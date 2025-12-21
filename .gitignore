@@ -1,0 +1,21 @@
+# CMake и папки сборки
+/build/
+/out/
+/.cmake/
+
+# Специфичные файлы Visual Studio
+.vs/
+*.sln
+*.vcxproj
+*.filters
+*.user
+
+# Cursor / VS Code
+.vscode/
+
+# Бинарники и временные файлы
+*.exe
+*.dll
+*.pdb
+*.obj
+*.log
