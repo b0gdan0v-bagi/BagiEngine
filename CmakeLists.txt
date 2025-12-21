@@ -30,6 +30,8 @@ add_executable(MyGame ${SOURCES})
 # Это позволяет использовать #include <Core/...> вместо #include "Core/..."
 target_include_directories(MyGame PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+# Настройка прекомпилированного заголовка
+target_precompile_headers(MyGame PRIVATE src/pch.h)
 # -----------------------------------------------
 
 target_link_libraries(MyGame PRIVATE SDL3-shared)
