@@ -4,8 +4,9 @@ project(MySDLGame)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include(FetchContent)
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+include(FetchContent)
 FetchContent_Declare(
   SDL3
   GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
@@ -18,23 +19,30 @@ set(SDL_TESTS OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(SDL3)
 
-# --- НОВАЯ ЧАСТЬ: Автоматический поиск файлов ---
+# 3. Поиск исходных файлов
+# Ищем все .cpp и .h файлы рекурсивно
+file(GLOB_RECURSE SOURCES 
+    "src/*.cpp" 
+    "src/*.h"
+    "src/*.cxx"
+)
 
-# Рекурсивно ищем все .cpp и .h файлы в папке src и подпапках
-file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h" "src/**/*.cpp" "src/**/*.h")
-
-# Создаем исполняемый файл, используя список найденных файлов
 add_executable(MyGame ${SOURCES})
 
-# Добавляем папку src в пути поиска заголовочных файлов
-# Это позволяет использовать #include <Core/...> вместо #include "Core/..."
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source Files" FILES ${SOURCES})
+
 target_include_directories(MyGame PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# Настройка прекомпилированного заголовка
 target_precompile_headers(MyGame PRIVATE src/pch.h)
-# -----------------------------------------------
 
 target_link_libraries(MyGame PRIVATE SDL3-shared)
+
+set_target_properties(SDL3-shared PROPERTIES FOLDER "Dependencies")
+set_target_properties(SDL_uclibc PROPERTIES FOLDER "Dependencies")
+set_target_properties(SDL3_test PROPERTIES FOLDER "Dependencies")
+if(TARGET uninstall)
+    set_target_properties(uninstall PROPERTIES FOLDER "Dependencies")
+endif()
 
 if(WIN32)
     add_custom_command(TARGET MyGame POST_BUILD
@@ -42,4 +50,8 @@ if(WIN32)
         $<TARGET_FILE:SDL3-shared>
         $<TARGET_FILE_DIR:MyGame>
     )
+endif()
+
+if(MSVC)
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT MyGame)
 endif()
