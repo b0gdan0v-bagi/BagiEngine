@@ -1,4 +1,28 @@
+// pch.h
 #pragma once
+
+// Чтобы Asio не тянул лишнего из Windows.h
+#ifdef _WIN32
+#define _WIN32_WINNT 0x0A00 // Windows 10+
+#endif
+
+#include <boost/asio.hpp>
+
+#include <filesystem> 
+
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
+
+// Другие полезные header-only компоненты Boost:
+#include <boost/smart_ptr.hpp>        // smart_ptr, shared_ptr, weak_ptr, intrusive_ptr
+#include <boost/optional.hpp>         // optional
+#include <boost/variant.hpp>          // variant
+#include <boost/any.hpp>              // any
+#include <boost/utility.hpp>          // utility функции
+#include <boost/type_traits.hpp>      // type_traits
+#include <boost/function.hpp>         // function
+#include <boost/bind.hpp>             // bind
+#include <boost/algorithm/string.hpp> // строковые алгоритмы
 
 // Стандартные библиотеки C++
 #include <algorithm>
