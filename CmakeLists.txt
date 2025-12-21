@@ -20,11 +20,15 @@ FetchContent_MakeAvailable(SDL3)
 
 # --- НОВАЯ ЧАСТЬ: Автоматический поиск файлов ---
 
-# Рекурсивно ищем все .cpp и .h файлы в папке src
-file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
+# Рекурсивно ищем все .cpp и .h файлы в папке src и подпапках
+file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h" "src/**/*.cpp" "src/**/*.h")
 
 # Создаем исполняемый файл, используя список найденных файлов
 add_executable(MyGame ${SOURCES})
+
+# Добавляем папку src в пути поиска заголовочных файлов
+# Это позволяет использовать #include <Core/...> вместо #include "Core/..."
+target_include_directories(MyGame PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # -----------------------------------------------
 
