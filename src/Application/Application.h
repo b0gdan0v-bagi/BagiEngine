@@ -4,6 +4,8 @@
 #include "Core/MainWindow/IMainWindow.h"
 #include "Core/Utils/IntrusivePtr.h"
 
+class ImGuiManager;
+
 class Application {
 public:
     Application() = default;
@@ -15,6 +17,7 @@ public:
 
 private:
     IntrusivePtr<IMainWindow> _window;
+    ImGuiManager* _imguiManager = nullptr;
     bool _isRunning = false;
 };
 
