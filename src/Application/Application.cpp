@@ -6,6 +6,7 @@
 #include <Core/Utils/New.h>
 #include <Core/Config/XmlConfig.h>
 #include <Core/FileSystem/FileSystem.h>
+#include <Widgets/ImGuiWidget.h>
 
 #include <imgui.h>
 
@@ -24,6 +25,8 @@ namespace Core {
         if (config.LoadFromVirtualPath("config/ApplicationConfig.xml")) {
             type = config.Get<std::string>("root.type", "SDL3");
             configPath = config.Get<std::string>("root.path", "");
+        } else {
+            return false;
         }
 
         if (type != "SDL3") {
@@ -40,6 +43,8 @@ namespace Core {
         auto sdlManager = Core::New<SDL3imGuiManager>();
         sdlManager->Initialize();
         _imguiManager = sdlManager;
+
+        _widgetManager.CreateWidgets(config);
 
         _isRunning = true;
         return true;
@@ -70,22 +75,9 @@ namespace Core {
             _window->SetRenderDrawColor(20, 20, 100, 255);
             _window->RenderClear();
 
-            // Рендеринг ImGui UI
-            if (_imguiManager) {
-                // Примеры использования ImGui:
-                //
-                // 1. Показать демо-окно со всеми виджетами:
-                ImGui::ShowDemoWindow();
-                //
-                // 2. Простое окно:
-                // if (ImGui::Begin("My Window")) {
-                //     ImGui::Text("Hello, ImGui!");
-                //     if (ImGui::Button("Click me")) {
-                //         // Обработка нажатия
-                //     }
-                //     ImGui::End();
-                // }
+            _widgetManager.DrawAll();
 
+            if (_imguiManager) {
                 _imguiManager->Render();
             }
 
@@ -106,6 +98,10 @@ namespace Core {
             _window.Reset();
         }
         SDL_Quit();
+    }
+
+    void Application::StopApplication() {
+        _isRunning = false;
     }
 
 }  // namespace Core

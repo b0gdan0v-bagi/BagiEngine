@@ -2,5 +2,8 @@
 <root>
 	<type>SDL3</type>
 	<path>config/SDLWindowConfig.xml</path>
+	<widgets>
+    	<widget type="ImGuiWidget" />
+  	</widgets>
 </root>
 
