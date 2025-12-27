@@ -10,7 +10,7 @@ namespace Core {
         SDLMainWindow();
         ~SDLMainWindow() override;
 
-        bool Create(const char* title, int width, int height, unsigned int flags = 0) override;
+        bool Initialize(std::string_view configPath) override;
         void Destroy() override;
         bool IsValid() const override;
         void* GetNativeWindow() const override;

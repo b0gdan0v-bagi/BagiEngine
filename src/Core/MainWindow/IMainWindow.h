@@ -8,7 +8,7 @@ namespace Core {
     public:
         ~IMainWindow() override = default;
 
-        virtual bool Create(const char* title, int width, int height, unsigned int flags = 0) = 0;
+        virtual bool Initialize(std::string_view configPath) = 0;
         virtual void Destroy() = 0;
 
         virtual bool IsValid() const = 0;

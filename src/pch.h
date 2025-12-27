@@ -13,6 +13,7 @@
 
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/xml_parser.hpp>
 
 // Другие полезные header-only компоненты Boost:
 #include <boost/smart_ptr.hpp>        // smart_ptr, shared_ptr, weak_ptr, intrusive_ptr

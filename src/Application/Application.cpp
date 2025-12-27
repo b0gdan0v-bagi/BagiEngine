@@ -4,6 +4,8 @@
 #include <Core/ImGui/IimGuiManager.h>
 #include <Core/MainWindow/SDLMainWindow.h>
 #include <Core/Utils/New.h>
+#include <Core/Config/XmlConfig.h>
+#include <Core/FileSystem/FileSystem.h>
 
 #include <imgui.h>
 
@@ -11,8 +13,25 @@ namespace Core {
 
     bool Application::Initialize() {
 
+        // Инициализация файловой системы
+        FileSystem::GetInstance().Initialize();
+
+        // Загрузка конфига из XML через виртуальный путь
+        XmlConfig config;
+        std::string type = "SDL3";
+        std::string configPath;
+
+        if (config.LoadFromVirtualPath("config/ApplicationConfig.xml")) {
+            type = config.Get<std::string>("root.type", "SDL3");
+            configPath = config.Get<std::string>("root.path", "");
+        }
+
+        if (type != "SDL3") {
+            return false;
+        }
+
         _window = Core::New<SDLMainWindow>();
-        if (!_window->Create("My SDL3 Window", 800, 600)) {
+        if (!_window->Initialize(configPath)) {
             _window.Reset();
             SDL_Quit();
             return false;
@@ -47,8 +66,8 @@ namespace Core {
                 }
             }
 
-            // Заливка экрана цветом (RGBA — Красный, Зеленый, Синий, Альфа)
-            _window->SetRenderDrawColor(20, 20, 100, 255);  // Темно-синий
+            // Заливка экрана цветом из конфига (RGBA — Красный, Зеленый, Синий, Альфа)
+            _window->SetRenderDrawColor(20, 20, 100, 255);
             _window->RenderClear();
 
             // Рендеринг ImGui UI

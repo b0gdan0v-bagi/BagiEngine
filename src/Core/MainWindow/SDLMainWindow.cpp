@@ -1,5 +1,6 @@
 #include "SDLMainWindow.h"
 
+#include <Core/Config/XmlConfig.h>
 #include <Core/MainWindow/SDLRendererHolder.h>
 
 namespace Core {
@@ -8,7 +9,7 @@ namespace Core {
 
     SDLMainWindow::~SDLMainWindow() = default;
 
-    bool SDLMainWindow::Create(const char* title, int width, int height, unsigned int flags) {
+    bool SDLMainWindow::Initialize(std::string_view configPath) {
 
         if (!SDL_Init(SDL_INIT_VIDEO)) {
             return false;
@@ -19,7 +20,23 @@ namespace Core {
             return false;
         }
 
-        _window = SDL_CreateWindow(title, width, height, flags);
+        std::string title;
+        int width;
+        int height;
+        SDL_WindowFlags flags;
+
+        XmlConfig config;
+
+        if (config.LoadFromVirtualPath(configPath)) {
+            title = config.Get<std::string>("root.window.title", "My SDL3 Window");
+            width = config.Get<int>("root.window.width", 800);
+            height = config.Get<int>("root.window.height", 600);
+            flags = config.Get<SDL_WindowFlags>("root.window.windowFlags", 0);
+        } else {
+            return false;
+        }
+
+        _window = SDL_CreateWindow(title.c_str(), width, height, flags);
         if (_window == nullptr) {
             return false;
         }

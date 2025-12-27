@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <window>
+        <title>My SDL3 Window from config</title>
+        <width>1024</width>
+        <height>768</height>
+        <windowFlags>0</windowFlags>
+        <fullscreen>false</fullscreen>
+    </window>
+</root>
+
