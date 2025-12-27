@@ -1,14 +1,12 @@
-#include <SDL3/SDL_main.h>
-#include "Application/Application.h"
+#include <Application/Application.h>
 
 int main(int argc, char* argv[]) {
-    Application app;
-    
-    if (!app.Initialize()) {
+    if (!Core::Application::GetInstance().Initialize()) {
         return -1;
     }
 
-    app.Run();
+    Core::Application::GetInstance().Run();
+    Core::Application::GetInstance().Cleanup();
 
     return 0;
 }

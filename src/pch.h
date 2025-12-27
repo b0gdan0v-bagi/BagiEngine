@@ -6,6 +6,7 @@
 #define _WIN32_WINNT 0x0A00 // Windows 10+
 #endif
 
+
 #include <boost/asio.hpp>
 
 #include <filesystem> 
@@ -39,6 +40,9 @@
 #include <utility>
 #include <vector>
 
+// SDL
+#include <SDL3/SDL.h>
+
 // C стандартные библиотеки
 #include <cctype>
 #include <cerrno>
@@ -49,3 +53,6 @@
 #include <cstring>
 #include <ctime>
 
+// Core
+#include <Core/Utils/RefCounted.h>
+#include <Core/Utils/New.h>

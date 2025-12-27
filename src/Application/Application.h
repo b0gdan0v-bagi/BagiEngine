@@ -1,23 +1,28 @@
 #pragma once
 
-#include <SDL3/SDL.h>
-#include "Core/MainWindow/IMainWindow.h"
-#include "Core/Utils/IntrusivePtr.h"
+#include <Core/MainWindow/IMainWindow.h>
+#include <Core/ImGui/IimGuiManager.h>
+#include <Core/Utils/IntrusivePtr.h>
+#include <Core/Utils/Singleton.h>
 
-class ImGuiManager;
+namespace Core {
 
-class Application {
-public:
-    Application() = default;
-    ~Application();
+    class Application : public Singleton<Application> {
+    public:
+        Application() = default;
+        ~Application() override = default;
 
-    bool Initialize();
-    void Run();
-    void Cleanup();
+        bool Initialize();
+        void Run();
+        void Cleanup();
 
-private:
-    IntrusivePtr<IMainWindow> _window;
-    ImGuiManager* _imguiManager = nullptr;
-    bool _isRunning = false;
-};
+        const IntrusivePtr<IMainWindow>& GetMainWindow() const {
+            return _window;
+        }
 
+    private:
+        IntrusivePtr<IMainWindow> _window;
+        IntrusivePtr<IimGuiManager> _imguiManager;
+        bool _isRunning = false;
+    };
+}  // namespace Core

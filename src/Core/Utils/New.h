@@ -1,7 +1,7 @@
 #pragma once
 
-#include "IntrusivePtr.h"
-#include "RefCounted.h"
+#include <Core/Utils/IntrusivePtr.h>
+#include <Core/Utils/RefCounted.h>
 
 namespace Core {
     // Вспомогательная функция для определения типа указателя
