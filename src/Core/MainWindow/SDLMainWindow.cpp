@@ -2,6 +2,7 @@
 
 #include <Core/Config/XmlConfig.h>
 #include <Core/MainWindow/SDLRendererHolder.h>
+#include <Core/MainWindow/SDLUtils.h>
 
 namespace Core {
 
@@ -31,7 +32,15 @@ namespace Core {
             title = config.Get<std::string>("root.window.title", "My SDL3 Window");
             width = config.Get<int>("root.window.width", 800);
             height = config.Get<int>("root.window.height", 600);
-            flags = config.Get<SDL_WindowFlags>("root.window.windowFlags", 0);
+            
+            // Пробуем прочитать как строку с именами флагов
+            auto flagsStringOpt = config.GetOptional<std::string>("root.window.windowFlags");
+            if (flagsStringOpt && !flagsStringOpt->empty()) {
+                flags = SDLUtils::ParseWindowFlags(*flagsStringOpt);
+            } else {
+                // Если не строка, пробуем прочитать как число (для обратной совместимости)
+                flags = config.Get<SDL_WindowFlags>("root.window.windowFlags", 0);
+            }
         } else {
             return false;
         }

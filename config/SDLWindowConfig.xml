@@ -4,7 +4,8 @@
         <title>My SDL3 Window from config</title>
         <width>1024</width>
         <height>768</height>
-        <windowFlags>0</windowFlags>
+        <!-- Можно использовать имена флагов через | или запятую: SDL_WINDOW_RESIZABLE|SDL_WINDOW_BORDERLESS -->
+        <windowFlags>SDL_WINDOW_RESIZABLE</windowFlags>
         <fullscreen>false</fullscreen>
     </window>
 </root>
