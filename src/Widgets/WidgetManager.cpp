@@ -12,7 +12,15 @@ namespace Core {
         }
     }
 
-    void WidgetManager::DrawAll() {
+    void WidgetManager::UpdateAll() const {
+        for (auto& widget : _widgets) {
+            if (widget) {
+                widget->Update();
+            }
+        }
+    }
+
+    void WidgetManager::DrawAll() const {
         for (auto& widget : _widgets) {
             if (widget) {
                 widget->Draw();

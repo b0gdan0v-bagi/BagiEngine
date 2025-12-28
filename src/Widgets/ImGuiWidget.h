@@ -12,6 +12,8 @@ namespace Core {
 
         bool Initialize() override;
         void Draw() override;
+        void Update() override;
+
     private:
         static SDL_Window* GetSDLWindow();
         static SDL_Renderer* GetSDLRenderer();

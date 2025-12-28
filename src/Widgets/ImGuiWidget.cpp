@@ -42,6 +42,13 @@ namespace Core {
     }
 
     void ImGuiWidget::Draw() {
+        if (auto* renderer = GetSDLRenderer()) {
+            ImGui::Render();
+            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+        }
+    }
+
+    void ImGuiWidget::Update() {
         if (!_isInitialized) {
             return;
         }
@@ -52,11 +59,6 @@ namespace Core {
             }
         }
         ImGui::End();
-
-        if (auto* renderer = GetSDLRenderer()) {
-            ImGui::Render();
-            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
-        }
     }
 
     SDL_Window* ImGuiWidget::GetSDLWindow() {

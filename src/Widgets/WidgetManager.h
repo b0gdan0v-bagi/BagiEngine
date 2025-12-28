@@ -13,7 +13,8 @@ namespace Core {
         ~WidgetManager() = default;
 
         void RegisterWidget(IntrusivePtr<IWidget> widget);
-        void DrawAll();
+        void UpdateAll() const;
+        void DrawAll() const;
         void CreateWidgets(const XmlConfig& config);
 
     private:
