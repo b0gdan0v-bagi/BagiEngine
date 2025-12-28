@@ -26,18 +26,15 @@ namespace Core {
             _dispatcher.trigger(std::forward<T>(event));
         }
 
-        // Эмиссия события типа T (enqueue для обработки позже)
         template <typename T>
         void Enqueue(const T& event) {
             _dispatcher.enqueue(event);
         }
 
-        // Обновление очереди событий (обработка всех enqueued событий)
-        void Update() {
+        void Update() const {
             _dispatcher.update();
         }
 
-        // Получить dispatcher для прямого доступа (если нужно)
         entt::dispatcher& GetDispatcher() {
             return _dispatcher;
         }

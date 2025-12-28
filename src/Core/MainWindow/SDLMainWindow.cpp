@@ -1,6 +1,9 @@
 #include "SDLMainWindow.h"
 
+#include <Application/Application.h>
 #include <Core/Config/XmlConfig.h>
+#include <Core/Events/Events.h>
+#include <Core/ImGui/SDL3imGuiManager.h>
 #include <Core/MainWindow/SDLRendererHolder.h>
 #include <Core/MainWindow/SDLUtils.h>
 
@@ -32,7 +35,7 @@ namespace Core {
             title = config.Get<std::string>("root.window.title", "My SDL3 Window");
             width = config.Get<int>("root.window.width", 800);
             height = config.Get<int>("root.window.height", 600);
-            
+
             // Пробуем прочитать как строку с именами флагов
             auto flagsStringOpt = config.GetOptional<std::string>("root.window.windowFlags");
             if (flagsStringOpt && !flagsStringOpt->empty()) {
@@ -59,6 +62,10 @@ namespace Core {
 
         _width = width;
         _height = height;
+
+        Application::GetInstance().GetEventManager().Subscribe<RenderClearEvent, &SDLMainWindow::RenderClear>(this);
+        Application::GetInstance().GetEventManager().Subscribe<RenderPresentEvent, &SDLMainWindow::RenderPresent>(this);
+
         return true;
     }
 
@@ -78,10 +85,6 @@ namespace Core {
         return _window != nullptr;
     }
 
-    void* SDLMainWindow::GetNativeWindow() const {
-        return static_cast<void*>(_window);
-    }
-
     int SDLMainWindow::GetWidth() const {
         return _width;
     }
@@ -96,13 +99,13 @@ namespace Core {
         }
     }
 
-    void SDLMainWindow::RenderClear() {
+    void SDLMainWindow::RenderClear() const {
         if (_renderer) {
             _renderer->RenderClear();
         }
     }
 
-    void SDLMainWindow::RenderPresent() {
+    void SDLMainWindow::RenderPresent() const {
         if (_renderer) {
             _renderer->RenderPresent();
         }

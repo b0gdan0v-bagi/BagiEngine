@@ -13,8 +13,8 @@ namespace Core {
             if (ImGui::Button("Quit")) {
                 Application::GetInstance().GetEventManager().Emit(QuitEvent{});
             }
-            ImGui::End();
         }
+        ImGui::End();
     }
 
 }  // namespace Core

@@ -11,7 +11,6 @@ namespace Core {
         virtual bool Initialize() = 0;
         virtual void Destroy() = 0;
 
-        virtual void NewFrame() = 0;
         virtual void Render() = 0;
 
         virtual bool IsInitialized() const = 0;

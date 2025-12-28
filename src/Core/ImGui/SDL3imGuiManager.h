@@ -15,7 +15,7 @@ namespace Core {
         bool Initialize() override;
         void Destroy() override;
 
-        void NewFrame() override;
+        
         void Render() override;
 
         bool IsInitialized() const override {
@@ -26,6 +26,7 @@ namespace Core {
         static SDL_Window* GetSDLWindow();
         static SDL_Renderer* GetSDLRenderer();
 
+        void OnNewFrame();
         void OnSDLEvent(const SDLEventWrapper& event) const;
 
         bool _isInitialized = false;

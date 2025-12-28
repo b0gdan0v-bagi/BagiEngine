@@ -61,14 +61,12 @@ namespace Core {
     void Application::Run() {
 
         while (_isRunning) {
-            if (_imguiManager) {
-                _imguiManager->NewFrame();
-            }
 
+            _eventManager.Emit(NewFrameEvent{});
             _eventManager.ProcessEvents();
 
             _window->SetRenderDrawColor(20, 20, 100, 255);
-            _window->RenderClear();
+            _eventManager.Emit(RenderClearEvent{});
 
             _widgetManager.DrawAll();
 
@@ -76,7 +74,7 @@ namespace Core {
                 _imguiManager->Render();
             }
 
-            _window->RenderPresent();
+            _eventManager.Emit(RenderPresentEvent{});
         }
     }
 

@@ -39,6 +39,7 @@ namespace Core {
         ImGui_ImplSDLRenderer3_Init(renderer);
 
         Application::GetInstance().GetEventManager().Subscribe<SDLEventWrapper, &SDL3imGuiManager::OnSDLEvent>(this);
+        Application::GetInstance().GetEventManager().Subscribe<NewFrameEvent, &SDL3imGuiManager::OnNewFrame>(this);
 
         _isInitialized = true;
         return true;
@@ -56,7 +57,7 @@ namespace Core {
         _isInitialized = false;
     }
 
-    void SDL3imGuiManager::NewFrame() {
+    void SDL3imGuiManager::OnNewFrame() {
         if (!_isInitialized) {
             return;
         }
