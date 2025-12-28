@@ -1,7 +1,6 @@
 #include "ImGuiWidget.h"
 
 #include "Core/MainWindow/SDLMainWindow.h"
-#include "Core/MainWindow/SDLRendererHolder.h"
 
 #include <Core/Events/Events.h>
 #include <Application/Application.h>
@@ -38,9 +37,9 @@ namespace Core {
         ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
         ImGui_ImplSDLRenderer3_Init(renderer);
 
-        Application::GetInstance().GetEventManager().Subscribe<SDLEventWrapper, &ImGuiWidget::OnSDLEvent>(this);
-        Application::GetInstance().GetEventManager().Subscribe<NewFrameEvent, &ImGuiWidget::OnNewFrame>(this);
-        Application::GetInstance().GetEventManager().Subscribe<ApplicationCleanUpEvent, &ImGuiWidget::Destroy>(this);
+        Application::GetEventManager().Subscribe<SDLEventWrapper, &ImGuiWidget::OnSDLEvent>(this);
+        Application::GetEventManager().Subscribe<NewFrameEvent, &ImGuiWidget::OnNewFrame>(this);
+        Application::GetEventManager().Subscribe<ApplicationCleanUpEvent, &ImGuiWidget::Destroy>(this);
 
         _isInitialized = true;
         return true;
@@ -53,7 +52,7 @@ namespace Core {
 
         if (ImGui::Begin("Debug Widget")) {
             if (ImGui::Button("Quit")) {
-                Application::GetInstance().GetEventManager().Emit(QuitEvent{});
+                Application::GetEventManager().Emit(QuitEvent{});
             }
         }
         ImGui::End();
@@ -65,7 +64,7 @@ namespace Core {
     }
 
     SDL_Window* ImGuiWidget::GetSDLWindow() {
-        const auto& window = Application::GetInstance().GetMainWindow();
+        const auto& window = Application::GetMainWindow();
         if (!window) {
             return nullptr;
         }
@@ -74,14 +73,12 @@ namespace Core {
     }
 
     SDL_Renderer* ImGuiWidget::GetSDLRenderer() {
-        const auto& window = Application::GetInstance().GetMainWindow();
+        const auto& window = Application::GetMainWindow();
         if (!window) {
             return nullptr;
         }
-        if (const auto& rendererHolder = window->GetRenderer()) {
-            return dynamic_cast<SDLRendererHolder*>(rendererHolder.Get())->GetRenderer();
-        }
-        return nullptr;
+
+        return dynamic_cast<SDLMainWindow*>(window.Get())->GetSDLRenderer();
     }
 
     void ImGuiWidget::Destroy() {

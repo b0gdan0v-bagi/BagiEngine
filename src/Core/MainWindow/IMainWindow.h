@@ -17,7 +17,5 @@ namespace Core {
         virtual int GetHeight() const = 0;
 
         virtual void SetRenderDrawColor(unsigned char r, unsigned char g, unsigned char b, unsigned char a) = 0;
-
-        virtual const IntrusivePtr<IRendererHolder>& GetRenderer() const = 0;
     };
 }  // namespace Core

@@ -30,7 +30,7 @@ namespace Core {
     }
 
     void SDLEventsProvider::ConvertSDLEvent(const SDL_Event& sdlEvent) {
-        auto& eventsManager = Application::GetInstance().GetEventManager();
+        auto& eventsManager = Application::GetEventManager();
         switch (sdlEvent.type) {
             case SDL_EVENT_QUIT:
                 eventsManager.Emit(QuitEvent{});

@@ -20,7 +20,7 @@ namespace Core {
             return _window;
         }
 
-        const IntrusivePtr<IRendererHolder>& GetRenderer() const override {
+        SDL_Renderer* GetSDLRenderer() const {
             return _renderer;
         }
 
@@ -31,7 +31,7 @@ namespace Core {
         void RenderPresent() const;
 
         SDL_Window* _window = nullptr;
-        IntrusivePtr<IRendererHolder> _renderer;
+        SDL_Renderer* _renderer = nullptr;
         int _width = 0;
         int _height = 0;
     };

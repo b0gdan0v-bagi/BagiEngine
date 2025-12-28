@@ -16,21 +16,19 @@ namespace Core {
         bool Initialize();
         void Run();
         void Cleanup();
-        void StopApplication();
 
-        const IntrusivePtr<IMainWindow>& GetMainWindow() const {
-            return _window;
+        static const IntrusivePtr<IMainWindow>& GetMainWindow() {
+            return GetInstance()._window;
         }
 
-        EventManager& GetEventManager() {
-            return _eventManager;
-        }
-
-        const EventManager& GetEventManager() const {
-            return _eventManager;
+        static EventManager& GetEventManager() {
+            return GetInstance()._eventManager;
         }
 
     private:
+
+        void StopApplication();
+
         IntrusivePtr<IMainWindow> _window;
         WidgetManager _widgetManager;
         EventManager _eventManager;

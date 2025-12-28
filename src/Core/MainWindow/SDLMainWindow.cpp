@@ -3,7 +3,6 @@
 #include <Application/Application.h>
 #include <Core/Config/XmlConfig.h>
 #include <Core/Events/Events.h>
-#include <Core/MainWindow/SDLRendererHolder.h>
 #include <Core/MainWindow/SDLUtils.h>
 
 namespace Core {
@@ -47,24 +46,17 @@ namespace Core {
             return false;
         }
 
-        _window = SDL_CreateWindow(title.c_str(), width, height, flags);
-        if (_window == nullptr) {
+        ;
+        if (!SDL_CreateWindowAndRenderer(title.c_str(), width, height, flags, &_window, &_renderer)) {
             return false;
         }
-
-        auto rendererHolder = Core::New<SDLRendererHolder>();
-        if (!rendererHolder) {
-            return false;
-        }
-        rendererHolder->Create(*this);
-        _renderer = rendererHolder;
 
         _width = width;
         _height = height;
 
-        Application::GetInstance().GetEventManager().Subscribe<RenderClearEvent, &SDLMainWindow::RenderClear>(this);
-        Application::GetInstance().GetEventManager().Subscribe<RenderPresentEvent, &SDLMainWindow::RenderPresent>(this);
-        Application::GetInstance().GetEventManager().Subscribe<ApplicationCleanUpEvent, &SDLMainWindow::Destroy>(this);
+        Application::GetEventManager().Subscribe<RenderClearEvent, &SDLMainWindow::RenderClear>(this);
+        Application::GetEventManager().Subscribe<RenderPresentEvent, &SDLMainWindow::RenderPresent>(this);
+        Application::GetEventManager().Subscribe<ApplicationCleanUpEvent, &SDLMainWindow::Destroy>(this);
 
         return true;
     }
@@ -75,7 +67,8 @@ namespace Core {
             _window = nullptr;
         }
         if (_renderer) {
-            _renderer->Destroy();
+            SDL_DestroyRenderer(_renderer);
+            _renderer = nullptr;
         }
         _width = 0;
         _height = 0;
@@ -95,19 +88,19 @@ namespace Core {
 
     void SDLMainWindow::SetRenderDrawColor(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
         if (_renderer) {
-            _renderer->SetRenderDrawColor(r, g, b, a);
+            SDL_SetRenderDrawColor(_renderer, r, g, b, a);
         }
     }
 
     void SDLMainWindow::RenderClear() const {
         if (_renderer) {
-            _renderer->RenderClear();
+            SDL_RenderClear(_renderer);
         }
     }
 
     void SDLMainWindow::RenderPresent() const {
         if (_renderer) {
-            _renderer->RenderPresent();
+            SDL_RenderPresent(_renderer);
         }
     }
 }  // namespace Core
