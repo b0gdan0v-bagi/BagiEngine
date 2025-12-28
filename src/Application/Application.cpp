@@ -35,7 +35,6 @@ namespace Core {
         _window = Core::New<SDLMainWindow>();
         if (!_window->Initialize(configPath)) {
             _window.Reset();
-            SDL_Quit();
             return false;
         }
 
@@ -74,7 +73,6 @@ namespace Core {
         if (_window) {
             _window.Reset();
         }
-        SDL_Quit();
     }
 
     void Application::StopApplication() {

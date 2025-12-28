@@ -1,5 +1,7 @@
 #include "SDLMainWindow.h"
 
+#include "Core/Utils/ScopeGuard.h"
+
 #include <Application/Application.h>
 #include <Core/Config/XmlConfig.h>
 #include <Core/Events/Events.h>
@@ -8,8 +10,27 @@
 namespace Core {
 
     SDLMainWindow::SDLMainWindow() = default;
-
     SDLMainWindow::~SDLMainWindow() = default;
+
+    class SDLMainWindowChecker {
+    public:
+        // Принимаем любой вызываемый объект
+        explicit SDLMainWindowChecker(std::function<void()> onExit) : onExit_(std::move(onExit)) {}
+
+        // Деструктор сработает при выходе из {}
+        ~SDLMainWindowChecker() {
+            if (onExit_) {
+                onExit_();
+            }
+        }
+
+        // Запрещаем копирование, чтобы избежать двойного вызова
+        SDLMainWindowChecker(const SDLMainWindowChecker&) = delete;
+        SDLMainWindowChecker& operator=(const SDLMainWindowChecker&) = delete;
+
+    private:
+        std::function<void()> onExit_;
+    };
 
     bool SDLMainWindow::Initialize(std::string_view configPath) {
 
@@ -17,10 +38,12 @@ namespace Core {
             return false;
         }
 
-        if (_window != nullptr) {
-            // Окно уже создано
-            return false;
-        }
+         bool initialized = false;
+        ScopeGuard guard([&]() {
+            if (!initialized) {
+                SDL_Quit();
+            }
+        });
 
         std::string title;
         int width;
@@ -58,6 +81,7 @@ namespace Core {
         Application::GetEventManager().Subscribe<RenderPresentEvent, &SDLMainWindow::RenderPresent>(this);
         Application::GetEventManager().Subscribe<ApplicationCleanUpEvent, &SDLMainWindow::Destroy>(this);
         Application::GetEventManager().Subscribe<SetRenderDrawColorEvent, &SDLMainWindow::SetRenderDrawColor>(this);
+        initialized = true;
 
         return true;
     }
@@ -71,6 +95,7 @@ namespace Core {
             SDL_DestroyRenderer(_renderer);
             _renderer = nullptr;
         }
+        SDL_Quit();
         _width = 0;
         _height = 0;
     }
