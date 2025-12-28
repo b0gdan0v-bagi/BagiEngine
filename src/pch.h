@@ -44,6 +44,9 @@
 // SDL
 #include <SDL3/SDL.h>
 
+// entt
+#include <entt/entt.hpp>
+
 // C стандартные библиотеки
 #include <cctype>
 #include <cerrno>

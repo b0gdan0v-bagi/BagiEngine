@@ -30,6 +30,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(imgui)
 
+# EnTT
+FetchContent_Declare(
+  entt
+  GIT_REPOSITORY https://github.com/skypjack/entt.git
+  GIT_TAG v3.13.2
+)
+
+FetchContent_MakeAvailable(entt)
+
 # Подключение Boost из локальных заголовков в проекте (header-only)
 # Заголовки Boost находятся в src/Core/Boost/boost
 set(BOOST_HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/Boost")
@@ -59,6 +68,7 @@ target_include_directories(MyGame PRIVATE
     ${BOOST_HEADERS_DIR}
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
+    ${entt_SOURCE_DIR}/src
 )
 
 target_precompile_headers(MyGame PRIVATE src/pch.h)

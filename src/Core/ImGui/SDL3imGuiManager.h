@@ -2,8 +2,10 @@
 #include <Core/ImGui/IimGuiManager.h>
 
 namespace Core {
+    struct SDLEventWrapper;
     class IMainWindow;
     class SDLMainWindow;
+    class EventManager;
 
     class SDL3imGuiManager : public IimGuiManager {
     public:
@@ -14,7 +16,6 @@ namespace Core {
         void Destroy() override;
 
         void NewFrame() override;
-        void ProcessEvent(const SDL_Event* event) override;
         void Render() override;
 
         bool IsInitialized() const override {
@@ -22,10 +23,12 @@ namespace Core {
         }
 
     private:
+        static SDL_Window* GetSDLWindow();
+        static SDL_Renderer* GetSDLRenderer();
 
-        SDL_Window* GetSDLWindow() const;
-        SDL_Renderer* GetSDLRenderer() const;
+        void OnSDLEvent(const SDLEventWrapper& event) const;
 
-         bool _isInitialized = false;
+        bool _isInitialized = false;
+        EventManager* _eventManager = nullptr;
     };
 }  // namespace Core

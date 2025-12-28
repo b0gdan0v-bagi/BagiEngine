@@ -1,6 +1,8 @@
 #include "SDL3imGuiManager.h"
 
 #include "Application/Application.h"
+#include "Core/Events/EventManager.h"
+#include "Core/Events/Events.h"
 #include "Core/MainWindow/SDLMainWindow.h"
 #include "Core/MainWindow/SDLRendererHolder.h"
 
@@ -36,6 +38,8 @@ namespace Core {
         ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
         ImGui_ImplSDLRenderer3_Init(renderer);
 
+        Application::GetInstance().GetEventManager().Subscribe<SDLEventWrapper, &SDL3imGuiManager::OnSDLEvent>(this);
+
         _isInitialized = true;
         return true;
     }
@@ -62,12 +66,12 @@ namespace Core {
         ImGui::NewFrame();
     }
 
-    void SDL3imGuiManager::ProcessEvent(const SDL_Event* event) {
+    void SDL3imGuiManager::OnSDLEvent(const SDLEventWrapper& event) const {
         if (!_isInitialized) {
             return;
         }
 
-        ImGui_ImplSDL3_ProcessEvent(event);
+        ImGui_ImplSDL3_ProcessEvent(&event.event);
     }
 
     void SDL3imGuiManager::Render() {
@@ -81,7 +85,7 @@ namespace Core {
         }
     }
 
-    SDL_Window* SDL3imGuiManager::GetSDLWindow() const {
+    SDL_Window* SDL3imGuiManager::GetSDLWindow() {
 
         const auto& window = Application::GetInstance().GetMainWindow();
         if (!window) {
@@ -91,7 +95,7 @@ namespace Core {
         return dynamic_cast<SDLMainWindow*>(window.Get())->GetSDLWindow();
     }
 
-    SDL_Renderer* SDL3imGuiManager::GetSDLRenderer() const {
+    SDL_Renderer* SDL3imGuiManager::GetSDLRenderer() {
         const auto& window = Application::GetInstance().GetMainWindow();
         if (!window) {
             return nullptr;

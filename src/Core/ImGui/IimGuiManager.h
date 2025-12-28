@@ -1,6 +1,8 @@
 #pragma once
 
 namespace Core {
+    class EventManager;
+
     class IimGuiManager : public RefCounted {
     public:
         IimGuiManager() = default;
@@ -10,7 +12,6 @@ namespace Core {
         virtual void Destroy() = 0;
 
         virtual void NewFrame() = 0;
-        virtual void ProcessEvent(const SDL_Event* event) = 0;
         virtual void Render() = 0;
 
         virtual bool IsInitialized() const = 0;

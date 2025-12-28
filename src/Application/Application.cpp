@@ -1,13 +1,14 @@
 #include "Application.h"
 
-#include <Core/ImGui/SDL3imGuiManager.h>
+#include <Core/Config/XmlConfig.h>
+#include <Core/Events/Events.h>
+#include <Core/Events/SDLEventsProvider.h>
+#include <Core/FileSystem/FileSystem.h>
 #include <Core/ImGui/IimGuiManager.h>
+#include <Core/ImGui/SDL3imGuiManager.h>
 #include <Core/MainWindow/SDLMainWindow.h>
 #include <Core/Utils/New.h>
-#include <Core/Config/XmlConfig.h>
-#include <Core/FileSystem/FileSystem.h>
 #include <Widgets/ImGuiWidget.h>
-
 #include <imgui.h>
 
 namespace Core {
@@ -40,6 +41,13 @@ namespace Core {
             return false;
         }
 
+        auto sdlEventsProvider = Core::New<SDLEventsProvider>();
+        if (!sdlEventsProvider->Initialize()) {
+            return false;
+        }
+        _eventManager.RegisterProvider(sdlEventsProvider);
+        _eventManager.Subscribe<QuitEvent, &Application::StopApplication>(this);
+
         auto sdlManager = Core::New<SDL3imGuiManager>();
         sdlManager->Initialize();
         _imguiManager = sdlManager;
@@ -52,26 +60,13 @@ namespace Core {
 
     void Application::Run() {
 
-        SDL_Event event;
-
         while (_isRunning) {
             if (_imguiManager) {
                 _imguiManager->NewFrame();
             }
 
-            // Обработка событий
-            while (SDL_PollEvent(&event)) {
-                // Передача событий в ImGui
-                if (_imguiManager) {
-                    _imguiManager->ProcessEvent(&event);
-                }
+            _eventManager.ProcessEvents();
 
-                if (event.type == SDL_EVENT_QUIT) {
-                    _isRunning = false;
-                }
-            }
-
-            // Заливка экрана цветом из конфига (RGBA — Красный, Зеленый, Синий, Альфа)
             _window->SetRenderDrawColor(20, 20, 100, 255);
             _window->RenderClear();
 
@@ -81,13 +76,11 @@ namespace Core {
                 _imguiManager->Render();
             }
 
-            // Показываем результат
             _window->RenderPresent();
         }
     }
 
     void Application::Cleanup() {
-        // 4. Завершение
         if (_imguiManager) {
             _imguiManager->Destroy();
             _imguiManager.Reset();

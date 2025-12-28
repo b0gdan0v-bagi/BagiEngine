@@ -4,6 +4,7 @@
 #include <Core/ImGui/IimGuiManager.h>
 #include <Core/Utils/IntrusivePtr.h>
 #include <Core/Utils/Singleton.h>
+#include <Core/Events/EventManager.h>
 #include <Widgets/WidgetManager.h>
 
 namespace Core {
@@ -22,10 +23,19 @@ namespace Core {
             return _window;
         }
 
+        EventManager& GetEventManager() {
+            return _eventManager;
+        }
+
+        const EventManager& GetEventManager() const {
+            return _eventManager;
+        }
+
     private:
         IntrusivePtr<IMainWindow> _window;
         IntrusivePtr<IimGuiManager> _imguiManager;
         WidgetManager _widgetManager;
+        EventManager _eventManager;
         bool _isRunning = false;
     };
 }  // namespace Core
