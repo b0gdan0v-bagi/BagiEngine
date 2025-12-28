@@ -25,6 +25,8 @@ namespace Core {
             return GetInstance()._eventManager;
         }
 
+        void SetMainWindow(IntrusivePtr<IMainWindow> window);
+
     private:
 
         void StopApplication();

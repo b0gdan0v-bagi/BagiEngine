@@ -1,54 +1,40 @@
 #include "Application.h"
 
+#include <Application/ApplicationSDLFabric.h>
 #include <Core/Config/XmlConfig.h>
 #include <Core/Events/Events.h>
 #include <Core/Events/SDLEventsProvider.h>
 #include <Core/FileSystem/FileSystem.h>
-#include <Core/MainWindow/SDLMainWindow.h>
-#include <Core/Utils/New.h>
-#include <Widgets/ImGuiWidget.h>
-#include <imgui.h>
 
 namespace Core {
 
     bool Application::Initialize() {
 
-        // Инициализация файловой системы
         FileSystem::GetInstance().Initialize();
 
-        // Загрузка конфига из XML через виртуальный путь
         XmlConfig config;
-        std::string type = "SDL3";
-        std::string configPath;
+        std::string type;
 
         if (config.LoadFromVirtualPath("config/ApplicationConfig.xml")) {
-            type = config.Get<std::string>("root.type", "SDL3");
-            configPath = config.Get<std::string>("root.path", "");
+            type = config.Get<std::string>("root.type");
         } else {
             return false;
         }
 
-        if (type != "SDL3") {
+        if (type == "SDL3") {
+            if (!ApplicationSDLFabric::Create(config)) {
+                return false;
+            }
+        } else {
             return false;
         }
 
-        _window = Core::New<SDLMainWindow>();
-        if (!_window->Initialize(configPath)) {
-            _window.Reset();
-            return false;
-        }
-
-        auto sdlEventsProvider = Core::New<SDLEventsProvider>();
-        if (!sdlEventsProvider->Initialize()) {
-            return false;
-        }
-        _eventManager.RegisterProvider(sdlEventsProvider);
         _eventManager.Subscribe<QuitEvent, &Application::StopApplication>(this);
 
         _widgetManager.CreateWidgets(config);
 
         _isRunning = true;
-        return true;
+        return _isRunning;
     }
 
     void Application::Run() {
@@ -73,6 +59,10 @@ namespace Core {
         if (_window) {
             _window.Reset();
         }
+    }
+
+    void Application::SetMainWindow(IntrusivePtr<IMainWindow> window) {
+        _window = std::move(window);
     }
 
     void Application::StopApplication() {
