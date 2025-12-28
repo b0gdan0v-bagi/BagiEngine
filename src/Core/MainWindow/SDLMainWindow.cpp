@@ -3,7 +3,6 @@
 #include <Application/Application.h>
 #include <Core/Config/XmlConfig.h>
 #include <Core/Events/Events.h>
-#include <Core/ImGui/SDL3imGuiManager.h>
 #include <Core/MainWindow/SDLRendererHolder.h>
 #include <Core/MainWindow/SDLUtils.h>
 
@@ -65,6 +64,7 @@ namespace Core {
 
         Application::GetInstance().GetEventManager().Subscribe<RenderClearEvent, &SDLMainWindow::RenderClear>(this);
         Application::GetInstance().GetEventManager().Subscribe<RenderPresentEvent, &SDLMainWindow::RenderPresent>(this);
+        Application::GetInstance().GetEventManager().Subscribe<ApplicationCleanUpEvent, &SDLMainWindow::Destroy>(this);
 
         return true;
     }

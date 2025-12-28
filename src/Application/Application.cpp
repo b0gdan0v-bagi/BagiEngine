@@ -4,8 +4,6 @@
 #include <Core/Events/Events.h>
 #include <Core/Events/SDLEventsProvider.h>
 #include <Core/FileSystem/FileSystem.h>
-#include <Core/ImGui/IimGuiManager.h>
-#include <Core/ImGui/SDL3imGuiManager.h>
 #include <Core/MainWindow/SDLMainWindow.h>
 #include <Core/Utils/New.h>
 #include <Widgets/ImGuiWidget.h>
@@ -48,10 +46,6 @@ namespace Core {
         _eventManager.RegisterProvider(sdlEventsProvider);
         _eventManager.Subscribe<QuitEvent, &Application::StopApplication>(this);
 
-        auto sdlManager = Core::New<SDL3imGuiManager>();
-        sdlManager->Initialize();
-        _imguiManager = sdlManager;
-
         _widgetManager.CreateWidgets(config);
 
         _isRunning = true;
@@ -70,22 +64,14 @@ namespace Core {
 
             _widgetManager.DrawAll();
 
-            if (_imguiManager) {
-                _imguiManager->Render();
-            }
-
             _eventManager.Emit(RenderPresentEvent{});
         }
     }
 
     void Application::Cleanup() {
-        if (_imguiManager) {
-            _imguiManager->Destroy();
-            _imguiManager.Reset();
-        }
+        _eventManager.Emit(ApplicationCleanUpEvent{});
 
         if (_window) {
-            _window->Destroy();
             _window.Reset();
         }
         SDL_Quit();

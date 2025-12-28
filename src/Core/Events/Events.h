@@ -13,6 +13,7 @@ namespace Core {
     struct NewFrameEvent : public BaseEvent {};
     struct RenderClearEvent : public BaseEvent {};
     struct RenderPresentEvent : public BaseEvent {};
+    struct ApplicationCleanUpEvent : public BaseEvent {};
 
     // События клавиатуры
     struct KeyDownEvent : public BaseEvent {

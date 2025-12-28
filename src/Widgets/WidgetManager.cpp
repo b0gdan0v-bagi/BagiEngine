@@ -56,6 +56,11 @@ namespace Core {
                 }
             }
         }
+        for (auto& widget : _widgets) {
+            if (widget) {
+                widget->Initialize();
+            }
+        }
     }
 
     IntrusivePtr<IWidget> WidgetManager::CreateWidgetByType(const std::string& type, const boost::property_tree::ptree& widgetNode) {

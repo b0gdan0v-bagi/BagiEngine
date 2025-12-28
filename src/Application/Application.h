@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Core/MainWindow/IMainWindow.h>
-#include <Core/ImGui/IimGuiManager.h>
 #include <Core/Utils/IntrusivePtr.h>
 #include <Core/Utils/Singleton.h>
 #include <Core/Events/EventManager.h>
@@ -33,7 +32,6 @@ namespace Core {
 
     private:
         IntrusivePtr<IMainWindow> _window;
-        IntrusivePtr<IimGuiManager> _imguiManager;
         WidgetManager _widgetManager;
         EventManager _eventManager;
         bool _isRunning = false;

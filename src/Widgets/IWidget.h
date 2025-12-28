@@ -9,6 +9,7 @@ namespace Core {
         IWidget() = default;
         virtual ~IWidget() = default;
 
+        virtual bool Initialize() = 0;
         virtual void Draw() = 0;
     };
 
