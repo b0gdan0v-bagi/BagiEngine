@@ -3,6 +3,7 @@
 #include <Core/MainWindow/IMainWindow.h>
 
 namespace Core {
+    struct SetRenderDrawColorEvent;
     class IRendererHolder;
 
     class SDLMainWindow : public IMainWindow {
@@ -24,7 +25,7 @@ namespace Core {
             return _renderer;
         }
 
-        void SetRenderDrawColor(unsigned char r, unsigned char g, unsigned char b, unsigned char a) override;
+        void SetRenderDrawColor(const SetRenderDrawColorEvent& event) const;
 
     private:
         void RenderClear() const;

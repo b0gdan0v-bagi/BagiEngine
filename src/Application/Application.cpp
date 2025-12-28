@@ -58,8 +58,7 @@ namespace Core {
 
             _eventManager.Emit(NewFrameEvent{});
             _eventManager.ProcessEvents();
-
-            _window->SetRenderDrawColor(20, 20, 100, 255);
+            _eventManager.Emit(SetRenderDrawColorEvent{20, 20, 100, 255});
             _eventManager.Emit(RenderClearEvent{});
 
             _widgetManager.DrawAll();

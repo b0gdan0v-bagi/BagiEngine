@@ -57,6 +57,7 @@ namespace Core {
         Application::GetEventManager().Subscribe<RenderClearEvent, &SDLMainWindow::RenderClear>(this);
         Application::GetEventManager().Subscribe<RenderPresentEvent, &SDLMainWindow::RenderPresent>(this);
         Application::GetEventManager().Subscribe<ApplicationCleanUpEvent, &SDLMainWindow::Destroy>(this);
+        Application::GetEventManager().Subscribe<SetRenderDrawColorEvent, &SDLMainWindow::SetRenderDrawColor>(this);
 
         return true;
     }
@@ -86,9 +87,9 @@ namespace Core {
         return _height;
     }
 
-    void SDLMainWindow::SetRenderDrawColor(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
+    void SDLMainWindow::SetRenderDrawColor(const SetRenderDrawColorEvent& event) const {
         if (_renderer) {
-            SDL_SetRenderDrawColor(_renderer, r, g, b, a);
+            SDL_SetRenderDrawColor(_renderer, event.color.r, event.color.g, event.color.b, event.color.a);
         }
     }
 

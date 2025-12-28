@@ -1,7 +1,11 @@
 #pragma once
 
+#include <Core/Math/Color.h>
 #include <SDL3/SDL.h>
-#include <entt/entt.hpp>
+
+namespace Math {
+    struct Color;
+}
 
 namespace Core {
 
@@ -14,6 +18,11 @@ namespace Core {
     struct RenderClearEvent : public BaseEvent {};
     struct RenderPresentEvent : public BaseEvent {};
     struct ApplicationCleanUpEvent : public BaseEvent {};
+    struct SetRenderDrawColorEvent : public BaseEvent {
+        constexpr explicit SetRenderDrawColorEvent(Math::Color color_) : color(color_) {};
+        constexpr explicit SetRenderDrawColorEvent(unsigned char r, unsigned char g, unsigned char b, unsigned char a) : color(Math::Color{r, g, b, a}) {};
+        Math::Color color;
+    };
 
     // События клавиатуры
     struct KeyDownEvent : public BaseEvent {

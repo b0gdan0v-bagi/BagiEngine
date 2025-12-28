@@ -1,5 +1,4 @@
 #pragma once
-#include <Core/Utils/IntrusivePtr.h>
 
 namespace Core {
     class IRendererHolder;
@@ -15,7 +14,5 @@ namespace Core {
 
         virtual int GetWidth() const = 0;
         virtual int GetHeight() const = 0;
-
-        virtual void SetRenderDrawColor(unsigned char r, unsigned char g, unsigned char b, unsigned char a) = 0;
     };
 }  // namespace Core
