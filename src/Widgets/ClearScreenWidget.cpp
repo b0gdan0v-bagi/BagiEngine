@@ -5,18 +5,12 @@
 
 namespace Core {
 
-    bool ClearScreenWidget::Initialize(const boost::property_tree::ptree& node) {
-        // Читаем атрибут Color из XML ноды
-        auto colorStr = node.get<std::string>("<xmlattr>.Color", "");
-        if (!colorStr.empty()) {
-            // Используем функцию ParseColorFromString из Math
-            _clearColor = Math::Color::ParseColorFromString(colorStr, _clearColor);
-        }
+    bool ClearScreenWidget::Initialize(const XmlNode& node) {
+        _clearColor = node.ParseAttribute<Math::Color>("Color").value_or(_clearColor);
         return true;
     }
 
     void ClearScreenWidget::Draw() {
-        // Nothing to draw, clearing is done in Update()
     }
 
     void ClearScreenWidget::Update() {

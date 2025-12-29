@@ -2,9 +2,9 @@
 
 namespace Core {
 
-    std::vector<std::string> Split(const std::string& str, char delimiter) {
-        std::vector<std::string> result;
-        
+    std::vector<std::string_view> String::Split(std::string_view str, char delimiter) {
+        std::vector<std::string_view> result;
+
         if (str.empty()) {
             return result;
         }
@@ -17,11 +17,9 @@ namespace Core {
             start = pos + 1;
         }
 
-        // Добавляем последнюю часть после последнего разделителя
         result.push_back(str.substr(start));
 
         return result;
     }
-
 }  // namespace Core
 

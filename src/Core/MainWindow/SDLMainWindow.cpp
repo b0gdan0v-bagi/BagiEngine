@@ -49,22 +49,24 @@ namespace Core {
         std::string title;
         int width;
         int height;
-        SDL_WindowFlags flags;
+        SDL_WindowFlags flags = 0;
 
         XmlConfig config;
 
         if (config.LoadFromVirtualPath(configPath)) {
-            title = config.Get<std::string>("root.window.title", "My SDL3 Window");
-            width = config.Get<int>("root.window.width", 800);
-            height = config.Get<int>("root.window.height", 600);
+            auto windowNode = config.GetRoot().GetChild("window");
+            if (!windowNode) {
+                return false;
+            }
+
+            title = windowNode.ParseAttribute<std::string>("title").value_or("My SDL3 Window");
+            width = windowNode.ParseAttribute<int>("width").value_or(800);
+            height = windowNode.ParseAttribute<int>("height").value_or(600);
 
             // Пробуем прочитать как строку с именами флагов
-            auto flagsStringOpt = config.GetOptional<std::string>("root.window.windowFlags");
+            const auto flagsStringOpt = windowNode.ParseAttribute<std::string_view>("windowFlags");
             if (flagsStringOpt && !flagsStringOpt->empty()) {
                 flags = SDLUtils::ParseWindowFlags(*flagsStringOpt);
-            } else {
-                // Если не строка, пробуем прочитать как число (для обратной совместимости)
-                flags = config.Get<SDL_WindowFlags>("root.window.windowFlags", 0);
             }
         } else {
             return false;

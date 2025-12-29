@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <root>
-    <window>
-        <title>My SDL3 Window from config</title>
-        <width>1024</width>
-        <height>768</height>
-        <!-- Можно использовать имена флагов через | или запятую: SDL_WINDOW_RESIZABLE|SDL_WINDOW_BORDERLESS -->
-        <windowFlags>SDL_WINDOW_RESIZABLE</windowFlags>
-        <fullscreen>false</fullscreen>
+    <window title="My SDL3 Window from config" width="1024" height="768" windowFlags="SDL_WINDOW_RESIZABLE">
     </window>
 </root>
 

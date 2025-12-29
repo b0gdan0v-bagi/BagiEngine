@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Core/Utils/RefCounted.h>
+#include <Core/Config/XmlNode.h>
 
 namespace Core {
 
@@ -9,7 +10,7 @@ namespace Core {
         IWidget() = default;
         virtual ~IWidget() = default;
 
-        virtual bool Initialize(const boost::property_tree::ptree& node) = 0;
+        virtual bool Initialize(const XmlNode& node) = 0;
 
         virtual void Update() = 0;
         virtual void Draw() = 0;

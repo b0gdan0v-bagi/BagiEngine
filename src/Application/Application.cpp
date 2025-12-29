@@ -16,7 +16,7 @@ namespace Core {
         ApplicationSystemType type;
 
         if (config.LoadFromVirtualPath("config/ApplicationConfig.xml")) {
-            type = config.Get<ApplicationSystemType>("root.type");
+            type = config.GetRoot().ParseAttribute<ApplicationSystemType>("type").value_or(ApplicationSystemType::None);
         } else {
             return false;
         }

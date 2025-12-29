@@ -1,40 +1,37 @@
 #include "XmlConfig.h"
 
 #include <Core/FileSystem/FileSystem.h>
+#include <algorithm>
+#include <sstream>
 
 namespace Core {
 
     bool XmlConfig::LoadFromFile(const std::filesystem::path& filepath) {
         if (!std::filesystem::exists(filepath)) {
-            return false;
+            return {};
         }
 
         if (!std::filesystem::is_regular_file(filepath)) {
-            return false;
+            return {};
         }
 
         std::ifstream testStream(filepath, std::ios::in);
         if (!testStream.is_open()) {
-            return false;
+            return {};
         }
         testStream.close();
 
-        boost::property_tree::read_xml(filepath.string(), _ptree, boost::property_tree::xml_parser::trim_whitespace);
-        return true;
+        pugi::xml_parse_result result = _doc.load_file(filepath.string().c_str());
+        return result;
     }
 
     bool XmlConfig::LoadFromString(const std::string& xmlContent) {
         if (xmlContent.empty()) {
-            return false;
+            return {};
         }
 
-        std::istringstream stream(xmlContent);
-        if (!stream.good()) {
-            return false;
-        }
-
-        boost::property_tree::read_xml(stream, _ptree, boost::property_tree::xml_parser::trim_whitespace);
-        return true;
+        bool result = _doc.load_string(xmlContent.c_str());
+        return result;
     }
 
     bool XmlConfig::SaveToFile(const std::filesystem::path& filepath) const {
@@ -54,15 +51,21 @@ namespace Core {
         }
         testStream.close();
 
-        boost::property_tree::xml_writer_settings<std::string> settings(' ', 4);
-        boost::property_tree::write_xml(filepath.string(), _ptree, std::locale(), settings);
-        return true;
+        // Сохраняем с форматированием (отступ 4 пробела)
+        return _doc.save_file(filepath.string().c_str(), "  ", pugi::format_indent | pugi::format_indent_attributes, pugi::encoding_utf8);
+    }
+
+    XmlNode XmlConfig::GetRoot() const {
+        if (!_doc) {
+            return {};
+        }
+        return XmlNode{_doc.first_child()};
     }
 
     bool XmlConfig::LoadFromVirtualPath(std::string_view virtualPath) {
         std::filesystem::path resolvedPath = FileSystem::GetInstance().ResolvePath(virtualPath);
         if (resolvedPath.empty()) {
-            return false;
+            return {};
         }
         return LoadFromFile(resolvedPath);
     }

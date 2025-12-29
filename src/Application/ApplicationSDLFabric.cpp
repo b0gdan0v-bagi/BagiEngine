@@ -10,13 +10,13 @@
 namespace Core {
 
     bool ApplicationSDLFabric::Create(const XmlConfig& config) {
-        std::string configPath = config.Get<std::string>("root.path", "");
-        if (configPath.empty()) {
+        auto configPath = config.GetRoot().ParseAttribute<std::string_view>("path");
+        if (!configPath || configPath->empty()) {
             return false;
         }
 
         auto window = Core::New<SDLMainWindow>();
-        if (!window->Initialize(configPath)) {
+        if (!window->Initialize(*configPath)) {
             return false;
         }
         Application::GetInstance().SetMainWindow(window, PassKey<ApplicationMainAccess>{});

@@ -3,7 +3,7 @@
 #include <Widgets/ImGuiWidget.h>
 #include <Widgets/ClearScreenWidget.h>
 #include <Core/Utils/New.h>
-#include <boost/property_tree/ptree.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 namespace Core {
 
@@ -30,48 +30,35 @@ namespace Core {
     }
 
     void WidgetManager::CreateWidgets(const XmlConfig& config) {
-        // Пробуем разные пути к списку виджетов
-        auto widgetsNode = config.GetChild("root.widgets");
-        if (!widgetsNode) {
-            widgetsNode = config.GetChild("widgets");
-        }
-        if (!widgetsNode) {
-            widgetsNode = config.GetChild("root");
+        const auto rootNode = config.GetRoot();
+        if (!rootNode) {
+            return;
         }
 
+        const auto widgetsNode = rootNode.GetChild("widgets");
         if (!widgetsNode) {
             return;
         }
 
-        const auto& tree = *widgetsNode;
-        
-        // Итерируемся по дочерним узлам
-        for (const auto& node : tree) {
-            // Ищем узлы с именем "widget"
-            if (node.first == "widget") {
-                const auto& widgetNode = node.second;
-                
-                // Получаем тип виджета из атрибута или из дочернего узла
-                std::string type = widgetNode.get<std::string>("<xmlattr>.type", "");
-                if (type.empty()) {
-                    type = widgetNode.get<std::string>("type", "");
-                }
-                
-                if (!type.empty()) {
-                    auto widgetType = magic_enum::enum_cast<WidgetType>(type);
-                    if (widgetType.has_value()) {
-                        auto widget = CreateWidgetByType(widgetType.value(), widgetNode);
-                        if (widget) {
-                            widget->Initialize(widgetNode);
-                            RegisterWidget(widget);
-                        }
-                    }
-                }
+        for (const auto widgetNode : widgetsNode.Children()) {
+            auto name = widgetNode.Name();
+            if (name != "widget") {
+                continue;
             }
+            auto widgetType = widgetNode.ParseAttribute<WidgetType>("type");
+            if (!widgetType) {
+                continue;
+            }
+            const auto widgetPtr = CreateWidgetByType(*widgetType);
+            if (!widgetPtr) {
+                continue;
+            }
+            widgetPtr->Initialize(widgetNode);
+            RegisterWidget(widgetPtr);
         }
     }
 
-    IntrusivePtr<IWidget> WidgetManager::CreateWidgetByType(WidgetType type, const boost::property_tree::ptree& widgetNode) {
+    IntrusivePtr<IWidget> WidgetManager::CreateWidgetByType(WidgetType type) {
         switch (type) {
             case WidgetType::ImGuiWidget:
                 return Core::New<ImGuiWidget>();

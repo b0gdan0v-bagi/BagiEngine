@@ -10,7 +10,7 @@ namespace Core {
         ClearScreenWidget() = default;
         ~ClearScreenWidget() override = default;
 
-        bool Initialize(const boost::property_tree::ptree& node) override;
+        bool Initialize(const XmlNode& node) override;
         void Draw() override;
         void Update() override;
 

@@ -23,7 +23,7 @@ namespace Core {
         void CreateWidgets(const XmlConfig& config);
 
     private:
-        IntrusivePtr<IWidget> CreateWidgetByType(WidgetType type, const boost::property_tree::ptree& widgetNode);
+        static IntrusivePtr<IWidget> CreateWidgetByType(WidgetType type);
 
         std::vector<IntrusivePtr<IWidget>> _widgets;
     };

@@ -48,6 +48,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(magic_enum)
 
+# PugiXML
+FetchContent_Declare(
+  pugixml
+  GIT_REPOSITORY https://github.com/zeux/pugixml.git
+  GIT_TAG v1.14
+)
+
+FetchContent_MakeAvailable(pugixml)
+
 # Подключение Boost из локальных заголовков в проекте (header-only)
 # Заголовки Boost находятся в src/Core/Boost/boost
 set(BOOST_HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/Boost")
@@ -80,11 +89,13 @@ target_include_directories(MyGame PRIVATE
     ${entt_SOURCE_DIR}/src
     ${magic_enum_SOURCE_DIR}/include
     ${magic_enum_SOURCE_DIR}
+    ${pugixml_SOURCE_DIR}/src
 )
 
 target_precompile_headers(MyGame PRIVATE src/pch.h)
 
 target_link_libraries(MyGame PRIVATE SDL3-shared)
+target_link_libraries(MyGame PRIVATE pugixml)
 
 # ImGui sources - добавляем после создания target
 if(imgui_SOURCE_DIR AND EXISTS "${imgui_SOURCE_DIR}")
