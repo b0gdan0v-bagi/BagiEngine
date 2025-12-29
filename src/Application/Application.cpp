@@ -47,7 +47,6 @@ namespace Core {
             _eventsProviderManager.ProcessEvents();
             _widgetManager.UpdateAll();
             EventsQueueRegistry::UpdateAll();
-
             _widgetManager.DrawAll();
 
             RenderEvents::RenderPresentEvent::Emit();

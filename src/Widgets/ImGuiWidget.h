@@ -12,7 +12,7 @@ namespace SDLEvents {
         ImGuiWidget() = default;
         ~ImGuiWidget() override = default;
 
-        bool Initialize() override;
+        bool Initialize(const boost::property_tree::ptree& node) override;
         void Draw() override;
         void Update() override;
 

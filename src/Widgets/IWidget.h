@@ -9,7 +9,7 @@ namespace Core {
         IWidget() = default;
         virtual ~IWidget() = default;
 
-        virtual bool Initialize() = 0;
+        virtual bool Initialize(const boost::property_tree::ptree& node) = 0;
 
         virtual void Update() = 0;
         virtual void Draw() = 0;

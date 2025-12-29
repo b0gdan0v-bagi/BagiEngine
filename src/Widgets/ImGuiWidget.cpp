@@ -13,7 +13,7 @@
 
 namespace Core {
 
-    bool ImGuiWidget::Initialize() {
+    bool ImGuiWidget::Initialize(const boost::property_tree::ptree& node) {
         if (_isInitialized) {
             return true;
         }

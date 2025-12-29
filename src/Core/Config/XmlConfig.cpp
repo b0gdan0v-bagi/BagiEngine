@@ -1,9 +1,6 @@
 #include "XmlConfig.h"
 
 #include <Core/FileSystem/FileSystem.h>
-#include <boost/property_tree/xml_parser.hpp>
-#include <fstream>
-#include <sstream>
 
 namespace Core {
 

@@ -62,15 +62,11 @@ namespace Core {
                     if (widgetType.has_value()) {
                         auto widget = CreateWidgetByType(widgetType.value(), widgetNode);
                         if (widget) {
+                            widget->Initialize(widgetNode);
                             RegisterWidget(widget);
                         }
                     }
                 }
-            }
-        }
-        for (auto& widget : _widgets) {
-            if (widget) {
-                widget->Initialize();
             }
         }
     }

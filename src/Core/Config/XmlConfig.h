@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Core/Math/Color.h>
+
 namespace Core {
 
     /**
@@ -47,7 +49,14 @@ namespace Core {
          */
         template<typename T>
         T Get(const std::string& path, const T& defaultValue = T{}) const {
-            if constexpr (std::is_enum_v<T>) {
+            if constexpr (std::is_same_v<T, Math::Color>) {
+                // Специализация для Math::Color
+                std::string colorStr = _ptree.get<std::string>(path, "");
+                if (colorStr.empty()) {
+                    return defaultValue;
+                }
+                return Math::Color::ParseColorFromString(colorStr, defaultValue);
+            } else if constexpr (std::is_enum_v<T>) {
                 // Для enum используем MagicEnum для парсинга из строки
                 std::string strValue = _ptree.get<std::string>(path, "");
                 if (strValue.empty()) {
@@ -124,6 +133,7 @@ namespace Core {
         bool IsLoaded() const {
             return !_ptree.empty();
         }
+
 
     private:
         boost::property_tree::ptree _ptree;

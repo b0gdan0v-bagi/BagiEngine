@@ -40,6 +40,8 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <fstream>
+#include <sstream>
 
 // SDL
 #include <SDL3/SDL.h>
@@ -65,3 +67,4 @@
 #include <Core/Utils/RefCounted.h>
 #include <Core/Utils/New.h>
 #include <Core/Utils/PassKey.h>
+#include <Core/Utils/String.h>
