@@ -47,8 +47,6 @@ namespace Core {
             _eventsProviderManager.ProcessEvents();
             _widgetManager.UpdateAll();
             EventsQueueRegistry::UpdateAll();
-            RenderEvents::SetRenderDrawColorEvent::Emit(Math::Color{20, 20, 100, 255});
-            RenderEvents::RenderClearEvent::Emit();
 
             _widgetManager.DrawAll();
 

@@ -1,6 +1,7 @@
 #include "WidgetManager.h"
 
 #include <Widgets/ImGuiWidget.h>
+#include <Widgets/ClearScreenWidget.h>
 #include <Core/Utils/New.h>
 #include <boost/property_tree/ptree.hpp>
 
@@ -74,6 +75,9 @@ namespace Core {
     IntrusivePtr<IWidget> WidgetManager::CreateWidgetByType(const std::string& type, const boost::property_tree::ptree& widgetNode) {
         if (type == "ImGuiWidget") {
             return Core::New<ImGuiWidget>();
+        }
+        if (type == "ClearScreenWidget") {
+            return Core::New<ClearScreenWidget>();
         }
 
         return {};
