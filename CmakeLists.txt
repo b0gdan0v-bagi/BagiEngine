@@ -39,6 +39,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(entt)
 
+# MagicEnum
+FetchContent_Declare(
+  magic_enum
+  GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
+  GIT_TAG v0.9.5
+)
+
+FetchContent_MakeAvailable(magic_enum)
+
 # Подключение Boost из локальных заголовков в проекте (header-only)
 # Заголовки Boost находятся в src/Core/Boost/boost
 set(BOOST_HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/Boost")
@@ -69,6 +78,8 @@ target_include_directories(MyGame PRIVATE
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
     ${entt_SOURCE_DIR}/src
+    ${magic_enum_SOURCE_DIR}/include
+    ${magic_enum_SOURCE_DIR}
 )
 
 target_precompile_headers(MyGame PRIVATE src/pch.h)

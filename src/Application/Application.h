@@ -8,6 +8,11 @@
 
 namespace Core {
 
+    enum class ApplicationSystemType : uint8_t {
+        None,
+        SDL3
+    };
+
     // Forward declaration для класса-ключа доступа
     class ApplicationMainAccess;
 

@@ -47,6 +47,9 @@
 // entt
 #include <entt/entt.hpp>
 
+// magic enum
+#include <magic_enum/magic_enum.hpp>
+
 // C стандартные библиотеки
 #include <cctype>
 #include <cerrno>

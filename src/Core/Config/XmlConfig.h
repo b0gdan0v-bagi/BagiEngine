@@ -1,10 +1,5 @@
 #pragma once
 
-#include <boost/property_tree/ptree.hpp>
-#include <boost/optional.hpp>
-#include <string>
-#include <filesystem>
-
 namespace Core {
 
     /**
@@ -52,7 +47,17 @@ namespace Core {
          */
         template<typename T>
         T Get(const std::string& path, const T& defaultValue = T{}) const {
-            return _ptree.get<T>(path, defaultValue);
+            if constexpr (std::is_enum_v<T>) {
+                // Для enum используем MagicEnum для парсинга из строки
+                std::string strValue = _ptree.get<std::string>(path, "");
+                if (strValue.empty()) {
+                    return defaultValue;
+                }
+                auto enumValue = magic_enum::enum_cast<T>(strValue);
+                return enumValue.value_or(defaultValue);
+            } else {
+                return _ptree.get<T>(path, defaultValue);
+            }
         }
 
         /**

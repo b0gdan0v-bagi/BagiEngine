@@ -13,20 +13,22 @@ namespace Core {
         FileSystem::GetInstance().Initialize();
 
         XmlConfig config;
-        std::string type;
+        ApplicationSystemType type;
 
         if (config.LoadFromVirtualPath("config/ApplicationConfig.xml")) {
-            type = config.Get<std::string>("root.type");
+            type = config.Get<ApplicationSystemType>("root.type");
         } else {
             return false;
         }
 
-        if (type == "SDL3") {
-            if (!ApplicationSDLFabric::Create(config)) {
+        switch (type) {
+            case ApplicationSystemType::SDL3:
+                if (!ApplicationSDLFabric::Create(config)) {
+                    return false;
+                }
+                break;
+            default:
                 return false;
-            }
-        } else {
-            return false;
         }
 
         ApplicationEvents::QuitEvent::Subscribe<&Application::StopApplication>(this);
