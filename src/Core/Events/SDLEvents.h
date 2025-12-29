@@ -1,25 +1,10 @@
 #pragma once
 
 #include <Core/Events/EventBase.h>
-
-namespace Math {
-    struct Color;
-}
+#include <SDL3/SDL.h>
 
 namespace Core {
-
-    // События наследуются от EventBase с самим собой как параметр
-    struct QuitEvent : public EventBase<QuitEvent> {};
-    struct NewFrameEvent : public EventBase<NewFrameEvent> {};
-    struct RenderClearEvent : public EventBase<RenderClearEvent> {};
-    struct RenderPresentEvent : public EventBase<RenderPresentEvent> {};
-    struct ApplicationCleanUpEvent : public EventBase<ApplicationCleanUpEvent> {};
-    
-    struct SetRenderDrawColorEvent : public EventBase<SetRenderDrawColorEvent> {
-        constexpr explicit SetRenderDrawColorEvent(Math::Color color_) : color(color_) {}
-        constexpr explicit SetRenderDrawColorEvent(unsigned char r, unsigned char g, unsigned char b, unsigned char a) : color(Math::Color{r, g, b, a}) {}
-        Math::Color color;
-    };
+namespace SDLEvents {
 
     // События клавиатуры
     struct KeyDownEvent : public EventBase<KeyDownEvent> {
@@ -76,4 +61,6 @@ namespace Core {
         explicit SDLEventWrapper(const SDL_Event& e) : event(e) {}
     };
 
+}  // namespace SDLEvents
 }  // namespace Core
+

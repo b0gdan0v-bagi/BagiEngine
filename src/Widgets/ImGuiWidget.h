@@ -3,7 +3,9 @@
 #include <Widgets/IWidget.h>
 
 namespace Core {
+namespace SDLEvents {
     struct SDLEventWrapper;
+}
 
     class ImGuiWidget : public IWidget {
     public:
@@ -20,7 +22,7 @@ namespace Core {
 
         void Destroy();
         void OnNewFrame() const;
-        void OnSDLEvent(const SDLEventWrapper& event) const;
+        void OnSDLEvent(const SDLEvents::SDLEventWrapper& event) const;
 
         bool _isInitialized = false;
     };

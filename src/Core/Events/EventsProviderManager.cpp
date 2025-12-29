@@ -1,5 +1,4 @@
 #include "EventsProviderManager.h"
-#include "Events.h"
 #include <algorithm>
 #include <vector>
 

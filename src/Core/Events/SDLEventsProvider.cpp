@@ -1,7 +1,8 @@
 #include "SDLEventsProvider.h"
 
 #include "Application/Application.h"
-#include <Core/Events/Events.h>
+#include <Core/Events/ApplicationEvents.h>
+#include <Core/Events/SDLEvents.h>
 
 namespace Core {
 
@@ -32,7 +33,7 @@ namespace Core {
     void SDLEventsProvider::ConvertSDLEvent(const SDL_Event& sdlEvent) {
         switch (sdlEvent.type) {
             case SDL_EVENT_QUIT:
-                QuitEvent::Emit();
+                ApplicationEvents::QuitEvent::Emit();
                 break;
 
             /*case SDL_EVENT_KEY_DOWN: {
@@ -81,7 +82,7 @@ namespace Core {
 
             default:
                 // Для всех остальных событий отправляем обёртку
-                SDLEventWrapper::Emit(sdlEvent);
+                SDLEvents::SDLEventWrapper::Emit(sdlEvent);
                 break;
         }
     }

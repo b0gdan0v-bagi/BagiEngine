@@ -2,7 +2,8 @@
 
 #include <Application/ApplicationSDLFabric.h>
 #include <Core/Config/XmlConfig.h>
-#include <Core/Events/Events.h>
+#include <Core/Events/ApplicationEvents.h>
+#include <Core/Events/RenderEvents.h>
 #include <Core/Events/SDLEventsProvider.h>
 #include <Core/FileSystem/FileSystem.h>
 
@@ -29,7 +30,7 @@ namespace Core {
             return false;
         }
 
-        QuitEvent::Subscribe<&Application::StopApplication>(this);
+        ApplicationEvents::QuitEvent::Subscribe<&Application::StopApplication>(this);
 
         _widgetManager.CreateWidgets(config);
 
@@ -41,21 +42,21 @@ namespace Core {
 
         while (_isRunning) {
 
-            NewFrameEvent::Emit();
+            RenderEvents::NewFrameEvent::Emit();
             _eventsProviderManager.ProcessEvents();
             _widgetManager.UpdateAll();
             EventsQueueRegistry::UpdateAll();
-            SetRenderDrawColorEvent::Emit(Math::Color{20, 20, 100, 255});
-            RenderClearEvent::Emit();
+            RenderEvents::SetRenderDrawColorEvent::Emit(Math::Color{20, 20, 100, 255});
+            RenderEvents::RenderClearEvent::Emit();
 
             _widgetManager.DrawAll();
 
-            RenderPresentEvent::Emit();
+            RenderEvents::RenderPresentEvent::Emit();
         }
     }
 
     void Application::Cleanup(PassKey<ApplicationMainAccess>) {
-        ApplicationCleanUpEvent::Emit();
+        ApplicationEvents::ApplicationCleanUpEvent::Emit();
 
         if (_window) {
             _window.Reset();

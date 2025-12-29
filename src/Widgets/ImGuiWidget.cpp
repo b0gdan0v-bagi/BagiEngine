@@ -2,7 +2,9 @@
 
 #include "Core/MainWindow/SDLMainWindow.h"
 
-#include <Core/Events/Events.h>
+#include <Core/Events/ApplicationEvents.h>
+#include <Core/Events/RenderEvents.h>
+#include <Core/Events/SDLEvents.h>
 #include <Application/Application.h>
 
 #include <imgui.h>
@@ -33,9 +35,9 @@ namespace Core {
         ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
         ImGui_ImplSDLRenderer3_Init(renderer);
 
-        SDLEventWrapper::Subscribe<&ImGuiWidget::OnSDLEvent>(this);
-        NewFrameEvent::Subscribe<&ImGuiWidget::OnNewFrame>(this);
-        ApplicationCleanUpEvent::Subscribe<&ImGuiWidget::Destroy>(this);
+        SDLEvents::SDLEventWrapper::Subscribe<&ImGuiWidget::OnSDLEvent>(this);
+        RenderEvents::NewFrameEvent::Subscribe<&ImGuiWidget::OnNewFrame>(this);
+        ApplicationEvents::ApplicationCleanUpEvent::Subscribe<&ImGuiWidget::Destroy>(this);
 
         _isInitialized = true;
         return true;
@@ -55,7 +57,7 @@ namespace Core {
 
         if (ImGui::Begin("Debug Widget")) {
             if (ImGui::Button("Quit")) {
-                QuitEvent::Emit();
+                ApplicationEvents::QuitEvent::Emit();
             }
         }
         ImGui::End();
@@ -101,7 +103,7 @@ namespace Core {
         ImGui::NewFrame();
     }
 
-    void ImGuiWidget::OnSDLEvent(const SDLEventWrapper& event) const {
+    void ImGuiWidget::OnSDLEvent(const SDLEvents::SDLEventWrapper& event) const {
         if (!_isInitialized) {
             return;
         }

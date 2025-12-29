@@ -4,7 +4,8 @@
 
 #include <Application/Application.h>
 #include <Core/Config/XmlConfig.h>
-#include <Core/Events/Events.h>
+#include <Core/Events/ApplicationEvents.h>
+#include <Core/Events/RenderEvents.h>
 #include <Core/MainWindow/SDLUtils.h>
 
 namespace Core {
@@ -77,10 +78,10 @@ namespace Core {
         _width = width;
         _height = height;
 
-        RenderClearEvent::Subscribe<&SDLMainWindow::RenderClear>(this);
-        RenderPresentEvent::Subscribe<&SDLMainWindow::RenderPresent>(this);
-        ApplicationCleanUpEvent::Subscribe<&SDLMainWindow::Destroy>(this);
-        SetRenderDrawColorEvent::Subscribe<&SDLMainWindow::SetRenderDrawColor>(this);
+        RenderEvents::RenderClearEvent::Subscribe<&SDLMainWindow::RenderClear>(this);
+        RenderEvents::RenderPresentEvent::Subscribe<&SDLMainWindow::RenderPresent>(this);
+        ApplicationEvents::ApplicationCleanUpEvent::Subscribe<&SDLMainWindow::Destroy>(this);
+        RenderEvents::SetRenderDrawColorEvent::Subscribe<&SDLMainWindow::SetRenderDrawColor>(this);
         initialized = true;
 
         return true;
@@ -112,7 +113,7 @@ namespace Core {
         return _height;
     }
 
-    void SDLMainWindow::SetRenderDrawColor(const SetRenderDrawColorEvent& event) const {
+    void SDLMainWindow::SetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) const {
         if (_renderer) {
             SDL_SetRenderDrawColor(_renderer, event.color.r, event.color.g, event.color.b, event.color.a);
         }
