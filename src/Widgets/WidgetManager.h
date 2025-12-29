@@ -7,6 +7,11 @@
 
 namespace Core {
 
+    enum class WidgetType {
+        ImGuiWidget,
+        ClearScreenWidget
+    };
+
     class WidgetManager {
     public:
         WidgetManager() = default;
@@ -18,7 +23,7 @@ namespace Core {
         void CreateWidgets(const XmlConfig& config);
 
     private:
-        IntrusivePtr<IWidget> CreateWidgetByType(const std::string& type, const boost::property_tree::ptree& widgetNode);
+        IntrusivePtr<IWidget> CreateWidgetByType(WidgetType type, const boost::property_tree::ptree& widgetNode);
 
         std::vector<IntrusivePtr<IWidget>> _widgets;
     };

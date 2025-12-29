@@ -58,9 +58,12 @@ namespace Core {
                 }
                 
                 if (!type.empty()) {
-                    auto widget = CreateWidgetByType(type, widgetNode);
-                    if (widget) {
-                        RegisterWidget(widget);
+                    auto widgetType = magic_enum::enum_cast<WidgetType>(type);
+                    if (widgetType.has_value()) {
+                        auto widget = CreateWidgetByType(widgetType.value(), widgetNode);
+                        if (widget) {
+                            RegisterWidget(widget);
+                        }
                     }
                 }
             }
@@ -72,15 +75,15 @@ namespace Core {
         }
     }
 
-    IntrusivePtr<IWidget> WidgetManager::CreateWidgetByType(const std::string& type, const boost::property_tree::ptree& widgetNode) {
-        if (type == "ImGuiWidget") {
-            return Core::New<ImGuiWidget>();
+    IntrusivePtr<IWidget> WidgetManager::CreateWidgetByType(WidgetType type, const boost::property_tree::ptree& widgetNode) {
+        switch (type) {
+            case WidgetType::ImGuiWidget:
+                return Core::New<ImGuiWidget>();
+            case WidgetType::ClearScreenWidget:
+                return Core::New<ClearScreenWidget>();
+            default:
+                return {};
         }
-        if (type == "ClearScreenWidget") {
-            return Core::New<ClearScreenWidget>();
-        }
-
-        return {};
     }
 
 }  // namespace Core
