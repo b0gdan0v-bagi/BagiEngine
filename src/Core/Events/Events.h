@@ -3,6 +3,8 @@
 #include <SDL3/SDL.h>
 #include <entt/entt.hpp>
 #include <utility>
+#include <functional>
+#include <vector>
 
 namespace Math {
     struct Color;
@@ -14,6 +16,30 @@ namespace Core {
         virtual ~BaseEvent() = default;
     };
 
+    // Менеджер для автоматической регистрации событий
+    class EventsQueueRegistry {
+    public:
+        using UpdateFunction = std::function<void()>;
+        
+        static void Register(UpdateFunction updateFunc) {
+            GetInstance()._updateFunctions.push_back(std::move(updateFunc));
+        }
+        
+        static void UpdateAll() {
+            for (auto& func : GetInstance()._updateFunctions) {
+                func();
+            }
+        }
+        
+    private:
+        static EventsQueueRegistry& GetInstance() {
+            static EventsQueueRegistry instance;
+            return instance;
+        }
+        
+        std::vector<UpdateFunction> _updateFunctions;
+    };
+
     // CRTP базовый класс для статических методов событий с индивидуальным dispatcher'ом
     template <typename Derived>
     struct EventBase : public BaseEvent {
@@ -21,6 +47,19 @@ namespace Core {
             static entt::dispatcher dispatcher;
             return dispatcher;
         }
+
+    private:
+        static void RegisterOnce() {
+            static bool registered = false;
+            if (!registered) {
+                registered = true;
+                EventsQueueRegistry::Register([]() {
+                    Derived::Update();
+                });
+            }
+        }
+
+    public:
 
         template <auto Candidate, typename Type>
         static void Subscribe(Type* instance) {
@@ -39,11 +78,13 @@ namespace Core {
         }
 
         static void Enqueue() requires (std::is_default_constructible_v<Derived>) {
+            RegisterOnce();
             GetDispatcher().enqueue(Derived{});
         }
 
         template <typename... Args>
         static void Enqueue(Args&&... args) {
+            RegisterOnce();
             GetDispatcher().enqueue(Derived{std::forward<Args>(args)...});
         }
 

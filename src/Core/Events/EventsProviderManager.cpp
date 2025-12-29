@@ -29,28 +29,11 @@ namespace Core {
     }
 
     void EventsProviderManager::ProcessEvents() const {
-        // Обрабатываем события от всех провайдеров
         for (auto& provider : _providers) {
             if (provider) {
                 provider->ProcessEvents();
             }
         }
-
-        // Обновляем очереди всех событий
-        QuitEvent::Update();
-        NewFrameEvent::Update();
-        RenderClearEvent::Update();
-        RenderPresentEvent::Update();
-        ApplicationCleanUpEvent::Update();
-        SetRenderDrawColorEvent::Update();
-        KeyDownEvent::Update();
-        KeyUpEvent::Update();
-        MouseButtonDownEvent::Update();
-        MouseButtonUpEvent::Update();
-        MouseMotionEvent::Update();
-        MouseWheelEvent::Update();
-        WindowEvent::Update();
-        SDLEventWrapper::Update();
     }
 
 } // namespace Core
