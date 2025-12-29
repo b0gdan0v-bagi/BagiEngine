@@ -17,8 +17,8 @@ namespace Core {
         ~Application() override = default;
 
         bool Initialize(PassKey<ApplicationMainAccess>);
-        void Run(PassKey<ApplicationMainAccess>);
-        void Cleanup(PassKey<ApplicationMainAccess>);
+        void Run(PassKey<ApplicationMainAccess>) const;
+        static void Cleanup(PassKey<ApplicationMainAccess>);
 
         static const IntrusivePtr<IMainWindow>& GetMainWindow() {
             return GetInstance()._window;

@@ -4,7 +4,6 @@
 #include <Core/Config/XmlConfig.h>
 #include <Core/Events/ApplicationEvents.h>
 #include <Core/Events/RenderEvents.h>
-#include <Core/Events/SDLEventsProvider.h>
 #include <Core/FileSystem/FileSystem.h>
 
 namespace Core {
@@ -38,7 +37,7 @@ namespace Core {
         return _isRunning;
     }
 
-    void Application::Run(PassKey<ApplicationMainAccess>) {
+    void Application::Run(PassKey<ApplicationMainAccess>) const {
 
         while (_isRunning) {
 
@@ -57,10 +56,6 @@ namespace Core {
 
     void Application::Cleanup(PassKey<ApplicationMainAccess>) {
         ApplicationEvents::ApplicationCleanUpEvent::Emit();
-
-        if (_window) {
-            _window.Reset();
-        }
     }
 
     void Application::SetMainWindow(IntrusivePtr<IMainWindow> window, PassKey<ApplicationMainAccess>) {
