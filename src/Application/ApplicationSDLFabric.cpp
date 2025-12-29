@@ -25,7 +25,7 @@ namespace Core {
         if (!sdlEventsProvider->Initialize()) {
             return false;
         }
-        Application::GetEventManager().RegisterProvider(sdlEventsProvider);
+        Application::GetEventsProviderManager().RegisterProvider(sdlEventsProvider);
 
         return true;
     }

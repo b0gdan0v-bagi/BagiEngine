@@ -30,10 +30,9 @@ namespace Core {
     }
 
     void SDLEventsProvider::ConvertSDLEvent(const SDL_Event& sdlEvent) {
-        auto& eventsManager = Application::GetEventManager();
         switch (sdlEvent.type) {
             case SDL_EVENT_QUIT:
-                eventsManager.Emit(QuitEvent{});
+                QuitEvent::Emit();
                 break;
 
             /*case SDL_EVENT_KEY_DOWN: {
@@ -82,7 +81,7 @@ namespace Core {
 
             default:
                 // Для всех остальных событий отправляем обёртку
-                eventsManager.Emit(SDLEventWrapper{sdlEvent});
+                SDLEventWrapper::Emit(sdlEvent);
                 break;
         }
     }

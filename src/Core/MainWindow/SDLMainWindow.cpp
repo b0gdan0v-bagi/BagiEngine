@@ -77,10 +77,10 @@ namespace Core {
         _width = width;
         _height = height;
 
-        Application::GetEventManager().Subscribe<RenderClearEvent, &SDLMainWindow::RenderClear>(this);
-        Application::GetEventManager().Subscribe<RenderPresentEvent, &SDLMainWindow::RenderPresent>(this);
-        Application::GetEventManager().Subscribe<ApplicationCleanUpEvent, &SDLMainWindow::Destroy>(this);
-        Application::GetEventManager().Subscribe<SetRenderDrawColorEvent, &SDLMainWindow::SetRenderDrawColor>(this);
+        RenderClearEvent::Subscribe<&SDLMainWindow::RenderClear>(this);
+        RenderPresentEvent::Subscribe<&SDLMainWindow::RenderPresent>(this);
+        ApplicationCleanUpEvent::Subscribe<&SDLMainWindow::Destroy>(this);
+        SetRenderDrawColorEvent::Subscribe<&SDLMainWindow::SetRenderDrawColor>(this);
         initialized = true;
 
         return true;

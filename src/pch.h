@@ -58,6 +58,7 @@
 #include <ctime>
 
 // Core
+#include <Core/Math/Color.h>
 #include <Core/Utils/RefCounted.h>
 #include <Core/Utils/New.h>
 #include <Core/Utils/PassKey.h>

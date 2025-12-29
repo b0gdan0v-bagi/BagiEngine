@@ -29,7 +29,7 @@ namespace Core {
             return false;
         }
 
-        _eventManager.Subscribe<QuitEvent, &Application::StopApplication>(this);
+        QuitEvent::Subscribe<&Application::StopApplication>(this);
 
         _widgetManager.CreateWidgets(config);
 
@@ -41,20 +41,20 @@ namespace Core {
 
         while (_isRunning) {
 
-            _eventManager.Emit(NewFrameEvent{});
-            _eventManager.ProcessEvents();
+            NewFrameEvent::Emit();
+            _eventsProviderManager.ProcessEvents();
             _widgetManager.UpdateAll();
-            _eventManager.Emit(SetRenderDrawColorEvent{20, 20, 100, 255});
-            _eventManager.Emit(RenderClearEvent{});
+            SetRenderDrawColorEvent::Emit(Math::Color{20, 20, 100, 255});
+            RenderClearEvent::Emit();
 
             _widgetManager.DrawAll();
 
-            _eventManager.Emit(RenderPresentEvent{});
+            RenderPresentEvent::Emit();
         }
     }
 
     void Application::Cleanup(PassKey<ApplicationMainAccess>) {
-        _eventManager.Emit(ApplicationCleanUpEvent{});
+        ApplicationCleanUpEvent::Emit();
 
         if (_window) {
             _window.Reset();

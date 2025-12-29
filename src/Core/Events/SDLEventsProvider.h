@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Core/Events/IEventsProvider.h>
-#include <Core/Events/EventManager.h>
 #include <SDL3/SDL.h>
 
 namespace Core {

@@ -33,9 +33,9 @@ namespace Core {
         ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
         ImGui_ImplSDLRenderer3_Init(renderer);
 
-        Application::GetEventManager().Subscribe<SDLEventWrapper, &ImGuiWidget::OnSDLEvent>(this);
-        Application::GetEventManager().Subscribe<NewFrameEvent, &ImGuiWidget::OnNewFrame>(this);
-        Application::GetEventManager().Subscribe<ApplicationCleanUpEvent, &ImGuiWidget::Destroy>(this);
+        SDLEventWrapper::Subscribe<&ImGuiWidget::OnSDLEvent>(this);
+        NewFrameEvent::Subscribe<&ImGuiWidget::OnNewFrame>(this);
+        ApplicationCleanUpEvent::Subscribe<&ImGuiWidget::Destroy>(this);
 
         _isInitialized = true;
         return true;
@@ -55,7 +55,7 @@ namespace Core {
 
         if (ImGui::Begin("Debug Widget")) {
             if (ImGui::Button("Quit")) {
-                Application::GetEventManager().Emit(QuitEvent{});
+                QuitEvent::Emit();
             }
         }
         ImGui::End();

@@ -3,7 +3,7 @@
 #include <Core/MainWindow/IMainWindow.h>
 #include <Core/Utils/IntrusivePtr.h>
 #include <Core/Utils/Singleton.h>
-#include <Core/Events/EventManager.h>
+#include <Core/Events/EventsProviderManager.h>
 #include <Widgets/WidgetManager.h>
 
 namespace Core {
@@ -24,8 +24,8 @@ namespace Core {
             return GetInstance()._window;
         }
 
-        static EventManager& GetEventManager() {
-            return GetInstance()._eventManager;
+        static EventsProviderManager& GetEventsProviderManager() {
+            return GetInstance()._eventsProviderManager;
         }
 
         void SetMainWindow(IntrusivePtr<IMainWindow> window, PassKey<ApplicationMainAccess>);
@@ -36,7 +36,7 @@ namespace Core {
 
         IntrusivePtr<IMainWindow> _window;
         WidgetManager _widgetManager;
-        EventManager _eventManager;
+        EventsProviderManager _eventsProviderManager;
         bool _isRunning = false;
     };
 }  // namespace Core
