@@ -8,7 +8,7 @@
 
 namespace Core {
 
-    bool Application::Initialize() {
+    bool Application::Initialize(PassKey<ApplicationMainAccess>) {
 
         FileSystem::GetInstance().Initialize();
 
@@ -37,7 +37,7 @@ namespace Core {
         return _isRunning;
     }
 
-    void Application::Run() {
+    void Application::Run(PassKey<ApplicationMainAccess>) {
 
         while (_isRunning) {
 
@@ -53,7 +53,7 @@ namespace Core {
         }
     }
 
-    void Application::Cleanup() {
+    void Application::Cleanup(PassKey<ApplicationMainAccess>) {
         _eventManager.Emit(ApplicationCleanUpEvent{});
 
         if (_window) {
@@ -61,7 +61,7 @@ namespace Core {
         }
     }
 
-    void Application::SetMainWindow(IntrusivePtr<IMainWindow> window) {
+    void Application::SetMainWindow(IntrusivePtr<IMainWindow> window, PassKey<ApplicationMainAccess>) {
         _window = std::move(window);
     }
 

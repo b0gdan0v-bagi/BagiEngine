@@ -19,7 +19,7 @@ namespace Core {
         if (!window->Initialize(configPath)) {
             return false;
         }
-        Application::GetInstance().SetMainWindow(window);
+        Application::GetInstance().SetMainWindow(window, PassKey<ApplicationMainAccess>{});
 
          auto sdlEventsProvider = Core::New<SDLEventsProvider>();
         if (!sdlEventsProvider->Initialize()) {

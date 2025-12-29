@@ -1,9 +1,11 @@
 #pragma once
 
+#include <Application/ApplicationMainAccess.h>
+
 namespace Core {
     class XmlConfig;
 
-    class ApplicationSDLFabric {
+    class ApplicationSDLFabric : public ApplicationMainAccess {
     public:
         static bool Create(const XmlConfig& config);
     };

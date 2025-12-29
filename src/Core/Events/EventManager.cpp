@@ -29,7 +29,7 @@ namespace Core {
         }
     }
 
-    void EventManager::ProcessEvents() {
+    void EventManager::ProcessEvents() const {
         // Обрабатываем события от всех делегатов
         for (auto& provider : _providers) {
             if (provider) {

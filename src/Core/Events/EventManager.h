@@ -14,7 +14,7 @@ namespace Core {
         void RegisterProvider(const IntrusivePtr<IEventsProvider>& Provider);
         void UnregisterProvider(const IntrusivePtr<IEventsProvider>& Provider);
 
-        void ProcessEvents();
+        void ProcessEvents() const;
 
         template <typename T, auto Candidate, typename Type>
         void Subscribe(Type* instance) {

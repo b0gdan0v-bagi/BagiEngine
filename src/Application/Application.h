@@ -8,14 +8,17 @@
 
 namespace Core {
 
+    // Forward declaration для класса-ключа доступа
+    class ApplicationMainAccess;
+
     class Application : public Singleton<Application> {
     public:
         Application() = default;
         ~Application() override = default;
 
-        bool Initialize();
-        void Run();
-        void Cleanup();
+        bool Initialize(PassKey<ApplicationMainAccess>);
+        void Run(PassKey<ApplicationMainAccess>);
+        void Cleanup(PassKey<ApplicationMainAccess>);
 
         static const IntrusivePtr<IMainWindow>& GetMainWindow() {
             return GetInstance()._window;
@@ -25,7 +28,7 @@ namespace Core {
             return GetInstance()._eventManager;
         }
 
-        void SetMainWindow(IntrusivePtr<IMainWindow> window);
+        void SetMainWindow(IntrusivePtr<IMainWindow> window, PassKey<ApplicationMainAccess>);
 
     private:
 
