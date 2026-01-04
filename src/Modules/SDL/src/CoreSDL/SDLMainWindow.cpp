@@ -51,7 +51,7 @@ namespace Core {
         int height;
         SDL_WindowFlags flags = 0;
 
-        XmlConfig config;
+        XmlConfig config = XmlConfig::Create();
 
         if (config.LoadFromVirtualPath(configPath)) {
             auto windowNode = config.GetRoot().GetChild("window");

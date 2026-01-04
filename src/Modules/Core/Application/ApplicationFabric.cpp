@@ -8,7 +8,7 @@ namespace Core {
 
     bool ApplicationFabric::Create() {
 
-        XmlConfig config;
+        XmlConfig config = XmlConfig::Create();
         constexpr std::string_view configPath = "config/ApplicationConfig.xml";
         if (!config.LoadFromVirtualPath(configPath)) {
             return false;

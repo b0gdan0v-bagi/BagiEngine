@@ -5,15 +5,19 @@
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <variant>
+#include <pugixml.hpp>
 
 namespace Core {
 
     class XmlConfig {
+
+        using RawDocument = std::variant<pugi::xml_document>;
+
     public:
-        XmlConfig() = default;
         ~XmlConfig() = default;
 
-        bool LoadFromFile(const std::filesystem::path& filepath);
+        static XmlConfig Create();
 
         bool LoadFromVirtualPath(std::string_view virtualPath);
 
@@ -24,16 +28,20 @@ namespace Core {
         XmlNode GetRoot() const;
 
         void Clear() {
-            _doc.reset();
+            std::visit(overload{[](pugi::xml_document& doc) { doc.reset(); }}, _doc);
         }
 
         bool IsLoaded() const {
-            return !_doc.empty();
+            return std::visit(overload{[](const pugi::xml_document& doc) { return !doc.empty(); }}, _doc);
         }
 
     private:
 
-        pugi::xml_document _doc;
+        explicit XmlConfig(pugi::xml_document doc) : _doc(std::move(doc)) {}
+
+        bool LoadFromFile(const std::filesystem::path& filepath);
+
+        RawDocument _doc;
     };
 
 }  // namespace Core

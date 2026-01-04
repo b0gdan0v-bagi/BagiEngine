@@ -4,6 +4,10 @@
 
 namespace Core {
 
+    XmlConfig XmlConfig::Create() {
+        return XmlConfig(pugi::xml_document{});
+    }
+
     bool XmlConfig::LoadFromFile(const std::filesystem::path& filepath) {
         if (!std::filesystem::exists(filepath)) {
             return {};
@@ -13,14 +17,11 @@ namespace Core {
             return {};
         }
 
-        std::ifstream testStream(filepath, std::ios::in);
-        if (!testStream.is_open()) {
-            return {};
-        }
-        testStream.close();
-
-        pugi::xml_parse_result result = _doc.load_file(filepath.string().c_str());
-        return result;
+        return std::visit(overload{[&filepath](pugi::xml_document& doc) {
+                              pugi::xml_parse_result result = doc.load_file(filepath.string().c_str());
+                              return result;
+                          }},
+                          _doc);
     }
 
     bool XmlConfig::LoadFromString(std::string_view xmlContent) {
@@ -28,8 +29,7 @@ namespace Core {
             return {};
         }
 
-        bool result = _doc.load_string(xmlContent.data());
-        return result;
+        return std::visit(overload{[xmlContent](pugi::xml_document& doc) { return doc.load_string(xmlContent.data()); }}, _doc);
     }
 
     bool XmlConfig::SaveToFile(const std::filesystem::path& filepath) const {
@@ -43,21 +43,20 @@ namespace Core {
             }
         }
 
-        std::ofstream testStream(filepath, std::ios::out);
-        if (!testStream.is_open()) {
-            return false;
-        }
-        testStream.close();
-
         // Сохраняем с форматированием (отступ 4 пробела)
-        return _doc.save_file(filepath.string().c_str(), "  ", pugi::format_indent | pugi::format_indent_attributes, pugi::encoding_utf8);
+        return std::visit(
+            overload{[&filepath](const pugi::xml_document& doc) { return doc.save_file(filepath.string().c_str(), "  ", pugi::format_indent | pugi::format_indent_attributes, pugi::encoding_utf8); }},
+            _doc);
     }
 
     XmlNode XmlConfig::GetRoot() const {
-        if (!_doc) {
-            return {};
-        }
-        return XmlNode{_doc.first_child()};
+        return std::visit(overload{[](const pugi::xml_document& doc) -> XmlNode {
+                              if (!doc) {
+                                  return {};
+                              }
+                              return XmlNode{doc.first_child()};
+                          }},
+                          _doc);
     }
 
     bool XmlConfig::LoadFromVirtualPath(std::string_view virtualPath) {
