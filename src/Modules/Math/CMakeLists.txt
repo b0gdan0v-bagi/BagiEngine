@@ -25,27 +25,9 @@ set_target_properties(MathModule PROPERTIES FOLDER "Modules")
 target_precompile_headers(MathModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h)
 
 # Подключаем директории с заголовками
-# Чтобы файлы из src/Modules/Math/src/ были доступны через <Math/Color.h>,
+# Чтобы файлы из src/Modules/Math/src/Math/ были доступны через <Math/Color.h>,
 # нужно добавить ${PROJECT_ROOT}/src/Modules/Math/src в include directories.
-# Но тогда путь будет <Color.h>, а не <Math/Color.h>.
-# Чтобы получить <Math/Color.h>, нужно добавить ${PROJECT_ROOT}/src/Modules/Math
-# в include directories, тогда путь Math/src/Color.h будет доступен как <Math/src/Color.h>.
-# Но нам нужно <Math/Color.h>, поэтому используем интерфейсную библиотеку,
-# которая добавляет ${PROJECT_ROOT}/src/Modules/Math/src в include directories.
-# Однако это даст путь <Color.h>.
-# Правильное решение: создать интерфейсную библиотеку с путем ${PROJECT_ROOT}/src/Modules/Math/src
-# и использовать её, но тогда путь будет <Color.h>.
-# Чтобы получить <Math/Color.h>, нужно использовать другой подход.
-# Используем интерфейсную библиотеку с путем ${PROJECT_ROOT}/src/Modules/Math/src
-# и создаем виртуальную структуру через интерфейсную библиотеку.
-# Но CMake не поддерживает виртуальные структуры напрямую.
-# Правильное решение: использовать интерфейсную библиотеку с путем ${PROJECT_ROOT}/src/Modules/Math/src
-# и создать виртуальную структуру, но это сложно.
-# Используем простой подход: добавляем ${PROJECT_ROOT}/src/Modules/Math/src в include directories
-# и используем путь <Color.h>, но это не то, что нужно.
-# Чтобы получить <Math/Color.h>, нужно использовать другой подход.
-# Используем интерфейсную библиотеку с путем ${PROJECT_ROOT}/src/Modules/Math/src
-# и создаем виртуальную структуру через интерфейсную библиотеку.
+# Тогда путь Math/Color.h будет доступен как <Math/Color.h>.
 add_library(MathModuleInterface INTERFACE)
 target_include_directories(MathModuleInterface INTERFACE
     $<BUILD_INTERFACE:${PROJECT_ROOT}/src/Modules/Math/src>

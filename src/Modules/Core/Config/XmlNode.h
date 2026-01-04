@@ -5,7 +5,7 @@
 #include <pugixml.hpp>
 #include <string>
 #include <variant>
-#include <Color.h>
+#include <Math/Color.h>
 
 namespace Core {
 

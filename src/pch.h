@@ -6,8 +6,6 @@
 #define _WIN32_WINNT 0x0A00  // Windows 10+
 #endif
 
-#include <Math/src/pch.h>
-
 // Стандартные библиотеки C++ для общего использования
 #include <filesystem>
 #include <memory>
@@ -24,4 +22,5 @@
 #include <cstring>
 #include <ctime>
 
-#include <Color.h>
+// Math
+#include <Math/Color.h>

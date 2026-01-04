@@ -1,7 +1,7 @@
 #include "ClearScreenWidget.h"
 
 #include <Core/Events/RenderEvents.h>
-#include <Color.h>
+#include <Math/Color.h>
 
 namespace Core {
 
