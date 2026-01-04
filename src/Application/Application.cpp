@@ -1,8 +1,9 @@
 #include "Application.h"
 
-#include <Application/ApplicationSDLFabric.h>
+#include <CoreSDL/ApplicationSDLFabric.h>
 #include <Core/Config/XmlConfig.h>
 #include <Core/Events/ApplicationEvents.h>
+#include <Core/Events/EventsQueueRegistry.h>
 #include <Core/Events/RenderEvents.h>
 #include <Core/FileSystem/FileSystem.h>
 

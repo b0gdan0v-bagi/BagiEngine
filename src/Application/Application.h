@@ -1,7 +1,8 @@
 #pragma once
 
 #include <Core/MainWindow/IMainWindow.h>
-#include <Core/Utils/IntrusivePtr.h>
+#include <Core/RefCounted/IntrusivePtr.h>
+#include <Core/Utils/PassKey.h>
 #include <Core/Utils/Singleton.h>
 #include <Core/Events/EventsProviderManager.h>
 #include <Widgets/WidgetManager.h>

@@ -2,7 +2,7 @@
 
 #include <Widgets/ImGuiWidget.h>
 #include <Widgets/ClearScreenWidget.h>
-#include <Core/Utils/New.h>
+#include <Core/RefCounted/New.h>
 #include <magic_enum/magic_enum.hpp>
 
 namespace Core {

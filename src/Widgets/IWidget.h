@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Core/Utils/RefCounted.h>
+#include <Core/RefCounted/RefCounted.h>
 #include <Core/Config/XmlNode.h>
 
 namespace Core {

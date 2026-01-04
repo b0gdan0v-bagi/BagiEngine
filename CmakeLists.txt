@@ -1,146 +1,58 @@
 cmake_minimum_required(VERSION 3.31)
 project(MySDLGame)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-include(FetchContent)
+add_subdirectory(src/Modules/Math)
+add_subdirectory(src/Modules/Core)
+add_subdirectory(src/Modules/Events)
+add_subdirectory(src/Modules/SDL)
 
-# SDL3
-FetchContent_Declare(
-  SDL3
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-  GIT_TAG main
-)
-
-set(SDL_SHARED ON CACHE BOOL "" FORCE)
-set(SDL_STATIC OFF CACHE BOOL "" FORCE)
-set(SDL_TESTS OFF CACHE BOOL "" FORCE)
-
-FetchContent_MakeAvailable(SDL3)
-
-# ImGui
-FetchContent_Declare(
-  imgui
-  GIT_REPOSITORY https://github.com/ocornut/imgui.git
-  GIT_TAG docking
-)
-
-FetchContent_MakeAvailable(imgui)
-
-# EnTT
-FetchContent_Declare(
-  entt
-  GIT_REPOSITORY https://github.com/skypjack/entt.git
-  GIT_TAG v3.13.2
-)
-
-FetchContent_MakeAvailable(entt)
-
-# MagicEnum
-FetchContent_Declare(
-  magic_enum
-  GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
-  GIT_TAG v0.9.5
-)
-
-FetchContent_MakeAvailable(magic_enum)
-
-# PugiXML
-FetchContent_Declare(
-  pugixml
-  GIT_REPOSITORY https://github.com/zeux/pugixml.git
-  GIT_TAG v1.14
-)
-
-FetchContent_MakeAvailable(pugixml)
-
-# Подключение Boost из локальных заголовков в проекте (header-only)
-# Заголовки Boost находятся в src/Core/Boost/boost
-set(BOOST_HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/Core/Boost")
-
-# Проверяем наличие заголовков Boost
-if(NOT EXISTS "${BOOST_HEADERS_DIR}/boost")
-    message(WARNING "Boost headers not found in ${BOOST_HEADERS_DIR}/boost")
-    message(STATUS "Run cmake/copy_boost_headers.ps1 to copy Boost headers")
-endif()
-
-message(STATUS "Using Boost headers from: ${BOOST_HEADERS_DIR}")
-
-# 3. Поиск исходных файлов
-# Ищем все .cpp и .h файлы рекурсивно
 file(GLOB_RECURSE SOURCES 
     "src/*.cpp" 
     "src/*.h"
     "src/*.cxx"
 )
 
+list(FILTER SOURCES EXCLUDE REGEX "src/Modules/.*")
+list(APPEND SOURCES ${CORESDL_MODULE_SOURCES})
+
 add_executable(MyGame ${SOURCES})
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source Files" FILES ${SOURCES})
 
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src/Modules/SDL/src" PREFIX "Source Files/CoreSDL" FILES ${CORESDL_MODULE_SOURCES})
+
 target_include_directories(MyGame PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${BOOST_HEADERS_DIR}
-    ${imgui_SOURCE_DIR}
-    ${imgui_SOURCE_DIR}/backends
-    ${entt_SOURCE_DIR}/src
-    ${magic_enum_SOURCE_DIR}/include
-    ${magic_enum_SOURCE_DIR}
-    ${pugixml_SOURCE_DIR}/src
+    ${CORESDL_MODULE_INCLUDE_DIRS}
 )
 
 target_precompile_headers(MyGame PRIVATE src/pch.h)
 
-target_link_libraries(MyGame PRIVATE SDL3-shared)
-target_link_libraries(MyGame PRIVATE pugixml)
+target_link_libraries(MyGame PRIVATE 
+    CoreModule
+    MathModule
+    EventsModule
+    ${CORESDL_MODULE_LIBRARIES}
+)
 
-# ImGui sources - добавляем после создания target
-if(imgui_SOURCE_DIR AND EXISTS "${imgui_SOURCE_DIR}")
-    set(IMGUI_SOURCES
-        ${imgui_SOURCE_DIR}/imgui.cpp
-        ${imgui_SOURCE_DIR}/imgui_demo.cpp
-        ${imgui_SOURCE_DIR}/imgui_draw.cpp
-        ${imgui_SOURCE_DIR}/imgui_tables.cpp
-        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-    )
-    
-    # Проверяем наличие бэкендов для SDL3
-    if(EXISTS "${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp")
-        list(APPEND IMGUI_SOURCES ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp)
-    endif()
-    
-    if(EXISTS "${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp")
-        list(APPEND IMGUI_SOURCES ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp)
-    endif()
-    
-    target_sources(MyGame PRIVATE ${IMGUI_SOURCES})
-    
-    # Группировка файлов ImGui в Visual Studio
-    source_group("ImGui" FILES ${IMGUI_SOURCES})
-    
-    message(STATUS "ImGui sources directory: ${imgui_SOURCE_DIR}")
-else()
-    message(WARNING "ImGui directory not found. imgui_SOURCE_DIR: ${imgui_SOURCE_DIR}")
-endif()
-
-# Boost используется только в header-only режиме (без скомпилированных библиотек)
-
-set_target_properties(SDL3-shared PROPERTIES FOLDER "Dependencies")
-set_target_properties(SDL_uclibc PROPERTIES FOLDER "Dependencies")
-set_target_properties(SDL3_test PROPERTIES FOLDER "Dependencies")
-if(TARGET uninstall)
-    set_target_properties(uninstall PROPERTIES FOLDER "Dependencies")
-endif()
-
+# Копирование SDL3 DLL рядом с исполняемым файлом (для Windows, если используется SDL3-shared)
 if(WIN32)
-    add_custom_command(TARGET MyGame POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:SDL3-shared>
-        $<TARGET_FILE_DIR:MyGame>
-    )
+    if(TARGET ${CORESDL_SDL3_TARGET})
+        # Проверяем, является ли таргет shared библиотекой
+        get_target_property(SDL3_TYPE ${CORESDL_SDL3_TARGET} TYPE)
+        if(SDL3_TYPE STREQUAL "SHARED_LIBRARY")
+            add_custom_command(TARGET MyGame POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:${CORESDL_SDL3_TARGET}>
+                $<TARGET_FILE_DIR:MyGame>
+            )
+        endif()
+    endif()
 endif()
 
 if(MSVC)

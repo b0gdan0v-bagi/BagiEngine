@@ -1,7 +1,7 @@
 #pragma once
 
 #include "IWidget.h"
-#include <Core/Utils/IntrusivePtr.h>
+#include <Core/RefCounted/IntrusivePtr.h>
 #include <Core/Config/XmlConfig.h>
 
 

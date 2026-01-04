@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Widgets/IWidget.h>
-#include <Core/Math/Color.h>
+#include <Color.h>
 
 namespace Core {
 

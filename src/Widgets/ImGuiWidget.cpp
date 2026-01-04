@@ -1,10 +1,10 @@
 #include "ImGuiWidget.h"
 
-#include "Core/MainWindow/SDLMainWindow.h"
+#include <CoreSDL/SDLMainWindow.h>
 
 #include <Core/Events/ApplicationEvents.h>
 #include <Core/Events/RenderEvents.h>
-#include <Core/Events/SDLEvents.h>
+#include <CoreSDL/SDLEvents.h>
 #include <Application/Application.h>
 
 #include <imgui.h>

@@ -2,6 +2,10 @@
 
 #include <Widgets/IWidget.h>
 
+// Forward declarations for SDL types
+struct SDL_Window;
+struct SDL_Renderer;
+
 namespace Core {
 namespace SDLEvents {
     struct SDLEventWrapper;
