@@ -1,8 +1,4 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <root type="SDL3" path="config/SDLWindowConfig.xml">
-	<widgets>
-		<widget type="ClearScreenWidget" Color="100,150,200,255" />
-    	<widget type="ImGuiWidget" />
-  	</widgets>
 </root>
 

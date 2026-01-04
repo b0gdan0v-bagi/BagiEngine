@@ -5,7 +5,7 @@
 #include <Core/Utils/PassKey.h>
 #include <Core/Utils/Singleton.h>
 #include <Core/Events/EventsProviderManager.h>
-#include <Widgets/WidgetManager.h>
+#include <Core/Widgets/WidgetManager.h>
 
 namespace Core {
 

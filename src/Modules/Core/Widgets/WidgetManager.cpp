@@ -2,6 +2,7 @@
 
 #include <Widgets/ImGuiWidget.h>
 #include <Widgets/ClearScreenWidget.h>
+#include <Core/Config/XmlConfig.h>
 #include <Core/RefCounted/New.h>
 #include <magic_enum/magic_enum.hpp>
 
@@ -29,7 +30,13 @@ namespace Core {
         }
     }
 
-    void WidgetManager::CreateWidgets(const XmlConfig& config) {
+    void WidgetManager::CreateWidgets() {
+        XmlConfig config;
+        constexpr std::string_view configPath = "config/WidgetsConfig.xml";
+        if (!config.LoadFromVirtualPath(configPath)) {
+            return;
+        }
+
         const auto rootNode = config.GetRoot();
         if (!rootNode) {
             return;

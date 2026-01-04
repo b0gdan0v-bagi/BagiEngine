@@ -1,7 +1,6 @@
 #include "Application.h"
 
-#include <CoreSDL/ApplicationSDLFabric.h>
-#include <Core/Config/XmlConfig.h>
+#include <Core/Application/ApplicationFabric.h>
 #include <Core/Events/ApplicationEvents.h>
 #include <Core/Events/EventsQueueRegistry.h>
 #include <Core/Events/RenderEvents.h>
@@ -11,32 +10,17 @@ namespace Core {
 
     bool Application::Initialize(PassKey<ApplicationMainAccess>) {
 
+        _isRunning = true;
+        ApplicationEvents::QuitEvent::Subscribe<&Application::StopApplication>(this);
+
         FileSystem::GetInstance().Initialize();
 
-        XmlConfig config;
-        ApplicationSystemType type;
-
-        if (config.LoadFromVirtualPath("config/ApplicationConfig.xml")) {
-            type = config.GetRoot().ParseAttribute<ApplicationSystemType>("type").value_or(ApplicationSystemType::None);
-        } else {
+        if (!ApplicationFabric::GetInstance().Create()) {
             return false;
         }
 
-        switch (type) {
-            case ApplicationSystemType::SDL3:
-                if (!ApplicationSDLFabric::Create(config)) {
-                    return false;
-                }
-                break;
-            default:
-                return false;
-        }
+        _widgetManager.CreateWidgets();
 
-        ApplicationEvents::QuitEvent::Subscribe<&Application::StopApplication>(this);
-
-        _widgetManager.CreateWidgets(config);
-
-        _isRunning = true;
         return _isRunning;
     }
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Application/ApplicationMainAccess.h>
+#include <Core/Application/ApplicationMainAccess.h>
 
 namespace Core {
     class XmlConfig;

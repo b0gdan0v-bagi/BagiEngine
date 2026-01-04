@@ -2,8 +2,7 @@
 
 #include "IWidget.h"
 #include <Core/RefCounted/IntrusivePtr.h>
-#include <Core/Config/XmlConfig.h>
-
+#include <string_view>
 
 namespace Core {
 
@@ -20,7 +19,7 @@ namespace Core {
         void RegisterWidget(IntrusivePtr<IWidget> widget);
         void UpdateAll() const;
         void DrawAll() const;
-        void CreateWidgets(const XmlConfig& config);
+        void CreateWidgets();
 
     private:
         static IntrusivePtr<IWidget> CreateWidgetByType(WidgetType type);

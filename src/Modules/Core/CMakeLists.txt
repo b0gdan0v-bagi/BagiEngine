@@ -158,9 +158,12 @@ target_precompile_headers(CoreModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
 # Подключаем директории с заголовками
 # PUBLIC означает, что эти директории будут доступны всем, кто линкуется с CoreModule
 # Добавляем ${PROJECT_ROOT}/src/Modules для поддержки включений через <Core/...>
+# Добавляем путь к SDL модулю для доступа к ApplicationSDLFabric из ApplicationFabric
+get_filename_component(SDL_MODULE_DIR "${PROJECT_ROOT}/src/Modules/SDL/src" ABSOLUTE)
 target_include_directories(CoreModule PUBLIC
     ${PROJECT_ROOT}/src
     ${PROJECT_ROOT}/src/Modules
+    ${SDL_MODULE_DIR}
     ${BOOST_HEADERS_DIR}
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends

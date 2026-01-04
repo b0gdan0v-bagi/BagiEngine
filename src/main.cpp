@@ -1,5 +1,5 @@
 #include <Application/Application.h>
-#include <Application/ApplicationMainAccess.h>
+#include <Core/Application/ApplicationMainAccess.h>
 
 int main(int argc, char* argv[]) {
     if (!Core::Application::GetInstance().Initialize(Core::PassKey<Core::ApplicationMainAccess>{})) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Widgets/IWidget.h>
+#include <Core/Widgets/IWidget.h>
 
 // Forward declarations for SDL types
 struct SDL_Window;
