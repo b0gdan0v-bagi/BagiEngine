@@ -30,7 +30,7 @@ namespace Core {
          * @param realPath Реальный путь к директории
          * @return true если монтирование успешно
          */
-        bool Mount(const std::string& virtualPath, const std::filesystem::path& realPath);
+        bool Mount(std::string_view virtualPath, const std::filesystem::path& realPath);
 
         /**
          * Размонтировать виртуальный путь
@@ -51,7 +51,7 @@ namespace Core {
          * @param virtualPath Виртуальный путь к файлу
          * @return true если файл существует
          */
-        bool Exists(const std::string& virtualPath) const;
+        bool Exists(std::string_view virtualPath) const;
 
         /**
          * Получить корневую директорию приложения

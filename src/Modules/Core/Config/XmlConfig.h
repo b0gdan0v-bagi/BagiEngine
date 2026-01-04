@@ -17,7 +17,7 @@ namespace Core {
 
         bool LoadFromVirtualPath(std::string_view virtualPath);
 
-        bool LoadFromString(const std::string& xmlContent);
+        bool LoadFromString(std::string_view xmlContent);
 
         bool SaveToFile(const std::filesystem::path& filepath) const;
 

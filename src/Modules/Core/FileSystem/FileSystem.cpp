@@ -23,7 +23,7 @@ namespace Core {
         }
     }
 
-    bool FileSystem::Mount(const std::string& virtualPath, const std::filesystem::path& realPath) {
+    bool FileSystem::Mount(std::string_view virtualPath, const std::filesystem::path& realPath) {
         if (virtualPath.empty()) {
             return false;
         }
@@ -37,7 +37,7 @@ namespace Core {
             return false;
         }
 
-        _mountPoints[virtualPath] = normalizedPath;
+        _mountPoints[std::string(virtualPath)] = normalizedPath;
         return true;
     }
 
@@ -102,7 +102,7 @@ namespace Core {
         return {};
     }
 
-    bool FileSystem::Exists(const std::string& virtualPath) const {
+    bool FileSystem::Exists(std::string_view virtualPath) const {
         std::filesystem::path resolved = ResolvePath(virtualPath);
         return !resolved.empty() && std::filesystem::exists(resolved);
     }

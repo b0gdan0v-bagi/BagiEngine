@@ -2,7 +2,6 @@
 
 #include <Core/FileSystem/FileSystem.h>
 
-
 namespace Core {
 
     bool XmlConfig::LoadFromFile(const std::filesystem::path& filepath) {
@@ -24,12 +23,12 @@ namespace Core {
         return result;
     }
 
-    bool XmlConfig::LoadFromString(const std::string& xmlContent) {
+    bool XmlConfig::LoadFromString(std::string_view xmlContent) {
         if (xmlContent.empty()) {
             return {};
         }
 
-        bool result = _doc.load_string(xmlContent.c_str());
+        bool result = _doc.load_string(xmlContent.data());
         return result;
     }
 
@@ -70,4 +69,3 @@ namespace Core {
     }
 
 }  // namespace Core
-
