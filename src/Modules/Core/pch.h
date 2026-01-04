@@ -43,3 +43,11 @@
 #include <variant>
 #include <vector>
 
+// Math
+#include <Math/Color.h>
+
+// Core
+#include <Core/RefCounted/RefCounted.h>
+#include <Core/RefCounted/New.h>
+#include <Core/Utils/Overload.h>
+

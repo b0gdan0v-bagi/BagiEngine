@@ -1,38 +1,35 @@
 #pragma once
 
-#include <magic_enum/magic_enum.hpp>
-#include <optional>
-#include <pugixml.hpp>
-#include <string>
-#include <variant>
-#include <Math/Color.h>
+#include <Core/Config/XmlNodeImpl.h>
+#include <Core/RefCounted/IntrusivePtr.h>
 
 namespace Core {
 
-    template <class... Ts>
-    struct overload : Ts... {
-        using Ts::operator()...;
-    };
-
     class XmlNode {
-
-        using RawNode = std::variant<pugi::xml_node>;
-        using RawIterator = std::variant<pugi::xml_node_iterator>;
 
     public:
         XmlNode() = default;
-        explicit XmlNode(pugi::xml_node node) : _node(node) {}
+        explicit XmlNode(pugi::xml_node node) : _impl(MakeIntrusiveNonAtomic(new XmlNodeImpl(node))) {}
 
         XmlNode GetChild(std::string_view name) const {
-            return Apply([name](auto node) { return XmlNode(node.child(name.data())); });
+            if (!_impl) {
+                return {};
+            }
+            return XmlNode(MakeIntrusiveNonAtomic(_impl->GetChild(name)));
         }
 
         bool IsEmpty() const {
-            return std::visit(overload{[](pugi::xml_node node) { return node.empty(); }}, _node);
+            if (!_impl) {
+                return true;
+            }
+            return _impl->IsEmpty();
         }
 
         explicit operator bool() const {
-            return std::visit(overload{[](pugi::xml_node node) { return !node.empty(); }}, _node);
+            if (!_impl) {
+                return false;
+            }
+            return static_cast<bool>(*_impl);
         }
 
         bool operator!() const {
@@ -47,7 +44,7 @@ namespace Core {
             using pointer = XmlNode*;
             using reference = XmlNode;
 
-            Iterator(const RawIterator& it) : _it(it) {}
+            Iterator(const XmlNodeImpl::RawIterator& it) : _it(it) {}
 
             // Разыменование возвращает нашу обертку XmlNode
             XmlNode operator*() const {
@@ -64,11 +61,11 @@ namespace Core {
             }
 
         private:
-            RawIterator _it;
+            XmlNodeImpl::RawIterator _it;
         };
 
         struct ChildrenRange {
-            RawNode parentNode;
+            XmlNodeImpl::RawNode parentNode;
 
             Iterator begin() const {
                 return std::visit(overload{[](pugi::xml_node node) { return Iterator(node.begin()); }}, parentNode);
@@ -80,68 +77,40 @@ namespace Core {
         };
 
         ChildrenRange Children() const {
-            return ChildrenRange{_node};
+            if (!_impl) {
+                return ChildrenRange{pugi::xml_node{}};
+            }
+            return ChildrenRange{_impl->GetRawNode()};
         }
 
         std::string_view Name() const {
-            return std::visit(overload{[](pugi::xml_node node) { return std::string_view(node.name()); }}, _node);
+            if (!_impl) {
+                return {};
+            }
+            return _impl->Name();
         }
 
         std::optional<std::string_view> GetAttribute(std::string_view name) const {
-            return std::visit(overload{[name](pugi::xml_node node) -> std::optional<std::string_view> {
-                                  auto attr = node.attribute(name.data());
-                                  if (!attr) {
-                                      return std::nullopt;
-                                  }
-                                  return std::string_view(attr.value());
-                              }},
-                              _node);
+            if (!_impl) {
+                return std::nullopt;
+            }
+            return _impl->GetAttribute(name);
         }
 
         template <typename T>
         std::optional<T> ParseAttribute(std::string_view name) const {
-            auto attrOpt = GetAttribute(name);
-
-            if (!attrOpt)
+            if (!_impl) {
                 return std::nullopt;
-
-            std::string_view s = *attrOpt;
-
-            if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
-                T result;
-                auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), result);
-                if (ec == std::errc{}) {
-                    return result;
-                }
-            } else if constexpr (std::is_floating_point_v<T>) {
-                T result;
-                auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), result);
-                if (ec == std::errc{})
-                    return result;
-            } else if constexpr (std::is_same_v<T, bool>) {
-                if (s == "true" || s == "1")
-                    return true;
-                if (s == "false" || s == "0")
-                    return false;
-            } else if constexpr (std::is_same_v<T, std::string_view>) {
-                return s;
-            } else if constexpr (std::is_enum_v<T>) {
-                return magic_enum::enum_cast<T>(s);
-            } else if constexpr (std::is_same_v<T, Math::Color>) {
-                return Math::Color::ParseColorFromString(s);
             }
-
-            return std::nullopt;
+            return _impl->ParseAttribute<T>(name);
         }
 
     private:
-        template <typename F>
-        auto Apply(F&& func) const {
-            return std::visit(std::forward<F>(func), _node);
-        }
+        explicit XmlNode(IntrusivePtrNonAtomic<XmlNodeImpl> impl) : _impl(std::move(impl)) {}
 
-        RawNode _node;
+        IntrusivePtrNonAtomic<XmlNodeImpl> _impl;
+
+        friend class XmlConfigImpl;
     };
 
 }  // namespace Core
-

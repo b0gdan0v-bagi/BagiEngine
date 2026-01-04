@@ -1,48 +1,31 @@
 #pragma once
 
 #include <Core/Config/XmlNode.h>
-#include <optional>
-#include <vector>
-#include <string>
-#include <filesystem>
-#include <variant>
-#include <pugixml.hpp>
+#include <Core/Config/XmlConfigImpl.h>
 
 namespace Core {
 
     class XmlConfig {
-
-        using RawDocument = std::variant<pugi::xml_document>;
 
     public:
         ~XmlConfig() = default;
 
         static XmlConfig Create();
 
-        bool LoadFromVirtualPath(std::string_view virtualPath);
+        [[nodiscard]] bool LoadFromVirtualPath(std::string_view virtualPath) const;
+        [[nodiscard]] bool LoadFromString(std::string_view xmlContent) const;
+        [[nodiscard]] bool SaveToFile(const std::filesystem::path& filepath) const;
+        [[nodiscard]] bool IsLoaded() const;
 
-        bool LoadFromString(std::string_view xmlContent);
+        [[nodiscard]] XmlNode GetRoot() const;
 
-        bool SaveToFile(const std::filesystem::path& filepath) const;
-
-        XmlNode GetRoot() const;
-
-        void Clear() {
-            std::visit(overload{[](pugi::xml_document& doc) { doc.reset(); }}, _doc);
-        }
-
-        bool IsLoaded() const {
-            return std::visit(overload{[](const pugi::xml_document& doc) { return !doc.empty(); }}, _doc);
-        }
+        void Clear() const;
 
     private:
 
-        explicit XmlConfig(pugi::xml_document doc) : _doc(std::move(doc)) {}
+        explicit XmlConfig(IntrusivePtrNonAtomic<XmlConfigImpl> impl) : _impl(std::move(impl)) {}
 
-        bool LoadFromFile(const std::filesystem::path& filepath);
-
-        RawDocument _doc;
+        IntrusivePtrNonAtomic<XmlConfigImpl> _impl;
     };
 
 }  // namespace Core
-
