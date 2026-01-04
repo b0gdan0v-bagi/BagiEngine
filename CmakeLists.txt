@@ -18,17 +18,13 @@ file(GLOB_RECURSE SOURCES
 )
 
 list(FILTER SOURCES EXCLUDE REGEX "src/Modules/.*")
-list(APPEND SOURCES ${CORESDL_MODULE_SOURCES})
 
 add_executable(MyGame ${SOURCES})
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source Files" FILES ${SOURCES})
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src/Modules/SDL/src" PREFIX "Source Files/CoreSDL" FILES ${CORESDL_MODULE_SOURCES})
-
 target_include_directories(MyGame PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CORESDL_MODULE_INCLUDE_DIRS}
 )
 
 target_precompile_headers(MyGame PRIVATE src/pch.h)
@@ -37,7 +33,7 @@ target_link_libraries(MyGame PRIVATE
     CoreModule
     MathModule
     EventsModule
-    ${CORESDL_MODULE_LIBRARIES}
+    SDLModule
 )
 
 # Копирование SDL3 DLL рядом с исполняемым файлом (для Windows, если используется SDL3-shared)

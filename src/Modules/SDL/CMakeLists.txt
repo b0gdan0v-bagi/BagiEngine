@@ -29,17 +29,26 @@ file(GLOB_RECURSE SDL_MODULE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cxx"
 )
 
-# Сохраняем список исходных файлов в переменную для использования в родительском CMakeLists.txt
-set(CORESDL_MODULE_SOURCES ${SDL_MODULE_SOURCES} PARENT_SCOPE)
+# Создаем статическую библиотеку SDL
+add_library(SDLModule STATIC ${SDL_MODULE_SOURCES})
 
-# Сохраняем пути включения для использования в родительском CMakeLists.txt
-set(CORESDL_MODULE_INCLUDE_DIRS
+# Группировка файлов в IDE
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "SDL" FILES ${SDL_MODULE_SOURCES})
+
+# Устанавливаем свойства для группировки в IDE
+set_target_properties(SDLModule PROPERTIES FOLDER "Modules")
+
+# Настройка предкомпилированных заголовков для модуля
+target_precompile_headers(SDLModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h)
+
+# Подключаем директории с заголовками
+target_include_directories(SDLModule PUBLIC
     ${PROJECT_ROOT}/src
+    ${PROJECT_ROOT}/src/Modules
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CoreSDL
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${BOOST_HEADERS_DIR}
     ${pugixml_SOURCE_DIR}/src
-    PARENT_SCOPE
 )
 
 # Определяем правильный таргет SDL3
@@ -63,20 +72,16 @@ if(SDL3_TARGET STREQUAL "")
     message(FATAL_ERROR "SDL3 target not found. Available targets may need to be checked.")
 endif()
 
-# Сохраняем зависимости для использования в родительском CMakeLists.txt
-set(CORESDL_MODULE_LIBRARIES
+# Подключаем зависимости модуля
+target_link_libraries(SDLModule PUBLIC
     CoreModule
     MathModule
     EventsModule
     ${SDL3_TARGET}
     pugixml
-    PARENT_SCOPE
 )
 
 # Сохраняем имя таргета SDL3 для копирования DLL (если нужно)
 set(CORESDL_SDL3_TARGET ${SDL3_TARGET} PARENT_SCOPE)
-
-# Сохраняем путь к предкомпилированным заголовкам
-set(CORESDL_MODULE_PCH ${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h PARENT_SCOPE)
 
 
