@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Core/Utils/EnumUtils.h>
+
 namespace Core {
-    enum class ApplicationSystemType : uint8_t { None, SDL3 };
+    CORE_ENUM(ApplicationSystemType, uint8_t, None, SDL3)
 }

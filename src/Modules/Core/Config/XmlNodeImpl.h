@@ -2,7 +2,7 @@
 
 #include <Core/RefCounted/RefCounted.h>
 #include <Core/Utils/Overload.h>
-#include <magic_enum/magic_enum.hpp>
+#include <Core/Utils/EnumUtils.h>
 #include <optional>
 #include <pugixml.hpp>
 #include <string>
@@ -78,7 +78,7 @@ namespace Core {
             } else if constexpr (std::is_same_v<T, std::string_view>) {
                 return s;
             } else if constexpr (std::is_enum_v<T>) {
-                return magic_enum::enum_cast<T>(s);
+                return EnumCast<T>(s);
             } else if constexpr (std::is_same_v<T, Math::Color>) {
                 return Math::Color::ParseColorFromString(s);
             }

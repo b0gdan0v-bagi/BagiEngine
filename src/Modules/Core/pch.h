@@ -50,4 +50,5 @@
 #include <Core/RefCounted/RefCounted.h>
 #include <Core/RefCounted/New.h>
 #include <Core/Utils/Overload.h>
+#include <Core/Utils/EnumUtils.h>
 

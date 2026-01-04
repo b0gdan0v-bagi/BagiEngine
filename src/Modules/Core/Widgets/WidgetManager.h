@@ -1,15 +1,11 @@
 #pragma once
 
-#include "IWidget.h"
+#include <Core/Widgets/IWidget.h>
 #include <Core/RefCounted/IntrusivePtr.h>
-#include <string_view>
 
 namespace Core {
 
-    enum class WidgetType {
-        ImGuiWidget,
-        ClearScreenWidget
-    };
+    CORE_ENUM(WidgetType, uint8_t, ImGuiWidget, ClearScreenWidget)
 
     class WidgetManager {
     public:
@@ -28,4 +24,3 @@ namespace Core {
     };
 
 }  // namespace Core
-
