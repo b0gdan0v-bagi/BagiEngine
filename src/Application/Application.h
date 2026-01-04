@@ -1,18 +1,13 @@
 #pragma once
 
+#include <Core/MainWindow/MainWindowAccessor.h>
 #include <Core/MainWindow/IMainWindow.h>
 #include <Core/RefCounted/IntrusivePtr.h>
 #include <Core/Utils/PassKey.h>
 #include <Core/Utils/Singleton.h>
-#include <Core/Events/EventsProviderManager.h>
-#include <Core/Widgets/WidgetManager.h>
+#include <Core/GameManager/CoreManager.h>
 
 namespace Core {
-
-    enum class ApplicationSystemType : uint8_t {
-        None,
-        SDL3
-    };
 
     // Forward declaration для класса-ключа доступа
     class ApplicationMainAccess;
@@ -24,25 +19,12 @@ namespace Core {
 
         bool Initialize(PassKey<ApplicationMainAccess>);
         void Run(PassKey<ApplicationMainAccess>) const;
-        static void Cleanup(PassKey<ApplicationMainAccess>);
-
-        static const IntrusivePtr<IMainWindow>& GetMainWindow() {
-            return GetInstance()._window;
-        }
-
-        static EventsProviderManager& GetEventsProviderManager() {
-            return GetInstance()._eventsProviderManager;
-        }
-
-        void SetMainWindow(IntrusivePtr<IMainWindow> window, PassKey<ApplicationMainAccess>);
 
     private:
 
         void StopApplication();
+        static void Cleanup();
 
-        IntrusivePtr<IMainWindow> _window;
-        WidgetManager _widgetManager;
-        EventsProviderManager _eventsProviderManager;
         bool _isRunning = false;
     };
 }  // namespace Core

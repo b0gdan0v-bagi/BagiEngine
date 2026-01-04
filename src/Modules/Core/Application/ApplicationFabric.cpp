@@ -1,8 +1,7 @@
 #include "ApplicationFabric.h"
 
-#include <Application/Application.h>
+#include <Core/Application/ApplicationSystemType.h>
 #include <Core/Config/XmlConfig.h>
-#include <Core/FileSystem/FileSystem.h>
 #include <CoreSDL/ApplicationSDLFabric.h>
 
 namespace Core {

@@ -3,6 +3,8 @@
 #include <Application/Application.h>
 #include <Core/Config/XmlConfig.h>
 #include <Core/FileSystem/FileSystem.h>
+#include <Core/GameManager/CoreManager.h>
+#include <Core/MainWindow/MainWindowAccessor.h>
 #include <Core/RefCounted/New.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
@@ -19,13 +21,13 @@ namespace Core {
         if (!window->Initialize(*configPath)) {
             return false;
         }
-        Application::GetInstance().SetMainWindow(window, PassKey<ApplicationMainAccess>{});
+        CoreManager::GetInstance().GetMainWindowManager().SetMainWindow(window, {});
 
          auto sdlEventsProvider = Core::New<SDLEventsProvider>();
         if (!sdlEventsProvider->Initialize()) {
             return false;
         }
-        Application::GetEventsProviderManager().RegisterProvider(sdlEventsProvider);
+        CoreManager::GetEventsProviderManager().RegisterProvider(sdlEventsProvider);
 
         return true;
     }

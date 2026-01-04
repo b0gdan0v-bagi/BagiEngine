@@ -7,7 +7,6 @@ int main(int argc, char* argv[]) {
     }
 
     Core::Application::GetInstance().Run(Core::PassKey<Core::ApplicationMainAccess>{});
-    Core::Application::GetInstance().Cleanup(Core::PassKey<Core::ApplicationMainAccess>{});
 
     return 0;
 }

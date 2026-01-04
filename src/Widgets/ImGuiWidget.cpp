@@ -64,7 +64,7 @@ namespace Core {
     }
 
     SDL_Window* ImGuiWidget::GetSDLWindow() {
-        const auto& window = Application::GetMainWindow();
+        const auto& window = CoreManager::GetMainWindow();
         if (!window) {
             return nullptr;
         }
@@ -73,7 +73,7 @@ namespace Core {
     }
 
     SDL_Renderer* ImGuiWidget::GetSDLRenderer() {
-        const auto& window = Application::GetMainWindow();
+        const auto& window = CoreManager::GetMainWindow();
         if (!window) {
             return nullptr;
         }

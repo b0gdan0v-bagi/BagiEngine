@@ -2,7 +2,6 @@
 
 #include <Core/Application/ApplicationFabric.h>
 #include <Core/Events/ApplicationEvents.h>
-#include <Core/Events/EventsQueueRegistry.h>
 #include <Core/Events/RenderEvents.h>
 #include <Core/FileSystem/FileSystem.h>
 
@@ -19,7 +18,7 @@ namespace Core {
             return false;
         }
 
-        _widgetManager.CreateWidgets();
+        CoreManager::GetInstance().OnApplicationInit({});
 
         return _isRunning;
     }
@@ -29,22 +28,17 @@ namespace Core {
         while (_isRunning) {
 
             RenderEvents::NewFrameEvent::Emit();
-            _eventsProviderManager.ProcessEvents();
-            _widgetManager.UpdateAll();
-            EventsQueueRegistry::UpdateAll();
-            _widgetManager.DrawAll();
-
+            CoreManager::GetInstance().OnGameCycle({});
             RenderEvents::RenderPresentEvent::Emit();
         }
+        GetInstance().Cleanup();
     }
 
-    void Application::Cleanup(PassKey<ApplicationMainAccess>) {
+    void Application::Cleanup() {
         ApplicationEvents::ApplicationCleanUpEvent::Emit();
+        CoreManager::GetInstance().OnApplicationDeinit({});
     }
 
-    void Application::SetMainWindow(IntrusivePtr<IMainWindow> window, PassKey<ApplicationMainAccess>) {
-        _window = std::move(window);
-    }
 
     void Application::StopApplication() {
         _isRunning = false;
