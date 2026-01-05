@@ -160,7 +160,6 @@ if(IMGUI_POPULATED AND IMGUI_SOURCE_DIR AND EXISTS "${IMGUI_SOURCE_DIR}")
 endif()
 
 # Поиск исходных файлов модуля
-# Events в src/Modules/Core/Events являются частью CoreModule и используют общий PCH
 file(GLOB_RECURSE CORE_MODULE_SOURCES 
     "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp" 
     "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
@@ -178,19 +177,20 @@ set_target_properties(CoreModule PROPERTIES FOLDER "Modules")
 # Настройка предкомпилированных заголовков для модуля
 # PRIVATE означает, что PCH будет использоваться только для этого модуля
 # Другие модули могут переиспользовать его через REUSE_FROM
-# Все файлы CoreModule, включая Events в src/Modules/Core/Events, 
-# автоматически используют этот PCH через CMake
 target_precompile_headers(CoreModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
 
 # Подключаем директории с заголовками
 # PUBLIC означает, что эти директории будут доступны всем, кто линкуется с CoreModule
 # Добавляем ${PROJECT_ROOT}/src/Modules для поддержки включений через <Core/...>
 # Добавляем путь к SDL модулю для доступа к ApplicationSDLFabric из ApplicationFabric
+# Добавляем путь к Events модулю для доступа к EventsProviderManager из CoreManager
 get_filename_component(SDL_MODULE_DIR "${PROJECT_ROOT}/src/Modules/SDL/src" ABSOLUTE)
+get_filename_component(EVENTS_MODULE_SRC_DIR "${PROJECT_ROOT}/src/Modules/Events/src" ABSOLUTE)
 target_include_directories(CoreModule PUBLIC
     ${PROJECT_ROOT}/src
     ${PROJECT_ROOT}/src/Modules
     ${SDL_MODULE_DIR}
+    ${EVENTS_MODULE_SRC_DIR}
     ${BOOST_HEADERS_DIR}
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
@@ -203,6 +203,9 @@ target_include_directories(CoreModule PUBLIC
 # Подключаем зависимости
 # CoreModule зависит от MathModule через XmlNode (использует Math::Color)
 # Но MathModule должен быть подключен в главном CMakeLists.txt перед CoreModule
+# Примечание: CoreModule использует EventsProviderManager, но не линкуется с EventsModule
+# чтобы избежать циклической зависимости (EventsModule линкуется с CoreModule).
+# Include директории Events добавлены напрямую выше.
 target_link_libraries(CoreModule PUBLIC
     MathModule
     pugixml

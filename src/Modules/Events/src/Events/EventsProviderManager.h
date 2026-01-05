@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Core/Events/IEventsProvider.h>
+#include <Events/IEventsProvider.h>
 
 namespace Core {
 

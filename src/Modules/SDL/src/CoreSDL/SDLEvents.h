@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Core/Events/EventBase.h>
+#include <Events/EventBase.h>
 #include <SDL3/SDL.h>
 
 namespace Core {

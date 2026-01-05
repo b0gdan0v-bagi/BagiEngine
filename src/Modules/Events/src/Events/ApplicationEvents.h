@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Core/Events/EventBase.h>
+#include <Events/EventBase.h>
 
 namespace Core {
 namespace ApplicationEvents {

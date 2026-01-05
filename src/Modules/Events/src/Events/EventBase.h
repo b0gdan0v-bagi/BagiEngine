@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Core/Events/EventsQueueRegistry.h>
+#include <Events/EventsQueueRegistry.h>
 #include <entt/entt.hpp>
 
 namespace Core {

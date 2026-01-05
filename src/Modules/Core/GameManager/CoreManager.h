@@ -1,8 +1,7 @@
 #pragma once
 
-#include <Core/Events/EventsProviderManager.h>
+#include <Events/EventsProviderManager.h>
 #include <Core/MainWindow/MainWindowManager.h>
-
 #include <Core/Widgets/WidgetManager.h>
 
 namespace Core {

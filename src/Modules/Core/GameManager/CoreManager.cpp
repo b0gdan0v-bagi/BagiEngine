@@ -1,6 +1,6 @@
 #include "CoreManager.h"
 
-#include <Core/Events/EventsQueueRegistry.h>
+#include <Events/EventsQueueRegistry.h>
 
 namespace Core {
 

@@ -3,8 +3,8 @@
 #include <Core/GameManager/CoreManager.h>
 #include <CoreSDL/SDLMainWindow.h>
 
-#include <Core/Events/ApplicationEvents.h>
-#include <Core/Events/RenderEvents.h>
+#include <Events/ApplicationEvents.h>
+#include <Events/RenderEvents.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Application/Application.h>
 

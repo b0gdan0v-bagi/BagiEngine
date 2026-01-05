@@ -4,8 +4,8 @@
 
 #include <Application/Application.h>
 #include <Core/Config/XmlConfig.h>
-#include <Core/Events/ApplicationEvents.h>
-#include <Core/Events/RenderEvents.h>
+#include <Events/ApplicationEvents.h>
+#include <Events/RenderEvents.h>
 #include <CoreSDL/SDLUtils.h>
 
 namespace Core {

@@ -1,7 +1,7 @@
 #include "SDLEventsProvider.h"
 
 #include "Application/Application.h"
-#include <Core/Events/ApplicationEvents.h>
+#include <Events/ApplicationEvents.h>
 #include <CoreSDL/SDLEvents.h>
 
 namespace Core {

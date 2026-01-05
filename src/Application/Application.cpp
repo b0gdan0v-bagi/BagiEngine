@@ -1,8 +1,8 @@
 #include "Application.h"
 
 #include <Core/Application/ApplicationFabric.h>
-#include <Core/Events/ApplicationEvents.h>
-#include <Core/Events/RenderEvents.h>
+#include <Events/ApplicationEvents.h>
+#include <Events/RenderEvents.h>
 #include <Core/FileSystem/FileSystem.h>
 #include <Core/GameManager/CoreManager.h>
 

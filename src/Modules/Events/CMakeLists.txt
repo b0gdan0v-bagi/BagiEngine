@@ -16,7 +16,7 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(entt)
 
-# Поиск исходных файлов модуля в директории src
+# Поиск исходных файлов модуля в директории src (рекурсивно, включая подпапки)
 file(GLOB_RECURSE EVENTS_MODULE_SOURCES 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
@@ -37,11 +37,22 @@ set_target_properties(EventsModule PROPERTIES FOLDER "Modules")
 target_precompile_headers(EventsModule REUSE_FROM CoreModule)
 
 # Подключаем директории с заголовками
-# Добавляем ${CMAKE_CURRENT_SOURCE_DIR}/src для поддержки включений через <Events/...>
+# Чтобы файлы из src/Modules/Events/src/Events/ были доступны через <Events/EventsProviderManager.h>,
+# нужно добавить ${PROJECT_ROOT}/src/Modules/Events/src в include directories.
+# Тогда путь Events/EventsProviderManager.h будет доступен как <Events/EventsProviderManager.h>.
+add_library(EventsModuleInterface INTERFACE)
+target_include_directories(EventsModuleInterface INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_ROOT}/src/Modules/Events/src>
+    $<INSTALL_INTERFACE:include>
+)
+
+# Подключаем интерфейс к основной библиотеке
+target_link_libraries(EventsModule PUBLIC EventsModuleInterface)
+
+# Также добавляем стандартные пути включения для совместимости
 target_include_directories(EventsModule PUBLIC
     ${PROJECT_ROOT}/src
     ${PROJECT_ROOT}/src/Modules
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${entt_SOURCE_DIR}/src
 )
 
