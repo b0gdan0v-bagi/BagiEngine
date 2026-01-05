@@ -1,22 +1,40 @@
 #pragma once
 
+#include <EASTL/string_view.h>
+#include <string_view>
+
 namespace Core {
 
     class String {
     public:
         using SmallStrVector = eastl::fixed_vector<std::string_view, 4>;
 
+        static constexpr uint64_t hashOffset = 14695981039346656037ULL;
+        static constexpr uint64_t hashPrime = 1099511628211ULL;
+
         static SmallStrVector Split(std::string_view str, char delimiter);
-    };
 
-    struct StringViewHash {
-        using is_transparent = void;
-
-        size_t operator()(const char* p) const {
-            return eastl::hash<const char*>{}(p);
+        static constexpr uint64_t GetHash(eastl::string_view sv) noexcept {
+            
+            uint64_t hash = hashOffset;
+            for (char c : sv) {
+                hash ^= static_cast<uint64_t>(c);
+                hash *= hashPrime;
+            }
+            return hash;
         }
-        size_t operator()(std::string_view s) const {
-            return eastl::hash<eastl::string_view>{}({s.data(), s.size()});
+
+        static constexpr uint64_t GetHash(std::string_view sv) noexcept {
+            uint64_t hash = hashOffset;
+            for (char c : sv) {
+                hash ^= static_cast<uint64_t>(c);
+                hash *= hashPrime;
+            }
+            return hash;
+        }
+
+        static constexpr uint64_t GetEmptyHash() noexcept {
+            return hashOffset;
         }
     };
 
