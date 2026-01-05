@@ -2,7 +2,6 @@
 
 #include <Core/Events/IEventsProvider.h>
 #include <Core/RefCounted/IntrusivePtr.h>
-#include <vector>
 
 namespace Core {
 
@@ -17,7 +16,7 @@ namespace Core {
         void ProcessEvents() const;
 
     private:
-        std::vector<IntrusivePtr<IEventsProvider>> _providers;
+        eastl::vector<IntrusivePtr<IEventsProvider>> _providers;
     };
 
 }  // namespace Core

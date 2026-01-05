@@ -32,7 +32,9 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Events" FILES ${EVEN
 set_target_properties(EventsModule PROPERTIES FOLDER "Modules")
 
 # Настройка предкомпилированных заголовков для модуля
-target_precompile_headers(EventsModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h)
+# REUSE_FROM позволяет переиспользовать PCH из CoreModule без перекомпиляции
+# Это критически ускоряет сборку, так как PCH компилируется только один раз
+target_precompile_headers(EventsModule REUSE_FROM CoreModule)
 
 # Подключаем директории с заголовками
 # Добавляем ${CMAKE_CURRENT_SOURCE_DIR}/src для поддержки включений через <Events/...>

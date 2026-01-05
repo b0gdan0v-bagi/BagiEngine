@@ -1,4 +1,5 @@
 #include <Math/Color.h>
+#include <Core/Utils/String.h>
 
 namespace Math {
 
@@ -7,15 +8,7 @@ namespace Math {
             return {};
         }
 
-        // Разделяем строку по запятым
-        std::vector<std::string_view> tokens;
-        size_t start = 0;
-        size_t pos = 0;
-        while ((pos = data.find(',', start)) != std::string::npos) {
-            tokens.push_back(data.substr(start, pos - start));
-            start = pos + 1;
-        }
-        tokens.push_back(data.substr(start));
+        const auto& tokens = Core::String::Split(data, ',');
 
         if (tokens.size() != 4) {
             return {};

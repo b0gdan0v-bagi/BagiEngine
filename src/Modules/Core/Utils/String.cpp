@@ -2,8 +2,8 @@
 
 namespace Core {
 
-    std::vector<std::string_view> String::Split(std::string_view str, char delimiter) {
-        std::vector<std::string_view> result;
+    String::SmallStrVector String::Split(std::string_view str, char delimiter) {
+        SmallStrVector result;
 
         if (str.empty()) {
             return result;
@@ -22,4 +22,3 @@ namespace Core {
         return result;
     }
 }  // namespace Core
-

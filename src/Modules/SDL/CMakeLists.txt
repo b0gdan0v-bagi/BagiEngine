@@ -39,7 +39,9 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "SDL" FILES ${SDL_MOD
 set_target_properties(SDLModule PROPERTIES FOLDER "Modules")
 
 # Настройка предкомпилированных заголовков для модуля
-target_precompile_headers(SDLModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h)
+# REUSE_FROM позволяет переиспользовать PCH из CoreModule без перекомпиляции
+# Это критически ускоряет сборку, так как PCH компилируется только один раз
+target_precompile_headers(SDLModule REUSE_FROM CoreModule)
 
 # Подключаем директории с заголовками
 target_include_directories(SDLModule PUBLIC

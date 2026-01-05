@@ -23,6 +23,17 @@
 // Magic Enum
 #include <magic_enum/magic_enum.hpp>
 
+// EASTL
+#include <EABase/eabase.h>
+#include <EASTL/fixed_vector.h>
+#include <EASTL/functional.h>
+#include <EASTL/internal/config.h>
+#include <EASTL/shared_ptr.h>
+#include <EASTL/string.h>
+#include <EASTL/unique_ptr.h>
+#include <EASTL/utility.h>
+#include <EASTL/vector.h>
+
 // Стандартные библиотеки C++
 #include <algorithm>
 #include <atomic>
@@ -47,8 +58,7 @@
 #include <Math/Color.h>
 
 // Core
-#include <Core/RefCounted/RefCounted.h>
 #include <Core/RefCounted/New.h>
-#include <Core/Utils/Overload.h>
+#include <Core/RefCounted/RefCounted.h>
 #include <Core/Utils/EnumUtils.h>
-
+#include <Core/Utils/Overload.h>

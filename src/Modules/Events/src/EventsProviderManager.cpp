@@ -1,6 +1,4 @@
 #include "EventsProviderManager.h"
-#include <algorithm>
-#include <vector>
 
 namespace Core {
 
@@ -9,11 +7,11 @@ namespace Core {
             return;
         }
 
-        // Проверяем, не зарегистрирован ли уже этот провайдер
-        auto it = std::find(_providers.begin(), _providers.end(), provider);
-        if (it == _providers.end()) {
-            _providers.push_back(provider);
+        const auto it = eastl::find(_providers.begin(), _providers.end(), provider);
+        if (it != _providers.end()) {
+            return;  // Провайдер уже зарегистрирован
         }
+        _providers.push_back(provider);
     }
 
     void EventsProviderManager::UnregisterProvider(const IntrusivePtr<IEventsProvider>& provider) {
@@ -21,7 +19,7 @@ namespace Core {
             return;
         }
 
-        auto it = std::find(_providers.begin(), _providers.end(), provider);
+        const auto it = eastl::find(_providers.begin(), _providers.end(), provider);
         if (it != _providers.end()) {
             _providers.erase(it);
         }
@@ -35,5 +33,4 @@ namespace Core {
         }
     }
 
-} // namespace Core
-
+}  // namespace Core

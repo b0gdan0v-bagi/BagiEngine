@@ -28,7 +28,7 @@ namespace Core {
             return instance;
         }
         
-        std::vector<UpdateFunction> _updateFunctions;
+        eastl::vector<UpdateFunction> _updateFunctions;
     };
 
 }  // namespace Core

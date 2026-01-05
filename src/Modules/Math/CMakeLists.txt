@@ -22,7 +22,15 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Math" FILES ${MATH_M
 set_target_properties(MathModule PROPERTIES FOLDER "Modules")
 
 # Настройка предкомпилированных заголовков для модуля
-target_precompile_headers(MathModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h)
+# REUSE_FROM позволяет переиспользовать PCH из CoreModule без перекомпиляции
+# Это критически ускоряет сборку, так как PCH компилируется только один раз
+target_precompile_headers(MathModule REUSE_FROM CoreModule)
+
+# Для MSVC: автоматическое включение PCH через Force Include
+# Это позволяет использовать PCH без явного #include в каждом файле
+if(MSVC)
+    target_compile_options(MathModule PRIVATE /FI"Core/pch.h")
+endif()
 
 # Подключаем директории с заголовками
 # Чтобы файлы из src/Modules/Math/src/Math/ были доступны через <Math/Color.h>,
@@ -43,5 +51,8 @@ target_include_directories(MathModule PUBLIC
     ${PROJECT_ROOT}/src/Modules
 )
 
-# MathModule не имеет зависимостей от других модулей
-# Использует только стандартную библиотеку C++
+# Подключаем зависимости
+# MathModule зависит от CoreModule (использует Core::String)
+target_link_libraries(MathModule PUBLIC
+    CoreModule
+)

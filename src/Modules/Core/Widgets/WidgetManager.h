@@ -20,7 +20,7 @@ namespace Core {
     private:
         static IntrusivePtr<IWidget> CreateWidgetByType(WidgetType type);
 
-        std::vector<IntrusivePtr<IWidget>> _widgets;
+        eastl::vector<IntrusivePtr<IWidget>> _widgets;
     };
 
 }  // namespace Core

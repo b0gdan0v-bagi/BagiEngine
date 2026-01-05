@@ -54,7 +54,31 @@ FetchContent_Declare(
   GIT_TAG v1.14
 )
 
+set(EA_KITS_VERBOSE OFF CACHE BOOL "" FORCE)
+set(EASTL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(EASTL_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
+
 FetchContent_MakeAvailable(pugixml)
+
+# EABase - требуется для EASTL
+FetchContent_Declare(
+  eabase
+  GIT_REPOSITORY https://github.com/electronicarts/EABase.git
+  GIT_TAG master
+  GIT_SUBMODULES ""  # Опустошаем список субмодулей, чтобы он не лез в тесты
+)
+
+FetchContent_MakeAvailable(eabase)
+
+# EASTL
+FetchContent_Declare(
+  eastl
+  GIT_REPOSITORY https://github.com/electronicarts/EASTL.git
+  GIT_TAG master
+  GIT_SUBMODULES ""
+)
+
+FetchContent_MakeAvailable(eastl)
 
 # Создаем статическую библиотеку ImGui
 FetchContent_GetProperties(imgui
@@ -153,6 +177,8 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Core" FILES ${CORE_MODUL
 set_target_properties(CoreModule PROPERTIES FOLDER "Modules")
 
 # Настройка предкомпилированных заголовков для модуля
+# PRIVATE означает, что PCH будет использоваться только для этого модуля
+# Другие модули могут переиспользовать его через REUSE_FROM
 target_precompile_headers(CoreModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
 
 # Подключаем директории с заголовками
@@ -169,6 +195,8 @@ target_include_directories(CoreModule PUBLIC
     ${imgui_SOURCE_DIR}/backends
     ${pugixml_SOURCE_DIR}/src
     ${magic_enum_SOURCE_DIR}/include
+    ${eabase_SOURCE_DIR}/include
+    ${eastl_SOURCE_DIR}/include
 )
 
 # Подключаем зависимости
@@ -179,4 +207,6 @@ target_link_libraries(CoreModule PUBLIC
     pugixml
     magic_enum::magic_enum
     imgui
+	EASTL   
+    EABase
 )

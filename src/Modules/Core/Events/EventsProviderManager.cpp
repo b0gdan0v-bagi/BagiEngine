@@ -1,6 +1,4 @@
 #include "EventsProviderManager.h"
-#include <algorithm>
-#include <vector>
 
 namespace Core {
 
@@ -10,7 +8,7 @@ namespace Core {
         }
 
         // Проверяем, не зарегистрирован ли уже этот провайдер
-        auto it = std::find(_providers.begin(), _providers.end(), provider);
+        auto it = eastl::find(_providers.begin(), _providers.end(), provider);
         if (it == _providers.end()) {
             _providers.push_back(provider);
         }
@@ -21,7 +19,7 @@ namespace Core {
             return;
         }
 
-        auto it = std::find(_providers.begin(), _providers.end(), provider);
+        auto it = eastl::find(_providers.begin(), _providers.end(), provider);
         if (it != _providers.end()) {
             _providers.erase(it);
         }
