@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Core/Utils/Singleton.h>
-
 namespace Core {
 
     /**

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Core/Events/IEventsProvider.h>
-#include <Core/RefCounted/IntrusivePtr.h>
 
 namespace Core {
 

@@ -1,7 +1,5 @@
 #include "XmlConfigImpl.h"
 
-#include <Core/Config/XmlNode.h>
-
 namespace Core {
 
     bool XmlConfigImpl::LoadFromFile(const std::filesystem::path& filepath) {

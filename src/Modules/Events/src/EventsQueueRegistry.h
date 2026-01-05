@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Core/Utils/PassKey.h>
-
 namespace Core {
     struct BaseEvent;
 

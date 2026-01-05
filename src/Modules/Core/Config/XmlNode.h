@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Core/Config/XmlNodeImpl.h>
-#include <Core/RefCounted/IntrusivePtr.h>
 
 namespace Core {
 

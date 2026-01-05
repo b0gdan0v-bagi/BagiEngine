@@ -1,8 +1,5 @@
 #pragma once
 
-#include <Core/RefCounted/RefCounted.h>
-#include <Core/Config/XmlNode.h>
-
 namespace Core {
 
     class IWidget : public RefCounted {

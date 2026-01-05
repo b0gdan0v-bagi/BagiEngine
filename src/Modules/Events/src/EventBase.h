@@ -2,7 +2,6 @@
 
 #include <Core/Events/EventsQueueRegistry.h>
 #include <entt/entt.hpp>
-#include <type_traits>
 
 namespace Core {
 

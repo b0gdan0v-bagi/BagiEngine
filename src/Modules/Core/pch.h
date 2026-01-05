@@ -60,10 +60,14 @@
 #include <Math/Color.h>
 
 // Core
+#include <Core/Utils/String.h>
 #include <Core/Utils/Singleton.h>
 #include <Core/Utils/PassKey.h>
+#include <Core/Utils/EnumUtils.h>
+#include <Core/Utils/Overload.h>
 #include <Core/RefCounted/RefCounted.h>
 #include <Core/RefCounted/IntrusivePtr.h>
 #include <Core/RefCounted/New.h>
-#include <Core/Utils/EnumUtils.h>
-#include <Core/Utils/Overload.h>
+
+#include <Core/Config/XmlNode.h>
+#include <Core/Config/XmlConfig.h>

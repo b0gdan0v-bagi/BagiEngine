@@ -1,10 +1,5 @@
 #pragma once
 
-#include <Core/RefCounted/RefCounted.h>
-#include <Core/Utils/Overload.h>
-#include <Core/Utils/EnumUtils.h>
-#include <Math/Color.h>
-
 namespace Core {
 
     class XmlNodeImpl : public RefCountedNonAtomic {

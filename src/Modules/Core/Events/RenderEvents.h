@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Core/Events/EventBase.h>
-#include <Math/Color.h>
 
 namespace Core {
 namespace RenderEvents {

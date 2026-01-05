@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Core/RefCounted/RefCounted.h>
-
 namespace Core {
 
     class IEventsProvider : public RefCounted {

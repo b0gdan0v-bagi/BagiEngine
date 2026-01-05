@@ -159,13 +159,12 @@ if(IMGUI_POPULATED AND IMGUI_SOURCE_DIR AND EXISTS "${IMGUI_SOURCE_DIR}")
     message(STATUS "ImGui sources directory: ${IMGUI_SOURCE_DIR}")
 endif()
 
-# Поиск исходных файлов модуля (исключаем Events - они теперь в отдельном модуле)
+# Поиск исходных файлов модуля
+# Events в src/Modules/Core/Events являются частью CoreModule и используют общий PCH
 file(GLOB_RECURSE CORE_MODULE_SOURCES 
     "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp" 
     "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
 )
-# Исключаем Events из Core модуля
-list(FILTER CORE_MODULE_SOURCES EXCLUDE REGEX ".*/Events/.*")
 
 # Создаем статическую библиотеку Core
 add_library(CoreModule STATIC ${CORE_MODULE_SOURCES})
@@ -179,6 +178,8 @@ set_target_properties(CoreModule PROPERTIES FOLDER "Modules")
 # Настройка предкомпилированных заголовков для модуля
 # PRIVATE означает, что PCH будет использоваться только для этого модуля
 # Другие модули могут переиспользовать его через REUSE_FROM
+# Все файлы CoreModule, включая Events в src/Modules/Core/Events, 
+# автоматически используют этот PCH через CMake
 target_precompile_headers(CoreModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
 
 # Подключаем директории с заголовками

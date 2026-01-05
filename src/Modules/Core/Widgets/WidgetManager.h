@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Core/Widgets/IWidget.h>
-#include <Core/RefCounted/IntrusivePtr.h>
 
 namespace Core {
 

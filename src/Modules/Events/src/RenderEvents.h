@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Math/Color.h>
 #include <Core/Events/EventBase.h>
 
 namespace Core {
