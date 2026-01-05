@@ -1,7 +1,5 @@
 #pragma once
 
-#include <type_traits>
-
 namespace Core {
     /**
      * Класс PassKey используется для обеспечения приватного доступа к конкретным классам.

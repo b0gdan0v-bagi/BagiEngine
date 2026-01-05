@@ -1,12 +1,5 @@
 #pragma once
 
-#include <Core/MainWindow/MainWindowAccessor.h>
-#include <Core/MainWindow/IMainWindow.h>
-#include <Core/RefCounted/IntrusivePtr.h>
-#include <Core/Utils/PassKey.h>
-#include <Core/Utils/Singleton.h>
-#include <Core/GameManager/CoreManager.h>
-
 namespace Core {
 
     // Forward declaration для класса-ключа доступа

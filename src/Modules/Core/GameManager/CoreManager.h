@@ -2,8 +2,7 @@
 
 #include <Core/Events/EventsProviderManager.h>
 #include <Core/MainWindow/MainWindowManager.h>
-#include <Core/Utils/PassKey.h>
-#include <Core/Utils/Singleton.h>
+
 #include <Core/Widgets/WidgetManager.h>
 
 namespace Core {

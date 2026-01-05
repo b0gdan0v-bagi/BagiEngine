@@ -1,5 +1,6 @@
 #include "ImGuiWidget.h"
 
+#include <Core/GameManager/CoreManager.h>
 #include <CoreSDL/SDLMainWindow.h>
 
 #include <Core/Events/ApplicationEvents.h>

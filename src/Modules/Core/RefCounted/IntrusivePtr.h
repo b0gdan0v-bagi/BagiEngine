@@ -1,9 +1,5 @@
 #pragma once
 
-#include "RefCounted.h"
-#include <cassert>
-#include <type_traits>
-
 namespace Core {
 
     template <typename T> class IntrusivePtrNonAtomic {

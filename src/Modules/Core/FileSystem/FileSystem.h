@@ -1,10 +1,6 @@
 #pragma once
 
 #include <Core/Utils/Singleton.h>
-#include <string>
-#include <filesystem>
-#include <vector>
-#include <map>
 
 namespace Core {
 

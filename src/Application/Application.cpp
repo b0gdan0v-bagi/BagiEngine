@@ -4,6 +4,7 @@
 #include <Core/Events/ApplicationEvents.h>
 #include <Core/Events/RenderEvents.h>
 #include <Core/FileSystem/FileSystem.h>
+#include <Core/GameManager/CoreManager.h>
 
 namespace Core {
 

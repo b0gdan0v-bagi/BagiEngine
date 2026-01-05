@@ -2,8 +2,6 @@
 
 #include <Core/MainWindow/MainWindowAccessor.h>
 #include <Core/MainWindow/IMainWindow.h>
-#include <Core/RefCounted/IntrusivePtr.h>
-#include <Core/Utils/PassKey.h>
 
 namespace Core {
 

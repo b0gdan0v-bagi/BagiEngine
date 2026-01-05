@@ -3,10 +3,6 @@
 #include <Core/RefCounted/RefCounted.h>
 #include <Core/Utils/Overload.h>
 #include <Core/Utils/EnumUtils.h>
-#include <optional>
-#include <pugixml.hpp>
-#include <string>
-#include <variant>
 #include <Math/Color.h>
 
 namespace Core {

@@ -1,8 +1,5 @@
 #pragma once
 
-#include <atomic>
-#include <mutex>
-
 namespace Core {
     template <typename T> class Singleton {
     public:

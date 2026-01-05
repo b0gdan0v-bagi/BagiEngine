@@ -52,13 +52,18 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
-#include <vector>
+#include <ranges>
+#include <array>
+#include <limits>
 
 // Math
 #include <Math/Color.h>
 
 // Core
-#include <Core/RefCounted/New.h>
+#include <Core/Utils/Singleton.h>
+#include <Core/Utils/PassKey.h>
 #include <Core/RefCounted/RefCounted.h>
+#include <Core/RefCounted/IntrusivePtr.h>
+#include <Core/RefCounted/New.h>
 #include <Core/Utils/EnumUtils.h>
 #include <Core/Utils/Overload.h>

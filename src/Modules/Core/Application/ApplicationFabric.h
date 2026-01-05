@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Core/Utils/Singleton.h>
-#include <string_view>
 
 namespace Core {
 
