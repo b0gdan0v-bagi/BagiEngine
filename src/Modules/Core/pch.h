@@ -27,6 +27,7 @@
 #include <EABase/eabase.h>
 #include <EASTL/fixed_vector.h>
 #include <EASTL/functional.h>
+#include <EASTL/hash_map.h>
 #include <EASTL/internal/config.h>
 #include <EASTL/shared_ptr.h>
 #include <EASTL/string.h>
@@ -44,7 +45,6 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
-#include <map>
 #include <mutex>
 #include <optional>
 #include <sstream>

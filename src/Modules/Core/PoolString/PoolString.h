@@ -47,6 +47,10 @@ namespace Core {
             return _entry->data;
         }
 
+        [[nodiscard]] constexpr bool Empty() const noexcept {
+            return _entry->size == 0;
+        }
+
         [[nodiscard]] constexpr bool operator==(const PoolString& other) const noexcept {
             if consteval {
                 return _entry->hash == other._entry->hash;
