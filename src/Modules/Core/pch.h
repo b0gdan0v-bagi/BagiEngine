@@ -30,6 +30,7 @@
 #include <EASTL/internal/config.h>
 #include <EASTL/shared_ptr.h>
 #include <EASTL/string.h>
+#include <EASTL/string_view.h>
 #include <EASTL/unique_ptr.h>
 #include <EASTL/utility.h>
 #include <EASTL/vector.h>
@@ -38,6 +39,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <cstring>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -63,6 +65,8 @@
 #include <Core/Utils/String.h>
 #include <Core/Utils/Singleton.h>
 #include <Core/Utils/PassKey.h>
+#include <Core/PoolString/PoolString.h>
+#include <Core/PoolString/StaticPoolString.h>
 #include <Core/Utils/EnumUtils.h>
 #include <Core/Utils/Overload.h>
 #include <Core/RefCounted/RefCounted.h>

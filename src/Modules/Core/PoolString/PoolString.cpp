@@ -1,7 +1,5 @@
 #include "PoolString.h"
 
-#include <EASTL/unique_ptr.h>
-#include <cstring>
 #include <mutex>
 
 namespace Core {
@@ -56,7 +54,7 @@ namespace Core {
             if (str.empty())
                 return &Details::g_EmptyEntryStore.header;
 
-            const uint64_t hash = PoolHash::Calculate(str);
+            const uint64_t hash = String::GetHash(str);
 
             // 1. Поиск под Shared Lock
             {
