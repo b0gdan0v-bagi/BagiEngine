@@ -1,129 +1,154 @@
 #pragma once
 
-#include <Core/Utils/String.h>
-#include <EASTL/string.h>
 #include <EASTL/string_view.h>
-#include <EASTL/unique_ptr.h>
-#include <EASTL/vector.h>
 #include <shared_mutex>
+#include <type_traits>
 
 namespace Core {
 
+    struct PoolHash {
+        static constexpr uint64_t OFFSET = 14695981039346656037ULL;
+        static constexpr uint64_t PRIME = 1099511628211ULL;
+
+        static constexpr uint64_t Calculate(eastl::string_view sv) noexcept {
+            uint64_t hash = OFFSET;
+            for (char c : sv) {
+                hash ^= static_cast<uint64_t>(c);
+                hash *= PRIME;
+            }
+            return hash;
+        }
+    };
+
     namespace Details {
 
-        // Интрузивная запись: содержит всё необходимое для хранения и поиска в таблице
         struct PoolStringEntry {
             const uint64_t hash;
-            PoolStringEntry* nextEntry = nullptr;  // Интрузивная цепочка для хеш-таблицы
+            PoolStringEntry* nextEntry;
             const uint32_t size;
-            const char data[1] = {'\0'};
+            char data[1];
 
-            constexpr PoolStringEntry(uint64_t h, size_t s) : hash(h), size(static_cast<uint32_t>(s)) {}
+            constexpr PoolStringEntry(uint64_t h, uint32_t s) : hash(h), nextEntry(nullptr), size(s), data{'\0'} {}
 
-            constexpr eastl::string_view ToStringView() const noexcept {
+            [[nodiscard]] constexpr eastl::string_view ToStringView() const noexcept {
                 return {&data[0], static_cast<size_t>(size)};
             }
         };
 
+        // Специальная обертка для пустой строки, вынесенная отдельно для MSVC
+        struct EmptyEntry {
+            PoolStringEntry header;
+            constexpr EmptyEntry() : header(PoolHash::OFFSET, 0) {}
+        };
+
+        // Инициализируем пустую запись здесь, чтобы избежать C2131 внутри класса
+        inline constexpr EmptyEntry g_EmptyEntryStore{};
+
         template <size_t N>
         struct FixedString {
-            char data[N];
+            char data[N]{};
             consteval FixedString(const char (&str)[N]) {
                 for (size_t i = 0; i < N; ++i)
                     data[i] = str[i];
+            }
+            constexpr eastl::string_view View() const noexcept {
+                return {data, N - 1};
             }
         };
 
         template <size_t N>
         struct StaticPoolStringEntry {
-            const uint64_t hash;
-            PoolStringEntry* nextEntry = nullptr;
-            const uint32_t size;
-            char data[N];
+            PoolStringEntry header;
+            char storage[N];
 
-            consteval StaticPoolStringEntry(FixedString<N> fs) 
-                : hash(String::GetHash(eastl::string_view(fs.data, N - 1))), size(N - 1) {
+            consteval StaticPoolStringEntry(FixedString<N> fs) : header(PoolHash::Calculate(fs.View()), static_cast<uint32_t>(N - 1)), storage{} {
                 for (size_t i = 0; i < N; ++i)
-                    data[i] = fs.data[i];
+                    storage[i] = fs.data[i];
             }
 
-            constexpr const PoolStringEntry* AsEntry() const {
-                return reinterpret_cast<const PoolStringEntry*>(this);
+            constexpr const PoolStringEntry* AsEntry() const noexcept {
+                return &header;
             }
         };
-
     }  // namespace Details
 
     class PoolString {
     public:
-        PoolString() noexcept : _entry(&_empty) {}
+        // Используем адрес заранее созданной константы
+        constexpr PoolString() noexcept : _entry(&Details::g_EmptyEntryStore.header) {}
 
         static PoolString Intern(eastl::string_view str);
-        static PoolString Find(eastl::string_view str);
 
-        const char* CStr() const noexcept {
-            return &_entry->data[0];
-        }
-        eastl::string_view ToStringView() const noexcept {
-            return _entry->ToStringView();
-        }
-        uint64_t HashValue() const noexcept {
+        [[nodiscard]] constexpr uint64_t HashValue() const noexcept {
             return _entry->hash;
         }
+        [[nodiscard]] constexpr eastl::string_view ToStringView() const noexcept {
+            return _entry->ToStringView();
+        }
+        [[nodiscard]] constexpr const char* CStr() const noexcept {
+            return _entry->data;
+        }
 
-        bool operator==(const PoolString& other) const noexcept {
+        [[nodiscard]] constexpr bool operator==(const PoolString& other) const noexcept {
+            if consteval {
+                return _entry->hash == other._entry->hash;
+            }
             return _entry == other._entry;
         }
-        bool operator!=(const PoolString& other) const noexcept {
-            return _entry != other._entry;
+        [[nodiscard]] constexpr bool operator!=(const PoolString& other) const noexcept {
+            return !(*this == other);
         }
-        bool operator<(const PoolString& other) const noexcept {
-            return _entry < other._entry;
-        }
-
-        explicit operator bool() const noexcept {
-            return _entry->size > 0;
-        }
-
-        static bool RegisterStatic(const Details::PoolStringEntry* entry);
-
-        // Прозрачный компаратор для использования в контейнерах EASTL/std
-        struct FastHash {
-            using is_transparent = void;
-            size_t operator()(PoolString s) const {
-                return static_cast<size_t>(s.HashValue());
-            }
-            size_t operator()(eastl::string_view sv) const {
-                return static_cast<size_t>(String::GetHash(sv));
-            }
-        };
 
     private:
-        class Storage;
-        friend class Storage;
-        template <Details::FixedString>
+        template <Details::FixedString Str>
         friend class StaticPoolString;
-        using Entry = Details::PoolStringEntry;
-        explicit PoolString(const Entry* entry) noexcept : _entry(entry) {}
+        class Storage;
+        friend class PoolString::Storage;
 
-        static inline const Entry _empty{String::GetEmptyHash(), 0};
+        using Entry = Details::PoolStringEntry;
+        constexpr explicit PoolString(const Entry* entry) noexcept : _entry(entry) {}
+
         const Entry* _entry;
     };
 
-    // C++23: Объявление compile-time строки: inline constexpr auto MyStr = StaticPoolString<"Hello">::Get();
     template <Details::FixedString Str>
     class StaticPoolString {
-        static constexpr Details::StaticPoolStringEntry<sizeof(Str)> _entry{Str};
-        static inline const bool _registered = PoolString::RegisterStatic(_entry.AsEntry());
-
     public:
-        static constexpr PoolString Get() noexcept {
-            (void)_registered;
-            return PoolString(_entry.AsEntry());
+        // Ленивое рантайм-интернирование
+        static PoolString ToPoolString() noexcept {
+            static PoolString cached = PoolString::Intern(Str.View());
+            return cached;
         }
+
         operator PoolString() const noexcept {
-            return Get();
+            return ToPoolString();
+        }
+
+        // Сравнение для static_assert
+        template <Details::FixedString OtherStr>
+        constexpr bool operator==(StaticPoolString<OtherStr>) const noexcept {
+            return Str.View() == OtherStr.View();
+        }
+
+        constexpr bool operator==(const PoolString& other) const noexcept {
+            if consteval {
+                return PoolHash::Calculate(Str.View()) == other.HashValue();
+            }
+            return ToPoolString() == other;
+        }
+
+        [[nodiscard]] consteval uint64_t HashValue() const noexcept {
+            return PoolHash::Calculate(Str.View());
+        }
+
+        [[nodiscard]] constexpr eastl::string_view View() const noexcept {
+            return Str.View();
         }
     };
+
+    template <Details::FixedString Str>
+    consteval auto operator""_ps() {
+        return StaticPoolString<Str>{};
+    }
 
 }  // namespace Core

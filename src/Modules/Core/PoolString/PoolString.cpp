@@ -1,28 +1,26 @@
 #include "PoolString.h"
 
-#include <EASTL/shared_ptr.h>
-#include <EASTL/vector.h>
+#include <EASTL/unique_ptr.h>
 #include <cstring>
-#include <shared_mutex>
+#include <mutex>
 
 namespace Core {
 
-    // Оптимизированная интрузивная хеш-таблица
     template <typename T, uint32_t BucketCount>
     class IntrusivePoolTable {
-        static_assert((BucketCount & (BucketCount - 1)) == 0, "BucketCount must be power of 2");
-        T* _buckets[BucketCount] = {nullptr};
+        static_assert((BucketCount & (BucketCount - 1)) == 0);
+        T* _buckets[BucketCount]{};
 
     public:
         void Insert(T* entry) noexcept {
-            const uint32_t index = static_cast<uint32_t>(entry->hash & (BucketCount - 1));
-            entry->nextEntry = _buckets[index];
-            _buckets[index] = entry;
+            const uint32_t idx = static_cast<uint32_t>(entry->hash & (BucketCount - 1));
+            entry->nextEntry = _buckets[idx];
+            _buckets[idx] = entry;
         }
 
         T* Find(uint64_t hash, eastl::string_view str) const noexcept {
-            const uint32_t index = static_cast<uint32_t>(hash & (BucketCount - 1));
-            for (T* e = _buckets[index]; e; e = e->nextEntry) {
+            const uint32_t idx = static_cast<uint32_t>(hash & (BucketCount - 1));
+            for (T* e = _buckets[idx]; e; e = e->nextEntry) {
                 if (e->hash == hash && e->size == str.size()) {
                     if (std::memcmp(e->data, str.data(), e->size) == 0)
                         return e;
@@ -33,17 +31,12 @@ namespace Core {
     };
 
     class PoolString::Storage {
-        mutable std::shared_mutex _mutex;
-
-        // Статическая таблица: Lock-free поиск, так как не меняется после инициализации Storage
-        IntrusivePoolTable<Entry, 4096> _staticTable;
-
-        // Динамическая таблица: Защищена мьютексом
-        IntrusivePoolTable<Entry, 16384> _dynamicTable;
+        std::shared_mutex _mutex;
+        IntrusivePoolTable<Entry, 16384> _table;
 
         struct Page {
-            static constexpr size_t Size = 64 * 1024;  // 64KB страницы для лучшей локальности
-            alignas(Entry) char data[Size];
+            static constexpr size_t Size = 128 * 1024;
+            alignas(uint64_t) char data[Size];
             eastl::unique_ptr<Page> prev;
         };
         eastl::unique_ptr<Page> _currentPage;
@@ -55,81 +48,52 @@ namespace Core {
             return instance;
         }
 
-        // Накопитель для статических записей до инициализации синглтона
-        static eastl::vector<const Entry*>& PendingEntries() {
-            static eastl::vector<const Entry*> vec;
-            return vec;
-        }
-
         Storage() {
-            for (auto e : PendingEntries()) {
-                _staticTable.Insert(const_cast<Entry*>(e));
-            }
             _currentPage = eastl::make_unique<Page>();
         }
 
         const Entry* GetOrAdd(eastl::string_view str) {
-            const uint64_t hash = String::GetHash(str);
+            if (str.empty())
+                return &Details::g_EmptyEntryStore.header;
 
-            // 1. Быстрый Lock-free поиск в статической таблице
-            if (auto e = _staticTable.Find(hash, str)) {
-                return e;
-            }
+            const uint64_t hash = PoolHash::Calculate(str);
 
-            // 2. Поиск в динамической под Reader Lock
+            // 1. Поиск под Shared Lock
             {
                 std::shared_lock lock(_mutex);
-                if (auto e = _dynamicTable.Find(hash, str)) {
+                if (auto e = _table.Find(hash, str))
                     return e;
-                }
             }
 
-            // 3. Аллокация новой строки под Writer Lock
+            // 2. Вставка под Unique Lock
             std::unique_lock lock(_mutex);
 
-            // Повторная проверка (double-checked locking)
-            if (auto e = _dynamicTable.Find(hash, str)) {
+            // Double-check
+            if (auto e = _table.Find(hash, str))
                 return e;
-            }
 
-            const size_t needed = sizeof(Entry) + str.size();  // +1 для \0 уже в sizeof(Entry)
-            const size_t alignedNeeded = (needed + alignof(Entry) - 1) & ~(alignof(Entry) - 1);
+            const size_t headerSize = offsetof(Entry, data);
+            const size_t totalSize = headerSize + str.size() + 1;
+            const size_t alignedSize = (totalSize + 7) & ~7;
 
-            if (_offset + alignedNeeded > Page::Size) {
+            if (_offset + alignedSize > Page::Size) {
                 auto newPage = eastl::make_unique<Page>();
-                newPage->prev = std::move(_currentPage);
-                _currentPage = std::move(newPage);
+                newPage->prev = eastl::move(_currentPage);
+                _currentPage = eastl::move(newPage);
                 _offset = 0;
             }
 
-            Entry* newEntry = new (&_currentPage->data[_offset]) Entry(hash, str.size());
-            char* entryData = const_cast<char*>(&newEntry->data[0]);
-            std::memcpy(entryData, str.data(), str.size());
-            entryData[str.size()] = '\0';
+            Entry* entry = new (&_currentPage->data[_offset]) Entry(hash, static_cast<uint32_t>(str.size()));
+            std::memcpy(entry->data, str.data(), str.size());
+            entry->data[str.size()] = '\0';
 
-            _offset += alignedNeeded;
-            _dynamicTable.Insert(newEntry);
-
-            return newEntry;
+            _offset += alignedSize;
+            _table.Insert(entry);
+            return entry;
         }
     };
 
-    bool PoolString::RegisterStatic(const Entry* entry) {
-        Storage::PendingEntries().push_back(entry);
-        return true;
-    }
-
     PoolString PoolString::Intern(eastl::string_view str) {
-        if (str.empty())
-            return PoolString();
-        return PoolString(Storage::Instance().GetOrAdd(str));
-    }
-
-    PoolString PoolString::Find(eastl::string_view str) {
-        if (str.empty())
-            return PoolString();
-        // В упрощенной реализации Find делает то же, что GetOrAdd,
-        // но в реальности может просто возвращать nullptr, если не найдено.
         return PoolString(Storage::Instance().GetOrAdd(str));
     }
 
