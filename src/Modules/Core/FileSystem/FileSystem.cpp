@@ -13,18 +13,18 @@ namespace Core {
         if (!_rootPath.empty()) {
             std::filesystem::path configPath = _rootPath / "config";
             if (std::filesystem::exists(configPath) && std::filesystem::is_directory(configPath)) {
-                Mount("config", configPath);
+                Mount("config"_intern, configPath);
             }
 
             std::filesystem::path assetsPath = _rootPath / "assets";
             if (std::filesystem::exists(assetsPath) && std::filesystem::is_directory(assetsPath)) {
-                Mount("assets", assetsPath);
+                Mount("assets"_intern, assetsPath);
             }
         }
     }
 
-    bool FileSystem::Mount(std::string_view virtualPath, const std::filesystem::path& realPath) {
-        if (virtualPath.empty()) {
+    bool FileSystem::Mount(PoolString virtualPath, const std::filesystem::path& realPath) {
+        if (virtualPath.Empty()) {
             return false;
         }
 
@@ -37,11 +37,11 @@ namespace Core {
             return false;
         }
 
-        _mountPoints[std::string(virtualPath)] = normalizedPath;
+        _mountPoints[virtualPath] = normalizedPath;
         return true;
     }
 
-    void FileSystem::Unmount(const std::string& virtualPath) {
+    void FileSystem::Unmount(PoolString virtualPath) {
         _mountPoints.erase(virtualPath);
     }
 
@@ -50,50 +50,53 @@ namespace Core {
             return {};
         }
 
-        // Если путь абсолютный, возвращаем как есть
-        std::filesystem::path path(virtualPath);
+        eastl::string_view eview(virtualPath.data(), virtualPath.size());
+
+        // 2. Если путь абсолютный
+        std::filesystem::path path(virtualPath);  // Здесь аллокация неизбежна для std::filesystem::path
         if (path.is_absolute()) {
-            if (std::filesystem::exists(path)) {
-                return path;
-            }
-            return {};
+            return std::filesystem::exists(path) ? path : std::filesystem::path{};
         }
 
-        // Ищем первый компонент пути как точку монтирования
-        size_t firstSlash = virtualPath.find_first_of("/\\");
-        std::string mountPoint;
-        std::string remainingPath;
+        // 3. Разделяем путь на точку монтирования и остаток через string_view
+        size_t firstSlash = eview.find_first_of("/\\");
 
-        if (firstSlash != std::string::npos) {
-            mountPoint = virtualPath.substr(0, firstSlash);
-            remainingPath = virtualPath.substr(firstSlash + 1);
+        eastl::string_view mountPoint;
+        eastl::string_view remainingPath;
+
+        if (firstSlash != eastl::string_view::npos) {
+            mountPoint = eview.substr(0, firstSlash);
+            remainingPath = eview.substr(firstSlash + 1);
         } else {
-            // Если нет слеша, весь путь - это точка монтирования
-            mountPoint = virtualPath;
+            mountPoint = eview;
         }
 
-        // Ищем в смонтированных директориях
-        auto it = _mountPoints.find(mountPoint);
+        // 4. Поиск по точке монтирования (Гетерогенный поиск без аллокаций)
+        auto it = _mountPoints.find_as(mountPoint, PoolStringHasher(), PoolStringEquality());
+
         if (it != _mountPoints.end()) {
+            // it->second это std::filesystem::path
             std::filesystem::path fullPath = it->second;
+
             if (!remainingPath.empty()) {
-                fullPath /= remainingPath;
+                // Конвертируем оставшийся кусочек в path при склейке
+                fullPath /= std::string_view(remainingPath.data(), remainingPath.size());
             }
-            
+
             if (std::filesystem::exists(fullPath)) {
                 return fullPath;
             }
         }
 
-        // Если не нашли в смонтированных, пробуем относительно корневой директории
+        // 5. Поиск относительно корня
         if (!_rootPath.empty()) {
-            std::filesystem::path rootPath = _rootPath / virtualPath;
-            if (std::filesystem::exists(rootPath)) {
-                return rootPath;
+            std::filesystem::path rootFullPath = _rootPath / virtualPath;
+            if (std::filesystem::exists(rootFullPath)) {
+                return rootFullPath;
             }
         }
 
-        // Пробуем относительно текущей рабочей директории
+        // 6. Относительно текущей директории
         std::filesystem::path currentPath = std::filesystem::current_path() / virtualPath;
         if (std::filesystem::exists(currentPath)) {
             return currentPath;
@@ -107,7 +110,7 @@ namespace Core {
         return !resolved.empty() && std::filesystem::exists(resolved);
     }
 
-    std::filesystem::path FileSystem::GetMountedPath(const std::string& virtualPath) const {
+    std::filesystem::path FileSystem::GetMountedPath(PoolString virtualPath) const {
         auto it = _mountPoints.find(virtualPath);
         if (it != _mountPoints.end()) {
             return it->second;

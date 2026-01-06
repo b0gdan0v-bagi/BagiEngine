@@ -1,4 +1,5 @@
 #pragma once
+#include <Core/PoolString/PoolStringMap.h>
 
 namespace Core {
 
@@ -24,13 +25,13 @@ namespace Core {
          * @param realPath Реальный путь к директории
          * @return true если монтирование успешно
          */
-        bool Mount(std::string_view virtualPath, const std::filesystem::path& realPath);
+        bool Mount(PoolString virtualPath, const std::filesystem::path& realPath);
 
         /**
          * Размонтировать виртуальный путь
          * @param virtualPath Виртуальный путь для размонтирования
          */
-        void Unmount(const std::string& virtualPath);
+        void Unmount(PoolString virtualPath);
 
         /**
          * Преобразовать виртуальный путь в реальный
@@ -62,11 +63,11 @@ namespace Core {
          * @param virtualPath Виртуальный путь
          * @return Реальный путь или пустой, если не смонтирован
          */
-        std::filesystem::path GetMountedPath(const std::string& virtualPath) const;
+        std::filesystem::path GetMountedPath(PoolString virtualPath) const;
 
     private:
         std::filesystem::path _rootPath;
-        std::map<std::string, std::filesystem::path> _mountPoints;
+        UnorderedPoolMap<std::filesystem::path> _mountPoints;
         
         /**
          * Найти корневую директорию проекта автоматически
