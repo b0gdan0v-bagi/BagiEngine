@@ -35,6 +35,7 @@
 #include <EASTL/unique_ptr.h>
 #include <EASTL/utility.h>
 #include <EASTL/vector.h>
+#include <EASTL/variant.h>
 
 // Стандартные библиотеки C++
 #include <algorithm>
