@@ -72,7 +72,7 @@ namespace Core {
         }
 
         // 4. Поиск по точке монтирования (Гетерогенный поиск без аллокаций)
-        auto it = _mountPoints.find_as(mountPoint, PoolStringHasher(), PoolStringEquality());
+        auto it = _mountPoints.Find(mountPoint);
 
         if (it != _mountPoints.end()) {
             // it->second это std::filesystem::path
