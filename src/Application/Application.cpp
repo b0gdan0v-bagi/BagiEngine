@@ -5,10 +5,13 @@
 #include <Events/RenderEvents.h>
 #include <Core/FileSystem/FileSystem.h>
 #include <Core/GameManager/CoreManager.h>
+#include <Core/PoolString/PoolStringTest.h>
 
 namespace Core {
 
     bool Application::Initialize(PassKey<ApplicationMainAccess>) {
+
+        Tests::PoolStringTest();
 
         _isRunning = true;
         ApplicationEvents::QuitEvent::Subscribe<&Application::StopApplication>(this);

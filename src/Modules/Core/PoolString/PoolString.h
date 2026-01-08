@@ -1,9 +1,12 @@
 #pragma once
 
+#include <EASTL/string_view.h>
+#include <Core/Utils/String.h>
 #include <shared_mutex>
 
 namespace Core {
 
+    class PoolStringChain;
     namespace Details {
 
         struct PoolStringEntry {
@@ -31,6 +34,7 @@ namespace Core {
     }  // namespace Details
 
     class PoolString {
+        friend class PoolStringChain;
     public:
         // Используем адрес заранее созданной константы
         constexpr PoolString() noexcept : _entry(&Details::g_EmptyEntryStore.header) {}
