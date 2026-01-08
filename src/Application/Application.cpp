@@ -6,12 +6,14 @@
 #include <Core/FileSystem/FileSystem.h>
 #include <Core/GameManager/CoreManager.h>
 #include <Core/PoolString/PoolStringTest.h>
+#include <Core/Format/FormatTest.h>
 
 namespace Core {
 
     bool Application::Initialize(PassKey<ApplicationMainAccess>) {
 
         Tests::PoolStringTest();
+        Tests::FormatTest();
 
         _isRunning = true;
         ApplicationEvents::QuitEvent::Subscribe<&Application::StopApplication>(this);

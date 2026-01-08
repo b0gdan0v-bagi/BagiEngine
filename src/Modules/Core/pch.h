@@ -31,6 +31,7 @@
 #include <EASTL/internal/config.h>
 #include <EASTL/shared_ptr.h>
 #include <EASTL/string.h>
+#include <EASTL/fixed_string.h>
 #include <EASTL/string_view.h>
 #include <EASTL/unique_ptr.h>
 #include <EASTL/utility.h>
@@ -74,6 +75,8 @@
 #include <Core/RefCounted/RefCounted.h>
 #include <Core/RefCounted/IntrusivePtr.h>
 #include <Core/RefCounted/New.h>
+
+#include <Core/Format/Format.h>
 
 #include <Core/Config/XmlNode.h>
 #include <Core/Config/XmlConfig.h>

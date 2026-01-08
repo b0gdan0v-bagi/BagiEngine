@@ -83,6 +83,15 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(eastl)
 
+# fmt
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+  GIT_TAG 11.0.2
+)
+
+FetchContent_MakeAvailable(fmt)
+
 # Создаем статическую библиотеку ImGui
 FetchContent_GetProperties(imgui
     SOURCE_DIR IMGUI_SOURCE_DIR
@@ -201,6 +210,7 @@ target_include_directories(CoreModule PUBLIC
     ${magic_enum_SOURCE_DIR}/include
     ${eabase_SOURCE_DIR}/include
     ${eastl_SOURCE_DIR}/include
+    ${fmt_SOURCE_DIR}/include
 )
 
 # Подключаем зависимости
@@ -216,4 +226,5 @@ target_link_libraries(CoreModule PUBLIC
     imgui
 	EASTL   
     EABase
+    fmt::fmt
 )
