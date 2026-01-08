@@ -43,6 +43,7 @@
 #include <cassert>
 #include <cstring>
 #include <cstdint>
+#include <charconv>
 #include <filesystem>
 #include <fstream>
 #include <functional>

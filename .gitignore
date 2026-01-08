@@ -12,6 +12,7 @@
 
 # Cursor / VS Code
 .vscode/
+.cache/
 
 # Бинарники и временные файлы
 *.exe

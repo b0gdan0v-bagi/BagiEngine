@@ -21,6 +21,9 @@ message(STATUS "Using Boost headers from: ${BOOST_HEADERS_DIR}")
 # Зависимости модуля Core
 include(FetchContent)
 
+# Устанавливаем минимальную версию политики для совместимости со старыми CMakeLists.txt в зависимостях (например, EABase, pugixml)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
+
 # SDL3 - нужен для компиляции ImGui SDL3 бэкендов
 # FetchContent_Declare здесь, но MakeAvailable будет вызван только если нужен для imgui
 FetchContent_Declare(

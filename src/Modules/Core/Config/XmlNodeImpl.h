@@ -9,6 +9,13 @@ namespace Core {
 
         explicit XmlNodeImpl(pugi::xml_node node) : _node(node) {}
 
+    private:
+        template <typename F>
+        auto Apply(F&& func) const {
+            return std::visit(std::forward<F>(func), _node);
+        }
+
+    public:
         XmlNodeImpl* GetChild(std::string_view name) const {
             auto childNode = Apply([name](auto node) { return node.child(name.data()); });
             return new XmlNodeImpl(childNode);
@@ -82,11 +89,6 @@ namespace Core {
         }
 
     private:
-        template <typename F>
-        auto Apply(F&& func) const {
-            return std::visit(std::forward<F>(func), _node);
-        }
-
         RawNode _node;
     };
 

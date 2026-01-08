@@ -30,9 +30,9 @@ namespace Math {
         return count + 10;
     }
 
-    template <typename T>
-    void HashCombine(size_t& seed, const T& v) {
-        seed ^= eastl::hash<T>{}(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    template <typename T, typename Seed>
+    void HashCombine(Seed& seed, const T& v) {
+        seed ^= static_cast<Seed>(eastl::hash<T>{}(v)) + static_cast<Seed>(0x9e3779b9) + (seed << 6) + (seed >> 2);
     }
 
 }  // namespace Math
