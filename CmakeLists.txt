@@ -6,6 +6,56 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+# =============================================================================
+# Platform Detection
+# =============================================================================
+if(WIN32)
+    add_compile_definitions(PLATFORM_WINDOWS)
+    message(STATUS "Platform: Windows")
+elseif(APPLE)
+    add_compile_definitions(PLATFORM_MACOS)
+    message(STATUS "Platform: macOS")
+else()
+    add_compile_definitions(PLATFORM_LINUX)
+    message(STATUS "Platform: Linux")
+endif()
+
+# =============================================================================
+# Assert System Options
+# =============================================================================
+option(ENGINE_ENABLE_ASSERTS "Enable ASSERT macros" ON)
+option(ENGINE_ENABLE_EXPECTS "Enable EXPECT macros" ON)
+
+# In Release builds, disable asserts by default (can be overridden)
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(NOT DEFINED CACHE{ENGINE_ENABLE_ASSERTS})
+        set(ENGINE_ENABLE_ASSERTS OFF CACHE BOOL "Enable ASSERT macros" FORCE)
+    endif()
+    if(NOT DEFINED CACHE{ENGINE_ENABLE_EXPECTS})
+        set(ENGINE_ENABLE_EXPECTS OFF CACHE BOOL "Enable EXPECT macros" FORCE)
+    endif()
+endif()
+
+# Pass defines to code
+if(ENGINE_ENABLE_ASSERTS)
+    add_compile_definitions(ENGINE_ENABLE_ASSERTS=1)
+    message(STATUS "Asserts: ENABLED")
+else()
+    add_compile_definitions(ENGINE_ENABLE_ASSERTS=0)
+    message(STATUS "Asserts: DISABLED")
+endif()
+
+if(ENGINE_ENABLE_EXPECTS)
+    add_compile_definitions(ENGINE_ENABLE_EXPECTS=1)
+    message(STATUS "Expects: ENABLED")
+else()
+    add_compile_definitions(ENGINE_ENABLE_EXPECTS=0)
+    message(STATUS "Expects: DISABLED")
+endif()
+
+# =============================================================================
+# Modules
+# =============================================================================
 # CoreModule должен быть объявлен первым, так как другие модули используют его PCH
 add_subdirectory(src/Modules/Core)
 add_subdirectory(src/Modules/Math)

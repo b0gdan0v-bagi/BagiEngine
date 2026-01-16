@@ -1,6 +1,8 @@
 #include "Application.h"
 
 #include <Core/Application/ApplicationFabric.h>
+#include <Core/Assert/AssertMacros.h>
+#include <Core/Assert/AssertHandlers.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Core/FileSystem/FileSystem.h>
@@ -12,13 +14,14 @@ namespace Core {
 
     bool Application::Initialize(PassKey<ApplicationMainAccess>) {
 
-        Tests::PoolStringTest();
-        Tests::FormatTest();
-
         _isRunning = true;
         ApplicationEvents::QuitEvent::Subscribe<&Application::StopApplication>(this);
-
         FileSystem::GetInstance().Initialize();
+
+        InitializeAssertHandlers();
+
+        Tests::PoolStringTest();
+        Tests::FormatTest();
 
         if (!ApplicationFabric::GetInstance().Create()) {
             return false;

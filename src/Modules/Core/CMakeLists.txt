@@ -92,6 +92,16 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(fmt)
 
+# EnTT - needed for EventBase used in Assert system
+# Note: This is the same declaration as in EventsModule, CMake will reuse it
+FetchContent_Declare(
+  entt
+  GIT_REPOSITORY https://github.com/skypjack/entt.git
+  GIT_TAG v3.13.2
+)
+
+FetchContent_MakeAvailable(entt)
+
 # Создаем статическую библиотеку ImGui
 FetchContent_GetProperties(imgui
     SOURCE_DIR IMGUI_SOURCE_DIR
@@ -211,6 +221,7 @@ target_include_directories(CoreModule PUBLIC
     ${eabase_SOURCE_DIR}/include
     ${eastl_SOURCE_DIR}/include
     ${fmt_SOURCE_DIR}/include
+    ${entt_SOURCE_DIR}/src
 )
 
 # Подключаем зависимости

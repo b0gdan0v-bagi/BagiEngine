@@ -80,3 +80,10 @@
 
 #include <Core/Config/XmlNode.h>
 #include <Core/Config/XmlConfig.h>
+
+// Logger system
+#include <Core/Logger/LogLevel.h>
+#include <Core/Logger/Logger.h>
+
+// Assert system (macros: ASSERT, EXPECT, FATALERROR)
+#include <Core/Assert/AssertMacros.h>
