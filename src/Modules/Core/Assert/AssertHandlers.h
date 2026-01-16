@@ -1,9 +1,16 @@
 #pragma once
 
-#include <Core/Assert/AssertEvent.h>
+#include <Core/Assert/IAssertHandler.h>
 #include <Core/Utils/Singleton.h>
+#include <Core/Utils/EnumUtils.h>
+#include <EASTL/vector.h>
 
 namespace Core {
+
+    /**
+     * @brief Enum defining available assert handler types
+     */
+    CORE_ENUM(AssertHandlerType, uint8_t, DebugBreak, Log)
 
     /**
      * @brief Handler that triggers debug break on assertion failures
@@ -11,47 +18,36 @@ namespace Core {
      * Subscribes to AssertEvent and calls platform-specific debug break
      * when an assertion fails. This allows debuggers to stop at the
      * exact point of failure.
-     * 
-     * @example
-     * // Initialize at startup
-     * DebugBreakHandler::GetInstance().Initialize();
      */
-    class DebugBreakHandler : public Singleton<DebugBreakHandler> {
-        friend class Singleton<DebugBreakHandler>;
-
+    class DebugBreakHandler : public IAssertHandler {
     public:
+        DebugBreakHandler() = default;
         ~DebugBreakHandler() override = default;
 
+        void Initialize() override;
+        void OnAssert(const AssertEvent& event) override;
+        int GetPriority() const override { return _priority; }
+
         /**
-         * @brief Initialize and subscribe to assert events
-         * 
-         * Call this during engine initialization to enable
-         * debug break on assertion failures.
+         * @brief Set handler priority
+         * @param priority Priority value (lower = higher priority)
          */
-        void Initialize();
+        void SetPriority(int priority) { _priority = priority; }
 
         /**
          * @brief Enable or disable debug breaks
-         * 
-         * When disabled, assertion failures are still logged
-         * but won't trigger a debug break.
-         * 
          * @param enabled true to enable debug breaks
          */
         void SetEnabled(bool enabled) { _enabled = enabled; }
 
         /**
          * @brief Check if debug breaks are enabled
-         * 
          * @return true if debug breaks are enabled
          */
         bool IsEnabled() const { return _enabled; }
 
     private:
-        DebugBreakHandler() = default;
-
-        void OnAssert(const AssertEvent& event);
-
+        int _priority = 0;
         bool _enabled = true;
         bool _initialized = false;
     };
@@ -61,43 +57,95 @@ namespace Core {
      * 
      * Subscribes to AssertEvent and logs detailed information
      * about the failure using the Logger system.
-     * 
-     * @example
-     * // Initialize at startup (after Logger)
-     * LogHandler::GetInstance().Initialize();
      */
-    class LogHandler : public Singleton<LogHandler> {
-        friend class Singleton<LogHandler>;
-
+    class AssertLogHandler : public IAssertHandler {
     public:
-        ~LogHandler() override = default;
+        AssertLogHandler() = default;
+        ~AssertLogHandler() override = default;
+
+        void Initialize() override;
+        void OnAssert(const AssertEvent& event) override;
+        int GetPriority() const override { return _priority; }
 
         /**
-         * @brief Initialize and subscribe to assert events
-         * 
-         * Call this during engine initialization after the
-         * Logger has been set up.
+         * @brief Set handler priority
+         * @param priority Priority value (lower = higher priority)
          */
-        void Initialize();
+        void SetPriority(int priority) { _priority = priority; }
 
     private:
-        LogHandler() = default;
-
-        void OnAssert(const AssertEvent& event);
-
+        int _priority = 0;
         bool _initialized = false;
     };
 
     /**
-     * @brief Initialize all default assert handlers
+     * @brief Manager for all assertion handlers
      * 
-     * Convenience function to set up both DebugBreakHandler
-     * and LogHandler. Call this during engine startup.
+     * Singleton that initializes and manages assert handlers based on
+     * XML configuration. Handlers are loaded from config/AssertHandlersConfig.xml
+     * and sorted by priority.
      * 
      * @example
-     * // In main() or engine initialization
-     * Core::InitializeAssertHandlers();
+     * // In Application::Initialize()
+     * AssertHandlerManager::GetInstance().Initialize();
+     * 
+     * // Access specific handler
+     * auto* handler = AssertHandlerManager::GetInstance().GetHandler<DebugBreakHandler>();
      */
-    void InitializeAssertHandlers();
+    class AssertHandlerManager : public Singleton<AssertHandlerManager> {
+        friend class Singleton<AssertHandlerManager>;
+
+    public:
+        ~AssertHandlerManager() override = default;
+
+        /**
+         * @brief Initialize handlers from configuration
+         * 
+         * Loads config/AssertHandlersConfig.xml, creates handlers,
+         * sorts them by priority, and initializes each one.
+         * Safe to call multiple times - subsequent calls are no-ops.
+         */
+        void Initialize();
+
+        /**
+         * @brief Get handler by type
+         * 
+         * @tparam T Handler type to find
+         * @return Pointer to handler or nullptr if not found
+         */
+        template<typename T>
+        T* GetHandler() {
+            for (auto& handler : _handlers) {
+                if (auto* typed = dynamic_cast<T*>(handler.Get())) {
+                    return typed;
+                }
+            }
+            return nullptr;
+        }
+
+        /**
+         * @brief Get all handlers
+         * @return Reference to handlers vector
+         */
+        const eastl::vector<IntrusivePtr<IAssertHandler>>& GetHandlers() const { return _handlers; }
+
+    private:
+        AssertHandlerManager() = default;
+
+        /**
+         * @brief Create handler instance by type
+         * @param type Handler type from enum
+         * @return Pointer to handler instance or nullptr if unknown type
+         */
+        static IntrusivePtr<IAssertHandler> CreateHandlerByType(AssertHandlerType type);
+
+        /**
+         * @brief Sort handlers by priority (lower first)
+         */
+        void SortHandlersByPriority();
+
+        eastl::vector<IntrusivePtr<IAssertHandler>> _handlers;
+        bool _initialized = false;
+    };
 
 }  // namespace Core

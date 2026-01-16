@@ -188,7 +188,7 @@ void MyTest() {
 **Initialization:**
 ```cpp
 // In Application::Initialize(), before running tests
-InitializeAssertHandlers();
+AssertHandlerManager::GetInstance().Initialize();
 ```
 
 ## Don't Forget

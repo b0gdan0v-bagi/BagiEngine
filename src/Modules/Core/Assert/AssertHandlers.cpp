@@ -1,11 +1,15 @@
 #include "AssertHandlers.h"
 
 #include <Core/Assert/PlatformDebug.h>
+#include <Core/Config/XmlConfig.h>
 #include <Core/Logger/Logger.h>
 
 #include <fmt/core.h>
+#include <EASTL/sort.h>
 
 namespace Core {
+
+    // DebugBreakHandler implementation
 
     void DebugBreakHandler::Initialize() {
         if (_initialized) {
@@ -30,16 +34,18 @@ namespace Core {
         }
     }
 
-    void LogHandler::Initialize() {
+    // AssertLogHandler implementation
+
+    void AssertLogHandler::Initialize() {
         if (_initialized) {
             return;
         }
 
-        AssertEvent::Subscribe<&LogHandler::OnAssert>(this);
+        AssertEvent::Subscribe<&AssertLogHandler::OnAssert>(this);
         _initialized = true;
     }
 
-    void LogHandler::OnAssert(const AssertEvent& event) {
+    void AssertLogHandler::OnAssert(const AssertEvent& event) {
         auto& logger = Logger::GetInstance();
 
         // Determine log level based on assert type
@@ -82,9 +88,95 @@ namespace Core {
         logger.LogRaw(level, message.c_str(), event.file, event.line);
     }
 
-    void InitializeAssertHandlers() {
-        DebugBreakHandler::GetInstance().Initialize();
-        LogHandler::GetInstance().Initialize();
+    // AssertHandlerManager implementation
+
+    void AssertHandlerManager::Initialize() {
+        if (_initialized) {
+            return;
+        }
+
+        XmlConfig config = XmlConfig::Create();
+        constexpr std::string_view configPath = "config/AssertHandlersConfig.xml";
+
+        if (!config.LoadFromVirtualPath(configPath)) {
+            // Fallback: create default handlers if config not found
+            auto debugHandler = Core::New<DebugBreakHandler>();
+            debugHandler->SetPriority(100);
+            _handlers.push_back(debugHandler);
+
+            auto logHandler = Core::New<AssertLogHandler>();
+            logHandler->SetPriority(0);
+            _handlers.push_back(logHandler);
+        } else {
+            const auto rootNode = config.GetRoot();
+            if (rootNode) {
+                const auto handlersNode = rootNode.GetChild("handlers");
+                if (handlersNode) {
+                    for (const auto handlerNode : handlersNode.Children()) {
+                        if (handlerNode.Name() != "handler") {
+                            continue;
+                        }
+
+                        // Check if handler is enabled (default: true)
+                        auto enabled = handlerNode.ParseAttribute<bool>("enabled");
+                        if (enabled.has_value() && !enabled.value()) {
+                            continue;
+                        }
+
+                        auto handlerType = handlerNode.ParseAttribute<AssertHandlerType>("type");
+                        if (!handlerType) {
+                            continue;
+                        }
+
+                        auto handler = CreateHandlerByType(*handlerType);
+                        if (!handler) {
+                            continue;
+                        }
+
+                        // Set priority from config (default: 0)
+                        auto priority = handlerNode.ParseAttribute<int>("priority");
+                        if (priority.has_value()) {
+                            // Use dynamic_cast to set priority on concrete types
+                            if (auto* debugHandler = dynamic_cast<DebugBreakHandler*>(handler.Get())) {
+                                debugHandler->SetPriority(*priority);
+                            } else if (auto* logHandler = dynamic_cast<AssertLogHandler*>(handler.Get())) {
+                                logHandler->SetPriority(*priority);
+                            }
+                        }
+
+                        _handlers.push_back(handler);
+                    }
+                }
+            }
+        }
+
+        // Sort handlers by priority (lower first)
+        SortHandlersByPriority();
+
+        // Initialize all handlers
+        for (auto& handler : _handlers) {
+            handler->Initialize();
+        }
+
+        _initialized = true;
+    }
+
+    IntrusivePtr<IAssertHandler> AssertHandlerManager::CreateHandlerByType(AssertHandlerType type) {
+        switch (type) {
+            case AssertHandlerType::DebugBreak:
+                return Core::New<DebugBreakHandler>();
+            case AssertHandlerType::Log:
+                return Core::New<AssertLogHandler>();
+            default:
+                return {};
+        }
+    }
+
+    void AssertHandlerManager::SortHandlersByPriority() {
+        eastl::sort(_handlers.begin(), _handlers.end(),
+            [](const IntrusivePtr<IAssertHandler>& a, const IntrusivePtr<IAssertHandler>& b) {
+                return a->GetPriority() < b->GetPriority();
+            });
     }
 
 }  // namespace Core

@@ -17,7 +17,7 @@ namespace Core {
         ApplicationEvents::QuitEvent::Subscribe<&Application::StopApplication>(this);
         FileSystem::GetInstance().Initialize();
 
-        InitializeAssertHandlers();
+        AssertHandlerManager::GetInstance().Initialize();
 
         TestManager::GetInstance().RunAllTests();
 

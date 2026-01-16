@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <!-- 
+        Assert Handlers Configuration
+        
+        type: Handler type (DebugBreak, Log)
+        enabled: Whether handler is active (default: true)
+        priority: Execution order, lower values run first (default: 0)
+    -->
+    <handlers>
+        <!-- Log handler runs first to capture the message before potential break -->
+        <handler type="Log" enabled="true" priority="0" />
+        
+        <!-- Debug break handler runs after logging -->
+        <handler type="DebugBreak" enabled="true" priority="100" />
+    </handlers>
+</root>
