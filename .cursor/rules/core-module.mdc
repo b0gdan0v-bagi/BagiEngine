@@ -88,7 +88,78 @@ bool MyClass::LoadFromConfig(const XmlNode& node) {
 - One class per file (header + implementation)
 - Header: `ClassName.h`
 - Implementation: `ClassName.cpp`
-- Tests: `ClassNameTest.h` (header-only tests are OK)
+- Tests: `Tests/TestName.h` (in Core/Tests folder)
+
+## Test System
+
+The Core module provides a configurable test system managed by `TestManager`:
+
+### Running Tests
+```cpp
+#include <Core/Tests/TestManager.h>
+
+// In Application::Initialize()
+TestManager::GetInstance().RunAllTests();
+```
+
+### Creating a New Test
+
+1. Create test class in `Core/Tests/`:
+
+```cpp
+#pragma once
+
+#include <Core/Tests/ITest.h>
+#include <Core/Assert/AssertMacros.h>
+
+namespace Core::Tests {
+
+    class MyNewTest : public ITest {
+    public:
+        const char* GetName() const override {
+            return "MyNewTest";
+        }
+
+        bool Run() override {
+            // Test logic using ASSERT macros
+            ASSERT(condition);
+            ASSERT(value == expected, "Error message");
+            return true;
+        }
+    };
+
+}  // namespace Core::Tests
+```
+
+2. Register test type in `TestManager.h`:
+```cpp
+CORE_ENUM(TestType, uint8_t, PoolStringTest, FormatTest, MyNewTest)
+```
+
+3. Add factory case in `TestManager.cpp`:
+```cpp
+case TestType::MyNewTest:
+    return Core::New<Tests::MyNewTest>();
+```
+
+4. Enable in `config/TestsConfig.xml`:
+```xml
+<test type="MyNewTest" enabled="true" />
+```
+
+### Test Configuration
+Tests are configured via `config/TestsConfig.xml`:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <tests>
+        <test type="PoolStringTest" enabled="true" />
+        <test type="FormatTest" enabled="false" />
+    </tests>
+</root>
+```
+
+Set `enabled="false"` to skip a test without removing it.
 
 ## Assertion System
 
@@ -125,3 +196,6 @@ InitializeAssertHandlers();
 - Update CMakeLists.txt when adding new files
 - Document public APIs with Doxygen comments
 - Use `ASSERT` macro instead of `std::assert` in all code and tests
+- Add tests for new functionality via `TestManager` system
+- Register new test types in `TestManager.h` and `TestManager.cpp`
+- Enable/disable tests via `config/TestsConfig.xml`
