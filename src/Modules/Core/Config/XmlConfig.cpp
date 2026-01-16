@@ -1,7 +1,7 @@
 #include "XmlConfig.h"
 
 #include <Core/Config/XmlConfigImpl.h>
-#include <Core/FileSystem/FileSystem.h>
+#include <Core/GameManager/CoreManager.h>
 
 namespace Core {
 
@@ -14,7 +14,7 @@ namespace Core {
         if (!_impl) {
             return false;
         }
-        std::filesystem::path resolvedPath = FileSystem::GetInstance().ResolvePath(virtualPath);
+        std::filesystem::path resolvedPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
         if (resolvedPath.empty()) {
             return {};
         }

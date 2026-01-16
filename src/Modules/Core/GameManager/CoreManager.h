@@ -3,6 +3,9 @@
 #include <Events/EventsProviderManager.h>
 #include <Core/MainWindow/MainWindowManager.h>
 #include <Core/Widgets/WidgetManager.h>
+#include <Core/FileSystem/FileSystem.h>
+#include <Core/Assert/AssertHandlers.h>
+#include <Core/Tests/TestManager.h>
 
 namespace Core {
 
@@ -26,9 +29,24 @@ namespace Core {
             return GetInstance()._mainWindowManager;
         }
 
+        static FileSystem& GetFileSystem() {
+            return GetInstance()._fileSystem;
+        }
+
+        static AssertHandlerManager& GetAssertHandlerManager() {
+            return GetInstance()._assertHandlerManager;
+        }
+
+        static TestManager& GetTestManager() {
+            return GetInstance()._testManager;
+        }
+
         static const IntrusivePtr<IMainWindow>& GetMainWindow();
 
-        // Функция инициализации приложения
+        // Pre-initialization function (FileSystem, AssertHandlers, Tests)
+        void OnApplicationPreInit(PassKey<Application>);
+
+        // Application initialization function
         void OnApplicationInit(PassKey<Application>);
 
         // Функция игрового цикла
@@ -38,6 +56,9 @@ namespace Core {
         void OnApplicationDeinit(PassKey<Application>);
 
     private:
+        FileSystem _fileSystem;
+        AssertHandlerManager _assertHandlerManager;
+        TestManager _testManager;
         WidgetManager _widgetManager;
         EventsProviderManager _eventsProviderManager;
         MainWindowManager _mainWindowManager;

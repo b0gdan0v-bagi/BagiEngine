@@ -2,12 +2,9 @@
 
 #include <Core/Application/ApplicationFabric.h>
 #include <Core/Assert/AssertMacros.h>
-#include <Core/Assert/AssertHandlers.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
-#include <Core/FileSystem/FileSystem.h>
 #include <Core/GameManager/CoreManager.h>
-#include <Core/Tests/TestManager.h>
 
 namespace Core {
 
@@ -15,11 +12,8 @@ namespace Core {
 
         _isRunning = true;
         ApplicationEvents::QuitEvent::Subscribe<&Application::StopApplication>(this);
-        FileSystem::GetInstance().Initialize();
 
-        AssertHandlerManager::GetInstance().Initialize();
-
-        TestManager::GetInstance().RunAllTests();
+        CoreManager::GetInstance().OnApplicationPreInit({});
 
         if (!ApplicationFabric::GetInstance().Create()) {
             return false;

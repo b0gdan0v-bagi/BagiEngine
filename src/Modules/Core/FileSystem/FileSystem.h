@@ -4,14 +4,17 @@
 namespace Core {
 
     /**
-     * Система монтирования файловой системы
-     * Позволяет монтировать директории под виртуальными путями
-     * и преобразовывать виртуальные пути в реальные
+     * @brief File system with virtual mount points
+     * 
+     * Allows mounting directories under virtual paths and resolving
+     * virtual paths to real filesystem paths.
+     * 
+     * @note Access via CoreManager::GetFileSystem()
      */
-    class FileSystem : public Singleton<FileSystem> {
+    class FileSystem {
     public:
         FileSystem() = default;
-        ~FileSystem() override = default;
+        ~FileSystem() = default;
 
         /**
          * Инициализация файловой системы

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Core/Assert/IAssertHandler.h>
-#include <Core/Utils/Singleton.h>
 #include <Core/Utils/EnumUtils.h>
 #include <EASTL/vector.h>
 
@@ -81,22 +80,20 @@ namespace Core {
     /**
      * @brief Manager for all assertion handlers
      * 
-     * Singleton that initializes and manages assert handlers based on
-     * XML configuration. Handlers are loaded from config/AssertHandlersConfig.xml
+     * Manages assert handlers based on XML configuration.
+     * Handlers are loaded from config/AssertHandlersConfig.xml
      * and sorted by priority.
      * 
-     * @example
-     * // In Application::Initialize()
-     * AssertHandlerManager::GetInstance().Initialize();
+     * @note Access via CoreManager::GetAssertHandlerManager()
      * 
+     * @example
      * // Access specific handler
-     * auto* handler = AssertHandlerManager::GetInstance().GetHandler<DebugBreakHandler>();
+     * auto* handler = CoreManager::GetAssertHandlerManager().GetHandler<DebugBreakHandler>();
      */
-    class AssertHandlerManager : public Singleton<AssertHandlerManager> {
-        friend class Singleton<AssertHandlerManager>;
-
+    class AssertHandlerManager {
     public:
-        ~AssertHandlerManager() override = default;
+        AssertHandlerManager() = default;
+        ~AssertHandlerManager() = default;
 
         /**
          * @brief Initialize handlers from configuration
@@ -130,8 +127,6 @@ namespace Core {
         const eastl::vector<IntrusivePtr<IAssertHandler>>& GetHandlers() const { return _handlers; }
 
     private:
-        AssertHandlerManager() = default;
-
         /**
          * @brief Create handler instance by type
          * @param type Handler type from enum

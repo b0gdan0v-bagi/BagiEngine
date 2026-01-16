@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Core/Tests/ITest.h>
-#include <Core/Utils/Singleton.h>
 #include <EASTL/vector.h>
 
 namespace Core {
@@ -17,13 +16,15 @@ namespace Core {
      * Reads TestsConfig.xml and runs tests specified in the config.
      * Tests can be enabled/disabled through configuration.
      *
+     * @note Access via CoreManager::GetTestManager()
+     *
      * @example
-     * TestManager::GetInstance().RunAllTests();
+     * CoreManager::GetTestManager().RunAllTests();
      */
-    class TestManager : public Singleton<TestManager> {
+    class TestManager {
     public:
         TestManager() = default;
-        ~TestManager() override = default;
+        ~TestManager() = default;
 
         /**
          * @brief Load and run tests from configuration

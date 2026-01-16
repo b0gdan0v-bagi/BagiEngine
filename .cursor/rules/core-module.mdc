@@ -90,16 +90,34 @@ bool MyClass::LoadFromConfig(const XmlNode& node) {
 - Implementation: `ClassName.cpp`
 - Tests: `Tests/TestName.h` (in Core/Tests folder)
 
+## CoreManager
+
+`CoreManager` is the central hub that owns core subsystems as members:
+
+```cpp
+#include <Core/GameManager/CoreManager.h>
+
+// Access subsystems via static methods
+CoreManager::GetFileSystem().ResolvePath("config/file.xml");
+CoreManager::GetAssertHandlerManager().GetHandler<DebugBreakHandler>();
+CoreManager::GetTestManager().RunAllTests();
+```
+
+**Initialization order** (in `OnApplicationPreInit`):
+1. `FileSystem` - needed for loading configs
+2. `AssertHandlerManager` - loads config, uses FileSystem
+3. `TestManager` - runs tests, uses assert system
+
 ## Test System
 
 The Core module provides a configurable test system managed by `TestManager`:
 
 ### Running Tests
-```cpp
-#include <Core/Tests/TestManager.h>
+Tests are run automatically during `CoreManager::OnApplicationPreInit()`.
 
-// In Application::Initialize()
-TestManager::GetInstance().RunAllTests();
+```cpp
+// Manual access if needed
+CoreManager::GetTestManager().RunAllTests();
 ```
 
 ### Creating a New Test
@@ -186,9 +204,11 @@ void MyTest() {
 - `FATALERROR("message")` - Unrecoverable error
 
 **Initialization:**
+Handlers are initialized automatically in `CoreManager::OnApplicationPreInit()`.
+
+**Accessing handlers:**
 ```cpp
-// In Application::Initialize(), before running tests
-AssertHandlerManager::GetInstance().Initialize();
+auto* handler = CoreManager::GetAssertHandlerManager().GetHandler<DebugBreakHandler>();
 ```
 
 ## Don't Forget

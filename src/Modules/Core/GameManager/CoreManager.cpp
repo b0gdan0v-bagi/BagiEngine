@@ -8,6 +8,12 @@ namespace Core {
         return GetInstance()._mainWindowManager.GetMainWindow();
     }
 
+    void CoreManager::OnApplicationPreInit(PassKey<Application>) {
+        _fileSystem.Initialize();
+        _assertHandlerManager.Initialize();
+        _testManager.RunAllTests();
+    }
+
     void CoreManager::OnApplicationInit(PassKey<Application>) {
         _widgetManager.CreateWidgets();
     }
