@@ -90,7 +90,38 @@ bool MyClass::LoadFromConfig(const XmlNode& node) {
 - Implementation: `ClassName.cpp`
 - Tests: `ClassNameTest.h` (header-only tests are OK)
 
+## Assertion System
+
+The Core module provides an assertion system that integrates with the event system:
+
+```cpp
+#include <Core/Assert/AssertMacros.h>
+
+// Use ASSERT for critical checks in code
+ASSERT(ptr != nullptr, "Pointer cannot be null");
+ASSERT(index >= 0 && index < size);
+
+// Use ASSERT in tests (not std::assert)
+void MyTest() {
+    auto result = DoSomething();
+    ASSERT(result.IsValid());
+    ASSERT(result.Value() == 42, "Expected value 42");
+}
+```
+
+**Assertion macros:**
+- `ASSERT(expr)` / `ASSERT(expr, "message")` - Critical assertion
+- `EXPECT(expr)` / `EXPECT(expr, "message")` - Soft expectation
+- `FATALERROR("message")` - Unrecoverable error
+
+**Initialization:**
+```cpp
+// In Application::Initialize(), before running tests
+InitializeAssertHandlers();
+```
+
 ## Don't Forget
 - Add new utilities to `pch.h` if they will be used widely
 - Update CMakeLists.txt when adding new files
 - Document public APIs with Doxygen comments
+- Use `ASSERT` macro instead of `std::assert` in all code and tests

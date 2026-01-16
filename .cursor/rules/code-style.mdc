@@ -144,12 +144,49 @@ bool Initialize() {
     return true;
 }
 
-// Use assert for programming errors
-assert(_instance != nullptr && "Instance must exist");
+// Use ASSERT for programming errors (not std::assert)
+ASSERT(_instance != nullptr, "Instance must exist");
 
 // Log errors before returning
 if (error) {
     // TODO: Add logging system
     return false;
 }
+```
+
+## Assertion Macros
+
+BagiEngine provides custom assertion macros that integrate with the event system:
+
+```cpp
+#include <Core/Assert/AssertMacros.h>
+
+// ASSERT - for critical checks (can be disabled in release builds)
+ASSERT(ptr != nullptr);
+ASSERT(index < size, "Index out of bounds");
+
+// EXPECT - for soft checks (less critical, can be disabled separately)
+EXPECT(value > 0);
+EXPECT(count <= MaxCount, "Count exceeds maximum");
+
+// FATALERROR - for unrecoverable errors
+FATALERROR("Unrecoverable error occurred");
+```
+
+**Key differences from std::assert:**
+- Emits `AssertEvent` through the event system
+- Can be handled by custom handlers (logging, debug breaks, etc.)
+- Can be disabled via CMake options:
+  - `ENGINE_ENABLE_ASSERTS` - Controls ASSERT and FATALERROR
+  - `ENGINE_ENABLE_EXPECTS` - Controls EXPECT
+- Supports optional messages: `ASSERT(expr, "message")`
+
+**Always use ASSERT/EXPECT in tests:**
+```cpp
+// Good - uses engine assertion macros
+ASSERT(result == expected);
+ASSERT(container.Size() == 5, "Container should have 5 elements");
+
+// Avoid - std::assert doesn't integrate with engine systems
+assert(result == expected);
 ```
