@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <tests>
+        <test type="PoolStringTest" enabled="true" />
+        <test type="FormatTest" enabled="true" />
+    </tests>
+</root>

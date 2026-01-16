@@ -7,8 +7,7 @@
 #include <Events/RenderEvents.h>
 #include <Core/FileSystem/FileSystem.h>
 #include <Core/GameManager/CoreManager.h>
-#include <Core/PoolString/PoolStringTest.h>
-#include <Core/Format/FormatTest.h>
+#include <Core/Tests/TestManager.h>
 
 namespace Core {
 
@@ -20,8 +19,7 @@ namespace Core {
 
         InitializeAssertHandlers();
 
-        Tests::PoolStringTest();
-        Tests::FormatTest();
+        TestManager::GetInstance().RunAllTests();
 
         if (!ApplicationFabric::GetInstance().Create()) {
             return false;
