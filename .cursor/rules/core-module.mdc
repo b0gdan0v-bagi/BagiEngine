@@ -7,215 +7,43 @@ alwaysApply: false
 # Core Module Guidelines
 
 ## Overview
-The Core module is the foundation of BagiEngine. It provides essential utilities and base classes that other modules depend on.
+The Core module is the foundation of BagiEngine. It provides essential utilities and base classes.
 
 ## Key Components
 
-### Singleton Pattern
-When creating a new global service:
+| Component | When to Use | Reference |
+|-----------|-------------|-----------|
+| `Singleton<T>` | Global services | `Core/Utils/Singleton.h` |
+| `RefCounted` + `IntrusivePtr` | Reference-counted objects | `Core/RefCounted/` |
+| `PoolString` | Identifiers, map keys, config keys | `Core/PoolString/` |
+| `XmlConfig` / `XmlNode` | Loading XML configuration | `Core/Config/` |
+| `PassKey<T>` | Restricted method access | `Core/Utils/PassKey.h` |
 
-```cpp
-#pragma once
-
-namespace Core {
-
-    class MyNewService : public Singleton<MyNewService> {
-    public:
-        MyNewService() = default;
-        ~MyNewService() override = default;
-
-        void Initialize();
-        void Shutdown();
-
-    private:
-        bool _isInitialized = false;
-    };
-
-}  // namespace Core
-```
-
-### RefCounted Objects
-For objects that need reference counting:
-
-```cpp
-class MyObject : public RefCounted {
-public:
-    // Use IntrusivePtr<MyObject> for pointers
-};
-
-// Usage:
-IntrusivePtr<MyObject> obj = MakeIntrusive<MyObject>();
-```
-
-### PoolString
-Always prefer `PoolString` over `std::string` for:
+## When to Use PoolString
 - Configuration keys
-- Identifiers that are compared frequently
-- Strings that are used as map keys
-
-```cpp
-// Good
-PoolString key = "myKey"_ps;
-UnorderedPoolMap<int> map;
-map[key] = 42;
-
-// Avoid
-std::string key = "myKey";
-std::unordered_map<std::string, int> map;
-```
-
-### XmlConfig System
-When adding new configuration:
-
-```cpp
-bool MyClass::LoadFromConfig(const XmlNode& node) {
-    if (!node.IsValid()) {
-        return false;
-    }
-    
-    _name = node.GetAttribute<PoolString>("name");
-    _value = node.GetAttribute<int>("value", 0);  // with default
-    
-    for (const auto& child : node.GetChildren("item")) {
-        // Process children
-    }
-    
-    return true;
-}
-```
-
-## File Organization
-- One class per file (header + implementation)
-- Header: `ClassName.h`
-- Implementation: `ClassName.cpp`
-- Tests: `Tests/TestName.h` (in Core/Tests folder)
+- Identifiers compared frequently
+- Map/hash keys
+- NOT for: temporary strings, user-facing text
 
 ## CoreManager
 
-`CoreManager` is the central hub that owns core subsystems as members:
-
-```cpp
-#include <Core/GameManager/CoreManager.h>
-
-// Access subsystems via static methods
-CoreManager::GetFileSystem().ResolvePath("config/file.xml");
-CoreManager::GetAssertHandlerManager().GetHandler<DebugBreakHandler>();
-CoreManager::GetTestManager().RunAllTests();
-```
+Central hub owning core subsystems. Access via static methods:
+- `CoreManager::GetFileSystem()`
+- `CoreManager::GetAssertHandlerManager()`
+- `CoreManager::GetTestManager()`
 
 **Initialization order** (in `OnApplicationPreInit`):
-1. `FileSystem` - needed for loading configs
-2. `AssertHandlerManager` - loads config, uses FileSystem
-3. `TestManager` - runs tests, uses assert system
+1. `FileSystem` — needed for loading configs
+2. `AssertHandlerManager` — loads config, uses FileSystem
+3. `TestManager` — runs tests, uses assert system
 
-## Test System
+## File Organization
+- One class per file: `ClassName.h` + `ClassName.cpp`
+- Tests: `Core/Tests/TestName.h`
 
-The Core module provides a configurable test system managed by `TestManager`:
-
-### Running Tests
-Tests are run automatically during `CoreManager::OnApplicationPreInit()`.
-
-```cpp
-// Manual access if needed
-CoreManager::GetTestManager().RunAllTests();
-```
-
-### Creating a New Test
-
-1. Create test class in `Core/Tests/`:
-
-```cpp
-#pragma once
-
-#include <Core/Tests/ITest.h>
-#include <Core/Assert/AssertMacros.h>
-
-namespace Core::Tests {
-
-    class MyNewTest : public ITest {
-    public:
-        const char* GetName() const override {
-            return "MyNewTest";
-        }
-
-        bool Run() override {
-            // Test logic using ASSERT macros
-            ASSERT(condition);
-            ASSERT(value == expected, "Error message");
-            return true;
-        }
-    };
-
-}  // namespace Core::Tests
-```
-
-2. Register test type in `TestManager.h`:
-```cpp
-CORE_ENUM(TestType, uint8_t, PoolStringTest, FormatTest, MyNewTest)
-```
-
-3. Add factory case in `TestManager.cpp`:
-```cpp
-case TestType::MyNewTest:
-    return Core::New<Tests::MyNewTest>();
-```
-
-4. Enable in `config/TestsConfig.xml`:
-```xml
-<test type="MyNewTest" enabled="true" />
-```
-
-### Test Configuration
-Tests are configured via `config/TestsConfig.xml`:
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<root>
-    <tests>
-        <test type="PoolStringTest" enabled="true" />
-        <test type="FormatTest" enabled="false" />
-    </tests>
-</root>
-```
-
-Set `enabled="false"` to skip a test without removing it.
-
-## Assertion System
-
-The Core module provides an assertion system that integrates with the event system:
-
-```cpp
-#include <Core/Assert/AssertMacros.h>
-
-// Use ASSERT for critical checks in code
-ASSERT(ptr != nullptr, "Pointer cannot be null");
-ASSERT(index >= 0 && index < size);
-
-// Use ASSERT in tests (not std::assert)
-void MyTest() {
-    auto result = DoSomething();
-    ASSERT(result.IsValid());
-    ASSERT(result.Value() == 42, "Expected value 42");
-}
-```
-
-**Assertion macros:**
-- `ASSERT(expr)` / `ASSERT(expr, "message")` - Critical assertion
-- `EXPECT(expr)` / `EXPECT(expr, "message")` - Soft expectation
-- `FATALERROR("message")` - Unrecoverable error
-
-**Initialization:**
-Handlers are initialized automatically in `CoreManager::OnApplicationPreInit()`.
-
-**Accessing handlers:**
-```cpp
-auto* handler = CoreManager::GetAssertHandlerManager().GetHandler<DebugBreakHandler>();
-```
-
-## Don't Forget
-- Add new utilities to `pch.h` if they will be used widely
-- Update CMakeLists.txt when adding new files
-- Document public APIs with Doxygen comments
-- Use `ASSERT` macro instead of `std::assert` in all code and tests
-- Add tests for new functionality via `TestManager` system
-- Register new test types in `TestManager.h` and `TestManager.cpp`
-- Enable/disable tests via `config/TestsConfig.xml`
+## Checklist for New Code
+- [ ] Add to `pch.h` if widely used
+- [ ] Update `CMakeLists.txt`
+- [ ] Use `ASSERT` macro (not `std::assert`)
+- [ ] Add Doxygen comments for public API
+- [ ] Add test if appropriate (see tests-module.mdc)

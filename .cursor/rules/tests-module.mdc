@@ -1,0 +1,55 @@
+---
+description: Rules for Test system and Assertions
+globs: 
+  - src/Modules/Core/Tests/**/*
+  - src/Modules/Core/Assert/**/*
+  - config/TestsConfig.xml
+  - config/AssertHandlersConfig.xml
+alwaysApply: false
+---
+
+# Test System & Assertions
+
+## Test System
+
+Tests are managed by `TestManager` and run automatically in `CoreManager::OnApplicationPreInit()`.
+
+### Adding a New Test
+
+1. Create class in `Core/Tests/` implementing `ITest`
+2. Register type in `TestManager.h` (add to `CORE_ENUM(TestType, ...)`)
+3. Add factory case in `TestManager.cpp`
+4. Enable in `config/TestsConfig.xml`
+
+**Reference:** See `Core/Tests/PoolStringTest.h` as example.
+
+### Test Configuration
+
+File: `config/TestsConfig.xml`
+- Set `enabled="true/false"` to control which tests run
+- Test types must match `TestType` enum values
+
+## Assertion System
+
+**Macros** (from `Core/Assert/AssertMacros.h`):
+- `ASSERT(expr)` / `ASSERT(expr, "msg")` — Critical check
+- `EXPECT(expr)` / `EXPECT(expr, "msg")` — Soft expectation  
+- `FATALERROR("msg")` — Unrecoverable error
+
+**Key points:**
+- Always use `ASSERT` instead of `std::assert`
+- Assertions emit `AssertEvent` through event system
+- Handlers configured via `config/AssertHandlersConfig.xml`
+
+**Built-in handlers:**
+- `DebugBreakHandler` — triggers debugger breakpoint
+- `LogHandler` — logs assertion failures
+- `AbortHandler` — calls abort()
+
+## Checklist for New Test
+- [ ] Inherit from `ITest`
+- [ ] Implement `GetName()` and `Run()`
+- [ ] Use `ASSERT` for checks (not std::assert)
+- [ ] Register in `TestManager.h` enum
+- [ ] Add factory case in `TestManager.cpp`
+- [ ] Add to `TestsConfig.xml`
