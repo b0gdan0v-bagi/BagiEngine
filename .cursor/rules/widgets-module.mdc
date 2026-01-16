@@ -1,0 +1,137 @@
+---
+description: Rules for Widget development
+globs: 
+  - src/Widgets/**/*
+  - src/Modules/Core/Widgets/**/*
+alwaysApply: false
+---
+
+# Widget System Guidelines
+
+## Overview
+Widgets are UI/rendering components that follow the IWidget interface. They are managed by WidgetManager and configured via XML.
+
+## Creating a New Widget
+
+### Header File
+```cpp
+#pragma once
+
+#include <Core/Widgets/IWidget.h>
+
+namespace Core {
+
+    class MyNewWidget : public IWidget {
+    public:
+        MyNewWidget() = default;
+        ~MyNewWidget() override = default;
+
+        bool Initialize(const XmlNode& node) override;
+        void Update() override;
+        void Draw() override;
+
+    private:
+        // Configuration from XML
+        PoolString _name;
+        int _priority = 0;
+        
+        // Runtime state with underscore prefix
+        bool _isActive = true;
+    };
+
+}  // namespace Core
+```
+
+### Implementation File
+```cpp
+#include "MyNewWidget.h"
+
+namespace Core {
+
+    bool MyNewWidget::Initialize(const XmlNode& node) {
+        if (!node.IsValid()) {
+            return false;
+        }
+        
+        _name = node.GetAttribute<PoolString>("name", "unnamed"_ps);
+        _priority = node.GetAttribute<int>("priority", 0);
+        
+        // Subscribe to events if needed
+        // RenderEvents::NewFrameEvent::Subscribe<&MyNewWidget::OnNewFrame>(this);
+        
+        return true;
+    }
+
+    void MyNewWidget::Update() {
+        // Called every frame before Draw
+        // Update logic here
+    }
+
+    void MyNewWidget::Draw() {
+        // Rendering code here
+    }
+
+}  // namespace Core
+```
+
+### XML Configuration
+Add to `config/WidgetsConfig.xml`:
+```xml
+<Widgets>
+    <Widget type="MyNewWidget" name="myWidget" priority="10">
+        <!-- Widget-specific attributes -->
+    </Widget>
+</Widgets>
+```
+
+## Widget Lifecycle
+
+1. **Construction** - Default constructor, no initialization
+2. **Initialize(XmlNode)** - Load configuration, subscribe to events
+3. **Update()** - Called every frame (logic)
+4. **Draw()** - Called every frame (rendering)
+5. **Destruction** - Cleanup, unsubscribe from events
+
+## Using Events in Widgets
+
+```cpp
+bool MyWidget::Initialize(const XmlNode& node) {
+    // Subscribe to render events
+    RenderEvents::NewFrameEvent::Subscribe<&MyWidget::OnNewFrame>(this);
+    ApplicationEvents::ApplicationCleanUpEvent::Subscribe<&MyWidget::OnCleanup>(this);
+    return true;
+}
+
+void MyWidget::OnNewFrame() {
+    // Called at start of each frame
+}
+
+void MyWidget::OnCleanup() {
+    // Called when application is shutting down
+}
+```
+
+## ImGui Widgets
+
+For ImGui-based widgets:
+```cpp
+void MyImGuiWidget::Draw() {
+    ImGui::Begin("My Window");
+    
+    ImGui::Text("Hello from MyWidget!");
+    
+    if (ImGui::Button("Click Me")) {
+        // Handle button click
+    }
+    
+    ImGui::End();
+}
+```
+
+## Best Practices
+
+1. **Single Responsibility** - One widget = one purpose
+2. **XML Configuration** - All tunable parameters from XML
+3. **Event-Driven** - Use events for communication between widgets
+4. **Lazy Initialization** - Initialize resources in Initialize(), not constructor
+5. **Clean Separation** - Update() for logic, Draw() for rendering

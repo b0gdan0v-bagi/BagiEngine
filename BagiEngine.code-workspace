@@ -1,0 +1,239 @@
+{
+	"folders": [
+		{
+			"path": ".",
+			"name": "BagiEngine"
+		}
+	],
+	"settings": {
+		// C/C++ настройки (кроссплатформенные)
+		"C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+		"C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+		"C_Cpp.default.cppStandard": "c++20",
+		// intelliSenseMode будет автоматически определяться CMake Tools
+		
+		// CMake настройки (кроссплатформенные)
+		"cmake.configureOnOpen": false,
+		"cmake.buildDirectory": "${workspaceFolder}/build",
+		"cmake.sourceDirectory": "${workspaceFolder}",
+		"cmake.generator": "Ninja",
+		"cmake.preferredGenerators": [
+			"Ninja",
+			"Unix Makefiles",
+			"Visual Studio 17 2022"
+		],
+		
+		// Файлы для исключения из поиска (Windows + macOS)
+		"files.exclude": {
+			"**/.git": true,
+			"**/.DS_Store": true,
+			"**/Thumbs.db": true,
+			"**/*.swp": true
+		},
+		
+		// Исключения для поиска (Windows + macOS)
+		"search.exclude": {
+			"**/build/_deps": true,
+			"**/build/CMakeFiles": true,
+			"**/*.a": true,
+			"**/*.lib": true,
+			"**/*.dylib": true,
+			"**/*.dll": true,
+			"**/*.exe": true,
+			"**/build/src": true
+		},
+		
+		// Исключения для наблюдателя файлов
+		"files.watcherExclude": {
+			"**/build/**": true,
+			"**/.git/objects/**": true,
+			"**/.git/subtree-cache/**": true,
+			"**/node_modules/**": true
+		},
+		
+		// Ассоциации файлов
+		"files.associations": {
+			"*.h": "cpp",
+			"*.hpp": "cpp",
+			"*.cpp": "cpp",
+			"*.ipp": "cpp",
+			"CMakeLists.txt": "cmake",
+			"*.cmake": "cmake"
+		},
+		
+		// Форматирование
+		"editor.formatOnSave": false,
+		"editor.tabSize": 4,
+		"editor.insertSpaces": true,
+		"[cpp]": {
+			"editor.defaultFormatter": "ms-vscode.cpptools"
+		},
+		
+		// Настройки терминала
+		"terminal.integrated.cwd": "${workspaceFolder}",
+		
+		// Настройки IntelliSense
+		"C_Cpp.errorSquiggles": "enabled",
+		"C_Cpp.intelliSenseEngine": "default",
+		"C_Cpp.enhancedColorization": "enabled",
+		
+		// Git настройки
+		"git.enabled": true,
+		"git.autofetch": true
+	},
+	"extensions": {
+		"recommendations": [
+			"ms-vscode.cpptools",
+			"ms-vscode.cmake-tools",
+			"twxs.cmake",
+			"ms-vscode.cpptools-extension-pack"
+		]
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "Debug MyGame (macOS)",
+				"type": "cppdbg",
+				"request": "launch",
+				"program": "${workspaceFolder}/build/MyGame",
+				"args": [],
+				"stopAtEntry": false,
+				"cwd": "${workspaceFolder}",
+				"environment": [],
+				"externalConsole": false,
+				"MIMode": "lldb",
+				"preLaunchTask": "CMake: build",
+				"osx": {
+					"MIMode": "lldb"
+				}
+			},
+			{
+				"name": "Debug MyGame (Windows)",
+				"type": "cppdbg",
+				"request": "launch",
+				"program": "${workspaceFolder}/build/MyGame.exe",
+				"args": [],
+				"stopAtEntry": false,
+				"cwd": "${workspaceFolder}",
+				"environment": [],
+				"externalConsole": false,
+				"MIMode": "gdb",
+				"miDebuggerPath": "gdb",
+				"preLaunchTask": "CMake: build",
+				"windows": {
+					"MIMode": "gdb",
+					"miDebuggerPath": "C:/msys64/mingw64/bin/gdb.exe"
+				},
+				"setupCommands": [
+					{
+						"description": "Enable pretty-printing for gdb",
+						"text": "-enable-pretty-printing",
+						"ignoreFailures": true
+					}
+				]
+			},
+			{
+				"name": "Debug MyGame (Windows MSVC)",
+				"type": "cppvsdbg",
+				"request": "launch",
+				"program": "${workspaceFolder}/build/Debug/MyGame.exe",
+				"args": [],
+				"stopAtEntry": false,
+				"cwd": "${workspaceFolder}",
+				"environment": [],
+				"console": "integratedTerminal",
+				"preLaunchTask": "CMake: build"
+			}
+		]
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "CMake: configure",
+				"type": "shell",
+				"command": "cmake",
+				"args": [
+					"-B",
+					"build",
+					"-G",
+					"Ninja"
+				],
+				"windows": {
+					"args": [
+						"-B",
+						"build",
+						"-G",
+						"Ninja"
+					]
+				},
+				"problemMatcher": [],
+				"group": {
+					"kind": "build",
+					"isDefault": false
+				},
+				"options": {
+					"cwd": "${workspaceFolder}"
+				}
+			},
+			{
+				"label": "CMake: configure (MSVC)",
+				"type": "shell",
+				"command": "cmake",
+				"args": [
+					"-B",
+					"build",
+					"-G",
+					"Visual Studio 17 2022",
+					"-A",
+					"x64"
+				],
+				"problemMatcher": [],
+				"group": {
+					"kind": "build",
+					"isDefault": false
+				},
+				"options": {
+					"cwd": "${workspaceFolder}"
+				}
+			},
+			{
+				"label": "CMake: build",
+				"type": "shell",
+				"command": "cmake",
+				"args": [
+					"--build",
+					"build"
+				],
+				"problemMatcher": [
+					"$gcc"
+				],
+				"group": {
+					"kind": "build",
+					"isDefault": true
+				},
+				"dependsOn": []
+			},
+			{
+				"label": "Run MyGame",
+				"type": "shell",
+				"command": "${workspaceFolder}/build/MyGame",
+				"windows": {
+					"command": "${workspaceFolder}\\build\\MyGame.exe"
+				},
+				"linux": {
+					"command": "${workspaceFolder}/build/MyGame"
+				},
+				"osx": {
+					"command": "${workspaceFolder}/build/MyGame"
+				},
+				"problemMatcher": [],
+				"group": {
+					"kind": "test",
+					"isDefault": true
+				}
+			}
+		]
+	}
+}

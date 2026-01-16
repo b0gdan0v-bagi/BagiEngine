@@ -1,0 +1,141 @@
+---
+description: Instructions for AI assistant when working with BagiEngine
+globs: "**/*"
+alwaysApply: true
+---
+
+# AI Assistant Instructions
+
+## Language Preferences
+
+- **Code comments**: English
+- **Documentation**: English (Doxygen format)
+- **Commit messages**: English
+- **Explanations to user**: Russian (if user writes in Russian)
+
+## When Writing New Code
+
+1. **Check existing patterns first** - Look at similar code in the project
+2. **Use project utilities** - Singleton, PassKey, PoolString, etc.
+3. **Follow module structure** - Put code in appropriate module
+4. **Add to PCH if widely used** - Update `Core/pch.h`
+5. **Update CMakeLists.txt** - Don't forget build system
+
+## When Fixing Bugs
+
+1. **Understand the problem** - Read related code first
+2. **Check event subscriptions** - Many bugs are from missing/wrong subscriptions
+3. **Verify lifecycle** - Initialize → Update/Draw → Cleanup
+4. **Check pointer validity** - Use IntrusivePtr, not raw pointers
+
+## When Adding Features
+
+1. **Create design first** - Describe the approach before coding
+2. **Follow existing architecture**:
+   - Global service? → Singleton
+   - UI component? → IWidget
+   - Communication? → EventBase
+   - Config? → XmlConfig
+3. **Add tests** - Create `*Test.h` file if appropriate
+
+## Code Generation Preferences
+
+```cpp
+// PREFER: Use project patterns
+class NewService : public Singleton<NewService> {
+    bool _initialized = false;  // underscore prefix
+};
+
+// AVOID: Generic C++ patterns
+class NewService {
+    static NewService* instance;  // no Singleton
+    bool initialized;  // no underscore
+};
+```
+
+```cpp
+// PREFER: EASTL containers
+eastl::vector<int> items;
+eastl::hash_map<PoolString, Value> map;
+
+// AVOID: std containers (unless necessary)
+std::vector<int> items;
+std::unordered_map<std::string, Value> map;
+```
+
+```cpp
+// PREFER: PoolString for identifiers
+PoolString name = "myName"_ps;
+
+// AVOID: std::string for frequently used strings
+std::string name = "myName";
+```
+
+## File Templates
+
+### New Header
+```cpp
+#pragma once
+
+namespace Core {
+
+    class NewClass {
+    public:
+        NewClass() = default;
+        ~NewClass() = default;
+
+    private:
+        bool _initialized = false;
+    };
+
+}  // namespace Core
+```
+
+### New Widget
+```cpp
+#pragma once
+
+#include <Core/Widgets/IWidget.h>
+
+namespace Core {
+
+    class NewWidget : public IWidget {
+    public:
+        NewWidget() = default;
+        ~NewWidget() override = default;
+
+        bool Initialize(const XmlNode& node) override;
+        void Update() override;
+        void Draw() override;
+
+    private:
+        // Config
+        // State
+    };
+
+}  // namespace Core
+```
+
+### New Event
+```cpp
+#pragma once
+
+#include <Events/EventBase.h>
+
+namespace Core {
+
+    struct NewEvent : EventBase<NewEvent> {
+        // Event data
+    };
+
+}  // namespace Core
+```
+
+## Don't Suggest
+
+- Adding unnecessary abstractions
+- Using std:: when EASTL has equivalent
+- Raw pointers instead of IntrusivePtr
+- Global variables instead of Singleton
+- Magic numbers without constants
+- Code without proper namespace closing comments

@@ -1,0 +1,155 @@
+---
+description: C++ code style rules for BagiEngine
+globs:
+  - "**/*.cpp"
+  - "**/*.h"
+  - "**/*.hpp"
+alwaysApply: true
+---
+
+# C++ Code Style
+
+## Header Files
+
+```cpp
+#pragma once  // Always use pragma once
+
+#include <External/Library.h>  // External includes first
+#include <Core/Utils/Singleton.h>  // Internal includes second
+
+namespace Core {  // Opening brace on same line
+
+    /**
+     * @brief Brief description
+     * @details Detailed description if needed
+     */
+    class MyClass : public BaseClass {
+    public:
+        MyClass() = default;
+        ~MyClass() override = default;  // Always use override
+
+        // Public methods - PascalCase
+        void PublicMethod();
+        bool IsValid() const;  // Const correctness
+
+    protected:
+        void ProtectedMethod();
+
+    private:
+        void PrivateMethod();
+
+        // Private members - underscore prefix, camelCase after
+        bool _isInitialized = false;  // Inline initialization
+        int _count = 0;
+        PoolString _name;
+    };
+
+}  // namespace Core  // Closing comment required
+```
+
+## Implementation Files
+
+```cpp
+#include "MyClass.h"  // Own header first
+
+#include <Other/Dependency.h>  // Other includes
+
+namespace Core {
+
+    void MyClass::PublicMethod() {
+        // 4 spaces indentation
+        if (_isInitialized) {
+            DoSomething();
+        }
+    }
+
+}  // namespace Core
+```
+
+## Naming Summary
+
+| Element | Style | Example |
+|---------|-------|---------|
+| Class | PascalCase | `FileSystem` |
+| Method | PascalCase | `Initialize()` |
+| Variable | camelCase | `virtualPath` |
+| Private member | _camelCase | `_isRunning` |
+| Namespace | PascalCase | `Core` |
+| Enum | PascalCase | `EventType` |
+| Enum value | PascalCase | `EventType::KeyDown` |
+| Constant | PascalCase | `MaxSize` |
+| Template param | T, TName | `template<typename T>` |
+
+## Formatting Rules
+
+- **Indentation**: 4 spaces (no tabs)
+- **Line length**: ~120 characters max
+- **Braces**: Same line for control structures, classes, functions
+- **Pointers/References**: `Type* ptr`, `Type& ref` (space before)
+- **Includes**: Sorted, grouped (external, internal, local)
+
+## Modern C++ Preferences
+
+```cpp
+// Use auto when type is obvious
+auto ptr = MakeIntrusive<MyClass>();
+auto it = container.begin();
+
+// Use range-based for
+for (const auto& item : container) {
+    Process(item);
+}
+
+// Use structured bindings
+auto [key, value] = GetPair();
+
+// Use std::optional for nullable values
+std::optional<int> MaybeGetValue();
+
+// Use concepts (C++20)
+template<typename T>
+requires std::derived_from<T, BaseClass>
+void Process(T& obj);
+
+// Use EASTL containers
+eastl::vector<int> numbers;
+eastl::hash_map<PoolString, int> map;
+```
+
+## Documentation
+
+```cpp
+/**
+ * @brief Short description
+ * 
+ * @param param1 Description of param1
+ * @param param2 Description of param2
+ * @return Description of return value
+ * 
+ * @example
+ * MyClass obj;
+ * obj.Method(42, "test");
+ */
+int Method(int param1, const char* param2);
+```
+
+## Error Handling
+
+```cpp
+// Use bool return for operations that can fail
+bool Initialize() {
+    if (!LoadConfig()) {
+        return false;
+    }
+    return true;
+}
+
+// Use assert for programming errors
+assert(_instance != nullptr && "Instance must exist");
+
+// Log errors before returning
+if (error) {
+    // TODO: Add logging system
+    return false;
+}
+```

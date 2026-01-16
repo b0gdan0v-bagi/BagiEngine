@@ -1,0 +1,96 @@
+---
+description: Rules for Core module development
+globs: src/Modules/Core/**/*
+alwaysApply: false
+---
+
+# Core Module Guidelines
+
+## Overview
+The Core module is the foundation of BagiEngine. It provides essential utilities and base classes that other modules depend on.
+
+## Key Components
+
+### Singleton Pattern
+When creating a new global service:
+
+```cpp
+#pragma once
+
+namespace Core {
+
+    class MyNewService : public Singleton<MyNewService> {
+    public:
+        MyNewService() = default;
+        ~MyNewService() override = default;
+
+        void Initialize();
+        void Shutdown();
+
+    private:
+        bool _isInitialized = false;
+    };
+
+}  // namespace Core
+```
+
+### RefCounted Objects
+For objects that need reference counting:
+
+```cpp
+class MyObject : public RefCounted {
+public:
+    // Use IntrusivePtr<MyObject> for pointers
+};
+
+// Usage:
+IntrusivePtr<MyObject> obj = MakeIntrusive<MyObject>();
+```
+
+### PoolString
+Always prefer `PoolString` over `std::string` for:
+- Configuration keys
+- Identifiers that are compared frequently
+- Strings that are used as map keys
+
+```cpp
+// Good
+PoolString key = "myKey"_ps;
+UnorderedPoolMap<int> map;
+map[key] = 42;
+
+// Avoid
+std::string key = "myKey";
+std::unordered_map<std::string, int> map;
+```
+
+### XmlConfig System
+When adding new configuration:
+
+```cpp
+bool MyClass::LoadFromConfig(const XmlNode& node) {
+    if (!node.IsValid()) {
+        return false;
+    }
+    
+    _name = node.GetAttribute<PoolString>("name");
+    _value = node.GetAttribute<int>("value", 0);  // with default
+    
+    for (const auto& child : node.GetChildren("item")) {
+        // Process children
+    }
+    
+    return true;
+}
+```
+
+## File Organization
+- One class per file (header + implementation)
+- Header: `ClassName.h`
+- Implementation: `ClassName.cpp`
+- Tests: `ClassNameTest.h` (header-only tests are OK)
+
+## Don't Forget
+- Add new utilities to `pch.h` if they will be used widely
+- Update CMakeLists.txt when adding new files
+- Document public APIs with Doxygen comments

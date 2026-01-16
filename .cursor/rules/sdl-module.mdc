@@ -1,0 +1,88 @@
+---
+description: Rules for SDL module development
+globs: src/Modules/SDL/**/*
+alwaysApply: false
+---
+
+# SDL Module Guidelines
+
+## Overview
+The SDL module provides SDL3 integration for window management, rendering, and input handling.
+
+## SDL3 Usage
+
+### Window Access
+```cpp
+// Use forward declarations in headers
+struct SDL_Window;
+struct SDL_Renderer;
+
+// Get window/renderer through accessors
+SDL_Window* window = MainWindowAccessor::GetWindow();
+SDL_Renderer* renderer = MainWindowAccessor::GetRenderer();
+```
+
+### Event Handling
+```cpp
+// Subscribe to SDL events
+SDLEvents::SDLEventWrapper event;
+SDLEvents::SDLEventEvent::Subscribe<&MyHandler::OnSDLEvent>(this);
+
+void MyHandler::OnSDLEvent(const SDLEvents::SDLEventWrapper& event) {
+    // Process SDL_Event
+    switch (event.event.type) {
+        case SDL_EVENT_KEY_DOWN:
+            // Handle key press
+            break;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            // Handle mouse click
+            break;
+    }
+}
+```
+
+### Rendering
+```cpp
+void MyWidget::Draw() {
+    SDL_Renderer* renderer = GetSDLRenderer();
+    
+    // Set draw color
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+    
+    // Draw shapes
+    SDL_FRect rect = {10.0f, 10.0f, 100.0f, 100.0f};
+    SDL_RenderFillRect(renderer, &rect);
+}
+```
+
+## SDL3 vs SDL2 Differences
+
+SDL3 uses different naming and types:
+- `SDL_Event.type` values have `SDL_EVENT_` prefix
+- Rectangles use `SDL_FRect` (float) by default
+- Window creation uses `SDL_CreateWindow()` with flags
+- `SDL_Init()` returns bool, not int
+
+## ImGui + SDL3
+
+ImGui integration:
+```cpp
+// In Initialize
+ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
+ImGui_ImplSDLRenderer3_Init(renderer);
+
+// Each frame
+ImGui_ImplSDLRenderer3_NewFrame();
+ImGui_ImplSDL3_NewFrame();
+ImGui::NewFrame();
+
+// After ImGui::Render()
+ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+```
+
+## Best Practices
+
+1. **Forward Declare SDL Types** - Don't include SDL headers in your headers
+2. **Use Accessors** - Don't store raw SDL pointers long-term
+3. **Check Return Values** - SDL3 functions may fail
+4. **Use Events** - Don't poll events directly, use the event system

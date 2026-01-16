@@ -1,0 +1,93 @@
+---
+description: Rules for Events module development
+globs: src/Modules/Events/**/*
+alwaysApply: false
+---
+
+# Events Module Guidelines
+
+## Overview
+The Events module provides an event system built on EnTT's dispatcher with CRTP-based static event types.
+
+## Creating a New Event
+
+```cpp
+#pragma once
+
+#include <Events/EventBase.h>
+
+namespace Core {
+
+    // Simple event (no data)
+    struct MySimpleEvent : EventBase<MySimpleEvent> {
+        // Empty - just uses default constructor
+    };
+
+    // Event with data
+    struct MyDataEvent : EventBase<MyDataEvent> {
+        int value;
+        PoolString name;
+        
+        MyDataEvent(int v, PoolString n) 
+            : value(v), name(std::move(n)) {}
+    };
+
+}  // namespace Core
+```
+
+## Subscribing to Events
+
+```cpp
+class MyHandler {
+public:
+    void Initialize() {
+        // Subscribe member function
+        MySimpleEvent::Subscribe<&MyHandler::OnSimpleEvent>(this);
+        MyDataEvent::Subscribe<&MyHandler::OnDataEvent>(this);
+    }
+
+private:
+    void OnSimpleEvent() {
+        // Handle event
+    }
+    
+    void OnDataEvent(const MyDataEvent& event) {
+        // Access event.value, event.name
+    }
+};
+```
+
+## Emitting Events
+
+```cpp
+// Immediate emission (synchronous)
+MySimpleEvent::Emit();
+MyDataEvent::Emit(42, "test"_ps);
+
+// Queued emission (processed during Update)
+MySimpleEvent::Enqueue();
+MyDataEvent::Enqueue(42, "test"_ps);
+
+// Process queued events
+MyDataEvent::Update();  // Or use EventsQueueRegistry
+```
+
+## Event Categories
+
+Organize events by purpose:
+- `ApplicationEvents.h` - App lifecycle (Quit, CleanUp)
+- `RenderEvents.h` - Rendering (NewFrame, RenderPresent)
+- `InputEvents.h` - User input
+- `GameEvents.h` - Game-specific events
+
+## Best Practices
+
+1. **Keep events small** - Only include necessary data
+2. **Use PoolString** - For string data in events
+3. **Prefer Emit over Enqueue** - Unless you need deferred processing
+4. **Unsubscribe in destructor** - If object lifetime is shorter than event source
+
+## Don't
+- Don't store pointers to temporary objects in events
+- Don't emit events from constructors
+- Don't create circular event dependencies
