@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PoolStringChain.h"
-#include <cassert>
+#include <Core/Assert/AssertMacros.h>
 #include <iostream>
 
 namespace Core::Tests {
@@ -18,45 +18,45 @@ namespace Core::Tests {
 
         // 1. Literal test
         PoolStringChain lit("literal");
-        assert(lit.View() == "literal");
-        assert(lit.Size() == 7);
-        assert(!lit.IsSingle());
+        ASSERT(lit.View() == "literal");
+        ASSERT(lit.Size() == 7);
+        ASSERT(!lit.IsSingle());
 
         // 2. Atom test
         PoolString ps1 = PoolString::Intern("atom");
         PoolStringChain atom(ps1);
-        assert(atom.View() == "atom");
-        assert(atom.IsSingle());
-        assert(atom.Size() == 4);
+        ASSERT(atom.View() == "atom");
+        ASSERT(atom.IsSingle());
+        ASSERT(atom.Size() == 4);
 
         // 3. Concat test
         PoolStringChain chain = PoolStringChain::Concat(ps1, 42);
-        assert(chain.Size() == 6);
-        assert(chain.Materialize() == "atom42");
+        ASSERT(chain.Size() == 6);
+        ASSERT(chain.Materialize() == "atom42");
 
         // 4. operator+= tests
         chain += PoolString::Intern("_suffix");
-        assert(chain.Size() == 13);
-        assert(chain.Materialize() == "atom42_suffix");
+        ASSERT(chain.Size() == 13);
+        ASSERT(chain.Materialize() == "atom42_suffix");
 
         // 5. Auto-materialization test
         chain += 777;
-        assert(chain.Materialize() == "atom42_suffix777");
-        assert(chain.Size() == 16);
+        ASSERT(chain.Materialize() == "atom42_suffix777");
+        ASSERT(chain.Size() == 16);
 
         // 6. Equality tests
         PoolStringChain a("same");
         PoolStringChain b("same");
-        assert(a == b);
+        ASSERT(a == b);
 
         PoolStringChain c = PoolStringChain::Concat(PoolString::Intern("v"), 1);
         PoolStringChain d = PoolStringChain::Concat(PoolString::Intern("v"), 1);
-        assert(c == d);
-        assert(c != a);
+        ASSERT(c == d);
+        ASSERT(c != a);
 
         // 7. Hash tests
-        assert(a.GetHash() == b.GetHash());
-        assert(c.GetHash() == d.GetHash());
+        ASSERT(a.GetHash() == b.GetHash());
+        ASSERT(c.GetHash() == d.GetHash());
 
         std::cout << "[PoolStringTest] All tests passed!" << std::endl;
     }
