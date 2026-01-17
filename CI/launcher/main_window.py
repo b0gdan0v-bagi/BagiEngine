@@ -15,7 +15,7 @@ from PyQt6.QtGui import QFont
 
 from .config import Config, BuildConfiguration
 from .actions import ACTIONS, get_available_actions, ActionResult, get_current_platform, Platform, get_build_dir_name
-from .pipeline import Pipeline, PipelineExecutor, PipelineResult, MultiConfigPipelineExecutor, MultiConfigPipelineResult
+from .pipeline import Pipeline, PipelineStep, PipelineExecutor, PipelineResult, MultiConfigPipelineExecutor, MultiConfigPipelineResult
 
 
 class PipelineWorker(QThread):
@@ -187,6 +187,65 @@ class ConfigurationDialog(QDialog):
             build_type=self.build_type_combo.currentText(),
             enabled=self._config.enabled if self._config else True
         )
+
+
+class VSConfigurationDialog(QDialog):
+    """Dialog for selecting Visual Studio configuration to open."""
+    
+    def __init__(self, parent=None, configurations: list[BuildConfiguration] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Select Visual Studio Configuration")
+        self.setMinimumWidth(400)
+        
+        self._configurations = configurations or []
+        self._selected_config: Optional[BuildConfiguration] = None
+        self._setup_ui()
+    
+    def _setup_ui(self):
+        """Setup the dialog UI."""
+        layout = QVBoxLayout(self)
+        
+        if not self._configurations:
+            label = QLabel("No Visual Studio configurations found.")
+            layout.addWidget(label)
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+            buttons.accepted.connect(self.reject)
+            layout.addWidget(buttons)
+            return
+        
+        label = QLabel("Select configuration to open in Visual Studio:")
+        layout.addWidget(label)
+        
+        self.config_list = QListWidget()
+        for config in self._configurations:
+            build_dir = get_build_dir_name(config.compiler)
+            item_text = f"{config.name} (build/{build_dir})"
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.ItemDataRole.UserRole, config)
+            self.config_list.addItem(item)
+        
+        self.config_list.setCurrentRow(0)
+        layout.addWidget(self.config_list)
+        
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._accept_selection)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+    
+    def _accept_selection(self):
+        """Accept the selected configuration."""
+        current_item = self.config_list.currentItem()
+        if current_item:
+            self._selected_config = current_item.data(Qt.ItemDataRole.UserRole)
+            self.accept()
+        else:
+            self.reject()
+    
+    def get_selected_configuration(self) -> Optional[BuildConfiguration]:
+        """Get the selected configuration."""
+        return self._selected_config
 
 
 class SettingsDialog(QDialog):
@@ -483,7 +542,7 @@ class MainWindow(QMainWindow):
         # Open Visual Studio button (Windows only)
         if "open_vs" in available:
             btn = QPushButton("Open Visual Studio")
-            btn.clicked.connect(lambda: self._run_single_action("open_vs"))
+            btn.clicked.connect(self._open_visual_studio_with_selection)
             layout.addWidget(btn)
         
         # Settings button
@@ -514,84 +573,107 @@ class MainWindow(QMainWindow):
         layout.addWidget(QLabel("Steps (in execution order):"))
         
         # Define action order explicitly for logical grouping
-        self._action_order = [
-            "clean_build",
-            "clean_all_builds",
-            "cmake_configure",
-            "cmake_build",
-            "open_cursor",
-            "open_vs",
-            "open_xcode",
-        ]
+        # Actions that need per-config checkboxes: clean_build, cmake_configure, cmake_build
+        # Actions that are static: close_vs (before clean), open_cursor, open_vs, open_xcode
+        self._config_actions = ["clean_build", "cmake_configure", "cmake_build"]
+        self._static_actions = ["open_cursor", "open_vs", "open_xcode"]
+        self._pre_clean_actions = ["close_vs"]  # Actions that go before clean operations
         
         self.step_checkboxes: dict[str, QCheckBox] = {}
-        self._checkbox_base_names: dict[str, str] = {}  # Store base names for dynamic updates
+        self._pipeline_layout = layout  # Store layout reference for dynamic updates
         available = get_available_actions()
         
-        for action_id in self._action_order:
+        # Create pre-clean static checkboxes first (close_vs before clean)
+        for action_id in self._pre_clean_actions:
             if action_id in available:
                 action = available[action_id]
                 checkbox = QCheckBox(action.name)
                 checkbox.setProperty("action_id", action_id)
                 self.step_checkboxes[action_id] = checkbox
-                self._checkbox_base_names[action_id] = action.name
+                layout.addWidget(checkbox)
+        
+        # Create dynamic config checkboxes (clean_build, cmake_configure, cmake_build)
+        self._rebuild_config_checkboxes()
+        
+        # Create other static checkboxes after config actions
+        for action_id in self._static_actions:
+            if action_id in available:
+                action = available[action_id]
+                checkbox = QCheckBox(action.name)
+                checkbox.setProperty("action_id", action_id)
+                self.step_checkboxes[action_id] = checkbox
                 layout.addWidget(checkbox)
         
         layout.addStretch()
         
         return group
     
-    def _update_pipeline_labels(self):
-        """Update checkbox labels with dynamic configuration info."""
+    def _rebuild_config_checkboxes(self):
+        """Rebuild checkboxes for configuration-specific actions."""
+        # Check if layout is initialized
+        if not hasattr(self, '_pipeline_layout') or self._pipeline_layout is None:
+            return
+        
+        # Remove existing config checkboxes
+        config_checkbox_keys = [
+            key for key in self.step_checkboxes.keys()
+            if any(key.startswith(f"{action_id}:") for action_id in self._config_actions)
+        ]
+        
+        for key in config_checkbox_keys:
+            checkbox = self.step_checkboxes.pop(key)
+            # Find and remove from layout
+            self._pipeline_layout.removeWidget(checkbox)
+            checkbox.deleteLater()
+        
+        # Get enabled configurations
         enabled_configs = self._get_enabled_configurations()
-        active_build_dir = get_build_dir_name(self.config.compiler)
+        available = get_available_actions()
         
-        # Get list of enabled build directories
-        enabled_build_dirs = [get_build_dir_name(c.compiler) for c in enabled_configs]
-        enabled_names = [c.name for c in enabled_configs]
+        # Find insertion point (after pre-clean actions like close_vs, before other static actions)
+        insertion_index = None
+        # Find the last pre-clean action (close_vs)
+        for i in range(self._pipeline_layout.count()):
+            item = self._pipeline_layout.itemAt(i)
+            if item and item.widget():
+                widget = item.widget()
+                if hasattr(widget, 'property') and widget.property("action_id") in self._pre_clean_actions:
+                    insertion_index = i + 1  # Insert after this action
+        # If no pre-clean actions, find first static action
+        if insertion_index is None:
+            for i in range(self._pipeline_layout.count()):
+                item = self._pipeline_layout.itemAt(i)
+                if item and item.widget():
+                    widget = item.widget()
+                    if hasattr(widget, 'property') and widget.property("action_id") in self._static_actions:
+                        insertion_index = i
+                        break
         
-        # Get VS generator configs for Open Visual Studio
-        vs_configs = [c for c in enabled_configs if "Visual Studio" in c.generator]
-        vs_build_dirs = [get_build_dir_name(c.compiler) for c in vs_configs]
+        if insertion_index is None:
+            insertion_index = self._pipeline_layout.count() - 1  # Before stretch
         
-        for action_id, checkbox in self.step_checkboxes.items():
-            base_name = self._checkbox_base_names.get(action_id, checkbox.text())
+        # Create checkboxes for each config action and each enabled config
+        # Order: clean_build for all configs, then cmake_configure for all configs, then cmake_build for all configs
+        action_display_names = {
+            "clean_build": "Clean Build",
+            "cmake_configure": "CMake Configure",
+            "cmake_build": "CMake Build"
+        }
+        
+        for action_id in self._config_actions:
+            if action_id not in available:
+                continue
             
-            if action_id == "clean_build":
-                # Show active build directory that will be cleaned
-                checkbox.setText(f"{base_name}  →  build/{active_build_dir}")
-            
-            elif action_id == "clean_all_builds":
-                # Show all enabled build directories
-                if enabled_build_dirs:
-                    dirs_str = ", ".join(f"build/{d}" for d in enabled_build_dirs)
-                    checkbox.setText(f"{base_name}  →  {dirs_str}")
-                else:
-                    checkbox.setText(base_name)
-            
-            elif action_id in ("cmake_configure", "cmake_build"):
-                # Show enabled configuration names
-                if enabled_names:
-                    names_str = ", ".join(enabled_names)
-                    checkbox.setText(f"{base_name}  →  [{names_str}]")
-                else:
-                    checkbox.setText(f"{base_name}  →  (no configs enabled)")
-            
-            elif action_id == "open_vs":
-                # Show VS generator build directories
-                if vs_build_dirs:
-                    dirs_str = ", ".join(f"build/{d}" for d in vs_build_dirs)
-                    checkbox.setText(f"{base_name}  →  {dirs_str}")
-                else:
-                    checkbox.setText(f"{base_name}  →  (no VS configs)")
-            
-            elif action_id == "open_cursor":
-                # Cursor opens workspace file, show that
-                checkbox.setText(f"{base_name}  →  CI/BagiEngine.code-workspace")
-            
-            else:
-                # Keep base name for other actions
-                checkbox.setText(base_name)
+            for config in enabled_configs:
+                checkbox_key = f"{action_id}:{config.name}"
+                display_name = f"{action_display_names[action_id]} {config.name}"
+                
+                checkbox = QCheckBox(display_name)
+                checkbox.setProperty("action_id", action_id)
+                checkbox.setProperty("config_name", config.name)
+                self.step_checkboxes[checkbox_key] = checkbox
+                self._pipeline_layout.insertWidget(insertion_index, checkbox)
+                insertion_index += 1
     
     
     def _create_output_group(self) -> QGroupBox:
@@ -618,7 +700,7 @@ class MainWindow(QMainWindow):
             self.preset_combo.setCurrentIndex(idx)
         
         self._load_pipeline_preset(self.config.last_pipeline)
-        self._update_pipeline_labels()
+        self._rebuild_config_checkboxes()
     
     def _load_pipeline_preset(self, preset_name: str):
         """Load a pipeline preset by checking the appropriate checkboxes."""
@@ -629,8 +711,16 @@ class MainWindow(QMainWindow):
         # Check the ones in the preset
         pipelines = self.config.pipelines
         if preset_name in pipelines:
+            enabled_configs = self._get_enabled_configurations()
             for action_id in pipelines[preset_name]:
-                if action_id in self.step_checkboxes:
+                # For config actions, check all enabled configs
+                if action_id in self._config_actions:
+                    for config in enabled_configs:
+                        checkbox_key = f"{action_id}:{config.name}"
+                        if checkbox_key in self.step_checkboxes:
+                            self.step_checkboxes[checkbox_key].setChecked(True)
+                # For static actions, check directly
+                elif action_id in self.step_checkboxes:
                     self.step_checkboxes[action_id].setChecked(True)
         
         self.config.last_pipeline = preset_name
@@ -656,25 +746,130 @@ class MainWindow(QMainWindow):
     def _get_current_pipeline(self) -> Pipeline:
         """Get current pipeline from checked checkboxes."""
         steps = []
-        # Iterate in the defined order to maintain execution sequence
-        for action_id in self._action_order:
-            if action_id in self.step_checkboxes:
-                if self.step_checkboxes[action_id].isChecked():
-                    steps.append(action_id)
         
-        return Pipeline("custom", steps)
+        # Group checked config actions by configuration
+        config_actions_by_config: dict[str, list[str]] = {}
+        checked_static_actions = []
+        
+        for checkbox_key, checkbox in self.step_checkboxes.items():
+            if not checkbox.isChecked():
+                continue
+            
+            # Check if this is a config action (has ":")
+            if ":" in checkbox_key:
+                action_id, config_name = checkbox_key.split(":", 1)
+                if config_name not in config_actions_by_config:
+                    config_actions_by_config[config_name] = []
+                config_actions_by_config[config_name].append(action_id)
+            else:
+                # Static action
+                action_id = checkbox_key
+                checked_static_actions.append(action_id)
+        
+        # Build pipeline steps in order: pre-clean actions, then clean_build, cmake_configure, cmake_build, then other static actions
+        # First, add pre-clean actions if checked (before clean operations)
+        for action_id in self._pre_clean_actions:
+            if action_id in checked_static_actions:
+                steps.append(PipelineStep(action_id=action_id, params={}))
+        
+        # For each configuration, add its actions in order
+        enabled_configs = self._get_enabled_configurations()
+        config_names = [c.name for c in enabled_configs]
+        
+        # Process configs in order
+        for config_name in config_names:
+            if config_name in config_actions_by_config:
+                actions = config_actions_by_config[config_name]
+                # Add in order: clean_build, cmake_configure, cmake_build
+                for action_id in ["clean_build", "cmake_configure", "cmake_build"]:
+                    if action_id in actions:
+                        # Find the config object
+                        config = next((c for c in enabled_configs if c.name == config_name), None)
+                        if config:
+                            # Create step with config params
+                            step = PipelineStep(
+                                action_id=action_id,
+                                params={
+                                    "compiler": config.compiler,
+                                    "generator": config.generator,
+                                    "build_type": config.build_type
+                                }
+                            )
+                            steps.append(step)
+        
+        # Add other static actions
+        for action_id in self._static_actions:
+            if action_id in checked_static_actions:
+                # For open_vs, determine VS configurations
+                if action_id == "open_vs":
+                    vs_configs = [c for c in enabled_configs if "Visual Studio" in c.generator]
+                    if vs_configs:
+                        vs_build_dirs = [get_build_dir_name(c.compiler) for c in vs_configs]
+                        steps.append(PipelineStep(action_id=action_id, params={"vs_build_dirs": vs_build_dirs}))
+                    else:
+                        # No VS configs, skip this action
+                        pass
+                else:
+                    steps.append(PipelineStep(action_id=action_id, params={}))
+        
+        # Create pipeline with empty steps, then set steps directly
+        pipeline = Pipeline("custom", [])
+        pipeline._steps = steps
+        return pipeline
     
     def _run_single_action(self, action_id: str):
         """Run a single action."""
         pipeline = Pipeline("single", [action_id])
         self._execute_pipeline(pipeline)
     
+    def _open_visual_studio_with_selection(self):
+        """Open Visual Studio with configuration selection dialog."""
+        # Get VS generator configurations
+        enabled_configs = self._get_enabled_configurations()
+        vs_configs = [c for c in enabled_configs if "Visual Studio" in c.generator]
+        
+        if not vs_configs:
+            QMessageBox.warning(
+                self,
+                "No Visual Studio Configurations",
+                "No Visual Studio generator configurations found.\n"
+                "Please configure at least one build configuration with Visual Studio generator in Settings."
+            )
+            return
+        
+        # If only one VS config, open it directly
+        if len(vs_configs) == 1:
+            config = vs_configs[0]
+            build_dir = get_build_dir_name(config.compiler)
+            pipeline = Pipeline("open_vs", ["open_vs"])
+            # Create step with config params
+            step = PipelineStep(
+                action_id="open_vs",
+                params={"vs_build_dirs": [build_dir]}
+            )
+            pipeline._steps = [step]
+            self._execute_pipeline(pipeline)
+        else:
+            # Show selection dialog
+            dialog = VSConfigurationDialog(self, vs_configs)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                selected_config = dialog.get_selected_configuration()
+                if selected_config:
+                    build_dir = get_build_dir_name(selected_config.compiler)
+                    pipeline = Pipeline("open_vs", ["open_vs"])
+                    step = PipelineStep(
+                        action_id="open_vs",
+                        params={"vs_build_dirs": [build_dir]}
+                    )
+                    pipeline._steps = [step]
+                    self._execute_pipeline(pipeline)
+    
     def _open_settings(self):
         """Open the settings dialog."""
         dialog = SettingsDialog(self, self.config)
         dialog.exec()
-        # Update labels after settings may have changed
-        self._update_pipeline_labels()
+        # Rebuild config checkboxes after settings may have changed
+        self._rebuild_config_checkboxes()
     
     def _clean_build(self):
         """Clean build directory for current compiler configuration."""
@@ -719,6 +914,7 @@ class MainWindow(QMainWindow):
         vs_configs = [c for c in enabled_configs if "Visual Studio" in c.generator]
         vs_build_dirs = [get_build_dir_name(c.compiler) for c in vs_configs] if vs_configs else None
         
+        # Use config defaults, but step.params will override them in PipelineExecutor
         self.worker = PipelineWorker(
             self.executor,
             pipeline,

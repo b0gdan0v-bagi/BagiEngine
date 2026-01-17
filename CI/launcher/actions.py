@@ -350,6 +350,27 @@ class ActionExecutor:
                         "Could not find Visual Studio installation.\n"
                         "Please ensure Visual Studio is installed with C++ development tools."
                     )
+                # Add verbose flag for MSVC compiler
+                if "_CL_" in env:
+                    env["_CL_"] = env["_CL_"] + " /VERBOSE"
+                else:
+                    env["_CL_"] = "/VERBOSE"
+            else:
+                # For Visual Studio generator, verbose is handled by --verbose flag
+                env = os.environ.copy()
+        else:
+            # For GCC/Clang, add verbose flag through environment variables
+            env = os.environ.copy()
+            if compiler in ("Clang", "GCC (MinGW)"):
+                # Add -v flag for verbose compiler output
+                if "CXXFLAGS" in env:
+                    env["CXXFLAGS"] = env["CXXFLAGS"] + " -v"
+                else:
+                    env["CXXFLAGS"] = "-v"
+                if "CFLAGS" in env:
+                    env["CFLAGS"] = env["CFLAGS"] + " -v"
+                else:
+                    env["CFLAGS"] = "-v"
         
         try:
             result = subprocess.run(
@@ -404,16 +425,24 @@ class ActionExecutor:
                 
                 if cursor_exe:
                     # Use absolute path to workspace file
+                    # DETACHED_PROCESS makes the process independent of parent
+                    # Redirect stdio to fully detach from parent process
                     subprocess.Popen(
                         [str(cursor_exe), str(self.workspace_file.resolve())],
-                        creationflags=subprocess.CREATE_NO_WINDOW
+                        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
                     )
                 else:
                     # Try from PATH
                     subprocess.Popen(
                         ["cursor", str(self.workspace_file.resolve())], 
                         shell=True,
-                        creationflags=subprocess.CREATE_NO_WINDOW
+                        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
                     )
                     
             elif platform == Platform.MACOS:
@@ -426,7 +455,10 @@ class ActionExecutor:
                         timeout=2
                     )
                     if result.returncode == 0:
-                        subprocess.Popen(["cursor", str(self.workspace_file.resolve())])
+                        subprocess.Popen(
+                            ["cursor", str(self.workspace_file.resolve())],
+                            start_new_session=True
+                        )
                     else:
                         raise FileNotFoundError("cursor command not in PATH")
                 except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -436,10 +468,16 @@ class ActionExecutor:
                         # Use the executable inside the app bundle
                         cursor_exe = cursor_app / "Contents" / "Resources" / "app" / "bin" / "cursor"
                         if cursor_exe.exists():
-                            subprocess.Popen([str(cursor_exe), str(self.workspace_file.resolve())])
+                            subprocess.Popen(
+                                [str(cursor_exe), str(self.workspace_file.resolve())],
+                                start_new_session=True
+                            )
                         else:
                             # Fallback to open command
-                            subprocess.Popen(["open", "-a", "Cursor", str(self.workspace_file.resolve())])
+                            subprocess.Popen(
+                                ["open", "-a", "Cursor", str(self.workspace_file.resolve())],
+                                start_new_session=True
+                            )
                     else:
                         return ActionResult(
                             False,
@@ -448,7 +486,10 @@ class ActionExecutor:
                         )
             else:
                 # Linux - try from PATH
-                subprocess.Popen(["cursor", str(self.workspace_file.resolve())])
+                subprocess.Popen(
+                    ["cursor", str(self.workspace_file.resolve())],
+                    start_new_session=True
+                )
             
             return ActionResult(
                 True, 
@@ -503,6 +544,31 @@ class ActionExecutor:
                 "\n".join(errors)
             )
     
+    def close_visual_studio(self) -> ActionResult:
+        """Close Visual Studio instances."""
+        if get_current_platform() != Platform.WINDOWS:
+            return ActionResult(False, "", "Visual Studio is only available on Windows")
+        
+        try:
+            # Close all devenv.exe processes (Visual Studio)
+            result = subprocess.run(
+                ["taskkill", "/F", "/IM", "devenv.exe"],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                return ActionResult(True, "Visual Studio instances closed successfully")
+            elif "not found" in result.stderr.lower() or "not running" in result.stderr.lower():
+                return ActionResult(True, "No Visual Studio instances were running")
+            else:
+                return ActionResult(False, result.stdout, result.stderr)
+        except subprocess.TimeoutExpired:
+            return ActionResult(False, "", "Close operation timed out")
+        except Exception as e:
+            return ActionResult(False, "", f"Failed to close Visual Studio: {e}")
+    
     def open_xcode(self) -> ActionResult:
         """Open project in Xcode."""
         if get_current_platform() != Platform.MACOS:
@@ -533,6 +599,7 @@ class ActionExecutor:
                 kwargs.get("build_type", "Debug"),
                 kwargs.get("compiler", "MSVC")
             ),
+            "close_vs": self.close_visual_studio,
             "clean_build": lambda: self.clean_build(kwargs.get("compiler", "MSVC")),
             "clean_all_builds": self.clean_all_builds,
             "open_cursor": self.open_cursor,
@@ -591,6 +658,12 @@ ACTIONS = {
         name="Open Cursor",
         description="Open project in Cursor IDE",
         platforms=[Platform.WINDOWS, Platform.MACOS, Platform.LINUX]
+    ),
+    "close_vs": Action(
+        id="close_vs",
+        name="Close Visual Studio",
+        description="Close all Visual Studio instances",
+        platforms=[Platform.WINDOWS]
     ),
     "open_vs": Action(
         id="open_vs",
