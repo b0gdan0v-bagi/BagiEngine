@@ -4,5 +4,6 @@
         <test type="PoolStringTest" enabled="true" />
         <test type="FormatTest" enabled="true" />
         <test type="EnumUtilsTest" enabled="true" />
+        <test type="ReflectionTest" enabled="true" />
     </tests>
 </root>

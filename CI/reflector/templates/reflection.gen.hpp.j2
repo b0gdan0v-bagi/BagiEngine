@@ -1,0 +1,73 @@
+// ============================================================================
+// GENERATED FILE - DO NOT EDIT
+// Generated from: {{ input_filename }}
+// Generator: BagiEngine Reflection System (reflector.py)
+// ============================================================================
+#pragma once
+
+#include <BECore/Reflection/TypeTraits.h>
+#include <BECore/Utils/EnumUtils.h>
+#include <EASTL/string_view.h>
+#include <tuple>
+
+{% if enums %}
+// ============================================================================
+// Enum Reflection
+// ============================================================================
+{% for enum in enums %}
+
+// Reflection for {{ enum.qualified_name }}
+// Compatible with EnumUtils<T> API
+namespace EnumImpl_{{ enum.name }} {
+    inline constexpr auto tokenizer = ::BECore::Impl::Tokenizer<{{ enum.qualified_name }}
+        {%- for value in enum.values -%}
+        , {{ enum.qualified_name }}::{{ value.name }}
+        {%- endfor -%}
+    >{};
+}
+
+/**
+ * @brief ADL function for EnumUtils compatibility
+ * @note Auto-generated from {{ enum.name }} marked with BE_REFLECT_ENUM
+ */
+consteval const auto* EnumTokenizerPtr({{ enum.qualified_name }}) {
+    return &EnumImpl_{{ enum.name }}::tokenizer;
+}
+
+{% endfor %}
+{% endif %}
+{% if classes %}
+// ============================================================================
+// Class Reflection
+// ============================================================================
+
+namespace BECore {
+
+{% for cls in classes %}
+/**
+ * @brief Reflection traits for {{ cls.qualified_name }}
+ * @note Auto-generated from {{ cls.name }} marked with BE_REFLECT_CLASS
+ *
+ * Fields:
+{% for field in cls.fields %}
+ *   - {{ field.name }} : {{ field.type_name }}
+{% endfor %}
+ */
+template<>
+struct ReflectionTraits<{{ cls.qualified_name }}> {
+    static constexpr bool reflected = true;
+    static constexpr eastl::string_view name = "{{ cls.name }}";
+    
+    static constexpr auto fields = std::make_tuple(
+        {%- for field in cls.fields %}
+        FieldInfo{ eastl::string_view{"{{ field.name }}"}, &{{ cls.qualified_name }}::{{ field.name }} }{{ "," if not loop.last else "" }}
+        {%- endfor %}
+    );
+    
+    static constexpr size_t field_count = {{ cls.fields | length }};
+};
+
+{% endfor %}
+}  // namespace BECore
+
+{% endif %}

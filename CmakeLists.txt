@@ -139,6 +139,104 @@ else()
 endif()
 
 # =============================================================================
+# Reflection System
+# =============================================================================
+# Find Python for the reflection code generator
+find_package(Python3 COMPONENTS Interpreter)
+
+if(Python3_FOUND)
+    message(STATUS "Python3 found: ${Python3_EXECUTABLE}")
+    
+    # Directory for generated reflection files
+    set(REFLECTION_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated" CACHE PATH "Directory for generated reflection files")
+    file(MAKE_DIRECTORY ${REFLECTION_GENERATED_DIR})
+    
+    # Reflector script and templates paths
+    set(REFLECTOR_SCRIPT "${CMAKE_SOURCE_DIR}/CI/reflector/reflector.py")
+    set(REFLECTOR_TEMPLATES "${CMAKE_SOURCE_DIR}/CI/reflector/templates")
+    
+    # =============================================================================
+    # add_reflection_target - Generate reflection code for headers
+    # =============================================================================
+    # Usage:
+    #   add_reflection_target(MyTarget
+    #       HEADERS
+    #           ${CMAKE_CURRENT_SOURCE_DIR}/Player.h
+    #           ${CMAKE_CURRENT_SOURCE_DIR}/GameState.h
+    #       INCLUDE_DIRS
+    #           ${CMAKE_SOURCE_DIR}/src/Modules
+    #   )
+    #
+    # This will:
+    #   1. Run reflector.py on each header when it changes
+    #   2. Generate .gen.hpp files in ${REFLECTION_GENERATED_DIR}
+    #   3. Add generated files to target sources
+    #   4. Add generated directory to target include paths
+    # =============================================================================
+    function(add_reflection_target TARGET_NAME)
+        cmake_parse_arguments(ARG "" "" "HEADERS;INCLUDE_DIRS" ${ARGN})
+        
+        if(NOT ARG_HEADERS)
+            message(WARNING "add_reflection_target: No HEADERS specified for ${TARGET_NAME}")
+            return()
+        endif()
+        
+        set(GENERATED_FILES "")
+        
+        # Build include path arguments
+        set(INCLUDE_ARGS "")
+        if(ARG_INCLUDE_DIRS)
+            foreach(INC_DIR ${ARG_INCLUDE_DIRS})
+                list(APPEND INCLUDE_ARGS "-I" "${INC_DIR}")
+            endforeach()
+        endif()
+        
+        foreach(HEADER ${ARG_HEADERS})
+            # Get filename without extension for output file
+            get_filename_component(HEADER_NAME ${HEADER} NAME_WE)
+            get_filename_component(HEADER_ABS ${HEADER} ABSOLUTE)
+            
+            set(GEN_FILE "${REFLECTION_GENERATED_DIR}/${HEADER_NAME}.gen.hpp")
+            list(APPEND GENERATED_FILES ${GEN_FILE})
+            
+            add_custom_command(
+                OUTPUT ${GEN_FILE}
+                COMMAND ${Python3_EXECUTABLE} ${REFLECTOR_SCRIPT}
+                    --input "${HEADER_ABS}"
+                    --output "${GEN_FILE}"
+                    --templates "${REFLECTOR_TEMPLATES}"
+                    ${INCLUDE_ARGS}
+                DEPENDS 
+                    ${HEADER_ABS}
+                    ${REFLECTOR_SCRIPT}
+                    ${REFLECTOR_TEMPLATES}/reflection.gen.hpp.j2
+                COMMENT "Generating reflection for ${HEADER_NAME}"
+                VERBATIM
+            )
+        endforeach()
+        
+        # Add generated files to target
+        target_sources(${TARGET_NAME} PRIVATE ${GENERATED_FILES})
+        
+        # Add generated directory to include paths
+        target_include_directories(${TARGET_NAME} PRIVATE ${REFLECTION_GENERATED_DIR})
+        
+        # Create a custom target for IDE visibility
+        add_custom_target(${TARGET_NAME}_Reflection DEPENDS ${GENERATED_FILES})
+        set_target_properties(${TARGET_NAME}_Reflection PROPERTIES FOLDER "Generated")
+        
+        message(STATUS "Reflection enabled for ${TARGET_NAME}: ${ARG_HEADERS}")
+    endfunction()
+else()
+    message(WARNING "Python3 not found - reflection code generation will be disabled")
+    
+    # Stub function when Python is not available
+    function(add_reflection_target TARGET_NAME)
+        message(WARNING "add_reflection_target: Skipped (Python3 not found)")
+    endfunction()
+endif()
+
+# =============================================================================
 # Modules
 # =============================================================================
 # BECoreModule должен быть объявлен первым, так как другие модули используют его PCH
