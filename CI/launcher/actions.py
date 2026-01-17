@@ -180,6 +180,81 @@ class ActionExecutor:
         """Set the current compiler for build directory resolution."""
         self._compiler = compiler
     
+    def _run_streaming_command(
+        self, 
+        cmd: list[str], 
+        env: Optional[dict[str, str]], 
+        on_output: Optional[Callable[[str], None]],
+        timeout: int = 300
+    ) -> ActionResult:
+        """Run a command with real-time output streaming.
+        
+        Args:
+            cmd: Command and arguments to run
+            env: Environment variables
+            on_output: Callback for each line of output
+            timeout: Timeout in seconds
+            
+        Returns:
+            ActionResult with combined output
+        """
+        import threading
+        
+        try:
+            # Use Popen for real-time output streaming
+            process = subprocess.Popen(
+                cmd,
+                cwd=self.project_root,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,  # Merge stderr into stdout
+                text=True,
+                bufsize=1,  # Line buffered
+                env=env,
+                # On Windows, prevent console window from appearing
+                creationflags=subprocess.CREATE_NO_WINDOW if get_current_platform() == Platform.WINDOWS else 0
+            )
+            
+            output_lines: list[str] = []
+            
+            def read_output():
+                """Read output from process in a separate thread."""
+                try:
+                    for line in iter(process.stdout.readline, ''):
+                        if line:
+                            line = line.rstrip('\r\n')
+                            output_lines.append(line)
+                            if on_output:
+                                on_output(line)
+                except Exception:
+                    pass
+                finally:
+                    if process.stdout:
+                        process.stdout.close()
+            
+            # Start output reading thread
+            output_thread = threading.Thread(target=read_output, daemon=True)
+            output_thread.start()
+            
+            # Wait for process to complete with timeout
+            try:
+                process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                output_thread.join(timeout=1)
+                return ActionResult(False, "\n".join(output_lines), "Command timed out")
+            
+            # Wait for output thread to finish
+            output_thread.join(timeout=5)
+            
+            return ActionResult(
+                success=process.returncode == 0,
+                output="\n".join(output_lines),
+                error="" if process.returncode == 0 else f"Command failed with exit code {process.returncode}"
+            )
+            
+        except Exception as e:
+            return ActionResult(False, "", str(e))
+    
     def clean_build(self, compiler: str = "MSVC") -> ActionResult:
         """Clean build directory using git clean (permanent deletion, no recycle bin).
         
@@ -259,8 +334,9 @@ class ActionExecutor:
             return ActionResult(False, "", str(e))
     
     def cmake_configure(self, build_type: str = "Debug", generator: str = "Ninja", 
-                        compiler: str = "MSVC") -> ActionResult:
-        """Run CMake configuration."""
+                        compiler: str = "MSVC",
+                        on_output: Optional[Callable[[str], None]] = None) -> ActionResult:
+        """Run CMake configuration with real-time output streaming."""
         self.set_compiler(compiler)
         self.build_dir.mkdir(parents=True, exist_ok=True)
         
@@ -301,40 +377,22 @@ class ActionExecutor:
                         "or run the launcher from a Visual Studio Developer Command Prompt."
                     )
         
-        try:
-            result = subprocess.run(
-                cmd,
-                cwd=self.project_root,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                env=env
-            )
-            return ActionResult(
-                success=result.returncode == 0,
-                output=result.stdout,
-                error=result.stderr
-            )
-        except subprocess.TimeoutExpired:
-            return ActionResult(False, "", "CMake configuration timed out")
-        except Exception as e:
-            return ActionResult(False, "", str(e))
+        return self._run_streaming_command(cmd, env, on_output, timeout=300)
     
-    def cmake_build(self, build_type: str = "Debug", compiler: str = "MSVC") -> ActionResult:
-        """Run CMake build with parallel compilation and verbose output."""
+    def cmake_build(self, build_type: str = "Debug", compiler: str = "MSVC",
+                    on_output: Optional[Callable[[str], None]] = None) -> ActionResult:
+        """Run CMake build with parallel compilation and real-time output streaming."""
         self.set_compiler(compiler)
         if not self.build_dir.exists():
             return ActionResult(False, "", f"Build directory {self.build_dir} does not exist. Run CMake Configure first.")
         
         # Get number of CPU cores for parallel build
-        import os
         cpu_count = os.cpu_count() or 4
         
         cmd = [
             "cmake", "--build", str(self.build_dir),
             "--config", build_type,
             "--parallel", str(cpu_count),  # Multi-threaded build
-            "--verbose"  # Show detailed compilation commands
         ]
         
         # For MSVC with Ninja, we need the VS environment for the build step too
@@ -351,46 +409,13 @@ class ActionExecutor:
                         "Could not find Visual Studio installation.\n"
                         "Please ensure Visual Studio is installed with C++ development tools."
                     )
-                # Add verbose flag for MSVC compiler
-                if "_CL_" in env:
-                    env["_CL_"] = env["_CL_"] + " /VERBOSE"
-                else:
-                    env["_CL_"] = "/VERBOSE"
             else:
-                # For Visual Studio generator, verbose is handled by --verbose flag
+                # For Visual Studio generator
                 env = os.environ.copy()
         else:
-            # For GCC/Clang, add verbose flag through environment variables
             env = os.environ.copy()
-            if compiler in ("Clang", "GCC (MinGW)"):
-                # Add -v flag for verbose compiler output
-                if "CXXFLAGS" in env:
-                    env["CXXFLAGS"] = env["CXXFLAGS"] + " -v"
-                else:
-                    env["CXXFLAGS"] = "-v"
-                if "CFLAGS" in env:
-                    env["CFLAGS"] = env["CFLAGS"] + " -v"
-                else:
-                    env["CFLAGS"] = "-v"
         
-        try:
-            result = subprocess.run(
-                cmd,
-                cwd=self.project_root,
-                capture_output=True,
-                text=True,
-                timeout=600,
-                env=env
-            )
-            return ActionResult(
-                success=result.returncode == 0,
-                output=result.stdout,
-                error=result.stderr
-            )
-        except subprocess.TimeoutExpired:
-            return ActionResult(False, "", "CMake build timed out")
-        except Exception as e:
-            return ActionResult(False, "", str(e))
+        return self._run_streaming_command(cmd, env, on_output, timeout=600)
     
     def open_cursor(self) -> ActionResult:
         """Open project in Cursor IDE with workspace file.
@@ -627,17 +652,25 @@ class ActionExecutor:
         except Exception as e:
             return ActionResult(False, "", f"Failed to open Xcode: {e}")
     
-    def execute(self, action_id: str, **kwargs) -> ActionResult:
-        """Execute an action by ID."""
+    def execute(self, action_id: str, on_output: Optional[Callable[[str], None]] = None, **kwargs) -> ActionResult:
+        """Execute an action by ID.
+        
+        Args:
+            action_id: ID of the action to execute
+            on_output: Optional callback for real-time output streaming
+            **kwargs: Additional arguments for the action
+        """
         action_map = {
             "cmake_configure": lambda: self.cmake_configure(
                 kwargs.get("build_type", "Debug"),
                 kwargs.get("generator", "Ninja"),
-                kwargs.get("compiler", "MSVC")
+                kwargs.get("compiler", "MSVC"),
+                on_output=on_output
             ),
             "cmake_build": lambda: self.cmake_build(
                 kwargs.get("build_type", "Debug"),
-                kwargs.get("compiler", "MSVC")
+                kwargs.get("compiler", "MSVC"),
+                on_output=on_output
             ),
             "close_vs": self.close_visual_studio,
             "clean_build": lambda: self.clean_build(kwargs.get("compiler", "MSVC")),

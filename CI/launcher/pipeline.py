@@ -109,11 +109,16 @@ class PipelineExecutor:
                 **step.params
             }
             
-            result = self.action_executor.execute(step.action_id, **params)
+            # Pass on_output callback for real-time streaming of cmake commands
+            result = self.action_executor.execute(step.action_id, on_output=on_output, **params)
             results.append((step.action_id, result))
             
-            if on_output and result.output:
-                on_output(result.output)
+            # For non-streaming actions, output is shown after completion
+            # For streaming actions (cmake_configure, cmake_build), output was already streamed
+            if step.action_id not in ("cmake_configure", "cmake_build"):
+                if on_output and result.output:
+                    on_output(result.output)
+            
             if on_output and result.error:
                 on_output(f"[ERROR] {result.error}")
             
