@@ -35,15 +35,14 @@ class Config:
     """Manages launcher configuration stored in JSON."""
     
     DEFAULT_CONFIG = {
-        "last_ide": "cursor",
         "build_type": "Debug",
         "generator": "Ninja",
         "compiler": "MSVC",
         "pipelines": {
-            "full_build": ["cmake_configure", "cmake_build", "open_ide"],
+            "full_build": ["cmake_configure", "cmake_build", "open_cursor"],
             "configure_only": ["cmake_configure"],
             "build_only": ["cmake_build"],
-            "quick_open": ["open_ide"]
+            "quick_open": ["open_cursor"]
         },
         "last_pipeline": "full_build",
         "build_configurations": [

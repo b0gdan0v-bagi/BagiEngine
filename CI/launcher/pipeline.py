@@ -78,6 +78,7 @@ class PipelineExecutor:
         generator: str = "Ninja",
         compiler: str = "MSVC",
         ide: str = "cursor",
+        vs_build_dirs: Optional[list[str]] = None,
         on_step_start: Optional[Callable[[int, str], None]] = None,
         on_step_complete: Optional[Callable[[int, str, ActionResult], None]] = None,
         on_output: Optional[Callable[[str], None]] = None,
@@ -104,6 +105,7 @@ class PipelineExecutor:
                 "generator": generator,
                 "compiler": compiler,
                 "ide": ide,
+                "vs_build_dirs": vs_build_dirs,
                 **step.params
             }
             

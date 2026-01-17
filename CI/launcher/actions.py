@@ -25,6 +25,93 @@ def get_current_platform() -> Platform:
         return Platform.LINUX
 
 
+def find_visual_studio() -> Optional[Path]:
+    """Find Visual Studio installation directory using vswhere.
+    
+    Returns:
+        Path to Visual Studio installation, or None if not found.
+    """
+    if get_current_platform() != Platform.WINDOWS:
+        return None
+    
+    # vswhere is installed with Visual Studio in this location
+    vswhere_paths = [
+        Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe",
+        Path(os.environ.get("PROGRAMFILES", "")) / "Microsoft Visual Studio" / "Installer" / "vswhere.exe",
+    ]
+    
+    vswhere = None
+    for path in vswhere_paths:
+        if path.exists():
+            vswhere = path
+            break
+    
+    if not vswhere:
+        return None
+    
+    try:
+        result = subprocess.run(
+            [str(vswhere), "-latest", "-property", "installationPath", "-requires", 
+             "Microsoft.VisualStudio.Component.VC.Tools.x86.x64"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return Path(result.stdout.strip())
+    except (subprocess.TimeoutExpired, Exception):
+        pass
+    
+    return None
+
+
+def get_msvc_environment(arch: str = "x64") -> Optional[dict[str, str]]:
+    """Get environment variables for MSVC compiler.
+    
+    Runs vcvarsall.bat and captures the resulting environment.
+    
+    Args:
+        arch: Target architecture (x64, x86, arm64, etc.)
+        
+    Returns:
+        Dictionary of environment variables, or None if setup failed.
+    """
+    vs_path = find_visual_studio()
+    if not vs_path:
+        return None
+    
+    vcvarsall = vs_path / "VC" / "Auxiliary" / "Build" / "vcvarsall.bat"
+    if not vcvarsall.exists():
+        return None
+    
+    try:
+        # Run vcvarsall.bat and print environment
+        # Use 'set' command to dump all environment variables after setup
+        cmd = f'"{vcvarsall}" {arch} && set'
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode != 0:
+            return None
+        
+        # Parse the environment variables from output
+        env = os.environ.copy()
+        for line in result.stdout.splitlines():
+            if '=' in line:
+                key, _, value = line.partition('=')
+                env[key] = value
+        
+        return env
+        
+    except (subprocess.TimeoutExpired, Exception):
+        return None
+
+
 def get_build_dir_name(compiler: str, platform: Optional[Platform] = None) -> str:
     """Get build directory name based on compiler and platform.
     
@@ -187,6 +274,9 @@ class ActionExecutor:
         if "Visual Studio" in generator:
             cmd.extend(["-A", "x64"])
         
+        # Prepare environment for subprocess
+        env = None
+        
         # Set compiler toolchain based on selection (Windows only)
         if get_current_platform() == Platform.WINDOWS:
             if compiler == "Clang":
@@ -197,6 +287,18 @@ class ActionExecutor:
                     cmd.extend(["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++"])
             elif compiler == "GCC (MinGW)":
                 cmd.extend(["-DCMAKE_C_COMPILER=gcc", "-DCMAKE_CXX_COMPILER=g++"])
+            elif compiler == "MSVC" and "Visual Studio" not in generator:
+                # For MSVC with non-VS generators (like Ninja), we need to set up
+                # the Visual Studio environment so CMake can find cl.exe
+                env = get_msvc_environment("x64")
+                if env is None:
+                    return ActionResult(
+                        False, 
+                        "", 
+                        "Could not find Visual Studio installation.\n"
+                        "Please ensure Visual Studio is installed with C++ development tools,\n"
+                        "or run the launcher from a Visual Studio Developer Command Prompt."
+                    )
         
         try:
             result = subprocess.run(
@@ -204,7 +306,8 @@ class ActionExecutor:
                 cwd=self.project_root,
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=300,
+                env=env
             )
             return ActionResult(
                 success=result.returncode == 0,
@@ -217,12 +320,36 @@ class ActionExecutor:
             return ActionResult(False, "", str(e))
     
     def cmake_build(self, build_type: str = "Debug", compiler: str = "MSVC") -> ActionResult:
-        """Run CMake build."""
+        """Run CMake build with parallel compilation and verbose output."""
         self.set_compiler(compiler)
         if not self.build_dir.exists():
             return ActionResult(False, "", f"Build directory {self.build_dir} does not exist. Run CMake Configure first.")
         
-        cmd = ["cmake", "--build", str(self.build_dir), "--config", build_type]
+        # Get number of CPU cores for parallel build
+        import os
+        cpu_count = os.cpu_count() or 4
+        
+        cmd = [
+            "cmake", "--build", str(self.build_dir),
+            "--config", build_type,
+            "--parallel", str(cpu_count),  # Multi-threaded build
+            "--verbose"  # Show detailed compilation commands
+        ]
+        
+        # For MSVC with Ninja, we need the VS environment for the build step too
+        env = None
+        if get_current_platform() == Platform.WINDOWS and compiler == "MSVC":
+            # Check if we're using a non-VS generator by looking for Ninja files
+            ninja_build = self.build_dir / "build.ninja"
+            if ninja_build.exists():
+                env = get_msvc_environment("x64")
+                if env is None:
+                    return ActionResult(
+                        False, 
+                        "", 
+                        "Could not find Visual Studio installation.\n"
+                        "Please ensure Visual Studio is installed with C++ development tools."
+                    )
         
         try:
             result = subprocess.run(
@@ -230,7 +357,8 @@ class ActionExecutor:
                 cwd=self.project_root,
                 capture_output=True,
                 text=True,
-                timeout=600
+                timeout=600,
+                env=env
             )
             return ActionResult(
                 success=result.returncode == 0,
@@ -277,13 +405,15 @@ class ActionExecutor:
                 if cursor_exe:
                     # Use absolute path to workspace file
                     subprocess.Popen(
-                        [str(cursor_exe), str(self.workspace_file.resolve())]
+                        [str(cursor_exe), str(self.workspace_file.resolve())],
+                        creationflags=subprocess.CREATE_NO_WINDOW
                     )
                 else:
                     # Try from PATH
                     subprocess.Popen(
                         ["cursor", str(self.workspace_file.resolve())], 
-                        shell=True
+                        shell=True,
+                        creationflags=subprocess.CREATE_NO_WINDOW
                     )
                     
             elif platform == Platform.MACOS:
@@ -328,23 +458,50 @@ class ActionExecutor:
         except Exception as e:
             return ActionResult(False, "", f"Failed to open Cursor: {e}")
     
-    def open_visual_studio(self) -> ActionResult:
-        """Open project in Visual Studio."""
+    def open_visual_studio(self, vs_build_dirs: Optional[list[str]] = None) -> ActionResult:
+        """Open project in Visual Studio.
+        
+        Args:
+            vs_build_dirs: Optional list of build directory names for VS generator configs.
+                          If not provided, uses the current build_dir.
+        """
         if get_current_platform() != Platform.WINDOWS:
             return ActionResult(False, "", "Visual Studio is only available on Windows")
         
-        # Find .sln file in build directory
-        sln_files = list(self.build_dir.glob("*.sln"))
-        if not sln_files:
-            return ActionResult(False, "", "No .sln file found. Run CMake Configure with Visual Studio generator first.")
+        # Determine which build directories to check
+        if vs_build_dirs:
+            build_dirs = [self.project_root / "build" / d for d in vs_build_dirs]
+        else:
+            build_dirs = [self.build_dir]
         
-        sln_file = sln_files[0]
+        opened_files = []
+        errors = []
         
-        try:
-            os.startfile(str(sln_file))
-            return ActionResult(True, f"Opened {sln_file.name}")
-        except Exception as e:
-            return ActionResult(False, "", f"Failed to open Visual Studio: {e}")
+        for build_dir in build_dirs:
+            sln_files = list(build_dir.glob("*.sln"))
+            if not sln_files:
+                errors.append(f"No .sln in build/{build_dir.name}")
+                continue
+            
+            sln_file = sln_files[0]
+            try:
+                os.startfile(str(sln_file))
+                opened_files.append(f"{build_dir.name}/{sln_file.name}")
+            except Exception as e:
+                errors.append(f"Failed to open {sln_file.name}: {e}")
+        
+        if opened_files:
+            output = "Opened: " + ", ".join(opened_files)
+            if errors:
+                output += "\nWarnings: " + "; ".join(errors)
+            return ActionResult(True, output)
+        else:
+            return ActionResult(
+                False, 
+                "", 
+                "No .sln files found. Run CMake Configure with Visual Studio generator first.\n" + 
+                "\n".join(errors)
+            )
     
     def open_xcode(self) -> ActionResult:
         """Open project in Xcode."""
@@ -379,7 +536,7 @@ class ActionExecutor:
             "clean_build": lambda: self.clean_build(kwargs.get("compiler", "MSVC")),
             "clean_all_builds": self.clean_all_builds,
             "open_cursor": self.open_cursor,
-            "open_vs": self.open_visual_studio,
+            "open_vs": lambda: self.open_visual_studio(kwargs.get("vs_build_dirs")),
             "open_xcode": self.open_xcode,
             "open_ide": lambda: self._open_ide(kwargs.get("ide", "cursor")),
         }

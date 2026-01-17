@@ -27,7 +27,8 @@ class PipelineWorker(QThread):
     finished_signal = pyqtSignal(object)
     
     def __init__(self, executor: PipelineExecutor, pipeline: Pipeline,
-                 build_type: str, generator: str, compiler: str, ide: str):
+                 build_type: str, generator: str, compiler: str, ide: str,
+                 vs_build_dirs: list[str] | None = None):
         super().__init__()
         self.executor = executor
         self.pipeline = pipeline
@@ -35,6 +36,7 @@ class PipelineWorker(QThread):
         self.generator = generator
         self.compiler = compiler
         self.ide = ide
+        self.vs_build_dirs = vs_build_dirs
     
     def run(self):
         result = self.executor.execute(
@@ -43,6 +45,7 @@ class PipelineWorker(QThread):
             generator=self.generator,
             compiler=self.compiler,
             ide=self.ide,
+            vs_build_dirs=self.vs_build_dirs,
             on_step_start=lambda i, name: self.step_started.emit(i, name),
             on_step_complete=lambda i, name, r: self.step_completed.emit(i, name, r),
             on_output=lambda out: self.output_received.emit(out),
@@ -187,12 +190,16 @@ class ConfigurationDialog(QDialog):
 
 
 class SettingsDialog(QDialog):
-    """Dialog for managing build settings and configurations."""
+    """Dialog for managing build configurations.
+    
+    Uses a single unified list of configurations where one is marked as 'active'
+    for single runs, and multiple can be enabled for batch builds.
+    """
     
     def __init__(self, parent=None, config: 'Config' = None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(550)
         self.setMinimumHeight(400)
         
         self._config = config
@@ -203,51 +210,23 @@ class SettingsDialog(QDialog):
         """Setup the dialog UI."""
         layout = QVBoxLayout(self)
         
-        # Build Settings group
-        settings_group = QGroupBox("Build Settings")
-        settings_layout = QVBoxLayout(settings_group)
-        
-        # Build type
-        build_layout = QHBoxLayout()
-        build_layout.addWidget(QLabel("Build Type:"))
-        self.build_type_combo = QComboBox()
-        self.build_type_combo.addItems(["Debug", "Release", "RelWithDebInfo", "MinSizeRel"])
-        build_layout.addWidget(self.build_type_combo, 1)
-        settings_layout.addLayout(build_layout)
-        
-        # Generator
-        gen_layout = QHBoxLayout()
-        gen_layout.addWidget(QLabel("Generator:"))
-        self.generator_combo = QComboBox()
-        generators = ["Ninja", "Ninja Multi-Config", "Unix Makefiles"]
-        if get_current_platform() == Platform.WINDOWS:
-            generators.extend(["Visual Studio 17 2022", "Visual Studio 16 2019", "NMake Makefiles"])
-        elif get_current_platform() == Platform.MACOS:
-            generators.append("Xcode")
-        self.generator_combo.addItems(generators)
-        gen_layout.addWidget(self.generator_combo, 1)
-        settings_layout.addLayout(gen_layout)
-        
-        # Compiler (Windows only)
-        if get_current_platform() == Platform.WINDOWS:
-            compiler_layout = QHBoxLayout()
-            compiler_layout.addWidget(QLabel("Compiler:"))
-            self.compiler_combo = QComboBox()
-            self.compiler_combo.addItems(["MSVC", "Clang", "GCC (MinGW)"])
-            compiler_layout.addWidget(self.compiler_combo, 1)
-            settings_layout.addLayout(compiler_layout)
-        else:
-            self.compiler_combo = None
-        
-        layout.addWidget(settings_group)
-        
-        # Build Configurations group
+        # Build Configurations group (unified - replaces separate Build Settings)
         configs_group = QGroupBox("Build Configurations")
         configs_layout = QVBoxLayout(configs_group)
         
-        # Configurations list with checkboxes
+        # Help text
+        help_label = QLabel(
+            "• <b>Active</b> (●) — used for single builds and Quick Actions\n"
+            "• <b>Enabled</b> (☑) — included in batch builds"
+        )
+        help_label.setWordWrap(True)
+        help_label.setStyleSheet("color: gray; font-size: 11px; margin-bottom: 8px;")
+        configs_layout.addWidget(help_label)
+        
+        # Configurations list
         self.configs_list = QListWidget()
-        self.configs_list.setMinimumHeight(150)
+        self.configs_list.setMinimumHeight(200)
+        self.configs_list.itemDoubleClicked.connect(self._edit_configuration)
         configs_layout.addWidget(self.configs_list)
         
         # Configuration controls
@@ -265,6 +244,13 @@ class SettingsDialog(QDialog):
         remove_config_btn.clicked.connect(self._remove_configuration)
         config_buttons.addWidget(remove_config_btn)
         
+        config_buttons.addStretch()
+        
+        set_active_btn = QPushButton("Set as Active")
+        set_active_btn.setToolTip("Use this configuration for single builds")
+        set_active_btn.clicked.connect(self._set_active_configuration)
+        config_buttons.addWidget(set_active_btn)
+        
         configs_layout.addLayout(config_buttons)
         layout.addWidget(configs_group)
         
@@ -280,39 +266,37 @@ class SettingsDialog(QDialog):
         """Load settings from config into UI."""
         if not self._config:
             return
-        
-        # Build type
-        idx = self.build_type_combo.findText(self._config.build_type)
-        if idx >= 0:
-            self.build_type_combo.setCurrentIndex(idx)
-        
-        # Generator
-        idx = self.generator_combo.findText(self._config.generator)
-        if idx >= 0:
-            self.generator_combo.setCurrentIndex(idx)
-        
-        # Compiler (Windows only)
-        if self.compiler_combo:
-            idx = self.compiler_combo.findText(self._config.compiler)
-            if idx >= 0:
-                self.compiler_combo.setCurrentIndex(idx)
-        
-        # Build configurations
         self._load_configurations()
+    
+    def _get_active_config_name(self) -> str:
+        """Get a unique identifier for the currently active configuration."""
+        return f"{self._config.compiler}|{self._config.generator}|{self._config.build_type}"
     
     def _load_configurations(self):
         """Load build configurations into the list."""
         self.configs_list.clear()
+        
+        active_key = self._get_active_config_name()
         
         for config in self._config.build_configurations:
             item = QListWidgetItem()
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked if config.enabled else Qt.CheckState.Unchecked)
             
-            # Display format: "Name (Compiler/Generator) -> build/Dir"
+            # Check if this is the active configuration
+            config_key = f"{config.compiler}|{config.generator}|{config.build_type}"
+            is_active = (config_key == active_key)
+            
+            # Display format: "● Name (Compiler/Generator/BuildType) -> build/Dir"
             build_dir = get_build_dir_name(config.compiler)
-            item.setText(f"{config.name} ({config.compiler}/{config.generator}) -> build/{build_dir}")
+            active_marker = "● " if is_active else "  "
+            item.setText(f"{active_marker}{config.name} ({config.compiler}/{config.generator}/{config.build_type}) -> build/{build_dir}")
             item.setData(Qt.ItemDataRole.UserRole, config)
+            
+            if is_active:
+                font = item.font()
+                font.setBold(True)
+                item.setFont(font)
             
             self.configs_list.addItem(item)
     
@@ -352,28 +336,43 @@ class SettingsDialog(QDialog):
             return
         
         configs = self._config.build_configurations
+        if len(configs) <= 1:
+            QMessageBox.warning(self, "Cannot Remove", "You must have at least one configuration.")
+            return
+        
         del configs[current_row]
         self._config.build_configurations = configs
         self._load_configurations()
     
+    def _set_active_configuration(self):
+        """Set selected configuration as the active one for single builds."""
+        current_row = self.configs_list.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "No Selection", "Please select a configuration to set as active.")
+            return
+        
+        item = self.configs_list.item(current_row)
+        config: BuildConfiguration = item.data(Qt.ItemDataRole.UserRole)
+        
+        # Update the main config settings to match this configuration
+        self._config.compiler = config.compiler
+        self._config.generator = config.generator
+        self._config.build_type = config.build_type
+        
+        # Refresh the list to show the new active marker
+        self._load_configurations()
+        self.configs_list.setCurrentRow(current_row)
+    
     def _save_and_accept(self):
         """Save settings and close dialog."""
-        # Save build settings
-        self._config.build_type = self.build_type_combo.currentText()
-        self._config.generator = self.generator_combo.currentText()
-        if self.compiler_combo:
-            self._config.compiler = self.compiler_combo.currentText()
-        
         # Save configuration enabled states
+        configs = []
         for i in range(self.configs_list.count()):
             item = self.configs_list.item(i)
             config: BuildConfiguration = item.data(Qt.ItemDataRole.UserRole)
             config.enabled = item.checkState() == Qt.CheckState.Checked
+            configs.append(config)
         
-        configs = []
-        for i in range(self.configs_list.count()):
-            item = self.configs_list.item(i)
-            configs.append(item.data(Qt.ItemDataRole.UserRole))
         self._config.build_configurations = configs
         
         self.accept()
@@ -495,7 +494,7 @@ class MainWindow(QMainWindow):
         return group
     
     def _create_pipeline_group(self) -> QGroupBox:
-        """Create pipeline builder group."""
+        """Create pipeline builder group with checkboxes for each action."""
         group = QGroupBox("Pipeline Builder")
         layout = QVBoxLayout(group)
         
@@ -511,34 +510,88 @@ class MainWindow(QMainWindow):
         
         layout.addLayout(preset_layout)
         
-        # Pipeline steps
-        layout.addWidget(QLabel("Steps:"))
+        # Pipeline steps as checkboxes (fixed order for better UX)
+        layout.addWidget(QLabel("Steps (in execution order):"))
         
-        self.steps_list = QListWidget()
-        self.steps_list.setDragDropMode(QListWidget.DragDropMode.InternalMove)
-        layout.addWidget(self.steps_list)
+        # Define action order explicitly for logical grouping
+        self._action_order = [
+            "clean_build",
+            "clean_all_builds",
+            "cmake_configure",
+            "cmake_build",
+            "open_cursor",
+            "open_vs",
+            "open_xcode",
+        ]
         
-        # Step controls
-        step_buttons = QHBoxLayout()
+        self.step_checkboxes: dict[str, QCheckBox] = {}
+        self._checkbox_base_names: dict[str, str] = {}  # Store base names for dynamic updates
+        available = get_available_actions()
         
-        self.action_combo = QComboBox()
-        for action_id, action in get_available_actions().items():
-            self.action_combo.addItem(action.name, action_id)
-        step_buttons.addWidget(self.action_combo, 1)
+        for action_id in self._action_order:
+            if action_id in available:
+                action = available[action_id]
+                checkbox = QCheckBox(action.name)
+                checkbox.setProperty("action_id", action_id)
+                self.step_checkboxes[action_id] = checkbox
+                self._checkbox_base_names[action_id] = action.name
+                layout.addWidget(checkbox)
         
-        add_btn = QPushButton("+")
-        add_btn.setMaximumWidth(30)
-        add_btn.clicked.connect(self._add_step)
-        step_buttons.addWidget(add_btn)
-        
-        remove_btn = QPushButton("-")
-        remove_btn.setMaximumWidth(30)
-        remove_btn.clicked.connect(self._remove_step)
-        step_buttons.addWidget(remove_btn)
-        
-        layout.addLayout(step_buttons)
+        layout.addStretch()
         
         return group
+    
+    def _update_pipeline_labels(self):
+        """Update checkbox labels with dynamic configuration info."""
+        enabled_configs = self._get_enabled_configurations()
+        active_build_dir = get_build_dir_name(self.config.compiler)
+        
+        # Get list of enabled build directories
+        enabled_build_dirs = [get_build_dir_name(c.compiler) for c in enabled_configs]
+        enabled_names = [c.name for c in enabled_configs]
+        
+        # Get VS generator configs for Open Visual Studio
+        vs_configs = [c for c in enabled_configs if "Visual Studio" in c.generator]
+        vs_build_dirs = [get_build_dir_name(c.compiler) for c in vs_configs]
+        
+        for action_id, checkbox in self.step_checkboxes.items():
+            base_name = self._checkbox_base_names.get(action_id, checkbox.text())
+            
+            if action_id == "clean_build":
+                # Show active build directory that will be cleaned
+                checkbox.setText(f"{base_name}  →  build/{active_build_dir}")
+            
+            elif action_id == "clean_all_builds":
+                # Show all enabled build directories
+                if enabled_build_dirs:
+                    dirs_str = ", ".join(f"build/{d}" for d in enabled_build_dirs)
+                    checkbox.setText(f"{base_name}  →  {dirs_str}")
+                else:
+                    checkbox.setText(base_name)
+            
+            elif action_id in ("cmake_configure", "cmake_build"):
+                # Show enabled configuration names
+                if enabled_names:
+                    names_str = ", ".join(enabled_names)
+                    checkbox.setText(f"{base_name}  →  [{names_str}]")
+                else:
+                    checkbox.setText(f"{base_name}  →  (no configs enabled)")
+            
+            elif action_id == "open_vs":
+                # Show VS generator build directories
+                if vs_build_dirs:
+                    dirs_str = ", ".join(f"build/{d}" for d in vs_build_dirs)
+                    checkbox.setText(f"{base_name}  →  {dirs_str}")
+                else:
+                    checkbox.setText(f"{base_name}  →  (no VS configs)")
+            
+            elif action_id == "open_cursor":
+                # Cursor opens workspace file, show that
+                checkbox.setText(f"{base_name}  →  CI/BagiEngine.code-workspace")
+            
+            else:
+                # Keep base name for other actions
+                checkbox.setText(base_name)
     
     
     def _create_output_group(self) -> QGroupBox:
@@ -565,39 +618,22 @@ class MainWindow(QMainWindow):
             self.preset_combo.setCurrentIndex(idx)
         
         self._load_pipeline_preset(self.config.last_pipeline)
+        self._update_pipeline_labels()
     
     def _load_pipeline_preset(self, preset_name: str):
-        """Load a pipeline preset into the steps list."""
-        self.steps_list.clear()
+        """Load a pipeline preset by checking the appropriate checkboxes."""
+        # Uncheck all first
+        for checkbox in self.step_checkboxes.values():
+            checkbox.setChecked(False)
         
+        # Check the ones in the preset
         pipelines = self.config.pipelines
         if preset_name in pipelines:
             for action_id in pipelines[preset_name]:
-                if action_id in ACTIONS:
-                    item = QListWidgetItem(ACTIONS[action_id].name)
-                    item.setData(Qt.ItemDataRole.UserRole, action_id)
-                    self.steps_list.addItem(item)
-                elif action_id == "open_ide":
-                    item = QListWidgetItem("Open IDE")
-                    item.setData(Qt.ItemDataRole.UserRole, "open_ide")
-                    self.steps_list.addItem(item)
+                if action_id in self.step_checkboxes:
+                    self.step_checkboxes[action_id].setChecked(True)
         
         self.config.last_pipeline = preset_name
-    
-    def _add_step(self):
-        """Add a step to the pipeline."""
-        action_id = self.action_combo.currentData()
-        action_name = self.action_combo.currentText()
-        
-        item = QListWidgetItem(action_name)
-        item.setData(Qt.ItemDataRole.UserRole, action_id)
-        self.steps_list.addItem(item)
-    
-    def _remove_step(self):
-        """Remove selected step from the pipeline."""
-        current_row = self.steps_list.currentRow()
-        if current_row >= 0:
-            self.steps_list.takeItem(current_row)
     
     def _get_enabled_configurations(self) -> list[BuildConfiguration]:
         """Get list of enabled configurations from config."""
@@ -618,12 +654,13 @@ class MainWindow(QMainWindow):
         self._execute_multi_config_pipeline(pipeline, configs)
     
     def _get_current_pipeline(self) -> Pipeline:
-        """Get current pipeline from UI."""
+        """Get current pipeline from checked checkboxes."""
         steps = []
-        for i in range(self.steps_list.count()):
-            item = self.steps_list.item(i)
-            action_id = item.data(Qt.ItemDataRole.UserRole)
-            steps.append(action_id)
+        # Iterate in the defined order to maintain execution sequence
+        for action_id in self._action_order:
+            if action_id in self.step_checkboxes:
+                if self.step_checkboxes[action_id].isChecked():
+                    steps.append(action_id)
         
         return Pipeline("custom", steps)
     
@@ -636,6 +673,8 @@ class MainWindow(QMainWindow):
         """Open the settings dialog."""
         dialog = SettingsDialog(self, self.config)
         dialog.exec()
+        # Update labels after settings may have changed
+        self._update_pipeline_labels()
     
     def _clean_build(self):
         """Clean build directory for current compiler configuration."""
@@ -675,13 +714,19 @@ class MainWindow(QMainWindow):
         
         self._log(f"Starting pipeline with {len(pipeline.steps)} step(s)...")
         
+        # Get VS build directories for open_vs action
+        enabled_configs = self._get_enabled_configurations()
+        vs_configs = [c for c in enabled_configs if "Visual Studio" in c.generator]
+        vs_build_dirs = [get_build_dir_name(c.compiler) for c in vs_configs] if vs_configs else None
+        
         self.worker = PipelineWorker(
             self.executor,
             pipeline,
             self.config.build_type,
             self.config.generator,
             self.config.compiler,
-            self.config.last_ide
+            self.config.last_ide,
+            vs_build_dirs
         )
         
         self.worker.step_started.connect(self._on_step_started)
