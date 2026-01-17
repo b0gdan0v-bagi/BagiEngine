@@ -52,14 +52,14 @@ namespace BECore {
             const char* reset = LogColorReset;
 
             fmt::print(stream,
-                "{}[{:5}]{} [{:%H:%M:%S}.{:03d}] {}\n",
-                color, LogLevelToDisplayString(level), reset,
+                "{}[{}]{} [{:%H:%M:%S}.{:03d}] {}\n",
+                color, level, reset,
                 fmt::localtime(time), ms.count(),
                 eastl::string(message.data(), message.size()));
         } else {
             fmt::print(stream,
-                "[{:5}] [{:%H:%M:%S}.{:03d}] {}\n",
-                LogLevelToDisplayString(level),
+                "[{}] [{:%H:%M:%S}.{:03d}] {}\n",
+                level,
                 fmt::localtime(time), ms.count(),
                 eastl::string(message.data(), message.size()));
         }

@@ -19,23 +19,6 @@ namespace BECore {
     )
 
     /**
-     * @brief Convert LogLevel to display string representation
-     * 
-     * @param level The log level to convert
-     * @return String representation of the level for display
-     */
-    constexpr const char* LogLevelToDisplayString(LogLevel level) {
-        switch (level) {
-            case LogLevel::Debug:   return "DEBUG";
-            case LogLevel::Info:    return "INFO";
-            case LogLevel::Warning: return "WARN";
-            case LogLevel::Error:   return "ERROR";
-            case LogLevel::Fatal:   return "FATAL";
-            default:                return "UNKNOWN";
-        }
-    }
-
-    /**
      * @brief Get ANSI color code for log level (for console output)
      * 
      * @param level The log level

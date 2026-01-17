@@ -64,8 +64,8 @@ namespace BECore {
 
         // Format and output (no colors in file)
         _file << fmt::format(
-            "[{:5}] [{:%Y-%m-%d %H:%M:%S}.{:03d}] {}\n",
-            LogLevelToDisplayString(level),
+            "[{}] [{:%Y-%m-%d %H:%M:%S}.{:03d}] {}\n",
+            level,
             fmt::localtime(time), ms.count(),
             eastl::string(message.data(), message.size()));
     }

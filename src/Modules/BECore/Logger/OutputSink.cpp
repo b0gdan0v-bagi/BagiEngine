@@ -38,8 +38,8 @@ namespace BECore {
 
         // Format message similar to console/file sinks
         std::string formatted = fmt::format(
-            "[{:5}] [{:%H:%M:%S}.{:03d}] {}\n",
-            LogLevelToDisplayString(level),
+            "[{}] [{:%H:%M:%S}.{:03d}] {}\n",
+            level,
             fmt::localtime(time), ms.count(),
             eastl::string(message.data(), message.size()));
 
