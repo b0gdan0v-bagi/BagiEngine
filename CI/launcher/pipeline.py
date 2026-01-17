@@ -228,7 +228,7 @@ class MultiConfigPipelineExecutor:
                     results=results
                 )
             
-            build_dir = get_build_dir_name(config.compiler)
+            build_dir = get_build_dir_name(config.compiler, with_solution_suffix=True)
             
             if on_config_start:
                 on_config_start(i, config.name, build_dir)

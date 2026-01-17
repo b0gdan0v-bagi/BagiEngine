@@ -71,6 +71,41 @@ else()
 endif()
 
 # =============================================================================
+# Output Directories Configuration
+# =============================================================================
+# Формируем имя output директории: {Compiler}{Platform}
+# CMake сам создаёт подпапки Debug/Release внутри
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(COMPILER_NAME "Clang")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(COMPILER_NAME "GCC")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    set(COMPILER_NAME "MSVC")
+else()
+    set(COMPILER_NAME "Unknown")
+endif()
+
+if(WIN32)
+    set(PLATFORM_NAME "Windows")
+elseif(APPLE)
+    set(PLATFORM_NAME "macOS")
+else()
+    set(PLATFORM_NAME "Linux")
+endif()
+
+set(OUTPUT_DIR_NAME "${COMPILER_NAME}${PLATFORM_NAME}")
+set(OUTPUT_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/${OUTPUT_DIR_NAME}")
+
+# Executables (.exe)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_BASE_DIR}")
+# Shared libraries (.dll on Windows, .so on Linux)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_BASE_DIR}")
+# Static libraries (.lib) - keep in build directory
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+
+message(STATUS "Output directory: ${OUTPUT_BASE_DIR}")
+
+# =============================================================================
 # Assert System Options
 # =============================================================================
 option(ENGINE_ENABLE_ASSERTS "Enable ASSERT macros" ON)

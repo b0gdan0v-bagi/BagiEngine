@@ -113,22 +113,23 @@ def get_msvc_environment(arch: str = "x64") -> Optional[dict[str, str]]:
         return None
 
 
-def get_build_dir_name(compiler: str, platform: Optional[Platform] = None) -> str:
+def get_build_dir_name(compiler: str, platform: Optional[Platform] = None, with_solution_suffix: bool = True) -> str:
     """Get build directory name based on compiler and platform.
     
     Args:
         compiler: Compiler name (MSVC, Clang, GCC)
         platform: Target platform (defaults to current platform)
+        with_solution_suffix: If True, adds "Solution" suffix for CMake build dir
         
     Returns:
-        Build directory name like "MSVCWin", "ClangMac", etc.
+        Build directory name like "MSVCWindowsSolution" or "MSVCWindows"
     """
     if platform is None:
         platform = get_current_platform()
     
     platform_suffix = {
-        Platform.WINDOWS: "Win",
-        Platform.MACOS: "Mac",
+        Platform.WINDOWS: "Windows",
+        Platform.MACOS: "macOS",
         Platform.LINUX: "Linux"
     }
     
@@ -138,7 +139,10 @@ def get_build_dir_name(compiler: str, platform: Optional[Platform] = None) -> st
     if "MinGW" in compiler:
         compiler_name = "GCC"
     
-    return f"{compiler_name}{platform_suffix[platform]}"
+    base_name = f"{compiler_name}{platform_suffix[platform]}"
+    if with_solution_suffix:
+        return f"{base_name}Solution"
+    return base_name
 
 
 @dataclass
@@ -165,20 +169,28 @@ class Action:
 class ActionExecutor:
     """Executes actions with project context."""
     
-    def __init__(self, project_root: Path, compiler: str = "MSVC"):
+    def __init__(self, project_root: Path, compiler: str = "MSVC", build_type: str = "Debug"):
         self.project_root = project_root
         self._compiler = compiler
+        self._build_type = build_type
         self.workspace_file = project_root / "CI" / "BagiEngine.code-workspace"
     
     @property
     def build_dir(self) -> Path:
-        """Get build directory based on current compiler."""
-        build_dir_name = get_build_dir_name(self._compiler)
+        """Get build directory based on current compiler and build type.
+        
+        Returns path like: build/MSVCDebugWindowsSolution
+        """
+        build_dir_name = get_build_dir_name(self._compiler, with_solution_suffix=True)
         return self.project_root / "build" / build_dir_name
     
     def set_compiler(self, compiler: str) -> None:
         """Set the current compiler for build directory resolution."""
         self._compiler = compiler
+    
+    def set_build_type(self, build_type: str) -> None:
+        """Set the current build type for build directory resolution."""
+        self._build_type = build_type
     
     def _run_streaming_command(
         self, 
@@ -255,13 +267,14 @@ class ActionExecutor:
         except Exception as e:
             return ActionResult(False, "", str(e))
     
-    def clean_build(self, compiler: str = "MSVC") -> ActionResult:
+    def clean_build(self, compiler: str = "MSVC", build_type: str = "Debug") -> ActionResult:
         """Clean build directory using git clean (permanent deletion, no recycle bin).
         
         Uses 'git clean -fdx' to forcefully remove all untracked files and directories
         in the build folder. This is a permanent deletion.
         """
         self.set_compiler(compiler)
+        self.set_build_type(build_type)
         
         if not self.build_dir.exists():
             return ActionResult(True, f"Build directory {self.build_dir} does not exist. Nothing to clean.")
@@ -281,15 +294,16 @@ class ActionExecutor:
                 timeout=120
             )
             
+            build_dir_name = get_build_dir_name(compiler, with_solution_suffix=True)
             if result.returncode == 0:
                 cleaned_files = result.stdout.strip()
                 if cleaned_files:
                     return ActionResult(
                         True, 
-                        f"Cleaned build directory: build/{get_build_dir_name(compiler)}\n{cleaned_files}"
+                        f"Cleaned build directory: build/{build_dir_name}\n{cleaned_files}"
                     )
                 else:
-                    return ActionResult(True, f"Build directory already clean: build/{get_build_dir_name(compiler)}")
+                    return ActionResult(True, f"Build directory already clean: build/{build_dir_name}")
             else:
                 return ActionResult(False, result.stdout, result.stderr)
                 
@@ -338,6 +352,7 @@ class ActionExecutor:
                         on_output: Optional[Callable[[str], None]] = None) -> ActionResult:
         """Run CMake configuration with real-time output streaming."""
         self.set_compiler(compiler)
+        self.set_build_type(build_type)
         self.build_dir.mkdir(parents=True, exist_ok=True)
         
         cmd = ["cmake", "-B", str(self.build_dir), "-S", str(self.project_root)]
@@ -383,6 +398,7 @@ class ActionExecutor:
                     on_output: Optional[Callable[[str], None]] = None) -> ActionResult:
         """Run CMake build with parallel compilation and real-time output streaming."""
         self.set_compiler(compiler)
+        self.set_build_type(build_type)
         if not self.build_dir.exists():
             return ActionResult(False, "", f"Build directory {self.build_dir} does not exist. Run CMake Configure first.")
         
@@ -673,7 +689,7 @@ class ActionExecutor:
                 on_output=on_output
             ),
             "close_vs": self.close_visual_studio,
-            "clean_build": lambda: self.clean_build(kwargs.get("compiler", "MSVC")),
+            "clean_build": lambda: self.clean_build(kwargs.get("compiler", "MSVC"), kwargs.get("build_type", "Debug")),
             "clean_all_builds": self.clean_all_builds,
             "open_cursor": self.open_cursor,
             "open_vs": lambda: self.open_visual_studio(kwargs.get("vs_build_dirs")),

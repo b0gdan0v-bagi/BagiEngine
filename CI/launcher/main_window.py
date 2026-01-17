@@ -130,6 +130,7 @@ class ConfigurationDialog(QDialog):
         # Build Type
         self.build_type_combo = QComboBox()
         self.build_type_combo.addItems(["Debug", "Release", "RelWithDebInfo", "MinSizeRel"])
+        self.build_type_combo.currentTextChanged.connect(self._update_preview)
         form_layout.addRow("Build Type:", self.build_type_combo)
         
         layout.addLayout(form_layout)
@@ -151,7 +152,8 @@ class ConfigurationDialog(QDialog):
     def _update_preview(self):
         """Update the build directory preview."""
         compiler = self.compiler_combo.currentText()
-        build_dir = get_build_dir_name(compiler)
+        build_type = self.build_type_combo.currentText()
+        build_dir = get_build_dir_name(compiler, with_solution_suffix=True)
         self.preview_label.setText(f"Build directory: build/{build_dir}")
     
     def _load_config(self, config: BuildConfiguration):
@@ -218,7 +220,7 @@ class VSConfigurationDialog(QDialog):
         
         self.config_list = QListWidget()
         for config in self._configurations:
-            build_dir = get_build_dir_name(config.compiler)
+            build_dir = get_build_dir_name(config.compiler, with_solution_suffix=True)
             item_text = f"{config.name} (build/{build_dir})"
             item = QListWidgetItem(item_text)
             item.setData(Qt.ItemDataRole.UserRole, config)
@@ -347,7 +349,7 @@ class SettingsDialog(QDialog):
             is_active = (config_key == active_key)
             
             # Display format: "● Name (Compiler/Generator/BuildType) -> build/Dir"
-            build_dir = get_build_dir_name(config.compiler)
+            build_dir = get_build_dir_name(config.compiler, with_solution_suffix=True)
             active_marker = "● " if is_active else "  "
             item.setText(f"{active_marker}{config.name} ({config.compiler}/{config.generator}/{config.build_type}) -> build/{build_dir}")
             item.setData(Qt.ItemDataRole.UserRole, config)
@@ -826,7 +828,7 @@ class MainWindow(QMainWindow):
                 if action_id == "open_vs":
                     vs_configs = [c for c in enabled_configs if "Visual Studio" in c.generator]
                     if vs_configs:
-                        vs_build_dirs = [get_build_dir_name(c.compiler) for c in vs_configs]
+                        vs_build_dirs = [get_build_dir_name(c.compiler, with_solution_suffix=True) for c in vs_configs]
                         steps.append(PipelineStep(action_id=action_id, params={"vs_build_dirs": vs_build_dirs}))
                     else:
                         # No VS configs, skip this action
@@ -862,7 +864,7 @@ class MainWindow(QMainWindow):
         # If only one VS config, open it directly
         if len(vs_configs) == 1:
             config = vs_configs[0]
-            build_dir = get_build_dir_name(config.compiler)
+            build_dir = get_build_dir_name(config.compiler, with_solution_suffix=True)
             pipeline = Pipeline("open_vs", ["open_vs"])
             # Create step with config params
             step = PipelineStep(
@@ -877,7 +879,7 @@ class MainWindow(QMainWindow):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 selected_config = dialog.get_selected_configuration()
                 if selected_config:
-                    build_dir = get_build_dir_name(selected_config.compiler)
+                    build_dir = get_build_dir_name(selected_config.compiler, with_solution_suffix=True)
                     pipeline = Pipeline("open_vs", ["open_vs"])
                     step = PipelineStep(
                         action_id="open_vs",
@@ -898,7 +900,8 @@ class MainWindow(QMainWindow):
     def _clean_build(self):
         """Clean build directory for current compiler configuration."""
         compiler = self.config.compiler
-        build_dir = get_build_dir_name(compiler)
+        build_type = self.config.build_type
+        build_dir = get_build_dir_name(compiler, with_solution_suffix=True)
         
         reply = QMessageBox.question(
             self,
@@ -936,7 +939,7 @@ class MainWindow(QMainWindow):
         # Get VS build directories for open_vs action
         enabled_configs = self._get_enabled_configurations()
         vs_configs = [c for c in enabled_configs if "Visual Studio" in c.generator]
-        vs_build_dirs = [get_build_dir_name(c.compiler) for c in vs_configs] if vs_configs else None
+        vs_build_dirs = [get_build_dir_name(c.compiler, with_solution_suffix=True) for c in vs_configs] if vs_configs else None
         
         # Use config defaults, but step.params will override them in PipelineExecutor
         self.worker = PipelineWorker(
