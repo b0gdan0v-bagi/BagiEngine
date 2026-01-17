@@ -11,111 +11,42 @@ alwaysApply: false
 
 ## Project Settings
 
-```cmake
-cmake_minimum_required(VERSION 3.31)
-project(MySDLGame)
-
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-```
+- CMake 3.31+
+- C++23 standard
+- Ninja generator
 
 ## Module Structure
 
 Each module has its own `CMakeLists.txt`:
-
-```cmake
-# src/Modules/MyModule/CMakeLists.txt
-
-# Collect source files
-file(GLOB_RECURSE MODULE_SOURCES 
-    "src/*.cpp" 
-    "src/*.h"
-)
-
-# Create library
-add_library(MyModule STATIC ${MODULE_SOURCES})
-
-# Include directories
-target_include_directories(MyModule PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${PROJECT_SOURCE_DIR}/src/Modules  # For cross-module includes
-)
-
-# Link dependencies
-target_link_libraries(MyModule PUBLIC
-    BECoreModule  # If depends on BECore
-)
-
-# Use precompiled headers from BECoreModule
-target_precompile_headers(MyModule REUSE_FROM BECoreModule)
-
-# MSVC: Force include PCH
-if(MSVC)
-    target_compile_options(MyModule PRIVATE /FI"BECore/pch.h")
-endif()
-```
-
-## Adding External Dependencies
-
-Using FetchContent:
-```cmake
-include(FetchContent)
-
-FetchContent_Declare(
-    library_name
-    GIT_REPOSITORY https://github.com/org/repo.git
-    GIT_TAG v1.0.0
-    GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(library_name)
-
-target_link_libraries(MyModule PRIVATE library_name)
-```
-
-## Source Groups (IDE folders)
-
-```cmake
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" 
-    PREFIX "Source Files" 
-    FILES ${MODULE_SOURCES}
-)
-```
-
-## Platform-Specific Code
-
-```cmake
-if(WIN32)
-    # Windows-specific
-    target_compile_definitions(MyModule PRIVATE WIN32_LEAN_AND_MEAN)
-endif()
-
-if(APPLE)
-    # macOS-specific
-endif()
-
-if(MSVC)
-    # Visual Studio specific
-    target_compile_options(MyModule PRIVATE /W4)
-else()
-    # GCC/Clang
-    target_compile_options(MyModule PRIVATE -Wall -Wextra)
-endif()
-```
+- Collect sources with `file(GLOB_RECURSE ...)`
+- Create `STATIC` library
+- Include directories: own `src/` + cross-module path
+- Link to `BECoreModule` if needed
+- Reuse PCH: `target_precompile_headers(MyModule REUSE_FROM BECoreModule)`
 
 ## Module Dependencies Order
 
 BECoreModule must be first (provides PCH):
-```cmake
-add_subdirectory(src/Modules/BECore)    # First!
-add_subdirectory(src/Modules/Math)
-add_subdirectory(src/Modules/Events)
-add_subdirectory(src/Modules/SDL)
-```
+1. `BECore` — first!
+2. `Math`
+3. `Events`
+4. `SDL`
+
+## External Dependencies
+
+Use `FetchContent` with `GIT_SHALLOW TRUE` for faster fetches.
 
 ## Best Practices
 
-1. **Use STATIC libraries** for modules
-2. **PUBLIC for headers** that other modules need
-3. **PRIVATE for implementation** details
-4. **REUSE_FROM BECoreModule** for PCH
-5. **GIT_SHALLOW TRUE** for faster fetches
+| Practice | Visibility |
+|----------|------------|
+| Headers other modules need | `PUBLIC` |
+| Implementation details | `PRIVATE` |
+| Static libraries | Always for modules |
+| PCH reuse | `REUSE_FROM BECoreModule` |
+
+## Platform-Specific
+
+- MSVC: `/FI"BECore/pch.h"` for force include
+- MSVC: `/W4` warnings
+- GCC/Clang: `-Wall -Wextra`

@@ -29,6 +29,7 @@ The BECore module is the foundation of BagiEngine. It provides essential utiliti
 
 Central hub owning core subsystems. Access via static methods:
 - `CoreManager::GetFileSystem()`
+- `CoreManager::GetLoggerManager()`
 - `CoreManager::GetAssertHandlerManager()`
 - `CoreManager::GetTestManager()`
 

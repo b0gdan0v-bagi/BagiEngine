@@ -9,64 +9,7 @@ alwaysApply: true
 
 # C++ Code Style
 
-## Header Files
-
-```cpp
-#pragma once  // Always use pragma once
-
-#include <External/Library.h>  // External includes first
-#include <BECore/Utils/Singleton.h>  // Internal includes second
-
-namespace BECore {  // Opening brace on same line
-
-    /**
-     * @brief Brief description
-     * @details Detailed description if needed
-     */
-    class MyClass : public BaseClass {
-    public:
-        MyClass() = default;
-        ~MyClass() override = default;  // Always use override
-
-        // Public methods - PascalCase
-        void PublicMethod();
-        bool IsValid() const;  // Const correctness
-
-    protected:
-        void ProtectedMethod();
-
-    private:
-        void PrivateMethod();
-
-        // Private members - underscore prefix, camelCase after
-        bool _isInitialized = false;  // Inline initialization
-        int _count = 0;
-        PoolString _name;
-    };
-
-}  // namespace BECore  // Closing comment required
-```
-
-## Implementation Files
-
-```cpp
-#include "MyClass.h"  // Own header first
-
-#include <Other/Dependency.h>  // Other includes
-
-namespace BECore {
-
-    void MyClass::PublicMethod() {
-        // 4 spaces indentation
-        if (_isInitialized) {
-            DoSomething();
-        }
-    }
-
-}  // namespace BECore
-```
-
-## Naming Summary
+## Naming Conventions
 
 | Element | Style | Example |
 |---------|-------|---------|
@@ -75,118 +18,40 @@ namespace BECore {
 | Variable | camelCase | `virtualPath` |
 | Private member | _camelCase | `_isRunning` |
 | Namespace | PascalCase | `BECore` |
-| Enum | PascalCase | `EventType` |
-| Enum value | PascalCase | `EventType::KeyDown` |
-| Constant | PascalCase | `MaxSize` |
+| Enum/Constant | PascalCase | `EventType::KeyDown` |
 | Template param | T, TName | `template<typename T>` |
+
+## File Structure
+
+- `#pragma once` — always (never include guards)
+- External includes first, then internal
+- Opening brace on same line
+- Namespace closing comment required: `} // namespace BECore`
+- Inline member initialization: `bool _flag = false;`
 
 ## Formatting Rules
 
 - **Indentation**: 4 spaces (no tabs)
 - **Line length**: ~120 characters max
-- **Braces**: Same line for control structures, classes, functions
-- **Pointers/References**: `Type* ptr`, `Type& ref` (space before)
-- **Includes**: Sorted, grouped (external, internal, local)
+- **Pointers/References**: `Type* ptr`, `Type& ref`
+- **Includes**: Sorted, grouped (external → internal → local)
 
 ## Modern C++ Preferences
 
-```cpp
-// Use auto when type is obvious
-auto ptr = MakeIntrusive<MyClass>();
-auto it = container.begin();
-
-// Use range-based for
-for (const auto& item : container) {
-    Process(item);
-}
-
-// Use structured bindings
-auto [key, value] = GetPair();
-
-// Use std::optional for nullable values
-std::optional<int> MaybeGetValue();
-
-// Use concepts (C++20)
-template<typename T>
-requires std::derived_from<T, BaseClass>
-void Process(T& obj);
-
-// Use EASTL containers
-eastl::vector<int> numbers;
-eastl::hash_map<PoolString, int> map;
-```
-
-## Documentation
-
-```cpp
-/**
- * @brief Short description
- * 
- * @param param1 Description of param1
- * @param param2 Description of param2
- * @return Description of return value
- * 
- * @example
- * MyClass obj;
- * obj.Method(42, "test");
- */
-int Method(int param1, const char* param2);
-```
-
-## Error Handling
-
-```cpp
-// Use bool return for operations that can fail
-bool Initialize() {
-    if (!LoadConfig()) {
-        return false;
-    }
-    return true;
-}
-
-// Use ASSERT for programming errors (not std::assert)
-ASSERT(_instance != nullptr, "Instance must exist");
-
-// Log errors before returning
-if (error) {
-    // TODO: Add logging system
-    return false;
-}
-```
+- Use `auto` when type is obvious
+- Use range-based `for`
+- Use structured bindings
+- Use `std::optional` for nullable values
+- Use EASTL containers
 
 ## Assertion Macros
 
-BagiEngine provides custom assertion macros that integrate with the event system:
+From `BECore/Assert/AssertMacros.h`:
+- `ASSERT(expr)` / `ASSERT(expr, "msg")` — critical check
+- `EXPECT(expr)` / `EXPECT(expr, "msg")` — soft expectation
+- `FATALERROR("msg")` — unrecoverable error
 
-```cpp
-#include <BECore/Assert/AssertMacros.h>
-
-// ASSERT - for critical checks (can be disabled in release builds)
-ASSERT(ptr != nullptr);
-ASSERT(index < size, "Index out of bounds");
-
-// EXPECT - for soft checks (less critical, can be disabled separately)
-EXPECT(value > 0);
-EXPECT(count <= MaxCount, "Count exceeds maximum");
-
-// FATALERROR - for unrecoverable errors
-FATALERROR("Unrecoverable error occurred");
-```
-
-**Key differences from std::assert:**
-- Emits `AssertEvent` through the event system
-- Can be handled by custom handlers (logging, debug breaks, etc.)
-- Can be disabled via CMake options:
-  - `ENGINE_ENABLE_ASSERTS` - Controls ASSERT and FATALERROR
-  - `ENGINE_ENABLE_EXPECTS` - Controls EXPECT
-- Supports optional messages: `ASSERT(expr, "message")`
-
-**Always use ASSERT/EXPECT in tests:**
-```cpp
-// Good - uses engine assertion macros
-ASSERT(result == expected);
-ASSERT(container.Size() == 5, "Container should have 5 elements");
-
-// Avoid - std::assert doesn't integrate with engine systems
-assert(result == expected);
-```
+**Key points:**
+- Always use `ASSERT` instead of `std::assert`
+- Supports optional messages
+- Can be disabled via CMake options

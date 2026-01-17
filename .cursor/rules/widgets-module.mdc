@@ -9,129 +9,39 @@ alwaysApply: false
 # Widget System Guidelines
 
 ## Overview
-Widgets are UI/rendering components that follow the IWidget interface. They are managed by WidgetManager and configured via XML.
 
-## Creating a New Widget
+Widgets are UI/rendering components implementing `IWidget`. Managed by `WidgetManager`, configured via XML.
 
-### Header File
-```cpp
-#pragma once
+## IWidget Interface
 
-#include <BECore/Widgets/IWidget.h>
-
-namespace BECore {
-
-    class MyNewWidget : public IWidget {
-    public:
-        MyNewWidget() = default;
-        ~MyNewWidget() override = default;
-
-        bool Initialize(const XmlNode& node) override;
-        void Update() override;
-        void Draw() override;
-
-    private:
-        // Configuration from XML
-        PoolString _name;
-        int _priority = 0;
-        
-        // Runtime state with underscore prefix
-        bool _isActive = true;
-    };
-
-}  // namespace BECore
-```
-
-### Implementation File
-```cpp
-#include "MyNewWidget.h"
-
-namespace BECore {
-
-    bool MyNewWidget::Initialize(const XmlNode& node) {
-        if (!node.IsValid()) {
-            return false;
-        }
-        
-        _name = node.GetAttribute<PoolString>("name", "unnamed"_ps);
-        _priority = node.GetAttribute<int>("priority", 0);
-        
-        // Subscribe to events if needed
-        // RenderEvents::NewFrameEvent::Subscribe<&MyNewWidget::OnNewFrame>(this);
-        
-        return true;
-    }
-
-    void MyNewWidget::Update() {
-        // Called every frame before Draw
-        // Update logic here
-    }
-
-    void MyNewWidget::Draw() {
-        // Rendering code here
-    }
-
-}  // namespace BECore
-```
-
-### XML Configuration
-Add to `config/WidgetsConfig.xml`:
-```xml
-<Widgets>
-    <Widget type="MyNewWidget" name="myWidget" priority="10">
-        <!-- Widget-specific attributes -->
-    </Widget>
-</Widgets>
-```
+| Method | Purpose |
+|--------|---------|
+| `Initialize(const XmlNode&)` | Load config, subscribe to events |
+| `Update()` | Called every frame (logic) |
+| `Draw()` | Called every frame (rendering) |
 
 ## Widget Lifecycle
 
-1. **Construction** - Default constructor, no initialization
-2. **Initialize(XmlNode)** - Load configuration, subscribe to events
-3. **Update()** - Called every frame (logic)
-4. **Draw()** - Called every frame (rendering)
-5. **Destruction** - Cleanup, unsubscribe from events
+1. Construction — default constructor, no init
+2. `Initialize(XmlNode)` — load config, subscribe to events
+3. `Update()` → `Draw()` — every frame
+4. Destruction — cleanup, unsubscribe from events
 
-## Using Events in Widgets
+## XML Configuration
 
-```cpp
-bool MyWidget::Initialize(const XmlNode& node) {
-    // Subscribe to render events
-    RenderEvents::NewFrameEvent::Subscribe<&MyWidget::OnNewFrame>(this);
-    ApplicationEvents::ApplicationCleanUpEvent::Subscribe<&MyWidget::OnCleanup>(this);
-    return true;
-}
-
-void MyWidget::OnNewFrame() {
-    // Called at start of each frame
-}
-
-void MyWidget::OnCleanup() {
-    // Called when application is shutting down
-}
-```
-
-## ImGui Widgets
-
-For ImGui-based widgets:
-```cpp
-void MyImGuiWidget::Draw() {
-    ImGui::Begin("My Window");
-    
-    ImGui::Text("Hello from MyWidget!");
-    
-    if (ImGui::Button("Click Me")) {
-        // Handle button click
-    }
-    
-    ImGui::End();
-}
-```
+File: `config/WidgetsConfig.xml`
+- `type` — widget class name
+- `name` — widget identifier
+- `priority` — processing order
 
 ## Best Practices
 
-1. **Single Responsibility** - One widget = one purpose
-2. **XML Configuration** - All tunable parameters from XML
-3. **Event-Driven** - Use events for communication between widgets
-4. **Lazy Initialization** - Initialize resources in Initialize(), not constructor
-5. **Clean Separation** - Update() for logic, Draw() for rendering
+- **Single Responsibility** — one widget = one purpose
+- **XML Configuration** — all tunable parameters from XML
+- **Event-Driven** — use events for widget communication
+- **Lazy Initialization** — initialize resources in `Initialize()`, not constructor
+- **Separation** — `Update()` for logic, `Draw()` for rendering
+
+## ImGui Widgets
+
+Use `ImGui::Begin()`/`ImGui::End()` in `Draw()` method for ImGui-based widgets.

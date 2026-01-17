@@ -7,82 +7,37 @@ alwaysApply: false
 # SDL Module Guidelines
 
 ## Overview
-The SDL module provides SDL3 integration for window management, rendering, and input handling.
 
-## SDL3 Usage
+SDL3 integration for window management, rendering, and input handling.
 
-### Window Access
-```cpp
-// Use forward declarations in headers
-struct SDL_Window;
-struct SDL_Renderer;
+## Key Components
 
-// Get window/renderer through accessors
-SDL_Window* window = MainWindowAccessor::GetWindow();
-SDL_Renderer* renderer = MainWindowAccessor::GetRenderer();
-```
-
-### Event Handling
-```cpp
-// Subscribe to SDL events
-SDLEvents::SDLEventWrapper event;
-SDLEvents::SDLEventEvent::Subscribe<&MyHandler::OnSDLEvent>(this);
-
-void MyHandler::OnSDLEvent(const SDLEvents::SDLEventWrapper& event) {
-    // Process SDL_Event
-    switch (event.event.type) {
-        case SDL_EVENT_KEY_DOWN:
-            // Handle key press
-            break;
-        case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            // Handle mouse click
-            break;
-    }
-}
-```
-
-### Rendering
-```cpp
-void MyWidget::Draw() {
-    SDL_Renderer* renderer = GetSDLRenderer();
-    
-    // Set draw color
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    
-    // Draw shapes
-    SDL_FRect rect = {10.0f, 10.0f, 100.0f, 100.0f};
-    SDL_RenderFillRect(renderer, &rect);
-}
-```
+| Component | Purpose |
+|-----------|---------|
+| `SDLMainWindow` | Window and renderer management |
+| `SDLEventsProvider` | SDL event polling and conversion |
+| `MainWindowAccessor` | Access to window/renderer |
 
 ## SDL3 vs SDL2 Differences
 
-SDL3 uses different naming and types:
-- `SDL_Event.type` values have `SDL_EVENT_` prefix
+- Event types use `SDL_EVENT_` prefix
 - Rectangles use `SDL_FRect` (float) by default
-- Window creation uses `SDL_CreateWindow()` with flags
 - `SDL_Init()` returns bool, not int
-
-## ImGui + SDL3
-
-ImGui integration:
-```cpp
-// In Initialize
-ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
-ImGui_ImplSDLRenderer3_Init(renderer);
-
-// Each frame
-ImGui_ImplSDLRenderer3_NewFrame();
-ImGui_ImplSDL3_NewFrame();
-ImGui::NewFrame();
-
-// After ImGui::Render()
-ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
-```
 
 ## Best Practices
 
-1. **Forward Declare SDL Types** - Don't include SDL headers in your headers
-2. **Use Accessors** - Don't store raw SDL pointers long-term
-3. **Check Return Values** - SDL3 functions may fail
-4. **Use Events** - Don't poll events directly, use the event system
+- **Forward declare SDL types** in headers (`struct SDL_Window;`)
+- **Use accessors** — don't store raw SDL pointers long-term
+- **Check return values** — SDL3 functions may fail
+- **Use event system** — don't poll events directly
+
+## ImGui + SDL3
+
+Backends: `ImGui_ImplSDL3_*` and `ImGui_ImplSDLRenderer3_*`
+
+Frame order:
+1. `ImGui_ImplSDLRenderer3_NewFrame()`
+2. `ImGui_ImplSDL3_NewFrame()`
+3. `ImGui::NewFrame()`
+4. ... render ...
+5. `ImGui_ImplSDLRenderer3_RenderDrawData()`

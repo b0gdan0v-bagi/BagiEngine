@@ -8,208 +8,49 @@ alwaysApply: false
 
 ## Overview
 
-The Logger module provides an event-based logging system. Log messages are emitted as events (`LogEvent`), and sinks subscribe to these events to process and output log messages.
+Event-based logging system. Log messages are emitted as `LogEvent`, sinks subscribe to process output.
 
 ## Architecture
 
-The logging system uses an event-driven architecture:
-
-1. **Logger** - Static helper class that emits `LogEvent` for log messages
-2. **LogEvent** - Event containing log level and message (`eastl::string_view`)
-3. **FlushLogsEvent** - Event to trigger flushing of all sinks
-4. **ILogSink** - Interface for log output destinations
-5. **LoggerManager** - Manages sinks, subscribes to `FlushLogsEvent`
-
-## Basic Logging
-
-```cpp
-#include <BECore/Logger/Logger.h>
-
-// Simple string messages
-Logger::Info("Game started");
-Logger::Warning("Low memory");
-Logger::Error("Failed to load resource");
-
-// Formatted messages (using fmt)
-Logger::Info("Player {} joined with score {}", playerName, score);
-Logger::Error("Failed to load file: {}", filename);
-```
-
-## Using Macros
-
-```cpp
-// Convenience macros (recommended)
-LOG_INFO("Game started");
-LOG_DEBUG("Debug information: {}", value);
-LOG_WARNING("Warning message");
-LOG_ERROR("Error occurred: {}", errorMsg);
-LOG_FATAL("Fatal error - shutting down");
-```
+| Component | Purpose |
+|-----------|---------|
+| `Logger` | Static helper, emits `LogEvent` |
+| `LogEvent` | Event with level and message (`eastl::string_view`) |
+| `FlushLogsEvent` | Event to trigger flushing of sinks |
+| `ILogSink` | Interface for log output destinations |
+| `LoggerManager` | Manages sinks, accessed via `CoreManager::GetLoggerManager()` |
 
 ## Log Levels
 
-```cpp
-enum class LogLevel {
-    Debug,    // Detailed debugging information
-    Info,     // General informational messages
-    Warning,   // Warning messages
-    Error,     // Error messages
-    Fatal      // Fatal errors (auto-flushes on emit)
-};
-```
+`Debug` → `Info` → `Warning` → `Error` → `Fatal`
 
-## Creating Custom Sinks
-
-Implement `ILogSink` interface:
-
-```cpp
-#include <BECore/Logger/ILogSink.h>
-#include <BECore/Logger/LogEvent.h>
-
-class MyCustomSink : public ILogSink {
-public:
-    void Initialize() override {
-        // Subscribe to LogEvent
-        LogEvent::Subscribe<&MyCustomSink::OnLogEvent>(this);
-        
-        // Setup your sink (open file, connect to network, etc.)
-    }
-
-private:
-    void OnLogEvent(const LogEvent& event) {
-        // Filter by level if needed
-        if (!ShouldLog(event.level)) {
-            return;
-        }
-        
-        // Process the log message
-        Write(event.level, event.message);
-    }
-
-    void Write(LogLevel level, eastl::string_view message) override {
-        // Output to your destination
-        // Note: message is a string_view - ensure lifetime is valid
-    }
-
-    void Flush() override {
-        // Flush any buffered output
-    }
-};
-```
-
-## Sink Configuration
-
-Sinks are configured via `config/LoggerConfig.xml`:
-
-```xml
-<logger>
-    <sinks>
-        <sink type="Console" enabled="true" priority="0" minLevel="Debug" colorEnabled="true"/>
-        <sink type="File" enabled="true" priority="1" minLevel="Info" filename="engine.log" append="false"/>
-        <sink type="Output" enabled="true" priority="2" minLevel="Warning"/>
-    </sinks>
-</logger>
-```
-
-### Sink Attributes
-
-- `type` - Sink type: `Console`, `File`, `Output`
-- `enabled` - Enable/disable sink (default: `true`)
-- `priority` - Processing order, lower = higher priority (default: `0`)
-- `minLevel` - Minimum log level to process (default: `Debug`)
-
-### Console Sink Options
-
-- `colorEnabled` - Enable colored output (default: `true`)
-
-### File Sink Options
-
-- `filename` - Log file path (default: `"engine.log"`)
-- `append` - Append to existing file (default: `false`)
+**Note:** `Fatal` auto-flushes after logging.
 
 ## Built-in Sinks
 
-### ConsoleSink
+| Sink | Output | Options |
+|------|--------|---------|
+| `ConsoleSink` | stdout/stderr with ANSI colors | `colorEnabled` |
+| `FileSink` | Thread-safe file logging | `filename`, `append` |
+| `OutputSink` | Platform debug output (OutputDebugString on Windows) | — |
 
-Outputs to stdout/stderr with optional ANSI color codes.
-- Errors and Fatal go to `stderr`
-- Others go to `stdout`
+## Sink Configuration
 
-### FileSink
-
-Thread-safe file logging with optional append mode.
-
-### OutputSink
-
-Platform-specific debug output:
-- Windows: `OutputDebugString` (Visual Studio Output window)
-- macOS: `stderr` (Xcode console)
-- Other: No-op
-
-## Event System
-
-### LogEvent
-
-Emitted when a log message is created:
-
-```cpp
-struct LogEvent : EventBase<LogEvent> {
-    LogLevel level;
-    eastl::string_view message;
-};
-```
-
-### FlushLogsEvent
-
-Emitted to flush all sinks:
-
-```cpp
-struct FlushLogsEvent : EventBase<FlushLogsEvent> {
-    // Empty event
-};
-```
-
-**Note:** `Logger::Fatal()` automatically emits `FlushLogsEvent` after logging.
-
-## String Handling
-
-- **Always use `eastl::string_view`** for log messages
-- Messages are passed as `string_view` to avoid unnecessary copies
-- Ensure message lifetime is valid when sink processes the event
-- For formatted messages, `Logger` creates `eastl::string` internally
+File: `config/LoggerConfig.xml`
+- `type` — `Console`, `File`, `Output`
+- `enabled` — enable/disable
+- `priority` — processing order (lower = higher priority)
+- `minLevel` — minimum log level to process
 
 ## Best Practices
 
-1. **Use macros for convenience** - `LOG_INFO()`, `LOG_ERROR()`, etc.
-2. **Use appropriate log levels** - Don't log everything as Error
-3. **Format messages clearly** - Include context and relevant data
-4. **Respect minLevel** - Sinks filter by level, don't log Debug in production
-5. **Fatal errors auto-flush** - No need to manually flush after `LOG_FATAL()`
+- Use macros: `LOG_INFO()`, `LOG_DEBUG()`, `LOG_ERROR()`, etc.
+- Use appropriate log levels
+- Use `eastl::string_view` for messages in sinks
+- Fatal errors auto-flush — no manual flush needed
 
 ## Don't
 
-- Don't use `const char*` - Use `eastl::string_view` in sinks
-- Don't store `string_view` - Convert to string if you need to store the message
-- Don't emit events directly - Use `Logger` static methods
-- Don't call `LoggerManager::Flush()` directly - Use `FlushLogsEvent::Emit()`
-- Don't create sinks manually - Let `LoggerManager` handle initialization
-
-## Accessing Sinks
-
-```cpp
-// Get specific sink type
-auto* consoleSink = CoreManager::GetLoggerManager().GetSink<ConsoleSink>();
-if (consoleSink) {
-    consoleSink->SetColorEnabled(false);
-}
-
-// Get all sinks
-const auto& sinks = CoreManager::GetLoggerManager().GetSinks();
-```
-
-## Thread Safety
-
-- `FileSink` is thread-safe (uses mutex)
-- `ConsoleSink` and `OutputSink` are not explicitly thread-safe
-- Event system (EnTT) handles concurrent event emission
-- Sinks should handle thread safety if needed
+- Store `string_view` — convert to string if needed
+- Emit `LogEvent` directly — use `Logger` static methods
+- Create sinks manually — let `LoggerManager` handle initialization
