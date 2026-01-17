@@ -10,6 +10,22 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 # =============================================================================
+# Compiler Detection and Configuration
+# =============================================================================
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    message(STATUS "Compiler: Clang ${CMAKE_CXX_COMPILER_VERSION}")
+    add_compile_definitions(COMPILER_CLANG)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    message(STATUS "Compiler: GCC ${CMAKE_CXX_COMPILER_VERSION}")
+    add_compile_definitions(COMPILER_GCC)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    message(STATUS "Compiler: MSVC ${CMAKE_CXX_COMPILER_VERSION}")
+    add_compile_definitions(COMPILER_MSVC)
+else()
+    message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+endif()
+
+# =============================================================================
 # Platform Detection
 # =============================================================================
 if(WIN32)
@@ -91,13 +107,20 @@ target_include_directories(MyGame PRIVATE
 # REUSE_FROM позволяет переиспользовать PCH из BECoreModule без перекомпиляции
 target_precompile_headers(MyGame REUSE_FROM BECoreModule)
 
-# Для MSVC: автоматическое включение PCH через Force Include
+# Автоматическое включение PCH через Force Include
 # Это позволяет использовать PCH без явного #include в каждом файле
+# Получаем путь к PCH header относительно include directories
+# BECoreModule добавляет ${PROJECT_ROOT}/src/Modules в include directories
+# PCH находится в src/Modules/BECore/pch.h, поэтому путь будет BECore/pch.h
 if(MSVC)
-    # Получаем путь к PCH header относительно include directories
-    # BECoreModule добавляет ${PROJECT_ROOT}/src/Modules в include directories
-    # PCH находится в src/Modules/BECore/pch.h, поэтому путь будет BECore/pch.h
+    # MSVC: Force Include через /FI
     target_compile_options(MyGame PRIVATE /FI"BECore/pch.h")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # Clang: Force Include через -include
+    target_compile_options(MyGame PRIVATE -include "BECore/pch.h")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # GCC: Force Include через -include
+    target_compile_options(MyGame PRIVATE -include "BECore/pch.h")
 endif()
 
 target_link_libraries(MyGame PRIVATE 

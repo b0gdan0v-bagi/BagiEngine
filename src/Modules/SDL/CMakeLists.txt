@@ -43,6 +43,19 @@ set_target_properties(SDLModule PROPERTIES FOLDER "Modules")
 # Это критически ускоряет сборку, так как PCH компилируется только один раз
 target_precompile_headers(SDLModule REUSE_FROM BECoreModule)
 
+# Автоматическое включение PCH через Force Include
+# Это позволяет использовать PCH без явного #include в каждом файле
+if(MSVC)
+    # MSVC: Force Include через /FI
+    target_compile_options(SDLModule PRIVATE /FI"BECore/pch.h")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # Clang: Force Include через -include
+    target_compile_options(SDLModule PRIVATE -include "BECore/pch.h")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # GCC: Force Include через -include
+    target_compile_options(SDLModule PRIVATE -include "BECore/pch.h")
+endif()
+
 # Подключаем директории с заголовками
 target_include_directories(SDLModule PUBLIC
     ${PROJECT_ROOT}/src

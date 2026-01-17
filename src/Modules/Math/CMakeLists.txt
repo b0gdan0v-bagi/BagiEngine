@@ -26,10 +26,17 @@ set_target_properties(MathModule PROPERTIES FOLDER "Modules")
 # Это критически ускоряет сборку, так как PCH компилируется только один раз
 target_precompile_headers(MathModule REUSE_FROM BECoreModule)
 
-# Для MSVC: автоматическое включение PCH через Force Include
+# Автоматическое включение PCH через Force Include
 # Это позволяет использовать PCH без явного #include в каждом файле
 if(MSVC)
+    # MSVC: Force Include через /FI
     target_compile_options(MathModule PRIVATE /FI"BECore/pch.h")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # Clang: Force Include через -include
+    target_compile_options(MathModule PRIVATE -include "BECore/pch.h")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # GCC: Force Include через -include
+    target_compile_options(MathModule PRIVATE -include "BECore/pch.h")
 endif()
 
 # Подключаем директории с заголовками
