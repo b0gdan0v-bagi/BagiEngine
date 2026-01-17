@@ -9,12 +9,6 @@ namespace BECore {
 
         namespace ranges = std::ranges;
 
-        template <class Ty>
-        inline constexpr bool hasStrings = false;
-
-        template <class Ty>
-        inline constexpr Ty Tokens = Ty{};
-
         template <auto EnumVal>
         static consteval auto enumName() {
 #ifdef _MSC_VER
@@ -96,6 +90,10 @@ namespace BECore {
                 return it == tokens.end() ? errorValue : it->value;
             }
 
+            static constexpr Enum ErrorValue() noexcept {
+                return errorValue;
+            }
+
             static Enum FromPoolString(PoolString ps) noexcept {
                 auto& cache = GetCache();
                 for (size_t i = 0; i < Count; ++i) {
@@ -124,116 +122,130 @@ namespace BECore {
 
     }  // namespace Impl
 
-#define CORE_ENUM(Enum, macType, ...)                                      \
-    enum class Enum : macType { __VA_ARGS__ };                             \
-    inline auto operator+(Enum e) noexcept {                               \
-        return std::underlying_type_t<Enum>(e);                            \
-    }                                                                      \
-    namespace Impl {                                                       \
-        template <>                                                        \
-        inline constexpr auto hasStrings<Enum> = true;                     \
-        template <>                                                        \
-        inline constexpr auto Tokens<Enum> = [] {                          \
-            using enum Enum;                                               \
-            return Tokenizer<Enum, __VA_ARGS__>{};                         \
-        }();                                                               \
-    }
-
-    // Returns constexpr eastl::string_view
-    template <typename E, typename Enum = std::remove_cvref_t<E>>
-        requires Impl::hasStrings<Enum>
-    inline constexpr eastl::string_view EnumToString(E e) noexcept {
-        return Impl::Tokens<Enum>.ToString(e);
-    }
-
-    // Returns PoolString (runtime, from cached array)
-    template <typename E, typename Enum = std::remove_cvref_t<E>>
-        requires Impl::hasStrings<Enum>
-    inline PoolString EnumToPoolString(E e) noexcept {
-        return Impl::Tokens<Enum>.ToPoolString(e);
-    }
-
-    // Parse eastl::string_view to enum
+    /**
+     * @brief Utility class for enum reflection and conversion
+     *
+     * Provides compile-time and runtime conversion between enum values,
+     * strings, and PoolStrings. Works with enums defined using CORE_ENUM macro.
+     *
+     * @tparam Enum The enum type (must be registered with CORE_ENUM)
+     *
+     * @example
+     * // Define enum in any namespace:
+     * namespace MyGame {
+     *     CORE_ENUM(Direction, uint8_t, North, South, East, West)
+     * }
+     *
+     * // Usage:
+     * using BECore::EnumUtils;
+     * constexpr auto name = EnumUtils<MyGame::Direction>::ToString(MyGame::Direction::North);
+     * auto dir = EnumUtils<MyGame::Direction>::FromString("South");
+     */
     template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline constexpr Enum StringToEnum(eastl::string_view str) noexcept {
-        return Impl::Tokens<Enum>.ToEnum(str);
-    }
-
-    // Parse std::string_view to enum
-    template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline constexpr Enum StringToEnum(std::string_view str) noexcept {
-        return Impl::Tokens<Enum>.ToEnum(eastl::string_view{str.data(), str.size()});
-    }
-
-    // Parse const char* to enum (resolves ambiguity)
-    template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline constexpr Enum StringToEnum(const char* str) noexcept {
-        return Impl::Tokens<Enum>.ToEnum(eastl::string_view{str});
-    }
-
-    // Parse PoolString to enum
-    template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline Enum PoolStringToEnum(PoolString ps) noexcept {
-        return Impl::Tokens<Enum>.FromPoolString(ps);
-    }
-
-    // Returns std::optional<Enum> for safe parsing (eastl::string_view)
-    template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline constexpr std::optional<Enum> EnumCast(eastl::string_view str) noexcept {
-        auto result = StringToEnum<Enum>(str);
-        using Ty = std::underlying_type_t<Enum>;
-        constexpr Enum errorValue{static_cast<Enum>(std::numeric_limits<Ty>::max())};
-        if (result == errorValue) {
-            return std::nullopt;
+    class EnumUtils {
+        static constexpr const auto& Tok() {
+            return *EnumTokenizerPtr(Enum{});  // ADL finds the friend function
         }
-        return result;
-    }
 
-    // Returns std::optional<Enum> for safe parsing (std::string_view)
-    template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline constexpr std::optional<Enum> EnumCast(std::string_view str) noexcept {
-        return EnumCast<Enum>(eastl::string_view{str.data(), str.size()});
-    }
+    public:
+        /// Returns the number of enum values
+        static constexpr size_t Count() noexcept {
+            return Tok().EnumCount;
+        }
 
-    // Returns std::optional<Enum> for safe parsing (const char*)
-    template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline constexpr std::optional<Enum> EnumCast(const char* str) noexcept {
-        return EnumCast<Enum>(eastl::string_view{str});
-    }
+        /// Convert enum to string_view (constexpr)
+        static constexpr eastl::string_view ToString(Enum e) noexcept {
+            return Tok().ToString(e);
+        }
 
-    // Get count of enum values
-    template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline constexpr size_t EnumCount() noexcept {
-        return Impl::Tokens<Enum>.EnumCount;
-    }
+        /// Convert enum to PoolString (runtime, cached)
+        static PoolString ToPoolString(Enum e) noexcept {
+            return Tok().ToPoolString(e);
+        }
 
-    // Get all PoolStrings for enum (cached array)
-    template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline const auto& EnumPoolStrings() noexcept {
-        return Impl::Tokens<Enum>.GetPoolStrings();
-    }
+        /// Parse eastl::string_view to enum
+        static constexpr Enum FromString(eastl::string_view str) noexcept {
+            return Tok().ToEnum(str);
+        }
 
-    // Get all string_views for enum (compile-time)
-    template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline constexpr const auto& EnumNames() noexcept {
-        return Impl::Tokens<Enum>.GetNames();
-    }
+        /// Parse std::string_view to enum
+        static constexpr Enum FromString(std::string_view str) noexcept {
+            return Tok().ToEnum(eastl::string_view{str.data(), str.size()});
+        }
 
-    // Get all values for enum (compile-time)
-    template <typename Enum>
-        requires Impl::hasStrings<Enum>
-    inline constexpr const auto& EnumValues() noexcept {
-        return Impl::Tokens<Enum>.GetValues();
-    }
+        /// Parse const char* to enum
+        static constexpr Enum FromString(const char* str) noexcept {
+            return Tok().ToEnum(eastl::string_view{str});
+        }
+
+        /// Parse PoolString to enum
+        static Enum FromPoolString(PoolString ps) noexcept {
+            return Tok().FromPoolString(ps);
+        }
+
+        /// Safe cast from eastl::string_view to enum (returns nullopt on failure)
+        static constexpr std::optional<Enum> Cast(eastl::string_view str) noexcept {
+            auto result = FromString(str);
+            if (result == Tok().ErrorValue()) {
+                return std::nullopt;
+            }
+            return result;
+        }
+
+        /// Safe cast from std::string_view to enum (returns nullopt on failure)
+        static constexpr std::optional<Enum> Cast(std::string_view str) noexcept {
+            return Cast(eastl::string_view{str.data(), str.size()});
+        }
+
+        /// Safe cast from const char* to enum (returns nullopt on failure)
+        static constexpr std::optional<Enum> Cast(const char* str) noexcept {
+            return Cast(eastl::string_view{str});
+        }
+
+        /// Get all enum names as constexpr array
+        static constexpr const auto& Names() noexcept {
+            return Tok().GetNames();
+        }
+
+        /// Get all enum values as constexpr array
+        static constexpr const auto& Values() noexcept {
+            return Tok().GetValues();
+        }
+
+        /// Get all PoolStrings for enum values (cached)
+        static const auto& PoolStrings() noexcept {
+            return Tok().GetPoolStrings();
+        }
+    };
 
 }  // namespace BECore
+
+/**
+ * @brief Macro to define an enum with reflection support
+ *
+ * Creates an enum class with automatic string conversion capabilities.
+ * Can be used in any namespace.
+ *
+ * @param Enum The enum name
+ * @param macType The underlying type (e.g., uint8_t)
+ * @param ... Enum values
+ *
+ * @example
+ * namespace MyGame {
+ *     CORE_ENUM(Direction, uint8_t, North, South, East, West)
+ * }
+ */
+#define CORE_ENUM(Enum, macType, ...)                                          \
+    enum class Enum : macType { __VA_ARGS__ };                                 \
+    inline auto operator+(Enum e) noexcept {                                   \
+        return std::underlying_type_t<Enum>(e);                                \
+    }                                                                          \
+    namespace EnumImpl_##Enum {                                                \
+        inline constexpr auto tokenizer = [] {                                 \
+            using enum Enum;                                                   \
+            return ::BECore::Impl::Tokenizer<Enum, __VA_ARGS__>{};             \
+        }();                                                                   \
+    }                                                                          \
+    consteval const auto* EnumTokenizerPtr(Enum) {                             \
+        return &EnumImpl_##Enum::tokenizer;                                    \
+    }
