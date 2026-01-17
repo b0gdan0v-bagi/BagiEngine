@@ -3,7 +3,6 @@
 #include <BECore/Tests/PoolStringTest.h>
 #include <BECore/Tests/FormatTest.h>
 #include <BECore/Config/XmlConfig.h>
-#include <iostream>
 
 namespace BECore {
 
@@ -12,7 +11,7 @@ namespace BECore {
         constexpr std::string_view configPath = "config/TestsConfig.xml";
 
         if (!config.LoadFromVirtualPath(configPath)) {
-            std::cout << "[TestManager] Config not found: " << configPath << std::endl;
+            LOG_ERROR("[TestManager] Config not found: {}", configPath);
             return;
         }
 
@@ -50,18 +49,18 @@ namespace BECore {
                 continue;
             }
 
-            std::cout << "[TestManager] Running: " << testPtr->GetName() << std::endl;
+            LOG_INFO("[TestManager] Running: {}", testPtr->GetName());
 
             if (testPtr->Run()) {
                 ++passed;
-                std::cout << "[TestManager] PASSED: " << testPtr->GetName() << std::endl;
+                LOG_INFO("[TestManager] PASSED: {}", testPtr->GetName());
             } else {
                 ++failed;
-                std::cout << "[TestManager] FAILED: " << testPtr->GetName() << std::endl;
+                LOG_ERROR("[TestManager] FAILED: {}", testPtr->GetName());
             }
         }
 
-        std::cout << "[TestManager] Results: " << passed << " passed, " << failed << " failed" << std::endl;
+        LOG_INFO("[TestManager] Results: {} passed, {} failed", passed, failed);
     }
 
     IntrusivePtr<ITest> TestManager::CreateTestByType(TestType type) {

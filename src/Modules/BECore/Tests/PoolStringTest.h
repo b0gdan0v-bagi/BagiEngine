@@ -2,8 +2,6 @@
 
 #include <BECore/Tests/ITest.h>
 #include <BECore/PoolString/PoolStringChain.h>
-#include <BECore/Assert/AssertMacros.h>
-#include <iostream>
 
 namespace BECore::Tests {
 
@@ -25,7 +23,7 @@ namespace BECore::Tests {
             static_assert(PoolStringChain("").Empty());
             static_assert(PoolStringChain("hello").Size() == 5);
 
-            std::cout << "[PoolStringTest] Starting runtime tests..." << std::endl;
+            LOG_INFO("[PoolStringTest] Starting runtime tests...");
 
             // --- Runtime tests ---
 
@@ -71,7 +69,7 @@ namespace BECore::Tests {
             ASSERT(a.GetHash() == b.GetHash());
             ASSERT(c.GetHash() == d.GetHash());
 
-            std::cout << "[PoolStringTest] All tests passed!" << std::endl;
+            LOG_INFO("[PoolStringTest] All tests passed!");
             return true;
         }
     };

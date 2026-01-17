@@ -1,10 +1,6 @@
 #pragma once
 
 #include <BECore/Tests/ITest.h>
-#include <BECore/Format/Format.h>
-#include <BECore/Assert/AssertMacros.h>
-#include <EASTL/fixed_string.h>
-#include <iostream>
 
 namespace BECore::Tests {
 
@@ -21,7 +17,7 @@ namespace BECore::Tests {
         }
 
         bool Run() override {
-            std::cout << "[FormatTest] Starting tests..." << std::endl;
+            LOG_INFO("[FormatTest] Starting tests...");
 
             // 1. Basic formatting to eastl::string
             eastl::string s1 = BECore::Format("Hello, {}!", "World");

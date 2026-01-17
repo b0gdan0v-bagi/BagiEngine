@@ -11,7 +11,7 @@ namespace BECore {
 
         template <typename... Args>
         static void Log(LogLevel level, fmt::format_string<Args...> format, Args&&... args) {
-            eastl::string message = fmt::format(format, std::forward<Args>(args)...);
+            eastl::string message = Format(format, std::forward<Args>(args)...);
             LogEvent::Emit(level, message);
         }
 

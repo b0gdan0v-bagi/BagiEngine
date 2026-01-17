@@ -2,11 +2,8 @@
 
 #include <BECore/Assert/PlatformDebug.h>
 #include <BECore/Config/XmlConfig.h>
-#include <BECore/Logger/Logger.h>
 
 #include <EASTL/sort.h>
-#include <EASTL/string_view.h>
-#include <fmt/core.h>
 
 namespace BECore {
 
