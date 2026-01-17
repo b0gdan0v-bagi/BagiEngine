@@ -11,13 +11,16 @@ namespace BECore {
 
         template <auto EnumVal>
         static consteval auto enumName() {
-#ifdef _MSC_VER
+#if defined(__clang__)
+            // Clang (including ClangCL on Windows): auto Impl::enumName() [EnumVal = align::CM]
+            constexpr std::string_view sv{__PRETTY_FUNCTION__};
+            constexpr auto last = sv.find_last_of("]");
+#elif defined(_MSC_VER)
             // MSVC: auto __cdecl Impl::enumName<align::CM>(void)
             constexpr std::string_view sv{__FUNCSIG__};  // NOLINT(clang-diagnostic-language-extension-token)
             constexpr size_t last = sv.find_last_of(">");
 #else
-            // clang: auto Impl::name() [E = align::CM]
-            // gcc: consteval auto Impl::name() [with auto E = align::CM]
+            // GCC: consteval auto Impl::enumName() [with auto EnumVal = align::CM]
             constexpr std::string_view sv{__PRETTY_FUNCTION__};
             constexpr auto last = sv.find_last_of("]");
 #endif
