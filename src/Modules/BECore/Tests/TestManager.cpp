@@ -2,6 +2,7 @@
 
 #include <BECore/Tests/PoolStringTest.h>
 #include <BECore/Tests/FormatTest.h>
+#include <BECore/Tests/EnumUtilsTest.h>
 #include <BECore/Config/XmlConfig.h>
 
 namespace BECore {
@@ -69,6 +70,8 @@ namespace BECore {
                 return BECore::New<Tests::PoolStringTest>();
             case TestType::FormatTest:
                 return BECore::New<Tests::FormatTest>();
+            case TestType::EnumUtilsTest:
+                return BECore::New<Tests::EnumUtilsTest>();
             default:
                 return {};
         }

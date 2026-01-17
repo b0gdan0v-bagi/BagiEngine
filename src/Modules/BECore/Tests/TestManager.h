@@ -8,7 +8,7 @@ namespace BECore {
     /**
      * @brief Enum defining available test types
      */
-    CORE_ENUM(TestType, uint8_t, PoolStringTest, FormatTest)
+    CORE_ENUM(TestType, uint8_t, PoolStringTest, FormatTest, EnumUtilsTest)
 
     /**
      * @brief Manager for running engine tests based on XML configuration
