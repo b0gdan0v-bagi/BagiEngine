@@ -1,33 +1,19 @@
 #!/bin/bash
-# Script to open BagiEngine workspace in Cursor (macOS/Linux)
-# This .command file can be double-clicked on macOS
+# BagiEngine Launcher (macOS)
 
-echo "Opening BagiEngine workspace in Cursor..."
+cd "$(dirname "$0")"
 
-# Get the directory where the script is located
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-WORKSPACE_PATH="$SCRIPT_DIR/BagiEngine.code-workspace"
-
-# Try to find and use Cursor
-if command -v cursor &> /dev/null; then
-    echo "Found Cursor in PATH"
-    cursor "$WORKSPACE_PATH"
-elif [ -d "/Applications/Cursor.app" ]; then
-    echo "Found Cursor in Applications folder"
-    open -a "Cursor" "$WORKSPACE_PATH"
-elif [ -f "/usr/local/bin/cursor" ]; then
-    echo "Found Cursor in /usr/local/bin"
-    /usr/local/bin/cursor "$WORKSPACE_PATH"
-elif [ -f "$HOME/.cursor/cursor" ]; then
-    echo "Found Cursor in home directory"
-    "$HOME/.cursor/cursor" "$WORKSPACE_PATH"
-else
-    echo "Cursor not found in standard paths, trying default application..."
-    open "$WORKSPACE_PATH"
+# Setup venv if needed
+if [ ! -f ".venv/bin/python" ]; then
+    echo "[INFO] Setting up Python virtual environment..."
+    source CI/setup_venv.sh
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to setup virtual environment"
+        read -p "Press any key to continue..."
+        exit 1
+    fi
 fi
 
-echo ""
-echo "Workspace opened successfully!"
-
-# Keep terminal open for a moment to see the message
-sleep 2
+# Activate and run launcher
+source .venv/bin/activate
+python -m CI.launcher.main

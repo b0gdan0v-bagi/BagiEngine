@@ -1,32 +1,17 @@
 @echo off
-REM Script to open BagiEngine workspace in Cursor (Windows CMD)
+cd /d "%~dp0"
 
-echo Opening BagiEngine workspace in Cursor...
-
-REM Try to find Cursor in common installation paths
-if exist "%LOCALAPPDATA%\Programs\Cursor\Cursor.exe" (
-    "%LOCALAPPDATA%\Programs\Cursor\Cursor.exe" "%~dp0BagiEngine.code-workspace"
-    goto :end
+:: Setup venv if needed
+if not exist ".venv\Scripts\python.exe" (
+    echo [INFO] Setting up Python virtual environment...
+    call CI\setup_venv.bat
+    if %ERRORLEVEL% NEQ 0 (
+        echo [ERROR] Failed to setup virtual environment
+        pause
+        exit /b 1
+    )
 )
 
-if exist "%PROGRAMFILES%\Cursor\Cursor.exe" (
-    "%PROGRAMFILES%\Cursor\Cursor.exe" "%~dp0BagiEngine.code-workspace"
-    goto :end
-)
-
-REM If Cursor is in PATH, use it directly
-where cursor >nul 2>nul
-if %ERRORLEVEL% EQU 0 (
-    cursor "%~dp0BagiEngine.code-workspace"
-    goto :end
-)
-
-REM Fallback: try to open with default application
-echo Cursor not found in standard paths, trying default application...
-start "" "%~dp0BagiEngine.code-workspace"
-goto :end
-
-:end
-echo.
-echo Workspace opened successfully!
-pause
+:: Activate and run launcher
+call .venv\Scripts\activate.bat
+python -m CI.launcher.main

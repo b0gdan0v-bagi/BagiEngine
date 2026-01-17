@@ -20,3 +20,12 @@
 *.pdb
 *.obj
 *.log
+
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Launcher config (user-specific)
+launcher_config.json
