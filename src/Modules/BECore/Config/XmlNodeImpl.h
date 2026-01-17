@@ -76,7 +76,7 @@ namespace BECore {
             } else if constexpr (std::is_same_v<T, std::string_view>) {
                 return s;
             } else if constexpr (std::is_enum_v<T>) {
-                return EnumCast<T>(s);
+                return EnumUtils<T>::Cast(s);
             } else if constexpr (std::is_same_v<T, Math::Color>) {
                 return Math::Color::ParseColorFromString(s);
             }
