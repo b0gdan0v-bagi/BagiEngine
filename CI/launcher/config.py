@@ -48,7 +48,8 @@ class Config:
         "build_configurations": [
             {"name": "MSVC Debug", "compiler": "MSVC", "generator": "Ninja", "build_type": "Debug", "enabled": True},
             {"name": "Clang Debug", "compiler": "Clang", "generator": "Ninja", "build_type": "Debug", "enabled": False}
-        ]
+        ],
+        "pipeline_step_states": {}  # Checkbox states for pipeline builder
     }
     
     def __init__(self, config_path: Path):
@@ -135,3 +136,13 @@ class Config:
     def build_configurations(self, value: list[BuildConfiguration]) -> None:
         """Set build configurations."""
         self.set("build_configurations", [c.to_dict() for c in value])
+    
+    @property
+    def pipeline_step_states(self) -> dict[str, bool]:
+        """Get pipeline step checkbox states."""
+        return self.get("pipeline_step_states", {})
+    
+    @pipeline_step_states.setter
+    def pipeline_step_states(self, value: dict[str, bool]) -> None:
+        """Set pipeline step checkbox states."""
+        self.set("pipeline_step_states", value)

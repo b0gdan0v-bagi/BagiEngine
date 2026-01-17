@@ -589,6 +589,7 @@ class MainWindow(QMainWindow):
                 action = available[action_id]
                 checkbox = QCheckBox(action.name)
                 checkbox.setProperty("action_id", action_id)
+                checkbox.stateChanged.connect(self._on_checkbox_changed)
                 self.step_checkboxes[action_id] = checkbox
                 layout.addWidget(checkbox)
         
@@ -601,6 +602,7 @@ class MainWindow(QMainWindow):
                 action = available[action_id]
                 checkbox = QCheckBox(action.name)
                 checkbox.setProperty("action_id", action_id)
+                checkbox.stateChanged.connect(self._on_checkbox_changed)
                 self.step_checkboxes[action_id] = checkbox
                 layout.addWidget(checkbox)
         
@@ -671,6 +673,7 @@ class MainWindow(QMainWindow):
                 checkbox = QCheckBox(display_name)
                 checkbox.setProperty("action_id", action_id)
                 checkbox.setProperty("config_name", config.name)
+                checkbox.stateChanged.connect(self._on_checkbox_changed)
                 self.step_checkboxes[checkbox_key] = checkbox
                 self._pipeline_layout.insertWidget(insertion_index, checkbox)
                 insertion_index += 1
@@ -699,8 +702,27 @@ class MainWindow(QMainWindow):
         if idx >= 0:
             self.preset_combo.setCurrentIndex(idx)
         
-        self._load_pipeline_preset(self.config.last_pipeline)
+        # Don't load preset automatically - load saved checkbox states instead
         self._rebuild_config_checkboxes()
+        self._load_checkbox_states()
+    
+    def _on_checkbox_changed(self):
+        """Handle checkbox state change - save to config immediately."""
+        self._save_checkbox_states()
+    
+    def _save_checkbox_states(self):
+        """Save current checkbox states to config."""
+        states = {}
+        for checkbox_key, checkbox in self.step_checkboxes.items():
+            states[checkbox_key] = checkbox.isChecked()
+        self.config.pipeline_step_states = states
+    
+    def _load_checkbox_states(self):
+        """Load checkbox states from config."""
+        states = self.config.pipeline_step_states
+        for checkbox_key, checkbox in self.step_checkboxes.items():
+            if checkbox_key in states:
+                checkbox.setChecked(states[checkbox_key])
     
     def _load_pipeline_preset(self, preset_name: str):
         """Load a pipeline preset by checking the appropriate checkboxes."""
@@ -870,6 +892,8 @@ class MainWindow(QMainWindow):
         dialog.exec()
         # Rebuild config checkboxes after settings may have changed
         self._rebuild_config_checkboxes()
+        # Restore checkbox states after rebuilding
+        self._load_checkbox_states()
     
     def _clean_build(self):
         """Clean build directory for current compiler configuration."""
