@@ -8,10 +8,16 @@ get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
 
 # EnTT - зависимость модуля Events
 include(FetchContent)
+
+# Восстанавливаем состояние FetchContent для существующих исходников
+restore_fetchcontent_if_exists(entt)
+
 FetchContent_Declare(
   entt
   GIT_REPOSITORY https://github.com/skypjack/entt.git
   GIT_TAG v3.13.2
+  GIT_SHALLOW TRUE
+  GIT_PROGRESS TRUE
 )
 
 FetchContent_MakeAvailable(entt)

@@ -10,6 +10,28 @@ project(MySDLGame)
 set(FETCHCONTENT_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/_deps" CACHE PATH "Directory for FetchContent dependencies" FORCE)
 message(STATUS "FetchContent dependencies will be stored in: ${FETCHCONTENT_BASE_DIR}")
 
+# После первого успешного clone не пытаться обновлять репозитории
+# Это ускоряет повторную конфигурацию
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Don't update FetchContent repos after first clone")
+
+# =============================================================================
+# FetchContent Helper Macro
+# =============================================================================
+# Макрос для восстановления состояния populated если исходники уже существуют.
+# Это позволяет избежать повторного клонирования после очистки build директории.
+include(FetchContent)
+macro(restore_fetchcontent_if_exists name)
+    string(TOLOWER "${name}" _name_lower)
+    set(_src_dir "${FETCHCONTENT_BASE_DIR}/${_name_lower}-src")
+    if(EXISTS "${_src_dir}" AND IS_DIRECTORY "${_src_dir}")
+        # Исходники уже существуют - восстанавливаем состояние populated
+        set(FETCHCONTENT_SOURCE_DIR_${name} "${_src_dir}" CACHE PATH "" FORCE)
+        message(STATUS "FetchContent: Reusing existing ${name} sources from ${_src_dir}")
+    endif()
+    unset(_src_dir)
+    unset(_name_lower)
+endmacro()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

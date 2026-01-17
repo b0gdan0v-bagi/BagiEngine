@@ -24,12 +24,24 @@ include(FetchContent)
 # Устанавливаем минимальную версию политики для совместимости со старыми CMakeLists.txt в зависимостях (например, EABase, pugixml)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
 
+# Восстанавливаем состояние FetchContent для существующих исходников
+restore_fetchcontent_if_exists(SDL3)
+restore_fetchcontent_if_exists(imgui)
+restore_fetchcontent_if_exists(magic_enum)
+restore_fetchcontent_if_exists(pugixml)
+restore_fetchcontent_if_exists(eabase)
+restore_fetchcontent_if_exists(eastl)
+restore_fetchcontent_if_exists(fmt)
+restore_fetchcontent_if_exists(entt)
+
 # SDL3 - нужен для компиляции ImGui SDL3 бэкендов
 # FetchContent_Declare здесь, но MakeAvailable будет вызван только если нужен для imgui
 FetchContent_Declare(
   SDL3
   GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
   GIT_TAG main
+  GIT_SHALLOW TRUE
+  GIT_PROGRESS TRUE
 )
 
 # ImGui
@@ -37,6 +49,8 @@ FetchContent_Declare(
   imgui
   GIT_REPOSITORY https://github.com/ocornut/imgui.git
   GIT_TAG docking
+  GIT_SHALLOW TRUE
+  GIT_PROGRESS TRUE
 )
 
 FetchContent_MakeAvailable(imgui)
@@ -46,6 +60,8 @@ FetchContent_Declare(
   magic_enum
   GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
   GIT_TAG v0.9.5
+  GIT_SHALLOW TRUE
+  GIT_PROGRESS TRUE
 )
 
 FetchContent_MakeAvailable(magic_enum)
@@ -55,6 +71,8 @@ FetchContent_Declare(
   pugixml
   GIT_REPOSITORY https://github.com/zeux/pugixml.git
   GIT_TAG v1.14
+  GIT_SHALLOW TRUE
+  GIT_PROGRESS TRUE
 )
 
 set(EA_KITS_VERBOSE OFF CACHE BOOL "" FORCE)
@@ -68,6 +86,8 @@ FetchContent_Declare(
   eabase
   GIT_REPOSITORY https://github.com/electronicarts/EABase.git
   GIT_TAG master
+  GIT_SHALLOW TRUE
+  GIT_PROGRESS TRUE
   GIT_SUBMODULES ""  # Опустошаем список субмодулей, чтобы он не лез в тесты
 )
 
@@ -78,6 +98,8 @@ FetchContent_Declare(
   eastl
   GIT_REPOSITORY https://github.com/electronicarts/EASTL.git
   GIT_TAG master
+  GIT_SHALLOW TRUE
+  GIT_PROGRESS TRUE
   GIT_SUBMODULES ""
 )
 
@@ -88,6 +110,8 @@ FetchContent_Declare(
   fmt
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
   GIT_TAG 11.0.2
+  GIT_SHALLOW TRUE
+  GIT_PROGRESS TRUE
 )
 
 FetchContent_MakeAvailable(fmt)
@@ -98,6 +122,8 @@ FetchContent_Declare(
   entt
   GIT_REPOSITORY https://github.com/skypjack/entt.git
   GIT_TAG v3.13.2
+  GIT_SHALLOW TRUE
+  GIT_PROGRESS TRUE
 )
 
 FetchContent_MakeAvailable(entt)
