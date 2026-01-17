@@ -1,5 +1,6 @@
 #include "EnumUtilsTest.h"
 
+#include <BECore/Format/Format.h>
 #include <BECore/Logger/Logger.h>
 
 namespace BECore::Tests {
@@ -22,6 +23,7 @@ namespace BECore::Tests {
         TestCast();
         TestCount();
         TestArrays();
+        TestFmtFormatting();
 
         LOG_INFO("[EnumUtilsTest] All tests passed!");
         return true;
@@ -163,6 +165,35 @@ namespace BECore::Tests {
         ASSERT(poolStrings[3] == ColorUtils::ToPoolString(TestColor::Yellow));
 
         LOG_INFO("[EnumUtilsTest] Arrays tests OK");
+    }
+
+    void EnumUtilsTest::TestFmtFormatting() {
+        // Test basic fmt formatting
+        eastl::string s1 = Format("Color: {}", TestColor::Red);
+        ASSERT(s1 == "Color: Red", "fmt formatting Red failed");
+
+        eastl::string s2 = Format("Color: {}", TestColor::Green);
+        ASSERT(s2 == "Color: Green", "fmt formatting Green failed");
+
+        eastl::string s3 = Format("Color: {}", TestColor::Blue);
+        ASSERT(s3 == "Color: Blue", "fmt formatting Blue failed");
+
+        eastl::string s4 = Format("Color: {}", TestColor::Yellow);
+        ASSERT(s4 == "Color: Yellow", "fmt formatting Yellow failed");
+
+        // Test multiple enums in one format string
+        eastl::string s5 = Format("Colors: {}, {}, {}", TestColor::Red, TestColor::Green, TestColor::Blue);
+        ASSERT(s5 == "Colors: Red, Green, Blue", "fmt formatting multiple enums failed");
+
+        // Test mixed formatting with other types
+        eastl::string s6 = Format("Color {} at index {}", TestColor::Yellow, 3);
+        ASSERT(s6 == "Color Yellow at index 3", "fmt formatting mixed types failed");
+
+        // Test with temporary enum value
+        eastl::string s7 = Format("Selected: {}", static_cast<TestColor>(2));  // Blue
+        ASSERT(s7 == "Selected: Blue", "fmt formatting temporary enum failed");
+
+        LOG_INFO("[EnumUtilsTest] fmt formatting tests OK");
     }
 
 }  // namespace BECore::Tests

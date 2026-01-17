@@ -68,6 +68,7 @@ namespace BECore::Tests {
         void TestCast();
         void TestCount();
         void TestArrays();
+        void TestFmtFormatting();
     };
 
 }  // namespace BECore::Tests

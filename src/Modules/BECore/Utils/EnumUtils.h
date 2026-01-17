@@ -2,6 +2,8 @@
 
 #include <EASTL/array.h>
 #include <EASTL/string_view.h>
+#include <string_view>
+#include <fmt/format.h>
 
 namespace BECore {
 
@@ -222,6 +224,36 @@ namespace BECore {
     };
 
 }  // namespace BECore
+
+// fmt support for EnumUtils-enabled enums
+
+namespace BECore::Detail {
+    // Helper trait to check if EnumUtils is available for a type
+    template <typename T, typename = void>
+    struct HasEnumUtils : std::false_type {};
+
+    template <typename T>
+    struct HasEnumUtils<T, std::enable_if_t<std::is_enum_v<T>>> : std::true_type {};
+}  // namespace BECore::Detail
+
+/**
+ * @brief fmt::formatter specialization for enums with EnumUtils support
+ *
+ * Enables fmt formatting for any enum type that supports EnumUtils.
+ * Uses EnumUtils::ToString() to convert enum to string representation.
+ * 
+ * Uses enable_if in the CharT template parameter to enable the specialization
+ * only for enum types that support EnumUtils::ToString().
+ */
+template <typename Enum>
+struct fmt::formatter<Enum, 
+    std::enable_if_t<BECore::Detail::HasEnumUtils<Enum>::value, char>> 
+    : fmt::formatter<std::string_view> {
+    auto format(Enum e, fmt::format_context& ctx) const -> decltype(ctx.out()) {
+        auto sv = BECore::EnumUtils<Enum>::ToString(e);
+        return fmt::formatter<std::string_view>::format(std::string_view(sv.data(), sv.size()), ctx);
+    }
+};
 
 /**
  * @brief Macro to define an enum with reflection support
