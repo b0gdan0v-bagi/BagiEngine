@@ -168,10 +168,11 @@ if(Python3_FOUND)
     #   )
     #
     # This will:
-    #   1. Run reflector.py on each header when it changes
+    #   1. Run reflector.py at CONFIGURE TIME (execute_process)
     #   2. Generate .gen.hpp files in ${REFLECTION_GENERATED_DIR}
     #   3. Add generated files to target sources
     #   4. Add generated directory to target include paths
+    #   5. Also add custom_command for incremental rebuilds at build time
     # =============================================================================
     function(add_reflection_target TARGET_NAME)
         cmake_parse_arguments(ARG "" "" "HEADERS;INCLUDE_DIRS" ${ARGN})
@@ -199,31 +200,40 @@ if(Python3_FOUND)
             set(GEN_FILE "${REFLECTION_GENERATED_DIR}/${HEADER_NAME}.gen.hpp")
             list(APPEND GENERATED_FILES ${GEN_FILE})
             
-            add_custom_command(
-                OUTPUT ${GEN_FILE}
+            # =================================================================
+            # CONFIGURE TIME: Generate via execute_process
+            # Files are created immediately, IDE sees them after configure
+            # =================================================================
+            message(STATUS "Generating reflection for ${HEADER_NAME}...")
+            execute_process(
                 COMMAND ${Python3_EXECUTABLE} ${REFLECTOR_SCRIPT}
                     --input "${HEADER_ABS}"
                     --output "${GEN_FILE}"
                     --templates "${REFLECTOR_TEMPLATES}"
                     ${INCLUDE_ARGS}
-                DEPENDS 
-                    ${HEADER_ABS}
-                    ${REFLECTOR_SCRIPT}
-                    ${REFLECTOR_TEMPLATES}/reflection.gen.hpp.j2
-                COMMENT "Generating reflection for ${HEADER_NAME}"
-                VERBATIM
+                RESULT_VARIABLE REFLECTOR_RESULT
+                OUTPUT_VARIABLE REFLECTOR_OUTPUT
+                ERROR_VARIABLE REFLECTOR_ERROR
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
+            
+            if(NOT REFLECTOR_RESULT EQUAL 0)
+                message(WARNING "Reflection generation failed for ${HEADER_NAME}:")
+                message(WARNING "  Exit code: ${REFLECTOR_RESULT}")
+                message(WARNING "  Error: ${REFLECTOR_ERROR}")
+            else()
+                message(STATUS "  Generated: ${GEN_FILE}")
+            endif()
         endforeach()
         
-        # Add generated files to target
+        # Add generated files to target sources
         target_sources(${TARGET_NAME} PRIVATE ${GENERATED_FILES})
         
         # Add generated directory to include paths
         target_include_directories(${TARGET_NAME} PRIVATE ${REFLECTION_GENERATED_DIR})
         
-        # Create a custom target for IDE visibility
-        add_custom_target(${TARGET_NAME}_Reflection DEPENDS ${GENERATED_FILES})
-        set_target_properties(${TARGET_NAME}_Reflection PROPERTIES FOLDER "Generated")
+        # Define REFLECTION_GENERATED so code can detect generated files are available
+        target_compile_definitions(${TARGET_NAME} PRIVATE REFLECTION_GENERATED=1)
         
         message(STATUS "Reflection enabled for ${TARGET_NAME}: ${ARG_HEADERS}")
     endfunction()

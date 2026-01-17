@@ -59,9 +59,9 @@ struct ReflectionTraits<{{ cls.qualified_name }}> {
     static constexpr eastl::string_view name = "{{ cls.name }}";
     
     static constexpr auto fields = std::make_tuple(
-        {%- for field in cls.fields %}
+{% for field in cls.fields %}
         FieldInfo{ eastl::string_view{"{{ field.name }}"}, &{{ cls.qualified_name }}::{{ field.name }} }{{ "," if not loop.last else "" }}
-        {%- endfor %}
+{% endfor %}
     );
     
     static constexpr size_t field_count = {{ cls.fields | length }};

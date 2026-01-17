@@ -2,9 +2,12 @@
 """
 BagiEngine Reflection Code Generator
 
-Parses C++ headers using libclang to extract types marked with reflection macros
+Parses C++ headers using regex patterns to extract types marked with reflection macros
 (BE_REFLECT_CLASS, BE_REFLECT_FIELD, BE_REFLECT_ENUM) and generates reflection
 metadata code using Jinja2 templates.
+
+This is a simplified regex-based approach that works without requiring full
+C++ parsing or all include paths.
 
 Usage:
     python reflector.py --input Player.hpp --output Player.gen.hpp --templates ./templates
@@ -16,13 +19,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
-
-try:
-    from clang.cindex import Index, CursorKind, Config
-except ImportError:
-    print("Error: libclang not found. Install with: pip install libclang")
-    sys.exit(1)
+from typing import List, Optional, Tuple
 
 try:
     from jinja2 import Environment, FileSystemLoader
@@ -36,8 +33,6 @@ class FieldData:
     """Information about a reflected field."""
     name: str
     type_name: str
-    is_pointer: bool = False
-    is_reference: bool = False
 
 
 @dataclass
@@ -53,7 +48,6 @@ class ClassData:
 class EnumValue:
     """Information about an enum constant."""
     name: str
-    value: Optional[int] = None
 
 
 @dataclass
@@ -66,187 +60,141 @@ class EnumData:
     values: List[EnumValue] = field(default_factory=list)
 
 
-def has_annotation(cursor, annotation_name: str) -> bool:
-    """Check if a cursor has a specific clang::annotate attribute."""
-    for child in cursor.get_children():
-        if child.kind == CursorKind.ANNOTATE_ATTR:
-            if child.displayname == annotation_name:
-                return True
-    return False
-
-
-def has_msvc_marker(cursor, marker_name: str, source_content: str) -> bool:
-    """Check if a cursor has a MSVC-style comment marker (/* marker */)."""
-    if cursor.location.file is None:
-        return False
+def parse_header_regex(content: str) -> Tuple[List[ClassData], List[EnumData]]:
+    """
+    Parse header file using regex patterns to find reflected types.
     
-    # Get the line containing the cursor
-    try:
-        lines = source_content.split('\n')
-        line_num = cursor.location.line - 1
-        if 0 <= line_num < len(lines):
-            line = lines[line_num]
-            # Check for comment marker pattern
-            pattern = rf'/\*\s*{marker_name}\s*\*/'
-            return bool(re.search(pattern, line))
-    except Exception:
-        pass
-    return False
-
-
-def is_reflected_class(cursor, source_content: str) -> bool:
-    """Check if a class/struct is marked for reflection."""
-    return (has_annotation(cursor, "reflect_class") or 
-            has_msvc_marker(cursor, "BE_REFLECT_CLASS", source_content))
-
-
-def is_reflected_field(cursor, source_content: str) -> bool:
-    """Check if a field is marked for reflection."""
-    return (has_annotation(cursor, "reflect_field") or 
-            has_msvc_marker(cursor, "BE_REFLECT_FIELD", source_content))
-
-
-def is_reflected_enum(cursor, source_content: str) -> bool:
-    """Check if an enum is marked for reflection."""
-    return (has_annotation(cursor, "reflect_enum") or 
-            has_msvc_marker(cursor, "BE_REFLECT_ENUM", source_content))
-
-
-def get_namespace(cursor) -> str:
-    """Get the full namespace path for a cursor."""
-    namespaces = []
-    parent = cursor.semantic_parent
-    while parent:
-        if parent.kind == CursorKind.NAMESPACE:
-            namespaces.append(parent.displayname)
-        parent = parent.semantic_parent
-    namespaces.reverse()
-    return "::".join(namespaces)
-
-
-def get_qualified_name(cursor) -> str:
-    """Get the fully qualified name of a cursor."""
-    namespace = get_namespace(cursor)
-    if namespace:
-        return f"{namespace}::{cursor.displayname}"
-    return cursor.displayname
-
-
-def extract_field_info(cursor) -> FieldData:
-    """Extract field information from a field declaration cursor."""
-    type_name = cursor.type.spelling
-    is_pointer = cursor.type.kind.name == 'POINTER'
-    is_reference = cursor.type.kind.name == 'LVALUEREFERENCE'
-    
-    return FieldData(
-        name=cursor.displayname,
-        type_name=type_name,
-        is_pointer=is_pointer,
-        is_reference=is_reference
-    )
-
-
-def extract_class_info(cursor, source_content: str) -> ClassData:
-    """Extract class information including reflected fields."""
-    class_data = ClassData(
-        name=cursor.displayname,
-        qualified_name=get_qualified_name(cursor),
-        namespace=get_namespace(cursor)
-    )
-    
-    for child in cursor.get_children():
-        if child.kind == CursorKind.FIELD_DECL:
-            if is_reflected_field(child, source_content):
-                class_data.fields.append(extract_field_info(child))
-    
-    return class_data
-
-
-def extract_enum_info(cursor) -> EnumData:
-    """Extract enum information including all values."""
-    # Get underlying type
-    underlying_type = "int"
-    if cursor.enum_type:
-        underlying_type = cursor.enum_type.spelling
-    
-    enum_data = EnumData(
-        name=cursor.displayname,
-        qualified_name=get_qualified_name(cursor),
-        namespace=get_namespace(cursor),
-        underlying_type=underlying_type
-    )
-    
-    for child in cursor.get_children():
-        if child.kind == CursorKind.ENUM_CONSTANT_DECL:
-            enum_data.values.append(EnumValue(
-                name=child.displayname,
-                value=child.enum_value
-            ))
-    
-    return enum_data
-
-
-def find_reflected_types(cursor, source_content: str, 
-                         classes: List[ClassData], 
-                         enums: List[EnumData]):
-    """Recursively find all reflected classes and enums."""
-    for child in cursor.get_children():
-        # Skip system headers
-        if child.location.file and str(child.location.file).startswith('/usr'):
-            continue
-            
-        if child.kind in (CursorKind.CLASS_DECL, CursorKind.STRUCT_DECL):
-            if child.is_definition() and is_reflected_class(child, source_content):
-                classes.append(extract_class_info(child, source_content))
-        
-        elif child.kind == CursorKind.ENUM_DECL:
-            if child.is_definition() and is_reflected_enum(child, source_content):
-                enums.append(extract_enum_info(child))
-        
-        # Recurse into namespaces
-        elif child.kind == CursorKind.NAMESPACE:
-            find_reflected_types(child, source_content, classes, enums)
-
-
-def parse_header(input_path: str, include_paths: List[str] = None) -> tuple:
-    """Parse a header file and extract reflection data."""
-    index = Index.create()
-    
-    # Read source content for MSVC marker detection
-    with open(input_path, 'r', encoding='utf-8') as f:
-        source_content = f.read()
-    
-    # Compiler arguments
-    args = [
-        '-x', 'c++',
-        '-std=c++23',
-        '-DCOMPILER_CLANG',  # Ensure we get the annotation syntax
-    ]
-    
-    # Add include paths
-    if include_paths:
-        for path in include_paths:
-            args.extend(['-I', path])
-    
-    # Parse the file
-    translation_unit = index.parse(
-        input_path,
-        args=args,
-        options=0x01  # CXTranslationUnit_DetailedPreprocessingRecord
-    )
-    
-    # Check for parse errors
-    if not translation_unit:
-        raise RuntimeError(f"Failed to parse {input_path}")
-    
-    for diag in translation_unit.diagnostics:
-        if diag.severity >= 3:  # Error or Fatal
-            print(f"Parse error: {diag.spelling}", file=sys.stderr)
-    
-    # Extract reflected types
+    Looks for:
+    - BE_REFLECT_CLASS or /* BE_REFLECT_CLASS */ before struct/class
+    - BE_REFLECT_FIELD or /* BE_REFLECT_FIELD */ before field declarations
+    - BE_REFLECT_ENUM or /* BE_REFLECT_ENUM */ before enum class
+    """
     classes: List[ClassData] = []
     enums: List[EnumData] = []
-    find_reflected_types(translation_unit.cursor, source_content, classes, enums)
+    
+    # Track current namespace context
+    current_namespace = ""
+    
+    # Find namespace declarations
+    namespace_pattern = re.compile(r'namespace\s+(\w+)\s*\{')
+    
+    # Pattern for BE_REFLECT_CLASS struct/class
+    # Matches: struct BE_REFLECT_CLASS Name { or /* BE_REFLECT_CLASS */ struct Name {
+    class_pattern = re.compile(
+        r'(?:struct|class)\s+BE_REFLECT_CLASS\s+(\w+)|'
+        r'/\*\s*BE_REFLECT_CLASS\s*\*/\s*(?:struct|class)\s+(\w+)|'
+        r'BE_REFLECT_CLASS\s+(?:struct|class)\s+(\w+)',
+        re.MULTILINE
+    )
+    
+    # Pattern for BE_REFLECT_ENUM
+    enum_pattern = re.compile(
+        r'enum\s+class\s+BE_REFLECT_ENUM\s+(\w+)\s*(?::\s*(\w+))?\s*\{([^}]*)\}|'
+        r'/\*\s*BE_REFLECT_ENUM\s*\*/\s*enum\s+class\s+(\w+)\s*(?::\s*(\w+))?\s*\{([^}]*)\}|'
+        r'BE_REFLECT_ENUM\s+enum\s+class\s+(\w+)\s*(?::\s*(\w+))?\s*\{([^}]*)\}',
+        re.MULTILINE | re.DOTALL
+    )
+    
+    # Pattern for BE_REFLECT_FIELD
+    field_pattern = re.compile(
+        r'BE_REFLECT_FIELD\s+([^;=]+?)\s+(\w+)\s*(?:=\s*[^;]+)?;|'
+        r'/\*\s*BE_REFLECT_FIELD\s*\*/\s*([^;=]+?)\s+(\w+)\s*(?:=\s*[^;]+)?;',
+        re.MULTILINE
+    )
+    
+    # Find namespaces (simplified - assumes single namespace level)
+    namespace_matches = list(namespace_pattern.finditer(content))
+    if namespace_matches:
+        # Use the last namespace before TestData or the first one
+        for match in namespace_matches:
+            ns = match.group(1)
+            if ns == "TestData":
+                current_namespace = ns
+                break
+            current_namespace = ns
+    
+    # Find reflected classes/structs
+    for match in class_pattern.finditer(content):
+        class_name = match.group(1) or match.group(2) or match.group(3)
+        if not class_name:
+            continue
+        
+        # Determine namespace for this class
+        # Look for namespace declaration before this class
+        class_pos = match.start()
+        ns = ""
+        for ns_match in namespace_pattern.finditer(content[:class_pos]):
+            ns = ns_match.group(1)
+        
+        qualified = f"{ns}::{class_name}" if ns else class_name
+        
+        cls = ClassData(
+            name=class_name,
+            qualified_name=qualified,
+            namespace=ns
+        )
+        
+        # Find the class body (from { to matching })
+        class_start = content.find('{', match.end())
+        if class_start == -1:
+            continue
+        
+        # Find matching closing brace
+        brace_count = 1
+        class_end = class_start + 1
+        while class_end < len(content) and brace_count > 0:
+            if content[class_end] == '{':
+                brace_count += 1
+            elif content[class_end] == '}':
+                brace_count -= 1
+            class_end += 1
+        
+        class_body = content[class_start:class_end]
+        
+        # Find fields in class body
+        for field_match in field_pattern.finditer(class_body):
+            type_name = (field_match.group(1) or field_match.group(3) or "").strip()
+            field_name = field_match.group(2) or field_match.group(4)
+            
+            if type_name and field_name:
+                cls.fields.append(FieldData(
+                    name=field_name,
+                    type_name=type_name
+                ))
+        
+        classes.append(cls)
+    
+    # Find reflected enums
+    for match in enum_pattern.finditer(content):
+        enum_name = match.group(1) or match.group(4) or match.group(7)
+        underlying = match.group(2) or match.group(5) or match.group(8) or "int"
+        values_str = match.group(3) or match.group(6) or match.group(9) or ""
+        
+        if not enum_name:
+            continue
+        
+        # Determine namespace
+        enum_pos = match.start()
+        ns = ""
+        for ns_match in namespace_pattern.finditer(content[:enum_pos]):
+            ns = ns_match.group(1)
+        
+        qualified = f"{ns}::{enum_name}" if ns else enum_name
+        
+        enum_data = EnumData(
+            name=enum_name,
+            qualified_name=qualified,
+            namespace=ns,
+            underlying_type=underlying
+        )
+        
+        # Parse enum values
+        for value_match in re.finditer(r'(\w+)\s*(?:=\s*[^,}]+)?', values_str):
+            value_name = value_match.group(1)
+            if value_name and value_name not in ('', ' '):
+                enum_data.values.append(EnumValue(name=value_name))
+        
+        enums.append(enum_data)
     
     return classes, enums
 
@@ -292,7 +240,7 @@ def main():
         '--include', '-I',
         action='append',
         default=[],
-        help='Additional include paths (can be specified multiple times)'
+        help='Additional include paths (ignored in regex mode, kept for compatibility)'
     )
     parser.add_argument(
         '--verbose', '-v',
@@ -311,20 +259,26 @@ def main():
         print(f"Error: Templates directory not found: {args.templates}", file=sys.stderr)
         sys.exit(1)
     
-    # Parse the header
+    # Read source file
     if args.verbose:
         print(f"Parsing: {args.input}")
     
     try:
-        classes, enums = parse_header(args.input, args.include)
+        with open(args.input, 'r', encoding='utf-8') as f:
+            content = f.read()
     except Exception as e:
-        print(f"Error parsing header: {e}", file=sys.stderr)
+        print(f"Error reading file: {e}", file=sys.stderr)
         sys.exit(1)
+    
+    # Parse using regex
+    classes, enums = parse_header_regex(content)
     
     if args.verbose:
         print(f"Found {len(classes)} reflected classes, {len(enums)} reflected enums")
         for cls in classes:
             print(f"  Class: {cls.qualified_name} ({len(cls.fields)} fields)")
+            for fld in cls.fields:
+                print(f"    - {fld.name}: {fld.type_name}")
         for enum in enums:
             print(f"  Enum: {enum.qualified_name} ({len(enum.values)} values)")
     
