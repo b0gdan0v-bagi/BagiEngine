@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root>
+    <!-- 
+        Logger Sinks Configuration
+        
+        type: Sink type (Console, File)
+        enabled: Whether sink is active (default: true)
+        priority: Execution order, lower values run first (default: 0)
+        minLevel: Minimum log level to output (Debug, Info, Warning, Error, Fatal)
+        
+        Console-specific:
+            colorEnabled: Enable ANSI color output (default: true)
+        
+        File-specific:
+            filename: Path to log file (default: engine.log)
+            append: Append to existing file (default: false)
+    -->
+    <sinks>
+        <!-- Console sink runs first -->
+        <sink type="Console" enabled="true" priority="0" minLevel="Debug" colorEnabled="true" />
+        
+        <!-- File sink runs after console -->
+        <sink type="File" enabled="true" priority="100" minLevel="Info" filename="engine.log" append="false" />
+    </sinks>
+</root>

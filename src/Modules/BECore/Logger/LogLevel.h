@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Utils/EnumUtils.h>
+
 namespace BECore {
 
     /**
@@ -8,21 +10,21 @@ namespace BECore {
      * Used to categorize log messages by importance.
      * Levels are ordered from least to most severe.
      */
-    enum class LogLevel {
+    CORE_ENUM(LogLevel, uint8_t,
         Debug,    ///< Detailed debug information (development only)
         Info,     ///< General informational messages
         Warning,  ///< Potentially problematic situations
         Error,    ///< Error conditions that don't stop execution
         Fatal     ///< Critical errors that may cause termination
-    };
+    )
 
     /**
-     * @brief Convert LogLevel to string representation
+     * @brief Convert LogLevel to display string representation
      * 
      * @param level The log level to convert
-     * @return String representation of the level
+     * @return String representation of the level for display
      */
-    constexpr const char* LogLevelToString(LogLevel level) {
+    constexpr const char* LogLevelToDisplayString(LogLevel level) {
         switch (level) {
             case LogLevel::Debug:   return "DEBUG";
             case LogLevel::Info:    return "INFO";

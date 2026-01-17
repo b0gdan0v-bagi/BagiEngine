@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Logger/LogLevel.h>
+#include <BECore/RefCounted/RefCounted.h>
 
 namespace BECore {
 
@@ -9,10 +10,37 @@ namespace BECore {
      * 
      * Implement this interface to create custom log sinks
      * (e.g., console, file, network, etc.)
+     * 
+     * Sinks are managed by LoggerManager and sorted by priority.
+     * Lower priority values are processed first.
+     * 
+     * @example
+     * class MyLogSink : public ILogSink {
+     * public:
+     *     void Initialize() override {
+     *         // Setup sink
+     *     }
+     * 
+     *     void Write(LogLevel level, const char* message, const char* file, int line) override {
+     *         // Write log message
+     *     }
+     * 
+     *     void Flush() override {
+     *         // Flush output
+     *     }
+     * };
      */
-    class ILogSink {
+    class ILogSink : public RefCounted {
     public:
-        virtual ~ILogSink() = default;
+        ~ILogSink() override = default;
+
+        /**
+         * @brief Initialize the sink
+         * 
+         * Called during engine initialization.
+         * Should set up any necessary state.
+         */
+        virtual void Initialize() = 0;
 
         /**
          * @brief Write a log message to the sink
@@ -57,8 +85,27 @@ namespace BECore {
             return static_cast<int>(level) >= static_cast<int>(_minLevel);
         }
 
+        /**
+         * @brief Get sink priority for sorting
+         * 
+         * Lower values are processed first. Use this to control
+         * the order in which sinks receive log messages.
+         * 
+         * @return Priority value (lower = higher priority)
+         */
+        virtual int GetPriority() const { return _priority; }
+
+        /**
+         * @brief Set sink priority
+         * @param priority Priority value (lower = higher priority)
+         */
+        void SetPriority(int priority) { _priority = priority; }
+
     protected:
+        ILogSink() = default;
+
         LogLevel _minLevel = LogLevel::Debug;
+        int _priority = 0;
     };
 
 }  // namespace BECore

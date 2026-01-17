@@ -5,6 +5,7 @@
 #include <BECore/Widgets/WidgetManager.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Assert/AssertHandlers.h>
+#include <BECore/Logger/LogSinks.h>
 #include <BECore/Tests/TestManager.h>
 
 namespace BECore {
@@ -41,6 +42,10 @@ namespace BECore {
             return GetInstance()._testManager;
         }
 
+        static LoggerManager& GetLoggerManager() {
+            return GetInstance()._loggerManager;
+        }
+
         static const IntrusivePtr<IMainWindow>& GetMainWindow();
 
         // Pre-initialization function (FileSystem, AssertHandlers, Tests)
@@ -57,6 +62,7 @@ namespace BECore {
 
     private:
         FileSystem _fileSystem;
+        LoggerManager _loggerManager;
         AssertHandlerManager _assertHandlerManager;
         TestManager _testManager;
         WidgetManager _widgetManager;
