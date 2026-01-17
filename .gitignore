@@ -2,6 +2,7 @@
 /build/
 /out/
 /.cmake/
+/_deps/
 
 # Специфичные файлы Visual Studio
 .vs/

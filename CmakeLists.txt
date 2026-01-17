@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.31)
 project(MySDLGame)
 
+# =============================================================================
+# FetchContent Configuration
+# =============================================================================
+# Настройка базовой директории для FetchContent зависимостей
+# Это должно быть установлено ДО первого include(FetchContent) в поддиректориях
+# Зависимости будут сохраняться в _deps в корне проекта, вне build директории
+set(FETCHCONTENT_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/_deps" CACHE PATH "Directory for FetchContent dependencies" FORCE)
+message(STATUS "FetchContent dependencies will be stored in: ${FETCHCONTENT_BASE_DIR}")
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
