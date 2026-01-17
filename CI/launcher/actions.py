@@ -3,6 +3,7 @@
 import subprocess
 import sys
 import os
+import time
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Callable, Optional
@@ -545,11 +546,23 @@ class ActionExecutor:
             )
     
     def close_visual_studio(self) -> ActionResult:
-        """Close Visual Studio instances."""
+        """Close Visual Studio instances and wait for processes to terminate."""
         if get_current_platform() != Platform.WINDOWS:
             return ActionResult(False, "", "Visual Studio is only available on Windows")
         
         try:
+            # First, check if any Visual Studio processes are running
+            check_result = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq devenv.exe", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            # If no processes found, nothing to close
+            if check_result.returncode != 0 or not check_result.stdout.strip() or "devenv.exe" not in check_result.stdout:
+                return ActionResult(True, "No Visual Studio instances were running")
+            
             # Close all devenv.exe processes (Visual Studio)
             result = subprocess.run(
                 ["taskkill", "/F", "/IM", "devenv.exe"],
@@ -559,7 +572,34 @@ class ActionExecutor:
             )
             
             if result.returncode == 0:
-                return ActionResult(True, "Visual Studio instances closed successfully")
+                # Wait for processes to actually terminate
+                # Poll every 0.5 seconds for up to 10 seconds
+                max_wait_time = 10.0
+                poll_interval = 0.5
+                elapsed = 0.0
+                
+                while elapsed < max_wait_time:
+                    time.sleep(poll_interval)
+                    elapsed += poll_interval
+                    
+                    # Check if processes are still running
+                    check_result = subprocess.run(
+                        ["tasklist", "/FI", "IMAGENAME eq devenv.exe", "/FO", "CSV", "/NH"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    
+                    # If no processes found or command failed, they're closed
+                    if check_result.returncode != 0 or not check_result.stdout.strip() or "devenv.exe" not in check_result.stdout:
+                        return ActionResult(True, "Visual Studio instances closed successfully")
+                
+                # Timeout reached but processes might still be closing
+                # This is non-fatal - return success but with a warning
+                return ActionResult(
+                    True, 
+                    "Visual Studio instances terminated (may still be closing background processes)"
+                )
             elif "not found" in result.stderr.lower() or "not running" in result.stderr.lower():
                 return ActionResult(True, "No Visual Studio instances were running")
             else:
