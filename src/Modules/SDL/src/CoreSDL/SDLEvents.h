@@ -3,7 +3,7 @@
 #include <Events/EventBase.h>
 #include <SDL3/SDL.h>
 
-namespace Core {
+namespace BECore {
 namespace SDLEvents {
 
     // События клавиатуры
@@ -62,5 +62,5 @@ namespace SDLEvents {
     };
 
 }  // namespace SDLEvents
-}  // namespace Core
+}  // namespace BECore
 

@@ -7,7 +7,7 @@ namespace Math {
             return {};
         }
 
-        const auto& tokens = Core::String::Split(data, ',');
+        const auto& tokens = BECore::String::Split(data, ',');
 
         if (tokens.size() != 4) {
             return {};

@@ -1,14 +1,14 @@
 #include "SDLMainWindow.h"
 
-#include "Core/Utils/ScopeGuard.h"
+#include "BECore/Utils/ScopeGuard.h"
 
 #include <Application/Application.h>
-#include <Core/Config/XmlConfig.h>
+#include <BECore/Config/XmlConfig.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <CoreSDL/SDLUtils.h>
 
-namespace Core {
+namespace BECore {
 
     SDLMainWindow::SDLMainWindow() = default;
     SDLMainWindow::~SDLMainWindow() = default;
@@ -132,5 +132,5 @@ namespace Core {
             SDL_RenderPresent(_renderer);
         }
     }
-}  // namespace Core
+}  // namespace BECore
 

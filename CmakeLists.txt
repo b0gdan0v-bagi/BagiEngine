@@ -56,8 +56,8 @@ endif()
 # =============================================================================
 # Modules
 # =============================================================================
-# CoreModule должен быть объявлен первым, так как другие модули используют его PCH
-add_subdirectory(src/Modules/Core)
+# BECoreModule должен быть объявлен первым, так как другие модули используют его PCH
+add_subdirectory(src/Modules/BECore)
 add_subdirectory(src/Modules/Math)
 add_subdirectory(src/Modules/Events)
 add_subdirectory(src/Modules/SDL)
@@ -79,20 +79,20 @@ target_include_directories(MyGame PRIVATE
 )
 
 # Настройка предкомпилированных заголовков для исполняемого файла
-# REUSE_FROM позволяет переиспользовать PCH из CoreModule без перекомпиляции
-target_precompile_headers(MyGame REUSE_FROM CoreModule)
+# REUSE_FROM позволяет переиспользовать PCH из BECoreModule без перекомпиляции
+target_precompile_headers(MyGame REUSE_FROM BECoreModule)
 
 # Для MSVC: автоматическое включение PCH через Force Include
 # Это позволяет использовать PCH без явного #include в каждом файле
 if(MSVC)
     # Получаем путь к PCH header относительно include directories
-    # CoreModule добавляет ${PROJECT_ROOT}/src/Modules в include directories
-    # PCH находится в src/Modules/Core/pch.h, поэтому путь будет Core/pch.h
-    target_compile_options(MyGame PRIVATE /FI"Core/pch.h")
+    # BECoreModule добавляет ${PROJECT_ROOT}/src/Modules в include directories
+    # PCH находится в src/Modules/BECore/pch.h, поэтому путь будет BECore/pch.h
+    target_compile_options(MyGame PRIVATE /FI"BECore/pch.h")
 endif()
 
 target_link_libraries(MyGame PRIVATE 
-    CoreModule
+    BECoreModule
     MathModule
     EventsModule
     SDLModule

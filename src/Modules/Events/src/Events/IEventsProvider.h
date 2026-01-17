@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Core {
+namespace BECore {
 
     class IEventsProvider : public RefCounted {
     public:
@@ -18,5 +18,5 @@ namespace Core {
         virtual void Destroy() = 0;
     };
 
-} // namespace Core
+} // namespace BECore
 

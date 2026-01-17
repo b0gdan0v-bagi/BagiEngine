@@ -1,6 +1,6 @@
 #include "EventsProviderManager.h"
 
-namespace Core {
+namespace BECore {
 
     void EventsProviderManager::RegisterProvider(const IntrusivePtr<IEventsProvider>& provider) {
         if (!provider) {
@@ -33,4 +33,4 @@ namespace Core {
         }
     }
 
-}  // namespace Core
+}  // namespace BECore

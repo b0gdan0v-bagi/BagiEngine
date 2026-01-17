@@ -3,7 +3,7 @@
 #include <Events/RenderEvents.h>
 #include <Math/Color.h>
 
-namespace Core {
+namespace BECore {
 
     bool ClearScreenWidget::Initialize(const XmlNode& node) {
         _clearColor = node.ParseAttribute<Math::Color>("Color").value_or(_clearColor);
@@ -18,5 +18,5 @@ namespace Core {
         RenderEvents::RenderClearEvent::Emit();
     }
 
-}  // namespace Core
+}  // namespace BECore
 

@@ -3,7 +3,7 @@
 #include <Events/IEventsProvider.h>
 #include <SDL3/SDL.h>
 
-namespace Core {
+namespace BECore {
 
     class SDLEventsProvider : public IEventsProvider {
     public:
@@ -21,5 +21,5 @@ namespace Core {
         void ConvertSDLEvent(const SDL_Event& sdlEvent);
     };
 
-} // namespace Core
+} // namespace BECore
 

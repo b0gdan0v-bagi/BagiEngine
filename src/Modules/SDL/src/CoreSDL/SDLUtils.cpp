@@ -1,10 +1,10 @@
 #include "SDLUtils.h"
 
-#include <Core/Utils/String.h>
+#include <BECore/Utils/String.h>
 #include <EASTL/unordered_map.h>
 #include <boost/algorithm/string.hpp>
 
-namespace Core {
+namespace BECore {
 
     namespace {
         struct FlagEntry {
@@ -25,7 +25,7 @@ namespace Core {
         }
 
         // Разделяем строку по разделителям (для имен флагов)
-        const auto& flagNames = Core::String::Split(flagsString, '|');
+        const auto& flagNames = BECore::String::Split(flagsString, '|');
 
         SDL_WindowFlags result = 0;
         for (const auto& flagName : flagNames) {
@@ -75,4 +75,4 @@ namespace Core {
 
         return 0;
     }
-}  // namespace Core
+}  // namespace BECore

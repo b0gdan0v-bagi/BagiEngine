@@ -1,15 +1,15 @@
 #include "ApplicationSDLFabric.h"
 
 #include <Application/Application.h>
-#include <Core/Config/XmlConfig.h>
-#include <Core/FileSystem/FileSystem.h>
-#include <Core/GameManager/CoreManager.h>
-#include <Core/MainWindow/MainWindowAccessor.h>
-#include <Core/RefCounted/New.h>
+#include <BECore/Config/XmlConfig.h>
+#include <BECore/FileSystem/FileSystem.h>
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/MainWindow/MainWindowAccessor.h>
+#include <BECore/RefCounted/New.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
 
-namespace Core {
+namespace BECore {
 
     bool ApplicationSDLFabric::Create(const XmlConfig& config) {
         auto configPath = config.GetRoot().ParseAttribute<std::string_view>("path");
@@ -17,13 +17,13 @@ namespace Core {
             return false;
         }
 
-        auto window = Core::New<SDLMainWindow>();
+        auto window = BECore::New<SDLMainWindow>();
         if (!window->Initialize(*configPath)) {
             return false;
         }
         CoreManager::GetInstance().GetMainWindowManager().SetMainWindow(window, {});
 
-         auto sdlEventsProvider = Core::New<SDLEventsProvider>();
+         auto sdlEventsProvider = BECore::New<SDLEventsProvider>();
         if (!sdlEventsProvider->Initialize()) {
             return false;
         }
@@ -31,5 +31,5 @@ namespace Core {
 
         return true;
     }
-}  // namespace Core
+}  // namespace BECore
 

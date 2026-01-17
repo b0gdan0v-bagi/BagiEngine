@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 
-namespace Core {
+namespace BECore {
 
     class SDLUtils {
     public:
@@ -12,6 +12,6 @@ namespace Core {
         static SDL_WindowFlags GetWindowFlagValue(std::string_view flagName);
     };
 
-}  // namespace Core
+}  // namespace BECore
 
 

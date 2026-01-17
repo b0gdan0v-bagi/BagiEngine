@@ -1,6 +1,6 @@
 #include "ImGuiWidget.h"
 
-#include <Core/GameManager/CoreManager.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <CoreSDL/SDLMainWindow.h>
 
 #include <Events/ApplicationEvents.h>
@@ -12,7 +12,7 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
 
-namespace Core {
+namespace BECore {
 
     bool ImGuiWidget::Initialize(const XmlNode& node) {
         if (_isInitialized) {
@@ -112,5 +112,5 @@ namespace Core {
         ImGui_ImplSDL3_ProcessEvent(&event.event);
     }
 
-}  // namespace Core
+}  // namespace BECore
 

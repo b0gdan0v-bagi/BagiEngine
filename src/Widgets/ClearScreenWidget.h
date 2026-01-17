@@ -1,9 +1,9 @@
 #pragma once
 
-#include <Core/Widgets/IWidget.h>
+#include <BECore/Widgets/IWidget.h>
 #include <Math/Color.h>
 
-namespace Core {
+namespace BECore {
 
     class ClearScreenWidget : public IWidget {
     public:
@@ -18,5 +18,5 @@ namespace Core {
         Math::Color _clearColor{20, 20, 100, 255};
     };
 
-}  // namespace Core
+}  // namespace BECore
 

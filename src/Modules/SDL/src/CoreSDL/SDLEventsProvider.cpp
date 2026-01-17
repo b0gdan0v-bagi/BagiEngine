@@ -4,7 +4,7 @@
 #include <Events/ApplicationEvents.h>
 #include <CoreSDL/SDLEvents.h>
 
-namespace Core {
+namespace BECore {
 
     bool SDLEventsProvider::Initialize() {
         if (_isInitialized) {
@@ -87,5 +87,5 @@ namespace Core {
         }
     }
 
-} // namespace Core
+} // namespace BECore
 

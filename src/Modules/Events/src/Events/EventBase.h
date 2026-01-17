@@ -3,7 +3,7 @@
 #include <Events/EventsQueueRegistry.h>
 #include <entt/entt.hpp>
 
-namespace Core {
+namespace BECore {
 
     struct BaseEvent {
         virtual ~BaseEvent() = default;
@@ -56,5 +56,5 @@ namespace Core {
         }
     };
 
-}  // namespace Core
+}  // namespace BECore
 

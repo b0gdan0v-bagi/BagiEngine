@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Core {
+namespace BECore {
     struct BaseEvent;
 
     // Менеджер для автоматической регистрации событий
@@ -27,5 +27,5 @@ namespace Core {
         eastl::vector<UpdateFunction> _updateFunctions;
     };
 
-}  // namespace Core
+}  // namespace BECore
 

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Core {
+namespace BECore {
 
     // Forward declaration для класса-ключа доступа
     class ApplicationMainAccess;
@@ -20,4 +20,4 @@ namespace Core {
 
         bool _isRunning = false;
     };
-}  // namespace Core
+}  // namespace BECore

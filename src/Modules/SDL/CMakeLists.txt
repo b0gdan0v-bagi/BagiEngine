@@ -6,7 +6,7 @@ get_filename_component(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
 
 # Определяем путь к Boost заголовкам
-set(BOOST_HEADERS_DIR "${PROJECT_ROOT}/src/Modules/Core/Boost")
+set(BOOST_HEADERS_DIR "${PROJECT_ROOT}/src/Modules/BECore/Boost")
 
 # SDL3 - зависимость модуля
 include(FetchContent)
@@ -39,9 +39,9 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "SDL" FILES ${SDL_MOD
 set_target_properties(SDLModule PROPERTIES FOLDER "Modules")
 
 # Настройка предкомпилированных заголовков для модуля
-# REUSE_FROM позволяет переиспользовать PCH из CoreModule без перекомпиляции
+# REUSE_FROM позволяет переиспользовать PCH из BECoreModule без перекомпиляции
 # Это критически ускоряет сборку, так как PCH компилируется только один раз
-target_precompile_headers(SDLModule REUSE_FROM CoreModule)
+target_precompile_headers(SDLModule REUSE_FROM BECoreModule)
 
 # Подключаем директории с заголовками
 target_include_directories(SDLModule PUBLIC
@@ -76,7 +76,7 @@ endif()
 
 # Подключаем зависимости модуля
 target_link_libraries(SDLModule PUBLIC
-    CoreModule
+    BECoreModule
     MathModule
     EventsModule
     ${SDL3_TARGET}

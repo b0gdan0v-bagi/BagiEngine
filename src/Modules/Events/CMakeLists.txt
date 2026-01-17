@@ -32,9 +32,9 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Events" FILES ${EVEN
 set_target_properties(EventsModule PROPERTIES FOLDER "Modules")
 
 # Настройка предкомпилированных заголовков для модуля
-# REUSE_FROM позволяет переиспользовать PCH из CoreModule без перекомпиляции
+# REUSE_FROM позволяет переиспользовать PCH из BECoreModule без перекомпиляции
 # Это критически ускоряет сборку, так как PCH компилируется только один раз
-target_precompile_headers(EventsModule REUSE_FROM CoreModule)
+target_precompile_headers(EventsModule REUSE_FROM BECoreModule)
 
 # Подключаем директории с заголовками
 # Чтобы файлы из src/Modules/Events/src/Events/ были доступны через <Events/EventsProviderManager.h>,
@@ -57,10 +57,10 @@ target_include_directories(EventsModule PUBLIC
 )
 
 # Подключаем зависимости
-# EventsModule зависит от CoreModule (RefCounted, IntrusivePtr, PassKey) и MathModule (RenderEvents)
+# EventsModule зависит от BECoreModule (RefCounted, IntrusivePtr, PassKey) и MathModule (RenderEvents)
 # entt - header-only библиотека, достаточно include директорий (уже добавлены выше)
 target_link_libraries(EventsModule PUBLIC
-    CoreModule
+    BECoreModule
     MathModule
 )
 

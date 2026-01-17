@@ -2,7 +2,7 @@
 
 #include <Events/EventBase.h>
 
-namespace Core {
+namespace BECore {
 namespace ApplicationEvents {
 
     // События приложения
@@ -10,5 +10,5 @@ namespace ApplicationEvents {
     struct ApplicationCleanUpEvent : public EventBase<ApplicationCleanUpEvent> {};
 
 }  // namespace ApplicationEvents
-}  // namespace Core
+}  // namespace BECore
 

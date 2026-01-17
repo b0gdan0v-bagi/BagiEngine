@@ -1,0 +1,17 @@
+#pragma once
+
+namespace BECore {
+
+    class IWidget : public RefCounted {
+    public:
+        IWidget() = default;
+        virtual ~IWidget() = default;
+
+        virtual bool Initialize(const XmlNode& node) = 0;
+
+        virtual void Update() = 0;
+        virtual void Draw() = 0;
+    };
+
+}  // namespace BECore
+

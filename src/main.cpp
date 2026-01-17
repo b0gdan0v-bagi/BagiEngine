@@ -1,12 +1,12 @@
 #include <Application/Application.h>
-#include <Core/Application/ApplicationMainAccess.h>
+#include <BECore/Application/ApplicationMainAccess.h>
 
 int main(int argc, char* argv[]) {
-    if (!Core::Application::GetInstance().Initialize(Core::PassKey<Core::ApplicationMainAccess>{})) {
+    if (!BECore::Application::GetInstance().Initialize(BECore::PassKey<BECore::ApplicationMainAccess>{})) {
         return -1;
     }
 
-    Core::Application::GetInstance().Run(Core::PassKey<Core::ApplicationMainAccess>{});
+    BECore::Application::GetInstance().Run(BECore::PassKey<BECore::ApplicationMainAccess>{});
 
     return 0;
 }

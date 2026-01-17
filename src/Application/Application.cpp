@@ -1,12 +1,12 @@
 #include "Application.h"
 
-#include <Core/Application/ApplicationFabric.h>
-#include <Core/Assert/AssertMacros.h>
+#include <BECore/Application/ApplicationFabric.h>
+#include <BECore/Assert/AssertMacros.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
-#include <Core/GameManager/CoreManager.h>
+#include <BECore/GameManager/CoreManager.h>
 
-namespace Core {
+namespace BECore {
 
     bool Application::Initialize(PassKey<ApplicationMainAccess>) {
 
@@ -45,4 +45,4 @@ namespace Core {
         _isRunning = false;
     }
 
-}  // namespace Core
+}  // namespace BECore

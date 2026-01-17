@@ -2,7 +2,7 @@
 
 #include <Events/EventBase.h>
 
-namespace Core {
+namespace BECore {
 namespace RenderEvents {
 
     // События рендеринга
@@ -17,5 +17,5 @@ namespace RenderEvents {
     };
 
 }  // namespace RenderEvents
-}  // namespace Core
+}  // namespace BECore
 

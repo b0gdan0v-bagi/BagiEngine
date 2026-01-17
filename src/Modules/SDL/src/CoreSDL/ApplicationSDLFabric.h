@@ -1,14 +1,14 @@
 #pragma once
 
-#include <Core/MainWindow/MainWindowAccessor.h>
-#include <Core/Application/ApplicationMainAccess.h>
+#include <BECore/MainWindow/MainWindowAccessor.h>
+#include <BECore/Application/ApplicationMainAccess.h>
 
-namespace Core {
+namespace BECore {
     class XmlConfig;
 
     class ApplicationSDLFabric : public ApplicationMainAccess, public MainWindowAccessor {
     public:
         static bool Create(const XmlConfig& config);
     };
-}  // namespace Core
+}  // namespace BECore
 

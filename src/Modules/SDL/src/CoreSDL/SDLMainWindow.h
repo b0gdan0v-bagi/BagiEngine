@@ -2,9 +2,9 @@
 
 #include <SDL3/SDL.h>
 
-#include <Core/MainWindow/IMainWindow.h>
+#include <BECore/MainWindow/IMainWindow.h>
 
-namespace Core {
+namespace BECore {
 namespace RenderEvents {
     struct SetRenderDrawColorEvent;
 }
@@ -40,5 +40,5 @@ namespace RenderEvents {
         int _width = 0;
         int _height = 0;
     };
-}  // namespace Core
+}  // namespace BECore
 

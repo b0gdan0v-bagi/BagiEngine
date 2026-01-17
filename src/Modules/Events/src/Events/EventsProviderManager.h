@@ -2,7 +2,7 @@
 
 #include <Events/IEventsProvider.h>
 
-namespace Core {
+namespace BECore {
 
     class EventsProviderManager {
     public:
@@ -18,5 +18,5 @@ namespace Core {
         eastl::vector<IntrusivePtr<IEventsProvider>> _providers;
     };
 
-}  // namespace Core
+}  // namespace BECore
 
