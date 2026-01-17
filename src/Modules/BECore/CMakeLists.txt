@@ -270,7 +270,6 @@ target_link_libraries(BECoreModule PUBLIC
 # Reflection Code Generation
 # =============================================================================
 # Generate reflection metadata for test classes
-# This demonstrates the reflection system and validates it works
 if(COMMAND add_reflection_target)
     add_reflection_target(BECoreModule
         HEADERS
