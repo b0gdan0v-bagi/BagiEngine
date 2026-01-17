@@ -1,7 +1,7 @@
 #!/bin/bash
 # Setup Python virtual environment (macOS/Linux)
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/../.venv"
 REQUIREMENTS="$SCRIPT_DIR/../requirements.txt"
 

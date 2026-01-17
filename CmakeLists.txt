@@ -43,8 +43,8 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # =============================================================================
 # Compiler Detection and Configuration
 # =============================================================================
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    message(STATUS "Compiler: Clang ${CMAKE_CXX_COMPILER_VERSION}")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
     add_compile_definitions(COMPILER_CLANG)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     message(STATUS "Compiler: GCC ${CMAKE_CXX_COMPILER_VERSION}")
@@ -75,7 +75,7 @@ endif()
 # =============================================================================
 # Формируем имя output директории: {Compiler}{Platform}
 # CMake сам создаёт подпапки Debug/Release внутри
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     set(COMPILER_NAME "Clang")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set(COMPILER_NAME "GCC")
@@ -100,8 +100,8 @@ set(OUTPUT_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/${OUTPUT_DIR_NAME}")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_BASE_DIR}")
 # Shared libraries (.dll on Windows, .so on Linux)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_BASE_DIR}")
-# Static libraries (.lib) - keep in build directory
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+# Static libraries (.lib) - keep in output directory
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${OUTPUT_BASE_DIR}/lib")
 
 message(STATUS "Output directory: ${OUTPUT_BASE_DIR}")
 
@@ -148,7 +148,7 @@ if(Python3_FOUND)
     message(STATUS "Python3 found: ${Python3_EXECUTABLE}")
     
     # Directory for generated reflection files
-    set(REFLECTION_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated" CACHE PATH "Directory for generated reflection files")
+    set(REFLECTION_GENERATED_DIR "${OUTPUT_BASE_DIR}/generated" CACHE PATH "Directory for generated reflection files")
     file(MAKE_DIRECTORY ${REFLECTION_GENERATED_DIR})
     
     # Reflector script and templates paths
@@ -198,7 +198,6 @@ if(Python3_FOUND)
             get_filename_component(HEADER_ABS ${HEADER} ABSOLUTE)
             
             set(GEN_FILE "${REFLECTION_GENERATED_DIR}/${HEADER_NAME}.gen.hpp")
-            list(APPEND GENERATED_FILES ${GEN_FILE})
             
             # =================================================================
             # CONFIGURE TIME: Generate via execute_process
@@ -222,12 +221,23 @@ if(Python3_FOUND)
                 message(WARNING "  Exit code: ${REFLECTOR_RESULT}")
                 message(WARNING "  Error: ${REFLECTOR_ERROR}")
             else()
-                message(STATUS "  Generated: ${GEN_FILE}")
+                # Only add to list if generation was successful
+                # Check if file exists before adding (extra safety check)
+                if(EXISTS "${GEN_FILE}")
+                    list(APPEND GENERATED_FILES ${GEN_FILE})
+                    message(STATUS "  Generated: ${GEN_FILE}")
+                else()
+                    message(WARNING "  Generated file ${GEN_FILE} does not exist after generation")
+                endif()
             endif()
         endforeach()
         
-        # Add generated files to target sources
-        target_sources(${TARGET_NAME} PRIVATE ${GENERATED_FILES})
+        # Only add generated files to target sources if any were successfully generated
+        if(GENERATED_FILES)
+            # Mark files as GENERATED so CMake knows they're build artifacts
+            set_source_files_properties(${GENERATED_FILES} PROPERTIES GENERATED TRUE)
+            target_sources(${TARGET_NAME} PRIVATE ${GENERATED_FILES})
+        endif()
         
         # Add generated directory to include paths
         target_include_directories(${TARGET_NAME} PRIVATE ${REFLECTION_GENERATED_DIR})
@@ -289,8 +299,8 @@ target_precompile_headers(MyGame REUSE_FROM BECoreModule)
 if(MSVC)
     # MSVC: Force Include через /FI
     target_compile_options(MyGame PRIVATE /FI"BECore/pch.h")
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    # Clang: Force Include через -include
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    # Clang/AppleClang: Force Include через -include
     target_compile_options(MyGame PRIVATE -include "BECore/pch.h")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # GCC: Force Include через -include

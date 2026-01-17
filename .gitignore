@@ -30,3 +30,10 @@ __pycache__/
 
 # Launcher config (user-specific)
 launcher_config.json
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes

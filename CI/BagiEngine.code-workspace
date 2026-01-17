@@ -199,7 +199,7 @@
 				"name": "Debug MyGame (macOS)",
 				"type": "cppdbg",
 				"request": "launch",
-				"program": "${workspaceFolder}/build/MyGame",
+				"program": "${workspaceFolder}/build/ClangmacOS/MyGame",
 				"args": [],
 				"stopAtEntry": false,
 				"cwd": "${workspaceFolder}",
@@ -321,15 +321,15 @@
 			{
 				"label": "Run MyGame",
 				"type": "shell",
-				"command": "${workspaceFolder}/build/MyGame",
+				"command": "${workspaceFolder}/build/ClangmacOS/MyGame",
 				"windows": {
-					"command": "${workspaceFolder}\\build\\MyGame.exe"
+					"command": "${workspaceFolder}\\build\\MSVCWindows\\MyGame.exe"
 				},
 				"linux": {
-					"command": "${workspaceFolder}/build/MyGame"
+					"command": "${workspaceFolder}/build/ClangLinux/MyGame"
 				},
 				"osx": {
-					"command": "${workspaceFolder}/build/MyGame"
+					"command": "${workspaceFolder}/build/ClangmacOS/MyGame"
 				},
 				"problemMatcher": [],
 				"group": {
