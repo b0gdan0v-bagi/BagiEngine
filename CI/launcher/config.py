@@ -3,6 +3,32 @@
 import json
 from pathlib import Path
 from typing import Any
+from dataclasses import dataclass, field, asdict
+
+
+@dataclass
+class BuildConfiguration:
+    """Represents a single build configuration."""
+    name: str
+    compiler: str      # MSVC, Clang, GCC
+    generator: str     # Ninja, Visual Studio, etc.
+    build_type: str    # Debug, Release
+    enabled: bool = True
+    
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return asdict(self)
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "BuildConfiguration":
+        """Create from dictionary."""
+        return cls(
+            name=data.get("name", ""),
+            compiler=data.get("compiler", "MSVC"),
+            generator=data.get("generator", "Ninja"),
+            build_type=data.get("build_type", "Debug"),
+            enabled=data.get("enabled", True)
+        )
 
 
 class Config:
@@ -19,7 +45,11 @@ class Config:
             "build_only": ["cmake_build"],
             "quick_open": ["open_ide"]
         },
-        "last_pipeline": "full_build"
+        "last_pipeline": "full_build",
+        "build_configurations": [
+            {"name": "MSVC Debug", "compiler": "MSVC", "generator": "Ninja", "build_type": "Debug", "enabled": True},
+            {"name": "Clang Debug", "compiler": "Clang", "generator": "Ninja", "build_type": "Debug", "enabled": False}
+        ]
     }
     
     def __init__(self, config_path: Path):
@@ -95,3 +125,14 @@ class Config:
     @last_pipeline.setter
     def last_pipeline(self, value: str) -> None:
         self.set("last_pipeline", value)
+    
+    @property
+    def build_configurations(self) -> list[BuildConfiguration]:
+        """Get list of build configurations."""
+        configs_data = self.get("build_configurations", self.DEFAULT_CONFIG["build_configurations"])
+        return [BuildConfiguration.from_dict(c) for c in configs_data]
+    
+    @build_configurations.setter
+    def build_configurations(self, value: list[BuildConfiguration]) -> None:
+        """Set build configurations."""
+        self.set("build_configurations", [c.to_dict() for c in value])

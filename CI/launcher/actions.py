@@ -25,6 +25,34 @@ def get_current_platform() -> Platform:
         return Platform.LINUX
 
 
+def get_build_dir_name(compiler: str, platform: Optional[Platform] = None) -> str:
+    """Get build directory name based on compiler and platform.
+    
+    Args:
+        compiler: Compiler name (MSVC, Clang, GCC)
+        platform: Target platform (defaults to current platform)
+        
+    Returns:
+        Build directory name like "MSVCWin", "ClangMac", etc.
+    """
+    if platform is None:
+        platform = get_current_platform()
+    
+    platform_suffix = {
+        Platform.WINDOWS: "Win",
+        Platform.MACOS: "Mac",
+        Platform.LINUX: "Linux"
+    }
+    
+    # Normalize compiler name (remove spaces and special chars)
+    compiler_name = compiler.replace(" ", "").replace("(", "").replace(")", "")
+    # Handle GCC (MinGW) -> GCC
+    if "MinGW" in compiler:
+        compiler_name = "GCC"
+    
+    return f"{compiler_name}{platform_suffix[platform]}"
+
+
 @dataclass
 class ActionResult:
     """Result of an action execution."""
@@ -49,15 +77,104 @@ class Action:
 class ActionExecutor:
     """Executes actions with project context."""
     
-    def __init__(self, project_root: Path):
+    def __init__(self, project_root: Path, compiler: str = "MSVC"):
         self.project_root = project_root
-        self.build_dir = project_root / "build"
+        self._compiler = compiler
         self.workspace_file = project_root / "CI" / "BagiEngine.code-workspace"
+    
+    @property
+    def build_dir(self) -> Path:
+        """Get build directory based on current compiler."""
+        build_dir_name = get_build_dir_name(self._compiler)
+        return self.project_root / "build" / build_dir_name
+    
+    def set_compiler(self, compiler: str) -> None:
+        """Set the current compiler for build directory resolution."""
+        self._compiler = compiler
+    
+    def clean_build(self, compiler: str = "MSVC") -> ActionResult:
+        """Clean build directory using git clean (permanent deletion, no recycle bin).
+        
+        Uses 'git clean -fdx' to forcefully remove all untracked files and directories
+        in the build folder. This is a permanent deletion.
+        """
+        self.set_compiler(compiler)
+        
+        if not self.build_dir.exists():
+            return ActionResult(True, f"Build directory {self.build_dir} does not exist. Nothing to clean.")
+        
+        # Use git clean -fdx in the build directory
+        # -f: force
+        # -d: remove directories
+        # -x: remove ignored files too
+        cmd = ["git", "clean", "-fdx", str(self.build_dir)]
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=self.project_root,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            if result.returncode == 0:
+                cleaned_files = result.stdout.strip()
+                if cleaned_files:
+                    return ActionResult(
+                        True, 
+                        f"Cleaned build directory: build/{get_build_dir_name(compiler)}\n{cleaned_files}"
+                    )
+                else:
+                    return ActionResult(True, f"Build directory already clean: build/{get_build_dir_name(compiler)}")
+            else:
+                return ActionResult(False, result.stdout, result.stderr)
+                
+        except subprocess.TimeoutExpired:
+            return ActionResult(False, "", "Clean operation timed out")
+        except Exception as e:
+            return ActionResult(False, "", str(e))
+    
+    def clean_all_builds(self) -> ActionResult:
+        """Clean all build directories using git clean (permanent deletion).
+        
+        Removes the entire build/ directory.
+        """
+        build_root = self.project_root / "build"
+        
+        if not build_root.exists():
+            return ActionResult(True, "Build directory does not exist. Nothing to clean.")
+        
+        cmd = ["git", "clean", "-fdx", str(build_root)]
+        
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=self.project_root,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            if result.returncode == 0:
+                cleaned_files = result.stdout.strip()
+                if cleaned_files:
+                    return ActionResult(True, f"Cleaned all build directories\n{cleaned_files}")
+                else:
+                    return ActionResult(True, "Build directories already clean")
+            else:
+                return ActionResult(False, result.stdout, result.stderr)
+                
+        except subprocess.TimeoutExpired:
+            return ActionResult(False, "", "Clean operation timed out")
+        except Exception as e:
+            return ActionResult(False, "", str(e))
     
     def cmake_configure(self, build_type: str = "Debug", generator: str = "Ninja", 
                         compiler: str = "MSVC") -> ActionResult:
         """Run CMake configuration."""
-        self.build_dir.mkdir(exist_ok=True)
+        self.set_compiler(compiler)
+        self.build_dir.mkdir(parents=True, exist_ok=True)
         
         cmd = ["cmake", "-B", str(self.build_dir), "-S", str(self.project_root)]
         
@@ -99,10 +216,11 @@ class ActionExecutor:
         except Exception as e:
             return ActionResult(False, "", str(e))
     
-    def cmake_build(self, build_type: str = "Debug") -> ActionResult:
+    def cmake_build(self, build_type: str = "Debug", compiler: str = "MSVC") -> ActionResult:
         """Run CMake build."""
+        self.set_compiler(compiler)
         if not self.build_dir.exists():
-            return ActionResult(False, "", "Build directory does not exist. Run CMake Configure first.")
+            return ActionResult(False, "", f"Build directory {self.build_dir} does not exist. Run CMake Configure first.")
         
         cmd = ["cmake", "--build", str(self.build_dir), "--config", build_type]
         
@@ -125,8 +243,21 @@ class ActionExecutor:
             return ActionResult(False, "", str(e))
     
     def open_cursor(self) -> ActionResult:
-        """Open project in Cursor IDE."""
+        """Open project in Cursor IDE with workspace file.
+        
+        The workspace file (CI/BagiEngine.code-workspace) points to the project root,
+        where .cursorrules and .cursor/rules/ are located. Cursor will automatically
+        load these rules when opening the workspace.
+        """
         platform = get_current_platform()
+        
+        # Ensure workspace file exists
+        if not self.workspace_file.exists():
+            return ActionResult(
+                False, 
+                "", 
+                f"Workspace file not found: {self.workspace_file}"
+            )
         
         try:
             if platform == Platform.WINDOWS:
@@ -134,6 +265,7 @@ class ActionExecutor:
                 cursor_paths = [
                     Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Cursor" / "Cursor.exe",
                     Path(os.environ.get("PROGRAMFILES", "")) / "Cursor" / "Cursor.exe",
+                    Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Cursor" / "Cursor.exe",
                 ]
                 
                 cursor_exe = None
@@ -143,20 +275,56 @@ class ActionExecutor:
                         break
                 
                 if cursor_exe:
-                    subprocess.Popen([str(cursor_exe), str(self.workspace_file)])
+                    # Use absolute path to workspace file
+                    subprocess.Popen(
+                        [str(cursor_exe), str(self.workspace_file.resolve())]
+                    )
                 else:
                     # Try from PATH
-                    subprocess.Popen(["cursor", str(self.workspace_file)], shell=True)
+                    subprocess.Popen(
+                        ["cursor", str(self.workspace_file.resolve())], 
+                        shell=True
+                    )
                     
             elif platform == Platform.MACOS:
-                if Path("/Applications/Cursor.app").exists():
-                    subprocess.Popen(["open", "-a", "Cursor", str(self.workspace_file)])
-                else:
-                    subprocess.Popen(["cursor", str(self.workspace_file)])
+                # Try command from PATH first (most reliable)
+                try:
+                    # Check if cursor command is available
+                    result = subprocess.run(
+                        ["which", "cursor"],
+                        capture_output=True,
+                        timeout=2
+                    )
+                    if result.returncode == 0:
+                        subprocess.Popen(["cursor", str(self.workspace_file.resolve())])
+                    else:
+                        raise FileNotFoundError("cursor command not in PATH")
+                except (FileNotFoundError, subprocess.TimeoutExpired):
+                    # Fallback to direct app bundle path
+                    cursor_app = Path("/Applications/Cursor.app")
+                    if cursor_app.exists():
+                        # Use the executable inside the app bundle
+                        cursor_exe = cursor_app / "Contents" / "Resources" / "app" / "bin" / "cursor"
+                        if cursor_exe.exists():
+                            subprocess.Popen([str(cursor_exe), str(self.workspace_file.resolve())])
+                        else:
+                            # Fallback to open command
+                            subprocess.Popen(["open", "-a", "Cursor", str(self.workspace_file.resolve())])
+                    else:
+                        return ActionResult(
+                            False,
+                            "",
+                            "Cursor not found. Please install Cursor or add it to PATH."
+                        )
             else:
-                subprocess.Popen(["cursor", str(self.workspace_file)])
+                # Linux - try from PATH
+                subprocess.Popen(["cursor", str(self.workspace_file.resolve())])
             
-            return ActionResult(True, "Cursor opened successfully")
+            return ActionResult(
+                True, 
+                f"Cursor opened with workspace: {self.workspace_file.name}\n"
+                f"Workspace points to project root where .cursorrules and .cursor/rules/ are located."
+            )
         except Exception as e:
             return ActionResult(False, "", f"Failed to open Cursor: {e}")
     
@@ -204,7 +372,12 @@ class ActionExecutor:
                 kwargs.get("generator", "Ninja"),
                 kwargs.get("compiler", "MSVC")
             ),
-            "cmake_build": lambda: self.cmake_build(kwargs.get("build_type", "Debug")),
+            "cmake_build": lambda: self.cmake_build(
+                kwargs.get("build_type", "Debug"),
+                kwargs.get("compiler", "MSVC")
+            ),
+            "clean_build": lambda: self.clean_build(kwargs.get("compiler", "MSVC")),
+            "clean_all_builds": self.clean_all_builds,
             "open_cursor": self.open_cursor,
             "open_vs": self.open_visual_studio,
             "open_xcode": self.open_xcode,
@@ -242,6 +415,18 @@ ACTIONS = {
         id="cmake_build",
         name="CMake Build",
         description="Build the project with CMake",
+        platforms=[Platform.WINDOWS, Platform.MACOS, Platform.LINUX]
+    ),
+    "clean_build": Action(
+        id="clean_build",
+        name="Clean Build",
+        description="Clean current build directory (permanent deletion via git clean)",
+        platforms=[Platform.WINDOWS, Platform.MACOS, Platform.LINUX]
+    ),
+    "clean_all_builds": Action(
+        id="clean_all_builds",
+        name="Clean All Builds",
+        description="Clean all build directories (permanent deletion via git clean)",
         platforms=[Platform.WINDOWS, Platform.MACOS, Platform.LINUX]
     ),
     "open_cursor": Action(

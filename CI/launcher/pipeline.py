@@ -1,10 +1,13 @@
 """Pipeline execution logic."""
 
-from dataclasses import dataclass
-from typing import Callable, Optional
+from dataclasses import dataclass, field
+from typing import Callable, Optional, TYPE_CHECKING
 from pathlib import Path
 
-from .actions import ActionExecutor, ActionResult, ACTIONS
+from .actions import ActionExecutor, ActionResult, ACTIONS, get_build_dir_name
+
+if TYPE_CHECKING:
+    from .config import BuildConfiguration
 
 
 @dataclass
@@ -132,4 +135,141 @@ class PipelineExecutor:
     
     def cancel(self) -> None:
         """Cancel the current pipeline execution."""
+        self._cancelled = True
+
+
+@dataclass
+class ConfigPipelineResult:
+    """Result of pipeline execution for a single configuration."""
+    config_name: str
+    build_dir: str
+    pipeline_result: PipelineResult
+    
+    @property
+    def success(self) -> bool:
+        return self.pipeline_result.success
+
+
+@dataclass
+class MultiConfigPipelineResult:
+    """Result of multi-configuration pipeline execution."""
+    success: bool
+    configs_completed: int
+    total_configs: int
+    results: list[ConfigPipelineResult]
+    
+    @property
+    def summary(self) -> str:
+        successful = sum(1 for r in self.results if r.success)
+        failed = len(self.results) - successful
+        if self.success:
+            return f"All {self.total_configs} configuration(s) completed successfully"
+        else:
+            return f"Completed {successful}/{self.total_configs} configurations ({failed} failed)"
+
+
+class MultiConfigPipelineExecutor:
+    """Executes pipelines for multiple build configurations."""
+    
+    def __init__(self, project_root: Path):
+        self.project_root = project_root
+        self._cancelled = False
+    
+    def execute(
+        self,
+        pipeline: Pipeline,
+        configurations: list["BuildConfiguration"],
+        ide: str = "cursor",
+        on_config_start: Optional[Callable[[int, str, str], None]] = None,
+        on_config_complete: Optional[Callable[[int, str, bool], None]] = None,
+        on_step_start: Optional[Callable[[int, str], None]] = None,
+        on_step_complete: Optional[Callable[[int, str, ActionResult], None]] = None,
+        on_output: Optional[Callable[[str], None]] = None,
+    ) -> MultiConfigPipelineResult:
+        """Execute pipeline for all enabled configurations.
+        
+        Args:
+            pipeline: Pipeline to execute
+            configurations: List of build configurations
+            ide: IDE to open (for open_ide action)
+            on_config_start: Callback(config_index, config_name, build_dir)
+            on_config_complete: Callback(config_index, config_name, success)
+            on_step_start: Callback(step_index, step_name)
+            on_step_complete: Callback(step_index, step_name, result)
+            on_output: Callback(output_text)
+        """
+        self._cancelled = False
+        results: list[ConfigPipelineResult] = []
+        
+        # Filter only enabled configurations
+        enabled_configs = [c for c in configurations if c.enabled]
+        
+        if not enabled_configs:
+            return MultiConfigPipelineResult(
+                success=False,
+                configs_completed=0,
+                total_configs=0,
+                results=[]
+            )
+        
+        for i, config in enumerate(enabled_configs):
+            if self._cancelled:
+                return MultiConfigPipelineResult(
+                    success=False,
+                    configs_completed=i,
+                    total_configs=len(enabled_configs),
+                    results=results
+                )
+            
+            build_dir = get_build_dir_name(config.compiler)
+            
+            if on_config_start:
+                on_config_start(i, config.name, build_dir)
+            
+            if on_output:
+                on_output(f"\n{'='*60}")
+                on_output(f"Configuration: {config.name}")
+                on_output(f"Build directory: build/{build_dir}")
+                on_output(f"Compiler: {config.compiler}, Generator: {config.generator}")
+                on_output(f"{'='*60}\n")
+            
+            # Create executor for this configuration
+            executor = PipelineExecutor(self.project_root)
+            
+            # Execute pipeline with this configuration's settings
+            pipeline_result = executor.execute(
+                pipeline=pipeline,
+                build_type=config.build_type,
+                generator=config.generator,
+                compiler=config.compiler,
+                ide=ide,
+                on_step_start=on_step_start,
+                on_step_complete=on_step_complete,
+                on_output=on_output,
+            )
+            
+            config_result = ConfigPipelineResult(
+                config_name=config.name,
+                build_dir=build_dir,
+                pipeline_result=pipeline_result
+            )
+            results.append(config_result)
+            
+            if on_config_complete:
+                on_config_complete(i, config.name, pipeline_result.success)
+            
+            # Continue to next configuration even if this one failed
+            # (unless cancelled)
+        
+        all_success = all(r.success for r in results)
+        
+        return MultiConfigPipelineResult(
+            success=all_success,
+            configs_completed=len(results),
+            total_configs=len(enabled_configs),
+            results=results
+        )
+    
+    def cancel(self) -> None:
+        """Cancel the current multi-config pipeline execution."""
         self._cancelled = True
