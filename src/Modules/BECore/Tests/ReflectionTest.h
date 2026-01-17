@@ -16,7 +16,9 @@ namespace BECore {
         /**
          * @brief Example reflected class for testing
          */
-        struct BE_REFLECT_CLASS Player {
+        struct Player {
+            BE_CLASS(Player)
+
             BE_REFLECT_FIELD int32_t health = 100;
             BE_REFLECT_FIELD float speed = 5.0f;
             BE_REFLECT_FIELD PoolString name;
@@ -26,7 +28,9 @@ namespace BECore {
         /**
          * @brief Nested reflected class for testing
          */
-        struct BE_REFLECT_CLASS Inventory {
+        struct Inventory {
+            BE_CLASS(Inventory)
+
             BE_REFLECT_FIELD int32_t gold = 0;
             BE_REFLECT_FIELD int32_t itemCount = 0;
         };
@@ -34,7 +38,9 @@ namespace BECore {
         /**
          * @brief Class with nested object for testing
          */
-        struct BE_REFLECT_CLASS GameState {
+        struct GameState {
+            BE_CLASS(GameState)
+
             BE_REFLECT_FIELD Player player;
             BE_REFLECT_FIELD Inventory inventory;
             BE_REFLECT_FIELD int32_t level = 1;

@@ -5,7 +5,7 @@
 #include <BECore/Reflection/BinaryArchive.h>
 #include <BECore/Logger/Logger.h>
 
-#include "ReflectionTest.gen.hpp"
+#include <Generated/ReflectionTest.gen.hpp>
 
 namespace BECore {
 

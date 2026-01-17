@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Reflection/ReflectionMarkers.h>
 #include <EASTL/string_view.h>
 #include <EASTL/tuple.h>
 #include <type_traits>
@@ -39,8 +40,9 @@ namespace BECore {
      * - static constexpr auto fields - tuple of FieldInfo
      *
      * @tparam T The type to get reflection traits for
+     * @note Default argument is specified in ReflectionMarkers.h forward declaration
      */
-    template <typename T, typename = void>
+    template <typename T, typename>
     struct ReflectionTraits {
         static constexpr bool reflected = false;
     };

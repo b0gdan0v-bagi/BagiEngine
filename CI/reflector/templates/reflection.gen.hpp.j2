@@ -46,7 +46,7 @@ namespace BECore {
 {% for cls in classes %}
 /**
  * @brief Reflection traits for {{ cls.qualified_name }}
- * @note Auto-generated from {{ cls.name }} marked with BE_REFLECT_CLASS
+ * @note Auto-generated from {{ cls.name }} marked with BE_CLASS
  *
  * Fields:
 {% for field in cls.fields %}
@@ -70,4 +70,36 @@ struct ReflectionTraits<{{ cls.qualified_name }}> {
 {% endfor %}
 }  // namespace BECore
 
+// ============================================================================
+// BE_CLASS() Static Method Implementations
+// ============================================================================
+{% for cls in classes %}
+
+// {{ cls.full_qualified_name }}::GetStaticTypeName()
+inline constexpr eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
+    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::name;
+}
+
+// {{ cls.full_qualified_name }}::GetStaticFieldCount()
+inline constexpr size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
+    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::field_count;
+}
+
+// {{ cls.full_qualified_name }}::ForEachFieldStatic (mutable)
+template<typename Func>
+inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic({{ cls.full_qualified_name }}& obj, Func&& func) {
+    std::apply([&](auto&&... fields) {
+        (func(fields.name, obj.*(fields.ptr)), ...);
+    }, ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields);
+}
+
+// {{ cls.full_qualified_name }}::ForEachFieldStatic (const)
+template<typename Func>
+inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic(const {{ cls.full_qualified_name }}& obj, Func&& func) {
+    std::apply([&](auto&&... fields) {
+        (func(fields.name, obj.*(fields.ptr)), ...);
+    }, ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields);
+}
+
+{% endfor %}
 {% endif %}

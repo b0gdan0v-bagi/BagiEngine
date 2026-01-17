@@ -3,7 +3,7 @@
 BagiEngine Reflection Code Generator
 
 Parses C++ headers using regex patterns to extract types marked with reflection macros
-(BE_REFLECT_CLASS, BE_REFLECT_FIELD, BE_REFLECT_ENUM) and generates reflection
+(BE_CLASS, BE_REFLECT_FIELD, BE_REFLECT_ENUM) and generates reflection
 metadata code using Jinja2 templates.
 
 This is a simplified regex-based approach that works without requiring full
@@ -39,7 +39,8 @@ class FieldData:
 class ClassData:
     """Information about a reflected class."""
     name: str
-    qualified_name: str
+    qualified_name: str  # For use inside namespace BECore (e.g., "TestData::Player")
+    full_qualified_name: str  # For use outside namespaces (e.g., "BECore::TestData::Player")
     namespace: str
     fields: List[FieldData] = field(default_factory=list)
 
@@ -60,27 +61,71 @@ class EnumData:
     values: List[EnumValue] = field(default_factory=list)
 
 
+def get_namespace_at_position(content: str, position: int) -> str:
+    """Get the full namespace path at a given position in the content."""
+    namespace_pattern = re.compile(r'namespace\s+(\w+)\s*\{')
+    
+    # Track namespace stack with (name, brace_depth_before_namespace)
+    ns_stack = []
+    brace_depth = 0
+    i = 0
+    
+    while i < position:
+        # Check for namespace declaration
+        ns_match = namespace_pattern.match(content, i)
+        if ns_match:
+            # Save brace_depth BEFORE the namespace's opening brace
+            ns_stack.append((ns_match.group(1), brace_depth))
+            i = ns_match.end()
+            # Count the namespace's opening brace
+            brace_depth += 1
+            continue
+        
+        if content[i] == '{':
+            brace_depth += 1
+        elif content[i] == '}':
+            brace_depth -= 1
+            # Pop namespaces that are now closed (when depth returns to pre-namespace level)
+            while ns_stack and ns_stack[-1][1] >= brace_depth:
+                ns_stack.pop()
+        
+        i += 1
+    
+    # Return full namespace path (e.g., "BECore::TestData")
+    if not ns_stack:
+        return ""
+    
+    return "::".join(ns[0] for ns in ns_stack)
+
+
 def parse_header_regex(content: str) -> Tuple[List[ClassData], List[EnumData]]:
     """
     Parse header file using regex patterns to find reflected types.
     
     Looks for:
-    - BE_REFLECT_CLASS or /* BE_REFLECT_CLASS */ before struct/class
+    - BE_CLASS(ClassName) inside struct/class body (new format)
+    - BE_REFLECT_CLASS before struct/class (legacy format)
     - BE_REFLECT_FIELD or /* BE_REFLECT_FIELD */ before field declarations
     - BE_REFLECT_ENUM or /* BE_REFLECT_ENUM */ before enum class
     """
     classes: List[ClassData] = []
     enums: List[EnumData] = []
     
-    # Track current namespace context
-    current_namespace = ""
+    # Pattern for finding struct/class declarations
+    struct_class_pattern = re.compile(
+        r'(?:struct|class)\s+(\w+)\s*(?::\s*[^{]+)?\s*\{',
+        re.MULTILINE
+    )
     
-    # Find namespace declarations
-    namespace_pattern = re.compile(r'namespace\s+(\w+)\s*\{')
+    # Pattern for BE_CLASS(ClassName) macro
+    be_class_macro_pattern = re.compile(
+        r'BE_CLASS\s*\(\s*(\w+)\s*\)',
+        re.MULTILINE
+    )
     
-    # Pattern for BE_REFLECT_CLASS struct/class
+    # Legacy pattern for BE_REFLECT_CLASS struct/class
     # Matches: struct BE_REFLECT_CLASS Name { or /* BE_REFLECT_CLASS */ struct Name {
-    class_pattern = re.compile(
+    legacy_class_pattern = re.compile(
         r'(?:struct|class)\s+BE_REFLECT_CLASS\s+(\w+)|'
         r'/\*\s*BE_REFLECT_CLASS\s*\*/\s*(?:struct|class)\s+(\w+)|'
         r'BE_REFLECT_CLASS\s+(?:struct|class)\s+(\w+)',
@@ -102,35 +147,97 @@ def parse_header_regex(content: str) -> Tuple[List[ClassData], List[EnumData]]:
         re.MULTILINE
     )
     
-    # Find namespaces (simplified - assumes single namespace level)
-    namespace_matches = list(namespace_pattern.finditer(content))
-    if namespace_matches:
-        # Use the last namespace before TestData or the first one
-        for match in namespace_matches:
-            ns = match.group(1)
-            if ns == "TestData":
-                current_namespace = ns
-                break
-            current_namespace = ns
-    
-    # Find reflected classes/structs
-    for match in class_pattern.finditer(content):
-        class_name = match.group(1) or match.group(2) or match.group(3)
-        if not class_name:
+    # Find classes with BE_CLASS(ClassName) macro (new format)
+    # First, find all struct/class declarations
+    for struct_match in struct_class_pattern.finditer(content):
+        struct_name = struct_match.group(1)
+        class_start = struct_match.end() - 1  # Position of opening brace
+        
+        # Find matching closing brace
+        brace_count = 1
+        class_end = class_start + 1
+        while class_end < len(content) and brace_count > 0:
+            if content[class_end] == '{':
+                brace_count += 1
+            elif content[class_end] == '}':
+                brace_count -= 1
+            class_end += 1
+        
+        class_body = content[class_start:class_end]
+        
+        # Check if BE_CLASS macro is in this class body
+        macro_match = be_class_macro_pattern.search(class_body)
+        if not macro_match:
             continue
         
-        # Determine namespace for this class
-        # Look for namespace declaration before this class
-        class_pos = match.start()
-        ns = ""
-        for ns_match in namespace_pattern.finditer(content[:class_pos]):
-            ns = ns_match.group(1)
+        macro_name = macro_match.group(1)
         
-        qualified = f"{ns}::{class_name}" if ns else class_name
+        # Verify struct name matches macro argument
+        if struct_name != macro_name:
+            continue
+        
+        class_name = struct_name
+        class_pos = struct_match.start()
+        
+        # Determine namespace
+        ns = get_namespace_at_position(content, class_pos)
+        full_qualified = f"{ns}::{class_name}" if ns else class_name
+        
+        # For use inside namespace BECore, strip the BECore:: prefix
+        if ns.startswith("BECore::"):
+            qualified = f"{ns[8:]}::{class_name}"
+        elif ns == "BECore":
+            qualified = class_name
+        else:
+            qualified = full_qualified
         
         cls = ClassData(
             name=class_name,
             qualified_name=qualified,
+            full_qualified_name=full_qualified,
+            namespace=ns
+        )
+        
+        # Find fields in class body
+        for field_match in field_pattern.finditer(class_body):
+            type_name = (field_match.group(1) or field_match.group(3) or "").strip()
+            field_name = field_match.group(2) or field_match.group(4)
+            
+            if type_name and field_name:
+                cls.fields.append(FieldData(
+                    name=field_name,
+                    type_name=type_name
+                ))
+        
+        classes.append(cls)
+    
+    # Find legacy classes with BE_REFLECT_CLASS marker
+    for match in legacy_class_pattern.finditer(content):
+        class_name = match.group(1) or match.group(2) or match.group(3)
+        if not class_name:
+            continue
+        
+        # Check if this class was already found via BE_CLASS
+        class_pos = match.start()
+        ns = get_namespace_at_position(content, class_pos)
+        full_qualified = f"{ns}::{class_name}" if ns else class_name
+        
+        # For use inside namespace BECore, strip the BECore:: prefix
+        if ns.startswith("BECore::"):
+            qualified = f"{ns[8:]}::{class_name}"
+        elif ns == "BECore":
+            qualified = class_name
+        else:
+            qualified = full_qualified
+        
+        # Skip if already found
+        if any(c.full_qualified_name == full_qualified for c in classes):
+            continue
+        
+        cls = ClassData(
+            name=class_name,
+            qualified_name=qualified,
+            full_qualified_name=full_qualified,
             namespace=ns
         )
         
@@ -175,10 +282,7 @@ def parse_header_regex(content: str) -> Tuple[List[ClassData], List[EnumData]]:
         
         # Determine namespace
         enum_pos = match.start()
-        ns = ""
-        for ns_match in namespace_pattern.finditer(content[:enum_pos]):
-            ns = ns_match.group(1)
-        
+        ns = get_namespace_at_position(content, enum_pos)
         qualified = f"{ns}::{enum_name}" if ns else enum_name
         
         enum_data = EnumData(

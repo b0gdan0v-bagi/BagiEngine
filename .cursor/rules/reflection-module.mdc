@@ -13,90 +13,49 @@ alwaysApply: false
 
 BagiEngine uses a compile-time reflection system with Python-based code generation.
 The system provides:
-- `BE_REFLECT_CLASS` / `BE_REFLECT_FIELD` / `BE_REFLECT_ENUM` markers
-- Auto-generated `ReflectionTraits<T>` specializations
+- `BE_CLASS(ClassName)` macro for class reflection
+- `BE_REFLECT_FIELD` / `BE_REFLECT_ENUM` markers
+- Auto-generated static methods and `ReflectionTraits<T>` specializations
 - EnumUtils compatibility for reflected enums
 - Abstract `IArchive` interface for serialization
 
 ## Marking Types for Reflection
 
-### Classes and Structs
+### Macros
 
-```cpp
-struct BE_REFLECT_CLASS Player {
-    BE_REFLECT_FIELD int32_t health = 100;
-    BE_REFLECT_FIELD float speed = 5.0f;
-    BE_REFLECT_FIELD PoolString name;
-    
-    // Non-reflected fields (not serialized)
-    int32_t _internalState = 0;
-};
-```
+| Macro | Location | Purpose |
+|-------|----------|---------|
+| `BE_CLASS(Name)` | Inside class body | Declares static reflection methods |
+| `BE_REFLECT_FIELD` | Before field declaration | Marks field for serialization |
+| `BE_REFLECT_ENUM` | Before enum class | Enables EnumUtils compatibility |
 
-### Enums
+### Usage Pattern
 
-```cpp
-enum class BE_REFLECT_ENUM Direction : uint8_t {
-    North, South, East, West
-};
-```
+1. Add `BE_CLASS(ClassName)` inside struct/class body
+2. Mark serializable fields with `BE_REFLECT_FIELD`
+3. Include generated file in .cpp: `#include <Generated/FileName.gen.hpp>`
 
-Reflected enums are compatible with `EnumUtils<T>`:
-- `EnumUtils<Direction>::ToString(Direction::North)` returns "North"
-- `EnumUtils<Direction>::FromString("South")` returns Direction::South
+## Generated Static Methods
+
+| Method | Description |
+|--------|-------------|
+| `GetStaticTypeName()` | Returns type name as `eastl::string_view` |
+| `GetStaticFieldCount()` | Returns number of reflected fields |
+| `ForEachFieldStatic(obj, func)` | Iterates over all fields with callback |
 
 ## Code Generation
 
 ### CMake Integration
 
-Use `add_reflection_target()` to enable code generation:
+Use `add_reflection_target()` in CMakeLists.txt to enable code generation.
+Generated files are placed in `${CMAKE_BINARY_DIR}/Generated/`.
 
-```cmake
-add_reflection_target(MyTarget
-    HEADERS
-        ${CMAKE_CURRENT_SOURCE_DIR}/Player.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/GameState.h
-    INCLUDE_DIRS
-        ${CMAKE_SOURCE_DIR}/src/Modules
-)
-```
+### Include Path
 
-Generated files are placed in `${CMAKE_BINARY_DIR}/generated/`.
+Include generated headers using angle brackets:
+- `#include <Generated/MyFile.gen.hpp>`
 
-### Manual Testing
-
-For testing without code generation, define `ReflectionTraits<T>` manually:
-
-```cpp
-template<>
-struct ReflectionTraits<MyClass> {
-    static constexpr bool reflected = true;
-    static constexpr eastl::string_view name = "MyClass";
-    
-    static constexpr auto fields = std::make_tuple(
-        FieldInfo{ eastl::string_view{"field1"}, &MyClass::field1 },
-        FieldInfo{ eastl::string_view{"field2"}, &MyClass::field2 }
-    );
-    
-    static constexpr size_t field_count = 2;
-};
-```
-
-## Serialization API
-
-### Using Archives
-
-```cpp
-// Writing
-XmlArchive writeArchive(XmlArchive::Mode::Write);
-Serialize(writeArchive, "root", myObject);
-writeArchive.SaveToFile("save.xml");
-
-// Reading
-XmlArchive readArchive(XmlArchive::Mode::Read);
-readArchive.LoadFromFile("save.xml");
-Serialize(readArchive, "root", myObject);
-```
+## Serialization
 
 ### Available Archives
 
@@ -107,78 +66,45 @@ Serialize(readArchive, "root", myObject);
 
 ### Helper Functions
 
-```cpp
-// Iterate over all fields
-ForEachField(player, [](eastl::string_view name, auto& value) {
-    // Process each field
-});
+| Function | Description |
+|----------|-------------|
+| `ForEachField(obj, func)` | Iterate over all reflected fields |
+| `FieldCount<T>()` | Get number of reflected fields |
+| `HasReflection<T>` | Concept to check if type has reflection |
+| `Serialize(archive, name, obj)` | Serialize/deserialize object |
 
-// Get field count
-constexpr size_t count = FieldCount<Player>();
+## File Structure
 
-// Check if type has reflection
-if constexpr (HasReflection<T>) {
-    // Use reflection
-}
-```
-
-## Implementing Custom Archives
-
-Inherit from `IArchive` and implement all virtual methods:
-
-```cpp
-class MyArchive : public IArchive {
-public:
-    bool IsReading() const override;
-    bool IsWriting() const override;
-    
-    void Serialize(eastl::string_view name, int32_t& value) override;
-    // ... other Serialize overloads
-    
-    bool BeginObject(eastl::string_view name) override;
-    void EndObject() override;
-    
-    bool BeginArray(eastl::string_view name, size_t& count) override;
-    void EndArray() override;
-};
-```
+| Path | Contents |
+|------|----------|
+| `BECore/Reflection/ReflectionMarkers.h` | `BE_CLASS`, `BE_REFLECT_*` macros |
+| `BECore/Reflection/TypeTraits.h` | `ReflectionTraits<T>`, `FieldInfo` |
+| `BECore/Reflection/IArchive.h` | Abstract archive interface |
+| `BECore/Reflection/SaveSystem.h` | `Serialize<T>` function |
+| `BECore/Reflection/XmlArchive.h` | XML implementation |
+| `BECore/Reflection/BinaryArchive.h` | Binary implementation |
+| `CI/reflector/reflector.py` | Code generator script |
+| `CI/reflector/templates/` | Jinja2 templates |
 
 ## Key Points
 
 - Use `eastl::string_view` for names (not `std::string_view`)
-- Field pointers are stored as pointer-to-member (`T Class::*`)
 - Generated code is placed in build directory, excluded from source control
-- The Python parser (`CI/reflector/reflector.py`) uses libclang for AST parsing
-- Jinja2 templates are in `CI/reflector/templates/`
-
-## File Structure
-
-```
-src/Modules/BECore/Reflection/
-    ReflectionMarkers.h    # BE_REFLECT_* macros
-    TypeTraits.h           # ReflectionTraits<T>, FieldInfo
-    IArchive.h             # Abstract archive interface
-    SaveSystem.h           # Serialize<T> function
-    XmlArchive.h/cpp       # XML implementation
-    BinaryArchive.h/cpp    # Binary implementation
-
-CI/reflector/
-    requirements.txt       # Python dependencies
-    reflector.py           # Code generator
-    templates/
-        reflection.gen.hpp.j2
-```
+- Python parser uses regex patterns to find `BE_CLASS()` and `BE_REFLECT_FIELD`
 
 ## DO
 
+- Use `BE_CLASS(ClassName)` inside class body
 - Mark all serializable fields with `BE_REFLECT_FIELD`
 - Use `PoolString` for frequently used strings
-- Include generated headers after the class definition
+- Include generated headers in .cpp files
 - Test serialization round-trips (write then read)
+- Add headers to `add_reflection_target()` in CMakeLists.txt
 
 ## DON'T
 
 - Don't reflect pointer types directly (use IDs or special handling)
 - Don't reflect reference types
 - Don't modify generated files (they are overwritten)
-- Don't forget to add headers to `add_reflection_target()`
+- Don't forget the `ClassName` argument in `BE_CLASS(ClassName)`
+- Don't include generated headers in .h files (use forward declarations)
