@@ -1,7 +1,10 @@
 #include "ConsoleSink.h"
 
+#include <BECore/Config/XmlNode.h>
 #include <BECore/Logger/LogLevel.h>
 
+#include <EASTL/string_view.h>
+#include <EASTL/string.h>
 #include <fmt/core.h>
 #include <fmt/chrono.h>
 #include <chrono>
@@ -14,10 +17,22 @@ namespace BECore {
             return;
         }
 
+        LogEvent::Subscribe<&ConsoleSink::OnLogEvent>(this);
         _initialized = true;
     }
 
-    void ConsoleSink::Write(LogLevel level, const char* message, const char* file, int line) {
+    void ConsoleSink::Configure(const XmlNode& node) {
+        auto colorEnabled = node.ParseAttribute<bool>("colorEnabled");
+        if (colorEnabled.has_value()) {
+            SetColorEnabled(*colorEnabled);
+        }
+    }
+
+    void ConsoleSink::OnLogEvent(const LogEvent& event) {
+        Write(event.level, event.message);
+    }
+
+    void ConsoleSink::Write(LogLevel level, eastl::string_view message) {
         if (!ShouldLog(level)) {
             return;
         }
@@ -36,33 +51,17 @@ namespace BECore {
             const char* color = LogLevelColor(level);
             const char* reset = LogColorReset;
 
-            if (file && line > 0) {
-                fmt::print(stream, 
-                    "{}[{:5}]{} [{:%H:%M:%S}.{:03d}] {} ({}:{})\n",
-                    color, LogLevelToDisplayString(level), reset,
-                    fmt::localtime(time), ms.count(),
-                    message, file, line);
-            } else {
-                fmt::print(stream,
-                    "{}[{:5}]{} [{:%H:%M:%S}.{:03d}] {}\n",
-                    color, LogLevelToDisplayString(level), reset,
-                    fmt::localtime(time), ms.count(),
-                    message);
-            }
+            fmt::print(stream,
+                "{}[{:5}]{} [{:%H:%M:%S}.{:03d}] {}\n",
+                color, LogLevelToDisplayString(level), reset,
+                fmt::localtime(time), ms.count(),
+                eastl::string(message.data(), message.size()));
         } else {
-            if (file && line > 0) {
-                fmt::print(stream,
-                    "[{:5}] [{:%H:%M:%S}.{:03d}] {} ({}:{})\n",
-                    LogLevelToDisplayString(level),
-                    fmt::localtime(time), ms.count(),
-                    message, file, line);
-            } else {
-                fmt::print(stream,
-                    "[{:5}] [{:%H:%M:%S}.{:03d}] {}\n",
-                    LogLevelToDisplayString(level),
-                    fmt::localtime(time), ms.count(),
-                    message);
-            }
+            fmt::print(stream,
+                "[{:5}] [{:%H:%M:%S}.{:03d}] {}\n",
+                LogLevelToDisplayString(level),
+                fmt::localtime(time), ms.count(),
+                eastl::string(message.data(), message.size()));
         }
     }
 

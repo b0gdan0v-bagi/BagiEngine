@@ -58,7 +58,8 @@
 			"*.cpp": "cpp",
 			"*.ipp": "cpp",
 			"CMakeLists.txt": "cmake",
-			"*.cmake": "cmake"
+			"*.cmake": "cmake",
+			"type_traits": "cpp"
 		},
 		
 		// Форматирование

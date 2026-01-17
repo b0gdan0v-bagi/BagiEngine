@@ -4,8 +4,9 @@
 #include <BECore/Config/XmlConfig.h>
 #include <BECore/Logger/Logger.h>
 
-#include <fmt/core.h>
 #include <EASTL/sort.h>
+#include <EASTL/string_view.h>
+#include <fmt/core.h>
 
 namespace BECore {
 
@@ -66,24 +67,25 @@ namespace BECore {
         }
 
         // Build the message
-        std::string message;
+        eastl::string message;
         
         if (event.expression) {
             if (event.message) {
-                message = fmt::format("{} failed: {} - {}", typeStr, event.expression, event.message);
+                
+                message = Format("{} failed: {} - {}", typeStr, event.expression, event.message);
             } else {
-                message = fmt::format("{} failed: {}", typeStr, event.expression);
+                message = Format("{} failed: {}", typeStr, event.expression);
             }
         } else {
             // FATALERROR case - no expression, just message
             if (event.message) {
-                message = fmt::format("{}: {}", typeStr, event.message);
+                message = Format("{}: {}", typeStr, event.message);
             } else {
-                message = fmt::format("{}: (no message)", typeStr);
+                message = Format("{}: (no message)", typeStr);
             }
         }
 
-        Logger::LogRaw(level, message.c_str(), event.file, event.line);
+        LogEvent::Emit(level, message);
     }
 
     // AssertHandlerManager implementation

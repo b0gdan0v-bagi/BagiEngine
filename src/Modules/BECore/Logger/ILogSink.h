@@ -3,7 +3,11 @@
 #include <BECore/Logger/LogLevel.h>
 #include <BECore/RefCounted/RefCounted.h>
 
+#include <EASTL/string_view.h>
+
 namespace BECore {
+
+    class XmlNode;
 
     /**
      * @brief Interface for log output destinations
@@ -21,7 +25,7 @@ namespace BECore {
      *         // Setup sink
      *     }
      * 
-     *     void Write(LogLevel level, const char* message, const char* file, int line) override {
+     *     void Write(LogLevel level, eastl::string_view message) override {
      *         // Write log message
      *     }
      * 
@@ -43,14 +47,22 @@ namespace BECore {
         virtual void Initialize() = 0;
 
         /**
+         * @brief Configure the sink from XML node
+         * 
+         * Called after sink creation to configure type-specific options.
+         * Base implementation does nothing - override in derived classes.
+         * 
+         * @param node XML node containing sink configuration
+         */
+        virtual void Configure(const XmlNode& node) {}
+
+        /**
          * @brief Write a log message to the sink
          * 
          * @param level Severity level of the message
          * @param message The formatted log message
-         * @param file Source file (can be nullptr)
-         * @param line Source line (0 if not available)
          */
-        virtual void Write(LogLevel level, const char* message, const char* file, int line) = 0;
+        virtual void Write(LogLevel level, eastl::string_view message) = 0;
 
         /**
          * @brief Flush any buffered output

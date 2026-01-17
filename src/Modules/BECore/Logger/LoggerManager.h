@@ -31,23 +31,17 @@ namespace BECore {
          * Loads config/LoggerConfig.xml, creates sinks,
          * sorts them by priority, and initializes each one.
          * Safe to call multiple times - subsequent calls are no-ops.
+         * 
+         * Sinks automatically subscribe to LogEvent during initialization.
+         * LoggerManager subscribes to FlushEvent to handle flush requests.
          */
         void Initialize();
 
+    private:
         /**
-         * @brief Log a message to all sinks
-         * 
-         * @param level Severity level of the message
-         * @param message The formatted log message
-         * @param file Source file (can be nullptr)
-         * @param line Source line (0 if not available)
+         * @brief Handle FlushEvent
          */
-        void Log(LogLevel level, const char* message, const char* file, int line);
-
-        /**
-         * @brief Flush all sinks
-         */
-        void Flush();
+        void OnFlushEvent();
 
         /**
          * @brief Get sink by type

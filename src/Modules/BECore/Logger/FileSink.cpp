@@ -1,7 +1,10 @@
 #include "FileSink.h"
 
+#include <BECore/Config/XmlNode.h>
 #include <BECore/Logger/LogLevel.h>
 
+#include <EASTL/string_view.h>
+#include <EASTL/string.h>
 #include <fmt/core.h>
 #include <fmt/chrono.h>
 #include <chrono>
@@ -19,6 +22,8 @@ namespace BECore {
             return;
         }
 
+        LogEvent::Subscribe<&FileSink::OnLogEvent>(this);
+
         auto mode = std::ios::out;
         if (_append) {
             mode |= std::ios::app;
@@ -28,7 +33,23 @@ namespace BECore {
         _initialized = true;
     }
 
-    void FileSink::Write(LogLevel level, const char* message, const char* file, int line) {
+    void FileSink::Configure(const XmlNode& node) {
+        auto filename = node.ParseAttribute<std::string_view>("filename");
+        if (filename.has_value()) {
+            SetFilename(std::string(*filename));
+        }
+
+        auto append = node.ParseAttribute<bool>("append");
+        if (append.has_value()) {
+            SetAppend(*append);
+        }
+    }
+
+    void FileSink::OnLogEvent(const LogEvent& event) {
+        Write(event.level, event.message);
+    }
+
+    void FileSink::Write(LogLevel level, eastl::string_view message) {
         if (!ShouldLog(level) || !_file.is_open()) {
             return;
         }
@@ -42,19 +63,11 @@ namespace BECore {
         std::lock_guard<std::mutex> lock(_mutex);
 
         // Format and output (no colors in file)
-        if (file && line > 0) {
-            _file << fmt::format(
-                "[{:5}] [{:%Y-%m-%d %H:%M:%S}.{:03d}] {} ({}:{})\n",
-                LogLevelToDisplayString(level),
-                fmt::localtime(time), ms.count(),
-                message, file, line);
-        } else {
-            _file << fmt::format(
-                "[{:5}] [{:%Y-%m-%d %H:%M:%S}.{:03d}] {}\n",
-                LogLevelToDisplayString(level),
-                fmt::localtime(time), ms.count(),
-                message);
-        }
+        _file << fmt::format(
+            "[{:5}] [{:%Y-%m-%d %H:%M:%S}.{:03d}] {}\n",
+            LogLevelToDisplayString(level),
+            fmt::localtime(time), ms.count(),
+            eastl::string(message.data(), message.size()));
     }
 
     void FileSink::Flush() {

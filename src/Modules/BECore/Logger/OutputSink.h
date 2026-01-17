@@ -1,12 +1,15 @@
 #pragma once
 
 #include <BECore/Logger/ILogSink.h>
+#include <BECore/Logger/LogEvent.h>
 
 #ifdef PLATFORM_WINDOWS
 #include <windows.h>
 #endif
 
 namespace BECore {
+
+    class XmlNode;
 
     /**
      * @brief Log sink that outputs to platform-specific debug output
@@ -26,14 +29,27 @@ namespace BECore {
         void Initialize() override;
 
         /**
+         * @brief Configure the Output sink from XML node
+         * 
+         * OutputSink has no configuration options, so this is a no-op.
+         * 
+         * @param node XML node containing sink configuration
+         */
+        void Configure(const XmlNode& node) override {}
+
+        /**
          * @brief Write a log message to platform debug output
          * 
          * @param level Severity level of the message
          * @param message The formatted log message
-         * @param file Source file (can be nullptr)
-         * @param line Source line (0 if not available)
          */
-        void Write(LogLevel level, const char* message, const char* file, int line) override;
+        void Write(LogLevel level, eastl::string_view message) override;
+
+    private:
+        /**
+         * @brief Handle LogEvent
+         */
+        void OnLogEvent(const LogEvent& event);
 
         /**
          * @brief Flush Output (no-op, platform debug output is immediate)

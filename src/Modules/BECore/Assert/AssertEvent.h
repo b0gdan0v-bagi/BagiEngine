@@ -13,23 +13,6 @@ namespace BECore {
         FatalError  ///< Fatal error (FATALERROR macro)
     };
 
-    /**
-     * @brief Event emitted when an assertion fails
-     * 
-     * Contains all information about the failed assertion including
-     * file location, expression, and optional message.
-     * 
-     * Handlers can subscribe to this event to implement custom behavior
-     * such as logging, debug breaks, or crash reporting.
-     * 
-     * @example
-     * // Subscribe to assert events
-     * AssertEvent::Subscribe<&MyHandler::OnAssert>(this);
-     * 
-     * void OnAssert(const AssertEvent& event) {
-     *     // Handle assertion failure
-     * }
-     */
     struct AssertEvent : EventBase<AssertEvent> {
         const char* file;        ///< Source file where assertion failed
         int line;                ///< Line number where assertion failed

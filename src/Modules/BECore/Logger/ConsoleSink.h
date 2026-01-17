@@ -1,8 +1,11 @@
 #pragma once
 
 #include <BECore/Logger/ILogSink.h>
+#include <BECore/Logger/LogEvent.h>
 
 namespace BECore {
+
+    class XmlNode;
 
     /**
      * @brief Log sink that outputs to console (stdout/stderr)
@@ -21,14 +24,25 @@ namespace BECore {
         void Initialize() override;
 
         /**
+         * @brief Configure the console sink from XML node
+         * 
+         * @param node XML node containing sink configuration
+         */
+        void Configure(const XmlNode& node) override;
+
+        /**
          * @brief Write a log message to console
          * 
          * @param level Severity level of the message
          * @param message The formatted log message
-         * @param file Source file (can be nullptr)
-         * @param line Source line (0 if not available)
          */
-        void Write(LogLevel level, const char* message, const char* file, int line) override;
+        void Write(LogLevel level, eastl::string_view message) override;
+
+    private:
+        /**
+         * @brief Handle LogEvent
+         */
+        void OnLogEvent(const LogEvent& event);
 
         /**
          * @brief Flush console output

@@ -3,6 +3,7 @@
 #include <BECore/Config/XmlConfig.h>
 #include <BECore/Logger/ConsoleSink.h>
 #include <BECore/Logger/FileSink.h>
+#include <BECore/Logger/LogEvent.h>
 #include <BECore/Logger/OutputSink.h>
 #include <BECore/RefCounted/New.h>
 
@@ -15,7 +16,7 @@ namespace BECore {
             return;
         }
 
-        XmlConfig config = XmlConfig::Create();
+        const XmlConfig config = XmlConfig::Create();
         constexpr std::string_view configPath = "config/LoggerConfig.xml";
 
         if (!config.LoadFromVirtualPath(configPath)) {
@@ -49,38 +50,17 @@ namespace BECore {
                             continue;
                         }
 
-                        // Set priority from config (default: 0)
                         auto priority = sinkNode.ParseAttribute<int>("priority");
                         if (priority.has_value()) {
                             sink->SetPriority(*priority);
                         }
 
-                        // Set min level from config (default: Debug)
                         auto minLevel = sinkNode.ParseAttribute<LogLevel>("minLevel");
                         if (minLevel.has_value()) {
                             sink->SetMinLevel(*minLevel);
                         }
 
-                        // Configure type-specific options
-                        if (*sinkType == LogSinkType::Console) {
-                            if (auto* consoleSink = dynamic_cast<ConsoleSink*>(sink.Get())) {
-                                auto colorEnabled = sinkNode.ParseAttribute<bool>("colorEnabled");
-                                if (colorEnabled.has_value()) {
-                                    consoleSink->SetColorEnabled(*colorEnabled);
-                                }
-                            }
-                        } else if (*sinkType == LogSinkType::File) {
-                            if (auto* fileSink = dynamic_cast<FileSink*>(sink.Get())) {
-                                auto filename = sinkNode.ParseAttribute<std::string_view>("filename");
-                                if (filename.has_value()) {
-                                    fileSink->SetFilename(std::string(*filename));
-                                }
-                                auto append = sinkNode.ParseAttribute<bool>("append");
-                                if (append.has_value()) {
-                                    fileSink->SetAppend(*append);
-                                }
-                            }
-                        }
+                        sink->Configure(sinkNode);
 
                         _sinks.push_back(sink);
                     }
@@ -96,21 +76,13 @@ namespace BECore {
             sink->Initialize();
         }
 
+        // Subscribe to FlushEvent
+        FlushLogsEvent::Subscribe<&LoggerManager::OnFlushEvent>(this);
+
         _initialized = true;
     }
 
-    void LoggerManager::Log(LogLevel level, const char* message, const char* file, int line) {
-        for (auto& sink : _sinks) {
-            sink->Write(level, message, file, line);
-        }
-
-        // Auto-flush on fatal errors
-        if (level == LogLevel::Fatal) {
-            Flush();
-        }
-    }
-
-    void LoggerManager::Flush() {
+    void LoggerManager::OnFlushEvent() {
         for (auto& sink : _sinks) {
             sink->Flush();
         }

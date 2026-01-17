@@ -2,6 +2,8 @@
 
 #include <BECore/Logger/LogLevel.h>
 
+#include <EASTL/string_view.h>
+#include <EASTL/string.h>
 #include <fmt/core.h>
 #include <fmt/chrono.h>
 #include <chrono>
@@ -15,10 +17,15 @@ namespace BECore {
             return;
         }
 
+        LogEvent::Subscribe<&OutputSink::OnLogEvent>(this);
         _initialized = true;
     }
 
-    void OutputSink::Write(LogLevel level, const char* message, const char* file, int line) {
+    void OutputSink::OnLogEvent(const LogEvent& event) {
+        Write(event.level, event.message);
+    }
+
+    void OutputSink::Write(LogLevel level, eastl::string_view message) {
         if (!ShouldLog(level)) {
             return;
         }
@@ -30,20 +37,11 @@ namespace BECore {
             now.time_since_epoch()) % 1000;
 
         // Format message similar to console/file sinks
-        std::string formatted;
-        if (file && line > 0) {
-            formatted = fmt::format(
-                "[{:5}] [{:%H:%M:%S}.{:03d}] {} ({}:{})\n",
-                LogLevelToDisplayString(level),
-                fmt::localtime(time), ms.count(),
-                message, file, line);
-        } else {
-            formatted = fmt::format(
-                "[{:5}] [{:%H:%M:%S}.{:03d}] {}\n",
-                LogLevelToDisplayString(level),
-                fmt::localtime(time), ms.count(),
-                message);
-        }
+        std::string formatted = fmt::format(
+            "[{:5}] [{:%H:%M:%S}.{:03d}] {}\n",
+            LogLevelToDisplayString(level),
+            fmt::localtime(time), ms.count(),
+            eastl::string(message.data(), message.size()));
 
 #if defined(PLATFORM_WINDOWS)
         // Output to Visual Studio Output window
