@@ -11,7 +11,7 @@ namespace BECore {
      * @brief Helper class for formatted logging
      * 
      * Provides static methods for logging through CoreManager's LoggerManager.
-     * Use the LOG_* macros for automatic file/line info.
+     * Use the LOG_* macros for simple logging without file/line info.
      * 
      * @example
      * LOG_INFO("Game started");
@@ -62,6 +62,28 @@ namespace BECore {
         }
 
         // Convenience methods with location info
+        // Overload for simple string literals without formatting
+        static void Debug(const char* file, int line, const char* message) {
+            LogRaw(LogLevel::Debug, message, file, line);
+        }
+
+        static void Info(const char* file, int line, const char* message) {
+            LogRaw(LogLevel::Info, message, file, line);
+        }
+
+        static void Warning(const char* file, int line, const char* message) {
+            LogRaw(LogLevel::Warning, message, file, line);
+        }
+
+        static void Error(const char* file, int line, const char* message) {
+            LogRaw(LogLevel::Error, message, file, line);
+        }
+
+        static void Fatal(const char* file, int line, const char* message) {
+            LogRaw(LogLevel::Fatal, message, file, line);
+        }
+
+        // Overloads with formatting
         template<typename... Args>
         static void Debug(const char* file, int line, fmt::format_string<Args...> format, Args&&... args) {
             Log(LogLevel::Debug, file, line, format, std::forward<Args>(args)...);
@@ -85,6 +107,27 @@ namespace BECore {
         template<typename... Args>
         static void Fatal(const char* file, int line, fmt::format_string<Args...> format, Args&&... args) {
             Log(LogLevel::Fatal, file, line, format, std::forward<Args>(args)...);
+        }
+
+        // Convenience methods without location info (simple strings)
+        static void Debug(const char* message) {
+            LogRaw(LogLevel::Debug, message);
+        }
+
+        static void Info(const char* message) {
+            LogRaw(LogLevel::Info, message);
+        }
+
+        static void Warning(const char* message) {
+            LogRaw(LogLevel::Warning, message);
+        }
+
+        static void Error(const char* message) {
+            LogRaw(LogLevel::Error, message);
+        }
+
+        static void Fatal(const char* message) {
+            LogRaw(LogLevel::Fatal, message);
         }
 
         // Convenience methods without location info
@@ -123,9 +166,9 @@ namespace BECore {
 
 }  // namespace BECore
 
-// Convenience macros with automatic file/line info
-#define LOG_DEBUG(...)   ::BECore::Logger::Debug(__FILE__, __LINE__, __VA_ARGS__)
-#define LOG_INFO(...)    ::BECore::Logger::Info(__FILE__, __LINE__, __VA_ARGS__)
-#define LOG_WARNING(...) ::BECore::Logger::Warning(__FILE__, __LINE__, __VA_ARGS__)
-#define LOG_ERROR(...)   ::BECore::Logger::Error(__FILE__, __LINE__, __VA_ARGS__)
-#define LOG_FATAL(...)   ::BECore::Logger::Fatal(__FILE__, __LINE__, __VA_ARGS__)
+// Convenience macros (format: [time] [level] message)
+#define LOG_DEBUG(...)   ::BECore::Logger::Debug(__VA_ARGS__)
+#define LOG_INFO(...)    ::BECore::Logger::Info(__VA_ARGS__)
+#define LOG_WARNING(...) ::BECore::Logger::Warning(__VA_ARGS__)
+#define LOG_ERROR(...)   ::BECore::Logger::Error(__VA_ARGS__)
+#define LOG_FATAL(...)   ::BECore::Logger::Fatal(__VA_ARGS__)

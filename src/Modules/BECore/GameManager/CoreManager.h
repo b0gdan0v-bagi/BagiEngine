@@ -5,7 +5,7 @@
 #include <BECore/Widgets/WidgetManager.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Assert/AssertHandlers.h>
-#include <BECore/Logger/LogSinks.h>
+#include <BECore/Logger/LoggerManager.h>
 #include <BECore/Tests/TestManager.h>
 
 namespace BECore {

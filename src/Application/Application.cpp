@@ -15,6 +15,8 @@ namespace BECore {
 
         CoreManager::GetInstance().OnApplicationPreInit({});
 
+        LOG_INFO("Game started");
+
         if (!ApplicationFabric::GetInstance().Create()) {
             return false;
         }

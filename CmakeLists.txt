@@ -70,7 +70,13 @@ file(GLOB_RECURSE SOURCES
 
 list(FILTER SOURCES EXCLUDE REGEX "src/Modules/.*")
 
-add_executable(MyGame ${SOURCES})
+# For Windows: create WIN32 executable (no console window)
+# For other platforms: create regular executable
+if(WIN32)
+    add_executable(MyGame WIN32 ${SOURCES})
+else()
+    add_executable(MyGame ${SOURCES})
+endif()
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source Files" FILES ${SOURCES})
 
