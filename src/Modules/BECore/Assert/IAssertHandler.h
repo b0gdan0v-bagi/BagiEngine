@@ -24,8 +24,6 @@ namespace BECore {
      *     void OnAssert(const AssertEvent& event) override {
      *         // Handle assertion
      *     }
-     * 
-     *     int GetPriority() const override { return 100; }
      * };
      */
     class IAssertHandler : public RefCounted {
@@ -58,10 +56,18 @@ namespace BECore {
          * 
          * @return Priority value (lower = higher priority)
          */
-        virtual int GetPriority() const = 0;
+        virtual int GetPriority() const { return _priority; }
+
+        /**
+         * @brief Set handler priority
+         * @param priority Priority value (lower = higher priority)
+         */
+        void SetPriority(int priority) { _priority = priority; }
 
     protected:
         IAssertHandler() = default;
+
+        int _priority = 0;
     };
 
 }  // namespace BECore

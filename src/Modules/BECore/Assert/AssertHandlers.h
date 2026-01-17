@@ -25,13 +25,6 @@ namespace BECore {
 
         void Initialize() override;
         void OnAssert(const AssertEvent& event) override;
-        int GetPriority() const override { return _priority; }
-
-        /**
-         * @brief Set handler priority
-         * @param priority Priority value (lower = higher priority)
-         */
-        void SetPriority(int priority) { _priority = priority; }
 
         /**
          * @brief Enable or disable debug breaks
@@ -46,7 +39,6 @@ namespace BECore {
         bool IsEnabled() const { return _enabled; }
 
     private:
-        int _priority = 0;
         bool _enabled = true;
         bool _initialized = false;
     };
@@ -64,16 +56,8 @@ namespace BECore {
 
         void Initialize() override;
         void OnAssert(const AssertEvent& event) override;
-        int GetPriority() const override { return _priority; }
-
-        /**
-         * @brief Set handler priority
-         * @param priority Priority value (lower = higher priority)
-         */
-        void SetPriority(int priority) { _priority = priority; }
 
     private:
-        int _priority = 0;
         bool _initialized = false;
     };
 

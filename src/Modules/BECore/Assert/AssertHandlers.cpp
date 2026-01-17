@@ -46,8 +46,6 @@ namespace BECore {
     }
 
     void AssertLogHandler::OnAssert(const AssertEvent& event) {
-        auto& logger = Logger::GetInstance();
-
         // Determine log level based on assert type
         LogLevel level = LogLevel::Error;
         const char* typeStr = "ASSERT";
@@ -85,7 +83,7 @@ namespace BECore {
             }
         }
 
-        logger.LogRaw(level, message.c_str(), event.file, event.line);
+        Logger::LogRaw(level, message.c_str(), event.file, event.line);
     }
 
     // AssertHandlerManager implementation
@@ -136,12 +134,7 @@ namespace BECore {
                         // Set priority from config (default: 0)
                         auto priority = handlerNode.ParseAttribute<int>("priority");
                         if (priority.has_value()) {
-                            // Use dynamic_cast to set priority on concrete types
-                            if (auto* debugHandler = dynamic_cast<DebugBreakHandler*>(handler.Get())) {
-                                debugHandler->SetPriority(*priority);
-                            } else if (auto* logHandler = dynamic_cast<AssertLogHandler*>(handler.Get())) {
-                                logHandler->SetPriority(*priority);
-                            }
+                            handler->SetPriority(*priority);
                         }
 
                         _handlers.push_back(handler);
