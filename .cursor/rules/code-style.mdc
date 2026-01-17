@@ -15,9 +15,9 @@ alwaysApply: true
 #pragma once  // Always use pragma once
 
 #include <External/Library.h>  // External includes first
-#include <Core/Utils/Singleton.h>  // Internal includes second
+#include <BECore/Utils/Singleton.h>  // Internal includes second
 
-namespace Core {  // Opening brace on same line
+namespace BECore {  // Opening brace on same line
 
     /**
      * @brief Brief description
@@ -44,7 +44,7 @@ namespace Core {  // Opening brace on same line
         PoolString _name;
     };
 
-}  // namespace Core  // Closing comment required
+}  // namespace BECore  // Closing comment required
 ```
 
 ## Implementation Files
@@ -54,7 +54,7 @@ namespace Core {  // Opening brace on same line
 
 #include <Other/Dependency.h>  // Other includes
 
-namespace Core {
+namespace BECore {
 
     void MyClass::PublicMethod() {
         // 4 spaces indentation
@@ -63,7 +63,7 @@ namespace Core {
         }
     }
 
-}  // namespace Core
+}  // namespace BECore
 ```
 
 ## Naming Summary
@@ -74,7 +74,7 @@ namespace Core {
 | Method | PascalCase | `Initialize()` |
 | Variable | camelCase | `virtualPath` |
 | Private member | _camelCase | `_isRunning` |
-| Namespace | PascalCase | `Core` |
+| Namespace | PascalCase | `BECore` |
 | Enum | PascalCase | `EventType` |
 | Enum value | PascalCase | `EventType::KeyDown` |
 | Constant | PascalCase | `MaxSize` |
@@ -159,7 +159,7 @@ if (error) {
 BagiEngine provides custom assertion macros that integrate with the event system:
 
 ```cpp
-#include <Core/Assert/AssertMacros.h>
+#include <BECore/Assert/AssertMacros.h>
 
 // ASSERT - for critical checks (can be disabled in release builds)
 ASSERT(ptr != nullptr);

@@ -23,7 +23,7 @@ src/
 ├── Application/          # Main application entry point
 ├── Widgets/              # Game-specific widgets (ClearScreenWidget, ImGuiWidget)
 └── Modules/
-    ├── Core/             # Core engine functionality
+    ├── BECore/           # Core engine functionality
     │   ├── Application/  # Application lifecycle (Fabric, MainAccess)
     │   ├── Config/       # XML configuration system (XmlConfig, XmlNode)
     │   ├── FileSystem/   # Virtual filesystem with mount points
@@ -48,7 +48,7 @@ config/                   # XML configuration files
 - **Methods**: PascalCase (e.g., `Initialize()`, `GetInstance()`)
 - **Variables**: camelCase (e.g., `virtualPath`, `realPath`)
 - **Private members**: underscore prefix (e.g., `_isRunning`, `_rootPath`, `_mountPoints`)
-- **Namespaces**: PascalCase (e.g., `Core`, `Math`, `SDLEvents`)
+- **Namespaces**: PascalCase (e.g., `BECore`, `Math`, `SDLEvents`)
 - **Constants/Enums**: PascalCase (e.g., `ApplicationSystemType`)
 
 ### File Structure
@@ -57,9 +57,9 @@ config/                   # XML configuration files
 #pragma once  // Always use pragma once, never include guards
 
 #include <...>  // Standard/External includes first
-#include <Core/...>  // Then internal includes
+#include <BECore/...>  // Then internal includes
 
-namespace Core {
+namespace BECore {
 
     /**
      * Doxygen-style documentation for classes
@@ -77,7 +77,7 @@ namespace Core {
         bool _isInitialized = false;
     };
 
-}  // namespace Core  <- Always add namespace comment
+}  // namespace BECore  <- Always add namespace comment
 ```
 
 ### Key Patterns Used
@@ -127,7 +127,7 @@ namespace Core {
 - Use `PassKey<T>` pattern to restrict method access
 - Document public APIs with Doxygen-style comments
 - Use `#pragma once` for header guards
-- Add namespace closing comments: `}  // namespace Core`
+- Add namespace closing comments: `}  // namespace BECore`
 - Initialize member variables inline: `bool _flag = false;`
 - Use `override` keyword for virtual methods
 - Use C++20/23 features: concepts, ranges, `std::filesystem`
@@ -143,20 +143,20 @@ namespace Core {
 ## Module Dependencies
 
 ```
-Core (base module, no dependencies except external libs)
+BECore (base module, no dependencies except external libs)
   ↑
-Math (depends on Core)
+Math (depends on BECore)
   ↑
-Events (depends on Core, uses EnTT)
+Events (depends on BECore, uses EnTT)
   ↑
-SDL (depends on Core, Events, uses SDL3)
+SDL (depends on BECore, Events, uses SDL3)
   ↑
 Application (depends on all modules)
 ```
 
 ## Precompiled Headers (PCH)
 
-The project uses PCH from `src/Modules/Core/pch.h`. This includes:
+The project uses PCH from `src/Modules/BECore/pch.h`. This includes:
 - Boost components
 - pugixml
 - magic_enum

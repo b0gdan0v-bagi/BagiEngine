@@ -2,7 +2,7 @@
 description: Rules for Widget development
 globs: 
   - src/Widgets/**/*
-  - src/Modules/Core/Widgets/**/*
+  - src/Modules/BECore/Widgets/**/*
 alwaysApply: false
 ---
 
@@ -17,9 +17,9 @@ Widgets are UI/rendering components that follow the IWidget interface. They are 
 ```cpp
 #pragma once
 
-#include <Core/Widgets/IWidget.h>
+#include <BECore/Widgets/IWidget.h>
 
-namespace Core {
+namespace BECore {
 
     class MyNewWidget : public IWidget {
     public:
@@ -39,14 +39,14 @@ namespace Core {
         bool _isActive = true;
     };
 
-}  // namespace Core
+}  // namespace BECore
 ```
 
 ### Implementation File
 ```cpp
 #include "MyNewWidget.h"
 
-namespace Core {
+namespace BECore {
 
     bool MyNewWidget::Initialize(const XmlNode& node) {
         if (!node.IsValid()) {
@@ -71,7 +71,7 @@ namespace Core {
         // Rendering code here
     }
 
-}  // namespace Core
+}  // namespace BECore
 ```
 
 ### XML Configuration

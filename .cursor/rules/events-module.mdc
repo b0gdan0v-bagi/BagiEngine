@@ -16,7 +16,7 @@ The Events module provides an event system built on EnTT's dispatcher with CRTP-
 
 #include <Events/EventBase.h>
 
-namespace Core {
+namespace BECore {
 
     // Simple event (no data)
     struct MySimpleEvent : EventBase<MySimpleEvent> {
@@ -32,7 +32,7 @@ namespace Core {
             : value(v), name(std::move(n)) {}
     };
 
-}  // namespace Core
+}  // namespace BECore
 ```
 
 ## Subscribing to Events

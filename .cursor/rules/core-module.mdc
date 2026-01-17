@@ -1,23 +1,23 @@
 ---
-description: Rules for Core module development
-globs: src/Modules/Core/**/*
+description: Rules for BECore module development
+globs: src/Modules/BECore/**/*
 alwaysApply: false
 ---
 
-# Core Module Guidelines
+# BECore Module Guidelines
 
 ## Overview
-The Core module is the foundation of BagiEngine. It provides essential utilities and base classes.
+The BECore module is the foundation of BagiEngine. It provides essential utilities and base classes.
 
 ## Key Components
 
 | Component | When to Use | Reference |
 |-----------|-------------|-----------|
-| `Singleton<T>` | Global services | `Core/Utils/Singleton.h` |
-| `RefCounted` + `IntrusivePtr` | Reference-counted objects | `Core/RefCounted/` |
-| `PoolString` | Identifiers, map keys, config keys | `Core/PoolString/` |
-| `XmlConfig` / `XmlNode` | Loading XML configuration | `Core/Config/` |
-| `PassKey<T>` | Restricted method access | `Core/Utils/PassKey.h` |
+| `Singleton<T>` | Global services | `BECore/Utils/Singleton.h` |
+| `RefCounted` + `IntrusivePtr` | Reference-counted objects | `BECore/RefCounted/` |
+| `PoolString` | Identifiers, map keys, config keys | `BECore/PoolString/` |
+| `XmlConfig` / `XmlNode` | Loading XML configuration | `BECore/Config/` |
+| `PassKey<T>` | Restricted method access | `BECore/Utils/PassKey.h` |
 
 ## When to Use PoolString
 - Configuration keys
@@ -39,7 +39,7 @@ Central hub owning core subsystems. Access via static methods:
 
 ## File Organization
 - One class per file: `ClassName.h` + `ClassName.cpp`
-- Tests: `Core/Tests/TestName.h`
+- Tests: `BECore/Tests/TestName.h`
 
 ## Checklist for New Code
 - [ ] Add to `pch.h` if widely used

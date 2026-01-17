@@ -1,8 +1,8 @@
 ---
 description: Rules for Test system and Assertions
 globs: 
-  - src/Modules/Core/Tests/**/*
-  - src/Modules/Core/Assert/**/*
+  - src/Modules/BECore/Tests/**/*
+  - src/Modules/BECore/Assert/**/*
   - config/TestsConfig.xml
   - config/AssertHandlersConfig.xml
 alwaysApply: false
@@ -16,12 +16,12 @@ Tests are managed by `TestManager` and run automatically in `CoreManager::OnAppl
 
 ### Adding a New Test
 
-1. Create class in `Core/Tests/` implementing `ITest`
+1. Create class in `BECore/Tests/` implementing `ITest`
 2. Register type in `TestManager.h` (add to `CORE_ENUM(TestType, ...)`)
 3. Add factory case in `TestManager.cpp`
 4. Enable in `config/TestsConfig.xml`
 
-**Reference:** See `Core/Tests/PoolStringTest.h` as example.
+**Reference:** See `BECore/Tests/PoolStringTest.h` as example.
 
 ### Test Configuration
 
@@ -31,7 +31,7 @@ File: `config/TestsConfig.xml`
 
 ## Assertion System
 
-**Macros** (from `Core/Assert/AssertMacros.h`):
+**Macros** (from `BECore/Assert/AssertMacros.h`):
 - `ASSERT(expr)` / `ASSERT(expr, "msg")` — Critical check
 - `EXPECT(expr)` / `EXPECT(expr, "msg")` — Soft expectation  
 - `FATALERROR("msg")` — Unrecoverable error

@@ -43,15 +43,15 @@ target_include_directories(MyModule PUBLIC
 
 # Link dependencies
 target_link_libraries(MyModule PUBLIC
-    CoreModule  # If depends on Core
+    BECoreModule  # If depends on BECore
 )
 
-# Use precompiled headers from CoreModule
-target_precompile_headers(MyModule REUSE_FROM CoreModule)
+# Use precompiled headers from BECoreModule
+target_precompile_headers(MyModule REUSE_FROM BECoreModule)
 
 # MSVC: Force include PCH
 if(MSVC)
-    target_compile_options(MyModule PRIVATE /FI"Core/pch.h")
+    target_compile_options(MyModule PRIVATE /FI"BECore/pch.h")
 endif()
 ```
 
@@ -104,9 +104,9 @@ endif()
 
 ## Module Dependencies Order
 
-CoreModule must be first (provides PCH):
+BECoreModule must be first (provides PCH):
 ```cmake
-add_subdirectory(src/Modules/Core)    # First!
+add_subdirectory(src/Modules/BECore)    # First!
 add_subdirectory(src/Modules/Math)
 add_subdirectory(src/Modules/Events)
 add_subdirectory(src/Modules/SDL)
@@ -117,5 +117,5 @@ add_subdirectory(src/Modules/SDL)
 1. **Use STATIC libraries** for modules
 2. **PUBLIC for headers** that other modules need
 3. **PRIVATE for implementation** details
-4. **REUSE_FROM CoreModule** for PCH
+4. **REUSE_FROM BECoreModule** for PCH
 5. **GIT_SHALLOW TRUE** for faster fetches
