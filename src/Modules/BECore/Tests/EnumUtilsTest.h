@@ -5,17 +5,20 @@
 
 namespace BECore {
 
-    // Test enum for EnumUtils tests (must be in BECore namespace for CORE_ENUM macro)
-    CORE_ENUM(TestColor, uint8_t, Red, Green, Blue, Yellow)
+   
 
 }  // namespace BECore
 
 namespace BECore::Tests {
 
+     CORE_ENUM(TestColor, uint8_t, Red, Green, Blue, Yellow)
+
     /**
      * @brief Test for EnumUtils functionality
      */
     class EnumUtilsTest : public ITest {
+        using ColorUtils = EnumUtils<TestColor>;
+
     public:
         EnumUtilsTest() = default;
         ~EnumUtilsTest() override = default;
@@ -31,13 +34,13 @@ namespace BECore::Tests {
             TestCompileTime();
 
             // --- Runtime tests ---
-            TestEnumToString();
-            TestEnumToPoolString();
-            TestStringToEnum();
-            TestPoolStringToEnum();
-            TestEnumCast();
-            TestEnumCount();
-            TestEnumArrays();
+            TestToString();
+            TestToPoolString();
+            TestFromString();
+            TestFromPoolString();
+            TestCast();
+            TestCount();
+            TestArrays();
 
             LOG_INFO("[EnumUtilsTest] All tests passed!");
             return true;
@@ -45,171 +48,175 @@ namespace BECore::Tests {
 
     private:
         static void TestCompileTime() {
-            // EnumToString is constexpr
-            static_assert(EnumToString(TestColor::Red) == "Red");
-            static_assert(EnumToString(TestColor::Green) == "Green");
-            static_assert(EnumToString(TestColor::Blue) == "Blue");
-            static_assert(EnumToString(TestColor::Yellow) == "Yellow");
+            // ToString is constexpr
+            static_assert(ColorUtils::ToString(TestColor::Red) == "Red");
+            static_assert(ColorUtils::ToString(TestColor::Green) == "Green");
+            static_assert(ColorUtils::ToString(TestColor::Blue) == "Blue");
+            static_assert(ColorUtils::ToString(TestColor::Yellow) == "Yellow");
 
-            // StringToEnum is constexpr
-            static_assert(StringToEnum<TestColor>("Red") == TestColor::Red);
-            static_assert(StringToEnum<TestColor>("Green") == TestColor::Green);
-            static_assert(StringToEnum<TestColor>("Blue") == TestColor::Blue);
-            static_assert(StringToEnum<TestColor>("Yellow") == TestColor::Yellow);
+            // FromString is constexpr
+            static_assert(ColorUtils::FromString("Red") == TestColor::Red);
+            static_assert(ColorUtils::FromString("Green") == TestColor::Green);
+            static_assert(ColorUtils::FromString("Blue") == TestColor::Blue);
+            static_assert(ColorUtils::FromString("Yellow") == TestColor::Yellow);
 
-            // EnumCount is constexpr
-            static_assert(EnumCount<TestColor>() == 4);
+            // Count is constexpr
+            static_assert(ColorUtils::Count() == 4);
 
-            // EnumNames returns constexpr array
-            static_assert(EnumNames<TestColor>().size() == 4);
-            static_assert(EnumNames<TestColor>()[0] == "Red");
-            static_assert(EnumNames<TestColor>()[3] == "Yellow");
+            // Names returns constexpr array
+            static_assert(ColorUtils::Names().size() == 4);
+            static_assert(ColorUtils::Names()[0] == "Red");
+            static_assert(ColorUtils::Names()[3] == "Yellow");
 
-            // EnumValues returns constexpr array
-            static_assert(EnumValues<TestColor>().size() == 4);
-            static_assert(EnumValues<TestColor>()[0] == TestColor::Red);
-            static_assert(EnumValues<TestColor>()[3] == TestColor::Yellow);
+            // Values returns constexpr array
+            static_assert(ColorUtils::Values().size() == 4);
+            static_assert(ColorUtils::Values()[0] == TestColor::Red);
+            static_assert(ColorUtils::Values()[3] == TestColor::Yellow);
 
-            // EnumCast is constexpr
-            static_assert(EnumCast<TestColor>("Red").has_value());
-            static_assert(EnumCast<TestColor>("Red").value() == TestColor::Red);
-            static_assert(!EnumCast<TestColor>("InvalidColor").has_value());
+            // Cast is constexpr
+            static_assert(ColorUtils::Cast("Red").has_value());
+            static_assert(ColorUtils::Cast("Red").value() == TestColor::Red);
+            static_assert(!ColorUtils::Cast("InvalidColor").has_value());
 
             LOG_INFO("[EnumUtilsTest] Compile-time tests OK");
         }
 
-        void TestEnumToString() {
-            // Test EnumToString returns correct eastl::string_view
-            ASSERT(EnumToString(TestColor::Red) == "Red", "EnumToString Red failed");
-            ASSERT(EnumToString(TestColor::Green) == "Green", "EnumToString Green failed");
-            ASSERT(EnumToString(TestColor::Blue) == "Blue", "EnumToString Blue failed");
-            ASSERT(EnumToString(TestColor::Yellow) == "Yellow", "EnumToString Yellow failed");
+        void TestToString() {
+            // Test ToString returns correct eastl::string_view
+            ASSERT(ColorUtils::ToString(TestColor::Red) == "Red", "ToString Red failed");
+            ASSERT(ColorUtils::ToString(TestColor::Green) == "Green", "ToString Green failed");
+            ASSERT(ColorUtils::ToString(TestColor::Blue) == "Blue", "ToString Blue failed");
+            ASSERT(ColorUtils::ToString(TestColor::Yellow) == "Yellow", "ToString Yellow failed");
 
             // Test with temporary
-            auto sv = EnumToString(TestColor::Blue);
-            ASSERT(sv.size() == 4, "EnumToString size mismatch");
-            ASSERT(sv == "Blue", "EnumToString Blue mismatch");
+            auto sv = ColorUtils::ToString(TestColor::Blue);
+            ASSERT(sv.size() == 4, "ToString size mismatch");
+            ASSERT(sv == "Blue", "ToString Blue mismatch");
 
-            LOG_INFO("[EnumUtilsTest] EnumToString tests OK");
+            LOG_INFO("[EnumUtilsTest] ToString tests OK");
         }
 
-        void TestEnumToPoolString() {
-            // Test EnumToPoolString returns valid PoolString
-            PoolString ps = EnumToPoolString(TestColor::Red);
-            ASSERT(!ps.Empty(), "EnumToPoolString Red empty");
-            ASSERT(ps.ToStringView() == "Red", "EnumToPoolString Red mismatch");
+        void TestToPoolString() {
+            // Test ToPoolString returns valid PoolString
+            PoolString ps = ColorUtils::ToPoolString(TestColor::Red);
+            ASSERT(!ps.Empty(), "ToPoolString Red empty");
+            ASSERT(ps.ToStringView() == "Red", "ToPoolString Red mismatch");
 
             // Test all values
-            ASSERT(EnumToPoolString(TestColor::Green).ToStringView() == "Green");
-            ASSERT(EnumToPoolString(TestColor::Blue).ToStringView() == "Blue");
-            ASSERT(EnumToPoolString(TestColor::Yellow).ToStringView() == "Yellow");
+            ASSERT(ColorUtils::ToPoolString(TestColor::Green).ToStringView() == "Green");
+            ASSERT(ColorUtils::ToPoolString(TestColor::Blue).ToStringView() == "Blue");
+            ASSERT(ColorUtils::ToPoolString(TestColor::Yellow).ToStringView() == "Yellow");
 
             // Test that same enum value returns same PoolString (interned)
-            PoolString ps1 = EnumToPoolString(TestColor::Red);
-            PoolString ps2 = EnumToPoolString(TestColor::Red);
-            ASSERT(ps1 == ps2, "EnumToPoolString should return same interned PoolString");
+            PoolString ps1 = ColorUtils::ToPoolString(TestColor::Red);
+            PoolString ps2 = ColorUtils::ToPoolString(TestColor::Red);
+            ASSERT(ps1 == ps2, "ToPoolString should return same interned PoolString");
 
             // Verify it's actually the same pointer (interning works)
             ASSERT(ps1.CStr() == ps2.CStr(), "PoolString pointers should match");
 
-            LOG_INFO("[EnumUtilsTest] EnumToPoolString tests OK");
+            LOG_INFO("[EnumUtilsTest] ToPoolString tests OK");
         }
 
-        void TestStringToEnum() {
-            // Test StringToEnum with eastl::string_view
-            ASSERT(StringToEnum<TestColor>(eastl::string_view{"Red"}) == TestColor::Red);
-            ASSERT(StringToEnum<TestColor>(eastl::string_view{"Green"}) == TestColor::Green);
-            ASSERT(StringToEnum<TestColor>(eastl::string_view{"Blue"}) == TestColor::Blue);
-            ASSERT(StringToEnum<TestColor>(eastl::string_view{"Yellow"}) == TestColor::Yellow);
+        void TestFromString() {
+            // Test FromString with eastl::string_view
+            ASSERT(ColorUtils::FromString(eastl::string_view{"Red"}) == TestColor::Red);
+            ASSERT(ColorUtils::FromString(eastl::string_view{"Green"}) == TestColor::Green);
+            ASSERT(ColorUtils::FromString(eastl::string_view{"Blue"}) == TestColor::Blue);
+            ASSERT(ColorUtils::FromString(eastl::string_view{"Yellow"}) == TestColor::Yellow);
 
-            // Test StringToEnum with std::string_view
-            ASSERT(StringToEnum<TestColor>(std::string_view{"Red"}) == TestColor::Red);
-            ASSERT(StringToEnum<TestColor>(std::string_view{"Green"}) == TestColor::Green);
+            // Test FromString with std::string_view
+            ASSERT(ColorUtils::FromString(std::string_view{"Red"}) == TestColor::Red);
+            ASSERT(ColorUtils::FromString(std::string_view{"Green"}) == TestColor::Green);
 
-            LOG_INFO("[EnumUtilsTest] StringToEnum tests OK");
+            // Test FromString with const char*
+            ASSERT(ColorUtils::FromString("Red") == TestColor::Red);
+            ASSERT(ColorUtils::FromString("Blue") == TestColor::Blue);
+
+            LOG_INFO("[EnumUtilsTest] FromString tests OK");
         }
 
-        void TestPoolStringToEnum() {
-            // Test PoolStringToEnum
+        void TestFromPoolString() {
+            // Test FromPoolString
             PoolString psRed = PoolString::Intern("Red");
             PoolString psGreen = PoolString::Intern("Green");
             PoolString psBlue = PoolString::Intern("Blue");
 
-            ASSERT(PoolStringToEnum<TestColor>(psRed) == TestColor::Red);
-            ASSERT(PoolStringToEnum<TestColor>(psGreen) == TestColor::Green);
-            ASSERT(PoolStringToEnum<TestColor>(psBlue) == TestColor::Blue);
+            ASSERT(ColorUtils::FromPoolString(psRed) == TestColor::Red);
+            ASSERT(ColorUtils::FromPoolString(psGreen) == TestColor::Green);
+            ASSERT(ColorUtils::FromPoolString(psBlue) == TestColor::Blue);
 
             // Test round-trip: enum -> PoolString -> enum
-            for (auto color : EnumValues<TestColor>()) {
-                PoolString ps = EnumToPoolString(color);
-                TestColor parsed = PoolStringToEnum<TestColor>(ps);
+            for (auto color : ColorUtils::Values()) {
+                PoolString ps = ColorUtils::ToPoolString(color);
+                TestColor parsed = ColorUtils::FromPoolString(ps);
                 ASSERT(parsed == color, "PoolString round-trip failed");
             }
 
-            LOG_INFO("[EnumUtilsTest] PoolStringToEnum tests OK");
+            LOG_INFO("[EnumUtilsTest] FromPoolString tests OK");
         }
 
-        void TestEnumCast() {
-            // Test EnumCast with valid values
-            auto red = EnumCast<TestColor>("Red");
-            ASSERT(red.has_value(), "EnumCast Red should have value");
-            ASSERT(red.value() == TestColor::Red, "EnumCast Red mismatch");
+        void TestCast() {
+            // Test Cast with valid values
+            auto red = ColorUtils::Cast("Red");
+            ASSERT(red.has_value(), "Cast Red should have value");
+            ASSERT(red.value() == TestColor::Red, "Cast Red mismatch");
 
-            auto green = EnumCast<TestColor>(eastl::string_view{"Green"});
-            ASSERT(green.has_value(), "EnumCast Green should have value");
-            ASSERT(green.value() == TestColor::Green, "EnumCast Green mismatch");
+            auto green = ColorUtils::Cast(eastl::string_view{"Green"});
+            ASSERT(green.has_value(), "Cast Green should have value");
+            ASSERT(green.value() == TestColor::Green, "Cast Green mismatch");
 
-            // Test EnumCast with invalid values
-            auto invalid1 = EnumCast<TestColor>("InvalidColor");
-            ASSERT(!invalid1.has_value(), "EnumCast InvalidColor should be nullopt");
+            // Test Cast with invalid values
+            auto invalid1 = ColorUtils::Cast("InvalidColor");
+            ASSERT(!invalid1.has_value(), "Cast InvalidColor should be nullopt");
 
-            auto invalid2 = EnumCast<TestColor>("");
-            ASSERT(!invalid2.has_value(), "EnumCast empty should be nullopt");
+            auto invalid2 = ColorUtils::Cast("");
+            ASSERT(!invalid2.has_value(), "Cast empty should be nullopt");
 
-            auto invalid3 = EnumCast<TestColor>("red");  // case sensitive
-            ASSERT(!invalid3.has_value(), "EnumCast lowercase should be nullopt");
+            auto invalid3 = ColorUtils::Cast("red");  // case sensitive
+            ASSERT(!invalid3.has_value(), "Cast lowercase should be nullopt");
 
-            LOG_INFO("[EnumUtilsTest] EnumCast tests OK");
+            LOG_INFO("[EnumUtilsTest] Cast tests OK");
         }
 
-        void TestEnumCount() {
-            ASSERT(EnumCount<TestColor>() == 4, "EnumCount should be 4");
+        void TestCount() {
+            ASSERT(ColorUtils::Count() == 4, "Count should be 4");
 
-            LOG_INFO("[EnumUtilsTest] EnumCount tests OK");
+            LOG_INFO("[EnumUtilsTest] Count tests OK");
         }
 
-        void TestEnumArrays() {
-            // Test EnumNames
-            const auto& names = EnumNames<TestColor>();
-            ASSERT(names.size() == 4, "EnumNames size mismatch");
-            ASSERT(names[0] == "Red", "EnumNames[0] mismatch");
-            ASSERT(names[1] == "Green", "EnumNames[1] mismatch");
-            ASSERT(names[2] == "Blue", "EnumNames[2] mismatch");
-            ASSERT(names[3] == "Yellow", "EnumNames[3] mismatch");
+        void TestArrays() {
+            // Test Names
+            const auto& names = ColorUtils::Names();
+            ASSERT(names.size() == 4, "Names size mismatch");
+            ASSERT(names[0] == "Red", "Names[0] mismatch");
+            ASSERT(names[1] == "Green", "Names[1] mismatch");
+            ASSERT(names[2] == "Blue", "Names[2] mismatch");
+            ASSERT(names[3] == "Yellow", "Names[3] mismatch");
 
-            // Test EnumValues
-            const auto& values = EnumValues<TestColor>();
-            ASSERT(values.size() == 4, "EnumValues size mismatch");
-            ASSERT(values[0] == TestColor::Red, "EnumValues[0] mismatch");
-            ASSERT(values[1] == TestColor::Green, "EnumValues[1] mismatch");
-            ASSERT(values[2] == TestColor::Blue, "EnumValues[2] mismatch");
-            ASSERT(values[3] == TestColor::Yellow, "EnumValues[3] mismatch");
+            // Test Values
+            const auto& values = ColorUtils::Values();
+            ASSERT(values.size() == 4, "Values size mismatch");
+            ASSERT(values[0] == TestColor::Red, "Values[0] mismatch");
+            ASSERT(values[1] == TestColor::Green, "Values[1] mismatch");
+            ASSERT(values[2] == TestColor::Blue, "Values[2] mismatch");
+            ASSERT(values[3] == TestColor::Yellow, "Values[3] mismatch");
 
-            // Test EnumPoolStrings
-            const auto& poolStrings = EnumPoolStrings<TestColor>();
-            ASSERT(poolStrings.size() == 4, "EnumPoolStrings size mismatch");
-            ASSERT(poolStrings[0].ToStringView() == "Red", "EnumPoolStrings[0] mismatch");
-            ASSERT(poolStrings[1].ToStringView() == "Green", "EnumPoolStrings[1] mismatch");
-            ASSERT(poolStrings[2].ToStringView() == "Blue", "EnumPoolStrings[2] mismatch");
-            ASSERT(poolStrings[3].ToStringView() == "Yellow", "EnumPoolStrings[3] mismatch");
+            // Test PoolStrings
+            const auto& poolStrings = ColorUtils::PoolStrings();
+            ASSERT(poolStrings.size() == 4, "PoolStrings size mismatch");
+            ASSERT(poolStrings[0].ToStringView() == "Red", "PoolStrings[0] mismatch");
+            ASSERT(poolStrings[1].ToStringView() == "Green", "PoolStrings[1] mismatch");
+            ASSERT(poolStrings[2].ToStringView() == "Blue", "PoolStrings[2] mismatch");
+            ASSERT(poolStrings[3].ToStringView() == "Yellow", "PoolStrings[3] mismatch");
 
-            // Verify pool strings are interned (same as EnumToPoolString)
-            ASSERT(poolStrings[0] == EnumToPoolString(TestColor::Red));
-            ASSERT(poolStrings[1] == EnumToPoolString(TestColor::Green));
-            ASSERT(poolStrings[2] == EnumToPoolString(TestColor::Blue));
-            ASSERT(poolStrings[3] == EnumToPoolString(TestColor::Yellow));
+            // Verify pool strings are interned (same as ToPoolString)
+            ASSERT(poolStrings[0] == ColorUtils::ToPoolString(TestColor::Red));
+            ASSERT(poolStrings[1] == ColorUtils::ToPoolString(TestColor::Green));
+            ASSERT(poolStrings[2] == ColorUtils::ToPoolString(TestColor::Blue));
+            ASSERT(poolStrings[3] == ColorUtils::ToPoolString(TestColor::Yellow));
 
-            LOG_INFO("[EnumUtilsTest] EnumArrays tests OK");
+            LOG_INFO("[EnumUtilsTest] Arrays tests OK");
         }
     };
 
