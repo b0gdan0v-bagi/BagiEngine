@@ -5,7 +5,7 @@
 #include <EASTL/vector.h>
 
 // Forward declaration - ILogSinkType is generated from BE_CLASS(ILogSink, FACTORY_BASE)
-enum class ILogSinkType : uint8_t;
+enum class LogSinkType : uint8_t;
 
 namespace BECore {
 
@@ -73,7 +73,7 @@ namespace BECore {
          * @param type Sink type from generated enum (ILogSinkType)
          * @return Pointer to sink instance or nullptr if unknown type
          */
-        static IntrusivePtr<ILogSink> CreateSinkByType(ILogSinkType type);
+        static IntrusivePtr<ILogSink> CreateSinkByType(LogSinkType type);
 
         /**
          * @brief Sort sinks by priority (lower first)

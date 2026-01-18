@@ -269,23 +269,13 @@ target_link_libraries(BECoreModule PUBLIC
 # =============================================================================
 # Reflection Code Generation
 # =============================================================================
-# Generate reflection metadata for test classes and factory bases
+# Generate reflection metadata for all BE_CLASS() files in specified directories
+# DIRS automatically scans for headers containing BE_CLASS() macro
 if(COMMAND add_reflection_target)
-    # Reflection for test classes
     add_reflection_target(BECoreModule
-        HEADERS
-            ${CMAKE_CURRENT_SOURCE_DIR}/Tests/ReflectionTest.h
-        INCLUDE_DIRS
-            ${PROJECT_ROOT}/src/Modules
-            ${PROJECT_ROOT}/src
-    )
-    
-    # Reflection for ILogSink factory - scans Logger directory for derived classes
-    add_reflection_target(BECoreModule
-        HEADERS
-            ${CMAKE_CURRENT_SOURCE_DIR}/Logger/ILogSink.h
-        SCAN_DIRS
+        DIRS
             ${CMAKE_CURRENT_SOURCE_DIR}/Logger
+            ${CMAKE_CURRENT_SOURCE_DIR}/Tests
         INCLUDE_DIRS
             ${PROJECT_ROOT}/src/Modules
             ${PROJECT_ROOT}/src

@@ -9,6 +9,8 @@
 #include <fmt/chrono.h>
 #include <chrono>
 
+#include <Generated/FileSink.gen.hpp>
+
 namespace BECore {
 
     FileSink::~FileSink() {

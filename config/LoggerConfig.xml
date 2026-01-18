@@ -24,12 +24,12 @@
     -->
     <sinks>
         <!-- Output sink runs first (for platform debug output - VS Output/Xcode console) -->
-        <sink type="OutputSink" enabled="true" priority="0" minLevel="Debug" />
+        <sink type="Output" enabled="true" priority="0" minLevel="Debug" />
         
         <!-- Console sink disabled (no console window in WIN32 app) -->
-        <sink type="ConsoleSink" enabled="false" priority="0" minLevel="Debug" colorEnabled="true" />
+        <sink type="Console" enabled="false" priority="0" minLevel="Debug" colorEnabled="true" />
         
         <!-- File sink runs after Output -->
-        <sink type="FileSink" enabled="true" priority="100" minLevel="Info" filename="engine.log" append="false" />
+        <sink type="File" enabled="true" priority="100" minLevel="Info" filename="engine.log" append="false" />
     </sinks>
 </root>

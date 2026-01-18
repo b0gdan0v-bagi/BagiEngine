@@ -70,6 +70,7 @@ class DerivedClassData:
     short_name: str     # Name for enum value (e.g., "Console" if strip suffix)
     full_name: str      # Full qualified name (e.g., "BECore::ConsoleSink")
     source_file: str    # Source file where this class is defined
+    include_path: str = ""  # Include path for the header (e.g., "BECore/Logger/ConsoleSink.h")
 
 
 @dataclass
@@ -79,6 +80,8 @@ class FactoryBaseData:
     qualified_name: str                         # For use inside namespace
     full_qualified_name: str                    # Full qualified name
     namespace: str                              # Namespace (e.g., "BECore")
+    enum_type_name: str = ""                    # Generated enum name (e.g., "LogSinkType")
+    factory_name: str = ""                      # Generated factory name (e.g., "LogSinkFactory")
     derived: List[DerivedClassData] = field(default_factory=list)  # List of derived classes
 
 
@@ -397,36 +400,102 @@ def compute_short_name(class_name: str, base_name: str) -> str:
     """
     Compute a short name for enum value based on class name and base class.
     
-    Strips common patterns:
-    - "I" prefix from base class name if present
-    - Common suffixes like "Sink", "Widget", "Handler" that match base class
+    Strips common suffix between class name and base name.
     
     Examples:
-        ConsoleSink + ILogSink -> Console
-        FileSink + ILogSink -> File
-        MyWidget + IWidget -> My
+        ConsoleSink + ILogSink -> Console (common suffix: "Sink")
+        FileSink + ILogSink -> File (common suffix: "Sink")
+        MyWidget + IWidget -> My (common suffix: "Widget")
+        ClearScreenWidget + IWidget -> ClearScreen (common suffix: "Widget")
     """
     short_name = class_name
     
-    # Try to strip suffix matching base class (without "I" prefix)
-    # e.g., ILogSink -> LogSink, then ConsoleSink -> Console
+    # Strip 'I' prefix from base class name if present
     base_suffix = base_name
     if base_suffix.startswith('I') and len(base_suffix) > 1:
-        base_suffix = base_suffix[1:]  # Remove 'I' prefix
+        base_suffix = base_suffix[1:]  # ILogSink -> LogSink
     
-    # If class name ends with base suffix, strip it
-    if short_name.endswith(base_suffix):
-        short_name = short_name[:-len(base_suffix)]
+    # Find the common suffix between class_name and base_suffix
+    # e.g., ConsoleSink vs LogSink -> common suffix is "Sink"
+    common_suffix = ""
+    for i in range(1, min(len(class_name), len(base_suffix)) + 1):
+        if class_name[-i:] == base_suffix[-i:]:
+            common_suffix = class_name[-i:]
+        else:
+            break
     
-    # If result is empty (class name was exactly the base name), use original
+    # Strip the common suffix from the class name
+    if common_suffix and len(common_suffix) < len(class_name):
+        short_name = class_name[:-len(common_suffix)]
+    
+    # If result is empty (class name was exactly the suffix), use original
     if not short_name:
         short_name = class_name
     
     return short_name
 
 
+def compute_enum_type_name(base_name: str) -> str:
+    """
+    Compute enum type name from base class name.
+    
+    Strips 'I' prefix if present and adds 'Type' suffix.
+    
+    Examples:
+        ILogSink -> LogSinkType
+        IWidget -> WidgetType
+        BaseClass -> BaseClassType
+    """
+    name = base_name
+    if name.startswith('I') and len(name) > 1:
+        name = name[1:]  # Strip 'I' prefix
+    return f"{name}Type"
+
+
+def compute_factory_name(base_name: str) -> str:
+    """
+    Compute factory class name from base class name.
+    
+    Strips 'I' prefix if present and adds 'Factory' suffix.
+    
+    Examples:
+        ILogSink -> LogSinkFactory
+        IWidget -> WidgetFactory
+        BaseClass -> BaseClassFactory
+    """
+    name = base_name
+    if name.startswith('I') and len(name) > 1:
+        name = name[1:]  # Strip 'I' prefix
+    return f"{name}Factory"
+
+
+def compute_include_path(source_file: str, include_dirs: List[str]) -> str:
+    """
+    Compute the include path for a source file relative to include directories.
+    
+    Examples:
+        /path/to/src/Modules/BECore/Logger/ConsoleSink.h
+        with include_dir /path/to/src/Modules
+        -> BECore/Logger/ConsoleSink.h
+    """
+    source_path = Path(source_file).resolve()
+    
+    for inc_dir in include_dirs:
+        inc_path = Path(inc_dir).resolve()
+        try:
+            rel_path = source_path.relative_to(inc_path)
+            # Convert to forward slashes for include paths
+            return str(rel_path).replace('\\', '/')
+        except ValueError:
+            continue
+    
+    # Fallback: just use the filename
+    return source_path.name
+
+
 def build_factory_bases(main_classes: List[ClassData], 
                         scanned_classes: List[ClassData],
+                        include_dirs: List[str] = None,
                         verbose: bool = False) -> List[FactoryBaseData]:
     """
     Build factory base data by matching derived classes to base classes.
@@ -434,6 +503,9 @@ def build_factory_bases(main_classes: List[ClassData],
     For each class marked with FACTORY_BASE in main_classes,
     find all classes in scanned_classes that inherit from it.
     """
+    if include_dirs is None:
+        include_dirs = []
+    
     factory_bases: List[FactoryBaseData] = []
     
     # Find all factory base classes from the main file
@@ -445,7 +517,9 @@ def build_factory_bases(main_classes: List[ClassData],
             name=cls.name,
             qualified_name=cls.qualified_name,
             full_qualified_name=cls.full_qualified_name,
-            namespace=cls.namespace
+            namespace=cls.namespace,
+            enum_type_name=compute_enum_type_name(cls.name),
+            factory_name=compute_factory_name(cls.name)
         )
         
         # Find all derived classes from scanned files
@@ -454,12 +528,15 @@ def build_factory_bases(main_classes: List[ClassData],
             if scanned_cls.parent_class == cls.name:
                 # Compute short name for enum value (strips common suffix)
                 short_name = compute_short_name(scanned_cls.name, cls.name)
+                source_file = getattr(scanned_cls, 'source_file', '')
+                include_path = compute_include_path(source_file, include_dirs) if source_file else ''
                 
                 derived = DerivedClassData(
                     name=scanned_cls.name,
                     short_name=short_name,
                     full_name=scanned_cls.full_qualified_name,
-                    source_file=getattr(scanned_cls, 'source_file', '')
+                    source_file=source_file,
+                    include_path=include_path
                 )
                 factory_base.derived.append(derived)
                 
@@ -470,6 +547,7 @@ def build_factory_bases(main_classes: List[ClassData],
             factory_bases.append(factory_base)
             if verbose:
                 print(f"  Factory base {cls.name}: {len(factory_base.derived)} derived classes")
+                print(f"    Enum type: {factory_base.enum_type_name}, Factory: {factory_base.factory_name}")
     
     return factory_bases
 
@@ -489,12 +567,48 @@ def generate_code(classes: List[ClassData], enums: List[EnumData],
     
     template = env.get_template('reflection.gen.hpp.j2')
     
+    # Note: factory_bases is passed but will be empty since we generate
+    # factory code in a separate file now
     return template.render(
         input_filename=input_filename,
         classes=classes,
         enums=enums,
+        factory_bases=[]  # Don't include factory in main reflection file
+    )
+
+
+def generate_enum_factory_code(factory_bases: List[FactoryBaseData],
+                               template_dir: str, input_filename: str) -> str:
+    """Generate enum and factory code using separate template."""
+    if not factory_bases:
+        return ""
+    
+    env = Environment(
+        loader=FileSystemLoader(template_dir),
+        trim_blocks=True,
+        lstrip_blocks=True
+    )
+    
+    template = env.get_template('enum_factory.gen.hpp.j2')
+    
+    return template.render(
+        input_filename=input_filename,
         factory_bases=factory_bases
     )
+
+
+def compute_enum_output_filename(base_name: str) -> str:
+    """
+    Compute output filename for enum factory file.
+    
+    Examples:
+        ILogSink -> EnumLogSink.gen.hpp
+        IWidget -> EnumWidget.gen.hpp
+    """
+    name = base_name
+    if name.startswith('I') and len(name) > 1:
+        name = name[1:]  # Strip 'I' prefix
+    return f"Enum{name}.gen.hpp"
 
 
 def main():
@@ -512,6 +626,10 @@ def main():
         help='Output generated header file'
     )
     parser.add_argument(
+        '--output-enum', '-e',
+        help='Output directory for enum factory files (optional, uses same dir as --output if not specified)'
+    )
+    parser.add_argument(
         '--templates', '-t',
         required=True,
         help='Directory containing Jinja2 templates'
@@ -520,7 +638,7 @@ def main():
         '--include', '-I',
         action='append',
         default=[],
-        help='Additional include paths (ignored in regex mode, kept for compatibility)'
+        help='Additional include paths (used for computing include paths in generated code)'
     )
     parser.add_argument(
         '--scan-dirs', '-S',
@@ -593,8 +711,8 @@ def main():
         if args.verbose:
             print(f"  Total scanned classes: {len(scanned_classes)}")
         
-        # Build factory bases
-        factory_bases = build_factory_bases(classes, scanned_classes, args.verbose)
+        # Build factory bases with include directories for path computation
+        factory_bases = build_factory_bases(classes, scanned_classes, args.include, args.verbose)
         
         if args.verbose:
             print(f"  Factory bases with derived classes: {len(factory_bases)}")
@@ -613,6 +731,24 @@ def main():
     
     if args.verbose:
         print(f"Generated: {args.output}")
+    
+    # Generate enum factory files if there are factory bases
+    if factory_bases:
+        enum_output_dir = args.output_enum if args.output_enum else output_dir
+        if enum_output_dir:
+            os.makedirs(enum_output_dir, exist_ok=True)
+        
+        for factory_base in factory_bases:
+            enum_filename = compute_enum_output_filename(factory_base.name)
+            enum_output_path = os.path.join(enum_output_dir, enum_filename) if enum_output_dir else enum_filename
+            
+            enum_code = generate_enum_factory_code([factory_base], args.templates, input_filename)
+            
+            with open(enum_output_path, 'w', encoding='utf-8') as f:
+                f.write(enum_code)
+            
+            if args.verbose:
+                print(f"Generated enum factory: {enum_output_path}")
 
 
 if __name__ == '__main__':

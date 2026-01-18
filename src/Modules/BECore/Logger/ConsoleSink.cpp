@@ -10,6 +10,8 @@
 #include <chrono>
 #include <cstdio>
 
+#include <Generated/ConsoleSink.gen.hpp>
+
 namespace BECore {
 
     void ConsoleSink::Initialize() {

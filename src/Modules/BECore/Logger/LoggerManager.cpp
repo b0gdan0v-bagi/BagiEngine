@@ -9,6 +9,7 @@
 
 // Include generated factory - provides ILogSinkType enum and ILogSinkFactory
 #include <Generated/ILogSink.gen.hpp>
+#include <Generated/EnumLogSink.gen.hpp>
 
 #include <EASTL/sort.h>
 
@@ -43,7 +44,7 @@ namespace BECore {
                             continue;
                         }
 
-                        auto sinkType = sinkNode.ParseAttribute<ILogSinkType>("type");
+                        auto sinkType = sinkNode.ParseAttribute<LogSinkType>("type");
                         if (!sinkType) {
                             continue;
                         }
@@ -91,8 +92,8 @@ namespace BECore {
         }
     }
 
-    IntrusivePtr<ILogSink> LoggerManager::CreateSinkByType(ILogSinkType type) {
-        return ILogSinkFactory::Create(type);
+    IntrusivePtr<ILogSink> LoggerManager::CreateSinkByType(LogSinkType type) {
+        return LogSinkFactory::Create(type);
     }
 
     void LoggerManager::SortSinksByPriority() {

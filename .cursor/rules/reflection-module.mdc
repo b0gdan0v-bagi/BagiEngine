@@ -17,7 +17,8 @@ The system provides:
 - `BE_CLASS(ClassName, FACTORY_BASE)` for factory/enum generation from inheritance
 - `BE_REFLECT_FIELD` / `BE_REFLECT_ENUM` markers
 - Auto-generated static methods and `ReflectionTraits<T>` specializations
-- Auto-generated factories and enums for inheritance hierarchies
+- Auto-generated factories inheriting from `AbstractFactory<T>`
+- `ClassMeta` for compile-time type identification without RTTI
 - EnumUtils compatibility for reflected enums
 - Abstract `IArchive` interface for serialization
 
@@ -48,7 +49,9 @@ to auto-generate a factory and type enum.
 1. Mark base class with `BE_CLASS(BaseClass, FACTORY_BASE)`
 2. Mark derived classes with regular `BE_CLASS(DerivedClass)`
 3. Add `SCAN_DIRS` in CMake to specify where to find derived classes
-4. Include generated file to access `{BaseClass}Type` enum and `{BaseClass}Factory`
+4. Include generated files:
+   - `<Generated/BaseClass.gen.hpp>` for reflection traits
+   - `<Generated/EnumBaseClass.gen.hpp>` for factory and enum
 
 ### Example
 
@@ -68,42 +71,116 @@ public:
 };
 
 // Usage in .cpp
-#include <Generated/ILogSink.gen.hpp>
+#include <Generated/ILogSink.gen.hpp>      // Reflection traits
+#include <Generated/EnumLogSink.gen.hpp>   // Factory and enum
 
-// Use generated enum and factory
-auto sink = ILogSinkFactory::Create(ILogSinkType::Console);
+// Create by enum (convenience)
+auto sink1 = LogSinkFactory::Create(LogSinkType::Console);
+
+// Create by ClassMeta (type-erased)
+ClassMeta meta = LogSinkFactory::ToMeta(LogSinkType::File);
+auto sink2 = LogSinkFactory::GetInstance().Create(meta);
+
+// Convert ClassMeta back to enum
+LogSinkType type = LogSinkFactory::FromMeta(meta);
 ```
 
 ### CMake Configuration
 
 ```cmake
+# Recommended: Auto-scan directories for all BE_CLASS() files
+add_reflection_target(MyModule
+    DIRS
+        ${CMAKE_CURRENT_SOURCE_DIR}/Logger
+        ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
+    INCLUDE_DIRS
+        ${PROJECT_ROOT}/src/Modules
+)
+
+# Legacy: Manual header list (still supported)
 add_reflection_target(MyModule
     HEADERS
-        ${CMAKE_CURRENT_SOURCE_DIR}/ILogSink.h
-    SCAN_DIRS
-        ${CMAKE_CURRENT_SOURCE_DIR}/Logger
+        ${CMAKE_CURRENT_SOURCE_DIR}/Player.h
     INCLUDE_DIRS
         ${PROJECT_ROOT}/src/Modules
 )
 ```
 
-### Generated Code
+The `DIRS` parameter automatically:
+1. Scans directories for headers containing `BE_CLASS()` macro
+2. Generates `.gen.hpp` for each file
+3. For `FACTORY_BASE` classes, also generates `EnumXxx.gen.hpp`
+
+### Generated Files
 
 For a base class `ILogSink` with derived classes `ConsoleSink`, `FileSink`, `OutputSink`:
 
-| Generated | Description |
-|-----------|-------------|
-| `ILogSinkType` | Enum with values `Console`, `File`, `Output` |
-| `ILogSinkFactory` | Factory class with `Create(ILogSinkType)` method |
-| `ILogSinkFactory::Count()` | Number of registered types |
-| `ILogSinkFactory::GetTypeName(type)` | Get string name for type |
+| File | Contents |
+|------|----------|
+| `ILogSink.gen.hpp` | `ReflectionTraits<ILogSink>` specialization |
+| `EnumLogSink.gen.hpp` | `LogSinkType` enum, `LogSinkFactory` class |
 
-### Short Name Computation
+### Generated Factory API
+
+| Method | Description |
+|--------|-------------|
+| `LogSinkFactory::Create(EnumType)` | Static method, creates by enum |
+| `LogSinkFactory::Create(ClassMeta)` | Virtual method, creates by type metadata |
+| `LogSinkFactory::ToMeta(EnumType)` | Convert enum to ClassMeta |
+| `LogSinkFactory::FromMeta(ClassMeta)` | Convert ClassMeta to enum |
+| `LogSinkFactory::Count()` | Number of registered types |
+| `LogSinkFactory::GetTypeName(type)` | Get string name for type |
+| `LogSinkFactory::GetInstance()` | Get singleton instance |
+
+### Naming Conventions
+
+| Base Class | Enum Type | Factory | Enum Values |
+|------------|-----------|---------|-------------|
+| `ILogSink` | `LogSinkType` | `LogSinkFactory` | `Console`, `File`, `Output` |
+| `IWidget` | `WidgetType` | `WidgetFactory` | `Clear`, `ImGui` |
 
 Enum values are computed by stripping the base class suffix:
 - `ConsoleSink` + `ILogSink` -> `Console`
 - `FileSink` + `ILogSink` -> `File`
 - `MyWidget` + `IWidget` -> `My`
+
+## ClassMeta (Type Identification)
+
+`ClassMeta` provides compile-time type identification without RTTI using FNV-1a hash.
+
+### Usage
+
+```cpp
+#include <BECore/Reflection/ClassMeta.h>
+
+// Get ClassMeta for a reflected type
+constexpr auto meta = GetClassMeta<ConsoleSink>();
+
+// Compare types
+if (meta == GetClassMeta<FileSink>()) { ... }
+
+// Check if valid
+if (meta) { ... }
+
+// Access type info
+eastl::string_view name = meta.typeName;
+uint64_t hash = meta.typeHash;
+```
+
+### AbstractFactory Base
+
+Generated factories inherit from `AbstractFactory<T>`:
+
+```cpp
+template<typename BaseType>
+class AbstractFactory {
+public:
+    using BasePtr = IntrusivePtr<BaseType>;
+    virtual BasePtr Create(const ClassMeta& meta) const = 0;
+};
+```
+
+This allows type-erased factory usage where the concrete factory type is unknown.
 
 ## Generated Static Methods
 
@@ -149,20 +226,26 @@ Include generated headers using angle brackets:
 |------|----------|
 | `BECore/Reflection/ReflectionMarkers.h` | `BE_CLASS`, `BE_REFLECT_*` macros |
 | `BECore/Reflection/TypeTraits.h` | `ReflectionTraits<T>`, `FieldInfo` |
+| `BECore/Reflection/ClassMeta.h` | `ClassMeta` struct, `GetClassMeta<T>()` |
+| `BECore/Reflection/AbstractFactory.h` | `AbstractFactory<T>` base template |
 | `BECore/Reflection/IArchive.h` | Abstract archive interface |
 | `BECore/Reflection/SaveSystem.h` | `Serialize<T>` function |
 | `BECore/Reflection/XmlArchive.h` | XML implementation |
 | `BECore/Reflection/BinaryArchive.h` | Binary implementation |
 | `CI/reflector/reflector.py` | Code generator script (supports `--scan-dirs`) |
-| `CI/reflector/templates/reflection.gen.hpp.j2` | Jinja2 template for code generation |
+| `CI/reflector/templates/reflection.gen.hpp.j2` | Jinja2 template for reflection code |
+| `CI/reflector/templates/enum_factory.gen.hpp.j2` | Jinja2 template for enum/factory code |
 
 ## Key Points
 
 - Use `eastl::string_view` for names (not `std::string_view`)
-- Generated code is placed in build directory, excluded from source control
+- Generated code is placed in `${CMAKE_BINARY_DIR}/Generated/`, excluded from source control
 - Python parser uses regex patterns to find `BE_CLASS()` and `BE_REFLECT_FIELD`
 - Factory generation requires `SCAN_DIRS` in CMake to find derived classes
 - Inheritance is detected from class declaration (e.g., `class Derived : public Base`)
+- Factories inherit from `AbstractFactory<T>` with `Create(ClassMeta)` interface
+- Factory/enum files are generated separately as `EnumXxx.gen.hpp`
+- `ClassMeta` uses `BECore::String::GetHash()` for compile-time type hashing
 
 ## DO
 
@@ -171,6 +254,8 @@ Include generated headers using angle brackets:
 - Mark all serializable fields with `BE_REFLECT_FIELD`
 - Use `PoolString` for frequently used strings
 - Include generated headers in .cpp files
+- Include both `FileName.gen.hpp` and `EnumFileName.gen.hpp` for factory bases
+- Use `ClassMeta` for type-erased factory operations
 - Test serialization round-trips (write then read)
 - Add headers to `add_reflection_target()` in CMakeLists.txt
 - Add `SCAN_DIRS` when using `FACTORY_BASE` to find derived classes

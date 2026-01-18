@@ -148,8 +148,10 @@ if(Python3_FOUND)
     message(STATUS "Python3 found: ${Python3_EXECUTABLE}")
     
     # Directory for generated reflection files
+    # Use CMAKE_BINARY_DIR so generated files go into the actual build directory
+    # (e.g., build/ClangWindowsSolution/Generated instead of build/ClangWindows/Generated)
     # Use "Generated" with capital G so include path is <Generated/File.gen.hpp>
-    set(REFLECTION_GENERATED_DIR "${OUTPUT_BASE_DIR}/Generated" CACHE PATH "Directory for generated reflection files")
+    set(REFLECTION_GENERATED_DIR "${CMAKE_BINARY_DIR}/Generated" CACHE PATH "Directory for generated reflection files")
     file(MAKE_DIRECTORY ${REFLECTION_GENERATED_DIR})
     
     # Reflector script and templates paths
@@ -160,37 +162,40 @@ if(Python3_FOUND)
     # add_reflection_target - Generate reflection code for headers
     # =============================================================================
     # Usage:
+    #   # Option 1: Automatic scanning (recommended)
+    #   add_reflection_target(MyTarget
+    #       DIRS
+    #           ${CMAKE_CURRENT_SOURCE_DIR}/Logger
+    #           ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
+    #       INCLUDE_DIRS
+    #           ${CMAKE_SOURCE_DIR}/src/Modules
+    #   )
+    #
+    #   # Option 2: Manual header list (legacy)
     #   add_reflection_target(MyTarget
     #       HEADERS
     #           ${CMAKE_CURRENT_SOURCE_DIR}/Player.h
-    #           ${CMAKE_CURRENT_SOURCE_DIR}/GameState.h
-    #       SCAN_DIRS
-    #           ${CMAKE_CURRENT_SOURCE_DIR}/Logger
     #       INCLUDE_DIRS
     #           ${CMAKE_SOURCE_DIR}/src/Modules
     #   )
     #
     # Parameters:
-    #   HEADERS    - Header files to generate reflection for
-    #   SCAN_DIRS  - Directories to scan for derived classes (for factory generation)
-    #   INCLUDE_DIRS - Additional include paths
+    #   DIRS       - Directories to scan for BE_CLASS() files (auto-generates for all)
+    #   HEADERS    - Explicit header files to generate reflection for (legacy)
+    #   INCLUDE_DIRS - Include paths for computing include directives
     #
     # This will:
-    #   1. Run reflector.py at CONFIGURE TIME (execute_process)
-    #   2. Generate .gen.hpp files in ${REFLECTION_GENERATED_DIR}
-    #   3. Add generated files to target sources
-    #   4. Add generated directory to target include paths
-    #   5. For FACTORY_BASE classes, scan SCAN_DIRS to find derived classes
+    #   1. Scan DIRS for all headers containing BE_CLASS() macro
+    #   2. Run reflector.py at CONFIGURE TIME for each file
+    #   3. Generate .gen.hpp files in ${REFLECTION_GENERATED_DIR}
+    #   4. For FACTORY_BASE classes, generate EnumXxx.gen.hpp with factory
+    #   5. Add all generated files to target sources
     # =============================================================================
     function(add_reflection_target TARGET_NAME)
-        cmake_parse_arguments(ARG "" "" "HEADERS;INCLUDE_DIRS;SCAN_DIRS" ${ARGN})
-        
-        if(NOT ARG_HEADERS)
-            message(WARNING "add_reflection_target: No HEADERS specified for ${TARGET_NAME}")
-            return()
-        endif()
+        cmake_parse_arguments(ARG "" "" "HEADERS;INCLUDE_DIRS;DIRS" ${ARGN})
         
         set(GENERATED_FILES "")
+        set(ALL_HEADERS "")
         
         # Build include path arguments
         set(INCLUDE_ARGS "")
@@ -200,15 +205,48 @@ if(Python3_FOUND)
             endforeach()
         endif()
         
-        # Build scan directory arguments for factory generation
+        # Collect headers from DIRS (auto-scan mode)
+        if(ARG_DIRS)
+            foreach(SCAN_DIR ${ARG_DIRS})
+                if(EXISTS "${SCAN_DIR}")
+                    # Find all header files in directory
+                    file(GLOB_RECURSE DIR_HEADERS "${SCAN_DIR}/*.h" "${SCAN_DIR}/*.hpp")
+                    foreach(HEADER ${DIR_HEADERS})
+                        # Check if file contains BE_CLASS macro
+                        file(READ "${HEADER}" HEADER_CONTENT)
+                        string(FIND "${HEADER_CONTENT}" "BE_CLASS(" HAS_BE_CLASS)
+                        if(NOT HAS_BE_CLASS EQUAL -1)
+                            list(APPEND ALL_HEADERS "${HEADER}")
+                        endif()
+                    endforeach()
+                endif()
+            endforeach()
+            list(LENGTH ALL_HEADERS HEADERS_COUNT)
+            message(STATUS "Auto-scanned ${TARGET_NAME}: found ${HEADERS_COUNT} headers with BE_CLASS()")
+        endif()
+        
+        # Add explicit HEADERS
+        if(ARG_HEADERS)
+            list(APPEND ALL_HEADERS ${ARG_HEADERS})
+        endif()
+        
+        # Remove duplicates
+        list(REMOVE_DUPLICATES ALL_HEADERS)
+        
+        if(NOT ALL_HEADERS)
+            message(WARNING "add_reflection_target: No headers with BE_CLASS() found for ${TARGET_NAME}")
+            return()
+        endif()
+        
+        # Build DIRS arguments for factory generation (reflector needs to know all dirs)
         set(SCAN_ARGS "")
-        if(ARG_SCAN_DIRS)
-            foreach(SCAN_DIR ${ARG_SCAN_DIRS})
+        if(ARG_DIRS)
+            foreach(SCAN_DIR ${ARG_DIRS})
                 list(APPEND SCAN_ARGS "-S" "${SCAN_DIR}")
             endforeach()
         endif()
         
-        foreach(HEADER ${ARG_HEADERS})
+        foreach(HEADER ${ALL_HEADERS})
             # Get filename without extension for output file
             get_filename_component(HEADER_NAME ${HEADER} NAME_WE)
             get_filename_component(HEADER_ABS ${HEADER} ABSOLUTE)
@@ -239,13 +277,21 @@ if(Python3_FOUND)
                 message(WARNING "  Error: ${REFLECTOR_ERROR}")
             else()
                 # Only add to list if generation was successful
-                # Check if file exists before adding (extra safety check)
                 if(EXISTS "${GEN_FILE}")
                     list(APPEND GENERATED_FILES ${GEN_FILE})
                     message(STATUS "  Generated: ${GEN_FILE}")
                 else()
                     message(WARNING "  Generated file ${GEN_FILE} does not exist after generation")
                 endif()
+            endif()
+        endforeach()
+        
+        # Collect all generated enum factory files (Enum*.gen.hpp)
+        file(GLOB ENUM_GEN_FILES "${REFLECTION_GENERATED_DIR}/Enum*.gen.hpp")
+        foreach(ENUM_FILE ${ENUM_GEN_FILES})
+            if(NOT "${ENUM_FILE}" IN_LIST GENERATED_FILES)
+                list(APPEND GENERATED_FILES ${ENUM_FILE})
+                message(STATUS "  Found enum factory: ${ENUM_FILE}")
             endif()
         endforeach()
         
@@ -256,8 +302,8 @@ if(Python3_FOUND)
             target_sources(${TARGET_NAME} PRIVATE ${GENERATED_FILES})
         endif()
         
-        # Add OUTPUT_BASE_DIR to include paths so <Generated/File.gen.hpp> works
-        target_include_directories(${TARGET_NAME} PRIVATE ${OUTPUT_BASE_DIR})
+        # Add CMAKE_BINARY_DIR to include paths so <Generated/File.gen.hpp> works
+        target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_BINARY_DIR})
         
         # Define REFLECTION_GENERATED so code can detect generated files are available
         target_compile_definitions(${TARGET_NAME} PRIVATE REFLECTION_GENERATED=1)

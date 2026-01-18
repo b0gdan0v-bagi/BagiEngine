@@ -10,6 +10,8 @@
 #include <string>
 #include <cstdio>
 
+#include <Generated/OutputSink.gen.hpp>
+
 namespace BECore {
 
     void OutputSink::Initialize() {
