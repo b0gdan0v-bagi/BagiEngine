@@ -14,6 +14,8 @@ namespace BECore {
      * Error and Fatal messages go to stderr, others to stdout.
      */
     class ConsoleSink : public ILogSink {
+        BE_CLASS(ConsoleSink)
+
     public:
         ConsoleSink() = default;
         ~ConsoleSink() override = default;

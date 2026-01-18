@@ -38,9 +38,21 @@ struct ReflectionTraits;
 // Place inside class body. Declares static reflection methods that are
 // defined in the generated .gen.hpp file.
 //
+// Usage:
+//   BE_CLASS(ClassName)              - Standard reflection
+//   BE_CLASS(ClassName, FACTORY_BASE) - Mark as factory base for enum generation
+//
 // @param ClassName The name of the containing class (required for static methods)
+// @param Options   Optional: FACTORY_BASE to enable factory/enum generation
 // =============================================================================
-#define BE_CLASS(ClassName)                                                     \
+
+// Helper macros for argument counting and dispatch
+#define BE_CLASS_EXPAND(x) x
+#define BE_CLASS_GET_MACRO(_1, _2, NAME, ...) NAME
+#define BE_CLASS(...) BE_CLASS_EXPAND(BE_CLASS_GET_MACRO(__VA_ARGS__, BE_CLASS_2, BE_CLASS_1)(__VA_ARGS__))
+
+// BE_CLASS(ClassName) - standard reflection only
+#define BE_CLASS_1(ClassName)                                                   \
 public:                                                                          \
     /** @brief Get the type name as string_view */                              \
     static constexpr eastl::string_view GetStaticTypeName();                    \
@@ -53,7 +65,27 @@ public:                                                                         
     template<typename Func>                                                      \
     static constexpr void ForEachFieldStatic(const ClassName& obj, Func&& func);\
 private:                                                                         \
-    template<typename, typename> friend struct ::BECore::ReflectionTraits; \
+    template<typename, typename> friend struct ::BECore::ReflectionTraits;      \
+    public:
+
+// BE_CLASS(ClassName, FACTORY_BASE) - reflection + factory base marker
+// The FACTORY_BASE parameter is parsed by reflector.py to generate:
+//   - CORE_ENUM({ClassName}Type, ...) with all derived classes
+//   - {ClassName}Factory class with Create() method
+#define BE_CLASS_2(ClassName, Options)                                          \
+public:                                                                          \
+    /** @brief Get the type name as string_view */                              \
+    static constexpr eastl::string_view GetStaticTypeName();                    \
+    /** @brief Get the number of reflected fields */                            \
+    static constexpr size_t GetStaticFieldCount();                              \
+    /** @brief Iterate over all reflected fields (mutable) */                   \
+    template<typename Func>                                                      \
+    static constexpr void ForEachFieldStatic(ClassName& obj, Func&& func);      \
+    /** @brief Iterate over all reflected fields (const) */                     \
+    template<typename Func>                                                      \
+    static constexpr void ForEachFieldStatic(const ClassName& obj, Func&& func);\
+private:                                                                         \
+    template<typename, typename> friend struct ::BECore::ReflectionTraits;      \
     public: 
 
 // =============================================================================

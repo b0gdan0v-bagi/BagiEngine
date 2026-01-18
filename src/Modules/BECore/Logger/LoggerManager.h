@@ -1,9 +1,11 @@
 #pragma once
 
 #include <BECore/Logger/ILogSink.h>
-#include <BECore/Logger/LogSinkType.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <EASTL/vector.h>
+
+// Forward declaration - ILogSinkType is generated from BE_CLASS(ILogSink, FACTORY_BASE)
+enum class ILogSinkType : uint8_t;
 
 namespace BECore {
 
@@ -68,10 +70,10 @@ namespace BECore {
     private:
         /**
          * @brief Create sink instance by type
-         * @param type Sink type from enum
+         * @param type Sink type from generated enum (ILogSinkType)
          * @return Pointer to sink instance or nullptr if unknown type
          */
-        static IntrusivePtr<ILogSink> CreateSinkByType(LogSinkType type);
+        static IntrusivePtr<ILogSink> CreateSinkByType(ILogSinkType type);
 
         /**
          * @brief Sort sinks by priority (lower first)

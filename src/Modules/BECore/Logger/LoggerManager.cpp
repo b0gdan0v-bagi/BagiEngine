@@ -7,6 +7,9 @@
 #include <BECore/Logger/OutputSink.h>
 #include <BECore/RefCounted/New.h>
 
+// Include generated factory - provides ILogSinkType enum and ILogSinkFactory
+#include <Generated/ILogSink.gen.hpp>
+
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -40,7 +43,7 @@ namespace BECore {
                             continue;
                         }
 
-                        auto sinkType = sinkNode.ParseAttribute<LogSinkType>("type");
+                        auto sinkType = sinkNode.ParseAttribute<ILogSinkType>("type");
                         if (!sinkType) {
                             continue;
                         }
@@ -88,17 +91,8 @@ namespace BECore {
         }
     }
 
-    IntrusivePtr<ILogSink> LoggerManager::CreateSinkByType(LogSinkType type) {
-        switch (type) {
-            case LogSinkType::Console:
-                return BECore::New<ConsoleSink>();
-            case LogSinkType::File:
-                return BECore::New<FileSink>();
-            case LogSinkType::Output:
-                return BECore::New<OutputSink>();
-            default:
-                return {};
-        }
+    IntrusivePtr<ILogSink> LoggerManager::CreateSinkByType(ILogSinkType type) {
+        return ILogSinkFactory::Create(type);
     }
 
     void LoggerManager::SortSinksByPriority() {

@@ -19,6 +19,8 @@ namespace BECore {
      * On other platforms: No-op (safe to use but won't output anything)
      */
     class OutputSink : public ILogSink {
+        BE_CLASS(OutputSink)
+
     public:
         OutputSink() = default;
         ~OutputSink() override = default;

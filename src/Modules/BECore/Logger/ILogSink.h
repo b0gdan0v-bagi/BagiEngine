@@ -2,6 +2,7 @@
 
 #include <BECore/Logger/LogLevel.h>
 #include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 
 #include <EASTL/string_view.h>
 
@@ -35,6 +36,8 @@ namespace BECore {
      * };
      */
     class ILogSink : public RefCounted {
+        BE_CLASS(ILogSink, FACTORY_BASE)
+
     public:
         ~ILogSink() override = default;
 

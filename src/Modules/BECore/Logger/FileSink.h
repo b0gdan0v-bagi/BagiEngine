@@ -17,6 +17,8 @@ namespace BECore {
      * Thread-safe file logging with optional append mode.
      */
     class FileSink : public ILogSink {
+        BE_CLASS(FileSink)
+
     public:
         FileSink() = default;
         ~FileSink() override;

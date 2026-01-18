@@ -164,19 +164,26 @@ if(Python3_FOUND)
     #       HEADERS
     #           ${CMAKE_CURRENT_SOURCE_DIR}/Player.h
     #           ${CMAKE_CURRENT_SOURCE_DIR}/GameState.h
+    #       SCAN_DIRS
+    #           ${CMAKE_CURRENT_SOURCE_DIR}/Logger
     #       INCLUDE_DIRS
     #           ${CMAKE_SOURCE_DIR}/src/Modules
     #   )
+    #
+    # Parameters:
+    #   HEADERS    - Header files to generate reflection for
+    #   SCAN_DIRS  - Directories to scan for derived classes (for factory generation)
+    #   INCLUDE_DIRS - Additional include paths
     #
     # This will:
     #   1. Run reflector.py at CONFIGURE TIME (execute_process)
     #   2. Generate .gen.hpp files in ${REFLECTION_GENERATED_DIR}
     #   3. Add generated files to target sources
     #   4. Add generated directory to target include paths
-    #   5. Also add custom_command for incremental rebuilds at build time
+    #   5. For FACTORY_BASE classes, scan SCAN_DIRS to find derived classes
     # =============================================================================
     function(add_reflection_target TARGET_NAME)
-        cmake_parse_arguments(ARG "" "" "HEADERS;INCLUDE_DIRS" ${ARGN})
+        cmake_parse_arguments(ARG "" "" "HEADERS;INCLUDE_DIRS;SCAN_DIRS" ${ARGN})
         
         if(NOT ARG_HEADERS)
             message(WARNING "add_reflection_target: No HEADERS specified for ${TARGET_NAME}")
@@ -190,6 +197,14 @@ if(Python3_FOUND)
         if(ARG_INCLUDE_DIRS)
             foreach(INC_DIR ${ARG_INCLUDE_DIRS})
                 list(APPEND INCLUDE_ARGS "-I" "${INC_DIR}")
+            endforeach()
+        endif()
+        
+        # Build scan directory arguments for factory generation
+        set(SCAN_ARGS "")
+        if(ARG_SCAN_DIRS)
+            foreach(SCAN_DIR ${ARG_SCAN_DIRS})
+                list(APPEND SCAN_ARGS "-S" "${SCAN_DIR}")
             endforeach()
         endif()
         
@@ -211,6 +226,7 @@ if(Python3_FOUND)
                     --output "${GEN_FILE}"
                     --templates "${REFLECTOR_TEMPLATES}"
                     ${INCLUDE_ARGS}
+                    ${SCAN_ARGS}
                 RESULT_VARIABLE REFLECTOR_RESULT
                 OUTPUT_VARIABLE REFLECTOR_OUTPUT
                 ERROR_VARIABLE REFLECTOR_ERROR

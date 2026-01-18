@@ -14,8 +14,10 @@ alwaysApply: false
 BagiEngine uses a compile-time reflection system with Python-based code generation.
 The system provides:
 - `BE_CLASS(ClassName)` macro for class reflection
+- `BE_CLASS(ClassName, FACTORY_BASE)` for factory/enum generation from inheritance
 - `BE_REFLECT_FIELD` / `BE_REFLECT_ENUM` markers
 - Auto-generated static methods and `ReflectionTraits<T>` specializations
+- Auto-generated factories and enums for inheritance hierarchies
 - EnumUtils compatibility for reflected enums
 - Abstract `IArchive` interface for serialization
 
@@ -26,6 +28,7 @@ The system provides:
 | Macro | Location | Purpose |
 |-------|----------|---------|
 | `BE_CLASS(Name)` | Inside class body | Declares static reflection methods |
+| `BE_CLASS(Name, FACTORY_BASE)` | Inside base class body | Enables factory/enum generation for inheritance tree |
 | `BE_REFLECT_FIELD` | Before field declaration | Marks field for serialization |
 | `BE_REFLECT_ENUM` | Before enum class | Enables EnumUtils compatibility |
 
@@ -34,6 +37,73 @@ The system provides:
 1. Add `BE_CLASS(ClassName)` inside struct/class body
 2. Mark serializable fields with `BE_REFLECT_FIELD`
 3. Include generated file in .cpp: `#include <Generated/FileName.gen.hpp>`
+
+## Factory Generation (FACTORY_BASE)
+
+For inheritance hierarchies, use `BE_CLASS(Name, FACTORY_BASE)` on the base class
+to auto-generate a factory and type enum.
+
+### Usage Pattern
+
+1. Mark base class with `BE_CLASS(BaseClass, FACTORY_BASE)`
+2. Mark derived classes with regular `BE_CLASS(DerivedClass)`
+3. Add `SCAN_DIRS` in CMake to specify where to find derived classes
+4. Include generated file to access `{BaseClass}Type` enum and `{BaseClass}Factory`
+
+### Example
+
+```cpp
+// ILogSink.h - base class
+class ILogSink : public RefCounted {
+    BE_CLASS(ILogSink, FACTORY_BASE)
+public:
+    virtual void Initialize() = 0;
+};
+
+// ConsoleSink.h - derived class
+class ConsoleSink : public ILogSink {
+    BE_CLASS(ConsoleSink)
+public:
+    void Initialize() override;
+};
+
+// Usage in .cpp
+#include <Generated/ILogSink.gen.hpp>
+
+// Use generated enum and factory
+auto sink = ILogSinkFactory::Create(ILogSinkType::Console);
+```
+
+### CMake Configuration
+
+```cmake
+add_reflection_target(MyModule
+    HEADERS
+        ${CMAKE_CURRENT_SOURCE_DIR}/ILogSink.h
+    SCAN_DIRS
+        ${CMAKE_CURRENT_SOURCE_DIR}/Logger
+    INCLUDE_DIRS
+        ${PROJECT_ROOT}/src/Modules
+)
+```
+
+### Generated Code
+
+For a base class `ILogSink` with derived classes `ConsoleSink`, `FileSink`, `OutputSink`:
+
+| Generated | Description |
+|-----------|-------------|
+| `ILogSinkType` | Enum with values `Console`, `File`, `Output` |
+| `ILogSinkFactory` | Factory class with `Create(ILogSinkType)` method |
+| `ILogSinkFactory::Count()` | Number of registered types |
+| `ILogSinkFactory::GetTypeName(type)` | Get string name for type |
+
+### Short Name Computation
+
+Enum values are computed by stripping the base class suffix:
+- `ConsoleSink` + `ILogSink` -> `Console`
+- `FileSink` + `ILogSink` -> `File`
+- `MyWidget` + `IWidget` -> `My`
 
 ## Generated Static Methods
 
@@ -83,23 +153,27 @@ Include generated headers using angle brackets:
 | `BECore/Reflection/SaveSystem.h` | `Serialize<T>` function |
 | `BECore/Reflection/XmlArchive.h` | XML implementation |
 | `BECore/Reflection/BinaryArchive.h` | Binary implementation |
-| `CI/reflector/reflector.py` | Code generator script |
-| `CI/reflector/templates/` | Jinja2 templates |
+| `CI/reflector/reflector.py` | Code generator script (supports `--scan-dirs`) |
+| `CI/reflector/templates/reflection.gen.hpp.j2` | Jinja2 template for code generation |
 
 ## Key Points
 
 - Use `eastl::string_view` for names (not `std::string_view`)
 - Generated code is placed in build directory, excluded from source control
 - Python parser uses regex patterns to find `BE_CLASS()` and `BE_REFLECT_FIELD`
+- Factory generation requires `SCAN_DIRS` in CMake to find derived classes
+- Inheritance is detected from class declaration (e.g., `class Derived : public Base`)
 
 ## DO
 
 - Use `BE_CLASS(ClassName)` inside class body
+- Use `BE_CLASS(ClassName, FACTORY_BASE)` for factory base classes
 - Mark all serializable fields with `BE_REFLECT_FIELD`
 - Use `PoolString` for frequently used strings
 - Include generated headers in .cpp files
 - Test serialization round-trips (write then read)
 - Add headers to `add_reflection_target()` in CMakeLists.txt
+- Add `SCAN_DIRS` when using `FACTORY_BASE` to find derived classes
 
 ## DON'T
 
@@ -108,3 +182,4 @@ Include generated headers using angle brackets:
 - Don't modify generated files (they are overwritten)
 - Don't forget the `ClassName` argument in `BE_CLASS(ClassName)`
 - Don't include generated headers in .h files (use forward declarations)
+- Don't forget to add derived class headers to `SCAN_DIRS` directories
