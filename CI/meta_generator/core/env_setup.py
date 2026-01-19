@@ -1,12 +1,13 @@
 """
 LLVM Discovery and Initialization Module
 
-Provides multi-level search for LLVM/libclang installation:
-1. User settings (meta_generator_settings.json)
-2. Environment variable (LIBCLANG_PATH)
-3. Known platform-specific paths
-4. llvm-config command
-5. Bundled libclang (optional)
+LLVM/libclang must be configured via system environment variable:
+- LIBCLANG_PATH: Path to directory containing libclang.dll (Windows) / libclang.so (Linux) / libclang.dylib (macOS)
+
+Example (Windows):
+    set LIBCLANG_PATH=D:\AHobbyProjects\LLVM\bin
+
+No automatic search is performed - this ensures predictable behavior.
 """
 
 import os
@@ -84,44 +85,23 @@ class LLVMDiscovery:
     
     def discover(self) -> LLVMStatus:
         """
-        Search for LLVM in order of priority.
+        Search for LLVM from LIBCLANG_PATH environment variable only.
         
         Returns:
             LLVMStatus with discovery results
         """
-        # 1. Check from settings.json (user specified manually)
-        if self.settings_path and self.settings_path.exists():
-            result = self._check_from_settings()
-            if result.found:
-                return result
-        
-        # 2. Environment variable LIBCLANG_PATH
+        # Check LIBCLANG_PATH environment variable (ONLY source)
         result = self._check_env_var()
         if result.found:
             return result
         
-        # 3. Known paths for platform
-        result = self._check_known_paths()
-        if result.found:
-            return result
-        
-        # 4. llvm-config (if available)
-        result = self._check_llvm_config()
-        if result.found:
-            return result
-        
-        # 5. Bundled (libclang in tools folder)
-        if self.bundled_path:
-            result = self._check_bundled()
-            if result.found:
-                return result
-        
+        # Not found - user must set LIBCLANG_PATH
         return LLVMStatus(
             found=False, 
             path=None, 
             version=None, 
             source="none",
-            error="LLVM/libclang not found. Install LLVM or set LIBCLANG_PATH."
+            error="LIBCLANG_PATH environment variable not set. Set it to LLVM bin directory (e.g., D:\\LLVM\\bin)"
         )
     
     def _check_env_var(self) -> LLVMStatus:
@@ -247,7 +227,11 @@ class LLVMDiscovery:
     
     def _get_version(self, path: str) -> Optional[str]:
         """
-        Try to get libclang version by initializing it.
+        Return placeholder version string.
+        
+        Note: We don't actually test initialization here to avoid calling
+        set_library_path() multiple times (which Python clang doesn't allow).
+        Actual initialization happens in initialize_clang().
         
         Args:
             path: Path to libclang directory
@@ -257,14 +241,9 @@ class LLVMDiscovery:
         """
         if not CLANG_AVAILABLE:
             return None
-            
-        try:
-            clang.cindex.Config.set_library_path(path)
-            # Try to create index to verify it works
-            idx = clang.cindex.Index.create()
-            return "OK"  # Actual version detection would require more complex parsing
-        except Exception:
-            return None
+        
+        # Just return OK if path was validated (file exists)
+        return "OK"
 
 
 def initialize_clang(settings_path: Optional[Path] = None, project_root: Optional[Path] = None) -> LLVMStatus:

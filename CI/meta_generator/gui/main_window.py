@@ -238,14 +238,45 @@ class MetaGeneratorWindow(QMainWindow):
     
     def _check_llvm_status(self):
         """Check and display LLVM status."""
-        status = initialize_clang(self.settings_path, self.project_root)
+        import os
+        env_path = os.getenv("LIBCLANG_PATH")
         
-        if status.found:
-            self.llvm_status_label.setText(f"LLVM: OK ({status.source})")
+        if env_path:
+            self.llvm_status_label.setText(f"LIBCLANG_PATH: {env_path}")
             self.llvm_status_label.setStyleSheet("color: green; font-weight: bold;")
         else:
-            self.llvm_status_label.setText("LLVM: Not configured (using regex)")
-            self.llvm_status_label.setStyleSheet("color: orange;")
+            self.llvm_status_label.setText("LIBCLANG_PATH: Not set (REQUIRED)")
+            self.llvm_status_label.setStyleSheet("color: red; font-weight: bold;")
+    
+    def _find_build_dir(self) -> Path:
+        """Find the actual CMake build directory."""
+        build_base = self.project_root / "build"
+        
+        if not build_base.exists():
+            return build_base
+        
+        # Check for compiler-specific subdirectories first (prioritize Solution dirs)
+        patterns = [
+            "Clang*Solution", "MSVC*Solution", "GCC*Solution",
+            "Clang*", "MSVC*", "GCC*",
+            "Debug", "Release", "RelWithDebInfo", "MinSizeRel"
+        ]
+        
+        for pattern in patterns:
+            matches = list(build_base.glob(pattern))
+            # Filter to directories that contain CMakeCache.txt (valid CMake build dirs)
+            cmake_dirs = [m for m in matches if m.is_dir() and (m / "CMakeCache.txt").exists()]
+            if cmake_dirs:
+                # Sort by modification time, return most recent
+                cmake_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                return cmake_dirs[0]
+        
+        # Fallback to build/ if it has CMakeCache.txt
+        if (build_base / "CMakeCache.txt").exists():
+            return build_base
+        
+        # Default fallback - just return build/
+        return build_base
     
     def _load_settings(self):
         """Load window settings from JSON."""
@@ -294,22 +325,16 @@ class MetaGeneratorWindow(QMainWindow):
     
     def _load_cache(self):
         """Load metadata cache and populate the tree."""
-        # Try to find cache in common build directories
+        # Use _find_build_dir() to find the correct CMake build directory
+        build_dir = self._find_build_dir()
+        
+        # Cache is stored in .meta_cache/ subdirectory (same as CMake)
         possible_cache_paths = [
-            self.project_root / "build" / "metadata_cache.json",
-            self.project_root / "build" / "Debug" / "metadata_cache.json",
-            self.project_root / "build" / "Release" / "metadata_cache.json",
+            build_dir / ".meta_cache" / "metadata_cache.json",
         ]
         
-        # Also check for compiler-specific build dirs
-        for compiler in ["MSVC", "Clang", "GCC"]:
-            for platform in ["Windows", "Linux", "macOS"]:
-                possible_cache_paths.append(
-                    self.project_root / "build" / f"{compiler}{platform}" / "metadata_cache.json"
-                )
-                possible_cache_paths.append(
-                    self.project_root / "build" / f"{compiler}{platform}Solution" / "metadata_cache.json"
-                )
+        # Fallback: check old location (for backwards compatibility)
+        possible_cache_paths.append(build_dir / "metadata_cache.json")
         
         cache_path = None
         for path in possible_cache_paths:
@@ -389,6 +414,17 @@ class MetaGeneratorWindow(QMainWindow):
             QMessageBox.warning(self, "Busy", "Generator is already running.")
             return
         
+        # Check LLVM status first (now required)
+        status = initialize_clang(self.settings_path, self.project_root)
+        if not status.found:
+            QMessageBox.critical(
+                self, "LLVM Required",
+                "LLVM/libclang is required but not configured.\n\n"
+                "Please configure LLVM path in Settings.\n\n"
+                "Download from: https://github.com/llvm/llvm-project/releases"
+            )
+            return
+        
         # Determine directories
         source_dirs = [
             self.project_root / "src" / "Modules" / "BECore" / "Logger",
@@ -402,9 +438,10 @@ class MetaGeneratorWindow(QMainWindow):
             QMessageBox.warning(self, "No Sources", "No source directories found.")
             return
         
-        # Find or create output directory
-        output_dir = self.project_root / "build" / "Generated"
-        cache_dir = self.project_root / "build"
+        # Find the actual CMake build directory
+        build_dir = self._find_build_dir()
+        output_dir = build_dir / "Generated"
+        cache_dir = build_dir / ".meta_cache"  # Same as CMake configuration
         
         include_dirs = [
             str(self.project_root / "src" / "Modules"),
@@ -413,6 +450,8 @@ class MetaGeneratorWindow(QMainWindow):
         
         self.log_text.clear()
         self._log("Starting generation..." + (" (force rescan)" if force else ""))
+        self._log(f"Build directory: {build_dir}")
+        self._log(f"Output directory: {output_dir}")
         
         self.rescan_action.setEnabled(False)
         self.generate_action.setEnabled(False)

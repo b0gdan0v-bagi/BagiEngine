@@ -102,13 +102,12 @@ if defined LLVM_PATH (
 
 echo [WARNING] LLVM/libclang not found automatically.
 echo.
-echo Please install LLVM:
+echo LLVM is REQUIRED for Meta-Generator. Please install LLVM:
 echo   1. Download from: https://github.com/llvm/llvm-project/releases
 echo   2. Run installer, select "Add LLVM to system PATH"
 echo   3. Or set LIBCLANG_PATH to LLVM bin directory
 echo.
 echo After installation, run this script again or use GUI Settings.
-echo Note: Meta-Generator will fall back to regex parsing without LLVM.
 goto :end
 
 :success

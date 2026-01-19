@@ -80,10 +80,10 @@ class SettingsDialog(QDialog):
         
         # Help text
         help_text = QLabel(
+            "LLVM/libclang is REQUIRED for reflection generation.\n\n"
             "If auto-detection fails, manually specify the path to LLVM's bin directory.\n"
             "The directory should contain libclang.dll (Windows) or libclang.so (Linux).\n\n"
-            "Download LLVM from: https://github.com/llvm/llvm-project/releases\n\n"
-            "Note: Without LLVM, the generator will use a regex-based parser (less accurate)."
+            "Download LLVM from: https://github.com/llvm/llvm-project/releases"
         )
         help_text.setStyleSheet("color: gray; font-size: 11px;")
         help_text.setWordWrap(True)
@@ -137,8 +137,8 @@ class SettingsDialog(QDialog):
         path = self.llvm_path_edit.text().strip()
         
         if not path:
-            self.status_label.setText("Not configured (will use regex parser)")
-            self.status_label.setStyleSheet("color: orange;")
+            self.status_label.setText("Not configured (REQUIRED)")
+            self.status_label.setStyleSheet("color: red; font-weight: bold;")
             self.version_label.setText("-")
             return
         
@@ -175,19 +175,23 @@ class SettingsDialog(QDialog):
         """Save settings and close dialog."""
         path = self.llvm_path_edit.text().strip()
         
-        # Validate before saving
-        if path:
-            discovery = LLVMDiscovery()
-            if not discovery._validate_path(path):
-                reply = QMessageBox.question(
-                    self, "Invalid Path",
-                    "The specified path does not contain libclang.\n"
-                    "The generator will fall back to regex parsing.\n\n"
-                    "Save anyway?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
-                if reply != QMessageBox.StandardButton.Yes:
-                    return
+        # Validate before saving - LLVM is required
+        if not path:
+            QMessageBox.warning(
+                self, "LLVM Required",
+                "LLVM path is required for reflection generation.\n"
+                "Please configure a valid LLVM path."
+            )
+            return
+        
+        discovery = LLVMDiscovery()
+        if not discovery._validate_path(path):
+            QMessageBox.warning(
+                self, "Invalid Path",
+                "The specified path does not contain libclang.\n"
+                "Please specify a valid LLVM bin directory."
+            )
+            return
         
         # Load existing settings to preserve other values
         settings = {}

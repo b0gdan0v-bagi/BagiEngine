@@ -13,7 +13,7 @@ Usage:
 
 Features:
     - Incremental generation (only re-parses changed files via SHA-256 hash)
-    - Libclang AST parsing with regex fallback
+    - Libclang AST parsing (LLVM required)
     - Factory and enum generation for FACTORY_BASE classes
 """
 
@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from core.env_setup import initialize_clang, LLVMStatus
 from core.cache import MetadataCache
-from core.parser import create_parser, RegexParser
+from core.parser import create_parser
 from core.generator import CodeGenerator
 from core.models import ClassData
 
@@ -156,18 +156,28 @@ Examples:
         if args.verbose and not args.quiet:
             print(msg)
     
-    # Initialize libclang
+    # Initialize libclang (required)
     verbose_log("Initializing libclang...")
-    llvm_status = initialize_clang(settings_path)
+    
+    llvm_status = initialize_clang()
     
     if llvm_status.found:
         verbose_log(f"  libclang: OK (via {llvm_status.source})")
         if llvm_status.path:
             verbose_log(f"  Path: {llvm_status.path}")
     else:
-        verbose_log(f"  libclang: Not available, using regex fallback")
+        # LLVM is required - fail with helpful error message
+        print("ERROR: LLVM/libclang is required but not available.", file=sys.stderr)
         if llvm_status.error:
-            verbose_log(f"  Reason: {llvm_status.error}")
+            print(f"  Reason: {llvm_status.error}", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Set system environment variable:", file=sys.stderr)
+        print("  Windows: set LIBCLANG_PATH=D:\\LLVM\\bin", file=sys.stderr)
+        print("  Linux:   export LIBCLANG_PATH=/usr/lib/llvm-18/lib", file=sys.stderr)
+        print("  macOS:   export LIBCLANG_PATH=/opt/homebrew/opt/llvm/lib", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Install LLVM from: https://github.com/llvm/llvm-project/releases", file=sys.stderr)
+        return 1
     
     # Load cache
     cache_path = cache_dir / "metadata_cache.json"
@@ -180,10 +190,13 @@ Examples:
     else:
         verbose_log("No cache found, starting fresh")
     
-    # Create parser
-    cpp_parser = create_parser(include_dirs, prefer_libclang=True)
-    parser_type = "libclang" if not isinstance(cpp_parser, RegexParser) else "regex"
-    verbose_log(f"Using {parser_type} parser")
+    # Create parser (libclang only)
+    try:
+        cpp_parser = create_parser(include_dirs)
+        verbose_log("Using libclang parser")
+    except RuntimeError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
     
     # Create generator
     generator = CodeGenerator(output_dir=output_dir)

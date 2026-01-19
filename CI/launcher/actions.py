@@ -175,6 +175,7 @@ class ActionExecutor:
         self._build_type = build_type
         self.workspace_file = project_root / "CI" / "BagiEngine.code-workspace"
     
+    
     @property
     def build_dir(self) -> Path:
         """Get build directory based on current compiler and build type.
@@ -366,8 +367,8 @@ class ActionExecutor:
         if "Visual Studio" in generator:
             cmd.extend(["-A", "x64"])
         
-        # Prepare environment for subprocess
-        env = None
+        # Prepare environment for subprocess (use system environment including LIBCLANG_PATH)
+        env = os.environ.copy()
         
         # Set compiler toolchain based on selection (Windows only)
         if get_current_platform() == Platform.WINDOWS:
@@ -382,8 +383,8 @@ class ActionExecutor:
             elif compiler == "MSVC" and "Visual Studio" not in generator:
                 # For MSVC with non-VS generators (like Ninja), we need to set up
                 # the Visual Studio environment so CMake can find cl.exe
-                env = get_msvc_environment("x64")
-                if env is None:
+                msvc_env = get_msvc_environment("x64")
+                if msvc_env is None:
                     return ActionResult(
                         False, 
                         "", 
@@ -391,6 +392,8 @@ class ActionExecutor:
                         "Please ensure Visual Studio is installed with C++ development tools,\n"
                         "or run the launcher from a Visual Studio Developer Command Prompt."
                     )
+                # Merge MSVC environment with system environment
+                env.update(msvc_env)
         
         return self._run_streaming_command(cmd, env, on_output, timeout=300)
     
@@ -411,25 +414,24 @@ class ActionExecutor:
             "--parallel", str(cpu_count),  # Multi-threaded build
         ]
         
+        # Use system environment (includes LIBCLANG_PATH if set)
+        env = os.environ.copy()
+        
         # For MSVC with Ninja, we need the VS environment for the build step too
-        env = None
         if get_current_platform() == Platform.WINDOWS and compiler == "MSVC":
             # Check if we're using a non-VS generator by looking for Ninja files
             ninja_build = self.build_dir / "build.ninja"
             if ninja_build.exists():
-                env = get_msvc_environment("x64")
-                if env is None:
+                msvc_env = get_msvc_environment("x64")
+                if msvc_env is None:
                     return ActionResult(
                         False, 
                         "", 
                         "Could not find Visual Studio installation.\n"
                         "Please ensure Visual Studio is installed with C++ development tools."
                     )
-            else:
-                # For Visual Studio generator
-                env = os.environ.copy()
-        else:
-            env = os.environ.copy()
+                # Merge MSVC environment with system environment
+                env.update(msvc_env)
         
         return self._run_streaming_command(cmd, env, on_output, timeout=600)
     

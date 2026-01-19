@@ -508,6 +508,9 @@ class MainWindow(QMainWindow):
         run_layout.addWidget(self.cancel_button)
         
         main_layout.addLayout(run_layout)
+        
+        # Status bar
+        self._create_status_bar()
     
     def _create_actions_group(self) -> QGroupBox:
         """Create quick actions group."""
@@ -546,6 +549,12 @@ class MainWindow(QMainWindow):
             btn = QPushButton("Open Visual Studio")
             btn.clicked.connect(self._open_visual_studio_with_selection)
             layout.addWidget(btn)
+        
+        # Meta Generator Settings button
+        btn = QPushButton("Meta Generator")
+        btn.setToolTip("Configure LLVM path for reflection code generation")
+        btn.clicked.connect(self._open_meta_generator)
+        layout.addWidget(btn)
         
         # Settings button
         btn = QPushButton("Settings")
@@ -696,6 +705,29 @@ class MainWindow(QMainWindow):
         layout.addWidget(clear_btn)
         
         return group
+    
+    def _create_status_bar(self) -> None:
+        """Create status bar with LLVM indicator."""
+        from PyQt6.QtWidgets import QStatusBar
+        
+        status_bar = QStatusBar()
+        self.setStatusBar(status_bar)
+        
+        # LLVM status indicator
+        import os
+        llvm_status_label = QLabel()
+        
+        # Check system LIBCLANG_PATH environment variable
+        env_path = os.getenv("LIBCLANG_PATH")
+        
+        if env_path:
+            llvm_status_label.setText(f"LIBCLANG_PATH: {env_path}")
+            llvm_status_label.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            llvm_status_label.setText("LIBCLANG_PATH: Not set (REQUIRED)")
+            llvm_status_label.setStyleSheet("color: red; font-weight: bold;")
+        
+        status_bar.addPermanentWidget(llvm_status_label)
     
     def _load_config(self):
         """Load configuration into UI."""
@@ -887,6 +919,40 @@ class MainWindow(QMainWindow):
                     )
                     pipeline._steps = [step]
                     self._execute_pipeline(pipeline)
+    
+    def _open_meta_generator(self):
+        """Open Meta-Generator GUI for LLVM configuration."""
+        import subprocess
+        import sys
+        
+        meta_gen_script = self.project_root / "CI" / "meta_generator" / "meta_generator_gui.py"
+        
+        if not meta_gen_script.exists():
+            QMessageBox.warning(
+                self,
+                "Meta-Generator Not Found",
+                f"Meta-Generator GUI script not found:\n{meta_gen_script}"
+            )
+            return
+        
+        try:
+            # Launch meta_generator_gui.py in a detached process
+            subprocess.Popen(
+                [sys.executable, str(meta_gen_script)],
+                cwd=str(self.project_root),
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP if get_current_platform() == Platform.WINDOWS else 0,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=get_current_platform() != Platform.WINDOWS
+            )
+            self.output_text.append("Meta-Generator GUI launched. Configure LLVM path and restart CMake.")
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Failed to Launch",
+                f"Could not launch Meta-Generator GUI:\n{e}"
+            )
     
     def _open_settings(self):
         """Open the settings dialog."""

@@ -107,7 +107,7 @@ if [ -z "$LLVM_FOUND" ]; then
     echo "Then set LIBCLANG_PATH:"
     echo "  export LIBCLANG_PATH=/usr/lib/llvm-16/lib  # adjust version"
     echo
-    echo "Note: Meta-Generator will fall back to regex parsing without LLVM."
+    echo "LLVM is REQUIRED for Meta-Generator."
 fi
 
 echo

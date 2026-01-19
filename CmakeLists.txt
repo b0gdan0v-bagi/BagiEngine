@@ -205,7 +205,11 @@ except ImportError:
             set(LIBCLANG_AVAILABLE TRUE)
         endif()
     else()
-        message(STATUS "  libclang: Not available (will use regex fallback)")
+        message(WARNING "  libclang: Not available (LLVM is REQUIRED for reflection generation)")
+        message(WARNING "  Options:")
+        message(WARNING "    1. Run: python CI/meta_generator/meta_generator_gui.py")
+        message(WARNING "    2. Set environment variable: LIBCLANG_PATH=C:/Program Files/LLVM/bin")
+        message(WARNING "    3. Install LLVM: https://github.com/llvm/llvm-project/releases")
         set(LIBCLANG_AVAILABLE FALSE)
     endif()
     
@@ -216,13 +220,9 @@ except ImportError:
     set(REFLECTION_GENERATED_DIR "${CMAKE_BINARY_DIR}/Generated" CACHE PATH "Directory for generated reflection files")
     file(MAKE_DIRECTORY ${REFLECTION_GENERATED_DIR})
     
-    # Meta-Generator script paths (new system with caching)
+    # Meta-Generator script paths (LLVM-based, requires libclang)
     set(META_GENERATOR_SCRIPT "${CMAKE_SOURCE_DIR}/CI/meta_generator/meta_generator.py")
     set(META_GENERATOR_SETTINGS "${CMAKE_SOURCE_DIR}/meta_generator_settings.json")
-    
-    # Legacy reflector script (fallback if meta_generator not available)
-    set(REFLECTOR_SCRIPT "${CMAKE_SOURCE_DIR}/CI/reflector/reflector.py")
-    set(REFLECTOR_TEMPLATES "${CMAKE_SOURCE_DIR}/CI/reflector/templates")
     
     # =============================================================================
     # add_reflection_target - Generate reflection code for headers
@@ -252,149 +252,73 @@ except ImportError:
     function(add_reflection_target TARGET_NAME)
         cmake_parse_arguments(ARG "" "" "HEADERS;INCLUDE_DIRS;DIRS;SCAN_DIRS" ${ARGN})
         
-        # Choose generator script: prefer meta_generator.py, fallback to reflector.py
-        if(EXISTS ${META_GENERATOR_SCRIPT})
-            set(GENERATOR_SCRIPT ${META_GENERATOR_SCRIPT})
-            set(USE_META_GENERATOR TRUE)
-        else()
-            set(GENERATOR_SCRIPT ${REFLECTOR_SCRIPT})
-            set(USE_META_GENERATOR FALSE)
-            message(STATUS "Using legacy reflector.py (meta_generator not found)")
+        # Check that meta_generator.py exists
+        if(NOT EXISTS ${META_GENERATOR_SCRIPT})
+            message(FATAL_ERROR "Meta-generator script not found: ${META_GENERATOR_SCRIPT}")
         endif()
         
-        if(USE_META_GENERATOR)
-            # =================================================================
-            # NEW: Meta-Generator with caching
-            # =================================================================
-            # Build source directories arguments
-            set(SOURCE_ARGS "")
-            if(ARG_DIRS)
-                foreach(DIR ${ARG_DIRS})
-                    list(APPEND SOURCE_ARGS "--source-dir" "${DIR}")
-                endforeach()
-            endif()
-            
-            # Build include directories arguments
-            set(INCLUDE_ARGS "")
-            if(ARG_INCLUDE_DIRS)
-                foreach(INC_DIR ${ARG_INCLUDE_DIRS})
-                    list(APPEND INCLUDE_ARGS "--include-dir" "${INC_DIR}")
-                endforeach()
-            endif()
-            
-            # Build scan directories arguments
-            set(SCAN_ARGS "")
-            if(ARG_SCAN_DIRS)
-                foreach(SCAN_DIR ${ARG_SCAN_DIRS})
-                    list(APPEND SCAN_ARGS "--scan-dir" "${SCAN_DIR}")
-                endforeach()
-            elseif(ARG_DIRS)
-                foreach(SCAN_DIR ${ARG_DIRS})
-                    list(APPEND SCAN_ARGS "--scan-dir" "${SCAN_DIR}")
-                endforeach()
-            endif()
-            
-            message(STATUS "Running meta_generator for ${TARGET_NAME}...")
-            
-            execute_process(
-                COMMAND ${Python3_EXECUTABLE} ${GENERATOR_SCRIPT}
-                    ${SOURCE_ARGS}
-                    --output-dir "${REFLECTION_GENERATED_DIR}"
-                    --cache-dir "${CMAKE_BINARY_DIR}"
-                    --settings "${META_GENERATOR_SETTINGS}"
-                    ${INCLUDE_ARGS}
-                    ${SCAN_ARGS}
-                RESULT_VARIABLE META_GEN_RESULT
-                OUTPUT_VARIABLE META_GEN_OUTPUT
-                ERROR_VARIABLE META_GEN_ERROR
-                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-            )
-            
-            if(NOT META_GEN_RESULT EQUAL 0)
-                message(WARNING "Meta-generator failed for ${TARGET_NAME}:")
-                message(WARNING "  Exit code: ${META_GEN_RESULT}")
-                message(WARNING "  Error: ${META_GEN_ERROR}")
-                
-                # Provide helpful error message for libclang issues
-                if(META_GEN_ERROR MATCHES "libclang")
-                    message(WARNING "")
-                    message(WARNING "  LLVM/libclang not configured. Options:")
-                    message(WARNING "    1. Run: python CI/meta_generator/meta_generator_gui.py")
-                    message(WARNING "    2. Set environment variable: LIBCLANG_PATH=C:/Program Files/LLVM/bin")
-                    message(WARNING "    3. Install LLVM: https://github.com/llvm/llvm-project/releases")
-                endif()
-            else()
-                if(META_GEN_OUTPUT)
-                    message(STATUS "${META_GEN_OUTPUT}")
-                endif()
-            endif()
-            
-        else()
-            # =================================================================
-            # LEGACY: Per-file reflector.py
-            # =================================================================
-            set(ALL_HEADERS "")
-            
-            # Build include path arguments for legacy format
-            set(INCLUDE_ARGS "")
-            if(ARG_INCLUDE_DIRS)
-                foreach(INC_DIR ${ARG_INCLUDE_DIRS})
-                    list(APPEND INCLUDE_ARGS "-I" "${INC_DIR}")
-                endforeach()
-            endif()
-            
-            # Collect headers from DIRS
-            if(ARG_DIRS)
-                foreach(SCAN_DIR ${ARG_DIRS})
-                    if(EXISTS "${SCAN_DIR}")
-                        file(GLOB_RECURSE DIR_HEADERS "${SCAN_DIR}/*.h" "${SCAN_DIR}/*.hpp")
-                        foreach(HEADER ${DIR_HEADERS})
-                            file(READ "${HEADER}" HEADER_CONTENT)
-                            string(FIND "${HEADER_CONTENT}" "BE_CLASS(" HAS_BE_CLASS)
-                            if(NOT HAS_BE_CLASS EQUAL -1)
-                                list(APPEND ALL_HEADERS "${HEADER}")
-                            endif()
-                        endforeach()
-                    endif()
-                endforeach()
-            endif()
-            
-            # Build SCAN_DIRS arguments
-            set(SCAN_ARGS "")
-            if(ARG_SCAN_DIRS)
-                foreach(SCAN_DIR ${ARG_SCAN_DIRS})
-                    list(APPEND SCAN_ARGS "-S" "${SCAN_DIR}")
-                endforeach()
-            elseif(ARG_DIRS)
-                foreach(SCAN_DIR ${ARG_DIRS})
-                    list(APPEND SCAN_ARGS "-S" "${SCAN_DIR}")
-                endforeach()
-            endif()
-            
-            foreach(HEADER ${ALL_HEADERS})
-                get_filename_component(HEADER_NAME ${HEADER} NAME_WE)
-                get_filename_component(HEADER_ABS ${HEADER} ABSOLUTE)
-                set(GEN_FILE "${REFLECTION_GENERATED_DIR}/${HEADER_NAME}.gen.hpp")
-                
-                message(STATUS "Generating reflection for ${HEADER_NAME}...")
-                execute_process(
-                    COMMAND ${Python3_EXECUTABLE} ${REFLECTOR_SCRIPT}
-                        --input "${HEADER_ABS}"
-                        --output "${GEN_FILE}"
-                        --templates "${REFLECTOR_TEMPLATES}"
-                        ${INCLUDE_ARGS}
-                        ${SCAN_ARGS}
-                    RESULT_VARIABLE REFLECTOR_RESULT
-                    OUTPUT_VARIABLE REFLECTOR_OUTPUT
-                    ERROR_VARIABLE REFLECTOR_ERROR
-                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-                )
-                
-                if(NOT REFLECTOR_RESULT EQUAL 0)
-                    message(WARNING "Reflection generation failed for ${HEADER_NAME}:")
-                    message(WARNING "  Error: ${REFLECTOR_ERROR}")
-                endif()
+        # Build source directories arguments
+        set(SOURCE_ARGS "")
+        if(ARG_DIRS)
+            foreach(DIR ${ARG_DIRS})
+                list(APPEND SOURCE_ARGS "--source-dir" "${DIR}")
             endforeach()
+        endif()
+        
+        # Build include directories arguments
+        set(INCLUDE_ARGS "")
+        if(ARG_INCLUDE_DIRS)
+            foreach(INC_DIR ${ARG_INCLUDE_DIRS})
+                list(APPEND INCLUDE_ARGS "--include-dir" "${INC_DIR}")
+            endforeach()
+        endif()
+        
+        # Build scan directories arguments
+        set(SCAN_ARGS "")
+        if(ARG_SCAN_DIRS)
+            foreach(SCAN_DIR ${ARG_SCAN_DIRS})
+                list(APPEND SCAN_ARGS "--scan-dir" "${SCAN_DIR}")
+            endforeach()
+        elseif(ARG_DIRS)
+            foreach(SCAN_DIR ${ARG_DIRS})
+                list(APPEND SCAN_ARGS "--scan-dir" "${SCAN_DIR}")
+            endforeach()
+        endif()
+        
+        message(STATUS "Running meta_generator for ${TARGET_NAME}...")
+        
+        # Create cache directory specific to configuration
+        set(META_CACHE_DIR "${CMAKE_BINARY_DIR}/.meta_cache")
+        file(MAKE_DIRECTORY "${META_CACHE_DIR}")
+        
+        execute_process(
+            COMMAND ${Python3_EXECUTABLE} ${META_GENERATOR_SCRIPT}
+                ${SOURCE_ARGS}
+                --output-dir "${REFLECTION_GENERATED_DIR}"
+                --cache-dir "${META_CACHE_DIR}"
+                --settings "${META_GENERATOR_SETTINGS}"
+                ${INCLUDE_ARGS}
+                ${SCAN_ARGS}
+            RESULT_VARIABLE META_GEN_RESULT
+            OUTPUT_VARIABLE META_GEN_OUTPUT
+            ERROR_VARIABLE META_GEN_ERROR
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        )
+        
+        if(NOT META_GEN_RESULT EQUAL 0)
+            message(FATAL_ERROR "Meta-generator failed for ${TARGET_NAME}:\n"
+                "  Exit code: ${META_GEN_RESULT}\n"
+                "  Error: ${META_GEN_ERROR}\n"
+                "\n"
+                "LLVM/libclang is REQUIRED. Options:\n"
+                "  1. Run: python CI/meta_generator/meta_generator_gui.py (configure LLVM path)\n"
+                "  2. Set environment variable: LIBCLANG_PATH=C:/Program Files/LLVM/bin\n"
+                "  3. Install LLVM: https://github.com/llvm/llvm-project/releases"
+            )
+        else()
+            if(META_GEN_OUTPUT)
+                message(STATUS "${META_GEN_OUTPUT}")
+            endif()
         endif()
         
         # Collect all generated files

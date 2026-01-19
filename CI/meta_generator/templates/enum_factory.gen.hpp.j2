@@ -1,7 +1,7 @@
 // ============================================================================
 // GENERATED FILE - DO NOT EDIT
 // Generated from: {{ input_filename }}
-// Generator: BagiEngine Reflection System (reflector.py)
+// Generator: BagiEngine Meta-Generator (LLVM-based)
 // ============================================================================
 #pragma once
 
@@ -17,9 +17,9 @@
 // Include base class generated reflection
 #include <Generated/{{ base.name }}.gen.hpp>
 
-// Include derived class headers
+// Include derived class headers (absolute paths)
 {% for d in base.derived %}
-#include <{{ d.include_path }}>
+#include "{{ d.include_path }}"
 {% endfor %}
 
 // Include generated reflection for derived classes (provides ReflectionTraits)
