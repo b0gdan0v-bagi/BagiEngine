@@ -21,6 +21,9 @@ if [ ! -f ".venv/bin/python" ]; then
     fi
 fi
 
-# Activate and run launcher
-source .venv/bin/activate
-python -m CI.launcher.main
+# Run launcher in background (detached from terminal)
+echo "[INFO] Starting BagiEngine Launcher..."
+nohup .venv/bin/python -m CI.launcher.main > /dev/null 2>&1 &
+echo "[INFO] Launcher started in background (PID: $!)"
+echo "[INFO] You can close this terminal window."
+sleep 2

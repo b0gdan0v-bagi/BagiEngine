@@ -19,9 +19,12 @@ if not exist ".venv\Scripts\python.exe" (
     )
 )
 
-:: Run launcher in a separate window using venv Python directly
-if exist ".venv\Scripts\python.exe" (
-    start "BagiEngine Launcher" ".venv\Scripts\python.exe" -m CI.launcher.main
+:: Run launcher using pythonw.exe (no console window)
+if exist ".venv\Scripts\pythonw.exe" (
+    echo [INFO] Starting BagiEngine Launcher...
+    start "" ".venv\Scripts\pythonw.exe" -m CI.launcher.main
+    echo [INFO] Launcher started. You can close this window.
+    timeout /t 2 /nobreak >nul
 ) else (
     echo [ERROR] Virtual environment not found. Please run CI\setup_venv.bat first.
     pause

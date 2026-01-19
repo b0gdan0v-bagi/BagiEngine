@@ -32,6 +32,9 @@ __pycache__/
 launcher_config.json
 meta_generator_settings.json
 
+# Environment variables (user-specific)
+.env
+
 # macOS
 .DS_Store
 .DS_Store?

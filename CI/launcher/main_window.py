@@ -717,14 +717,16 @@ class MainWindow(QMainWindow):
         import os
         llvm_status_label = QLabel()
         
-        # Check system LIBCLANG_PATH environment variable
+        # Check LIBCLANG_PATH environment variable (loaded from .env or system)
         env_path = os.getenv("LIBCLANG_PATH")
         
         if env_path:
-            llvm_status_label.setText(f"LIBCLANG_PATH: {env_path}")
+            env_file = self.project_root / ".env"
+            source = "from .env" if env_file.exists() else "from system"
+            llvm_status_label.setText(f"LIBCLANG_PATH: {env_path} ({source})")
             llvm_status_label.setStyleSheet("color: green; font-weight: bold;")
         else:
-            llvm_status_label.setText("LIBCLANG_PATH: Not set (REQUIRED)")
+            llvm_status_label.setText("LIBCLANG_PATH: Not set (create .env file - see .env.example)")
             llvm_status_label.setStyleSheet("color: red; font-weight: bold;")
         
         status_bar.addPermanentWidget(llvm_status_label)
