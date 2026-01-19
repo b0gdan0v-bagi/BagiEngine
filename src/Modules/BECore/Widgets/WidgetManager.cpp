@@ -30,7 +30,7 @@ namespace BECore {
 
     void WidgetManager::CreateWidgets() {
         XmlConfig config = XmlConfig::Create();
-        constexpr std::string_view configPath = "config/WidgetsConfig.xml";
+        constexpr eastl::string_view configPath = "config/WidgetsConfig.xml";
         if (!config.LoadFromVirtualPath(configPath)) {
             return;
         }

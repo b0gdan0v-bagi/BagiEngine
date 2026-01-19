@@ -12,7 +12,7 @@
 namespace BECore {
 
     bool ApplicationSDLFabric::Create(const XmlConfig& config) {
-        auto configPath = config.GetRoot().ParseAttribute<std::string_view>("path");
+        auto configPath = config.GetRoot().ParseAttribute<eastl::string_view>("path");
         if (!configPath || configPath->empty()) {
             return false;
         }

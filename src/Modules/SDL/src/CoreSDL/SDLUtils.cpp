@@ -1,14 +1,12 @@
 #include "SDLUtils.h"
 
 #include <BECore/Utils/String.h>
-#include <EASTL/unordered_map.h>
-#include <boost/algorithm/string.hpp>
 
 namespace BECore {
 
     namespace {
         struct FlagEntry {
-            std::string_view name;
+            eastl::string_view name;
             SDL_WindowFlags value;
         };
 
@@ -19,7 +17,7 @@ namespace BECore {
         }
     }  // namespace
 
-    SDL_WindowFlags SDLUtils::ParseWindowFlags(std::string_view flagsString) {
+    SDL_WindowFlags SDLUtils::ParseWindowFlags(eastl::string_view flagsString) {
         if (flagsString.empty()) {
             return 0;
         }
@@ -36,7 +34,7 @@ namespace BECore {
         return result;
     }
 
-    SDL_WindowFlags SDLUtils::GetWindowFlagValue(std::string_view flagName) {
+    SDL_WindowFlags SDLUtils::GetWindowFlagValue(eastl::string_view flagName) {
         // Маппинг имен флагов на их значения
         static constexpr auto flagTable = SortFlagEntryFlags(std::array<FlagEntry, 26>{{
             {.name = "SDL_WINDOW_FULLSCREEN", .value = SDL_WINDOW_FULLSCREEN},

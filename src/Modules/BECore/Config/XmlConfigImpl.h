@@ -12,7 +12,7 @@ namespace BECore {
 
         bool LoadFromFile(const std::filesystem::path& filepath);
 
-        bool LoadFromString(std::string_view xmlContent);
+        bool LoadFromString(eastl::string_view xmlContent);
 
         bool SaveToFile(const std::filesystem::path& filepath) const;
 

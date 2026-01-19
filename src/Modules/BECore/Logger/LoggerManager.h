@@ -40,10 +40,6 @@ namespace BECore {
         void Initialize();
 
     private:
-        /**
-         * @brief Handle FlushEvent
-         */
-        void OnFlushEvent();
 
         /**
          * @brief Get sink by type

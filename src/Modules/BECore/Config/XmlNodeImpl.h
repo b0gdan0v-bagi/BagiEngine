@@ -16,7 +16,7 @@ namespace BECore {
         }
 
     public:
-        XmlNodeImpl* GetChild(std::string_view name) const {
+        XmlNodeImpl* GetChild(eastl::string_view name) const {
             auto childNode = Apply([name](auto node) { return node.child(name.data()); });
             return new XmlNodeImpl(childNode);
         }
@@ -33,29 +33,29 @@ namespace BECore {
             return !static_cast<bool>(*this);
         }
 
-        std::string_view Name() const {
-            return std::visit(overload{[](pugi::xml_node node) { return std::string_view(node.name()); }}, _node);
+        eastl::string_view Name() const {
+            return std::visit(overload{[](pugi::xml_node node) { return eastl::string_view(node.name()); }}, _node);
         }
 
-        std::optional<std::string_view> GetAttribute(std::string_view name) const {
-            return std::visit(overload{[name](pugi::xml_node node) -> std::optional<std::string_view> {
+        std::optional<eastl::string_view> GetAttribute(eastl::string_view name) const {
+            return std::visit(overload{[name](pugi::xml_node node) -> std::optional<eastl::string_view> {
                                   auto attr = node.attribute(name.data());
                                   if (!attr) {
                                       return std::nullopt;
                                   }
-                                  return std::string_view(attr.value());
+                                  return eastl::string_view(attr.value());
                               }},
                               _node);
         }
 
         template <typename T>
-        std::optional<T> ParseAttribute(std::string_view name) const {
+        std::optional<T> ParseAttribute(eastl::string_view name) const {
             auto attrOpt = GetAttribute(name);
 
             if (!attrOpt)
                 return std::nullopt;
 
-            std::string_view s = *attrOpt;
+            eastl::string_view s = *attrOpt;
 
             if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
                 T result;
@@ -73,7 +73,7 @@ namespace BECore {
                     return true;
                 if (s == "false" || s == "0")
                     return false;
-            } else if constexpr (std::is_same_v<T, std::string_view>) {
+            } else if constexpr (std::is_same_v<T, eastl::string_view>) {
                 return s;
             } else if constexpr (std::is_enum_v<T>) {
                 return EnumUtils<T>::Cast(s);

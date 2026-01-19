@@ -20,6 +20,7 @@ namespace BECore {
         }
 
         LogEvent::Subscribe<&ConsoleSink::OnLogEvent>(this);
+        FlushLogsEvent::Subscribe<&ConsoleSink::OnFlushEvent>(this);
         _initialized = true;
     }
 
@@ -67,7 +68,7 @@ namespace BECore {
         }
     }
 
-    void ConsoleSink::Flush() {
+    void ConsoleSink::OnFlushEvent() {
         std::fflush(stdout);
         std::fflush(stderr);
     }

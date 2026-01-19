@@ -7,7 +7,7 @@ namespace BECore {
     public:
         ~IMainWindow() override = default;
 
-        virtual bool Initialize(std::string_view configPath) = 0;
+        virtual bool Initialize(eastl::string_view configPath) = 0;
         virtual void Destroy() = 0;
 
         virtual bool IsValid() const = 0;

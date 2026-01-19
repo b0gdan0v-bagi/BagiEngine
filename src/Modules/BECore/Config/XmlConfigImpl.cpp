@@ -24,7 +24,7 @@ namespace BECore {
                           _doc);
     }
 
-    bool XmlConfigImpl::LoadFromString(std::string_view xmlContent) {
+    bool XmlConfigImpl::LoadFromString(eastl::string_view xmlContent) {
         if (xmlContent.empty()) {
             return {};
         }

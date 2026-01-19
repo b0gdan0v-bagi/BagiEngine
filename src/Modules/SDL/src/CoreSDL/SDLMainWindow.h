@@ -15,7 +15,7 @@ namespace RenderEvents {
         SDLMainWindow();
         ~SDLMainWindow() override;
 
-        bool Initialize(std::string_view configPath) override;
+        bool Initialize(eastl::string_view configPath) override;
         void Destroy() override;
         bool IsValid() const override;
         int GetWidth() const override;

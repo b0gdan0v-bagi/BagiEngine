@@ -55,8 +55,4 @@ namespace BECore {
 #endif
     }
 
-    void OutputSink::Flush() {
-        // Platform debug output is immediate, no flushing needed
-    }
-
 }  // namespace BECore

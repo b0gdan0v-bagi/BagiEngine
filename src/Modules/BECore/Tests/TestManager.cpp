@@ -10,7 +10,7 @@ namespace BECore {
 
     void TestManager::RunAllTests() {
         XmlConfig config = XmlConfig::Create();
-        constexpr std::string_view configPath = "config/TestsConfig.xml";
+        constexpr eastl::string_view configPath = "config/TestsConfig.xml";
 
         if (!config.LoadFromVirtualPath(configPath)) {
             LOG_ERROR("[TestManager] Config not found: {}", configPath);

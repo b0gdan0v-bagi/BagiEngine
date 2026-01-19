@@ -93,7 +93,7 @@ namespace BECore {
         }
 
         XmlConfig config = XmlConfig::Create();
-        constexpr std::string_view configPath = "config/AssertHandlersConfig.xml";
+        constexpr eastl::string_view configPath = "config/AssertHandlersConfig.xml";
 
         if (!config.LoadFromVirtualPath(configPath)) {
             // Fallback: create default handlers if config not found

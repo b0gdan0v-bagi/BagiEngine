@@ -45,30 +45,28 @@ namespace BECore {
         _mountPoints.erase(virtualPath);
     }
 
-    std::filesystem::path FileSystem::ResolvePath(std::string_view virtualPath) const {
+    std::filesystem::path FileSystem::ResolvePath(eastl::string_view virtualPath) const {
         if (virtualPath.empty()) {
             return {};
         }
 
-        eastl::string_view eview(virtualPath.data(), virtualPath.size());
-
         // 2. Если путь абсолютный
-        std::filesystem::path path(virtualPath);  // Здесь аллокация неизбежна для std::filesystem::path
+        std::filesystem::path path(std::string_view(virtualPath.data(), virtualPath.size()));  // Здесь аллокация неизбежна для std::filesystem::path
         if (path.is_absolute()) {
             return std::filesystem::exists(path) ? path : std::filesystem::path{};
         }
 
         // 3. Разделяем путь на точку монтирования и остаток через string_view
-        size_t firstSlash = eview.find_first_of("/\\");
+        size_t firstSlash = virtualPath.find_first_of("/\\");
 
         eastl::string_view mountPoint;
         eastl::string_view remainingPath;
 
         if (firstSlash != eastl::string_view::npos) {
-            mountPoint = eview.substr(0, firstSlash);
-            remainingPath = eview.substr(firstSlash + 1);
+            mountPoint = virtualPath.substr(0, firstSlash);
+            remainingPath = virtualPath.substr(firstSlash + 1);
         } else {
-            mountPoint = eview;
+            mountPoint = virtualPath;
         }
 
         // 4. Поиск по точке монтирования (Гетерогенный поиск без аллокаций)
@@ -90,14 +88,14 @@ namespace BECore {
 
         // 5. Поиск относительно корня
         if (!_rootPath.empty()) {
-            std::filesystem::path rootFullPath = _rootPath / virtualPath;
+            std::filesystem::path rootFullPath = _rootPath / std::string_view(virtualPath.data(), virtualPath.size());
             if (std::filesystem::exists(rootFullPath)) {
                 return rootFullPath;
             }
         }
 
         // 6. Относительно текущей директории
-        std::filesystem::path currentPath = std::filesystem::current_path() / virtualPath;
+        std::filesystem::path currentPath = std::filesystem::current_path() / std::string_view(virtualPath.data(), virtualPath.size());
         if (std::filesystem::exists(currentPath)) {
             return currentPath;
         }
@@ -105,7 +103,7 @@ namespace BECore {
         return {};
     }
 
-    bool FileSystem::Exists(std::string_view virtualPath) const {
+    bool FileSystem::Exists(eastl::string_view virtualPath) const {
         std::filesystem::path resolved = ResolvePath(virtualPath);
         return !resolved.empty() && std::filesystem::exists(resolved);
     }

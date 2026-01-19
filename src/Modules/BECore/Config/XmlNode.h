@@ -10,7 +10,7 @@ namespace BECore {
         XmlNode() = default;
         explicit XmlNode(pugi::xml_node node) : _impl(MakeIntrusiveNonAtomic(new XmlNodeImpl(node))) {}
 
-        XmlNode GetChild(std::string_view name) const {
+        XmlNode GetChild(eastl::string_view name) const {
             if (!_impl) {
                 return {};
             }
@@ -82,14 +82,14 @@ namespace BECore {
             return ChildrenRange{_impl->GetRawNode()};
         }
 
-        std::string_view Name() const {
+        eastl::string_view Name() const {
             if (!_impl) {
                 return {};
             }
             return _impl->Name();
         }
 
-        std::optional<std::string_view> GetAttribute(std::string_view name) const {
+        std::optional<eastl::string_view> GetAttribute(eastl::string_view name) const {
             if (!_impl) {
                 return std::nullopt;
             }
@@ -97,7 +97,7 @@ namespace BECore {
         }
 
         template <typename T>
-        std::optional<T> ParseAttribute(std::string_view name) const {
+        std::optional<T> ParseAttribute(eastl::string_view name) const {
             if (!_impl) {
                 return std::nullopt;
             }

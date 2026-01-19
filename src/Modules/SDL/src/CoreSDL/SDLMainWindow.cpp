@@ -33,7 +33,7 @@ namespace BECore {
         std::function<void()> onExit_;
     };
 
-    bool SDLMainWindow::Initialize(std::string_view configPath) {
+    bool SDLMainWindow::Initialize(eastl::string_view configPath) {
 
         if (!SDL_Init(SDL_INIT_VIDEO)) {
             return false;
@@ -64,7 +64,7 @@ namespace BECore {
             height = windowNode.ParseAttribute<int>("height").value_or(600);
 
             // Пробуем прочитать как строку с именами флагов
-            const auto flagsStringOpt = windowNode.ParseAttribute<std::string_view>("windowFlags");
+            const auto flagsStringOpt = windowNode.ParseAttribute<eastl::string_view>("windowFlags");
             if (flagsStringOpt && !flagsStringOpt->empty()) {
                 flags = SDLUtils::ParseWindowFlags(*flagsStringOpt);
             }
@@ -72,7 +72,6 @@ namespace BECore {
             return false;
         }
 
-        ;
         if (!SDL_CreateWindowAndRenderer(title.c_str(), width, height, flags, &_window, &_renderer)) {
             return false;
         }

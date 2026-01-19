@@ -7,7 +7,6 @@
 #include <BECore/Logger/OutputSink.h>
 #include <BECore/RefCounted/New.h>
 
-// Include generated factory - provides ILogSinkType enum and ILogSinkFactory
 #include <Generated/ILogSink.gen.hpp>
 #include <Generated/EnumLogSink.gen.hpp>
 
@@ -21,7 +20,7 @@ namespace BECore {
         }
 
         const XmlConfig config = XmlConfig::Create();
-        constexpr std::string_view configPath = "config/LoggerConfig.xml";
+        constexpr eastl::string_view configPath = "config/LoggerConfig.xml";
 
         if (!config.LoadFromVirtualPath(configPath)) {
             // Fallback: create default sinks if config not found
@@ -80,16 +79,7 @@ namespace BECore {
             sink->Initialize();
         }
 
-        // Subscribe to FlushEvent
-        FlushLogsEvent::Subscribe<&LoggerManager::OnFlushEvent>(this);
-
         _initialized = true;
-    }
-
-    void LoggerManager::OnFlushEvent() {
-        for (auto& sink : _sinks) {
-            sink->Flush();
-        }
     }
 
     IntrusivePtr<ILogSink> LoggerManager::CreateSinkByType(LogSinkType type) {

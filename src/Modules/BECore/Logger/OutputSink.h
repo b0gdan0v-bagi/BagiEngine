@@ -25,38 +25,13 @@ namespace BECore {
         OutputSink() = default;
         ~OutputSink() override = default;
 
-        /**
-         * @brief Initialize the Output sink
-         */
         void Initialize() override;
-
-        /**
-         * @brief Configure the Output sink from XML node
-         * 
-         * OutputSink has no configuration options, so this is a no-op.
-         * 
-         * @param node XML node containing sink configuration
-         */
         void Configure(const XmlNode& node) override {}
-
-        /**
-         * @brief Write a log message to platform debug output
-         * 
-         * @param level Severity level of the message
-         * @param message The formatted log message
-         */
         void Write(LogLevel level, eastl::string_view message) override;
 
     private:
-        /**
-         * @brief Handle LogEvent
-         */
-        void OnLogEvent(const LogEvent& event);
 
-        /**
-         * @brief Flush Output (no-op, platform debug output is immediate)
-         */
-        void Flush() override;
+        void OnLogEvent(const LogEvent& event);
 
     private:
         bool _initialized = false;

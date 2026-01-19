@@ -25,20 +25,21 @@ namespace BECore {
         }
 
         LogEvent::Subscribe<&FileSink::OnLogEvent>(this);
+        FlushLogsEvent::Subscribe<&FileSink::OnFlushEvent>(this);
 
         auto mode = std::ios::out;
         if (_append) {
             mode |= std::ios::app;
         }
-        _file.open(_filename, mode);
+        _file.open(_filename.c_str(), mode);
 
         _initialized = true;
     }
 
     void FileSink::Configure(const XmlNode& node) {
-        auto filename = node.ParseAttribute<std::string_view>("filename");
+        auto filename = node.ParseAttribute<eastl::string_view>("filename");
         if (filename.has_value()) {
-            SetFilename(std::string(*filename));
+            SetFilename(*filename);
         }
 
         auto append = node.ParseAttribute<bool>("append");
@@ -49,6 +50,13 @@ namespace BECore {
 
     void FileSink::OnLogEvent(const LogEvent& event) {
         Write(event.level, event.message);
+    }
+
+    void FileSink::OnFlushEvent() {
+        std::scoped_lock lock(_mutex);
+        if (_file.is_open()) {
+            _file.flush();
+        }
     }
 
     void FileSink::Write(LogLevel level, eastl::string_view message) {
@@ -72,11 +80,8 @@ namespace BECore {
             eastl::string(message.data(), message.size()));
     }
 
-    void FileSink::Flush() {
-        std::lock_guard<std::mutex> lock(_mutex);
-        if (_file.is_open()) {
-            _file.flush();
-        }
+    void FileSink::SetFilename(eastl::string_view filename) {
+        _filename = filename;
     }
 
 }  // namespace BECore

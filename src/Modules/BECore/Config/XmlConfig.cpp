@@ -10,7 +10,7 @@ namespace BECore {
         return XmlConfig(std::move(impl));
     }
 
-    bool XmlConfig::LoadFromVirtualPath(std::string_view virtualPath) const {
+    bool XmlConfig::LoadFromVirtualPath(eastl::string_view virtualPath) const {
         if (!_impl) {
             return false;
         }
@@ -21,7 +21,7 @@ namespace BECore {
         return _impl->LoadFromFile(resolvedPath);
     }
 
-    bool XmlConfig::LoadFromString(std::string_view xmlContent) const {
+    bool XmlConfig::LoadFromString(eastl::string_view xmlContent) const {
         if (!_impl) {
             return false;
         }
