@@ -7,10 +7,9 @@
 namespace BECore::Tests {
 
     bool PoolStringTest::Run() {
-        // --- Compile-time tests ---
-        static_assert(PoolStringChain("test").View() == "test");
-        static_assert(PoolStringChain("").Empty());
-        static_assert(PoolStringChain("hello").Size() == 5);
+        // Compile-time tests (static_assert)
+        TestCompileTime();
+        LOG_INFO("[PoolStringTest] Compile-time tests OK");
 
         LOG_INFO("[PoolStringTest] Starting runtime tests...");
 

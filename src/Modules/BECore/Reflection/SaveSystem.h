@@ -42,11 +42,32 @@ namespace BECore {
     template <typename T>
     concept VectorType = IsVector<std::remove_cv_t<T>>::value;
 
+    /**
+     * @brief Concept to check if a type can be serialized
+     *
+     * A type is serializable if it is:
+     * - A primitive type (bool, int, float, string, PoolString)
+     * - An enum type
+     * - A reflected type (has BE_CLASS)
+     * - A vector of serializable elements
+     *
+     * @example
+     * static_assert(Serializable<int>);
+     * static_assert(Serializable<Player>);  // reflected class
+     * static_assert(!Serializable<std::mutex>);  // not serializable
+     */
+    template <typename T>
+    concept Serializable =
+        ArchivePrimitive<T> ||
+        std::is_enum_v<T> ||
+        HasReflection<T> ||
+        VectorType<T>;
+
     // =============================================================================
     // Forward declarations
     // =============================================================================
 
-    template <typename T>
+    template <Serializable T>
     void Serialize(IArchive& archive, eastl::string_view name, T& value);
 
     // =============================================================================

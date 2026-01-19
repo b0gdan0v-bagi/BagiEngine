@@ -17,17 +17,32 @@ Tests are managed by `TestManager` and run automatically in `CoreManager::OnAppl
 ### Adding a New Test
 
 1. Create class in `BECore/Tests/` implementing `ITest`
-2. Register type in `TestManager.h` (add to `CORE_ENUM(TestType, ...)`)
-3. Add factory case in `TestManager.cpp`
+2. Add `BE_CLASS(TestName)` macro inside class
+3. Implement `TestCompileTime()` for compile-time checks
 4. Enable in `config/TestsConfig.xml`
 
-**Reference:** See `BECore/Tests/PoolStringTest.h` as example.
+### Test Structure Pattern
+
+| Element | Description |
+|---------|-------------|
+| `BE_CLASS(TestName)` | Macro inside class body |
+| `bool Run() override` | Main test entry point |
+| `static constexpr void TestCompileTime()` | Contains `static_assert` checks |
+| `static_assert(ValidTest<TestName>)` | After class, validates test interface |
+
+In `Run()`: call `TestCompileTime()` first, then runtime tests.
+
+**Reference:** See `BECore/Tests/EnumUtilsTest.h` as example.
+
+### ValidTest Concept
+
+Validates that a test class has `Run()` returning `bool`, has `GetStaticTypeName()` from `BE_CLASS`, and inherits from `ITest`.
 
 ### Test Configuration
 
 File: `config/TestsConfig.xml`
 - Set `enabled="true/false"` to control which tests run
-- Test types must match `TestType` enum values
+- Test types are auto-generated from `ITest` inheritance tree
 
 ## Assertion System
 
@@ -38,6 +53,7 @@ File: `config/TestsConfig.xml`
 
 **Key points:**
 - Always use `ASSERT` instead of `std::assert`
+- Use `static_assert` for compile-time checks in `TestCompileTime()`
 - Assertions emit `AssertEvent` through event system
 - Handlers configured via `config/AssertHandlersConfig.xml`
 
@@ -48,8 +64,9 @@ File: `config/TestsConfig.xml`
 
 ## Checklist for New Test
 - [ ] Inherit from `ITest`
-- [ ] Implement `GetName()` and `Run()`
-- [ ] Use `ASSERT` for checks (not std::assert)
-- [ ] Register in `TestManager.h` enum
-- [ ] Add factory case in `TestManager.cpp`
+- [ ] Add `BE_CLASS(TestName)`
+- [ ] Implement `Run()` returning `bool`
+- [ ] Add `static constexpr void TestCompileTime()` with `static_assert` checks
+- [ ] Add `static_assert(ValidTest<TestName>)` after class
+- [ ] Use `ASSERT` for runtime checks (not std::assert)
 - [ ] Add to `TestsConfig.xml`

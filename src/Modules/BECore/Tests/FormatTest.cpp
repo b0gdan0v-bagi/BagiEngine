@@ -10,6 +10,10 @@ namespace BECore::Tests {
     bool FormatTest::Run() {
         LOG_INFO("[FormatTest] Starting tests...");
 
+        // Compile-time tests (static_assert)
+        TestCompileTime();
+        LOG_INFO("[FormatTest] Compile-time tests OK");
+
         // 1. Basic formatting to eastl::string
         eastl::string s1 = BECore::Format("Hello, {}!", "World");
         ASSERT(s1 == "Hello, World!");

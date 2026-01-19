@@ -15,6 +15,22 @@ namespace BECore::Tests {
         ~PoolStringTest() override = default;
 
         bool Run() override;
+
+    private:
+        /**
+         * @brief Compile-time tests using static_assert
+         */
+        static constexpr void TestCompileTime() {
+            // PoolStringChain compile-time tests
+            static_assert(PoolStringChain("test").View() == "test");
+            static_assert(PoolStringChain("").Empty());
+            static_assert(PoolStringChain("hello").Size() == 5);
+            static_assert(!PoolStringChain("abc").Empty());
+            static_assert(PoolStringChain("ab").Size() + PoolStringChain("cd").Size() == 4);
+        }
     };
+
+    // Compile-time validation of test class
+    static_assert(ValidTest<PoolStringTest>);
 
 }  // namespace BECore::Tests

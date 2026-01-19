@@ -157,13 +157,13 @@ inline constexpr bool {{ cls.full_qualified_name }}::Is() const {
 
 // {{ cls.full_qualified_name }}::Cast<T>() (mutable)
 template<typename T>
-inline T* {{ cls.full_qualified_name }}::Cast() {
+inline constexpr T* {{ cls.full_qualified_name }}::Cast() {
     return Is<T>() ? static_cast<T*>(this) : nullptr;
 }
 
 // {{ cls.full_qualified_name }}::Cast<T>() (const)
 template<typename T>
-inline const T* {{ cls.full_qualified_name }}::Cast() const {
+inline constexpr const T* {{ cls.full_qualified_name }}::Cast() const {
     return Is<T>() ? static_cast<const T*>(this) : nullptr;
 }
 

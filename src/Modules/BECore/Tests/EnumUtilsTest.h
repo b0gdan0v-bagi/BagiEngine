@@ -22,7 +22,7 @@ namespace BECore::Tests {
         bool Run() override;
 
     private:
-        static void TestCompileTime() {
+        static constexpr void TestCompileTime() {
             // ToString is constexpr
             static_assert(ColorUtils::ToString(TestColor::Red) == "Red");
             static_assert(ColorUtils::ToString(TestColor::Green) == "Green");
@@ -52,8 +52,6 @@ namespace BECore::Tests {
             static_assert(ColorUtils::Cast("Red").has_value());
             static_assert(ColorUtils::Cast("Red").value() == TestColor::Red);
             static_assert(!ColorUtils::Cast("InvalidColor").has_value());
-
-            LOG_INFO("[EnumUtilsTest] Compile-time tests OK");
         }
 
         void TestToString();
@@ -65,5 +63,8 @@ namespace BECore::Tests {
         void TestArrays();
         void TestFmtFormatting();
     };
+
+    // Compile-time validation of test class
+    static_assert(ValidTest<EnumUtilsTest>);
 
 }  // namespace BECore::Tests

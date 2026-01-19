@@ -2,6 +2,7 @@
 
 #include <BECore/Tests/ITest.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
+#include <BECore/Reflection/TypeTraits.h>
 #include <BECore/PoolString/PoolString.h>
 #include <cstdint>
 
@@ -100,6 +101,12 @@ namespace BECore::Tests {
 
     private:
         /**
+         * @brief Compile-time tests using static_assert
+         * @note Defined in .cpp after generated code is included
+         */
+        static constexpr void TestCompileTime();
+
+        /**
          * @brief Test basic field access via reflection
          */
         bool TestFieldAccess();
@@ -119,5 +126,8 @@ namespace BECore::Tests {
          */
         bool TestMethodReflection();
     };
+
+    // Compile-time validation of test class
+    static_assert(ValidTest<ReflectionTest>);
 
 }  // namespace BECore::Tests

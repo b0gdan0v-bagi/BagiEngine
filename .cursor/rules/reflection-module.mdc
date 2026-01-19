@@ -39,17 +39,36 @@ Compile-time reflection system with Python-based code generation (reflector.py).
 | `GetStaticTypeMeta()` | Static constexpr, returns `ClassMeta&` for the class |
 | `GetTypeMeta()` | Instance constexpr, returns actual runtime type's `ClassMeta&` |
 | `Is<T>()` | Constexpr, returns true if instance is of type T |
-| `Cast<T>()` | Returns `T*` if type matches, nullptr otherwise |
+| `Cast<T>()` | Constexpr, returns `T*` if type matches, nullptr otherwise |
 | `ForEachFieldStatic(obj, func)` | Constexpr, iterates over all fields |
+
+## Field Reflection API
+
+| Function/Concept | Description |
+|------------------|-------------|
+| `HasReflection<T>` | Concept, true if type has reflected fields |
+| `FieldCount<T>()` | Constexpr, returns number of reflected fields |
+| `ForEachField(obj, func)` | Constexpr, iterates over all fields |
+| `HasField<T>(name)` | Consteval, returns true if field with name exists |
+| `GetFieldInfo<T, I>()` | Constexpr, returns FieldInfo for field at index I |
 
 ## Method Reflection API
 
 | Function/Concept | Description |
 |------------------|-------------|
 | `HasMethodReflection<T>` | Concept, true if type has reflected methods |
-| `MethodCount<T>()` | Returns number of reflected methods |
-| `ForEachMethod<T>(func)` | Iterates over all method infos |
-| `InvokeMethod<Ret>(obj, name, args...)` | Invoke method by name, type-safe |
+| `MethodCount<T>()` | Constexpr, returns number of reflected methods |
+| `ForEachMethod<T>(func)` | Constexpr, iterates over all method infos |
+| `InvokeMethod<Ret>(obj, name, args...)` | Constexpr, invoke method by name, type-safe |
+| `HasMethod<T>(name)` | Consteval, returns true if method with name exists |
+| `GetMethodInfo<T, I>()` | Constexpr, returns MethodInfo for method at index I |
+
+## Validation Concepts
+
+| Concept | Description |
+|---------|-------------|
+| `ReflectedDerivedFrom<D, B>` | True if D is a reflected class derived from B |
+| `Serializable<T>` | True if T can be serialized (primitive, enum, reflected, or vector) |
 
 ## Factory Generation (FACTORY_BASE)
 
@@ -66,10 +85,10 @@ For inheritance hierarchies, use `BE_CLASS(Name, FACTORY_BASE)` on base class.
 |--------|-------------|
 | `Factory::Create(EnumType)` | Static method, creates by enum |
 | `Factory::Create(ClassMeta)` | Virtual method, creates by type metadata |
-| `Factory::ToMeta(EnumType)` | Convert enum to ClassMeta |
-| `Factory::FromMeta(ClassMeta)` | Convert ClassMeta to enum |
-| `Factory::Count()` | Number of registered types |
-| `Factory::GetTypeName(type)` | Get string name for type |
+| `Factory::ToMeta(EnumType)` | Constexpr, convert enum to ClassMeta |
+| `Factory::FromMeta(ClassMeta)` | Constexpr, convert ClassMeta to enum |
+| `Factory::Count()` | Constexpr, number of registered types |
+| `Factory::GetTypeName(type)` | Constexpr, get string name for type |
 | `Factory::GetInstance()` | Get singleton instance |
 
 ### Naming Conventions
@@ -106,12 +125,13 @@ Compile-time type identification without RTTI using FNV-1a hash.
 | `XmlArchive` | XML (pugixml) | Human-readable saves, config files |
 | `BinaryArchive` | Binary stream | Compact saves, network packets |
 
-| Helper Function | Description |
-|-----------------|-------------|
-| `ForEachField(obj, func)` | Iterate over all reflected fields |
-| `FieldCount<T>()` | Get number of reflected fields |
-| `HasReflection<T>` | Concept to check if type has reflection |
-| `Serialize(archive, name, obj)` | Serialize/deserialize object |
+| Helper | Description |
+|--------|-------------|
+| `Serializable<T>` | Concept to check if type can be serialized |
+| `ArchivePrimitive<T>` | Concept for primitive types (int, float, string, etc.) |
+| `VectorType<T>` | Concept for eastl::vector types |
+| `Serialize(archive, name, obj)` | Serialize/deserialize object (requires `Serializable<T>`) |
+| `SerializeRoot(archive, obj)` | Serialize object as root element |
 
 ## File Structure
 

@@ -8,6 +8,54 @@
 
 #include <Generated/ReflectionTest.gen.hpp>
 
+// =========================================================================
+// Compile-time tests (requires generated ReflectionTraits)
+// =========================================================================
+
+namespace BECore::Tests {
+
+    constexpr void ReflectionTest::TestCompileTime() {
+        // HasReflection concept tests
+        static_assert(HasReflection<TestData::Player>, "Player should have reflection");
+        static_assert(HasReflection<TestData::Inventory>, "Inventory should have reflection");
+        static_assert(HasReflection<TestData::GameState>, "GameState should have reflection");
+
+        // Field count tests
+        static_assert(FieldCount<TestData::Player>() == 4, "Player should have 4 fields");
+        static_assert(FieldCount<TestData::Inventory>() == 2, "Inventory should have 2 fields");
+        static_assert(FieldCount<TestData::GameState>() == 3, "GameState should have 3 fields");
+
+        // HasField tests
+        static_assert(HasField<TestData::Player>("health"), "Player should have 'health' field");
+        static_assert(HasField<TestData::Player>("speed"), "Player should have 'speed' field");
+        static_assert(HasField<TestData::Player>("name"), "Player should have 'name' field");
+        static_assert(HasField<TestData::Player>("isAlive"), "Player should have 'isAlive' field");
+        static_assert(!HasField<TestData::Player>("mana"), "Player should not have 'mana' field");
+
+        // GetFieldInfo tests
+        static_assert(GetFieldInfo<TestData::Player, 0>().name == "health");
+        static_assert(GetFieldInfo<TestData::Player, 1>().name == "speed");
+        static_assert(GetFieldInfo<TestData::Player, 2>().name == "name");
+        static_assert(GetFieldInfo<TestData::Player, 3>().name == "isAlive");
+
+        // Method reflection tests
+        static_assert(HasMethodReflection<TestData::Player>, "Player should have method reflection");
+        static_assert(MethodCount<TestData::Player>() == 4, "Player should have 4 reflected methods");
+
+        // HasMethod tests
+        static_assert(HasMethod<TestData::Player>("TakeDamage"), "Player should have 'TakeDamage' method");
+        static_assert(HasMethod<TestData::Player>("Heal"), "Player should have 'Heal' method");
+        static_assert(HasMethod<TestData::Player>("IsDead"), "Player should have 'IsDead' method");
+        static_assert(HasMethod<TestData::Player>("GetHealthPercent"), "Player should have 'GetHealthPercent' method");
+        static_assert(!HasMethod<TestData::Player>("Fly"), "Player should not have 'Fly' method");
+
+        // GetMethodInfo tests
+        static_assert(GetMethodInfo<TestData::Player, 0>().name == "TakeDamage");
+        static_assert(GetMethodInfo<TestData::Player, 1>().name == "Heal");
+    }
+
+}  // namespace BECore::Tests
+
 namespace BECore {
 
     // =========================================================================
@@ -49,6 +97,10 @@ namespace BECore::Tests {
     bool ReflectionTest::Run() {
         LOG_INFO("[ReflectionTest] Starting reflection tests...");
         
+        // Compile-time tests (static_assert)
+        TestCompileTime();
+        LOG_INFO("[ReflectionTest] Compile-time tests PASSED");
+        
         bool allPassed = true;
         
         if (!TestFieldAccess()) {
@@ -83,16 +135,9 @@ namespace BECore::Tests {
     }
 
     bool ReflectionTest::TestFieldAccess() {
-        // Test HasReflection concept
-        static_assert(HasReflection<TestData::Player>, "Player should have reflection");
-        static_assert(HasReflection<TestData::Inventory>, "Inventory should have reflection");
-        static_assert(HasReflection<TestData::GameState>, "GameState should have reflection");
+        // Compile-time tests are in TestCompileTime()
         
-        // Test field count
-        static_assert(FieldCount<TestData::Player>() == 4, "Player should have 4 fields");
-        static_assert(FieldCount<TestData::Inventory>() == 2, "Inventory should have 2 fields");
-        
-        // Test ForEachField
+        // Test ForEachField at runtime
         TestData::Player player;
         player.health = 42;
         player.speed = 3.14f;
@@ -223,13 +268,9 @@ namespace BECore::Tests {
     }
 
     bool ReflectionTest::TestMethodReflection() {
-        // Test HasMethodReflection concept
-        static_assert(HasMethodReflection<TestData::Player>, "Player should have method reflection");
+        // Compile-time tests are in TestCompileTime()
         
-        // Test method count
-        static_assert(MethodCount<TestData::Player>() == 4, "Player should have 4 reflected methods");
-        
-        // Test ForEachMethod
+        // Test ForEachMethod at runtime
         int methodCount = 0;
         eastl::vector<eastl::string_view> methodNames;
         ForEachMethod<TestData::Player>([&](auto& method) {

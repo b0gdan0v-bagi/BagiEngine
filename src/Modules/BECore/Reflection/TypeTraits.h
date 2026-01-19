@@ -83,6 +83,43 @@ namespace BECore {
     }
 
     /**
+     * @brief Check if a type has a field with the given name at compile-time
+     *
+     * @tparam T The reflected type
+     * @param name The field name to search for
+     * @return true if field exists
+     *
+     * @example
+     * static_assert(HasField<Player>("health"));
+     * static_assert(!HasField<Player>("mana"));
+     */
+    template <typename T>
+        requires HasReflection<T>
+    consteval bool HasField(eastl::string_view name) {
+        bool found = false;
+        std::apply([&](auto&&... fields) {
+            ((found = found || (fields.name == name)), ...);
+        }, ReflectionTraits<T>::fields);
+        return found;
+    }
+
+    /**
+     * @brief Get field info by index at compile-time
+     *
+     * @tparam T The reflected type
+     * @tparam I The field index
+     * @return FieldInfo for the field at index I
+     *
+     * @example
+     * static_assert(GetFieldInfo<Player, 0>().name == "health");
+     */
+    template <typename T, size_t I>
+        requires HasReflection<T> && (I < FieldCount<T>())
+    constexpr auto GetFieldInfo() {
+        return std::get<I>(ReflectionTraits<T>::fields);
+    }
+
+    /**
      * @brief Helper to iterate over all reflected fields
      *
      * @tparam T The reflected type
@@ -138,6 +175,58 @@ namespace BECore {
     }
 
     /**
+     * @brief Check if a type has a method with the given name at compile-time
+     *
+     * @tparam T The reflected type
+     * @param name The method name to search for
+     * @return true if method exists
+     *
+     * @example
+     * static_assert(HasMethod<Player>("TakeDamage"));
+     * static_assert(!HasMethod<Player>("Fly"));
+     */
+    template <typename T>
+        requires HasMethodReflection<T>
+    consteval bool HasMethod(eastl::string_view name) {
+        bool found = false;
+        std::apply([&](auto&&... methods) {
+            ((found = found || (methods.name == name)), ...);
+        }, ReflectionTraits<T>::methods);
+        return found;
+    }
+
+    /**
+     * @brief Get method info by index at compile-time
+     *
+     * @tparam T The reflected type
+     * @tparam I The method index
+     * @return MethodInfo or ConstMethodInfo for the method at index I
+     *
+     * @example
+     * static_assert(GetMethodInfo<Player, 0>().name == "TakeDamage");
+     */
+    template <typename T, size_t I>
+        requires HasMethodReflection<T> && (I < MethodCount<T>())
+    constexpr auto GetMethodInfo() {
+        return std::get<I>(ReflectionTraits<T>::methods);
+    }
+
+    /**
+     * @brief Concept to check if Derived is a reflected class derived from Base
+     *
+     * @tparam Derived The derived type
+     * @tparam Base The base type
+     *
+     * @example
+     * static_assert(ReflectedDerivedFrom<ConsoleSink, ILogSink>);
+     */
+    template <typename Derived, typename Base>
+    concept ReflectedDerivedFrom =
+        HasReflection<Derived> &&
+        HasReflection<Base> &&
+        std::is_base_of_v<Base, Derived>;
+
+    /**
      * @brief Helper to iterate over all reflected methods
      *
      * @tparam T The reflected type
@@ -158,7 +247,7 @@ namespace BECore {
          * Uses if constexpr to skip methods with incompatible signatures at compile time
          */
         template <typename Ret, typename Method, typename T, typename... Args>
-        bool TryInvokeOne(Method& method, T& obj, eastl::string_view name, Ret& result, Args&&... args) {
+        constexpr bool TryInvokeOne(Method& method, T& obj, eastl::string_view name, Ret& result, Args&&... args) {
             using MethodPtr = decltype(method.ptr);
             if constexpr (std::is_invocable_r_v<Ret, MethodPtr, T&, Args...>) {
                 if (method.name == name) {
@@ -173,7 +262,7 @@ namespace BECore {
          * @brief Try to invoke a single void method if signature matches
          */
         template <typename Method, typename T, typename... Args>
-        bool TryInvokeOneVoid(Method& method, T& obj, eastl::string_view name, Args&&... args) {
+        constexpr bool TryInvokeOneVoid(Method& method, T& obj, eastl::string_view name, Args&&... args) {
             using MethodPtr = decltype(method.ptr);
             if constexpr (std::is_invocable_v<MethodPtr, T&, Args...>) {
                 if (method.name == name) {
@@ -188,7 +277,7 @@ namespace BECore {
          * @brief Helper to find and invoke a method by name
          */
         template <typename Ret, typename T, typename... Args, typename MethodTuple, size_t... Is>
-        Ret InvokeMethodImpl(T& obj, eastl::string_view name, MethodTuple& methods,
+        constexpr Ret InvokeMethodImpl(T& obj, eastl::string_view name, MethodTuple& methods,
                              std::index_sequence<Is...>, Args&&... args) {
             Ret result{};
             // Fold expression with short-circuit - stops at first match
@@ -200,7 +289,7 @@ namespace BECore {
          * @brief Helper for void return type
          */
         template <typename T, typename... Args, typename MethodTuple, size_t... Is>
-        void InvokeMethodVoidImpl(T& obj, eastl::string_view name, MethodTuple& methods,
+        constexpr void InvokeMethodVoidImpl(T& obj, eastl::string_view name, MethodTuple& methods,
                                   std::index_sequence<Is...>, Args&&... args) {
             // Fold expression with short-circuit - stops at first match
             (TryInvokeOneVoid(std::get<Is>(methods), obj, name, std::forward<Args>(args)...) || ...);
@@ -227,7 +316,7 @@ namespace BECore {
      */
     template <typename Ret, typename T, typename... Args>
         requires HasMethodReflection<T>
-    Ret InvokeMethod(T& obj, eastl::string_view name, Args&&... args) {
+    constexpr Ret InvokeMethod(T& obj, eastl::string_view name, Args&&... args) {
         constexpr auto& methods = ReflectionTraits<T>::methods;
         constexpr size_t count = std::tuple_size_v<std::decay_t<decltype(methods)>>;
         

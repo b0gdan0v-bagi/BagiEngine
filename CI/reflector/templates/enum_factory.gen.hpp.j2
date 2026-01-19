@@ -90,7 +90,7 @@ public:
      * @param type The type enum value
      * @return ClassMeta for the corresponding type
      */
-    static ClassMeta ToMeta(EnumType type) {
+    static constexpr ClassMeta ToMeta(EnumType type) {
         switch (type) {
 {% for d in base.derived %}
             case EnumType::{{ d.short_name }}: return GetClassMeta<{{ d.full_name }}>();
@@ -104,7 +104,7 @@ public:
      * @param meta The ClassMeta to convert
      * @return Enum value, or first value if not found
      */
-    static EnumType FromMeta(const ClassMeta& meta) {
+    static constexpr EnumType FromMeta(const ClassMeta& meta) {
 {% for d in base.derived %}
         if (meta == GetClassMeta<{{ d.full_name }}>()) return EnumType::{{ d.short_name }};
 {% endfor %}

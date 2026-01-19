@@ -73,10 +73,10 @@ public:                                                                         
     constexpr bool Is() const;                                                                                                                                                                         \
     /** @brief Cast to type T, returns nullptr if type mismatch */                                                                                                                                     \
     template <typename T>                                                                                                                                                                              \
-    T* Cast();                                                                                                                                                                                         \
+    constexpr T* Cast();                                                                                                                                                                               \
     /** @brief Cast to type T (const), returns nullptr if type mismatch */                                                                                                                             \
     template <typename T>                                                                                                                                                                              \
-    const T* Cast() const;                                                                                                                                                                             \
+    constexpr const T* Cast() const;                                                                                                                                                                   \
                                                                                                                                                                                                        \
 private:                                                                                                                                                                                               \
     template <typename, typename>                                                                                                                                                                      \
@@ -111,10 +111,10 @@ public:                                                                         
     constexpr bool Is() const;                                                                                                                                                                         \
     /** @brief Cast to type T, returns nullptr if type mismatch */                                                                                                                                     \
     template <typename T>                                                                                                                                                                              \
-    T* Cast();                                                                                                                                                                                         \
+    constexpr T* Cast();                                                                                                                                                                               \
     /** @brief Cast to type T (const), returns nullptr if type mismatch */                                                                                                                             \
     template <typename T>                                                                                                                                                                              \
-    const T* Cast() const;                                                                                                                                                                             \
+    constexpr const T* Cast() const;                                                                                                                                                                   \
                                                                                                                                                                                                        \
 private:                                                                                                                                                                                               \
     template <typename, typename>                                                                                                                                                                      \

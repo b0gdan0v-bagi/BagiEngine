@@ -12,6 +12,7 @@ namespace BECore::Tests {
 
         // --- Compile-time tests (static_assert) ---
         TestCompileTime();
+        LOG_INFO("[EnumUtilsTest] Compile-time tests OK");
 
         // --- Runtime tests ---
         TestToString();
