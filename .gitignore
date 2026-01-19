@@ -30,6 +30,7 @@ __pycache__/
 
 # Launcher config (user-specific)
 launcher_config.json
+meta_generator_settings.json
 
 # macOS
 .DS_Store

@@ -1,0 +1,143 @@
+// ============================================================================
+// GENERATED FILE - DO NOT EDIT
+// Generated from: {{ input_filename }}
+// Generator: BagiEngine Reflection System (reflector.py)
+// ============================================================================
+#pragma once
+
+#include <BECore/Reflection/ClassMeta.h>
+#include <BECore/Reflection/AbstractFactory.h>
+#include <BECore/RefCounted/New.h>
+#include <BECore/Utils/EnumUtils.h>
+
+{% for base in factory_bases %}
+// ============================================================================
+// Includes for {{ base.name }} hierarchy
+// ============================================================================
+// Include base class generated reflection
+#include <Generated/{{ base.name }}.gen.hpp>
+
+// Include derived class headers
+{% for d in base.derived %}
+#include <{{ d.include_path }}>
+{% endfor %}
+
+// Include generated reflection for derived classes (provides ReflectionTraits)
+{% for d in base.derived %}
+#include <Generated/{{ d.name }}.gen.hpp>
+{% endfor %}
+
+// ============================================================================
+// Enum: {{ base.enum_type_name }}
+// ============================================================================
+// Auto-generated from {{ base.name }} inheritance tree
+// Values: {% for d in base.derived %}{{ d.short_name }}{{ ", " if not loop.last else "" }}{% endfor %}
+
+CORE_ENUM({{ base.enum_type_name }}, uint8_t, {% for d in base.derived %}{{ d.short_name }}{{ ", " if not loop.last else "" }}{% endfor %})
+
+namespace {{ base.namespace }} {
+
+/**
+ * @brief Factory for creating {{ base.name }} instances
+ * 
+ * Inherits AbstractFactory<{{ base.name }}> and provides:
+ * - Create(ClassMeta) - base interface implementation
+ * - Create(EnumType) - convenience method with enum->meta conversion
+ * - ToMeta/FromMeta - enum <-> ClassMeta conversion
+ * 
+ * @note Auto-generated from BE_CLASS({{ base.name }}, FACTORY_BASE)
+ *
+ * Registered types:
+{% for d in base.derived %}
+ *   - {{ d.short_name }} -> {{ d.full_name }}
+{% endfor %}
+ */
+class {{ base.factory_name }} : public AbstractFactory<{{ base.name }}> {
+public:
+    using EnumType = {{ base.enum_type_name }};
+
+    // =========================================================================
+    // AbstractFactory interface
+    // =========================================================================
+    
+    /**
+     * @brief Create instance by ClassMeta
+     * @param meta Type metadata identifying the concrete class
+     * @return IntrusivePtr to created instance, or empty if unknown type
+     */
+    BasePtr Create(const ClassMeta& meta) const override {
+{% for d in base.derived %}
+        if (meta == GetClassMeta<{{ d.full_name }}>()) return New<{{ d.full_name }}>();
+{% endfor %}
+        return {};
+    }
+
+    // =========================================================================
+    // Enum-based convenience methods
+    // =========================================================================
+    
+    /**
+     * @brief Create instance by enum type
+     * @param type The type enum value
+     * @return IntrusivePtr to created instance
+     */
+    static BasePtr Create(EnumType type) {
+        return GetInstance().Create(ToMeta(type));
+    }
+
+    /**
+     * @brief Convert enum to ClassMeta
+     * @param type The type enum value
+     * @return ClassMeta for the corresponding type
+     */
+    static constexpr ClassMeta ToMeta(EnumType type) {
+        switch (type) {
+{% for d in base.derived %}
+            case EnumType::{{ d.short_name }}: return GetClassMeta<{{ d.full_name }}>();
+{% endfor %}
+        }
+        return {};
+    }
+
+    /**
+     * @brief Convert ClassMeta to enum
+     * @param meta The ClassMeta to convert
+     * @return Enum value, or first value if not found
+     */
+    static constexpr EnumType FromMeta(const ClassMeta& meta) {
+{% for d in base.derived %}
+        if (meta == GetClassMeta<{{ d.full_name }}>()) return EnumType::{{ d.short_name }};
+{% endfor %}
+        return static_cast<EnumType>(0);
+    }
+
+    /**
+     * @brief Get the number of registered types
+     * @return Number of derived classes
+     */
+    static constexpr size_t Count() {
+        return {{ base.derived | length }};
+    }
+
+    /**
+     * @brief Get the type name as string
+     * @param type The type enum value
+     * @return String representation of the type
+     */
+    static constexpr eastl::string_view GetTypeName(EnumType type) {
+        return EnumUtils<EnumType>::ToString(type);
+    }
+
+    /**
+     * @brief Get singleton instance
+     * @return Reference to the factory instance
+     */
+    static {{ base.factory_name }}& GetInstance() {
+        static {{ base.factory_name }} instance;
+        return instance;
+    }
+};
+
+}  // namespace {{ base.namespace }}
+
+{% endfor %}

@@ -1,6 +1,13 @@
 @echo off
 cd /d "%~dp0"
 
+:: Setup meta-generator environment first
+echo [INFO] Setting up Meta-Generator environment...
+call CI\meta_generator\setup_env.bat
+if %ERRORLEVEL% NEQ 0 (
+    echo [WARNING] Meta-Generator setup had issues, continuing...
+)
+
 :: Setup venv if needed
 if not exist ".venv\Scripts\python.exe" (
     echo [INFO] Setting up Python virtual environment...

@@ -1,0 +1,18 @@
+# Meta-Generator Dependencies
+# ===========================
+
+# GUI Framework
+PyQt6>=6.5.0
+
+# C++ Parsing (requires LLVM installation)
+libclang>=16.0.0
+
+# Template Engine
+Jinja2>=3.1.0
+
+# Note: libclang Python package requires LLVM to be installed on the system
+# Windows: Download from https://github.com/llvm/llvm-project/releases
+# Linux: sudo apt install libclang-dev llvm
+# macOS: brew install llvm
+#
+# After installation, set LIBCLANG_PATH environment variable or use GUI Settings

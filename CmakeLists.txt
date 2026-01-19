@@ -139,6 +139,26 @@ else()
 endif()
 
 # =============================================================================
+# Python Virtual Environment Detection
+# =============================================================================
+# Use Python from .venv/ if it exists, otherwise system Python
+# This ensures all dependencies (clang, jinja2) are available
+
+if(WIN32)
+    set(VENV_PYTHON "${CMAKE_SOURCE_DIR}/.venv/Scripts/python.exe")
+else()
+    set(VENV_PYTHON "${CMAKE_SOURCE_DIR}/.venv/bin/python3")
+endif()
+
+if(EXISTS ${VENV_PYTHON})
+    set(Python3_EXECUTABLE ${VENV_PYTHON} CACHE FILEPATH "Python interpreter from venv" FORCE)
+    message(STATUS "Using Python from venv: ${VENV_PYTHON}")
+else()
+    message(STATUS "Venv not found at ${VENV_PYTHON}, using system Python")
+    message(STATUS "  Hint: Run 'CI/setup_venv.bat' (Windows) or 'CI/setup_venv.sh' to create venv")
+endif()
+
+# =============================================================================
 # Reflection System
 # =============================================================================
 # Find Python for the reflection code generator
@@ -147,6 +167,48 @@ find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
     message(STATUS "Python3 found: ${Python3_EXECUTABLE}")
     
+    # =========================================================================
+    # Libclang Pre-flight Check
+    # =========================================================================
+    message(STATUS "Checking libclang availability...")
+    
+    execute_process(
+        COMMAND ${Python3_EXECUTABLE} -c "
+import sys
+try:
+    import clang.cindex
+    try:
+        idx = clang.cindex.Index.create()
+        print('OK')
+        sys.exit(0)
+    except Exception:
+        print('NEEDS_CONFIG')
+        sys.exit(0)
+except ImportError:
+    print('NOT_INSTALLED')
+    sys.exit(1)
+"
+        RESULT_VARIABLE CLANG_PY_STATUS
+        OUTPUT_VARIABLE CLANG_PY_OUTPUT
+        ERROR_VARIABLE CLANG_PY_ERROR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    
+    if(CLANG_PY_STATUS EQUAL 0)
+        if(CLANG_PY_OUTPUT STREQUAL "OK")
+            message(STATUS "  libclang: OK")
+            set(LIBCLANG_AVAILABLE TRUE)
+        elseif(CLANG_PY_OUTPUT STREQUAL "NEEDS_CONFIG")
+            message(STATUS "  libclang: Package installed, but library not configured")
+            message(STATUS "  Run 'python CI/meta_generator/meta_generator_gui.py' to configure LLVM path")
+            message(STATUS "  Or set LIBCLANG_PATH environment variable")
+            set(LIBCLANG_AVAILABLE TRUE)
+        endif()
+    else()
+        message(STATUS "  libclang: Not available (will use regex fallback)")
+        set(LIBCLANG_AVAILABLE FALSE)
+    endif()
+    
     # Directory for generated reflection files
     # Use CMAKE_BINARY_DIR so generated files go into the actual build directory
     # (e.g., build/ClangWindowsSolution/Generated instead of build/ClangWindows/Generated)
@@ -154,7 +216,11 @@ if(Python3_FOUND)
     set(REFLECTION_GENERATED_DIR "${CMAKE_BINARY_DIR}/Generated" CACHE PATH "Directory for generated reflection files")
     file(MAKE_DIRECTORY ${REFLECTION_GENERATED_DIR})
     
-    # Reflector script and templates paths
+    # Meta-Generator script paths (new system with caching)
+    set(META_GENERATOR_SCRIPT "${CMAKE_SOURCE_DIR}/CI/meta_generator/meta_generator.py")
+    set(META_GENERATOR_SETTINGS "${CMAKE_SOURCE_DIR}/meta_generator_settings.json")
+    
+    # Legacy reflector script (fallback if meta_generator not available)
     set(REFLECTOR_SCRIPT "${CMAKE_SOURCE_DIR}/CI/reflector/reflector.py")
     set(REFLECTOR_TEMPLATES "${CMAKE_SOURCE_DIR}/CI/reflector/templates")
     
@@ -162,26 +228,9 @@ if(Python3_FOUND)
     # add_reflection_target - Generate reflection code for headers
     # =============================================================================
     # Usage:
-    #   # Option 1: Automatic scanning (recommended)
     #   add_reflection_target(MyTarget
     #       DIRS
     #           ${CMAKE_CURRENT_SOURCE_DIR}/Logger
-    #           ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
-    #       INCLUDE_DIRS
-    #           ${CMAKE_SOURCE_DIR}/src/Modules
-    #   )
-    #
-    #   # Option 2: Manual header list (legacy)
-    #   add_reflection_target(MyTarget
-    #       HEADERS
-    #           ${CMAKE_CURRENT_SOURCE_DIR}/Player.h
-    #       INCLUDE_DIRS
-    #           ${CMAKE_SOURCE_DIR}/src/Modules
-    #   )
-    #
-    #   # Option 3: With separate scan dirs for factory generation
-    #   add_reflection_target(MyTarget
-    #       DIRS
     #           ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
     #       SCAN_DIRS
     #           ${CMAKE_SOURCE_DIR}/src/Widgets
@@ -190,132 +239,172 @@ if(Python3_FOUND)
     #   )
     #
     # Parameters:
-    #   DIRS       - Directories to scan for BE_CLASS() files (auto-generates for all)
+    #   DIRS       - Directories to scan for BE_CLASS() files
     #   SCAN_DIRS  - Additional directories to scan for derived classes (factory generation)
-    #   HEADERS    - Explicit header files to generate reflection for (legacy)
     #   INCLUDE_DIRS - Include paths for computing include directives
     #
     # This will:
-    #   1. Scan DIRS for all headers containing BE_CLASS() macro
-    #   2. Run reflector.py at CONFIGURE TIME for each file
-    #   3. Generate .gen.hpp files in ${REFLECTION_GENERATED_DIR}
-    #   4. For FACTORY_BASE classes, generate EnumXxx.gen.hpp with factory
-    #   5. Add all generated files to target sources
+    #   1. Run meta_generator.py with caching (only re-parses changed files)
+    #   2. Generate .gen.hpp files in ${REFLECTION_GENERATED_DIR}
+    #   3. For FACTORY_BASE classes, generate EnumXxx.gen.hpp with factory
+    #   4. Add all generated files to target sources
     # =============================================================================
     function(add_reflection_target TARGET_NAME)
         cmake_parse_arguments(ARG "" "" "HEADERS;INCLUDE_DIRS;DIRS;SCAN_DIRS" ${ARGN})
         
-        set(GENERATED_FILES "")
-        set(ALL_HEADERS "")
-        
-        # Build include path arguments
-        set(INCLUDE_ARGS "")
-        if(ARG_INCLUDE_DIRS)
-            foreach(INC_DIR ${ARG_INCLUDE_DIRS})
-                list(APPEND INCLUDE_ARGS "-I" "${INC_DIR}")
-            endforeach()
+        # Choose generator script: prefer meta_generator.py, fallback to reflector.py
+        if(EXISTS ${META_GENERATOR_SCRIPT})
+            set(GENERATOR_SCRIPT ${META_GENERATOR_SCRIPT})
+            set(USE_META_GENERATOR TRUE)
+        else()
+            set(GENERATOR_SCRIPT ${REFLECTOR_SCRIPT})
+            set(USE_META_GENERATOR FALSE)
+            message(STATUS "Using legacy reflector.py (meta_generator not found)")
         endif()
         
-        # Collect headers from DIRS (auto-scan mode)
-        if(ARG_DIRS)
-            foreach(SCAN_DIR ${ARG_DIRS})
-                if(EXISTS "${SCAN_DIR}")
-                    # Find all header files in directory
-                    file(GLOB_RECURSE DIR_HEADERS "${SCAN_DIR}/*.h" "${SCAN_DIR}/*.hpp")
-                    foreach(HEADER ${DIR_HEADERS})
-                        # Check if file contains BE_CLASS macro
-                        file(READ "${HEADER}" HEADER_CONTENT)
-                        string(FIND "${HEADER_CONTENT}" "BE_CLASS(" HAS_BE_CLASS)
-                        if(NOT HAS_BE_CLASS EQUAL -1)
-                            list(APPEND ALL_HEADERS "${HEADER}")
-                        endif()
-                    endforeach()
-                endif()
-            endforeach()
-            list(LENGTH ALL_HEADERS HEADERS_COUNT)
-            message(STATUS "Auto-scanned ${TARGET_NAME}: found ${HEADERS_COUNT} headers with BE_CLASS()")
-        endif()
-        
-        # Add explicit HEADERS
-        if(ARG_HEADERS)
-            list(APPEND ALL_HEADERS ${ARG_HEADERS})
-        endif()
-        
-        # Remove duplicates
-        list(REMOVE_DUPLICATES ALL_HEADERS)
-        
-        if(NOT ALL_HEADERS)
-            message(WARNING "add_reflection_target: No headers with BE_CLASS() found for ${TARGET_NAME}")
-            return()
-        endif()
-        
-        # Build SCAN_DIRS arguments for factory generation (reflector needs to know all dirs)
-        # Use explicit SCAN_DIRS if provided, otherwise use DIRS
-        set(SCAN_ARGS "")
-        if(ARG_SCAN_DIRS)
-            foreach(SCAN_DIR ${ARG_SCAN_DIRS})
-                list(APPEND SCAN_ARGS "-S" "${SCAN_DIR}")
-            endforeach()
-        elseif(ARG_DIRS)
-            foreach(SCAN_DIR ${ARG_DIRS})
-                list(APPEND SCAN_ARGS "-S" "${SCAN_DIR}")
-            endforeach()
-        endif()
-        
-        foreach(HEADER ${ALL_HEADERS})
-            # Get filename without extension for output file
-            get_filename_component(HEADER_NAME ${HEADER} NAME_WE)
-            get_filename_component(HEADER_ABS ${HEADER} ABSOLUTE)
-            
-            set(GEN_FILE "${REFLECTION_GENERATED_DIR}/${HEADER_NAME}.gen.hpp")
-            
+        if(USE_META_GENERATOR)
             # =================================================================
-            # CONFIGURE TIME: Generate via execute_process
-            # Files are created immediately, IDE sees them after configure
+            # NEW: Meta-Generator with caching
             # =================================================================
-            message(STATUS "Generating reflection for ${HEADER_NAME}...")
+            # Build source directories arguments
+            set(SOURCE_ARGS "")
+            if(ARG_DIRS)
+                foreach(DIR ${ARG_DIRS})
+                    list(APPEND SOURCE_ARGS "--source-dir" "${DIR}")
+                endforeach()
+            endif()
+            
+            # Build include directories arguments
+            set(INCLUDE_ARGS "")
+            if(ARG_INCLUDE_DIRS)
+                foreach(INC_DIR ${ARG_INCLUDE_DIRS})
+                    list(APPEND INCLUDE_ARGS "--include-dir" "${INC_DIR}")
+                endforeach()
+            endif()
+            
+            # Build scan directories arguments
+            set(SCAN_ARGS "")
+            if(ARG_SCAN_DIRS)
+                foreach(SCAN_DIR ${ARG_SCAN_DIRS})
+                    list(APPEND SCAN_ARGS "--scan-dir" "${SCAN_DIR}")
+                endforeach()
+            elseif(ARG_DIRS)
+                foreach(SCAN_DIR ${ARG_DIRS})
+                    list(APPEND SCAN_ARGS "--scan-dir" "${SCAN_DIR}")
+                endforeach()
+            endif()
+            
+            message(STATUS "Running meta_generator for ${TARGET_NAME}...")
+            
             execute_process(
-                COMMAND ${Python3_EXECUTABLE} ${REFLECTOR_SCRIPT}
-                    --input "${HEADER_ABS}"
-                    --output "${GEN_FILE}"
-                    --templates "${REFLECTOR_TEMPLATES}"
+                COMMAND ${Python3_EXECUTABLE} ${GENERATOR_SCRIPT}
+                    ${SOURCE_ARGS}
+                    --output-dir "${REFLECTION_GENERATED_DIR}"
+                    --cache-dir "${CMAKE_BINARY_DIR}"
+                    --settings "${META_GENERATOR_SETTINGS}"
                     ${INCLUDE_ARGS}
                     ${SCAN_ARGS}
-                RESULT_VARIABLE REFLECTOR_RESULT
-                OUTPUT_VARIABLE REFLECTOR_OUTPUT
-                ERROR_VARIABLE REFLECTOR_ERROR
+                RESULT_VARIABLE META_GEN_RESULT
+                OUTPUT_VARIABLE META_GEN_OUTPUT
+                ERROR_VARIABLE META_GEN_ERROR
                 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             )
             
-            if(NOT REFLECTOR_RESULT EQUAL 0)
-                message(WARNING "Reflection generation failed for ${HEADER_NAME}:")
-                message(WARNING "  Exit code: ${REFLECTOR_RESULT}")
-                message(WARNING "  Error: ${REFLECTOR_ERROR}")
+            if(NOT META_GEN_RESULT EQUAL 0)
+                message(WARNING "Meta-generator failed for ${TARGET_NAME}:")
+                message(WARNING "  Exit code: ${META_GEN_RESULT}")
+                message(WARNING "  Error: ${META_GEN_ERROR}")
+                
+                # Provide helpful error message for libclang issues
+                if(META_GEN_ERROR MATCHES "libclang")
+                    message(WARNING "")
+                    message(WARNING "  LLVM/libclang not configured. Options:")
+                    message(WARNING "    1. Run: python CI/meta_generator/meta_generator_gui.py")
+                    message(WARNING "    2. Set environment variable: LIBCLANG_PATH=C:/Program Files/LLVM/bin")
+                    message(WARNING "    3. Install LLVM: https://github.com/llvm/llvm-project/releases")
+                endif()
             else()
-                # Only add to list if generation was successful
-                if(EXISTS "${GEN_FILE}")
-                    list(APPEND GENERATED_FILES ${GEN_FILE})
-                    message(STATUS "  Generated: ${GEN_FILE}")
-                else()
-                    message(WARNING "  Generated file ${GEN_FILE} does not exist after generation")
+                if(META_GEN_OUTPUT)
+                    message(STATUS "${META_GEN_OUTPUT}")
                 endif()
             endif()
-        endforeach()
-        
-        # Collect all generated enum factory files (Enum*.gen.hpp)
-        file(GLOB ENUM_GEN_FILES "${REFLECTION_GENERATED_DIR}/Enum*.gen.hpp")
-        foreach(ENUM_FILE ${ENUM_GEN_FILES})
-            if(NOT "${ENUM_FILE}" IN_LIST GENERATED_FILES)
-                list(APPEND GENERATED_FILES ${ENUM_FILE})
-                message(STATUS "  Found enum factory: ${ENUM_FILE}")
+            
+        else()
+            # =================================================================
+            # LEGACY: Per-file reflector.py
+            # =================================================================
+            set(ALL_HEADERS "")
+            
+            # Build include path arguments for legacy format
+            set(INCLUDE_ARGS "")
+            if(ARG_INCLUDE_DIRS)
+                foreach(INC_DIR ${ARG_INCLUDE_DIRS})
+                    list(APPEND INCLUDE_ARGS "-I" "${INC_DIR}")
+                endforeach()
             endif()
-        endforeach()
+            
+            # Collect headers from DIRS
+            if(ARG_DIRS)
+                foreach(SCAN_DIR ${ARG_DIRS})
+                    if(EXISTS "${SCAN_DIR}")
+                        file(GLOB_RECURSE DIR_HEADERS "${SCAN_DIR}/*.h" "${SCAN_DIR}/*.hpp")
+                        foreach(HEADER ${DIR_HEADERS})
+                            file(READ "${HEADER}" HEADER_CONTENT)
+                            string(FIND "${HEADER_CONTENT}" "BE_CLASS(" HAS_BE_CLASS)
+                            if(NOT HAS_BE_CLASS EQUAL -1)
+                                list(APPEND ALL_HEADERS "${HEADER}")
+                            endif()
+                        endforeach()
+                    endif()
+                endforeach()
+            endif()
+            
+            # Build SCAN_DIRS arguments
+            set(SCAN_ARGS "")
+            if(ARG_SCAN_DIRS)
+                foreach(SCAN_DIR ${ARG_SCAN_DIRS})
+                    list(APPEND SCAN_ARGS "-S" "${SCAN_DIR}")
+                endforeach()
+            elseif(ARG_DIRS)
+                foreach(SCAN_DIR ${ARG_DIRS})
+                    list(APPEND SCAN_ARGS "-S" "${SCAN_DIR}")
+                endforeach()
+            endif()
+            
+            foreach(HEADER ${ALL_HEADERS})
+                get_filename_component(HEADER_NAME ${HEADER} NAME_WE)
+                get_filename_component(HEADER_ABS ${HEADER} ABSOLUTE)
+                set(GEN_FILE "${REFLECTION_GENERATED_DIR}/${HEADER_NAME}.gen.hpp")
+                
+                message(STATUS "Generating reflection for ${HEADER_NAME}...")
+                execute_process(
+                    COMMAND ${Python3_EXECUTABLE} ${REFLECTOR_SCRIPT}
+                        --input "${HEADER_ABS}"
+                        --output "${GEN_FILE}"
+                        --templates "${REFLECTOR_TEMPLATES}"
+                        ${INCLUDE_ARGS}
+                        ${SCAN_ARGS}
+                    RESULT_VARIABLE REFLECTOR_RESULT
+                    OUTPUT_VARIABLE REFLECTOR_OUTPUT
+                    ERROR_VARIABLE REFLECTOR_ERROR
+                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                )
+                
+                if(NOT REFLECTOR_RESULT EQUAL 0)
+                    message(WARNING "Reflection generation failed for ${HEADER_NAME}:")
+                    message(WARNING "  Error: ${REFLECTOR_ERROR}")
+                endif()
+            endforeach()
+        endif()
         
-        # Only add generated files to target sources if any were successfully generated
+        # Collect all generated files
+        file(GLOB GENERATED_FILES "${REFLECTION_GENERATED_DIR}/*.gen.hpp")
+        
         if(GENERATED_FILES)
-            # Mark files as GENERATED so CMake knows they're build artifacts
             set_source_files_properties(${GENERATED_FILES} PROPERTIES GENERATED TRUE)
             target_sources(${TARGET_NAME} PRIVATE ${GENERATED_FILES})
+            list(LENGTH GENERATED_FILES GEN_COUNT)
+            message(STATUS "Reflection enabled for ${TARGET_NAME}: ${GEN_COUNT} files generated")
         endif()
         
         # Add CMAKE_BINARY_DIR to include paths so <Generated/File.gen.hpp> works
@@ -324,7 +413,6 @@ if(Python3_FOUND)
         # Define REFLECTION_GENERATED so code can detect generated files are available
         target_compile_definitions(${TARGET_NAME} PRIVATE REFLECTION_GENERATED=1)
         
-        message(STATUS "Reflection enabled for ${TARGET_NAME}: ${ARG_HEADERS}")
     endfunction()
 else()
     message(WARNING "Python3 not found - reflection code generation will be disabled")

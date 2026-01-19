@@ -1,7 +1,14 @@
 #!/bin/bash
-# BagiEngine Launcher (macOS)
+# BagiEngine Launcher (macOS/Linux)
 
 cd "$(dirname "$0")"
+
+# Setup meta-generator environment first
+echo "[INFO] Setting up Meta-Generator environment..."
+source CI/meta_generator/setup_env.sh
+if [ $? -ne 0 ]; then
+    echo "[WARNING] Meta-Generator setup had issues, continuing..."
+fi
 
 # Setup venv if needed
 if [ ! -f ".venv/bin/python" ]; then
