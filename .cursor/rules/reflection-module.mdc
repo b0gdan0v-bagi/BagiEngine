@@ -20,7 +20,6 @@ Compile-time reflection system with Python-based code generation (reflector.py).
 | `BE_CLASS(Name)` | Inside class body | Declares static reflection methods |
 | `BE_CLASS(Name, FACTORY_BASE)` | Inside base class body | Enables factory/enum generation for inheritance tree |
 | `BE_REFLECT_FIELD` | Before field declaration | Marks field for serialization |
-| `BE_REFLECT_ENUM` | Before enum class | Enables EnumUtils compatibility |
 | `BE_FUNCTION` | Before method declaration | Marks method for reflection/invocation |
 
 ## Usage Pattern
@@ -160,6 +159,7 @@ Compile-time type identification without RTTI using FNV-1a hash.
 - Use `BE_CLASS(ClassName, FACTORY_BASE)` for factory base classes
 - Mark serializable fields with `BE_REFLECT_FIELD`
 - Mark callable methods with `BE_FUNCTION`
+- Use `CORE_ENUM` macro for enum reflection
 - Use `Is<T>()` and `Cast<T>()` instead of `dynamic_cast`
 - Include generated headers in .cpp files only
 - Include `EnumXxx.gen.hpp` for factory bases (includes all dependencies)

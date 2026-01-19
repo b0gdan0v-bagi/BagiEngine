@@ -17,9 +17,9 @@
 // Include base class generated reflection
 #include <Generated/{{ base.name }}.gen.hpp>
 
-// Include derived class headers (absolute paths)
+// Include derived class headers
 {% for d in base.derived %}
-#include "{{ d.include_path }}"
+#include <{{ d.include_path }}>
 {% endfor %}
 
 // Include generated reflection for derived classes (provides ReflectionTraits)

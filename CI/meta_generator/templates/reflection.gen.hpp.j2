@@ -31,7 +31,7 @@ namespace EnumImpl_{{ enum.name }} {
 
 /**
  * @brief ADL function for EnumUtils compatibility
- * @note Auto-generated from {{ enum.name }} marked with BE_REFLECT_ENUM
+ * @note Auto-generated from {{ enum.name }}
  */
 consteval const auto* EnumTokenizerPtr({{ enum.qualified_name }}) {
     return &EnumImpl_{{ enum.name }}::tokenizer;

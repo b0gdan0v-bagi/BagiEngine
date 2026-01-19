@@ -97,14 +97,6 @@ public:
 #define BE_REFLECT_FIELD [[clang::annotate("reflect_field")]]
 
 /**
- * @brief Mark an enum for reflection
- *
- * The reflection parser will generate EnumTokenizerPtr compatible with
- * EnumUtils<T>, providing ToString/FromString functionality.
- */
-#define BE_REFLECT_ENUM [[clang::annotate("reflect_enum")]]
-
-/**
  * @brief Mark a method for reflection
  *
  * Methods marked with this macro will be included in the generated
@@ -123,7 +115,6 @@ public:
 // MSVC: use comment markers as fallback since MSVC lacks [[annotate]]
 // The reflection parser detects these via regex patterns
 #define BE_REFLECT_FIELD /* BE_REFLECT_FIELD */
-#define BE_REFLECT_ENUM  /* BE_REFLECT_ENUM */
 #define BE_FUNCTION      /* BE_FUNCTION */
 #endif
 

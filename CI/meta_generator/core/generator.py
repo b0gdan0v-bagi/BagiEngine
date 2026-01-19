@@ -90,17 +90,35 @@ def compute_factory_name(base_name: str) -> str:
 
 def compute_include_path(source_file: str, include_dirs: List[str]) -> str:
     """
-    Compute the absolute include path for a source file.
+    Compute the relative include path for a source file.
     
-    Returns the absolute path with forward slashes for cross-platform compatibility.
+    Tries to compute path relative to one of the include directories.
+    Falls back to filename only if no include_dir matches.
     
     Examples:
-        D:/Project/src/Modules/BECore/Logger/ConsoleSink.h
-        -> D:/Project/src/Modules/BECore/Logger/ConsoleSink.h
+        source: D:/Project/src/Widgets/ClearScreenWidget.h
+        include_dirs: ["D:/Project/src"]
+        -> Widgets/ClearScreenWidget.h
+        
+        source: D:/Project/src/Modules/BECore/Logger/ConsoleSink.h  
+        include_dirs: ["D:/Project/src"]
+        -> Modules/BECore/Logger/ConsoleSink.h
     """
     source_path = Path(source_file).resolve()
-    # Convert to forward slashes for cross-platform include paths
-    return str(source_path).replace('\\', '/')
+    
+    # Try to make path relative to one of the include directories
+    for inc_dir in include_dirs:
+        inc_path = Path(inc_dir).resolve()
+        try:
+            rel_path = source_path.relative_to(inc_path)
+            # Convert to forward slashes for cross-platform include paths
+            return str(rel_path).replace('\\', '/')
+        except ValueError:
+            # source_path is not relative to this include directory
+            continue
+    
+    # Fallback: use just the filename (less ideal but better than absolute path)
+    return source_path.name
 
 
 def compute_enum_output_filename(base_name: str) -> str:

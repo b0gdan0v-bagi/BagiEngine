@@ -3,6 +3,9 @@ C++ Parser Module
 
 Provides parsing of C++ headers to extract reflection metadata.
 Uses libclang for accurate AST parsing. LLVM installation is required.
+
+Note: This parser extracts classes marked with BE_CLASS and their fields/methods.
+Enum reflection is handled via CORE_ENUM macro, not parsed by this module.
 """
 
 import re
@@ -11,7 +14,7 @@ from typing import List, Tuple, Optional
 
 from .models import (
     ClassData, FieldData, MethodData, MethodParam, 
-    EnumData, EnumValue
+    EnumData
 )
 from .env_setup import is_libclang_available
 
@@ -99,10 +102,8 @@ class LibclangParser:
             if class_data:
                 classes.append(class_data)
         
-        elif cursor.kind == CursorKind.ENUM_DECL:
-            enum_data = self._parse_enum(cursor, source_path)
-            if enum_data:
-                enums.append(enum_data)
+        # Note: Enum reflection is handled via CORE_ENUM macro, not BE_REFLECT_ENUM
+        # No enum parsing needed here
         
         # Recurse into children
         for child in cursor.get_children():
@@ -254,55 +255,6 @@ class LibclangParser:
         except Exception:
             pass
         return False
-    
-    def _parse_enum(self, cursor, source_path: Path) -> Optional[EnumData]:
-        """Parse an enum declaration."""
-        enum_name = cursor.spelling
-        if not enum_name:
-            return None
-        
-        # Read file content to check for BE_REFLECT_ENUM
-        try:
-            with open(source_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Check for BE_REFLECT_ENUM marker before the enum
-            enum_pattern = re.compile(
-                rf'(?:BE_REFLECT_ENUM\s+enum\s+class\s+{re.escape(enum_name)}|'
-                rf'/\*\s*BE_REFLECT_ENUM\s*\*/\s*enum\s+class\s+{re.escape(enum_name)}|'
-                rf'enum\s+class\s+BE_REFLECT_ENUM\s+{re.escape(enum_name)})'
-                rf'\s*(?::\s*(\w+))?\s*\{{([^}}]*)\}}',
-                re.DOTALL
-            )
-            match = enum_pattern.search(content)
-            if not match:
-                return None
-            
-            underlying_type = match.group(1) or "int"
-            values_str = match.group(2) or ""
-            
-        except Exception:
-            return None
-        
-        # Get namespace
-        ns = self._get_namespace(cursor)
-        qualified = f"{ns}::{enum_name}" if ns else enum_name
-        
-        enum_data = EnumData(
-            name=enum_name,
-            qualified_name=qualified,
-            namespace=ns,
-            underlying_type=underlying_type,
-            line=cursor.location.line
-        )
-        
-        # Parse enum values from the content
-        for value_match in re.finditer(r'(\w+)\s*(?:=\s*([^,}]+))?', values_str):
-            value_name = value_match.group(1)
-            if value_name and value_name.strip():
-                enum_data.values.append(EnumValue(name=value_name))
-        
-        return enum_data
     
     def _get_namespace(self, cursor) -> str:
         """Get full namespace path for a cursor."""

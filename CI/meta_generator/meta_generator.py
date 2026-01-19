@@ -255,11 +255,23 @@ Examples:
         
         for file_path in scan_headers_list:
             if str(file_path.resolve()) not in cache.files:
+                verbose_log(f"  Parsing: {file_path.name}")
                 try:
                     classes, enums = cpp_parser.parse_file(file_path)
                     cache.update_file(file_path, classes, enums)
-                except Exception:
-                    pass
+                    
+                    # Generate reflection code for newly found classes
+                    if classes or enums:
+                        output_path = generator.generate_reflection(
+                            classes, enums, file_path.name
+                        )
+                        if output_path:
+                            generated_count += 1
+                            verbose_log(f"    Generated: {output_path.name}")
+                except Exception as e:
+                    error_count += 1
+                    if not args.quiet:
+                        print(f"Error processing {file_path}: {e}", file=sys.stderr)
     
     # Build and generate factory bases
     all_classes = cache.get_all_classes()
