@@ -10,18 +10,28 @@ alwaysApply: false
 
 Event system built on EnTT's dispatcher with CRTP-based static event types.
 
-## Creating Events
+## Event Structure
 
 Inherit from `EventBase<T>`:
-- Simple event — empty struct
-- Event with data — add fields and constructor
+- Simple event: `struct MyEvent { };`
+- With data: Add fields + constructor
 
-## Subscribing
+## Subscription API
 
-Use static `Subscribe` method with member function pointer:
-- `MyEvent::Subscribe<&Handler::OnEvent>(this);`
+| Method | Description |
+|--------|-------------|
+| `MyEvent::Subscribe<&Handler::OnEvent>(this)` | Manual subscription |
+| `MyEvent::SubscribeScoped<&Handler::OnEvent>(this)` | Returns `scoped_connection` (RAII) |
+| `MyEvent::Unsubscribe<&Handler>(instance)` | Unsubscribe specific handler |
+| `MyEvent::UnsubscribeAll(instance)` | Unsubscribe all handlers for instance |
 
-## Emitting
+### SubscriptionHolder (RAII)
+
+Inherit for automatic unsubscription:
+- `Subscribe<EventType, &Handler>(this)` — auto-unsubscribes in destructor
+- Preferred method for widget/component lifetime management
+
+## Emitting API
 
 | Method | Behavior |
 |--------|----------|
@@ -38,13 +48,15 @@ Use static `Subscribe` method with member function pointer:
 
 ## Best Practices
 
-- Keep events small — only necessary data
+### DO
+- Prefer `SubscriptionHolder` for automatic lifetime management
 - Use `PoolString` for string data
+- Keep events small (only necessary data)
 - Prefer `Emit` over `Enqueue` unless deferred processing needed
-- Unsubscribe in destructor if object lifetime is shorter than event source
 
-## Don't
-
+### DON'T
 - Store pointers to temporary objects in events
 - Emit events from constructors
 - Create circular event dependencies
+- Connect/disconnect inside event handlers (undefined behavior)
+- Forget to unsubscribe if not using `SubscriptionHolder`

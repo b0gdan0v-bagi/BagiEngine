@@ -1,0 +1,98 @@
+---
+description: Guidelines for BE_EVENT reflection-based event types
+globs: 
+  - "**/*Event.h"
+  - "**/*Events.h"
+alwaysApply: false
+---
+
+# Reflection Events Guidelines
+
+## Overview
+
+`BE_EVENT` is a lightweight reflection macro for event types. Zero memory overhead per instance (no `_typeMeta` pointer).
+
+## BE_EVENT vs BE_CLASS
+
+| Feature | BE_EVENT | BE_CLASS |
+|---------|----------|----------|
+| **Memory overhead** | 0 bytes | 8 bytes (`_typeMeta` pointer) |
+| **GetStaticTypeMeta()** | ✅ Yes | ✅ Yes |
+| **GetStaticTypeHash()** | ✅ Yes | ❌ No (manual) |
+| **GetTypeMeta() instance** | ❌ No | ✅ Yes |
+| **Is\<T\>() / Cast\<T\>()** | ❌ No | ✅ Yes |
+| **ForEachFieldStatic** | ✅ Const only | ✅ Mutable + Const |
+| **BE_REFLECT_FIELD** | ✅ Yes | ✅ Yes |
+| **BE_FUNCTION** | ❌ No | ✅ Yes |
+| **Use case** | Events | Classes/polymorphic types |
+
+## When to Use
+
+**Use `BE_EVENT` when:**
+- Type known statically (no polymorphism)
+- Zero memory overhead required
+- Need reflection for serialization/logging
+- Event data is immutable
+
+**Use `BE_CLASS` when:**
+- Need `Is<T>()` / `Cast<T>()` runtime checks
+- Polymorphic inheritance with factory
+- Need mutable field iteration
+- Need method reflection (`BE_FUNCTION`)
+
+## Usage Pattern
+
+```cpp
+struct MyEvent {
+    BE_EVENT(MyEvent)
+    BE_REFLECT_FIELD int32_t playerId = 0;
+    BE_REFLECT_FIELD float value = 0.0f;
+};
+```
+
+## Generated API
+
+| Method | Description |
+|--------|-------------|
+| `GetStaticTypeMeta()` | Constexpr, returns `ClassMeta&` |
+| `GetStaticTypeHash()` | Constexpr, returns `uint64_t` hash |
+| `GetStaticTypeName()` | Constexpr, returns `eastl::string_view` |
+| `GetStaticFieldCount()` | Constexpr, returns field count |
+| `ForEachFieldStatic(obj, func)` | Constexpr, iterates fields (const only) |
+
+## Memory Characteristics
+
+| Type | Size |
+|------|------|
+| Empty event | 1 byte (minimal) |
+| Event with int32_t field | 4 bytes (no overhead) |
+| BE_CLASS with int32_t | 12 bytes (4 + 8 pointer) |
+
+## Integration with EventBase
+
+```cpp
+// Option 1: EventBase (hot-path, no reflection)
+struct FastEvent : public EventBase<FastEvent> { int value; };
+
+// Option 2: BE_EVENT (with reflection)
+struct DebugEvent { BE_EVENT(DebugEvent) BE_REFLECT_FIELD int value; };
+```
+
+Choose:
+- **EventBase**: Maximum performance, no introspection
+- **BE_EVENT**: Zero overhead + reflection for serialization/debug
+
+## Best Practices
+
+### DO
+- Use `BE_EVENT` for event types needing reflection
+- Mark fields with `BE_REFLECT_FIELD`
+- Keep events immutable
+- Use `constexpr` constructors
+- Use `GetStaticTypeHash()` for efficient dispatch
+
+### DON'T
+- Use for polymorphic types (use `BE_CLASS`)
+- Modify event fields after construction
+- Expect `Is<T>()` / `Cast<T>()` (not available)
+- Use `BE_FUNCTION` (events don't have methods)
