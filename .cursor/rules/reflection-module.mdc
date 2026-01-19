@@ -11,20 +11,9 @@ alwaysApply: false
 
 ## Overview
 
-BagiEngine uses a compile-time reflection system with Python-based code generation.
-The system provides:
-- `BE_CLASS(ClassName)` macro for class reflection
-- `BE_CLASS(ClassName, FACTORY_BASE)` for factory/enum generation from inheritance
-- `BE_REFLECT_FIELD` / `BE_REFLECT_ENUM` markers
-- Auto-generated static methods and `ReflectionTraits<T>` specializations
-- Auto-generated factories inheriting from `AbstractFactory<T>`
-- `ClassMeta` for compile-time type identification without RTTI
-- EnumUtils compatibility for reflected enums
-- Abstract `IArchive` interface for serialization
+Compile-time reflection system with Python-based code generation (reflector.py).
 
-## Marking Types for Reflection
-
-### Macros
+## Macros
 
 | Macro | Location | Purpose |
 |-------|----------|---------|
@@ -32,189 +21,93 @@ The system provides:
 | `BE_CLASS(Name, FACTORY_BASE)` | Inside base class body | Enables factory/enum generation for inheritance tree |
 | `BE_REFLECT_FIELD` | Before field declaration | Marks field for serialization |
 | `BE_REFLECT_ENUM` | Before enum class | Enables EnumUtils compatibility |
+| `BE_FUNCTION` | Before method declaration | Marks method for reflection/invocation |
 
-### Usage Pattern
+## Usage Pattern
 
 1. Add `BE_CLASS(ClassName)` inside struct/class body
 2. Mark serializable fields with `BE_REFLECT_FIELD`
-3. Include generated file in .cpp: `#include <Generated/FileName.gen.hpp>`
+3. Mark callable methods with `BE_FUNCTION`
+4. Include generated file in .cpp: `#include <Generated/FileName.gen.hpp>`
+
+## Generated Type Methods
+
+| Method | Description |
+|--------|-------------|
+| `GetStaticTypeName()` | Constexpr, returns type name as `eastl::string_view` |
+| `GetStaticFieldCount()` | Constexpr, returns number of reflected fields |
+| `GetStaticTypeMeta()` | Static constexpr, returns `ClassMeta&` for the class |
+| `GetTypeMeta()` | Instance constexpr, returns actual runtime type's `ClassMeta&` |
+| `Is<T>()` | Constexpr, returns true if instance is of type T |
+| `Cast<T>()` | Returns `T*` if type matches, nullptr otherwise |
+| `ForEachFieldStatic(obj, func)` | Constexpr, iterates over all fields |
+
+## Method Reflection API
+
+| Function/Concept | Description |
+|------------------|-------------|
+| `HasMethodReflection<T>` | Concept, true if type has reflected methods |
+| `MethodCount<T>()` | Returns number of reflected methods |
+| `ForEachMethod<T>(func)` | Iterates over all method infos |
+| `InvokeMethod<Ret>(obj, name, args...)` | Invoke method by name, type-safe |
 
 ## Factory Generation (FACTORY_BASE)
 
-For inheritance hierarchies, use `BE_CLASS(Name, FACTORY_BASE)` on the base class
-to auto-generate a factory and type enum.
-
-### Usage Pattern
+For inheritance hierarchies, use `BE_CLASS(Name, FACTORY_BASE)` on base class.
 
 1. Mark base class with `BE_CLASS(BaseClass, FACTORY_BASE)`
 2. Mark derived classes with regular `BE_CLASS(DerivedClass)`
 3. Add `SCAN_DIRS` in CMake to specify where to find derived classes
-4. Include generated files:
-   - `<Generated/BaseClass.gen.hpp>` for reflection traits
-   - `<Generated/EnumBaseClass.gen.hpp>` for factory and enum
-
-### Example
-
-```cpp
-// ILogSink.h - base class
-class ILogSink : public RefCounted {
-    BE_CLASS(ILogSink, FACTORY_BASE)
-public:
-    virtual void Initialize() = 0;
-};
-
-// ConsoleSink.h - derived class
-class ConsoleSink : public ILogSink {
-    BE_CLASS(ConsoleSink)
-public:
-    void Initialize() override;
-};
-
-// Usage in .cpp
-#include <Generated/ILogSink.gen.hpp>      // Reflection traits
-#include <Generated/EnumLogSink.gen.hpp>   // Factory and enum
-
-// Create by enum (convenience)
-auto sink1 = LogSinkFactory::Create(LogSinkType::Console);
-
-// Create by ClassMeta (type-erased)
-ClassMeta meta = LogSinkFactory::ToMeta(LogSinkType::File);
-auto sink2 = LogSinkFactory::GetInstance().Create(meta);
-
-// Convert ClassMeta back to enum
-LogSinkType type = LogSinkFactory::FromMeta(meta);
-```
-
-### CMake Configuration
-
-```cmake
-# Recommended: Auto-scan directories for all BE_CLASS() files
-add_reflection_target(MyModule
-    DIRS
-        ${CMAKE_CURRENT_SOURCE_DIR}/Logger
-        ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
-    INCLUDE_DIRS
-        ${PROJECT_ROOT}/src/Modules
-)
-
-# Legacy: Manual header list (still supported)
-add_reflection_target(MyModule
-    HEADERS
-        ${CMAKE_CURRENT_SOURCE_DIR}/Player.h
-    INCLUDE_DIRS
-        ${PROJECT_ROOT}/src/Modules
-)
-```
-
-The `DIRS` parameter automatically:
-1. Scans directories for headers containing `BE_CLASS()` macro
-2. Generates `.gen.hpp` for each file
-3. For `FACTORY_BASE` classes, also generates `EnumXxx.gen.hpp`
-
-### Generated Files
-
-For a base class `ILogSink` with derived classes `ConsoleSink`, `FileSink`, `OutputSink`:
-
-| File | Contents |
-|------|----------|
-| `ILogSink.gen.hpp` | `ReflectionTraits<ILogSink>` specialization |
-| `EnumLogSink.gen.hpp` | `LogSinkType` enum, `LogSinkFactory` class |
+4. Include `<Generated/EnumBaseClass.gen.hpp>` — includes all dependencies
 
 ### Generated Factory API
 
 | Method | Description |
 |--------|-------------|
-| `LogSinkFactory::Create(EnumType)` | Static method, creates by enum |
-| `LogSinkFactory::Create(ClassMeta)` | Virtual method, creates by type metadata |
-| `LogSinkFactory::ToMeta(EnumType)` | Convert enum to ClassMeta |
-| `LogSinkFactory::FromMeta(ClassMeta)` | Convert ClassMeta to enum |
-| `LogSinkFactory::Count()` | Number of registered types |
-| `LogSinkFactory::GetTypeName(type)` | Get string name for type |
-| `LogSinkFactory::GetInstance()` | Get singleton instance |
+| `Factory::Create(EnumType)` | Static method, creates by enum |
+| `Factory::Create(ClassMeta)` | Virtual method, creates by type metadata |
+| `Factory::ToMeta(EnumType)` | Convert enum to ClassMeta |
+| `Factory::FromMeta(ClassMeta)` | Convert ClassMeta to enum |
+| `Factory::Count()` | Number of registered types |
+| `Factory::GetTypeName(type)` | Get string name for type |
+| `Factory::GetInstance()` | Get singleton instance |
 
 ### Naming Conventions
 
 | Base Class | Enum Type | Factory | Enum Values |
 |------------|-----------|---------|-------------|
-| `ILogSink` | `LogSinkType` | `LogSinkFactory` | `Console`, `File`, `Output` |
-| `IWidget` | `WidgetType` | `WidgetFactory` | `Clear`, `ImGui` |
+| `ILogSink` | `LogSinkType` | `LogSinkFactory` | `Console`, `File` |
+| `IWidget` | `WidgetType` | `WidgetFactory` | `ClearScreen`, `ImGui` |
 
-Enum values are computed by stripping the base class suffix:
-- `ConsoleSink` + `ILogSink` -> `Console`
-- `FileSink` + `ILogSink` -> `File`
-- `MyWidget` + `IWidget` -> `My`
+Enum values computed by stripping base class suffix: `ConsoleSink` + `ILogSink` → `Console`
 
-## ClassMeta (Type Identification)
+## CMake Configuration
 
-`ClassMeta` provides compile-time type identification without RTTI using FNV-1a hash.
+Parameters for `add_reflection_target()`:
+- `DIRS` — Directories to scan for headers with `BE_CLASS()` (generates .gen.hpp)
+- `SCAN_DIRS` — Additional directories to scan for derived classes (factory generation)
+- `INCLUDE_DIRS` — Include paths for computing include directives
 
-### Usage
+## ClassMeta
 
-```cpp
-#include <BECore/Reflection/ClassMeta.h>
+Compile-time type identification without RTTI using FNV-1a hash.
 
-// Get ClassMeta for a reflected type
-constexpr auto meta = GetClassMeta<ConsoleSink>();
-
-// Compare types
-if (meta == GetClassMeta<FileSink>()) { ... }
-
-// Check if valid
-if (meta) { ... }
-
-// Access type info
-eastl::string_view name = meta.typeName;
-uint64_t hash = meta.typeHash;
-```
-
-### AbstractFactory Base
-
-Generated factories inherit from `AbstractFactory<T>`:
-
-```cpp
-template<typename BaseType>
-class AbstractFactory {
-public:
-    using BasePtr = IntrusivePtr<BaseType>;
-    virtual BasePtr Create(const ClassMeta& meta) const = 0;
-};
-```
-
-This allows type-erased factory usage where the concrete factory type is unknown.
-
-## Generated Static Methods
-
-| Method | Description |
-|--------|-------------|
-| `GetStaticTypeName()` | Returns type name as `eastl::string_view` |
-| `GetStaticFieldCount()` | Returns number of reflected fields |
-| `ForEachFieldStatic(obj, func)` | Iterates over all fields with callback |
-
-## Code Generation
-
-### CMake Integration
-
-Use `add_reflection_target()` in CMakeLists.txt to enable code generation.
-Generated files are placed in `${CMAKE_BINARY_DIR}/Generated/`.
-
-### Include Path
-
-Include generated headers using angle brackets:
-- `#include <Generated/MyFile.gen.hpp>`
+| Field/Method | Description |
+|--------------|-------------|
+| `typeHash` | uint64_t, FNV-1a hash of type name |
+| `typeName` | `eastl::string_view` |
+| `operator==` | Compare by hash |
+| `operator bool` | True if valid |
 
 ## Serialization
-
-### Available Archives
 
 | Archive | Format | Use Case |
 |---------|--------|----------|
 | `XmlArchive` | XML (pugixml) | Human-readable saves, config files |
 | `BinaryArchive` | Binary stream | Compact saves, network packets |
 
-### Helper Functions
-
-| Function | Description |
-|----------|-------------|
+| Helper Function | Description |
+|-----------------|-------------|
 | `ForEachField(obj, func)` | Iterate over all reflected fields |
 | `FieldCount<T>()` | Get number of reflected fields |
 | `HasReflection<T>` | Concept to check if type has reflection |
@@ -224,41 +117,32 @@ Include generated headers using angle brackets:
 
 | Path | Contents |
 |------|----------|
-| `BECore/Reflection/ReflectionMarkers.h` | `BE_CLASS`, `BE_REFLECT_*` macros |
-| `BECore/Reflection/TypeTraits.h` | `ReflectionTraits<T>`, `FieldInfo` |
+| `BECore/Reflection/ReflectionMarkers.h` | `BE_CLASS`, `BE_REFLECT_*`, `BE_FUNCTION` macros |
+| `BECore/Reflection/TypeTraits.h` | `ReflectionTraits<T>`, `FieldInfo`, method helpers |
+| `BECore/Reflection/MethodInfo.h` | `MethodInfo`, `ConstMethodInfo` structs |
 | `BECore/Reflection/ClassMeta.h` | `ClassMeta` struct, `GetClassMeta<T>()` |
 | `BECore/Reflection/AbstractFactory.h` | `AbstractFactory<T>` base template |
-| `BECore/Reflection/IArchive.h` | Abstract archive interface |
-| `BECore/Reflection/SaveSystem.h` | `Serialize<T>` function |
-| `BECore/Reflection/XmlArchive.h` | XML implementation |
-| `BECore/Reflection/BinaryArchive.h` | Binary implementation |
-| `CI/reflector/reflector.py` | Code generator script (supports `--scan-dirs`) |
-| `CI/reflector/templates/reflection.gen.hpp.j2` | Jinja2 template for reflection code |
-| `CI/reflector/templates/enum_factory.gen.hpp.j2` | Jinja2 template for enum/factory code |
+| `CI/reflector/reflector.py` | Code generator script |
+| `CI/reflector/templates/*.j2` | Jinja2 templates |
 
 ## Key Points
 
 - Use `eastl::string_view` for names (not `std::string_view`)
-- Generated code is placed in `${CMAKE_BINARY_DIR}/Generated/`, excluded from source control
-- Python parser uses regex patterns to find `BE_CLASS()` and `BE_REFLECT_FIELD`
-- Factory generation requires `SCAN_DIRS` in CMake to find derived classes
-- Inheritance is detected from class declaration (e.g., `class Derived : public Base`)
-- Factories inherit from `AbstractFactory<T>` with `Create(ClassMeta)` interface
-- Factory/enum files are generated separately as `EnumXxx.gen.hpp`
-- `ClassMeta` uses `BECore::String::GetHash()` for compile-time type hashing
+- Generated code is in `${CMAKE_BINARY_DIR}/Generated/`
+- Python parser uses regex patterns to find `BE_CLASS()`, `BE_REFLECT_FIELD`, `BE_FUNCTION`
+- `EnumXxx.gen.hpp` includes base class `.gen.hpp` and all derived `.gen.hpp`
+- `Is<T>()` and `Cast<T>()` work without RTTI using embedded `_typeMeta` pointer
+- Method invocation uses `if constexpr` to skip methods with incompatible signatures
 
 ## DO
 
 - Use `BE_CLASS(ClassName)` inside class body
 - Use `BE_CLASS(ClassName, FACTORY_BASE)` for factory base classes
-- Mark all serializable fields with `BE_REFLECT_FIELD`
-- Use `PoolString` for frequently used strings
-- Include generated headers in .cpp files
-- Include both `FileName.gen.hpp` and `EnumFileName.gen.hpp` for factory bases
-- Use `ClassMeta` for type-erased factory operations
-- Test serialization round-trips (write then read)
-- Add headers to `add_reflection_target()` in CMakeLists.txt
-- Add `SCAN_DIRS` when using `FACTORY_BASE` to find derived classes
+- Mark serializable fields with `BE_REFLECT_FIELD`
+- Mark callable methods with `BE_FUNCTION`
+- Use `Is<T>()` and `Cast<T>()` instead of `dynamic_cast`
+- Include generated headers in .cpp files only
+- Include `EnumXxx.gen.hpp` for factory bases (includes all dependencies)
 
 ## DON'T
 
@@ -266,5 +150,5 @@ Include generated headers using angle brackets:
 - Don't reflect reference types
 - Don't modify generated files (they are overwritten)
 - Don't forget the `ClassName` argument in `BE_CLASS(ClassName)`
-- Don't include generated headers in .h files (use forward declarations)
-- Don't forget to add derived class headers to `SCAN_DIRS` directories
+- Don't include generated headers in .h files (causes ODR issues)
+- Don't use `dynamic_cast` when `Is<T>()`/`Cast<T>()` are available
