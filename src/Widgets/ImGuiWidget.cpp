@@ -12,6 +12,8 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
 
+#include <Generated/ImGuiWidget.gen.hpp>
+
 namespace BECore {
 
     bool ImGuiWidget::Initialize(const XmlNode& node) {

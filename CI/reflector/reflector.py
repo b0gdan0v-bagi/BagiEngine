@@ -36,6 +36,24 @@ class FieldData:
 
 
 @dataclass
+class MethodParam:
+    """Information about a method parameter."""
+    name: str
+    type_name: str
+
+
+@dataclass
+class MethodData:
+    """Information about a reflected method."""
+    name: str
+    return_type: str
+    params: List[MethodParam] = field(default_factory=list)
+    is_const: bool = False
+    is_virtual: bool = False
+    is_override: bool = False
+
+
+@dataclass
 class ClassData:
     """Information about a reflected class."""
     name: str
@@ -43,6 +61,7 @@ class ClassData:
     full_qualified_name: str  # For use outside namespaces (e.g., "BECore::TestData::Player")
     namespace: str
     fields: List[FieldData] = field(default_factory=list)
+    methods: List[MethodData] = field(default_factory=list)
     is_factory_base: bool = False  # True if marked with BE_CLASS(Name, FACTORY_BASE)
     parent_class: Optional[str] = None  # Direct parent class name if inheriting
 
@@ -122,6 +141,56 @@ def get_namespace_at_position(content: str, position: int) -> str:
     return "::".join(ns[0] for ns in ns_stack)
 
 
+def parse_method_params(params_str: str) -> List[MethodParam]:
+    """Parse method parameter string into a list of MethodParam."""
+    params = []
+    if not params_str:
+        return params
+    
+    # Split by comma, handling nested templates
+    param_parts = []
+    depth = 0
+    current = ""
+    for char in params_str:
+        if char == '<':
+            depth += 1
+        elif char == '>':
+            depth -= 1
+        elif char == ',' and depth == 0:
+            param_parts.append(current.strip())
+            current = ""
+            continue
+        current += char
+    if current.strip():
+        param_parts.append(current.strip())
+    
+    for param in param_parts:
+        # Parse "Type name" or "const Type& name" etc.
+        param = param.strip()
+        if not param:
+            continue
+        # Find last word as param name
+        parts = param.rsplit(None, 1)
+        if len(parts) == 2:
+            param_type, param_name = parts
+            # Handle reference/pointer attached to name
+            while param_name and param_name[0] in '*&':
+                param_type += param_name[0]
+                param_name = param_name[1:]
+            params.append(MethodParam(
+                name=param_name.strip(),
+                type_name=param_type.strip()
+            ))
+        elif len(parts) == 1:
+            # No name, just type (unusual but handle it)
+            params.append(MethodParam(
+                name="",
+                type_name=parts[0].strip()
+            ))
+    
+    return params
+
+
 def parse_header_regex(content: str) -> Tuple[List[ClassData], List[EnumData]]:
     """
     Parse header file using regex patterns to find reflected types.
@@ -177,6 +246,23 @@ def parse_header_regex(content: str) -> Tuple[List[ClassData], List[EnumData]]:
     field_pattern = re.compile(
         r'BE_REFLECT_FIELD\s+([^;=]+?)\s+(\w+)\s*(?:=\s*[^;]+)?;|'
         r'/\*\s*BE_REFLECT_FIELD\s*\*/\s*([^;=]+?)\s+(\w+)\s*(?:=\s*[^;]+)?;',
+        re.MULTILINE
+    )
+    
+    # Pattern for BE_FUNCTION methods
+    # Matches: BE_FUNCTION ReturnType MethodName(params) [const] [override];
+    # or: /* BE_FUNCTION */ ReturnType MethodName(params) [const] [override];
+    # Captures: (1) return type, (2) method name, (3) params, (4) const/override qualifiers
+    method_pattern = re.compile(
+        r'(?:BE_FUNCTION\s+|/\*\s*BE_FUNCTION\s*\*/\s*)'
+        r'(virtual\s+)?'                        # Optional virtual keyword
+        r'([^(]+?)\s+'                          # Return type (non-greedy)
+        r'(\w+)\s*'                             # Method name
+        r'\(([^)]*)\)\s*'                       # Parameters
+        r'(const\s*)?'                          # Optional const
+        r'(override\s*)?'                       # Optional override
+        r'(?:=\s*0\s*)?'                        # Optional pure virtual
+        r';',                                   # Semicolon
         re.MULTILINE
     )
     
@@ -255,6 +341,28 @@ def parse_header_regex(content: str) -> Tuple[List[ClassData], List[EnumData]]:
                 cls.fields.append(FieldData(
                     name=field_name,
                     type_name=type_name
+                ))
+        
+        # Find methods in class body
+        for method_match in method_pattern.finditer(class_body):
+            is_virtual = bool(method_match.group(1))
+            return_type = method_match.group(2).strip()
+            method_name = method_match.group(3).strip()
+            params_str = method_match.group(4).strip()
+            is_const = bool(method_match.group(5))
+            is_override = bool(method_match.group(6))
+            
+            # Parse parameters
+            params = parse_method_params(params_str)
+            
+            if method_name:
+                cls.methods.append(MethodData(
+                    name=method_name,
+                    return_type=return_type,
+                    params=params,
+                    is_const=is_const,
+                    is_virtual=is_virtual,
+                    is_override=is_override
                 ))
         
         classes.append(cls)
@@ -682,9 +790,14 @@ def main():
         for cls in classes:
             factory_marker = " [FACTORY_BASE]" if cls.is_factory_base else ""
             parent_info = f" : {cls.parent_class}" if cls.parent_class else ""
-            print(f"  Class: {cls.qualified_name}{parent_info}{factory_marker} ({len(cls.fields)} fields)")
+            print(f"  Class: {cls.qualified_name}{parent_info}{factory_marker} ({len(cls.fields)} fields, {len(cls.methods)} methods)")
             for fld in cls.fields:
-                print(f"    - {fld.name}: {fld.type_name}")
+                print(f"    Field: {fld.name}: {fld.type_name}")
+            for method in cls.methods:
+                const_marker = " const" if method.is_const else ""
+                override_marker = " override" if method.is_override else ""
+                params_str = ", ".join(f"{p.type_name} {p.name}" for p in method.params)
+                print(f"    Method: {method.return_type} {method.name}({params_str}){const_marker}{override_marker}")
         for enum in enums:
             print(f"  Enum: {enum.qualified_name} ({len(enum.values)} values)")
     

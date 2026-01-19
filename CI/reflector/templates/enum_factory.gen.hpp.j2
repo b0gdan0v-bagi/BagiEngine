@@ -14,6 +14,9 @@
 // ============================================================================
 // Includes for {{ base.name }} hierarchy
 // ============================================================================
+// Include base class generated reflection
+#include <Generated/{{ base.name }}.gen.hpp>
+
 // Include derived class headers
 {% for d in base.derived %}
 #include <{{ d.include_path }}>

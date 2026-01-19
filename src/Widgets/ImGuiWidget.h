@@ -7,18 +7,19 @@ struct SDL_Window;
 struct SDL_Renderer;
 
 namespace BECore {
-namespace SDLEvents {
-    struct SDLEventWrapper;
-}
+    namespace SDLEvents {
+        struct SDLEventWrapper;
+    }
 
     class ImGuiWidget : public IWidget {
+        BE_CLASS(ImGuiWidget)
     public:
         ImGuiWidget() = default;
         ~ImGuiWidget() override = default;
 
-        bool Initialize(const XmlNode& node) override;
-        void Draw() override;
-        void Update() override;
+        BE_FUNCTION bool Initialize(const XmlNode& node) override;
+        BE_FUNCTION void Draw() override;
+        BE_FUNCTION void Update() override;
 
     private:
         static SDL_Window* GetSDLWindow();
@@ -32,4 +33,3 @@ namespace SDLEvents {
     };
 
 }  // namespace BECore
-

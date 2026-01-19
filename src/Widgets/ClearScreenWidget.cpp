@@ -3,6 +3,8 @@
 #include <Events/RenderEvents.h>
 #include <Math/Color.h>
 
+#include <Generated/ClearScreenWidget.gen.hpp>
+
 namespace BECore {
 
     bool ClearScreenWidget::Initialize(const XmlNode& node) {

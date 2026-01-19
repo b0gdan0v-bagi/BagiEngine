@@ -271,11 +271,18 @@ target_link_libraries(BECoreModule PUBLIC
 # =============================================================================
 # Generate reflection metadata for all BE_CLASS() files in specified directories
 # DIRS automatically scans for headers containing BE_CLASS() macro
+# SCAN_DIRS specifies additional directories to scan for derived classes (for factory generation)
 if(COMMAND add_reflection_target)
     add_reflection_target(BECoreModule
         DIRS
             ${CMAKE_CURRENT_SOURCE_DIR}/Logger
             ${CMAKE_CURRENT_SOURCE_DIR}/Tests
+            ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
+        SCAN_DIRS
+            ${CMAKE_CURRENT_SOURCE_DIR}/Logger
+            ${CMAKE_CURRENT_SOURCE_DIR}/Tests
+            ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
+            ${PROJECT_ROOT}/src/Widgets
         INCLUDE_DIRS
             ${PROJECT_ROOT}/src/Modules
             ${PROJECT_ROOT}/src

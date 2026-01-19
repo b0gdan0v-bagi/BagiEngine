@@ -6,7 +6,10 @@
 #pragma once
 
 #include <BECore/Reflection/TypeTraits.h>
+#include <BECore/Reflection/ClassMeta.h>
+#include <BECore/Reflection/MethodInfo.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/Utils/String.h>
 #include <EASTL/string_view.h>
 #include <tuple>
 
@@ -52,6 +55,13 @@ namespace BECore {
 {% for field in cls.fields %}
  *   - {{ field.name }} : {{ field.type_name }}
 {% endfor %}
+{% if cls.methods %}
+ *
+ * Methods:
+{% for method in cls.methods %}
+ *   - {{ method.return_type }} {{ method.name }}({{ method.params | map(attribute='type_name') | join(', ') }}){% if method.is_const %} const{% endif %}
+{% endfor %}
+{% endif %}
  */
 template<>
 struct ReflectionTraits<{{ cls.qualified_name }}> {
@@ -65,10 +75,43 @@ struct ReflectionTraits<{{ cls.qualified_name }}> {
     );
     
     static constexpr size_t field_count = {{ cls.fields | length }};
+{% if cls.methods %}
+    
+    static constexpr auto methods = std::make_tuple(
+{% for method in cls.methods %}
+{% if method.is_const %}
+        ConstMethodInfo{ eastl::string_view{"{{ method.name }}"}, &{{ cls.qualified_name }}::{{ method.name }} }{{ "," if not loop.last else "" }}
+{% else %}
+        MethodInfo{ eastl::string_view{"{{ method.name }}"}, &{{ cls.qualified_name }}::{{ method.name }} }{{ "," if not loop.last else "" }}
+{% endif %}
+{% endfor %}
+    );
+    
+    static constexpr size_t method_count = {{ cls.methods | length }};
+{% else %}
+    
+    static constexpr auto methods = std::make_tuple();
+    
+    static constexpr size_t method_count = 0;
+{% endif %}
 };
 
 {% endfor %}
 }  // namespace BECore
+
+// ============================================================================
+// Static ClassMeta instances
+// ============================================================================
+{% for cls in classes %}
+namespace {{ cls.namespace if cls.namespace else '::' }} {
+namespace Detail_{{ cls.name }} {
+    inline constexpr ::BECore::ClassMeta _staticTypeMeta{
+        ::BECore::String::GetHash(eastl::string_view{"{{ cls.name }}"}),
+        eastl::string_view{"{{ cls.name }}"}
+    };
+}  // namespace Detail_{{ cls.name }}
+}  // namespace {{ cls.namespace if cls.namespace else '::' }}
+{% endfor %}
 
 // ============================================================================
 // BE_CLASS() Static Method Implementations
@@ -85,6 +128,11 @@ inline constexpr size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
     return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::field_count;
 }
 
+// {{ cls.full_qualified_name }}::GetStaticTypeMeta()
+inline constexpr const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
+    return {{ cls.namespace if cls.namespace else '::' }}::Detail_{{ cls.name }}::_staticTypeMeta;
+}
+
 // {{ cls.full_qualified_name }}::ForEachFieldStatic (mutable)
 template<typename Func>
 inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic({{ cls.full_qualified_name }}& obj, Func&& func) {
@@ -99,6 +147,24 @@ inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic(const {{
     std::apply([&](auto&&... fields) {
         (func(fields.name, obj.*(fields.ptr)), ...);
     }, ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields);
+}
+
+// {{ cls.full_qualified_name }}::Is<T>()
+template<typename T>
+inline constexpr bool {{ cls.full_qualified_name }}::Is() const {
+    return GetTypeMeta() == T::GetStaticTypeMeta();
+}
+
+// {{ cls.full_qualified_name }}::Cast<T>() (mutable)
+template<typename T>
+inline T* {{ cls.full_qualified_name }}::Cast() {
+    return Is<T>() ? static_cast<T*>(this) : nullptr;
+}
+
+// {{ cls.full_qualified_name }}::Cast<T>() (const)
+template<typename T>
+inline const T* {{ cls.full_qualified_name }}::Cast() const {
+    return Is<T>() ? static_cast<const T*>(this) : nullptr;
 }
 
 {% endfor %}

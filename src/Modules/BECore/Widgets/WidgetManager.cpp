@@ -4,6 +4,8 @@
 #include <Widgets/ClearScreenWidget.h>
 #include <BECore/Config/XmlConfig.h>
 
+#include <Generated/EnumWidget.gen.hpp>
+
 namespace BECore {
 
     void WidgetManager::RegisterWidget(IntrusivePtr<IWidget> widget) {
@@ -54,7 +56,7 @@ namespace BECore {
             if (!widgetType) {
                 continue;
             }
-            const auto widgetPtr = CreateWidgetByType(*widgetType);
+            const auto widgetPtr = WidgetFactory::Create(*widgetType);
             if (!widgetPtr) {
                 continue;
             }
@@ -62,17 +64,5 @@ namespace BECore {
             RegisterWidget(widgetPtr);
         }
     }
-
-    IntrusivePtr<IWidget> WidgetManager::CreateWidgetByType(WidgetType type) {
-        switch (type) {
-            case WidgetType::ImGuiWidget:
-                return BECore::New<ImGuiWidget>();
-            case WidgetType::ClearScreenWidget:
-                return BECore::New<ClearScreenWidget>();
-            default:
-                return {};
-        }
-    }
-
 }  // namespace BECore
 

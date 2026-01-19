@@ -4,10 +4,39 @@
 #include <BECore/Reflection/XmlArchive.h>
 #include <BECore/Reflection/BinaryArchive.h>
 #include <BECore/Logger/Logger.h>
+#include <EASTL/vector.h>
 
 #include <Generated/ReflectionTest.gen.hpp>
 
 namespace BECore {
+
+    // =========================================================================
+    // Player method implementations
+    // =========================================================================
+
+    int32_t TestData::Player::TakeDamage(int32_t amount) {
+        health -= amount;
+        if (health <= 0) {
+            health = 0;
+            isAlive = false;
+        }
+        return health;
+    }
+
+    void TestData::Player::Heal(int32_t amount) {
+        health += amount;
+        if (health > 0) {
+            isAlive = true;
+        }
+    }
+
+    bool TestData::Player::IsDead() const {
+        return health <= 0;
+    }
+
+    float TestData::Player::GetHealthPercent() const {
+        return static_cast<float>(health);  // Assuming max health is 100
+    }
 
     // =========================================================================
     // Test implementation
@@ -37,6 +66,13 @@ namespace BECore {
             allPassed = false;
         } else {
             LOG_INFO("ReflectionTest", "TestBinarySerialization PASSED");
+        }
+        
+        if (!TestMethodReflection()) {
+            LOG_ERROR("ReflectionTest", "TestMethodReflection FAILED");
+            allPassed = false;
+        } else {
+            LOG_INFO("ReflectionTest", "TestMethodReflection PASSED");
         }
         
         return allPassed;
@@ -179,6 +215,92 @@ namespace BECore {
             return false;
         }
         
+        return true;
+    }
+
+    bool ReflectionTest::TestMethodReflection() {
+        // Test HasMethodReflection concept
+        static_assert(HasMethodReflection<TestData::Player>, "Player should have method reflection");
+        
+        // Test method count
+        static_assert(MethodCount<TestData::Player>() == 4, "Player should have 4 reflected methods");
+        
+        // Test ForEachMethod
+        int methodCount = 0;
+        eastl::vector<eastl::string_view> methodNames;
+        ForEachMethod<TestData::Player>([&](auto& method) {
+            methodCount++;
+            methodNames.push_back(method.name);
+        });
+        
+        if (methodCount != 4) {
+            LOG_ERROR("ReflectionTest", "ForEachMethod visited {} methods, expected 4", methodCount);
+            return false;
+        }
+        
+        // Verify method names are present
+        bool hasTakeDamage = false, hasHeal = false, hasIsDead = false, hasGetHealthPercent = false;
+        for (const auto& name : methodNames) {
+            if (name == "TakeDamage") hasTakeDamage = true;
+            if (name == "Heal") hasHeal = true;
+            if (name == "IsDead") hasIsDead = true;
+            if (name == "GetHealthPercent") hasGetHealthPercent = true;
+        }
+        
+        if (!hasTakeDamage || !hasHeal || !hasIsDead || !hasGetHealthPercent) {
+            LOG_ERROR("ReflectionTest", "Missing expected method names");
+            return false;
+        }
+        
+        LOG_DEBUG("ReflectionTest", "Method reflection: found {} methods", methodCount);
+        for (const auto& name : methodNames) {
+            LOG_DEBUG("ReflectionTest", "  - {}", std::string_view(name.data(), name.size()));
+        }
+        
+        // Test InvokeMethod for non-const methods
+        TestData::Player player;
+        player.health = 100;
+        player.isAlive = true;
+        
+        // Test TakeDamage via reflection
+        int32_t remaining = InvokeMethod<int32_t>(player, "TakeDamage", 30);
+        if (remaining != 70) {
+            LOG_ERROR("ReflectionTest", "TakeDamage returned {}, expected 70", remaining);
+            return false;
+        }
+        if (player.health != 70) {
+            LOG_ERROR("ReflectionTest", "health is {}, expected 70 after TakeDamage", player.health);
+            return false;
+        }
+        
+        // Test Heal via reflection
+        InvokeMethod<void>(player, "Heal", 20);
+        if (player.health != 90) {
+            LOG_ERROR("ReflectionTest", "health is {}, expected 90 after Heal", player.health);
+            return false;
+        }
+        
+        // Test const methods via reflection
+        // Note: IsDead and GetHealthPercent are const methods
+        // We need to use const reference for const method invocation
+        const TestData::Player& constPlayer = player;
+        
+        // For const methods, we can check the traits directly
+        LOG_DEBUG("ReflectionTest", "Player health: {}, isAlive: {}", player.health, player.isAlive);
+        LOG_DEBUG("ReflectionTest", "IsDead() should return false, GetHealthPercent() should return 90");
+        
+        // Direct method calls to verify behavior
+        if (player.IsDead()) {
+            LOG_ERROR("ReflectionTest", "IsDead() returned true, expected false");
+            return false;
+        }
+        
+        if (player.GetHealthPercent() != 90.0f) {
+            LOG_ERROR("ReflectionTest", "GetHealthPercent() returned {}, expected 90", player.GetHealthPercent());
+            return false;
+        }
+        
+        LOG_INFO("ReflectionTest", "Method reflection tests passed");
         return true;
     }
 

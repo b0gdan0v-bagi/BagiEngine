@@ -179,8 +179,19 @@ if(Python3_FOUND)
     #           ${CMAKE_SOURCE_DIR}/src/Modules
     #   )
     #
+    #   # Option 3: With separate scan dirs for factory generation
+    #   add_reflection_target(MyTarget
+    #       DIRS
+    #           ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
+    #       SCAN_DIRS
+    #           ${CMAKE_SOURCE_DIR}/src/Widgets
+    #       INCLUDE_DIRS
+    #           ${CMAKE_SOURCE_DIR}/src/Modules
+    #   )
+    #
     # Parameters:
     #   DIRS       - Directories to scan for BE_CLASS() files (auto-generates for all)
+    #   SCAN_DIRS  - Additional directories to scan for derived classes (factory generation)
     #   HEADERS    - Explicit header files to generate reflection for (legacy)
     #   INCLUDE_DIRS - Include paths for computing include directives
     #
@@ -192,7 +203,7 @@ if(Python3_FOUND)
     #   5. Add all generated files to target sources
     # =============================================================================
     function(add_reflection_target TARGET_NAME)
-        cmake_parse_arguments(ARG "" "" "HEADERS;INCLUDE_DIRS;DIRS" ${ARGN})
+        cmake_parse_arguments(ARG "" "" "HEADERS;INCLUDE_DIRS;DIRS;SCAN_DIRS" ${ARGN})
         
         set(GENERATED_FILES "")
         set(ALL_HEADERS "")
@@ -238,9 +249,14 @@ if(Python3_FOUND)
             return()
         endif()
         
-        # Build DIRS arguments for factory generation (reflector needs to know all dirs)
+        # Build SCAN_DIRS arguments for factory generation (reflector needs to know all dirs)
+        # Use explicit SCAN_DIRS if provided, otherwise use DIRS
         set(SCAN_ARGS "")
-        if(ARG_DIRS)
+        if(ARG_SCAN_DIRS)
+            foreach(SCAN_DIR ${ARG_SCAN_DIRS})
+                list(APPEND SCAN_ARGS "-S" "${SCAN_DIR}")
+            endforeach()
+        elseif(ARG_DIRS)
             foreach(SCAN_DIR ${ARG_DIRS})
                 list(APPEND SCAN_ARGS "-S" "${SCAN_DIR}")
             endforeach()
@@ -376,6 +392,20 @@ target_link_libraries(MyGame PRIVATE
     EventsModule
     SDLModule
 )
+
+# =============================================================================
+# Reflection Code Generation for Application Widgets
+# =============================================================================
+# Generate reflection metadata for widget implementations in src/Widgets
+if(COMMAND add_reflection_target)
+    add_reflection_target(MyGame
+        DIRS
+            ${CMAKE_SOURCE_DIR}/src/Widgets
+        INCLUDE_DIRS
+            ${CMAKE_SOURCE_DIR}/src/Modules
+            ${CMAKE_SOURCE_DIR}/src
+    )
+endif()
 
 # Копирование SDL3 DLL рядом с исполняемым файлом (для Windows, если используется SDL3-shared)
 if(WIN32)

@@ -1,16 +1,18 @@
 #pragma once
+#include <BECore/Reflection/ReflectionMarkers.h>
 
 namespace BECore {
 
     class IWidget : public RefCounted {
+        BE_CLASS(IWidget, FACTORY_BASE)
     public:
         IWidget() = default;
-        virtual ~IWidget() = default;
+        ~IWidget() override = default;
 
-        virtual bool Initialize(const XmlNode& node) = 0;
+        BE_FUNCTION virtual bool Initialize(const XmlNode& node) = 0;
 
-        virtual void Update() = 0;
-        virtual void Draw() = 0;
+        BE_FUNCTION virtual void Update() = 0;
+        BE_FUNCTION virtual void Draw() = 0;
     };
 
 }  // namespace BECore

@@ -23,6 +23,31 @@ namespace BECore {
             BE_REFLECT_FIELD float speed = 5.0f;
             BE_REFLECT_FIELD PoolString name;
             BE_REFLECT_FIELD bool isAlive = true;
+
+            /**
+             * @brief Take damage and update health
+             * @param amount Damage amount
+             * @return Remaining health
+             */
+            BE_FUNCTION int32_t TakeDamage(int32_t amount);
+
+            /**
+             * @brief Heal the player
+             * @param amount Heal amount
+             */
+            BE_FUNCTION void Heal(int32_t amount);
+
+            /**
+             * @brief Check if player is dead
+             * @return true if health <= 0
+             */
+            BE_FUNCTION bool IsDead() const;
+
+            /**
+             * @brief Get current health percentage
+             * @return Health as percentage (0-100)
+             */
+            BE_FUNCTION float GetHealthPercent() const;
         };
 
         /**
@@ -84,6 +109,11 @@ namespace BECore {
          * @brief Test binary serialization round-trip
          */
         bool TestBinarySerialization();
+
+        /**
+         * @brief Test method reflection (BE_FUNCTION)
+         */
+        bool TestMethodReflection();
     };
 
 }  // namespace BECore

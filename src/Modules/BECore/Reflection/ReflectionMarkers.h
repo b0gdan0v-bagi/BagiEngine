@@ -1,8 +1,5 @@
 #pragma once
 
-#include <EASTL/string_view.h>
-#include <type_traits>
-
 /**
  * @file ReflectionMarkers.h
  * @brief Macros for marking classes, fields, and enums for reflection
@@ -29,6 +26,9 @@ namespace BECore {
     // Default argument specified here; must not be repeated in TypeTraits.h definition
     template <typename T, typename = void>
     struct ReflectionTraits;
+
+    // Forward declaration for embedded type identification
+    struct ClassMeta;
 
 }  // namespace BECore
 
@@ -64,10 +64,25 @@ public:                                                                         
     /** @brief Iterate over all reflected fields (const) */                                                                                                                                            \
     template <typename Func>                                                                                                                                                                           \
     static constexpr void ForEachFieldStatic(const ClassName& obj, Func&& func);                                                                                                                       \
+    /** @brief Get static ClassMeta for this type (defined in generated code) */                                                                                                                       \
+    static constexpr const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                   \
+    /** @brief Get runtime ClassMeta for this instance */                                                                                                                                              \
+    constexpr const ::BECore::ClassMeta& GetTypeMeta() const { return *_typeMeta; }                                                                                                                    \
+    /** @brief Check if this instance is of type T */                                                                                                                                                  \
+    template <typename T>                                                                                                                                                                              \
+    constexpr bool Is() const;                                                                                                                                                                         \
+    /** @brief Cast to type T, returns nullptr if type mismatch */                                                                                                                                     \
+    template <typename T>                                                                                                                                                                              \
+    T* Cast();                                                                                                                                                                                         \
+    /** @brief Cast to type T (const), returns nullptr if type mismatch */                                                                                                                             \
+    template <typename T>                                                                                                                                                                              \
+    const T* Cast() const;                                                                                                                                                                             \
                                                                                                                                                                                                        \
 private:                                                                                                                                                                                               \
     template <typename, typename>                                                                                                                                                                      \
     friend struct ::BECore::ReflectionTraits;                                                                                                                                                          \
+    /** @brief Pointer to type metadata (points to static meta of actual derived type) */                                                                                                              \
+    const ::BECore::ClassMeta* _typeMeta = &ClassName::GetStaticTypeMeta();                                                                                                                            \
                                                                                                                                                                                                        \
 public:
 
@@ -87,10 +102,25 @@ public:                                                                         
     /** @brief Iterate over all reflected fields (const) */                                                                                                                                            \
     template <typename Func>                                                                                                                                                                           \
     static constexpr void ForEachFieldStatic(const ClassName& obj, Func&& func);                                                                                                                       \
+    /** @brief Get static ClassMeta for this type (defined in generated code) */                                                                                                                       \
+    static constexpr const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                   \
+    /** @brief Get runtime ClassMeta for this instance */                                                                                                                                              \
+    constexpr const ::BECore::ClassMeta& GetTypeMeta() const { return *_typeMeta; }                                                                                                                    \
+    /** @brief Check if this instance is of type T */                                                                                                                                                  \
+    template <typename T>                                                                                                                                                                              \
+    constexpr bool Is() const;                                                                                                                                                                         \
+    /** @brief Cast to type T, returns nullptr if type mismatch */                                                                                                                                     \
+    template <typename T>                                                                                                                                                                              \
+    T* Cast();                                                                                                                                                                                         \
+    /** @brief Cast to type T (const), returns nullptr if type mismatch */                                                                                                                             \
+    template <typename T>                                                                                                                                                                              \
+    const T* Cast() const;                                                                                                                                                                             \
                                                                                                                                                                                                        \
 private:                                                                                                                                                                                               \
     template <typename, typename>                                                                                                                                                                      \
     friend struct ::BECore::ReflectionTraits;                                                                                                                                                          \
+    /** @brief Pointer to type metadata (points to static meta of actual derived type) */                                                                                                              \
+    const ::BECore::ClassMeta* _typeMeta = &ClassName::GetStaticTypeMeta();                                                                                                                            \
                                                                                                                                                                                                        \
 public:
 
@@ -115,16 +145,27 @@ public:
  * EnumUtils<T>, providing ToString/FromString functionality.
  */
 #define BE_REFLECT_ENUM [[clang::annotate("reflect_enum")]]
+
+/**
+ * @brief Mark a method for reflection
+ *
+ * Methods marked with this macro will be included in the generated
+ * ReflectionTraits<T>::methods tuple and can be invoked via reflection.
+ *
+ * @example
+ *   class MyClass {
+ *       BE_CLASS(MyClass)
+ *   public:
+ *       BE_FUNCTION void Update();
+ *       BE_FUNCTION bool Initialize(const XmlNode& node);
+ *   };
+ */
+#define BE_FUNCTION [[clang::annotate("reflect_function")]]
 #else
-   // MSVC: use comment markers as fallback since MSVC lacks [[annotate]]
+// MSVC: use comment markers as fallback since MSVC lacks [[annotate]]
 // The reflection parser detects these via regex patterns
 #define BE_REFLECT_FIELD /* BE_REFLECT_FIELD */
 #define BE_REFLECT_ENUM  /* BE_REFLECT_ENUM */
+#define BE_FUNCTION      /* BE_FUNCTION */
 #endif
 
-// Legacy macro - kept for compatibility, prefer BE_CLASS(ClassName)
-#if defined(__clang__) || defined(__GNUC__)
-#define BE_REFLECT_CLASS [[clang::annotate("reflect_class")]]
-#else
-#define BE_REFLECT_CLASS /* BE_REFLECT_CLASS */
-#endif
