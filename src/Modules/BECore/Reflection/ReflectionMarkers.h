@@ -39,58 +39,16 @@ namespace BECore {
 // defined in the generated .gen.hpp file.
 //
 // Usage:
-//   BE_CLASS(ClassName)              - Standard reflection
-//   BE_CLASS(ClassName, FACTORY_BASE) - Mark as factory base for enum generation
+//   BE_CLASS(ClassName)                                 - Standard reflection
+//   BE_CLASS(ClassName, FACTORY_BASE)                   - Mark as factory base for enum generation
+//   BE_CLASS(ClassName, FACTORY_BASE, SERIALIZABLE)     - Multiple options
 //
 // @param ClassName The name of the containing class (required for static methods)
-// @param Options   Optional: FACTORY_BASE to enable factory/enum generation
+// @param ...       Optional: Comma-separated options (FACTORY_BASE, SERIALIZABLE, etc.)
+//                  These options are parsed by reflector.py, not by C++ preprocessor
 // =============================================================================
 
-// Helper macros for argument counting and dispatch
-#define BE_CLASS_EXPAND(x) x
-#define BE_CLASS_GET_MACRO(_1, _2, NAME, ...) NAME
-#define BE_CLASS(...) BE_CLASS_EXPAND(BE_CLASS_GET_MACRO(__VA_ARGS__, BE_CLASS_2, BE_CLASS_1)(__VA_ARGS__))
-
-// BE_CLASS(ClassName) - standard reflection only
-#define BE_CLASS_1(ClassName)                                                                                                                                                                          \
-public:                                                                                                                                                                                                \
-    /** @brief Get the type name as string_view */                                                                                                                                                     \
-    static constexpr eastl::string_view GetStaticTypeName();                                                                                                                                           \
-    /** @brief Get the number of reflected fields */                                                                                                                                                   \
-    static constexpr size_t GetStaticFieldCount();                                                                                                                                                     \
-    /** @brief Iterate over all reflected fields (mutable) */                                                                                                                                          \
-    template <typename Func>                                                                                                                                                                           \
-    static constexpr void ForEachFieldStatic(ClassName& obj, Func&& func);                                                                                                                             \
-    /** @brief Iterate over all reflected fields (const) */                                                                                                                                            \
-    template <typename Func>                                                                                                                                                                           \
-    static constexpr void ForEachFieldStatic(const ClassName& obj, Func&& func);                                                                                                                       \
-    /** @brief Get static ClassMeta for this type (defined in generated code) */                                                                                                                       \
-    static constexpr const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                   \
-    /** @brief Get runtime ClassMeta for this instance */                                                                                                                                              \
-    constexpr const ::BECore::ClassMeta& GetTypeMeta() const { return *_typeMeta; }                                                                                                                    \
-    /** @brief Check if this instance is of type T */                                                                                                                                                  \
-    template <typename T>                                                                                                                                                                              \
-    constexpr bool Is() const;                                                                                                                                                                         \
-    /** @brief Cast to type T, returns nullptr if type mismatch */                                                                                                                                     \
-    template <typename T>                                                                                                                                                                              \
-    constexpr T* Cast();                                                                                                                                                                               \
-    /** @brief Cast to type T (const), returns nullptr if type mismatch */                                                                                                                             \
-    template <typename T>                                                                                                                                                                              \
-    constexpr const T* Cast() const;                                                                                                                                                                   \
-                                                                                                                                                                                                       \
-private:                                                                                                                                                                                               \
-    template <typename, typename>                                                                                                                                                                      \
-    friend struct ::BECore::ReflectionTraits;                                                                                                                                                          \
-    /** @brief Pointer to type metadata (points to static meta of actual derived type) */                                                                                                              \
-    const ::BECore::ClassMeta* _typeMeta = &ClassName::GetStaticTypeMeta();                                                                                                                            \
-                                                                                                                                                                                                       \
-public:
-
-// BE_CLASS(ClassName, FACTORY_BASE) - reflection + factory base marker
-// The FACTORY_BASE parameter is parsed by reflector.py to generate:
-//   - CORE_ENUM({ClassName}Type, ...) with all derived classes
-//   - {ClassName}Factory class with Create() method
-#define BE_CLASS_2(ClassName, Options)                                                                                                                                                                 \
+#define BE_CLASS(ClassName, ...)                                                                                                                                                                       \
 public:                                                                                                                                                                                                \
     /** @brief Get the type name as string_view */                                                                                                                                                     \
     static constexpr eastl::string_view GetStaticTypeName();                                                                                                                                           \
