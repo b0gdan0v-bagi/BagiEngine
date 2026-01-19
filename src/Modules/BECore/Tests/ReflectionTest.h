@@ -73,9 +73,13 @@ namespace BECore {
 
     }  // namespace TestData
 
-    // =========================================================================
-    // Reflection Test
-    // =========================================================================
+}  // namespace BECore
+
+// =========================================================================
+// Reflection Test
+// =========================================================================
+
+namespace BECore::Tests {
 
     /**
      * @brief Test for reflection and serialization system
@@ -87,12 +91,12 @@ namespace BECore {
      * - Nested object handling
      */
     class ReflectionTest : public ITest {
+        BE_CLASS(ReflectionTest)
     public:
         ReflectionTest() = default;
         ~ReflectionTest() override = default;
 
         bool Run() override;
-        const char* GetName() const override { return "ReflectionTest"; }
 
     private:
         /**
@@ -116,4 +120,4 @@ namespace BECore {
         bool TestMethodReflection();
     };
 
-}  // namespace BECore
+}  // namespace BECore::Tests

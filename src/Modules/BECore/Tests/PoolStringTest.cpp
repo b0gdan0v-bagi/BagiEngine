@@ -2,11 +2,9 @@
 
 #include <BECore/Logger/Logger.h>
 
-namespace BECore::Tests {
+#include <Generated/PoolStringTest.gen.hpp>
 
-    const char* PoolStringTest::GetName() const {
-        return "PoolStringTest";
-    }
+namespace BECore::Tests {
 
     bool PoolStringTest::Run() {
         // --- Compile-time tests ---

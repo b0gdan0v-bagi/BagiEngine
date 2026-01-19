@@ -3,11 +3,9 @@
 #include <BECore/Format/Format.h>
 #include <BECore/Logger/Logger.h>
 
-namespace BECore::Tests {
+#include <Generated/FormatTest.gen.hpp>
 
-    const char* FormatTest::GetName() const {
-        return "FormatTest";
-    }
+namespace BECore::Tests {
 
     bool FormatTest::Run() {
         LOG_INFO("[FormatTest] Starting tests...");

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <root>
     <tests>
-        <test type="PoolStringTest" enabled="true" />
-        <test type="FormatTest" enabled="true" />
-        <test type="EnumUtilsTest" enabled="true" />
-        <test type="ReflectionTest" enabled="true" />
+        <test type="PoolString" enabled="true" />
+        <test type="Format" enabled="true" />
+        <test type="EnumUtils" enabled="true" />
+        <test type="Reflection" enabled="true" />
     </tests>
 </root>

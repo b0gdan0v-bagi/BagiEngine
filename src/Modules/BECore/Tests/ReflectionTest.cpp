@@ -38,9 +38,13 @@ namespace BECore {
         return static_cast<float>(health);  // Assuming max health is 100
     }
 
-    // =========================================================================
-    // Test implementation
-    // =========================================================================
+}  // namespace BECore
+
+// =========================================================================
+// Test implementation
+// =========================================================================
+
+namespace BECore::Tests {
 
     bool ReflectionTest::Run() {
         LOG_INFO("[ReflectionTest] Starting reflection tests...");
@@ -304,4 +308,4 @@ namespace BECore {
         return true;
     }
 
-}  // namespace BECore
+}  // namespace BECore::Tests

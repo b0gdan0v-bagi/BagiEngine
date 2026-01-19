@@ -1,10 +1,8 @@
 #include "TestManager.h"
 
-#include <BECore/Tests/PoolStringTest.h>
-#include <BECore/Tests/FormatTest.h>
-#include <BECore/Tests/EnumUtilsTest.h>
-#include <BECore/Tests/ReflectionTest.h>
 #include <BECore/Config/XmlConfig.h>
+
+#include <Generated/EnumTest.gen.hpp>
 
 namespace BECore {
 
@@ -46,38 +44,26 @@ namespace BECore {
                 continue;
             }
 
-            auto testPtr = CreateTestByType(*testType);
+            // Use auto-generated TestFactory to create test instances
+            auto testPtr = Tests::TestFactory::GetInstance().Create(*testType);
             if (!testPtr) {
+                LOG_ERROR("[TestManager] Failed to create test of type: {}"_format(
+                    Tests::TestFactory::GetInstance().GetTypeName(*testType)));
                 continue;
             }
 
-            LOG_INFO("[TestManager] Running: {}"_format(testPtr->GetName()));
+            LOG_INFO("[TestManager] Running: {}"_format(testPtr->GetStaticTypeName()));
 
             if (testPtr->Run()) {
                 ++passed;
-                LOG_INFO("[TestManager] PASSED: {}"_format(testPtr->GetName()));
+                LOG_INFO("[TestManager] PASSED: {}"_format(testPtr->GetStaticTypeName()));
             } else {
                 ++failed;
-                LOG_ERROR("[TestManager] FAILED: {}"_format(testPtr->GetName()));
+                LOG_ERROR("[TestManager] FAILED: {}"_format(testPtr->GetStaticTypeName()));
             }
         }
 
         LOG_INFO("[TestManager] Results: {} passed, {} failed"_format(passed, failed));
-    }
-
-    IntrusivePtr<ITest> TestManager::CreateTestByType(TestType type) {
-        switch (type) {
-            case TestType::PoolStringTest:
-                return BECore::New<Tests::PoolStringTest>();
-            case TestType::FormatTest:
-                return BECore::New<Tests::FormatTest>();
-            case TestType::EnumUtilsTest:
-                return BECore::New<Tests::EnumUtilsTest>();
-            case TestType::ReflectionTest:
-                return BECore::New<ReflectionTest>();
-            default:
-                return {};
-        }
     }
 
 }  // namespace BECore

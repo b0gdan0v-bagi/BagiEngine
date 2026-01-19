@@ -9,11 +9,11 @@ namespace BECore::Tests {
      * @brief Test for PoolString and PoolStringChain functionality
      */
     class PoolStringTest : public ITest {
+        BE_CLASS(PoolStringTest)
     public:
         PoolStringTest() = default;
         ~PoolStringTest() override = default;
 
-        const char* GetName() const override;
         bool Run() override;
     };
 

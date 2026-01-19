@@ -3,11 +3,9 @@
 #include <BECore/Format/Format.h>
 #include <BECore/Logger/Logger.h>
 
-namespace BECore::Tests {
+#include <Generated/EnumUtilsTest.gen.hpp>
 
-    const char* EnumUtilsTest::GetName() const {
-        return "EnumUtilsTest";
-    }
+namespace BECore::Tests {
 
     bool EnumUtilsTest::Run() {
         LOG_INFO("[EnumUtilsTest] Starting tests...");

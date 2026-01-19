@@ -3,27 +3,22 @@
 #include <BECore/Tests/ITest.h>
 #include <BECore/Utils/EnumUtils.h>
 
-namespace BECore {
-
-   
-
-}  // namespace BECore
-
 namespace BECore::Tests {
 
-     CORE_ENUM(TestColor, uint8_t, Red, Green, Blue, Yellow)
+    CORE_ENUM(TestColor, uint8_t, Red, Green, Blue, Yellow)
 
     /**
      * @brief Test for EnumUtils functionality
      */
     class EnumUtilsTest : public ITest {
+        BE_CLASS(EnumUtilsTest)
+
         using ColorUtils = EnumUtils<TestColor>;
 
     public:
         EnumUtilsTest() = default;
         ~EnumUtilsTest() override = default;
 
-        const char* GetName() const override;
         bool Run() override;
 
     private:

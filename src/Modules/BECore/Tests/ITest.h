@@ -1,31 +1,17 @@
 #pragma once
 
 #include <BECore/RefCounted/RefCounted.h>
+#include <BECore/Reflection/ReflectionMarkers.h>
 
-namespace BECore {
+namespace BECore::Tests {
 
-    /**
-     * @brief Interface for all engine tests
-     *
-     * Tests should inherit from this interface and implement
-     * the Run() method with their test logic.
-     */
     class ITest : public RefCounted {
+        BE_CLASS(ITest, FACTORY_BASE)
     public:
         ITest() = default;
         ~ITest() override = default;
 
-        /**
-         * @brief Execute the test
-         * @return true if test passed, false otherwise
-         */
         virtual bool Run() = 0;
-
-        /**
-         * @brief Get test name for logging
-         * @return Test name string
-         */
-        virtual const char* GetName() const = 0;
     };
 
-}  // namespace BECore
+}  // namespace BECore::Tests

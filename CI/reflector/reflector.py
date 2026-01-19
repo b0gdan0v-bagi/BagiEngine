@@ -106,9 +106,11 @@ class FactoryBaseData:
 
 def get_namespace_at_position(content: str, position: int) -> str:
     """Get the full namespace path at a given position in the content."""
-    namespace_pattern = re.compile(r'namespace\s+(\w+)\s*\{')
+    # Pattern handles both "namespace Name {" and "namespace A::B::C {" (C++17 nested namespaces)
+    namespace_pattern = re.compile(r'namespace\s+([\w:]+)\s*\{')
     
     # Track namespace stack with (name, brace_depth_before_namespace)
+    # name can be a single identifier or a nested path like "BECore::Tests"
     ns_stack = []
     brace_depth = 0
     i = 0
@@ -117,8 +119,9 @@ def get_namespace_at_position(content: str, position: int) -> str:
         # Check for namespace declaration
         ns_match = namespace_pattern.match(content, i)
         if ns_match:
+            ns_name = ns_match.group(1)
             # Save brace_depth BEFORE the namespace's opening brace
-            ns_stack.append((ns_match.group(1), brace_depth))
+            ns_stack.append((ns_name, brace_depth))
             i = ns_match.end()
             # Count the namespace's opening brace
             brace_depth += 1
@@ -134,10 +137,11 @@ def get_namespace_at_position(content: str, position: int) -> str:
         
         i += 1
     
-    # Return full namespace path (e.g., "BECore::TestData")
+    # Return full namespace path (e.g., "BECore::TestData" or "BECore::Tests")
     if not ns_stack:
         return ""
     
+    # Join all namespace parts, handling nested namespaces like "BECore::Tests"
     return "::".join(ns[0] for ns in ns_stack)
 
 

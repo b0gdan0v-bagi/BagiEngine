@@ -8,11 +8,11 @@ namespace BECore::Tests {
      * @brief Test for BECore::Format functionality
      */
     class FormatTest : public ITest {
+        BE_CLASS(FormatTest)
     public:
         FormatTest() = default;
         ~FormatTest() override = default;
 
-        const char* GetName() const override;
         bool Run() override;
     };
 
