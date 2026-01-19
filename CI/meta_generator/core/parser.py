@@ -115,27 +115,44 @@ class LibclangParser:
         if not class_name:
             return None
         
-        # Check for BE_CLASS macro by looking for specific patterns
+        # Check for BE_CLASS or BE_EVENT macro by looking for specific patterns
         has_be_class = False
+        is_event = False
         is_factory_base = False
         
-        # Read file content to check for BE_CLASS
+        # Read file content to check for BE_CLASS or BE_EVENT
         try:
             with open(source_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Find class body and check for BE_CLASS macro
+            # Find class declaration start
             class_pattern = re.compile(
-                rf'(?:struct|class)\s+{re.escape(class_name)}\s*[^{{]*\{{([^}}]*BE_CLASS\s*\([^)]*\)[^}}]*)\}}',
+                rf'(?:struct|class)\s+{re.escape(class_name)}\s*[^{{]*\{{',
                 re.DOTALL
             )
             match = class_pattern.search(content)
             if match:
-                class_body = match.group(1)
-                be_class_match = re.search(r'BE_CLASS\s*\(\s*(\w+)\s*(?:,\s*(\w+)\s*)?\)', class_body)
-                if be_class_match and be_class_match.group(1) == class_name:
+                start_pos = match.end()  # Position right after '{'
+                
+                # Find matching closing brace (handle nested braces)
+                brace_count = 1
+                pos = start_pos
+                while pos < len(content) and brace_count > 0:
+                    if content[pos] == '{':
+                        brace_count += 1
+                    elif content[pos] == '}':
+                        brace_count -= 1
+                    pos += 1
+                
+                class_body = content[start_pos:pos-1]
+                
+                # Check for BE_CLASS or BE_EVENT
+                be_macro_match = re.search(r'BE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*(\w+)\s*)?\)', class_body)
+                if be_macro_match and be_macro_match.group(2) == class_name:
                     has_be_class = True
-                    if be_class_match.group(2) and be_class_match.group(2).upper() == "FACTORY_BASE":
+                    macro_type = be_macro_match.group(1)
+                    is_event = (macro_type == "EVENT")
+                    if be_macro_match.group(3) and be_macro_match.group(3).upper() == "FACTORY_BASE":
                         is_factory_base = True
         except Exception:
             pass
@@ -170,6 +187,7 @@ class LibclangParser:
             full_qualified_name=full_qualified,
             namespace=ns,
             is_factory_base=is_factory_base,
+            is_event=is_event,
             parent_class=parent_class,
             source_file=str(source_path),
             line=cursor.location.line

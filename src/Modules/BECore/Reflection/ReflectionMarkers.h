@@ -83,6 +83,47 @@ private:                                                                        
 public:
 
 // =============================================================================
+// BE_EVENT - Lightweight reflection macro for event types
+// =============================================================================
+// Place inside event struct body. Similar to BE_CLASS but without _typeMeta
+// pointer overhead (0 bytes per instance). Events don't need runtime polymorphism.
+//
+// Usage:
+//   struct MyEvent {
+//       BE_EVENT(MyEvent)
+//       BE_REFLECT_FIELD int32_t value = 0;
+//   };
+//
+// Key differences from BE_CLASS:
+// - No _typeMeta member (0 bytes overhead per instance)
+// - No GetTypeMeta() instance method (type always known statically)
+// - No Is<T>()/Cast<T>() (events don't need polymorphism)
+// - Supports BE_REFLECT_FIELD for data serialization/logging
+//
+// @param EventName The name of the containing event struct
+// =============================================================================
+
+#define BE_EVENT(EventName)                                                                                                                                                                                \
+public:                                                                                                                                                                                                   \
+    /** @brief Get the event type name as string_view */                                                                                                                                                  \
+    static constexpr eastl::string_view GetStaticTypeName();                                                                                                                                              \
+    /** @brief Get static ClassMeta for this event type (defined in generated code) */                                                                                                                    \
+    static constexpr const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                      \
+    /** @brief Get event type hash for efficient dispatch */                                                                                                                                              \
+    static constexpr uint64_t GetStaticTypeHash();                                                                                                                                                        \
+    /** @brief Get the number of reflected fields */                                                                                                                                                      \
+    static constexpr size_t GetStaticFieldCount();                                                                                                                                                        \
+    /** @brief Iterate over all reflected fields (const) */                                                                                                                                               \
+    template <typename Func>                                                                                                                                                                              \
+    static constexpr void ForEachFieldStatic(const EventName& obj, Func&& func);                                                                                                                          \
+                                                                                                                                                                                                          \
+private:                                                                                                                                                                                                  \
+    template <typename, typename>                                                                                                                                                                         \
+    friend struct ::BECore::ReflectionTraits;                                                                                                                                                             \
+                                                                                                                                                                                                          \
+public:
+
+// =============================================================================
 // Field and Enum markers
 // =============================================================================
 

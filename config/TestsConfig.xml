@@ -5,5 +5,7 @@
         <test type="Format" enabled="true" />
         <test type="EnumUtils" enabled="true" />
         <test type="Reflection" enabled="true" />
+        <test type="EventSubscription" enabled="true" />
+        <test type="ReflectionEvent" enabled="true" />
     </tests>
 </root>

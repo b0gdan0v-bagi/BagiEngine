@@ -114,9 +114,49 @@ namespace Detail_{{ cls.name }} {
 {% endfor %}
 
 // ============================================================================
-// BE_CLASS() Static Method Implementations
+// BE_CLASS() / BE_EVENT() Static Method Implementations
 // ============================================================================
 {% for cls in classes %}
+
+{% if cls.is_event %}
+// ============================================================================
+// BE_EVENT Implementation: {{ cls.full_qualified_name }}
+// Lightweight event type without _typeMeta member (0 bytes overhead)
+// ============================================================================
+
+// {{ cls.full_qualified_name }}::GetStaticTypeName()
+inline constexpr eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
+    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::name;
+}
+
+// {{ cls.full_qualified_name }}::GetStaticTypeMeta()
+inline constexpr const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
+    return {{ cls.namespace if cls.namespace else '::' }}::Detail_{{ cls.name }}::_staticTypeMeta;
+}
+
+// {{ cls.full_qualified_name }}::GetStaticTypeHash()
+inline constexpr uint64_t {{ cls.full_qualified_name }}::GetStaticTypeHash() {
+    return GetStaticTypeMeta().typeHash;
+}
+
+// {{ cls.full_qualified_name }}::GetStaticFieldCount()
+inline constexpr size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
+    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::field_count;
+}
+
+// {{ cls.full_qualified_name }}::ForEachFieldStatic (const only - events are immutable)
+template<typename Func>
+inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic(const {{ cls.full_qualified_name }}& obj, Func&& func) {
+    std::apply([&](auto&&... fields) {
+        (func(fields.name, obj.*(fields.ptr)), ...);
+    }, ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields);
+}
+
+{% else %}
+// ============================================================================
+// BE_CLASS Implementation: {{ cls.full_qualified_name }}
+// Full reflection with runtime polymorphism support
+// ============================================================================
 
 // {{ cls.full_qualified_name }}::GetStaticTypeName()
 inline constexpr eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
@@ -167,5 +207,6 @@ inline constexpr const T* {{ cls.full_qualified_name }}::Cast() const {
     return Is<T>() ? static_cast<const T*>(this) : nullptr;
 }
 
+{% endif %}
 {% endfor %}
 {% endif %}

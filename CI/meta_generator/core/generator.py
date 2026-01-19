@@ -208,6 +208,7 @@ class CodeGenerator:
                     for m in cls.methods
                 ],
                 'is_factory_base': cls.is_factory_base,
+                'is_event': cls.is_event,
                 'parent_class': cls.parent_class,
             }
             classes_data.append(cls_dict)
