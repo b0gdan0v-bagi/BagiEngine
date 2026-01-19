@@ -13,7 +13,7 @@ namespace BECore {
         constexpr eastl::string_view configPath = "config/TestsConfig.xml";
 
         if (!config.LoadFromVirtualPath(configPath)) {
-            LOG_ERROR("[TestManager] Config not found: {}", configPath);
+            LOG_ERROR("[TestManager] Config not found: {}"_format(configPath));
             return;
         }
 
@@ -51,18 +51,18 @@ namespace BECore {
                 continue;
             }
 
-            LOG_INFO("[TestManager] Running: {}", testPtr->GetName());
+            LOG_INFO("[TestManager] Running: {}"_format(testPtr->GetName()));
 
             if (testPtr->Run()) {
                 ++passed;
-                LOG_INFO("[TestManager] PASSED: {}", testPtr->GetName());
+                LOG_INFO("[TestManager] PASSED: {}"_format(testPtr->GetName()));
             } else {
                 ++failed;
-                LOG_ERROR("[TestManager] FAILED: {}", testPtr->GetName());
+                LOG_ERROR("[TestManager] FAILED: {}"_format(testPtr->GetName()));
             }
         }
 
-        LOG_INFO("[TestManager] Results: {} passed, {} failed", passed, failed);
+        LOG_INFO("[TestManager] Results: {} passed, {} failed"_format(passed, failed));
     }
 
     IntrusivePtr<ITest> TestManager::CreateTestByType(TestType type) {

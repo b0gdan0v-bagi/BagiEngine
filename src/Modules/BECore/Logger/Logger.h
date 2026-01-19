@@ -37,32 +37,6 @@ namespace BECore {
             FlushLogsEvent::Emit();
         }
 
-        template <typename... Args>
-        static void Debug(fmt::format_string<Args...> format, Args&&... args) {
-            Log(LogLevel::Debug, format, std::forward<Args>(args)...);
-        }
-
-        template <typename... Args>
-        static void Info(fmt::format_string<Args...> format, Args&&... args) {
-            Log(LogLevel::Info, format, std::forward<Args>(args)...);
-        }
-
-        template <typename... Args>
-        static void Warning(fmt::format_string<Args...> format, Args&&... args) {
-            Log(LogLevel::Warning, format, std::forward<Args>(args)...);
-        }
-
-        template <typename... Args>
-        static void Error(fmt::format_string<Args...> format, Args&&... args) {
-            Log(LogLevel::Error, format, std::forward<Args>(args)...);
-        }
-
-        template <typename... Args>
-        static void Fatal(fmt::format_string<Args...> format, Args&&... args) {
-            Log(LogLevel::Fatal, format, std::forward<Args>(args)...);
-            FlushLogsEvent::Emit();
-        }
-
     private:
         static void LogRaw(LogLevel level, eastl::string_view message) {
             LogEvent::Emit(level, message);

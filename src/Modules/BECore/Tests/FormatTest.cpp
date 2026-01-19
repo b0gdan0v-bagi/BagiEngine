@@ -39,6 +39,28 @@ namespace BECore::Tests {
         BECore::PrintLine("FormatTest: All assertions passed successfully!");
         BECore::Print("Formatted message with Print: {}\n", "Success");
 
+        // 7. User-defined literal _format tests
+        using namespace BECore::Literals;
+        
+        eastl::string s5 = "Hello, {}!"_format("World");
+        ASSERT(s5 == "Hello, World!");
+
+        eastl::string s6 = "Value: {}"_format(42);
+        ASSERT(s6 == "Value: 42");
+
+        eastl::string s7 = "{} + {} = {}"_format(2, 3, 5);
+        ASSERT(s7 == "2 + 3 = 5");
+
+        eastl::string s8 = "Formatted: {:03d}"_format(7);
+        ASSERT(s8 == "Formatted: 007");
+
+        // Test with EASTL types
+        eastl::string name2 = "Test";
+        eastl::string s9 = "Name: {}"_format(name2);
+        ASSERT(s9 == "Name: Test");
+
+        BECore::PrintLine("FormatTest: _format literal tests passed!");
+
         return true;
     }
 

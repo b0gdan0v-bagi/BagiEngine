@@ -43,36 +43,36 @@ namespace BECore {
     // =========================================================================
 
     bool ReflectionTest::Run() {
-        LOG_INFO("ReflectionTest", "Starting reflection tests...");
+        LOG_INFO("[ReflectionTest] Starting reflection tests...");
         
         bool allPassed = true;
         
         if (!TestFieldAccess()) {
-            LOG_ERROR("ReflectionTest", "TestFieldAccess FAILED");
+            LOG_ERROR("[ReflectionTest] TestFieldAccess FAILED");
             allPassed = false;
         } else {
-            LOG_INFO("ReflectionTest", "TestFieldAccess PASSED");
+            LOG_INFO("[ReflectionTest] TestFieldAccess PASSED");
         }
         
         if (!TestXmlSerialization()) {
-            LOG_ERROR("ReflectionTest", "TestXmlSerialization FAILED");
+            LOG_ERROR("[ReflectionTest] TestXmlSerialization FAILED");
             allPassed = false;
         } else {
-            LOG_INFO("ReflectionTest", "TestXmlSerialization PASSED");
+            LOG_INFO("[ReflectionTest] TestXmlSerialization PASSED");
         }
         
         if (!TestBinarySerialization()) {
-            LOG_ERROR("ReflectionTest", "TestBinarySerialization FAILED");
+            LOG_ERROR("[ReflectionTest] TestBinarySerialization FAILED");
             allPassed = false;
         } else {
-            LOG_INFO("ReflectionTest", "TestBinarySerialization PASSED");
+            LOG_INFO("[ReflectionTest] TestBinarySerialization PASSED");
         }
         
         if (!TestMethodReflection()) {
-            LOG_ERROR("ReflectionTest", "TestMethodReflection FAILED");
+            LOG_ERROR("[ReflectionTest] TestMethodReflection FAILED");
             allPassed = false;
         } else {
-            LOG_INFO("ReflectionTest", "TestMethodReflection PASSED");
+            LOG_INFO("[ReflectionTest] TestMethodReflection PASSED");
         }
         
         return allPassed;
@@ -106,7 +106,7 @@ namespace BECore {
         });
         
         if (fieldCount != 4) {
-            LOG_ERROR("ReflectionTest", "ForEachField visited {} fields, expected 4", fieldCount);
+            LOG_ERROR("[ReflectionTest] ForEachField visited {} fields, expected 4"_format(fieldCount));
             return false;
         }
         
@@ -126,12 +126,12 @@ namespace BECore {
         Serialize(writeArchive, eastl::string_view{"Player"}, original);
         eastl::string xml = writeArchive.SaveToString();
         
-        LOG_DEBUG("ReflectionTest", "Generated XML:\n{}", std::string_view(xml.c_str(), xml.size()));
+        LOG_DEBUG("[ReflectionTest] Generated XML:\n{}"_format(xml));
         
         // Deserialize from XML
         XmlArchive readArchive(XmlArchive::Mode::Read);
         if (!readArchive.LoadFromString(xml)) {
-            LOG_ERROR("ReflectionTest", "Failed to load XML");
+            LOG_ERROR("[ReflectionTest] Failed to load XML");
             return false;
         }
         
@@ -144,22 +144,22 @@ namespace BECore {
         
         // Verify
         if (loaded.health != original.health) {
-            LOG_ERROR("ReflectionTest", "health mismatch: {} != {}", loaded.health, original.health);
+            LOG_ERROR("[ReflectionTest] health mismatch: {} != {}"_format(loaded.health, original.health));
             return false;
         }
         
         if (loaded.speed != original.speed) {
-            LOG_ERROR("ReflectionTest", "speed mismatch: {} != {}", loaded.speed, original.speed);
+            LOG_ERROR("[ReflectionTest] speed mismatch: {} != {}"_format(loaded.speed, original.speed));
             return false;
         }
         
         if (loaded.name != original.name) {
-            LOG_ERROR("ReflectionTest", "name mismatch");
+            LOG_ERROR("[ReflectionTest] name mismatch");
             return false;
         }
         
         if (loaded.isAlive != original.isAlive) {
-            LOG_ERROR("ReflectionTest", "isAlive mismatch");
+            LOG_ERROR("[ReflectionTest] isAlive mismatch");
             return false;
         }
         
@@ -178,12 +178,12 @@ namespace BECore {
         BinaryArchive writeArchive(BinaryArchive::Mode::Write);
         Serialize(writeArchive, eastl::string_view{"Player"}, original);
         
-        LOG_DEBUG("ReflectionTest", "Binary size: {} bytes", writeArchive.GetSize());
+        LOG_DEBUG("[ReflectionTest] Binary size: {} bytes"_format(writeArchive.GetSize()));
         
         // Deserialize from binary
         BinaryArchive readArchive(BinaryArchive::Mode::Read);
         if (!readArchive.LoadFromBuffer(writeArchive.GetBuffer().data(), writeArchive.GetBuffer().size())) {
-            LOG_ERROR("ReflectionTest", "Failed to load binary");
+            LOG_ERROR("[ReflectionTest] Failed to load binary");
             return false;
         }
         
@@ -196,22 +196,22 @@ namespace BECore {
         
         // Verify
         if (loaded.health != original.health) {
-            LOG_ERROR("ReflectionTest", "health mismatch: {} != {}", loaded.health, original.health);
+            LOG_ERROR("[ReflectionTest] health mismatch: {} != {}"_format(loaded.health, original.health));
             return false;
         }
         
         if (loaded.speed != original.speed) {
-            LOG_ERROR("ReflectionTest", "speed mismatch: {} != {}", loaded.speed, original.speed);
+            LOG_ERROR("[ReflectionTest] speed mismatch: {} != {}"_format(loaded.speed, original.speed));
             return false;
         }
         
         if (loaded.name != original.name) {
-            LOG_ERROR("ReflectionTest", "name mismatch");
+            LOG_ERROR("[ReflectionTest] name mismatch");
             return false;
         }
         
         if (loaded.isAlive != original.isAlive) {
-            LOG_ERROR("ReflectionTest", "isAlive mismatch");
+            LOG_ERROR("[ReflectionTest] isAlive mismatch");
             return false;
         }
         
@@ -234,7 +234,7 @@ namespace BECore {
         });
         
         if (methodCount != 4) {
-            LOG_ERROR("ReflectionTest", "ForEachMethod visited {} methods, expected 4", methodCount);
+            LOG_ERROR("[ReflectionTest] ForEachMethod visited {} methods, expected 4"_format(methodCount));
             return false;
         }
         
@@ -248,13 +248,13 @@ namespace BECore {
         }
         
         if (!hasTakeDamage || !hasHeal || !hasIsDead || !hasGetHealthPercent) {
-            LOG_ERROR("ReflectionTest", "Missing expected method names");
+            LOG_ERROR("[ReflectionTest] Missing expected method names");
             return false;
         }
         
-        LOG_DEBUG("ReflectionTest", "Method reflection: found {} methods", methodCount);
+        LOG_DEBUG("[ReflectionTest] Method reflection: found {} methods"_format(methodCount));
         for (const auto& name : methodNames) {
-            LOG_DEBUG("ReflectionTest", "  - {}", std::string_view(name.data(), name.size()));
+            LOG_DEBUG("[ReflectionTest]   - {}"_format(name));
         }
         
         // Test InvokeMethod for non-const methods
@@ -265,18 +265,18 @@ namespace BECore {
         // Test TakeDamage via reflection
         int32_t remaining = InvokeMethod<int32_t>(player, "TakeDamage", 30);
         if (remaining != 70) {
-            LOG_ERROR("ReflectionTest", "TakeDamage returned {}, expected 70", remaining);
+            LOG_ERROR("[ReflectionTest] TakeDamage returned {}, expected 70"_format(remaining));
             return false;
         }
         if (player.health != 70) {
-            LOG_ERROR("ReflectionTest", "health is {}, expected 70 after TakeDamage", player.health);
+            LOG_ERROR("[ReflectionTest] health is {}, expected 70 after TakeDamage"_format(player.health));
             return false;
         }
         
         // Test Heal via reflection
         InvokeMethod<void>(player, "Heal", 20);
         if (player.health != 90) {
-            LOG_ERROR("ReflectionTest", "health is {}, expected 90 after Heal", player.health);
+            LOG_ERROR("[ReflectionTest] health is {}, expected 90 after Heal"_format(player.health));
             return false;
         }
         
@@ -286,21 +286,21 @@ namespace BECore {
         const TestData::Player& constPlayer = player;
         
         // For const methods, we can check the traits directly
-        LOG_DEBUG("ReflectionTest", "Player health: {}, isAlive: {}", player.health, player.isAlive);
-        LOG_DEBUG("ReflectionTest", "IsDead() should return false, GetHealthPercent() should return 90");
+        LOG_DEBUG("[ReflectionTest] Player health: {}, isAlive: {}"_format(player.health, player.isAlive));
+        LOG_DEBUG("[ReflectionTest] IsDead() should return false, GetHealthPercent() should return 90");
         
         // Direct method calls to verify behavior
         if (player.IsDead()) {
-            LOG_ERROR("ReflectionTest", "IsDead() returned true, expected false");
+            LOG_ERROR("[ReflectionTest] IsDead() returned true, expected false");
             return false;
         }
         
         if (player.GetHealthPercent() != 90.0f) {
-            LOG_ERROR("ReflectionTest", "GetHealthPercent() returned {}, expected 90", player.GetHealthPercent());
+            LOG_ERROR("[ReflectionTest] GetHealthPercent() returned {}, expected 90"_format(player.GetHealthPercent()));
             return false;
         }
         
-        LOG_INFO("ReflectionTest", "Method reflection tests passed");
+        LOG_INFO("[ReflectionTest] Method reflection tests passed");
         return true;
     }
 

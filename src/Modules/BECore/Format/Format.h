@@ -76,4 +76,40 @@ namespace BECore {
     using Details::Format::PrintLine;
     using Details::Format::FormatTo;
 
+    /**
+     * @brief Вспомогательный класс для поддержки user-defined literal _format.
+     * Позволяет использовать синтаксис: "{}"_format(value)
+     */
+    class FormatLiteral {
+    public:
+        constexpr FormatLiteral(eastl::string_view format) : _format(format) {}
+
+        /**
+         * @brief Оператор вызова для форматирования с аргументами.
+         */
+        template <typename... Args>
+        [[nodiscard]] eastl::string operator()(Args&&... args) const {
+            // Конвертируем eastl::string_view в std::string_view для fmt::runtime
+            std::string_view fmtView(_format.data(), _format.size());
+            return Details::Format::Format(fmt::runtime(fmtView), std::forward<Args>(args)...);
+        }
+
+    private:
+        eastl::string_view _format;
+    };
+
+    /**
+     * @brief User-defined literal для форматирования строк.
+     * Использование: "{}"_format(value)
+     * 
+     * @example
+     * auto str = "Hello, {}!"_format("World");
+     * auto num = "Value: {}"_format(42);
+     */
+    inline namespace Literals {
+        [[nodiscard]] constexpr FormatLiteral operator""_format(const char* str, size_t len) {
+            return FormatLiteral(eastl::string_view(str, len));
+        }
+    } // namespace Literals
+
 } // namespace BECore
