@@ -159,7 +159,7 @@ Examples:
     # Initialize libclang (required)
     verbose_log("Initializing libclang...")
     
-    llvm_status = initialize_clang()
+    llvm_status = initialize_clang(settings_path=settings_path)
     
     if llvm_status.found:
         verbose_log(f"  libclang: OK (via {llvm_status.source})")

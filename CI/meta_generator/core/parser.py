@@ -85,7 +85,16 @@ class LibclangParser:
         # Walk the AST
         self._walk_ast(tu.cursor, path, classes, enums)
         
-        return classes, enums
+        # Deduplicate classes (same class may appear multiple times in AST)
+        seen_classes = {}
+        unique_classes = []
+        for cls in classes:
+            key = f"{cls.namespace}::{cls.name}" if cls.namespace else cls.name
+            if key not in seen_classes:
+                seen_classes[key] = True
+                unique_classes.append(cls)
+        
+        return unique_classes, enums
     
     def _walk_ast(self, cursor, source_path: Path, classes: List[ClassData], enums: List[EnumData]):
         """Recursively walk the AST to find reflected types."""
@@ -125,14 +134,20 @@ class LibclangParser:
             with open(source_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Find class declaration start
+            # Find class declaration start (ignore forward declarations and friend declarations)
+            # Use negative lookbehind to exclude 'friend class' and ensure we only match full definitions with '{'
             class_pattern = re.compile(
-                rf'(?:struct|class)\s+{re.escape(class_name)}\s*[^{{]*\{{',
+                rf'(?<!friend\s)(?:struct|class)\s+{re.escape(class_name)}\s*(?:[^{{;])*\{{',
                 re.DOTALL
             )
-            match = class_pattern.search(content)
-            if match:
-                start_pos = match.end()  # Position right after '{'
+            
+            # Find all matches and pick the one that has a body (with BE_CLASS macro)
+            matches = list(class_pattern.finditer(content))
+            match = None
+            
+            # Try each match to find the one with BE_CLASS macro
+            for potential_match in matches:
+                start_pos = potential_match.end()  # Position right after '{'
                 
                 # Find matching closing brace (handle nested braces)
                 brace_count = 1
@@ -146,14 +161,32 @@ class LibclangParser:
                 
                 class_body = content[start_pos:pos-1]
                 
-                # Check for BE_CLASS or BE_EVENT
+                # Check if this match contains BE_CLASS or BE_EVENT
                 be_macro_match = re.search(r'BE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*(\w+)\s*)?\)', class_body)
                 if be_macro_match and be_macro_match.group(2) == class_name:
-                    has_be_class = True
-                    macro_type = be_macro_match.group(1)
-                    is_event = (macro_type == "EVENT")
-                    if be_macro_match.group(3) and be_macro_match.group(3).upper() == "FACTORY_BASE":
-                        is_factory_base = True
+                    match = potential_match
+                    break
+            
+            if match:
+                # We already found BE_CLASS in the loop above, so just extract the info
+                start_pos = match.end()
+                brace_count = 1
+                pos = start_pos
+                while pos < len(content) and brace_count > 0:
+                    if content[pos] == '{':
+                        brace_count += 1
+                    elif content[pos] == '}':
+                        brace_count -= 1
+                    pos += 1
+                
+                class_body = content[start_pos:pos-1]
+                be_macro_match = re.search(r'BE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*(\w+)\s*)?\)', class_body)
+                
+                has_be_class = True
+                macro_type = be_macro_match.group(1)
+                is_event = (macro_type == "EVENT")
+                if be_macro_match.group(3) and be_macro_match.group(3).upper() == "FACTORY_BASE":
+                    is_factory_base = True
         except Exception:
             pass
         
