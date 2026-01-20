@@ -52,14 +52,14 @@ namespace BECore {
                 continue;
             }
 
-            LOG_INFO("[TestManager] Running: {}"_format(testPtr->GetStaticTypeName()));
+            LOG_INFO("[TestManager] Running: {}"_format(testPtr->GetName()));
 
             if (testPtr->Run()) {
                 ++passed;
-                LOG_INFO("[TestManager] PASSED: {}"_format(testPtr->GetStaticTypeName()));
+                LOG_INFO("[TestManager] PASSED: {}"_format(testPtr->GetName()));
             } else {
                 ++failed;
-                LOG_ERROR("[TestManager] FAILED: {}"_format(testPtr->GetStaticTypeName()));
+                LOG_ERROR("[TestManager] FAILED: {}"_format(testPtr->GetName()));
             }
         }
 

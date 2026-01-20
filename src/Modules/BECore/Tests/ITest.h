@@ -14,6 +14,7 @@ namespace BECore::Tests {
         ~ITest() override = default;
 
         virtual bool Run() = 0;
+        virtual eastl::string_view GetName() = 0;
     };
 
     /**

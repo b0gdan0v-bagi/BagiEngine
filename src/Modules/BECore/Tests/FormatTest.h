@@ -17,6 +17,9 @@ namespace BECore::Tests {
         ~FormatTest() override = default;
 
         bool Run() override;
+        eastl::string_view GetName() override {
+            return GetStaticTypeName();
+        }
 
     private:
         /**
