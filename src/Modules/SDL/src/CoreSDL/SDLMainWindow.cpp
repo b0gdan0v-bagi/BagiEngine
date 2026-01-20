@@ -4,9 +4,9 @@
 
 #include <Application/Application.h>
 #include <BECore/Config/XmlConfig.h>
+#include <CoreSDL/SDLUtils.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
-#include <CoreSDL/SDLUtils.h>
 
 namespace BECore {
 
@@ -39,7 +39,7 @@ namespace BECore {
             return false;
         }
 
-         bool initialized = false;
+        bool initialized = false;
         ScopeGuard guard([&]() {
             if (!initialized) {
                 SDL_Quit();
@@ -79,10 +79,10 @@ namespace BECore {
         _width = width;
         _height = height;
 
-        RenderEvents::RenderClearEvent::Subscribe<&SDLMainWindow::RenderClear>(this);
-        RenderEvents::RenderPresentEvent::Subscribe<&SDLMainWindow::RenderPresent>(this);
-        ApplicationEvents::ApplicationCleanUpEvent::Subscribe<&SDLMainWindow::Destroy>(this);
-        RenderEvents::SetRenderDrawColorEvent::Subscribe<&SDLMainWindow::SetRenderDrawColor>(this);
+        Subscribe<RenderEvents::RenderClearEvent, &SDLMainWindow::RenderClear>(this);
+        Subscribe<RenderEvents::RenderPresentEvent, &SDLMainWindow::RenderPresent>(this);
+        Subscribe<ApplicationEvents::ApplicationCleanUpEvent, &SDLMainWindow::Destroy>(this);
+        Subscribe<RenderEvents::SetRenderDrawColorEvent, &SDLMainWindow::SetRenderDrawColor>(this);
         initialized = true;
 
         return true;
@@ -132,4 +132,3 @@ namespace BECore {
         }
     }
 }  // namespace BECore
-

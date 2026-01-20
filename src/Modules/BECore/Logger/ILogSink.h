@@ -3,14 +3,13 @@
 #include <BECore/Logger/LogLevel.h>
 #include <BECore/RefCounted/RefCounted.h>
 #include <BECore/Reflection/ReflectionMarkers.h>
-
 #include <EASTL/string_view.h>
 
 namespace BECore {
 
     class XmlNode;
 
-    class ILogSink : public RefCounted {
+    class ILogSink : public RefCounted, public SubscriptionHolder {
         BE_CLASS(ILogSink, FACTORY_BASE)
 
     public:
@@ -22,16 +21,24 @@ namespace BECore {
 
         virtual void Write(LogLevel level, eastl::string_view message) = 0;
 
-        void SetMinLevel(LogLevel level) { _minLevel = level; }
+        void SetMinLevel(LogLevel level) {
+            _minLevel = level;
+        }
 
-        LogLevel GetMinLevel() const { return _minLevel; }
+        LogLevel GetMinLevel() const {
+            return _minLevel;
+        }
 
         bool ShouldLog(LogLevel level) const {
             return static_cast<int>(level) >= static_cast<int>(_minLevel);
         }
 
-        virtual int GetPriority() const { return _priority; }
-        void SetPriority(int priority) { _priority = priority; }
+        virtual int GetPriority() const {
+            return _priority;
+        }
+        void SetPriority(int priority) {
+            _priority = priority;
+        }
 
     protected:
         ILogSink() = default;

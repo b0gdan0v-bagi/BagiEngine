@@ -1,16 +1,15 @@
 #pragma once
 
+#include <BECore/MainWindow/IMainWindow.h>
 #include <SDL3/SDL.h>
 
-#include <BECore/MainWindow/IMainWindow.h>
-
 namespace BECore {
-namespace RenderEvents {
-    struct SetRenderDrawColorEvent;
-}
+    namespace RenderEvents {
+        struct SetRenderDrawColorEvent;
+    }
     class IRendererHolder;
 
-    class SDLMainWindow : public IMainWindow {
+    class SDLMainWindow : public IMainWindow, public SubscriptionHolder {
     public:
         SDLMainWindow();
         ~SDLMainWindow() override;
@@ -41,4 +40,3 @@ namespace RenderEvents {
         int _height = 0;
     };
 }  // namespace BECore
-

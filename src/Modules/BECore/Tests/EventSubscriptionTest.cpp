@@ -1,5 +1,6 @@
-#include <BECore/Tests/EventSubscriptionTest.h>
 #include <BECore/Assert/AssertMacros.h>
+#include <BECore/Tests/EventSubscriptionTest.h>
+
 #include <Generated/EventSubscriptionTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -7,56 +8,9 @@ namespace BECore::Tests {
     bool EventSubscriptionTest::Run() {
         TestCompileTime();
 
-        ASSERT(TestManualSubscription(), "TestManualSubscription failed");
-        ASSERT(TestScopedSubscription(), "TestScopedSubscription failed");
         ASSERT(TestSubscriptionHolder(), "TestSubscriptionHolder failed");
         ASSERT(TestDestructorUnsubscribe(), "TestDestructorUnsubscribe failed");
         ASSERT(TestUnsubscribeAll(), "TestUnsubscribeAll failed");
-
-        return true;
-    }
-
-    bool EventSubscriptionTest::TestManualSubscription() {
-        SimpleSubscriber subscriber;
-
-        // Subscribe
-        TestEvents::SimpleEvent::Subscribe<&SimpleSubscriber::OnSimpleEvent>(&subscriber);
-
-        // Emit event
-        TestEvents::SimpleEvent::Emit();
-        ASSERT(subscriber.callCount == 1, "Event should be received once");
-
-        // Emit again
-        TestEvents::SimpleEvent::Emit();
-        ASSERT(subscriber.callCount == 2, "Event should be received twice");
-
-        // Unsubscribe
-        TestEvents::SimpleEvent::Unsubscribe<&SimpleSubscriber::OnSimpleEvent>(&subscriber);
-
-        // Emit after unsubscribe
-        TestEvents::SimpleEvent::Emit();
-        ASSERT(subscriber.callCount == 2, "Event should not be received after unsubscribe");
-
-        return true;
-    }
-
-    bool EventSubscriptionTest::TestScopedSubscription() {
-        SimpleSubscriber subscriber;
-
-        {
-            // Subscribe with scoped_connection
-            auto conn = TestEvents::SimpleEvent::SubscribeScoped<&SimpleSubscriber::OnSimpleEvent>(&subscriber);
-
-            // Emit event
-            TestEvents::SimpleEvent::Emit();
-            ASSERT(subscriber.callCount == 1, "Event should be received");
-
-            // conn goes out of scope here and auto-disconnects
-        }
-
-        // Emit after scoped_connection destruction
-        TestEvents::SimpleEvent::Emit();
-        ASSERT(subscriber.callCount == 1, "Event should not be received after scoped_connection destruction");
 
         return true;
     }
@@ -119,8 +73,8 @@ namespace BECore::Tests {
         SimpleSubscriber subscriber;
 
         // Subscribe to multiple events
-        TestEvents::SimpleEvent::Subscribe<&SimpleSubscriber::OnSimpleEvent>(&subscriber);
-        TestEvents::DataEvent::Subscribe<&SimpleSubscriber::OnDataEvent>(&subscriber);
+        subscriber.Subscribe<TestEvents::SimpleEvent, &SimpleSubscriber::OnSimpleEvent>(&subscriber);
+        subscriber.Subscribe<TestEvents::DataEvent, &SimpleSubscriber::OnDataEvent>(&subscriber);
 
         // Emit both events
         TestEvents::SimpleEvent::Emit();

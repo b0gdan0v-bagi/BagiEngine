@@ -76,6 +76,8 @@
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <BECore/RefCounted/New.h>
 
+#include <Events/SubscriptionHolder.h>
+
 #include <BECore/Reflection/ReflectionMarkers.h>
 
 #include <BECore/Format/Format.h>

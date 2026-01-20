@@ -5,7 +5,7 @@ namespace BECore {
     // Forward declaration для класса-ключа доступа
     class ApplicationMainAccess;
 
-    class Application : public Singleton<Application> {
+    class Application : public Singleton<Application>, public SubscriptionHolder {
     public:
         Application() = default;
         ~Application() override = default;

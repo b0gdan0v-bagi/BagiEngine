@@ -28,12 +28,7 @@ namespace BECore {
     public:
         SubscriptionHolder() = default;
 
-        /**
-         * @brief Destructor automatically unsubscribes all held connections
-         */
-        ~SubscriptionHolder() {
-            UnsubscribeAll();
-        }
+        virtual ~SubscriptionHolder() = default;
 
         // Non-copyable, movable
         SubscriptionHolder(const SubscriptionHolder&) = delete;
@@ -45,7 +40,7 @@ namespace BECore {
         /**
          * @brief Subscribe to an event and store the connection for auto-cleanup
          * 
-         * @tparam Event Event type (must have SubscribeScoped method)
+         * @tparam Event Event type (must have Subscribe method)
          * @tparam Handler Member function pointer to handler
          * @tparam T Type of the instance
          * @param instance Pointer to the instance containing the handler
@@ -55,7 +50,7 @@ namespace BECore {
          */
         template <typename Event, auto Handler, typename T>
         void Subscribe(T* instance) {
-            _connections.push_back(Event::template SubscribeScoped<Handler>(instance));
+            _connections.push_back(Event::template Subscribe<Handler>(instance, {}));
         }
 
         /**

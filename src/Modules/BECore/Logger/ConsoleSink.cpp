@@ -19,8 +19,8 @@ namespace BECore {
             return;
         }
 
-        LogEvent::Subscribe<&ConsoleSink::OnLogEvent>(this);
-        FlushLogsEvent::Subscribe<&ConsoleSink::OnFlushEvent>(this);
+        Subscribe<LogEvent, &ConsoleSink::OnLogEvent>(this);
+        Subscribe<FlushLogsEvent, &ConsoleSink::OnFlushEvent>(this);
         _initialized = true;
     }
 
@@ -41,9 +41,9 @@ namespace BECore {
         }
 
         // Get current time
-        auto now = std::chrono::system_clock::now();
-        auto time = std::chrono::system_clock::to_time_t(now);
-        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        const auto now = std::chrono::system_clock::now();
+        const auto time = std::chrono::system_clock::to_time_t(now);
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             now.time_since_epoch()) % 1000;
 
         // Choose output stream
@@ -57,14 +57,11 @@ namespace BECore {
             fmt::print(stream,
                 "{}[{}]{} [{:%H:%M:%S}.{:03d}] {}\n",
                 color, level, reset,
-                fmt::localtime(time), ms.count(),
-                eastl::string(message.data(), message.size()));
+                fmt::localtime(time), ms.count(), message);
         } else {
             fmt::print(stream,
                 "[{}] [{:%H:%M:%S}.{:03d}] {}\n",
-                level,
-                fmt::localtime(time), ms.count(),
-                eastl::string(message.data(), message.size()));
+                level, fmt::localtime(time), ms.count(), message);
         }
     }
 

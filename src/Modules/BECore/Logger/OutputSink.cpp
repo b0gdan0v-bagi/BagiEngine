@@ -19,7 +19,7 @@ namespace BECore {
             return;
         }
 
-        LogEvent::Subscribe<&OutputSink::OnLogEvent>(this);
+        Subscribe<LogEvent, &OutputSink::OnLogEvent>(this);
         _initialized = true;
     }
 
@@ -39,11 +39,7 @@ namespace BECore {
             now.time_since_epoch()) % 1000;
 
         // Format message similar to console/file sinks
-        std::string formatted = fmt::format(
-            "[{}] [{:%H:%M:%S}.{:03d}] {}\n",
-            level,
-            fmt::localtime(time), ms.count(),
-            eastl::string(message.data(), message.size()));
+        std::string formatted = fmt::format("[{}] [{:%H:%M:%S}.{:03d}] {}\n", level, fmt::localtime(time), ms.count(), message);
 
 #if defined(PLATFORM_WINDOWS)
         // Output to Visual Studio Output window

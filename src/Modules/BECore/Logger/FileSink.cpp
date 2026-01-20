@@ -2,14 +2,12 @@
 
 #include <BECore/Config/XmlNode.h>
 #include <BECore/Logger/LogLevel.h>
-
-#include <EASTL/string_view.h>
 #include <EASTL/string.h>
-#include <fmt/core.h>
-#include <fmt/chrono.h>
-#include <chrono>
-
+#include <EASTL/string_view.h>
 #include <Generated/FileSink.gen.hpp>
+#include <chrono>
+#include <fmt/chrono.h>
+#include <fmt/core.h>
 
 namespace BECore {
 
@@ -24,8 +22,8 @@ namespace BECore {
             return;
         }
 
-        LogEvent::Subscribe<&FileSink::OnLogEvent>(this);
-        FlushLogsEvent::Subscribe<&FileSink::OnFlushEvent>(this);
+        Subscribe<LogEvent, &FileSink::OnLogEvent>(this);
+        Subscribe<FlushLogsEvent, &FileSink::OnFlushEvent>(this);
 
         auto mode = std::ios::out;
         if (_append) {
@@ -65,19 +63,14 @@ namespace BECore {
         }
 
         // Get current time
-        auto now = std::chrono::system_clock::now();
-        auto time = std::chrono::system_clock::to_time_t(now);
-        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            now.time_since_epoch()) % 1000;
+        const auto now = std::chrono::system_clock::now();
+        const auto time = std::chrono::system_clock::to_time_t(now);
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
-        std::lock_guard<std::mutex> lock(_mutex);
+        std::scoped_lock lock(_mutex);
 
         // Format and output (no colors in file)
-        _file << fmt::format(
-            "[{}] [{:%Y-%m-%d %H:%M:%S}.{:03d}] {}\n",
-            level,
-            fmt::localtime(time), ms.count(),
-            eastl::string(message.data(), message.size()));
+        _file << fmt::format("[{}] [{:%Y-%m-%d %H:%M:%S}.{:03d}] {}\n", level, fmt::localtime(time), ms.count(), message.data());
     }
 
     void FileSink::SetFilename(eastl::string_view filename) {

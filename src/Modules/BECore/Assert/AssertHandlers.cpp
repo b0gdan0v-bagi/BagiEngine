@@ -14,7 +14,7 @@ namespace BECore {
             return;
         }
 
-        AssertEvent::Subscribe<&DebugBreakHandler::OnAssert>(this);
+        Subscribe<AssertEvent, &DebugBreakHandler::OnAssert>(this);
         _initialized = true;
     }
 
@@ -39,7 +39,7 @@ namespace BECore {
             return;
         }
 
-        AssertEvent::Subscribe<&AssertLogHandler::OnAssert>(this);
+        Subscribe<AssertEvent, &AssertLogHandler::OnAssert>(this);
         _initialized = true;
     }
 

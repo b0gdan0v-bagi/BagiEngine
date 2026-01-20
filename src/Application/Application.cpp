@@ -2,16 +2,16 @@
 
 #include <BECore/Application/ApplicationFabric.h>
 #include <BECore/Assert/AssertMacros.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
-#include <BECore/GameManager/CoreManager.h>
 
 namespace BECore {
 
     bool Application::Initialize(PassKey<ApplicationMainAccess>) {
 
         _isRunning = true;
-        ApplicationEvents::QuitEvent::Subscribe<&Application::StopApplication>(this);
+        Subscribe<ApplicationEvents::QuitEvent, &Application::StopApplication>(this);
 
         CoreManager::GetInstance().OnApplicationPreInit({});
 
@@ -41,7 +41,6 @@ namespace BECore {
         ApplicationEvents::ApplicationCleanUpEvent::Emit();
         CoreManager::GetInstance().OnApplicationDeinit({});
     }
-
 
     void Application::StopApplication() {
         _isRunning = false;

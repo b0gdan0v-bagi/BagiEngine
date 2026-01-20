@@ -7,6 +7,8 @@
 
 namespace BECore::Tests {
 
+    class EventSubscriptionTest;
+
     // =========================================================================
     // Test Events
     // =========================================================================
@@ -24,7 +26,8 @@ namespace BECore::Tests {
     // Test Subscriber Classes
     // =========================================================================
 
-    class SimpleSubscriber {
+    class SimpleSubscriber : public SubscriptionHolder {
+        friend class EventSubscriptionTest;
     public:
         int callCount = 0;
         int lastValue = 0;
@@ -89,16 +92,6 @@ namespace BECore::Tests {
             static_assert(std::is_default_constructible_v<SimpleSubscriber>);
             static_assert(std::is_default_constructible_v<RaiiSubscriber>);
         }
-
-        /**
-         * @brief Test manual Subscribe/Unsubscribe
-         */
-        bool TestManualSubscription();
-
-        /**
-         * @brief Test scoped_connection RAII behavior
-         */
-        bool TestScopedSubscription();
 
         /**
          * @brief Test SubscriptionHolder auto-cleanup

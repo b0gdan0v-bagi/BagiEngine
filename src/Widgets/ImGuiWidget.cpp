@@ -38,9 +38,9 @@ namespace BECore {
         ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
         ImGui_ImplSDLRenderer3_Init(renderer);
 
-        SDLEvents::SDLEventWrapper::Subscribe<&ImGuiWidget::OnSDLEvent>(this);
-        RenderEvents::NewFrameEvent::Subscribe<&ImGuiWidget::OnNewFrame>(this);
-        ApplicationEvents::ApplicationCleanUpEvent::Subscribe<&ImGuiWidget::Destroy>(this);
+        Subscribe<SDLEvents::SDLEventWrapper, &ImGuiWidget::OnSDLEvent>(this);
+        Subscribe<RenderEvents::NewFrameEvent, &ImGuiWidget::OnNewFrame>(this);
+        Subscribe<ApplicationEvents::ApplicationCleanUpEvent, &ImGuiWidget::Destroy>(this);
 
         _isInitialized = true;
         return true;

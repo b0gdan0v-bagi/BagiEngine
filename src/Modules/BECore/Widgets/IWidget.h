@@ -3,7 +3,7 @@
 
 namespace BECore {
 
-    class IWidget : public RefCounted {
+    class IWidget : public RefCounted, public SubscriptionHolder {
         BE_CLASS(IWidget, FACTORY_BASE)
     public:
         IWidget() = default;
