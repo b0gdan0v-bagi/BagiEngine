@@ -1,125 +1,46 @@
+---
+description: Rules for TaskSystem module development
+globs: src/Modules/TaskSystem/**/*
+alwaysApply: false
+---
+
 # TaskSystem Module Guidelines
 
 ## Overview
 
-TaskSystem provides C++20 coroutine-based asynchronous task execution for BagiEngine.
+C++20 coroutine-based asynchronous task execution system.
 
 ## Key Components
 
-| Component | Description |
-|-----------|-------------|
+| Component | Purpose |
+|-----------|---------|
 | `Task<T>` | Main coroutine type with promise_type |
 | `TaskHandle<T>` | Handle for tracking/cancelling tasks |
+| `TaskManager` | Singleton API (`Run()`, `RunOnMainThread()`, `RunDelayed()`) |
 | `ThreadPool` | Worker threads with work stealing |
 | `TaskScheduler` | Priority queues, delayed tasks |
-| `TaskManager` | Singleton API for running tasks |
+| `CancellationToken` | Cancellation support |
+| `TaskGroup` | Group management for multiple tasks |
 
-## Usage Patterns
+## Awaitables
 
-### Running a Task
-
-```cpp
-Task<int> ComputeAsync() {
-    co_return 42;
-}
-
-// Run on background thread
-auto handle = TaskManager::GetInstance().Run(ComputeAsync());
-
-// Run on main thread
-auto handle = TaskManager::GetInstance().RunOnMainThread(ComputeAsync());
-
-// Get result (blocking)
-int result = handle->GetResult();
-```
-
-### Thread Switching
-
-```cpp
-Task<void> MyTask() {
-    // Do heavy work on background thread
-    co_await SwitchToBackground();
-    auto data = LoadData();
-
-    // Switch to main thread for UI update
-    co_await SwitchToMainThread();
-    UpdateUI(data);
-}
-```
-
-### Delayed Execution
-
-```cpp
-// Delay using co_await
-Task<void> DelayedTask() {
-    co_await Delay(std::chrono::seconds(1));
-    DoWork();
-}
-
-// Schedule delayed task
-TaskManager::GetInstance().RunDelayed(
-    MyTask(),
-    std::chrono::milliseconds(500)
-);
-```
-
-### Cancellation
-
-```cpp
-Task<void> CancellableTask(CancellationToken token) {
-    while (!token.IsCancelled()) {
-        DoWork();
-        co_await Yield();
-    }
-}
-
-// Cancel
-auto token = CancellationToken::Create();
-auto handle = TaskManager::GetInstance().Run(CancellableTask(token));
-token.Cancel();
-```
-
-### Task Groups
-
-```cpp
-TaskGroup group;
-group.Add(TaskManager::GetInstance().Run(Task1()));
-group.Add(TaskManager::GetInstance().Run(Task2()));
-
-// Wait for all
-group.WaitAll();
-
-// Or cancel all
-group.CancelAll();
-```
-
-## File Structure
-
-```
-src/Modules/TaskSystem/src/TaskSystem/
-├── Task.h              # Task<T> coroutine type
-├── TaskHandle.h        # TaskHandle<T> tracking
-├── TaskPriority.h      # TaskPriority, ThreadType, TaskStatus enums
-├── TaskQueue.h         # Thread-safe task queue
-├── ThreadPool.h/cpp    # Worker thread pool
-├── TaskScheduler.h/cpp # Task scheduling
-├── TaskManager.h/cpp   # Main API (SingletonAtomic)
-├── Awaitables.h/cpp    # SwitchToMainThread, Delay, etc.
-├── CancellationToken.h # Cancellation support
-├── TaskGroup.h         # Group management
-├── TaskStatistics.h    # Profiling
-└── EventAwaiter.h      # Event integration
-```
+| Awaitable | Purpose |
+|-----------|---------|
+| `SwitchToMainThread()` | Switch execution to main thread |
+| `SwitchToBackground()` | Switch execution to background thread |
+| `Delay(duration)` | Delay execution |
+| `Yield()` | Yield to scheduler |
 
 ## Best Practices
 
-### DO:
+### DO
 - Use `co_await SwitchToMainThread()` before UI operations
 - Use `CancellationToken` for long-running tasks
 - Use `TaskGroup` to manage related tasks
 - Use priority appropriately (Critical only for urgent work)
+- Check `std::expected` from `GetResult()` (no-exceptions policy)
 
-### DON'T:
+### DON'T
 - Don't block main thread with `handle->Wait()`
 - Don't create tasks in tight loops without yielding
 - Don't ignore cancellation tokens
@@ -134,7 +55,7 @@ src/Modules/TaskSystem/src/TaskSystem/
 
 ## Integration
 
-TaskManager is integrated into CoreManager lifecycle:
+TaskManager lifecycle integrated into CoreManager:
 - `Initialize()` in `OnApplicationInit`
 - `Update()` in `OnGameCycle`
 - `Shutdown()` in `OnApplicationDeinit`

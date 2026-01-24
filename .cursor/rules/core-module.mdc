@@ -42,6 +42,18 @@ Central hub owning core subsystems. Access via static methods:
 - One class per file: `ClassName.h` + `ClassName.cpp`
 - Tests: `BECore/Tests/TestName.h`
 
+## Error Handling (No Exceptions)
+
+BagiEngine is built **without exceptions** (no-exceptions policy). Use:
+
+| Situation | Use |
+|-----------|-----|
+| Expected, recoverable errors (I/O, loading, TaskSystem) | `std::expected<T, E>` |
+| Programming errors (bugs, preconditions) | `ASSERT()` |
+| Critical/unrecoverable errors | `FATALERROR()` |
+
+TaskSystem: `Task<T>::GetResult()`, `TaskHandle<T>::GetResult()`, `CancellationToken::CheckCancellation()` return `std::expected<T, TaskError>`.
+
 ## Checklist for New Code
 - [ ] Add to `pch.h` if widely used
 - [ ] Update `CMakeLists.txt`

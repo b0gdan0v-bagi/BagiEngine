@@ -2,7 +2,7 @@
 
 Extended patterns and idioms for BagiEngine game engine development.
 
-**Project Requirements**: Use `IntrusivePtr<T>` with `BECore::New<T>()` (or `BECore::NewAtomic<T>()` for thread-safe), EASTL containers, `BE_ASSERT()`, deducing this over CRTP. Exceptions are **FORBIDDEN**. `dynamic_cast` only as last resort.
+**Project Requirements**: Use `IntrusivePtr<T>` with `BECore::New<T>()` (or `BECore::NewAtomic<T>()` for thread-safe), EASTL containers, `BE_ASSERT()`, deducing this over CRTP. BagiEngine is built **without exceptions** — use `std::expected<T, E>`, `ASSERT`, or `FATALERROR`. `dynamic_cast` only as last resort.
 
 ## Patterns Already in Codebase
 

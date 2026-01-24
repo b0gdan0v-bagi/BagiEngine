@@ -61,12 +61,14 @@ eastl::hash_map<PoolString, IntrusivePtr<Resource>> resources;
 
 ## Error Handling
 
-Prefer this hierarchy:
-1. **Compile-time errors**: `static_assert`, concepts, SFINAE
-2. **Expected failures**: `std::expected<T, E>` (C++23) or `eastl::optional<T>`
-3. **Programming errors**: `BE_ASSERT()` (NEVER use `assert()`)
+BagiEngine is built **without exceptions** (no-exceptions policy). Use:
 
-**Exceptions are FORBIDDEN** - use error codes, `std::expected`, or `BE_ASSERT` instead.
+1. **Compile-time errors**: `static_assert`, concepts, SFINAE
+2. **Expected failures**: `std::expected<T, E>` (C++23) — I/O, loading, TaskSystem results
+3. **Programming errors**: `BE_ASSERT()` (NEVER use `assert()`)
+4. **Critical failures**: `FATALERROR()` — unrecoverable errors
+
+**Exceptions are FORBIDDEN** — use `std::expected`, error codes, or `BE_ASSERT` instead.
 
 ```cpp
 auto LoadTexture(std::string_view path) -> std::expected<Texture, LoadError> {
