@@ -1,0 +1,29 @@
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui.git
+	branch = docking
+
+[submodule "external/SDL"]
+	path = external/SDL
+	url = https://github.com/libsdl-org/SDL.git
+	branch = main
+
+[submodule "external/entt"]
+	path = external/entt
+	url = https://github.com/skypjack/entt.git
+
+[submodule "external/eastl"]
+	path = external/eastl
+	url = https://github.com/electronicarts/EASTL.git
+
+[submodule "external/eabase"]
+	path = external/eabase
+	url = https://github.com/electronicarts/EABase.git
+
+[submodule "external/fmt"]
+	path = external/fmt
+	url = https://github.com/fmtlib/fmt.git
+
+[submodule "external/pugixml"]
+	path = external/pugixml
+	url = https://github.com/zeux/pugixml.git
