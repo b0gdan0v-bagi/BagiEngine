@@ -20,18 +20,12 @@ set(SDL_TEST OFF CACHE BOOL "Build SDL3 tests" FORCE)
 set(SDL_TESTS OFF CACHE BOOL "Build SDL3 tests" FORCE)
 add_subdirectory(external/SDL)
 
-# fmt - Static library
-message(STATUS "Configuring fmt...")
-set(FMT_INSTALL OFF CACHE BOOL "Generate fmt install target" FORCE)
-set(FMT_TEST OFF CACHE BOOL "Build fmt tests" FORCE)
-set(FMT_DOC OFF CACHE BOOL "Build fmt documentation" FORCE)
-add_subdirectory(external/fmt)
-
-# Vendored libraries (EnTT, pugixml, ImGui)
+# Vendored libraries (EnTT, pugixml, ImGui, fmt)
 message(STATUS "Configuring vendored libraries...")
 add_subdirectory(src/Modules/EnTT)
 add_subdirectory(src/Modules/pugixml)
 add_subdirectory(src/Modules/imgui)
+add_subdirectory(src/Modules/fmt)
 
 # Group external libraries in IDE
 set_target_properties(SDL3-shared PROPERTIES FOLDER "External")

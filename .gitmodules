@@ -2,8 +2,3 @@
 	path = external/SDL
 	url = https://github.com/libsdl-org/SDL.git
 	branch = main
-
-[submodule "external/fmt"]
-	path = external/fmt
-	url = https://github.com/fmtlib/fmt.git
-
