@@ -232,13 +232,16 @@ target_precompile_headers(BECoreModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h
 # Добавляем ${PROJECT_ROOT}/src/Modules для поддержки включений через <BECore/...>
 # Добавляем путь к SDL модулю для доступа к ApplicationSDLFabric из ApplicationFabric
 # Добавляем путь к Events модулю для доступа к EventsProviderManager из CoreManager
+# Добавляем путь к TaskSystem модулю для доступа к TaskManager из CoreManager
 get_filename_component(SDL_MODULE_DIR "${PROJECT_ROOT}/src/Modules/SDL/src" ABSOLUTE)
 get_filename_component(EVENTS_MODULE_SRC_DIR "${PROJECT_ROOT}/src/Modules/Events/src" ABSOLUTE)
+get_filename_component(TASKSYSTEM_MODULE_SRC_DIR "${PROJECT_ROOT}/src/Modules/TaskSystem/src" ABSOLUTE)
 target_include_directories(BECoreModule PUBLIC
     ${PROJECT_ROOT}/src
     ${PROJECT_ROOT}/src/Modules
     ${SDL_MODULE_DIR}
     ${EVENTS_MODULE_SRC_DIR}
+    ${TASKSYSTEM_MODULE_SRC_DIR}
     ${BOOST_HEADERS_DIR}
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends

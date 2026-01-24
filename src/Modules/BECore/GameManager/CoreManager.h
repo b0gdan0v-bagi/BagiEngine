@@ -10,8 +10,9 @@
 
 namespace BECore {
 
-    // Forward declaration
+    // Forward declarations
     class Application;
+    class TaskManager;
 
     class CoreManager : public Singleton<CoreManager> {
     public:
@@ -45,6 +46,8 @@ namespace BECore {
         static LoggerManager& GetLoggerManager() {
             return GetInstance()._loggerManager;
         }
+
+        static TaskManager& GetTaskManager();
 
         static const IntrusivePtr<IMainWindow>& GetMainWindow();
 

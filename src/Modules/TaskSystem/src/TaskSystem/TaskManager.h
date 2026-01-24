@@ -1,8 +1,13 @@
 #pragma once
 
 #include <TaskSystem/TaskPriority.h>
+#include <TaskSystem/Task.h>
+#include <TaskSystem/TaskHandle.h>
+#include <TaskSystem/ThreadPool.h>
+#include <TaskSystem/TaskScheduler.h>
 
 #include <thread>
+#include <chrono>
 
 namespace BECore {
 
@@ -15,18 +20,17 @@ namespace BECore {
      * Предоставляет API для запуска задач, управления потоками выполнения
      * и интеграции с системой событий движка.
      * 
-     * Использует SingletonAtomic для потокобезопасной инициализации.
-     * Lifecycle методы (Initialize, Update, Shutdown) защищены PassKey<CoreManager>.
-     * 
      * @example
      * // Запуск простой задачи
-     * TaskManager::GetInstance().Run(MyAsyncTask());
+     * auto handle = TaskManager::GetInstance().Run(MyAsyncTask());
      * 
-     * // Переключение на главный поток
-     * co_await TaskManager::SwitchToMainThread();
+     * // Отложенная задача
+     * TaskManager::GetInstance().RunDelayed(MyTask(), std::chrono::seconds(1));
      */
     class TaskManager : public SingletonAtomic<TaskManager> {
     public:
+        using Duration = std::chrono::steady_clock::duration;
+
         TaskManager() = default;
         ~TaskManager() = default;
 
@@ -40,53 +44,115 @@ namespace BECore {
         // Lifecycle (protected by PassKey<CoreManager>)
         // =================================================================
 
-        /**
-         * Инициализация системы задач.
-         * Создает пул потоков и подготавливает очереди.
-         * Вызывается из CoreManager::OnApplicationInit.
-         */
         void Initialize(PassKey<CoreManager>);
-
-        /**
-         * Обновление системы задач.
-         * Обрабатывает задачи из очереди главного потока.
-         * Вызывается из CoreManager::OnGameCycle.
-         */
         void Update(PassKey<CoreManager>);
-
-        /**
-         * Завершение работы системы задач.
-         * Ожидает завершения всех задач и останавливает потоки.
-         * Вызывается из CoreManager::OnApplicationDeinit.
-         */
         void Shutdown(PassKey<CoreManager>);
 
         // =================================================================
-        // Public API (будет расширено в следующих этапах)
+        // Public API - Run tasks
+        // =================================================================
+
+        /**
+         * Запускает задачу на выполнение.
+         * @param task Корутина для выполнения
+         * @param priority Приоритет задачи
+         * @param threadType Тип потока для выполнения
+         * @return Handle для отслеживания задачи
+         */
+        template <typename T>
+        IntrusivePtr<TaskHandle<T>> Run(Task<T> task,
+                                         TaskPriority priority = TaskPriority::Normal,
+                                         ThreadType threadType = ThreadType::Background) {
+            auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
+            
+            auto* handlePtr = handle.Get();
+            _scheduler.Schedule([handlePtr]() {
+                handlePtr->Start();
+                // Запускаем корутину до завершения
+                while (!handlePtr->IsDone() && !handlePtr->IsCancelled()) {
+                    handlePtr->GetTask().Resume();
+                }
+                if (!handlePtr->IsCancelled()) {
+                    handlePtr->MarkCompleted();
+                }
+            }, priority, threadType);
+
+            return handle;
+        }
+
+        /**
+         * Запускает отложенную задачу.
+         */
+        template <typename T>
+        IntrusivePtr<TaskHandle<T>> RunDelayed(Task<T> task,
+                                                Duration delay,
+                                                TaskPriority priority = TaskPriority::Normal,
+                                                ThreadType threadType = ThreadType::Background) {
+            auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
+            
+            auto* handlePtr = handle.Get();
+            _scheduler.ScheduleDelayed([handlePtr]() {
+                handlePtr->Start();
+                while (!handlePtr->IsDone() && !handlePtr->IsCancelled()) {
+                    handlePtr->GetTask().Resume();
+                }
+                if (!handlePtr->IsCancelled()) {
+                    handlePtr->MarkCompleted();
+                }
+            }, delay, priority, threadType);
+
+            return handle;
+        }
+
+        /**
+         * Запускает задачу в главном потоке.
+         */
+        template <typename T>
+        IntrusivePtr<TaskHandle<T>> RunOnMainThread(Task<T> task,
+                                                     TaskPriority priority = TaskPriority::Normal) {
+            return Run(std::move(task), priority, ThreadType::MainThread);
+        }
+
+        // =================================================================
+        // Public API - Utilities
         // =================================================================
 
         /**
          * Проверяет, инициализирована ли система задач.
-         * @return true если система готова к работе
          */
         [[nodiscard]] bool IsInitialized() const { return _isInitialized; }
 
         /**
          * Проверяет, выполняется ли код в главном потоке.
-         * @return true если текущий поток - главный
          */
         [[nodiscard]] bool IsMainThread() const;
 
         /**
          * Возвращает количество рабочих потоков в пуле.
-         * @return количество потоков
          */
-        [[nodiscard]] size_t GetWorkerCount() const { return _workerCount; }
+        [[nodiscard]] size_t GetWorkerCount() const;
+
+        /**
+         * Возвращает количество ожидающих задач.
+         */
+        [[nodiscard]] size_t GetPendingTaskCount() const;
+
+        /**
+         * Получает ThreadPool (для низкоуровневого доступа).
+         */
+        [[nodiscard]] ThreadPool* GetThreadPool() { return _threadPool.get(); }
+
+        /**
+         * Получает TaskScheduler (для низкоуровневого доступа).
+         */
+        [[nodiscard]] TaskScheduler* GetScheduler() { return &_scheduler; }
 
     private:
         bool _isInitialized = false;
-        size_t _workerCount = 0;
         std::thread::id _mainThreadId;
+
+        eastl::unique_ptr<ThreadPool> _threadPool;
+        TaskScheduler _scheduler;
     };
 
 } // namespace BECore
