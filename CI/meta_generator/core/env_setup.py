@@ -5,7 +5,7 @@ LLVM/libclang must be configured via system environment variable:
 - LIBCLANG_PATH: Path to directory containing libclang.dll (Windows) / libclang.so (Linux) / libclang.dylib (macOS)
 
 Example (Windows):
-    set LIBCLANG_PATH=D:\AHobbyProjects\LLVM\bin
+    set LIBCLANG_PATH=D:\\AHobbyProjects\\LLVM\\bin
 
 No automatic search is performed - this ensures predictable behavior.
 """
@@ -85,17 +85,23 @@ class LLVMDiscovery:
     
     def discover(self) -> LLVMStatus:
         """
-        Search for LLVM from LIBCLANG_PATH environment variable only.
+        Search for LLVM from LIBCLANG_PATH environment variable and settings file.
         
         Returns:
             LLVMStatus with discovery results
         """
-        # Check LIBCLANG_PATH environment variable (ONLY source)
+        # Check LIBCLANG_PATH environment variable first
         result = self._check_env_var()
         if result.found:
             return result
         
-        # Not found - user must set LIBCLANG_PATH
+        # Check settings file (meta_generator_settings.json)
+        if self.settings_path:
+            result = self._check_from_settings()
+            if result.found:
+                return result
+        
+        # Not found - user must set LIBCLANG_PATH or configure via settings
         return LLVMStatus(
             found=False, 
             path=None, 
