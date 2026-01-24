@@ -19,6 +19,7 @@ alwaysApply: true
 | Private member | _camelCase | `_isRunning` |
 | Namespace | PascalCase | `BECore` |
 | Enum/Constant | PascalCase | `EventType::KeyDown` |
+| Enum definition | CORE_ENUM macro | `CORE_ENUM(State, uint8_t, Idle, Running)` |
 | Template param | T, TName | `template<typename T>` |
 
 ## File Structure

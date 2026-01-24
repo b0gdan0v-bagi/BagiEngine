@@ -122,6 +122,7 @@ namespace BECore {
 ### DO:
 - Use `PoolString` instead of `std::string` for frequently used strings
 - Use EASTL containers (`eastl::vector`, `eastl::hash_map`) over std:: equivalents
+- Use `CORE_ENUM(Name, Type, Values)` instead of `enum class` for automatic reflection
 - Inherit from `Singleton<T>` for global services
 - Use `PassKey<T>` pattern to restrict method access
 - Document public APIs with Doxygen-style comments
@@ -134,6 +135,7 @@ namespace BECore {
 ### DON'T:
 - Don't use raw `new`/`delete` - use `IntrusivePtr` or EASTL smart pointers
 - Don't use `std::string` when `PoolString` is more appropriate
+- Don't use `enum class` - use `CORE_ENUM` macro instead
 - Don't create circular dependencies between modules
 - Don't add public constructors to Singletons
 - Don't forget to close namespaces with comments

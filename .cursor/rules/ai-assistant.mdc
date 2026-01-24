@@ -28,6 +28,7 @@ alwaysApply: true
 | Communication | `EventBase<T>` | `Events/EventBase.h` |
 | Config loading | `XmlConfig` / `XmlNode` | `BECore/Config/` |
 | Logging | `LOG_INFO()`, `LOG_ERROR()` | `BECore/Logger/Logger.h` |
+| Enum definition | `CORE_ENUM(Name, Type, Values)` | `BECore/Utils/EnumUtils.h` |
 
 ## Code Preferences
 
@@ -35,6 +36,7 @@ alwaysApply: true
 - Use `PoolString` for identifiers and map keys
 - Use `IntrusivePtr` instead of raw pointers
 - Use `ASSERT` / `EXPECT` macros (not `std::assert`)
+- Use `CORE_ENUM` macro instead of `enum class`
 - Use underscore prefix for private members: `_isRunning`
 - Always add namespace closing comments
 
@@ -44,4 +46,5 @@ alwaysApply: true
 - `std::` when EASTL has equivalent
 - Raw pointers instead of `IntrusivePtr`
 - Global variables instead of `Singleton`
+- `enum class` instead of `CORE_ENUM`
 - Magic numbers without constants

@@ -4,70 +4,20 @@ globs:
   - "**/EnumUtils.h"
   - "**/*.h"
   - "**/*.cpp"
-alwaysApply: false
 ---
 
 # Enum System (CORE_ENUM + EnumUtils)
 
-## Overview
+## Critical Rule
 
-BagiEngine uses `CORE_ENUM` macro for enum definition with automatic reflection.
-Access enum utilities via `EnumUtils<Enum>` class.
+❌ **NEVER** write: `enum class MyEnum { Value1, Value2 };`  
+✅ **ALWAYS** write: `CORE_ENUM(MyEnum, uint8_t, Value1, Value2);`
 
-## Defining Enums
+## Usage
 
-Use `CORE_ENUM(Name, UnderlyingType, Values...)` in any namespace:
+Use `CORE_ENUM(Name, UnderlyingType, Values...)` in any namespace. Access utilities via `EnumUtils<Enum>`:
 
-| Parameter | Description |
-|-----------|-------------|
-| Name | Enum class name |
-| UnderlyingType | `uint8_t`, `uint16_t`, `int`, etc. |
-| Values | Comma-separated enum values |
-
-## EnumUtils API
-
-All methods accessed via `EnumUtils<MyEnum>::Method()`:
-
-### Compile-time (constexpr)
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `ToString(e)` | `eastl::string_view` | Enum to string |
-| `FromString(str)` | `Enum` | String to enum |
-| `Cast(str)` | `std::optional<Enum>` | Safe string to enum |
-| `Count()` | `size_t` | Number of values |
-| `Names()` | `eastl::array<string_view, N>` | All names |
-| `Values()` | `eastl::array<Enum, N>` | All values |
-
-### Runtime (PoolString)
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `ToPoolString(e)` | `PoolString` | Enum to interned string |
-| `FromPoolString(ps)` | `Enum` | PoolString to enum |
-| `PoolStrings()` | `eastl::array<PoolString, N>` | All cached PoolStrings |
-
-## String Overloads
-
-`FromString` and `Cast` accept:
-- `eastl::string_view`
-- `std::string_view`  
-- `const char*`
-
-## Key Points
-
-- Enums work in **any namespace** (not just BECore)
-- PoolStrings are **lazily initialized** on first runtime access
-- All compile-time methods are **constexpr**
-- Use `Cast()` for safe parsing (returns `nullopt` on failure)
-- Use `FromString()` when you're sure the string is valid
-
-## Typical Usage Pattern
-
-1. Define enum with `CORE_ENUM`
-2. Create type alias: `using MyEnumUtils = EnumUtils<MyEnum>;`
-3. Use static methods: `MyEnumUtils::ToString(value)`
-
-## Integration with XML
-
-`XmlNode::ParseAttribute<MyEnum>()` automatically uses `EnumUtils<MyEnum>::Cast()`.
+- `EnumUtils<MyEnum>::ToString(e)` - enum to string
+- `EnumUtils<MyEnum>::FromString(str)` - string to enum
+- `EnumUtils<MyEnum>::Cast(str)` - safe parsing (returns `std::optional`)
+- `EnumUtils<MyEnum>::ToPoolString(e)` - enum to PoolString
