@@ -2,11 +2,16 @@ cmake_minimum_required(VERSION 3.31)
 project(MySDLGame)
 
 # =============================================================================
+# C++ Standard Configuration
+# =============================================================================
+# Set C++ standard FIRST, before adding any subdirectories
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# =============================================================================
 # External Dependencies
 # =============================================================================
 # Build external libraries directly instead of using a separate SDK build
-
-include(FetchContent)
 
 # EA Libraries (Vendored EABase + EASTL)
 message(STATUS "Configuring EA Libraries (vendored)...")
@@ -30,9 +35,6 @@ add_subdirectory(src/Modules/fmt)
 # Group external libraries in IDE
 set_target_properties(SDL3-shared PROPERTIES FOLDER "External")
 set_target_properties(fmt PROPERTIES FOLDER "External")
-
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Export compile commands for IntelliSense and other tools
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
