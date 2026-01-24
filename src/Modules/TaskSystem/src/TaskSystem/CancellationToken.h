@@ -1,19 +1,8 @@
 #pragma once
 
 #include <atomic>
-#include <stdexcept>
 
 namespace BECore {
-
-    /**
-     * Исключение, выбрасываемое при отмене задачи.
-     */
-    class TaskCancelledException : public std::exception {
-    public:
-        const char* what() const noexcept override {
-            return "Task was cancelled";
-        }
-    };
 
     /**
      * CancellationToken - токен для кооперативной отмены задач.
@@ -54,12 +43,14 @@ namespace BECore {
         }
 
         /**
-         * Выбрасывает исключение, если была запрошена отмена.
+         * Проверяет отмену и возвращает std::expected.
+         * @return std::expected<void, TaskError> с ошибкой Cancelled, если отменено
          */
-        void ThrowIfCancelled() const {
+        [[nodiscard]] std::expected<void, TaskError> CheckCancellation() const {
             if (IsCancelled()) {
-                throw TaskCancelledException();
+                return std::unexpected(TaskError::Cancelled);
             }
+            return {};
         }
 
         /**

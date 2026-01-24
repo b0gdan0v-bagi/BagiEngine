@@ -58,6 +58,27 @@ else()
 endif()
 
 # =============================================================================
+# Exception Handling Configuration
+# =============================================================================
+option(ENGINE_NO_EXCEPTIONS "Disable C++ exceptions" ON)
+
+if(ENGINE_NO_EXCEPTIONS)
+    message(STATUS "C++ exceptions: DISABLED")
+    add_compile_definitions(ENGINE_NO_EXCEPTIONS=1)
+    add_compile_definitions(EASTL_EXCEPTIONS_ENABLED=0)
+    
+    if(NOT MSVC)
+        add_compile_options(-fno-exceptions)
+    else()
+        # MSVC: /EHs-c- отключает исключения
+        string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+        add_compile_options(/EHs-c-)
+    endif()
+else()
+    message(STATUS "C++ exceptions: ENABLED")
+endif()
+
+# =============================================================================
 # Platform Detection
 # =============================================================================
 if(WIN32)

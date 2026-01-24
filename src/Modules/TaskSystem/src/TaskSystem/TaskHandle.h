@@ -37,6 +37,11 @@ namespace BECore {
          */
         [[nodiscard]] TaskStatus GetStatus() const { return _status.load(std::memory_order_acquire); }
 
+        /**
+         * Получает ошибку задачи.
+         */
+        [[nodiscard]] TaskError GetError() const { return _error.load(std::memory_order_acquire); }
+
         // Awaitable interface для co_await TaskHandleBase
         bool await_ready() const noexcept { return IsDone(); }
         void await_suspend(std::coroutine_handle<> continuation) noexcept { _continuation = continuation; }
@@ -44,6 +49,7 @@ namespace BECore {
 
     protected:
         std::atomic<TaskStatus> _status{TaskStatus::Pending};
+        std::atomic<TaskError> _error{TaskError::None};
         std::coroutine_handle<> _continuation;
 
         void SetStatus(TaskStatus status) {
@@ -114,14 +120,20 @@ namespace BECore {
          * Получает результат задачи.
          * Блокирует до завершения, если задача еще выполняется.
          */
-        T GetResult() requires(!std::is_void_v<T>) {
+        std::expected<T, TaskError> GetResult() requires(!std::is_void_v<T>) {
             Wait();
+            if (IsCancelled()) {
+                return std::unexpected(TaskError::Cancelled);
+            }
             return _task.GetResult();
         }
 
-        void GetResult() requires(std::is_void_v<T>) {
+        std::expected<void, TaskError> GetResult() requires(std::is_void_v<T>) {
             Wait();
-            _task.GetResult();
+            if (IsCancelled()) {
+                return std::unexpected(TaskError::Cancelled);
+            }
+            return _task.GetResult();
         }
 
         /**
@@ -161,7 +173,8 @@ namespace BECore {
         /**
          * Отмечает задачу как завершенную с ошибкой.
          */
-        void MarkFailed() {
+        void MarkFailed(TaskError error = TaskError::Exception) {
+            _error.store(error, std::memory_order_release);
             SetStatus(TaskStatus::Failed);
             ResumeContinuation();
         }

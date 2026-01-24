@@ -19,9 +19,15 @@ namespace BECore::Tests {
 
     // Helper: корутина с вложенным co_await
     Task<int> NestedTask() {
-        int a = co_await SimpleIntTask(10);
-        int b = co_await SimpleIntTask(20);
-        co_return a + b;
+        auto resultA = co_await SimpleIntTask(10);
+        auto resultB = co_await SimpleIntTask(20);
+        
+        // В случае ошибки возвращаем 0 (в реальном коде нужна более сложная обработка)
+        if (!resultA.has_value() || !resultB.has_value()) {
+            co_return 0;
+        }
+        
+        co_return *resultA + *resultB;
     }
 
     bool TaskSystemTest::Run() {
@@ -83,7 +89,8 @@ namespace BECore::Tests {
             EXPECT(task.IsValid(), "Task should be valid");
             EXPECT(!task.IsDone(), "Task should not be done before execution");
             
-            task.GetResult(); // Run to completion
+            auto result = task.GetResult(); // Run to completion
+            EXPECT(result.has_value(), "Task should complete successfully");
             EXPECT(task.IsDone(), "Task should be done after GetResult");
         }
 
@@ -103,16 +110,18 @@ namespace BECore::Tests {
         // Test 1: Task returning int
         {
             auto task = SimpleIntTask(21);
-            int result = task.GetResult();
-            EXPECT(result == 42, "SimpleIntTask(21) should return 42");
+            auto result = task.GetResult();
+            EXPECT(result.has_value(), "Task should return a value");
+            EXPECT(*result == 42, "SimpleIntTask(21) should return 42");
         }
 
         // Test 2: Nested tasks
         {
             auto task = NestedTask();
-            int result = task.GetResult();
+            auto result = task.GetResult();
+            EXPECT(result.has_value(), "Nested task should return a value");
             // NestedTask: (10*2) + (20*2) = 20 + 40 = 60
-            EXPECT(result == 60, "NestedTask should return 60");
+            EXPECT(*result == 60, "NestedTask should return 60");
         }
 
         return true;
@@ -200,19 +209,14 @@ namespace BECore::Tests {
             EXPECT(token.IsCancelled(), "Token should be cancelled after Cancel()");
         }
 
-        // Test 2: ThrowIfCancelled
+        // Test 2: CheckCancellation (вместо ThrowIfCancelled)
         {
             auto token = CancellationToken::Create();
             token.Cancel();
             
-            bool exceptionThrown = false;
-            try {
-                token.ThrowIfCancelled();
-            } catch (const TaskCancelledException&) {
-                exceptionThrown = true;
-            }
-            
-            EXPECT(exceptionThrown, "ThrowIfCancelled should throw on cancelled token");
+            auto result = token.CheckCancellation();
+            EXPECT(!result.has_value(), "CheckCancellation should return error on cancelled token");
+            EXPECT(result.error() == TaskError::Cancelled, "Error should be Cancelled");
         }
 
         return true;

@@ -1,8 +1,9 @@
 #pragma once
 
 #include <coroutine>
-#include <exception>
 #include <variant>
+#include <expected>
+#include <TaskSystem/TaskPriority.h>
 
 namespace BECore {
 
@@ -37,7 +38,7 @@ namespace BECore {
 
         template <typename T>
         struct TaskPromiseBase {
-            std::exception_ptr _exception;
+            TaskError _error = TaskError::None;
             std::coroutine_handle<> _continuation;
 
             auto initial_suspend() noexcept { return std::suspend_always{}; }
@@ -47,7 +48,9 @@ namespace BECore {
             }
 
             void unhandled_exception() noexcept {
-                _exception = std::current_exception();
+                _error = TaskError::Exception;
+                // В debug можно логировать через ASSERT
+                ASSERT(false, "Unhandled exception in coroutine");
             }
 
             void SetContinuation(std::coroutine_handle<> continuation) noexcept {
@@ -69,16 +72,16 @@ namespace BECore {
                 _result.template emplace<T>(std::move(value));
             }
 
-            T& GetResult() & {
-                if (this->_exception) {
-                    std::rethrow_exception(this->_exception);
+            std::expected<T, TaskError> GetResult() & {
+                if (this->_error != TaskError::None) {
+                    return std::unexpected(this->_error);
                 }
                 return std::get<T>(_result);
             }
 
-            T GetResult() && {
-                if (this->_exception) {
-                    std::rethrow_exception(this->_exception);
+            std::expected<T, TaskError> GetResult() && {
+                if (this->_error != TaskError::None) {
+                    return std::unexpected(this->_error);
                 }
                 return std::move(std::get<T>(_result));
             }
@@ -86,7 +89,7 @@ namespace BECore {
 
         /**
          * Promise для Task<void>.
-         * Не хранит значение, только исключение.
+         * Не хранит значение, только ошибку.
          */
         template <>
         struct TaskPromise<void> : TaskPromiseBase<void> {
@@ -94,10 +97,11 @@ namespace BECore {
 
             void return_void() noexcept {}
 
-            void GetResult() {
-                if (this->_exception) {
-                    std::rethrow_exception(this->_exception);
+            std::expected<void, TaskError> GetResult() {
+                if (this->_error != TaskError::None) {
+                    return std::unexpected(this->_error);
                 }
+                return {};
             }
         };
 

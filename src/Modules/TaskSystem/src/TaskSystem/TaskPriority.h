@@ -36,4 +36,16 @@ namespace BECore {
         Failed          ///< Задача завершилась с ошибкой
     );
 
+    /**
+     * Ошибки выполнения задач.
+     * Используется в std::expected<T, TaskError> для возврата ошибок.
+     */
+    CORE_ENUM(TaskError, uint8_t,
+        None,           ///< Нет ошибки
+        Cancelled,      ///< Задача отменена
+        Timeout,        ///< Превышено время ожидания
+        Exception,      ///< Необработанное исключение (legacy)
+        InvalidState    ///< Некорректное состояние
+    );
+
 } // namespace BECore

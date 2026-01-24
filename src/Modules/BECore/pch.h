@@ -26,6 +26,7 @@
 #include <cstring>
 #include <cstdint>
 #include <charconv>
+#include <expected>
 #include <filesystem>
 #include <fstream>
 #include <functional>
