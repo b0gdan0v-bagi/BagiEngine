@@ -8,26 +8,6 @@ get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
 # Определяем путь к Boost заголовкам
 set(BOOST_HEADERS_DIR "${PROJECT_ROOT}/src/Modules/BECore/Boost")
 
-# SDL3 - зависимость модуля
-include(FetchContent)
-
-# Восстанавливаем состояние FetchContent для существующих исходников
-restore_fetchcontent_if_exists(SDL3)
-
-FetchContent_Declare(
-  SDL3
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-  GIT_TAG main
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-)
-
-set(SDL_SHARED ON CACHE BOOL "" FORCE)
-set(SDL_STATIC OFF CACHE BOOL "" FORCE)
-set(SDL_TESTS OFF CACHE BOOL "" FORCE)
-
-FetchContent_MakeAvailable(SDL3)
-
 # Поиск исходных файлов модуля в директории src
 file(GLOB_RECURSE SDL_MODULE_SOURCES 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" 
@@ -69,40 +49,18 @@ target_include_directories(SDLModule PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CoreSDL
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${BOOST_HEADERS_DIR}
-    ${pugixml_SOURCE_DIR}/src
 )
-
-# Определяем правильный таргет SDL3
-# Проверяем, какой таргет доступен после FetchContent_MakeAvailable
-set(SDL3_TARGET "")
-if(TARGET SDL3-shared)
-    set(SDL3_TARGET SDL3-shared)
-elseif(TARGET SDL3::SDL3-shared)
-    set(SDL3_TARGET SDL3::SDL3-shared)
-elseif(TARGET SDL3-static)
-    set(SDL3_TARGET SDL3-static)
-elseif(TARGET SDL3::SDL3-static)
-    set(SDL3_TARGET SDL3::SDL3-static)
-elseif(TARGET SDL3::SDL3)
-    set(SDL3_TARGET SDL3::SDL3)
-elseif(TARGET SDL3)
-    set(SDL3_TARGET SDL3)
-endif()
-
-if(SDL3_TARGET STREQUAL "")
-    message(FATAL_ERROR "SDL3 target not found. Available targets may need to be checked.")
-endif()
 
 # Подключаем зависимости модуля
 target_link_libraries(SDLModule PUBLIC
     BECoreModule
     MathModule
     EventsModule
-    ${SDL3_TARGET}
+    SDL3-shared
     pugixml
 )
 
 # Сохраняем имя таргета SDL3 для копирования DLL (если нужно)
-set(CORESDL_SDL3_TARGET ${SDL3_TARGET} PARENT_SCOPE)
+set(CORESDL_SDL3_TARGET SDL3-shared PARENT_SCOPE)
 
 

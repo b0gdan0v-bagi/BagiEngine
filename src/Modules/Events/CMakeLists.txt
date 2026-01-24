@@ -6,22 +6,6 @@ get_filename_component(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
 
-# EnTT - зависимость модуля Events
-include(FetchContent)
-
-# Восстанавливаем состояние FetchContent для существующих исходников
-restore_fetchcontent_if_exists(entt)
-
-FetchContent_Declare(
-  entt
-  GIT_REPOSITORY https://github.com/skypjack/entt.git
-  GIT_TAG v3.13.2
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-)
-
-FetchContent_MakeAvailable(entt)
-
 # Поиск исходных файлов модуля в директории src (рекурсивно, включая подпапки)
 file(GLOB_RECURSE EVENTS_MODULE_SOURCES 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" 
@@ -72,14 +56,14 @@ target_link_libraries(EventsModule PUBLIC EventsModuleInterface)
 target_include_directories(EventsModule PUBLIC
     ${PROJECT_ROOT}/src
     ${PROJECT_ROOT}/src/Modules
-    ${entt_SOURCE_DIR}/src
 )
 
 # Подключаем зависимости
 # EventsModule зависит от BECoreModule (RefCounted, IntrusivePtr, PassKey) и MathModule (RenderEvents)
-# entt - header-only библиотека, достаточно include директорий (уже добавлены выше)
+# EnTT - header-only библиотека
 target_link_libraries(EventsModule PUBLIC
     BECoreModule
     MathModule
+    EnTT
 )
 

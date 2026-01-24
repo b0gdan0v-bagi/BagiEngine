@@ -2,35 +2,34 @@ cmake_minimum_required(VERSION 3.31)
 project(MySDLGame)
 
 # =============================================================================
-# FetchContent Configuration
+# External Dependencies
 # =============================================================================
-# Настройка базовой директории для FetchContent зависимостей
-# Это должно быть установлено ДО первого include(FetchContent) в поддиректориях
-# Зависимости будут сохраняться в _deps в корне проекта, вне build директории
-set(FETCHCONTENT_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/_deps" CACHE PATH "Directory for FetchContent dependencies" FORCE)
-message(STATUS "FetchContent dependencies will be stored in: ${FETCHCONTENT_BASE_DIR}")
+# Build external libraries directly instead of using a separate SDK build
 
-# После первого успешного clone не пытаться обновлять репозитории
-# Это ускоряет повторную конфигурацию
-set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Don't update FetchContent repos after first clone")
-
-# =============================================================================
-# FetchContent Helper Macro
-# =============================================================================
-# Макрос для восстановления состояния populated если исходники уже существуют.
-# Это позволяет избежать повторного клонирования после очистки build директории.
 include(FetchContent)
-macro(restore_fetchcontent_if_exists name)
-    string(TOLOWER "${name}" _name_lower)
-    set(_src_dir "${FETCHCONTENT_BASE_DIR}/${_name_lower}-src")
-    if(EXISTS "${_src_dir}" AND IS_DIRECTORY "${_src_dir}")
-        # Исходники уже существуют - восстанавливаем состояние populated
-        set(FETCHCONTENT_SOURCE_DIR_${name} "${_src_dir}" CACHE PATH "" FORCE)
-        message(STATUS "FetchContent: Reusing existing ${name} sources from ${_src_dir}")
-    endif()
-    unset(_src_dir)
-    unset(_name_lower)
-endmacro()
+
+# EA Libraries (Vendored EABase + EASTL)
+message(STATUS "Configuring EA Libraries (vendored)...")
+add_subdirectory(src/Modules/EABase)
+
+# SDL3 - Shared library
+message(STATUS "Configuring SDL3...")
+set(SDL_SHARED ON CACHE BOOL "Build SDL3 as shared library" FORCE)
+set(SDL_STATIC OFF CACHE BOOL "Build SDL3 as static library" FORCE)
+set(SDL_TEST OFF CACHE BOOL "Build SDL3 tests" FORCE)
+set(SDL_TESTS OFF CACHE BOOL "Build SDL3 tests" FORCE)
+add_subdirectory(external/SDL)
+
+# Vendored libraries (EnTT, pugixml, ImGui, fmt)
+message(STATUS "Configuring vendored libraries...")
+add_subdirectory(src/Modules/EnTT)
+add_subdirectory(src/Modules/pugixml)
+add_subdirectory(src/Modules/imgui)
+add_subdirectory(src/Modules/fmt)
+
+# Group external libraries in IDE
+set_target_properties(SDL3-shared PROPERTIES FOLDER "External")
+set_target_properties(fmt PROPERTIES FOLDER "External")
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -421,18 +420,14 @@ if(COMMAND add_reflection_target)
     )
 endif()
 
-# Копирование SDL3 DLL рядом с исполняемым файлом (для Windows, если используется SDL3-shared)
+# Копирование SDL3 DLL рядом с исполняемым файлом (для Windows)
 if(WIN32)
-    if(TARGET ${CORESDL_SDL3_TARGET})
-        # Проверяем, является ли таргет shared библиотекой
-        get_target_property(SDL3_TYPE ${CORESDL_SDL3_TARGET} TYPE)
-        if(SDL3_TYPE STREQUAL "SHARED_LIBRARY")
-            add_custom_command(TARGET MyGame POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${CORESDL_SDL3_TARGET}>
-                $<TARGET_FILE_DIR:MyGame>
-            )
-        endif()
+    if(TARGET SDL3-shared)
+        add_custom_command(TARGET MyGame POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:SDL3-shared>
+            $<TARGET_FILE_DIR:MyGame>
+        )
     endif()
 endif()
 

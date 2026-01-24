@@ -1,0 +1,4 @@
+[submodule "external/SDL"]
+	path = external/SDL
+	url = https://github.com/libsdl-org/SDL.git
+	# Fixed at commit: 535d80badefc83c5c527ec5748f2a20d6a9310fe

@@ -6,207 +6,6 @@ get_filename_component(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
 
-# Определяем путь к Boost заголовкам
-set(BOOST_HEADERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Boost")
-
-# Проверяем наличие заголовков Boost
-if(NOT EXISTS "${BOOST_HEADERS_DIR}/boost")
-    message(WARNING "Boost headers not found in ${BOOST_HEADERS_DIR}/boost")
-    message(STATUS "Run cmake/download_boost_headers.ps1 to download Boost headers")
-    message(STATUS "Or run cmake/copy_boost_headers.ps1 -BoostSourcePath <path> to copy from existing installation")
-endif()
-
-message(STATUS "Using Boost headers from: ${BOOST_HEADERS_DIR}")
-
-# Зависимости модуля Core
-include(FetchContent)
-
-# Устанавливаем минимальную версию политики для совместимости со старыми CMakeLists.txt в зависимостях (например, EABase, pugixml)
-set(CMAKE_POLICY_VERSION_MINIMUM 3.10)
-
-# Восстанавливаем состояние FetchContent для существующих исходников
-restore_fetchcontent_if_exists(SDL3)
-restore_fetchcontent_if_exists(imgui)
-restore_fetchcontent_if_exists(magic_enum)
-restore_fetchcontent_if_exists(pugixml)
-restore_fetchcontent_if_exists(eabase)
-restore_fetchcontent_if_exists(eastl)
-restore_fetchcontent_if_exists(fmt)
-restore_fetchcontent_if_exists(entt)
-
-# SDL3 - нужен для компиляции ImGui SDL3 бэкендов
-# FetchContent_Declare здесь, но MakeAvailable будет вызван только если нужен для imgui
-FetchContent_Declare(
-  SDL3
-  GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-  GIT_TAG main
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-)
-
-# ImGui
-FetchContent_Declare(
-  imgui
-  GIT_REPOSITORY https://github.com/ocornut/imgui.git
-  GIT_TAG docking
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-)
-
-FetchContent_MakeAvailable(imgui)
-
-# MagicEnum
-FetchContent_Declare(
-  magic_enum
-  GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
-  GIT_TAG v0.9.5
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-)
-
-FetchContent_MakeAvailable(magic_enum)
-
-# PugiXML
-FetchContent_Declare(
-  pugixml
-  GIT_REPOSITORY https://github.com/zeux/pugixml.git
-  GIT_TAG v1.14
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-)
-
-set(EA_KITS_VERBOSE OFF CACHE BOOL "" FORCE)
-set(EASTL_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(EASTL_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
-
-FetchContent_MakeAvailable(pugixml)
-
-# EABase - требуется для EASTL
-FetchContent_Declare(
-  eabase
-  GIT_REPOSITORY https://github.com/electronicarts/EABase.git
-  GIT_TAG master
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-  GIT_SUBMODULES ""  # Опустошаем список субмодулей, чтобы он не лез в тесты
-)
-
-FetchContent_MakeAvailable(eabase)
-
-# EASTL
-FetchContent_Declare(
-  eastl
-  GIT_REPOSITORY https://github.com/electronicarts/EASTL.git
-  GIT_TAG master
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-  GIT_SUBMODULES ""
-)
-
-FetchContent_MakeAvailable(eastl)
-
-# fmt
-FetchContent_Declare(
-  fmt
-  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG 11.0.2
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-)
-
-FetchContent_MakeAvailable(fmt)
-
-# EnTT - needed for EventBase used in Assert system
-# Note: This is the same declaration as in EventsModule, CMake will reuse it
-FetchContent_Declare(
-  entt
-  GIT_REPOSITORY https://github.com/skypjack/entt.git
-  GIT_TAG v3.13.2
-  GIT_SHALLOW TRUE
-  GIT_PROGRESS TRUE
-)
-
-FetchContent_MakeAvailable(entt)
-
-# Создаем статическую библиотеку ImGui
-FetchContent_GetProperties(imgui
-    SOURCE_DIR IMGUI_SOURCE_DIR
-    POPULATED IMGUI_POPULATED
-)
-
-if(IMGUI_POPULATED AND IMGUI_SOURCE_DIR AND EXISTS "${IMGUI_SOURCE_DIR}")
-    set(IMGUI_SOURCES
-        ${IMGUI_SOURCE_DIR}/imgui.cpp
-        ${IMGUI_SOURCE_DIR}/imgui_demo.cpp
-        ${IMGUI_SOURCE_DIR}/imgui_draw.cpp
-        ${IMGUI_SOURCE_DIR}/imgui_tables.cpp
-        ${IMGUI_SOURCE_DIR}/imgui_widgets.cpp
-    )
-    
-    # Проверяем наличие бэкендов для SDL3
-    set(HAS_SDL3_BACKEND OFF)
-    if(EXISTS "${IMGUI_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp")
-        list(APPEND IMGUI_SOURCES ${IMGUI_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp)
-        set(HAS_SDL3_BACKEND ON)
-    endif()
-    
-    if(EXISTS "${IMGUI_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp")
-        list(APPEND IMGUI_SOURCES ${IMGUI_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp)
-        set(HAS_SDL3_BACKEND ON)
-    endif()
-    
-    # Если есть SDL3 бэкенды, нужно получить доступ к SDL3 заголовкам
-    if(HAS_SDL3_BACKEND)
-        # Проверяем, был ли SDL3 уже получен (например, в SDL модуле)
-        FetchContent_GetProperties(SDL3
-            SOURCE_DIR SDL3_SOURCE_DIR
-            POPULATED SDL3_POPULATED
-        )
-        
-        # Если SDL3 еще не получен, получаем его здесь
-        if(NOT SDL3_POPULATED)
-            set(SDL_SHARED ON CACHE BOOL "" FORCE)
-            set(SDL_STATIC OFF CACHE BOOL "" FORCE)
-            set(SDL_TESTS OFF CACHE BOOL "" FORCE)
-            FetchContent_MakeAvailable(SDL3)
-        endif()
-        
-        # Получаем свойства SDL3 после MakeAvailable
-        FetchContent_GetProperties(SDL3
-            SOURCE_DIR SDL3_SOURCE_DIR
-            POPULATED SDL3_POPULATED
-        )
-    endif()
-    
-    add_library(imgui STATIC ${IMGUI_SOURCES})
-    
-    target_include_directories(imgui PUBLIC
-        ${IMGUI_SOURCE_DIR}
-        ${IMGUI_SOURCE_DIR}/backends
-    )
-    
-    # Если есть SDL3 бэкенды, подключаем SDL3 к imgui
-    if(HAS_SDL3_BACKEND AND SDL3_POPULATED)
-        # Проверяем наличие статической или динамической библиотеки SDL3
-        if(TARGET SDL3-static)
-            target_link_libraries(imgui PUBLIC SDL3-static)
-        elseif(TARGET SDL3::SDL3-static)
-            target_link_libraries(imgui PUBLIC SDL3::SDL3-static)
-        elseif(TARGET SDL3-shared)
-            target_link_libraries(imgui PUBLIC SDL3-shared)
-        elseif(TARGET SDL3::SDL3-shared)
-            target_link_libraries(imgui PUBLIC SDL3::SDL3-shared)
-        endif()
-    endif()
-    
-    set_target_properties(imgui PROPERTIES FOLDER "Modules/Dependencies")
-    
-    # Группировка файлов ImGui в Visual Studio
-    source_group("ImGui" FILES ${IMGUI_SOURCES})
-    
-    message(STATUS "ImGui sources directory: ${IMGUI_SOURCE_DIR}")
-endif()
-
 # Поиск исходных файлов модуля
 file(GLOB_RECURSE CORE_MODULE_SOURCES 
     "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp" 
@@ -242,18 +41,9 @@ target_include_directories(BECoreModule PUBLIC
     ${SDL_MODULE_DIR}
     ${EVENTS_MODULE_SRC_DIR}
     ${TASKSYSTEM_MODULE_SRC_DIR}
-    ${BOOST_HEADERS_DIR}
-    ${imgui_SOURCE_DIR}
-    ${imgui_SOURCE_DIR}/backends
-    ${pugixml_SOURCE_DIR}/src
-    ${magic_enum_SOURCE_DIR}/include
-    ${eabase_SOURCE_DIR}/include
-    ${eastl_SOURCE_DIR}/include
-    ${fmt_SOURCE_DIR}/include
-    ${entt_SOURCE_DIR}/src
 )
 
-# Подключаем зависимости
+# Подключаем зависимости из SDK
 # BECoreModule зависит от MathModule через XmlNode (использует Math::Color)
 # Но MathModule должен быть подключен в главном CMakeLists.txt перед BECoreModule
 # Примечание: BECoreModule использует EventsProviderManager, но не линкуется с EventsModule
@@ -262,11 +52,11 @@ target_include_directories(BECoreModule PUBLIC
 target_link_libraries(BECoreModule PUBLIC
     MathModule
     pugixml
-    magic_enum::magic_enum
     imgui
-	EASTL   
-    EABase
-    fmt::fmt
+    EASTL
+    fmt
+    EnTT
+    SDL3-shared
 )
 
 # =============================================================================

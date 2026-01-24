@@ -36,7 +36,7 @@ namespace BECore {
 
     SDL_WindowFlags SDLUtils::GetWindowFlagValue(eastl::string_view flagName) {
         // Маппинг имен флагов на их значения
-        static constexpr auto flagTable = SortFlagEntryFlags(std::array<FlagEntry, 26>{{
+        static constexpr auto flagTable = SortFlagEntryFlags(std::array<FlagEntry, 25>{{
             {.name = "SDL_WINDOW_FULLSCREEN", .value = SDL_WINDOW_FULLSCREEN},
             {.name = "SDL_WINDOW_OPENGL", .value = SDL_WINDOW_OPENGL},
             {.name = "SDL_WINDOW_OCCLUDED", .value = SDL_WINDOW_OCCLUDED},
@@ -58,7 +58,6 @@ namespace BECore {
             {.name = "SDL_WINDOW_TOOLTIP", .value = SDL_WINDOW_TOOLTIP},
             {.name = "SDL_WINDOW_POPUP_MENU", .value = SDL_WINDOW_POPUP_MENU},
             {.name = "SDL_WINDOW_KEYBOARD_GRABBED", .value = SDL_WINDOW_KEYBOARD_GRABBED},
-            {.name = "SDL_WINDOW_FILL_DOCUMENT", .value = SDL_WINDOW_FILL_DOCUMENT},
             {.name = "SDL_WINDOW_VULKAN", .value = SDL_WINDOW_VULKAN},
             {.name = "SDL_WINDOW_METAL", .value = SDL_WINDOW_METAL},
             {.name = "SDL_WINDOW_TRANSPARENT", .value = SDL_WINDOW_TRANSPARENT},
