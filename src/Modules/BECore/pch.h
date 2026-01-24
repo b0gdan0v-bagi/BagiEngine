@@ -1,11 +1,6 @@
 // pch.h
 #pragma once
 
-// Чтобы Asio не тянул лишнего из Windows.h
-#ifdef _WIN32
-#define _WIN32_WINNT 0x0A00  // Windows 10+
-#endif
-
 // PugiXML
 #include <pugixml.hpp>
 
