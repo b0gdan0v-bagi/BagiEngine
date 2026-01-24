@@ -7,5 +7,6 @@
         <test type="Reflection" enabled="true" />
         <test type="EventSubscription" enabled="true" />
         <test type="ReflectionEvent" enabled="true" />
+        <test type="TaskSystem" enabled="true" />
     </tests>
 </root>
