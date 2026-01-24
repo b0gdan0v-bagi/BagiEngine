@@ -6,57 +6,45 @@ alwaysApply: false
 
 # BECore Module Guidelines
 
-## Overview
-The BECore module is the foundation of BagiEngine. It provides essential utilities and base classes.
-
-## Key Components
-
-| Component | When to Use | Reference |
-|-----------|-------------|-----------|
-| `Singleton<T>` | Global services | `BECore/Utils/Singleton.h` |
-| `RefCounted` + `IntrusivePtr` | Reference-counted objects | `BECore/RefCounted/` |
-| `PoolString` | Identifiers, map keys, config keys | `BECore/PoolString/` |
-| `XmlConfig` / `XmlNode` | Loading XML configuration | `BECore/Config/` |
-| `PassKey<T>` | Restricted method access | `BECore/Utils/PassKey.h` |
-
-## When to Use PoolString
-- Configuration keys
-- Identifiers compared frequently
-- Map/hash keys
-- NOT for: temporary strings, user-facing text
-
 ## CoreManager
 
-Central hub owning core subsystems. Access via static methods:
-- `CoreManager::GetFileSystem()`
-- `CoreManager::GetLoggerManager()`
-- `CoreManager::GetAssertHandlerManager()`
-- `CoreManager::GetTestManager()`
+Central hub for core subsystems. Access via static methods:
+- `GetFileSystem()`, `GetConfigManager()`, `GetLoggerManager()`
+- `GetAssertHandlerManager()`, `GetTestManager()`, `GetResourceManager()`
 
 **Initialization order** (in `OnApplicationPreInit`):
-1. `FileSystem` — needed for loading configs
-2. `AssertHandlerManager` — loads config, uses FileSystem
-3. `TestManager` — runs tests, uses assert system
+1. `FileSystem` → 2. `TaskManager` → 3. `ConfigManager` → 4. `LoggerManager` → 5. `AssertHandlerManager` → 6. `ResourceManager` → 7. `TestManager`
+
+## ConfigManager
+
+**DO**: Use `ConfigManager` for all config access:
+```cpp
+auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
+```
+
+**DON'T**: Create `XmlConfig` and call `LoadFromVirtualPath()` manually.
+
+**Features:**
+- Loads all configs from `config/` recursively at startup (parallel via TaskManager)
+- Identifies by filename stem (without `.xml`)
+- Thread-safe access
+
+## Pre-Init Log Buffer
+
+Logs before `LoggerManager::Initialize()` are buffered and replayed when sinks are ready. Ensures no logs lost during early init (TaskManager, ConfigManager).
+
+## PoolString Usage
+
+Use for: config keys, identifiers, map keys  
+Don't use for: temporary strings, user-facing text
 
 ## File Organization
+
 - One class per file: `ClassName.h` + `ClassName.cpp`
 - Tests: `BECore/Tests/TestName.h`
 
-## Error Handling (No Exceptions)
+## Checklist
 
-BagiEngine is built **without exceptions** (no-exceptions policy). Use:
-
-| Situation | Use |
-|-----------|-----|
-| Expected, recoverable errors (I/O, loading, TaskSystem) | `std::expected<T, E>` |
-| Programming errors (bugs, preconditions) | `ASSERT()` |
-| Critical/unrecoverable errors | `FATALERROR()` |
-
-TaskSystem: `Task<T>::GetResult()`, `TaskHandle<T>::GetResult()`, `CancellationToken::CheckCancellation()` return `std::expected<T, TaskError>`.
-
-## Checklist for New Code
 - [ ] Add to `pch.h` if widely used
 - [ ] Update `CMakeLists.txt`
-- [ ] Use `ASSERT` macro (not `std::assert`)
 - [ ] Add Doxygen comments for public API
-- [ ] Add test if appropriate (see tests-module.mdc)

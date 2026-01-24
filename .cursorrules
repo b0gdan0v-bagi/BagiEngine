@@ -2,225 +2,101 @@
 
 ## Project Overview
 
-BagiEngine is a C++23 game engine with modular architecture built using modern C++ practices.
+BagiEngine is a C++23 game engine with modular architecture.
 
 ## Technology Stack
 
-- **Language**: C++23 (CMAKE_CXX_STANDARD 23)
-- **Build System**: CMake 3.31+ with Ninja generator
+- **Language**: C++23
+- **Build System**: CMake 3.31+ with Ninja
 - **Graphics**: SDL3, ImGui
 - **ECS**: EnTT
-- **Containers**: EASTL (EA's STL - preferred over std:: containers)
+- **Containers**: EASTL (preferred over std::)
 - **XML**: pugixml
-- **Formatting**: fmt library
+- **Formatting**: fmt
 - **Reflection**: magic_enum
 
 ## Project Structure
 
 ```
 src/
-├── Application/          # Main application entry point
-├── Widgets/              # Game-specific widgets (ClearScreenWidget, ImGuiWidget)
+├── Application/          # Application entry point
+├── Widgets/              # Game widgets
 └── Modules/
-    ├── BECore/           # Core engine functionality
-    │   ├── Application/  # Application lifecycle (Fabric, MainAccess)
-    │   ├── Config/       # XML configuration system (XmlConfig, XmlNode)
-    │   ├── FileSystem/   # Virtual filesystem with mount points
-    │   ├── Format/       # Custom formatting utilities
-    │   ├── GameManager/  # Core game loop management
-    │   ├── MainWindow/   # Window management interfaces
-    │   ├── PoolString/   # Optimized string pooling system
-    │   ├── RefCounted/   # Reference counting (IntrusivePtr, RefCounted)
-    │   ├── Utils/        # Singleton, PassKey, EnumUtils, etc.
-    │   └── Widgets/      # Widget system (IWidget interface)
-    ├── Events/           # Event system using EnTT dispatcher
-    ├── Math/             # Math utilities (Color, vectors)
+    ├── BECore/           # Core engine (see core-module.mdc)
+    ├── Events/           # Event system (EnTT)
+    ├── Math/             # Math utilities
+    ├── TaskSystem/       # Async tasks (coroutines)
     └── SDL/              # SDL3 integration
 config/                   # XML configuration files
 ```
 
-## Code Style Guidelines
+## Code Style
 
-### Naming Conventions
-
-- **Classes**: PascalCase (e.g., `FileSystem`, `CoreManager`)
-- **Methods**: PascalCase (e.g., `Initialize()`, `GetInstance()`)
-- **Variables**: camelCase (e.g., `virtualPath`, `realPath`)
-- **Private members**: underscore prefix (e.g., `_isRunning`, `_rootPath`, `_mountPoints`)
-- **Namespaces**: PascalCase (e.g., `BECore`, `Math`, `SDLEvents`)
-- **Constants/Enums**: PascalCase (e.g., `ApplicationSystemType`)
+### Naming
+- **Classes/Methods**: PascalCase (`FileSystem`, `Initialize()`)
+- **Variables**: camelCase (`virtualPath`)
+- **Private members**: `_camelCase` (`_isRunning`)
+- **Namespaces**: PascalCase (`BECore`)
 
 ### File Structure
-
 ```cpp
-#pragma once  // Always use pragma once, never include guards
+#pragma once
 
-#include <...>  // Standard/External includes first
-#include <BECore/...>  // Then internal includes
+#include <...>  // External first
+#include <BECore/...>  // Internal
 
 namespace BECore {
-
-    /**
-     * Doxygen-style documentation for classes
-     */
     class MyClass : public Singleton<MyClass> {
-    public:
-        MyClass() = default;
-        ~MyClass() override = default;
-
-        // Public methods
-        void PublicMethod();
-
     private:
-        // Private members with underscore prefix
-        bool _isInitialized = false;
+        bool _flag = false;
     };
-
-}  // namespace BECore  <- Always add namespace comment
+}  // namespace BECore
 ```
 
-### Key Patterns Used
+## Key Patterns
 
-1. **Singleton Pattern** - For global services:
-   ```cpp
-   class MyService : public Singleton<MyService> {
-       // Use GetInstance() to access
-   };
-   ```
+| Pattern | Usage |
+|---------|-------|
+| `Singleton<T>` | Global services |
+| `PassKey<T>` | Access control |
+| `RefCounted` + `IntrusivePtr` | Reference counting |
+| `EventBase<T>` | Events (CRTP) |
+| `IWidget` | UI/rendering |
+| `CORE_ENUM(Name, Type, Values)` | Enums (not `enum class`) |
 
-2. **PassKey Pattern** - For access control:
-   ```cpp
-   void RestrictedMethod(PassKey<AllowedClass>);
-   // Only AllowedClass can call this method
-   ```
+## Guidelines
 
-3. **RefCounted + IntrusivePtr** - For reference counting:
-   ```cpp
-   class MyObject : public RefCounted {
-       // Use IntrusivePtr<MyObject> for smart pointers
-   };
-   ```
+### DO
+- Use EASTL containers over std::
+- Use `PoolString` for identifiers/keys
+- Use `ASSERT` macro (not `std::assert`)
+- Use `#pragma once`
+- Add namespace closing comments
+- Initialize members inline: `bool _flag = false;`
+- Use `override` for virtual methods
 
-4. **Event System (CRTP)** - For events:
-   ```cpp
-   struct MyEvent : EventBase<MyEvent> {
-       // Use Subscribe<&Handler>(), Emit(), Enqueue()
-   };
-   ```
-
-5. **Widget System** - For UI/rendering:
-   ```cpp
-   class MyWidget : public IWidget {
-       bool Initialize(const XmlNode& node) override;
-       void Update() override;
-       void Draw() override;
-   };
-   ```
-
-## Important Guidelines
-
-### DO:
-- Use `PoolString` instead of `std::string` for frequently used strings
-- Use EASTL containers (`eastl::vector`, `eastl::hash_map`) over std:: equivalents
-- Use `CORE_ENUM(Name, Type, Values)` instead of `enum class` for automatic reflection
-- Inherit from `Singleton<T>` for global services
-- Use `PassKey<T>` pattern to restrict method access
-- Document public APIs with Doxygen-style comments
-- Use `#pragma once` for header guards
-- Add namespace closing comments: `}  // namespace BECore`
-- Initialize member variables inline: `bool _flag = false;`
-- Use `override` keyword for virtual methods
-- Use C++20/23 features: concepts, ranges, `std::filesystem`
-
-### DON'T:
-- Don't use raw `new`/`delete` - use `IntrusivePtr` or EASTL smart pointers
-- Don't use `std::string` when `PoolString` is more appropriate
-- Don't use `enum class` - use `CORE_ENUM` macro instead
-- Don't create circular dependencies between modules
-- Don't add public constructors to Singletons
-- Don't forget to close namespaces with comments
-- Don't use C-style casts - use `static_cast`, `dynamic_cast`, etc.
+### DON'T
+- Don't use raw `new`/`delete` - use `IntrusivePtr`
+- Don't use `std::string` when `PoolString` fits
+- Don't use `enum class` - use `CORE_ENUM`
+- Don't create circular dependencies
+- Don't use C-style casts
 
 ## Module Dependencies
 
 ```
-BECore (base module, no dependencies except external libs)
-  ↑
-Math (depends on BECore)
-  ↑
-Events (depends on BECore, uses EnTT)
-  ↑
-TaskSystem (depends on BECore, Events)
-  ↑
-SDL (depends on BECore, Events, uses SDL3)
-  ↑
-Application (depends on all modules)
+BECore → Math → Events → TaskSystem → SDL → Application
 ```
 
-## Precompiled Headers (PCH)
+## Error Handling (No Exceptions)
 
-The project uses PCH from `src/Modules/BECore/pch.h`. This includes:
-- pugixml
-- magic_enum
-- EASTL containers
-- Standard library headers
-- Core utilities (Singleton, PassKey, PoolString, etc.)
+- **Expected errors**: `std::expected<T, E>`
+- **Programming errors**: `ASSERT()`
+- **Critical errors**: `FATALERROR()`
 
-When adding new files, these headers are automatically available without explicit includes.
+## Planning
 
-## Configuration System
-
-XML configs are stored in `config/` directory:
-- `ApplicationConfig.xml` - Main application settings
-- `SDLWindowConfig.xml` - Window configuration
-- `WidgetsConfig.xml` - Widget definitions
-
-Access configs via:
-```cpp
-XmlConfig config;
-if (config.Load("config/MyConfig.xml")) {
-    XmlNode node = config.GetRoot();
-    // ...
-}
-```
-
-## Virtual FileSystem
-
-Use FileSystem for file access:
-```cpp
-FileSystem::GetInstance().Mount("assets", "./assets");
-auto path = FileSystem::GetInstance().ResolvePath("assets/texture.png");
-```
-
-## Building
-
-```bash
-# Configure (Ninja)
-cmake -B build -G Ninja
-
-# Build
-cmake --build build
-
-# Run
-./build/MyGame
-```
-
-## Platform Support
-
-- macOS (Apple Silicon + Intel)
-- Windows (MSVC, MinGW)
-- Linux (GCC, Clang)
-
-## Planning and Documentation
-
-**CRITICAL**: When creating complex multi-step plans or task breakdowns:
-- **ALWAYS** save plans to `.cursor/plans/PLAN_NAME.md` before execution
-- Use descriptive filenames (e.g., `tasksystem_implementation.plan.md`, `reflection_system.plan.md`)
-- Update the plan file as work progresses, marking completed tasks
-- Plans should include: overview, todos with status, architecture diagrams, examples, and technical details
-- **NEVER** store plans in external storage - always use `.cursor/plans/` directory so they can be versioned in git
-- **ALWAYS** include at the end of every plan:
-  - Task for creating comprehensive tests (unit tests, integration tests, edge cases)
-  - Task for updating/creating documentation (module rules in `.cursor/rules/`, README updates, code examples)
-
-This ensures plans are tracked in version control and accessible to the team, and that testing and documentation are never forgotten.
+**CRITICAL**: For complex tasks:
+- Save plans to `.cursor/plans/PLAN_NAME.md`
+- Include testing and documentation tasks
+- Update plan as work progresses
