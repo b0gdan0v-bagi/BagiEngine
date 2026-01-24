@@ -20,9 +20,6 @@
 // PugiXML
 #include <pugixml.hpp>
 
-// Magic Enum
-#include <magic_enum/magic_enum.hpp>
-
 // EASTL
 #include <EABase/eabase.h>
 #include <EASTL/fixed_vector.h>
