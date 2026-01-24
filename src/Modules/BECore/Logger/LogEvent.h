@@ -16,6 +16,7 @@ namespace BECore {
             , message(message)
         {}
     };
+
     struct FlushLogsEvent : EventBase<FlushLogsEvent> {
     };
 

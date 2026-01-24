@@ -1,22 +1,18 @@
 #include "TestManager.h"
 
 #include <BECore/Config/XmlConfig.h>
+#include <BECore/GameManager/CoreManager.h>
 
 #include <Generated/EnumTest.gen.hpp>
 
 namespace BECore {
 
     void TestManager::RunAllTests() {
-        XmlConfig config = XmlConfig::Create();
-        constexpr eastl::string_view configPath = "config/TestsConfig.xml";
+        // Получаем конфиг через ConfigManager
+        const auto rootNode = CoreManager::GetConfigManager().GetConfig("TestsConfig"_intern);
 
-        if (!config.LoadFromVirtualPath(configPath)) {
-            LOG_ERROR("[TestManager] Config not found: {}"_format(configPath));
-            return;
-        }
-
-        const auto rootNode = config.GetRoot();
         if (!rootNode) {
+            LOG_ERROR("[TestManager] Config not found: TestsConfig");
             return;
         }
 

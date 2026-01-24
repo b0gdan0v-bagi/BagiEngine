@@ -2,6 +2,7 @@
 
 #include <BECore/Assert/PlatformDebug.h>
 #include <BECore/Config/XmlConfig.h>
+#include <BECore/GameManager/CoreManager.h>
 
 #include <EASTL/sort.h>
 
@@ -92,10 +93,10 @@ namespace BECore {
             return;
         }
 
-        XmlConfig config = XmlConfig::Create();
-        constexpr eastl::string_view configPath = "config/AssertHandlersConfig.xml";
+        // Получаем конфиг через ConfigManager
+        const auto rootNode = CoreManager::GetConfigManager().GetConfig("AssertHandlersConfig"_intern);
 
-        if (!config.LoadFromVirtualPath(configPath)) {
+        if (!rootNode) {
             // Fallback: create default handlers if config not found
             auto debugHandler = BECore::New<DebugBreakHandler>();
             debugHandler->SetPriority(100);
@@ -105,39 +106,36 @@ namespace BECore {
             logHandler->SetPriority(0);
             _handlers.push_back(logHandler);
         } else {
-            const auto rootNode = config.GetRoot();
-            if (rootNode) {
-                const auto handlersNode = rootNode.GetChild("handlers");
-                if (handlersNode) {
-                    for (const auto handlerNode : handlersNode.Children()) {
-                        if (handlerNode.Name() != "handler") {
-                            continue;
-                        }
-
-                        // Check if handler is enabled (default: true)
-                        auto enabled = handlerNode.ParseAttribute<bool>("enabled");
-                        if (enabled.has_value() && !enabled.value()) {
-                            continue;
-                        }
-
-                        auto handlerType = handlerNode.ParseAttribute<AssertHandlerType>("type");
-                        if (!handlerType) {
-                            continue;
-                        }
-
-                        auto handler = CreateHandlerByType(*handlerType);
-                        if (!handler) {
-                            continue;
-                        }
-
-                        // Set priority from config (default: 0)
-                        auto priority = handlerNode.ParseAttribute<int>("priority");
-                        if (priority.has_value()) {
-                            handler->SetPriority(*priority);
-                        }
-
-                        _handlers.push_back(handler);
+            const auto handlersNode = rootNode.GetChild("handlers");
+            if (handlersNode) {
+                for (const auto handlerNode : handlersNode.Children()) {
+                    if (handlerNode.Name() != "handler") {
+                        continue;
                     }
+
+                    // Check if handler is enabled (default: true)
+                    auto enabled = handlerNode.ParseAttribute<bool>("enabled");
+                    if (enabled.has_value() && !enabled.value()) {
+                        continue;
+                    }
+
+                    auto handlerType = handlerNode.ParseAttribute<AssertHandlerType>("type");
+                    if (!handlerType) {
+                        continue;
+                    }
+
+                    auto handler = CreateHandlerByType(*handlerType);
+                    if (!handler) {
+                        continue;
+                    }
+
+                    // Set priority from config (default: 0)
+                    auto priority = handlerNode.ParseAttribute<int>("priority");
+                    if (priority.has_value()) {
+                        handler->SetPriority(*priority);
+                    }
+
+                    _handlers.push_back(handler);
                 }
             }
         }

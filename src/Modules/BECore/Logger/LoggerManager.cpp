@@ -1,6 +1,7 @@
 #include "LoggerManager.h"
 
 #include <BECore/Config/XmlConfig.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ConsoleSink.h>
 #include <BECore/Logger/FileSink.h>
 #include <BECore/Logger/LogEvent.h>
@@ -19,54 +20,51 @@ namespace BECore {
             return;
         }
 
-        const XmlConfig config = XmlConfig::Create();
-        constexpr eastl::string_view configPath = "config/LoggerConfig.xml";
+        // Получаем конфиг через ConfigManager
+        const auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
 
-        if (!config.LoadFromVirtualPath(configPath)) {
+        if (!rootNode) {
             // Fallback: create default sinks if config not found
             auto consoleSink = BECore::New<ConsoleSink>();
             consoleSink->SetPriority(0);
             _sinks.push_back(consoleSink);
         } else {
-            const auto rootNode = config.GetRoot();
-            if (rootNode) {
-                const auto sinksNode = rootNode.GetChild("sinks");
-                if (sinksNode) {
-                    for (const auto sinkNode : sinksNode.Children()) {
-                        if (sinkNode.Name() != "sink") {
-                            continue;
-                        }
-
-                        // Check if sink is enabled (default: true)
-                        auto enabled = sinkNode.ParseAttribute<bool>("enabled");
-                        if (enabled.has_value() && !enabled.value()) {
-                            continue;
-                        }
-
-                        auto sinkType = sinkNode.ParseAttribute<LogSinkType>("type");
-                        if (!sinkType) {
-                            continue;
-                        }
-
-                        auto sink = CreateSinkByType(*sinkType);
-                        if (!sink) {
-                            continue;
-                        }
-
-                        auto priority = sinkNode.ParseAttribute<int>("priority");
-                        if (priority.has_value()) {
-                            sink->SetPriority(*priority);
-                        }
-
-                        auto minLevel = sinkNode.ParseAttribute<LogLevel>("minLevel");
-                        if (minLevel.has_value()) {
-                            sink->SetMinLevel(*minLevel);
-                        }
-
-                        sink->Configure(sinkNode);
-
-                        _sinks.push_back(sink);
+            const auto sinksNode = rootNode.GetChild("sinks");
+            if (sinksNode) {
+                for (const auto sinkNode : sinksNode.Children()) {
+                    if (sinkNode.Name() != "sink") {
+                        continue;
                     }
+
+                    // Check if sink is enabled (default: true)
+                    auto enabled = sinkNode.ParseAttribute<bool>("enabled");
+                    if (enabled.has_value() && !enabled.value()) {
+                        continue;
+                    }
+
+                    auto sinkType = sinkNode.ParseAttribute<LogSinkType>("type");
+                    if (!sinkType) {
+                        continue;
+                    }
+
+                    auto sink = CreateSinkByType(*sinkType);
+                    if (!sink) {
+                        continue;
+                    }
+
+                    auto priority = sinkNode.ParseAttribute<int>("priority");
+                    if (priority.has_value()) {
+                        sink->SetPriority(*priority);
+                    }
+
+                    auto minLevel = sinkNode.ParseAttribute<LogLevel>("minLevel");
+                    if (minLevel.has_value()) {
+                        sink->SetMinLevel(*minLevel);
+                    }
+
+                    sink->Configure(sinkNode);
+
+                    _sinks.push_back(sink);
                 }
             }
         }

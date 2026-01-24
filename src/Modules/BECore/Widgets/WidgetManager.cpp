@@ -3,6 +3,7 @@
 #include <Widgets/ImGuiWidget.h>
 #include <Widgets/ClearScreenWidget.h>
 #include <BECore/Config/XmlConfig.h>
+#include <BECore/GameManager/CoreManager.h>
 
 #include <Generated/EnumWidget.gen.hpp>
 
@@ -31,13 +32,9 @@ namespace BECore {
     }
 
     void WidgetManager::CreateWidgets() {
-        XmlConfig config = XmlConfig::Create();
-        constexpr eastl::string_view configPath = "config/WidgetsConfig.xml";
-        if (!config.LoadFromVirtualPath(configPath)) {
-            return;
-        }
-
-        const auto rootNode = config.GetRoot();
+        // Получаем конфиг через ConfigManager
+        const auto rootNode = CoreManager::GetConfigManager().GetConfig("WidgetsConfig"_intern);
+        
         if (!rootNode) {
             return;
         }

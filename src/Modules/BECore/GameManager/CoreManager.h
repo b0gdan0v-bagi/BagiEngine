@@ -4,6 +4,7 @@
 #include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/Config/ConfigManager.h>
 #include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Tests/TestManager.h>
@@ -34,6 +35,10 @@ namespace BECore {
 
         static FileSystem& GetFileSystem() {
             return GetInstance()._fileSystem;
+        }
+
+        static ConfigManager& GetConfigManager() {
+            return GetInstance()._configManager;
         }
 
         static AssertHandlerManager& GetAssertHandlerManager() {
@@ -70,6 +75,7 @@ namespace BECore {
 
     private:
         FileSystem _fileSystem;
+        ConfigManager _configManager;
         LoggerManager _loggerManager;
         AssertHandlerManager _assertHandlerManager;
         TestManager _testManager;

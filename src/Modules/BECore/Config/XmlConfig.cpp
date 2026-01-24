@@ -21,6 +21,13 @@ namespace BECore {
         return _impl->LoadFromFile(resolvedPath);
     }
 
+    bool XmlConfig::LoadFromFile(const std::filesystem::path& filepath) const {
+        if (!_impl) {
+            return false;
+        }
+        return _impl->LoadFromFile(filepath);
+    }
+
     bool XmlConfig::LoadFromString(eastl::string_view xmlContent) const {
         if (!_impl) {
             return false;

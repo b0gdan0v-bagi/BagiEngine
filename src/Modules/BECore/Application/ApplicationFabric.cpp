@@ -2,26 +2,36 @@
 
 #include <BECore/Application/ApplicationSystemType.h>
 #include <BECore/Config/XmlConfig.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <CoreSDL/ApplicationSDLFabric.h>
 
 namespace BECore {
 
     bool ApplicationFabric::Create() {
 
-        XmlConfig config = XmlConfig::Create();
-        constexpr eastl::string_view configPath = "config/ApplicationConfig.xml";
-        if (!config.LoadFromVirtualPath(configPath)) {
+        // Получаем конфиг через ConfigManager
+        const auto rootNode = CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern);
+        
+        if (!rootNode) {
             return false;
         }
 
-        ApplicationSystemType type = config.GetRoot().ParseAttribute<ApplicationSystemType>("type").value_or(ApplicationSystemType::None);
+        ApplicationSystemType type = rootNode.ParseAttribute<ApplicationSystemType>("type").value_or(ApplicationSystemType::None);
 
         switch (type) {
-            case ApplicationSystemType::SDL3:
-                if (!ApplicationSDLFabric::Create(config)) {
+            case ApplicationSystemType::SDL3: {
+                // Создаём временный XmlConfig для передачи в ApplicationSDLFabric
+                // TODO: В будущем можно передавать XmlNode напрямую
+                XmlConfig config = XmlConfig::Create();
+                if (config.LoadFromVirtualPath("config/ApplicationConfig.xml")) {
+                    if (!ApplicationSDLFabric::Create(config)) {
+                        return false;
+                    }
+                } else {
                     return false;
                 }
                 break;
+            }
             default:
                 return false;
         }

@@ -15,9 +15,10 @@ namespace BECore {
 
     void CoreManager::OnApplicationPreInit(PassKey<Application>) {
         _fileSystem.Initialize();
+        TaskManager::GetInstance().Initialize(PassKey<CoreManager>{});
+        _configManager.Initialize();
         _loggerManager.Initialize();
         _assertHandlerManager.Initialize();
-        TaskManager::GetInstance().Initialize(PassKey<CoreManager>{});
         _resourceManager.Initialize();
         _testManager.RunAllTests();
     }
