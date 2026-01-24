@@ -3,6 +3,8 @@
 #include <thread>
 #include <atomic>
 
+#include <Generated/TaskSystemTest.gen.hpp>
+
 namespace BECore::Tests {
 
     // Helper: простая корутина возвращающая void

@@ -28,11 +28,11 @@ namespace BECore {
         TaskGroup() : _token(CancellationToken::Create()) {}
         ~TaskGroup() = default;
 
-        // Non-copyable, movable
+        // Non-copyable, non-movable (due to mutex)
         TaskGroup(const TaskGroup&) = delete;
         TaskGroup& operator=(const TaskGroup&) = delete;
-        TaskGroup(TaskGroup&&) = default;
-        TaskGroup& operator=(TaskGroup&&) = default;
+        TaskGroup(TaskGroup&&) = delete;
+        TaskGroup& operator=(TaskGroup&&) = delete;
 
         /**
          * Добавляет handle в группу.

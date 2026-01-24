@@ -16,6 +16,25 @@ namespace BECore {
          * Базовый promise_type для Task<T>.
          * Содержит общую логику для void и non-void типов.
          */
+        /**
+         * FinalAwaiter - awaiter для final_suspend.
+         * Определён вне локального контекста, чтобы поддерживать шаблонный await_suspend.
+         */
+        struct FinalAwaiter {
+            bool await_ready() noexcept { return false; }
+
+            template <typename PromiseType>
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<PromiseType> h) noexcept {
+                auto& promise = h.promise();
+                if (promise._continuation) {
+                    return promise._continuation;
+                }
+                return std::noop_coroutine();
+            }
+
+            void await_resume() noexcept {}
+        };
+
         template <typename T>
         struct TaskPromiseBase {
             std::exception_ptr _exception;
@@ -23,19 +42,7 @@ namespace BECore {
 
             auto initial_suspend() noexcept { return std::suspend_always{}; }
 
-            auto final_suspend() noexcept {
-                struct FinalAwaiter {
-                    bool await_ready() noexcept { return false; }
-
-                    std::coroutine_handle<> await_suspend(std::coroutine_handle<TaskPromiseBase> h) noexcept {
-                        if (h.promise()._continuation) {
-                            return h.promise()._continuation;
-                        }
-                        return std::noop_coroutine();
-                    }
-
-                    void await_resume() noexcept {}
-                };
+            FinalAwaiter final_suspend() noexcept {
                 return FinalAwaiter{};
             }
 
