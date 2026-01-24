@@ -6,17 +6,6 @@
 #define _WIN32_WINNT 0x0A00  // Windows 10+
 #endif
 
-// Boost компоненты
-#include <boost/algorithm/string.hpp>  // строковые алгоритмы
-#include <boost/any.hpp>               // any
-#include <boost/bind.hpp>              // bind
-#include <boost/function.hpp>          // function
-#include <boost/optional.hpp>          // optional
-#include <boost/smart_ptr.hpp>         // smart_ptr, shared_ptr, weak_ptr, intrusive_ptr
-#include <boost/type_traits.hpp>       // type_traits
-#include <boost/utility.hpp>           // utility функции
-#include <boost/variant.hpp>           // variant
-
 // PugiXML
 #include <pugixml.hpp>
 

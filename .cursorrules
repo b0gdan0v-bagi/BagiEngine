@@ -14,7 +14,6 @@ BagiEngine is a C++23 game engine with modular architecture built using modern C
 - **XML**: pugixml
 - **Formatting**: fmt library
 - **Reflection**: magic_enum
-- **Utilities**: Boost (algorithm, smart_ptr, variant, optional)
 
 ## Project Structure
 
@@ -157,7 +156,6 @@ Application (depends on all modules)
 ## Precompiled Headers (PCH)
 
 The project uses PCH from `src/Modules/BECore/pch.h`. This includes:
-- Boost components
 - pugixml
 - magic_enum
 - EASTL containers
