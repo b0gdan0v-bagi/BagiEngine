@@ -2,35 +2,77 @@ cmake_minimum_required(VERSION 3.31)
 project(MySDLGame)
 
 # =============================================================================
-# FetchContent Configuration
+# External Dependencies
 # =============================================================================
-# Настройка базовой директории для FetchContent зависимостей
-# Это должно быть установлено ДО первого include(FetchContent) в поддиректориях
-# Зависимости будут сохраняться в _deps в корне проекта, вне build директории
-set(FETCHCONTENT_BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/_deps" CACHE PATH "Directory for FetchContent dependencies" FORCE)
-message(STATUS "FetchContent dependencies will be stored in: ${FETCHCONTENT_BASE_DIR}")
+# Build external libraries directly instead of using a separate SDK build
 
-# После первого успешного clone не пытаться обновлять репозитории
-# Это ускоряет повторную конфигурацию
-set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Don't update FetchContent repos after first clone")
-
-# =============================================================================
-# FetchContent Helper Macro
-# =============================================================================
-# Макрос для восстановления состояния populated если исходники уже существуют.
-# Это позволяет избежать повторного клонирования после очистки build директории.
 include(FetchContent)
-macro(restore_fetchcontent_if_exists name)
-    string(TOLOWER "${name}" _name_lower)
-    set(_src_dir "${FETCHCONTENT_BASE_DIR}/${_name_lower}-src")
-    if(EXISTS "${_src_dir}" AND IS_DIRECTORY "${_src_dir}")
-        # Исходники уже существуют - восстанавливаем состояние populated
-        set(FETCHCONTENT_SOURCE_DIR_${name} "${_src_dir}" CACHE PATH "" FORCE)
-        message(STATUS "FetchContent: Reusing existing ${name} sources from ${_src_dir}")
-    endif()
-    unset(_src_dir)
-    unset(_name_lower)
-endmacro()
+
+# EA Libraries (Vendored EABase + EASTL)
+message(STATUS "Configuring EA Libraries (vendored)...")
+add_subdirectory(src/Modules/EABase)
+
+# SDL3 - Shared library
+message(STATUS "Configuring SDL3...")
+set(SDL_SHARED ON CACHE BOOL "Build SDL3 as shared library" FORCE)
+set(SDL_STATIC OFF CACHE BOOL "Build SDL3 as static library" FORCE)
+set(SDL_TEST OFF CACHE BOOL "Build SDL3 tests" FORCE)
+set(SDL_TESTS OFF CACHE BOOL "Build SDL3 tests" FORCE)
+add_subdirectory(external/SDL)
+
+# fmt - Static library
+message(STATUS "Configuring fmt...")
+set(FMT_INSTALL OFF CACHE BOOL "Generate fmt install target" FORCE)
+set(FMT_TEST OFF CACHE BOOL "Build fmt tests" FORCE)
+set(FMT_DOC OFF CACHE BOOL "Build fmt documentation" FORCE)
+add_subdirectory(external/fmt)
+
+# pugixml - Static library
+message(STATUS "Configuring pugixml...")
+set(PUGIXML_BUILD_TESTS OFF CACHE BOOL "Build pugixml tests" FORCE)
+add_subdirectory(external/pugixml)
+
+# EnTT - Header-only library
+message(STATUS "Configuring EnTT...")
+add_library(EnTT INTERFACE)
+target_include_directories(EnTT INTERFACE ${CMAKE_SOURCE_DIR}/external/entt/src)
+
+# ImGui - Static library with SDL3 backends
+message(STATUS "Configuring ImGui...")
+file(GLOB IMGUI_SOURCES 
+    ${CMAKE_SOURCE_DIR}/external/imgui/*.cpp
+)
+
+add_library(imgui STATIC 
+    ${IMGUI_SOURCES}
+    ${CMAKE_SOURCE_DIR}/external/imgui/backends/imgui_impl_sdl3.cpp
+    ${CMAKE_SOURCE_DIR}/external/imgui/backends/imgui_impl_sdlrenderer3.cpp
+)
+
+target_include_directories(imgui PUBLIC 
+    ${CMAKE_SOURCE_DIR}/external/imgui
+    ${CMAKE_SOURCE_DIR}/external/SDL/include
+)
+
+target_link_libraries(imgui PRIVATE SDL3-shared)
+
+set_target_properties(imgui PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    FOLDER "External"
+)
+
+# Group external libraries in IDE
+set_target_properties(SDL3-shared PROPERTIES FOLDER "External")
+set_target_properties(fmt PROPERTIES FOLDER "External")
+set_target_properties(EnTT PROPERTIES FOLDER "External")
+
+# Handle pugixml target name (can be pugixml or pugixml-static)
+if(TARGET pugixml-static AND NOT TARGET pugixml)
+    set_target_properties(pugixml-static PROPERTIES FOLDER "External")
+    add_library(pugixml ALIAS pugixml-static)
+elseif(TARGET pugixml)
+    set_target_properties(pugixml PROPERTIES FOLDER "External")
+endif()
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -421,18 +463,14 @@ if(COMMAND add_reflection_target)
     )
 endif()
 
-# Копирование SDL3 DLL рядом с исполняемым файлом (для Windows, если используется SDL3-shared)
+# Копирование SDL3 DLL рядом с исполняемым файлом (для Windows)
 if(WIN32)
-    if(TARGET ${CORESDL_SDL3_TARGET})
-        # Проверяем, является ли таргет shared библиотекой
-        get_target_property(SDL3_TYPE ${CORESDL_SDL3_TARGET} TYPE)
-        if(SDL3_TYPE STREQUAL "SHARED_LIBRARY")
-            add_custom_command(TARGET MyGame POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${CORESDL_SDL3_TARGET}>
-                $<TARGET_FILE_DIR:MyGame>
-            )
-        endif()
+    if(TARGET SDL3-shared)
+        add_custom_command(TARGET MyGame POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:SDL3-shared>
+            $<TARGET_FILE_DIR:MyGame>
+        )
     endif()
 endif()
 
