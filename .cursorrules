@@ -148,6 +148,8 @@ Math (depends on BECore)
   ↑
 Events (depends on BECore, uses EnTT)
   ↑
+TaskSystem (depends on BECore, Events)
+  ↑
 SDL (depends on BECore, Events, uses SDL3)
   ↑
 Application (depends on all modules)

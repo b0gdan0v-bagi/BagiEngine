@@ -2,6 +2,19 @@
 
 Этот проект включает PyQt6 лаунчер для управления сборкой и открытия IDE.
 
+## Клонирование репозитория
+
+Проект использует git submodules (SDL3). При клонировании используйте:
+
+```bash
+git clone --recursive https://github.com/your-repo/BagiEngine.git
+```
+
+Если уже склонировали без `--recursive`:
+```bash
+git submodule update --init --recursive
+```
+
 ## Первоначальная настройка
 
 ### Настройка переменных окружения
@@ -104,16 +117,35 @@ cursor CI\BagiEngine.code-workspace
 cursor CI/BagiEngine.code-workspace
 ```
 
-## Структура CI/
+## Структура проекта
 
 ```
-CI/
-├── setup_venv.bat       # Настройка venv (Windows CMD)
-├── setup_venv.ps1       # Настройка venv (PowerShell)
-├── setup_venv.sh        # Настройка venv (macOS/Linux)
-├── setup_vs.bat         # Генерация проекта VS
-├── BagiEngine.code-workspace  # Workspace файл
-└── launcher/            # PyQt6 приложение
+BagiEngine/
+├── src/
+│   ├── Application/     # Main entry point
+│   ├── Widgets/         # Game widgets
+│   └── Modules/
+│       ├── BECore/      # Core engine module
+│       ├── Math/        # Math utilities
+│       ├── Events/      # Event system
+│       ├── TaskSystem/  # Task/job system
+│       ├── SDL/         # SDL3 integration
+│       ├── EABase/      # EASTL (vendored)
+│       ├── EnTT/        # ECS framework (vendored)
+│       ├── pugixml/     # XML parser (vendored)
+│       ├── imgui/       # ImGui (vendored)
+│       └── fmt/         # Formatting (vendored)
+├── external/
+│   └── SDL/             # SDL3 (git submodule)
+├── config/              # XML configuration files
+├── .cursorignore        # Игнорирование vendored для AI
+└── CI/
+    ├── setup_venv.bat       # Настройка venv (Windows CMD)
+    ├── setup_venv.ps1       # Настройка venv (PowerShell)
+    ├── setup_venv.sh        # Настройка venv (macOS/Linux)
+    ├── setup_vs.bat         # Генерация проекта VS
+    ├── BagiEngine.code-workspace  # Workspace файл
+    └── launcher/            # PyQt6 приложение
 ```
 
 ## Ручная сборка (без Launcher)

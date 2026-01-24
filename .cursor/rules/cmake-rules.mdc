@@ -13,11 +13,54 @@ alwaysApply: false
 
 - CMake 3.31+
 - C++23 standard
-- Ninja generator
+- Ninja generator (recommended)
+
+## External Dependencies
+
+### Vendored Libraries (in `src/Modules/`)
+
+These are included directly via `add_subdirectory()`:
+
+| Library | Path | Purpose |
+|---------|------|---------|
+| EABase/EASTL | `src/Modules/EABase/` | EA's STL containers |
+| EnTT | `src/Modules/EnTT/` | ECS framework |
+| pugixml | `src/Modules/pugixml/` | XML parsing |
+| ImGui | `src/Modules/imgui/` | Immediate mode GUI |
+| fmt | `src/Modules/fmt/` | Formatting library |
+
+### Git Submodules (in `external/`)
+
+| Library | Path | Type |
+|---------|------|------|
+| SDL3 | `external/SDL/` | Shared library |
+
+### Dependency Loading Order in Root CMakeLists.txt
+
+```cmake
+# 1. Vendored EA Libraries
+add_subdirectory(src/Modules/EABase)
+
+# 2. SDL3 (git submodule)
+add_subdirectory(external/SDL)
+
+# 3. Other vendored libraries
+add_subdirectory(src/Modules/EnTT)
+add_subdirectory(src/Modules/pugixml)
+add_subdirectory(src/Modules/imgui)
+add_subdirectory(src/Modules/fmt)
+
+# 4. Engine modules (BECore first!)
+add_subdirectory(src/Modules/BECore)
+add_subdirectory(src/Modules/Math)
+add_subdirectory(src/Modules/Events)
+add_subdirectory(src/Modules/TaskSystem)
+add_subdirectory(src/Modules/SDL)
+```
 
 ## Module Structure
 
-Each module has its own `CMakeLists.txt`:
+Each engine module has its own `CMakeLists.txt`:
 - Collect sources with `file(GLOB_RECURSE ...)`
 - Create `STATIC` library
 - Include directories: own `src/` + cross-module path
@@ -30,11 +73,8 @@ BECoreModule must be first (provides PCH):
 1. `BECore` — first!
 2. `Math`
 3. `Events`
-4. `SDL`
-
-## External Dependencies
-
-Use `FetchContent` with `GIT_SHALLOW TRUE` for faster fetches.
+4. `TaskSystem`
+5. `SDL`
 
 ## Best Practices
 
@@ -42,7 +82,7 @@ Use `FetchContent` with `GIT_SHALLOW TRUE` for faster fetches.
 |----------|------------|
 | Headers other modules need | `PUBLIC` |
 | Implementation details | `PRIVATE` |
-| Static libraries | Always for modules |
+| Static libraries | Always for engine modules |
 | PCH reuse | `REUSE_FROM BECoreModule` |
 
 ## Platform-Specific
@@ -50,3 +90,15 @@ Use `FetchContent` with `GIT_SHALLOW TRUE` for faster fetches.
 - MSVC: `/FI"BECore/pch.h"` for force include
 - MSVC: `/W4` warnings
 - GCC/Clang: `-Wall -Wextra`
+
+## Output Directory Structure
+
+Build outputs are organized by compiler and platform:
+```
+build/{Compiler}{Platform}/
+├── MyGame.exe           # Executable
+├── SDL3.dll             # Runtime dependencies
+└── lib/                 # Static libraries
+```
+
+Example: `build/MSVCWindows/`, `build/ClangmacOS/`
