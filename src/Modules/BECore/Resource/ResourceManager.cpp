@@ -1,23 +1,24 @@
 #include <BECore/Resource/ResourceManager.h>
-#include <BECore/Resource/XmlResourceLoader.h>
-#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/RefCounted/New.h>
 #include <BECore/Logger/Logger.h>
 
 #include <Generated/IResourceLoader.gen.hpp>
-#include <Generated/XmlResourceLoader.gen.hpp>
+#include <Generated/EnumResourceLoader.gen.hpp>
 
 namespace BECore {
 
-    void ResourceManager::Initialize(FileSystem* fileSystem) {
+    void ResourceManager::Initialize() {
         LOG_INFO("Initializing ResourceManager...");
         
-        _fileSystem = fileSystem;
+        // Register all loaders via generated factory
+        for (auto type : EnumUtils<ResourceLoaderType>::Values()) {
+            auto loader = ResourceLoaderFactory::Create(type);
+            if (loader) {
+                RegisterLoader(std::move(loader));
+            }
+        }
         
-        // Register default loaders
-        RegisterLoader(New<XmlResourceLoader>());
-        
-        LOG_INFO(Format("ResourceManager initialized with {} loaders", _loaders.size()).c_str());
+        LOG_INFO(Format("ResourceManager initialized with {} loaders", _loaders.size()));
     }
 
     void ResourceManager::RegisterLoader(IntrusivePtr<IResourceLoader> loader) {
@@ -30,7 +31,7 @@ namespace BECore {
     }
 
     void ResourceManager::ClearCache() {
-        LOG_INFO(Format("Clearing resource cache ({} resources)", _cache.GetCount()).c_str());
+        LOG_INFO(Format("Clearing resource cache ({} resources)", _cache.GetCount()));
         _cache.Clear();
     }
 

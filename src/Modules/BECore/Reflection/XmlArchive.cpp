@@ -1,4 +1,5 @@
 #include <BECore/Reflection/XmlArchive.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <sstream>
 #include <charconv>
 
@@ -22,6 +23,14 @@ namespace BECore {
         _nodeStack.clear();
         _nodeStack.push_back(_document.document_element());
         return true;
+    }
+
+    bool XmlArchive::LoadFromVirtualPath(eastl::string_view virtualPath) {
+        auto realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
+        if (realPath.empty()) {
+            return false;
+        }
+        return LoadFromFile(realPath);
     }
 
     bool XmlArchive::LoadFromString(eastl::string_view xmlContent) {

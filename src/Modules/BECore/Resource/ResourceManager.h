@@ -10,16 +10,11 @@
 #include <BECore/Reflection/SaveSystem.h>
 #include <BECore/Reflection/XmlArchive.h>
 #include <BECore/Format/Format.h>
-#include <BECore/FileSystem/FileSystem.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/Awaitables.h>
 #include <EASTL/vector.h>
-#include <filesystem>
 
 namespace BECore {
-
-    // Forward declaration to avoid circular dependency with CoreManager
-    class CoreManager;
 
     /**
      * @brief Central manager for loading and caching resources
@@ -65,10 +60,9 @@ namespace BECore {
          * @brief Initialize resource manager and register default loaders
          * 
          * Should be called once during application startup.
-         * 
-         * @param fileSystem Reference to FileSystem for path resolution
+         * Registers all loaders via generated ResourceLoaderFactory.
          */
-        void Initialize(FileSystem* fileSystem);
+        void Initialize();
         
         /**
          * @brief Load resource asynchronously with Task<T>
@@ -158,7 +152,6 @@ namespace BECore {
         
         ResourceCache _cache;
         eastl::vector<IntrusivePtr<IResourceLoader>> _loaders;
-        FileSystem* _fileSystem = nullptr;  // Non-owning pointer to FileSystem
     };
 
     // Template implementations
@@ -252,21 +245,9 @@ namespace BECore {
         // Switch to background thread for I/O
         co_await SwitchToBackground();
         
-        // Resolve virtual path to real path
-        if (!_fileSystem) {
-            LOG_ERROR("ResourceManager not initialized - FileSystem is null");
-            co_return T{};
-        }
-        
-        auto realPath = _fileSystem->ResolvePath(path);
-        if (!std::filesystem::exists(realPath)) {
-            LOG_ERROR(Format("File not found for serialization: {}", path).c_str());
-            co_return T{};
-        }
-        
-        // Create XmlArchive in Read mode
+        // Create XmlArchive in Read mode and load from virtual path
         XmlArchive archive(XmlArchive::Mode::Read);
-        if (!archive.LoadFromFile(realPath)) {
+        if (!archive.LoadFromVirtualPath(path)) {
             LOG_ERROR(Format("Failed to load XML for serialization: {}", path).c_str());
             co_return T{};
         }
@@ -280,21 +261,9 @@ namespace BECore {
     
     template<HasReflection T>
     T ResourceManager::LoadSerialized(eastl::string_view path) {
-        // Resolve virtual path to real path
-        if (!_fileSystem) {
-            LOG_ERROR("ResourceManager not initialized - FileSystem is null");
-            return T{};
-        }
-        
-        auto realPath = _fileSystem->ResolvePath(path);
-        if (!std::filesystem::exists(realPath)) {
-            LOG_ERROR(Format("File not found for serialization: {}", path).c_str());
-            return T{};
-        }
-        
-        // Create XmlArchive in Read mode
+        // Create XmlArchive in Read mode and load from virtual path
         XmlArchive archive(XmlArchive::Mode::Read);
-        if (!archive.LoadFromFile(realPath)) {
+        if (!archive.LoadFromVirtualPath(path)) {
             LOG_ERROR(Format("Failed to load XML for serialization: {}", path).c_str());
             return T{};
         }

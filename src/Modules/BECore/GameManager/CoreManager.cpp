@@ -17,12 +17,12 @@ namespace BECore {
         _fileSystem.Initialize();
         _loggerManager.Initialize();
         _assertHandlerManager.Initialize();
-        _resourceManager.Initialize(&_fileSystem);
+        TaskManager::GetInstance().Initialize(PassKey<CoreManager>{});
+        _resourceManager.Initialize();
         _testManager.RunAllTests();
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
-        TaskManager::GetInstance().Initialize(PassKey<CoreManager>{});
         _widgetManager.CreateWidgets();
     }
 

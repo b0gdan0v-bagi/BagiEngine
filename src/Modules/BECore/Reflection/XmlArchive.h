@@ -55,6 +55,16 @@ namespace BECore {
         bool LoadFromFile(const std::filesystem::path& path);
 
         /**
+         * @brief Load XML from virtual path
+         * 
+         * Resolves path via CoreManager::GetFileSystem() and loads the file.
+         * 
+         * @param virtualPath Virtual path (e.g., "config/game.xml")
+         * @return true on success
+         */
+        bool LoadFromVirtualPath(eastl::string_view virtualPath);
+
+        /**
          * @brief Load XML from string
          * @param xmlContent XML string content
          * @return true on success
