@@ -7,6 +7,7 @@
 #include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Tests/TestManager.h>
+#include <BECore/Resource/ResourceManager.h>
 
 namespace BECore {
 
@@ -47,6 +48,10 @@ namespace BECore {
             return GetInstance()._loggerManager;
         }
 
+        static ResourceManager& GetResourceManager() {
+            return GetInstance()._resourceManager;
+        }
+
         static TaskManager& GetTaskManager();
 
         static const IntrusivePtr<IMainWindow>& GetMainWindow();
@@ -68,6 +73,7 @@ namespace BECore {
         LoggerManager _loggerManager;
         AssertHandlerManager _assertHandlerManager;
         TestManager _testManager;
+        ResourceManager _resourceManager;
         WidgetManager _widgetManager;
         EventsProviderManager _eventsProviderManager;
         MainWindowManager _mainWindowManager;

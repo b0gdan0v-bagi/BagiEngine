@@ -71,10 +71,12 @@ if(COMMAND add_reflection_target)
             ${CMAKE_CURRENT_SOURCE_DIR}/Logger
             ${CMAKE_CURRENT_SOURCE_DIR}/Tests
             ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
+            ${CMAKE_CURRENT_SOURCE_DIR}/Resource
         SCAN_DIRS
             ${CMAKE_CURRENT_SOURCE_DIR}/Logger
             ${CMAKE_CURRENT_SOURCE_DIR}/Tests
             ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
+            ${CMAKE_CURRENT_SOURCE_DIR}/Resource
             ${PROJECT_ROOT}/src/Widgets
         INCLUDE_DIRS
             ${PROJECT_ROOT}/src/Modules

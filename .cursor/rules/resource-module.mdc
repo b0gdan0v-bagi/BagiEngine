@@ -1,0 +1,209 @@
+# Resource Module Guidelines
+
+**Glob pattern:** `src/Modules/BECore/Resource/**/*`
+
+## Overview
+
+The Resource module provides a comprehensive system for loading, caching, and managing game assets with async/sync loading support via Task<T>, reference-counted caching, and extensible loader system.
+
+## Architecture
+
+```
+ResourceManager (main entry point)
+    ├── ResourceCache (thread-safe caching with shared_mutex)
+    ├── IResourceLoader* (registered loaders)
+    │   └── XmlResourceLoader (.xml files)
+    └── FileSystem (for path resolution)
+
+Resources inherit from:
+    IResource (base, ref-counted)
+        ├── XmlResource (XML configs)
+        └── SerializedResource<T> (reflected types)
+```
+
+## Core Components
+
+### IResource
+
+Base class for all resources:
+- **State tracking**: `ResourceState` enum (Unloaded, Loading, Loaded, Failed)
+- **Reference counting**: Inherits from `RefCounted`
+- **Memory tracking**: `GetMemoryUsage()` for cache statistics
+- **Reflection support**: `BE_CLASS(IResource, FACTORY_BASE)`
+
+### ResourceHandle<T>
+
+Type-safe wrapper around `IntrusivePtr<T>`:
+- Tracks last access time for potential LRU eviction
+- Implicit bool conversion for validity checks
+- Arrow/dereference operators for convenient access
+
+### ResourceCache
+
+Thread-safe cache using `std::shared_mutex`:
+- Read-heavy workload optimization (shared locks for reads)
+- No automatic eviction in v1 (resources persist until explicit clear)
+- Statistics: `GetCount()`, `GetTotalMemoryUsage()`
+
+### IResourceLoader
+
+Plugin-style loader interface:
+- `CanLoad(extension)` - checks file extension support
+- `LoadAsync(path)` - async loading via Task<T>
+- `LoadSync(path)` - blocking synchronous loading
+
+### ResourceManager
+
+Main API for resource operations:
+- `Load<T>(path)` - sync loading with caching
+- `LoadAsync<T>(path)` - async loading with caching
+- `LoadSerialized<T>(path)` - deserialize reflected types from XML
+- `RegisterLoader(loader)` - add custom loaders
+
+## Usage Examples
+
+### Basic XML Loading (Sync)
+
+```cpp
+auto& rm = CoreManager::GetResourceManager();
+auto xml = rm.Load<XmlResource>("config/game.xml");
+if (xml && xml->GetState() == ResourceState::Loaded) {
+    auto root = xml->GetRoot();
+    auto title = root.ParseAttribute<eastl::string_view>("title");
+}
+```
+
+### Async Loading with Task<T>
+
+```cpp
+Task<void> LoadGameAssets() {
+    auto& rm = CoreManager::GetResourceManager();
+    
+    // Load multiple resources concurrently
+    auto xml = co_await rm.LoadAsync<XmlResource>("config/game.xml");
+    auto levels = co_await rm.LoadAsync<XmlResource>("config/levels.xml");
+    
+    if (xml && levels) {
+        // Both loaded successfully
+        ProcessGameConfig(xml->GetRoot());
+    }
+}
+```
+
+### Serialized Resource Loading
+
+```cpp
+// Define a reflected type
+struct PlayerStats {
+    BE_CLASS(PlayerStats)
+    BE_REFLECT_FIELD int32_t health = 100;
+    BE_REFLECT_FIELD float speed = 5.0f;
+    BE_REFLECT_FIELD eastl::string name = "Player";
+};
+
+// Load and deserialize
+Task<void> LoadPlayer() {
+    auto stats = co_await CoreManager::GetResourceManager()
+        .LoadSerializedAsync<PlayerStats>("saves/player.xml");
+    
+    LOG_INFO("Loaded player: {}, HP: {}", stats.name, stats.health);
+}
+```
+
+### Custom Resource Loader
+
+```cpp
+class TextureResourceLoader : public IResourceLoader {
+    BE_CLASS(TextureResourceLoader)
+public:
+    bool CanLoad(eastl::string_view extension) const override {
+        return extension == ".png" || extension == ".jpg";
+    }
+    
+    Task<IntrusivePtr<IResource>> LoadAsync(PoolString path) override {
+        co_await ResumeOnThreadPool();
+        
+        auto resource = New<TextureResource>();
+        // Load texture data...
+        resource->SetLoaded(path, textureData);
+        co_return resource;
+    }
+    
+    IntrusivePtr<IResource> LoadSync(PoolString path) override {
+        // Synchronous implementation...
+    }
+};
+
+// Register at startup
+CoreManager::GetResourceManager().RegisterLoader(New<TextureResourceLoader>());
+```
+
+## Resource State Lifecycle
+
+```
+Unloaded → Loading → Loaded
+                   ↘ Failed
+```
+
+1. **Unloaded**: Initial state
+2. **Loading**: Set by loader during async operations
+3. **Loaded**: Resource ready for use
+4. **Failed**: Load operation failed
+
+## Thread Safety
+
+- **ResourceCache**: Thread-safe with `std::shared_mutex`
+  - Concurrent reads allowed (shared lock)
+  - Exclusive write lock for `Put()`, `Clear()`
+- **Resources**: Immutable after loading (safe concurrent reads)
+- **Loading**: Runs on TaskSystem thread pool (no blocking)
+
+## Best Practices
+
+### DO:
+- Use `LoadAsync<T>()` for game startup to avoid blocking
+- Check `ResourceHandle` validity with `if (handle)` before use
+- Batch load resources during loading screens
+- Use `LoadSerialized<T>()` for configuration objects
+- Create custom loaders for new asset types
+- Use `PoolString::Intern()` for resource paths to optimize cache lookups
+
+### DON'T:
+- Don't use `Load()` (sync) on the main thread during gameplay
+- Don't cache raw pointers to resources (use `ResourceHandle<T>`)
+- Don't load the same resource multiple times (caching is automatic)
+- Don't forget to check `GetState()` before using loaded data
+- Don't create circular resource dependencies
+
+## Memory Management
+
+- Resources are **reference-counted** via `IntrusivePtr`
+- Cache holds references, keeping resources alive
+- `ClearCache()` releases all cached resources
+- `GetMemoryUsage()` tracks approximate memory per resource
+
+## Integration with CoreManager
+
+Access via singleton:
+```cpp
+auto& rm = CoreManager::GetResourceManager();
+```
+
+Initialized during `OnApplicationPreInit()` before tests run.
+
+## Testing
+
+See `ResourceManagerTest` for examples:
+- Sync/async loading validation
+- Cache hit verification
+- Invalid path handling
+- Memory tracking
+
+## Future Enhancements (Not in v1)
+
+- LRU cache eviction based on access time
+- Binary resource format support
+- Streaming for large assets
+- Hot-reloading for development
+- Dependency tracking between resources
+- Compression support

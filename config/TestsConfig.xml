@@ -8,5 +8,6 @@
         <test type="EventSubscription" enabled="true" />
         <test type="ReflectionEvent" enabled="true" />
         <test type="TaskSystem" enabled="true" />
+        <test type="ResourceManager" enabled="true" />
     </tests>
 </root>

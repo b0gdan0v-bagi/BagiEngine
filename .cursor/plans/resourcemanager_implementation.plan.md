@@ -4,37 +4,37 @@ overview: Implement a comprehensive ResourceManager with async loading via Task<
 todos:
   - id: iresource
     content: Create IResource base class with BE_CLASS(FACTORY_BASE), CORE_ENUM for State, path/memory tracking
-    status: pending
+    status: completed
   - id: resource-handle
     content: Create ResourceHandle<T> template wrapping IntrusivePtr with access time tracking
-    status: pending
+    status: completed
   - id: resource-cache
     content: Implement ResourceCache with simple caching (no eviction), thread-safe access
-    status: pending
+    status: completed
   - id: iresource-loader
     content: Create IResourceLoader interface with CanLoad/LoadAsync/LoadSync methods
-    status: pending
+    status: completed
   - id: xml-resource
     content: Implement XmlResource wrapping XmlConfig as a cacheable resource
-    status: pending
+    status: completed
   - id: xml-loader
     content: Implement XmlResourceLoader that creates XmlResource instances
-    status: pending
+    status: completed
   - id: serialized-resource
     content: Create SerializedResource<T> template for Reflection-based deserialization
-    status: pending
+    status: completed
   - id: resource-manager
     content: Implement ResourceManager with Load/LoadAsync/LoadSerializedAsync methods
-    status: pending
+    status: completed
   - id: coremanager-integration
     content: Add ResourceManager to CoreManager with GetResourceManager() accessor
-    status: pending
+    status: completed
   - id: resource-test
     content: Create ResourceManagerTest following ITest pattern with compile-time and runtime tests
-    status: pending
+    status: completed
   - id: documentation
     content: Add Doxygen documentation to all public APIs
-    status: pending
+    status: completed
 isProject: false
 ---
 
