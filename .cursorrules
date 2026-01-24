@@ -210,3 +210,17 @@ cmake --build build
 - macOS (Apple Silicon + Intel)
 - Windows (MSVC, MinGW)
 - Linux (GCC, Clang)
+
+## Planning and Documentation
+
+**CRITICAL**: When creating complex multi-step plans or task breakdowns:
+- **ALWAYS** save plans to `.cursor/plans/PLAN_NAME.md` before execution
+- Use descriptive filenames (e.g., `tasksystem_implementation.plan.md`, `reflection_system.plan.md`)
+- Update the plan file as work progresses, marking completed tasks
+- Plans should include: overview, todos with status, architecture diagrams, examples, and technical details
+- **NEVER** store plans in external storage - always use `.cursor/plans/` directory so they can be versioned in git
+- **ALWAYS** include at the end of every plan:
+  - Task for creating comprehensive tests (unit tests, integration tests, edge cases)
+  - Task for updating/creating documentation (module rules in `.cursor/rules/`, README updates, code examples)
+
+This ensures plans are tracked in version control and accessible to the team, and that testing and documentation are never forgotten.
