@@ -1,5 +1,5 @@
 ---
-description: Guidelines for Reflection and Serialization system
+description: Rules for Reflection and Serialization system
 globs:
   - "**/Reflection/**/*"
   - "**/*Test*.h"
@@ -11,164 +11,77 @@ alwaysApply: false
 
 ## Overview
 
-Compile-time reflection system with Python-based code generation (reflector.py).
+Compile-time reflection with Python code generator (meta_generator). Auto-generates `Serialize()` methods.
 
 ## Macros
 
-| Macro | Location | Purpose |
-|-------|----------|---------|
-| `BE_CLASS(Name)` | Inside class body | Declares static reflection methods |
-| `BE_CLASS(Name, FACTORY_BASE)` | Inside base class body | Enables factory/enum generation for inheritance tree |
-| `BE_REFLECT_FIELD` | Before field declaration | Marks field for serialization |
-| `BE_FUNCTION` | Before method declaration | Marks method for reflection/invocation |
-
-## Usage Pattern
-
-1. Add `BE_CLASS(ClassName)` inside struct/class body
-2. Mark serializable fields with `BE_REFLECT_FIELD`
-3. Mark callable methods with `BE_FUNCTION`
-4. Include generated file in .cpp: `#include <Generated/FileName.gen.hpp>`
-
-## Generated Type Methods
-
-| Method | Description |
-|--------|-------------|
-| `GetStaticTypeName()` | Constexpr, returns type name as `eastl::string_view` |
-| `GetStaticFieldCount()` | Constexpr, returns number of reflected fields |
-| `GetStaticTypeMeta()` | Static constexpr, returns `ClassMeta&` for the class |
-| `GetTypeMeta()` | Instance constexpr, returns actual runtime type's `ClassMeta&` |
-| `Is<T>()` | Constexpr, returns true if instance is of type T |
-| `Cast<T>()` | Constexpr, returns `T*` if type matches, nullptr otherwise |
-| `ForEachFieldStatic(obj, func)` | Constexpr, iterates over all fields |
-
-## Field Reflection API
-
-| Function/Concept | Description |
-|------------------|-------------|
-| `HasReflection<T>` | Concept, true if type has reflected fields |
-| `FieldCount<T>()` | Constexpr, returns number of reflected fields |
-| `ForEachField(obj, func)` | Constexpr, iterates over all fields |
-| `HasField<T>(name)` | Consteval, returns true if field with name exists |
-| `GetFieldInfo<T, I>()` | Constexpr, returns FieldInfo for field at index I |
-
-## Method Reflection API
-
-| Function/Concept | Description |
-|------------------|-------------|
-| `HasMethodReflection<T>` | Concept, true if type has reflected methods |
-| `MethodCount<T>()` | Constexpr, returns number of reflected methods |
-| `ForEachMethod<T>(func)` | Constexpr, iterates over all method infos |
-| `InvokeMethod<Ret>(obj, name, args...)` | Constexpr, invoke method by name, type-safe |
-| `HasMethod<T>(name)` | Consteval, returns true if method with name exists |
-| `GetMethodInfo<T, I>()` | Constexpr, returns MethodInfo for method at index I |
-
-## Validation Concepts
-
-| Concept | Description |
-|---------|-------------|
-| `ReflectedDerivedFrom<D, B>` | True if D is a reflected class derived from B |
-| `Serializable<T>` | True if T can be serialized (primitive, enum, reflected, or vector) |
-
-## Factory Generation (FACTORY_BASE)
-
-For inheritance hierarchies, use `BE_CLASS(Name, FACTORY_BASE)` on base class.
-
-1. Mark base class with `BE_CLASS(BaseClass, FACTORY_BASE)`
-2. Mark derived classes with regular `BE_CLASS(DerivedClass)`
-3. Add `SCAN_DIRS` in CMake to specify where to find derived classes
-4. Include `<Generated/EnumBaseClass.gen.hpp>` — includes all dependencies
-
-### Generated Factory API
-
-| Method | Description |
-|--------|-------------|
-| `Factory::Create(EnumType)` | Static method, creates by enum |
-| `Factory::Create(ClassMeta)` | Virtual method, creates by type metadata |
-| `Factory::ToMeta(EnumType)` | Constexpr, convert enum to ClassMeta |
-| `Factory::FromMeta(ClassMeta)` | Constexpr, convert ClassMeta to enum |
-| `Factory::Count()` | Constexpr, number of registered types |
-| `Factory::GetTypeName(type)` | Constexpr, get string name for type |
-| `Factory::GetInstance()` | Get singleton instance |
-
-### Naming Conventions
-
-| Base Class | Enum Type | Factory | Enum Values |
-|------------|-----------|---------|-------------|
-| `ILogSink` | `LogSinkType` | `LogSinkFactory` | `Console`, `File` |
-| `IWidget` | `WidgetType` | `WidgetFactory` | `ClearScreen`, `ImGui` |
-
-Enum values computed by stripping base class suffix: `ConsoleSink` + `ILogSink` → `Console`
-
-## CMake Configuration
-
-Parameters for `add_reflection_target()`:
-- `DIRS` — Directories to scan for headers with `BE_CLASS()` (generates .gen.hpp)
-- `SCAN_DIRS` — Additional directories to scan for derived classes (factory generation)
-- `INCLUDE_DIRS` — Include paths for computing include directives
-
-## ClassMeta
-
-Compile-time type identification without RTTI using FNV-1a hash.
-
-| Field/Method | Description |
-|--------------|-------------|
-| `typeHash` | uint64_t, FNV-1a hash of type name |
-| `typeName` | `eastl::string_view` |
-| `operator==` | Compare by hash |
-| `operator bool` | True if valid |
+| Macro | Purpose |
+|-------|---------|
+| `BE_CLASS(Name)` | Reflection + auto `Serialize()` |
+| `BE_CLASS(Name, FACTORY_BASE)` | Factory/enum generation for hierarchy |
+| `BE_REFLECT_FIELD` | Mark field for serialization (same line!) |
+| `BE_FUNCTION` | Mark method for reflection |
 
 ## Serialization
 
-| Archive | Format | Use Case |
-|---------|--------|----------|
-| `XmlArchive` | XML (pugixml) | Human-readable saves, config files |
-| `BinaryArchive` | Binary stream | Compact saves, network packets |
+| Type | XML Format | Method |
+|------|------------|--------|
+| Primitives (int, bool, string, PoolString) | Attributes | `SerializeAttribute()` |
+| Classes (BE_CLASS) | Child elements | `BeginObject()` + `Serialize()` |
 
-| Helper | Description |
+```xml
+<Player health="100" name="Hero">
+    <Position x="10" y="20"/>
+</Player>
+```
+
+## Usage
+
+```cpp
+// Class definition
+struct Player {
+    BE_CLASS(Player)
+    BE_REFLECT_FIELD int32_t health = 100;  // ✓ Same line
+    BE_REFLECT_FIELD PoolString name;
+    bool _internal = false;  // Not serialized
+};
+
+// Serialization
+XmlArchive archive(XmlArchive::Mode::Write);
+if (archive.BeginObject("Player")) {
+    player.Serialize(archive);
+    archive.EndObject();
+}
+```
+
+## Factory Generation (FACTORY_BASE)
+
+Use `BE_CLASS(Name, FACTORY_BASE)` on base class. Include `<Generated/EnumXxx.gen.hpp>`.
+
+| Base Class | Enum | Factory |
+|------------|------|---------|
+| `ILogSink` | `LogSinkType` | `LogSinkFactory` |
+| `IWidget` | `WidgetType` | `WidgetFactory` |
+
+## Generated Methods
+
+| Method | Description |
 |--------|-------------|
-| `Serializable<T>` | Concept to check if type can be serialized |
-| `ArchivePrimitive<T>` | Concept for primitive types (int, float, string, etc.) |
-| `VectorType<T>` | Concept for eastl::vector types |
-| `Serialize(archive, name, obj)` | Serialize/deserialize object (requires `Serializable<T>`) |
-| `SerializeRoot(archive, obj)` | Serialize object as root element |
+| `GetStaticTypeName()` | Type name as `string_view` |
+| `GetStaticTypeMeta()` | `ClassMeta&` for type |
+| `Is<T>()` / `Cast<T>()` | Runtime type checking |
+| `Serialize(Archive&)` | Auto-generated from `BE_REFLECT_FIELD` |
 
-## File Structure
+## Best Practices
 
-| Path | Contents |
-|------|----------|
-| `BECore/Reflection/ReflectionMarkers.h` | `BE_CLASS`, `BE_REFLECT_*`, `BE_FUNCTION` macros |
-| `BECore/Reflection/TypeTraits.h` | `ReflectionTraits<T>`, `FieldInfo`, method helpers |
-| `BECore/Reflection/MethodInfo.h` | `MethodInfo`, `ConstMethodInfo` structs |
-| `BECore/Reflection/ClassMeta.h` | `ClassMeta` struct, `GetClassMeta<T>()` |
-| `BECore/Reflection/AbstractFactory.h` | `AbstractFactory<T>` base template |
-| `CI/reflector/reflector.py` | Code generator script |
-| `CI/reflector/templates/*.j2` | Jinja2 templates |
+- Put `BE_REFLECT_FIELD` on **same line** as field
+- Include `.gen.hpp` in .cpp only
+- Use `Is<T>()`/`Cast<T>()` instead of `dynamic_cast`
+- Use `SerializeAttribute()` for primitives
 
-## Key Points
+## Don't
 
-- Use `eastl::string_view` for names (not `std::string_view`)
-- Generated code is in `${CMAKE_BINARY_DIR}/Generated/`
-- Python parser uses regex patterns to find `BE_CLASS()`, `BE_REFLECT_FIELD`, `BE_FUNCTION`
-- `EnumXxx.gen.hpp` includes base class `.gen.hpp` and all derived `.gen.hpp`
-- `Is<T>()` and `Cast<T>()` work without RTTI using embedded `_typeMeta` pointer
-- Method invocation uses `if constexpr` to skip methods with incompatible signatures
-
-## DO
-
-- Use `BE_CLASS(ClassName)` inside class body
-- Use `BE_CLASS(ClassName, FACTORY_BASE)` for factory base classes
-- Mark serializable fields with `BE_REFLECT_FIELD`
-- Mark callable methods with `BE_FUNCTION`
-- Use `CORE_ENUM` macro for enum reflection
-- Use `Is<T>()` and `Cast<T>()` instead of `dynamic_cast`
-- Include generated headers in .cpp files only
-- Include `EnumXxx.gen.hpp` for factory bases (includes all dependencies)
-
-## DON'T
-
-- Don't reflect pointer types directly (use IDs or special handling)
-- Don't reflect reference types
-- Don't modify generated files (they are overwritten)
-- Don't forget the `ClassName` argument in `BE_CLASS(ClassName)`
-- Don't include generated headers in .h files (causes ODR issues)
-- Don't use `dynamic_cast` when `Is<T>()`/`Cast<T>()` are available
+- Reflect pointers/references directly
+- Put `BE_REFLECT_FIELD` on separate line
+- Include `.gen.hpp` in headers
+- Modify generated files

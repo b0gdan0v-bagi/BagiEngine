@@ -126,6 +126,7 @@ BagiEngine/
 │   ├── Widgets/         # Game widgets
 │   └── Modules/
 │       ├── BECore/      # Core engine module
+│       │   └── Reflection/  # Serialization system
 │       ├── Math/        # Math utilities
 │       ├── Events/      # Event system
 │       ├── TaskSystem/  # Task/job system
@@ -138,6 +139,7 @@ BagiEngine/
 ├── external/
 │   └── SDL/             # SDL3 (git submodule)
 ├── config/              # XML configuration files
+├── build/Generated/     # Auto-generated reflection code
 ├── .cursorignore        # Игнорирование vendored для AI
 └── CI/
     ├── setup_venv.bat       # Настройка venv (Windows CMD)
@@ -145,8 +147,15 @@ BagiEngine/
     ├── setup_venv.sh        # Настройка venv (macOS/Linux)
     ├── setup_vs.bat         # Генерация проекта VS
     ├── BagiEngine.code-workspace  # Workspace файл
-    └── launcher/            # PyQt6 приложение
+    ├── launcher/            # PyQt6 приложение
+    └── meta_generator/      # Генератор кода рефлексии
 ```
+
+## Рефлексия и сериализация
+
+Используйте `BE_CLASS` и `BE_REFLECT_FIELD` для автоматической сериализации.
+Примитивы → XML атрибуты, классы → вложенные элементы.
+Подробнее: `.cursor/rules/reflection-module.mdc`
 
 ## Ручная сборка (без Launcher)
 
