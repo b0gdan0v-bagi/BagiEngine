@@ -3,7 +3,9 @@
 #include <Widgets/ImGuiWidget.h>
 #include <Widgets/ClearScreenWidget.h>
 #include <BECore/Config/XmlConfig.h>
+#include <BECore/Config/XmlNode.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/XmlArchive.h>
 
 #include <Generated/EnumWidget.gen.hpp>
 
@@ -32,7 +34,7 @@ namespace BECore {
     }
 
     void WidgetManager::CreateWidgets() {
-        // Получаем конфиг через ConfigManager
+        // Get config via ConfigManager
         const auto rootNode = CoreManager::GetConfigManager().GetConfig("WidgetsConfig"_intern);
         
         if (!rootNode) {
@@ -57,7 +59,12 @@ namespace BECore {
             if (!widgetPtr) {
                 continue;
             }
-            widgetPtr->Initialize(widgetNode);
+            
+            // Use XmlArchive for widget initialization
+            XmlArchive archive(XmlArchive::Mode::Read);
+            archive.LoadFromXmlNode(widgetNode);
+            widgetPtr->Initialize(archive);
+            
             RegisterWidget(widgetPtr);
         }
     }

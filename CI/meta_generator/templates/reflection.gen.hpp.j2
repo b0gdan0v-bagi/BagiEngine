@@ -207,6 +207,23 @@ inline constexpr const T* {{ cls.full_qualified_name }}::Cast() const {
     return Is<T>() ? static_cast<const T*>(this) : nullptr;
 }
 
+{% if cls.fields %}
+// {{ cls.full_qualified_name }}::Serialize() - auto-generated from BE_REFLECT_FIELD markers
+template<typename Archive>
+inline void {{ cls.full_qualified_name }}::Serialize(Archive& archive) {
+{% for field in cls.fields %}
+{% if field.is_primitive %}
+    archive.SerializeAttribute("{{ field.name }}", {{ field.name }});
+{% else %}
+    if (archive.BeginObject("{{ field.name }}")) {
+        {{ field.name }}.Serialize(archive);
+        archive.EndObject();
+    }
+{% endif %}
+{% endfor %}
+}
+{% endif %}
+
 {% endif %}
 {% endfor %}
 {% endif %}

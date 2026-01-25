@@ -107,6 +107,21 @@ namespace BECore {
         void Serialize(eastl::string_view name, eastl::string& value) override;
         void Serialize(eastl::string_view name, PoolString& value) override;
 
+        // For binary format, SerializeAttribute is identical to Serialize
+        void SerializeAttribute(eastl::string_view name, bool& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, int8_t& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, uint8_t& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, int16_t& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, uint16_t& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, int32_t& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, uint32_t& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, int64_t& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, uint64_t& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, float& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, double& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, eastl::string& value) override { Serialize(name, value); }
+        void SerializeAttribute(eastl::string_view name, PoolString& value) override { Serialize(name, value); }
+
         bool BeginObject(eastl::string_view name) override;
         void EndObject() override;
 

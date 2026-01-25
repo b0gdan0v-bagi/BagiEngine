@@ -20,6 +20,51 @@ class MethodParam:
     type_name: str
 
 
+# Primitive types for serialization (attributes vs child elements)
+PRIMITIVE_TYPES = frozenset({
+    # Boolean
+    'bool',
+    # Signed integers
+    'int8_t', 'int16_t', 'int32_t', 'int64_t',
+    'signed char', 'short', 'int', 'long', 'long long',
+    # Unsigned integers
+    'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t',
+    'unsigned char', 'unsigned short', 'unsigned int', 'unsigned long', 'unsigned long long',
+    # Floating point
+    'float', 'double',
+    # Strings
+    'eastl::string', 'std::string', 'PoolString',
+    'eastl::basic_string<char>', 'std::basic_string<char>',
+    # Character
+    'char', 'wchar_t', 'char8_t', 'char16_t', 'char32_t',
+})
+
+# Patterns that indicate primitive types
+PRIMITIVE_PATTERNS = [
+    'eastl::basic_string',
+    'std::basic_string',
+    'PoolString',
+]
+
+
+def is_primitive_type(type_name: str) -> bool:
+    """Check if a type is a primitive that should be serialized as attribute."""
+    # Remove const, volatile, reference, pointer modifiers
+    clean_type = type_name.replace('const ', '').replace('volatile ', '')
+    clean_type = clean_type.rstrip('&*').strip()
+    
+    # Check direct match
+    if clean_type in PRIMITIVE_TYPES:
+        return True
+    
+    # Check pattern matches (for templated types like eastl::basic_string<char>)
+    for pattern in PRIMITIVE_PATTERNS:
+        if clean_type.startswith(pattern):
+            return True
+    
+    return False
+
+
 @dataclass
 class FieldData:
     """Information about a reflected field."""
@@ -27,6 +72,12 @@ class FieldData:
     type_name: str
     line: int = 0
     column: int = 0
+    is_primitive: bool = False  # Set by parser, used by template for SerializeAttribute vs BeginObject
+    
+    def __post_init__(self):
+        """Automatically determine if type is primitive after initialization."""
+        if not self.is_primitive:
+            self.is_primitive = is_primitive_type(self.type_name)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -35,6 +86,7 @@ class FieldData:
             "type_name": self.type_name,
             "line": self.line,
             "column": self.column,
+            "is_primitive": self.is_primitive,
         }
     
     @classmethod
@@ -45,6 +97,7 @@ class FieldData:
             type_name=data["type_name"],
             line=data.get("line", 0),
             column=data.get("column", 0),
+            is_primitive=data.get("is_primitive", False),
         )
 
 

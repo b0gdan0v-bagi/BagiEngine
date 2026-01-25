@@ -7,6 +7,8 @@ struct SDL_Window;
 struct SDL_Renderer;
 
 namespace BECore {
+    class IArchive;
+
     namespace SDLEvents {
         struct SDLEventWrapper;
     }
@@ -17,7 +19,7 @@ namespace BECore {
         ImGuiWidget() = default;
         ~ImGuiWidget() override = default;
 
-        BE_FUNCTION bool Initialize(const XmlNode& node) override;
+        BE_FUNCTION bool Initialize(IArchive& archive) override;
         BE_FUNCTION void Draw() override;
         BE_FUNCTION void Update() override;
 

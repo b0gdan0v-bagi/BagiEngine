@@ -195,7 +195,14 @@ class CodeGenerator:
                 'qualified_name': cls.qualified_name,
                 'full_qualified_name': cls.full_qualified_name,
                 'namespace': cls.namespace,
-                'fields': [{'name': f.name, 'type_name': f.type_name} for f in cls.fields],
+                'fields': [
+                    {
+                        'name': f.name,
+                        'type_name': f.type_name,
+                        'is_primitive': f.is_primitive,
+                    }
+                    for f in cls.fields
+                ],
                 'methods': [
                     {
                         'name': m.name,

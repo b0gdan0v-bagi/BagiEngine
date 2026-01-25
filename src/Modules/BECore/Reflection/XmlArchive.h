@@ -7,6 +7,10 @@
 
 namespace BECore {
 
+    // Forward declarations
+    class XmlConfig;
+    class XmlNode;
+
     /**
      * @brief XML-based archive implementation using pugixml
      *
@@ -72,6 +76,17 @@ namespace BECore {
         bool LoadFromString(eastl::string_view xmlContent);
 
         /**
+         * @brief Position archive at the given XmlNode
+         * 
+         * Allows using XmlArchive with nodes obtained from XmlConfig/ConfigManager.
+         * The archive will serialize from/to this node's position.
+         * 
+         * @param node XmlNode to position at
+         * @return true on success
+         */
+        bool LoadFromXmlNode(const XmlNode& node);
+
+        /**
          * @brief Save XML to file
          * @param path File path to save to
          * @return true on success
@@ -105,6 +120,21 @@ namespace BECore {
         void Serialize(eastl::string_view name, eastl::string& value) override;
         void Serialize(eastl::string_view name, PoolString& value) override;
 
+        // Attribute serialization (primitives stored as XML attributes)
+        void SerializeAttribute(eastl::string_view name, bool& value) override;
+        void SerializeAttribute(eastl::string_view name, int8_t& value) override;
+        void SerializeAttribute(eastl::string_view name, uint8_t& value) override;
+        void SerializeAttribute(eastl::string_view name, int16_t& value) override;
+        void SerializeAttribute(eastl::string_view name, uint16_t& value) override;
+        void SerializeAttribute(eastl::string_view name, int32_t& value) override;
+        void SerializeAttribute(eastl::string_view name, uint32_t& value) override;
+        void SerializeAttribute(eastl::string_view name, int64_t& value) override;
+        void SerializeAttribute(eastl::string_view name, uint64_t& value) override;
+        void SerializeAttribute(eastl::string_view name, float& value) override;
+        void SerializeAttribute(eastl::string_view name, double& value) override;
+        void SerializeAttribute(eastl::string_view name, eastl::string& value) override;
+        void SerializeAttribute(eastl::string_view name, PoolString& value) override;
+
         bool BeginObject(eastl::string_view name) override;
         void EndObject() override;
 
@@ -121,6 +151,16 @@ namespace BECore {
          * @brief Get child node for reading
          */
         pugi::xml_node GetChild(eastl::string_view name) const;
+
+        /**
+         * @brief Get or create attribute on current node
+         */
+        pugi::xml_attribute GetOrCreateAttribute(eastl::string_view name);
+
+        /**
+         * @brief Get attribute from current node for reading
+         */
+        pugi::xml_attribute GetAttribute(eastl::string_view name) const;
 
         Mode _mode;
         pugi::xml_document _document;

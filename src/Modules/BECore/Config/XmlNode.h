@@ -104,12 +104,24 @@ namespace BECore {
             return _impl->ParseAttribute<T>(name);
         }
 
+        /**
+         * @brief Get underlying pugi::xml_node for integration with XmlArchive
+         * @return pugi::xml_node or empty node if not valid
+         */
+        pugi::xml_node GetPugiNode() const {
+            if (!_impl) {
+                return pugi::xml_node{};
+            }
+            return std::get<pugi::xml_node>(_impl->GetRawNode());
+        }
+
     private:
         explicit XmlNode(IntrusivePtrNonAtomic<XmlNodeImpl> impl) : _impl(std::move(impl)) {}
 
         IntrusivePtrNonAtomic<XmlNodeImpl> _impl;
 
         friend class XmlConfigImpl;
+        friend class XmlArchive;
     };
 
 }  // namespace BECore

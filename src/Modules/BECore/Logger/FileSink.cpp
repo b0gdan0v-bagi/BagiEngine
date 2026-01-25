@@ -1,6 +1,6 @@
 #include "FileSink.h"
 
-#include <BECore/Config/XmlNode.h>
+#include <BECore/Reflection/IArchive.h>
 #include <BECore/Logger/LogLevel.h>
 #include <EASTL/string.h>
 #include <EASTL/string_view.h>
@@ -34,16 +34,9 @@ namespace BECore {
         _initialized = true;
     }
 
-    void FileSink::Configure(const XmlNode& node) {
-        auto filename = node.ParseAttribute<eastl::string_view>("filename");
-        if (filename.has_value()) {
-            SetFilename(*filename);
-        }
-
-        auto append = node.ParseAttribute<bool>("append");
-        if (append.has_value()) {
-            SetAppend(*append);
-        }
+    void FileSink::Configure(IArchive& archive) {
+        archive.SerializeAttribute("filename", _filename);
+        archive.SerializeAttribute("append", _append);
     }
 
     void FileSink::OnLogEvent(const LogEvent& event) {

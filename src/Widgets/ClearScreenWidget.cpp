@@ -1,5 +1,6 @@
 #include "ClearScreenWidget.h"
 
+#include <BECore/Reflection/IArchive.h>
 #include <Events/RenderEvents.h>
 #include <Math/Color.h>
 
@@ -7,8 +8,12 @@
 
 namespace BECore {
 
-    bool ClearScreenWidget::Initialize(const XmlNode& node) {
-        _clearColor = node.ParseAttribute<Math::Color>("Color").value_or(_clearColor);
+    bool ClearScreenWidget::Initialize(IArchive& archive) {
+        // Color is a nested object with attributes for r, g, b, a
+        if (archive.BeginObject("Color")) {
+            _clearColor.Serialize(archive);
+            archive.EndObject();
+        }
         return true;
     }
 

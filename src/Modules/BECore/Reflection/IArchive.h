@@ -53,7 +53,7 @@ namespace BECore {
         virtual bool IsWriting() const = 0;
 
         // =================================================================
-        // Primitive types serialization
+        // Primitive types serialization (as child elements)
         // =================================================================
 
         virtual void Serialize(eastl::string_view name, bool& value) = 0;
@@ -69,11 +69,32 @@ namespace BECore {
         virtual void Serialize(eastl::string_view name, double& value) = 0;
 
         // =================================================================
-        // String types serialization
+        // String types serialization (as child elements)
         // =================================================================
 
         virtual void Serialize(eastl::string_view name, eastl::string& value) = 0;
         virtual void Serialize(eastl::string_view name, PoolString& value) = 0;
+
+        // =================================================================
+        // Attribute serialization (for XML attributes, inline for binary)
+        // =================================================================
+        // Use SerializeAttribute for primitive values that should be stored
+        // as XML attributes rather than child elements. This is the preferred
+        // method for configuration files where compactness matters.
+
+        virtual void SerializeAttribute(eastl::string_view name, bool& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, int8_t& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, uint8_t& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, int16_t& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, uint16_t& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, int32_t& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, uint32_t& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, int64_t& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, uint64_t& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, float& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, double& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, eastl::string& value) = 0;
+        virtual void SerializeAttribute(eastl::string_view name, PoolString& value) = 0;
 
         // =================================================================
         // Object nesting

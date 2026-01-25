@@ -172,7 +172,10 @@ namespace BECore::Tests {
         
         // Serialize to XML
         XmlArchive writeArchive(XmlArchive::Mode::Write);
-        Serialize(writeArchive, eastl::string_view{"Player"}, original);
+        if (writeArchive.BeginObject("Player")) {
+            original.Serialize(writeArchive);
+            writeArchive.EndObject();
+        }
         eastl::string xml = writeArchive.SaveToString();
         
         LOG_DEBUG("[ReflectionTest] Generated XML:\n{}"_format(xml));
@@ -189,7 +192,10 @@ namespace BECore::Tests {
         loaded.speed = 0.0f;
         loaded.isAlive = false;
         
-        Serialize(readArchive, eastl::string_view{"Player"}, loaded);
+        if (readArchive.BeginObject("Player")) {
+            loaded.Serialize(readArchive);
+            readArchive.EndObject();
+        }
         
         // Verify
         if (loaded.health != original.health) {
@@ -225,7 +231,10 @@ namespace BECore::Tests {
         
         // Serialize to binary
         BinaryArchive writeArchive(BinaryArchive::Mode::Write);
-        Serialize(writeArchive, eastl::string_view{"Player"}, original);
+        if (writeArchive.BeginObject("Player")) {
+            original.Serialize(writeArchive);
+            writeArchive.EndObject();
+        }
         
         LOG_DEBUG("[ReflectionTest] Binary size: {} bytes"_format(writeArchive.GetSize()));
         
@@ -241,7 +250,10 @@ namespace BECore::Tests {
         loaded.speed = 0.0f;
         loaded.isAlive = true;
         
-        Serialize(readArchive, eastl::string_view{"Player"}, loaded);
+        if (readArchive.BeginObject("Player")) {
+            loaded.Serialize(readArchive);
+            readArchive.EndObject();
+        }
         
         // Verify
         if (loaded.health != original.health) {

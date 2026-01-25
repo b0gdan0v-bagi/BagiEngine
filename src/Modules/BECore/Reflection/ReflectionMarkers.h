@@ -73,6 +73,9 @@ public:                                                                         
     /** @brief Cast to type T (const), returns nullptr if type mismatch */                                                                                                                             \
     template <typename T>                                                                                                                                                                              \
     constexpr const T* Cast() const;                                                                                                                                                                   \
+    /** @brief Serialize all reflected fields (primitives as attributes, classes as child elements) */                                                                                                 \
+    template <typename Archive>                                                                                                                                                                        \
+    void Serialize(Archive& archive);                                                                                                                                                                  \
                                                                                                                                                                                                        \
 private:                                                                                                                                                                                               \
     template <typename, typename>                                                                                                                                                                      \

@@ -1,6 +1,7 @@
 #include "ImGuiWidget.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/IArchive.h>
 #include <CoreSDL/SDLMainWindow.h>
 
 #include <Events/ApplicationEvents.h>
@@ -16,7 +17,7 @@
 
 namespace BECore {
 
-    bool ImGuiWidget::Initialize(const XmlNode& node) {
+    bool ImGuiWidget::Initialize(IArchive& /*archive*/) {
         if (_isInitialized) {
             return true;
         }

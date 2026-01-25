@@ -22,7 +22,7 @@ class MetadataCache:
     to detect when files need to be re-parsed.
     """
     
-    CACHE_VERSION = "1.0"
+    CACHE_VERSION = "1.1"  # Bumped for is_primitive field support
     
     def __init__(self, cache_path: Path):
         """

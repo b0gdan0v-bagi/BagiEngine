@@ -1,12 +1,14 @@
 #include "LoggerManager.h"
 
 #include <BECore/Config/XmlConfig.h>
+#include <BECore/Config/XmlNode.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ConsoleSink.h>
 #include <BECore/Logger/FileSink.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Logger/OutputSink.h>
 #include <BECore/RefCounted/New.h>
+#include <BECore/Reflection/XmlArchive.h>
 
 #include <Generated/ILogSink.gen.hpp>
 #include <Generated/EnumLogSink.gen.hpp>
@@ -20,7 +22,7 @@ namespace BECore {
             return;
         }
 
-        // Получаем конфиг через ConfigManager
+        // Get config via ConfigManager
         const auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
 
         if (!rootNode) {
@@ -62,7 +64,10 @@ namespace BECore {
                         sink->SetMinLevel(*minLevel);
                     }
 
-                    sink->Configure(sinkNode);
+                    // Use XmlArchive for sink-specific configuration
+                    XmlArchive archive(XmlArchive::Mode::Read);
+                    archive.LoadFromXmlNode(sinkNode);
+                    sink->Configure(archive);
 
                     _sinks.push_back(sink);
                 }

@@ -273,25 +273,22 @@ class LibclangParser:
     
     def _has_reflection_annotation(self, cursor, lines: List[str], marker: str) -> bool:
         """Check if a cursor has a reflection annotation marker."""
-        # Check for clang::annotate attribute
+        # Check for clang::annotate attribute (preferred method)
         for child in cursor.get_children():
             if child.kind == CursorKind.ANNOTATE_ATTR:
                 annotation = child.spelling
                 if "reflect" in annotation.lower():
                     return True
         
-        # Fallback: check previous line for comment marker
+        # Fallback for MSVC: check if marker appears on the same line as the field
+        # The marker should be ON THE SAME LINE as the field declaration
         if lines and cursor.location.line > 0:
             line_idx = cursor.location.line - 1
             if line_idx < len(lines):
                 current_line = lines[line_idx]
+                # Check if marker is on the same line as the field
                 if marker in current_line:
                     return True
-                # Also check the previous line
-                if line_idx > 0:
-                    prev_line = lines[line_idx - 1]
-                    if marker in prev_line:
-                        return True
         
         return False
     

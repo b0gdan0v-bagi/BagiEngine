@@ -5,11 +5,10 @@
 
 #include <fstream>
 #include <mutex>
-#include <string>
 
 namespace BECore {
 
-    class XmlNode;
+    class IArchive;
 
     class FileSink : public ILogSink {
         BE_CLASS(FileSink)
@@ -20,7 +19,7 @@ namespace BECore {
 
         void Initialize() override;
 
-        void Configure(const XmlNode& node) override;
+        void Configure(IArchive& archive) override;
 
         bool IsOpen() const { return _file.is_open(); }
 
@@ -41,8 +40,8 @@ namespace BECore {
         bool IsAppend() const { return _append; }
 
     private:
-        eastl::string _filename = "engine.log";
-        bool _append = false;
+        BE_REFLECT_FIELD eastl::string _filename = "engine.log";
+        BE_REFLECT_FIELD bool _append = false;
         std::ofstream _file;
         std::mutex _mutex;
         bool _initialized = false;

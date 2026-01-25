@@ -4,7 +4,7 @@
 
 namespace BECore {
 
-    class XmlNode;
+    class IArchive;
     struct LogEvent;
 
     class ConsoleSink : public ILogSink {
@@ -16,7 +16,7 @@ namespace BECore {
 
         void Initialize() override;
 
-        void Configure(const XmlNode& node) override;
+        void Configure(IArchive& archive) override;
 
         void Write(LogLevel level, eastl::string_view message) override;
 
@@ -29,7 +29,7 @@ namespace BECore {
         bool IsColorEnabled() const { return _colorEnabled; }
 
     private:
-        bool _colorEnabled = true;
+        BE_REFLECT_FIELD bool _colorEnabled = true;
         bool _initialized = false;
     };
 

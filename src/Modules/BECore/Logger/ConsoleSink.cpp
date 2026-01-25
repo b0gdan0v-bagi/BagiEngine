@@ -1,6 +1,6 @@
 #include "ConsoleSink.h"
 
-#include <BECore/Config/XmlNode.h>
+#include <BECore/Reflection/IArchive.h>
 #include <BECore/Logger/LogLevel.h>
 
 #include <EASTL/string_view.h>
@@ -24,11 +24,8 @@ namespace BECore {
         _initialized = true;
     }
 
-    void ConsoleSink::Configure(const XmlNode& node) {
-        auto colorEnabled = node.ParseAttribute<bool>("colorEnabled");
-        if (colorEnabled.has_value()) {
-            SetColorEnabled(*colorEnabled);
-        }
+    void ConsoleSink::Configure(IArchive& archive) {
+        archive.SerializeAttribute("colorEnabled", _colorEnabled);
     }
 
     void ConsoleSink::OnLogEvent(const LogEvent& event) {
