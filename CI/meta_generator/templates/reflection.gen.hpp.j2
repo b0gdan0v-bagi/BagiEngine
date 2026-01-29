@@ -13,6 +13,9 @@
 #include <EASTL/string_view.h>
 #include <tuple>
 
+// Include the original header file to access class declarations
+#include <{{ include_path }}>
+
 {% if enums %}
 // ============================================================================
 // Enum Reflection
@@ -152,6 +155,40 @@ inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic(const {{
     }, ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields);
 }
 
+{% if cls.fields %}
+// {{ cls.full_qualified_name }}::Serialize() - auto-generated from BE_REFLECT_FIELD markers
+template<typename Serializer>
+inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
+{% for field in cls.fields %}
+{% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
+{% if field.is_primitive %}
+    s.WriteAttribute("{{ xml_name }}", {{ field.name }});
+{% else %}
+    if (s.BeginObject("{{ xml_name }}")) {
+        {{ field.name }}.Serialize(s);
+        s.EndObject();
+    }
+{% endif %}
+{% endfor %}
+}
+
+// {{ cls.full_qualified_name }}::Deserialize() - auto-generated from BE_REFLECT_FIELD markers
+template<typename Deserializer>
+inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
+{% for field in cls.fields %}
+{% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
+{% if field.is_primitive %}
+    d.ReadAttribute("{{ xml_name }}", {{ field.name }});
+{% else %}
+    if (d.BeginObject("{{ xml_name }}")) {
+        {{ field.name }}.Deserialize(d);
+        d.EndObject();
+    }
+{% endif %}
+{% endfor %}
+}
+{% endif %}
+
 {% else %}
 // ============================================================================
 // BE_CLASS Implementation: {{ cls.full_qualified_name }}
@@ -209,15 +246,34 @@ inline constexpr const T* {{ cls.full_qualified_name }}::Cast() const {
 
 {% if cls.fields %}
 // {{ cls.full_qualified_name }}::Serialize() - auto-generated from BE_REFLECT_FIELD markers
-template<typename Archive>
-inline void {{ cls.full_qualified_name }}::Serialize(Archive& archive) {
+// Writes data to ISerializer (save/export)
+template<typename Serializer>
+inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
 {% for field in cls.fields %}
+{% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
 {% if field.is_primitive %}
-    archive.SerializeAttribute("{{ field.name }}", {{ field.name }});
+    s.WriteAttribute("{{ xml_name }}", {{ field.name }});
 {% else %}
-    if (archive.BeginObject("{{ field.name }}")) {
-        {{ field.name }}.Serialize(archive);
-        archive.EndObject();
+    if (s.BeginObject("{{ xml_name }}")) {
+        {{ field.name }}.Serialize(s);
+        s.EndObject();
+    }
+{% endif %}
+{% endfor %}
+}
+
+// {{ cls.full_qualified_name }}::Deserialize() - auto-generated from BE_REFLECT_FIELD markers
+// Reads data from IDeserializer (load/import)
+template<typename Deserializer>
+inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
+{% for field in cls.fields %}
+{% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
+{% if field.is_primitive %}
+    d.ReadAttribute("{{ xml_name }}", {{ field.name }});
+{% else %}
+    if (d.BeginObject("{{ xml_name }}")) {
+        {{ field.name }}.Deserialize(d);
+        d.EndObject();
     }
 {% endif %}
 {% endfor %}

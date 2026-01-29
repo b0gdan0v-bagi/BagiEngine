@@ -5,7 +5,7 @@
 #include <BECore/Config/XmlConfig.h>
 #include <BECore/Config/XmlNode.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Reflection/XmlArchive.h>
+#include <BECore/Reflection/XmlDeserializer.h>
 
 #include <Generated/EnumWidget.gen.hpp>
 
@@ -60,10 +60,10 @@ namespace BECore {
                 continue;
             }
             
-            // Use XmlArchive for widget initialization
-            XmlArchive archive(XmlArchive::Mode::Read);
-            archive.LoadFromXmlNode(widgetNode);
-            widgetPtr->Initialize(archive);
+            // Use XmlDeserializer for widget initialization
+            XmlDeserializer deserializer;
+            deserializer.LoadFromXmlNode(widgetNode);
+            widgetPtr->Initialize(deserializer);
             
             RegisterWidget(widgetPtr);
         }

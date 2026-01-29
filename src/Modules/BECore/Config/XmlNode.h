@@ -105,7 +105,7 @@ namespace BECore {
         }
 
         /**
-         * @brief Get underlying pugi::xml_node for integration with XmlArchive
+         * @brief Get underlying pugi::xml_node for internal use
          * @return pugi::xml_node or empty node if not valid
          */
         pugi::xml_node GetPugiNode() const {
@@ -121,7 +121,6 @@ namespace BECore {
         IntrusivePtrNonAtomic<XmlNodeImpl> _impl;
 
         friend class XmlConfigImpl;
-        friend class XmlArchive;
     };
 
 }  // namespace BECore

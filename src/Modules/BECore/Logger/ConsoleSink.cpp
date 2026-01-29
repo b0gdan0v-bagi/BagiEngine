@@ -1,6 +1,6 @@
 #include "ConsoleSink.h"
 
-#include <BECore/Reflection/IArchive.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Logger/LogLevel.h>
 
 #include <EASTL/string_view.h>
@@ -24,8 +24,8 @@ namespace BECore {
         _initialized = true;
     }
 
-    void ConsoleSink::Configure(IArchive& archive) {
-        archive.SerializeAttribute("colorEnabled", _colorEnabled);
+    void ConsoleSink::Configure(IDeserializer& deserializer) {
+        Deserialize(deserializer);
     }
 
     void ConsoleSink::OnLogEvent(const LogEvent& event) {

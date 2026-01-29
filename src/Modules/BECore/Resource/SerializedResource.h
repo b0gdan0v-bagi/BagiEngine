@@ -2,7 +2,6 @@
 
 #include <BECore/Resource/IResource.h>
 #include <BECore/Reflection/TypeTraits.h>
-#include <BECore/Reflection/XmlArchive.h>
 
 namespace BECore {
 

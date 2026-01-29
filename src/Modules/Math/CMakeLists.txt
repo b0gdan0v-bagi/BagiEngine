@@ -63,3 +63,17 @@ target_include_directories(MathModule PUBLIC
 target_link_libraries(MathModule PUBLIC
     BECoreModule
 )
+
+# =============================================================================
+# Reflection Code Generation
+# =============================================================================
+# Generate reflection metadata for Math::Color
+if(COMMAND add_reflection_target)
+    add_reflection_target(MathModule
+        DIRS
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/Math
+        INCLUDE_DIRS
+            ${PROJECT_ROOT}/src/Modules
+            ${PROJECT_ROOT}/src/Modules/Math/src
+    )
+endif()

@@ -1,6 +1,6 @@
 #include "FileSink.h"
 
-#include <BECore/Reflection/IArchive.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Logger/LogLevel.h>
 #include <EASTL/string.h>
 #include <EASTL/string_view.h>
@@ -34,9 +34,8 @@ namespace BECore {
         _initialized = true;
     }
 
-    void FileSink::Configure(IArchive& archive) {
-        archive.SerializeAttribute("filename", _filename);
-        archive.SerializeAttribute("append", _append);
+    void FileSink::Configure(IDeserializer& deserializer) {
+        Deserialize(deserializer);
     }
 
     void FileSink::OnLogEvent(const LogEvent& event) {

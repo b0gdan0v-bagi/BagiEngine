@@ -11,13 +11,26 @@ alwaysApply: false
 
 ## Overview
 
-Compile-time reflection with Python code generator (meta_generator). Auto-generates `Serialize()` methods.
+Compile-time reflection with Python code generator (meta_generator). Auto-generates `Serialize()` (write) and `Deserialize()` (read) methods.
+
+## Architecture
+
+The serialization system uses **separate interfaces** for reading and writing:
+
+- **`ISerializer`** - Interface for writing data (save/export)
+  - Methods: `Write()`, `WriteAttribute()`
+  - Implementations: `XmlSerializer`, `BinarySerializer`
+  
+- **`IDeserializer`** - Interface for reading data (load/import)
+  - Methods: `Read()`, `ReadAttribute()`
+  - Error tracking: `HasErrors()`, `GetErrors()`, `ClearErrors()`
+  - Implementations: `XmlDeserializer`, `BinaryDeserializer`
 
 ## Macros
 
 | Macro | Purpose |
 |-------|---------|
-| `BE_CLASS(Name)` | Reflection + auto `Serialize()` |
+| `BE_CLASS(Name)` | Reflection + auto `Serialize()` + `Deserialize()` |
 | `BE_CLASS(Name, FACTORY_BASE)` | Factory/enum generation for hierarchy |
 | `BE_REFLECT_FIELD` | Mark field for serialization (same line!) |
 | `BE_FUNCTION` | Mark method for reflection |
@@ -26,8 +39,12 @@ Compile-time reflection with Python code generator (meta_generator). Auto-genera
 
 | Type | XML Format | Method |
 |------|------------|--------|
-| Primitives (int, bool, string, PoolString) | Attributes | `SerializeAttribute()` |
-| Classes (BE_CLASS) | Child elements | `BeginObject()` + `Serialize()` |
+| Primitives (int, bool, string, PoolString) | Attributes | `WriteAttribute()` / `ReadAttribute()` |
+| Classes (BE_CLASS) | Child elements | `BeginObject()` + `Serialize()` / `Deserialize()` |
+
+**Field naming:** Underscore prefix is automatically stripped for XML names:
+- C++ field: `_clearColor` → XML name: `clearColor`
+- C++ field: `_filename` → XML name: `filename`
 
 ```xml
 <Player health="100" name="Hero">
@@ -37,21 +54,78 @@ Compile-time reflection with Python code generator (meta_generator). Auto-genera
 
 ## Usage
 
+### Writing (Save/Export)
+
 ```cpp
 // Class definition
 struct Player {
     BE_CLASS(Player)
     BE_REFLECT_FIELD int32_t health = 100;  // ✓ Same line
     BE_REFLECT_FIELD PoolString name;
-    bool _internal = false;  // Not serialized
+    BE_REFLECT_FIELD Math::Color _clearColor;  // XML: clearColor
+    bool _internal = false;  // Not serialized (no BE_REFLECT_FIELD)
 };
 
-// Serialization
-XmlArchive archive(XmlArchive::Mode::Write);
-if (archive.BeginObject("Player")) {
-    player.Serialize(archive);
-    archive.EndObject();
+// Serialization (writing)
+XmlSerializer serializer;
+if (serializer.BeginObject("Player")) {
+    player.Serialize(serializer);  // const method
+    serializer.EndObject();
 }
+serializer.SaveToFile("save.xml");
+```
+
+### Reading (Load/Import)
+
+```cpp
+// Deserialization (reading)
+XmlDeserializer deserializer;
+deserializer.LoadFromFile("save.xml");
+if (deserializer.BeginObject("Player")) {
+    player.Deserialize(deserializer);  // non-const method
+    deserializer.EndObject();
+}
+
+// Check for errors
+if (deserializer.HasErrors()) {
+    for (const auto& err : deserializer.GetErrors()) {
+        LOG_ERROR("Deserialize error: {} - {} (line {})", 
+                  err.fieldName, err.errorMessage, err.line);
+    }
+}
+```
+
+### Arrays
+
+Arrays require an `elementName` parameter:
+
+```cpp
+// Writing
+size_t count = items.size();
+if (serializer.BeginArray("items", "item", count)) {
+    for (const auto& item : items) {
+        item.Serialize(serializer);
+    }
+    serializer.EndArray();
+}
+
+// Reading
+size_t count = 0;
+if (deserializer.BeginArray("items", "item", count)) {
+    items.resize(count);
+    for (auto& item : items) {
+        item.Deserialize(deserializer);
+    }
+    deserializer.EndArray();
+}
+```
+
+XML result:
+```xml
+<items count="2">
+    <item>A</item>
+    <item>B</item>
+</items>
 ```
 
 ## Factory Generation (FACTORY_BASE)
@@ -70,14 +144,17 @@ Use `BE_CLASS(Name, FACTORY_BASE)` on base class. Include `<Generated/EnumXxx.ge
 | `GetStaticTypeName()` | Type name as `string_view` |
 | `GetStaticTypeMeta()` | `ClassMeta&` for type |
 | `Is<T>()` / `Cast<T>()` | Runtime type checking |
-| `Serialize(Archive&)` | Auto-generated from `BE_REFLECT_FIELD` |
+| `Serialize(Serializer&) const` | Auto-generated write method |
+| `Deserialize(Deserializer&)` | Auto-generated read method |
 
 ## Best Practices
 
 - Put `BE_REFLECT_FIELD` on **same line** as field
 - Include `.gen.hpp` in .cpp only
 - Use `Is<T>()`/`Cast<T>()` instead of `dynamic_cast`
-- Use `SerializeAttribute()` for primitives
+- Use `WriteAttribute()`/`ReadAttribute()` for primitives
+- Check `HasErrors()` after deserialization
+- Field names with underscore prefix are automatically stripped for XML
 
 ## Don't
 
@@ -85,3 +162,4 @@ Use `BE_CLASS(Name, FACTORY_BASE)` on base class. Include `<Generated/EnumXxx.ge
 - Put `BE_REFLECT_FIELD` on separate line
 - Include `.gen.hpp` in headers
 - Modify generated files
+- Use old `IArchive` interface (deprecated, use `ISerializer`/`IDeserializer`)

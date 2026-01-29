@@ -1,6 +1,6 @@
 #include "ClearScreenWidget.h"
 
-#include <BECore/Reflection/IArchive.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <Events/RenderEvents.h>
 #include <Math/Color.h>
 
@@ -8,12 +8,8 @@
 
 namespace BECore {
 
-    bool ClearScreenWidget::Initialize(IArchive& archive) {
-        // Color is a nested object with attributes for r, g, b, a
-        if (archive.BeginObject("Color")) {
-            _clearColor.Serialize(archive);
-            archive.EndObject();
-        }
+    bool ClearScreenWidget::Initialize(IDeserializer& deserializer) {
+        Deserialize(deserializer);
         return true;
     }
 

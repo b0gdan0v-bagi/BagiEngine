@@ -5,7 +5,7 @@
 
 namespace BECore {
 
-    class IArchive;
+    class IDeserializer;
 
     class ClearScreenWidget : public IWidget {
         BE_CLASS(ClearScreenWidget)
@@ -13,12 +13,12 @@ namespace BECore {
         ClearScreenWidget() = default;
         ~ClearScreenWidget() override = default;
 
-        BE_FUNCTION bool Initialize(IArchive& archive) override;
+        BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
         BE_FUNCTION void Draw() override;
         BE_FUNCTION void Update() override;
 
     private:
-        BE_REFLECT_FIELD Math::Color _clearColor{20, 20, 100, 255};
+        BE_REFLECT_FIELD Math::ColorSerializable _clearColor{20, 20, 100, 255};
     };
 
 }  // namespace BECore

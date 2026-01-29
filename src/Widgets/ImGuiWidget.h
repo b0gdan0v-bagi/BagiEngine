@@ -7,7 +7,7 @@ struct SDL_Window;
 struct SDL_Renderer;
 
 namespace BECore {
-    class IArchive;
+    class IDeserializer;
 
     namespace SDLEvents {
         struct SDLEventWrapper;
@@ -19,7 +19,7 @@ namespace BECore {
         ImGuiWidget() = default;
         ~ImGuiWidget() override = default;
 
-        BE_FUNCTION bool Initialize(IArchive& archive) override;
+        BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
         BE_FUNCTION void Draw() override;
         BE_FUNCTION void Update() override;
 

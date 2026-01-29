@@ -8,7 +8,7 @@
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Logger/OutputSink.h>
 #include <BECore/RefCounted/New.h>
-#include <BECore/Reflection/XmlArchive.h>
+#include <BECore/Reflection/XmlDeserializer.h>
 
 #include <Generated/ILogSink.gen.hpp>
 #include <Generated/EnumLogSink.gen.hpp>
@@ -64,10 +64,10 @@ namespace BECore {
                         sink->SetMinLevel(*minLevel);
                     }
 
-                    // Use XmlArchive for sink-specific configuration
-                    XmlArchive archive(XmlArchive::Mode::Read);
-                    archive.LoadFromXmlNode(sinkNode);
-                    sink->Configure(archive);
+                    // Use XmlDeserializer for sink-specific configuration
+                    XmlDeserializer deserializer;
+                    deserializer.LoadFromXmlNode(sinkNode);
+                    sink->Configure(deserializer);
 
                     _sinks.push_back(sink);
                 }

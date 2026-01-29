@@ -1,4 +1,5 @@
 #include "Color.h"
+#include <Generated/Color.gen.hpp>
 
 namespace Math {
 
