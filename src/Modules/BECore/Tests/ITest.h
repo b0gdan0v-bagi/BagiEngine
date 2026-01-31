@@ -7,7 +7,7 @@
 
 namespace BECore::Tests {
 
-    class ITest : public RefCounted {
+    class ITest : public RefCountedAtomic {
         BE_CLASS(ITest, FACTORY_BASE)
     public:
         ITest() = default;

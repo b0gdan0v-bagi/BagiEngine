@@ -31,7 +31,7 @@ namespace BECore {
         }
 
         // Сканируем директорию для поиска XML файлов
-        eastl::vector<std::pair<std::filesystem::path, PoolString>> filesToLoad;
+        eastl::vector<eastl::pair<std::filesystem::path, PoolString>> filesToLoad;
         ScanDirectory(configPath, filesToLoad);
 
         if (filesToLoad.empty()) {
@@ -98,7 +98,7 @@ namespace BECore {
     }
 
     void ConfigManager::ScanDirectory(const std::filesystem::path& dir,
-                                     eastl::vector<std::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
+                                     eastl::vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
         // filesystem может бросать исключения, но exceptions отключены
         // Просто пропускаем ошибки
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
@@ -120,11 +120,21 @@ namespace BECore {
 
         LOG_DEBUG(Format("[ConfigManager] Loading config: {}", name.ToStringView()).c_str());
 
-        // Создаём ConfigImpl напрямую
-        auto impl = BECore::New<XmlConfigImpl>(pugi::xml_document{});
+        // Проверяем, не загружен ли уже конфиг (защита от дубликатов)
+        {
+            std::scoped_lock lock(_mutex);
+            if (_configs.find(name) != _configs.end()) {
+                LOG_WARNING(Format("[ConfigManager] Config {} already loaded, skipping duplicate", 
+                                 name.ToStringView()).c_str());
+                co_return;
+            }
+        }
+
+        // Создаём XmlDocument напрямую
+        auto doc = BECore::New<XmlDocument>();
         
         // Используем LoadFromFile для физического пути
-        if (!impl->LoadFromFile(path)) {
+        if (!doc->LoadFromFile(path)) {
             LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}", 
                            name.ToStringView(), path.string()).c_str());
             co_return;
@@ -132,8 +142,14 @@ namespace BECore {
 
         // Добавляем в кэш (потокобезопасно)
         {
-            std::lock_guard<std::mutex> lock(_mutex);
-            _configs[name] = std::move(impl);
+            std::scoped_lock lock(_mutex);
+            // Повторная проверка на случай race condition
+            if (_configs.find(name) != _configs.end()) {
+                LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", 
+                                 name.ToStringView()).c_str());
+                co_return;
+            }
+            _configs[name] = std::move(doc);
         }
 
         LOG_DEBUG(Format("[ConfigManager] Config loaded: {}", name.ToStringView()).c_str());

@@ -1,5 +1,6 @@
 #include "CoreManager.h"
 
+#include <BECore/Logger/OutputSink.h>
 #include <Events/EventsQueueRegistry.h>
 #include <TaskSystem/TaskManager.h>
 
@@ -14,9 +15,16 @@ namespace BECore {
     }
 
     void CoreManager::OnApplicationPreInit(PassKey<Application>) {
-        _fileSystem.Initialize();
-        TaskManager::GetInstance().Initialize(PassKey<CoreManager>{});
-        _configManager.Initialize();
+        {
+            // For scope before
+            auto tempTestSync = New<BECore::OutputSink>();
+            tempTestSync->Initialize();
+
+            _fileSystem.Initialize();
+            TaskManager::GetInstance().Initialize(PassKey<CoreManager>{});
+            _configManager.Initialize();
+        }
+        
         _loggerManager.Initialize();
         _assertHandlerManager.Initialize();
         _resourceManager.Initialize();

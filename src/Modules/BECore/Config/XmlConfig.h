@@ -1,6 +1,6 @@
 #pragma once
 
-#include <BECore/Config/XmlConfigImpl.h>
+#include <BECore/Config/XmlDocument.h>
 
 namespace BECore {
 
@@ -23,9 +23,9 @@ namespace BECore {
 
     private:
 
-        explicit XmlConfig(IntrusivePtrNonAtomic<XmlConfigImpl> impl) : _impl(std::move(impl)) {}
+        explicit XmlConfig(IntrusivePtrAtomic<XmlDocument> doc) : _doc(std::move(doc)) {}
 
-        IntrusivePtrNonAtomic<XmlConfigImpl> _impl;
+        IntrusivePtrAtomic<XmlDocument> _doc;
     };
 
 }  // namespace BECore

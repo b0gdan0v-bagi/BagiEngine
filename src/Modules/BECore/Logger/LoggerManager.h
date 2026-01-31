@@ -61,22 +61,17 @@ namespace BECore {
          * @brief Get all sinks
          * @return Reference to sinks vector
          */
-        const eastl::vector<IntrusivePtr<ILogSink>>& GetSinks() const { return _sinks; }
+        const eastl::vector<IntrusivePtrAtomic<ILogSink>>& GetSinks() const { return _sinks; }
+        static IntrusivePtrAtomic<ILogSink> CreateSinkByType(LogSinkType type);
 
     private:
-        /**
-         * @brief Create sink instance by type
-         * @param type Sink type from generated enum (ILogSinkType)
-         * @return Pointer to sink instance or nullptr if unknown type
-         */
-        static IntrusivePtr<ILogSink> CreateSinkByType(LogSinkType type);
 
         /**
          * @brief Sort sinks by priority (lower first)
          */
         void SortSinksByPriority();
 
-        eastl::vector<IntrusivePtr<ILogSink>> _sinks;
+        eastl::vector<IntrusivePtrAtomic<ILogSink>> _sinks;
         bool _initialized = false;
     };
 

@@ -9,37 +9,26 @@ namespace BECore {
     class Logger {
     public:
 
-        template <typename... Args>
-        static void Log(LogLevel level, fmt::format_string<Args...> format, Args&&... args) {
-            eastl::string message = Format(format, std::forward<Args>(args)...);
-            LogEvent::Emit(level, message);
-        }
-
         // Convenience methods without location info (simple strings)
         static void Debug(eastl::string_view message) {
-            LogRaw(LogLevel::Debug, message);
+            LogEvent::Emit(LogLevel::Debug, message);
         }
 
         static void Info(eastl::string_view message) {
-            LogRaw(LogLevel::Info, message);
+            LogEvent::Emit(LogLevel::Info, message);
         }
 
         static void Warning(eastl::string_view message) {
-            LogRaw(LogLevel::Warning, message);
+            LogEvent::Emit(LogLevel::Warning, message);
         }
 
         static void Error(eastl::string_view message) {
-            LogRaw(LogLevel::Error, message);
+            LogEvent::Emit(LogLevel::Error, message);
         }
 
         static void Fatal(eastl::string_view message) {
-            LogRaw(LogLevel::Fatal, message);
+            LogEvent::Emit(LogLevel::Fatal, message);
             FlushLogsEvent::Emit();
-        }
-
-    private:
-        static void LogRaw(LogLevel level, eastl::string_view message) {
-            LogEvent::Emit(level, message);
         }
     };
 

@@ -85,13 +85,13 @@ namespace BECore {
         _initialized = true;
     }
 
-    IntrusivePtr<ILogSink> LoggerManager::CreateSinkByType(LogSinkType type) {
+    IntrusivePtrAtomic<ILogSink> LoggerManager::CreateSinkByType(LogSinkType type) {
         return LogSinkFactory::Create(type);
     }
 
     void LoggerManager::SortSinksByPriority() {
         eastl::sort(_sinks.begin(), _sinks.end(),
-            [](const IntrusivePtr<ILogSink>& a, const IntrusivePtr<ILogSink>& b) {
+            [](auto&& a, auto&& b) {
                 return a->GetPriority() < b->GetPriority();
             });
     }

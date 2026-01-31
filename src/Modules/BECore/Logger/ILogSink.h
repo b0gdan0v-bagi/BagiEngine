@@ -9,7 +9,7 @@ namespace BECore {
 
     class IDeserializer;
 
-    class ILogSink : public RefCounted, public SubscriptionHolder {
+    class ILogSink : public RefCountedAtomic, public SubscriptionHolder {
         BE_CLASS(ILogSink, FACTORY_BASE)
 
     public:

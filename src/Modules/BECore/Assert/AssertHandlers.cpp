@@ -144,14 +144,15 @@ namespace BECore {
         SortHandlersByPriority();
 
         // Initialize all handlers
-        for (auto& handler : _handlers) {
+        for (const auto& handler : _handlers) {
             handler->Initialize();
         }
 
         _initialized = true;
     }
 
-    IntrusivePtr<IAssertHandler> AssertHandlerManager::CreateHandlerByType(AssertHandlerType type) {
+    IntrusivePtrAtomic<IAssertHandler> AssertHandlerManager::CreateHandlerByType(AssertHandlerType type) {
+
         switch (type) {
             case AssertHandlerType::DebugBreak:
                 return BECore::New<DebugBreakHandler>();
@@ -164,7 +165,7 @@ namespace BECore {
 
     void AssertHandlerManager::SortHandlersByPriority() {
         eastl::sort(_handlers.begin(), _handlers.end(),
-            [](const IntrusivePtr<IAssertHandler>& a, const IntrusivePtr<IAssertHandler>& b) {
+            [](auto && a, auto && b) {
                 return a->GetPriority() < b->GetPriority();
             });
     }

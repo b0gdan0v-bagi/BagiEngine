@@ -2,7 +2,7 @@
 
 #include <BECore/Config/XmlConfig.h>
 #include <BECore/Config/XmlNode.h>
-#include <BECore/Config/XmlConfigImpl.h>
+#include <BECore/Config/XmlDocument.h>
 #include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <TaskSystem/Task.h>
@@ -71,7 +71,7 @@ namespace BECore {
          * @param filesToLoad Output vector of (path, name) pairs
          */
         void ScanDirectory(const std::filesystem::path& dir,
-                          eastl::vector<std::pair<std::filesystem::path, PoolString>>& filesToLoad) const;
+                          eastl::vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const;
 
         /**
          * @brief Load single config file asynchronously
@@ -81,7 +81,7 @@ namespace BECore {
         Task<void> LoadConfigAsync(std::filesystem::path path, PoolString name);
 
         mutable std::mutex _mutex;
-        UnorderedPoolMap<IntrusivePtrNonAtomic<XmlConfigImpl>> _configs;
+        UnorderedPoolMap<IntrusivePtrAtomic<XmlDocument>> _configs;
         bool _initialized = false;
     };
 
