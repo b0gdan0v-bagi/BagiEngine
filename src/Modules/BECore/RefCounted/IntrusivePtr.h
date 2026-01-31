@@ -173,9 +173,11 @@ namespace BECore {
         T* _ptr = nullptr;
     };
 
-    template <typename T> class IntrusivePtrAtomic {
-    public:
-        IntrusivePtrAtomic() = default;
+template <typename T> class IntrusivePtrAtomic {
+    template <typename U> friend class IntrusivePtrAtomic;
+
+public:
+    IntrusivePtrAtomic() = default;
 
         explicit IntrusivePtrAtomic(T* ptr) : _ptr(ptr) {
             if (_ptr != nullptr) {
@@ -199,9 +201,9 @@ namespace BECore {
             }
         }
 
-        template <typename U> IntrusivePtrAtomic(IntrusivePtrAtomic<U>&& other) noexcept : _ptr(other.Get()) {
-            other.Reset();
-        }
+    template <typename U> IntrusivePtrAtomic(IntrusivePtrAtomic<U>&& other) noexcept : _ptr(other._ptr) {
+        other._ptr = nullptr;  // Don't release - just transfer ownership
+    }
 
         ~IntrusivePtrAtomic() {
             Reset();
@@ -253,14 +255,14 @@ namespace BECore {
             return *this;
         }
 
-        template <typename U> IntrusivePtrAtomic& operator=(IntrusivePtrAtomic<U>&& other) noexcept {
-            if (_ptr != nullptr) {
-                _ptr->ReleaseRef();
-            }
-            _ptr = other.Get();
-            other.Reset();
-            return *this;
+    template <typename U> IntrusivePtrAtomic& operator=(IntrusivePtrAtomic<U>&& other) noexcept {
+        if (_ptr != nullptr) {
+            _ptr->ReleaseRef();
         }
+        _ptr = other._ptr;
+        other._ptr = nullptr;  // Don't release - just transfer ownership
+        return *this;
+    }
 
         T& operator*() const {
             assert(_ptr != nullptr);
