@@ -15,7 +15,7 @@
  *
  *       BE_REFLECT_FIELD int32_t health = 100;
  *       BE_REFLECT_FIELD float speed = 5.0f;
- *       BE_REFLECT_FIELD Math::Color _clearColor;  // XML name: clearColor
+ *       BE_REFLECT_FIELD BECore::Color _clearColor;  // XML name: clearColor
  *   };
  *
  * Include generated file in .cpp:

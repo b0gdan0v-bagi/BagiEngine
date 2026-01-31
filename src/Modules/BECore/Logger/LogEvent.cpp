@@ -3,7 +3,7 @@
 namespace BECore {
 
     bool& LogEvent::GetBufferingFlag() {
-        static bool buffering = true;  // По умолчанию буферизация включена
+        static bool buffering = false;  // По умолчанию буферизация включена
         return buffering;
     }
 

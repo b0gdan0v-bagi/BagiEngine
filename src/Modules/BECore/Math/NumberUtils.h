@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Math {
+namespace BECore {
 
     // Подсчитывает количество цифр в числе (включая знак минус для отрицательных чисел)
     // Использует каскад сравнений для оптимизации (быстрее, чем цикл или log10)
@@ -35,5 +35,5 @@ namespace Math {
         seed ^= static_cast<Seed>(eastl::hash<T>{}(v)) + static_cast<Seed>(0x9e3779b9) + (seed << 6) + (seed >> 2);
     }
 
-}  // namespace Math
+}  // namespace BECore
 

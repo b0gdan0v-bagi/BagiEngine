@@ -1,6 +1,6 @@
 #include "PoolStringChain.h"
 
-#include <Math/NumberUtils.h>
+#include <BECore/Math/NumberUtils.h>
 
 namespace BECore {
 
@@ -140,9 +140,9 @@ namespace BECore {
         for (uint8_t i = 0; i < _count; ++i) {
             const auto& v = _storage.compound[i];
             if (v.IsInt()) {
-                Math::HashCombine(hash, v.AsInt());
+                BECore::HashCombine(hash, v.AsInt());
             } else {
-                Math::HashCombine(hash, v.AsPoolString().HashValue());
+                BECore::HashCombine(hash, v.AsPoolString().HashValue());
             }
         }
         return hash;

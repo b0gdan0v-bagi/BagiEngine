@@ -4,7 +4,7 @@ namespace BECore {
 
     class XmlNode;
 
-    class XmlConfigImpl : public RefCountedNonAtomic {
+    class XmlConfigImpl : public RefCountedAtomic {
     public:
         using RawDocument = std::variant<pugi::xml_document>;
 

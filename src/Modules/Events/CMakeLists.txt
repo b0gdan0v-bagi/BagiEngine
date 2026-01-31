@@ -59,11 +59,10 @@ target_include_directories(EventsModule PUBLIC
 )
 
 # Подключаем зависимости
-# EventsModule зависит от BECoreModule (RefCounted, IntrusivePtr, PassKey) и MathModule (RenderEvents)
+# EventsModule зависит от BECoreModule (RefCounted, IntrusivePtr, PassKey, Math::Color для RenderEvents)
 # EnTT - header-only библиотека
 target_link_libraries(EventsModule PUBLIC
     BECoreModule
-    MathModule
     EnTT
 )
 

@@ -11,9 +11,9 @@ namespace RenderEvents {
     struct RenderPresentEvent : public EventBase<RenderPresentEvent> {};
     
     struct SetRenderDrawColorEvent : public EventBase<SetRenderDrawColorEvent> {
-        constexpr explicit SetRenderDrawColorEvent(Math::Color color_) : color(color_) {}
-        constexpr explicit SetRenderDrawColorEvent(unsigned char r, unsigned char g, unsigned char b, unsigned char a) : color(Math::Color{r, g, b, a}) {}
-        Math::Color color;
+        constexpr explicit SetRenderDrawColorEvent(BECore::Color color_) : color(color_) {}
+        constexpr explicit SetRenderDrawColorEvent(unsigned char r, unsigned char g, unsigned char b, unsigned char a) : color(BECore::Color{r, g, b, a}) {}
+        BECore::Color color;
     };
 
 }  // namespace RenderEvents

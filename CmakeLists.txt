@@ -374,7 +374,6 @@ endif()
 # =============================================================================
 # BECoreModule должен быть объявлен первым, так как другие модули используют его PCH
 add_subdirectory(src/Modules/BECore)
-add_subdirectory(src/Modules/Math)
 add_subdirectory(src/Modules/Events)
 add_subdirectory(src/Modules/TaskSystem)
 add_subdirectory(src/Modules/SDL)
@@ -423,7 +422,6 @@ endif()
 
 target_link_libraries(MyGame PRIVATE 
     BECoreModule
-    MathModule
     EventsModule
     TaskSystemModule
     SDLModule

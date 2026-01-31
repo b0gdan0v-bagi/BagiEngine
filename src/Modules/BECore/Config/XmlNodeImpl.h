@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    class XmlNodeImpl : public RefCountedNonAtomic {
+    class XmlNodeImpl : public RefCountedAtomic {
     public:
         using RawNode = std::variant<pugi::xml_node>;
         using RawIterator = std::variant<pugi::xml_node_iterator>;
@@ -77,8 +77,8 @@ namespace BECore {
                 return s;
             } else if constexpr (std::is_enum_v<T>) {
                 return EnumUtils<T>::Cast(s);
-            } else if constexpr (std::is_same_v<T, Math::Color>) {
-                return Math::Color::ParseColorFromString(s);
+            } else if constexpr (std::is_same_v<T, BECore::Color>) {
+                return BECore::Color::ParseColorFromString(s);
             }
 
             return std::nullopt;

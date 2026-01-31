@@ -1,7 +1,7 @@
 #pragma once
 
 #include <BECore/Widgets/IWidget.h>
-#include <Math/Color.h>
+#include <BECore/Math/Color.h>
 
 namespace BECore {
 
@@ -18,7 +18,7 @@ namespace BECore {
         BE_FUNCTION void Update() override;
 
     private:
-        BE_REFLECT_FIELD Math::ColorSerializable _clearColor{20, 20, 100, 255};
+        BE_REFLECT_FIELD BECore::Color _clearColor{20, 20, 100, 255};
     };
 
 }  // namespace BECore

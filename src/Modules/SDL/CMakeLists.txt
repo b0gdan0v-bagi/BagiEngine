@@ -54,7 +54,6 @@ target_include_directories(SDLModule PUBLIC
 # Подключаем зависимости модуля
 target_link_libraries(SDLModule PUBLIC
     BECoreModule
-    MathModule
     EventsModule
     SDL3-shared
     pugixml
