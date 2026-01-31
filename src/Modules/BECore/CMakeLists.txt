@@ -56,6 +56,11 @@ target_link_libraries(BECoreModule PUBLIC
     SDL3-shared
 )
 
+# DbgHelp for stack trace capture (Windows only)
+if(WIN32)
+    target_link_libraries(BECoreModule PUBLIC dbghelp)
+endif()
+
 # =============================================================================
 # Reflection Code Generation
 # =============================================================================

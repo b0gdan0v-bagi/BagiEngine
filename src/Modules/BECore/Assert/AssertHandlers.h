@@ -9,7 +9,7 @@ namespace BECore {
     /**
      * @brief Enum defining available assert handler types
      */
-    CORE_ENUM(AssertHandlerType, uint8_t, DebugBreak, Log)
+    CORE_ENUM(AssertHandlerType, uint8_t, DebugBreak, Log, StackTrace)
 
     /**
      * @brief Handler that triggers debug break on assertion failures
@@ -39,6 +39,25 @@ namespace BECore {
     public:
         AssertLogHandler() = default;
         ~AssertLogHandler() override = default;
+
+        void Initialize() override;
+        void OnAssert(const AssertEvent& event) override;
+
+    private:
+        bool _initialized = false;
+    };
+
+    /**
+     * @brief Handler that captures and prints stack traces on assertion failures
+     * 
+     * Subscribes to AssertEvent and outputs a formatted stack trace to stderr
+     * when an assertion fails. This helps identify the call chain leading to
+     * the failure.
+     */
+    class StackTraceHandler : public IAssertHandler {
+    public:
+        StackTraceHandler() = default;
+        ~StackTraceHandler() override = default;
 
         void Initialize() override;
         void OnAssert(const AssertEvent& event) override;
