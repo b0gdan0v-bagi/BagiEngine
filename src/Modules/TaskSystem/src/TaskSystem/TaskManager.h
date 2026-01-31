@@ -67,14 +67,7 @@ namespace BECore {
             
             auto* handlePtr = handle.Get();
             _scheduler.Schedule([handlePtr]() {
-                handlePtr->Start();
-                // Запускаем корутину до завершения
-                while (!handlePtr->IsDone() && !handlePtr->IsCancelled()) {
-                    handlePtr->GetTask().Resume();
-                }
-                if (!handlePtr->IsCancelled()) {
-                    handlePtr->MarkCompleted();
-                }
+                handlePtr->Start();  // Start() сам вызывает Resume()
             }, priority, threadType);
 
             return handle;
@@ -92,13 +85,7 @@ namespace BECore {
             
             auto* handlePtr = handle.Get();
             _scheduler.ScheduleDelayed([handlePtr]() {
-                handlePtr->Start();
-                while (!handlePtr->IsDone() && !handlePtr->IsCancelled()) {
-                    handlePtr->GetTask().Resume();
-                }
-                if (!handlePtr->IsCancelled()) {
-                    handlePtr->MarkCompleted();
-                }
+                handlePtr->Start();  // Start() сам вызывает Resume()
             }, delay, priority, threadType);
 
             return handle;

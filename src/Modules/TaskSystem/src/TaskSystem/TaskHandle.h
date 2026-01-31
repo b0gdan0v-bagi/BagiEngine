@@ -110,6 +110,11 @@ namespace BECore {
                 // Spin wait (TODO: replace with proper synchronization)
                 std::this_thread::yield();
             }
+            
+            // Обновляем статус после завершения
+            if (IsDone() && GetStatus() == TaskStatus::Running) {
+                SetStatus(TaskStatus::Completed);
+            }
         }
 
         // =================================================================
@@ -162,21 +167,23 @@ namespace BECore {
 
         /**
          * Отмечает задачу как завершенную.
+         * Примечание: ResumeContinuation не вызывается здесь,
+         * так как FinalAwaiter делает симметричный transfer к continuation.
          */
         void MarkCompleted() {
             if (!_cancelled.load(std::memory_order_acquire)) {
                 SetStatus(TaskStatus::Completed);
             }
-            ResumeContinuation();
         }
 
         /**
          * Отмечает задачу как завершенную с ошибкой.
+         * Примечание: ResumeContinuation не вызывается здесь,
+         * так как FinalAwaiter делает симметричный transfer к continuation.
          */
         void MarkFailed(TaskError error = TaskError::Exception) {
             _error.store(error, std::memory_order_release);
             SetStatus(TaskStatus::Failed);
-            ResumeContinuation();
         }
 
     private:

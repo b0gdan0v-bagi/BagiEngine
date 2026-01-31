@@ -38,8 +38,16 @@ namespace BECore {
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             now.time_since_epoch()) % 1000;
 
+        // Thread-safe localtime conversion
+        std::tm tm_buf;
+#ifdef _WIN32
+        localtime_s(&tm_buf, &time);
+#else
+        localtime_r(&time, &tm_buf);
+#endif
+
         // Format message similar to console/file sinks
-        std::string formatted = fmt::format("[{}] [{:%H:%M:%S}.{:03d}] {}\n", level, fmt::localtime(time), ms.count(), message);
+        std::string formatted = fmt::format("[{}] [{:%H:%M:%S}.{:03d}] {}\n", level, tm_buf, ms.count(), message);
 
 #if defined(PLATFORM_WINDOWS)
         // Output to Visual Studio Output window

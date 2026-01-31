@@ -55,7 +55,7 @@ namespace BECore {
             group.Add(handle);
         }
 
-        // Ждём завершения всех задач (блокирующее ожидание без busy-wait)
+        // Ждём завершения всех задач
         group.WaitAll();
 
         size_t loadedCount;
@@ -107,9 +107,8 @@ namespace BECore {
     }
 
     Task<void> ConfigManager::LoadConfigAsync(std::filesystem::path path, PoolString name) {
-        // Переключаемся на фоновый поток
-        co_await SwitchToBackground();
-
+        // Задача уже запущена на background потоке через TaskManager::Run
+        
         LOG_DEBUG(Format("[ConfigManager] Loading config: {}", name.ToStringView()).c_str());
 
         // Проверяем, не загружен ли уже конфиг (защита от дубликатов)
@@ -141,7 +140,7 @@ namespace BECore {
                                  name.ToStringView()).c_str());
                 co_return;
             }
-            _configs[name] = std::move(doc);
+            _configs[name] = doc;
         }
 
         LOG_DEBUG(Format("[ConfigManager] Config loaded: {}", name.ToStringView()).c_str());
