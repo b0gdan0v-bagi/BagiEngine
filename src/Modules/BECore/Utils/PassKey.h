@@ -1,5 +1,7 @@
 #pragma once
 
+#include <concepts>
+
 namespace BECore {
     /**
      * Класс PassKey используется для обеспечения приватного доступа к конкретным классам.
@@ -20,45 +22,48 @@ namespace BECore {
      * class Manager {
      * public:
      *     void DoSomething(MyClass& obj) {
-     *         obj.PrivateMethod(PassKey<Manager>{}); // OK
+     *         obj.PrivateMethod({}); // OK - используем {} для PassKey
      *     }
      * };
      *
      * class DerivedManager : public Manager {
      * public:
      *     void DoSomething(MyClass& obj) {
-     *         obj.PrivateMethod(PassKey<Manager>{}); // OK - наследник может создать PassKey<Manager>
+     *         obj.PrivateMethod({}); // OK - наследник может создать PassKey<Manager>
      *     }
      * };
      *
      * // В другом месте:
      * MyClass obj;
-     * obj.PrivateMethod(PassKey<Manager>{}); // Ошибка компиляции - только Manager и его наследники могут создать PassKey<Manager>
+     * obj.PrivateMethod({}); // Ошибка компиляции - только Manager и его наследники могут создать PassKey<Manager>
      */
     template <typename T>
     class PassKey {
-        // Разрешаем доступ для самого T
+    protected:
+        // Protected конструктор: доступен для T (через friend) и наследников T
+        constexpr PassKey() noexcept = default;
+
+    private:
+        // friend даёт T доступ к protected конструктору
         friend T;
 
-        // Вспомогательный класс для проверки наследования
+        // Разрешаем конструирование PassKey<U> для производных типов
         template <typename U>
-        using IsDerivedFrom = std::bool_constant<std::is_base_of_v<T, U> || std::is_same_v<T, U>>;
+        friend class PassKey;
+
+        // Запрещаем копирование и присваивание
+        PassKey(const PassKey&) = delete;
+        PassKey& operator=(const PassKey&) = delete;
+        PassKey& operator=(PassKey&&) = delete;
 
     public:
-        PassKey() = default;
-        PassKey(const PassKey&) = default;
-        PassKey& operator=(const PassKey&) = default;
-        PassKey(PassKey&&) = default;
-        PassKey& operator=(PassKey&&) = default;
+        // Move конструктор публичный для передачи в функции
+        constexpr PassKey(PassKey&&) noexcept = default;
 
-        // Шаблонный конструктор, разрешающий создание для наследников T
-        // Конструктор доступен только если U является T или наследником T
-        template <typename U, typename = std::enable_if_t<IsDerivedFrom<U>::value>>
-        PassKey(PassKey<U> const&) {}
-
-        // Шаблонный конструктор перемещения для наследников T
-        template <typename U, typename = std::enable_if_t<IsDerivedFrom<U>::value>>
-        PassKey(PassKey<U>&&) {}
+        // Конструктор для поддержки PassKey<Derived> -> PassKey<Base>
+        template <typename U>
+        requires (std::derived_from<U, T> || std::same_as<U, T>)
+        constexpr PassKey(PassKey<U>&&) noexcept {}
     };
 }  // namespace BECore
 

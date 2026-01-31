@@ -10,8 +10,8 @@ namespace BECore {
         Application() = default;
         ~Application() override = default;
 
-        bool Initialize(PassKey<ApplicationMainAccess>);
-        void Run(PassKey<ApplicationMainAccess>) const;
+        bool Initialize();
+        void Run() const;
 
     private:
 

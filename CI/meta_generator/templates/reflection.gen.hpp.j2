@@ -133,7 +133,7 @@ inline constexpr eastl::string_view {{ cls.full_qualified_name }}::GetStaticType
 }
 
 // {{ cls.full_qualified_name }}::GetStaticTypeMeta()
-inline constexpr const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
+inline const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
     return {{ cls.namespace if cls.namespace else '::' }}::Detail_{{ cls.name }}::_staticTypeMeta;
 }
 
@@ -206,7 +206,7 @@ inline constexpr size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
 }
 
 // {{ cls.full_qualified_name }}::GetStaticTypeMeta()
-inline constexpr const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
+inline const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
     return {{ cls.namespace if cls.namespace else '::' }}::Detail_{{ cls.name }}::_staticTypeMeta;
 }
 

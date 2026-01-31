@@ -7,6 +7,7 @@
 #include <BECore/RefCounted/New.h>
 #include <TaskSystem/TaskManager.h>
 #include <TaskSystem/TaskHandle.h>
+#include <TaskSystem/TaskGroup.h>
 #include <TaskSystem/Awaitables.h>
 
 #include <pugixml.hpp>
@@ -15,9 +16,12 @@
 namespace BECore {
 
     void ConfigManager::Initialize() {
-        if (_initialized) {
-            LOG_INFO("[ConfigManager] Already initialized");
-            return;
+        {
+            std::lock_guard lock(_mutex);
+            if (_initialized) {
+                LOG_INFO("[ConfigManager] Already initialized");
+                return;
+            }
         }
 
         LOG_INFO("[ConfigManager] Initializing...");
@@ -26,6 +30,7 @@ namespace BECore {
         auto configPath = CoreManager::GetFileSystem().ResolvePath("config");
         if (configPath.empty() || !std::filesystem::exists(configPath)) {
             LOG_WARNING("[ConfigManager] Config directory not found, skipping initialization");
+            std::lock_guard lock(_mutex);
             _initialized = true;
             return;
         }
@@ -36,6 +41,7 @@ namespace BECore {
 
         if (filesToLoad.empty()) {
             LOG_WARNING("[ConfigManager] No XML files found in config directory");
+            std::lock_guard lock(_mutex);
             _initialized = true;
             return;
         }
@@ -43,37 +49,23 @@ namespace BECore {
         LOG_INFO(Format("[ConfigManager] Found {} config files", filesToLoad.size()).c_str());
 
         // Запускаем параллельные задачи загрузки
-        eastl::vector<IntrusivePtr<TaskHandle<void>>> handles;
-        handles.reserve(filesToLoad.size());
-
+        TaskGroup group;
         for (const auto& [path, name] : filesToLoad) {
             auto handle = TaskManager::GetInstance().Run(LoadConfigAsync(path, name));
-            handles.push_back(handle);
+            group.Add(handle);
         }
 
-        // Ждём завершения всех задач
-        // Нужно вызывать Update для обработки задач
-        bool allDone = false;
-        while (!allDone) {
-            allDone = true;
-            for (auto& handle : handles) {
-                if (!handle->IsDone()) {
-                    allDone = false;
-                    break;
-                }
-            }
+        // Ждём завершения всех задач (блокирующее ожидание без busy-wait)
+        group.WaitAll();
 
-            if (!allDone) {
-                // Даём TaskManager обработать задачи главного потока и отложенные задачи
-                TaskManager::GetInstance().Update(PassKey<CoreManager>{});
-                
-                // Небольшая пауза для предотвращения busy-wait
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
+        size_t loadedCount;
+        {
+            std::lock_guard lock(_mutex);
+            loadedCount = _configs.size();
+            _initialized = true;
         }
 
-        LOG_INFO(Format("[ConfigManager] Loaded {} configs", _configs.size()).c_str());
-        _initialized = true;
+        LOG_INFO(Format("[ConfigManager] Loaded {} configs", loadedCount).c_str());
     }
 
     XmlNode ConfigManager::GetConfig(PoolString name) const {

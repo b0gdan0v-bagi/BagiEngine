@@ -16,7 +16,7 @@ namespace BECore {
         }
 
         // Установка главного окна
-        void SetMainWindow(IntrusivePtr<IMainWindow> window, PassKey<MainWindowAccessor>) {
+        void SetMainWindow(IntrusivePtr<IMainWindow> window) {
             _window = std::move(window);
         }
 

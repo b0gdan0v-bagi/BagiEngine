@@ -70,7 +70,7 @@ public:                                                                         
     template <typename Func>                                                                                                                                                                           \
     static constexpr void ForEachFieldStatic(const ClassName& obj, Func&& func);                                                                                                                       \
     /** @brief Get static ClassMeta for this type (defined in generated code) */                                                                                                                       \
-    static constexpr const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                   \
+    static const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                   \
     /** @brief Get runtime ClassMeta for this instance */                                                                                                                                              \
     constexpr const ::BECore::ClassMeta& GetTypeMeta() const { return *_typeMeta; }                                                                                                                    \
     /** @brief Check if this instance is of type T */                                                                                                                                                  \
@@ -123,7 +123,7 @@ public:                                                                         
     /** @brief Get the event type name as string_view */                                                                                                                                                  \
     static constexpr eastl::string_view GetStaticTypeName();                                                                                                                                              \
     /** @brief Get static ClassMeta for this event type (defined in generated code) */                                                                                                                    \
-    static constexpr const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                      \
+    static const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                      \
     /** @brief Get event type hash for efficient dispatch */                                                                                                                                              \
     static constexpr uint64_t GetStaticTypeHash();                                                                                                                                                        \
     /** @brief Get the number of reflected fields */                                                                                                                                                      \

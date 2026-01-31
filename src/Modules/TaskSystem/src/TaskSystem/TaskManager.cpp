@@ -11,7 +11,7 @@ namespace BECore {
         _mainThreadId = std::this_thread::get_id();
 
         // Создаем пул потоков
-        size_t numThreads = std::thread::hardware_concurrency();
+        size_t numThreads = std::min(std::thread::hardware_concurrency(), 4u);
         if (numThreads < 2) {
             numThreads = 2;
         }
