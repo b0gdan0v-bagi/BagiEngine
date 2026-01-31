@@ -68,10 +68,9 @@ namespace BECore {
             static bool registered = false;
             if (!registered) {
                 registered = true;
-                EventsQueueRegistry::Register([]() { Derived::Update(); }, PassKey<BaseEvent>{});
+                EventsQueueRegistry::Register([]() { Derived::Update(); }, {});
             }
         }
     };
 
 }  // namespace BECore
-

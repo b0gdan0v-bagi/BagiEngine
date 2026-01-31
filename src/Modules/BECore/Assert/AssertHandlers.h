@@ -9,7 +9,7 @@ namespace BECore {
     /**
      * @brief Enum defining available assert handler types
      */
-    CORE_ENUM(AssertHandlerType, uint8_t, DebugBreak, Log)
+    CORE_ENUM(AssertHandlerType, uint8_t, DebugBreak, Log, StackTrace)
 
     /**
      * @brief Handler that triggers debug break on assertion failures
@@ -26,16 +26,8 @@ namespace BECore {
         void Initialize() override;
         void OnAssert(const AssertEvent& event) override;
 
-        /**
-         * @brief Enable or disable debug breaks
-         * @param enabled true to enable debug breaks
-         */
         void SetEnabled(bool enabled) { _enabled = enabled; }
 
-        /**
-         * @brief Check if debug breaks are enabled
-         * @return true if debug breaks are enabled
-         */
         bool IsEnabled() const { return _enabled; }
 
     private:
@@ -43,12 +35,6 @@ namespace BECore {
         bool _initialized = false;
     };
 
-    /**
-     * @brief Handler that logs assertion failures
-     * 
-     * Subscribes to AssertEvent and logs detailed information
-     * about the failure using the Logger system.
-     */
     class AssertLogHandler : public IAssertHandler {
     public:
         AssertLogHandler() = default;
@@ -62,38 +48,32 @@ namespace BECore {
     };
 
     /**
-     * @brief Manager for all assertion handlers
+     * @brief Handler that captures and prints stack traces on assertion failures
      * 
-     * Manages assert handlers based on XML configuration.
-     * Handlers are loaded from config/AssertHandlersConfig.xml
-     * and sorted by priority.
-     * 
-     * @note Access via CoreManager::GetAssertHandlerManager()
-     * 
-     * @example
-     * // Access specific handler
-     * auto* handler = CoreManager::GetAssertHandlerManager().GetHandler<DebugBreakHandler>();
+     * Subscribes to AssertEvent and outputs a formatted stack trace to stderr
+     * when an assertion fails. This helps identify the call chain leading to
+     * the failure.
      */
+    class StackTraceHandler : public IAssertHandler {
+    public:
+        StackTraceHandler() = default;
+        ~StackTraceHandler() override = default;
+
+        void Initialize() override;
+        void OnAssert(const AssertEvent& event) override;
+
+    private:
+        bool _initialized = false;
+    };
+
     class AssertHandlerManager {
     public:
         AssertHandlerManager() = default;
         ~AssertHandlerManager() = default;
 
-        /**
-         * @brief Initialize handlers from configuration
-         * 
-         * Loads config/AssertHandlersConfig.xml, creates handlers,
-         * sorts them by priority, and initializes each one.
-         * Safe to call multiple times - subsequent calls are no-ops.
-         */
+
         void Initialize();
 
-        /**
-         * @brief Get handler by type
-         * 
-         * @tparam T Handler type to find
-         * @return Pointer to handler or nullptr if not found
-         */
         template<typename T>
         T* GetHandler() {
             for (auto& handler : _handlers) {
@@ -104,26 +84,17 @@ namespace BECore {
             return nullptr;
         }
 
-        /**
-         * @brief Get all handlers
-         * @return Reference to handlers vector
-         */
-        const eastl::vector<IntrusivePtr<IAssertHandler>>& GetHandlers() const { return _handlers; }
+        const eastl::vector<IntrusivePtrAtomic<IAssertHandler>>& GetHandlers() const {
+            return _handlers;
+        }
 
     private:
-        /**
-         * @brief Create handler instance by type
-         * @param type Handler type from enum
-         * @return Pointer to handler instance or nullptr if unknown type
-         */
-        static IntrusivePtr<IAssertHandler> CreateHandlerByType(AssertHandlerType type);
 
-        /**
-         * @brief Sort handlers by priority (lower first)
-         */
+        static IntrusivePtrAtomic<IAssertHandler> CreateHandlerByType(AssertHandlerType type);
+
         void SortHandlersByPriority();
 
-        eastl::vector<IntrusivePtr<IAssertHandler>> _handlers;
+        eastl::vector<IntrusivePtrAtomic<IAssertHandler>> _handlers;
         bool _initialized = false;
     };
 

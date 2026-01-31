@@ -15,29 +15,13 @@ namespace BECore {
         >;
     };
 
-    /**
-     * Создает новый объект через new и автоматически определяет тип указателя
-     * на основе базового класса (RefCounted/RefCountedAtomic -> атомарный, RefCountedNonAtomic -> неатомарный)
-     * @tparam T Тип объекта (должен наследоваться от RefCounted или RefCountedNonAtomic)
-     * @tparam Args Типы аргументов конструктора
-     * @param args Аргументы конструктора
-     * @return IntrusivePtrAtomic или IntrusivePtrNonAtomic в зависимости от базового класса
-     */
-    template <typename T, typename... Args>
-    typename GetIntrusivePtrType<T>::type New(Args&&... args) {
-        return IntrusivePtrNonAtomic<T>(new T(std::forward<Args>(args)...));
-    }
-
-    /**
-     * Создает новый объект через new и возвращает IntrusivePtrAtomic
-     * @tparam T Тип объекта (должен наследоваться от RefCountedAtomic)
-     * @tparam Args Типы аргументов конструктора
-     * @param args Аргументы конструктора
-     * @return IntrusivePtrAtomic, владеющий объектом
-     */
-    template <typename T, typename... Args>
-    IntrusivePtrAtomic<T> NewAtomic(Args&&... args) {
-        return IntrusivePtrAtomic<T>(new T(std::forward<Args>(args)...));
+template <typename T, typename... Args>
+    auto New(Args&&... args) {
+        if constexpr (std::derived_from<T, RefCountedAtomic>) {
+            return IntrusivePtrAtomic<T>(new T(std::forward<Args>(args)...));
+        } else {
+            return IntrusivePtrNonAtomic<T>(new T(std::forward<Args>(args)...));
+        }
     }
 }
 

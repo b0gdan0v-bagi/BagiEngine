@@ -21,7 +21,7 @@ namespace BECore {
         if (!window->Initialize(*configPath)) {
             return false;
         }
-        CoreManager::GetInstance().GetMainWindowManager().SetMainWindow(window, {});
+        CoreManager::GetInstance().GetMainWindowManager().SetMainWindow(window);
 
          auto sdlEventsProvider = BECore::New<SDLEventsProvider>();
         if (!sdlEventsProvider->Initialize()) {

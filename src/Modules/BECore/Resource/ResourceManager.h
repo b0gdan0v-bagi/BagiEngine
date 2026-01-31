@@ -7,8 +7,7 @@
 #include <BECore/Resource/SerializedResource.h>
 #include <BECore/Resource/XmlResource.h>
 #include <BECore/Reflection/TypeTraits.h>
-#include <BECore/Reflection/SaveSystem.h>
-#include <BECore/Reflection/XmlArchive.h>
+#include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Format/Format.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/Awaitables.h>
@@ -245,32 +244,38 @@ namespace BECore {
         // Switch to background thread for I/O
         co_await SwitchToBackground();
         
-        // Create XmlArchive in Read mode and load from virtual path
-        XmlArchive archive(XmlArchive::Mode::Read);
-        if (!archive.LoadFromVirtualPath(path)) {
-            LOG_ERROR(Format("Failed to load XML for serialization: {}", path).c_str());
+        // Create XmlDeserializer and load from virtual path
+        XmlDeserializer deserializer;
+        if (!deserializer.LoadFromVirtualPath(path)) {
+            LOG_ERROR(Format("Failed to load XML for deserialization: {}", path).c_str());
             co_return T{};
         }
         
-        // Deserialize using SerializeRoot
+        // Deserialize using generated Deserialize method
         T result{};
-        SerializeRoot(archive, result);
+        if (deserializer.BeginObject(ReflectionTraits<T>::name)) {
+            result.Deserialize(deserializer);
+            deserializer.EndObject();
+        }
         
         co_return result;
     }
     
     template<HasReflection T>
     T ResourceManager::LoadSerialized(eastl::string_view path) {
-        // Create XmlArchive in Read mode and load from virtual path
-        XmlArchive archive(XmlArchive::Mode::Read);
-        if (!archive.LoadFromVirtualPath(path)) {
-            LOG_ERROR(Format("Failed to load XML for serialization: {}", path).c_str());
+        // Create XmlDeserializer and load from virtual path
+        XmlDeserializer deserializer;
+        if (!deserializer.LoadFromVirtualPath(path)) {
+            LOG_ERROR(Format("Failed to load XML for deserialization: {}", path).c_str());
             return T{};
         }
         
-        // Deserialize using SerializeRoot
+        // Deserialize using generated Deserialize method
         T result{};
-        SerializeRoot(archive, result);
+        if (deserializer.BeginObject(ReflectionTraits<T>::name)) {
+            result.Deserialize(deserializer);
+            deserializer.EndObject();
+        }
         
         return result;
     }

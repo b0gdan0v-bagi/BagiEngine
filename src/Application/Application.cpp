@@ -8,7 +8,7 @@
 
 namespace BECore {
 
-    bool Application::Initialize(PassKey<ApplicationMainAccess>) {
+    bool Application::Initialize() {
 
         _isRunning = true;
         Subscribe<ApplicationEvents::QuitEvent, &Application::StopApplication>(this);
@@ -26,7 +26,7 @@ namespace BECore {
         return _isRunning;
     }
 
-    void Application::Run(PassKey<ApplicationMainAccess>) const {
+    void Application::Run() const {
 
         while (_isRunning) {
 

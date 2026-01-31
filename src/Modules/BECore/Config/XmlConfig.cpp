@@ -1,65 +1,66 @@
 #include "XmlConfig.h"
 
-#include <BECore/Config/XmlConfigImpl.h>
+#include <BECore/Config/XmlDocument.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/RefCounted/New.h>
 
 namespace BECore {
 
     XmlConfig XmlConfig::Create() {
-        auto impl = BECore::New<XmlConfigImpl>(pugi::xml_document{});
-        return XmlConfig(std::move(impl));
+        auto doc = BECore::New<XmlDocument>();
+        return XmlConfig(std::move(doc));
     }
 
     bool XmlConfig::LoadFromVirtualPath(eastl::string_view virtualPath) const {
-        if (!_impl) {
+        if (!_doc) {
             return false;
         }
         std::filesystem::path resolvedPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
         if (resolvedPath.empty()) {
-            return {};
+            return false;
         }
-        return _impl->LoadFromFile(resolvedPath);
+        return _doc->LoadFromFile(resolvedPath);
     }
 
     bool XmlConfig::LoadFromFile(const std::filesystem::path& filepath) const {
-        if (!_impl) {
+        if (!_doc) {
             return false;
         }
-        return _impl->LoadFromFile(filepath);
+        return _doc->LoadFromFile(filepath);
     }
 
     bool XmlConfig::LoadFromString(eastl::string_view xmlContent) const {
-        if (!_impl) {
+        if (!_doc) {
             return false;
         }
-        return _impl->LoadFromString(xmlContent);
+        return _doc->LoadFromString(xmlContent);
     }
 
     bool XmlConfig::SaveToFile(const std::filesystem::path& filepath) const {
-        if (!_impl) {
+        if (!_doc) {
             return false;
         }
-        return _impl->SaveToFile(filepath);
+        return _doc->SaveToFile(filepath);
     }
 
     XmlNode XmlConfig::GetRoot() const {
-        if (!_impl) {
+        if (!_doc) {
             return {};
         }
-        return _impl->GetRoot();
+        return _doc->GetRoot();
     }
 
     void XmlConfig::Clear() const {
-        if (_impl) {
-            _impl->Clear();
+        if (_doc) {
+            _doc->Clear();
         }
     }
 
     bool XmlConfig::IsLoaded() const {
-        if (!_impl) {
+        if (!_doc) {
             return false;
         }
-        return _impl->IsLoaded();
+        return _doc->IsLoaded();
     }
 
 }  // namespace BECore

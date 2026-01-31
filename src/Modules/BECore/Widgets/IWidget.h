@@ -3,7 +3,7 @@
 
 namespace BECore {
 
-    class IArchive;
+    class IDeserializer;
 
     class IWidget : public RefCounted, public SubscriptionHolder {
         BE_CLASS(IWidget, FACTORY_BASE)
@@ -11,7 +11,7 @@ namespace BECore {
         IWidget() = default;
         ~IWidget() override = default;
 
-        BE_FUNCTION virtual bool Initialize(IArchive& archive) = 0;
+        BE_FUNCTION virtual bool Initialize(IDeserializer& deserializer) = 0;
 
         BE_FUNCTION virtual void Update() = 0;
         BE_FUNCTION virtual void Draw() = 0;

@@ -8,7 +8,7 @@
 
 namespace BECore {
 
-    class IArchive;
+    class IDeserializer;
 
     class FileSink : public ILogSink {
         BE_CLASS(FileSink)
@@ -19,7 +19,7 @@ namespace BECore {
 
         void Initialize() override;
 
-        void Configure(IArchive& archive) override;
+        void Configure(IDeserializer& deserializer) override;
 
         bool IsOpen() const { return _file.is_open(); }
 

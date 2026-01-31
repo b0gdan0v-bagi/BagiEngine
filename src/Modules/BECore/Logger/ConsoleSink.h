@@ -4,7 +4,7 @@
 
 namespace BECore {
 
-    class IArchive;
+    class IDeserializer;
     struct LogEvent;
 
     class ConsoleSink : public ILogSink {
@@ -16,7 +16,7 @@ namespace BECore {
 
         void Initialize() override;
 
-        void Configure(IArchive& archive) override;
+        void Configure(IDeserializer& deserializer) override;
 
         void Write(LogLevel level, eastl::string_view message) override;
 

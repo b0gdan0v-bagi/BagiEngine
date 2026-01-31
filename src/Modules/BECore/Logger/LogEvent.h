@@ -15,6 +15,8 @@ namespace BECore {
             : level(level)
             , message(message)
         {}
+
+        static void Emit(LogLevel level, eastl::string_view message);
     };
 
     struct FlushLogsEvent : EventBase<FlushLogsEvent> {

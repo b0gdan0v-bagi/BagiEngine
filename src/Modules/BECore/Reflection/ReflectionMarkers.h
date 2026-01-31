@@ -4,9 +4,10 @@
  * @file ReflectionMarkers.h
  * @brief Macros for marking classes, fields, and enums for reflection
  *
- * These macros are used by the reflection parser (reflector.py) to identify
+ * These macros are used by the reflection parser (meta_generator) to identify
  * types that need reflection metadata generation. The generated code provides
- * ReflectionTraits<T> specializations and static class methods.
+ * ReflectionTraits<T> specializations and static class methods, including
+ * auto-generated Serialize() and Deserialize() methods.
  *
  * Usage:
  *   struct Player {
@@ -14,10 +15,18 @@
  *
  *       BE_REFLECT_FIELD int32_t health = 100;
  *       BE_REFLECT_FIELD float speed = 5.0f;
+ *       BE_REFLECT_FIELD BECore::Color _clearColor;  // XML name: clearColor
  *   };
  *
  * Include generated file in .cpp:
  *   #include <Generated/Player.gen.hpp>
+ *
+ * The generated code provides:
+ *   - Serialize(ISerializer&) const  - for writing/saving
+ *   - Deserialize(IDeserializer&)    - for reading/loading
+ *
+ * Note: Underscore prefix in field names is automatically stripped for XML
+ * element/attribute names (e.g., _clearColor → clearColor).
  */
 
 namespace BECore {
@@ -61,7 +70,7 @@ public:                                                                         
     template <typename Func>                                                                                                                                                                           \
     static constexpr void ForEachFieldStatic(const ClassName& obj, Func&& func);                                                                                                                       \
     /** @brief Get static ClassMeta for this type (defined in generated code) */                                                                                                                       \
-    static constexpr const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                   \
+    static const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                   \
     /** @brief Get runtime ClassMeta for this instance */                                                                                                                                              \
     constexpr const ::BECore::ClassMeta& GetTypeMeta() const { return *_typeMeta; }                                                                                                                    \
     /** @brief Check if this instance is of type T */                                                                                                                                                  \
@@ -73,9 +82,12 @@ public:                                                                         
     /** @brief Cast to type T (const), returns nullptr if type mismatch */                                                                                                                             \
     template <typename T>                                                                                                                                                                              \
     constexpr const T* Cast() const;                                                                                                                                                                   \
-    /** @brief Serialize all reflected fields (primitives as attributes, classes as child elements) */                                                                                                 \
-    template <typename Archive>                                                                                                                                                                        \
-    void Serialize(Archive& archive);                                                                                                                                                                  \
+    /** @brief Serialize all reflected fields to ISerializer (write/save) */                                                                                                                           \
+    template <typename Serializer>                                                                                                                                                                     \
+    void Serialize(Serializer& s) const;                                                                                                                                                               \
+    /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                      \
+    template <typename Deserializer>                                                                                                                                                                   \
+    void Deserialize(Deserializer& d);                                                                                                                                                                 \
                                                                                                                                                                                                        \
 private:                                                                                                                                                                                               \
     template <typename, typename>                                                                                                                                                                      \
@@ -111,7 +123,7 @@ public:                                                                         
     /** @brief Get the event type name as string_view */                                                                                                                                                  \
     static constexpr eastl::string_view GetStaticTypeName();                                                                                                                                              \
     /** @brief Get static ClassMeta for this event type (defined in generated code) */                                                                                                                    \
-    static constexpr const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                      \
+    static const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                      \
     /** @brief Get event type hash for efficient dispatch */                                                                                                                                              \
     static constexpr uint64_t GetStaticTypeHash();                                                                                                                                                        \
     /** @brief Get the number of reflected fields */                                                                                                                                                      \
@@ -119,6 +131,12 @@ public:                                                                         
     /** @brief Iterate over all reflected fields (const) */                                                                                                                                               \
     template <typename Func>                                                                                                                                                                              \
     static constexpr void ForEachFieldStatic(const EventName& obj, Func&& func);                                                                                                                          \
+    /** @brief Serialize all reflected fields to ISerializer (write/save) */                                                                                                                              \
+    template <typename Serializer>                                                                                                                                                                        \
+    void Serialize(Serializer& s) const;                                                                                                                                                                  \
+    /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                         \
+    template <typename Deserializer>                                                                                                                                                                      \
+    void Deserialize(Deserializer& d);                                                                                                                                                                    \
                                                                                                                                                                                                           \
 private:                                                                                                                                                                                                  \
     template <typename, typename>                                                                                                                                                                         \

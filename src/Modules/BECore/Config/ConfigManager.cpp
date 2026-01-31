@@ -7,6 +7,7 @@
 #include <BECore/RefCounted/New.h>
 #include <TaskSystem/TaskManager.h>
 #include <TaskSystem/TaskHandle.h>
+#include <TaskSystem/TaskGroup.h>
 #include <TaskSystem/Awaitables.h>
 
 #include <pugixml.hpp>
@@ -15,9 +16,12 @@
 namespace BECore {
 
     void ConfigManager::Initialize() {
-        if (_initialized) {
-            LOG_INFO("[ConfigManager] Already initialized");
-            return;
+        {
+            std::lock_guard lock(_mutex);
+            if (_initialized) {
+                LOG_INFO("[ConfigManager] Already initialized");
+                return;
+            }
         }
 
         LOG_INFO("[ConfigManager] Initializing...");
@@ -26,16 +30,18 @@ namespace BECore {
         auto configPath = CoreManager::GetFileSystem().ResolvePath("config");
         if (configPath.empty() || !std::filesystem::exists(configPath)) {
             LOG_WARNING("[ConfigManager] Config directory not found, skipping initialization");
+            std::lock_guard lock(_mutex);
             _initialized = true;
             return;
         }
 
         // Сканируем директорию для поиска XML файлов
-        eastl::vector<std::pair<std::filesystem::path, PoolString>> filesToLoad;
+        eastl::vector<eastl::pair<std::filesystem::path, PoolString>> filesToLoad;
         ScanDirectory(configPath, filesToLoad);
 
         if (filesToLoad.empty()) {
             LOG_WARNING("[ConfigManager] No XML files found in config directory");
+            std::lock_guard lock(_mutex);
             _initialized = true;
             return;
         }
@@ -43,37 +49,23 @@ namespace BECore {
         LOG_INFO(Format("[ConfigManager] Found {} config files", filesToLoad.size()).c_str());
 
         // Запускаем параллельные задачи загрузки
-        eastl::vector<IntrusivePtr<TaskHandle<void>>> handles;
-        handles.reserve(filesToLoad.size());
-
+        TaskGroup group;
         for (const auto& [path, name] : filesToLoad) {
             auto handle = TaskManager::GetInstance().Run(LoadConfigAsync(path, name));
-            handles.push_back(handle);
+            group.Add(handle);
         }
 
         // Ждём завершения всех задач
-        // Нужно вызывать Update для обработки задач
-        bool allDone = false;
-        while (!allDone) {
-            allDone = true;
-            for (auto& handle : handles) {
-                if (!handle->IsDone()) {
-                    allDone = false;
-                    break;
-                }
-            }
+        group.WaitAll();
 
-            if (!allDone) {
-                // Даём TaskManager обработать задачи главного потока и отложенные задачи
-                TaskManager::GetInstance().Update(PassKey<CoreManager>{});
-                
-                // Небольшая пауза для предотвращения busy-wait
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
+        size_t loadedCount;
+        {
+            std::lock_guard lock(_mutex);
+            loadedCount = _configs.size();
+            _initialized = true;
         }
 
-        LOG_INFO(Format("[ConfigManager] Loaded {} configs", _configs.size()).c_str());
-        _initialized = true;
+        LOG_INFO(Format("[ConfigManager] Loaded {} configs", loadedCount).c_str());
     }
 
     XmlNode ConfigManager::GetConfig(PoolString name) const {
@@ -98,7 +90,7 @@ namespace BECore {
     }
 
     void ConfigManager::ScanDirectory(const std::filesystem::path& dir,
-                                     eastl::vector<std::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
+                                     eastl::vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
         // filesystem может бросать исключения, но exceptions отключены
         // Просто пропускаем ошибки
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
@@ -115,16 +107,25 @@ namespace BECore {
     }
 
     Task<void> ConfigManager::LoadConfigAsync(std::filesystem::path path, PoolString name) {
-        // Переключаемся на фоновый поток
-        co_await SwitchToBackground();
-
+        // Задача уже запущена на background потоке через TaskManager::Run
+        
         LOG_DEBUG(Format("[ConfigManager] Loading config: {}", name.ToStringView()).c_str());
 
-        // Создаём ConfigImpl напрямую
-        auto impl = BECore::New<XmlConfigImpl>(pugi::xml_document{});
+        // Проверяем, не загружен ли уже конфиг (защита от дубликатов)
+        {
+            std::scoped_lock lock(_mutex);
+            if (_configs.find(name) != _configs.end()) {
+                LOG_WARNING(Format("[ConfigManager] Config {} already loaded, skipping duplicate", 
+                                 name.ToStringView()).c_str());
+                co_return;
+            }
+        }
+
+        // Создаём XmlDocument напрямую
+        auto doc = BECore::New<XmlDocument>();
         
         // Используем LoadFromFile для физического пути
-        if (!impl->LoadFromFile(path)) {
+        if (!doc->LoadFromFile(path)) {
             LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}", 
                            name.ToStringView(), path.string()).c_str());
             co_return;
@@ -132,8 +133,14 @@ namespace BECore {
 
         // Добавляем в кэш (потокобезопасно)
         {
-            std::lock_guard<std::mutex> lock(_mutex);
-            _configs[name] = std::move(impl);
+            std::scoped_lock lock(_mutex);
+            // Повторная проверка на случай race condition
+            if (_configs.find(name) != _configs.end()) {
+                LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", 
+                                 name.ToStringView()).c_str());
+                co_return;
+            }
+            _configs[name] = doc;
         }
 
         LOG_DEBUG(Format("[ConfigManager] Config loaded: {}", name.ToStringView()).c_str());

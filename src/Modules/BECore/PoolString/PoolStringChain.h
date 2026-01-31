@@ -2,7 +2,7 @@
 
 #include "PoolString.h"
 #include "StaticPoolString.h"
-#include <Math/NumberUtils.h>
+#include <BECore/Math/NumberUtils.h>
 #include <EASTL/string_view.h>
 #include <EASTL/array.h>
 #include <EASTL/variant.h>
@@ -102,7 +102,7 @@ namespace BECore {
                     for (uint8_t i = 0; i < _count; ++i) {
                         const auto& v = _storage.compound[i];
                         if (v.IsInt()) {
-                            total += Math::CountDigits(v.AsInt());
+                            total += BECore::CountDigits(v.AsInt());
                         } else {
                             total += v.AsPoolString().Length();
                         }

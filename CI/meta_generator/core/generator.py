@@ -165,7 +165,8 @@ class CodeGenerator:
         self, 
         classes: List[ClassData], 
         enums: List[EnumData], 
-        input_filename: str
+        source_file: Path,
+        include_dirs: List[str] = None
     ) -> Optional[Path]:
         """
         Generate reflection code for classes and enums.
@@ -173,7 +174,8 @@ class CodeGenerator:
         Args:
             classes: List of reflected classes
             enums: List of reflected enums
-            input_filename: Name of the source file (for comments)
+            source_file: Path to the source file
+            include_dirs: Include directories for computing include path
             
         Returns:
             Path to generated file, or None if nothing to generate
@@ -186,6 +188,9 @@ class CodeGenerator:
         
         # Load template
         template = self.env.get_template('reflection.gen.hpp.j2')
+        
+        # Compute include path for the original header
+        include_path = compute_include_path(str(source_file), include_dirs or [])
         
         # Prepare class data for template (convert dataclasses to dicts)
         classes_data = []
@@ -234,14 +239,15 @@ class CodeGenerator:
         
         # Render template
         output = template.render(
-            input_filename=input_filename,
+            input_filename=source_file.name,
+            include_path=include_path,
             classes=classes_data,
             enums=enums_data,
             factory_bases=[]  # Factory bases are generated separately
         )
         
         # Write output file
-        output_filename = Path(input_filename).stem + ".gen.hpp"
+        output_filename = source_file.stem + ".gen.hpp"
         output_path = self.output_dir / output_filename
         
         with open(output_path, 'w', encoding='utf-8') as f:

@@ -232,7 +232,7 @@ Examples:
             # Generate reflection code
             if classes or enums:
                 output_path = generator.generate_reflection(
-                    classes, enums, file_path.name
+                    classes, enums, file_path, include_dirs
                 )
                 if output_path:
                     generated_count += 1
@@ -263,7 +263,7 @@ Examples:
                     # Generate reflection code for newly found classes
                     if classes or enums:
                         output_path = generator.generate_reflection(
-                            classes, enums, file_path.name
+                            classes, enums, file_path, include_dirs
                         )
                         if output_path:
                             generated_count += 1
@@ -284,10 +284,33 @@ Examples:
             verbose_log(f"    Generated: {output_path.name}")
     
     # Cleanup deleted files from cache
-    existing_files = set(scan_headers(source_dirs + scan_dirs))
-    removed = cache.cleanup_deleted_files(existing_files)
-    if removed > 0:
-        verbose_log(f"Removed {removed} deleted files from cache")
+    # Only cleanup files from directories we're responsible for (not the entire cache)
+    # This allows multiple modules to share the same cache without overwriting each other
+    scanned_dirs = source_dirs + scan_dirs
+    existing_files_in_scanned_dirs = set(scan_headers(scanned_dirs))
+    
+    # Find files in cache that were from our directories but no longer exist
+    to_remove = []
+    for cached_path in cache.files.keys():
+        cached_path_obj = Path(cached_path)
+        # Check if this file was from one of our directories
+        for scan_dir in scanned_dirs:
+            try:
+                cached_path_obj.relative_to(scan_dir.resolve())
+                # File was from our directory - check if it still exists
+                if cached_path_obj not in existing_files_in_scanned_dirs and \
+                   Path(cached_path) not in existing_files_in_scanned_dirs:
+                    to_remove.append(cached_path)
+                break
+            except ValueError:
+                # Not from this directory, check next
+                continue
+    
+    for path in to_remove:
+        cache.remove_file(Path(path))
+    
+    if to_remove:
+        verbose_log(f"Removed {len(to_remove)} deleted files from cache")
     
     # Save cache
     cache.save()

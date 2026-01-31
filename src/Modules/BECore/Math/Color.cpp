@@ -1,7 +1,6 @@
 #include "Color.h"
-#include <Generated/Color.gen.hpp>
 
-namespace Math {
+namespace BECore {
 
     std::optional<Color> Color::ParseColorFromString(eastl::string_view data) {
         if (data.empty()) {
@@ -26,5 +25,5 @@ namespace Math {
         return Color{fromStringView(tokens[0]), fromStringView(tokens[1]), fromStringView(tokens[2]), fromStringView(tokens[3])};
     }
 
-}  // namespace Math
+}  // namespace BECore
 

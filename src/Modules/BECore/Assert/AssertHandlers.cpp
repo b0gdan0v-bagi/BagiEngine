@@ -1,6 +1,7 @@
 #include "AssertHandlers.h"
 
 #include <BECore/Assert/PlatformDebug.h>
+#include <BECore/Assert/StackTrace.h>
 #include <BECore/Config/XmlConfig.h>
 #include <BECore/GameManager/CoreManager.h>
 
@@ -86,6 +87,31 @@ namespace BECore {
         LogEvent::Emit(level, message);
     }
 
+    // StackTraceHandler implementation
+
+    void StackTraceHandler::Initialize() {
+        if (_initialized) {
+            return;
+        }
+
+        Subscribe<AssertEvent, &StackTraceHandler::OnAssert>(this);
+        _initialized = true;
+    }
+
+    void StackTraceHandler::OnAssert(const AssertEvent& event) {
+        // Print stack trace for all assertion types
+        fprintf(stderr, "\n[ASSERT] Stack trace for %s:%d\n", event.file, event.line);
+        if (event.expression) {
+            fprintf(stderr, "  Expression: %s\n", event.expression);
+        }
+        if (event.message) {
+            fprintf(stderr, "  Message: %s\n", event.message);
+        }
+        
+        // Skip 1 frame (this function itself)
+        CaptureAndPrintStackTrace(1);
+    }
+
     // AssertHandlerManager implementation
 
     void AssertHandlerManager::Initialize() {
@@ -144,19 +170,22 @@ namespace BECore {
         SortHandlersByPriority();
 
         // Initialize all handlers
-        for (auto& handler : _handlers) {
+        for (const auto& handler : _handlers) {
             handler->Initialize();
         }
 
         _initialized = true;
     }
 
-    IntrusivePtr<IAssertHandler> AssertHandlerManager::CreateHandlerByType(AssertHandlerType type) {
+    IntrusivePtrAtomic<IAssertHandler> AssertHandlerManager::CreateHandlerByType(AssertHandlerType type) {
+
         switch (type) {
             case AssertHandlerType::DebugBreak:
                 return BECore::New<DebugBreakHandler>();
             case AssertHandlerType::Log:
                 return BECore::New<AssertLogHandler>();
+            case AssertHandlerType::StackTrace:
+                return BECore::New<StackTraceHandler>();
             default:
                 return {};
         }
@@ -164,7 +193,7 @@ namespace BECore {
 
     void AssertHandlerManager::SortHandlersByPriority() {
         eastl::sort(_handlers.begin(), _handlers.end(),
-            [](const IntrusivePtr<IAssertHandler>& a, const IntrusivePtr<IAssertHandler>& b) {
+            [](auto && a, auto && b) {
                 return a->GetPriority() < b->GetPriority();
             });
     }

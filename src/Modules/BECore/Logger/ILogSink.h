@@ -7,9 +7,9 @@
 
 namespace BECore {
 
-    class IArchive;
+    class IDeserializer;
 
-    class ILogSink : public RefCounted, public SubscriptionHolder {
+    class ILogSink : public RefCountedAtomic, public SubscriptionHolder {
         BE_CLASS(ILogSink, FACTORY_BASE)
 
     public:
@@ -17,7 +17,7 @@ namespace BECore {
 
         virtual void Initialize() = 0;
 
-        virtual void Configure(IArchive& archive) {}
+        virtual void Configure(IDeserializer& deserializer) {}
 
         virtual void Write(LogLevel level, eastl::string_view message) = 0;
 

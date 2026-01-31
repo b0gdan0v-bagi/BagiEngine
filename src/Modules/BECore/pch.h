@@ -44,7 +44,7 @@
 #include <limits>
 
 // Math
-#include <Math/Color.h>
+#include <BECore/Math/Color.h>
 
 // Core
 #include <BECore/Utils/String.h>

@@ -44,13 +44,10 @@ target_include_directories(BECoreModule PUBLIC
 )
 
 # Подключаем зависимости из SDK
-# BECoreModule зависит от MathModule через XmlNode (использует Math::Color)
-# Но MathModule должен быть подключен в главном CMakeLists.txt перед BECoreModule
 # Примечание: BECoreModule использует EventsProviderManager, но не линкуется с EventsModule
 # чтобы избежать циклической зависимости (EventsModule линкуется с BECoreModule).
 # Include директории Events добавлены напрямую выше.
 target_link_libraries(BECoreModule PUBLIC
-    MathModule
     pugixml
     imgui
     EASTL
@@ -58,6 +55,11 @@ target_link_libraries(BECoreModule PUBLIC
     EnTT
     SDL3-shared
 )
+
+# DbgHelp for stack trace capture (Windows only)
+if(WIN32)
+    target_link_libraries(BECoreModule PUBLIC dbghelp)
+endif()
 
 # =============================================================================
 # Reflection Code Generation
@@ -72,11 +74,13 @@ if(COMMAND add_reflection_target)
             ${CMAKE_CURRENT_SOURCE_DIR}/Tests
             ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
             ${CMAKE_CURRENT_SOURCE_DIR}/Resource
+            ${CMAKE_CURRENT_SOURCE_DIR}/Math
         SCAN_DIRS
             ${CMAKE_CURRENT_SOURCE_DIR}/Logger
             ${CMAKE_CURRENT_SOURCE_DIR}/Tests
             ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
             ${CMAKE_CURRENT_SOURCE_DIR}/Resource
+            ${CMAKE_CURRENT_SOURCE_DIR}/Math
             ${PROJECT_ROOT}/src/Widgets
         INCLUDE_DIRS
             ${PROJECT_ROOT}/src/Modules

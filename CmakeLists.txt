@@ -374,7 +374,6 @@ endif()
 # =============================================================================
 # BECoreModule должен быть объявлен первым, так как другие модули используют его PCH
 add_subdirectory(src/Modules/BECore)
-add_subdirectory(src/Modules/Math)
 add_subdirectory(src/Modules/Events)
 add_subdirectory(src/Modules/TaskSystem)
 add_subdirectory(src/Modules/SDL)
@@ -423,25 +422,18 @@ endif()
 
 target_link_libraries(MyGame PRIVATE 
     BECoreModule
-    MathModule
     EventsModule
     TaskSystemModule
     SDLModule
 )
 
 # =============================================================================
-# Reflection Code Generation for Application Widgets
+# Reflection Support for MyGame
 # =============================================================================
-# Generate reflection metadata for widget implementations in src/Widgets
-if(COMMAND add_reflection_target)
-    add_reflection_target(MyGame
-        DIRS
-            ${CMAKE_SOURCE_DIR}/src/Widgets
-        INCLUDE_DIRS
-            ${CMAKE_SOURCE_DIR}/src/Modules
-            ${CMAKE_SOURCE_DIR}/src
-    )
-endif()
+# Widget reflection is handled by BECoreModule via SCAN_DIRS (src/Widgets).
+# Here we only add the necessary include paths and definitions.
+target_include_directories(MyGame PRIVATE ${CMAKE_BINARY_DIR})
+target_compile_definitions(MyGame PRIVATE REFLECTION_GENERATED=1)
 
 # Копирование SDL3 DLL рядом с исполняемым файлом (для Windows)
 if(WIN32)

@@ -1,7 +1,7 @@
 #include "ImGuiWidget.h"
 
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Reflection/IArchive.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <CoreSDL/SDLMainWindow.h>
 
 #include <Events/ApplicationEvents.h>
@@ -17,7 +17,7 @@
 
 namespace BECore {
 
-    bool ImGuiWidget::Initialize(IArchive& /*archive*/) {
+    bool ImGuiWidget::Initialize(IDeserializer& /*deserializer*/) {
         if (_isInitialized) {
             return true;
         }

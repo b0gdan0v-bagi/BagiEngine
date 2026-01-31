@@ -1,6 +1,6 @@
 #include "ConsoleSink.h"
 
-#include <BECore/Reflection/IArchive.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Logger/LogLevel.h>
 
 #include <EASTL/string_view.h>
@@ -24,8 +24,8 @@ namespace BECore {
         _initialized = true;
     }
 
-    void ConsoleSink::Configure(IArchive& archive) {
-        archive.SerializeAttribute("colorEnabled", _colorEnabled);
+    void ConsoleSink::Configure(IDeserializer& deserializer) {
+        Deserialize(deserializer);
     }
 
     void ConsoleSink::OnLogEvent(const LogEvent& event) {
@@ -43,6 +43,14 @@ namespace BECore {
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             now.time_since_epoch()) % 1000;
 
+        // Thread-safe localtime conversion
+        std::tm tm_buf;
+#ifdef _WIN32
+        localtime_s(&tm_buf, &time);
+#else
+        localtime_r(&time, &tm_buf);
+#endif
+
         // Choose output stream
         FILE* stream = (level >= LogLevel::Error) ? stderr : stdout;
 
@@ -54,11 +62,11 @@ namespace BECore {
             fmt::print(stream,
                 "{}[{}]{} [{:%H:%M:%S}.{:03d}] {}\n",
                 color, level, reset,
-                fmt::localtime(time), ms.count(), message);
+                tm_buf, ms.count(), message);
         } else {
             fmt::print(stream,
                 "[{}] [{:%H:%M:%S}.{:03d}] {}\n",
-                level, fmt::localtime(time), ms.count(), message);
+                level, tm_buf, ms.count(), message);
         }
     }
 

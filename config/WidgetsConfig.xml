@@ -2,7 +2,7 @@
 <root>
     <widgets>
         <widget type="ClearScreen">
-            <Color r="100" g="150" b="200" a="255"/>
+            <clearColor r="100" g="150" b="200" a="255"/>
         </widget>
         <widget type="ImGui"/>
     </widgets>

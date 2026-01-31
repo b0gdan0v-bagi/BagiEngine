@@ -1,15 +1,14 @@
 #include <Application/Application.h>
-#include <BECore/Application/ApplicationMainAccess.h>
 
 #ifdef PLATFORM_WINDOWS
 #include <windows.h>
 
 int RunApplication() {
-    if (!BECore::Application::GetInstance().Initialize(BECore::PassKey<BECore::ApplicationMainAccess>{})) {
+    if (!BECore::Application::GetInstance().Initialize()) {
         return -1;
     }
 
-    BECore::Application::GetInstance().Run(BECore::PassKey<BECore::ApplicationMainAccess>{});
+    BECore::Application::GetInstance().Run();
 
     return 0;
 }
@@ -19,12 +18,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 }
 #else
 int main(int argc, char* argv[]) {
-    if (!BECore::Application::GetInstance().Initialize(BECore::PassKey<BECore::ApplicationMainAccess>{})) {
-        return -1;
-    }
-
-    BECore::Application::GetInstance().Run(BECore::PassKey<BECore::ApplicationMainAccess>{});
-
-    return 0;
+    return RunApplication();
 }
 #endif

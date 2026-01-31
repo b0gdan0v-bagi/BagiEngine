@@ -1,6 +1,6 @@
 #include "FileSink.h"
 
-#include <BECore/Reflection/IArchive.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Logger/LogLevel.h>
 #include <EASTL/string.h>
 #include <EASTL/string_view.h>
@@ -34,9 +34,8 @@ namespace BECore {
         _initialized = true;
     }
 
-    void FileSink::Configure(IArchive& archive) {
-        archive.SerializeAttribute("filename", _filename);
-        archive.SerializeAttribute("append", _append);
+    void FileSink::Configure(IDeserializer& deserializer) {
+        Deserialize(deserializer);
     }
 
     void FileSink::OnLogEvent(const LogEvent& event) {
@@ -60,10 +59,18 @@ namespace BECore {
         const auto time = std::chrono::system_clock::to_time_t(now);
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
+        // Thread-safe localtime conversion
+        std::tm tm_buf;
+#ifdef _WIN32
+        localtime_s(&tm_buf, &time);
+#else
+        localtime_r(&time, &tm_buf);
+#endif
+
         std::scoped_lock lock(_mutex);
 
         // Format and output (no colors in file)
-        _file << fmt::format("[{}] [{:%Y-%m-%d %H:%M:%S}.{:03d}] {}\n", level, fmt::localtime(time), ms.count(), message.data());
+        _file << fmt::format("[{}] [{:%Y-%m-%d %H:%M:%S}.{:03d}] {}\n", level, tm_buf, ms.count(), message.data());
     }
 
     void FileSink::SetFilename(eastl::string_view filename) {
