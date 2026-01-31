@@ -19,12 +19,12 @@ The serialization system uses **separate interfaces** for reading and writing:
 
 - **`ISerializer`** - Interface for writing data (save/export)
   - Methods: `Write()`, `WriteAttribute()`
-  - Implementations: `XmlSerializer`, `BinarySerializer`
+  - Implementations: `XmlSerializer` (Binary planned)
   
 - **`IDeserializer`** - Interface for reading data (load/import)
   - Methods: `Read()`, `ReadAttribute()`
   - Error tracking: `HasErrors()`, `GetErrors()`, `ClearErrors()`
-  - Implementations: `XmlDeserializer`, `BinaryDeserializer`
+  - Implementations: `XmlDeserializer` (Binary planned)
 
 ## Macros
 

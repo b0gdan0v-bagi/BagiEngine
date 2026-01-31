@@ -26,7 +26,8 @@ alwaysApply: true
 | Global service | `Singleton<T>` | `BECore/Utils/Singleton.h` |
 | UI component | `IWidget` | `BECore/Widgets/` |
 | Communication | `EventBase<T>` | `Events/EventBase.h` |
-| Config loading | `XmlConfig` / `XmlNode` | `BECore/Config/` |
+| Config loading | `ConfigManager::GetConfig()` → `XmlNode` | `BECore/Config/` |
+| Serialization | `ISerializer` / `IDeserializer`, `XmlSerializer` / `XmlDeserializer` | `BECore/Reflection/` |
 | Logging | `LOG_INFO()`, `LOG_ERROR()` | `BECore/Logger/Logger.h` |
 | Enum definition | `CORE_ENUM(Name, Type, Values)` | `BECore/Utils/EnumUtils.h` |
 

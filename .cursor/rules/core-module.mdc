@@ -22,12 +22,17 @@ Central hub for core subsystems. Access via static methods:
 auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
 ```
 
-**DON'T**: Create `XmlConfig` and call `LoadFromVirtualPath()` manually.
+**DON'T**: Create config loaders manually or call `LoadFromVirtualPath()` directly.
 
 **Features:**
 - Loads all configs from `config/` recursively at startup (parallel via TaskManager)
-- Identifies by filename stem (without `.xml`)
-- Thread-safe access
+- Identifies by filename stem (without `.xml`); returns `XmlNode` (backed by `XmlDocument`)
+- Thread-safe access; configs cached in `UnorderedPoolMap<IntrusivePtrAtomic<XmlDocument>>`
+
+## Assert (CRTDebugHook, StackTrace)
+
+- **CRTDebugHook** (`InstallCRTDebugHooks()`): Captures CRT debug reports (heap corruption, invalid params) and stack traces. Windows Debug builds only; call early in init.
+- **StackTrace** (`CaptureAndPrintStackTrace()`): Cross-platform stack capture for assertion failures; uses DbgHelp/PDB on Windows.
 
 ## Pre-Init Log Buffer
 

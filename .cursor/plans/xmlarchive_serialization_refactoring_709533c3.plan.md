@@ -1,53 +1,67 @@
 ---
 name: XmlArchive Serialization Refactoring
-overview: Refactoring configuration loading from manual XmlNode parsing to unified reflection-based XmlArchive serialization. Primitives as XML attributes, classes as child elements.
+overview: Refactoring configuration loading from manual XmlNode parsing to unified reflection-based serialization. Primitives as XML attributes, classes as child elements. **Completed** (merge ee1e4ef): split into ISerializer/IDeserializer, XmlSerializer/XmlDeserializer.
 todos:
   - id: xmlarchive-attributes
-    content: Add attribute serialization to XmlArchive (SerializeAttribute for primitives)
-    status: pending
+    content: Add attribute serialization (WriteAttribute/ReadAttribute for primitives)
+    status: completed
   - id: xmlarchive-xmlconfig
-    content: Add LoadFromXmlConfig/LoadFromXmlNode methods to XmlArchive
-    status: pending
+    content: Add LoadFromFile/LoadFromNode to XmlDeserializer, SaveToFile to XmlSerializer
+    status: completed
   - id: color-reflection
-    content: Add BE_CLASS and BE_REFLECT_FIELD to Math::Color for automatic serialization
-    status: pending
+    content: Add BE_CLASS and BE_REFLECT_FIELD to Math::Color (Color moved to BECore)
+    status: completed
   - id: meta-generator-serialize
-    content: Extend meta_generator to generate Serialize() methods from BE_REFLECT_FIELD
-    status: pending
+    content: Extend meta_generator to generate Serialize()/Deserialize() from BE_REFLECT_FIELD
+    status: completed
   - id: interface-ilogsink
-    content: Change ILogSink::Configure(XmlNode&) to Configure(IArchive&)
-    status: pending
+    content: ILogSink::Configure(IDeserializer&)
+    status: completed
   - id: interface-iwidget
-    content: Change IWidget::Initialize(XmlNode&) to Initialize(IArchive&)
-    status: pending
+    content: IWidget::Initialize(IDeserializer&)
+    status: completed
   - id: impl-logsinks
-    content: Update ConsoleSink, FileSink to use generated Serialize via BE_REFLECT_FIELD
-    status: pending
+    content: ConsoleSink, FileSink use generated Serialize/Deserialize
+    status: completed
   - id: impl-widgets
-    content: Update ClearScreenWidget, ImGuiWidget to use generated Serialize
-    status: pending
+    content: ClearScreenWidget, ImGuiWidget use generated Serialize/Deserialize
+    status: completed
   - id: manager-logger
-    content: Update LoggerManager to use XmlArchive
-    status: pending
+    content: LoggerManager uses XmlDeserializer
+    status: completed
   - id: manager-widget
-    content: Update WidgetManager to use XmlArchive
-    status: pending
+    content: WidgetManager uses XmlDeserializer
+    status: completed
   - id: manager-assert
-    content: Update AssertHandlerManager to use XmlArchive
-    status: pending
+    content: AssertHandlerManager uses XmlDeserializer
+    status: completed
   - id: manager-test
-    content: Update TestManager to use XmlArchive
-    status: pending
+    content: TestManager uses XmlDeserializer
+    status: completed
   - id: app-fabric
-    content: Update ApplicationFabric, ApplicationSDLFabric, SDLMainWindow
-    status: pending
+    content: ApplicationFabric, ApplicationSDLFabric, SDLMainWindow updated
+    status: completed
   - id: xml-configs
-    content: Update XML config files (primitives as attributes, classes as child elements)
-    status: pending
+    content: XML configs updated (primitives as attributes, Color as child)
+    status: completed
 isProject: false
 ---
 
-# Refactoring Configuration to XmlArchive Serialization with Reflection
+# Refactoring Configuration to Reflection Serialization (Completed)
+
+## Completed outcome (merge ee1e4ef + branch tmp/refactor_serialization)
+
+- **IArchive removed.** Split into:
+  - **ISerializer** (Write, WriteAttribute) + **IDeserializer** (Read, ReadAttribute), sharing **IArchiveBase** (BeginObject/EndObject, BeginArray/EndArray).
+- **XmlArchive removed.** Replaced by **XmlSerializer** and **XmlDeserializer** (LoadFromFile, LoadFromNode; SaveToFile).
+- **Config:** XmlConfigImpl removed; **XmlDocument** holds document lifetime; **XmlNode** is a lightweight wrapper. ConfigManager returns XmlNode, caches `IntrusivePtrAtomic<XmlDocument>`.
+- **Math:** Color and NumberUtils moved into BECore (Math module removed as separate module).
+- **Assert:** CRTDebugHook (InstallCRTDebugHooks), StackTrace (CaptureAndPrintStackTrace) added; IAssertHandler refactored (RefCountedAtomic, SubscriptionHolder).
+- **BinaryArchive/SaveSystem** removed; BinarySerializer/BinaryDeserializer planned (not yet implemented).
+
+---
+
+# Original plan: Refactoring Configuration to XmlArchive Serialization with Reflection
 
 ## Overview
 
@@ -57,29 +71,33 @@ Replace manual XML attribute parsing (`XmlNode::ParseAttribute`) with unified re
 2. **Classes as child elements**: `<Color r="100" g="150" b="200" a="255"/>`
 3. **Reflection-driven**: User marks fields with `BE_REFLECT_FIELD`, meta_generator generates `Serialize()`
 
-## Architecture
+## Architecture (actual after refactor)
 
 ```mermaid
 flowchart TB
     subgraph Compile["Compile Time (meta_generator)"]
         Parser[parser.py] -->|Reads BE_REFLECT_FIELD| Models[ClassData/FieldData]
         Models --> Generator[generator.py]
-        Generator -->|reflection.gen.hpp| Generated[Serialize method]
+        Generator -->|reflection.gen.hpp| Generated[Serialize/Deserialize]
     end
     
     subgraph Runtime["Runtime"]
-        XmlConfig --> XmlArchive
-        XmlArchive -->|SerializeAttribute| Primitives[bool/int/string/enum]
-        XmlArchive -->|BeginObject + Serialize| Objects[Color/nested classes]
-        Generated -->|Uses| XmlArchive
+        XmlDocument --> XmlNode
+        XmlNode --> XmlDeserializer
+        XmlDeserializer -->|ReadAttribute| Primitives[bool/int/string/enum]
+        XmlDeserializer -->|BeginObject + Deserialize| Objects[Color/nested classes]
+        XmlSerializer -->|WriteAttribute| Primitives
+        XmlSerializer -->|BeginObject + Serialize| Objects
+        Generated -->|Uses| XmlSerializer
+        Generated -->|Uses| XmlDeserializer
     end
 ```
 
-## Phase 1: XmlArchive Infrastructure
+## Phase 1: Serialization infrastructure (original plan; actual: ISerializer/IDeserializer, XmlSerializer/XmlDeserializer)
 
 ### 1.1 Add attribute serialization
 
-[`src/Modules/BECore/Reflection/IArchive.h`](src/Modules/BECore/Reflection/IArchive.h):
+*(Originally IArchive.h; now ISerializer has WriteAttribute, IDeserializer has ReadAttribute.)*
 
 ```cpp
 // Add attribute variants for primitives
@@ -89,12 +107,11 @@ virtual void SerializeAttribute(eastl::string_view name, int32_t& value) = 0;
 virtual void SerializeAttribute(eastl::string_view name, eastl::string& value) = 0;
 ```
 
-[`src/Modules/BECore/Reflection/XmlArchive.h`](src/Modules/BECore/Reflection/XmlArchive.h):
-
-- Implement `SerializeAttribute()` methods using XML attributes
-- Keep existing `Serialize()` for child elements (nested objects)
-- Add `LoadFromXmlConfig(const XmlConfig& config)`
-- Add `LoadFromXmlNode(const XmlNode& node)` for sub-node positioning
+*XmlSerializer/XmlDeserializer:*
+- `WriteAttribute()` / `ReadAttribute()` for XML attributes
+- `BeginObject()` / `EndObject()` + `Serialize()` / `Deserialize()` for child elements
+- XmlDeserializer: `LoadFromFile()`, `LoadFromNode(XmlNode)` for sub-node positioning
+- XmlSerializer: `SaveToFile()`
 
 ### 1.2 XML Format Examples
 
@@ -116,7 +133,7 @@ virtual void SerializeAttribute(eastl::string_view name, eastl::string& value) =
 
 ### 2.1 Math::Color with reflection
 
-[`src/Modules/Math/src/Math/Color.h`](src/Modules/Math/src/Math/Color.h):
+[`src/Modules/BECore/Math/Color.h`](src/Modules/BECore/Math/Color.h) (Math module moved into BECore):
 
 ```cpp
 struct Color {
@@ -192,7 +209,7 @@ void {{ cls.name }}::Serialize(Archive& archive) {
 [`src/Modules/BECore/Logger/ILogSink.h`](src/Modules/BECore/Logger/ILogSink.h):
 
 ```cpp
-virtual void Configure(IArchive& archive) {}
+virtual void Configure(IDeserializer& deserializer) {}
 ```
 
 ### 4.2 IWidget
@@ -200,7 +217,7 @@ virtual void Configure(IArchive& archive) {}
 [`src/Modules/BECore/Widgets/IWidget.h`](src/Modules/BECore/Widgets/IWidget.h):
 
 ```cpp
-virtual bool Initialize(IArchive& archive) = 0;
+virtual bool Initialize(IDeserializer& deserializer) = 0;
 ```
 
 ## Phase 5: Manager Updates
@@ -210,17 +227,17 @@ virtual bool Initialize(IArchive& archive) = 0;
 [`src/Modules/BECore/Logger/LoggerManager.cpp`](src/Modules/BECore/Logger/LoggerManager.cpp):
 
 ```cpp
-XmlArchive archive(XmlArchive::Mode::Read);
-archive.LoadFromXmlNode(sinkNode);  // Position at sink node
+XmlDeserializer deserializer;
+deserializer.LoadFromNode(sinkNode);  // Position at sink node
 
 // Read common attributes
 LogSinkType type;
-archive.SerializeAttribute("type", type);
+deserializer.ReadAttribute("type", type);
 bool enabled = true;
-archive.SerializeAttribute("enabled", enabled);
+deserializer.ReadAttribute("enabled", enabled);
 // ...
 
-sink->Configure(archive);  // Sink reads its own attributes
+sink->Configure(deserializer);  // Sink reads its own attributes
 ```
 
 ### 5.2 Similar pattern for:
@@ -249,32 +266,25 @@ Keep current format (attributes for primitives):
 </widget>
 ```
 
-## Files Summary
+## Files Summary (actual after refactor)
 
 | Phase | Files |
-
 |-------|-------|
-
-| XmlArchive | IArchive.h, XmlArchive.h/.cpp |
-
-| Reflection Types | Math/Color.h, ConsoleSink.h, FileSink.h, ClearScreenWidget.h |
-
+| Serialization API | ISerializer.h, IDeserializer.h (IArchiveBase), XmlSerializer.h/.cpp, XmlDeserializer.h/.cpp |
+| Config | XmlDocument.h/.cpp, XmlNode.h, XmlConfig.h; ConfigManager uses XmlDocument |
+| Reflection Types | BECore/Math/Color.h (moved from Math module), ConsoleSink, FileSink, ClearScreenWidget |
 | Meta-Generator | parser.py, models.py, generator.py, reflection.gen.hpp.j2 |
-
-| Interfaces | ILogSink.h, IWidget.h |
-
-| Managers | LoggerManager.cpp, WidgetManager.cpp, AssertHandlers.cpp, TestManager.cpp |
-
-| Application | ApplicationFabric.cpp, ApplicationSDLFabric.cpp, SDLMainWindow.cpp |
-
-| Configs | WidgetsConfig.xml (add Color child), others minimal changes |
+| Interfaces | ILogSink.h, IWidget.h (Configure/Initialize take IDeserializer&) |
+| Managers | LoggerManager, WidgetManager, AssertHandlers, TestManager |
+| Application | ApplicationFabric, ApplicationSDLFabric, SDLMainWindow |
+| Configs | WidgetsConfig.xml (Color child), LoggerConfig.xml, etc. |
 
 ## Key Design Decisions
 
-1. **SerializeAttribute vs Serialize**: 
+1. **WriteAttribute/ReadAttribute vs BeginObject + Serialize/Deserialize**: 
 
-   - `SerializeAttribute()` - writes/reads XML attribute
-   - `Serialize()` (BeginObject) - writes/reads child element
+   - `WriteAttribute()` / `ReadAttribute()` - primitives as XML attributes
+   - `BeginObject()` + `Serialize()` / `Deserialize()` - child elements (nested objects)
 
 2. **Type Classification**:
 
