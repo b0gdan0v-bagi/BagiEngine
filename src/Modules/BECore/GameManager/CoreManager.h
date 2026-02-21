@@ -2,6 +2,7 @@
 
 #include <Events/EventsProviderManager.h>
 #include <BECore/MainWindow/MainWindowManager.h>
+#include <BECore/Renderer/RendererManager.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Config/ConfigManager.h>
@@ -61,6 +62,14 @@ namespace BECore {
 
         static const IntrusivePtr<IMainWindow>& GetMainWindow();
 
+        static RendererManager& GetRendererManager() {
+            return GetInstance()._rendererManager;
+        }
+
+        static const IntrusivePtr<IRenderer>& GetRenderer() {
+            return GetInstance()._rendererManager.GetRenderer();
+        }
+
         // Pre-initialization function (FileSystem, AssertHandlers, Tests)
         void OnApplicationPreInit(PassKey<Application>);
 
@@ -83,6 +92,7 @@ namespace BECore {
         WidgetManager _widgetManager;
         EventsProviderManager _eventsProviderManager;
         MainWindowManager _mainWindowManager;
+        RendererManager _rendererManager;
     };
 
 }  // namespace BECore

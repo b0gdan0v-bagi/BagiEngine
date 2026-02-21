@@ -1,7 +1,9 @@
 # Dear ImGui - Graphical UI library (Vendored)
 # Bloat-free Immediate Mode Graphical User interface for C++
+#
+# imgui_impl_vulkan uses vendored Vulkan-Headers (Vulkan::Headers) -- no SDK needed.
 
-add_library(imgui STATIC
+set(IMGUI_SOURCES
     imgui.cpp
     imgui_draw.cpp
     imgui_tables.cpp
@@ -9,14 +11,22 @@ add_library(imgui STATIC
     imgui_demo.cpp
     backends/imgui_impl_sdl3.cpp
     backends/imgui_impl_sdlrenderer3.cpp
+    backends/imgui_impl_vulkan.cpp
 )
 
-target_include_directories(imgui PUBLIC 
+add_library(imgui STATIC ${IMGUI_SOURCES})
+
+target_include_directories(imgui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/external/SDL/include
 )
 
-target_link_libraries(imgui PRIVATE SDL3-shared)
+target_link_libraries(imgui PRIVATE
+    SDL3-shared
+    Vulkan::Headers
+)
+
+target_compile_definitions(imgui PRIVATE IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING=0)
 
 # Disable warnings for external library
 if(MSVC)

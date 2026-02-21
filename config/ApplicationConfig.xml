@@ -1,4 +1,3 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<root type="SDL3" path="config/SDLWindowConfig.xml">
+<root type="SDL3" renderer="SDLRendererBackend" path="config/SDLWindowConfig.xml">
 </root>
-

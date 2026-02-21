@@ -1,13 +1,13 @@
 #include "ApplicationSDLFabric.h"
 
-#include <Application/Application.h>
 #include <BECore/Config/XmlConfig.h>
-#include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/MainWindowAccessor.h>
 #include <BECore/RefCounted/New.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
+
+#include <Generated/EnumRenderer.gen.hpp>
 
 namespace BECore {
 
@@ -23,7 +23,21 @@ namespace BECore {
         }
         CoreManager::GetInstance().GetMainWindowManager().SetMainWindow(window);
 
-         auto sdlEventsProvider = BECore::New<SDLEventsProvider>();
+        // Create renderer backend from config attribute (default: SDLRendererBackend)
+        const auto rendererType = config.GetRoot()
+            .ParseAttribute<RendererType>("renderer")
+            .value_or(RendererType::SDLRendererBackend);
+
+        auto renderer = RendererFactory::Create(rendererType);
+        if (!renderer) {
+            return false;
+        }
+        if (!renderer->Initialize(*window)) {
+            return false;
+        }
+        CoreManager::GetRendererManager().SetRenderer(std::move(renderer));
+
+        auto sdlEventsProvider = BECore::New<SDLEventsProvider>();
         if (!sdlEventsProvider->Initialize()) {
             return false;
         }
@@ -31,5 +45,5 @@ namespace BECore {
 
         return true;
     }
-}  // namespace BECore
 
+}  // namespace BECore

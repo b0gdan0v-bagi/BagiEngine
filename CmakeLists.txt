@@ -25,6 +25,10 @@ set(SDL_TEST OFF CACHE BOOL "Build SDL3 tests" FORCE)
 set(SDL_TESTS OFF CACHE BOOL "Build SDL3 tests" FORCE)
 add_subdirectory(external/SDL)
 
+# Vulkan-Headers (vendored, include-only - provides Vulkan::Headers target)
+message(STATUS "Configuring Vulkan-Headers (vendored)...")
+add_subdirectory(external/Vulkan-Headers)
+
 # Vendored libraries (EnTT, pugixml, ImGui, fmt)
 message(STATUS "Configuring vendored libraries...")
 add_subdirectory(src/Modules/EnTT)
@@ -377,6 +381,7 @@ add_subdirectory(src/Modules/BECore)
 add_subdirectory(src/Modules/Events)
 add_subdirectory(src/Modules/TaskSystem)
 add_subdirectory(src/Modules/SDL)
+add_subdirectory(src/Modules/Vulkan)
 
 file(GLOB_RECURSE SOURCES 
     "src/*.cpp" 
@@ -427,6 +432,9 @@ target_link_libraries(MyGame PRIVATE
     SDLModule
 )
 
+target_link_libraries(MyGame PRIVATE VulkanModule)
+target_compile_definitions(MyGame PRIVATE IMGUI_VULKAN_AVAILABLE=1)
+
 # =============================================================================
 # Reflection Support for MyGame
 # =============================================================================
@@ -444,6 +452,32 @@ if(WIN32)
             $<TARGET_FILE_DIR:MyGame>
         )
     endif()
+endif()
+
+# Копирование вендорного Vulkan Loader рядом с исполняемым файлом
+set(VULKAN_LOADER_ROOT "${CMAKE_SOURCE_DIR}/external/Vulkan-Loader")
+if(WIN32)
+    set(_VULKAN_RUNTIME "${VULKAN_LOADER_ROOT}/Windows/Bin/vulkan-1.dll")
+    if(EXISTS "${_VULKAN_RUNTIME}")
+        add_custom_command(TARGET MyGame POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${_VULKAN_RUNTIME}"
+            $<TARGET_FILE_DIR:MyGame>
+        )
+    endif()
+elseif(APPLE)
+    set(_VULKAN_RUNTIME "${VULKAN_LOADER_ROOT}/macOS/lib/libvulkan.1.dylib")
+    if(EXISTS "${_VULKAN_RUNTIME}")
+        add_custom_command(TARGET MyGame POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${_VULKAN_RUNTIME}"
+            $<TARGET_FILE_DIR:MyGame>
+        )
+    endif()
+    set_target_properties(MyGame PROPERTIES
+        BUILD_RPATH "@executable_path"
+        INSTALL_RPATH "@executable_path"
+    )
 endif()
 
 if(MSVC)
