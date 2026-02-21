@@ -30,6 +30,7 @@ alwaysApply: true
 | Serialization | `ISerializer` / `IDeserializer`, `XmlSerializer` / `XmlDeserializer` | `BECore/Reflection/` |
 | Logging | `LOG_INFO()`, `LOG_ERROR()` | `BECore/Logger/Logger.h` |
 | Enum definition | `CORE_ENUM(Name, Type, Values)` | `BECore/Utils/EnumUtils.h` |
+| String formatting | `Format("...", args...)` | `BECore/Format/Format.h` |
 
 ## Code Preferences
 
@@ -40,6 +41,7 @@ alwaysApply: true
 - Use `CORE_ENUM` macro instead of `enum class`
 - Use underscore prefix for private members: `_isRunning`
 - Always add namespace closing comments
+- Use `Format("...", args...)` for string construction — never use `+` concatenation with `eastl::string`
 
 ## Don't Suggest
 
@@ -49,3 +51,4 @@ alwaysApply: true
 - Global variables instead of `Singleton`
 - `enum class` instead of `CORE_ENUM`
 - Magic numbers without constants
+- `eastl::string("prefix") + value` or `str + "suffix"` — use `Format()` instead
