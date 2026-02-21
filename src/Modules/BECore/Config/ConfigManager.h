@@ -6,7 +6,9 @@
 #include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <TaskSystem/Task.h>
+#include <EASTL/vector.h>
 #include <atomic>
+#include <filesystem>
 #include <mutex>
 
 namespace BECore {
@@ -65,7 +67,39 @@ namespace BECore {
          */
         size_t GetConfigCount() const;
 
+        /**
+         * @brief Get sorted list of all loaded config names
+         * @return Vector of config names (without extension)
+         */
+        eastl::vector<PoolString> GetAllConfigNames() const;
+
+        /**
+         * @brief Get the on-disk file path for a loaded config
+         * @param name Config name (without extension)
+         * @return File path, or empty path if not found
+         */
+        std::filesystem::path GetConfigFilePath(PoolString name) const;
+
+        /**
+         * @brief Save a config's XmlDocument back to its original file
+         * @param name Config name (without extension)
+         * @return True if saved successfully
+         */
+        bool SaveConfig(PoolString name);
+
+        /**
+         * @brief Reload a config from disk, replacing the cached document
+         * @param name Config name (without extension)
+         * @return True if reloaded successfully
+         */
+        bool ReloadConfig(PoolString name);
+
     private:
+        struct ConfigEntry {
+            IntrusivePtrAtomic<XmlDocument> doc;
+            std::filesystem::path filePath;
+        };
+
         /**
          * @brief Scan directory and collect XML files to load
          * @param dir Directory to scan
@@ -82,7 +116,7 @@ namespace BECore {
         Task<void> LoadConfigAsync(std::filesystem::path path, PoolString name);
 
         std::mutex _writeMutex;
-        UnorderedPoolMap<IntrusivePtrAtomic<XmlDocument>> _configs;
+        UnorderedPoolMap<ConfigEntry> _configs;
         std::atomic<bool> _initialized{false};
     };
 

@@ -1,6 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0"?>
 <root>
-    <window title="My SDL3 Window from config" width="1024" height="768" windowFlags="SDL_WINDOW_RESIZABLE">
-    </window>
+  <window
+    title="My SDL3 Window from config!"
+    width="1920"
+    height="1080"
+    windowFlags="SDL_WINDOW_RESIZABLE" />
 </root>
-

@@ -12,6 +12,7 @@
 
 #include <pugixml.hpp>
 #include <filesystem>
+#include <EASTL/sort.h>
 
 namespace BECore {
 
@@ -62,8 +63,8 @@ namespace BECore {
     XmlNode ConfigManager::GetConfig(PoolString name) const {
         ASSERT(_initialized.load(std::memory_order_acquire));
         auto it = _configs.find(name);
-        if (it != _configs.end() && it->second) {
-            return it->second->GetRoot();
+        if (it != _configs.end() && it->second.doc) {
+            return it->second.doc->GetRoot();
         }
         return XmlNode();
     }
@@ -76,6 +77,81 @@ namespace BECore {
     size_t ConfigManager::GetConfigCount() const {
         ASSERT(_initialized.load(std::memory_order_acquire));
         return _configs.size();
+    }
+
+    eastl::vector<PoolString> ConfigManager::GetAllConfigNames() const {
+        ASSERT(_initialized.load(std::memory_order_acquire));
+        eastl::vector<PoolString> names;
+        names.reserve(_configs.size());
+        for (const auto& [name, entry] : _configs) {
+            names.push_back(name);
+        }
+        eastl::sort(names.begin(), names.end(), [](const PoolString& a, const PoolString& b) {
+            return a.ToStringView() < b.ToStringView();
+        });
+        return names;
+    }
+
+    std::filesystem::path ConfigManager::GetConfigFilePath(PoolString name) const {
+        ASSERT(_initialized.load(std::memory_order_acquire));
+        auto it = _configs.find(name);
+        if (it != _configs.end()) {
+            return it->second.filePath;
+        }
+        return {};
+    }
+
+    bool ConfigManager::SaveConfig(PoolString name) {
+        ASSERT(_initialized.load(std::memory_order_acquire));
+        std::scoped_lock lock(_writeMutex);
+        auto it = _configs.find(name);
+        if (it == _configs.end() || !it->second.doc) {
+            LOG_ERROR(Format("[ConfigManager] SaveConfig: config '{}' not found", name.ToStringView()).c_str());
+            return false;
+        }
+        const auto& entry = it->second;
+        if (entry.filePath.empty()) {
+            LOG_ERROR(Format("[ConfigManager] SaveConfig: no file path for config '{}'", name.ToStringView()).c_str());
+            return false;
+        }
+        const bool ok = entry.doc->SaveToFile(entry.filePath);
+        if (ok) {
+            LOG_INFO(Format("[ConfigManager] Saved config '{}' to {}", name.ToStringView(), entry.filePath.string()).c_str());
+        } else {
+            LOG_ERROR(Format("[ConfigManager] Failed to save config '{}' to {}", name.ToStringView(), entry.filePath.string()).c_str());
+        }
+        return ok;
+    }
+
+    bool ConfigManager::ReloadConfig(PoolString name) {
+        ASSERT(_initialized.load(std::memory_order_acquire));
+        std::filesystem::path filePath;
+        {
+            std::scoped_lock lock(_writeMutex);
+            auto it = _configs.find(name);
+            if (it == _configs.end()) {
+                LOG_ERROR(Format("[ConfigManager] ReloadConfig: config '{}' not found", name.ToStringView()).c_str());
+                return false;
+            }
+            filePath = it->second.filePath;
+        }
+
+        auto newDoc = BECore::New<XmlDocument>();
+        if (!newDoc->LoadFromFile(filePath)) {
+            LOG_ERROR(Format("[ConfigManager] ReloadConfig: failed to reload '{}' from {}", name.ToStringView(), filePath.string()).c_str());
+            return false;
+        }
+
+        {
+            std::scoped_lock lock(_writeMutex);
+            auto it = _configs.find(name);
+            if (it != _configs.end()) {
+                it->second.doc = newDoc;
+            }
+        }
+
+        LOG_INFO(Format("[ConfigManager] Reloaded config '{}'", name.ToStringView()).c_str());
+        return true;
     }
 
     void ConfigManager::ScanDirectory(const std::filesystem::path& dir,
@@ -129,7 +205,7 @@ namespace BECore {
                                  name.ToStringView()).c_str());
                 co_return;
             }
-            _configs[name] = doc;
+            _configs[name] = ConfigEntry{doc, path};
         }
 
         LOG_DEBUG(Format("[ConfigManager] Config loaded: {}", name.ToStringView()).c_str());
