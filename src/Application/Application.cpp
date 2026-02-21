@@ -3,6 +3,7 @@
 #include <BECore/Application/ApplicationFabric.h>
 #include <BECore/Assert/AssertMacros.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Logger/LogEvent.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 
@@ -33,6 +34,7 @@ namespace BECore {
             RenderEvents::NewFrameEvent::Emit();
             CoreManager::GetInstance().OnGameCycle({});
             RenderEvents::RenderPresentEvent::Emit();
+            LogEvent::Flush();
         }
         GetInstance().Cleanup();
     }

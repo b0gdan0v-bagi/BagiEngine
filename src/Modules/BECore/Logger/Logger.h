@@ -28,6 +28,7 @@ namespace BECore {
 
         static void Fatal(eastl::string_view message) {
             LogEvent::Emit(LogLevel::Fatal, message);
+            LogEvent::Flush();
             FlushLogsEvent::Emit();
         }
     };

@@ -1,13 +1,17 @@
 #include "LogEvent.h"
 
-#include <mutex>
+#include <BECore/Logger/LogRingBuffer.h>
 
 namespace BECore {
 
     void LogEvent::Emit(LogLevel level, eastl::string_view message) {
-        static std::mutex s_logMutex;
-        std::lock_guard lock(s_logMutex);
-        EventBase<LogEvent>::Emit(level, message);
+        LogRingBuffer<>::GetGlobal().TryPush(level, message);
+    }
+
+    void LogEvent::Flush() {
+        LogRingBuffer<>::GetGlobal().Drain([](const LogEntry& entry) {
+            EventBase<LogEvent>::Emit(entry.level, eastl::string_view{entry.message, entry.messageLength});
+        });
     }
 
 }  // namespace BECore
