@@ -6,6 +6,7 @@
 #include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
 #include <TaskSystem/Task.h>
+#include <atomic>
 #include <mutex>
 
 namespace BECore {
@@ -80,9 +81,9 @@ namespace BECore {
          */
         Task<void> LoadConfigAsync(std::filesystem::path path, PoolString name);
 
-        mutable std::mutex _mutex;
+        std::mutex _writeMutex;
         UnorderedPoolMap<IntrusivePtrAtomic<XmlDocument>> _configs;
-        bool _initialized = false;
+        std::atomic<bool> _initialized{false};
     };
 
 }  // namespace BECore

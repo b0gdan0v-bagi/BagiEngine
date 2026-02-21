@@ -16,12 +16,9 @@
 namespace BECore {
 
     void ConfigManager::Initialize() {
-        {
-            std::lock_guard lock(_mutex);
-            if (_initialized) {
-                LOG_INFO("[ConfigManager] Already initialized");
-                return;
-            }
+        if (_initialized.load(std::memory_order_acquire)) {
+            LOG_INFO("[ConfigManager] Already initialized");
+            return;
         }
 
         LOG_INFO("[ConfigManager] Initializing...");
@@ -30,8 +27,7 @@ namespace BECore {
         auto configPath = CoreManager::GetFileSystem().ResolvePath("config");
         if (configPath.empty() || !std::filesystem::exists(configPath)) {
             LOG_WARNING("[ConfigManager] Config directory not found, skipping initialization");
-            std::lock_guard lock(_mutex);
-            _initialized = true;
+            _initialized.store(true, std::memory_order_release);
             return;
         }
 
@@ -41,8 +37,7 @@ namespace BECore {
 
         if (filesToLoad.empty()) {
             LOG_WARNING("[ConfigManager] No XML files found in config directory");
-            std::lock_guard lock(_mutex);
-            _initialized = true;
+            _initialized.store(true, std::memory_order_release);
             return;
         }
 
@@ -58,34 +53,28 @@ namespace BECore {
         // Ждём завершения всех задач
         group.WaitAll();
 
-        size_t loadedCount;
-        {
-            std::lock_guard lock(_mutex);
-            loadedCount = _configs.size();
-            _initialized = true;
-        }
+        auto loadedCount = _configs.size();
+        _initialized.store(true, std::memory_order_release);
 
         LOG_INFO(Format("[ConfigManager] Loaded {} configs", loadedCount).c_str());
     }
 
     XmlNode ConfigManager::GetConfig(PoolString name) const {
-        std::lock_guard<std::mutex> lock(_mutex);
-
+        ASSERT(_initialized.load(std::memory_order_acquire));
         auto it = _configs.find(name);
         if (it != _configs.end() && it->second) {
             return it->second->GetRoot();
         }
-
-        return XmlNode();  // Невалидный узел
+        return XmlNode();
     }
 
     bool ConfigManager::HasConfig(PoolString name) const {
-        std::lock_guard<std::mutex> lock(_mutex);
+        ASSERT(_initialized.load(std::memory_order_acquire));
         return _configs.find(name) != _configs.end();
     }
 
     size_t ConfigManager::GetConfigCount() const {
-        std::lock_guard<std::mutex> lock(_mutex);
+        ASSERT(_initialized.load(std::memory_order_acquire));
         return _configs.size();
     }
 
@@ -113,7 +102,7 @@ namespace BECore {
 
         // Проверяем, не загружен ли уже конфиг (защита от дубликатов)
         {
-            std::scoped_lock lock(_mutex);
+            std::scoped_lock lock(_writeMutex);
             if (_configs.find(name) != _configs.end()) {
                 LOG_WARNING(Format("[ConfigManager] Config {} already loaded, skipping duplicate", 
                                  name.ToStringView()).c_str());
@@ -133,7 +122,7 @@ namespace BECore {
 
         // Добавляем в кэш (потокобезопасно)
         {
-            std::scoped_lock lock(_mutex);
+            std::scoped_lock lock(_writeMutex);
             // Повторная проверка на случай race condition
             if (_configs.find(name) != _configs.end()) {
                 LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", 
