@@ -68,6 +68,10 @@ class LibclangParser:
         args = ['-x', 'c++', '-std=c++23']
         for inc_dir in self.include_dirs:
             args.append(f'-I{inc_dir}')
+        # Force-include PCH so PoolString, int32_t, etc. are visible when parsing
+        # (matches build; allows strip_pch_includes to remove those includes from headers)
+        args.append('-include')
+        args.append('BECore/pch.h')
         
         try:
             # Parse the translation unit
