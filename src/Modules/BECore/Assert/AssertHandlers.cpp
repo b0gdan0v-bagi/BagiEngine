@@ -6,8 +6,6 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <EASTL/sort.h>
 #include <Generated/AssertHandlers.gen.hpp>
-#include <Generated/EnumAssertHandler.gen.hpp>
-#include <Generated/IAssertHandler.gen.hpp>
 
 namespace BECore {
 
@@ -119,13 +117,6 @@ namespace BECore {
             return;
         }
 
-        auto root = CoreManager::GetConfigManager().GetConfig("AssertHandlersConfig");
-        if (root) {
-            XmlDeserializer d;
-            d.LoadFromXmlNode(root);
-            Deserialize(d);
-        }
-
         if (_handlers.empty()) {
             // Fallback: create default handlers if config not found or empty
             auto logHandler = BECore::New<LogHandler>();
@@ -150,3 +141,4 @@ namespace BECore {
     }
 
 }  // namespace BECore
+

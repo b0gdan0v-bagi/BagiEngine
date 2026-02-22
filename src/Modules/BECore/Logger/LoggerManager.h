@@ -12,17 +12,18 @@ namespace BECore {
      * and sorted by priority.
      *
      * @note Access via CoreManager::GetLoggerManager()
+     * @note Created via BECore::MakeFromConfig<LoggerManager>("LoggerConfig")
      *
      * @example
      * // Access specific sink
      * auto* sink = CoreManager::GetLoggerManager().GetSink<ConsoleSink>();
      */
-    class LoggerManager {
+    class LoggerManager : public RefCountedAtomic {
         BE_CLASS(LoggerManager)
 
     public:
         LoggerManager() = default;
-        ~LoggerManager() = default;
+        ~LoggerManager() override = default;
 
         /**
          * @brief Initialize sinks from configuration

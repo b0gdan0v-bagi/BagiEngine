@@ -1,7 +1,6 @@
 #include <BECore/Resource/XmlResourceLoader.h>
 #include <TaskSystem/Awaitables.h>
 
-#include <Generated/IResourceLoader.gen.hpp>
 #include <Generated/XmlResourceLoader.gen.hpp>
 
 namespace BECore {

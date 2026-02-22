@@ -14,7 +14,7 @@ namespace BECore::Tests {
         return true;
     }
 
-    constexpr void ReflectionEventTest::TestCompileTime() {
+    void ReflectionEventTest::TestCompileTime() {
         using namespace ReflectionTestEvents;
 
         // Events have reflection
@@ -23,14 +23,14 @@ namespace BECore::Tests {
         static_assert(HasReflection<TestMessageEvent>);
 
         // Static type names are correct
-        static_assert(TestEmptyEvent::GetStaticTypeName() == "TestEmptyEvent");
-        static_assert(TestDataEvent::GetStaticTypeName() == "TestDataEvent");
-        static_assert(TestMessageEvent::GetStaticTypeName() == "TestMessageEvent");
+        ASSERT(TestEmptyEvent::GetStaticTypeName() == "TestEmptyEvent", "TestEmptyEvent type name mismatch");
+        ASSERT(TestDataEvent::GetStaticTypeName() == "TestDataEvent", "TestDataEvent type name mismatch");
+        ASSERT(TestMessageEvent::GetStaticTypeName() == "TestMessageEvent", "TestMessageEvent type name mismatch");
 
         // Field counts are correct
-        static_assert(TestEmptyEvent::GetStaticFieldCount() == 0);
-        static_assert(TestDataEvent::GetStaticFieldCount() == 2);
-        static_assert(TestMessageEvent::GetStaticFieldCount() == 2);
+        ASSERT(TestEmptyEvent::GetStaticFieldCount() == 0, "TestEmptyEvent should have 0 fields");
+        ASSERT(TestDataEvent::GetStaticFieldCount() == 2, "TestDataEvent should have 2 fields");
+        ASSERT(TestMessageEvent::GetStaticFieldCount() == 2, "TestMessageEvent should have 2 fields");
 
         // Events are default constructible
         static_assert(std::is_default_constructible_v<TestEmptyEvent>);

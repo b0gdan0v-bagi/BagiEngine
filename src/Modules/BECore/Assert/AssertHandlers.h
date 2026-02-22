@@ -69,12 +69,12 @@ namespace BECore {
         bool _initialized = false;
     };
 
-    class AssertHandlerManager {
+    class AssertHandlerManager : public RefCountedAtomic {
         BE_CLASS(AssertHandlerManager)
 
     public:
         AssertHandlerManager() = default;
-        ~AssertHandlerManager() = default;
+        ~AssertHandlerManager() override = default;
 
         void Initialize();
 

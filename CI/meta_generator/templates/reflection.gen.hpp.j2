@@ -9,6 +9,7 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/MethodInfo.h>
 #include <BECore/Reflection/FieldSerializer.h>
+#include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/String.h>
 #include <EASTL/string_view.h>
@@ -16,14 +17,12 @@
 
 // Include the original header file to access class declarations
 #include <{{ include_path }}>
-{% set _included_bases = [] %}
-{% for cls in classes %}
-{% if cls.parent_has_be_class and cls.parent_class not in _included_bases %}
-// Include generated reflection for base class (provides base Serialize/Deserialize definitions)
-#include <Generated/{{ cls.parent_class }}.gen.hpp>
-{% if _included_bases.append(cls.parent_class) %}{% endif %}
-{% endif %}
+{% if factory_deps %}
+// Auto-include factory gen files for polymorphic field support
+{% for dep in factory_deps %}
+#include <Generated/{{ dep }}>
 {% endfor %}
+{% endif %}
 
 {% if enums %}
 // ============================================================================
@@ -136,26 +135,6 @@ namespace Detail_{{ cls.name }} {
 // Lightweight event type without _typeMeta member (0 bytes overhead)
 // ============================================================================
 
-// {{ cls.full_qualified_name }}::GetStaticTypeName()
-inline constexpr eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
-    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::name;
-}
-
-// {{ cls.full_qualified_name }}::GetStaticTypeMeta()
-inline const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
-    return {{ cls.namespace if cls.namespace else '::' }}::Detail_{{ cls.name }}::_staticTypeMeta;
-}
-
-// {{ cls.full_qualified_name }}::GetStaticTypeHash()
-inline constexpr uint64_t {{ cls.full_qualified_name }}::GetStaticTypeHash() {
-    return GetStaticTypeMeta().typeHash;
-}
-
-// {{ cls.full_qualified_name }}::GetStaticFieldCount()
-inline constexpr size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
-    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::field_count;
-}
-
 // {{ cls.full_qualified_name }}::ForEachFieldStatic (const only - events are immutable)
 template<typename Func>
 inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic(const {{ cls.full_qualified_name }}& obj, Func&& func) {
@@ -164,10 +143,30 @@ inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic(const {{
     }, ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields);
 }
 
+#ifndef BE_GEN_NO_IMPL
+// {{ cls.full_qualified_name }}::GetStaticTypeName()
+eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
+    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::name;
+}
+
+// {{ cls.full_qualified_name }}::GetStaticTypeMeta()
+const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
+    return {{ cls.namespace if cls.namespace else '::' }}::Detail_{{ cls.name }}::_staticTypeMeta;
+}
+
+// {{ cls.full_qualified_name }}::GetStaticTypeHash()
+uint64_t {{ cls.full_qualified_name }}::GetStaticTypeHash() {
+    return GetStaticTypeMeta().typeHash;
+}
+
+// {{ cls.full_qualified_name }}::GetStaticFieldCount()
+size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
+    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::field_count;
+}
+
 {% if cls.fields %}
 // {{ cls.full_qualified_name }}::Serialize() - auto-generated from BE_REFLECT_FIELD markers
-template<typename Serializer>
-inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
+void {{ cls.full_qualified_name }}::Serialize(::BECore::ISerializer& s) const {
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
 {% if field.is_enum %}
@@ -182,8 +181,7 @@ inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
 }
 
 // {{ cls.full_qualified_name }}::Deserialize() - auto-generated from BE_REFLECT_FIELD markers
-template<typename Deserializer>
-inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
+void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
 {% if field.is_enum %}
@@ -201,27 +199,13 @@ inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
 {% endfor %}
 }
 {% endif %}
+#endif // BE_GEN_NO_IMPL
 
 {% else %}
 // ============================================================================
 // BE_CLASS Implementation: {{ cls.full_qualified_name }}
 // Full reflection with runtime polymorphism support
 // ============================================================================
-
-// {{ cls.full_qualified_name }}::GetStaticTypeName()
-inline constexpr eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
-    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::name;
-}
-
-// {{ cls.full_qualified_name }}::GetStaticFieldCount()
-inline constexpr size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
-    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::field_count;
-}
-
-// {{ cls.full_qualified_name }}::GetStaticTypeMeta()
-inline const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
-    return {{ cls.namespace if cls.namespace else '::' }}::Detail_{{ cls.name }}::_staticTypeMeta;
-}
 
 // {{ cls.full_qualified_name }}::ForEachFieldStatic (mutable)
 template<typename Func>
@@ -239,10 +223,25 @@ inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic(const {{
     }, ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields);
 }
 
+#ifndef BE_GEN_NO_IMPL
+// {{ cls.full_qualified_name }}::GetStaticTypeName()
+eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
+    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::name;
+}
+
+// {{ cls.full_qualified_name }}::GetStaticFieldCount()
+size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
+    return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::field_count;
+}
+
+// {{ cls.full_qualified_name }}::GetStaticTypeMeta()
+const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
+    return {{ cls.namespace if cls.namespace else '::' }}::Detail_{{ cls.name }}::_staticTypeMeta;
+}
+
 // {{ cls.full_qualified_name }}::Serialize() - auto-generated from BE_REFLECT_FIELD markers
 // Writes data to ISerializer (save/export)
-template<typename Serializer>
-inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
+void {{ cls.full_qualified_name }}::Serialize(::BECore::ISerializer& s) const {
 {% if cls.parent_has_be_class %}
     {{ cls.parent_full_qualified_name }}::Serialize(s);
 {% endif %}
@@ -261,8 +260,7 @@ inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
 
 // {{ cls.full_qualified_name }}::Deserialize() - auto-generated from BE_REFLECT_FIELD markers
 // Reads data from IDeserializer (load/import)
-template<typename Deserializer>
-inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
+void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% if cls.parent_has_be_class %}
     {{ cls.parent_full_qualified_name }}::Deserialize(d);
 {% endif %}
@@ -282,6 +280,7 @@ inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
 {% endif %}
 {% endfor %}
 }
+#endif // BE_GEN_NO_IMPL
 
 {% endif %}
 {% endfor %}

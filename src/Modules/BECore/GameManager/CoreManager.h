@@ -1,15 +1,15 @@
 #pragma once
 
-#include <Events/EventsProviderManager.h>
+#include <BECore/Assert/AssertHandlers.h>
+#include <BECore/Config/ConfigManager.h>
+#include <BECore/FileSystem/FileSystem.h>
+#include <BECore/Logger/LoggerManager.h>
 #include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Renderer/RendererManager.h>
-#include <BECore/Widgets/WidgetManager.h>
-#include <BECore/FileSystem/FileSystem.h>
-#include <BECore/Config/ConfigManager.h>
-#include <BECore/Assert/AssertHandlers.h>
-#include <BECore/Logger/LoggerManager.h>
-#include <BECore/Tests/TestManager.h>
 #include <BECore/Resource/ResourceManager.h>
+#include <BECore/Tests/TestManager.h>
+#include <BECore/Widgets/WidgetManager.h>
+#include <Events/EventsProviderManager.h>
 
 namespace BECore {
 
@@ -43,7 +43,7 @@ namespace BECore {
         }
 
         static AssertHandlerManager& GetAssertHandlerManager() {
-            return GetInstance()._assertHandlerManager;
+            return *GetInstance()._assertHandlerManager;
         }
 
         static TestManager& GetTestManager() {
@@ -51,7 +51,7 @@ namespace BECore {
         }
 
         static LoggerManager& GetLoggerManager() {
-            return GetInstance()._loggerManager;
+            return *GetInstance()._loggerManager;
         }
 
         static ResourceManager& GetResourceManager() {
@@ -85,8 +85,8 @@ namespace BECore {
     private:
         FileSystem _fileSystem;
         ConfigManager _configManager;
-        LoggerManager _loggerManager;
-        AssertHandlerManager _assertHandlerManager;
+        IntrusivePtrAtomic<LoggerManager> _loggerManager;
+        IntrusivePtrAtomic<AssertHandlerManager> _assertHandlerManager;
         TestManager _testManager;
         ResourceManager _resourceManager;
         WidgetManager _widgetManager;
@@ -96,4 +96,3 @@ namespace BECore {
     };
 
 }  // namespace BECore
-

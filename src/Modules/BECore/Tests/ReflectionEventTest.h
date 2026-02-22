@@ -79,7 +79,7 @@ namespace BECore::Tests {
          * @brief Compile-time tests using static_assert
          * @note Defined in .cpp after generated code is included
          */
-        static constexpr void TestCompileTime();
+        static void TestCompileTime();
 
         /**
          * @brief Test event ClassMeta functionality

@@ -6,8 +6,9 @@ Produces .gen.hpp files compatible with the existing reflection system.
 """
 
 import os
+import re
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -16,6 +17,40 @@ from .models import ClassData, EnumData, FactoryBaseData, DerivedClassData
 
 # Default templates directory (relative to this file)
 DEFAULT_TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+
+# Pattern to extract inner type from IntrusivePtrAtomic<T> or IntrusivePtrNonAtomic<T>
+_INTRUSIVE_PTR_PATTERN = re.compile(
+    r'IntrusivePtr(?:Atomic|NonAtomic)<\s*([^<>]+?)\s*>'
+)
+
+
+def extract_intrusive_inner_type(type_name: str) -> Optional[str]:
+    """Extract the inner type T from IntrusivePtrAtomic<T> or IntrusivePtrNonAtomic<T>.
+
+    Returns the inner type name (possibly namespace-qualified), or None.
+
+    Examples:
+        'eastl::vector<IntrusivePtrAtomic<ILogSink>>' -> 'ILogSink'
+        'IntrusivePtrNonAtomic<Tests::ITest>'         -> 'Tests::ITest'
+    """
+    m = _INTRUSIVE_PTR_PATTERN.search(type_name)
+    return m.group(1) if m else None
+
+
+def compute_factory_dep_filename(base_name: str) -> str:
+    """Compute the EnumXxx.gen.hpp filename for a factory base class.
+
+    Strips leading 'I' prefix and namespace, then prepends 'Enum'.
+
+    Examples:
+        'ILogSink'        -> 'EnumLogSink.gen.hpp'
+        'Tests::ITest'    -> 'EnumTest.gen.hpp'
+        'IAssertHandler'  -> 'EnumAssertHandler.gen.hpp'
+    """
+    short = base_name.split('::')[-1]
+    if short.startswith('I') and len(short) > 1:
+        short = short[1:]
+    return f"Enum{short}.gen.hpp"
 
 
 def compute_element_name(base_name: str, first_derived_name: str) -> str:
@@ -209,6 +244,13 @@ class CodeGenerator:
         # Build map of all known classes for parent class lookup
         all_classes_map = {c.name: c for c in (all_classes or [])}
 
+        # Build set of factory base short names (e.g. 'ILogSink', 'ITest')
+        factory_base_names: Set[str] = {
+            c.name.split('::')[-1]
+            for c in (all_classes or [])
+            if c.is_factory_base
+        }
+
         # Prepare class data for template (convert dataclasses to dicts)
         classes_data = []
         for cls in classes:
@@ -249,6 +291,20 @@ class CodeGenerator:
                 'parent_full_qualified_name': parent_full_qualified_name,
             }
             classes_data.append(cls_dict)
+
+        # Collect all unique factory dep filenames needed by this file's classes
+        seen_factory_deps: Set[str] = set()
+        all_factory_deps: List[str] = []
+        for cls in classes:
+            for f in cls.fields:
+                inner = extract_intrusive_inner_type(f.type_name)
+                if inner:
+                    short = inner.split('::')[-1]
+                    if short in factory_base_names:
+                        dep_file = compute_factory_dep_filename(inner)
+                        if dep_file not in seen_factory_deps:
+                            seen_factory_deps.add(dep_file)
+                            all_factory_deps.append(dep_file)
         
         # Prepare enum data
         enums_data = []
@@ -268,6 +324,7 @@ class CodeGenerator:
             include_path=include_path,
             classes=classes_data,
             enums=enums_data,
+            factory_deps=all_factory_deps,
             factory_bases=[]  # Factory bases are generated separately
         )
         

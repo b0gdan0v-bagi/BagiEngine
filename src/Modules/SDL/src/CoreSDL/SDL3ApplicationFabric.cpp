@@ -4,6 +4,7 @@
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <Generated/EnumRenderer.gen.hpp>
+#include <Generated/SDL3ApplicationFabric.gen.hpp>
 
 namespace BECore {
 

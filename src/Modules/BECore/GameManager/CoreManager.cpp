@@ -1,6 +1,7 @@
 #include "CoreManager.h"
 
 #include <BECore/Assert/CRTDebugHook.h>
+#include <BECore/Config/ConfigFactory.h>
 #include <BECore/Logger/OutputSink.h>
 #include <Events/EventsQueueRegistry.h>
 #include <TaskSystem/TaskManager.h>
@@ -18,7 +19,7 @@ namespace BECore {
     void CoreManager::OnApplicationPreInit(PassKey<Application>) {
         // Install CRT debug hooks as early as possible
         InstallCRTDebugHooks();
-        
+
         {
             // For scope before
             auto tempTestSync = New<BECore::OutputSink>();
@@ -30,9 +31,12 @@ namespace BECore {
             TaskManager::GetInstance().Initialize(PassKey<CoreManager>{});
             _configManager.Initialize();
         }
-        
-        _loggerManager.Initialize();
-        _assertHandlerManager.Initialize();
+
+        _loggerManager = MakeFromConfig<LoggerManager>("LoggerConfig");
+        _loggerManager->Initialize();
+
+        _assertHandlerManager = MakeFromConfig<AssertHandlerManager>("AssertHandlersConfig");
+        _assertHandlerManager->Initialize();
         _resourceManager.Initialize();
         _testManager.RunAllTests();
     }
@@ -54,4 +58,3 @@ namespace BECore {
     }
 
 }  // namespace BECore
-

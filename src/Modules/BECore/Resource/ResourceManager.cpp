@@ -1,6 +1,5 @@
 #include <BECore/Resource/ResourceManager.h>
 
-#include <Generated/IResourceLoader.gen.hpp>
 #include <Generated/EnumResourceLoader.gen.hpp>
 
 namespace BECore {

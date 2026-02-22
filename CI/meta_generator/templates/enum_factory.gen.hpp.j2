@@ -16,7 +16,10 @@
 // ============================================================================
 // Includes for {{ base.name }} hierarchy
 // ============================================================================
-// Include base class generated reflection
+// Guard: include gen files for metadata only (no Serialize/Deserialize definitions)
+#define BE_GEN_NO_IMPL
+
+// Include base class generated reflection (metadata only)
 #include <Generated/{{ base.name }}.gen.hpp>
 
 // Include derived class headers
@@ -24,10 +27,12 @@
 #include <{{ d.include_path }}>
 {% endfor %}
 
-// Include generated reflection for derived classes (provides ReflectionTraits)
+// Include generated reflection for derived classes (metadata only)
 {% for d in base.derived | unique(attribute='gen_hpp') %}
 #include <Generated/{{ d.gen_hpp }}>
 {% endfor %}
+
+#undef BE_GEN_NO_IMPL
 
 // ============================================================================
 // Enum: {{ base.enum_type_name }}
@@ -140,17 +145,19 @@ public:
     }
 };
 
+}  // namespace {{ base.namespace }}
+
 // ============================================================================
 // FactoryTraits specialization for {{ base.name }}
 // Enables generic DeserializeField dispatch in FieldSerializer.h
 // ============================================================================
+namespace BECore {
 template<>
-struct FactoryTraits<{{ base.name }}> {
-    using FactoryType = {{ base.factory_name }};
+struct FactoryTraits<{{ base.full_qualified_name }}> {
+    using FactoryType = {{ base.namespace }}::{{ base.factory_name }};
     using EnumType    = {{ base.enum_type_name }};
     static constexpr eastl::string_view elementName = "{{ base.element_name }}";
 };
-
-}  // namespace {{ base.namespace }}
+}  // namespace BECore
 
 {% endfor %}

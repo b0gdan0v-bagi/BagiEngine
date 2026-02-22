@@ -4,8 +4,6 @@
 #include <BECore/Logger/ConsoleSink.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <EASTL/sort.h>
-#include <Generated/EnumLogSink.gen.hpp>
-#include <Generated/ILogSink.gen.hpp>
 #include <Generated/LoggerManager.gen.hpp>
 
 namespace BECore {
@@ -13,13 +11,6 @@ namespace BECore {
     void LoggerManager::Initialize() {
         if (_initialized) {
             return;
-        }
-
-        auto root = CoreManager::GetConfigManager().GetConfig("LoggerConfig");
-        if (root) {
-            XmlDeserializer d;
-            d.LoadFromXmlNode(root);
-            Deserialize(d);
         }
 
         if (_sinks.empty()) {
