@@ -49,6 +49,7 @@ target_include_directories(SDLModule PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/CoreSDL
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${BOOST_HEADERS_DIR}
+    ${CMAKE_BINARY_DIR}
 )
 
 # Подключаем зависимости модуля
@@ -57,6 +58,7 @@ target_link_libraries(SDLModule PUBLIC
     EventsModule
     SDL3-shared
     pugixml
+    Vulkan::Headers
 )
 
 # Сохраняем имя таргета SDL3 для копирования DLL (если нужно)

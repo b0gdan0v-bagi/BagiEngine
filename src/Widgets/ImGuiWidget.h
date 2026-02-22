@@ -2,9 +2,7 @@
 
 #include <BECore/Widgets/IWidget.h>
 
-// Forward declarations for SDL types
 struct SDL_Window;
-struct SDL_Renderer;
 
 namespace BECore {
     class IDeserializer;
@@ -25,7 +23,6 @@ namespace BECore {
 
     private:
         static SDL_Window* GetSDLWindow();
-        static SDL_Renderer* GetSDLRenderer();
 
         void Destroy();
         void OnNewFrame() const;

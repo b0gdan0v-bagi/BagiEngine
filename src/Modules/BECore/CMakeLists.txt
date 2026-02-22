@@ -29,18 +29,20 @@ target_precompile_headers(BECoreModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h
 # Подключаем директории с заголовками
 # PUBLIC означает, что эти директории будут доступны всем, кто линкуется с BECoreModule
 # Добавляем ${PROJECT_ROOT}/src/Modules для поддержки включений через <BECore/...>
-# Добавляем путь к SDL модулю для доступа к ApplicationSDLFabric из ApplicationFabric
+# Добавляем путь к SDL модулю для доступа к SDL3ApplicationFabric из ApplicationFabric
 # Добавляем путь к Events модулю для доступа к EventsProviderManager из CoreManager
 # Добавляем путь к TaskSystem модулю для доступа к TaskManager из CoreManager
 get_filename_component(SDL_MODULE_DIR "${PROJECT_ROOT}/src/Modules/SDL/src" ABSOLUTE)
 get_filename_component(EVENTS_MODULE_SRC_DIR "${PROJECT_ROOT}/src/Modules/Events/src" ABSOLUTE)
 get_filename_component(TASKSYSTEM_MODULE_SRC_DIR "${PROJECT_ROOT}/src/Modules/TaskSystem/src" ABSOLUTE)
+get_filename_component(VULKAN_MODULE_SRC_DIR "${PROJECT_ROOT}/src/Modules/Vulkan/src" ABSOLUTE)
 target_include_directories(BECoreModule PUBLIC
     ${PROJECT_ROOT}/src
     ${PROJECT_ROOT}/src/Modules
     ${SDL_MODULE_DIR}
     ${EVENTS_MODULE_SRC_DIR}
     ${TASKSYSTEM_MODULE_SRC_DIR}
+    ${VULKAN_MODULE_SRC_DIR}
 )
 
 # Подключаем зависимости из SDK
@@ -70,18 +72,24 @@ endif()
 if(COMMAND add_reflection_target)
     add_reflection_target(BECoreModule
         DIRS
+            ${CMAKE_CURRENT_SOURCE_DIR}/Application
             ${CMAKE_CURRENT_SOURCE_DIR}/Logger
             ${CMAKE_CURRENT_SOURCE_DIR}/Tests
             ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
             ${CMAKE_CURRENT_SOURCE_DIR}/Resource
             ${CMAKE_CURRENT_SOURCE_DIR}/Math
+            ${CMAKE_CURRENT_SOURCE_DIR}/Renderer
         SCAN_DIRS
+            ${CMAKE_CURRENT_SOURCE_DIR}/Application
             ${CMAKE_CURRENT_SOURCE_DIR}/Logger
             ${CMAKE_CURRENT_SOURCE_DIR}/Tests
             ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
             ${CMAKE_CURRENT_SOURCE_DIR}/Resource
             ${CMAKE_CURRENT_SOURCE_DIR}/Math
+            ${CMAKE_CURRENT_SOURCE_DIR}/Renderer
             ${PROJECT_ROOT}/src/Widgets
+            ${PROJECT_ROOT}/src/Modules/SDL/src/CoreSDL
+            ${PROJECT_ROOT}/src/Modules/Vulkan/src/CoreVulkan
         INCLUDE_DIRS
             ${PROJECT_ROOT}/src/Modules
             ${PROJECT_ROOT}/src

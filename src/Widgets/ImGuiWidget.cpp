@@ -7,11 +7,9 @@
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <CoreSDL/SDLEvents.h>
-#include <Application/Application.h>
 
 #include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
-#include <backends/imgui_impl_sdlrenderer3.h>
 
 #include <Generated/ImGuiWidget.gen.hpp>
 
@@ -23,9 +21,11 @@ namespace BECore {
         }
 
         SDL_Window* window = GetSDLWindow();
-        SDL_Renderer* renderer = GetSDLRenderer();
+        if (!window) {
+            return false;
+        }
 
-        if (window == nullptr || renderer == nullptr) {
+        if (!CoreManager::GetRenderer()) {
             return false;
         }
 
@@ -36,8 +36,8 @@ namespace BECore {
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
         ImGui::StyleColorsDark();
-        ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
-        ImGui_ImplSDLRenderer3_Init(renderer);
+
+        RenderEvents::ImGuiInitEvent::Emit();
 
         Subscribe<SDLEvents::SDLEventWrapper, &ImGuiWidget::OnSDLEvent>(this);
         Subscribe<RenderEvents::NewFrameEvent, &ImGuiWidget::OnNewFrame>(this);
@@ -48,10 +48,12 @@ namespace BECore {
     }
 
     void ImGuiWidget::Draw() {
-        if (auto* renderer = GetSDLRenderer()) {
-            ImGui::Render();
-            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+        if (!_isInitialized) {
+            return;
         }
+
+        ImGui::Render();
+        RenderEvents::ImGuiRenderEvent::Emit();
     }
 
     void ImGuiWidget::Update() {
@@ -73,16 +75,11 @@ namespace BECore {
             return nullptr;
         }
 
-        return dynamic_cast<SDLMainWindow*>(window.Get())->GetSDLWindow();
-    }
-
-    SDL_Renderer* ImGuiWidget::GetSDLRenderer() {
-        const auto& window = CoreManager::GetMainWindow();
-        if (!window) {
+        auto* sdlWindow = dynamic_cast<SDLMainWindow*>(window.Get());
+        if (!sdlWindow) {
             return nullptr;
         }
-
-        return dynamic_cast<SDLMainWindow*>(window.Get())->GetSDLRenderer();
+        return sdlWindow->GetSDLWindow();
     }
 
     void ImGuiWidget::Destroy() {
@@ -90,7 +87,8 @@ namespace BECore {
             return;
         }
 
-        ImGui_ImplSDLRenderer3_Shutdown();
+        RenderEvents::ImGuiShutdownEvent::Emit();
+
         ImGui_ImplSDL3_Shutdown();
         ImGui::DestroyContext();
 
@@ -102,8 +100,7 @@ namespace BECore {
             return;
         }
 
-        ImGui_ImplSDL3_NewFrame();
-        ImGui_ImplSDLRenderer3_NewFrame();
+        RenderEvents::ImGuiNewFrameEvent::Emit();
         ImGui::NewFrame();
     }
 
@@ -116,4 +113,3 @@ namespace BECore {
     }
 
 }  // namespace BECore
-

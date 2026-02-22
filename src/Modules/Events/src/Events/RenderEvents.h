@@ -9,6 +9,12 @@ namespace RenderEvents {
     struct NewFrameEvent : public EventBase<NewFrameEvent> {};
     struct RenderClearEvent : public EventBase<RenderClearEvent> {};
     struct RenderPresentEvent : public EventBase<RenderPresentEvent> {};
+
+    // События ImGui — эмитятся ImGuiWidget, обрабатываются каждым renderer backend'ом
+    struct ImGuiInitEvent : public EventBase<ImGuiInitEvent> {};
+    struct ImGuiShutdownEvent : public EventBase<ImGuiShutdownEvent> {};
+    struct ImGuiNewFrameEvent : public EventBase<ImGuiNewFrameEvent> {};
+    struct ImGuiRenderEvent : public EventBase<ImGuiRenderEvent> {};
     
     struct SetRenderDrawColorEvent : public EventBase<SetRenderDrawColorEvent> {
         constexpr explicit SetRenderDrawColorEvent(BECore::Color color_) : color(color_) {}

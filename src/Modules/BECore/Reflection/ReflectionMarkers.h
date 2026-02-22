@@ -75,13 +75,13 @@ public:                                                                         
     constexpr const ::BECore::ClassMeta& GetTypeMeta() const { return *_typeMeta; }                                                                                                                    \
     /** @brief Check if this instance is of type T */                                                                                                                                                  \
     template <typename T>                                                                                                                                                                              \
-    constexpr bool Is() const;                                                                                                                                                                         \
+    constexpr bool Is() const { return GetTypeMeta() == T::GetStaticTypeMeta(); }                                                                                                                      \
     /** @brief Cast to type T, returns nullptr if type mismatch */                                                                                                                                     \
     template <typename T>                                                                                                                                                                              \
-    constexpr T* Cast();                                                                                                                                                                               \
+    constexpr T* Cast() { return Is<T>() ? static_cast<T*>(this) : nullptr; }                                                                                                                         \
     /** @brief Cast to type T (const), returns nullptr if type mismatch */                                                                                                                             \
     template <typename T>                                                                                                                                                                              \
-    constexpr const T* Cast() const;                                                                                                                                                                   \
+    constexpr const T* Cast() const { return Is<T>() ? static_cast<const T*>(this) : nullptr; }                                                                                                       \
     /** @brief Serialize all reflected fields to ISerializer (write/save) */                                                                                                                           \
     template <typename Serializer>                                                                                                                                                                     \
     void Serialize(Serializer& s) const;                                                                                                                                                               \

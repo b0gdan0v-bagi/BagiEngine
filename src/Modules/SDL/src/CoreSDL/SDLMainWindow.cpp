@@ -2,36 +2,14 @@
 
 #include "BECore/Utils/ScopeGuard.h"
 
-#include <Application/Application.h>
 #include <BECore/Config/XmlConfig.h>
 #include <CoreSDL/SDLUtils.h>
 #include <Events/ApplicationEvents.h>
-#include <Events/RenderEvents.h>
 
 namespace BECore {
 
     SDLMainWindow::SDLMainWindow() = default;
     SDLMainWindow::~SDLMainWindow() = default;
-
-    class SDLMainWindowChecker {
-    public:
-        // Принимаем любой вызываемый объект
-        explicit SDLMainWindowChecker(std::function<void()> onExit) : onExit_(std::move(onExit)) {}
-
-        // Деструктор сработает при выходе из {}
-        ~SDLMainWindowChecker() {
-            if (onExit_) {
-                onExit_();
-            }
-        }
-
-        // Запрещаем копирование, чтобы избежать двойного вызова
-        SDLMainWindowChecker(const SDLMainWindowChecker&) = delete;
-        SDLMainWindowChecker& operator=(const SDLMainWindowChecker&) = delete;
-
-    private:
-        std::function<void()> onExit_;
-    };
 
     bool SDLMainWindow::Initialize(eastl::string_view configPath) {
 
@@ -63,7 +41,6 @@ namespace BECore {
             width = windowNode.ParseAttribute<int>("width").value_or(800);
             height = windowNode.ParseAttribute<int>("height").value_or(600);
 
-            // Пробуем прочитать как строку с именами флагов
             const auto flagsStringOpt = windowNode.ParseAttribute<eastl::string_view>("windowFlags");
             if (flagsStringOpt && !flagsStringOpt->empty()) {
                 flags = SDLUtils::ParseWindowFlags(*flagsStringOpt);
@@ -72,19 +49,17 @@ namespace BECore {
             return false;
         }
 
-        if (!SDL_CreateWindowAndRenderer(title.c_str(), width, height, flags, &_window, &_renderer)) {
+        _window = SDL_CreateWindow(title.c_str(), width, height, flags);
+        if (!_window) {
             return false;
         }
 
         _width = width;
         _height = height;
 
-        Subscribe<RenderEvents::RenderClearEvent, &SDLMainWindow::RenderClear>(this);
-        Subscribe<RenderEvents::RenderPresentEvent, &SDLMainWindow::RenderPresent>(this);
         Subscribe<ApplicationEvents::ApplicationCleanUpEvent, &SDLMainWindow::Destroy>(this);
-        Subscribe<RenderEvents::SetRenderDrawColorEvent, &SDLMainWindow::SetRenderDrawColor>(this);
-        initialized = true;
 
+        initialized = true;
         return true;
     }
 
@@ -92,10 +67,6 @@ namespace BECore {
         if (_window != nullptr) {
             SDL_DestroyWindow(_window);
             _window = nullptr;
-        }
-        if (_renderer) {
-            SDL_DestroyRenderer(_renderer);
-            _renderer = nullptr;
         }
         SDL_Quit();
         _width = 0;
@@ -114,21 +85,4 @@ namespace BECore {
         return _height;
     }
 
-    void SDLMainWindow::SetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) const {
-        if (_renderer) {
-            SDL_SetRenderDrawColor(_renderer, event.color.r, event.color.g, event.color.b, event.color.a);
-        }
-    }
-
-    void SDLMainWindow::RenderClear() const {
-        if (_renderer) {
-            SDL_RenderClear(_renderer);
-        }
-    }
-
-    void SDLMainWindow::RenderPresent() const {
-        if (_renderer) {
-            SDL_RenderPresent(_renderer);
-        }
-    }
 }  // namespace BECore
