@@ -44,6 +44,8 @@ def get_strip_pch_ignore_patterns(project_root: Path) -> list[str]:
     return [p for p in base if p != "src/Modules/BECore" and not p.startswith("src/Modules/BECore/")]
 
 INCLUDE_LINE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]\s*(?://.*)?$')
+# Не трогать сам файл PCH
+PCH_FILE_RE = re.compile(r"pch\.h$", re.IGNORECASE)
 
 
 def normalize_include_path(path: str) -> str:
@@ -176,6 +178,8 @@ def main() -> int:
 
     modified = 0
     for path in files:
+        if PCH_FILE_RE.search(str(path).replace("\\", "/")):
+            continue
         removed, wrote = process_file(path, pch_includes, args.dry_run)
         if removed:
             rel = path.relative_to(project_root)
