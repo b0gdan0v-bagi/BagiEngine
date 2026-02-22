@@ -2,8 +2,6 @@
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Logger/Logger.h>
-#include <EASTL/vector.h>
 
 #include <Generated/ReflectionTest.gen.hpp>
 

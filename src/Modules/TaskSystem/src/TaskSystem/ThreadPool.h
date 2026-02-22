@@ -1,9 +1,6 @@
 #pragma once
 
-#include <EASTL/unique_ptr.h>
-#include <EASTL/vector.h>
 #include <TaskSystem/TaskQueue.h>
-#include <atomic>
 #include <thread>
 
 namespace BECore {

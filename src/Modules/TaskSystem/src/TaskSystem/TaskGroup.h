@@ -1,9 +1,7 @@
 #pragma once
 
-#include <EASTL/vector.h>
 #include <TaskSystem/CancellationToken.h>
 #include <TaskSystem/TaskHandle.h>
-#include <mutex>
 
 namespace BECore {
 

@@ -1,9 +1,6 @@
 #pragma once
 
 #include <BECore/Reflection/IDeserializer.h>
-#include <pugixml.hpp>
-#include <EASTL/vector.h>
-#include <filesystem>
 
 namespace BECore {
 

@@ -1,9 +1,6 @@
 #pragma once
 
-#include <EASTL/string.h>
-#include <atomic>
 #include <chrono>
-#include <mutex>
 
 namespace BECore {
 

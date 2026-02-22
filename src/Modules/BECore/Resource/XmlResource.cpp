@@ -1,5 +1,4 @@
 #include <BECore/Resource/XmlResource.h>
-#include <BECore/RefCounted/IntrusivePtr.h>
 
 #include <Generated/IResource.gen.hpp>
 #include <Generated/XmlResource.gen.hpp>

@@ -1,8 +1,6 @@
 #pragma once
 
 #include <BECore/Tests/ITest.h>
-#include <BECore/Format/Format.h>
-#include <BECore/PoolString/PoolString.h>
 #include <fmt/format.h>
 
 namespace BECore::Tests {

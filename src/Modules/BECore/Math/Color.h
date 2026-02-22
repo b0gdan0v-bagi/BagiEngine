@@ -1,8 +1,5 @@
 #pragma once
 
-#include <BECore/Reflection/ReflectionMarkers.h>
-#include <optional>
-#include <EASTL/string_view.h>
 
 namespace BECore {
 
@@ -41,4 +38,3 @@ namespace BECore {
         }
     };
 }  // namespace BECore
-

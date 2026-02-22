@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/Tests/ITest.h>
-#include <EASTL/vector.h>
 
 namespace BECore {
 

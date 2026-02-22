@@ -1,8 +1,6 @@
 #include "SDL3ApplicationFabric.h"
 
-#include <BECore/Config/XmlNode.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/RefCounted/New.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <Generated/EnumRenderer.gen.hpp>

@@ -2,8 +2,6 @@
 
 #include "ConfigFieldSchema.h"
 
-#include <EASTL/string.h>
-#include <EASTL/string_view.h>
 
 namespace BECore {
 

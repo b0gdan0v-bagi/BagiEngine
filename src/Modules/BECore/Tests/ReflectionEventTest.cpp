@@ -1,5 +1,4 @@
 #include <BECore/Tests/ReflectionEventTest.h>
-#include <BECore/Assert/AssertMacros.h>
 #include <Generated/ReflectionEventTest.gen.hpp>
 
 namespace BECore::Tests {

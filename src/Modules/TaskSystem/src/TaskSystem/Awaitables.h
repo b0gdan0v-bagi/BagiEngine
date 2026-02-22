@@ -3,7 +3,6 @@
 #include <TaskSystem/TaskPriority.h>
 #include <chrono>
 #include <coroutine>
-#include <functional>
 
 namespace BECore {
 

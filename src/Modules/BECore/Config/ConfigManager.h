@@ -1,15 +1,8 @@
 #pragma once
 
-#include <BECore/Config/XmlConfig.h>
-#include <BECore/Config/XmlNode.h>
 #include <BECore/Config/XmlDocument.h>
 #include <BECore/PoolString/PoolStringMap.h>
-#include <BECore/RefCounted/IntrusivePtr.h>
 #include <TaskSystem/Task.h>
-#include <EASTL/vector.h>
-#include <atomic>
-#include <filesystem>
-#include <mutex>
 
 namespace BECore {
 

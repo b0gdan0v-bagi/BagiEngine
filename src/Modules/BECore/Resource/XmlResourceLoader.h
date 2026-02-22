@@ -2,8 +2,6 @@
 
 #include <BECore/Resource/IResourceLoader.h>
 #include <BECore/Resource/XmlResource.h>
-#include <BECore/Logger/Logger.h>
-#include <BECore/Format/Format.h>
 
 namespace BECore {
 

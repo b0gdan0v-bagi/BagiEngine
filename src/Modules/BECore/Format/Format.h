@@ -1,9 +1,6 @@
 #pragma once
 
-#include <EASTL/string.h>
-#include <EASTL/string_view.h>
 #include <fmt/format.h>
-#include <string_view>
 
 /**
  * @brief Специализации fmt::formatter для типов EASTL.

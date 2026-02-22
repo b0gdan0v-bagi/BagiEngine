@@ -1,5 +1,4 @@
 #pragma once
-#include <BECore/Reflection/ReflectionMarkers.h>
 
 namespace BECore {
 
@@ -18,4 +17,3 @@ namespace BECore {
     };
 
 }  // namespace BECore
-

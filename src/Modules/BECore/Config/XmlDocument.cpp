@@ -1,7 +1,6 @@
 #include "XmlDocument.h"
 #include "XmlNode.h"
 
-#include <fstream>
 
 namespace BECore {
 

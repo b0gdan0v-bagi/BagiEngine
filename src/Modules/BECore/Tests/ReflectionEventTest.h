@@ -1,10 +1,8 @@
 #pragma once
 
 #include <BECore/Tests/ITest.h>
-#include <BECore/Reflection/ReflectionMarkers.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Reflection/ClassMeta.h>
-#include <BECore/PoolString/PoolString.h>
 
 namespace BECore::Tests {
 

@@ -1,6 +1,5 @@
 #include "PoolStringTest.h"
 
-#include <BECore/Logger/Logger.h>
 
 #include <Generated/PoolStringTest.gen.hpp>
 

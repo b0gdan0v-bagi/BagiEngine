@@ -1,7 +1,6 @@
 #include "TaskSystemTest.h"
 
 #include <thread>
-#include <atomic>
 
 #include <Generated/TaskSystemTest.gen.hpp>
 

@@ -1,12 +1,6 @@
 #pragma once
 
-#include <BECore/PoolString/PoolString.h>
-#include <BECore/Utils/EnumUtils.h>
-#include <BECore/Utils/Singleton.h>
-#include <EASTL/string.h>
-#include <EASTL/string_view.h>
 #include <EASTL/unordered_map.h>
-#include <EASTL/vector.h>
 
 namespace BECore {
 

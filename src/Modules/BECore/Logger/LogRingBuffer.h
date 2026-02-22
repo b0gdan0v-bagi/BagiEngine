@@ -1,14 +1,8 @@
 #pragma once
 
-#include <BECore/Logger/LogLevel.h>
 
-#include <EASTL/string_view.h>
 
-#include <atomic>
 #include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <algorithm>
 
 namespace BECore {
 

@@ -1,8 +1,5 @@
 #pragma once
 
-#include <BECore/RefCounted/RefCounted.h>
-#include <pugixml.hpp>
-#include <filesystem>
 
 namespace BECore {
 

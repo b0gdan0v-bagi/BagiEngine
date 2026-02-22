@@ -1,6 +1,5 @@
 #include "FileSystem.h"
 
-#include <filesystem>
 
 namespace BECore {
 
@@ -145,4 +144,3 @@ namespace BECore {
     }
 
 }  // namespace BECore
-

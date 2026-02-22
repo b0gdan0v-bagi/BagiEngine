@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Math/Color.h>
 #include <BECore/Widgets/IWidget.h>
 
 namespace BECore {

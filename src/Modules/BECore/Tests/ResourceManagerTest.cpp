@@ -1,7 +1,5 @@
 #include "ResourceManagerTest.h"
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Logger/Logger.h>
-#include <BECore/Config/XmlConfig.h>
 
 #include <Generated/ResourceManagerTest.gen.hpp>
 

@@ -1,8 +1,6 @@
 #pragma once
 
-#include <BECore/Utils/String.h>
 #include <BECore/Reflection/TypeTraits.h>
-#include <EASTL/string_view.h>
 
 namespace BECore {
 

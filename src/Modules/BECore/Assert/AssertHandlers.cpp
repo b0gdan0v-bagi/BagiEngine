@@ -2,7 +2,6 @@
 
 #include <BECore/Assert/PlatformDebug.h>
 #include <BECore/Assert/StackTrace.h>
-#include <BECore/Config/XmlConfig.h>
 #include <BECore/GameManager/CoreManager.h>
 
 #include <EASTL/sort.h>

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Events/EventsQueueRegistry.h>
-#include <Events/SubscriptionHolder.h>
 #include <entt/entt.hpp>
 
 namespace BECore {

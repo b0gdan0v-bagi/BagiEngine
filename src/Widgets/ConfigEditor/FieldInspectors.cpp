@@ -1,10 +1,8 @@
 #include "FieldInspectors.h"
 
-#include <BECore/Format/Format.h>
 #include <EASTL/array.h>
 #include <EASTL/unordered_map.h>
 #include <imgui.h>
-#include <charconv>
 
 namespace BECore {
 

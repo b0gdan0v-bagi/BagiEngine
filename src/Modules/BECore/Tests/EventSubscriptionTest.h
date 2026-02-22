@@ -1,9 +1,7 @@
 #pragma once
 
 #include <BECore/Tests/ITest.h>
-#include <BECore/Reflection/ReflectionMarkers.h>
 #include <Events/EventBase.h>
-#include <Events/SubscriptionHolder.h>
 
 namespace BECore::Tests {
 

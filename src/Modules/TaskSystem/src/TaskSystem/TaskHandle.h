@@ -2,8 +2,6 @@
 
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskPriority.h>
-#include <atomic>
-#include <functional>
 #include <thread>
 
 namespace BECore {

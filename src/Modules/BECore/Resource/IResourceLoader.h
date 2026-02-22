@@ -1,12 +1,7 @@
 #pragma once
 
 #include <BECore/Resource/IResource.h>
-#include <BECore/RefCounted/RefCounted.h>
-#include <BECore/RefCounted/IntrusivePtr.h>
-#include <BECore/PoolString/PoolString.h>
-#include <BECore/Reflection/ReflectionMarkers.h>
 #include <TaskSystem/Task.h>
-#include <EASTL/string_view.h>
 
 namespace BECore {
 

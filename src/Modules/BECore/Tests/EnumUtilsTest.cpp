@@ -1,7 +1,5 @@
 #include "EnumUtilsTest.h"
 
-#include <BECore/Format/Format.h>
-#include <BECore/Logger/Logger.h>
 
 #include <Generated/EnumUtilsTest.gen.hpp>
 

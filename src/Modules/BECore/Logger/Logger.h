@@ -1,8 +1,6 @@
 #pragma once
 
 #include <BECore/Logger/LogEvent.h>
-#include <BECore/Logger/LogLevel.h>
-#include <EASTL/string_view.h>
 
 namespace BECore {
 

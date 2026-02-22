@@ -1,12 +1,10 @@
 #pragma once
 
 #include <EASTL/priority_queue.h>
-#include <EASTL/vector.h>
 #include <TaskSystem/TaskPriority.h>
 #include <TaskSystem/TaskQueue.h>
 #include <TaskSystem/ThreadPool.h>
 #include <chrono>
-#include <mutex>
 
 namespace BECore {
 

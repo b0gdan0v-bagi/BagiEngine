@@ -4,7 +4,6 @@
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/XmlResource.h>
 #include <BECore/Resource/ResourceHandle.h>
-#include <BECore/Utils/EnumUtils.h>
 #include <TaskSystem/Task.h>
 
 namespace BECore::Tests {

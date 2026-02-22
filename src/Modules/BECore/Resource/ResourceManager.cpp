@@ -1,6 +1,4 @@
 #include <BECore/Resource/ResourceManager.h>
-#include <BECore/RefCounted/New.h>
-#include <BECore/Logger/Logger.h>
 
 #include <Generated/IResourceLoader.gen.hpp>
 #include <Generated/EnumResourceLoader.gen.hpp>

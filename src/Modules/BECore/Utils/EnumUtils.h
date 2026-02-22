@@ -1,8 +1,6 @@
 #pragma once
 
 #include <EASTL/array.h>
-#include <EASTL/string_view.h>
-#include <string_view>
 #include <fmt/format.h>
 
 namespace BECore {

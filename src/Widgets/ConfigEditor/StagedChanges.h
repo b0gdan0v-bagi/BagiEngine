@@ -1,10 +1,6 @@
 #pragma once
 
-#include <EASTL/functional.h>
-#include <EASTL/string.h>
-#include <EASTL/string_view.h>
 #include <EASTL/unordered_map.h>
-#include <pugixml.hpp>
 
 namespace BECore {
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/Tests/ITest.h>
-#include <BECore/Utils/EnumUtils.h>
 
 namespace BECore::Tests {
 

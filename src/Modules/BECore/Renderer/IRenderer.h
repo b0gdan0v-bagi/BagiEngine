@@ -1,6 +1,4 @@
 #pragma once
-#include <BECore/Reflection/ReflectionMarkers.h>
-#include <BECore/Math/Color.h>
 
 namespace BECore {
 

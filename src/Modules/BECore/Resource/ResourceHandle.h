@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/Resource/IResource.h>
-#include <BECore/RefCounted/IntrusivePtr.h>
 #include <chrono>
 
 namespace BECore {

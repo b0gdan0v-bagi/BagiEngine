@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Utils/EnumUtils.h>
 
 namespace BECore {
 

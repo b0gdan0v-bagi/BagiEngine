@@ -1,8 +1,6 @@
 #pragma once
 
 #include <BECore/Assert/IAssertHandler.h>
-#include <BECore/Utils/EnumUtils.h>
-#include <EASTL/vector.h>
 
 namespace BECore {
 

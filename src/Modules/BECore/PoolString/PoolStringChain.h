@@ -3,12 +3,8 @@
 #include "PoolString.h"
 #include "StaticPoolString.h"
 #include <BECore/Math/NumberUtils.h>
-#include <EASTL/string_view.h>
 #include <EASTL/array.h>
-#include <EASTL/variant.h>
-#include <EASTL/string.h>
 #include <initializer_list>
-#include <cstdint>
 
 namespace BECore {
 

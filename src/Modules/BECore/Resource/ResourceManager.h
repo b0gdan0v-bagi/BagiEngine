@@ -8,10 +8,8 @@
 #include <BECore/Resource/XmlResource.h>
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Format/Format.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/Awaitables.h>
-#include <EASTL/vector.h>
 
 namespace BECore {
 

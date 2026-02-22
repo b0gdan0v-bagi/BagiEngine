@@ -1,6 +1,5 @@
 #include "TestManager.h"
 
-#include <BECore/Config/XmlConfig.h>
 #include <BECore/GameManager/CoreManager.h>
 
 #include <Generated/EnumTest.gen.hpp>

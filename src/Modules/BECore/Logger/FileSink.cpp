@@ -1,9 +1,6 @@
 #include "FileSink.h"
 
 #include <BECore/Reflection/IDeserializer.h>
-#include <BECore/Logger/LogLevel.h>
-#include <EASTL/string.h>
-#include <EASTL/string_view.h>
 #include <Generated/FileSink.gen.hpp>
 #include <chrono>
 #include <fmt/chrono.h>

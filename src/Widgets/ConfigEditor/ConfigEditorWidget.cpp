@@ -4,15 +4,11 @@
 #include "FieldInspectors.h"
 
 #include <BECore/Config/ConfigManager.h>
-#include <BECore/Config/XmlNode.h>
-#include <BECore/Format/Format.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Logger/LogLevel.h>
 #include <BECore/Logger/LogSinkType.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <Generated/ConfigEditorWidget.gen.hpp>
 #include <imgui.h>
-#include <pugixml.hpp>
 
 namespace BECore {
 

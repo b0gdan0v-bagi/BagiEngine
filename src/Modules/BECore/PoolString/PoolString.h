@@ -1,7 +1,5 @@
 #pragma once
 
-#include <EASTL/string_view.h>
-#include <BECore/Utils/String.h>
 #include <shared_mutex>
 
 namespace BECore {

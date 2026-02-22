@@ -1,6 +1,5 @@
 #include "PoolString.h"
 
-#include <mutex>
 
 namespace BECore {
 

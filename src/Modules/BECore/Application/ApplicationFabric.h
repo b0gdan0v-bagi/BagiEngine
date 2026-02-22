@@ -1,6 +1,5 @@
 #pragma once
 
-#include <BECore/Utils/Singleton.h>
 
 namespace BECore {
 
@@ -13,4 +12,3 @@ namespace BECore {
         friend class Singleton<ApplicationFabric>;
     };
 }  // namespace BECore
-

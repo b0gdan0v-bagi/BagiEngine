@@ -1,8 +1,6 @@
 #pragma once
 
 #include <BECore/Assert/AssertEvent.h>
-#include <BECore/RefCounted/RefCounted.h>
-#include <Events/SubscriptionHolder.h>
 
 namespace BECore {
 

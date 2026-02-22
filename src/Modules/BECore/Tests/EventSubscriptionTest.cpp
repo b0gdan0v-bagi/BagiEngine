@@ -1,4 +1,3 @@
-#include <BECore/Assert/AssertMacros.h>
 #include <BECore/Tests/EventSubscriptionTest.h>
 
 #include <Generated/EventSubscriptionTest.gen.hpp>

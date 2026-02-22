@@ -1,5 +1,4 @@
 #include <BECore/Reflection/XmlSerializer.h>
-#include <sstream>
 
 namespace BECore {
 

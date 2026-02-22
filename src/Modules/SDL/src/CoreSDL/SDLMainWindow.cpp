@@ -2,7 +2,6 @@
 
 #include "BECore/Utils/ScopeGuard.h"
 
-#include <BECore/Config/XmlConfig.h>
 #include <CoreSDL/SDLUtils.h>
 #include <Events/ApplicationEvents.h>
 

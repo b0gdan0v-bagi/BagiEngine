@@ -1,8 +1,6 @@
 #pragma once
 
 #include <BECore/Logger/ILogSink.h>
-#include <BECore/RefCounted/IntrusivePtr.h>
-#include <EASTL/vector.h>
 
 // Forward declaration - ILogSinkType is generated from BE_CLASS(ILogSink, FACTORY_BASE)
 enum class LogSinkType : uint8_t;

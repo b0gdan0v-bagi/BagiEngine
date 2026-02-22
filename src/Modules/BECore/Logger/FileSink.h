@@ -3,8 +3,6 @@
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Logger/LogEvent.h>
 
-#include <fstream>
-#include <mutex>
 
 namespace BECore {
 

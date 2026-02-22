@@ -1,5 +1,4 @@
 #include <BECore/Resource/XmlResourceLoader.h>
-#include <BECore/RefCounted/New.h>
 #include <TaskSystem/Awaitables.h>
 
 #include <Generated/IResourceLoader.gen.hpp>

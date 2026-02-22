@@ -1,9 +1,5 @@
 #pragma once
 
-#include <BECore/RefCounted/RefCounted.h>
-#include <BECore/PoolString/PoolString.h>
-#include <BECore/Utils/EnumUtils.h>
-#include <BECore/Reflection/ReflectionMarkers.h>
 
 namespace BECore {
 

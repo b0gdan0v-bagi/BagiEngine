@@ -2,9 +2,7 @@
 
 #include "StagedChanges.h"
 
-#include <BECore/PoolString/PoolString.h>
 #include <BECore/Widgets/IWidget.h>
-#include <EASTL/string.h>
 
 // Forward declaration - avoid including pugixml in header
 namespace pugi {

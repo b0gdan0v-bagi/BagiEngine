@@ -1,5 +1,4 @@
 #include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Config/XmlNode.h>
 #include <BECore/GameManager/CoreManager.h>
 
 namespace BECore {

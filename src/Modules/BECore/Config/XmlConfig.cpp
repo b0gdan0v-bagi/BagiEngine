@@ -2,7 +2,6 @@
 
 #include <BECore/Config/XmlDocument.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/RefCounted/New.h>
 
 namespace BECore {
 

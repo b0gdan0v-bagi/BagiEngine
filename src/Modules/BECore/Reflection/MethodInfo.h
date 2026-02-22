@@ -1,7 +1,5 @@
 #pragma once
 
-#include <EASTL/string_view.h>
-#include <utility>
 
 namespace BECore {
 

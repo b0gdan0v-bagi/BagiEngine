@@ -1,10 +1,7 @@
 #include "ConsoleSink.h"
 
 #include <BECore/Reflection/IDeserializer.h>
-#include <BECore/Logger/LogLevel.h>
 
-#include <EASTL/string_view.h>
-#include <EASTL/string.h>
 #include <fmt/core.h>
 #include <fmt/chrono.h>
 #include <chrono>

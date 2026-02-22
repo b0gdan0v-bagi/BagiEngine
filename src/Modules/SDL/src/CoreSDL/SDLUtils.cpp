@@ -1,6 +1,5 @@
 #include "SDLUtils.h"
 
-#include <BECore/Utils/String.h>
 
 namespace BECore {
 

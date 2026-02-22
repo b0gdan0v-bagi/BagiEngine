@@ -1,10 +1,7 @@
 #pragma once
 
 #include <EASTL/deque.h>
-#include <atomic>
 #include <condition_variable>
-#include <functional>
-#include <mutex>
 
 namespace BECore {
 

@@ -2,8 +2,6 @@
 
 #include <Widgets/ImGuiWidget.h>
 #include <Widgets/ClearScreenWidget.h>
-#include <BECore/Config/XmlConfig.h>
-#include <BECore/Config/XmlNode.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 
@@ -69,4 +67,3 @@ namespace BECore {
         }
     }
 }  // namespace BECore
-

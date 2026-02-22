@@ -1,6 +1,5 @@
 #pragma once
 
-#include <EASTL/vector.h>
 #include <entt/entt.hpp>
 
 namespace BECore {

@@ -2,16 +2,11 @@
 
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Logger/Logger.h>
-#include <BECore/Format/Format.h>
-#include <BECore/RefCounted/New.h>
 #include <TaskSystem/TaskManager.h>
 #include <TaskSystem/TaskHandle.h>
 #include <TaskSystem/TaskGroup.h>
 #include <TaskSystem/Awaitables.h>
 
-#include <pugixml.hpp>
-#include <filesystem>
 #include <EASTL/sort.h>
 
 namespace BECore {

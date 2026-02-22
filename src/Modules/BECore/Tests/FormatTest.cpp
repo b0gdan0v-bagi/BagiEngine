@@ -1,7 +1,5 @@
 #include "FormatTest.h"
 
-#include <BECore/Format/Format.h>
-#include <BECore/Logger/Logger.h>
 
 #include <Generated/FormatTest.gen.hpp>
 

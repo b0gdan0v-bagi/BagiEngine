@@ -1,7 +1,6 @@
 #pragma once
 
 #include <BECore/Reflection/ISerializer.h>
-#include <EASTL/vector.h>
 
 namespace BECore {
 

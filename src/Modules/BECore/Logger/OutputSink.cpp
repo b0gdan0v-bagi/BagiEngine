@@ -1,13 +1,9 @@
 #include "OutputSink.h"
 
-#include <BECore/Logger/LogLevel.h>
 
-#include <EASTL/string_view.h>
-#include <EASTL/string.h>
 #include <fmt/core.h>
 #include <fmt/chrono.h>
 #include <chrono>
-#include <string>
 #include <cstdio>
 
 #include <Generated/OutputSink.gen.hpp>

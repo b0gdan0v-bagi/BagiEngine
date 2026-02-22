@@ -1,13 +1,10 @@
 #include "LoggerManager.h"
 
-#include <BECore/Config/XmlConfig.h>
-#include <BECore/Config/XmlNode.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ConsoleSink.h>
 #include <BECore/Logger/FileSink.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/Logger/OutputSink.h>
-#include <BECore/RefCounted/New.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 
 #include <Generated/ILogSink.gen.hpp>

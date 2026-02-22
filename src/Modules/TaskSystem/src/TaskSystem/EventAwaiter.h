@@ -2,7 +2,6 @@
 
 #include <Events/EventBase.h>
 #include <coroutine>
-#include <optional>
 
 namespace BECore {
 

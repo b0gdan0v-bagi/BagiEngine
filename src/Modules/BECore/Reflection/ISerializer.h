@@ -1,9 +1,5 @@
 #pragma once
 
-#include <EASTL/string.h>
-#include <EASTL/string_view.h>
-#include <BECore/PoolString/PoolString.h>
-#include <cstdint>
 
 namespace BECore {
 

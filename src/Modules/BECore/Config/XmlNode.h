@@ -1,9 +1,5 @@
 #pragma once
 
-#include <pugixml.hpp>
-#include <EASTL/string_view.h>
-#include <optional>
-#include <charconv>
 
 namespace BECore {
 

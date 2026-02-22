@@ -1,7 +1,5 @@
 #include "ConfigFieldSchema.h"
 
-#include <BECore/Format/Format.h>
-#include <charconv>
 
 namespace BECore {
 
