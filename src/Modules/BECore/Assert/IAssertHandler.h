@@ -1,10 +1,13 @@
 #pragma once
 
 #include <BECore/Assert/AssertEvent.h>
+#include <BECore/Reflection/IDeserializer.h>
 
 namespace BECore {
 
     class IAssertHandler : public RefCountedAtomic, public SubscriptionHolder {
+        BE_CLASS(IAssertHandler, FACTORY_BASE)
+
     public:
         ~IAssertHandler() override = default;
 
@@ -23,7 +26,7 @@ namespace BECore {
     protected:
         IAssertHandler() = default;
 
-        int _priority = 0;
+        BE_REFLECT_FIELD int _priority = 0;
     };
 
 }  // namespace BECore

@@ -76,6 +76,7 @@ if(COMMAND add_reflection_target)
     add_reflection_target(BECoreModule
         DIRS
             ${CMAKE_CURRENT_SOURCE_DIR}/Application
+            ${CMAKE_CURRENT_SOURCE_DIR}/Assert
             ${CMAKE_CURRENT_SOURCE_DIR}/Logger
             ${CMAKE_CURRENT_SOURCE_DIR}/Tests
             ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
@@ -84,6 +85,7 @@ if(COMMAND add_reflection_target)
             ${CMAKE_CURRENT_SOURCE_DIR}/Renderer
         SCAN_DIRS
             ${CMAKE_CURRENT_SOURCE_DIR}/Application
+            ${CMAKE_CURRENT_SOURCE_DIR}/Assert
             ${CMAKE_CURRENT_SOURCE_DIR}/Logger
             ${CMAKE_CURRENT_SOURCE_DIR}/Tests
             ${CMAKE_CURRENT_SOURCE_DIR}/Widgets

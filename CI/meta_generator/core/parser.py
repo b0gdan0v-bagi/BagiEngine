@@ -248,11 +248,14 @@ class LibclangParser:
             if child.kind == CursorKind.FIELD_DECL:
                 # Check for BE_REFLECT_FIELD annotation
                 if self._has_reflection_annotation(child, lines, "BE_REFLECT_FIELD"):
+                    canonical = child.type.get_canonical()
+                    is_enum = canonical.kind == TypeKind.ENUM
                     cls.fields.append(FieldData(
                         name=child.spelling,
                         type_name=child.type.spelling,
                         line=child.location.line,
-                        column=child.location.column
+                        column=child.location.column,
+                        is_enum=is_enum,
                     ))
             
             elif child.kind == CursorKind.CXX_METHOD:

@@ -231,8 +231,9 @@ Examples:
             
             # Generate reflection code
             if classes or enums:
+                all_classes_so_far = cache.get_all_classes()
                 output_path = generator.generate_reflection(
-                    classes, enums, file_path, include_dirs
+                    classes, enums, file_path, include_dirs, all_classes_so_far
                 )
                 if output_path:
                     generated_count += 1
@@ -262,8 +263,9 @@ Examples:
                     
                     # Generate reflection code for newly found classes
                     if classes or enums:
+                        all_classes_so_far = cache.get_all_classes()
                         output_path = generator.generate_reflection(
-                            classes, enums, file_path, include_dirs
+                            classes, enums, file_path, include_dirs, all_classes_so_far
                         )
                         if output_path:
                             generated_count += 1

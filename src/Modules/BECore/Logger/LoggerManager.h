@@ -2,9 +2,6 @@
 
 #include <BECore/Logger/ILogSink.h>
 
-// Forward declaration - ILogSinkType is generated from BE_CLASS(ILogSink, FACTORY_BASE)
-enum class LogSinkType : uint8_t;
-
 namespace BECore {
 
     /**
@@ -60,7 +57,6 @@ namespace BECore {
          * @return Reference to sinks vector
          */
         const eastl::vector<IntrusivePtrAtomic<ILogSink>>& GetSinks() const { return _sinks; }
-        static IntrusivePtrAtomic<ILogSink> CreateSinkByType(LogSinkType type);
 
     private:
 

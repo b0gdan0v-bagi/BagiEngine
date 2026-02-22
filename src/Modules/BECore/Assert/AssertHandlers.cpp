@@ -4,6 +4,9 @@
 #include <BECore/Assert/StackTrace.h>
 #include <BECore/GameManager/CoreManager.h>
 
+#include <Generated/IAssertHandler.gen.hpp>
+#include <Generated/EnumAssertHandler.gen.hpp>
+
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -33,18 +36,18 @@ namespace BECore {
         }
     }
 
-    // AssertLogHandler implementation
+    // LogHandler implementation
 
-    void AssertLogHandler::Initialize() {
+    void LogHandler::Initialize() {
         if (_initialized) {
             return;
         }
 
-        Subscribe<AssertEvent, &AssertLogHandler::OnAssert>(this);
+        Subscribe<AssertEvent, &LogHandler::OnAssert>(this);
         _initialized = true;
     }
 
-    void AssertLogHandler::OnAssert(const AssertEvent& event) {
+    void LogHandler::OnAssert(const AssertEvent& event) {
         // Determine log level based on assert type
         LogLevel level = LogLevel::Error;
         const char* typeStr = "ASSERT";
@@ -118,76 +121,25 @@ namespace BECore {
             return;
         }
 
-        // Получаем конфиг через ConfigManager
-        const auto rootNode = CoreManager::GetConfigManager().GetConfig("AssertHandlersConfig"_intern);
+        _handlers = AssertHandlerFactory::LoadFromConfig("AssertHandlersConfig");
 
-        if (!rootNode) {
-            // Fallback: create default handlers if config not found
+        if (_handlers.empty()) {
+            // Fallback: create default handlers if config not found or empty
+            auto logHandler = BECore::New<LogHandler>();
+            _handlers.push_back(logHandler);
+
             auto debugHandler = BECore::New<DebugBreakHandler>();
             debugHandler->SetPriority(100);
             _handlers.push_back(debugHandler);
-
-            auto logHandler = BECore::New<AssertLogHandler>();
-            logHandler->SetPriority(0);
-            _handlers.push_back(logHandler);
-        } else {
-            const auto handlersNode = rootNode.GetChild("handlers");
-            if (handlersNode) {
-                for (const auto handlerNode : handlersNode.Children()) {
-                    if (handlerNode.Name() != "handler") {
-                        continue;
-                    }
-
-                    // Check if handler is enabled (default: true)
-                    auto enabled = handlerNode.ParseAttribute<bool>("enabled");
-                    if (enabled.has_value() && !enabled.value()) {
-                        continue;
-                    }
-
-                    auto handlerType = handlerNode.ParseAttribute<AssertHandlerType>("type");
-                    if (!handlerType) {
-                        continue;
-                    }
-
-                    auto handler = CreateHandlerByType(*handlerType);
-                    if (!handler) {
-                        continue;
-                    }
-
-                    // Set priority from config (default: 0)
-                    auto priority = handlerNode.ParseAttribute<int>("priority");
-                    if (priority.has_value()) {
-                        handler->SetPriority(*priority);
-                    }
-
-                    _handlers.push_back(handler);
-                }
-            }
         }
 
-        // Sort handlers by priority (lower first)
         SortHandlersByPriority();
 
-        // Initialize all handlers
         for (const auto& handler : _handlers) {
             handler->Initialize();
         }
 
         _initialized = true;
-    }
-
-    IntrusivePtrAtomic<IAssertHandler> AssertHandlerManager::CreateHandlerByType(AssertHandlerType type) {
-
-        switch (type) {
-            case AssertHandlerType::DebugBreak:
-                return BECore::New<DebugBreakHandler>();
-            case AssertHandlerType::Log:
-                return BECore::New<AssertLogHandler>();
-            case AssertHandlerType::StackTrace:
-                return BECore::New<StackTraceHandler>();
-            default:
-                return {};
-        }
     }
 
     void AssertHandlerManager::SortHandlersByPriority() {

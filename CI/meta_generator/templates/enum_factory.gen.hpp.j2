@@ -9,6 +9,9 @@
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/RefCounted/New.h>
 #include <BECore/Utils/EnumUtils.h>
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/XmlDeserializer.h>
+#include <EASTL/vector.h>
 
 {% for base in factory_bases %}
 // ============================================================================
@@ -18,13 +21,13 @@
 #include <Generated/{{ base.name }}.gen.hpp>
 
 // Include derived class headers
-{% for d in base.derived %}
+{% for d in base.derived | unique(attribute='include_path') %}
 #include <{{ d.include_path }}>
 {% endfor %}
 
 // Include generated reflection for derived classes (provides ReflectionTraits)
-{% for d in base.derived %}
-#include <Generated/{{ d.name }}.gen.hpp>
+{% for d in base.derived | unique(attribute='gen_hpp') %}
+#include <Generated/{{ d.gen_hpp }}>
 {% endfor %}
 
 // ============================================================================
@@ -136,7 +139,36 @@ public:
         static {{ base.factory_name }} instance;
         return instance;
     }
+
+    /**
+     * @brief Load and create all instances from a named XML config section
+     * @param configName Config name as loaded by ConfigManager (e.g., "LoggerConfig")
+     * @return Vector of created and deserialized instances; empty if config not found
+     */
+    static eastl::vector<BasePtr> LoadFromConfig(eastl::string_view configName);
 };
+
+inline eastl::vector<{{ base.factory_name }}::BasePtr> {{ base.factory_name }}::LoadFromConfig(eastl::string_view configName) {
+    eastl::vector<BasePtr> items;
+    auto root = CoreManager::GetConfigManager().GetConfig(configName);
+    if (!root) return items;
+    auto container = root.GetChild("{{ base.container_name }}");
+    if (!container) return items;
+    for (auto node : container.Children()) {
+        if (node.Name() != "{{ base.element_name }}") continue;
+        auto en = node.ParseAttribute<bool>("enabled");
+        if (en.has_value() && !*en) continue;
+        auto type = node.ParseAttribute<EnumType>("type");
+        if (!type) continue;
+        auto item = Create(*type);
+        if (!item) continue;
+        XmlDeserializer deserializer;
+        deserializer.LoadFromXmlNode(node);
+        item->Deserialize(deserializer);
+        items.push_back(eastl::move(item));
+    }
+    return items;
+}
 
 }  // namespace {{ base.namespace }}
 

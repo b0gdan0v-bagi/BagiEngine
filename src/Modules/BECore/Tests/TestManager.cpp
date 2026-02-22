@@ -1,60 +1,30 @@
 #include "TestManager.h"
 
-#include <BECore/GameManager/CoreManager.h>
-
+#include <Generated/ITest.gen.hpp>
 #include <Generated/EnumTest.gen.hpp>
 
 namespace BECore {
 
     void TestManager::RunAllTests() {
-        // Получаем конфиг через ConfigManager
-        const auto rootNode = CoreManager::GetConfigManager().GetConfig("TestsConfig"_intern);
+        auto tests = Tests::TestFactory::LoadFromConfig("TestsConfig");
 
-        if (!rootNode) {
-            LOG_ERROR("[TestManager] Config not found: TestsConfig");
-            return;
-        }
-
-        const auto testsNode = rootNode.GetChild("tests");
-        if (!testsNode) {
+        if (tests.empty()) {
+            LOG_WARNING("[TestManager] No tests loaded from TestsConfig");
             return;
         }
 
         int passed = 0;
         int failed = 0;
 
-        for (const auto testNode : testsNode.Children()) {
-            if (testNode.Name() != "test") {
-                continue;
-            }
+        for (const auto& test : tests) {
+            LOG_INFO("[TestManager] Running: {}"_format(test->GetName()));
 
-            // Check if test is enabled (default: true)
-            auto enabled = testNode.ParseAttribute<bool>("enabled");
-            if (enabled.has_value() && !enabled.value()) {
-                continue;
-            }
-
-            auto testType = testNode.ParseAttribute<TestType>("type");
-            if (!testType) {
-                continue;
-            }
-
-            // Use auto-generated TestFactory to create test instances
-            auto testPtr = Tests::TestFactory::GetInstance().Create(*testType);
-            if (!testPtr) {
-                LOG_ERROR("[TestManager] Failed to create test of type: {}"_format(
-                    Tests::TestFactory::GetInstance().GetTypeName(*testType)));
-                continue;
-            }
-
-            LOG_INFO("[TestManager] Running: {}"_format(testPtr->GetName()));
-
-            if (testPtr->Run()) {
+            if (test->Run()) {
                 ++passed;
-                LOG_INFO("[TestManager] PASSED: {}"_format(testPtr->GetName()));
+                LOG_INFO("[TestManager] PASSED: {}"_format(test->GetName()));
             } else {
                 ++failed;
-                LOG_ERROR("[TestManager] FAILED: {}"_format(testPtr->GetName()));
+                LOG_ERROR("[TestManager] FAILED: {}"_format(test->GetName()));
             }
         }
 

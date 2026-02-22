@@ -1,11 +1,6 @@
 #include "LoggerManager.h"
 
-#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ConsoleSink.h>
-#include <BECore/Logger/FileSink.h>
-#include <BECore/Logger/LogEvent.h>
-#include <BECore/Logger/OutputSink.h>
-#include <BECore/Reflection/XmlDeserializer.h>
 
 #include <Generated/ILogSink.gen.hpp>
 #include <Generated/EnumLogSink.gen.hpp>
@@ -19,71 +14,20 @@ namespace BECore {
             return;
         }
 
-        // Get config via ConfigManager
-        const auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
+        _sinks = LogSinkFactory::LoadFromConfig("LoggerConfig");
 
-        if (!rootNode) {
-            // Fallback: create default sinks if config not found
-            auto consoleSink = BECore::New<ConsoleSink>();
-            consoleSink->SetPriority(0);
-            _sinks.push_back(consoleSink);
-        } else {
-            const auto sinksNode = rootNode.GetChild("sinks");
-            if (sinksNode) {
-                for (const auto sinkNode : sinksNode.Children()) {
-                    if (sinkNode.Name() != "sink") {
-                        continue;
-                    }
-
-                    // Check if sink is enabled (default: true)
-                    auto enabled = sinkNode.ParseAttribute<bool>("enabled");
-                    if (enabled.has_value() && !enabled.value()) {
-                        continue;
-                    }
-
-                    auto sinkType = sinkNode.ParseAttribute<LogSinkType>("type");
-                    if (!sinkType) {
-                        continue;
-                    }
-
-                    auto sink = CreateSinkByType(*sinkType);
-                    if (!sink) {
-                        continue;
-                    }
-
-                    auto priority = sinkNode.ParseAttribute<int>("priority");
-                    if (priority.has_value()) {
-                        sink->SetPriority(*priority);
-                    }
-
-                    auto minLevel = sinkNode.ParseAttribute<LogLevel>("minLevel");
-                    if (minLevel.has_value()) {
-                        sink->SetMinLevel(*minLevel);
-                    }
-
-                    // Use XmlDeserializer for sink-specific configuration
-                    XmlDeserializer deserializer;
-                    deserializer.LoadFromXmlNode(sinkNode);
-                    sink->Configure(deserializer);
-
-                    _sinks.push_back(sink);
-                }
-            }
+        if (_sinks.empty()) {
+            // Fallback: create a default console sink if config not found or empty
+            _sinks.push_back(BECore::New<ConsoleSink>());
         }
 
-        // Sort sinks by priority (lower first)
         SortSinksByPriority();
 
-        // Initialize all sinks
         for (auto& sink : _sinks) {
             sink->Initialize();
         }
 
         _initialized = true;
-    }
-
-    IntrusivePtrAtomic<ILogSink> LoggerManager::CreateSinkByType(LogSinkType type) {
-        return LogSinkFactory::Create(type);
     }
 
     void LoggerManager::SortSinksByPriority() {

@@ -15,6 +15,14 @@
 
 // Include the original header file to access class declarations
 #include <{{ include_path }}>
+{% set _included_bases = [] %}
+{% for cls in classes %}
+{% if cls.parent_has_be_class and cls.parent_class not in _included_bases %}
+// Include generated reflection for base class (provides base Serialize/Deserialize definitions)
+#include <Generated/{{ cls.parent_class }}.gen.hpp>
+{% if _included_bases.append(cls.parent_class) %}{% endif %}
+{% endif %}
+{% endfor %}
 
 {% if enums %}
 // ============================================================================
@@ -161,7 +169,12 @@ template<typename Serializer>
 inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-{% if field.is_primitive %}
+{% if field.is_enum %}
+    {
+        auto _sv = EnumUtils<{{ field.type_name }}>::ToString({{ field.name }});
+        s.WriteAttribute("{{ xml_name }}", _sv);
+    }
+{% elif field.is_primitive %}
     s.WriteAttribute("{{ xml_name }}", {{ field.name }});
 {% else %}
     if (s.BeginObject("{{ xml_name }}")) {
@@ -177,7 +190,16 @@ template<typename Deserializer>
 inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-{% if field.is_primitive %}
+{% if field.is_enum %}
+    {
+        eastl::string _eStr;
+        if (d.ReadAttribute("{{ xml_name }}", _eStr)) {
+            auto _r = EnumUtils<{{ field.type_name }}>::Cast(
+                eastl::string_view(_eStr.data(), _eStr.size()));
+            if (_r) {{ field.name }} = *_r;
+        }
+    }
+{% elif field.is_primitive %}
     d.ReadAttribute("{{ xml_name }}", {{ field.name }});
 {% else %}
     if (d.BeginObject("{{ xml_name }}")) {
@@ -226,14 +248,21 @@ inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic(const {{
     }, ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields);
 }
 
-{% if cls.fields %}
 // {{ cls.full_qualified_name }}::Serialize() - auto-generated from BE_REFLECT_FIELD markers
 // Writes data to ISerializer (save/export)
 template<typename Serializer>
 inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
+{% if cls.parent_has_be_class %}
+    {{ cls.parent_full_qualified_name }}::Serialize(s);
+{% endif %}
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-{% if field.is_primitive %}
+{% if field.is_enum %}
+    {
+        auto _sv = EnumUtils<{{ field.type_name }}>::ToString({{ field.name }});
+        s.WriteAttribute("{{ xml_name }}", _sv);
+    }
+{% elif field.is_primitive %}
     s.WriteAttribute("{{ xml_name }}", {{ field.name }});
 {% else %}
     if (s.BeginObject("{{ xml_name }}")) {
@@ -248,9 +277,21 @@ inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
 // Reads data from IDeserializer (load/import)
 template<typename Deserializer>
 inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
+{% if cls.parent_has_be_class %}
+    {{ cls.parent_full_qualified_name }}::Deserialize(d);
+{% endif %}
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-{% if field.is_primitive %}
+{% if field.is_enum %}
+    {
+        eastl::string _eStr;
+        if (d.ReadAttribute("{{ xml_name }}", _eStr)) {
+            auto _r = EnumUtils<{{ field.type_name }}>::Cast(
+                eastl::string_view(_eStr.data(), _eStr.size()));
+            if (_r) {{ field.name }} = *_r;
+        }
+    }
+{% elif field.is_primitive %}
     d.ReadAttribute("{{ xml_name }}", {{ field.name }});
 {% else %}
     if (d.BeginObject("{{ xml_name }}")) {
@@ -260,7 +301,6 @@ inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
 {% endif %}
 {% endfor %}
 }
-{% endif %}
 
 {% endif %}
 {% endfor %}

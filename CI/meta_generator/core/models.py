@@ -73,10 +73,13 @@ class FieldData:
     line: int = 0
     column: int = 0
     is_primitive: bool = False  # Set by parser, used by template for SerializeAttribute vs BeginObject
+    is_enum: bool = False  # Set by parser when the field type is an enum
     
     def __post_init__(self):
         """Automatically determine if type is primitive after initialization."""
-        if not self.is_primitive:
+        if self.is_enum:
+            self.is_primitive = True  # Enums are serialized as XML attributes
+        elif not self.is_primitive:
             self.is_primitive = is_primitive_type(self.type_name)
     
     def to_dict(self) -> Dict[str, Any]:
@@ -87,6 +90,7 @@ class FieldData:
             "line": self.line,
             "column": self.column,
             "is_primitive": self.is_primitive,
+            "is_enum": self.is_enum,
         }
     
     @classmethod
@@ -98,6 +102,7 @@ class FieldData:
             line=data.get("line", 0),
             column=data.get("column", 0),
             is_primitive=data.get("is_primitive", False),
+            is_enum=data.get("is_enum", False),
         )
 
 
@@ -283,6 +288,8 @@ class FactoryBaseData:
     enum_type_name: str = ""                    # Generated enum name (e.g., "LogSinkType")
     factory_name: str = ""                      # Generated factory name (e.g., "LogSinkFactory")
     derived: List[DerivedClassData] = field(default_factory=list)  # List of derived classes
+    container_name: str = ""                    # XML container element name (e.g., "sinks")
+    element_name: str = ""                      # XML element name (e.g., "sink")
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -294,6 +301,8 @@ class FactoryBaseData:
             "enum_type_name": self.enum_type_name,
             "factory_name": self.factory_name,
             "derived": [d.to_dict() for d in self.derived],
+            "container_name": self.container_name,
+            "element_name": self.element_name,
         }
     
     @classmethod
@@ -308,6 +317,8 @@ class FactoryBaseData:
             enum_type_name=data.get("enum_type_name", ""),
             factory_name=data.get("factory_name", ""),
             derived=derived,
+            container_name=data.get("container_name", ""),
+            element_name=data.get("element_name", ""),
         )
 
 

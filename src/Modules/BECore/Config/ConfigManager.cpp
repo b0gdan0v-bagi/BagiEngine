@@ -69,6 +69,20 @@ namespace BECore {
         return _configs.find(name) != _configs.end();
     }
 
+    XmlNode ConfigManager::GetConfig(eastl::string_view name) const {
+        ASSERT(_initialized.load(std::memory_order_acquire));
+        auto it = _configs.Find(name);
+        if (it != _configs.end() && it->second.doc) {
+            return it->second.doc->GetRoot();
+        }
+        return XmlNode();
+    }
+
+    bool ConfigManager::HasConfig(eastl::string_view name) const {
+        ASSERT(_initialized.load(std::memory_order_acquire));
+        return _configs.Find(name) != _configs.end();
+    }
+
     size_t ConfigManager::GetConfigCount() const {
         ASSERT(_initialized.load(std::memory_order_acquire));
         return _configs.size();

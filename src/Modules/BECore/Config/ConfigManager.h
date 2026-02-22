@@ -49,11 +49,25 @@ namespace BECore {
         XmlNode GetConfig(PoolString name) const;
 
         /**
+         * @brief Get loaded config by name (without extension) — string_view overload
+         * @param name Config name as string_view; avoids PoolString interning overhead
+         * @return Root XmlNode or invalid node if not found
+         */
+        XmlNode GetConfig(eastl::string_view name) const;
+
+        /**
          * @brief Check if config exists
          * @param name Config name (without extension)
          * @return True if config is loaded
          */
         bool HasConfig(PoolString name) const;
+
+        /**
+         * @brief Check if config exists — string_view overload
+         * @param name Config name as string_view
+         * @return True if config is loaded
+         */
+        bool HasConfig(eastl::string_view name) const;
 
         /**
          * @brief Get number of loaded configs

@@ -9,8 +9,6 @@
 
 namespace BECore {
 
-    class IDeserializer;
-
     /**
      * @brief Log sink that outputs to platform-specific debug output
      * 
@@ -26,7 +24,6 @@ namespace BECore {
         ~OutputSink() override = default;
 
         void Initialize() override;
-        void Configure(IDeserializer& /*deserializer*/) override {}
         void Write(LogLevel level, eastl::string_view message) override;
 
     private:

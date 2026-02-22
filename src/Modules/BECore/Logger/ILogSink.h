@@ -3,8 +3,6 @@
 
 namespace BECore {
 
-    class IDeserializer;
-
     class ILogSink : public RefCountedAtomic, public SubscriptionHolder {
         BE_CLASS(ILogSink, FACTORY_BASE)
 
@@ -12,8 +10,6 @@ namespace BECore {
         ~ILogSink() override = default;
 
         virtual void Initialize() = 0;
-
-        virtual void Configure(IDeserializer& deserializer) {}
 
         virtual void Write(LogLevel level, eastl::string_view message) = 0;
 
@@ -39,8 +35,8 @@ namespace BECore {
     protected:
         ILogSink() = default;
 
-        LogLevel _minLevel = LogLevel::Debug;
-        int _priority = 0;
+        BE_REFLECT_FIELD LogLevel _minLevel = LogLevel::Debug;
+        BE_REFLECT_FIELD int _priority = 0;
     };
 
 }  // namespace BECore

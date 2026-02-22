@@ -1,9 +1,12 @@
 #include "SDLMainWindow.h"
 
 #include "BECore/Utils/ScopeGuard.h"
+#include "SDLWindowConfig.h"
 
+#include <BECore/Reflection/XmlDeserializer.h>
 #include <CoreSDL/SDLUtils.h>
 #include <Events/ApplicationEvents.h>
+#include <Generated/SDLWindowConfig.gen.hpp>
 
 namespace BECore {
 
@@ -23,38 +26,33 @@ namespace BECore {
             }
         });
 
-        std::string title;
-        int width;
-        int height;
-        SDL_WindowFlags flags = 0;
-
         XmlConfig config = XmlConfig::Create();
-
-        if (config.LoadFromVirtualPath(configPath)) {
-            auto windowNode = config.GetRoot().GetChild("window");
-            if (!windowNode) {
-                return false;
-            }
-
-            title = windowNode.ParseAttribute<std::string>("title").value_or("My SDL3 Window");
-            width = windowNode.ParseAttribute<int>("width").value_or(800);
-            height = windowNode.ParseAttribute<int>("height").value_or(600);
-
-            const auto flagsStringOpt = windowNode.ParseAttribute<eastl::string_view>("windowFlags");
-            if (flagsStringOpt && !flagsStringOpt->empty()) {
-                flags = SDLUtils::ParseWindowFlags(*flagsStringOpt);
-            }
-        } else {
+        if (!config.LoadFromVirtualPath(configPath)) {
             return false;
         }
 
-        _window = SDL_CreateWindow(title.c_str(), width, height, flags);
+        auto windowNode = config.GetRoot().GetChild("window");
+        if (!windowNode) {
+            return false;
+        }
+
+        SDLWindowConfig windowConfig;
+        XmlDeserializer deserializer;
+        deserializer.LoadFromXmlNode(windowNode);
+        windowConfig.Deserialize(deserializer);
+
+        SDL_WindowFlags flags = 0;
+        if (!windowConfig._windowFlags.empty()) {
+            flags = SDLUtils::ParseWindowFlags(eastl::string_view(windowConfig._windowFlags.data(), windowConfig._windowFlags.size()));
+        }
+
+        _window = SDL_CreateWindow(windowConfig._title.c_str(), windowConfig._width, windowConfig._height, flags);
         if (!_window) {
             return false;
         }
 
-        _width = width;
-        _height = height;
+        _width = windowConfig._width;
+        _height = windowConfig._height;
 
         Subscribe<ApplicationEvents::ApplicationCleanUpEvent, &SDLMainWindow::Destroy>(this);
 

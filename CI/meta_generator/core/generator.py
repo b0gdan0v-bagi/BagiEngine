@@ -18,6 +18,19 @@ from .models import ClassData, EnumData, FactoryBaseData, DerivedClassData
 DEFAULT_TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 
+def compute_element_name(base_name: str, first_derived_name: str) -> str:
+    """Derive XML element name from the common suffix between base and first derived class.
+
+    Examples:
+        ILogSink + ConsoleSink -> suffix 'Sink' -> 'sink'
+        IAssertHandler + DebugBreakHandler -> suffix 'Handler' -> 'handler'
+        IWidget + ClearScreenWidget -> suffix 'Widget' -> 'widget'
+    """
+    short = compute_short_name(first_derived_name, base_name)
+    suffix = first_derived_name[len(short):]
+    return suffix.lower() if suffix else base_name.lstrip('I').lower()
+
+
 def compute_short_name(class_name: str, base_name: str) -> str:
     """
     Compute a short name for enum value based on class name and base class.
@@ -166,7 +179,8 @@ class CodeGenerator:
         classes: List[ClassData], 
         enums: List[EnumData], 
         source_file: Path,
-        include_dirs: List[str] = None
+        include_dirs: List[str] = None,
+        all_classes: List[ClassData] = None
     ) -> Optional[Path]:
         """
         Generate reflection code for classes and enums.
@@ -192,9 +206,17 @@ class CodeGenerator:
         # Compute include path for the original header
         include_path = compute_include_path(str(source_file), include_dirs or [])
         
+        # Build map of all known classes for parent class lookup
+        all_classes_map = {c.name: c for c in (all_classes or [])}
+
         # Prepare class data for template (convert dataclasses to dicts)
         classes_data = []
         for cls in classes:
+            # Resolve parent class metadata for base class Deserialize() call generation
+            parent_cls = all_classes_map.get(cls.parent_class) if cls.parent_class else None
+            parent_has_be_class = parent_cls is not None and not parent_cls.is_event
+            parent_full_qualified_name = parent_cls.full_qualified_name if parent_cls else None
+
             cls_dict = {
                 'name': cls.name,
                 'qualified_name': cls.qualified_name,
@@ -205,6 +227,7 @@ class CodeGenerator:
                         'name': f.name,
                         'type_name': f.type_name,
                         'is_primitive': f.is_primitive,
+                        'is_enum': f.is_enum,
                     }
                     for f in cls.fields
                 ],
@@ -222,6 +245,8 @@ class CodeGenerator:
                 'is_factory_base': cls.is_factory_base,
                 'is_event': cls.is_event,
                 'parent_class': cls.parent_class,
+                'parent_has_be_class': parent_has_be_class,
+                'parent_full_qualified_name': parent_full_qualified_name,
             }
             classes_data.append(cls_dict)
         
@@ -287,6 +312,8 @@ class CodeGenerator:
             'namespace': factory_base.namespace,
             'enum_type_name': factory_base.enum_type_name,
             'factory_name': factory_base.factory_name,
+            'container_name': factory_base.container_name,
+            'element_name': factory_base.element_name,
             'derived': [
                 {
                     'name': d.name,
@@ -294,6 +321,7 @@ class CodeGenerator:
                     'full_name': d.full_name,
                     'source_file': d.source_file,
                     'include_path': d.include_path,
+                    'gen_hpp': Path(d.source_file).stem + '.gen.hpp',
                 }
                 for d in factory_base.derived
             ],
@@ -363,6 +391,9 @@ class CodeGenerator:
                     factory_base.derived.append(derived)
             
             if factory_base.derived:
+                element = compute_element_name(base_cls.name, factory_base.derived[0].name)
+                factory_base.element_name = element
+                factory_base.container_name = element + "s"
                 factory_bases.append(factory_base)
         
         return factory_bases

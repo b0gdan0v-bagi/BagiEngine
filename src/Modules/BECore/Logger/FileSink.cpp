@@ -1,6 +1,5 @@
 #include "FileSink.h"
 
-#include <BECore/Reflection/IDeserializer.h>
 #include <Generated/FileSink.gen.hpp>
 #include <chrono>
 #include <fmt/chrono.h>
@@ -29,10 +28,6 @@ namespace BECore {
         _file.open(_filename.c_str(), mode);
 
         _initialized = true;
-    }
-
-    void FileSink::Configure(IDeserializer& deserializer) {
-        Deserialize(deserializer);
     }
 
     void FileSink::OnLogEvent(const LogEvent& event) {

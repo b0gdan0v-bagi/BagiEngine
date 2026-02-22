@@ -1,7 +1,5 @@
 #include "ConsoleSink.h"
 
-#include <BECore/Reflection/IDeserializer.h>
-
 #include <fmt/core.h>
 #include <fmt/chrono.h>
 #include <chrono>
@@ -19,10 +17,6 @@ namespace BECore {
         Subscribe<LogEvent, &ConsoleSink::OnLogEvent>(this);
         Subscribe<FlushLogsEvent, &ConsoleSink::OnFlushEvent>(this);
         _initialized = true;
-    }
-
-    void ConsoleSink::Configure(IDeserializer& deserializer) {
-        Deserialize(deserializer);
     }
 
     void ConsoleSink::OnLogEvent(const LogEvent& event) {

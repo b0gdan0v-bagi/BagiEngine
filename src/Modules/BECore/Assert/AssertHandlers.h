@@ -5,18 +5,15 @@
 namespace BECore {
 
     /**
-     * @brief Enum defining available assert handler types
-     */
-    CORE_ENUM(AssertHandlerType, uint8_t, DebugBreak, Log, StackTrace)
-
-    /**
      * @brief Handler that triggers debug break on assertion failures
-     * 
+     *
      * Subscribes to AssertEvent and calls platform-specific debug break
      * when an assertion fails. This allows debuggers to stop at the
      * exact point of failure.
      */
     class DebugBreakHandler : public IAssertHandler {
+        BE_CLASS(DebugBreakHandler)
+
     public:
         DebugBreakHandler() = default;
         ~DebugBreakHandler() override = default;
@@ -29,14 +26,16 @@ namespace BECore {
         bool IsEnabled() const { return _enabled; }
 
     private:
-        bool _enabled = true;
+        BE_REFLECT_FIELD bool _enabled = true;
         bool _initialized = false;
     };
 
-    class AssertLogHandler : public IAssertHandler {
+    class LogHandler : public IAssertHandler {
+        BE_CLASS(LogHandler)
+
     public:
-        AssertLogHandler() = default;
-        ~AssertLogHandler() override = default;
+        LogHandler() = default;
+        ~LogHandler() override = default;
 
         void Initialize() override;
         void OnAssert(const AssertEvent& event) override;
@@ -47,12 +46,14 @@ namespace BECore {
 
     /**
      * @brief Handler that captures and prints stack traces on assertion failures
-     * 
+     *
      * Subscribes to AssertEvent and outputs a formatted stack trace to stderr
      * when an assertion fails. This helps identify the call chain leading to
      * the failure.
      */
     class StackTraceHandler : public IAssertHandler {
+        BE_CLASS(StackTraceHandler)
+
     public:
         StackTraceHandler() = default;
         ~StackTraceHandler() override = default;
@@ -87,8 +88,6 @@ namespace BECore {
         }
 
     private:
-
-        static IntrusivePtrAtomic<IAssertHandler> CreateHandlerByType(AssertHandlerType type);
 
         void SortHandlersByPriority();
 
