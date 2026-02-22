@@ -68,7 +68,7 @@ namespace BECore {
 
 ### DO
 - Use EASTL containers over std::
-- Use `PoolString` for identifiers/keys
+- Use `PoolString` for identifiers/keys; use `_intern` for string literals (e.g. `"Key"_intern`)
 - Use `ASSERT` macro (not `std::assert`)
 - Use `#pragma once`
 - Add namespace closing comments
