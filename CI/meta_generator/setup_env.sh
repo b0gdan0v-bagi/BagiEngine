@@ -9,21 +9,20 @@ echo
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 VENV_DIR="$REPO_ROOT/.venv"
+REQUIREMENTS="$SCRIPT_DIR/requirements.txt"
 
-# Check Python
-if ! command -v python3 &> /dev/null; then
-    echo "[ERROR] Python3 not found. Please install Python 3.10+"
-    echo "  Ubuntu/Debian: sudo apt install python3 python3-pip python3-venv"
-    echo "  macOS: brew install python3"
+# Check uv
+if ! command -v uv &> /dev/null; then
+    echo "[ERROR] uv not found. Install: curl -LsSf https://astral.sh/uv/install.sh | sh"
     exit 1
 fi
-echo "[OK] Python3 found: $(python3 --version)"
+echo "[OK] uv found"
 
 # Check/Create venv if not exists
 if [ ! -f "$VENV_DIR/bin/python3" ]; then
     echo
     echo "[INFO] Virtual environment not found. Creating..."
-    python3 -m venv "$VENV_DIR"
+    uv venv "$VENV_DIR"
     if [ $? -ne 0 ]; then
         echo "[ERROR] Failed to create virtual environment"
         exit 1
@@ -31,13 +30,11 @@ if [ ! -f "$VENV_DIR/bin/python3" ]; then
     echo "[OK] Virtual environment created"
 fi
 
-# Activate venv
-source "$VENV_DIR/bin/activate"
-
-# Install pip packages
+# Install pip packages from requirements.txt
 echo
 echo "Installing Python dependencies..."
-pip install clang pyqt6 jinja2 --quiet
+cd "$REPO_ROOT"
+uv pip install -r "$REQUIREMENTS"
 if [ $? -ne 0 ]; then
     echo "[ERROR] Failed to install Python packages"
     exit 1

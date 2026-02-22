@@ -17,6 +17,22 @@ git submodule update --init --recursive
 
 ## Первоначальная настройка
 
+### Установка uv
+
+Проект использует [uv](https://docs.astral.sh/uv/) для управления Python-окружением. Установите uv один раз:
+
+**Windows (PowerShell):**
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**macOS/Linux:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+После установки перезапустите терминал. Альтернатива: `pip install uv`.
+
 ### Настройка переменных окружения
 
 **Вариант 1: Автоматическое создание (рекомендуется)**
@@ -75,7 +91,7 @@ LIBCLANG_PATH=C:/Program Files/LLVM
 
 **Важно:** Лаунчер запускается в фоновом режиме (с `nohup`). Вы можете закрыть терминал после запуска - лаунчер продолжит работать.
 
-**Примечание:** При первом запуске автоматически создаётся виртуальное окружение Python и устанавливаются зависимости.
+**Примечание:** При первом запуске автоматически создаётся виртуальное окружение (`.venv`) через uv и устанавливаются зависимости.
 
 ## Возможности Launcher
 
@@ -142,9 +158,9 @@ BagiEngine/
 ├── build/Generated/     # Auto-generated reflection code
 ├── .cursorignore        # Игнорирование vendored для AI
 └── CI/
-    ├── setup_venv.bat       # Настройка venv (Windows CMD)
-    ├── setup_venv.ps1       # Настройка venv (PowerShell)
-    ├── setup_venv.sh        # Настройка venv (macOS/Linux)
+    ├── setup_venv.bat       # Настройка .venv через uv (Windows CMD)
+    ├── setup_venv.ps1       # Настройка .venv через uv (PowerShell)
+    ├── setup_venv.sh        # Настройка .venv через uv (macOS/Linux)
     ├── setup_vs.bat         # Генерация проекта VS
     ├── BagiEngine.code-workspace  # Workspace файл
     ├── launcher/            # PyQt6 приложение

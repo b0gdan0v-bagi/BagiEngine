@@ -10,21 +10,21 @@ echo.
 set "SCRIPT_DIR=%~dp0"
 set "REPO_ROOT=%SCRIPT_DIR%..\.."
 set "VENV_DIR=%REPO_ROOT%\.venv"
+set "REQUIREMENTS=%SCRIPT_DIR%requirements.txt"
 
-:: Check Python
-python --version >nul 2>&1
+:: Check uv
+where uv >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Python not found. Please install Python 3.10+
-    echo Download: https://www.python.org/downloads/
+    echo [ERROR] uv not found. Install: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
     goto :error
 )
-echo [OK] Python found
+echo [OK] uv found
 
 :: Check/Create venv if not exists
 if not exist "%VENV_DIR%\Scripts\python.exe" (
     echo.
     echo [INFO] Virtual environment not found. Creating...
-    python -m venv "%VENV_DIR%"
+    uv venv "%VENV_DIR%"
     if errorlevel 1 (
         echo [ERROR] Failed to create virtual environment
         goto :error
@@ -32,13 +32,11 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
     echo [OK] Virtual environment created
 )
 
-:: Activate venv
-call "%VENV_DIR%\Scripts\activate.bat"
-
-:: Check/Install pip packages
+:: Install pip packages from requirements.txt
 echo.
 echo Installing Python dependencies...
-pip install clang pyqt6 jinja2 --quiet
+cd /d "%REPO_ROOT%"
+uv pip install -r "%REQUIREMENTS%"
 if errorlevel 1 (
     echo [ERROR] Failed to install Python packages
     goto :error

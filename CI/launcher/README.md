@@ -80,19 +80,18 @@ If you want to see debug output or run from an existing terminal:
 
 ### First-Time Setup
 
+Requires [uv](https://docs.astral.sh/uv/) (install: `irm https://astral.sh/uv/install.ps1 | iex` on Windows, `curl -LsSf https://astral.sh/uv/install.sh | sh` on macOS/Linux).
+
 ```bash
 # Create virtual environment (first time only)
-python -m venv .venv
-
-# Activate virtual environment
-source .venv/bin/activate  # macOS/Linux
-.venv\Scripts\activate     # Windows
+uv venv .venv
 
 # Install dependencies
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 
 # Run launcher
-python -m CI.launcher.main
+.venv\Scripts\python.exe -m CI.launcher.main   # Windows
+.venv/bin/python -m CI.launcher.main           # macOS/Linux
 ```
 
 ## Build Configurations
@@ -194,7 +193,7 @@ Restart the launcher.
 
 ### Virtual environment issues
 
-Delete `.venv` folder and re-run `!start.cmd` or `!start.command`.
+Ensure **uv** is installed. Delete `.venv` folder and re-run `!start.cmd` or `!start.command` to recreate it with uv.
 
 ### CMake configure fails
 
