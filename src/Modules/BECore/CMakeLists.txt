@@ -26,6 +26,9 @@ set_target_properties(BECoreModule PROPERTIES FOLDER "Modules")
 # Другие модули могут переиспользовать его через REUSE_FROM
 target_precompile_headers(BECoreModule PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
 
+
+# Макрос должен совпадать с целями, переиспользующими PCH (MyGame с ImGui Vulkan), иначе -Wclang-cl-pch
+target_compile_definitions(BECoreModule PRIVATE IMGUI_VULKAN_AVAILABLE=1)
 # Подключаем директории с заголовками
 # PUBLIC означает, что эти директории будут доступны всем, кто линкуется с BECoreModule
 # Добавляем ${PROJECT_ROOT}/src/Modules для поддержки включений через <BECore/...>
