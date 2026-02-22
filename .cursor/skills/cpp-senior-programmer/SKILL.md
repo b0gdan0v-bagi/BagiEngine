@@ -271,6 +271,17 @@ constexpr auto SinTable = []() {
 - Repeated container reallocations
 - Cache-unfriendly access patterns
 
+## Planning and Final Tasks
+
+When creating a plan that involves a large amount of C++ changes, add at the **end of the plan** these tasks (so they are executed after code changes):
+
+1. **Apply formatting:** Run the **clang-format** skill (changed or all depending on scope of edits).
+2. **Remove redundant PCH includes:** Run the **strip-pch-includes** skill; if processing in parts, use a subfolder and run with dry-run first, then without dry-run.
+
+Example task wording in a plan:
+- "Apply code style: run clang-format skill (changed or all as appropriate)."
+- "Strip PCH includes: run strip-pch-includes skill (by subfolder if needed; use dry-run first)."
+
 ## Additional Resources
 
 - **Design patterns**: See [patterns.md](patterns.md) for detailed pattern implementations

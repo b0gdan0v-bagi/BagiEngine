@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QTextEdit, QListWidget, QListWidgetItem, QProgressBar,
     QSplitter, QFrame, QMessageBox, QCheckBox, QDialog,
     QFormLayout, QLineEdit, QDialogButtonBox, QRadioButton,
+    QFileDialog, QButtonGroup,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -280,6 +281,100 @@ class ClangFormatScopeDialog(QDialog):
         return "changed" if self.radio_changed.isChecked() else "all"
 
 
+class StripPchScopeDialog(QDialog):
+    """Dialog to choose scope for strip PCH includes: folder, changed/all, dry run."""
+
+    def __init__(self, parent=None, project_root: Optional[Path] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Strip PCH Includes")
+        self._project_root = project_root or Path()
+        self._dir_rel: Optional[str] = None  # None = all, else e.g. "src/Widgets"
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        # Folder selection
+        layout.addWidget(QLabel("Limit to folder:"))
+        folder_layout = QHBoxLayout()
+        self.radio_all = QRadioButton("All (src/, config/)")
+        self.radio_all.setChecked(True)
+        self.radio_all.toggled.connect(self._on_folder_choice_changed)
+        folder_layout.addWidget(self.radio_all)
+        layout.addLayout(folder_layout)
+
+        self.radio_dir = QRadioButton("Choose folder...")
+        self.radio_dir.toggled.connect(self._on_folder_choice_changed)
+        folder_layout2 = QHBoxLayout()
+        folder_layout2.addWidget(self.radio_dir)
+        self._dir_label = QLabel("")
+        self._dir_label.setStyleSheet("color: gray;")
+        folder_layout2.addWidget(self._dir_label, 1)
+        self._browse_btn = QPushButton("Browse...")
+        self._browse_btn.clicked.connect(self._browse_folder)
+        self._browse_btn.setEnabled(False)
+        folder_layout2.addWidget(self._browse_btn)
+        layout.addLayout(folder_layout2)
+
+        # Scope
+        layout.addWidget(QLabel("Scope:"))
+        self.radio_changed = QRadioButton("Only changed files (git)")
+        self.radio_changed.setChecked(True)
+        layout.addWidget(self.radio_changed)
+        self.radio_scope_all = QRadioButton("All files")
+        layout.addWidget(self.radio_scope_all)
+
+        # Separate exclusive groups so folder and scope choices are independent
+        self._folder_group = QButtonGroup(self)
+        self._folder_group.addButton(self.radio_all)
+        self._folder_group.addButton(self.radio_dir)
+        self._scope_group = QButtonGroup(self)
+        self._scope_group.addButton(self.radio_changed)
+        self._scope_group.addButton(self.radio_scope_all)
+
+        # Dry run
+        self._dry_run_cb = QCheckBox("Dry run (report only, do not modify files)")
+        layout.addWidget(self._dry_run_cb)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _on_folder_choice_changed(self):
+        self._browse_btn.setEnabled(self.radio_dir.isChecked())
+        if not self.radio_dir.isChecked():
+            self._dir_label.setText("")
+
+    def _browse_folder(self):
+        start = str(self._project_root) if self._project_root else ""
+        path = QFileDialog.getExistingDirectory(self, "Select folder (under src/ or config/)", start)
+        if not path:
+            return
+        try:
+            rel = Path(path).relative_to(self._project_root)
+        except ValueError:
+            return
+        rel_str = str(rel).replace("\\", "/")
+        if rel_str.startswith("src/") or rel_str.startswith("config/") or rel_str in ("src", "config"):
+            self._dir_rel = rel_str
+            self._dir_label.setText(rel_str)
+        else:
+            QMessageBox.warning(
+                self,
+                "Invalid folder",
+                "Please select a folder under src/ or config/.",
+            )
+
+    def get_options(self) -> dict:
+        """Return dict with dir_rel (str | None), scope (str), dry_run (bool)."""
+        dir_rel = self._dir_rel if self.radio_dir.isChecked() and self._dir_rel else None
+        scope = "changed" if self.radio_changed.isChecked() else "all"
+        return {"dir_rel": dir_rel, "scope": scope, "dry_run": self._dry_run_cb.isChecked()}
+
+
 class ClangFormatWorker(QThread):
     """Worker thread that runs format_sources.py with streaming output."""
 
@@ -295,6 +390,48 @@ class ClangFormatWorker(QThread):
     def run(self):
         flag = "--changed" if self._scope == "changed" else "--all"
         cmd = [sys.executable, str(self._script_path), flag]
+        creationflags = (
+            subprocess.CREATE_NO_WINDOW if get_current_platform() == Platform.WINDOWS else 0
+        )
+        try:
+            process = subprocess.Popen(
+                cmd,
+                cwd=str(self._project_root),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                creationflags=creationflags,
+            )
+            for line in iter(process.stdout.readline, ""):
+                if line:
+                    self.output_received.emit(line.rstrip("\r\n"))
+            process.wait()
+            self.finished_signal.emit(process.returncode == 0)
+        except Exception as e:
+            self.output_received.emit(f"Error: {e}")
+            self.finished_signal.emit(False)
+
+
+class StripPchWorker(QThread):
+    """Worker thread that runs strip_pch_includes.py with streaming output."""
+
+    output_received = pyqtSignal(str)
+    finished_signal = pyqtSignal(bool)  # success
+
+    def __init__(self, project_root: Path, script_path: Path, options: dict):
+        super().__init__()
+        self._project_root = project_root
+        self._script_path = script_path
+        self._options = options
+
+    def run(self):
+        cmd = [sys.executable, str(self._script_path)]
+        cmd.append("--changed" if self._options.get("scope") == "changed" else "--all")
+        if self._options.get("dir_rel"):
+            cmd.extend(["--dir", self._options["dir_rel"]])
+        if self._options.get("dry_run"):
+            cmd.append("--dry-run")
         creationflags = (
             subprocess.CREATE_NO_WINDOW if get_current_platform() == Platform.WINDOWS else 0
         )
@@ -629,6 +766,12 @@ class MainWindow(QMainWindow):
         self._clang_format_btn.setToolTip("Apply .clang-format to changed or all sources")
         self._clang_format_btn.clicked.connect(self._run_clang_format)
         layout.addWidget(self._clang_format_btn)
+
+        # Strip PCH includes button
+        self._strip_pch_btn = QPushButton("Strip PCH includes")
+        self._strip_pch_btn.setToolTip("Remove #include lines already in PCH; optional folder scope")
+        self._strip_pch_btn.clicked.connect(self._run_strip_pch)
+        layout.addWidget(self._strip_pch_btn)
         
         # Settings button
         btn = QPushButton("Settings")
@@ -1021,6 +1164,32 @@ class MainWindow(QMainWindow):
         """Re-enable Clang-Format button and log result."""
         self._clang_format_btn.setEnabled(True)
         self._log("Clang-Format: " + ("completed successfully." if success else "finished with errors."))
+
+    def _run_strip_pch(self):
+        """Show scope dialog and run strip_pch_includes.py with streaming output."""
+        script_path = self.project_root / "CI" / "scripts" / "strip_pch_includes.py"
+        if not script_path.exists():
+            QMessageBox.warning(
+                self,
+                "Strip PCH Includes Not Found",
+                f"Script not found:\n{script_path}",
+            )
+            return
+        dialog = StripPchScopeDialog(self, self.project_root)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        options = dialog.get_options()
+        self._strip_pch_btn.setEnabled(False)
+        self._log("Strip PCH includes: starting...")
+        self._strip_pch_worker = StripPchWorker(self.project_root, script_path, options)
+        self._strip_pch_worker.output_received.connect(self._log)
+        self._strip_pch_worker.finished_signal.connect(self._on_strip_pch_finished)
+        self._strip_pch_worker.start()
+
+    def _on_strip_pch_finished(self, success: bool):
+        """Re-enable Strip PCH includes button and log result."""
+        self._strip_pch_btn.setEnabled(True)
+        self._log("Strip PCH includes: " + ("completed successfully." if success else "finished with errors."))
 
     def _open_meta_generator(self):
         """Open Meta-Generator GUI for LLVM configuration."""
