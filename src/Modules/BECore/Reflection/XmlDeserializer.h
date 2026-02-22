@@ -21,7 +21,7 @@ namespace BECore {
      * int32_t health;
      * deserializer.ReadAttribute("health", health);
      * deserializer.EndObject();
-     * 
+     *
      * if (deserializer.HasErrors()) {
      *     for (const auto& err : deserializer.GetErrors()) {
      *         LOG_ERROR("Error: {}", err.errorMessage);
@@ -55,9 +55,9 @@ namespace BECore {
 
         /**
          * @brief Load XML from virtual path
-         * 
+         *
          * Resolves path via CoreManager::GetFileSystem() and loads the file.
-         * 
+         *
          * @param virtualPath Virtual path (e.g., "config/game.xml")
          * @return true on success
          */
@@ -72,9 +72,9 @@ namespace BECore {
 
         /**
          * @brief Position deserializer at the given XmlNode
-         * 
+         *
          * Allows using XmlDeserializer with nodes obtained from XmlConfig/ConfigManager.
-         * 
+         *
          * @param node XmlNode to position at
          * @return true on success
          */
@@ -118,6 +118,8 @@ namespace BECore {
 
         bool BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) override;
         void EndArray() override;
+        bool BeginArrayElement() override;
+        void EndArrayElement() override;
 
         // Error tracking
         bool HasErrors() const override;
@@ -142,7 +144,7 @@ namespace BECore {
 
         pugi::xml_document _document;
         eastl::vector<pugi::xml_node> _nodeStack;
-        
+
         // For array iteration
         struct ArrayContext {
             pugi::xml_node parentNode;

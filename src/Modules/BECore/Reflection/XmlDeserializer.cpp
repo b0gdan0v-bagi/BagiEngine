@@ -1,10 +1,9 @@
-#include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/XmlDeserializer.h>
 
 namespace BECore {
 
-    XmlDeserializer::XmlDeserializer() {
-    }
+    XmlDeserializer::XmlDeserializer() {}
 
     bool XmlDeserializer::LoadFromFile(const std::filesystem::path& path) {
         pugi::xml_parse_result result = _document.load_file(path.c_str());
@@ -12,7 +11,7 @@ namespace BECore {
             AddError("", "Failed to parse XML file");
             return false;
         }
-        
+
         _nodeStack.clear();
         _nodeStack.push_back(_document.document_element());
         return true;
@@ -28,15 +27,12 @@ namespace BECore {
     }
 
     bool XmlDeserializer::LoadFromString(eastl::string_view xmlContent) {
-        pugi::xml_parse_result result = _document.load_buffer(
-            xmlContent.data(), 
-            xmlContent.size()
-        );
+        pugi::xml_parse_result result = _document.load_buffer(xmlContent.data(), xmlContent.size());
         if (!result) {
             AddError("", "Failed to parse XML string");
             return false;
         }
-        
+
         _nodeStack.clear();
         _nodeStack.push_back(_document.document_element());
         return true;
@@ -48,7 +44,7 @@ namespace BECore {
             AddError("", "Invalid XmlNode");
             return false;
         }
-        
+
         _nodeStack.clear();
         _nodeStack.push_back(pugiNode);
         return true;
@@ -58,7 +54,7 @@ namespace BECore {
         if (_nodeStack.empty()) {
             return pugi::xml_node();
         }
-        
+
         std::string nameStr(name.data(), name.size());
         return _nodeStack.back().child(nameStr.c_str());
     }
@@ -67,7 +63,7 @@ namespace BECore {
         if (_nodeStack.empty()) {
             return pugi::xml_attribute();
         }
-        
+
         std::string nameStr(name.data(), name.size());
         return _nodeStack.back().attribute(nameStr.c_str());
     }
@@ -90,7 +86,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         eastl::string_view text = node.text().as_string();
         outValue = (text == "true" || text == "1");
         return true;
@@ -102,7 +98,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         outValue = static_cast<int8_t>(node.text().as_int());
         return true;
     }
@@ -113,7 +109,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         outValue = static_cast<uint8_t>(node.text().as_uint());
         return true;
     }
@@ -124,7 +120,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         outValue = static_cast<int16_t>(node.text().as_int());
         return true;
     }
@@ -135,7 +131,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         outValue = static_cast<uint16_t>(node.text().as_uint());
         return true;
     }
@@ -146,7 +142,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         outValue = node.text().as_int();
         return true;
     }
@@ -157,7 +153,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         outValue = node.text().as_uint();
         return true;
     }
@@ -168,7 +164,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         outValue = static_cast<int64_t>(node.text().as_llong());
         return true;
     }
@@ -179,7 +175,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         outValue = static_cast<uint64_t>(node.text().as_ullong());
         return true;
     }
@@ -190,7 +186,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         outValue = node.text().as_float();
         return true;
     }
@@ -201,7 +197,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         outValue = node.text().as_double();
         return true;
     }
@@ -212,7 +208,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         const char* text = node.text().as_string();
         outValue = eastl::string(text);
         return true;
@@ -224,7 +220,7 @@ namespace BECore {
             AddError(name, "Element not found");
             return false;
         }
-        
+
         const char* text = node.text().as_string();
         outValue = PoolString::Intern(eastl::string_view{text});
         return true;
@@ -240,7 +236,7 @@ namespace BECore {
             // Don't add error for missing attributes (they might be optional)
             return false;
         }
-        
+
         eastl::string_view text = attr.as_string();
         outValue = (text == "true" || text == "1");
         return true;
@@ -251,7 +247,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         outValue = static_cast<int8_t>(attr.as_int());
         return true;
     }
@@ -261,7 +257,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         outValue = static_cast<uint8_t>(attr.as_uint());
         return true;
     }
@@ -271,7 +267,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         outValue = static_cast<int16_t>(attr.as_int());
         return true;
     }
@@ -281,7 +277,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         outValue = static_cast<uint16_t>(attr.as_uint());
         return true;
     }
@@ -291,7 +287,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         outValue = attr.as_int();
         return true;
     }
@@ -301,7 +297,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         outValue = attr.as_uint();
         return true;
     }
@@ -311,7 +307,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         outValue = static_cast<int64_t>(attr.as_llong());
         return true;
     }
@@ -321,7 +317,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         outValue = static_cast<uint64_t>(attr.as_ullong());
         return true;
     }
@@ -331,7 +327,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         outValue = attr.as_float();
         return true;
     }
@@ -341,7 +337,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         outValue = attr.as_double();
         return true;
     }
@@ -351,7 +347,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         const char* text = attr.as_string();
         outValue = eastl::string(text);
         return true;
@@ -362,7 +358,7 @@ namespace BECore {
         if (!attr) {
             return false;
         }
-        
+
         const char* text = attr.as_string();
         outValue = PoolString::Intern(eastl::string_view{text});
         return true;
@@ -392,31 +388,45 @@ namespace BECore {
     // =============================================================================
 
     bool XmlDeserializer::BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) {
-        std::string nameStr(name.data(), name.size());
-        
         pugi::xml_node node = GetChild(name);
-        if (node) {
-            count = node.attribute("count").as_uint();
-            
-            // Collect child elements for iteration
-            ArrayContext ctx;
-            ctx.parentNode = node;
-            ctx.currentIndex = 0;
-            for (pugi::xml_node child : node.children()) {
-                ctx.elements.push_back(child);
-            }
-            _arrayStack.push_back(eastl::move(ctx));
-            
-            _nodeStack.push_back(node);
-            return true;
+        if (!node) {
+            return false;
         }
-        return false;
+
+        ArrayContext ctx;
+        ctx.parentNode = node;
+        ctx.currentIndex = 0;
+        for (pugi::xml_node child : node.children()) {
+            ctx.elements.push_back(child);
+        }
+        count = ctx.elements.size();
+        _arrayStack.push_back(eastl::move(ctx));
+        _nodeStack.push_back(node);
+        return true;
     }
 
     void XmlDeserializer::EndArray() {
         if (!_arrayStack.empty()) {
             _arrayStack.pop_back();
         }
+        if (_nodeStack.size() > 1) {
+            _nodeStack.pop_back();
+        }
+    }
+
+    bool XmlDeserializer::BeginArrayElement() {
+        if (_arrayStack.empty()) {
+            return false;
+        }
+        ArrayContext& ctx = _arrayStack.back();
+        if (ctx.currentIndex >= ctx.elements.size()) {
+            return false;
+        }
+        _nodeStack.push_back(ctx.elements[ctx.currentIndex++]);
+        return true;
+    }
+
+    void XmlDeserializer::EndArrayElement() {
         if (_nodeStack.size() > 1) {
             _nodeStack.pop_back();
         }

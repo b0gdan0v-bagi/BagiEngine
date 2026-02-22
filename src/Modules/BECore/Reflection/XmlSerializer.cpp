@@ -22,10 +22,10 @@ namespace BECore {
         if (_nodeStack.empty()) {
             return pugi::xml_node();
         }
-        
+
         pugi::xml_node parent = _nodeStack.back();
         std::string nameStr(name.data(), name.size());
-        
+
         pugi::xml_node child = parent.child(nameStr.c_str());
         if (!child) {
             child = parent.append_child(nameStr.c_str());
@@ -37,10 +37,10 @@ namespace BECore {
         if (_nodeStack.empty()) {
             return pugi::xml_attribute();
         }
-        
+
         pugi::xml_node node = _nodeStack.back();
         std::string nameStr(name.data(), name.size());
-        
+
         pugi::xml_attribute attr = node.attribute(nameStr.c_str());
         if (!attr) {
             attr = node.append_attribute(nameStr.c_str());
@@ -209,19 +209,15 @@ namespace BECore {
     // =============================================================================
 
     bool XmlSerializer::BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) {
-        std::string nameStr(name.data(), name.size());
-        
         pugi::xml_node node = GetOrCreateChild(name);
-        node.append_attribute("count").set_value(static_cast<unsigned int>(count));
         _nodeStack.push_back(node);
-        
-        // Store array context for element creation
+
         ArrayContext ctx;
         ctx.parentNode = node;
         ctx.elementName = eastl::string(elementName.data(), elementName.size());
         ctx.currentIndex = 0;
-        _arrayStack.push_back(ctx);
-        
+        _arrayStack.push_back(eastl::move(ctx));
+
         return true;
     }
 
@@ -229,6 +225,23 @@ namespace BECore {
         if (!_arrayStack.empty()) {
             _arrayStack.pop_back();
         }
+        if (_nodeStack.size() > 1) {
+            _nodeStack.pop_back();
+        }
+    }
+
+    bool XmlSerializer::BeginArrayElement() {
+        if (_arrayStack.empty()) {
+            return false;
+        }
+        const ArrayContext& ctx = _arrayStack.back();
+        std::string elemName(ctx.elementName.data(), ctx.elementName.size());
+        pugi::xml_node elem = _nodeStack.back().append_child(elemName.c_str());
+        _nodeStack.push_back(elem);
+        return true;
+    }
+
+    void XmlSerializer::EndArrayElement() {
         if (_nodeStack.size() > 1) {
             _nodeStack.pop_back();
         }

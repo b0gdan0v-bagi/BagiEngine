@@ -90,6 +90,8 @@ namespace BECore {
 
         bool BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) override;
         void EndArray() override;
+        bool BeginArrayElement() override;
+        void EndArrayElement() override;
 
     private:
         /**
@@ -104,7 +106,7 @@ namespace BECore {
 
         pugi::xml_document _document;
         eastl::vector<pugi::xml_node> _nodeStack;
-        
+
         // For array iteration
         struct ArrayContext {
             pugi::xml_node parentNode;

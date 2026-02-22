@@ -1,6 +1,5 @@
 #pragma once
 
-
 namespace BECore {
 
     /**
@@ -54,6 +53,21 @@ namespace BECore {
          * @brief End the current array section
          */
         virtual void EndArray() = 0;
+
+        /**
+         * @brief Begin the next element inside a BeginArray/EndArray scope
+         *
+         * When writing: creates a new child element with the array's element name.
+         * When reading: navigates into the next child element in order.
+         *
+         * @return true if an element is available (reading) or was created (writing)
+         */
+        virtual bool BeginArrayElement() = 0;
+
+        /**
+         * @brief End the current array element
+         */
+        virtual void EndArrayElement() = 0;
 
     protected:
         IArchiveBase() = default;

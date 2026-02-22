@@ -8,6 +8,7 @@
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/MethodInfo.h>
+#include <BECore/Reflection/FieldSerializer.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/String.h>
 #include <EASTL/string_view.h>
@@ -174,13 +175,8 @@ inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
         auto _sv = EnumUtils<{{ field.type_name }}>::ToString({{ field.name }});
         s.WriteAttribute("{{ xml_name }}", _sv);
     }
-{% elif field.is_primitive %}
-    s.WriteAttribute("{{ xml_name }}", {{ field.name }});
 {% else %}
-    if (s.BeginObject("{{ xml_name }}")) {
-        {{ field.name }}.Serialize(s);
-        s.EndObject();
-    }
+    ::BECore::SerializeField(s, "{{ xml_name }}", {{ field.name }});
 {% endif %}
 {% endfor %}
 }
@@ -199,13 +195,8 @@ inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
             if (_r) {{ field.name }} = *_r;
         }
     }
-{% elif field.is_primitive %}
-    d.ReadAttribute("{{ xml_name }}", {{ field.name }});
 {% else %}
-    if (d.BeginObject("{{ xml_name }}")) {
-        {{ field.name }}.Deserialize(d);
-        d.EndObject();
-    }
+    ::BECore::DeserializeField(d, "{{ xml_name }}", {{ field.name }});
 {% endif %}
 {% endfor %}
 }
@@ -262,13 +253,8 @@ inline void {{ cls.full_qualified_name }}::Serialize(Serializer& s) const {
         auto _sv = EnumUtils<{{ field.type_name }}>::ToString({{ field.name }});
         s.WriteAttribute("{{ xml_name }}", _sv);
     }
-{% elif field.is_primitive %}
-    s.WriteAttribute("{{ xml_name }}", {{ field.name }});
 {% else %}
-    if (s.BeginObject("{{ xml_name }}")) {
-        {{ field.name }}.Serialize(s);
-        s.EndObject();
-    }
+    ::BECore::SerializeField(s, "{{ xml_name }}", {{ field.name }});
 {% endif %}
 {% endfor %}
 }
@@ -291,13 +277,8 @@ inline void {{ cls.full_qualified_name }}::Deserialize(Deserializer& d) {
             if (_r) {{ field.name }} = *_r;
         }
     }
-{% elif field.is_primitive %}
-    d.ReadAttribute("{{ xml_name }}", {{ field.name }});
 {% else %}
-    if (d.BeginObject("{{ xml_name }}")) {
-        {{ field.name }}.Deserialize(d);
-        d.EndObject();
-    }
+    ::BECore::DeserializeField(d, "{{ xml_name }}", {{ field.name }});
 {% endif %}
 {% endfor %}
 }

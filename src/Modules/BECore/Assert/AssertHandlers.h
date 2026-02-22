@@ -21,9 +21,13 @@ namespace BECore {
         void Initialize() override;
         void OnAssert(const AssertEvent& event) override;
 
-        void SetEnabled(bool enabled) { _enabled = enabled; }
+        void SetEnabled(bool enabled) {
+            _enabled = enabled;
+        }
 
-        bool IsEnabled() const { return _enabled; }
+        bool IsEnabled() const {
+            return _enabled;
+        }
 
     private:
         BE_REFLECT_FIELD bool _enabled = true;
@@ -66,14 +70,15 @@ namespace BECore {
     };
 
     class AssertHandlerManager {
+        BE_CLASS(AssertHandlerManager)
+
     public:
         AssertHandlerManager() = default;
         ~AssertHandlerManager() = default;
 
-
         void Initialize();
 
-        template<typename T>
+        template <typename T>
         T* GetHandler() {
             for (auto& handler : _handlers) {
                 if (auto* typed = dynamic_cast<T*>(handler.Get())) {
@@ -88,10 +93,9 @@ namespace BECore {
         }
 
     private:
-
         void SortHandlersByPriority();
 
-        eastl::vector<IntrusivePtrAtomic<IAssertHandler>> _handlers;
+        BE_REFLECT_FIELD eastl::vector<IntrusivePtrAtomic<IAssertHandler>> _handlers;
         bool _initialized = false;
     };
 

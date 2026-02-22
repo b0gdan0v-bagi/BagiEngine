@@ -1,11 +1,12 @@
 #include "LoggerManager.h"
 
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/ConsoleSink.h>
-
-#include <Generated/ILogSink.gen.hpp>
-#include <Generated/EnumLogSink.gen.hpp>
-
+#include <BECore/Reflection/XmlDeserializer.h>
 #include <EASTL/sort.h>
+#include <Generated/EnumLogSink.gen.hpp>
+#include <Generated/ILogSink.gen.hpp>
+#include <Generated/LoggerManager.gen.hpp>
 
 namespace BECore {
 
@@ -14,7 +15,12 @@ namespace BECore {
             return;
         }
 
-        _sinks = LogSinkFactory::LoadFromConfig("LoggerConfig");
+        auto root = CoreManager::GetConfigManager().GetConfig("LoggerConfig");
+        if (root) {
+            XmlDeserializer d;
+            d.LoadFromXmlNode(root);
+            Deserialize(d);
+        }
 
         if (_sinks.empty()) {
             // Fallback: create a default console sink if config not found or empty
@@ -31,10 +37,7 @@ namespace BECore {
     }
 
     void LoggerManager::SortSinksByPriority() {
-        eastl::sort(_sinks.begin(), _sinks.end(),
-            [](auto&& a, auto&& b) {
-                return a->GetPriority() < b->GetPriority();
-            });
+        eastl::sort(_sinks.begin(), _sinks.end(), [](auto&& a, auto&& b) { return a->GetPriority() < b->GetPriority(); });
     }
 
 }  // namespace BECore

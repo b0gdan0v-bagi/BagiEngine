@@ -3,11 +3,11 @@
 #include <BECore/Assert/PlatformDebug.h>
 #include <BECore/Assert/StackTrace.h>
 #include <BECore/GameManager/CoreManager.h>
-
-#include <Generated/IAssertHandler.gen.hpp>
-#include <Generated/EnumAssertHandler.gen.hpp>
-
+#include <BECore/Reflection/XmlDeserializer.h>
 #include <EASTL/sort.h>
+#include <Generated/AssertHandlers.gen.hpp>
+#include <Generated/EnumAssertHandler.gen.hpp>
+#include <Generated/IAssertHandler.gen.hpp>
 
 namespace BECore {
 
@@ -29,9 +29,7 @@ namespace BECore {
 
         // Always break on fatal errors and asserts
         // Expects also break if enabled
-        if (event.type == AssertType::FatalError || 
-            event.type == AssertType::Assert ||
-            event.type == AssertType::Expect) {
+        if (event.type == AssertType::FatalError || event.type == AssertType::Assert || event.type == AssertType::Expect) {
             ENGINE_DEBUG_BREAK();
         }
     }
@@ -69,10 +67,10 @@ namespace BECore {
 
         // Build the message
         eastl::string message;
-        
+
         if (event.expression) {
             if (event.message) {
-                
+
                 message = Format("{} failed: {} - {}", typeStr, event.expression, event.message);
             } else {
                 message = Format("{} failed: {}", typeStr, event.expression);
@@ -109,7 +107,7 @@ namespace BECore {
         if (event.message) {
             fprintf(stderr, "  Message: %s\n", event.message);
         }
-        
+
         // Skip 1 frame (this function itself)
         CaptureAndPrintStackTrace(1);
     }
@@ -121,7 +119,12 @@ namespace BECore {
             return;
         }
 
-        _handlers = AssertHandlerFactory::LoadFromConfig("AssertHandlersConfig");
+        auto root = CoreManager::GetConfigManager().GetConfig("AssertHandlersConfig");
+        if (root) {
+            XmlDeserializer d;
+            d.LoadFromXmlNode(root);
+            Deserialize(d);
+        }
 
         if (_handlers.empty()) {
             // Fallback: create default handlers if config not found or empty
@@ -143,10 +146,7 @@ namespace BECore {
     }
 
     void AssertHandlerManager::SortHandlersByPriority() {
-        eastl::sort(_handlers.begin(), _handlers.end(),
-            [](auto && a, auto && b) {
-                return a->GetPriority() < b->GetPriority();
-            });
+        eastl::sort(_handlers.begin(), _handlers.end(), [](auto&& a, auto&& b) { return a->GetPriority() < b->GetPriority(); });
     }
 
 }  // namespace BECore
