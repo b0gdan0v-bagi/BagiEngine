@@ -20,6 +20,7 @@ alwaysApply: true
 | Namespace | PascalCase | `BECore` |
 | Enum/Constant | PascalCase | `EventType::KeyDown` |
 | Enum definition | CORE_ENUM macro | `CORE_ENUM(State, uint8_t, Idle, Running)` |
+| PoolString literal | _intern suffix | `"Key"_intern` |
 | Template param | T, TName | `template<typename T>` |
 
 ## File Structure

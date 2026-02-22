@@ -13,6 +13,13 @@ alwaysApply: false
 
 Compile-time reflection with Python code generator (meta_generator). Auto-generates `Serialize()` (write) and `Deserialize()` (read) methods.
 
+## Codegen (meta_generator)
+
+- **Script:** `CI/meta_generator/meta_generator.py`
+- **Target config:** `CI/meta_generator/reflection_targets.json` — per target: `source_dirs`, `scan_dirs`, `include_dirs`
+- **Run:** `--target BECoreModule --project-root . --output-dir build/Generated --cache-dir build` (optionally `--settings meta_generator_settings.json`)
+- **Cache:** `metadata_cache.json` in `cache-dir`
+
 ## Architecture
 
 The serialization system uses **separate interfaces** for reading and writing:
@@ -146,6 +153,17 @@ Use `BE_CLASS(Name, FACTORY_BASE)` on base class. Include `<Generated/EnumXxx.ge
 | `Is<T>()` / `Cast<T>()` | Runtime type checking |
 | `Serialize(Serializer&) const` | Auto-generated write method |
 | `Deserialize(Deserializer&)` | Auto-generated read method |
+
+## Container and pointer serialization
+
+In `BECore/Reflection/FieldSerializer.h`, `SerializeField` / `DeserializeField` are defined for:
+
+- Types with `Serialize`/`Deserialize` — one child element per object
+- `eastl::vector<T>` — child elements with `value` attribute or `Serialize()` per element
+- `eastl::vector<IntrusivePtr<Base>>` with factory — `type` and `enabled` attributes, creation via `FactoryTraits`
+- `IntrusivePtrAtomic<T>` / `IntrusivePtrNonAtomic<T>` — one child element; null = skip
+
+Prefer these overloads in custom `Serialize`/`Deserialize` instead of manual `BeginArray`/`BeginObject` where they fit.
 
 ## Best Practices
 

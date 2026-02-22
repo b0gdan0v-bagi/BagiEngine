@@ -35,7 +35,7 @@ alwaysApply: true
 ## Code Preferences
 
 - Use EASTL containers (`eastl::vector`, `eastl::hash_map`) over `std::`
-- Use `PoolString` for identifiers and map keys
+- Use `PoolString` for identifiers and map keys; for literals use the `_intern` suffix (e.g. `"LoggerConfig"_intern` for config keys). Example: `CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern)`
 - Use `IntrusivePtr` instead of raw pointers
 - Use `ASSERT` / `EXPECT` macros (not `std::assert`)
 - Use `CORE_ENUM` macro instead of `enum class`

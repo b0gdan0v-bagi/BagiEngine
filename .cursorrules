@@ -104,3 +104,5 @@ BECore → Math → Events → TaskSystem → SDL → Application
 For plans with substantial C++ code changes, add at the end:
 - **Formatting:** Apply clang-format (see skill `clang-format`; use changed or all by scope).
 - **Includes:** If includes were added or touched, run Strip PCH includes (see skill `strip-pch-includes`); use a subfolder and dry-run first if doing in parts.
+
+CI or the launcher may run format on changed files; ensure local changes are formatted before pushing.
