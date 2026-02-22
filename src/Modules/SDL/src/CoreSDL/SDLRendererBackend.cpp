@@ -8,6 +8,10 @@
 
 #include <SDL3/SDL.h>
 
+#include <imgui.h>
+#include <backends/imgui_impl_sdl3.h>
+#include <backends/imgui_impl_sdlrenderer3.h>
+
 #include <Generated/SDLRendererBackend.gen.hpp>
 
 namespace BECore {
@@ -26,6 +30,10 @@ namespace BECore {
         Subscribe<RenderEvents::RenderClearEvent, &SDLRendererBackend::OnRenderClear>(this);
         Subscribe<RenderEvents::RenderPresentEvent, &SDLRendererBackend::OnRenderPresent>(this);
         Subscribe<RenderEvents::SetRenderDrawColorEvent, &SDLRendererBackend::OnSetRenderDrawColor>(this);
+        Subscribe<RenderEvents::ImGuiInitEvent, &SDLRendererBackend::OnImGuiInit>(this);
+        Subscribe<RenderEvents::ImGuiShutdownEvent, &SDLRendererBackend::OnImGuiShutdown>(this);
+        Subscribe<RenderEvents::ImGuiNewFrameEvent, &SDLRendererBackend::OnImGuiNewFrame>(this);
+        Subscribe<RenderEvents::ImGuiRenderEvent, &SDLRendererBackend::OnImGuiRender>(this);
         Subscribe<ApplicationEvents::ApplicationCleanUpEvent, &SDLRendererBackend::Destroy>(this);
 
         return true;
@@ -72,6 +80,37 @@ namespace BECore {
     void SDLRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {
         if (_renderer) {
             SDL_SetRenderDrawColor(_renderer, event.color.r, event.color.g, event.color.b, event.color.a);
+        }
+    }
+
+    void SDLRendererBackend::OnImGuiInit() {
+        if (!_renderer) {
+            return;
+        }
+        const auto& window = CoreManager::GetMainWindow();
+        if (!window) {
+            return;
+        }
+        auto* sdlWindow = dynamic_cast<SDLMainWindow*>(window.Get());
+        if (!sdlWindow) {
+            return;
+        }
+        ImGui_ImplSDL3_InitForSDLRenderer(sdlWindow->GetSDLWindow(), _renderer);
+        ImGui_ImplSDLRenderer3_Init(_renderer);
+    }
+
+    void SDLRendererBackend::OnImGuiShutdown() {
+        ImGui_ImplSDLRenderer3_Shutdown();
+    }
+
+    void SDLRendererBackend::OnImGuiNewFrame() {
+        ImGui_ImplSDL3_NewFrame();
+        ImGui_ImplSDLRenderer3_NewFrame();
+    }
+
+    void SDLRendererBackend::OnImGuiRender() {
+        if (_renderer) {
+            ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), _renderer);
         }
     }
 

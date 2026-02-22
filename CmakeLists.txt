@@ -381,6 +381,9 @@ add_subdirectory(src/Modules/BECore)
 add_subdirectory(src/Modules/Events)
 add_subdirectory(src/Modules/TaskSystem)
 add_subdirectory(src/Modules/SDL)
+
+# Optional: path to Vulkan SDK (Windows). If set and Lib/vulkan-1.lib exists, used for linking; else vendored external/Vulkan-Loader is used.
+set(VULKAN_SDK "C:/VulkanSDK/1.4.341.1" CACHE PATH "Path to Vulkan SDK (optional; used for loader on Windows)")
 add_subdirectory(src/Modules/Vulkan)
 
 file(GLOB_RECURSE SOURCES 
@@ -454,14 +457,19 @@ if(WIN32)
     endif()
 endif()
 
-# Копирование вендорного Vulkan Loader рядом с исполняемым файлом
+# Копирование Vulkan Loader (vulkan-1.dll) рядом с исполняемым файлом: приоритет VULKAN_SDK/Bin, иначе вендорная папка
 set(VULKAN_LOADER_ROOT "${CMAKE_SOURCE_DIR}/external/Vulkan-Loader")
 if(WIN32)
-    set(_VULKAN_RUNTIME "${VULKAN_LOADER_ROOT}/Windows/Bin/vulkan-1.dll")
-    if(EXISTS "${_VULKAN_RUNTIME}")
+    set(_VULKAN_DLL "")
+    if(VULKAN_SDK AND EXISTS "${VULKAN_SDK}/Bin/vulkan-1.dll")
+        set(_VULKAN_DLL "${VULKAN_SDK}/Bin/vulkan-1.dll")
+    elseif(EXISTS "${VULKAN_LOADER_ROOT}/Windows/Bin/vulkan-1.dll")
+        set(_VULKAN_DLL "${VULKAN_LOADER_ROOT}/Windows/Bin/vulkan-1.dll")
+    endif()
+    if(_VULKAN_DLL)
         add_custom_command(TARGET MyGame POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${_VULKAN_RUNTIME}"
+            "${_VULKAN_DLL}"
             $<TARGET_FILE_DIR:MyGame>
         )
     endif()

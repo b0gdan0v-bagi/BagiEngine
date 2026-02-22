@@ -32,6 +32,11 @@ namespace BECore {
         void OnRenderPresent();
         void OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event);
 
+        void OnImGuiInit();
+        void OnImGuiShutdown();
+        void OnImGuiNewFrame();
+        void OnImGuiRender();
+
         SDL_Renderer* _renderer = nullptr;
     };
 

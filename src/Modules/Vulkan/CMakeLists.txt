@@ -47,17 +47,20 @@ target_link_libraries(VulkanModule PUBLIC
     Vulkan::Headers
 )
 
-# Link against the vendored Vulkan loader stored in external/Vulkan-Loader/.
-# Place vulkan-1.lib + vulkan-1.dll (Windows) or libvulkan.1.dylib (macOS)
-# in the appropriate subfolder -- see external/Vulkan-Loader/README.md.
+# Link against the Vulkan loader: prefer VULKAN_SDK (e.g. C:/VulkanSDK/1.4.341.1) when set and present, else vendored external/Vulkan-Loader/.
 if(WIN32)
-    set(_VULKAN_LIB "${VULKAN_LOADER_ROOT}/Windows/Lib/vulkan-1.lib")
-    if(NOT EXISTS "${_VULKAN_LIB}")
+    set(_VULKAN_LIB_DIR "")
+    if(VULKAN_SDK AND EXISTS "${VULKAN_SDK}/Lib/vulkan-1.lib")
+        set(_VULKAN_LIB_DIR "${VULKAN_SDK}/Lib")
+    elseif(EXISTS "${VULKAN_LOADER_ROOT}/Windows/Lib/vulkan-1.lib")
+        set(_VULKAN_LIB_DIR "${VULKAN_LOADER_ROOT}/Windows/Lib")
+    endif()
+    if(NOT _VULKAN_LIB_DIR)
         message(FATAL_ERROR
-            "Vendored Vulkan loader not found: ${_VULKAN_LIB}\n"
+            "Vulkan loader not found. Set VULKAN_SDK (e.g. C:/VulkanSDK/1.4.341.1) or place vulkan-1.lib in external/Vulkan-Loader/Windows/Lib.\n"
             "See external/Vulkan-Loader/README.md for setup instructions.")
     endif()
-    target_link_directories(VulkanModule PUBLIC "${VULKAN_LOADER_ROOT}/Windows/Lib")
+    target_link_directories(VulkanModule PUBLIC "${_VULKAN_LIB_DIR}")
     target_link_libraries(VulkanModule PUBLIC vulkan-1)
 elseif(APPLE)
     set(_VULKAN_DYLIB "${VULKAN_LOADER_ROOT}/macOS/lib/libvulkan.1.dylib")

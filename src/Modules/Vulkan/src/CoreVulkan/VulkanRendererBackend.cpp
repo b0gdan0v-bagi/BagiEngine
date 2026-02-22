@@ -9,6 +9,10 @@
 
 #include <SDL3/SDL_vulkan.h>
 
+#include <imgui.h>
+#include <backends/imgui_impl_sdl3.h>
+#include <backends/imgui_impl_vulkan.h>
+
 #include <Generated/VulkanRendererBackend.gen.hpp>
 
 namespace BECore {
@@ -64,6 +68,10 @@ namespace BECore {
         Subscribe<RenderEvents::SetRenderDrawColorEvent,  &VulkanRendererBackend::OnSetRenderDrawColor>(this);
         Subscribe<RenderEvents::RenderClearEvent,         &VulkanRendererBackend::OnRenderClear>(this);
         Subscribe<RenderEvents::RenderPresentEvent,       &VulkanRendererBackend::OnRenderPresent>(this);
+        Subscribe<RenderEvents::ImGuiInitEvent,           &VulkanRendererBackend::OnImGuiInit>(this);
+        Subscribe<RenderEvents::ImGuiShutdownEvent,       &VulkanRendererBackend::OnImGuiShutdown>(this);
+        Subscribe<RenderEvents::ImGuiNewFrameEvent,       &VulkanRendererBackend::OnImGuiNewFrame>(this);
+        Subscribe<RenderEvents::ImGuiRenderEvent,         &VulkanRendererBackend::OnImGuiRender>(this);
         Subscribe<ApplicationEvents::ApplicationCleanUpEvent, &VulkanRendererBackend::Destroy>(this);
 
         LOG_INFO("VulkanRendererBackend: Initialized successfully");
@@ -256,6 +264,44 @@ namespace BECore {
 
     void VulkanRendererBackend::OnRenderPresent() {
         Present();
+    }
+
+    void VulkanRendererBackend::OnImGuiInit() {
+        const auto& window = CoreManager::GetMainWindow();
+        if (!window) {
+            return;
+        }
+        auto* sdlWindow = dynamic_cast<SDLMainWindow*>(window.Get());
+        if (!sdlWindow) {
+            return;
+        }
+        ImGui_ImplSDL3_InitForVulkan(sdlWindow->GetSDLWindow());
+
+        ImGui_ImplVulkan_InitInfo vulkanInfo{};
+        vulkanInfo.ApiVersion      = VK_API_VERSION_1_0;
+        vulkanInfo.Instance        = _device.GetInstance();
+        vulkanInfo.PhysicalDevice  = _device.GetPhysicalDevice();
+        vulkanInfo.Device          = _device.GetDevice();
+        vulkanInfo.QueueFamily     = _device.GetQueueFamilies().graphicsFamily;
+        vulkanInfo.Queue           = _device.GetGraphicsQueue();
+        vulkanInfo.MinImageCount   = kMaxFramesInFlight;
+        vulkanInfo.ImageCount      = kMaxFramesInFlight;
+        vulkanInfo.PipelineInfoMain.RenderPass  = _swapchain.GetRenderPass();
+        vulkanInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+        ImGui_ImplVulkan_Init(&vulkanInfo);
+    }
+
+    void VulkanRendererBackend::OnImGuiShutdown() {
+        ImGui_ImplVulkan_Shutdown();
+    }
+
+    void VulkanRendererBackend::OnImGuiNewFrame() {
+        ImGui_ImplSDL3_NewFrame();
+        ImGui_ImplVulkan_NewFrame();
+    }
+
+    void VulkanRendererBackend::OnImGuiRender() {
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), GetCurrentCommandBuffer());
     }
 
 }  // namespace BECore
