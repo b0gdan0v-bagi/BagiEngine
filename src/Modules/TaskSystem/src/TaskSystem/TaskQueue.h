@@ -1,17 +1,16 @@
 #pragma once
 
+#include <EASTL/deque.h>
 #include <atomic>
-#include <mutex>
 #include <condition_variable>
 #include <functional>
-
-#include <EASTL/deque.h>
+#include <mutex>
 
 namespace BECore {
 
     /**
      * TaskQueue - потокобезопасная очередь задач.
-     * 
+     *
      * Использует mutex для синхронизации и condition_variable для ожидания.
      * Поддерживает graceful shutdown.
      */
@@ -47,9 +46,7 @@ namespace BECore {
          */
         bool Pop(TaskFunc& task) {
             std::unique_lock lock(_mutex);
-            _condition.wait(lock, [this] {
-                return !_tasks.empty() || _stopped.load(std::memory_order_acquire);
-            });
+            _condition.wait(lock, [this] { return !_tasks.empty() || _stopped.load(std::memory_order_acquire); });
 
             if (_stopped.load(std::memory_order_acquire) && _tasks.empty()) {
                 return false;
@@ -136,4 +133,4 @@ namespace BECore {
         std::atomic<bool> _stopped{false};
     };
 
-} // namespace BECore
+}  // namespace BECore

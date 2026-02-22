@@ -3,12 +3,11 @@
 #include <Events/EventBase.h>
 
 namespace BECore {
-namespace ApplicationEvents {
+    namespace ApplicationEvents {
 
-    // События приложения
-    struct QuitEvent : public EventBase<QuitEvent> {};
-    struct ApplicationCleanUpEvent : public EventBase<ApplicationCleanUpEvent> {};
+        // События приложения
+        struct QuitEvent : public EventBase<QuitEvent> {};
+        struct ApplicationCleanUpEvent : public EventBase<ApplicationCleanUpEvent> {};
 
-}  // namespace ApplicationEvents
+    }  // namespace ApplicationEvents
 }  // namespace BECore
-

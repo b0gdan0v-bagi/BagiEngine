@@ -1,9 +1,9 @@
 #pragma once
 
-#include <coroutine>
-#include <variant>
-#include <expected>
 #include <TaskSystem/TaskPriority.h>
+#include <coroutine>
+#include <expected>
+#include <variant>
 
 namespace BECore {
 
@@ -22,7 +22,9 @@ namespace BECore {
          * Определён вне локального контекста, чтобы поддерживать шаблонный await_suspend.
          */
         struct FinalAwaiter {
-            bool await_ready() noexcept { return false; }
+            bool await_ready() noexcept {
+                return false;
+            }
 
             template <typename PromiseType>
             std::coroutine_handle<> await_suspend(std::coroutine_handle<PromiseType> h) noexcept {
@@ -41,7 +43,9 @@ namespace BECore {
             TaskError _error = TaskError::None;
             std::coroutine_handle<> _continuation;
 
-            auto initial_suspend() noexcept { return std::suspend_always{}; }
+            auto initial_suspend() noexcept {
+                return std::suspend_always{};
+            }
 
             FinalAwaiter final_suspend() noexcept {
                 return FinalAwaiter{};
@@ -105,21 +109,21 @@ namespace BECore {
             }
         };
 
-    } // namespace Detail
+    }  // namespace Detail
 
     /**
      * Task<T> - основной тип корутины для асинхронных операций.
-     * 
+     *
      * Представляет отложенное вычисление, которое может быть запущено
      * и ожидаемо через co_await.
-     * 
+     *
      * @tparam T Тип возвращаемого значения (void для задач без результата)
-     * 
+     *
      * @example
      * Task<int> ComputeAsync() {
      *     co_return 42;
      * }
-     * 
+     *
      * Task<void> DoWorkAsync() {
      *     int result = co_await ComputeAsync();
      *     LOG_INFO("Result: {}"_format(result));
@@ -241,6 +245,6 @@ namespace BECore {
             return Task<void>{std::coroutine_handle<TaskPromise<void>>::from_promise(*this)};
         }
 
-    } // namespace Detail
+    }  // namespace Detail
 
-} // namespace BECore
+}  // namespace BECore

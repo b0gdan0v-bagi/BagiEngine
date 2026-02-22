@@ -2,16 +2,13 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLMainWindow.h>
-
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
-#include <CoreSDL/SDLEvents.h>
-
-#include <imgui.h>
-#include <backends/imgui_impl_sdl3.h>
-
 #include <Generated/ImGuiWidget.gen.hpp>
+#include <backends/imgui_impl_sdl3.h>
+#include <imgui.h>
 
 namespace BECore {
 

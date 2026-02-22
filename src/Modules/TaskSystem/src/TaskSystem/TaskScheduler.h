@@ -1,20 +1,18 @@
 #pragma once
 
-#include <TaskSystem/TaskQueue.h>
+#include <EASTL/priority_queue.h>
+#include <EASTL/vector.h>
 #include <TaskSystem/TaskPriority.h>
+#include <TaskSystem/TaskQueue.h>
 #include <TaskSystem/ThreadPool.h>
-
 #include <chrono>
 #include <mutex>
-
-#include <EASTL/vector.h>
-#include <EASTL/priority_queue.h>
 
 namespace BECore {
 
     /**
      * TaskScheduler - планировщик задач с приоритетами и отложенным выполнением.
-     * 
+     *
      * Поддерживает:
      * - Приоритетные очереди
      * - Отложенные задачи (delayed tasks)
@@ -46,9 +44,7 @@ namespace BECore {
          * @param priority Приоритет задачи
          * @param threadType Тип потока для выполнения
          */
-        void Schedule(TaskQueue::TaskFunc task, 
-                      TaskPriority priority = TaskPriority::Normal,
-                      ThreadType threadType = ThreadType::Background);
+        void Schedule(TaskQueue::TaskFunc task, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background);
 
         /**
          * Добавляет отложенную задачу.
@@ -57,10 +53,7 @@ namespace BECore {
          * @param priority Приоритет задачи
          * @param threadType Тип потока для выполнения
          */
-        void ScheduleDelayed(TaskQueue::TaskFunc task,
-                             Duration delay,
-                             TaskPriority priority = TaskPriority::Normal,
-                             ThreadType threadType = ThreadType::Background);
+        void ScheduleDelayed(TaskQueue::TaskFunc task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background);
 
         /**
          * Обрабатывает задачи главного потока.
@@ -115,7 +108,7 @@ namespace BECore {
         void DispatchToThreadPool(TaskQueue::TaskFunc task, TaskPriority priority);
 
         ThreadPool* _threadPool = nullptr;
-        
+
         // Очередь главного потока (с приоритетами)
         eastl::priority_queue<PrioritizedTask> _mainThreadQueue;
         mutable std::mutex _mainThreadMutex;
@@ -127,4 +120,4 @@ namespace BECore {
         bool _stopped = false;
     };
 
-} // namespace BECore
+}  // namespace BECore

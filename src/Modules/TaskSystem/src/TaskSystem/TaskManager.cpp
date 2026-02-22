@@ -77,4 +77,4 @@ namespace BECore {
         return count;
     }
 
-} // namespace BECore
+}  // namespace BECore

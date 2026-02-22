@@ -1,4 +1,5 @@
 #include "Color.h"
+
 #include <Generated/Color.gen.hpp>
 
 namespace Math {
@@ -27,4 +28,3 @@ namespace Math {
     }
 
 }  // namespace Math
-

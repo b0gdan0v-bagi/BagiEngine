@@ -1,22 +1,20 @@
 #pragma once
 
-#include <TaskSystem/TaskHandle.h>
-#include <TaskSystem/CancellationToken.h>
-
-#include <mutex>
-
 #include <EASTL/vector.h>
+#include <TaskSystem/CancellationToken.h>
+#include <TaskSystem/TaskHandle.h>
+#include <mutex>
 
 namespace BECore {
 
     /**
      * TaskGroup - группа связанных задач.
-     * 
+     *
      * Позволяет управлять несколькими задачами как единым целым:
      * - Массовая отмена
      * - Ожидание завершения всех
      * - Общий CancellationToken
-     * 
+     *
      * @example
      * TaskGroup group;
      * group.Run(Task1());
@@ -107,8 +105,12 @@ namespace BECore {
         /**
          * Получает токен отмены группы.
          */
-        [[nodiscard]] CancellationToken& GetToken() { return _token; }
-        [[nodiscard]] const CancellationToken& GetToken() const { return _token; }
+        [[nodiscard]] CancellationToken& GetToken() {
+            return _token;
+        }
+        [[nodiscard]] const CancellationToken& GetToken() const {
+            return _token;
+        }
 
         /**
          * Очищает список задач.
@@ -124,4 +126,4 @@ namespace BECore {
         CancellationToken _token;
     };
 
-} // namespace BECore
+}  // namespace BECore

@@ -19,4 +19,3 @@ namespace BECore {
     };
 
 }  // namespace BECore
-

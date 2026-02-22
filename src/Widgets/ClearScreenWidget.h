@@ -1,7 +1,7 @@
 #pragma once
 
-#include <BECore/Widgets/IWidget.h>
 #include <BECore/Math/Color.h>
+#include <BECore/Widgets/IWidget.h>
 
 namespace BECore {
 
@@ -22,4 +22,3 @@ namespace BECore {
     };
 
 }  // namespace BECore
-

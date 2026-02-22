@@ -6,7 +6,7 @@ namespace BECore {
 
     /**
      * CancellationToken - токен для кооперативной отмены задач.
-     * 
+     *
      * @example
      * Task<void> MyTask(CancellationToken token) {
      *     while (!token.IsCancelled()) {
@@ -71,10 +71,9 @@ namespace BECore {
         }
 
     private:
-        explicit CancellationToken(eastl::shared_ptr<std::atomic<bool>> cancelled)
-            : _cancelled(std::move(cancelled)) {}
+        explicit CancellationToken(eastl::shared_ptr<std::atomic<bool>> cancelled) : _cancelled(std::move(cancelled)) {}
 
         eastl::shared_ptr<std::atomic<bool>> _cancelled;
     };
 
-} // namespace BECore
+}  // namespace BECore

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <BECore/Widgets/IWidget.h>
 #include <BECore/PoolString/PoolString.h>
+#include <BECore/Widgets/IWidget.h>
 #include <EASTL/string.h>
 #include <EASTL/unordered_map.h>
 #include <EASTL/vector.h>

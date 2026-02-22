@@ -1,13 +1,12 @@
 #pragma once
 
-#include <TaskSystem/TaskPriority.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskHandle.h>
-#include <TaskSystem/ThreadPool.h>
+#include <TaskSystem/TaskPriority.h>
 #include <TaskSystem/TaskScheduler.h>
-
-#include <thread>
+#include <TaskSystem/ThreadPool.h>
 #include <chrono>
+#include <thread>
 
 namespace BECore {
 
@@ -16,14 +15,14 @@ namespace BECore {
 
     /**
      * TaskManager - главный интерфейс для работы с асинхронными задачами.
-     * 
+     *
      * Предоставляет API для запуска задач, управления потоками выполнения
      * и интеграции с системой событий движка.
-     * 
+     *
      * @example
      * // Запуск простой задачи
      * auto handle = TaskManager::GetInstance().Run(MyAsyncTask());
-     * 
+     *
      * // Отложенная задача
      * TaskManager::GetInstance().RunDelayed(MyTask(), std::chrono::seconds(1));
      */
@@ -60,15 +59,15 @@ namespace BECore {
          * @return Handle для отслеживания задачи
          */
         template <typename T>
-        IntrusivePtr<TaskHandle<T>> Run(Task<T> task,
-                                         TaskPriority priority = TaskPriority::Normal,
-                                         ThreadType threadType = ThreadType::Background) {
+        IntrusivePtr<TaskHandle<T>> Run(Task<T> task, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background) {
             auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
-            
+
             auto* handlePtr = handle.Get();
-            _scheduler.Schedule([handlePtr]() {
-                handlePtr->Start();  // Start() сам вызывает Resume()
-            }, priority, threadType);
+            _scheduler.Schedule(
+                [handlePtr]() {
+                    handlePtr->Start();  // Start() сам вызывает Resume()
+                },
+                priority, threadType);
 
             return handle;
         }
@@ -77,16 +76,15 @@ namespace BECore {
          * Запускает отложенную задачу.
          */
         template <typename T>
-        IntrusivePtr<TaskHandle<T>> RunDelayed(Task<T> task,
-                                                Duration delay,
-                                                TaskPriority priority = TaskPriority::Normal,
-                                                ThreadType threadType = ThreadType::Background) {
+        IntrusivePtr<TaskHandle<T>> RunDelayed(Task<T> task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background) {
             auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
-            
+
             auto* handlePtr = handle.Get();
-            _scheduler.ScheduleDelayed([handlePtr]() {
-                handlePtr->Start();  // Start() сам вызывает Resume()
-            }, delay, priority, threadType);
+            _scheduler.ScheduleDelayed(
+                [handlePtr]() {
+                    handlePtr->Start();  // Start() сам вызывает Resume()
+                },
+                delay, priority, threadType);
 
             return handle;
         }
@@ -95,8 +93,7 @@ namespace BECore {
          * Запускает задачу в главном потоке.
          */
         template <typename T>
-        IntrusivePtr<TaskHandle<T>> RunOnMainThread(Task<T> task,
-                                                     TaskPriority priority = TaskPriority::Normal) {
+        IntrusivePtr<TaskHandle<T>> RunOnMainThread(Task<T> task, TaskPriority priority = TaskPriority::Normal) {
             return Run(std::move(task), priority, ThreadType::MainThread);
         }
 
@@ -107,7 +104,9 @@ namespace BECore {
         /**
          * Проверяет, инициализирована ли система задач.
          */
-        [[nodiscard]] bool IsInitialized() const { return _isInitialized; }
+        [[nodiscard]] bool IsInitialized() const {
+            return _isInitialized;
+        }
 
         /**
          * Проверяет, выполняется ли код в главном потоке.
@@ -127,12 +126,16 @@ namespace BECore {
         /**
          * Получает ThreadPool (для низкоуровневого доступа).
          */
-        [[nodiscard]] ThreadPool* GetThreadPool() { return _threadPool.get(); }
+        [[nodiscard]] ThreadPool* GetThreadPool() {
+            return _threadPool.get();
+        }
 
         /**
          * Получает TaskScheduler (для низкоуровневого доступа).
          */
-        [[nodiscard]] TaskScheduler* GetScheduler() { return &_scheduler; }
+        [[nodiscard]] TaskScheduler* GetScheduler() {
+            return &_scheduler;
+        }
 
     private:
         bool _isInitialized = false;
@@ -142,4 +145,4 @@ namespace BECore {
         TaskScheduler _scheduler;
     };
 
-} // namespace BECore
+}  // namespace BECore

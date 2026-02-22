@@ -2,17 +2,14 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <CoreSDL/SDLMainWindow.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
-#include <CoreSDL/SDLMainWindow.h>
-
+#include <Generated/SDLRendererBackend.gen.hpp>
 #include <SDL3/SDL.h>
-
-#include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_sdlrenderer3.h>
-
-#include <Generated/SDLRendererBackend.gen.hpp>
+#include <imgui.h>
 
 namespace BECore {
 
@@ -46,11 +43,9 @@ namespace BECore {
         }
     }
 
-    void SDLRendererBackend::BeginFrame() {
-    }
+    void SDLRendererBackend::BeginFrame() {}
 
-    void SDLRendererBackend::EndFrame() {
-    }
+    void SDLRendererBackend::EndFrame() {}
 
     void SDLRendererBackend::Clear(const Color& color) {
         if (_renderer) {

@@ -1,22 +1,20 @@
 #pragma once
 
-#include <TaskSystem/TaskQueue.h>
-
-#include <thread>
-#include <atomic>
-
-#include <EASTL/vector.h>
 #include <EASTL/unique_ptr.h>
+#include <EASTL/vector.h>
+#include <TaskSystem/TaskQueue.h>
+#include <atomic>
+#include <thread>
 
 namespace BECore {
 
     /**
      * ThreadPool - пул рабочих потоков с work stealing.
-     * 
+     *
      * Каждый поток имеет свою локальную очередь задач.
      * При отсутствии задач в локальной очереди поток пытается
      * украсть задачу из очередей других потоков.
-     * 
+     *
      * @example
      * ThreadPool pool(4);  // 4 рабочих потока
      * pool.Submit([] { DoWork(); });
@@ -66,7 +64,9 @@ namespace BECore {
         /**
          * Возвращает количество рабочих потоков.
          */
-        [[nodiscard]] size_t GetThreadCount() const { return _threads.size(); }
+        [[nodiscard]] size_t GetThreadCount() const {
+            return _threads.size();
+        }
 
         /**
          * Возвращает общее количество задач во всех очередях.
@@ -83,4 +83,4 @@ namespace BECore {
         std::atomic<size_t> _nextQueue{0};
     };
 
-} // namespace BECore
+}  // namespace BECore

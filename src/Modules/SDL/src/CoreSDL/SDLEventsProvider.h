@@ -21,5 +21,4 @@ namespace BECore {
         void ConvertSDLEvent(const SDL_Event& sdlEvent);
     };
 
-} // namespace BECore
-
+}  // namespace BECore

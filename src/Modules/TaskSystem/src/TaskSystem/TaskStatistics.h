@@ -1,16 +1,15 @@
 #pragma once
 
+#include <EASTL/string.h>
 #include <atomic>
 #include <chrono>
 #include <mutex>
-
-#include <EASTL/string.h>
 
 namespace BECore {
 
     /**
      * TaskStatistics - статистика и метрики системы задач.
-     * 
+     *
      * Собирает информацию о:
      * - Количестве выполненных задач
      * - Времени выполнения
@@ -24,18 +23,18 @@ namespace BECore {
             uint64_t totalTasksCompleted = 0;
             uint64_t totalTasksCancelled = 0;
             uint64_t totalTasksFailed = 0;
-            
+
             uint64_t mainThreadTasksCompleted = 0;
             uint64_t backgroundTasksCompleted = 0;
-            
+
             double averageTaskDurationMs = 0.0;
             double maxTaskDurationMs = 0.0;
             double minTaskDurationMs = 0.0;
-            
+
             size_t currentPendingTasks = 0;
             size_t currentMainThreadQueueSize = 0;
             size_t currentDelayedTaskCount = 0;
-            
+
             size_t workerThreadCount = 0;
         };
 
@@ -51,7 +50,7 @@ namespace BECore {
 
         void RecordTaskCompleted(bool isMainThread, double durationMs) {
             _totalTasksCompleted.fetch_add(1, std::memory_order_relaxed);
-            
+
             if (isMainThread) {
                 _mainThreadTasksCompleted.fetch_add(1, std::memory_order_relaxed);
             } else {
@@ -75,12 +74,12 @@ namespace BECore {
 
         Snapshot GetSnapshot() const {
             Snapshot snapshot;
-            
+
             snapshot.totalTasksScheduled = _totalTasksScheduled.load(std::memory_order_relaxed);
             snapshot.totalTasksCompleted = _totalTasksCompleted.load(std::memory_order_relaxed);
             snapshot.totalTasksCancelled = _totalTasksCancelled.load(std::memory_order_relaxed);
             snapshot.totalTasksFailed = _totalTasksFailed.load(std::memory_order_relaxed);
-            
+
             snapshot.mainThreadTasksCompleted = _mainThreadTasksCompleted.load(std::memory_order_relaxed);
             snapshot.backgroundTasksCompleted = _backgroundTasksCompleted.load(std::memory_order_relaxed);
 
@@ -117,22 +116,17 @@ namespace BECore {
         eastl::string ToString() const {
             auto snapshot = GetSnapshot();
             return "[TaskStatistics] Scheduled: {}, Completed: {}, Cancelled: {}, Failed: {}, AvgDuration: {:.2f}ms"_format(
-                snapshot.totalTasksScheduled,
-                snapshot.totalTasksCompleted,
-                snapshot.totalTasksCancelled,
-                snapshot.totalTasksFailed,
-                snapshot.averageTaskDurationMs
-            );
+                snapshot.totalTasksScheduled, snapshot.totalTasksCompleted, snapshot.totalTasksCancelled, snapshot.totalTasksFailed, snapshot.averageTaskDurationMs);
         }
 
     private:
         void UpdateDurationStats(double durationMs) {
             std::lock_guard lock(_durationMutex);
-            
+
             _totalDurationMs += durationMs;
             _durationCount++;
             _averageDurationMs = _totalDurationMs / static_cast<double>(_durationCount);
-            
+
             if (durationMs > _maxDurationMs) {
                 _maxDurationMs = durationMs;
             }
@@ -158,4 +152,4 @@ namespace BECore {
         double _totalDurationMs = 0.0;
     };
 
-} // namespace BECore
+}  // namespace BECore

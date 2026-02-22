@@ -1,9 +1,8 @@
 #pragma once
 
 #include <TaskSystem/TaskPriority.h>
-
-#include <coroutine>
 #include <chrono>
+#include <coroutine>
 #include <functional>
 
 namespace BECore {
@@ -13,7 +12,7 @@ namespace BECore {
 
     /**
      * MainThreadAwaiter - переключение на главный поток.
-     * 
+     *
      * @example
      * co_await SwitchToMainThread();
      */
@@ -25,21 +24,23 @@ namespace BECore {
 
     /**
      * BackgroundAwaiter - переключение на фоновый поток.
-     * 
+     *
      * @example
      * co_await SwitchToBackground();
      */
     struct BackgroundAwaiter {
         TaskPriority priority = TaskPriority::Normal;
 
-        bool await_ready() const noexcept { return false; }
+        bool await_ready() const noexcept {
+            return false;
+        }
         void await_suspend(std::coroutine_handle<> handle) noexcept;
         void await_resume() const noexcept {}
     };
 
     /**
      * DelayAwaiter - задержка на указанное время.
-     * 
+     *
      * @example
      * co_await Delay(std::chrono::milliseconds(100));
      */
@@ -47,19 +48,23 @@ namespace BECore {
         std::chrono::steady_clock::duration delay;
         ThreadType threadType = ThreadType::Background;
 
-        bool await_ready() const noexcept { return delay.count() <= 0; }
+        bool await_ready() const noexcept {
+            return delay.count() <= 0;
+        }
         void await_suspend(std::coroutine_handle<> handle) noexcept;
         void await_resume() const noexcept {}
     };
 
     /**
      * YieldAwaiter - уступает выполнение другим задачам.
-     * 
+     *
      * @example
      * co_await Yield();
      */
     struct YieldAwaiter {
-        bool await_ready() const noexcept { return false; }
+        bool await_ready() const noexcept {
+            return false;
+        }
         void await_suspend(std::coroutine_handle<> handle) noexcept;
         void await_resume() const noexcept {}
     };
@@ -86,24 +91,21 @@ namespace BECore {
      * Задержка выполнения.
      */
     template <typename Rep, typename Period>
-    DelayAwaiter Delay(std::chrono::duration<Rep, Period> duration,
-                       ThreadType threadType = ThreadType::Background) {
+    DelayAwaiter Delay(std::chrono::duration<Rep, Period> duration, ThreadType threadType = ThreadType::Background) {
         return {std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration), threadType};
     }
 
     /**
      * Задержка в миллисекундах.
      */
-    inline DelayAwaiter DelayMs(int64_t milliseconds,
-                                 ThreadType threadType = ThreadType::Background) {
+    inline DelayAwaiter DelayMs(int64_t milliseconds, ThreadType threadType = ThreadType::Background) {
         return Delay(std::chrono::milliseconds(milliseconds), threadType);
     }
 
     /**
      * Задержка в секундах.
      */
-    inline DelayAwaiter DelaySec(double seconds,
-                                  ThreadType threadType = ThreadType::Background) {
+    inline DelayAwaiter DelaySec(double seconds, ThreadType threadType = ThreadType::Background) {
         return Delay(std::chrono::duration<double>(seconds), threadType);
     }
 
@@ -114,4 +116,4 @@ namespace BECore {
         return {};
     }
 
-} // namespace BECore
+}  // namespace BECore

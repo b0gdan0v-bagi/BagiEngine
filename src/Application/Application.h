@@ -14,7 +14,6 @@ namespace BECore {
         void Run() const;
 
     private:
-
         void StopApplication();
         static void Cleanup();
 

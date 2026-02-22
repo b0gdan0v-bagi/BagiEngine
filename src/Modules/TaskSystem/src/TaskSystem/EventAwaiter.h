@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Events/EventBase.h>
-
 #include <coroutine>
 #include <optional>
 
@@ -9,12 +8,12 @@ namespace BECore {
 
     /**
      * EventAwaiter<T> - awaitable для ожидания события.
-     * 
+     *
      * Позволяет использовать co_await для ожидания конкретного события.
      * При получении события корутина возобновляется с данными события.
-     * 
+     *
      * @tparam EventType Тип события (должен наследовать EventBase<EventType>)
-     * 
+     *
      * @example
      * Task<void> HandleInput() {
      *     auto event = co_await WaitForEvent<KeyPressEvent>();
@@ -27,17 +26,15 @@ namespace BECore {
         EventAwaiter() = default;
 
         bool await_ready() const noexcept {
-            return false; // Всегда suspend для ожидания события
+            return false;  // Всегда suspend для ожидания события
         }
 
         void await_suspend(std::coroutine_handle<> handle) noexcept {
             _handle = handle;
-            
+
             // Подписываемся на событие
             // Используем лямбду с захватом this
-            _connection = entt::scoped_connection{
-                GetDispatcher().sink<EventType>().connect<&EventAwaiter::OnEvent>(this)
-            };
+            _connection = entt::scoped_connection{GetDispatcher().sink<EventType>().connect<&EventAwaiter::OnEvent>(this)};
         }
 
         EventType await_resume() noexcept {
@@ -58,8 +55,8 @@ namespace BECore {
 
         void OnEvent(const EventType& event) {
             _receivedEvent = event;
-            _connection.release(); // Отписываемся после получения
-            
+            _connection.release();  // Отписываемся после получения
+
             if (_handle) {
                 _handle.resume();
             }
@@ -72,10 +69,10 @@ namespace BECore {
 
     /**
      * Ожидает получение события указанного типа.
-     * 
+     *
      * @tparam EventType Тип события
      * @return Awaitable, который вернет полученное событие
-     * 
+     *
      * @example
      * auto keyEvent = co_await WaitForEvent<KeyPressEvent>();
      */
@@ -86,7 +83,7 @@ namespace BECore {
 
     /**
      * EventAwaiterWithTimeout - ожидание события с таймаутом.
-     * 
+     *
      * @tparam EventType Тип события
      */
     template <typename EventType>
@@ -104,12 +101,10 @@ namespace BECore {
         void await_suspend(std::coroutine_handle<> handle) noexcept {
             _handle = handle;
             _startTime = std::chrono::steady_clock::now();
-            
+
             // Подписываемся на событие
-            _connection = entt::scoped_connection{
-                GetDispatcher().sink<EventType>().connect<&EventAwaiterWithTimeout::OnEvent>(this)
-            };
-            
+            _connection = entt::scoped_connection{GetDispatcher().sink<EventType>().connect<&EventAwaiterWithTimeout::OnEvent>(this)};
+
             // TODO: Планируем таймаут через TaskScheduler
         }
 
@@ -127,7 +122,7 @@ namespace BECore {
             if (!_timedOut) {
                 _receivedEvent = event;
                 _connection.release();
-                
+
                 if (_handle) {
                     _handle.resume();
                 }
@@ -138,7 +133,7 @@ namespace BECore {
             if (!_receivedEvent.has_value()) {
                 _timedOut = true;
                 _connection.release();
-                
+
                 if (_handle) {
                     _handle.resume();
                 }
@@ -158,11 +153,8 @@ namespace BECore {
      * Возвращает std::nullopt при истечении таймаута.
      */
     template <typename EventType, typename Rep, typename Period>
-    EventAwaiterWithTimeout<EventType> WaitForEventWithTimeout(
-        std::chrono::duration<Rep, Period> timeout) {
-        return EventAwaiterWithTimeout<EventType>{
-            std::chrono::duration_cast<std::chrono::steady_clock::duration>(timeout)
-        };
+    EventAwaiterWithTimeout<EventType> WaitForEventWithTimeout(std::chrono::duration<Rep, Period> timeout) {
+        return EventAwaiterWithTimeout<EventType>{std::chrono::duration_cast<std::chrono::steady_clock::duration>(timeout)};
     }
 
-} // namespace BECore
+}  // namespace BECore

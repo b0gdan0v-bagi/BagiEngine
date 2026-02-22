@@ -5,7 +5,6 @@
 #include <BECore/RefCounted/New.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
-
 #include <Generated/EnumRenderer.gen.hpp>
 
 namespace BECore {
@@ -22,9 +21,7 @@ namespace BECore {
         }
         CoreManager::GetInstance().GetMainWindowManager().SetMainWindow(window);
 
-        const auto rendererType = configNode
-            .ParseAttribute<RendererType>("renderer")
-            .value_or(RendererType::SDLRendererBackend);
+        const auto rendererType = configNode.ParseAttribute<RendererType>("renderer").value_or(RendererType::SDLRendererBackend);
 
         auto renderer = RendererFactory::Create(rendererType);
         if (!renderer) {

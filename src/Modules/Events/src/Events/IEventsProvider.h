@@ -18,5 +18,4 @@ namespace BECore {
         virtual void Destroy() = 0;
     };
 
-} // namespace BECore
-
+}  // namespace BECore

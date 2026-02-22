@@ -55,7 +55,7 @@ namespace BECore {
 
     void ThreadPool::Shutdown() {
         if (_stopped.exchange(true, std::memory_order_acq_rel)) {
-            return; // Already stopped
+            return;  // Already stopped
         }
 
         LOG_INFO("[ThreadPool] Shutting down...");
@@ -125,4 +125,4 @@ namespace BECore {
         return false;
     }
 
-} // namespace BECore
+}  // namespace BECore

@@ -2,7 +2,6 @@
 
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskPriority.h>
-
 #include <atomic>
 #include <functional>
 #include <thread>
@@ -35,16 +34,24 @@ namespace BECore {
         /**
          * Получает статус задачи.
          */
-        [[nodiscard]] TaskStatus GetStatus() const { return _status.load(std::memory_order_acquire); }
+        [[nodiscard]] TaskStatus GetStatus() const {
+            return _status.load(std::memory_order_acquire);
+        }
 
         /**
          * Получает ошибку задачи.
          */
-        [[nodiscard]] TaskError GetError() const { return _error.load(std::memory_order_acquire); }
+        [[nodiscard]] TaskError GetError() const {
+            return _error.load(std::memory_order_acquire);
+        }
 
         // Awaitable interface для co_await TaskHandleBase
-        bool await_ready() const noexcept { return IsDone(); }
-        void await_suspend(std::coroutine_handle<> continuation) noexcept { _continuation = continuation; }
+        bool await_ready() const noexcept {
+            return IsDone();
+        }
+        void await_suspend(std::coroutine_handle<> continuation) noexcept {
+            _continuation = continuation;
+        }
         void await_resume() noexcept {}
 
     protected:
@@ -65,15 +72,15 @@ namespace BECore {
 
     /**
      * TaskHandle<T> - handle для отслеживания и управления задачей.
-     * 
+     *
      * Позволяет:
      * - Проверять статус задачи
      * - Ожидать завершения
      * - Получать результат
      * - Отменять выполнение
-     * 
+     *
      * @tparam T Тип результата задачи
-     * 
+     *
      * @example
      * TaskHandle<int> handle = TaskManager::Run(MyTask());
      * // ... делаем что-то еще ...
@@ -110,7 +117,7 @@ namespace BECore {
                 // Spin wait (TODO: replace with proper synchronization)
                 std::this_thread::yield();
             }
-            
+
             // Обновляем статус после завершения
             if (IsDone() && GetStatus() == TaskStatus::Running) {
                 SetStatus(TaskStatus::Completed);
@@ -152,8 +159,12 @@ namespace BECore {
         // Task access (для внутреннего использования)
         // =================================================================
 
-        Task<T>& GetTask() { return _task; }
-        const Task<T>& GetTask() const { return _task; }
+        Task<T>& GetTask() {
+            return _task;
+        }
+        const Task<T>& GetTask() const {
+            return _task;
+        }
 
         /**
          * Запускает выполнение задачи.
@@ -191,5 +202,4 @@ namespace BECore {
         std::atomic<bool> _cancelled{false};
     };
 
-
-} // namespace BECore
+}  // namespace BECore

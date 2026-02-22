@@ -15,9 +15,7 @@ namespace BECore {
     void MainThreadAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
         auto* scheduler = TaskManager::GetInstance().GetScheduler();
         if (scheduler) {
-            scheduler->Schedule([handle]() mutable {
-                handle.resume();
-            }, TaskPriority::Normal, ThreadType::MainThread);
+            scheduler->Schedule([handle]() mutable { handle.resume(); }, TaskPriority::Normal, ThreadType::MainThread);
         }
     }
 
@@ -28,9 +26,7 @@ namespace BECore {
     void BackgroundAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
         auto* scheduler = TaskManager::GetInstance().GetScheduler();
         if (scheduler) {
-            scheduler->Schedule([handle]() mutable {
-                handle.resume();
-            }, priority, ThreadType::Background);
+            scheduler->Schedule([handle]() mutable { handle.resume(); }, priority, ThreadType::Background);
         }
     }
 
@@ -41,9 +37,7 @@ namespace BECore {
     void DelayAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
         auto* scheduler = TaskManager::GetInstance().GetScheduler();
         if (scheduler) {
-            scheduler->ScheduleDelayed([handle]() mutable {
-                handle.resume();
-            }, delay, TaskPriority::Normal, threadType);
+            scheduler->ScheduleDelayed([handle]() mutable { handle.resume(); }, delay, TaskPriority::Normal, threadType);
         }
     }
 
@@ -54,17 +48,13 @@ namespace BECore {
     void YieldAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
         auto& taskManager = TaskManager::GetInstance();
         auto* scheduler = taskManager.GetScheduler();
-        
+
         if (scheduler) {
             // Планируем продолжение в том же типе потока
-            ThreadType threadType = taskManager.IsMainThread() 
-                ? ThreadType::MainThread 
-                : ThreadType::Background;
-            
-            scheduler->Schedule([handle]() mutable {
-                handle.resume();
-            }, TaskPriority::Low, threadType);
+            ThreadType threadType = taskManager.IsMainThread() ? ThreadType::MainThread : ThreadType::Background;
+
+            scheduler->Schedule([handle]() mutable { handle.resume(); }, TaskPriority::Low, threadType);
         }
     }
 
-} // namespace BECore
+}  // namespace BECore

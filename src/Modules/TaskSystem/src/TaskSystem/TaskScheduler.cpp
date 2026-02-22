@@ -9,9 +9,7 @@ namespace BECore {
         LOG_INFO("[TaskScheduler] Initialized");
     }
 
-    void TaskScheduler::Schedule(TaskQueue::TaskFunc task, 
-                                  TaskPriority priority,
-                                  ThreadType threadType) {
+    void TaskScheduler::Schedule(TaskQueue::TaskFunc task, TaskPriority priority, ThreadType threadType) {
         if (_stopped) {
             LOG_WARNING("[TaskScheduler] Scheduling task on stopped scheduler");
             return;
@@ -25,10 +23,7 @@ namespace BECore {
         }
     }
 
-    void TaskScheduler::ScheduleDelayed(TaskQueue::TaskFunc task,
-                                         Duration delay,
-                                         TaskPriority priority,
-                                         ThreadType threadType) {
+    void TaskScheduler::ScheduleDelayed(TaskQueue::TaskFunc task, Duration delay, TaskPriority priority, ThreadType threadType) {
         if (_stopped) {
             LOG_WARNING("[TaskScheduler] Scheduling delayed task on stopped scheduler");
             return;
@@ -119,4 +114,4 @@ namespace BECore {
         }
     }
 
-} // namespace BECore
+}  // namespace BECore

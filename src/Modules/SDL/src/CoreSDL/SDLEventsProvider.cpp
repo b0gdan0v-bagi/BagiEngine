@@ -1,8 +1,9 @@
 #include "SDLEventsProvider.h"
 
 #include "Application/Application.h"
-#include <Events/ApplicationEvents.h>
+
 #include <CoreSDL/SDLEvents.h>
+#include <Events/ApplicationEvents.h>
 
 namespace BECore {
 
@@ -36,49 +37,49 @@ namespace BECore {
                 ApplicationEvents::QuitEvent::Emit();
                 break;
 
-            /*case SDL_EVENT_KEY_DOWN: {
-                const auto& keyEvent = sdlEvent.key;
-                eventsManager.Emit(KeyDownEvent{
-                    keyEvent.key,
-                    static_cast<SDL_Keymod>(keyEvent.mod),
-                    keyEvent.repeat != 0
-                });
-                break;
-            }
+                /*case SDL_EVENT_KEY_DOWN: {
+                    const auto& keyEvent = sdlEvent.key;
+                    eventsManager.Emit(KeyDownEvent{
+                        keyEvent.key,
+                        static_cast<SDL_Keymod>(keyEvent.mod),
+                        keyEvent.repeat != 0
+                    });
+                    break;
+                }
 
-            case SDL_EVENT_KEY_UP: {
-                const auto& keyEvent = sdlEvent.key;
-                eventsManager.Emit(KeyUpEvent{
-                    keyEvent.key,
-                    static_cast<SDL_Keymod>(keyEvent.mod)
-                });
-                break;
-            }
+                case SDL_EVENT_KEY_UP: {
+                    const auto& keyEvent = sdlEvent.key;
+                    eventsManager.Emit(KeyUpEvent{
+                        keyEvent.key,
+                        static_cast<SDL_Keymod>(keyEvent.mod)
+                    });
+                    break;
+                }
 
-            case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                eventsManager.Emit(MouseButtonDownEvent{sdlEvent.button});
-                break;
+                case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                    eventsManager.Emit(MouseButtonDownEvent{sdlEvent.button});
+                    break;
 
-            case SDL_EVENT_MOUSE_BUTTON_UP:
-                eventsManager.Emit(MouseButtonUpEvent{sdlEvent.button});
-                break;
+                case SDL_EVENT_MOUSE_BUTTON_UP:
+                    eventsManager.Emit(MouseButtonUpEvent{sdlEvent.button});
+                    break;
 
-            case SDL_EVENT_MOUSE_MOTION:
-                eventsManager.Emit(MouseMotionEvent{sdlEvent.motion});
-                break;
+                case SDL_EVENT_MOUSE_MOTION:
+                    eventsManager.Emit(MouseMotionEvent{sdlEvent.motion});
+                    break;
 
-            case SDL_EVENT_MOUSE_WHEEL:
-                eventsManager.Emit(MouseWheelEvent{sdlEvent.wheel});
-                break;
+                case SDL_EVENT_MOUSE_WHEEL:
+                    eventsManager.Emit(MouseWheelEvent{sdlEvent.wheel});
+                    break;
 
-            case SDL_EVENT_WINDOW_RESIZED:
-            case SDL_EVENT_WINDOW_MOVED:
-            case SDL_EVENT_WINDOW_FOCUS_GAINED:
-            case SDL_EVENT_WINDOW_FOCUS_LOST:
-            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-                eventsManager.Emit(WindowEvent{sdlEvent.window});
-                break;
-                */
+                case SDL_EVENT_WINDOW_RESIZED:
+                case SDL_EVENT_WINDOW_MOVED:
+                case SDL_EVENT_WINDOW_FOCUS_GAINED:
+                case SDL_EVENT_WINDOW_FOCUS_LOST:
+                case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                    eventsManager.Emit(WindowEvent{sdlEvent.window});
+                    break;
+                    */
 
             default:
                 // Для всех остальных событий отправляем обёртку
@@ -87,5 +88,4 @@ namespace BECore {
         }
     }
 
-} // namespace BECore
-
+}  // namespace BECore
