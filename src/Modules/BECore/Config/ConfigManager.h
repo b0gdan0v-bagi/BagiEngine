@@ -23,7 +23,7 @@ namespace BECore {
      * 
      * @example
      * // Get config by name (without extension)
-     * auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_ps);
+     * auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
      * if (rootNode) {
      *     // Use config...
      * }

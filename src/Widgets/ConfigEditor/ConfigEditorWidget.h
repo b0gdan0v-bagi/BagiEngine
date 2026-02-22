@@ -1,11 +1,10 @@
 #pragma once
 
+#include "StagedChanges.h"
+
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/Widgets/IWidget.h>
 #include <EASTL/string.h>
-#include <EASTL/unordered_map.h>
-#include <EASTL/vector.h>
-#include <array>
 
 // Forward declaration - avoid including pugixml in header
 namespace pugi {
@@ -23,8 +22,8 @@ namespace BECore {
      *   Left panel  - list of all loaded config names
      *   Right panel - recursive XML tree editor for the selected config
      *
-     * Editing modifies the live pugixml DOM directly. Save/Reload propagate
-     * changes to/from disk via ConfigManager.
+     * Edits are staged in memory until the user clicks Save. Reload and config
+     * switching warn the user if there are unsaved staged changes.
      */
     class ConfigEditorWidget : public IWidget {
         BE_CLASS(ConfigEditorWidget)
@@ -38,24 +37,29 @@ namespace BECore {
 
     private:
         /**
-         * @brief Recursively render an XML node as an ImGui tree with editable attributes
+         * @brief Recursively render an XML node as an ImGui tree with typed field inspectors
          * @param node The pugixml node to render
-         * @param nodePath Unique path string used as key for edit buffers
+         * @param nodePath Unique path string used as key for staged changes
          */
         void RenderXmlNode(pugi::xml_node node, const eastl::string& nodePath);
 
         /**
-         * @brief Get (or create) a persistent char buffer for an ImGui InputText field
-         * @param key Unique key for the buffer (nodePath + attribute name)
-         * @param initialValue Value to initialise the buffer with on first access
+         * @brief Render the reload confirmation popup
+         * @return True if the user confirmed the reload
          */
-        char* GetOrCreateBuffer(const eastl::string& key, eastl::string_view initialValue);
+        bool RenderReloadConfirmPopup();
+
+        /**
+         * @brief Clear all transient state for the current config selection
+         */
+        void ClearTransientState();
 
         PoolString _selectedConfig;
-        bool _hasUnsavedChanges = false;
+        PoolString _pendingSwitchConfig; // config to switch to after confirming discard
 
-        // Maps unique field key → persistent InputText buffer (128 chars each)
-        eastl::unordered_map<eastl::string, eastl::array<char, 128>> _editBuffers;
+        StagedChanges _staged;
+        bool _showReloadConfirm = false;
+        bool _showSwitchConfirm = false;
     };
 
-}  // namespace BECore
+} // namespace BECore
