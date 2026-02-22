@@ -1,6 +1,5 @@
 #include "SDLUtils.h"
 
-
 namespace BECore {
 
     namespace {

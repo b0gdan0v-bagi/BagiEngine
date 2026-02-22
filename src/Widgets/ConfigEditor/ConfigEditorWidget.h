@@ -53,11 +53,11 @@ namespace BECore {
         void ClearTransientState();
 
         PoolString _selectedConfig;
-        PoolString _pendingSwitchConfig; // config to switch to after confirming discard
+        PoolString _pendingSwitchConfig;  // config to switch to after confirming discard
 
         StagedChanges _staged;
         bool _showReloadConfirm = false;
         bool _showSwitchConfirm = false;
     };
 
-} // namespace BECore
+}  // namespace BECore

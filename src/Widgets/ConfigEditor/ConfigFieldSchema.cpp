@@ -1,14 +1,12 @@
 #include "ConfigFieldSchema.h"
 
-
 namespace BECore {
 
     eastl::string ConfigFieldSchema::MakeKey(PoolString configName, eastl::string_view attrPath) {
         return Format("{}|{}", configName.CStr(), attrPath);
     }
 
-    void ConfigFieldSchema::RegisterFlags(PoolString configName, eastl::string_view attrPath,
-                                          eastl::vector<eastl::string> flagNames) {
+    void ConfigFieldSchema::RegisterFlags(PoolString configName, eastl::string_view attrPath, eastl::vector<eastl::string> flagNames) {
         const eastl::string key = MakeKey(configName, attrPath);
         FieldHint hint;
         hint.type = FieldType::Flags;
@@ -16,8 +14,7 @@ namespace BECore {
         _hints[key] = std::move(hint);
     }
 
-    FieldHint ConfigFieldSchema::Resolve(PoolString configName, eastl::string_view attrPath,
-                                         eastl::string_view currentValue) const {
+    FieldHint ConfigFieldSchema::Resolve(PoolString configName, eastl::string_view attrPath, eastl::string_view currentValue) const {
         const eastl::string key = MakeKey(configName, attrPath);
         if (const auto it = _hints.find(key); it != _hints.end()) {
             return it->second;
@@ -35,8 +32,7 @@ namespace BECore {
             eastl::string_view remaining = currentValue;
             while (!remaining.empty()) {
                 const auto pos = remaining.find('|');
-                eastl::string_view token =
-                    (pos == eastl::string_view::npos) ? remaining : remaining.substr(0, pos);
+                eastl::string_view token = (pos == eastl::string_view::npos) ? remaining : remaining.substr(0, pos);
                 while (!token.empty() && token.front() == ' ') {
                     token.remove_prefix(1);
                 }
@@ -57,8 +53,7 @@ namespace BECore {
         // Heuristic: integer
         {
             int result = 0;
-            const auto [ptr, ec] =
-                std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), result);
+            const auto [ptr, ec] = std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), result);
             if (ec == std::errc{} && ptr == currentValue.data() + currentValue.size()) {
                 return FieldHint{FieldType::Int};
             }
@@ -67,8 +62,7 @@ namespace BECore {
         // Heuristic: float
         {
             float result = 0.0f;
-            const auto [ptr, ec] =
-                std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), result);
+            const auto [ptr, ec] = std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), result);
             if (ec == std::errc{} && ptr == currentValue.data() + currentValue.size()) {
                 return FieldHint{FieldType::Float};
             }
@@ -77,4 +71,4 @@ namespace BECore {
         return FieldHint{FieldType::String};
     }
 
-} // namespace BECore
+}  // namespace BECore

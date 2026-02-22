@@ -8,7 +8,7 @@ namespace BECore {
 
     struct FieldHint {
         FieldType type = FieldType::String;
-        eastl::vector<eastl::string> options; // enum values or flag names (owned)
+        eastl::vector<eastl::string> options;  // enum values or flag names (owned)
     };
 
     /**
@@ -46,8 +46,7 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          * @param flagNames List of all possible flag names
          */
-        void RegisterFlags(PoolString configName, eastl::string_view attrPath,
-                           eastl::vector<eastl::string> flagNames);
+        void RegisterFlags(PoolString configName, eastl::string_view attrPath, eastl::vector<eastl::string> flagNames);
 
         /**
          * @brief Resolve a FieldHint for the given attribute
@@ -63,8 +62,7 @@ namespace BECore {
          * @param attrPath Path in format "elementName/@attrName"
          * @param currentValue Current attribute value for heuristic fallback
          */
-        FieldHint Resolve(PoolString configName, eastl::string_view attrPath,
-                          eastl::string_view currentValue) const;
+        FieldHint Resolve(PoolString configName, eastl::string_view attrPath, eastl::string_view currentValue) const;
 
     private:
         static eastl::string MakeKey(PoolString configName, eastl::string_view attrPath);
@@ -72,4 +70,4 @@ namespace BECore {
         eastl::unordered_map<eastl::string, FieldHint> _hints;
     };
 
-} // namespace BECore
+}  // namespace BECore

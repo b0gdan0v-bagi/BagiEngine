@@ -21,18 +21,18 @@ namespace BECore {
 
         schema.RegisterEnum<LogSinkType>("LoggerConfig"_intern, "sink/@type");
         schema.RegisterEnum<LogLevel>("LoggerConfig"_intern, "sink/@minLevel");
-        schema.RegisterFlags("SDLWindowConfig"_intern, "window/@windowFlags",
-                             {"SDL_WINDOW_FULLSCREEN", "SDL_WINDOW_OPENGL", "SDL_WINDOW_OCCLUDED",
-                              "SDL_WINDOW_HIDDEN", "SDL_WINDOW_BORDERLESS", "SDL_WINDOW_RESIZABLE",
-                              "SDL_WINDOW_MINIMIZED", "SDL_WINDOW_MAXIMIZED",
-                              "SDL_WINDOW_MOUSE_GRABBED", "SDL_WINDOW_INPUT_FOCUS",
-                              "SDL_WINDOW_MOUSE_FOCUS", "SDL_WINDOW_EXTERNAL",
-                              "SDL_WINDOW_MODAL", "SDL_WINDOW_HIGH_PIXEL_DENSITY",
-                              "SDL_WINDOW_MOUSE_CAPTURE", "SDL_WINDOW_ALWAYS_ON_TOP",
-                              "SDL_WINDOW_UTILITY", "SDL_WINDOW_TOOLTIP", "SDL_WINDOW_POPUP_MENU",
-                              "SDL_WINDOW_KEYBOARD_GRABBED", "SDL_WINDOW_VULKAN",
-                              "SDL_WINDOW_METAL", "SDL_WINDOW_TRANSPARENT",
-                              "SDL_WINDOW_NOT_FOCUSABLE"});
+        schema.RegisterFlags("SDLWindowConfig"_intern, "window/@windowFlags", {"SDL_WINDOW_FULLSCREEN",    "SDL_WINDOW_OPENGL",
+                                                                               "SDL_WINDOW_OCCLUDED",      "SDL_WINDOW_HIDDEN",
+                                                                               "SDL_WINDOW_BORDERLESS",    "SDL_WINDOW_RESIZABLE",
+                                                                               "SDL_WINDOW_MINIMIZED",     "SDL_WINDOW_MAXIMIZED",
+                                                                               "SDL_WINDOW_MOUSE_GRABBED", "SDL_WINDOW_INPUT_FOCUS",
+                                                                               "SDL_WINDOW_MOUSE_FOCUS",   "SDL_WINDOW_EXTERNAL",
+                                                                               "SDL_WINDOW_MODAL",         "SDL_WINDOW_HIGH_PIXEL_DENSITY",
+                                                                               "SDL_WINDOW_MOUSE_CAPTURE", "SDL_WINDOW_ALWAYS_ON_TOP",
+                                                                               "SDL_WINDOW_UTILITY",       "SDL_WINDOW_TOOLTIP",
+                                                                               "SDL_WINDOW_POPUP_MENU",    "SDL_WINDOW_KEYBOARD_GRABBED",
+                                                                               "SDL_WINDOW_VULKAN",        "SDL_WINDOW_METAL",
+                                                                               "SDL_WINDOW_TRANSPARENT",   "SDL_WINDOW_NOT_FOCUSABLE"});
 
         return true;
     }
@@ -170,8 +170,7 @@ namespace BECore {
         }
 
         // Switch-config confirmation popup
-        if (ImGui::BeginPopupModal("Unsaved Changes##switch", nullptr,
-                                   ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::BeginPopupModal("Unsaved Changes##switch", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("You have unsaved changes in '%s'.", _selectedConfig.CStr());
             ImGui::Text("Switch config and discard changes?");
             ImGui::Separator();
@@ -221,9 +220,7 @@ namespace BECore {
             // Render attributes as typed inspector controls in a two-column table
             if (hasAttributes) {
                 ImGui::Indent(8.0f);
-                if (ImGui::BeginTable("##attrs", 2,
-                                      ImGuiTableFlags_SizingFixedFit |
-                                          ImGuiTableFlags_NoSavedSettings)) {
+                if (ImGui::BeginTable("##attrs", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings)) {
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
@@ -246,16 +243,12 @@ namespace BECore {
 
                         const eastl::string_view domValue{attr.value()};
                         const eastl::string* stagedPtr = _staged.Get(attrKey);
-                        const eastl::string_view currentValue =
-                            stagedPtr ? eastl::string_view{*stagedPtr} : domValue;
+                        const eastl::string_view currentValue = stagedPtr ? eastl::string_view{*stagedPtr} : domValue;
 
-                        const eastl::string schemaPath =
-                            Format("{}/@{}", node.name(), attr.name());
-                        const FieldHint hint =
-                            schema.Resolve(_selectedConfig, schemaPath, currentValue);
+                        const eastl::string schemaPath = Format("{}/@{}", node.name(), attr.name());
+                        const FieldHint hint = schema.Resolve(_selectedConfig, schemaPath, currentValue);
 
-                        const auto result =
-                            RenderFieldInspector(attrKey, currentValue, hint);
+                        const auto result = RenderFieldInspector(attrKey, currentValue, hint);
                         if (result.changed) {
                             _staged.Set(attrKey, attr, result.newValue);
                         }
@@ -269,16 +262,13 @@ namespace BECore {
             size_t childIndex = 0;
             for (auto child = node.first_child(); child; child = child.next_sibling()) {
                 if (child.type() == pugi::node_element) {
-                    const eastl::string childPath =
-                        Format("{}/{}[{}]", nodePath, child.name(), childIndex);
+                    const eastl::string childPath = Format("{}/{}[{}]", nodePath, child.name(), childIndex);
                     RenderXmlNode(child, childPath);
                     ++childIndex;
                 } else if (child.type() == pugi::node_pcdata) {
                     const eastl::string textKey = Format("{}#text", nodePath);
                     const eastl::string* stagedPtr = _staged.Get(textKey);
-                    const eastl::string_view currentValue =
-                        stagedPtr ? eastl::string_view{*stagedPtr}
-                                  : eastl::string_view{child.value()};
+                    const eastl::string_view currentValue = stagedPtr ? eastl::string_view{*stagedPtr} : eastl::string_view{child.value()};
 
                     const FieldHint stringHint{FieldType::String};
                     const auto result = RenderFieldInspector(textKey, currentValue, stringHint);
@@ -294,8 +284,7 @@ namespace BECore {
 
     bool ConfigEditorWidget::RenderReloadConfirmPopup() {
         bool confirmed = false;
-        if (ImGui::BeginPopupModal("Unsaved Changes##reload", nullptr,
-                                   ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::BeginPopupModal("Unsaved Changes##reload", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("You have unsaved changes in '%s'.", _selectedConfig.CStr());
             ImGui::Text("Reload from disk and discard all changes?");
             ImGui::Separator();
@@ -317,4 +306,4 @@ namespace BECore {
         ClearFieldInspectorState();
     }
 
-} // namespace BECore
+}  // namespace BECore

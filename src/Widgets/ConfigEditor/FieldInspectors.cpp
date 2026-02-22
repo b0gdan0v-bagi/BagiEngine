@@ -61,8 +61,7 @@ namespace BECore {
             return {};
         }
 
-        InspectorResult RenderEnum(const eastl::string& widgetId, eastl::string_view currentValue,
-                                   const eastl::vector<eastl::string>& options) {
+        InspectorResult RenderEnum(const eastl::string& widgetId, eastl::string_view currentValue, const eastl::vector<eastl::string>& options) {
             if (options.empty()) {
                 return {};
             }
@@ -93,8 +92,7 @@ namespace BECore {
             return {};
         }
 
-        InspectorResult RenderFlags(const eastl::string& widgetId, eastl::string_view currentValue,
-                                    const eastl::vector<eastl::string>& options) {
+        InspectorResult RenderFlags(const eastl::string& widgetId, eastl::string_view currentValue, const eastl::vector<eastl::string>& options) {
             if (options.empty()) {
                 return {};
             }
@@ -104,8 +102,7 @@ namespace BECore {
                 eastl::string_view remaining = currentValue;
                 while (!remaining.empty()) {
                     const auto pos = remaining.find('|');
-                    eastl::string_view token =
-                        (pos == eastl::string_view::npos) ? remaining : remaining.substr(0, pos);
+                    eastl::string_view token = (pos == eastl::string_view::npos) ? remaining : remaining.substr(0, pos);
                     while (!token.empty() && token.front() == ' ') {
                         token.remove_prefix(1);
                     }
@@ -157,29 +154,34 @@ namespace BECore {
             char* buf = GetOrCreateTextBuffer(widgetId, currentValue);
             const eastl::string label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
-            if (ImGui::InputText(label.c_str(), buf, k_textBufSize,
-                                 ImGuiInputTextFlags_EnterReturnsTrue)) {
+            if (ImGui::InputText(label.c_str(), buf, k_textBufSize, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 return {true, eastl::string{buf}};
             }
             return {};
         }
 
-    } // namespace
+    }  // namespace
 
     // =========================================================================
     // Public API
     // =========================================================================
 
-    InspectorResult RenderFieldInspector(const eastl::string& widgetId,
-                                          eastl::string_view currentValue, const FieldHint& hint) {
+    InspectorResult RenderFieldInspector(const eastl::string& widgetId, eastl::string_view currentValue, const FieldHint& hint) {
         switch (hint.type) {
-            case FieldType::Bool:   return RenderBool(widgetId, currentValue);
-            case FieldType::Int:    return RenderInt(widgetId, currentValue);
-            case FieldType::Float:  return RenderFloat(widgetId, currentValue);
-            case FieldType::Enum:   return RenderEnum(widgetId, currentValue, hint.options);
-            case FieldType::Flags:  return RenderFlags(widgetId, currentValue, hint.options);
-            case FieldType::String: return RenderString(widgetId, currentValue);
-            default:                return RenderString(widgetId, currentValue);
+            case FieldType::Bool:
+                return RenderBool(widgetId, currentValue);
+            case FieldType::Int:
+                return RenderInt(widgetId, currentValue);
+            case FieldType::Float:
+                return RenderFloat(widgetId, currentValue);
+            case FieldType::Enum:
+                return RenderEnum(widgetId, currentValue, hint.options);
+            case FieldType::Flags:
+                return RenderFlags(widgetId, currentValue, hint.options);
+            case FieldType::String:
+                return RenderString(widgetId, currentValue);
+            default:
+                return RenderString(widgetId, currentValue);
         }
     }
 
@@ -187,4 +189,4 @@ namespace BECore {
         s_textBuffers.clear();
     }
 
-} // namespace BECore
+}  // namespace BECore

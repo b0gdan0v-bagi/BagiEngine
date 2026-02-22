@@ -72,4 +72,4 @@ namespace BECore {
         eastl::unordered_map<eastl::string, Entry> _changes;
     };
 
-} // namespace BECore
+}  // namespace BECore

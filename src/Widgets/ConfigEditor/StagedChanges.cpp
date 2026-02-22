@@ -2,16 +2,14 @@
 
 namespace BECore {
 
-    void StagedChanges::Set(const eastl::string& key, pugi::xml_attribute attr,
-                             eastl::string_view newValue) {
+    void StagedChanges::Set(const eastl::string& key, pugi::xml_attribute attr, eastl::string_view newValue) {
         auto& entry = _changes[key];
         entry.value.assign(newValue.data(), newValue.size());
         entry.attr = attr;
         entry.textNode = pugi::xml_node{};
     }
 
-    void StagedChanges::SetText(const eastl::string& key, pugi::xml_node textNode,
-                                 eastl::string_view newValue) {
+    void StagedChanges::SetText(const eastl::string& key, pugi::xml_node textNode, eastl::string_view newValue) {
         auto& entry = _changes[key];
         entry.value.assign(newValue.data(), newValue.size());
         entry.attr = pugi::xml_attribute{};
@@ -45,11 +43,10 @@ namespace BECore {
         }
     }
 
-    void StagedChanges::ForEach(
-        eastl::function<void(const eastl::string&, const eastl::string&)> fn) const {
+    void StagedChanges::ForEach(eastl::function<void(const eastl::string&, const eastl::string&)> fn) const {
         for (const auto& [key, entry] : _changes) {
             fn(key, entry.value);
         }
     }
 
-} // namespace BECore
+}  // namespace BECore
