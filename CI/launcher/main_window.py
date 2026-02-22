@@ -1,5 +1,7 @@
 """Main window for the BagiEngine Launcher."""
 
+import subprocess
+import sys
 from pathlib import Path
 from typing import Optional, Union
 
@@ -8,7 +10,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QPushButton, QComboBox, QLabel,
     QTextEdit, QListWidget, QListWidgetItem, QProgressBar,
     QSplitter, QFrame, QMessageBox, QCheckBox, QDialog,
-    QFormLayout, QLineEdit, QDialogButtonBox
+    QFormLayout, QLineEdit, QDialogButtonBox, QRadioButton,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -248,6 +250,72 @@ class VSConfigurationDialog(QDialog):
     def get_selected_configuration(self) -> Optional[BuildConfiguration]:
         """Get the selected configuration."""
         return self._selected_config
+
+
+class ClangFormatScopeDialog(QDialog):
+    """Dialog to choose scope for clang-format: changed files or all files."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Clang-Format")
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Format scope:"))
+        self.radio_changed = QRadioButton("Only changed files (git)")
+        self.radio_changed.setChecked(True)
+        layout.addWidget(self.radio_changed)
+        self.radio_all = QRadioButton("All files (src/, config/)")
+        layout.addWidget(self.radio_all)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def get_scope(self) -> str:
+        """Return 'changed' or 'all'."""
+        return "changed" if self.radio_changed.isChecked() else "all"
+
+
+class ClangFormatWorker(QThread):
+    """Worker thread that runs format_sources.py with streaming output."""
+
+    output_received = pyqtSignal(str)
+    finished_signal = pyqtSignal(bool)  # success
+
+    def __init__(self, project_root: Path, script_path: Path, scope: str):
+        super().__init__()
+        self._project_root = project_root
+        self._script_path = script_path
+        self._scope = scope
+
+    def run(self):
+        flag = "--changed" if self._scope == "changed" else "--all"
+        cmd = [sys.executable, str(self._script_path), flag]
+        creationflags = (
+            subprocess.CREATE_NO_WINDOW if get_current_platform() == Platform.WINDOWS else 0
+        )
+        try:
+            process = subprocess.Popen(
+                cmd,
+                cwd=str(self._project_root),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                creationflags=creationflags,
+            )
+            for line in iter(process.stdout.readline, ""):
+                if line:
+                    self.output_received.emit(line.rstrip("\r\n"))
+            process.wait()
+            self.finished_signal.emit(process.returncode == 0)
+        except Exception as e:
+            self.output_received.emit(f"Error: {e}")
+            self.finished_signal.emit(False)
 
 
 class SettingsDialog(QDialog):
@@ -555,6 +623,12 @@ class MainWindow(QMainWindow):
         btn.setToolTip("Configure LLVM path for reflection code generation")
         btn.clicked.connect(self._open_meta_generator)
         layout.addWidget(btn)
+        
+        # Clang-Format button
+        self._clang_format_btn = QPushButton("Clang-Format")
+        self._clang_format_btn.setToolTip("Apply .clang-format to changed or all sources")
+        self._clang_format_btn.clicked.connect(self._run_clang_format)
+        layout.addWidget(self._clang_format_btn)
         
         # Settings button
         btn = QPushButton("Settings")
@@ -922,23 +996,43 @@ class MainWindow(QMainWindow):
                     pipeline._steps = [step]
                     self._execute_pipeline(pipeline)
     
+    def _run_clang_format(self):
+        """Show scope dialog and run format_sources.py with streaming output."""
+        script_path = self.project_root / "CI" / "scripts" / "format_sources.py"
+        if not script_path.exists():
+            QMessageBox.warning(
+                self,
+                "Clang-Format Not Found",
+                f"Format script not found:\n{script_path}",
+            )
+            return
+        dialog = ClangFormatScopeDialog(self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        scope = dialog.get_scope()
+        self._clang_format_btn.setEnabled(False)
+        self._log("Clang-Format: starting...")
+        self._format_worker = ClangFormatWorker(self.project_root, script_path, scope)
+        self._format_worker.output_received.connect(self._log)
+        self._format_worker.finished_signal.connect(self._on_clang_format_finished)
+        self._format_worker.start()
+
+    def _on_clang_format_finished(self, success: bool):
+        """Re-enable Clang-Format button and log result."""
+        self._clang_format_btn.setEnabled(True)
+        self._log("Clang-Format: " + ("completed successfully." if success else "finished with errors."))
+
     def _open_meta_generator(self):
         """Open Meta-Generator GUI for LLVM configuration."""
-        import subprocess
-        import sys
-        
         meta_gen_script = self.project_root / "CI" / "meta_generator" / "meta_generator_gui.py"
-        
         if not meta_gen_script.exists():
             QMessageBox.warning(
                 self,
                 "Meta-Generator Not Found",
-                f"Meta-Generator GUI script not found:\n{meta_gen_script}"
+                f"Meta-Generator GUI script not found:\n{meta_gen_script}",
             )
             return
-        
         try:
-            # Launch meta_generator_gui.py in a detached process
             subprocess.Popen(
                 [sys.executable, str(meta_gen_script)],
                 cwd=str(self.project_root),

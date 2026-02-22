@@ -1,0 +1,12 @@
+# Vendored / third-party: never formatted by CI/scripts/format_sources.py
+external/
+build/
+.venv/
+# Vendored modules under src/Modules
+src/Modules/BECore
+src/Modules/EABase
+src/Modules/EnTT
+src/Modules/fmt
+src/Modules/imgui
+src/Modules/pugixml
+src/Modules/Vulkan
