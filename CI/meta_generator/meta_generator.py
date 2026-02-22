@@ -18,6 +18,7 @@ Features:
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import List, Set
@@ -76,15 +77,29 @@ Examples:
                            --output-dir build/Generated \\
                            --cache-dir build \\
                            --include-dir src/Modules
+
+  # Use config for target (CMake mode)
+  python meta_generator.py --target BECoreModule --project-root . \\
+                           --output-dir build/Generated --cache-dir build --settings meta_generator_settings.json
 """
+    )
+    
+    parser.add_argument(
+        '--target', '-t',
+        help='Target name from reflection_targets.json (when set, source/scan/include dirs are loaded from config)'
+    )
+    
+    parser.add_argument(
+        '--project-root',
+        help='Project root for resolving relative paths in reflection_targets.json (used with --target)'
     )
     
     parser.add_argument(
         '--source-dir', '-s',
         action='append',
         dest='source_dirs',
-        required=True,
-        help='Source directory to scan for headers (can be specified multiple times)'
+        default=[],
+        help='Source directory to scan for headers (can be specified multiple times; not used with --target)'
     )
     
     parser.add_argument(
@@ -140,13 +155,34 @@ Examples:
     
     args = parser.parse_args()
     
-    # Convert paths
-    source_dirs = [Path(d) for d in args.source_dirs]
     output_dir = Path(args.output_dir)
     cache_dir = Path(args.cache_dir)
-    include_dirs = args.include_dirs
-    scan_dirs = [Path(d) for d in args.scan_dirs] if args.scan_dirs else source_dirs
     settings_path = Path(args.settings) if args.settings else None
+    
+    # Load dirs from config when --target is set
+    if args.target:
+        if args.source_dirs or args.scan_dirs or args.include_dirs:
+            print("Warning: --source-dir/--scan-dir/--include-dir are ignored when --target is set", file=sys.stderr)
+        project_root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+        config_path = Path(__file__).parent / "reflection_targets.json"
+        if not config_path.exists():
+            print(f"ERROR: Reflection targets config not found: {config_path}", file=sys.stderr)
+            return 1
+        with open(config_path, encoding='utf-8') as f:
+            targets_config = json.load(f)
+        if args.target not in targets_config:
+            print(f"ERROR: Unknown target '{args.target}' in reflection_targets.json. Known: {list(targets_config.keys())}", file=sys.stderr)
+            return 1
+        cfg = targets_config[args.target]
+        source_dirs = [project_root / d for d in cfg.get("source_dirs", [])]
+        scan_dirs = [project_root / d for d in cfg.get("scan_dirs", [])]
+        include_dirs = [str(project_root / d) for d in cfg.get("include_dirs", [])]
+    else:
+        if not args.source_dirs:
+            parser.error("Either --target or at least one --source-dir is required")
+        source_dirs = [Path(d) for d in args.source_dirs]
+        include_dirs = args.include_dirs
+        scan_dirs = [Path(d) for d in args.scan_dirs] if args.scan_dirs else source_dirs
     
     def log(msg: str):
         if not args.quiet:

@@ -1,0 +1,28 @@
+{
+  "BECoreModule": {
+    "source_dirs": [
+      "src/Modules/BECore/Application",
+      "src/Modules/BECore/Assert",
+      "src/Modules/BECore/Logger",
+      "src/Modules/BECore/Tests",
+      "src/Modules/BECore/Widgets",
+      "src/Modules/BECore/Resource",
+      "src/Modules/BECore/Math",
+      "src/Modules/BECore/Renderer"
+    ],
+    "scan_dirs": [
+      "src/Modules/BECore/Application",
+      "src/Modules/BECore/Assert",
+      "src/Modules/BECore/Logger",
+      "src/Modules/BECore/Tests",
+      "src/Modules/BECore/Widgets",
+      "src/Modules/BECore/Resource",
+      "src/Modules/BECore/Math",
+      "src/Modules/BECore/Renderer",
+      "src/Widgets",
+      "src/Modules/SDL/src/CoreSDL",
+      "src/Modules/Vulkan/src/CoreVulkan"
+    ],
+    "include_dirs": ["src/Modules", "src"]
+  }
+}

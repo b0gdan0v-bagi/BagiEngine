@@ -69,34 +69,7 @@ endif()
 # =============================================================================
 # Reflection Code Generation
 # =============================================================================
-# Generate reflection metadata for all BE_CLASS() files in specified directories
-# DIRS automatically scans for headers containing BE_CLASS() macro
-# SCAN_DIRS specifies additional directories to scan for derived classes (for factory generation)
+# Dirs for BECoreModule are defined in CI/meta_generator/reflection_targets.json
 if(COMMAND add_reflection_target)
-    add_reflection_target(BECoreModule
-        DIRS
-            ${CMAKE_CURRENT_SOURCE_DIR}/Application
-            ${CMAKE_CURRENT_SOURCE_DIR}/Assert
-            ${CMAKE_CURRENT_SOURCE_DIR}/Logger
-            ${CMAKE_CURRENT_SOURCE_DIR}/Tests
-            ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
-            ${CMAKE_CURRENT_SOURCE_DIR}/Resource
-            ${CMAKE_CURRENT_SOURCE_DIR}/Math
-            ${CMAKE_CURRENT_SOURCE_DIR}/Renderer
-        SCAN_DIRS
-            ${CMAKE_CURRENT_SOURCE_DIR}/Application
-            ${CMAKE_CURRENT_SOURCE_DIR}/Assert
-            ${CMAKE_CURRENT_SOURCE_DIR}/Logger
-            ${CMAKE_CURRENT_SOURCE_DIR}/Tests
-            ${CMAKE_CURRENT_SOURCE_DIR}/Widgets
-            ${CMAKE_CURRENT_SOURCE_DIR}/Resource
-            ${CMAKE_CURRENT_SOURCE_DIR}/Math
-            ${CMAKE_CURRENT_SOURCE_DIR}/Renderer
-            ${PROJECT_ROOT}/src/Widgets
-            ${PROJECT_ROOT}/src/Modules/SDL/src/CoreSDL
-            ${PROJECT_ROOT}/src/Modules/Vulkan/src/CoreVulkan
-        INCLUDE_DIRS
-            ${PROJECT_ROOT}/src/Modules
-            ${PROJECT_ROOT}/src
-    )
+    add_reflection_target(BECoreModule)
 endif()
