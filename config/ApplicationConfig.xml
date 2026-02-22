@@ -1,3 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<root type="SDL3" renderer="SDLRendererBackend" path="config/SDLWindowConfig.xml">
-</root>
+<?xml version="1.0"?>
+<root
+  type="SDL3"
+  renderer="VulkanRendererBackend"
+  path="config/SDLWindowConfig.xml" />

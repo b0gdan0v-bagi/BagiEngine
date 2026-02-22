@@ -284,8 +284,9 @@ namespace BECore {
         vulkanInfo.Device          = _device.GetDevice();
         vulkanInfo.QueueFamily     = _device.GetQueueFamilies().graphicsFamily;
         vulkanInfo.Queue           = _device.GetGraphicsQueue();
-        vulkanInfo.MinImageCount   = kMaxFramesInFlight;
-        vulkanInfo.ImageCount      = kMaxFramesInFlight;
+        vulkanInfo.MinImageCount      = kMaxFramesInFlight;
+        vulkanInfo.ImageCount         = kMaxFramesInFlight;
+        vulkanInfo.DescriptorPoolSize = 1000;
         vulkanInfo.PipelineInfoMain.RenderPass  = _swapchain.GetRenderPass();
         vulkanInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         ImGui_ImplVulkan_Init(&vulkanInfo);

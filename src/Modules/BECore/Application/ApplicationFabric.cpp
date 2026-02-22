@@ -1,42 +1,29 @@
 #include "ApplicationFabric.h"
 
-#include <BECore/Application/ApplicationSystemType.h>
-#include <BECore/Config/XmlConfig.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <CoreSDL/ApplicationSDLFabric.h>
+
+#include <Generated/EnumApplicationFabric.gen.hpp>
 
 namespace BECore {
 
     bool ApplicationFabric::Create() {
+        const auto configNode = CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern);
 
-        // Получаем конфиг через ConfigManager
-        const auto rootNode = CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern);
-        
-        if (!rootNode) {
+        if (!configNode) {
             return false;
         }
 
-        ApplicationSystemType type = rootNode.ParseAttribute<ApplicationSystemType>("type").value_or(ApplicationSystemType::None);
-
-        switch (type) {
-            case ApplicationSystemType::SDL3: {
-                // Создаём временный XmlConfig для передачи в ApplicationSDLFabric
-                // TODO: В будущем можно передавать XmlNode напрямую
-                XmlConfig config = XmlConfig::Create();
-                if (config.LoadFromVirtualPath("config/ApplicationConfig.xml")) {
-                    if (!ApplicationSDLFabric::Create(config)) {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-                break;
-            }
-            default:
-                return false;
+        const auto typeOpt = configNode.ParseAttribute<ApplicationFabricType>("type");
+        if (!typeOpt) {
+            return false;
         }
 
-        return true;
+        auto fabric = ApplicationFabricFactory::Create(*typeOpt);
+        if (!fabric) {
+            return false;
+        }
+
+        return fabric->Create(configNode);
     }
 
 }  // namespace BECore
