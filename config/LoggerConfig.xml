@@ -3,7 +3,7 @@
     <!-- 
         Logger Sinks Configuration
         
-        type: Sink type (Console, File, Output)
+        type: Sink class name (OutputSink, ConsoleSink, FileSink)
         enabled: Whether sink is active (default: true)
         priority: Execution order, lower values run first (default: 0)
         minLevel: Minimum log level to output (Debug, Info, Warning, Error, Fatal)
@@ -24,12 +24,12 @@
     -->
     <sinks>
         <!-- Output sink runs first (for platform debug output - VS Output/Xcode console) -->
-        <sink type="Output" enabled="true" priority="0" minLevel="Debug" />
+        <sink type="OutputSink" enabled="true" priority="0" minLevel="Debug" />
         
         <!-- Console sink disabled (no console window in WIN32 app) -->
-        <sink type="Console" enabled="false" priority="0" minLevel="Debug" colorEnabled="true" />
+        <sink type="ConsoleSink" enabled="false" priority="0" minLevel="Debug" colorEnabled="true" />
         
         <!-- File sink runs after Output -->
-        <sink type="File" enabled="true" priority="100" minLevel="Info" filename="engine.log" append="false" />
+        <sink type="FileSink" enabled="true" priority="100" minLevel="Info" filename="engine.log" append="false" />
     </sinks>
 </root>

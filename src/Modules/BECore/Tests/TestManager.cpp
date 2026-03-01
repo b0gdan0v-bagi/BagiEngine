@@ -3,7 +3,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/FieldSerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
-#include <Generated/EnumTest.gen.hpp>
 
 namespace BECore {
 

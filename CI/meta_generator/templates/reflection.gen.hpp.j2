@@ -5,6 +5,8 @@
 // ============================================================================
 #pragma once
 
+// ReSharper disable CppNonInlineFunctionDefinitionInHeaderFile
+
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/MethodInfo.h>
@@ -111,20 +113,6 @@ struct ReflectionTraits<{{ cls.qualified_name }}> {
 }  // namespace BECore
 
 // ============================================================================
-// Static ClassMeta instances
-// ============================================================================
-{% for cls in classes %}
-namespace {{ cls.namespace if cls.namespace else '::' }} {
-namespace Detail_{{ cls.name }} {
-    inline constexpr ::BECore::ClassMeta _staticTypeMeta{
-        ::BECore::String::GetHash(eastl::string_view{"{{ cls.name }}"}),
-        eastl::string_view{"{{ cls.name }}"}
-    };
-}  // namespace Detail_{{ cls.name }}
-}  // namespace {{ cls.namespace if cls.namespace else '::' }}
-{% endfor %}
-
-// ============================================================================
 // BE_CLASS() / BE_EVENT() Static Method Implementations
 // ============================================================================
 {% for cls in classes %}
@@ -143,7 +131,6 @@ inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic(const {{
     }, ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields);
 }
 
-#ifndef BE_GEN_NO_IMPL
 // {{ cls.full_qualified_name }}::GetStaticTypeName()
 eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
     return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::name;
@@ -151,7 +138,11 @@ eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
 
 // {{ cls.full_qualified_name }}::GetStaticTypeMeta()
 const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
-    return {{ cls.namespace if cls.namespace else '::' }}::Detail_{{ cls.name }}::_staticTypeMeta;
+    static const ::BECore::ClassMeta meta{
+        ::BECore::String::GetHash(eastl::string_view{"{{ cls.name }}"}),
+        eastl::string_view{"{{ cls.name }}"}
+    };
+    return meta;
 }
 
 // {{ cls.full_qualified_name }}::GetStaticTypeHash()
@@ -199,7 +190,6 @@ void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% endfor %}
 }
 {% endif %}
-#endif // BE_GEN_NO_IMPL
 
 {% else %}
 // ============================================================================
@@ -223,7 +213,6 @@ inline constexpr void {{ cls.full_qualified_name }}::ForEachFieldStatic(const {{
     }, ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::fields);
 }
 
-#ifndef BE_GEN_NO_IMPL
 // {{ cls.full_qualified_name }}::GetStaticTypeName()
 eastl::string_view {{ cls.full_qualified_name }}::GetStaticTypeName() {
     return ::BECore::ReflectionTraits<{{ cls.qualified_name }}>::name;
@@ -236,7 +225,11 @@ size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
 
 // {{ cls.full_qualified_name }}::GetStaticTypeMeta()
 const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
-    return {{ cls.namespace if cls.namespace else '::' }}::Detail_{{ cls.name }}::_staticTypeMeta;
+    static const ::BECore::ClassMeta meta{
+        ::BECore::String::GetHash(eastl::string_view{"{{ cls.name }}"}),
+        eastl::string_view{"{{ cls.name }}"}
+    };
+    return meta;
 }
 
 // {{ cls.full_qualified_name }}::Serialize() - auto-generated from BE_REFLECT_FIELD markers
@@ -280,7 +273,25 @@ void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% endif %}
 {% endfor %}
 }
-#endif // BE_GEN_NO_IMPL
+
+{% if cls.factory_base_fqn %}
+// ============================================================================
+// AbstractFactory Self-Registration: {{ cls.name }} -> AbstractFactory<{{ cls.factory_base_fqn }}>
+// This block is included only from {{ cls.name }}.cpp via the .gen.hpp file,
+// so AbstractFactory<{{ cls.factory_base_fqn }}> acquires a creator for this type
+// without any consumer needing to include {{ cls.name }}.h.
+// ============================================================================
+namespace {
+const bool _reg_{{ cls.name }} = [] {
+    ::BECore::AbstractFactory<{{ cls.factory_base_fqn }}>::GetInstance().Register(
+        {{ cls.full_qualified_name }}::GetStaticTypeMeta(),
+        []() -> typename ::BECore::AbstractFactory<{{ cls.factory_base_fqn }}>::BasePtr {
+            return ::BECore::New<{{ cls.full_qualified_name }}>();
+        });
+    return true;
+}();
+}  // namespace
+{% endif %}
 
 {% endif %}
 {% endfor %}

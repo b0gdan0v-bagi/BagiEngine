@@ -1,20 +1,23 @@
 #include <BECore/Resource/ResourceManager.h>
 
-#include <Generated/EnumResourceLoader.gen.hpp>
+#include <BECore/Reflection/AbstractFactory.h>
+#include <BECore/Resource/IResourceLoader.h>
 
 namespace BECore {
 
     void ResourceManager::Initialize() {
         LOG_INFO("Initializing ResourceManager...");
-        
-        // Register all loaders via generated factory
-        for (auto type : EnumUtils<ResourceLoaderType>::Values()) {
-            auto loader = ResourceLoaderFactory::Create(type);
+
+        // Create all registered loaders via the self-registration factory.
+        // Each concrete loader registered itself when its .gen.hpp was included
+        // in its own .cpp, so no EnumXxx.gen.hpp include is needed here.
+        for (const auto& meta : AbstractFactory<IResourceLoader>::GetInstance().GetRegisteredTypes()) {
+            auto loader = AbstractFactory<IResourceLoader>::GetInstance().Create(meta);
             if (loader) {
                 RegisterLoader(std::move(loader));
             }
         }
-        
+
         LOG_INFO(Format("ResourceManager initialized with {} loaders", _loaders.size()));
     }
 
@@ -23,7 +26,7 @@ namespace BECore {
             LOG_ERROR("Attempted to register null loader");
             return;
         }
-        
+
         _loaders.push_back(std::move(loader));
     }
 

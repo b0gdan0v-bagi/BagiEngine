@@ -3,15 +3,15 @@
     <!-- 
         Assert Handlers Configuration
         
-        type: Handler type (DebugBreak, Log)
+        type: Handler class name (LogHandler, DebugBreakHandler, StackTraceHandler)
         enabled: Whether handler is active (default: true)
         priority: Execution order, lower values run first (default: 0)
     -->
     <handlers>
         <!-- Log handler runs first to capture the message before potential break -->
-        <handler type="Log" enabled="true" priority="0" />
+        <handler type="LogHandler" enabled="true" priority="0" />
         
         <!-- Debug break handler runs after logging -->
-        <handler type="DebugBreak" enabled="true" priority="100" />
+        <handler type="DebugBreakHandler" enabled="true" priority="100" />
     </handlers>
 </root>

@@ -36,7 +36,7 @@ class GeneratorWorker(QThread):
     output_received = pyqtSignal(str)
     finished_signal = pyqtSignal(bool, str)  # success, message
     
-    def __init__(self, project_root: Path, source_dirs: list, output_dir: Path, 
+    def __init__(self, project_root: Path, source_dirs: list, output_dir: Path,
                  cache_dir: Path, include_dirs: list = None, force: bool = False):
         super().__init__()
         self.project_root = project_root
@@ -45,25 +45,26 @@ class GeneratorWorker(QThread):
         self.cache_dir = cache_dir
         self.include_dirs = include_dirs or []
         self.force = force
-    
+
     def run(self):
         import subprocess
-        
+
         # Build command
         cmd = [
             sys.executable,
             str(self.project_root / "CI" / "meta_generator" / "meta_generator.py"),
             "--output-dir", str(self.output_dir),
             "--cache-dir", str(self.cache_dir),
+            "--settings", str(self.project_root / "meta_generator_settings.json"),
             "--verbose"
         ]
-        
+
         for src_dir in self.source_dirs:
             cmd.extend(["--source-dir", str(src_dir)])
-        
+
         for inc_dir in self.include_dirs:
             cmd.extend(["--include-dir", str(inc_dir)])
-        
+
         if self.force:
             cmd.append("--force")
         
@@ -455,7 +456,7 @@ class MetaGeneratorWindow(QMainWindow):
         
         self.rescan_action.setEnabled(False)
         self.generate_action.setEnabled(False)
-        
+
         self.worker = GeneratorWorker(
             self.project_root, source_dirs, output_dir, cache_dir, include_dirs, force
         )

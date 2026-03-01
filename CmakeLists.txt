@@ -315,31 +315,25 @@ except ImportError:
         file(MAKE_DIRECTORY "${META_CACHE_DIR}")
         
         execute_process(
-            COMMAND ${Python3_EXECUTABLE} ${META_GENERATOR_SCRIPT}
+            COMMAND ${Python3_EXECUTABLE} -u ${META_GENERATOR_SCRIPT}
                 ${META_EXTRA_ARGS}
                 --output-dir "${REFLECTION_GENERATED_DIR}"
                 --cache-dir "${META_CACHE_DIR}"
                 --settings "${META_GENERATOR_SETTINGS}"
             RESULT_VARIABLE META_GEN_RESULT
-            OUTPUT_VARIABLE META_GEN_OUTPUT
-            ERROR_VARIABLE META_GEN_ERROR
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         )
         
         if(NOT META_GEN_RESULT EQUAL 0)
             message(FATAL_ERROR "Meta-generator failed for ${TARGET_NAME}:\n"
                 "  Exit code: ${META_GEN_RESULT}\n"
-                "  Error: ${META_GEN_ERROR}\n"
+                "  See output above for details.\n"
                 "\n"
                 "LLVM/libclang is REQUIRED. Options:\n"
                 "  1. Run: python CI/meta_generator/meta_generator_gui.py (configure LLVM path)\n"
                 "  2. Set environment variable: LIBCLANG_PATH=C:/Program Files/LLVM/bin\n"
                 "  3. Install LLVM: https://github.com/llvm/llvm-project/releases"
             )
-        else()
-            if(META_GEN_OUTPUT)
-                message(STATUS "${META_GEN_OUTPUT}")
-            endif()
         endif()
         
         # Collect all generated files

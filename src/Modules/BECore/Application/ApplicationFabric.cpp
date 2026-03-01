@@ -1,8 +1,8 @@
 #include "ApplicationFabric.h"
 
 #include <BECore/GameManager/CoreManager.h>
-
-#include <Generated/EnumApplicationFabric.gen.hpp>
+#include <BECore/Reflection/AbstractFactory.h>
+#include <BECore/Application/IApplicationFabric.h>
 
 namespace BECore {
 
@@ -13,12 +13,12 @@ namespace BECore {
             return false;
         }
 
-        const auto typeOpt = configNode.ParseAttribute<ApplicationFabricType>("type");
+        const auto typeOpt = configNode.ParseAttribute<eastl::string_view>("type");
         if (!typeOpt) {
             return false;
         }
 
-        auto fabric = ApplicationFabricFactory::Create(*typeOpt);
+        auto fabric = AbstractFactory<IApplicationFabric>::GetInstance().Create(*typeOpt);
         if (!fabric) {
             return false;
         }

@@ -16,23 +16,12 @@
 // ============================================================================
 // Includes for {{ base.name }} hierarchy
 // ============================================================================
-// Guard: include gen files for metadata only (no Serialize/Deserialize definitions)
-#define BE_GEN_NO_IMPL
 
-// Include base class generated reflection (metadata only)
-#include <Generated/{{ base.name }}.gen.hpp>
-
-// Include derived class headers
+// Include base and derived class headers
+#include <{{ base.include_path }}>
 {% for d in base.derived | unique(attribute='include_path') %}
 #include <{{ d.include_path }}>
 {% endfor %}
-
-// Include generated reflection for derived classes (metadata only)
-{% for d in base.derived | unique(attribute='gen_hpp') %}
-#include <Generated/{{ d.gen_hpp }}>
-{% endfor %}
-
-#undef BE_GEN_NO_IMPL
 
 // ============================================================================
 // Enum: {{ base.enum_type_name }}
@@ -74,7 +63,7 @@ public:
      */
     BasePtr Create(const ClassMeta& meta) const override {
 {% for d in base.derived %}
-        if (meta == GetClassMeta<{{ d.full_name }}>()) return New<{{ d.full_name }}>();
+        if (meta == {{ d.full_name }}::GetStaticTypeMeta()) return New<{{ d.full_name }}>();
 {% endfor %}
         return {};
     }
@@ -97,10 +86,10 @@ public:
      * @param type The type enum value
      * @return ClassMeta for the corresponding type
      */
-    static constexpr ClassMeta ToMeta(EnumType type) {
+    static ClassMeta ToMeta(EnumType type) {
         switch (type) {
 {% for d in base.derived %}
-            case EnumType::{{ d.short_name }}: return GetClassMeta<{{ d.full_name }}>();
+            case EnumType::{{ d.short_name }}: return {{ d.full_name }}::GetStaticTypeMeta();
 {% endfor %}
         }
         return {};
@@ -111,9 +100,9 @@ public:
      * @param meta The ClassMeta to convert
      * @return Enum value, or first value if not found
      */
-    static constexpr EnumType FromMeta(const ClassMeta& meta) {
+    static EnumType FromMeta(const ClassMeta& meta) {
 {% for d in base.derived %}
-        if (meta == GetClassMeta<{{ d.full_name }}>()) return EnumType::{{ d.short_name }};
+        if (meta == {{ d.full_name }}::GetStaticTypeMeta()) return EnumType::{{ d.short_name }};
 {% endfor %}
         return static_cast<EnumType>(0);
     }

@@ -202,7 +202,6 @@ class SettingsDialog(QDialog):
             except Exception:
                 pass
         
-        # Update LLVM path
         settings["llvm_bin_path"] = path
         
         # Save settings

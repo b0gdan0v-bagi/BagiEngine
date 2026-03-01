@@ -19,7 +19,9 @@ Features:
 
 import argparse
 import json
+import os
 import sys
+import time
 from pathlib import Path
 from typing import List, Set
 
@@ -30,7 +32,7 @@ from core.env_setup import initialize_clang, LLVMStatus
 from core.cache import MetadataCache
 from core.parser import create_parser
 from core.generator import CodeGenerator
-from core.models import ClassData
+from core.models import ClassData, EnumData
 
 
 def scan_headers(source_dirs: List[Path], extensions: List[str] = None) -> List[Path]:
@@ -218,8 +220,11 @@ Examples:
     # Load cache
     cache_path = cache_dir / "metadata_cache.json"
     cache = MetadataCache(cache_path)
+    t0_load = time.perf_counter()
     cache_loaded = cache.load()
-    
+    cache_load_elapsed = time.perf_counter() - t0_load
+    if args.verbose and not args.quiet:
+        log(f"Cache load: {cache_load_elapsed:.2f} s")
     if cache_loaded:
         stats = cache.get_statistics()
         verbose_log(f"Loaded cache: {stats['files']} files, {stats['classes']} classes")
@@ -254,18 +259,13 @@ Examples:
     processed_count = 0
     generated_count = 0
     error_count = 0
-    
+
     for file_path in files_to_process:
         verbose_log(f"  Parsing: {file_path.name}")
-        
         try:
             classes, enums = cpp_parser.parse_file(file_path)
-            
-            # Update cache
             cache.update_file(file_path, classes, enums)
             processed_count += 1
-            
-            # Generate reflection code
             if classes or enums:
                 all_classes_so_far = cache.get_all_classes()
                 output_path = generator.generate_reflection(
@@ -274,30 +274,22 @@ Examples:
                 if output_path:
                     generated_count += 1
                     verbose_log(f"    Generated: {output_path.name}")
-                    
                     for cls in classes:
                         if cls.is_factory_base:
                             verbose_log(f"    Found factory base: {cls.name}")
-            
         except Exception as e:
             error_count += 1
             if not args.quiet:
                 print(f"Error processing {file_path}: {e}", file=sys.stderr)
-    
-    # Generate factory code for factory bases
-    # Scan additional directories for derived classes
     if scan_dirs:
         verbose_log("Scanning for derived classes...")
         scan_headers_list = scan_headers(scan_dirs)
-        
         for file_path in scan_headers_list:
             if str(file_path.resolve()) not in cache.files:
                 verbose_log(f"  Parsing: {file_path.name}")
                 try:
                     classes, enums = cpp_parser.parse_file(file_path)
                     cache.update_file(file_path, classes, enums)
-                    
-                    # Generate reflection code for newly found classes
                     if classes or enums:
                         all_classes_so_far = cache.get_all_classes()
                         output_path = generator.generate_reflection(
@@ -310,17 +302,14 @@ Examples:
                     error_count += 1
                     if not args.quiet:
                         print(f"Error processing {file_path}: {e}", file=sys.stderr)
-    
-    # Build and generate factory bases
     all_classes = cache.get_all_classes()
     factory_bases = generator.build_factory_bases(all_classes, include_dirs)
-    
     for factory_base in factory_bases:
-        verbose_log(f"Generating factory for {factory_base.name}: {len(factory_base.derived)} derived classes")
-        output_path = generator.generate_enum_factory(factory_base, f"{factory_base.name}.h")
+        verbose_log(f"Generating factory traits for {factory_base.name}: {len(factory_base.derived)} derived classes")
+        output_path = generator.generate_factory_traits(factory_base, f"{factory_base.name}.h")
         if output_path:
             verbose_log(f"    Generated: {output_path.name}")
-    
+
     # Cleanup deleted files from cache
     # Only cleanup files from directories we're responsible for (not the entire cache)
     # This allows multiple modules to share the same cache without overwriting each other
@@ -351,7 +340,11 @@ Examples:
         verbose_log(f"Removed {len(to_remove)} deleted files from cache")
     
     # Save cache
+    t0_save = time.perf_counter()
     cache.save()
+    cache_save_elapsed = time.perf_counter() - t0_save
+    if args.verbose and not args.quiet:
+        log(f"Cache save (serialization): {cache_save_elapsed:.2f} s")
     verbose_log(f"Cache saved to {cache_path}")
     
     # Summary
@@ -361,6 +354,7 @@ Examples:
         if error_count > 0:
             log(f"  Errors: {error_count}")
         verbose_log(f"  Cache: {stats['files']} files, {stats['classes']} classes, {stats['enums']} enums")
+        log(f"  Cache load: {cache_load_elapsed:.2f} s | Cache save (serialization): {cache_save_elapsed:.2f} s")
     
     return 0 if error_count == 0 else 1
 

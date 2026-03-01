@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/FactoryTraits.h>
 #include <BECore/Reflection/ISerializer.h>
 #include <EASTL/unordered_map.h>
@@ -34,6 +35,35 @@ namespace BECore {
         template <typename Ptr>
         concept HasInnerFactory = requires {
             typename InnerFactoryType<Ptr>::type;
+        };
+
+        /**
+         * @brief Trait to extract the pointee type from any IntrusivePtr (for New + Deserialize path).
+         */
+        template <typename Ptr>
+        struct IntrusivePtrPointeeType {};
+
+        template <typename T>
+        struct IntrusivePtrPointeeType<IntrusivePtrAtomic<T>> {
+            using type = T;
+        };
+
+        template <typename T>
+        struct IntrusivePtrPointeeType<IntrusivePtrNonAtomic<T>> {
+            using type = T;
+        };
+
+        template <typename Ptr>
+        concept IsIntrusivePtr = requires {
+            typename IntrusivePtrPointeeType<Ptr>::type;
+        };
+
+        /**
+         * @brief Concept that matches types with an Initialize() method (optional post-Deserialize step).
+         */
+        template <typename T>
+        concept HasInitialize = requires(T& t) {
+            t.Initialize();
         };
 
         /**
@@ -73,10 +103,27 @@ namespace BECore {
 
         /**
          * @brief Deserialize a single element value from the current archive node.
+         *
+         * For IntrusivePtr elements (e.g. in vector/map): creates via New, Deserialize, optional Initialize.
          */
         template <typename Archive, typename T>
         void DeserializeElement(Archive& d, T& item) {
-            if constexpr (HasDeserialize<T, Archive>) {
+            if constexpr (IsIntrusivePtr<T>) {
+                using U = typename IntrusivePtrPointeeType<T>::type;
+                if constexpr (HasDeserialize<U, Archive> && !std::is_abstract_v<U>) {
+                    item = New<U>();
+                    item->Deserialize(d);
+                    if constexpr (HasInitialize<U>) {
+                        item->Initialize();
+                    }
+                } else if constexpr (requires { (*item).Deserialize(d); }) {
+                    if (item) {
+                        (*item).Deserialize(d);
+                    }
+                } else {
+                    d.ReadAttribute("value", item);
+                }
+            } else if constexpr (HasDeserialize<T, Archive>) {
                 item.Deserialize(d);
             } else if constexpr (requires { (*item).Deserialize(d); }) {
                 if (item) {
@@ -166,22 +213,19 @@ namespace BECore {
     /**
      * @brief Serialize a vector of factory-managed polymorphic pointers.
      *
-     * Writes a `type` attribute (from FactoryTraits) and `enabled="true"` per element.
-     * XML: <fieldName><elementName type="..." enabled="true" .../></fieldName>
+     * Writes the concrete class name as the `type` attribute and `enabled="true"` per element.
+     * XML: <fieldName><elementName type="ConcreteClassName" enabled="true" .../></fieldName>
      */
     template <typename Archive, typename Ptr, typename Alloc>
     requires Detail::HasInnerFactory<Ptr> void SerializeField(Archive& s, eastl::string_view name, const eastl::vector<Ptr, Alloc>& vec) {
         using Base = typename Detail::InnerFactoryType<Ptr>::type;
         using Traits = FactoryTraits<Base>;
-        using EnumType = typename Traits::EnumType;
 
         size_t count = vec.size();
         if (s.BeginArray(name, Traits::elementName, count)) {
             for (const auto& item : vec) {
                 if (item && s.BeginArrayElement()) {
-                    auto typeEnum = Traits::FactoryType::FromMeta(item->GetTypeMeta());
-                    auto typeName = EnumUtils<EnumType>::ToString(typeEnum);
-                    s.WriteAttribute("type", typeName);
+                    s.WriteAttribute("type", item->GetTypeMeta().typeName);
                     s.WriteAttribute("enabled", true);
                     item->Serialize(s);
                     s.EndArrayElement();
@@ -194,15 +238,14 @@ namespace BECore {
     /**
      * @brief Deserialize a vector of factory-managed polymorphic pointers.
      *
-     * Reads `type` and optional `enabled` attributes per element; creates instances
-     * via the factory and deserializes their fields.
+     * Reads the `type` attribute (full class name) and optional `enabled` attribute per element.
+     * Creates instances via AbstractFactory<Base> by class name — no derived-class headers needed.
      * Disabled elements (enabled="false") are skipped.
      */
     template <typename Archive, typename Ptr, typename Alloc>
     requires Detail::HasInnerFactory<Ptr> void DeserializeField(Archive& d, eastl::string_view name, eastl::vector<Ptr, Alloc>& vec) {
         using Base = typename Detail::InnerFactoryType<Ptr>::type;
         using Traits = FactoryTraits<Base>;
-        using EnumType = typename Traits::EnumType;
 
         size_t count = 0;
         if (d.BeginArray(name, Traits::elementName, count)) {
@@ -215,13 +258,14 @@ namespace BECore {
                     if (enabled) {
                         eastl::string typeStr;
                         if (d.ReadAttribute("type", typeStr)) {
-                            auto typeResult = EnumUtils<EnumType>::Cast(eastl::string_view(typeStr.data(), typeStr.size()));
-                            if (typeResult) {
-                                auto item = Traits::FactoryType::Create(*typeResult);
-                                if (item) {
-                                    item->Deserialize(d);
-                                    vec.push_back(eastl::move(item));
+                            auto item = AbstractFactory<Base>::GetInstance().Create(
+                                eastl::string_view(typeStr.data(), typeStr.size()));
+                            if (item) {
+                                item->Deserialize(d);
+                                if constexpr (Detail::HasInitialize<Base>) {
+                                    item->Initialize();
                                 }
+                                vec.push_back(eastl::move(item));
                             }
                         }
                     }

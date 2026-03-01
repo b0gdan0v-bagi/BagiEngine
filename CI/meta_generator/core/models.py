@@ -210,7 +210,10 @@ class ClassData:
     parent_class: Optional[str] = None  # Direct parent class name if inheriting
     source_file: str = ""
     line: int = 0
-    
+    # Resolved at generation time (not stored in cache): FQN of the factory base this
+    # class derives from, e.g. "BECore::ILogSink". Empty string when not a factory child.
+    factory_base_fqn: str = ""
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -290,6 +293,7 @@ class FactoryBaseData:
     derived: List[DerivedClassData] = field(default_factory=list)  # List of derived classes
     container_name: str = ""                    # XML container element name (e.g., "sinks")
     element_name: str = ""                      # XML element name (e.g., "sink")
+    include_path: str = ""                      # Include path for the base class header
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""

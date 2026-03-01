@@ -1,11 +1,9 @@
 #include "WidgetManager.h"
 
-#include <Widgets/ImGuiWidget.h>
-#include <Widgets/ClearScreenWidget.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/XmlDeserializer.h>
-
-#include <Generated/EnumWidget.gen.hpp>
+#include <BECore/Widgets/IWidget.h>
 
 namespace BECore {
 
@@ -32,9 +30,8 @@ namespace BECore {
     }
 
     void WidgetManager::CreateWidgets() {
-        // Get config via ConfigManager
         const auto rootNode = CoreManager::GetConfigManager().GetConfig("WidgetsConfig"_intern);
-        
+
         if (!rootNode) {
             return;
         }
@@ -49,20 +46,19 @@ namespace BECore {
             if (name != "widget") {
                 continue;
             }
-            auto widgetType = widgetNode.ParseAttribute<WidgetType>("type");
-            if (!widgetType) {
+            auto widgetTypeName = widgetNode.ParseAttribute<eastl::string_view>("type");
+            if (!widgetTypeName) {
                 continue;
             }
-            const auto widgetPtr = WidgetFactory::Create(*widgetType);
+            const auto widgetPtr = AbstractFactory<IWidget>::GetInstance().Create(*widgetTypeName);
             if (!widgetPtr) {
                 continue;
             }
-            
-            // Use XmlDeserializer for widget initialization
+
             XmlDeserializer deserializer;
             deserializer.LoadFromXmlNode(widgetNode);
             widgetPtr->Initialize(deserializer);
-            
+
             RegisterWidget(widgetPtr);
         }
     }

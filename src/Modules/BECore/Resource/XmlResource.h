@@ -21,6 +21,7 @@ namespace BECore {
     class XmlResource : public IResource {
         BE_CLASS(XmlResource)
     public:
+        XmlResource() : _config(XmlConfig::Create()) {}
         ~XmlResource() override = default;
         
         // IResource interface
@@ -55,10 +56,7 @@ namespace BECore {
 
     private:
         friend class XmlResourceLoader;
-        
-        // Private constructor for XmlResourceLoader
-        XmlResource() : _config(XmlConfig::Create()) {}
-        
+
         /**
          * @brief Initialize resource with loaded XML
          * 

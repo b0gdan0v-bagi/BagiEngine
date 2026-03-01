@@ -1,10 +1,10 @@
 #include "SDL3ApplicationFabric.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/AbstractFactory.h>
+#include <BECore/Renderer/IRenderer.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
-#include <Generated/EnumRenderer.gen.hpp>
-#include <Generated/SDL3ApplicationFabric.gen.hpp>
 
 namespace BECore {
 
@@ -20,9 +20,9 @@ namespace BECore {
         }
         CoreManager::GetInstance().GetMainWindowManager().SetMainWindow(window);
 
-        const auto rendererType = configNode.ParseAttribute<RendererType>("renderer").value_or(RendererType::SDLRendererBackend);
+        const auto rendererTypeName = configNode.ParseAttribute<eastl::string_view>("renderer").value_or("SDLRendererBackend");
 
-        auto renderer = RendererFactory::Create(rendererType);
+        auto renderer = AbstractFactory<IRenderer>::GetInstance().Create(rendererTypeName);
         if (!renderer) {
             return false;
         }

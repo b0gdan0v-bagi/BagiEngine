@@ -395,7 +395,7 @@ class ActionExecutor:
                 # Merge MSVC environment with system environment
                 env.update(msvc_env)
         
-        return self._run_streaming_command(cmd, env, on_output, timeout=300)
+        return self._run_streaming_command(cmd, env, on_output, timeout=600)
     
     def cmake_build(self, build_type: str = "Debug", compiler: str = "MSVC",
                     on_output: Optional[Callable[[str], None]] = None) -> ActionResult:
