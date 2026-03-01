@@ -37,21 +37,6 @@ def extract_intrusive_inner_type(type_name: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
-def compute_factory_dep_filename(base_name: str) -> str:
-    """Compute the FactoryTraitsXxx.gen.hpp filename for a factory base class.
-
-    Strips leading 'I' prefix and namespace, then prepends 'FactoryTraits'.
-
-    Examples:
-        'ILogSink'        -> 'FactoryTraitsLogSink.gen.hpp'
-        'Tests::ITest'    -> 'FactoryTraitsTest.gen.hpp'
-        'IAssertHandler'  -> 'FactoryTraitsAssertHandler.gen.hpp'
-    """
-    short = base_name.split('::')[-1]
-    if short.startswith('I') and len(short) > 1:
-        short = short[1:]
-    return f"FactoryTraits{short}.gen.hpp"
-
 
 def compute_element_name(base_name: str, first_derived_name: str) -> str:
     """Derive XML element name from the common suffix between base and first derived class.
@@ -169,19 +154,6 @@ def compute_include_path(source_file: str, include_dirs: List[str]) -> str:
     return source_path.name
 
 
-def compute_factory_traits_output_filename(base_name: str) -> str:
-    """
-    Compute output filename for the lightweight factory traits gen file.
-
-    Examples:
-        ILogSink -> FactoryTraitsLogSink.gen.hpp
-        IWidget  -> FactoryTraitsWidget.gen.hpp
-    """
-    name = base_name
-    if name.startswith('I') and len(name) > 1:
-        name = name[1:]
-    return f"FactoryTraits{name}.gen.hpp"
-
 
 class CodeGenerator:
     """
@@ -210,50 +182,55 @@ class CodeGenerator:
         )
     
     def generate_reflection(
-        self, 
-        classes: List[ClassData], 
-        enums: List[EnumData], 
+        self,
+        classes: List[ClassData],
+        enums: List[EnumData],
         source_file: Path,
         include_dirs: List[str] = None,
-        all_classes: List[ClassData] = None
+        all_classes: List[ClassData] = None,
+        factory_bases: List[FactoryBaseData] = None,
     ) -> Optional[Path]:
         """
         Generate reflection code for classes and enums.
-        
+
         Args:
             classes: List of reflected classes
             enums: List of reflected enums
             source_file: Path to the source file
             include_dirs: Include directories for computing include path
-            
+            all_classes: All known classes (for parent lookup)
+            factory_bases: All known factory bases (for inlining FactoryTraits)
+
         Returns:
             Path to generated file, or None if nothing to generate
         """
         if not classes and not enums:
             return None
-        
+
         # Ensure output directory exists
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Load template
         template = self.env.get_template('reflection.gen.hpp.j2')
-        
+
         # Compute include path for the original header
         include_path = compute_include_path(str(source_file), include_dirs or [])
-        
+
         # Build map of all known classes for parent class lookup
         all_classes_map = {c.name: c for c in (all_classes or [])}
 
-        # Build map of factory base short names -> full_qualified_name
-        # e.g. 'ILogSink' -> 'BECore::ILogSink'
-        factory_base_fqn_map: dict[str, str] = {
-            c.name.split('::')[-1]: c.full_qualified_name
-            for c in (all_classes or [])
-            if c.is_factory_base
+        # Build map: short factory-base name -> FactoryBaseData
+        # e.g. 'ILogSink' -> FactoryBaseData(...)
+        factory_base_map: dict[str, FactoryBaseData] = {
+            fb.name.split('::')[-1]: fb
+            for fb in (factory_bases or [])
         }
 
-        # Build set of factory base short names (e.g. 'ILogSink', 'ITest')
-        factory_base_names: Set[str] = set(factory_base_fqn_map.keys())
+        # Also build FQN map for self-registration block in templates
+        factory_base_fqn_map: dict[str, str] = {
+            name: fb.full_qualified_name
+            for name, fb in factory_base_map.items()
+        }
 
         # Prepare class data for template (convert dataclasses to dicts)
         classes_data = []
@@ -303,20 +280,27 @@ class CodeGenerator:
             }
             classes_data.append(cls_dict)
 
-        # Collect all unique factory dep filenames needed by this file's classes
+        # Collect factory deps data for inlining FactoryTraits into this gen file.
+        # One entry per unique factory base referenced by IntrusivePtr fields.
         seen_factory_deps: Set[str] = set()
-        all_factory_deps: List[str] = []
+        factory_deps_data: List[dict] = []
         for cls in classes:
             for f in cls.fields:
                 inner = extract_intrusive_inner_type(f.type_name)
                 if inner:
                     short = inner.split('::')[-1]
-                    if short in factory_base_names:
-                        dep_file = compute_factory_dep_filename(inner)
-                        if dep_file not in seen_factory_deps:
-                            seen_factory_deps.add(dep_file)
-                            all_factory_deps.append(dep_file)
-        
+                    if short in factory_base_map and short not in seen_factory_deps:
+                        seen_factory_deps.add(short)
+                        fb = factory_base_map[short]
+                        factory_deps_data.append({
+                            'name': fb.name,
+                            'full_qualified_name': fb.full_qualified_name,
+                            'enum_type_name': fb.enum_type_name,
+                            'element_name': fb.element_name,
+                            'include_path': fb.include_path,
+                            'derived': [{'short_name': d.short_name} for d in fb.derived],
+                        })
+
         # Prepare enum data
         enums_data = []
         for enum in enums:
@@ -328,81 +312,19 @@ class CodeGenerator:
                 'values': [{'name': v.name} for v in enum.values],
             }
             enums_data.append(enum_dict)
-        
+
         # Render template
         output = template.render(
             input_filename=source_file.name,
             include_path=include_path,
             classes=classes_data,
             enums=enums_data,
-            factory_deps=all_factory_deps,
-            factory_bases=[]  # Factory bases are generated separately
+            factory_deps=factory_deps_data,
+            factory_bases=[],  # Factory bases are no longer generated separately
         )
-        
+
         # Write output file
         output_filename = source_file.stem + ".gen.hpp"
-        output_path = self.output_dir / output_filename
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(output)
-        
-        return output_path
-    
-    def generate_factory_traits(
-        self,
-        factory_base: FactoryBaseData,
-        input_filename: str
-    ) -> Optional[Path]:
-        """
-        Generate lightweight factory traits file for a factory base class.
-
-        Produces FactoryTraitsXxx.gen.hpp containing:
-          - CORE_ENUM with short-name values (kept for future use)
-          - FactoryTraits<Base> specialization (elementName, EnumType)
-
-        No derived-class headers are included. Derived classes register
-        themselves via AbstractFactory<Base> from their own .gen.hpp files.
-
-        Args:
-            factory_base: Factory base data with derived classes
-            input_filename: Name of the base class source file
-
-        Returns:
-            Path to generated file, or None if no derived classes
-        """
-        if not factory_base.derived:
-            return None
-
-        # Ensure output directory exists
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Load template
-        template = self.env.get_template('factory_traits.gen.hpp.j2')
-
-        # Prepare factory base data (only what the lightweight template needs)
-        base_dict = {
-            'name': factory_base.name,
-            'full_qualified_name': factory_base.full_qualified_name,
-            'namespace': factory_base.namespace,
-            'enum_type_name': factory_base.enum_type_name,
-            'element_name': factory_base.element_name,
-            'include_path': factory_base.include_path,
-            'derived': [
-                {
-                    'short_name': d.short_name,
-                }
-                for d in factory_base.derived
-            ],
-        }
-
-        # Render template
-        output = template.render(
-            input_filename=input_filename,
-            factory_bases=[base_dict]
-        )
-
-        # Write output file
-        output_filename = compute_factory_traits_output_filename(factory_base.name)
         output_path = self.output_dir / output_filename
 
         with open(output_path, 'w', encoding='utf-8') as f:

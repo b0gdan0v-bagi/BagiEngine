@@ -267,6 +267,22 @@ class MetadataCache:
             return self.files[path_str].enums
         return []
     
+    def get_file_data(self, file_path: Path) -> tuple:
+        """
+        Return (classes, enums) for a file from cache.
+
+        Args:
+            file_path: Path to source file
+
+        Returns:
+            Tuple (List[ClassData], List[EnumData]); empty lists if not cached.
+        """
+        key = str(file_path.resolve())
+        if key in self.files:
+            meta = self.files[key]
+            return meta.classes, meta.enums
+        return [], []
+
     def find_factory_bases(self) -> List[ClassData]:
         """
         Find all classes marked as factory bases.

@@ -20,9 +20,19 @@
 // Include the original header file to access class declarations
 #include <{{ include_path }}>
 {% if factory_deps %}
-// Auto-include factory gen files for polymorphic field support
+// Factory traits inlined for polymorphic field support (HasInnerFactory / DeserializeField dispatch)
 {% for dep in factory_deps %}
-#include <Generated/{{ dep }}>
+#include <{{ dep.include_path }}>
+
+CORE_ENUM({{ dep.enum_type_name }}, uint8_t, {% for d in dep.derived %}{{ d.short_name }}{{ ", " if not loop.last else "" }}{% endfor %})
+
+namespace BECore {
+template<>
+struct FactoryTraits<{{ dep.full_qualified_name }}> {
+    using EnumType = {{ dep.enum_type_name }};
+    static constexpr eastl::string_view elementName = "{{ dep.element_name }}";
+};
+}  // namespace BECore
 {% endfor %}
 {% endif %}
 

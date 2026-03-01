@@ -14,31 +14,7 @@ namespace BECore {
     namespace Detail {
 
         /**
-         * @brief Trait to extract the factory base type from an intrusive smart pointer,
-         *        but only when that type has a FactoryTraits specialization.
-         *
-         * Used by HasInnerFactory to detect polymorphic factory containers.
-         */
-        template <typename Ptr>
-        struct InnerFactoryType {};
-
-        template <typename T>
-        requires HasFactory<T> struct InnerFactoryType<IntrusivePtrAtomic<T>> {
-            using type = T;
-        };
-
-        template <typename T>
-        requires HasFactory<T> struct InnerFactoryType<IntrusivePtrNonAtomic<T>> {
-            using type = T;
-        };
-
-        template <typename Ptr>
-        concept HasInnerFactory = requires {
-            typename InnerFactoryType<Ptr>::type;
-        };
-
-        /**
-         * @brief Trait to extract the pointee type from any IntrusivePtr (for New + Deserialize path).
+         * @brief Trait to extract the pointee type from any IntrusivePtr.
          */
         template <typename Ptr>
         struct IntrusivePtrPointeeType {};
@@ -59,10 +35,19 @@ namespace BECore {
         };
 
         /**
-         * @brief Concept that matches types with an Initialize() method (optional post-Deserialize step).
+         * @brief Concept: IntrusivePtr whose pointee has a FactoryTraits specialization.
+         *
+         * Replaces the old InnerFactoryType struct — derived directly from IsIntrusivePtr
+         * and HasFactory so there are no constrained partial specializations.
+         */
+        template <typename Ptr>
+        concept HasInnerFactory = IsIntrusivePtr<Ptr> && HasFactory<typename IntrusivePtrPointeeType<Ptr>::type>;
+
+        /**
+         * @brief Concept that matches types with an Initialize() method.
          */
         template <typename T>
-        concept HasInitialize = requires(T& t) {
+        concept HasInitialize = requires(T & t) {
             t.Initialize();
         };
 
@@ -83,55 +68,92 @@ namespace BECore {
         };
 
         /**
-         * @brief Serialize a single element value to the current archive node.
+         * @brief Write the body of an IntrusivePtr into the current (already open) archive node.
          *
-         * Dispatches to Serialize() for reflected objects, or WriteAttribute("value", ...)
-         * for primitives. Smart pointers dereference and dispatch.
+         * For factory types writes the "type" attribute, then delegates to Serialize().
+         * Caller is responsible for BeginObject/EndObject around this call.
+         */
+        template <typename Archive, typename Ptr>
+        requires IsIntrusivePtr<Ptr> void SerializeIntrusiveBody(Archive& s, const Ptr& ptr) {
+            using T = typename IntrusivePtrPointeeType<Ptr>::type;
+            if constexpr (HasFactory<T>)
+                s.WriteAttribute("type", ptr->GetTypeMeta().typeName);
+            if constexpr (HasSerialize<T, Archive>)
+                ptr->Serialize(s);
+        }
+
+        /**
+         * @brief Read the body of an IntrusivePtr from the current (already open) archive node.
+         *
+         * If ptr is null: tries factory-first (reads "type", creates via AbstractFactory<T>),
+         * then falls back to New<T> for non-abstract types. If ptr is already set, reuses it.
+         * Deserialize + Initialize are called exactly once after creation.
+         * Caller is responsible for BeginObject/EndObject around this call.
+         */
+        template <typename Archive, typename Ptr>
+        requires IsIntrusivePtr<Ptr> void DeserializeIntrusiveBody(Archive& d, Ptr& ptr) {
+            using T = typename IntrusivePtrPointeeType<Ptr>::type;
+            if (!ptr) {
+                if constexpr (HasFactory<T>) {
+                    eastl::string typeStr;
+                    if (d.ReadAttribute("type", typeStr))
+                        ptr = AbstractFactory<T>::GetInstance().Create(eastl::string_view(typeStr.data(), typeStr.size()));
+                }
+                if (!ptr) {
+                    if constexpr (!std::is_abstract_v<T>)
+                        ptr = New<T>();
+                }
+            }
+            if (ptr) {
+                ptr->Deserialize(d);
+                if constexpr (HasInitialize<T>)
+                    ptr->Initialize();
+            }
+        }
+
+        /**
+         * @brief Serialize a single element into the current (already open) array element node.
+         *
+         * Used by vector/map loops. Delegates IntrusivePtr logic to SerializeIntrusiveBody.
          */
         template <typename Archive, typename T>
         void SerializeElement(Archive& s, const T& item) {
-            if constexpr (HasSerialize<T, Archive>) {
+            if constexpr (IsIntrusivePtr<T>) {
+                if (item)
+                    SerializeIntrusiveBody(s, item);
+            } else if constexpr (HasSerialize<T, Archive>) {
                 item.Serialize(s);
-            } else if constexpr (requires { (*item).Serialize(s); }) {
-                if (item) {
-                    (*item).Serialize(s);
-                }
             } else {
                 s.WriteAttribute("value", item);
             }
         }
 
         /**
-         * @brief Deserialize a single element value from the current archive node.
+         * @brief Deserialize a single element from the current (already open) array element node.
          *
-         * For IntrusivePtr elements (e.g. in vector/map): creates via New, Deserialize, optional Initialize.
+         * Used by vector/map loops. Delegates IntrusivePtr logic to DeserializeIntrusiveBody.
          */
         template <typename Archive, typename T>
         void DeserializeElement(Archive& d, T& item) {
             if constexpr (IsIntrusivePtr<T>) {
-                using U = typename IntrusivePtrPointeeType<T>::type;
-                if constexpr (HasDeserialize<U, Archive> && !std::is_abstract_v<U>) {
-                    item = New<U>();
-                    item->Deserialize(d);
-                    if constexpr (HasInitialize<U>) {
-                        item->Initialize();
-                    }
-                } else if constexpr (requires { (*item).Deserialize(d); }) {
-                    if (item) {
-                        (*item).Deserialize(d);
-                    }
-                } else {
-                    d.ReadAttribute("value", item);
-                }
+                DeserializeIntrusiveBody(d, item);
             } else if constexpr (HasDeserialize<T, Archive>) {
                 item.Deserialize(d);
-            } else if constexpr (requires { (*item).Deserialize(d); }) {
-                if (item) {
-                    (*item).Deserialize(d);
-                }
             } else {
                 d.ReadAttribute("value", item);
             }
+        }
+
+        /**
+         * @brief Construct a default T and deserialize it from the current archive node.
+         *
+         * Convenience wrapper over DeserializeElement for use in push_back / emplace sites.
+         */
+        template <typename T, typename Archive>
+        T MakeElement(Archive& d) {
+            T item{};
+            DeserializeElement(d, item);
+            return item;
         }
 
     }  // namespace Detail
@@ -169,40 +191,30 @@ namespace BECore {
     // =========================================================================
 
     /**
-     * @brief Serialize an IntrusivePtrAtomic<T> as a named child element.
+     * @brief Serialize an IntrusivePtr as a named child element.
      *
-     * No-op if the pointer is null. Delegates to SerializeField<T>.
+     * No-op if the pointer is null. For factory types writes the "type" attribute;
+     * otherwise delegates to the pointee's Serialize().
      */
-    template <typename Archive, typename T>
-    void SerializeField(Archive& s, eastl::string_view name, const IntrusivePtrAtomic<T>& ptr) {
-        if (ptr) {
-            SerializeField(s, name, *ptr);
+    template <typename Archive, typename Ptr>
+    requires Detail::IsIntrusivePtr<Ptr> void SerializeField(Archive& s, eastl::string_view name, const Ptr& ptr) {
+        if (ptr && s.BeginObject(name)) {
+            Detail::SerializeIntrusiveBody(s, ptr);
+            s.EndObject();
         }
     }
 
     /**
-     * @brief Deserialize into an existing IntrusivePtrAtomic<T> from a named child element.
+     * @brief Deserialize into an IntrusivePtr from a named child element.
      *
-     * The pointer must already be non-null; typically used for single owned objects.
+     * For factory types reads "type" and creates via AbstractFactory (ptr may be null on entry).
+     * For concrete types deserializes into existing ptr, or creates via New<T>.
      */
-    template <typename Archive, typename T>
-    void DeserializeField(Archive& d, eastl::string_view name, IntrusivePtrAtomic<T>& ptr) {
-        if (ptr) {
-            DeserializeField(d, name, *ptr);
-        }
-    }
-
-    template <typename Archive, typename T>
-    void SerializeField(Archive& s, eastl::string_view name, const IntrusivePtrNonAtomic<T>& ptr) {
-        if (ptr) {
-            SerializeField(s, name, *ptr);
-        }
-    }
-
-    template <typename Archive, typename T>
-    void DeserializeField(Archive& d, eastl::string_view name, IntrusivePtrNonAtomic<T>& ptr) {
-        if (ptr) {
-            DeserializeField(d, name, *ptr);
+    template <typename Archive, typename Ptr>
+    requires Detail::IsIntrusivePtr<Ptr> void DeserializeField(Archive& d, eastl::string_view name, Ptr& ptr) {
+        if (d.BeginObject(name)) {
+            Detail::DeserializeIntrusiveBody(d, ptr);
+            d.EndObject();
         }
     }
 
@@ -213,21 +225,19 @@ namespace BECore {
     /**
      * @brief Serialize a vector of factory-managed polymorphic pointers.
      *
-     * Writes the concrete class name as the `type` attribute and `enabled="true"` per element.
      * XML: <fieldName><elementName type="ConcreteClassName" enabled="true" .../></fieldName>
      */
     template <typename Archive, typename Ptr, typename Alloc>
     requires Detail::HasInnerFactory<Ptr> void SerializeField(Archive& s, eastl::string_view name, const eastl::vector<Ptr, Alloc>& vec) {
-        using Base = typename Detail::InnerFactoryType<Ptr>::type;
+        using Base = typename Detail::IntrusivePtrPointeeType<Ptr>::type;
         using Traits = FactoryTraits<Base>;
 
         size_t count = vec.size();
         if (s.BeginArray(name, Traits::elementName, count)) {
             for (const auto& item : vec) {
                 if (item && s.BeginArrayElement()) {
-                    s.WriteAttribute("type", item->GetTypeMeta().typeName);
                     s.WriteAttribute("enabled", true);
-                    item->Serialize(s);
+                    Detail::SerializeIntrusiveBody(s, item);
                     s.EndArrayElement();
                 }
             }
@@ -238,13 +248,13 @@ namespace BECore {
     /**
      * @brief Deserialize a vector of factory-managed polymorphic pointers.
      *
-     * Reads the `type` attribute (full class name) and optional `enabled` attribute per element.
-     * Creates instances via AbstractFactory<Base> by class name — no derived-class headers needed.
+     * Reads "type" and optional "enabled" per element.
+     * Creates instances via AbstractFactory<Base> — no derived-class headers needed.
      * Disabled elements (enabled="false") are skipped.
      */
     template <typename Archive, typename Ptr, typename Alloc>
     requires Detail::HasInnerFactory<Ptr> void DeserializeField(Archive& d, eastl::string_view name, eastl::vector<Ptr, Alloc>& vec) {
-        using Base = typename Detail::InnerFactoryType<Ptr>::type;
+        using Base = typename Detail::IntrusivePtrPointeeType<Ptr>::type;
         using Traits = FactoryTraits<Base>;
 
         size_t count = 0;
@@ -256,18 +266,10 @@ namespace BECore {
                     bool enabled = true;
                     d.ReadAttribute("enabled", enabled);
                     if (enabled) {
-                        eastl::string typeStr;
-                        if (d.ReadAttribute("type", typeStr)) {
-                            auto item = AbstractFactory<Base>::GetInstance().Create(
-                                eastl::string_view(typeStr.data(), typeStr.size()));
-                            if (item) {
-                                item->Deserialize(d);
-                                if constexpr (Detail::HasInitialize<Base>) {
-                                    item->Initialize();
-                                }
-                                vec.push_back(eastl::move(item));
-                            }
-                        }
+                        Ptr item;
+                        Detail::DeserializeIntrusiveBody(d, item);
+                        if (item)
+                            vec.push_back(eastl::move(item));
                     }
                     d.EndArrayElement();
                 }
@@ -283,8 +285,8 @@ namespace BECore {
     /**
      * @brief Serialize a vector of arbitrary elements.
      *
-     * Each element is serialized into an `<item>` child element.
-     * Primitives use a `value` attribute; reflected objects use Serialize().
+     * Each element is serialized into an <item> child element.
+     * Primitives use a "value" attribute; reflected objects use Serialize().
      */
     template <typename Archive, typename Elem, typename Alloc>
     void SerializeField(Archive& s, eastl::string_view name, const eastl::vector<Elem, Alloc>& vec) {
@@ -303,8 +305,8 @@ namespace BECore {
     /**
      * @brief Deserialize a vector of arbitrary elements.
      *
-     * Each `<item>` element is deserialized in order.
-     * Primitives use a `value` attribute; reflected objects use Deserialize().
+     * Each <item> element is deserialized in order.
+     * Primitives use a "value" attribute; reflected objects use Deserialize().
      */
     template <typename Archive, typename Elem, typename Alloc>
     void DeserializeField(Archive& d, eastl::string_view name, eastl::vector<Elem, Alloc>& vec) {
@@ -314,9 +316,7 @@ namespace BECore {
             vec.reserve(count);
             for (size_t i = 0; i < count; ++i) {
                 if (d.BeginArrayElement()) {
-                    Elem item{};
-                    Detail::DeserializeElement(d, item);
-                    vec.push_back(eastl::move(item));
+                    vec.push_back(Detail::MakeElement<Elem>(d));
                     d.EndArrayElement();
                 }
             }
@@ -331,8 +331,7 @@ namespace BECore {
     /**
      * @brief Serialize an unordered_map.
      *
-     * Each key-value pair becomes an `<entry key="...">` element.
-     * The value is serialized into the element body (attributes/children).
+     * Each key-value pair becomes an <entry key="..."> element.
      * XML: <fieldName><entry key="k1" .../><entry key="k2" .../></fieldName>
      */
     template <typename Archive, typename K, typename V, typename Hash, typename Pred, typename Alloc>
@@ -353,8 +352,8 @@ namespace BECore {
     /**
      * @brief Deserialize an unordered_map.
      *
-     * Reads each `<entry key="...">` element, deserializing the key from the `key`
-     * attribute and the value from the element body.
+     * Reads each <entry key="..."> element, deserializing key from the "key" attribute
+     * and value from the element body.
      */
     template <typename Archive, typename K, typename V, typename Hash, typename Pred, typename Alloc>
     void DeserializeField(Archive& d, eastl::string_view name, eastl::unordered_map<K, V, Hash, Pred, Alloc>& map) {
@@ -366,9 +365,7 @@ namespace BECore {
                 if (d.BeginArrayElement()) {
                     K key{};
                     d.ReadAttribute("key", key);
-                    V value{};
-                    Detail::DeserializeElement(d, value);
-                    map.emplace(eastl::move(key), eastl::move(value));
+                    map.emplace(eastl::move(key), Detail::MakeElement<V>(d));
                     d.EndArrayElement();
                 }
             }
@@ -383,10 +380,9 @@ namespace BECore {
     /**
      * @brief Serialize any primitive value as a named XML attribute.
      *
-     * This is the lowest-priority overload. All more-specific overloads
-     * (reflected objects, vectors, maps, smart pointers) are preferred by
-     * the compiler. This catch-all handles plain scalars and strings that
-     * are not matched by any other overload.
+     * Lowest-priority overload — all more-specific overloads (reflected objects,
+     * vectors, maps, smart pointers) are preferred by the compiler.
+     * Handles plain scalars, strings, and PoolString.
      */
     template <typename Archive, typename T>
     void SerializeField(Archive& s, eastl::string_view name, const T& value) {

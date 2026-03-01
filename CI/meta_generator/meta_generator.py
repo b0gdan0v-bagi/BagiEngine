@@ -255,10 +255,16 @@ Examples:
         else:
             log("All files up to date")
     
-    # Process files
+    # Pass 1: parse all files and update cache.
+    # Parsing is done first for ALL files so that factory base information is
+    # complete before any code generation begins. This avoids the ordering race
+    # where LoggerManager.h could be generated before ILogSink.h is parsed,
+    # resulting in missing FactoryTraits includes.
     processed_count = 0
     generated_count = 0
     error_count = 0
+
+    files_to_generate: List[Path] = []
 
     for file_path in files_to_process:
         verbose_log(f"  Parsing: {file_path.name}")
@@ -267,20 +273,15 @@ Examples:
             cache.update_file(file_path, classes, enums)
             processed_count += 1
             if classes or enums:
-                all_classes_so_far = cache.get_all_classes()
-                output_path = generator.generate_reflection(
-                    classes, enums, file_path, include_dirs, all_classes_so_far
-                )
-                if output_path:
-                    generated_count += 1
-                    verbose_log(f"    Generated: {output_path.name}")
-                    for cls in classes:
-                        if cls.is_factory_base:
-                            verbose_log(f"    Found factory base: {cls.name}")
+                files_to_generate.append(file_path)
+                for cls in classes:
+                    if cls.is_factory_base:
+                        verbose_log(f"    Found factory base: {cls.name}")
         except Exception as e:
             error_count += 1
             if not args.quiet:
                 print(f"Error processing {file_path}: {e}", file=sys.stderr)
+
     if scan_dirs:
         verbose_log("Scanning for derived classes...")
         scan_headers_list = scan_headers(scan_dirs)
@@ -291,24 +292,34 @@ Examples:
                     classes, enums = cpp_parser.parse_file(file_path)
                     cache.update_file(file_path, classes, enums)
                     if classes or enums:
-                        all_classes_so_far = cache.get_all_classes()
-                        output_path = generator.generate_reflection(
-                            classes, enums, file_path, include_dirs, all_classes_so_far
-                        )
-                        if output_path:
-                            generated_count += 1
-                            verbose_log(f"    Generated: {output_path.name}")
+                        files_to_generate.append(file_path)
                 except Exception as e:
                     error_count += 1
                     if not args.quiet:
                         print(f"Error processing {file_path}: {e}", file=sys.stderr)
+
+    # After all parsing: build the complete factory-base picture once.
     all_classes = cache.get_all_classes()
     factory_bases = generator.build_factory_bases(all_classes, include_dirs)
-    for factory_base in factory_bases:
-        verbose_log(f"Generating factory traits for {factory_base.name}: {len(factory_base.derived)} derived classes")
-        output_path = generator.generate_factory_traits(factory_base, f"{factory_base.name}.h")
-        if output_path:
-            verbose_log(f"    Generated: {output_path.name}")
+    if factory_bases:
+        verbose_log(f"Factory bases found: {[fb.name for fb in factory_bases]}")
+
+    # Pass 2: generate code for all files that had reflected content.
+    # At this point every factory base is known, so FactoryTraits can be
+    # inlined correctly into whichever gen file needs them.
+    for file_path in files_to_generate:
+        classes, enums = cache.get_file_data(file_path)
+        try:
+            output_path = generator.generate_reflection(
+                classes, enums, file_path, include_dirs, all_classes, factory_bases
+            )
+            if output_path:
+                generated_count += 1
+                verbose_log(f"    Generated: {output_path.name}")
+        except Exception as e:
+            error_count += 1
+            if not args.quiet:
+                print(f"Error generating {file_path}: {e}", file=sys.stderr)
 
     # Cleanup deleted files from cache
     # Only cleanup files from directories we're responsible for (not the entire cache)
