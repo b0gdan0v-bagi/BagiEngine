@@ -125,6 +125,16 @@ namespace BECore::Tests {
          * @brief Test method reflection (BE_FUNCTION)
          */
         bool TestMethodReflection();
+
+        /**
+         * @brief Test DefaultChecker for arithmetic, strings, containers, pointers
+         */
+        bool TestDefaultChecker();
+
+        /**
+         * @brief Test Ser::Save with SetSkipDefaults(true) produces smaller XML
+         */
+        bool TestSkipDefaults();
     };
 
     // Compile-time validation of test class

@@ -221,6 +221,14 @@ namespace BECore {
         }
     };
 
+    /**
+     * @brief Concept: T is an enum registered with CORE_ENUM (has ADL-discoverable EnumTokenizerPtr).
+     */
+    template <typename T>
+    concept IsReflectedEnum = std::is_enum_v<T> && requires {
+        { EnumTokenizerPtr(T{}) };
+    };
+
 }  // namespace BECore
 
 // fmt support for EnumUtils-enabled enums

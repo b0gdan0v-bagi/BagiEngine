@@ -10,8 +10,7 @@
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/MethodInfo.h>
-#include <BECore/Reflection/FieldSerializer.h>
-#include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/String.h>
 #include <EASTL/string_view.h>
@@ -170,14 +169,7 @@ size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
 void {{ cls.full_qualified_name }}::Serialize(::BECore::ISerializer& s) const {
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-{% if field.is_enum %}
-    {
-        auto _sv = EnumUtils<{{ field.type_name }}>::ToString({{ field.name }});
-        s.WriteAttribute("{{ xml_name }}", _sv);
-    }
-{% else %}
-    ::BECore::SerializeField(s, "{{ xml_name }}", {{ field.name }});
-{% endif %}
+    ::BECore::Ser::Save(s, {{ field.name }}, "{{ xml_name }}");
 {% endfor %}
 }
 
@@ -185,18 +177,7 @@ void {{ cls.full_qualified_name }}::Serialize(::BECore::ISerializer& s) const {
 void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-{% if field.is_enum %}
-    {
-        eastl::string _eStr;
-        if (d.ReadAttribute("{{ xml_name }}", _eStr)) {
-            auto _r = EnumUtils<{{ field.type_name }}>::Cast(
-                eastl::string_view(_eStr.data(), _eStr.size()));
-            if (_r) {{ field.name }} = *_r;
-        }
-    }
-{% else %}
-    ::BECore::DeserializeField(d, "{{ xml_name }}", {{ field.name }});
-{% endif %}
+    ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}");
 {% endfor %}
 }
 {% endif %}
@@ -250,14 +231,7 @@ void {{ cls.full_qualified_name }}::Serialize(::BECore::ISerializer& s) const {
 {% endif %}
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-{% if field.is_enum %}
-    {
-        auto _sv = EnumUtils<{{ field.type_name }}>::ToString({{ field.name }});
-        s.WriteAttribute("{{ xml_name }}", _sv);
-    }
-{% else %}
-    ::BECore::SerializeField(s, "{{ xml_name }}", {{ field.name }});
-{% endif %}
+    ::BECore::Ser::Save(s, {{ field.name }}, "{{ xml_name }}");
 {% endfor %}
 }
 
@@ -269,18 +243,7 @@ void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% endif %}
 {% for field in cls.fields %}
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
-{% if field.is_enum %}
-    {
-        eastl::string _eStr;
-        if (d.ReadAttribute("{{ xml_name }}", _eStr)) {
-            auto _r = EnumUtils<{{ field.type_name }}>::Cast(
-                eastl::string_view(_eStr.data(), _eStr.size()));
-            if (_r) {{ field.name }} = *_r;
-        }
-    }
-{% else %}
-    ::BECore::DeserializeField(d, "{{ xml_name }}", {{ field.name }});
-{% endif %}
+    ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}");
 {% endfor %}
 }
 

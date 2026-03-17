@@ -2,6 +2,8 @@
 #include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/SerializationTraits.h>
+#include <BECore/Reflection/DataAccessor.h>
 
 #include <Generated/ReflectionTest.gen.hpp>
 
@@ -132,7 +134,21 @@ namespace BECore::Tests {
         } else {
             LOG_INFO("[ReflectionTest] TestMethodReflection PASSED");
         }
-        
+
+        if (!TestDefaultChecker()) {
+            LOG_ERROR("[ReflectionTest] TestDefaultChecker FAILED");
+            allPassed = false;
+        } else {
+            LOG_INFO("[ReflectionTest] TestDefaultChecker PASSED");
+        }
+
+        if (!TestSkipDefaults()) {
+            LOG_ERROR("[ReflectionTest] TestSkipDefaults FAILED");
+            allPassed = false;
+        } else {
+            LOG_INFO("[ReflectionTest] TestSkipDefaults PASSED");
+        }
+
         return allPassed;
     }
 
@@ -309,6 +325,157 @@ namespace BECore::Tests {
         }
         
         LOG_INFO("[ReflectionTest] Method reflection tests passed");
+        return true;
+    }
+
+    bool ReflectionTest::TestDefaultChecker() {
+        // Arithmetic types
+        if (!DefaultChecker<int32_t>::IsDefault(0)) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<int32_t>::IsDefault(0) should be true");
+            return false;
+        }
+        if (DefaultChecker<int32_t>::IsDefault(42)) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<int32_t>::IsDefault(42) should be false");
+            return false;
+        }
+        if (!DefaultChecker<float>::IsDefault(0.0f)) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<float>::IsDefault(0.0f) should be true");
+            return false;
+        }
+        if (!DefaultChecker<bool>::IsDefault(false)) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<bool>::IsDefault(false) should be true");
+            return false;
+        }
+        if (DefaultChecker<bool>::IsDefault(true)) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<bool>::IsDefault(true) should be false");
+            return false;
+        }
+
+        // PoolString
+        if (!DefaultChecker<PoolString>::IsDefault(PoolString{})) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<PoolString>::IsDefault(empty) should be true");
+            return false;
+        }
+        if (DefaultChecker<PoolString>::IsDefault(PoolString::Intern("test"))) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<PoolString>::IsDefault(\"test\") should be false");
+            return false;
+        }
+
+        // eastl::string
+        if (!DefaultChecker<eastl::string>::IsDefault(eastl::string{})) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<eastl::string>::IsDefault(empty) should be true");
+            return false;
+        }
+        if (DefaultChecker<eastl::string>::IsDefault(eastl::string{"hello"})) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<eastl::string>::IsDefault(\"hello\") should be false");
+            return false;
+        }
+
+        // eastl::vector
+        if (!DefaultChecker<eastl::vector<int32_t>>::IsDefault(eastl::vector<int32_t>{})) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<vector<int>>::IsDefault(empty) should be true");
+            return false;
+        }
+        eastl::vector<int32_t> nonEmptyVec{1, 2, 3};
+        if (DefaultChecker<eastl::vector<int32_t>>::IsDefault(nonEmptyVec)) {
+            LOG_ERROR("[ReflectionTest] DefaultChecker<vector<int>>::IsDefault({1,2,3}) should be false");
+            return false;
+        }
+
+        LOG_INFO("[ReflectionTest] DefaultChecker tests passed");
+        return true;
+    }
+
+    bool ReflectionTest::TestSkipDefaults() {
+        TestData::Player player;
+        player.health = 0;
+        player.speed = 0.0f;
+        player.name = PoolString{};
+        player.isAlive = false;
+
+        // Serialize WITHOUT skip-defaults
+        XmlSerializer fullSerializer;
+        if (fullSerializer.BeginObject("Player")) {
+            player.Serialize(fullSerializer);
+            fullSerializer.EndObject();
+        }
+        eastl::string fullXml = fullSerializer.SaveToString();
+
+        // Serialize WITH skip-defaults
+        XmlSerializer skipSerializer;
+        skipSerializer.SetSkipDefaults(true);
+        if (skipSerializer.BeginObject("Player")) {
+            player.Serialize(skipSerializer);
+            skipSerializer.EndObject();
+        }
+        eastl::string skipXml = skipSerializer.SaveToString();
+
+        LOG_DEBUG("[ReflectionTest] Full XML ({} chars):\n{}"_format(fullXml.size(), fullXml));
+        LOG_DEBUG("[ReflectionTest] Skip-defaults XML ({} chars):\n{}"_format(skipXml.size(), skipXml));
+
+        if (skipXml.size() >= fullXml.size()) {
+            LOG_ERROR("[ReflectionTest] skip-defaults XML should be smaller: {} >= {}"_format(
+                skipXml.size(), fullXml.size()));
+            return false;
+        }
+
+        // Verify round-trip: deserialize skip-defaults XML and check values
+        XmlDeserializer deserializer;
+        if (!deserializer.LoadFromString(skipXml)) {
+            LOG_ERROR("[ReflectionTest] Failed to load skip-defaults XML");
+            return false;
+        }
+
+        TestData::Player loaded;
+        loaded.health = 0;
+        loaded.speed = 0.0f;
+        loaded.isAlive = false;
+
+        if (deserializer.BeginObject("Player")) {
+            loaded.Deserialize(deserializer);
+            deserializer.EndObject();
+        }
+
+        if (loaded.health != player.health || loaded.speed != player.speed
+            || loaded.name != player.name || loaded.isAlive != player.isAlive) {
+            LOG_ERROR("[ReflectionTest] Round-trip with skip-defaults produced different values");
+            return false;
+        }
+
+        // Verify that non-default values still serialize correctly
+        TestData::Player hero;
+        hero.health = 75;
+        hero.speed = 10.5f;
+        hero.name = PoolString::Intern("Hero");
+        hero.isAlive = true;
+
+        XmlSerializer heroSerializer;
+        heroSerializer.SetSkipDefaults(true);
+        if (heroSerializer.BeginObject("Player")) {
+            hero.Serialize(heroSerializer);
+            heroSerializer.EndObject();
+        }
+        eastl::string heroXml = heroSerializer.SaveToString();
+
+        XmlDeserializer heroDeserializer;
+        if (!heroDeserializer.LoadFromString(heroXml)) {
+            LOG_ERROR("[ReflectionTest] Failed to load hero XML");
+            return false;
+        }
+
+        TestData::Player heroLoaded;
+        if (heroDeserializer.BeginObject("Player")) {
+            heroLoaded.Deserialize(heroDeserializer);
+            heroDeserializer.EndObject();
+        }
+
+        if (heroLoaded.health != hero.health || heroLoaded.speed != hero.speed
+            || heroLoaded.name != hero.name || heroLoaded.isAlive != hero.isAlive) {
+            LOG_ERROR("[ReflectionTest] Round-trip of non-default values with skip-defaults failed");
+            return false;
+        }
+
+        LOG_INFO("[ReflectionTest] Skip-defaults tests passed");
         return true;
     }
 

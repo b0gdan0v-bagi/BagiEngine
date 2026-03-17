@@ -95,6 +95,9 @@ namespace BECore {
     public:
         virtual ~ISerializer() = default;
 
+        bool IsSkipDefaults() const { return _skipDefaults; }
+        void SetSkipDefaults(bool skip) { _skipDefaults = skip; }
+
         // =================================================================
         // Primitive types serialization (as child elements)
         // =================================================================
@@ -142,6 +145,9 @@ namespace BECore {
         ISerializer& operator=(const ISerializer&) = default;
         ISerializer(ISerializer&&) = default;
         ISerializer& operator=(ISerializer&&) = default;
+
+    private:
+        bool _skipDefaults = false;
     };
 
 }  // namespace BECore

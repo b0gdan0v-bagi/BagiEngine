@@ -1,7 +1,7 @@
 #include "TestManager.h"
 
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Reflection/FieldSerializer.h>
+#include <BECore/Reflection/DataAccessor.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 
 namespace BECore {
@@ -13,7 +13,7 @@ namespace BECore {
         if (root) {
             XmlDeserializer d;
             d.LoadFromXmlNode(root);
-            DeserializeField(d, "tests", tests);
+            Ser::Load(d, tests, "tests");
         }
 
         if (tests.empty()) {
