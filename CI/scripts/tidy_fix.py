@@ -18,9 +18,12 @@ After running, apply clang-format to keep consistent style:
 """
 
 import argparse
+import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 _script_dir = Path(__file__).resolve().parent
@@ -30,6 +33,16 @@ if str(_script_dir) not in sys.path:
 from format_sources import load_ignore_patterns  # noqa: E402
 
 SOURCE_EXTENSIONS = {".cpp", ".c"}
+
+# Compile-command argument prefixes that clang-tidy cannot handle when the
+# corresponding build artefacts (compiled PCH, module map response files) do
+# not exist in a configure-only Tidy build.  /FI (force-include) is kept so
+# that pch.h is still pulled in as a plain header.
+_BAD_ARG_PREFIXES = (
+    "/Yu",   # use compiled PCH — .pch file does not exist
+    "/Fp",   # path to compiled .pch file — does not exist
+    "@",     # response-file (e.g. @*.modmap from C++ module scanning)
+)
 
 
 def is_excluded(rel_path: str, ignore_patterns: list[str]) -> bool:
@@ -42,8 +55,6 @@ def is_excluded(rel_path: str, ignore_patterns: list[str]) -> bool:
 
 
 def find_clang_tidy(project_root: Path) -> Path | None:
-    import shutil
-
     exe = shutil.which("clang-tidy")
     if exe:
         return Path(exe)
@@ -79,6 +90,38 @@ def find_compile_commands(project_root: Path, build_dir_arg: str | None) -> Path
             if db.exists():
                 return db
     return None
+
+
+def filter_compile_commands(db_path: Path, out_dir: Path) -> Path:
+    """Write a filtered compile_commands.json to out_dir.
+
+    Strips MSVC PCH flags (/Yu, /Fp) and modmap response-file references (@...)
+    that clang-tidy cannot resolve in a configure-only build.  The /FI
+    force-include flag is preserved so that pch.h is still included as a plain
+    header, giving clang-tidy access to all common declarations.
+    """
+    with db_path.open("r", encoding="utf-8") as f:
+        entries = json.load(f)
+
+    for entry in entries:
+        if "arguments" in entry:
+            entry["arguments"] = [
+                a for a in entry["arguments"]
+                if not any(a.startswith(p) for p in _BAD_ARG_PREFIXES)
+            ]
+        elif "command" in entry:
+            import shlex
+            try:
+                args = shlex.split(entry["command"], posix=False)
+                args = [a for a in args if not any(a.startswith(p) for p in _BAD_ARG_PREFIXES)]
+                entry["command"] = subprocess.list2cmdline(args)
+            except ValueError:
+                pass
+
+    out_path = out_dir / "compile_commands.json"
+    with out_path.open("w", encoding="utf-8") as f:
+        json.dump(entries, f, indent=2)
+    return out_path
 
 
 def get_changed_files(project_root: Path, ignore_patterns: list[str]) -> list[Path]:
@@ -167,44 +210,60 @@ def main() -> int:
         )
         return 1
 
-    build_dir = compile_commands_db.parent
     print(f"Using compile_commands.json: {compile_commands_db.relative_to(project_root)}")
 
-    ignore_patterns = load_ignore_patterns(project_root)
-    if args.changed:
-        files = get_changed_files(project_root, ignore_patterns)
-        print(f"Processing {len(files)} changed file(s)...")
-    else:
-        files = get_all_source_files(project_root, ignore_patterns)
-        print(f"Processing {len(files)} file(s)...")
+    # Build a filtered copy of compile_commands.json in a temp directory.
+    # This removes MSVC PCH artefact flags that clang-tidy cannot resolve
+    # without an actual build, while preserving /FI (force-include) so that
+    # pch.h is still available as a plain header.
+    tmp_dir = Path(tempfile.mkdtemp(prefix="bagi_tidy_"))
+    try:
+        filtered_db = filter_compile_commands(compile_commands_db, tmp_dir)
+        build_dir = filtered_db.parent
 
-    if not files:
-        print("No files to process.")
-        return 0
+        ignore_patterns = load_ignore_patterns(project_root)
+        if args.changed:
+            files = get_changed_files(project_root, ignore_patterns)
+            print(f"Processing {len(files)} changed file(s)...")
+        else:
+            files = get_all_source_files(project_root, ignore_patterns)
+            print(f"Processing {len(files)} file(s)...")
 
-    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-    failed = []
-    for path in files:
-        rel = path.relative_to(project_root)
-        try:
-            result = subprocess.run(
-                [str(clang_tidy), "-p", str(build_dir), str(path), "--fix"],
-                cwd=project_root,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                creationflags=creationflags,
-            )
-            if result.returncode not in (0, 1):
-                failed.append((str(rel), result.stderr.strip()))
-                print(f"Error: {rel}", file=sys.stderr)
-                if result.stderr.strip():
-                    print(f"  {result.stderr.strip()}", file=sys.stderr)
-            else:
-                print(str(rel))
-        except (subprocess.TimeoutExpired, Exception) as e:
-            failed.append((str(rel), str(e)))
-            print(f"Error: {rel} - {e}", file=sys.stderr)
+        if not files:
+            print("No files to process.")
+            return 0
+
+        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        failed = []
+        for path in files:
+            rel = path.relative_to(project_root)
+            try:
+                result = subprocess.run(
+                    [str(clang_tidy), "-p", str(build_dir), str(path), "--fix"],
+                    cwd=project_root,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=60,
+                    creationflags=creationflags,
+                )
+                if result.returncode not in (0, 1):
+                    failed.append((str(rel), result.stderr.strip()))
+                    print(f"Error: {rel}", file=sys.stderr)
+                    if result.stderr.strip():
+                        print(f"  {result.stderr.strip()}", file=sys.stderr)
+                else:
+                    print(str(rel))
+                    if result.stderr.strip():
+                        for stderr_line in result.stderr.strip().splitlines():
+                            print(f"  {stderr_line}", file=sys.stderr)
+            except (subprocess.TimeoutExpired, Exception) as e:
+                failed.append((str(rel), str(e)))
+                print(f"Error: {rel} - {e}", file=sys.stderr)
+
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     print()
     if failed:

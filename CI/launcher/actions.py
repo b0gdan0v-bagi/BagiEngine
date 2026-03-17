@@ -3,6 +3,7 @@
 import subprocess
 import sys
 import os
+import shutil
 import time
 from pathlib import Path
 from dataclasses import dataclass
@@ -396,7 +397,93 @@ class ActionExecutor:
                 env.update(msvc_env)
         
         return self._run_streaming_command(cmd, env, on_output, timeout=600)
-    
+
+    def cmake_configure_tidy(self, compiler: str = "MSVC",
+                             on_output: Optional[Callable[[str], None]] = None) -> ActionResult:
+        """Configure a lightweight Ninja build in build/Tidy solely for compile_commands.json.
+
+        Does not affect the development VS solution. The generated compile_commands.json
+        is auto-discovered by tidy_fix.py via its build/*/ scan.
+        """
+        tidy_dir = self.project_root / "build" / "Tidy"
+        tidy_dir.mkdir(parents=True, exist_ok=True)
+
+        cmd = [
+            "cmake",
+            "-B", str(tidy_dir),
+            "-S", str(self.project_root),
+            "-G", "Ninja",
+            "-DCMAKE_BUILD_TYPE=Debug",
+            # Use a static library for CMake's internal compiler tests so the linker
+            # (and rc.exe / manifest embedding) is never invoked during configure.
+            # compile_commands.json is written at configure time, so this is sufficient.
+            "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY",
+            # Disable C++ module scanning (CMake 3.28+): prevents @*.modmap response-file
+            # references from being added to compile commands. Those files are only created
+            # during an actual build, so a configure-only Tidy build would leave them
+            # missing, causing clang-tidy to fail to parse every translation unit.
+            "-DCMAKE_CXX_SCAN_FOR_MODULES=OFF",
+        ]
+
+        env = os.environ.copy()
+
+        if get_current_platform() == Platform.WINDOWS:
+            if compiler == "GCC (MinGW)":
+                cmd.extend(["-DCMAKE_C_COMPILER=gcc", "-DCMAKE_CXX_COMPILER=g++"])
+            else:
+                # Always use cl.exe (MSVC) for the tooling build on Windows regardless of
+                # the active compiler.  clang-cl + Ninja triggers lld-link which breaks
+                # CMake's vs_link_exe manifest embedding during compiler detection.
+                # compile_commands.json generated with MSVC flags is perfectly usable by
+                # clang-tidy — it understands /D, /I, /std:c++ etc.
+                vs_path = find_visual_studio()
+                if vs_path is None:
+                    return ActionResult(
+                        False,
+                        "",
+                        "Could not find Visual Studio installation.\n"
+                        "Please ensure Visual Studio is installed with C++ development tools.",
+                    )
+
+                # Find cl.exe by full path — avoids PATH case-sensitivity issues
+                # that arise when get_msvc_environment() dict has both 'PATH' and 'Path'.
+                cl_exe = None
+                msvc_tools = vs_path / "VC" / "Tools" / "MSVC"
+                if msvc_tools.is_dir():
+                    for ver_dir in sorted(msvc_tools.iterdir(), reverse=True):
+                        candidate = ver_dir / "bin" / "Hostx64" / "x64" / "cl.exe"
+                        if candidate.exists():
+                            cl_exe = str(candidate)
+                            break
+
+                if cl_exe is None:
+                    return ActionResult(
+                        False,
+                        "",
+                        "Could not find cl.exe in Visual Studio installation.\n"
+                        "Please ensure C++ build tools are installed.",
+                    )
+
+                cmd.extend([f"-DCMAKE_C_COMPILER={cl_exe}", f"-DCMAKE_CXX_COMPILER={cl_exe}"])
+
+                # Still inject VS dev environment for headers, libs, rc.exe, link.exe etc.
+                msvc_env = get_msvc_environment("x64")
+                if msvc_env:
+                    env.update(msvc_env)
+
+        return self._run_streaming_command(cmd, env, on_output, timeout=600)
+
+    def clean_tidy_build(self) -> ActionResult:
+        """Remove the build/Tidy directory created by cmake_configure_tidy."""
+        tidy_dir = self.project_root / "build" / "Tidy"
+        if not tidy_dir.exists():
+            return ActionResult(True, "Tidy build directory does not exist. Nothing to clean.")
+        try:
+            shutil.rmtree(tidy_dir)
+            return ActionResult(True, f"Removed {tidy_dir}")
+        except Exception as e:
+            return ActionResult(False, "", str(e))
+
     def cmake_build(self, build_type: str = "Debug", compiler: str = "MSVC",
                     on_output: Optional[Callable[[str], None]] = None) -> ActionResult:
         """Run CMake build with parallel compilation and real-time output streaming."""

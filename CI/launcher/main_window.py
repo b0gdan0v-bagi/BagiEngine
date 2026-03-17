@@ -17,7 +17,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
 
 from .config import Config, BuildConfiguration
-from .actions import ACTIONS, get_available_actions, ActionResult, get_current_platform, Platform, get_build_dir_name
+from .actions import ACTIONS, get_available_actions, ActionResult, get_current_platform, Platform, get_build_dir_name, ActionExecutor
 from .pipeline import Pipeline, PipelineStep, PipelineExecutor, PipelineResult, MultiConfigPipelineExecutor, MultiConfigPipelineResult
 
 
@@ -275,6 +275,171 @@ class ClangFormatScopeDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def get_scope(self) -> str:
+        """Return 'changed' or 'all'."""
+        return "changed" if self.radio_changed.isChecked() else "all"
+
+
+class _TidyConfigureWorker(QThread):
+    """Background thread that runs cmake_configure_tidy to produce compile_commands.json."""
+
+    line_received = pyqtSignal(str)
+    finished_signal = pyqtSignal(bool, str)  # success, error_message
+
+    def __init__(self, project_root: Path, compiler: str):
+        super().__init__()
+        self._project_root = project_root
+        self._compiler = compiler
+
+    def run(self):
+        executor = ActionExecutor(self._project_root, self._compiler)
+        result = executor.cmake_configure_tidy(
+            compiler=self._compiler,
+            on_output=lambda line: self.line_received.emit(line),
+        )
+        self.finished_signal.emit(result.success, result.error if not result.success else "")
+
+
+class TidyScopeDialog(QDialog):
+    """Scope dialog for Tidy Fix with inline tooling build status and configure button."""
+
+    def __init__(self, parent=None, project_root: Optional[Path] = None, compiler: str = "MSVC"):
+        super().__init__(parent)
+        self.setWindowTitle("Tidy Fix")
+        self._project_root = project_root or Path()
+        self._compiler = compiler
+        self._worker: Optional[_TidyConfigureWorker] = None
+        self._setup_ui()
+        self._refresh_status()
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _find_compile_commands(self) -> Optional[Path]:
+        """Return the first compile_commands.json found under build/*/."""
+        build_root = self._project_root / "build"
+        if not build_root.is_dir():
+            return None
+        for child in sorted(build_root.iterdir()):
+            if child.is_dir():
+                db = child / "compile_commands.json"
+                if db.exists():
+                    return db
+        return None
+
+    def _refresh_status(self):
+        db = self._find_compile_commands()
+        tidy_dir_exists = (self._project_root / "build" / "Tidy").is_dir()
+        if db:
+            try:
+                rel = db.parent.relative_to(self._project_root)
+            except ValueError:
+                rel = db.parent
+            self._status_label.setText(f"\u2713 Found ({rel})")
+            self._status_label.setStyleSheet("color: green;")
+            self._configure_btn.setVisible(False)
+            self._ok_btn.setEnabled(True)
+        else:
+            self._status_label.setText("\u26a0 Not found in build/*/")
+            self._status_label.setStyleSheet("color: orange;")
+            self._configure_btn.setVisible(True)
+            self._configure_btn.setEnabled(True)
+            self._configure_btn.setText("Configure Tooling Build")
+            self._ok_btn.setEnabled(False)
+        self._clear_btn.setVisible(tidy_dir_exists)
+
+    # ------------------------------------------------------------------
+    # UI setup
+    # ------------------------------------------------------------------
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        layout.addWidget(QLabel("Tidy Fix scope:"))
+        self.radio_changed = QRadioButton("Only changed files (git)")
+        self.radio_changed.setChecked(True)
+        layout.addWidget(self.radio_changed)
+        self.radio_all = QRadioButton("All files (src/, config/)")
+        layout.addWidget(self.radio_all)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(sep)
+
+        layout.addWidget(QLabel("Tooling build (compile_commands.json):"))
+        self._status_label = QLabel()
+        layout.addWidget(self._status_label)
+
+        self._configure_btn = QPushButton("Configure Tooling Build")
+        self._configure_btn.clicked.connect(self._on_configure_clicked)
+        layout.addWidget(self._configure_btn)
+
+        self._clear_btn = QPushButton("Clear Tidy Build")
+        self._clear_btn.clicked.connect(self._on_clear_clicked)
+        layout.addWidget(self._clear_btn)
+
+        self._output_edit = QTextEdit()
+        self._output_edit.setReadOnly(True)
+        self._output_edit.setMaximumHeight(120)
+        self._output_edit.setVisible(False)
+        layout.addWidget(self._output_edit)
+
+        btn_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        self._ok_btn = btn_box.button(QDialogButtonBox.StandardButton.Ok)
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+        layout.addWidget(btn_box)
+
+    # ------------------------------------------------------------------
+    # Slots
+    # ------------------------------------------------------------------
+
+    def _on_configure_clicked(self):
+        self._configure_btn.setEnabled(False)
+        self._configure_btn.setText("Configuring...")
+        self._output_edit.clear()
+        self._output_edit.setVisible(True)
+        self._status_label.setText("Configuring...")
+        self._status_label.setStyleSheet("color: gray;")
+
+        self._worker = _TidyConfigureWorker(self._project_root, self._compiler)
+        self._worker.line_received.connect(self._output_edit.append)
+        self._worker.finished_signal.connect(self._on_configure_finished)
+        self._worker.start()
+
+    def _on_configure_finished(self, success: bool, error: str):
+        if success:
+            db = self._find_compile_commands()
+            loc = str(db.parent.relative_to(self._project_root)) if db else "build/Tidy"
+            self._status_label.setText(f"\u2713 Ready ({loc})")
+            self._status_label.setStyleSheet("color: green;")
+            self._configure_btn.setVisible(False)
+            self._ok_btn.setEnabled(True)
+            self._clear_btn.setVisible(True)
+        else:
+            self._status_label.setText("\u2717 Configure failed")
+            self._status_label.setStyleSheet("color: red;")
+            self._configure_btn.setEnabled(True)
+            self._configure_btn.setText("Retry Configure")
+            if error:
+                self._output_edit.append(f"\nError: {error}")
+            self._clear_btn.setVisible((self._project_root / "build" / "Tidy").is_dir())
+
+    def _on_clear_clicked(self):
+        result = ActionExecutor(self._project_root).clean_tidy_build()
+        if not result.success:
+            self._status_label.setText(f"\u2717 Clear failed: {result.error}")
+            self._status_label.setStyleSheet("color: red;")
+        self._refresh_status()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def get_scope(self) -> str:
         """Return 'changed' or 'all'."""
@@ -1181,8 +1346,7 @@ class MainWindow(QMainWindow):
                 f"Script not found:\n{script_path}",
             )
             return
-        dialog = ClangFormatScopeDialog(self)
-        dialog.setWindowTitle("Tidy Fix")
+        dialog = TidyScopeDialog(self, project_root=self.project_root, compiler=self.config.compiler)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         scope = dialog.get_scope()
