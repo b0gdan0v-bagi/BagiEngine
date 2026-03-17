@@ -2,7 +2,7 @@
 C++ Parser Module
 
 Provides parsing of C++ headers to extract reflection metadata.
-Uses libclang for accurate AST parsing. LLVM installation is required.
+Uses regex and brace-counting for fast, dependency-free parsing.
 
 Note: This parser extracts classes marked with BE_CLASS and their fields/methods.
 Enum reflection is handled via CORE_ENUM macro, not parsed by this module.
@@ -10,347 +10,383 @@ Enum reflection is handled via CORE_ENUM macro, not parsed by this module.
 
 import re
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Set
 
 from .models import (
-    ClassData, FieldData, MethodData, MethodParam, 
+    ClassData, FieldData, MethodData, MethodParam,
     EnumData
 )
-from .env_setup import is_libclang_available
 
-# Try to import clang
-try:
-    import clang.cindex
-    from clang.cindex import CursorKind, TypeKind
-    CLANG_AVAILABLE = True
-except ImportError:
-    CLANG_AVAILABLE = False
+_RE_LINE_COMMENT = re.compile(r'//.*?$', re.MULTILINE)
+_RE_BLOCK_COMMENT = re.compile(r'/\*.*?\*/', re.DOTALL)
+
+_RE_NAMESPACE = re.compile(r'\bnamespace\s+([\w:]+)\s*\{')
+_RE_CLASS_DEF = re.compile(
+    r'(?<!friend\s)(?:struct|class)\s+(\w+)\s*(?::([^{;]*))?(\{)',
+    re.DOTALL,
+)
+_RE_BE_MACRO = re.compile(r'BE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*(\w+)\s*)?\)')
+_RE_FIELD = re.compile(
+    r'BE_REFLECT_FIELD\b\s+(.*?)\s*;',
+    re.DOTALL,
+)
+_RE_METHOD = re.compile(
+    r'BE_FUNCTION\b\s+(.*?)\s*;',
+    re.DOTALL,
+)
+_RE_IDENT = re.compile(r'[A-Za-z_]\w*$')
 
 
-class LibclangParser:
+def _strip_comments(text: str) -> str:
+    text = _RE_BLOCK_COMMENT.sub('', text)
+    text = _RE_LINE_COMMENT.sub('', text)
+    return text
+
+
+def _find_matching_brace(text: str, start: int) -> int:
+    """Return index past the closing '}' that matches the '{' at *start*."""
+    depth = 1
+    pos = start + 1
+    length = len(text)
+    while pos < length and depth > 0:
+        ch = text[pos]
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+        pos += 1
+    return pos
+
+
+def _extract_parent_class(inheritance: str) -> Optional[str]:
+    """Extract parent class name from inheritance clause like 'public IWidget, ...'."""
+    if not inheritance:
+        return None
+    inheritance = inheritance.strip()
+    first = inheritance.split(',')[0].strip()
+    parts = first.split()
+    if parts and parts[0] in ('public', 'private', 'protected'):
+        parts = parts[1:]
+    if not parts:
+        return None
+    parent = ' '.join(parts)
+    # Handle template bases like EventBase<SimpleEvent>
+    angle = parent.find('<')
+    if angle != -1:
+        parent = parent[:angle].strip()
+    if '::' in parent:
+        parent = parent.split('::')[-1]
+    return parent or None
+
+
+def _split_type_and_name(decl: str) -> Optional[Tuple[str, str]]:
+    """Split a field declaration (after BE_REFLECT_FIELD, before ;) into (type, name).
+
+    Handles brace and = initialisers, template angle brackets, etc.
     """
-    Libclang-based C++ parser.
-    
-    Uses libclang for accurate AST parsing. Requires LLVM installation.
+    decl = decl.strip()
+
+    # Strip brace initialiser  e.g. {20, 20, 100, 255}
+    # Find the last balanced {} block
+    result = []
+    depth = 0
+    brace_start = -1
+    for i, ch in enumerate(decl):
+        if ch == '{':
+            if depth == 0:
+                brace_start = i
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                continue
+        if depth == 0 and ch != '}':
+            result.append(ch)
+    decl = ''.join(result).strip()
+
+    # Strip = initialiser
+    # Walk from the end to find '=' that isn't inside angle brackets
+    angle = 0
+    eq_pos = -1
+    for i in range(len(decl) - 1, -1, -1):
+        ch = decl[i]
+        if ch == '>':
+            angle += 1
+        elif ch == '<':
+            angle -= 1
+        elif ch == '=' and angle == 0:
+            eq_pos = i
+            break
+    if eq_pos != -1:
+        decl = decl[:eq_pos].strip()
+
+    # Now split into type and name
+    # The field name is the last C++ identifier token
+    # Walk backwards past the identifier
+    decl = decl.rstrip()
+    m = _RE_IDENT.search(decl)
+    if not m:
+        return None
+    name = m.group(0)
+    type_name = decl[:m.start()].strip()
+    if not type_name:
+        return None
+    return type_name, name
+
+
+def _parse_method_decl(decl: str) -> Optional[Tuple[str, str, List[MethodParam], bool, bool, bool]]:
+    """Parse a method declaration (after BE_FUNCTION, before ;).
+
+    Returns (return_type, name, params, is_const, is_virtual, is_override) or None.
     """
-    
-    def __init__(self, include_dirs: List[str] = None):
-        """
-        Initialize libclang parser.
-        
-        Args:
-            include_dirs: Include directories for parsing
-        """
-        if not CLANG_AVAILABLE:
-            raise RuntimeError(
-                "LLVM/libclang is required but not available.\n"
-                "The 'clang' Python package is not installed.\n"
-                "Install with: pip install clang"
-            )
-        
+    decl = decl.strip()
+
+    # Remove pure virtual '= 0'
+    decl = re.sub(r'\s*=\s*0\s*$', '', decl)
+
+    is_override = False
+    if re.search(r'\boverride\b', decl):
+        is_override = True
+        decl = re.sub(r'\boverride\b', '', decl).strip()
+
+    is_const = False
+    # const after closing paren
+    paren_close = decl.rfind(')')
+    if paren_close != -1:
+        after_paren = decl[paren_close + 1:].strip()
+        if 'const' in after_paren:
+            is_const = True
+        decl = decl[:paren_close + 1]
+
+    is_virtual = False
+    if decl.startswith('virtual '):
+        is_virtual = True
+        decl = decl[len('virtual '):].strip()
+
+    # Find the parameter list
+    paren_open = decl.find('(')
+    paren_close = decl.rfind(')')
+    if paren_open == -1 or paren_close == -1:
+        return None
+
+    params_str = decl[paren_open + 1:paren_close].strip()
+    before_paren = decl[:paren_open].strip()
+
+    # Split before_paren into return_type and method_name
+    m = _RE_IDENT.search(before_paren)
+    if not m:
+        return None
+    method_name = m.group(0)
+    return_type = before_paren[:m.start()].strip()
+    if not return_type:
+        return None
+
+    # Parse params
+    params: List[MethodParam] = []
+    if params_str:
+        for param_str in _split_params(params_str):
+            param_str = param_str.strip()
+            if not param_str:
+                continue
+            pm = _parse_single_param(param_str)
+            if pm:
+                params.append(pm)
+
+    return return_type, method_name, params, is_const, is_virtual, is_override
+
+
+def _split_params(params_str: str) -> List[str]:
+    """Split parameter list by commas, respecting angle brackets and parens."""
+    parts = []
+    depth = 0
+    current = []
+    for ch in params_str:
+        if ch in '<(':
+            depth += 1
+        elif ch in '>)':
+            depth -= 1
+        elif ch == ',' and depth == 0:
+            parts.append(''.join(current))
+            current = []
+            continue
+        current.append(ch)
+    if current:
+        parts.append(''.join(current))
+    return parts
+
+
+def _parse_single_param(param_str: str) -> Optional[MethodParam]:
+    """Parse a single parameter like 'const eastl::string& name' into MethodParam."""
+    param_str = param_str.strip()
+    if not param_str:
+        return None
+
+    # Find last identifier (param name)
+    # But handle case where there's no name (just type)
+    m = _RE_IDENT.search(param_str)
+    if not m:
+        return MethodParam(name='', type_name=param_str)
+
+    candidate_name = m.group(0)
+    candidate_type = param_str[:m.start()].strip()
+
+    # If type is empty, the whole thing is just a type (no param name)
+    if not candidate_type:
+        return MethodParam(name='', type_name=param_str)
+
+    # Handle edge case: '&' or '*' between type and name
+    return MethodParam(name=candidate_name, type_name=candidate_type)
+
+
+class RegexParser:
+    """Regex-based C++ parser for reflection metadata extraction."""
+
+    def __init__(self, include_dirs: List[str] = None, known_enums: Set[str] = None):
         self.include_dirs = include_dirs or []
-        self.index = clang.cindex.Index.create()
-    
+        self.known_enums = known_enums or set()
+
     def parse_file(self, path: Path) -> Tuple[List[ClassData], List[EnumData]]:
-        """
-        Parse a C++ header file using libclang.
-        
-        Args:
-            path: Path to header file
-            
-        Returns:
-            Tuple of (classes, enums) found in the file
-            
-        Raises:
-            RuntimeError: If parsing fails
-        """
-        # Build compiler arguments
-        args = ['-x', 'c++', '-std=c++23']
-        for inc_dir in self.include_dirs:
-            args.append(f'-I{inc_dir}')
-        # Force-include PCH so PoolString, int32_t, etc. are visible when parsing
-        # (matches build; allows strip_pch_includes to remove those includes from headers)
-        args.append('-include')
-        args.append('BECore/pch.h')
-        
         try:
-            # Parse the translation unit
-            tu = self.index.parse(
-                str(path),
-                args=args,
-                options=clang.cindex.TranslationUnit.PARSE_SKIP_FUNCTION_BODIES
-            )
+            with open(path, 'r', encoding='utf-8') as f:
+                raw = f.read()
         except Exception as e:
-            raise RuntimeError(f"Failed to parse {path}: {e}")
-        
+            raise RuntimeError(f"Failed to read {path}: {e}")
+
+        text = _strip_comments(raw)
+
         classes: List[ClassData] = []
-        enums: List[EnumData] = []
-        
-        # Walk the AST
-        self._walk_ast(tu.cursor, path, classes, enums)
-        
-        # Deduplicate classes (same class may appear multiple times in AST)
-        seen_classes = {}
-        unique_classes = []
-        for cls in classes:
-            key = f"{cls.namespace}::{cls.name}" if cls.namespace else cls.name
-            if key not in seen_classes:
-                seen_classes[key] = True
-                unique_classes.append(cls)
-        
-        return unique_classes, enums
-    
-    def _walk_ast(self, cursor, source_path: Path, classes: List[ClassData], enums: List[EnumData]):
-        """Recursively walk the AST to find reflected types."""
-        
-        # Only process nodes from the source file
-        if cursor.location.file and str(cursor.location.file) != str(source_path):
-            # Still recurse into children for includes
-            for child in cursor.get_children():
-                self._walk_ast(child, source_path, classes, enums)
-            return
-        
-        if cursor.kind in (CursorKind.CLASS_DECL, CursorKind.STRUCT_DECL):
-            class_data = self._parse_class(cursor, source_path)
-            if class_data:
-                classes.append(class_data)
-        
-        # Note: Enum reflection is handled via CORE_ENUM macro, not BE_REFLECT_ENUM
-        # No enum parsing needed here
-        
-        # Recurse into children
-        for child in cursor.get_children():
-            self._walk_ast(child, source_path, classes, enums)
-    
-    def _parse_class(self, cursor, source_path: Path) -> Optional[ClassData]:
-        """Parse a class/struct declaration."""
-        class_name = cursor.spelling
-        if not class_name:
-            return None
-        
-        # Check for BE_CLASS or BE_EVENT macro by looking for specific patterns
-        has_be_class = False
-        is_event = False
-        is_factory_base = False
-        
-        # Read file content to check for BE_CLASS or BE_EVENT
-        try:
-            with open(source_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Find class declaration start (ignore forward declarations and friend declarations)
-            # Use negative lookbehind to exclude 'friend class' and ensure we only match full definitions with '{'
-            class_pattern = re.compile(
-                rf'(?<!friend\s)(?:struct|class)\s+{re.escape(class_name)}\s*(?:[^{{;])*\{{',
-                re.DOTALL
+        self._find_classes(text, path, classes)
+        return classes, []
+
+    # ------------------------------------------------------------------
+
+    def _find_classes(self, text: str, source_path: Path, classes: List[ClassData]):
+        """Find all class/struct definitions with BE_CLASS/BE_EVENT in *text*."""
+        for m in _RE_CLASS_DEF.finditer(text):
+            class_name = m.group(1)
+            inheritance = m.group(2)
+            brace_pos = m.start(3)
+
+            body_end = _find_matching_brace(text, brace_pos)
+            body = text[brace_pos + 1:body_end - 1]
+
+            be = _RE_BE_MACRO.search(body)
+            if not be or be.group(2) != class_name:
+                continue
+
+            is_event = (be.group(1) == "EVENT")
+            is_factory_base = bool(
+                be.group(3) and be.group(3).upper() == "FACTORY_BASE"
             )
-            
-            # Find all matches and pick the one that has a body (with BE_CLASS macro)
-            matches = list(class_pattern.finditer(content))
-            match = None
-            
-            # Try each match to find the one with BE_CLASS macro
-            for potential_match in matches:
-                start_pos = potential_match.end()  # Position right after '{'
-                
-                # Find matching closing brace (handle nested braces)
-                brace_count = 1
-                pos = start_pos
-                while pos < len(content) and brace_count > 0:
-                    if content[pos] == '{':
-                        brace_count += 1
-                    elif content[pos] == '}':
-                        brace_count -= 1
-                    pos += 1
-                
-                class_body = content[start_pos:pos-1]
-                
-                # Check if this match contains BE_CLASS or BE_EVENT
-                be_macro_match = re.search(r'BE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*(\w+)\s*)?\)', class_body)
-                if be_macro_match and be_macro_match.group(2) == class_name:
-                    match = potential_match
-                    break
-            
-            if match:
-                # We already found BE_CLASS in the loop above, so just extract the info
-                start_pos = match.end()
-                brace_count = 1
-                pos = start_pos
-                while pos < len(content) and brace_count > 0:
-                    if content[pos] == '{':
-                        brace_count += 1
-                    elif content[pos] == '}':
-                        brace_count -= 1
-                    pos += 1
-                
-                class_body = content[start_pos:pos-1]
-                be_macro_match = re.search(r'BE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*(\w+)\s*)?\)', class_body)
-                
-                has_be_class = True
-                macro_type = be_macro_match.group(1)
-                is_event = (macro_type == "EVENT")
-                if be_macro_match.group(3) and be_macro_match.group(3).upper() == "FACTORY_BASE":
-                    is_factory_base = True
-        except Exception:
-            pass
-        
-        if not has_be_class:
-            return None
-        
-        # Get namespace
-        ns = self._get_namespace(cursor)
-        full_qualified = f"{ns}::{class_name}" if ns else class_name
-        
-        if ns.startswith("BECore::"):
-            qualified = f"{ns[8:]}::{class_name}"
-        elif ns == "BECore":
-            qualified = class_name
-        else:
-            qualified = full_qualified
-        
-        # Get parent class
-        parent_class = None
-        for child in cursor.get_children():
-            if child.kind == CursorKind.CXX_BASE_SPECIFIER:
-                parent_class = child.type.spelling
-                # Extract just the class name from fully qualified
-                if '::' in parent_class:
-                    parent_class = parent_class.split('::')[-1]
-                break
-        
-        cls = ClassData(
-            name=class_name,
-            qualified_name=qualified,
-            full_qualified_name=full_qualified,
-            namespace=ns,
-            is_factory_base=is_factory_base,
-            is_event=is_event,
-            parent_class=parent_class,
-            source_file=str(source_path),
-            line=cursor.location.line
-        )
-        
-        # Parse fields and methods
-        self._parse_class_members(cursor, cls, source_path)
-        
-        return cls
-    
-    def _parse_class_members(self, cursor, cls: ClassData, source_path: Path):
-        """Parse class fields and methods."""
-        # Read file content for annotation checking
-        try:
-            with open(source_path, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-        except Exception:
-            lines = []
-        
-        for child in cursor.get_children():
-            if child.kind == CursorKind.FIELD_DECL:
-                # Check for BE_REFLECT_FIELD annotation
-                if self._has_reflection_annotation(child, lines, "BE_REFLECT_FIELD"):
-                    canonical = child.type.get_canonical()
-                    is_enum = canonical.kind == TypeKind.ENUM
-                    cls.fields.append(FieldData(
-                        name=child.spelling,
-                        type_name=child.type.spelling,
-                        line=child.location.line,
-                        column=child.location.column,
-                        is_enum=is_enum,
-                    ))
-            
-            elif child.kind == CursorKind.CXX_METHOD:
-                # Check for BE_FUNCTION annotation
-                if self._has_reflection_annotation(child, lines, "BE_FUNCTION"):
-                    params = []
-                    for arg in child.get_arguments():
-                        params.append(MethodParam(
-                            name=arg.spelling,
-                            type_name=arg.type.spelling
-                        ))
-                    
-                    cls.methods.append(MethodData(
-                        name=child.spelling,
-                        return_type=child.result_type.spelling,
-                        params=params,
-                        is_const=child.is_const_method(),
-                        is_virtual=child.is_virtual_method(),
-                        is_override=self._is_override(child),
-                        line=child.location.line
-                    ))
-    
-    def _has_reflection_annotation(self, cursor, lines: List[str], marker: str) -> bool:
-        """Check if a cursor has a reflection annotation marker."""
-        # Check for clang::annotate attribute (preferred method)
-        for child in cursor.get_children():
-            if child.kind == CursorKind.ANNOTATE_ATTR:
-                annotation = child.spelling
-                if "reflect" in annotation.lower():
-                    return True
-        
-        # Fallback for MSVC: check if marker appears on the same line as the field
-        # The marker should be ON THE SAME LINE as the field declaration
-        if lines and cursor.location.line > 0:
-            line_idx = cursor.location.line - 1
-            if line_idx < len(lines):
-                current_line = lines[line_idx]
-                # Check if marker is on the same line as the field
-                if marker in current_line:
-                    return True
-        
-        return False
-    
-    def _is_override(self, cursor) -> bool:
-        """Check if method has override specifier."""
-        # Check tokens for 'override' keyword
-        try:
-            tokens = list(cursor.get_tokens())
-            for token in tokens:
-                if token.spelling == 'override':
-                    return True
-        except Exception:
-            pass
-        return False
-    
-    def _get_namespace(self, cursor) -> str:
-        """Get full namespace path for a cursor."""
-        parts = []
-        parent = cursor.semantic_parent
-        
-        while parent and parent.kind != CursorKind.TRANSLATION_UNIT:
-            if parent.kind == CursorKind.NAMESPACE:
-                parts.insert(0, parent.spelling)
-            parent = parent.semantic_parent
-        
-        return "::".join(parts)
+
+            parent_class = _extract_parent_class(inheritance)
+            ns = self._namespace_at(text, m.start())
+            full_qualified = f"{ns}::{class_name}" if ns else class_name
+
+            if ns.startswith("BECore::"):
+                qualified = f"{ns[8:]}::{class_name}"
+            elif ns == "BECore":
+                qualified = class_name
+            else:
+                qualified = full_qualified
+
+            line_no = text[:m.start()].count('\n') + 1
+
+            cls = ClassData(
+                name=class_name,
+                qualified_name=qualified,
+                full_qualified_name=full_qualified,
+                namespace=ns,
+                is_factory_base=is_factory_base,
+                is_event=is_event,
+                parent_class=parent_class,
+                source_file=str(source_path),
+                line=line_no,
+            )
+
+            self._parse_fields(body, cls)
+            self._parse_methods(body, cls)
+            classes.append(cls)
+
+    def _namespace_at(self, text: str, pos: int) -> str:
+        """Determine the namespace at a given character position via brace counting."""
+        ns_stack: List[str] = []
+        # Track opening braces that are NOT namespace braces
+        generic_depth = 0
+        i = 0
+        while i < pos:
+            ns_m = _RE_NAMESPACE.match(text, i)
+            if ns_m and ns_m.start() == i:
+                # Namespace declaration — push segments
+                ns_name = ns_m.group(1)
+                for seg in ns_name.split('::'):
+                    ns_stack.append(seg)
+                i = ns_m.end()
+                continue
+
+            ch = text[i]
+            if ch == '{':
+                # Non-namespace brace
+                generic_depth += 1
+            elif ch == '}':
+                if generic_depth > 0:
+                    generic_depth -= 1
+                elif ns_stack:
+                    ns_stack.pop()
+            i += 1
+
+        return '::'.join(ns_stack)
+
+    def _parse_fields(self, body: str, cls: ClassData):
+        for m in _RE_FIELD.finditer(body):
+            raw = m.group(1)
+            parsed = _split_type_and_name(raw)
+            if not parsed:
+                continue
+            type_name, field_name = parsed
+
+            # Check if enum
+            bare_type = type_name.split('::')[-1].strip()
+            is_enum = bare_type in self.known_enums
+
+            line_no = body[:m.start()].count('\n') + 1
+
+            cls.fields.append(FieldData(
+                name=field_name,
+                type_name=type_name,
+                line=cls.line + line_no,
+                column=0,
+                is_enum=is_enum,
+            ))
+
+    def _parse_methods(self, body: str, cls: ClassData):
+        for m in _RE_METHOD.finditer(body):
+            raw = m.group(1)
+            parsed = _parse_method_decl(raw)
+            if not parsed:
+                continue
+            return_type, name, params, is_const, is_virtual, is_override = parsed
+            line_no = body[:m.start()].count('\n') + 1
+
+            cls.methods.append(MethodData(
+                name=name,
+                return_type=return_type,
+                params=params,
+                is_const=is_const,
+                is_virtual=is_virtual,
+                is_override=is_override,
+                line=cls.line + line_no,
+            ))
 
 
-def create_parser(include_dirs: List[str] = None):
-    """
-    Create libclang parser.
-    
+def create_parser(include_dirs: List[str] = None, known_enums: Set[str] = None):
+    """Create a regex-based parser.
+
     Args:
-        include_dirs: Include directories for parsing
-        
+        include_dirs: Include directories (kept for interface compat)
+        known_enums: Set of enum type names collected via CORE_ENUM pre-scan
+
     Returns:
-        LibclangParser instance
-        
-    Raises:
-        RuntimeError: If LLVM/libclang is not available
+        RegexParser instance
     """
-    if not CLANG_AVAILABLE:
-        raise RuntimeError(
-            "LLVM/libclang is required but not available.\n"
-            "The 'clang' Python package is not installed.\n"
-            "Install with: pip install clang"
-        )
-    
-    if not is_libclang_available():
-        raise RuntimeError(
-            "LLVM/libclang is required but not configured.\n"
-            "Options:\n"
-            "  1. Run: python CI/meta_generator/meta_generator_gui.py (configure LLVM path)\n"
-            "  2. Set environment variable: LIBCLANG_PATH=C:/Program Files/LLVM/bin\n"
-            "  3. Install LLVM: https://github.com/llvm/llvm-project/releases"
-        )
-    
-    return LibclangParser(include_dirs)
+    return RegexParser(include_dirs, known_enums)

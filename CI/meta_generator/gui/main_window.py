@@ -5,7 +5,6 @@ Provides a visual interface for:
 - Viewing all reflected types from the metadata cache
 - Inspecting class/enum details
 - Running full rescan or incremental generation
-- Configuring LLVM path
 """
 
 import json
@@ -27,7 +26,6 @@ from .settings_dialog import SettingsDialog
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.cache import MetadataCache
-from core.env_setup import initialize_clang, LLVMStatus
 
 
 class GeneratorWorker(QThread):
@@ -55,7 +53,6 @@ class GeneratorWorker(QThread):
             str(self.project_root / "CI" / "meta_generator" / "meta_generator.py"),
             "--output-dir", str(self.output_dir),
             "--cache-dir", str(self.cache_dir),
-            "--settings", str(self.project_root / "meta_generator_settings.json"),
             "--verbose"
         ]
 
@@ -110,7 +107,6 @@ class MetaGeneratorWindow(QMainWindow):
         self._setup_toolbar()
         self._setup_statusbar()
         self._load_settings()
-        self._check_llvm_status()
         self._load_cache()
     
     def _setup_ui(self):
@@ -229,25 +225,9 @@ class MetaGeneratorWindow(QMainWindow):
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
         
-        # LLVM status indicator
-        self.llvm_status_label = QLabel()
-        self.statusbar.addPermanentWidget(self.llvm_status_label)
-        
         # Statistics label
         self.stats_label = QLabel()
         self.statusbar.addWidget(self.stats_label)
-    
-    def _check_llvm_status(self):
-        """Check and display LLVM status."""
-        import os
-        env_path = os.getenv("LIBCLANG_PATH")
-        
-        if env_path:
-            self.llvm_status_label.setText(f"LIBCLANG_PATH: {env_path}")
-            self.llvm_status_label.setStyleSheet("color: green; font-weight: bold;")
-        else:
-            self.llvm_status_label.setText("LIBCLANG_PATH: Not set (REQUIRED)")
-            self.llvm_status_label.setStyleSheet("color: red; font-weight: bold;")
     
     def _find_build_dir(self) -> Path:
         """Find the actual CMake build directory."""
@@ -385,15 +365,13 @@ class MetaGeneratorWindow(QMainWindow):
             self.project_root = Path(path)
             self.settings_path = self.project_root / "meta_generator_settings.json"
             self._load_settings()
-            self._check_llvm_status()
             self._load_cache()
             self.setWindowTitle(f"BagiEngine Meta-Generator - {self.project_root.name}")
     
     def _open_settings(self):
         """Open settings dialog."""
         dialog = SettingsDialog(self, self.project_root)
-        if dialog.exec():
-            self._check_llvm_status()
+        dialog.exec()
     
     def _run_generate(self):
         """Run incremental generation."""
@@ -413,17 +391,6 @@ class MetaGeneratorWindow(QMainWindow):
         """Run the meta generator."""
         if self.worker and self.worker.isRunning():
             QMessageBox.warning(self, "Busy", "Generator is already running.")
-            return
-        
-        # Check LLVM status first (now required)
-        status = initialize_clang(self.settings_path, self.project_root)
-        if not status.found:
-            QMessageBox.critical(
-                self, "LLVM Required",
-                "LLVM/libclang is required but not configured.\n\n"
-                "Please configure LLVM path in Settings.\n\n"
-                "Download from: https://github.com/llvm/llvm-project/releases"
-            )
             return
         
         # Determine directories

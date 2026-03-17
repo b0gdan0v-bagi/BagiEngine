@@ -13,13 +13,13 @@ Usage:
 
 Features:
     - Incremental generation (only re-parses changed files via SHA-256 hash)
-    - Libclang AST parsing (LLVM required)
+    - Fast regex-based parsing (no external dependencies)
     - Factory and enum generation for FACTORY_BASE classes
 """
 
 import argparse
 import json
-import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -28,36 +28,44 @@ from typing import List, Set
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.env_setup import initialize_clang, LLVMStatus
 from core.cache import MetadataCache
 from core.parser import create_parser
 from core.generator import CodeGenerator
-from core.models import ClassData, EnumData
+
+_RE_CORE_ENUM = re.compile(r'\bCORE_ENUM\s*\(\s*(\w+)')
 
 
 def scan_headers(source_dirs: List[Path], extensions: List[str] = None) -> List[Path]:
-    """
-    Scan directories for header files.
-    
-    Args:
-        source_dirs: Directories to scan
-        extensions: File extensions to include
-        
-    Returns:
-        List of header file paths
-    """
+    """Scan directories for header files."""
     if extensions is None:
         extensions = ['.h', '.hpp', '.hxx']
-    
+
     headers: List[Path] = []
-    
+
     for source_dir in source_dirs:
         if not source_dir.exists():
             continue
         for ext in extensions:
             headers.extend(source_dir.rglob(f'*{ext}'))
-    
+
     return headers
+
+
+def collect_known_enums(dirs: List[Path]) -> Set[str]:
+    """Pre-scan all headers for CORE_ENUM(Name, ...) and return enum type names."""
+    enums: Set[str] = set()
+    for d in dirs:
+        if not d.exists():
+            continue
+        for ext in ('.h', '.hpp', '.hxx'):
+            for path in d.rglob(f'*{ext}'):
+                try:
+                    text = path.read_text(encoding='utf-8')
+                except Exception:
+                    continue
+                for m in _RE_CORE_ENUM.finditer(text):
+                    enums.add(m.group(1))
+    return enums
 
 
 def main() -> int:
@@ -82,20 +90,20 @@ Examples:
 
   # Use config for target (CMake mode)
   python meta_generator.py --target BECoreModule --project-root . \\
-                           --output-dir build/Generated --cache-dir build --settings meta_generator_settings.json
+                           --output-dir build/Generated --cache-dir build
 """
     )
-    
+
     parser.add_argument(
         '--target', '-t',
         help='Target name from reflection_targets.json (when set, source/scan/include dirs are loaded from config)'
     )
-    
+
     parser.add_argument(
         '--project-root',
         help='Project root for resolving relative paths in reflection_targets.json (used with --target)'
     )
-    
+
     parser.add_argument(
         '--source-dir', '-s',
         action='append',
@@ -103,24 +111,24 @@ Examples:
         default=[],
         help='Source directory to scan for headers (can be specified multiple times; not used with --target)'
     )
-    
+
     parser.add_argument(
         '--output-dir', '-o',
         required=True,
         help='Output directory for generated files'
     )
-    
+
     parser.add_argument(
         '--cache-dir', '-c',
         required=True,
         help='Directory for metadata cache file'
     )
-    
+
     parser.add_argument(
         '--settings',
-        help='Path to settings JSON file (for LLVM path)'
+        help='(Ignored, kept for backwards compatibility)'
     )
-    
+
     parser.add_argument(
         '--include-dir', '-I',
         action='append',
@@ -128,7 +136,7 @@ Examples:
         default=[],
         help='Include directory for computing include paths (can be specified multiple times)'
     )
-    
+
     parser.add_argument(
         '--scan-dir', '-S',
         action='append',
@@ -136,31 +144,30 @@ Examples:
         default=[],
         help='Additional directory to scan for derived classes (factory generation)'
     )
-    
+
     parser.add_argument(
         '--force', '-f',
         action='store_true',
         help='Force full rescan (ignore cache)'
     )
-    
+
     parser.add_argument(
         '--verbose', '-v',
         action='store_true',
         help='Enable verbose output'
     )
-    
+
     parser.add_argument(
         '--quiet', '-q',
         action='store_true',
         help='Suppress all output except errors'
     )
-    
+
     args = parser.parse_args()
-    
+
     output_dir = Path(args.output_dir)
     cache_dir = Path(args.cache_dir)
-    settings_path = Path(args.settings) if args.settings else None
-    
+
     # Load dirs from config when --target is set
     if args.target:
         if args.source_dirs or args.scan_dirs or args.include_dirs:
@@ -185,38 +192,20 @@ Examples:
         source_dirs = [Path(d) for d in args.source_dirs]
         include_dirs = args.include_dirs
         scan_dirs = [Path(d) for d in args.scan_dirs] if args.scan_dirs else source_dirs
-    
+
     def log(msg: str):
         if not args.quiet:
             print(msg)
-    
+
     def verbose_log(msg: str):
         if args.verbose and not args.quiet:
             print(msg)
-    
-    # Initialize libclang (required)
-    verbose_log("Initializing libclang...")
-    
-    llvm_status = initialize_clang(settings_path=settings_path)
-    
-    if llvm_status.found:
-        verbose_log(f"  libclang: OK (via {llvm_status.source})")
-        if llvm_status.path:
-            verbose_log(f"  Path: {llvm_status.path}")
-    else:
-        # LLVM is required - fail with helpful error message
-        print("ERROR: LLVM/libclang is required but not available.", file=sys.stderr)
-        if llvm_status.error:
-            print(f"  Reason: {llvm_status.error}", file=sys.stderr)
-        print("", file=sys.stderr)
-        print("Set system environment variable:", file=sys.stderr)
-        print("  Windows: set LIBCLANG_PATH=D:\\LLVM\\bin", file=sys.stderr)
-        print("  Linux:   export LIBCLANG_PATH=/usr/lib/llvm-18/lib", file=sys.stderr)
-        print("  macOS:   export LIBCLANG_PATH=/opt/homebrew/opt/llvm/lib", file=sys.stderr)
-        print("", file=sys.stderr)
-        print("Install LLVM from: https://github.com/llvm/llvm-project/releases", file=sys.stderr)
-        return 1
-    
+
+    # Pre-scan for CORE_ENUM types across all dirs
+    all_scan_dirs = list(set(source_dirs + scan_dirs))
+    known_enums = collect_known_enums(all_scan_dirs)
+    verbose_log(f"Known enums ({len(known_enums)}): {sorted(known_enums)}")
+
     # Load cache
     cache_path = cache_dir / "metadata_cache.json"
     cache = MetadataCache(cache_path)
@@ -230,21 +219,17 @@ Examples:
         verbose_log(f"Loaded cache: {stats['files']} files, {stats['classes']} classes")
     else:
         verbose_log("No cache found, starting fresh")
-    
-    # Create parser (libclang only)
-    try:
-        cpp_parser = create_parser(include_dirs)
-        verbose_log("Using libclang parser")
-    except RuntimeError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
-    
+
+    # Create parser (regex-based, no external dependencies)
+    cpp_parser = create_parser(include_dirs, known_enums)
+    verbose_log("Using regex parser")
+
     # Create generator
     generator = CodeGenerator(output_dir=output_dir)
-    
+
     # Get files to process
     all_headers = scan_headers(source_dirs)
-    
+
     if args.force:
         files_to_process = all_headers
         log(f"Force mode: processing all {len(files_to_process)} files")
@@ -254,12 +239,10 @@ Examples:
             log(f"Processing {len(files_to_process)} changed files")
         else:
             log("All files up to date")
-    
+
     # Pass 1: parse all files and update cache.
     # Parsing is done first for ALL files so that factory base information is
-    # complete before any code generation begins. This avoids the ordering race
-    # where LoggerManager.h could be generated before ILogSink.h is parsed,
-    # resulting in missing FactoryTraits includes.
+    # complete before any code generation begins.
     processed_count = 0
     generated_count = 0
     error_count = 0
@@ -305,8 +288,6 @@ Examples:
         verbose_log(f"Factory bases found: {[fb.name for fb in factory_bases]}")
 
     # Pass 2: generate code for all files that had reflected content.
-    # At this point every factory base is known, so FactoryTraits can be
-    # inlined correctly into whichever gen file needs them.
     for file_path in files_to_generate:
         classes, enums = cache.get_file_data(file_path)
         try:
@@ -322,34 +303,28 @@ Examples:
                 print(f"Error generating {file_path}: {e}", file=sys.stderr)
 
     # Cleanup deleted files from cache
-    # Only cleanup files from directories we're responsible for (not the entire cache)
-    # This allows multiple modules to share the same cache without overwriting each other
     scanned_dirs = source_dirs + scan_dirs
     existing_files_in_scanned_dirs = set(scan_headers(scanned_dirs))
-    
-    # Find files in cache that were from our directories but no longer exist
+
     to_remove = []
     for cached_path in cache.files.keys():
         cached_path_obj = Path(cached_path)
-        # Check if this file was from one of our directories
         for scan_dir in scanned_dirs:
             try:
                 cached_path_obj.relative_to(scan_dir.resolve())
-                # File was from our directory - check if it still exists
                 if cached_path_obj not in existing_files_in_scanned_dirs and \
                    Path(cached_path) not in existing_files_in_scanned_dirs:
                     to_remove.append(cached_path)
                 break
             except ValueError:
-                # Not from this directory, check next
                 continue
-    
+
     for path in to_remove:
         cache.remove_file(Path(path))
-    
+
     if to_remove:
         verbose_log(f"Removed {len(to_remove)} deleted files from cache")
-    
+
     # Save cache
     t0_save = time.perf_counter()
     cache.save()
@@ -357,7 +332,7 @@ Examples:
     if args.verbose and not args.quiet:
         log(f"Cache save (serialization): {cache_save_elapsed:.2f} s")
     verbose_log(f"Cache saved to {cache_path}")
-    
+
     # Summary
     if not args.quiet:
         stats = cache.get_statistics()
@@ -366,7 +341,7 @@ Examples:
             log(f"  Errors: {error_count}")
         verbose_log(f"  Cache: {stats['files']} files, {stats['classes']} classes, {stats['enums']} enums")
         log(f"  Cache load: {cache_load_elapsed:.2f} s | Cache save (serialization): {cache_save_elapsed:.2f} s")
-    
+
     return 0 if error_count == 0 else 1
 
 

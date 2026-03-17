@@ -193,52 +193,6 @@ find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
     message(STATUS "Python3 found: ${Python3_EXECUTABLE}")
     
-    # =========================================================================
-    # Libclang Pre-flight Check
-    # =========================================================================
-    message(STATUS "Checking libclang availability...")
-    
-    execute_process(
-        COMMAND ${Python3_EXECUTABLE} -c "
-import sys
-try:
-    import clang.cindex
-    try:
-        idx = clang.cindex.Index.create()
-        print('OK')
-        sys.exit(0)
-    except Exception:
-        print('NEEDS_CONFIG')
-        sys.exit(0)
-except ImportError:
-    print('NOT_INSTALLED')
-    sys.exit(1)
-"
-        RESULT_VARIABLE CLANG_PY_STATUS
-        OUTPUT_VARIABLE CLANG_PY_OUTPUT
-        ERROR_VARIABLE CLANG_PY_ERROR
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    
-    if(CLANG_PY_STATUS EQUAL 0)
-        if(CLANG_PY_OUTPUT STREQUAL "OK")
-            message(STATUS "  libclang: OK")
-            set(LIBCLANG_AVAILABLE TRUE)
-        elseif(CLANG_PY_OUTPUT STREQUAL "NEEDS_CONFIG")
-            message(STATUS "  libclang: Package installed, but library not configured")
-            message(STATUS "  Run 'python CI/meta_generator/meta_generator_gui.py' to configure LLVM path")
-            message(STATUS "  Or set LIBCLANG_PATH environment variable")
-            set(LIBCLANG_AVAILABLE TRUE)
-        endif()
-    else()
-        message(WARNING "  libclang: Not available (LLVM is REQUIRED for reflection generation)")
-        message(WARNING "  Options:")
-        message(WARNING "    1. Run: python CI/meta_generator/meta_generator_gui.py")
-        message(WARNING "    2. Set environment variable: LIBCLANG_PATH=C:/Program Files/LLVM/bin")
-        message(WARNING "    3. Install LLVM: https://github.com/llvm/llvm-project/releases")
-        set(LIBCLANG_AVAILABLE FALSE)
-    endif()
-    
     # Directory for generated reflection files
     # Use CMAKE_BINARY_DIR so generated files go into the actual build directory
     # (e.g., build/ClangWindowsSolution/Generated instead of build/ClangWindows/Generated)
@@ -246,9 +200,8 @@ except ImportError:
     set(REFLECTION_GENERATED_DIR "${CMAKE_BINARY_DIR}/Generated" CACHE PATH "Directory for generated reflection files")
     file(MAKE_DIRECTORY ${REFLECTION_GENERATED_DIR})
     
-    # Meta-Generator script paths (LLVM-based, requires libclang)
+    # Meta-Generator script path (regex-based, no external dependencies)
     set(META_GENERATOR_SCRIPT "${CMAKE_SOURCE_DIR}/CI/meta_generator/meta_generator.py")
-    set(META_GENERATOR_SETTINGS "${CMAKE_SOURCE_DIR}/meta_generator_settings.json")
     
     # =============================================================================
     # add_reflection_target - Generate reflection code for headers
@@ -319,7 +272,6 @@ except ImportError:
                 ${META_EXTRA_ARGS}
                 --output-dir "${REFLECTION_GENERATED_DIR}"
                 --cache-dir "${META_CACHE_DIR}"
-                --settings "${META_GENERATOR_SETTINGS}"
             RESULT_VARIABLE META_GEN_RESULT
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         )
@@ -327,12 +279,7 @@ except ImportError:
         if(NOT META_GEN_RESULT EQUAL 0)
             message(FATAL_ERROR "Meta-generator failed for ${TARGET_NAME}:\n"
                 "  Exit code: ${META_GEN_RESULT}\n"
-                "  See output above for details.\n"
-                "\n"
-                "LLVM/libclang is REQUIRED. Options:\n"
-                "  1. Run: python CI/meta_generator/meta_generator_gui.py (configure LLVM path)\n"
-                "  2. Set environment variable: LIBCLANG_PATH=C:/Program Files/LLVM/bin\n"
-                "  3. Install LLVM: https://github.com/llvm/llvm-project/releases"
+                "  See output above for details."
             )
         endif()
         
@@ -418,7 +365,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 target_link_libraries(MyGame PRIVATE 
-    $<LINK_LIBRARY:WHOLE_ARCHIVE,BECoreModule>
+    BECoreModule
     EventsModule
     TaskSystemModule
     SDLModule
