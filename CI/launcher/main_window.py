@@ -767,6 +767,12 @@ class MainWindow(QMainWindow):
         self._clang_format_btn.clicked.connect(self._run_clang_format)
         layout.addWidget(self._clang_format_btn)
 
+        # Tidy Fix button
+        self._tidy_fix_btn = QPushButton("Tidy Fix")
+        self._tidy_fix_btn.setToolTip("Run clang-tidy fixes (braces around if/for/while) on changed or all sources (requires compile_commands.json)")
+        self._tidy_fix_btn.clicked.connect(self._run_tidy_fix)
+        layout.addWidget(self._tidy_fix_btn)
+
         # Strip PCH includes button
         self._strip_pch_btn = QPushButton("Strip PCH includes")
         self._strip_pch_btn.setToolTip("Remove #include lines already in PCH; optional folder scope")
@@ -1164,6 +1170,33 @@ class MainWindow(QMainWindow):
         """Re-enable Clang-Format button and log result."""
         self._clang_format_btn.setEnabled(True)
         self._log("Clang-Format: " + ("completed successfully." if success else "finished with errors."))
+
+    def _run_tidy_fix(self):
+        """Show scope dialog and run tidy_fix.py with streaming output."""
+        script_path = self.project_root / "CI" / "scripts" / "tidy_fix.py"
+        if not script_path.exists():
+            QMessageBox.warning(
+                self,
+                "Tidy Fix Not Found",
+                f"Script not found:\n{script_path}",
+            )
+            return
+        dialog = ClangFormatScopeDialog(self)
+        dialog.setWindowTitle("Tidy Fix")
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        scope = dialog.get_scope()
+        self._tidy_fix_btn.setEnabled(False)
+        self._log("Tidy Fix: starting...")
+        self._tidy_fix_worker = ClangFormatWorker(self.project_root, script_path, scope)
+        self._tidy_fix_worker.output_received.connect(self._log)
+        self._tidy_fix_worker.finished_signal.connect(self._on_tidy_fix_finished)
+        self._tidy_fix_worker.start()
+
+    def _on_tidy_fix_finished(self, success: bool):
+        """Re-enable Tidy Fix button and log result."""
+        self._tidy_fix_btn.setEnabled(True)
+        self._log("Tidy Fix: " + ("completed successfully." if success else "finished with errors."))
 
     def _run_strip_pch(self):
         """Show scope dialog and run strip_pch_includes.py with streaming output."""

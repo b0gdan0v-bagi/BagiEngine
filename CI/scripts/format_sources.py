@@ -6,7 +6,7 @@ Modes:
   --changed  Only files with uncommitted changes (git).
   --all      All C/C++ sources under src/ and config/.
 
-Ignore: .clang-format-ignore in project root (merged with built-in vendored paths).
+Ignore: .clang-format-ignore in project root (required).
 Run from project root. Uses root .clang-format.
 """
 
@@ -19,32 +19,17 @@ from pathlib import Path
 # Extensions that clang-format should process
 SOURCE_EXTENSIONS = {".cpp", ".c", ".h", ".hpp", ".cxx", ".hxx", ".cc"}
 
-# Default ignore patterns (relative to project root, forward slashes). Vendored libs + external/build.
-DEFAULT_IGNORE_PATTERNS = [
-    "external/",
-    "build/",
-    ".venv/",
-    "src/Modules/EABase",
-    "src/Modules/EnTT",
-    "src/Modules/fmt",
-    "src/Modules/imgui",
-    "src/Modules/pugixml",
-    "src/Modules/Vulkan",
-]
-
 
 def load_ignore_patterns(project_root: Path) -> list[str]:
-    """Load ignore patterns: default list + lines from .clang-format-ignore (merged)."""
-    patterns = list(DEFAULT_IGNORE_PATTERNS)
+    """Load ignore patterns from .clang-format-ignore (required). Exits with error if not found."""
     ignore_file = project_root / ".clang-format-ignore"
-    if ignore_file.exists():
-        try:
-            for line in ignore_file.read_text(encoding="utf-8", errors="replace").splitlines():
-                line = line.split("#", 1)[0].strip()
-                if line:
-                    patterns.append(line.replace("\\", "/").rstrip("/"))
-        except OSError:
-            pass
+    if not ignore_file.exists():
+        sys.exit(f"[error] .clang-format-ignore not found at {ignore_file}")
+    patterns = []
+    for line in ignore_file.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            patterns.append(line.replace("\\", "/").rstrip("/"))
     return patterns
 
 
