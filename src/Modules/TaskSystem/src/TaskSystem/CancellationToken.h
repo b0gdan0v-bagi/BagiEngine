@@ -1,5 +1,7 @@
 #pragma once
 
+#include <TaskSystem/TaskPriority.h>
+
 namespace BECore {
 
     /**
