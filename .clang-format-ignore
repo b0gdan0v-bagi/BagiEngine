@@ -10,3 +10,4 @@ src/Modules/imgui
 src/Modules/pugixml
 src/Modules/Vulkan
 src/Modules/BECore/pch.h
+src/Modules/BECore/Assert/StackTrace.cpp

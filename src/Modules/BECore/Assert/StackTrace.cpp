@@ -5,8 +5,8 @@
 
 #if defined(PLATFORM_WINDOWS)
 #define WIN32_LEAN_AND_MEAN
-#include <dbghelp.h>
 #include <windows.h>
+#include <dbghelp.h>
 #pragma comment(lib, "dbghelp.lib")
 #elif defined(PLATFORM_LINUX) || defined(PLATFORM_MACOS)
 #include <cxxabi.h>
