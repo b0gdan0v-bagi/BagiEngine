@@ -18,8 +18,9 @@ namespace BECore {
             const uint32_t idx = static_cast<uint32_t>(hash & (BucketCount - 1));
             for (T* e = _buckets[idx]; e; e = e->nextEntry) {
                 if (e->hash == hash && e->size == str.size()) {
-                    if (std::memcmp(e->data, str.data(), e->size) == 0)
+                    if (std::memcmp(e->data, str.data(), e->size) == 0) {
                         return e;
+                    }
                 }
             }
             return nullptr;
@@ -49,24 +50,27 @@ namespace BECore {
         }
 
         const Entry* GetOrAdd(eastl::string_view str) {
-            if (str.empty())
+            if (str.empty()) {
                 return &Details::g_EmptyEntryStore.header;
+            }
 
             const uint64_t hash = String::GetHash(str);
 
             // 1. Поиск под Shared Lock
             {
                 std::shared_lock lock(_mutex);
-                if (auto e = _table.Find(hash, str))
+                if (auto e = _table.Find(hash, str)) {
                     return e;
+                }
             }
 
             // 2. Вставка под Unique Lock
             std::unique_lock lock(_mutex);
 
             // Double-check
-            if (auto e = _table.Find(hash, str))
+            if (auto e = _table.Find(hash, str)) {
                 return e;
+            }
 
             const size_t headerSize = offsetof(Entry, data);
             const size_t totalSize = headerSize + str.size() + 1;

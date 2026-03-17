@@ -150,20 +150,26 @@ namespace BECore {
     }
 
     bool PoolStringChain::operator==(const PoolStringChain& other) const {
-        if (_mode != other._mode)
+        if (_mode != other._mode) {
             return false;
-        if (_mode == Mode::Empty)
+        }
+        if (_mode == Mode::Empty) {
             return true;
-        if (_mode == Mode::Atom)
+        }
+        if (_mode == Mode::Atom) {
             return _storage.single == other._storage.single;
-        if (_mode == Mode::Literal)
+        }
+        if (_mode == Mode::Literal) {
             return eastl::string_view(_storage.view.p, _storage.view.s) == eastl::string_view(other._storage.view.p, other._storage.view.s);
+        }
         if (_mode == Mode::Compound) {
-            if (_count != other._count)
+            if (_count != other._count) {
                 return false;
+            }
             for (uint8_t i = 0; i < _count; ++i) {
-                if (_storage.compound[i].data != other._storage.compound[i].data)
+                if (_storage.compound[i].data != other._storage.compound[i].data) {
                     return false;
+                }
             }
             return true;
         }

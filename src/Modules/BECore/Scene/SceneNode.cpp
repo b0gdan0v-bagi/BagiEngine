@@ -21,8 +21,9 @@ namespace BECore {
     }
 
     void SceneNode::RemoveChild(SceneNode* child) {
-        if (!child)
+        if (!child) {
             return;
+        }
 
         auto it = eastl::find_if(_children.begin(), _children.end(), [child](const IntrusivePtr<SceneNode>& node) { return node.Get() == child; });
 
@@ -33,8 +34,9 @@ namespace BECore {
     }
 
     void SceneNode::AddComponent(IntrusivePtr<IComponent> component) {
-        if (!component)
+        if (!component) {
             return;
+        }
 
         auto typeName = PoolString::Intern(component->GetTypeMeta().typeName);
         RemoveComponent(typeName);
@@ -48,15 +50,17 @@ namespace BECore {
     void SceneNode::RemoveComponent(PoolString typeName) {
         auto it = eastl::find_if(_components.begin(), _components.end(), [&typeName](const IntrusivePtr<IComponent>& comp) { return PoolString::Intern(comp->GetTypeMeta().typeName) == typeName; });
 
-        if (it != _components.end())
+        if (it != _components.end()) {
             _components.erase(it);
+        }
     }
 
     IntrusivePtr<IComponent> SceneNode::GetComponent(eastl::string_view typeName) const {
         auto it = eastl::find_if(_components.begin(), _components.end(), [&typeName](const IntrusivePtr<IComponent>& comp) { return comp->GetTypeMeta().typeName == typeName; });
 
-        if (it != _components.end())
+        if (it != _components.end()) {
             return *it;
+        }
         return {};
     }
 

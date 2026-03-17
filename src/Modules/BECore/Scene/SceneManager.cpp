@@ -9,13 +9,15 @@ namespace BECore {
     }
 
     void SceneManager::UpdateAll() const {
-        if (_activeScene)
+        if (_activeScene) {
             _activeScene->Update();
+        }
     }
 
     void SceneManager::DrawAll() const {
-        if (_activeScene)
+        if (_activeScene) {
             _activeScene->Draw();
+        }
     }
 
     Scene* SceneManager::GetActiveScene() const {

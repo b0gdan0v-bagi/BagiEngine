@@ -217,8 +217,9 @@ namespace BECore::Tests {
             fieldCount++;
             if (name == "health") {
                 if constexpr (std::is_same_v<std::remove_reference_t<decltype(value)>, int32_t>) {
-                    if (value != 42)
+                    if (value != 42) {
                         return;
+                    }
                 }
             }
         });
@@ -316,14 +317,18 @@ namespace BECore::Tests {
         // Verify method names are present
         bool hasTakeDamage = false, hasHeal = false, hasIsDead = false, hasGetHealthPercent = false;
         for (const auto& name : methodNames) {
-            if (name == "TakeDamage")
+            if (name == "TakeDamage") {
                 hasTakeDamage = true;
-            if (name == "Heal")
+            }
+            if (name == "Heal") {
                 hasHeal = true;
-            if (name == "IsDead")
+            }
+            if (name == "IsDead") {
                 hasIsDead = true;
-            if (name == "GetHealthPercent")
+            }
+            if (name == "GetHealthPercent") {
                 hasGetHealthPercent = true;
+            }
         }
 
         if (!hasTakeDamage || !hasHeal || !hasIsDead || !hasGetHealthPercent) {
