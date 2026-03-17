@@ -245,6 +245,11 @@ class CodeGenerator:
             if cls.parent_class and not cls.is_event and not cls.is_factory_base:
                 parent_short = cls.parent_class.split('::')[-1]
                 factory_base_fqn = factory_base_fqn_map.get(parent_short, "")
+            elif cls.is_factory_base and not cls.is_event:
+                short = cls.name.split('::')[-1]
+                fb = factory_base_map.get(short)
+                if fb and len(fb.derived) == 1 and fb.derived[0].name == cls.name:
+                    factory_base_fqn = cls.full_qualified_name
 
             cls_dict = {
                 'name': cls.name,
@@ -383,9 +388,21 @@ class CodeGenerator:
             
             if factory_base.derived:
                 element = compute_element_name(base_cls.name, factory_base.derived[0].name)
-                factory_base.element_name = element
-                factory_base.container_name = element + "s"
-                factory_bases.append(factory_base)
+            else:
+                element = base_cls.element_name or base_cls.name.lstrip('I').lower()
+                short_name = base_cls.name
+                include_path = compute_include_path(base_cls.source_file, include_dirs)
+                factory_base.derived.append(DerivedClassData(
+                    name=base_cls.name,
+                    short_name=short_name,
+                    full_name=base_cls.full_qualified_name,
+                    source_file=base_cls.source_file,
+                    include_path=include_path,
+                ))
+
+            factory_base.element_name = element
+            factory_base.container_name = element + "s"
+            factory_bases.append(factory_base)
         
         return factory_bases
     

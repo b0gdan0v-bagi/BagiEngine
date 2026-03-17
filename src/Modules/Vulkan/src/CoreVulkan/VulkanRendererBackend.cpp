@@ -1,20 +1,16 @@
 #include "VulkanRendererBackend.h"
 
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/MainWindow/IMainWindow.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/MainWindow/IMainWindow.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/VulkanRendererBackend.gen.hpp>
-
 #include <SDL3/SDL_vulkan.h>
-
-#include <imgui.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_vulkan.h>
-
-#include <Generated/VulkanRendererBackend.gen.hpp>
+#include <imgui.h>
 
 namespace BECore {
 
@@ -55,24 +51,30 @@ namespace BECore {
             return false;
         }
 
-        const int width  = window.GetWidth();
+        const int width = window.GetWidth();
         const int height = window.GetHeight();
 
         if (!_swapchain.Initialize(_device, _surface, width, height)) {
             return false;
         }
 
-        if (!CreateCommandPool())    { return false; }
-        if (!CreateCommandBuffers()) { return false; }
-        if (!CreateSyncObjects())    { return false; }
+        if (!CreateCommandPool()) {
+            return false;
+        }
+        if (!CreateCommandBuffers()) {
+            return false;
+        }
+        if (!CreateSyncObjects()) {
+            return false;
+        }
 
-        Subscribe<RenderEvents::SetRenderDrawColorEvent,  &VulkanRendererBackend::OnSetRenderDrawColor>(this);
-        Subscribe<RenderEvents::RenderClearEvent,         &VulkanRendererBackend::OnRenderClear>(this);
-        Subscribe<RenderEvents::RenderPresentEvent,       &VulkanRendererBackend::OnRenderPresent>(this);
-        Subscribe<RenderEvents::ImGuiInitEvent,           &VulkanRendererBackend::OnImGuiInit>(this);
-        Subscribe<RenderEvents::ImGuiShutdownEvent,       &VulkanRendererBackend::OnImGuiShutdown>(this);
-        Subscribe<RenderEvents::ImGuiNewFrameEvent,       &VulkanRendererBackend::OnImGuiNewFrame>(this);
-        Subscribe<RenderEvents::ImGuiRenderEvent,         &VulkanRendererBackend::OnImGuiRender>(this);
+        Subscribe<RenderEvents::SetRenderDrawColorEvent, &VulkanRendererBackend::OnSetRenderDrawColor>(this);
+        Subscribe<RenderEvents::RenderClearEvent, &VulkanRendererBackend::OnRenderClear>(this);
+        Subscribe<RenderEvents::RenderPresentEvent, &VulkanRendererBackend::OnRenderPresent>(this);
+        Subscribe<RenderEvents::ImGuiInitEvent, &VulkanRendererBackend::OnImGuiInit>(this);
+        Subscribe<RenderEvents::ImGuiShutdownEvent, &VulkanRendererBackend::OnImGuiShutdown>(this);
+        Subscribe<RenderEvents::ImGuiNewFrameEvent, &VulkanRendererBackend::OnImGuiNewFrame>(this);
+        Subscribe<RenderEvents::ImGuiRenderEvent, &VulkanRendererBackend::OnImGuiRender>(this);
         Subscribe<ApplicationEvents::ApplicationCleanUpEvent, &VulkanRendererBackend::Destroy>(this);
 
         LOG_INFO("VulkanRendererBackend: Initialized successfully");
@@ -124,8 +126,7 @@ namespace BECore {
         // Wait until the GPU finishes the previous use of this frame slot
         vkWaitForFences(vkDevice, 1, &_inFlightFences[frameIdx], VK_TRUE, UINT64_MAX);
 
-        if (!_swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx],
-                                          _currentImageIndex)) {
+        if (!_swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx], _currentImageIndex)) {
             return;  // swapchain out-of-date (TODO: recreate on resize)
         }
 
@@ -143,13 +144,13 @@ namespace BECore {
         clearValue.color = _clearColor;
 
         VkRenderPassBeginInfo rpBegin{};
-        rpBegin.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpBegin.renderPass        = _swapchain.GetRenderPass();
-        rpBegin.framebuffer       = _swapchain.GetFramebuffer(_currentImageIndex);
+        rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rpBegin.renderPass = _swapchain.GetRenderPass();
+        rpBegin.framebuffer = _swapchain.GetFramebuffer(_currentImageIndex);
         rpBegin.renderArea.offset = {0, 0};
         rpBegin.renderArea.extent = _swapchain.GetExtent();
-        rpBegin.clearValueCount   = 1;
-        rpBegin.pClearValues      = &clearValue;
+        rpBegin.clearValueCount = 1;
+        rpBegin.pClearValues = &clearValue;
 
         vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -170,14 +171,14 @@ namespace BECore {
         // Submit the command buffer
         const VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo submitInfo{};
-        submitInfo.sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.waitSemaphoreCount   = 1;
-        submitInfo.pWaitSemaphores      = &_imageAvailableSemaphores[frameIdx];
-        submitInfo.pWaitDstStageMask    = &waitStage;
-        submitInfo.commandBufferCount   = 1;
-        submitInfo.pCommandBuffers      = &cmd;
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = &_imageAvailableSemaphores[frameIdx];
+        submitInfo.pWaitDstStageMask = &waitStage;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
         submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores    = &_renderFinishedSemaphores[frameIdx];
+        submitInfo.pSignalSemaphores = &_renderFinishedSemaphores[frameIdx];
 
         vkQueueSubmit(_device.GetGraphicsQueue(), 1, &submitInfo, _inFlightFences[frameIdx]);
 
@@ -206,8 +207,8 @@ namespace BECore {
 
     bool VulkanRendererBackend::CreateCommandPool() {
         VkCommandPoolCreateInfo poolInfo{};
-        poolInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-        poolInfo.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         poolInfo.queueFamilyIndex = _device.GetQueueFamilies().graphicsFamily;
 
         return vkCreateCommandPool(_device.GetDevice(), &poolInfo, nullptr, &_commandPool) == VK_SUCCESS;
@@ -217,9 +218,9 @@ namespace BECore {
         _commandBuffers.resize(kMaxFramesInFlight);
 
         VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool        = _commandPool;
-        allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = _commandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = static_cast<uint32_t>(_commandBuffers.size());
 
         return vkAllocateCommandBuffers(_device.GetDevice(), &allocInfo, _commandBuffers.data()) == VK_SUCCESS;
@@ -239,12 +240,9 @@ namespace BECore {
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
         for (int i = 0; i < kMaxFramesInFlight; ++i) {
-            if (vkCreateSemaphore(_device.GetDevice(), &semInfo, nullptr,
-                                  &_imageAvailableSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(_device.GetDevice(), &semInfo, nullptr,
-                                  &_renderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateFence(_device.GetDevice(), &fenceInfo, nullptr,
-                              &_inFlightFences[i]) != VK_SUCCESS) {
+            if (vkCreateSemaphore(_device.GetDevice(), &semInfo, nullptr, &_imageAvailableSemaphores[i]) != VK_SUCCESS ||
+                vkCreateSemaphore(_device.GetDevice(), &semInfo, nullptr, &_renderFinishedSemaphores[i]) != VK_SUCCESS ||
+                vkCreateFence(_device.GetDevice(), &fenceInfo, nullptr, &_inFlightFences[i]) != VK_SUCCESS) {
                 return false;
             }
         }
@@ -254,6 +252,10 @@ namespace BECore {
     // =========================================================================
     // Event handlers (translate engine render events to Vulkan calls)
     // =========================================================================
+
+    void VulkanRendererBackend::DrawFilledRect(float, float, float, float, const Color&) {
+        // TODO: Vulkan primitive rendering
+    }
 
     void VulkanRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {
         Clear(event.color);
@@ -279,16 +281,16 @@ namespace BECore {
         ImGui_ImplSDL3_InitForVulkan(sdlWindow->GetSDLWindow());
 
         ImGui_ImplVulkan_InitInfo vulkanInfo{};
-        vulkanInfo.ApiVersion      = VK_API_VERSION_1_0;
-        vulkanInfo.Instance        = _device.GetInstance();
-        vulkanInfo.PhysicalDevice  = _device.GetPhysicalDevice();
-        vulkanInfo.Device          = _device.GetDevice();
-        vulkanInfo.QueueFamily     = _device.GetQueueFamilies().graphicsFamily;
-        vulkanInfo.Queue           = _device.GetGraphicsQueue();
-        vulkanInfo.MinImageCount      = kMaxFramesInFlight;
-        vulkanInfo.ImageCount         = kMaxFramesInFlight;
+        vulkanInfo.ApiVersion = VK_API_VERSION_1_0;
+        vulkanInfo.Instance = _device.GetInstance();
+        vulkanInfo.PhysicalDevice = _device.GetPhysicalDevice();
+        vulkanInfo.Device = _device.GetDevice();
+        vulkanInfo.QueueFamily = _device.GetQueueFamilies().graphicsFamily;
+        vulkanInfo.Queue = _device.GetGraphicsQueue();
+        vulkanInfo.MinImageCount = kMaxFramesInFlight;
+        vulkanInfo.ImageCount = kMaxFramesInFlight;
         vulkanInfo.DescriptorPoolSize = 1000;
-        vulkanInfo.PipelineInfoMain.RenderPass  = _swapchain.GetRenderPass();
+        vulkanInfo.PipelineInfoMain.RenderPass = _swapchain.GetRenderPass();
         vulkanInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
         ImGui_ImplVulkan_Init(&vulkanInfo);
     }

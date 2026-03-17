@@ -210,6 +210,8 @@ class ClassData:
     parent_class: Optional[str] = None  # Direct parent class name if inheriting
     source_file: str = ""
     line: int = 0
+    # Custom XML element name from ELEMENT=xxx option in BE_CLASS macro.
+    element_name: Optional[str] = None
     # Resolved at generation time (not stored in cache): FQN of the factory base this
     # class derives from, e.g. "BECore::ILogSink". Empty string when not a factory child.
     factory_base_fqn: str = ""
@@ -228,6 +230,7 @@ class ClassData:
             "parent_class": self.parent_class,
             "source_file": self.source_file,
             "line": self.line,
+            "element_name": self.element_name,
         }
     
     @classmethod
@@ -247,6 +250,7 @@ class ClassData:
             parent_class=data.get("parent_class"),
             source_file=data.get("source_file", ""),
             line=data.get("line", 0),
+            element_name=data.get("element_name"),
         )
 
 

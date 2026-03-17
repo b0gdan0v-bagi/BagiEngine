@@ -22,6 +22,7 @@ namespace BECore {
         void EndFrame() override;
         void Clear(const Color& color) override;
         void Present() override;
+        void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
 
         SDL_Renderer* GetSDLRenderer() const {
             return _renderer;

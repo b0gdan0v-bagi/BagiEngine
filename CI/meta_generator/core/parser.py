@@ -25,7 +25,7 @@ _RE_CLASS_DEF = re.compile(
     r'(?<!friend\s)(?:struct|class)\s+(\w+)\s*(?::([^{;]*))?(\{)',
     re.DOTALL,
 )
-_RE_BE_MACRO = re.compile(r'BE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*(\w+)\s*)?\)')
+_RE_BE_MACRO = re.compile(r'BE_(CLASS|EVENT)\s*\(\s*(\w+)\s*(?:,\s*([^)]+?)\s*)?\)')
 _RE_FIELD = re.compile(
     r'BE_REFLECT_FIELD\b\s+(.*?)\s*;',
     re.DOTALL,
@@ -275,9 +275,15 @@ class RegexParser:
                 continue
 
             is_event = (be.group(1) == "EVENT")
-            is_factory_base = bool(
-                be.group(3) and be.group(3).upper() == "FACTORY_BASE"
-            )
+            options_str = be.group(3) or ""
+            options = [o.strip() for o in options_str.split(",") if o.strip()]
+            is_factory_base = any(o.upper() == "FACTORY_BASE" for o in options)
+            element_name = None
+            for opt in options:
+                if "=" in opt:
+                    key, val = opt.split("=", 1)
+                    if key.strip().upper() == "ELEMENT":
+                        element_name = val.strip()
 
             parent_class = _extract_parent_class(inheritance)
             ns = self._namespace_at(text, m.start())
@@ -302,6 +308,7 @@ class RegexParser:
                 parent_class=parent_class,
                 source_file=str(source_path),
                 line=line_no,
+                element_name=element_name,
             )
 
             self._parse_fields(body, cls)

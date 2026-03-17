@@ -7,6 +7,7 @@
 #include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Resource/ResourceManager.h>
+#include <BECore/Scene/SceneManager.h>
 #include <BECore/Tests/TestManager.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/EventsProviderManager.h>
@@ -70,6 +71,10 @@ namespace BECore {
             return GetInstance()._rendererManager.GetRenderer();
         }
 
+        static SceneManager& GetSceneManager() {
+            return *GetInstance()._sceneManager;
+        }
+
         // Pre-initialization function (FileSystem, AssertHandlers, Tests)
         void OnApplicationPreInit(PassKey<Application>);
 
@@ -93,6 +98,7 @@ namespace BECore {
         EventsProviderManager _eventsProviderManager;
         MainWindowManager _mainWindowManager;
         RendererManager _rendererManager;
+        IntrusivePtrAtomic<SceneManager> _sceneManager;
     };
 
 }  // namespace BECore

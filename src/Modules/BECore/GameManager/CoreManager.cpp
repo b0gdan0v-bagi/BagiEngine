@@ -43,14 +43,18 @@ namespace BECore {
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
         _widgetManager.CreateWidgets();
+        _sceneManager = MakeFromConfig<SceneManager>("SceneConfig");
+        _sceneManager->Initialize();
     }
 
     void CoreManager::OnGameCycle(PassKey<Application>) const {
         _eventsProviderManager.ProcessEvents();
         TaskManager::GetInstance().Update(PassKey<CoreManager>{});
         _widgetManager.UpdateAll();
+        _sceneManager->UpdateAll();
         EventsQueueRegistry::UpdateAll();
         _widgetManager.DrawAll();
+        _sceneManager->DrawAll();
     }
 
     void CoreManager::OnApplicationDeinit(PassKey<Application>) {

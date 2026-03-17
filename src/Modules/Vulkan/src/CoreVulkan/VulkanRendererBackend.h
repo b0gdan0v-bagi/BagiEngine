@@ -3,9 +3,8 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <CoreVulkan/VulkanDevice.h>
 #include <CoreVulkan/VulkanSwapchain.h>
-
-#include <vulkan/vulkan.h>
 #include <EASTL/vector.h>
+#include <vulkan/vulkan.h>
 
 namespace BECore {
 
@@ -38,17 +37,34 @@ namespace BECore {
         void EndFrame() override;
         void Clear(const Color& color) override;
         void Present() override;
+        void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
 
         // Vulkan handles exposed for imgui_impl_vulkan integration
-        VkInstance       GetVkInstance()      const { return _device.GetInstance(); }
-        VkPhysicalDevice GetVkPhysicalDevice() const { return _device.GetPhysicalDevice(); }
-        VkDevice         GetVkDevice()        const { return _device.GetDevice(); }
-        VkQueue          GetVkGraphicsQueue() const { return _device.GetGraphicsQueue(); }
-        VkRenderPass     GetVkRenderPass()       const { return _swapchain.GetRenderPass(); }
-        uint32_t         GetGraphicsQueueFamily() const { return _device.GetQueueFamilies().graphicsFamily; }
-        uint32_t         GetCurrentImageIndex()   const { return _currentImageIndex; }
-        VkCommandBuffer  GetCurrentCommandBuffer() const;
-        uint32_t         GetMinImageCount()        const { return kMaxFramesInFlight; }
+        VkInstance GetVkInstance() const {
+            return _device.GetInstance();
+        }
+        VkPhysicalDevice GetVkPhysicalDevice() const {
+            return _device.GetPhysicalDevice();
+        }
+        VkDevice GetVkDevice() const {
+            return _device.GetDevice();
+        }
+        VkQueue GetVkGraphicsQueue() const {
+            return _device.GetGraphicsQueue();
+        }
+        VkRenderPass GetVkRenderPass() const {
+            return _swapchain.GetRenderPass();
+        }
+        uint32_t GetGraphicsQueueFamily() const {
+            return _device.GetQueueFamilies().graphicsFamily;
+        }
+        uint32_t GetCurrentImageIndex() const {
+            return _currentImageIndex;
+        }
+        VkCommandBuffer GetCurrentCommandBuffer() const;
+        uint32_t GetMinImageCount() const {
+            return kMaxFramesInFlight;
+        }
 
     private:
         bool CreateCommandPool();
@@ -64,22 +80,22 @@ namespace BECore {
         void OnImGuiNewFrame();
         void OnImGuiRender();
 
-        VulkanDevice    _device;
+        VulkanDevice _device;
         VulkanSwapchain _swapchain;
 
         VkSurfaceKHR _surface = VK_NULL_HANDLE;
 
-        VkCommandPool                  _commandPool = VK_NULL_HANDLE;
+        VkCommandPool _commandPool = VK_NULL_HANDLE;
         eastl::vector<VkCommandBuffer> _commandBuffers;
 
         // One set of sync objects per in-flight frame
         eastl::vector<VkSemaphore> _imageAvailableSemaphores;
         eastl::vector<VkSemaphore> _renderFinishedSemaphores;
-        eastl::vector<VkFence>     _inFlightFences;
+        eastl::vector<VkFence> _inFlightFences;
 
-        uint32_t _currentFrame      = 0;
+        uint32_t _currentFrame = 0;
         uint32_t _currentImageIndex = 0;
-        bool     _frameActive       = false;
+        bool _frameActive = false;
 
         // Clear color set by SetRenderDrawColorEvent
         VkClearColorValue _clearColor = {{0.0f, 0.0f, 0.0f, 1.0f}};

@@ -8,7 +8,9 @@
       "src/Modules/BECore/Widgets",
       "src/Modules/BECore/Resource",
       "src/Modules/BECore/Math",
-      "src/Modules/BECore/Renderer"
+      "src/Modules/BECore/Renderer",
+      "src/Modules/BECore/Scene",
+      "src/Modules/BECore/Scene/Components"
     ],
     "scan_dirs": [
       "src/Modules/BECore/Application",
@@ -19,6 +21,8 @@
       "src/Modules/BECore/Resource",
       "src/Modules/BECore/Math",
       "src/Modules/BECore/Renderer",
+      "src/Modules/BECore/Scene",
+      "src/Modules/BECore/Scene/Components",
       "src/Widgets",
       "src/Modules/SDL/src/CoreSDL",
       "src/Modules/Vulkan/src/CoreVulkan"

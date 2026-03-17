@@ -17,6 +17,7 @@ namespace BECore {
         BE_FUNCTION virtual void EndFrame() = 0;
         BE_FUNCTION virtual void Clear(const Color& color) = 0;
         BE_FUNCTION virtual void Present() = 0;
+        BE_FUNCTION virtual void DrawFilledRect(float x, float y, float w, float h, const Color& color) = 0;
     };
 
 }  // namespace BECore

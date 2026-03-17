@@ -60,6 +60,14 @@ namespace BECore {
         }
     }
 
+    void SDLRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
+        if (_renderer) {
+            SDL_SetRenderDrawColor(_renderer, color.r, color.g, color.b, color.a);
+            SDL_FRect rect{x, y, w, h};
+            SDL_RenderFillRect(_renderer, &rect);
+        }
+    }
+
     void SDLRendererBackend::OnRenderClear() {
         if (_renderer) {
             SDL_RenderClear(_renderer);

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SceneManager>
+    <scenes>
+        <scene type="Scene" name="MainScene">
+            <nodes>
+                <node name="RedQuad">
+                    <components>
+                        <component type="TransformComponent" x="100" y="100" width="50" height="50" />
+                        <component type="QuadRendererComponent" r="255" g="0" b="0" a="255" />
+                    </components>
+                </node>
+            </nodes>
+        </scene>
+    </scenes>
+</SceneManager>
