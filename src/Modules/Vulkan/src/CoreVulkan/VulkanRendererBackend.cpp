@@ -6,6 +6,7 @@
 #include <CoreSDL/SDLMainWindow.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
+#include <Generated/VulkanRendererBackend.gen.hpp>
 
 #include <SDL3/SDL_vulkan.h>
 

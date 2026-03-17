@@ -365,13 +365,13 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 target_link_libraries(MyGame PRIVATE 
-    BECoreModule
-    EventsModule
-    TaskSystemModule
-    SDLModule
+    $<LINK_LIBRARY:WHOLE_ARCHIVE,BECoreModule>
+    $<LINK_LIBRARY:WHOLE_ARCHIVE,EventsModule>
+    $<LINK_LIBRARY:WHOLE_ARCHIVE,TaskSystemModule>
+    $<LINK_LIBRARY:WHOLE_ARCHIVE,SDLModule>
 )
 
-target_link_libraries(MyGame PRIVATE VulkanModule)
+target_link_libraries(MyGame PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,VulkanModule>)
 target_compile_definitions(MyGame PRIVATE IMGUI_VULKAN_AVAILABLE=1)
 
 # =============================================================================

@@ -5,6 +5,7 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
+#include <Generated/SDL3ApplicationFabric.gen.hpp>
 
 namespace BECore {
 
