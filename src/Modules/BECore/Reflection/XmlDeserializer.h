@@ -126,6 +126,9 @@ namespace BECore {
         const eastl::vector<DeserializeError>& GetErrors() const override;
         void ClearErrors() override;
 
+    protected:
+        void AddError(eastl::string_view path, eastl::string_view message, int32_t line) override;
+
     private:
         /**
          * @brief Get child node for reading
@@ -136,11 +139,6 @@ namespace BECore {
          * @brief Get attribute from current node for reading
          */
         pugi::xml_attribute GetAttribute(eastl::string_view name) const;
-
-        /**
-         * @brief Add error to the error list
-         */
-        void AddError(eastl::string_view fieldName, eastl::string_view errorMessage);
 
         pugi::xml_document _document;
         eastl::vector<pugi::xml_node> _nodeStack;

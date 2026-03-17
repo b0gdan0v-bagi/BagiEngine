@@ -8,7 +8,7 @@ namespace BECore {
     bool XmlDeserializer::LoadFromFile(const std::filesystem::path& path) {
         pugi::xml_parse_result result = _document.load_file(path.c_str());
         if (!result) {
-            AddError("", "Failed to parse XML file");
+            AddError("", "Failed to parse XML file", 0);
             return false;
         }
 
@@ -20,7 +20,7 @@ namespace BECore {
     bool XmlDeserializer::LoadFromVirtualPath(eastl::string_view virtualPath) {
         auto realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
         if (realPath.empty()) {
-            AddError("", "Failed to resolve virtual path");
+            AddError("", "Failed to resolve virtual path", 0);
             return false;
         }
         return LoadFromFile(realPath);
@@ -29,7 +29,7 @@ namespace BECore {
     bool XmlDeserializer::LoadFromString(eastl::string_view xmlContent) {
         pugi::xml_parse_result result = _document.load_buffer(xmlContent.data(), xmlContent.size());
         if (!result) {
-            AddError("", "Failed to parse XML string");
+            AddError("", "Failed to parse XML string", 0);
             return false;
         }
 
@@ -41,7 +41,7 @@ namespace BECore {
     bool XmlDeserializer::LoadFromXmlNode(const XmlNode& node) {
         pugi::xml_node pugiNode = node.GetPugiNode();
         if (!pugiNode) {
-            AddError("", "Invalid XmlNode");
+            AddError("", "Invalid XmlNode", 0);
             return false;
         }
 
@@ -68,11 +68,11 @@ namespace BECore {
         return _nodeStack.back().attribute(nameStr.c_str());
     }
 
-    void XmlDeserializer::AddError(eastl::string_view fieldName, eastl::string_view errorMessage) {
+    void XmlDeserializer::AddError(eastl::string_view path, eastl::string_view message, int32_t line) {
         DeserializeError error;
-        error.fieldName = PoolString::Intern(fieldName);
-        error.errorMessage = PoolString::Intern(errorMessage);
-        error.line = 0;  // TODO: Get line number from pugixml if available
+        error.path = PoolString::Intern(path);
+        error.errorMessage = PoolString::Intern(message);
+        error.line = line;
         _errors.push_back(error);
     }
 
@@ -83,7 +83,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, bool& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -95,7 +95,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, int8_t& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -106,7 +106,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, uint8_t& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -117,7 +117,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, int16_t& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -128,7 +128,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, uint16_t& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -139,7 +139,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, int32_t& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -150,7 +150,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, uint32_t& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -161,7 +161,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, int64_t& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -172,7 +172,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, uint64_t& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -183,7 +183,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, float& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -194,7 +194,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, double& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -205,7 +205,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, eastl::string& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -217,7 +217,7 @@ namespace BECore {
     bool XmlDeserializer::Read(eastl::string_view name, PoolString& outValue) {
         pugi::xml_node node = GetChild(name);
         if (!node) {
-            AddError(name, "Element not found");
+            ReportError(name, "Element not found");
             return false;
         }
 
@@ -372,6 +372,7 @@ namespace BECore {
         pugi::xml_node node = GetChild(name);
         if (node) {
             _nodeStack.push_back(node);
+            PushPathSegment(name);
             return true;
         }
         return false;
@@ -380,6 +381,7 @@ namespace BECore {
     void XmlDeserializer::EndObject() {
         if (_nodeStack.size() > 1) {
             _nodeStack.pop_back();
+            PopPathSegment();
         }
     }
 
@@ -402,6 +404,7 @@ namespace BECore {
         count = ctx.elements.size();
         _arrayStack.push_back(eastl::move(ctx));
         _nodeStack.push_back(node);
+        PushPathSegment(name);
         return true;
     }
 
@@ -411,6 +414,7 @@ namespace BECore {
         }
         if (_nodeStack.size() > 1) {
             _nodeStack.pop_back();
+            PopPathSegment();
         }
     }
 
@@ -422,6 +426,7 @@ namespace BECore {
         if (ctx.currentIndex >= ctx.elements.size()) {
             return false;
         }
+        PushPathArrayIndex(ctx.currentIndex);
         _nodeStack.push_back(ctx.elements[ctx.currentIndex++]);
         return true;
     }
@@ -429,6 +434,7 @@ namespace BECore {
     void XmlDeserializer::EndArrayElement() {
         if (_nodeStack.size() > 1) {
             _nodeStack.pop_back();
+            PopPathSegment();
         }
     }
 

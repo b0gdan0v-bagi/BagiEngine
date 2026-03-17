@@ -135,6 +135,41 @@ namespace BECore::Tests {
          * @brief Test Ser::Save with SetSkipDefaults(true) produces smaller XML
          */
         bool TestSkipDefaults();
+
+        /**
+         * @brief Test eastl::map round-trip serialization
+         */
+        bool TestMapSerialization();
+
+        /**
+         * @brief Test eastl::fixed_vector round-trip serialization
+         */
+        bool TestFixedVectorSerialization();
+
+        /**
+         * @brief Test eastl::array and std::array round-trip serialization
+         */
+        bool TestArraySerialization();
+
+        /**
+         * @brief Test eastl::pair and std::pair round-trip serialization
+         */
+        bool TestPairSerialization();
+
+        /**
+         * @brief Test eastl::optional and std::optional round-trip serialization
+         */
+        bool TestOptionalSerialization();
+
+        /**
+         * @brief Test that deserialization errors include the full path
+         */
+        bool TestErrorReporting();
+
+        /**
+         * @brief Test that eastl::unordered_map keys are written in sorted order
+         */
+        bool TestUnorderedMapSortedKeys();
     };
 
     // Compile-time validation of test class

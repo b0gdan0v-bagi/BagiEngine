@@ -4,6 +4,8 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/SerializationTraits.h>
 #include <BECore/Reflection/DataAccessor.h>
+#include <EASTL/map.h>
+#include <EASTL/optional.h>
 
 #include <Generated/ReflectionTest.gen.hpp>
 
@@ -147,6 +149,55 @@ namespace BECore::Tests {
             allPassed = false;
         } else {
             LOG_INFO("[ReflectionTest] TestSkipDefaults PASSED");
+        }
+
+        if (!TestMapSerialization()) {
+            LOG_ERROR("[ReflectionTest] TestMapSerialization FAILED");
+            allPassed = false;
+        } else {
+            LOG_INFO("[ReflectionTest] TestMapSerialization PASSED");
+        }
+
+        if (!TestFixedVectorSerialization()) {
+            LOG_ERROR("[ReflectionTest] TestFixedVectorSerialization FAILED");
+            allPassed = false;
+        } else {
+            LOG_INFO("[ReflectionTest] TestFixedVectorSerialization PASSED");
+        }
+
+        if (!TestArraySerialization()) {
+            LOG_ERROR("[ReflectionTest] TestArraySerialization FAILED");
+            allPassed = false;
+        } else {
+            LOG_INFO("[ReflectionTest] TestArraySerialization PASSED");
+        }
+
+        if (!TestPairSerialization()) {
+            LOG_ERROR("[ReflectionTest] TestPairSerialization FAILED");
+            allPassed = false;
+        } else {
+            LOG_INFO("[ReflectionTest] TestPairSerialization PASSED");
+        }
+
+        if (!TestOptionalSerialization()) {
+            LOG_ERROR("[ReflectionTest] TestOptionalSerialization FAILED");
+            allPassed = false;
+        } else {
+            LOG_INFO("[ReflectionTest] TestOptionalSerialization PASSED");
+        }
+
+        if (!TestErrorReporting()) {
+            LOG_ERROR("[ReflectionTest] TestErrorReporting FAILED");
+            allPassed = false;
+        } else {
+            LOG_INFO("[ReflectionTest] TestErrorReporting PASSED");
+        }
+
+        if (!TestUnorderedMapSortedKeys()) {
+            LOG_ERROR("[ReflectionTest] TestUnorderedMapSortedKeys FAILED");
+            allPassed = false;
+        } else {
+            LOG_INFO("[ReflectionTest] TestUnorderedMapSortedKeys PASSED");
         }
 
         return allPassed;
@@ -476,6 +527,442 @@ namespace BECore::Tests {
         }
 
         LOG_INFO("[ReflectionTest] Skip-defaults tests passed");
+        return true;
+    }
+
+    bool ReflectionTest::TestMapSerialization() {
+        eastl::map<eastl::string, int32_t> original;
+        original["charlie"] = 3;
+        original["alpha"] = 1;
+        original["bravo"] = 2;
+
+        XmlSerializer serializer;
+        if (serializer.BeginObject("MapTest")) {
+            Ser::Save(serializer, original, "scores");
+            serializer.EndObject();
+        }
+        eastl::string xml = serializer.SaveToString();
+        LOG_DEBUG("[ReflectionTest] Map XML:\n{}"_format(xml));
+
+        XmlDeserializer deserializer;
+        if (!deserializer.LoadFromString(xml)) {
+            LOG_ERROR("[ReflectionTest] Failed to load map XML");
+            return false;
+        }
+
+        eastl::map<eastl::string, int32_t> loaded;
+        if (deserializer.BeginObject("MapTest")) {
+            Ser::Load(deserializer, loaded, "scores");
+            deserializer.EndObject();
+        }
+
+        if (loaded.size() != original.size()) {
+            LOG_ERROR("[ReflectionTest] map size mismatch: {} != {}"_format(loaded.size(), original.size()));
+            return false;
+        }
+        for (const auto& [k, v] : original) {
+            auto it = loaded.find(k);
+            if (it == loaded.end() || it->second != v) {
+                LOG_ERROR("[ReflectionTest] map entry '{}' mismatch"_format(k));
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool ReflectionTest::TestFixedVectorSerialization() {
+        eastl::fixed_vector<int32_t, 8> original;
+        original.push_back(10);
+        original.push_back(20);
+        original.push_back(30);
+
+        XmlSerializer serializer;
+        if (serializer.BeginObject("FVTest")) {
+            Ser::Save(serializer, original, "values");
+            serializer.EndObject();
+        }
+        eastl::string xml = serializer.SaveToString();
+
+        XmlDeserializer deserializer;
+        if (!deserializer.LoadFromString(xml)) {
+            LOG_ERROR("[ReflectionTest] Failed to load fixed_vector XML");
+            return false;
+        }
+
+        eastl::fixed_vector<int32_t, 8> loaded;
+        if (deserializer.BeginObject("FVTest")) {
+            Ser::Load(deserializer, loaded, "values");
+            deserializer.EndObject();
+        }
+
+        if (loaded.size() != original.size()) {
+            LOG_ERROR("[ReflectionTest] fixed_vector size mismatch: {} != {}"_format(loaded.size(), original.size()));
+            return false;
+        }
+        for (size_t i = 0; i < original.size(); ++i) {
+            if (loaded[i] != original[i]) {
+                LOG_ERROR("[ReflectionTest] fixed_vector[{}] mismatch: {} != {}"_format(i, loaded[i], original[i]));
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool ReflectionTest::TestArraySerialization() {
+        // eastl::array
+        {
+            eastl::array<float, 3> original = {1.0f, 2.5f, 3.75f};
+
+            XmlSerializer serializer;
+            if (serializer.BeginObject("ArrTest")) {
+                Ser::Save(serializer, original, "values");
+                serializer.EndObject();
+            }
+            eastl::string xml = serializer.SaveToString();
+
+            XmlDeserializer deserializer;
+            if (!deserializer.LoadFromString(xml)) {
+                LOG_ERROR("[ReflectionTest] Failed to load eastl::array XML");
+                return false;
+            }
+
+            eastl::array<float, 3> loaded = {};
+            if (deserializer.BeginObject("ArrTest")) {
+                Ser::Load(deserializer, loaded, "values");
+                deserializer.EndObject();
+            }
+
+            for (size_t i = 0; i < 3; ++i) {
+                if (loaded[i] != original[i]) {
+                    LOG_ERROR("[ReflectionTest] eastl::array[{}] mismatch: {} != {}"_format(i, loaded[i], original[i]));
+                    return false;
+                }
+            }
+        }
+
+        // std::array
+        {
+            std::array<float, 3> original = {4.0f, 5.5f, 6.25f};
+
+            XmlSerializer serializer;
+            if (serializer.BeginObject("StdArrTest")) {
+                Ser::Save(serializer, original, "values");
+                serializer.EndObject();
+            }
+            eastl::string xml = serializer.SaveToString();
+
+            XmlDeserializer deserializer;
+            if (!deserializer.LoadFromString(xml)) {
+                LOG_ERROR("[ReflectionTest] Failed to load std::array XML");
+                return false;
+            }
+
+            std::array<float, 3> loaded = {};
+            if (deserializer.BeginObject("StdArrTest")) {
+                Ser::Load(deserializer, loaded, "values");
+                deserializer.EndObject();
+            }
+
+            for (size_t i = 0; i < 3; ++i) {
+                if (loaded[i] != original[i]) {
+                    LOG_ERROR("[ReflectionTest] std::array[{}] mismatch: {} != {}"_format(i, loaded[i], original[i]));
+                    return false;
+                }
+            }
+        }
+
+        // Partial load: XML has fewer elements than array size
+        {
+            eastl::array<int32_t, 4> original = {7, 8, 0, 0};
+
+            XmlSerializer serializer;
+            if (serializer.BeginObject("PartialArr")) {
+                eastl::array<int32_t, 2> small = {7, 8};
+                Ser::Save(serializer, small, "values");
+                serializer.EndObject();
+            }
+            eastl::string xml = serializer.SaveToString();
+
+            XmlDeserializer deserializer;
+            if (!deserializer.LoadFromString(xml)) {
+                LOG_ERROR("[ReflectionTest] Failed to load partial array XML");
+                return false;
+            }
+
+            eastl::array<int32_t, 4> loaded = {99, 99, 99, 99};
+            if (deserializer.BeginObject("PartialArr")) {
+                Ser::Load(deserializer, loaded, "values");
+                deserializer.EndObject();
+            }
+
+            if (loaded[0] != 7 || loaded[1] != 8 || loaded[2] != 0 || loaded[3] != 0) {
+                LOG_ERROR("[ReflectionTest] partial array load failed: [{}, {}, {}, {}]"_format(
+                    loaded[0], loaded[1], loaded[2], loaded[3]));
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ReflectionTest::TestPairSerialization() {
+        // eastl::pair
+        {
+            eastl::pair<int32_t, eastl::string> original = {42, eastl::string("hello")};
+
+            XmlSerializer serializer;
+            if (serializer.BeginObject("PairTest")) {
+                Ser::Save(serializer, original, "entry");
+                serializer.EndObject();
+            }
+            eastl::string xml = serializer.SaveToString();
+
+            XmlDeserializer deserializer;
+            if (!deserializer.LoadFromString(xml)) {
+                LOG_ERROR("[ReflectionTest] Failed to load eastl::pair XML");
+                return false;
+            }
+
+            eastl::pair<int32_t, eastl::string> loaded = {0, eastl::string{}};
+            if (deserializer.BeginObject("PairTest")) {
+                Ser::Load(deserializer, loaded, "entry");
+                deserializer.EndObject();
+            }
+
+            if (loaded.first != original.first || loaded.second != original.second) {
+                LOG_ERROR("[ReflectionTest] eastl::pair mismatch: ({}, {}) != ({}, {})"_format(
+                    loaded.first, loaded.second, original.first, original.second));
+                return false;
+            }
+        }
+
+        // std::pair
+        {
+            std::pair<int32_t, eastl::string> original = {99, eastl::string("world")};
+
+            XmlSerializer serializer;
+            if (serializer.BeginObject("StdPairTest")) {
+                Ser::Save(serializer, original, "entry");
+                serializer.EndObject();
+            }
+            eastl::string xml = serializer.SaveToString();
+
+            XmlDeserializer deserializer;
+            if (!deserializer.LoadFromString(xml)) {
+                LOG_ERROR("[ReflectionTest] Failed to load std::pair XML");
+                return false;
+            }
+
+            std::pair<int32_t, eastl::string> loaded = {0, eastl::string{}};
+            if (deserializer.BeginObject("StdPairTest")) {
+                Ser::Load(deserializer, loaded, "entry");
+                deserializer.EndObject();
+            }
+
+            if (loaded.first != original.first || loaded.second != original.second) {
+                LOG_ERROR("[ReflectionTest] std::pair mismatch");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ReflectionTest::TestOptionalSerialization() {
+        // eastl::optional with value
+        {
+            eastl::optional<int32_t> original = 77;
+
+            XmlSerializer serializer;
+            if (serializer.BeginObject("OptTest")) {
+                Ser::Save(serializer, original, "value");
+                serializer.EndObject();
+            }
+            eastl::string xml = serializer.SaveToString();
+
+            XmlDeserializer deserializer;
+            if (!deserializer.LoadFromString(xml)) {
+                LOG_ERROR("[ReflectionTest] Failed to load eastl::optional XML");
+                return false;
+            }
+
+            eastl::optional<int32_t> loaded;
+            if (deserializer.BeginObject("OptTest")) {
+                Ser::Load(deserializer, loaded, "value");
+                deserializer.EndObject();
+            }
+
+            if (!loaded.has_value() || *loaded != 77) {
+                LOG_ERROR("[ReflectionTest] eastl::optional with value mismatch");
+                return false;
+            }
+        }
+
+        // eastl::optional without value (absent key -> nullopt)
+        {
+            eastl::optional<int32_t> original;  // no value
+
+            XmlSerializer serializer;
+            if (serializer.BeginObject("OptEmptyTest")) {
+                Ser::Save(serializer, original, "value");
+                serializer.EndObject();
+            }
+            eastl::string xml = serializer.SaveToString();
+
+            XmlDeserializer deserializer;
+            if (!deserializer.LoadFromString(xml)) {
+                LOG_ERROR("[ReflectionTest] Failed to load empty optional XML");
+                return false;
+            }
+
+            eastl::optional<int32_t> loaded = 55;  // pre-set to non-null to verify reset
+            if (deserializer.BeginObject("OptEmptyTest")) {
+                Ser::Load(deserializer, loaded, "value");
+                deserializer.EndObject();
+            }
+
+            if (loaded.has_value()) {
+                LOG_ERROR("[ReflectionTest] eastl::optional should be nullopt after loading absent key");
+                return false;
+            }
+        }
+
+        // std::optional with value
+        {
+            std::optional<int32_t> original = 123;
+
+            XmlSerializer serializer;
+            if (serializer.BeginObject("StdOptTest")) {
+                Ser::Save(serializer, original, "value");
+                serializer.EndObject();
+            }
+            eastl::string xml = serializer.SaveToString();
+
+            XmlDeserializer deserializer;
+            if (!deserializer.LoadFromString(xml)) {
+                LOG_ERROR("[ReflectionTest] Failed to load std::optional XML");
+                return false;
+            }
+
+            std::optional<int32_t> loaded;
+            if (deserializer.BeginObject("StdOptTest")) {
+                Ser::Load(deserializer, loaded, "value");
+                deserializer.EndObject();
+            }
+
+            if (!loaded.has_value() || *loaded != 123) {
+                LOG_ERROR("[ReflectionTest] std::optional with value mismatch");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool ReflectionTest::TestErrorReporting() {
+        // Build XML that has a nested structure: Root > player > inventory > gold
+        // Then try to read a field that doesn't exist inside inventory
+        constexpr eastl::string_view xml = R"(
+            <root>
+              <player>
+                <inventory gold="50"/>
+              </player>
+            </root>
+        )";
+
+        XmlDeserializer deserializer;
+        if (!deserializer.LoadFromString(xml)) {
+            LOG_ERROR("[ReflectionTest] Failed to load error-reporting XML");
+            return false;
+        }
+
+        // Navigate into player.inventory and read a non-existent child element
+        // (Read() reports errors; ReadAttribute() does not for missing attrs)
+        if (deserializer.BeginObject("player")) {
+            if (deserializer.BeginObject("inventory")) {
+                int32_t missing = 0;
+                deserializer.Read("nonExistentField", missing);
+                deserializer.EndObject();
+            }
+            deserializer.EndObject();
+        }
+
+        if (!deserializer.HasErrors()) {
+            LOG_ERROR("[ReflectionTest] Expected errors but none were reported");
+            return false;
+        }
+
+        const auto& errors = deserializer.GetErrors();
+        const eastl::string pathStr = errors[0].path.ToStringView().data();
+        LOG_DEBUG("[ReflectionTest] Error path: '{}', message: '{}'"_format(
+            pathStr, errors[0].errorMessage.ToStringView()));
+
+        // The path should contain "player" and "inventory"
+        if (pathStr.find("player") == eastl::string::npos
+            || pathStr.find("inventory") == eastl::string::npos) {
+            LOG_ERROR("[ReflectionTest] Error path '{}' missing expected segments"_format(pathStr));
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ReflectionTest::TestUnorderedMapSortedKeys() {
+        eastl::unordered_map<eastl::string, int32_t> original;
+        original["zebra"] = 26;
+        original["apple"] = 1;
+        original["mango"] = 13;
+
+        XmlSerializer serializer;
+        if (serializer.BeginObject("MapSortTest")) {
+            Ser::Save(serializer, original, "entries");
+            serializer.EndObject();
+        }
+        eastl::string xml = serializer.SaveToString();
+        LOG_DEBUG("[ReflectionTest] Sorted unordered_map XML:\n{}"_format(xml));
+
+        // Verify keys appear in alphabetical order in the XML string
+        size_t posApple = xml.find("apple");
+        size_t posMango = xml.find("mango");
+        size_t posZebra = xml.find("zebra");
+
+        if (posApple == eastl::string::npos || posMango == eastl::string::npos
+            || posZebra == eastl::string::npos) {
+            LOG_ERROR("[ReflectionTest] Not all keys found in XML");
+            return false;
+        }
+
+        if (!(posApple < posMango && posMango < posZebra)) {
+            LOG_ERROR("[ReflectionTest] Keys not in sorted order in XML: apple={}, mango={}, zebra={}"_format(
+                posApple, posMango, posZebra));
+            return false;
+        }
+
+        // Verify round-trip still works
+        XmlDeserializer deserializer;
+        if (!deserializer.LoadFromString(xml)) {
+            LOG_ERROR("[ReflectionTest] Failed to load sorted unordered_map XML");
+            return false;
+        }
+
+        eastl::unordered_map<eastl::string, int32_t> loaded;
+        if (deserializer.BeginObject("MapSortTest")) {
+            Ser::Load(deserializer, loaded, "entries");
+            deserializer.EndObject();
+        }
+
+        if (loaded.size() != original.size()) {
+            LOG_ERROR("[ReflectionTest] unordered_map round-trip size mismatch");
+            return false;
+        }
+        for (const auto& [k, v] : original) {
+            auto it = loaded.find(k);
+            if (it == loaded.end() || it->second != v) {
+                LOG_ERROR("[ReflectionTest] unordered_map entry '{}' mismatch"_format(k));
+                return false;
+            }
+        }
+
         return true;
     }
 
