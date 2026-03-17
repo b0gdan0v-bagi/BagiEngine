@@ -418,7 +418,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 target_link_libraries(MyGame PRIVATE 
-    BECoreModule
+    $<LINK_LIBRARY:WHOLE_ARCHIVE,BECoreModule>
     EventsModule
     TaskSystemModule
     SDLModule
