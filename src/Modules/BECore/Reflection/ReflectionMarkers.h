@@ -78,17 +78,17 @@ public:                                                                         
     static constexpr void ForEachFieldStatic(const ClassName& obj, Func&& func);                                                                                                                       \
     /** @brief Get static ClassMeta for this type (defined in generated code) */                                                                                                                       \
     static const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                   \
-    /** @brief Get runtime ClassMeta for this instance */                                                                                                                                              \
-    constexpr const ::BECore::ClassMeta& GetTypeMeta() const { return *_typeMeta; }                                                                                                                    \
+    /** @brief Get runtime ClassMeta for this instance (virtual -- correct type returned through base pointer) */                                                                                      \
+    virtual const ::BECore::ClassMeta& GetTypeMeta() const { return GetStaticTypeMeta(); }                                                                                                             \
     /** @brief Check if this instance is of type T */                                                                                                                                                  \
     template <typename T>                                                                                                                                                                              \
-    constexpr bool Is() const { return GetTypeMeta() == T::GetStaticTypeMeta(); }                                                                                                                      \
+    bool Is() const { return GetTypeMeta() == T::GetStaticTypeMeta(); }                                                                                                                                \
     /** @brief Cast to type T, returns nullptr if type mismatch */                                                                                                                                     \
     template <typename T>                                                                                                                                                                              \
-    constexpr T* Cast() { return Is<T>() ? static_cast<T*>(this) : nullptr; }                                                                                                                         \
+    T* Cast() { return Is<T>() ? static_cast<T*>(this) : nullptr; }                                                                                                                                   \
     /** @brief Cast to type T (const), returns nullptr if type mismatch */                                                                                                                             \
     template <typename T>                                                                                                                                                                              \
-    constexpr const T* Cast() const { return Is<T>() ? static_cast<const T*>(this) : nullptr; }                                                                                                       \
+    const T* Cast() const { return Is<T>() ? static_cast<const T*>(this) : nullptr; }                                                                                                       \
     /** @brief Serialize all reflected fields to ISerializer (write/save) */                                                                                                                           \
     void Serialize(::BECore::ISerializer& s) const;                                                                                                                                                    \
     /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                      \
@@ -97,16 +97,14 @@ public:                                                                         
 private:                                                                                                                                                                                               \
     template <typename, typename>                                                                                                                                                                      \
     friend struct ::BECore::ReflectionTraits;                                                                                                                                                          \
-    /** @brief Pointer to type metadata (points to static meta of actual derived type) */                                                                                                              \
-    const ::BECore::ClassMeta* _typeMeta = &ClassName::GetStaticTypeMeta();                                                                                                                            \
                                                                                                                                                                                                        \
 public:
 
 // =============================================================================
 // BE_EVENT - Lightweight reflection macro for event types
 // =============================================================================
-// Place inside event struct body. Similar to BE_CLASS but without _typeMeta
-// pointer overhead (0 bytes per instance). Events don't need runtime polymorphism.
+// Place inside event struct body. Similar to BE_CLASS but without virtual dispatch
+// overhead (0 bytes per instance). Events don't need runtime polymorphism.
 //
 // Usage:
 //   struct MyEvent {
@@ -115,7 +113,7 @@ public:
 //   };
 //
 // Key differences from BE_CLASS:
-// - No _typeMeta member (0 bytes overhead per instance)
+// - No virtual GetTypeMeta() / vptr overhead (events are never used through base pointers)
 // - No GetTypeMeta() instance method (type always known statically)
 // - No Is<T>()/Cast<T>() (events don't need polymorphism)
 // - Supports BE_REFLECT_FIELD for data serialization/logging

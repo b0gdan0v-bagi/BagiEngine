@@ -10,16 +10,16 @@ alwaysApply: false
 
 ## Overview
 
-`BE_EVENT` is a lightweight reflection macro for event types. Zero memory overhead per instance (no `_typeMeta` pointer).
+`BE_EVENT` is a lightweight reflection macro for event types. Zero memory overhead per instance (no virtual dispatch / vptr).
 
 ## BE_EVENT vs BE_CLASS
 
 | Feature | BE_EVENT | BE_CLASS |
 |---------|----------|----------|
-| **Memory overhead** | 0 bytes | 8 bytes (`_typeMeta` pointer) |
+| **Memory overhead** | 0 bytes (no vptr) | vptr only if class has no other virtual methods |
 | **GetStaticTypeMeta()** | ✅ Yes | ✅ Yes |
 | **GetStaticTypeHash()** | ✅ Yes | ❌ No (manual) |
-| **GetTypeMeta() instance** | ❌ No | ✅ Yes |
+| **GetTypeMeta() instance** | ❌ No | ✅ Yes (virtual, correct through base pointer) |
 | **Is\<T\>() / Cast\<T\>()** | ❌ No | ✅ Yes |
 | **ForEachFieldStatic** | ✅ Const only | ✅ Mutable + Const |
 | **BE_REFLECT_FIELD** | ✅ Yes | ✅ Yes |
@@ -66,7 +66,8 @@ struct MyEvent {
 |------|------|
 | Empty event | 1 byte (minimal) |
 | Event with int32_t field | 4 bytes (no overhead) |
-| BE_CLASS with int32_t | 12 bytes (4 + 8 pointer) |
+| BE_CLASS with int32_t (standalone struct) | 12 bytes (4 data + 8 vptr) |
+| BE_CLASS inheriting RefCounted (already has vptr) | sizeof(fields) only (no additional overhead) |
 
 ## Integration with EventBase
 

@@ -95,16 +95,16 @@ namespace BECore::Tests {
     bool ReflectionEventTest::TestZeroOverhead() {
         using namespace ReflectionTestEvents;
 
-        // Empty event should have minimal size (no _typeMeta pointer)
+        // Empty event should have minimal size (no virtual dispatch / vptr)
         // Note: sizeof(empty struct) is 1 in C++ (cannot be 0)
         ASSERT(sizeof(TestEmptyEvent) == 1, "Empty event should have size 1 (no overhead)");
 
-        // Data event size should equal its fields (no _typeMeta overhead)
+        // Data event size should equal its fields (no vptr overhead)
         // int32_t (4) + float (4) = 8 bytes
         ASSERT(sizeof(TestDataEvent) == 8, "TestDataEvent should be 8 bytes (no overhead)");
 
-        // Compare with a BE_CLASS type that has _typeMeta pointer
-        // (Those would be 8 bytes larger due to pointer)
+        // BE_CLASS standalone structs (without prior vtable) carry a vptr,
+        // but most BE_CLASS types inherit RefCounted which already has a vptr -- no extra cost
 
         return true;
     }
