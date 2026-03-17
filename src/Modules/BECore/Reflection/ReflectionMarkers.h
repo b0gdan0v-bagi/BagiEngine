@@ -98,9 +98,9 @@ public:                                                                         
         return Is<T>() ? static_cast<const T*>(this) : nullptr;                                                                                                                                        \
     }                                                                                                                                                                                                  \
     /** @brief Serialize all reflected fields to ISerializer (write/save) */                                                                                                                           \
-    void Serialize(::BECore::ISerializer& s) const;                                                                                                                                                    \
+    virtual void Serialize(::BECore::ISerializer& s) const;                                                                                                                                            \
     /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                      \
-    void Deserialize(::BECore::IDeserializer& d);                                                                                                                                                      \
+    virtual void Deserialize(::BECore::IDeserializer& d);                                                                                                                                              \
                                                                                                                                                                                                        \
 private:                                                                                                                                                                                               \
     template <typename, typename>                                                                                                                                                                      \

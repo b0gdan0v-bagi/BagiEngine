@@ -2,6 +2,7 @@
 
 #include <BECore/Renderer/IRenderer.h>
 #include <CoreVulkan/VulkanDevice.h>
+#include <CoreVulkan/VulkanRectPipeline.h>
 #include <CoreVulkan/VulkanSwapchain.h>
 #include <EASTL/vector.h>
 #include <vulkan/vulkan.h>
@@ -82,6 +83,7 @@ namespace BECore {
 
         VulkanDevice _device;
         VulkanSwapchain _swapchain;
+        VulkanRectPipeline _rectPipeline;
 
         VkSurfaceKHR _surface = VK_NULL_HANDLE;
 

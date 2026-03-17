@@ -58,6 +58,10 @@ namespace BECore {
             return false;
         }
 
+        if (!_rectPipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass())) {
+            return false;
+        }
+
         if (!CreateCommandPool()) {
             return false;
         }
@@ -103,6 +107,7 @@ namespace BECore {
             _commandPool = VK_NULL_HANDLE;
         }
 
+        _rectPipeline.Destroy(vkDevice);
         _swapchain.Destroy(_device);
 
         // Surface must be destroyed before the instance
@@ -253,8 +258,11 @@ namespace BECore {
     // Event handlers (translate engine render events to Vulkan calls)
     // =========================================================================
 
-    void VulkanRendererBackend::DrawFilledRect(float, float, float, float, const Color&) {
-        // TODO: Vulkan primitive rendering
+    void VulkanRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
+        if (!_frameActive) {
+            return;
+        }
+        _rectPipeline.Draw(_commandBuffers[_currentFrame], x, y, w, h, color, _swapchain.GetExtent());
     }
 
     void VulkanRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {
