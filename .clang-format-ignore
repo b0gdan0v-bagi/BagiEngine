@@ -9,3 +9,4 @@ src/Modules/fmt
 src/Modules/imgui
 src/Modules/pugixml
 src/Modules/Vulkan
+src/Modules/BECore/pch.h
