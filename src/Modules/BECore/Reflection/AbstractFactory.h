@@ -56,7 +56,7 @@ namespace BECore {
          * @return New instance, or empty pointer if type is not registered.
          */
         BasePtr Create(const ClassMeta& meta) const {
-            return _findAndCreate(meta.typeHash);
+            return FindAndCreate(meta.typeHash);
         }
 
         /**
@@ -69,7 +69,7 @@ namespace BECore {
          * @return New instance, or empty pointer if type is not registered.
          */
         BasePtr Create(eastl::string_view name) const {
-            return _findAndCreate(String::GetHash(name));
+            return FindAndCreate(String::GetHash(name));
         }
 
         /**
@@ -81,7 +81,7 @@ namespace BECore {
          * @return New instance, or empty pointer if type is not registered.
          */
         BasePtr Create(const PoolString& name) const {
-            return _findAndCreate(name.HashValue());
+            return FindAndCreate(name.HashValue());
         }
 
         /**
@@ -95,7 +95,7 @@ namespace BECore {
         }
 
     private:
-        static constexpr eastl::string_view _resolveDebugName() {
+        static constexpr eastl::string_view ResolveDebugName() {
             if constexpr (HasReflection<BaseType>) {
                 return ReflectionTraits<BaseType>::name;
             } else {
@@ -105,13 +105,14 @@ namespace BECore {
 
         AbstractFactory() = default;
 
-        BasePtr _findAndCreate(uint64_t hash) const {
+        BasePtr FindAndCreate(uint64_t hash) const {
             auto it = _creators.find(hash);
-            if (it != _creators.end()) return it->second();
+            if (it != _creators.end())
+                return it->second();
             return {};
         }
 
-        eastl::string_view _debugName = _resolveDebugName();
+        eastl::string_view _debugName = ResolveDebugName();
         eastl::hash_map<uint64_t, CreatorFunc> _creators;
         eastl::vector<ClassMeta> _metas;
     };
