@@ -22,7 +22,6 @@ namespace BECore {
         void Clear() const;
 
     private:
-
         explicit XmlConfig(IntrusivePtrAtomic<XmlDocument> doc) : _doc(std::move(doc)) {}
 
         IntrusivePtrAtomic<XmlDocument> _doc;

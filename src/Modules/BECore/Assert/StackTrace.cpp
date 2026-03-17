@@ -4,14 +4,14 @@
 #include <cstdlib>
 
 #if defined(PLATFORM_WINDOWS)
-    #define WIN32_LEAN_AND_MEAN
-    #include <windows.h>
-    #include <dbghelp.h>
-    #pragma comment(lib, "dbghelp.lib")
+#define WIN32_LEAN_AND_MEAN
+#include <dbghelp.h>
+#include <windows.h>
+#pragma comment(lib, "dbghelp.lib")
 #elif defined(PLATFORM_LINUX) || defined(PLATFORM_MACOS)
-    #include <execinfo.h>
-    #include <cxxabi.h>
-    #include <dlfcn.h>
+#include <cxxabi.h>
+#include <dlfcn.h>
+#include <execinfo.h>
 #endif
 
 namespace BECore {

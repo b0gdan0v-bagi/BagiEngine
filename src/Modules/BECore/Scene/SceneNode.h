@@ -7,7 +7,7 @@ namespace BECore {
     class Scene;
 
     class SceneNode : public RefCounted {
-        BE_CLASS(SceneNode, FACTORY_BASE, ELEMENT=node)
+        BE_CLASS(SceneNode, FACTORY_BASE, ELEMENT = node)
     public:
         SceneNode() = default;
         ~SceneNode() override = default;

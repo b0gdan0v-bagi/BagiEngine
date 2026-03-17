@@ -7,4 +7,3 @@ namespace BECore {
      */
     class ApplicationMainAccess {};
 }  // namespace BECore
-

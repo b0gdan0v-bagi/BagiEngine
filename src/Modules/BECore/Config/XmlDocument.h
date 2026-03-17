@@ -1,13 +1,12 @@
 #pragma once
 
-
 namespace BECore {
 
     class XmlNode;
 
     /**
      * @brief XML document wrapper with ownership
-     * 
+     *
      * Owns the underlying pugi::xml_document and provides lifetime management.
      * Use with IntrusivePtr for reference counting.
      */

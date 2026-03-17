@@ -11,7 +11,7 @@ namespace BECore {
 
     /**
      * @brief Log sink that outputs to platform-specific debug output
-     * 
+     *
      * On Windows: Uses OutputDebugString to send logs to Visual Studio Output window
      * On macOS: Uses stderr to send logs to Xcode console (captured by Xcode)
      * On other platforms: No-op (safe to use but won't output anything)
@@ -27,7 +27,6 @@ namespace BECore {
         void Write(LogLevel level, eastl::string_view message) override;
 
     private:
-
         void OnLogEvent(const LogEvent& event);
 
     private:

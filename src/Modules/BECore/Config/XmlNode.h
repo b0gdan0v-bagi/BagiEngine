@@ -1,11 +1,10 @@
 #pragma once
 
-
 namespace BECore {
 
     /**
      * @brief Lightweight wrapper for pugi::xml_node
-     * 
+     *
      * Value type (8-16 bytes) that wraps pugi::xml_node handle.
      * Does NOT own the underlying XML data - lifetime tied to the XmlDocument.
      * Cheap to copy and pass by value.

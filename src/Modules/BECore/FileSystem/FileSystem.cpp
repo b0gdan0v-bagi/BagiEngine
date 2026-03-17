@@ -1,6 +1,5 @@
 #include "FileSystem.h"
 
-
 namespace BECore {
 
     void FileSystem::Initialize() {
@@ -118,27 +117,27 @@ namespace BECore {
     std::filesystem::path FileSystem::FindRootDirectory() const {
         // Получаем путь к исполняемому файлу
         std::filesystem::path exePath;
-        
+
         // Пробуем найти корневую директорию, поднимаясь вверх от exe
         std::filesystem::path current = std::filesystem::current_path();
-        
+
         // Ищем директорию с config/example_config.xml или другими маркерами
         std::filesystem::path searchPath = current;
-        int maxDepth = 10; // Ограничение глубины поиска
-        
+        int maxDepth = 10;  // Ограничение глубины поиска
+
         for (int i = 0; i < maxDepth; ++i) {
             std::filesystem::path configDir = searchPath / "config";
             if (std::filesystem::exists(configDir) && std::filesystem::is_directory(configDir)) {
                 return searchPath;
             }
-            
+
             if (searchPath.has_parent_path() && searchPath != searchPath.parent_path()) {
                 searchPath = searchPath.parent_path();
             } else {
                 break;
             }
         }
-        
+
         // Если не нашли, возвращаем текущую директорию
         return current;
     }

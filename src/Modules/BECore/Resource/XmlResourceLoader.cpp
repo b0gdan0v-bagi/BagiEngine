@@ -1,7 +1,6 @@
 #include <BECore/Resource/XmlResourceLoader.h>
-#include <TaskSystem/Awaitables.h>
-
 #include <Generated/XmlResourceLoader.gen.hpp>
+#include <TaskSystem/Awaitables.h>
 
 namespace BECore {
 
@@ -12,7 +11,7 @@ namespace BECore {
     Task<IntrusivePtr<IResource>> XmlResourceLoader::LoadAsync(PoolString path) {
         // Run loading on thread pool
         co_await SwitchToBackground();
-        
+
         auto resource = LoadInternal(path);
         co_return resource;
     }
@@ -23,7 +22,7 @@ namespace BECore {
 
     IntrusivePtr<XmlResource> XmlResourceLoader::LoadInternal(PoolString path) {
         auto resource = XmlResource::Create();
-        
+
         // Create and load XmlConfig
         auto config = XmlConfig::Create();
         if (!config.LoadFromVirtualPath(path.ToStringView())) {
@@ -31,11 +30,11 @@ namespace BECore {
             resource->SetFailed(path);
             return resource;
         }
-        
+
         // Mark as loaded
         resource->SetLoaded(path, std::move(config));
         LOG_INFO(Format("Loaded XML resource: {}", path.ToStringView()).c_str());
-        
+
         return resource;
     }
 

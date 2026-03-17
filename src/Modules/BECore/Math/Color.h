@@ -1,11 +1,10 @@
 #pragma once
 
-
 namespace BECore {
 
     /**
      * @brief Lightweight POD color type (4 bytes, no vtable, no reflection overhead)
-     * 
+     *
      * Use this for performance-critical code, arrays, or when reflection is not needed.
      */
     struct Color {
@@ -15,13 +14,12 @@ namespace BECore {
         unsigned char a = 0;
 
         constexpr Color() = default;
-        constexpr Color(unsigned char r_, unsigned char g_, unsigned char b_, unsigned char a_) 
-            : r(r_), g(g_), b(b_), a(a_) {}
+        constexpr Color(unsigned char r_, unsigned char g_, unsigned char b_, unsigned char a_) : r(r_), g(g_), b(b_), a(a_) {}
 
         static std::optional<Color> ParseColorFromString(eastl::string_view data);
 
         // Manual serialization for lightweight types
-        template<typename Serializer>
+        template <typename Serializer>
         void Serialize(Serializer& s) const {
             s.WriteAttribute("r", r);
             s.WriteAttribute("g", g);
@@ -29,7 +27,7 @@ namespace BECore {
             s.WriteAttribute("a", a);
         }
 
-        template<typename Deserializer>
+        template <typename Deserializer>
         void Deserialize(Deserializer& d) {
             d.ReadAttribute("r", r);
             d.ReadAttribute("g", g);

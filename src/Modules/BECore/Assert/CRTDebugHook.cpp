@@ -1,11 +1,10 @@
 #include "CRTDebugHook.h"
 
 #include <BECore/Assert/StackTrace.h>
-
 #include <cstdio>
 
 #if defined(PLATFORM_WINDOWS) && defined(_DEBUG)
-    #include <crtdbg.h>
+#include <crtdbg.h>
 #endif
 
 namespace BECore {
@@ -57,17 +56,17 @@ namespace BECore {
 
         // Enable all CRT debug checks
         int flags = _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG);
-        
+
         // Enable memory leak detection on exit
         flags |= _CRTDBG_LEAK_CHECK_DF;
-        
+
         // Check for memory leaks on every allocation/free (performance impact)
         // Uncomment for aggressive debugging:
         // flags |= _CRTDBG_CHECK_ALWAYS_DF;
-        
+
         // Check memory integrity on every allocation/free
         flags |= _CRTDBG_ALLOC_MEM_DF;
-        
+
         _CrtSetDbgFlag(flags);
 
         fprintf(stderr, "[CRTDebugHook] CRT debug hooks installed (Debug build)\n");
@@ -78,12 +77,12 @@ namespace BECore {
 
     // No-op for Release builds or non-Windows platforms
     void InstallCRTDebugHooks() {
-        // CRT debug hooks are only available in Windows Debug builds
-        #if defined(PLATFORM_WINDOWS)
-            fprintf(stderr, "[CRTDebugHook] Skipped (Release build)\n");
-        #else
-            fprintf(stderr, "[CRTDebugHook] Skipped (non-Windows platform)\n");
-        #endif
+// CRT debug hooks are only available in Windows Debug builds
+#if defined(PLATFORM_WINDOWS)
+        fprintf(stderr, "[CRTDebugHook] Skipped (Release build)\n");
+#else
+        fprintf(stderr, "[CRTDebugHook] Skipped (non-Windows platform)\n");
+#endif
         fflush(stderr);
     }
 

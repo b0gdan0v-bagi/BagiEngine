@@ -1,12 +1,11 @@
-#include <BECore/Tests/ReflectionTest.h>
-#include <BECore/Reflection/TypeTraits.h>
-#include <BECore/Reflection/XmlSerializer.h>
-#include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Reflection/SerializationTraits.h>
 #include <BECore/Reflection/DataAccessor.h>
+#include <BECore/Reflection/SerializationTraits.h>
+#include <BECore/Reflection/TypeTraits.h>
+#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
+#include <BECore/Tests/ReflectionTest.h>
 #include <EASTL/map.h>
 #include <EASTL/optional.h>
-
 #include <Generated/ReflectionTest.gen.hpp>
 
 // =========================================================================
@@ -97,27 +96,27 @@ namespace BECore::Tests {
 
     bool ReflectionTest::Run() {
         LOG_INFO("[ReflectionTest] Starting reflection tests...");
-        
+
         // Compile-time tests (static_assert)
         TestCompileTime();
         LOG_INFO("[ReflectionTest] Compile-time tests PASSED");
-        
+
         bool allPassed = true;
-        
+
         if (!TestFieldAccess()) {
             LOG_ERROR("[ReflectionTest] TestFieldAccess FAILED");
             allPassed = false;
         } else {
             LOG_INFO("[ReflectionTest] TestFieldAccess PASSED");
         }
-        
+
         if (!TestXmlSerialization()) {
             LOG_ERROR("[ReflectionTest] TestXmlSerialization FAILED");
             allPassed = false;
         } else {
             LOG_INFO("[ReflectionTest] TestXmlSerialization PASSED");
         }
-        
+
         // TODO: Re-enable once BinarySerializer/BinaryDeserializer are implemented
         // BinaryArchive uses deprecated IArchive interface
         /*
@@ -129,7 +128,7 @@ namespace BECore::Tests {
         }
         */
         LOG_INFO("[ReflectionTest] TestBinarySerialization SKIPPED (BinarySerializer not implemented)");
-        
+
         if (!TestMethodReflection()) {
             LOG_ERROR("[ReflectionTest] TestMethodReflection FAILED");
             allPassed = false;
@@ -205,29 +204,30 @@ namespace BECore::Tests {
 
     bool ReflectionTest::TestFieldAccess() {
         // Compile-time tests are in TestCompileTime()
-        
+
         // Test ForEachField at runtime
         TestData::Player player;
         player.health = 42;
         player.speed = 3.14f;
         player.name = PoolString::Intern("TestPlayer");
         player.isAlive = false;
-        
+
         int fieldCount = 0;
         ForEachField(player, [&](eastl::string_view name, auto& value) {
             fieldCount++;
             if (name == "health") {
                 if constexpr (std::is_same_v<std::remove_reference_t<decltype(value)>, int32_t>) {
-                    if (value != 42) return;
+                    if (value != 42)
+                        return;
                 }
             }
         });
-        
+
         if (fieldCount != 4) {
             LOG_ERROR("[ReflectionTest] ForEachField visited {} fields, expected 4"_format(fieldCount));
             return false;
         }
-        
+
         return true;
     }
 
@@ -238,7 +238,7 @@ namespace BECore::Tests {
         original.speed = 10.5f;
         original.name = PoolString::Intern("Hero");
         original.isAlive = true;
-        
+
         // Serialize to XML
         XmlSerializer serializer;
         if (serializer.BeginObject("Player")) {
@@ -246,47 +246,47 @@ namespace BECore::Tests {
             serializer.EndObject();
         }
         eastl::string xml = serializer.SaveToString();
-        
+
         LOG_DEBUG("[ReflectionTest] Generated XML:\n{}"_format(xml));
-        
+
         // Deserialize from XML
         XmlDeserializer deserializer;
         if (!deserializer.LoadFromString(xml)) {
             LOG_ERROR("[ReflectionTest] Failed to load XML");
             return false;
         }
-        
+
         TestData::Player loaded;
         loaded.health = 0;
         loaded.speed = 0.0f;
         loaded.isAlive = false;
-        
+
         if (deserializer.BeginObject("Player")) {
             loaded.Deserialize(deserializer);
             deserializer.EndObject();
         }
-        
+
         // Verify
         if (loaded.health != original.health) {
             LOG_ERROR("[ReflectionTest] health mismatch: {} != {}"_format(loaded.health, original.health));
             return false;
         }
-        
+
         if (loaded.speed != original.speed) {
             LOG_ERROR("[ReflectionTest] speed mismatch: {} != {}"_format(loaded.speed, original.speed));
             return false;
         }
-        
+
         if (loaded.name != original.name) {
             LOG_ERROR("[ReflectionTest] name mismatch");
             return false;
         }
-        
+
         if (loaded.isAlive != original.isAlive) {
             LOG_ERROR("[ReflectionTest] isAlive mismatch");
             return false;
         }
-        
+
         return true;
     }
 
@@ -299,7 +299,7 @@ namespace BECore::Tests {
 
     bool ReflectionTest::TestMethodReflection() {
         // Compile-time tests are in TestCompileTime()
-        
+
         // Test ForEachMethod at runtime
         int methodCount = 0;
         eastl::vector<eastl::string_view> methodNames;
@@ -307,36 +307,40 @@ namespace BECore::Tests {
             methodCount++;
             methodNames.push_back(method.name);
         });
-        
+
         if (methodCount != 4) {
             LOG_ERROR("[ReflectionTest] ForEachMethod visited {} methods, expected 4"_format(methodCount));
             return false;
         }
-        
+
         // Verify method names are present
         bool hasTakeDamage = false, hasHeal = false, hasIsDead = false, hasGetHealthPercent = false;
         for (const auto& name : methodNames) {
-            if (name == "TakeDamage") hasTakeDamage = true;
-            if (name == "Heal") hasHeal = true;
-            if (name == "IsDead") hasIsDead = true;
-            if (name == "GetHealthPercent") hasGetHealthPercent = true;
+            if (name == "TakeDamage")
+                hasTakeDamage = true;
+            if (name == "Heal")
+                hasHeal = true;
+            if (name == "IsDead")
+                hasIsDead = true;
+            if (name == "GetHealthPercent")
+                hasGetHealthPercent = true;
         }
-        
+
         if (!hasTakeDamage || !hasHeal || !hasIsDead || !hasGetHealthPercent) {
             LOG_ERROR("[ReflectionTest] Missing expected method names");
             return false;
         }
-        
+
         LOG_DEBUG("[ReflectionTest] Method reflection: found {} methods"_format(methodCount));
         for (const auto& name : methodNames) {
             LOG_DEBUG("[ReflectionTest]   - {}"_format(name));
         }
-        
+
         // Test InvokeMethod for non-const methods
         TestData::Player player;
         player.health = 100;
         player.isAlive = true;
-        
+
         // Test TakeDamage via reflection
         int32_t remaining = InvokeMethod<int32_t>(player, "TakeDamage", 30);
         if (remaining != 70) {
@@ -347,34 +351,34 @@ namespace BECore::Tests {
             LOG_ERROR("[ReflectionTest] health is {}, expected 70 after TakeDamage"_format(player.health));
             return false;
         }
-        
+
         // Test Heal via reflection
         InvokeMethod<void>(player, "Heal", 20);
         if (player.health != 90) {
             LOG_ERROR("[ReflectionTest] health is {}, expected 90 after Heal"_format(player.health));
             return false;
         }
-        
+
         // Test const methods via reflection
         // Note: IsDead and GetHealthPercent are const methods
         // We need to use const reference for const method invocation
         const TestData::Player& constPlayer = player;
-        
+
         // For const methods, we can check the traits directly
         LOG_DEBUG("[ReflectionTest] Player health: {}, isAlive: {}"_format(player.health, player.isAlive));
         LOG_DEBUG("[ReflectionTest] IsDead() should return false, GetHealthPercent() should return 90");
-        
+
         // Direct method calls to verify behavior
         if (player.IsDead()) {
             LOG_ERROR("[ReflectionTest] IsDead() returned true, expected false");
             return false;
         }
-        
+
         if (player.GetHealthPercent() != 90.0f) {
             LOG_ERROR("[ReflectionTest] GetHealthPercent() returned {}, expected 90"_format(player.GetHealthPercent()));
             return false;
         }
-        
+
         LOG_INFO("[ReflectionTest] Method reflection tests passed");
         return true;
     }
@@ -465,8 +469,7 @@ namespace BECore::Tests {
         LOG_DEBUG("[ReflectionTest] Skip-defaults XML ({} chars):\n{}"_format(skipXml.size(), skipXml));
 
         if (skipXml.size() >= fullXml.size()) {
-            LOG_ERROR("[ReflectionTest] skip-defaults XML should be smaller: {} >= {}"_format(
-                skipXml.size(), fullXml.size()));
+            LOG_ERROR("[ReflectionTest] skip-defaults XML should be smaller: {} >= {}"_format(skipXml.size(), fullXml.size()));
             return false;
         }
 
@@ -487,8 +490,7 @@ namespace BECore::Tests {
             deserializer.EndObject();
         }
 
-        if (loaded.health != player.health || loaded.speed != player.speed
-            || loaded.name != player.name || loaded.isAlive != player.isAlive) {
+        if (loaded.health != player.health || loaded.speed != player.speed || loaded.name != player.name || loaded.isAlive != player.isAlive) {
             LOG_ERROR("[ReflectionTest] Round-trip with skip-defaults produced different values");
             return false;
         }
@@ -520,8 +522,7 @@ namespace BECore::Tests {
             heroDeserializer.EndObject();
         }
 
-        if (heroLoaded.health != hero.health || heroLoaded.speed != hero.speed
-            || heroLoaded.name != hero.name || heroLoaded.isAlive != hero.isAlive) {
+        if (heroLoaded.health != hero.health || heroLoaded.speed != hero.speed || heroLoaded.name != hero.name || heroLoaded.isAlive != hero.isAlive) {
             LOG_ERROR("[ReflectionTest] Round-trip of non-default values with skip-defaults failed");
             return false;
         }
@@ -696,8 +697,7 @@ namespace BECore::Tests {
             }
 
             if (loaded[0] != 7 || loaded[1] != 8 || loaded[2] != 0 || loaded[3] != 0) {
-                LOG_ERROR("[ReflectionTest] partial array load failed: [{}, {}, {}, {}]"_format(
-                    loaded[0], loaded[1], loaded[2], loaded[3]));
+                LOG_ERROR("[ReflectionTest] partial array load failed: [{}, {}, {}, {}]"_format(loaded[0], loaded[1], loaded[2], loaded[3]));
                 return false;
             }
         }
@@ -730,8 +730,7 @@ namespace BECore::Tests {
             }
 
             if (loaded.first != original.first || loaded.second != original.second) {
-                LOG_ERROR("[ReflectionTest] eastl::pair mismatch: ({}, {}) != ({}, {})"_format(
-                    loaded.first, loaded.second, original.first, original.second));
+                LOG_ERROR("[ReflectionTest] eastl::pair mismatch: ({}, {}) != ({}, {})"_format(loaded.first, loaded.second, original.first, original.second));
                 return false;
             }
         }
@@ -894,12 +893,10 @@ namespace BECore::Tests {
 
         const auto& errors = deserializer.GetErrors();
         const eastl::string pathStr = errors[0].path.ToStringView().data();
-        LOG_DEBUG("[ReflectionTest] Error path: '{}', message: '{}'"_format(
-            pathStr, errors[0].errorMessage.ToStringView()));
+        LOG_DEBUG("[ReflectionTest] Error path: '{}', message: '{}'"_format(pathStr, errors[0].errorMessage.ToStringView()));
 
         // The path should contain "player" and "inventory"
-        if (pathStr.find("player") == eastl::string::npos
-            || pathStr.find("inventory") == eastl::string::npos) {
+        if (pathStr.find("player") == eastl::string::npos || pathStr.find("inventory") == eastl::string::npos) {
             LOG_ERROR("[ReflectionTest] Error path '{}' missing expected segments"_format(pathStr));
             return false;
         }
@@ -926,15 +923,13 @@ namespace BECore::Tests {
         size_t posMango = xml.find("mango");
         size_t posZebra = xml.find("zebra");
 
-        if (posApple == eastl::string::npos || posMango == eastl::string::npos
-            || posZebra == eastl::string::npos) {
+        if (posApple == eastl::string::npos || posMango == eastl::string::npos || posZebra == eastl::string::npos) {
             LOG_ERROR("[ReflectionTest] Not all keys found in XML");
             return false;
         }
 
         if (!(posApple < posMango && posMango < posZebra)) {
-            LOG_ERROR("[ReflectionTest] Keys not in sorted order in XML: apple={}, mango={}, zebra={}"_format(
-                posApple, posMango, posZebra));
+            LOG_ERROR("[ReflectionTest] Keys not in sorted order in XML: apple={}, mango={}, zebra={}"_format(posApple, posMango, posZebra));
             return false;
         }
 

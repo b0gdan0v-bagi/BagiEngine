@@ -226,7 +226,7 @@ namespace BECore {
      */
     template <typename T>
     concept IsReflectedEnum = std::is_enum_v<T> && requires {
-        { EnumTokenizerPtr(T{}) };
+        {EnumTokenizerPtr(T{})};
     };
 
 }  // namespace BECore
@@ -247,14 +247,12 @@ namespace BECore::Detail {
  *
  * Enables fmt formatting for any enum type that supports EnumUtils.
  * Uses EnumUtils::ToString() to convert enum to string representation.
- * 
+ *
  * Uses enable_if in the CharT template parameter to enable the specialization
  * only for enum types that support EnumUtils::ToString().
  */
 template <typename Enum>
-struct fmt::formatter<Enum, 
-    std::enable_if_t<BECore::Detail::HasEnumUtils<Enum>::value, char>> 
-    : fmt::formatter<std::string_view> {
+struct fmt::formatter<Enum, std::enable_if_t<BECore::Detail::HasEnumUtils<Enum>::value, char>> : fmt::formatter<std::string_view> {
     auto format(Enum e, fmt::format_context& ctx) const -> decltype(ctx.out()) {
         auto sv = BECore::EnumUtils<Enum>::ToString(e);
         return fmt::formatter<std::string_view>::format(std::string_view(sv.data(), sv.size()), ctx);
@@ -276,17 +274,17 @@ struct fmt::formatter<Enum,
  *     CORE_ENUM(Direction, uint8_t, North, South, East, West)
  * }
  */
-#define CORE_ENUM(Enum, macType, ...)                                          \
-    enum class Enum : macType { __VA_ARGS__ };                                 \
-    inline auto operator+(Enum e) noexcept {                                   \
-        return std::underlying_type_t<Enum>(e);                                \
-    }                                                                          \
-    namespace EnumImpl_##Enum {                                                \
-        inline constexpr auto tokenizer = [] {                                 \
-            using enum Enum;                                                   \
-            return ::BECore::Impl::Tokenizer<Enum, __VA_ARGS__>{};             \
-        }();                                                                   \
-    }                                                                          \
-    consteval const auto* EnumTokenizerPtr(Enum) {                             \
-        return &EnumImpl_##Enum::tokenizer;                                    \
+#define CORE_ENUM(Enum, macType, ...)                                                                                                                                                                  \
+    enum class Enum : macType { __VA_ARGS__ };                                                                                                                                                         \
+    inline auto operator+(Enum e) noexcept {                                                                                                                                                           \
+        return std::underlying_type_t<Enum>(e);                                                                                                                                                        \
+    }                                                                                                                                                                                                  \
+    namespace EnumImpl_##Enum {                                                                                                                                                                        \
+        inline constexpr auto tokenizer = [] {                                                                                                                                                         \
+            using enum Enum;                                                                                                                                                                           \
+            return ::BECore::Impl::Tokenizer<Enum, __VA_ARGS__>{};                                                                                                                                     \
+        }();                                                                                                                                                                                           \
+    }                                                                                                                                                                                                  \
+    consteval const auto* EnumTokenizerPtr(Enum) {                                                                                                                                                     \
+        return &EnumImpl_##Enum::tokenizer;                                                                                                                                                            \
     }

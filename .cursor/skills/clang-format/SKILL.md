@@ -53,4 +53,4 @@ uv run python CI/scripts/format_sources.py --all
 | Changed  | Git-modified files (staged + unstaged), extensions: .cpp, .c, .h, .hpp, .cxx, .hxx, .cc |
 | All      | All such files under `src/` and `config/`            |
 
-**Ignore:** The script reads [.clang-format-ignore](.clang-format-ignore) in the project root (one path or prefix per line; `#` comments). If the file is missing, a built-in default is used. By default, vendored libraries are excluded: `external/`, `build/`, `.venv/`, and the vendored modules under `src/Modules/` (BECore, EABase, EnTT, fmt, imgui, pugixml, Vulkan). You can add more paths in `.clang-format-ignore`; they are merged with the default.
+**Ignore:** The script reads [.clang-format-ignore](.clang-format-ignore) in the project root (one path or prefix per line; `#` comments). If the file is missing, a built-in default is used. By default, vendored libraries are excluded: `external/`, `build/`, `.venv/`, and the vendored modules under `src/Modules/` (EABase, EnTT, fmt, imgui, pugixml, Vulkan). BECore is project code and is formatted. You can add more paths in `.clang-format-ignore`; they are merged with the default.

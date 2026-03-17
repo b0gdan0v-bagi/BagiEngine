@@ -2,12 +2,11 @@
 
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <TaskSystem/TaskManager.h>
-#include <TaskSystem/TaskHandle.h>
-#include <TaskSystem/TaskGroup.h>
-#include <TaskSystem/Awaitables.h>
-
 #include <EASTL/sort.h>
+#include <TaskSystem/Awaitables.h>
+#include <TaskSystem/TaskGroup.h>
+#include <TaskSystem/TaskHandle.h>
+#include <TaskSystem/TaskManager.h>
 
 namespace BECore {
 
@@ -95,9 +94,7 @@ namespace BECore {
         for (const auto& [name, entry] : _configs) {
             names.push_back(name);
         }
-        eastl::sort(names.begin(), names.end(), [](const PoolString& a, const PoolString& b) {
-            return a.ToStringView() < b.ToStringView();
-        });
+        eastl::sort(names.begin(), names.end(), [](const PoolString& a, const PoolString& b) { return a.ToStringView() < b.ToStringView(); });
         return names;
     }
 
@@ -163,8 +160,7 @@ namespace BECore {
         return true;
     }
 
-    void ConfigManager::ScanDirectory(const std::filesystem::path& dir,
-                                     eastl::vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
+    void ConfigManager::ScanDirectory(const std::filesystem::path& dir, eastl::vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const {
         // filesystem может бросать исключения, но exceptions отключены
         // Просто пропускаем ошибки
         for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
@@ -174,7 +170,7 @@ namespace BECore {
                 // Конвертируем std::string в eastl::string_view через c_str()
                 auto name = PoolString::Intern(eastl::string_view(stemStr.c_str(), stemStr.length()));
                 filesToLoad.push_back({entry.path(), name});
-                
+
                 LOG_DEBUG(Format("[ConfigManager] Found config: {} -> {}", stemStr, entry.path().string()).c_str());
             }
         }
@@ -182,26 +178,24 @@ namespace BECore {
 
     Task<void> ConfigManager::LoadConfigAsync(std::filesystem::path path, PoolString name) {
         // Задача уже запущена на background потоке через TaskManager::Run
-        
+
         LOG_DEBUG(Format("[ConfigManager] Loading config: {}", name.ToStringView()).c_str());
 
         // Проверяем, не загружен ли уже конфиг (защита от дубликатов)
         {
             std::scoped_lock lock(_writeMutex);
             if (_configs.find(name) != _configs.end()) {
-                LOG_WARNING(Format("[ConfigManager] Config {} already loaded, skipping duplicate", 
-                                 name.ToStringView()).c_str());
+                LOG_WARNING(Format("[ConfigManager] Config {} already loaded, skipping duplicate", name.ToStringView()).c_str());
                 co_return;
             }
         }
 
         // Создаём XmlDocument напрямую
         auto doc = BECore::New<XmlDocument>();
-        
+
         // Используем LoadFromFile для физического пути
         if (!doc->LoadFromFile(path)) {
-            LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}", 
-                           name.ToStringView(), path.string()).c_str());
+            LOG_ERROR(Format("[ConfigManager] Failed to load config: {} from {}", name.ToStringView(), path.string()).c_str());
             co_return;
         }
 
@@ -210,8 +204,7 @@ namespace BECore {
             std::scoped_lock lock(_writeMutex);
             // Повторная проверка на случай race condition
             if (_configs.find(name) != _configs.end()) {
-                LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", 
-                                 name.ToStringView()).c_str());
+                LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView()).c_str());
                 co_return;
             }
             _configs[name] = ConfigEntry{doc, path};

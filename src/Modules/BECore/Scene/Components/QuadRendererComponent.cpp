@@ -1,11 +1,10 @@
 #include "QuadRendererComponent.h"
 
-#include <Generated/QuadRendererComponent.gen.hpp>
-
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/SceneNode.h>
 #include <Events/SceneEvents.h>
+#include <Generated/QuadRendererComponent.gen.hpp>
 
 namespace BECore {
 

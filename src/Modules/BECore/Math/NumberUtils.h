@@ -36,4 +36,3 @@ namespace BECore {
     }
 
 }  // namespace BECore
-

@@ -1,8 +1,8 @@
 #include "ApplicationFabric.h"
 
+#include <BECore/Application/IApplicationFabric.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
-#include <BECore/Application/IApplicationFabric.h>
 
 namespace BECore {
 

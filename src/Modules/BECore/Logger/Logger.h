@@ -6,7 +6,6 @@ namespace BECore {
 
     class Logger {
     public:
-
         // Convenience methods without location info (simple strings)
         static void Debug(eastl::string_view message) {
             LogEvent::Emit(LogLevel::Debug, message);

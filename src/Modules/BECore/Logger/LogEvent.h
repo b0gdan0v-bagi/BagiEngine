@@ -2,17 +2,13 @@
 
 #include <Events/EventBase.h>
 
-
 namespace BECore {
 
     struct LogEvent : EventBase<LogEvent> {
-        LogLevel level;              
-        eastl::string_view message;  
+        LogLevel level;
+        eastl::string_view message;
 
-        LogEvent(LogLevel level, eastl::string_view message)
-            : level(level)
-            , message(message)
-        {}
+        LogEvent(LogLevel level, eastl::string_view message) : level(level), message(message) {}
 
         static void Emit(LogLevel level, eastl::string_view message);
 
@@ -25,7 +21,6 @@ namespace BECore {
         static void Flush();
     };
 
-    struct FlushLogsEvent : EventBase<FlushLogsEvent> {
-    };
+    struct FlushLogsEvent : EventBase<FlushLogsEvent> {};
 
 }  // namespace BECore

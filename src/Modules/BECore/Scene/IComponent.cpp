@@ -1,9 +1,8 @@
 #include "IComponent.h"
 
-#include <Generated/IComponent.gen.hpp>
-
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <Generated/IComponent.gen.hpp>
 
 namespace BECore {
 

@@ -8,9 +8,9 @@ namespace BECore {
      * @brief Error information for deserialization failures
      */
     struct DeserializeError {
-        PoolString path;          // Full path to the field, e.g. "player.inventory.items[3].name"
+        PoolString path;  // Full path to the field, e.g. "player.inventory.items[3].name"
         PoolString errorMessage;
-        int32_t line = 0;         // Line number for XML (0 for binary)
+        int32_t line = 0;  // Line number for XML (0 for binary)
     };
 
     /**
@@ -32,7 +32,7 @@ namespace BECore {
      * int32_t health;
      * deserializer.ReadAttribute("health", health);
      * deserializer.EndObject();
-     * 
+     *
      * if (deserializer.HasErrors()) {
      *     for (const auto& err : deserializer.GetErrors()) {
      *         LOG_ERROR("Deserialization error at '{}': {}", err.path, err.errorMessage);

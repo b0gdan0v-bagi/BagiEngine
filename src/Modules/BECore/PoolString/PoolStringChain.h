@@ -2,6 +2,7 @@
 
 #include "PoolString.h"
 #include "StaticPoolString.h"
+
 #include <BECore/Math/NumberUtils.h>
 #include <EASTL/array.h>
 #include <initializer_list>
@@ -12,7 +13,7 @@ namespace BECore {
         friend class PoolString;
 
         struct TaggedVal {
-            uintptr_t data; // bit 0: 0=PoolString, 1=Int
+            uintptr_t data;  // bit 0: 0=PoolString, 1=Int
 
             static TaggedVal FromPoolString(PoolString ps) {
                 return {reinterpret_cast<uintptr_t>(ps._entry)};
@@ -142,7 +143,7 @@ namespace BECore {
     private:
         Storage _storage;
         Mode _mode;
-        uint8_t _count; // Для Compound: кол-во элементов (2 или 3)
+        uint8_t _count;  // Для Compound: кол-во элементов (2 или 3)
     };
 
     static_assert(sizeof(PoolStringChain) <= 32);

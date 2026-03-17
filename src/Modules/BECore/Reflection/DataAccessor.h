@@ -2,8 +2,8 @@
 
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/FactoryTraits.h>
-#include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Reflection/ISerializer.h>
 #include <BECore/Reflection/SerializationTraits.h>
 #include <EASTL/array.h>
 #include <EASTL/map.h>
@@ -41,7 +41,7 @@ namespace BECore {
         concept HasInnerFactory = IsIntrusivePtr<Ptr> && HasFactory<typename IntrusivePtrPointeeType<Ptr>::type>;
 
         template <typename T>
-        concept HasInitialize = requires(T& t) {
+        concept HasInitialize = requires(T & t) {
             t.Initialize();
         };
 
@@ -51,7 +51,7 @@ namespace BECore {
         };
 
         template <typename T, typename Archive>
-        concept HasDeserialize = requires(T& t, Archive& a) {
+        concept HasDeserialize = requires(T & t, Archive& a) {
             t.Deserialize(a);
         };
 
@@ -65,8 +65,7 @@ namespace BECore {
 
         template <typename T, typename = void>
         struct DataAccessor {
-            static_assert(sizeof(T) != sizeof(T),
-                          "No DataAccessor specialization for this type");
+            static_assert(sizeof(T) != sizeof(T), "No DataAccessor specialization for this type");
         };
 
         // =================================================================
@@ -99,8 +98,7 @@ namespace BECore {
                     if (!item) {
                         eastl::string typeStr;
                         if (d.ReadAttribute("type", typeStr))
-                            item = AbstractFactory<Pointee>::GetInstance().Create(
-                                eastl::string_view(typeStr.data(), typeStr.size()));
+                            item = AbstractFactory<Pointee>::GetInstance().Create(eastl::string_view(typeStr.data(), typeStr.size()));
                         if (!item) {
                             if constexpr (!std::is_abstract_v<Pointee>)
                                 item = New<Pointee>();
@@ -319,8 +317,7 @@ namespace BECore {
                         value = *result;
                         return true;
                     }
-                    d.ReportError(key, eastl::string_view(
-                        Format("Invalid enum value: '{}'", str).c_str()));
+                    d.ReportError(key, eastl::string_view(Format("Invalid enum value: '{}'", str).c_str()));
                 }
                 return false;
             }
@@ -331,10 +328,8 @@ namespace BECore {
         // =================================================================
 
         template <typename T>
-        struct DataAccessor<T, std::enable_if_t<!std::is_arithmetic_v<T> && !std::is_enum_v<T>
-                                                && !::BECore::Detail::IsIntrusivePtr<T>
-                                                && ::BECore::Detail::HasSerialize<T, ISerializer>
-                                                && ::BECore::Detail::HasDeserialize<T, IDeserializer>>> {
+        struct DataAccessor<T, std::enable_if_t<!std::is_arithmetic_v<T> && !std::is_enum_v<T> && !::BECore::Detail::IsIntrusivePtr<T> && ::BECore::Detail::HasSerialize<T, ISerializer> &&
+                                                ::BECore::Detail::HasDeserialize<T, IDeserializer>>> {
             static void Save(ISerializer& s, const T& value, eastl::string_view key) {
                 if (s.BeginObject(key)) {
                     value.Serialize(s);
@@ -409,11 +404,9 @@ namespace BECore {
                     if (!ptr) {
                         eastl::string typeStr;
                         if (d.ReadAttribute("type", typeStr)) {
-                            ptr = AbstractFactory<T>::GetInstance().Create(
-                                eastl::string_view(typeStr.data(), typeStr.size()));
+                            ptr = AbstractFactory<T>::GetInstance().Create(eastl::string_view(typeStr.data(), typeStr.size()));
                             if (!ptr)
-                                d.ReportError(key, eastl::string_view(
-                                    Format("Unknown factory type: '{}'", typeStr).c_str()));
+                                d.ReportError(key, eastl::string_view(Format("Unknown factory type: '{}'", typeStr).c_str()));
                         }
                         if (!ptr) {
                             if constexpr (!std::is_abstract_v<T>)
@@ -438,8 +431,7 @@ namespace BECore {
         // =================================================================
 
         template <typename Ptr, typename Alloc>
-        struct DataAccessor<eastl::vector<Ptr, Alloc>,
-                            std::enable_if_t<::BECore::Detail::HasInnerFactory<Ptr>>> {
+        struct DataAccessor<eastl::vector<Ptr, Alloc>, std::enable_if_t<::BECore::Detail::HasInnerFactory<Ptr>>> {
             static void Save(ISerializer& s, const eastl::vector<Ptr, Alloc>& vec, eastl::string_view key) {
                 Detail::SaveVectorLikeFactory(s, vec, key);
             }
@@ -454,8 +446,7 @@ namespace BECore {
         // =================================================================
 
         template <typename Elem, typename Alloc>
-        struct DataAccessor<eastl::vector<Elem, Alloc>,
-                            std::enable_if_t<!::BECore::Detail::HasInnerFactory<Elem>>> {
+        struct DataAccessor<eastl::vector<Elem, Alloc>, std::enable_if_t<!::BECore::Detail::HasInnerFactory<Elem>>> {
             static void Save(ISerializer& s, const eastl::vector<Elem, Alloc>& vec, eastl::string_view key) {
                 Detail::SaveVectorLike(s, vec, key);
             }
@@ -470,15 +461,12 @@ namespace BECore {
         // =================================================================
 
         template <typename Ptr, size_t N, bool bOverflow, typename Alloc>
-        struct DataAccessor<eastl::fixed_vector<Ptr, N, bOverflow, Alloc>,
-                            std::enable_if_t<::BECore::Detail::HasInnerFactory<Ptr>>> {
-            static void Save(ISerializer& s, const eastl::fixed_vector<Ptr, N, bOverflow, Alloc>& vec,
-                             eastl::string_view key) {
+        struct DataAccessor<eastl::fixed_vector<Ptr, N, bOverflow, Alloc>, std::enable_if_t<::BECore::Detail::HasInnerFactory<Ptr>>> {
+            static void Save(ISerializer& s, const eastl::fixed_vector<Ptr, N, bOverflow, Alloc>& vec, eastl::string_view key) {
                 Detail::SaveVectorLikeFactory(s, vec, key);
             }
 
-            static bool Load(IDeserializer& d, eastl::fixed_vector<Ptr, N, bOverflow, Alloc>& vec,
-                             eastl::string_view key) {
+            static bool Load(IDeserializer& d, eastl::fixed_vector<Ptr, N, bOverflow, Alloc>& vec, eastl::string_view key) {
                 return Detail::LoadVectorLikeFactory(d, vec, key);
             }
         };
@@ -488,15 +476,12 @@ namespace BECore {
         // =================================================================
 
         template <typename Elem, size_t N, bool bOverflow, typename Alloc>
-        struct DataAccessor<eastl::fixed_vector<Elem, N, bOverflow, Alloc>,
-                            std::enable_if_t<!::BECore::Detail::HasInnerFactory<Elem>>> {
-            static void Save(ISerializer& s, const eastl::fixed_vector<Elem, N, bOverflow, Alloc>& vec,
-                             eastl::string_view key) {
+        struct DataAccessor<eastl::fixed_vector<Elem, N, bOverflow, Alloc>, std::enable_if_t<!::BECore::Detail::HasInnerFactory<Elem>>> {
+            static void Save(ISerializer& s, const eastl::fixed_vector<Elem, N, bOverflow, Alloc>& vec, eastl::string_view key) {
                 Detail::SaveVectorLike(s, vec, key);
             }
 
-            static bool Load(IDeserializer& d, eastl::fixed_vector<Elem, N, bOverflow, Alloc>& vec,
-                             eastl::string_view key) {
+            static bool Load(IDeserializer& d, eastl::fixed_vector<Elem, N, bOverflow, Alloc>& vec, eastl::string_view key) {
                 return Detail::LoadVectorLike(d, vec, key);
             }
         };
@@ -631,22 +616,19 @@ namespace BECore {
 
         template <typename K, typename V, typename Hash, typename Pred, typename Alloc>
         struct DataAccessor<eastl::unordered_map<K, V, Hash, Pred, Alloc>> {
-            static void Save(ISerializer& s, const eastl::unordered_map<K, V, Hash, Pred, Alloc>& map,
-                             eastl::string_view key) {
+            static void Save(ISerializer& s, const eastl::unordered_map<K, V, Hash, Pred, Alloc>& map, eastl::string_view key) {
                 size_t count = map.size();
                 if (s.BeginArray(key, "entry", count)) {
                     if constexpr (requires(const K& a, const K& b) {
-                                      { a < b } -> std::convertible_to<bool>;
+                                      {
+                                          a < b
+                                      } -> std::convertible_to<bool>;
                                   }) {
                         eastl::vector<eastl::pair<const K*, const V*>> sorted;
                         sorted.reserve(map.size());
                         for (const auto& [k, v] : map)
                             sorted.push_back({&k, &v});
-                        eastl::sort(sorted.begin(), sorted.end(),
-                                    [](const eastl::pair<const K*, const V*>& a,
-                                       const eastl::pair<const K*, const V*>& b) {
-                                        return *a.first < *b.first;
-                                    });
+                        eastl::sort(sorted.begin(), sorted.end(), [](const eastl::pair<const K*, const V*>& a, const eastl::pair<const K*, const V*>& b) { return *a.first < *b.first; });
                         for (const auto& [kPtr, vPtr] : sorted) {
                             if (s.BeginArrayElement()) {
                                 s.WriteAttribute("key", *kPtr);
@@ -667,8 +649,7 @@ namespace BECore {
                 }
             }
 
-            static bool Load(IDeserializer& d, eastl::unordered_map<K, V, Hash, Pred, Alloc>& map,
-                             eastl::string_view key) {
+            static bool Load(IDeserializer& d, eastl::unordered_map<K, V, Hash, Pred, Alloc>& map, eastl::string_view key) {
                 size_t count = 0;
                 if (d.BeginArray(key, "entry", count)) {
                     map.clear();
@@ -694,8 +675,7 @@ namespace BECore {
 
         template <typename K, typename V, typename Cmp, typename Alloc>
         struct DataAccessor<eastl::map<K, V, Cmp, Alloc>> {
-            static void Save(ISerializer& s, const eastl::map<K, V, Cmp, Alloc>& map,
-                             eastl::string_view key) {
+            static void Save(ISerializer& s, const eastl::map<K, V, Cmp, Alloc>& map, eastl::string_view key) {
                 size_t count = map.size();
                 if (s.BeginArray(key, "entry", count)) {
                     for (const auto& [k, v] : map) {
@@ -709,8 +689,7 @@ namespace BECore {
                 }
             }
 
-            static bool Load(IDeserializer& d, eastl::map<K, V, Cmp, Alloc>& map,
-                             eastl::string_view key) {
+            static bool Load(IDeserializer& d, eastl::map<K, V, Cmp, Alloc>& map, eastl::string_view key) {
                 size_t count = 0;
                 if (d.BeginArray(key, "entry", count)) {
                     map.clear();

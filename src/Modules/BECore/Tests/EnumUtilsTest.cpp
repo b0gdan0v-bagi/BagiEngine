@@ -1,6 +1,5 @@
 #include "EnumUtilsTest.h"
 
-
 #include <Generated/EnumUtilsTest.gen.hpp>
 
 namespace BECore::Tests {

@@ -1,7 +1,8 @@
 #pragma once
 
 namespace BECore {
-    template <typename T> class Singleton {
+    template <typename T>
+    class Singleton {
     public:
         /**
          * Получает единственный экземпляр класса T
@@ -48,7 +49,8 @@ namespace BECore {
     };
 
     // Инициализация статических членов
-    template <typename T> T* Singleton<T>::_instance = nullptr;
+    template <typename T>
+    T* Singleton<T>::_instance = nullptr;
 
     /**
      * Базовый класс для реализации паттерна Singleton (атомарная версия).
@@ -69,7 +71,8 @@ namespace BECore {
      * // Использование:
      * MyManager::GetInstance().DoSomething();
      */
-    template <typename T> class SingletonAtomic {
+    template <typename T>
+    class SingletonAtomic {
     public:
         /**
          * Получает единственный экземпляр класса T
@@ -128,9 +131,10 @@ namespace BECore {
     };
 
     // Инициализация статических членов
-    template <typename T> std::atomic<T*> SingletonAtomic<T>::_instance{nullptr};
+    template <typename T>
+    std::atomic<T*> SingletonAtomic<T>::_instance{nullptr};
 
-    template <typename T> std::mutex SingletonAtomic<T>::_mutex;
+    template <typename T>
+    std::mutex SingletonAtomic<T>::_mutex;
 
 }  // namespace BECore
-

@@ -111,7 +111,7 @@ namespace eastl {
     template <>
     struct equal_to<BECore::PoolString> {
         using is_transparent = void;  // Позволяет гетерогенный поиск
-        
+
         constexpr bool operator()(const BECore::PoolString& lhs, const BECore::PoolString& rhs) const noexcept {
             return lhs == rhs;
         }
@@ -143,7 +143,7 @@ namespace eastl {
     template <>
     struct less<BECore::PoolString> {
         using is_transparent = void;  // Позволяет гетерогенный поиск
-        
+
         constexpr bool operator()(const BECore::PoolString& lhs, const BECore::PoolString& rhs) const noexcept {
             return lhs.ToStringView() < rhs.ToStringView();
         }

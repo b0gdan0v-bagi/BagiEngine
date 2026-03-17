@@ -1,7 +1,6 @@
-#include <BECore/Resource/ResourceManager.h>
-
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Resource/IResourceLoader.h>
+#include <BECore/Resource/ResourceManager.h>
 
 namespace BECore {
 

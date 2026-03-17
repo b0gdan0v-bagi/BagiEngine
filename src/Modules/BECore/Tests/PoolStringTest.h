@@ -1,7 +1,7 @@
 #pragma once
 
-#include <BECore/Tests/ITest.h>
 #include <BECore/PoolString/PoolStringChain.h>
+#include <BECore/Tests/ITest.h>
 
 namespace BECore::Tests {
 

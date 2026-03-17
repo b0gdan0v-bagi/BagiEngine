@@ -9,9 +9,7 @@ namespace BECore {
     }
 
     void LogEvent::Flush() {
-        LogRingBuffer<>::GetGlobal().Drain([](const LogEntry& entry) {
-            EventBase<LogEvent>::Emit(entry.level, eastl::string_view{entry.message, entry.messageLength});
-        });
+        LogRingBuffer<>::GetGlobal().Drain([](const LogEntry& entry) { EventBase<LogEvent>::Emit(entry.level, eastl::string_view{entry.message, entry.messageLength}); });
     }
 
 }  // namespace BECore

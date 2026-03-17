@@ -1,12 +1,10 @@
 #include "OutputSink.h"
 
-
-#include <fmt/core.h>
-#include <fmt/chrono.h>
+#include <Generated/OutputSink.gen.hpp>
 #include <chrono>
 #include <cstdio>
-
-#include <Generated/OutputSink.gen.hpp>
+#include <fmt/chrono.h>
+#include <fmt/core.h>
 
 namespace BECore {
 
@@ -31,8 +29,7 @@ namespace BECore {
         // Get current time
         auto now = std::chrono::system_clock::now();
         auto time = std::chrono::system_clock::to_time_t(now);
-        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            now.time_since_epoch()) % 1000;
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
         // Thread-safe localtime conversion
         std::tm tm_buf;

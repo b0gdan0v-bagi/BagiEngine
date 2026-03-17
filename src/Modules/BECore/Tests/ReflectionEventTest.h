@@ -1,8 +1,8 @@
 #pragma once
 
-#include <BECore/Tests/ITest.h>
-#include <BECore/Reflection/TypeTraits.h>
 #include <BECore/Reflection/ClassMeta.h>
+#include <BECore/Reflection/TypeTraits.h>
+#include <BECore/Tests/ITest.h>
 
 namespace BECore::Tests {
 
@@ -29,8 +29,7 @@ namespace BECore::Tests {
             BE_REFLECT_FIELD float multiplier = 1.0f;
 
             constexpr TestDataEvent() = default;
-            constexpr explicit TestDataEvent(int32_t v, float m = 1.0f) 
-                : value(v), multiplier(m) {}
+            constexpr explicit TestDataEvent(int32_t v, float m = 1.0f) : value(v), multiplier(m) {}
         };
 
         /**
@@ -43,8 +42,7 @@ namespace BECore::Tests {
             BE_REFLECT_FIELD int32_t code = 0;
 
             TestMessageEvent() = default;
-            explicit TestMessageEvent(PoolString msg, int32_t c = 0) 
-                : message(std::move(msg)), code(c) {}
+            explicit TestMessageEvent(PoolString msg, int32_t c = 0) : message(std::move(msg)), code(c) {}
         };
 
     }  // namespace ReflectionTestEvents

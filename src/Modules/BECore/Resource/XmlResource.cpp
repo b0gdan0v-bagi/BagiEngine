@@ -1,5 +1,4 @@
 #include <BECore/Resource/XmlResource.h>
-
 #include <Generated/XmlResource.gen.hpp>
 
 namespace BECore {

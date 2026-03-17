@@ -1,6 +1,5 @@
 #pragma once
 
-
 namespace BECore {
 
     class String {
@@ -13,7 +12,7 @@ namespace BECore {
         static SmallStrVector Split(eastl::string_view str, char delimiter);
 
         static constexpr uint64_t GetHash(eastl::string_view sv) noexcept {
-            
+
             uint64_t hash = hashOffset;
             for (char c : sv) {
                 hash ^= static_cast<uint64_t>(c);

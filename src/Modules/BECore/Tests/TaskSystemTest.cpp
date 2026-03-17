@@ -1,8 +1,7 @@
 #include "TaskSystemTest.h"
 
-#include <thread>
-
 #include <Generated/TaskSystemTest.gen.hpp>
+#include <thread>
 
 namespace BECore::Tests {
 
@@ -20,13 +19,13 @@ namespace BECore::Tests {
     Task<int> NestedTask() {
         auto resultA = co_await SimpleIntTask(10);
         auto resultB = co_await SimpleIntTask(20);
-        
+
         // В случае ошибки возвращаем 0 (в реальном коде нужна более сложная обработка)
         if (!resultA.has_value() || !resultB.has_value()) {
             co_return 0;
         }
-        
-        co_return *resultA + *resultB;
+
+        co_return* resultA + *resultB;
     }
 
     bool TaskSystemTest::Run() {
@@ -87,8 +86,8 @@ namespace BECore::Tests {
             auto task = SimpleVoidTask();
             EXPECT(task.IsValid(), "Task should be valid");
             EXPECT(!task.IsDone(), "Task should not be done before execution");
-            
-            auto result = task.GetResult(); // Run to completion
+
+            auto result = task.GetResult();  // Run to completion
             EXPECT(result.has_value(), "Task should complete successfully");
             EXPECT(task.IsDone(), "Task should be done after GetResult");
         }
@@ -97,7 +96,7 @@ namespace BECore::Tests {
         {
             auto task1 = SimpleVoidTask();
             auto task2 = std::move(task1);
-            
+
             EXPECT(!task1.IsValid(), "Moved-from task should be invalid");
             EXPECT(task2.IsValid(), "Moved-to task should be valid");
         }
@@ -128,25 +127,25 @@ namespace BECore::Tests {
 
     bool TaskSystemTest::TestTaskQueue() {
         TaskQueue queue;
-        
+
         // Test 1: Push and Pop
         {
             std::atomic<int> counter{0};
-            
+
             queue.Push([&counter]() { counter++; });
             queue.Push([&counter]() { counter++; });
-            
+
             EXPECT(queue.Size() == 2, "Queue should have 2 tasks");
-            
+
             TaskQueue::TaskFunc task;
             EXPECT(queue.TryPop(task), "TryPop should succeed");
             task();
             EXPECT(counter == 1, "Counter should be 1 after first task");
-            
+
             EXPECT(queue.TryPop(task), "Second TryPop should succeed");
             task();
             EXPECT(counter == 2, "Counter should be 2 after second task");
-            
+
             EXPECT(!queue.TryPop(task), "TryPop on empty queue should fail");
         }
 
@@ -154,7 +153,7 @@ namespace BECore::Tests {
         {
             queue.Push([]() {});
             queue.Push([]() {});
-            
+
             TaskQueue::TaskFunc task;
             EXPECT(queue.TrySteal(task), "TrySteal should succeed");
             EXPECT(queue.Size() == 1, "Queue should have 1 task after steal");
@@ -174,16 +173,16 @@ namespace BECore::Tests {
         {
             ThreadPool pool(2);
             std::atomic<int> counter{0};
-            
+
             pool.Submit([&counter]() { counter++; });
             pool.Submit([&counter]() { counter++; });
             pool.Submit([&counter]() { counter++; });
-            
+
             // Wait for completion
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            
+
             EXPECT(counter == 3, "All 3 tasks should be executed");
-            
+
             pool.Shutdown();
             EXPECT(pool.IsStopped(), "Pool should be stopped after Shutdown");
         }
@@ -203,7 +202,7 @@ namespace BECore::Tests {
             auto token = CancellationToken::Create();
             EXPECT(token.IsValid(), "Token should be valid");
             EXPECT(!token.IsCancelled(), "Token should not be cancelled initially");
-            
+
             token.Cancel();
             EXPECT(token.IsCancelled(), "Token should be cancelled after Cancel()");
         }
@@ -212,7 +211,7 @@ namespace BECore::Tests {
         {
             auto token = CancellationToken::Create();
             token.Cancel();
-            
+
             auto result = token.CheckCancellation();
             EXPECT(!result.has_value(), "CheckCancellation should return error on cancelled token");
             EXPECT(result.error() == TaskError::Cancelled, "Error should be Cancelled");
@@ -226,14 +225,14 @@ namespace BECore::Tests {
         {
             TaskGroup group;
             EXPECT(group.Size() == 0, "New group should be empty");
-            
+
             // Add mock handles
             auto handle1 = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
             auto handle2 = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
-            
+
             group.Add(handle1);
             group.Add(handle2);
-            
+
             EXPECT(group.Size() == 2, "Group should have 2 handles");
         }
 
@@ -242,7 +241,7 @@ namespace BECore::Tests {
             TaskGroup group;
             auto handle = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
             group.Add(handle);
-            
+
             group.CancelAll();
             EXPECT(handle->IsCancelled(), "Handle should be cancelled after CancelAll");
         }
@@ -259,7 +258,7 @@ namespace BECore::Tests {
             stats.RecordTaskScheduled();
             stats.RecordTaskCompleted(false, 10.0);
             stats.RecordTaskCancelled();
-            
+
             auto snapshot = stats.GetSnapshot();
             EXPECT(snapshot.totalTasksScheduled == 2, "Should have 2 scheduled tasks");
             EXPECT(snapshot.totalTasksCompleted == 1, "Should have 1 completed task");
@@ -278,4 +277,4 @@ namespace BECore::Tests {
         return true;
     }
 
-} // namespace BECore::Tests
+}  // namespace BECore::Tests

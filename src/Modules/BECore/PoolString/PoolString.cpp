@@ -1,6 +1,5 @@
 #include "PoolString.h"
 
-
 namespace BECore {
 
     template <typename T, uint32_t BucketCount>

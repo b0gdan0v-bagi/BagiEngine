@@ -22,26 +22,14 @@ namespace BECore {
 
         /**
          * @brief Construct an AssertEvent
-         * 
+         *
          * @param file Source file path
          * @param line Line number
          * @param expression Expression that failed (can be nullptr)
          * @param message Optional message (can be nullptr)
          * @param type Type of assertion
          */
-        AssertEvent(
-            const char* file,
-            int line,
-            const char* expression,
-            const char* message,
-            AssertType type
-        )
-            : file(file)
-            , line(line)
-            , expression(expression)
-            , message(message)
-            , type(type)
-        {}
+        AssertEvent(const char* file, int line, const char* expression, const char* message, AssertType type) : file(file), line(line), expression(expression), message(message), type(type) {}
     };
 
 }  // namespace BECore

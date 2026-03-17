@@ -65,13 +65,13 @@ namespace BECore {
             return fmt::format_to(out, fmt, std::forward<Args>(args)...);
         }
 
-    } // namespace Details::Format
+    }  // namespace Details::Format
 
     // Алиасы для удобства в пространстве имен Core
     using Details::Format::Format;
+    using Details::Format::FormatTo;
     using Details::Format::Print;
     using Details::Format::PrintLine;
-    using Details::Format::FormatTo;
 
     /**
      * @brief Вспомогательный класс для поддержки user-defined literal _format.
@@ -98,7 +98,7 @@ namespace BECore {
     /**
      * @brief User-defined literal для форматирования строк.
      * Использование: "{}"_format(value)
-     * 
+     *
      * @example
      * auto str = "Hello, {}!"_format("World");
      * auto num = "Value: {}"_format(42);
@@ -107,6 +107,6 @@ namespace BECore {
         [[nodiscard]] constexpr FormatLiteral operator""_format(const char* str, size_t len) {
             return FormatLiteral(eastl::string_view(str, len));
         }
-    } // namespace Literals
+    }  // namespace Literals
 
-} // namespace BECore
+}  // namespace BECore

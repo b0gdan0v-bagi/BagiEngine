@@ -26,8 +26,12 @@ namespace BECore::Tests {
      */
     template <typename T>
     concept ValidTest = requires(T t) {
-        { t.Run() } -> std::same_as<bool>;
-        { T::GetStaticTypeName() } -> std::convertible_to<eastl::string_view>;
+        {
+            t.Run()
+        } -> std::same_as<bool>;
+        {
+            T::GetStaticTypeName()
+        } -> std::convertible_to<eastl::string_view>;
         requires std::is_base_of_v<ITest, T>;
     };
 

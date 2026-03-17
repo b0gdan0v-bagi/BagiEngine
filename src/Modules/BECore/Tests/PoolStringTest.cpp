@@ -1,6 +1,5 @@
 #include "PoolStringTest.h"
 
-
 #include <Generated/PoolStringTest.gen.hpp>
 
 namespace BECore::Tests {

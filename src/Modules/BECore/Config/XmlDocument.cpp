@@ -1,6 +1,6 @@
 #include "XmlDocument.h"
-#include "XmlNode.h"
 
+#include "XmlNode.h"
 
 namespace BECore {
 
@@ -49,9 +49,7 @@ namespace BECore {
         testStream.close();
 
         // Save with formatting (2 space indent)
-        return _doc.save_file(filepath.string().c_str(), "  ", 
-                             pugi::format_indent | pugi::format_indent_attributes, 
-                             pugi::encoding_utf8);
+        return _doc.save_file(filepath.string().c_str(), "  ", pugi::format_indent | pugi::format_indent_attributes, pugi::encoding_utf8);
     }
 
     XmlNode XmlDocument::GetRoot() const {

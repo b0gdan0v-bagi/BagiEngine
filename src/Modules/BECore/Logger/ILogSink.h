@@ -1,6 +1,5 @@
 #pragma once
 
-
 namespace BECore {
 
     class ILogSink : public RefCountedAtomic, public SubscriptionHolder {

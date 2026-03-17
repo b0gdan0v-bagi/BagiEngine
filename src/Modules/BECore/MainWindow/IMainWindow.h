@@ -16,4 +16,3 @@ namespace BECore {
         virtual int GetHeight() const = 0;
     };
 }  // namespace BECore
-

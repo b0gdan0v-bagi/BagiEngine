@@ -1,6 +1,5 @@
 #pragma once
 
-
 namespace BECore {
 
     class ApplicationFabric : public Singleton<ApplicationFabric> {

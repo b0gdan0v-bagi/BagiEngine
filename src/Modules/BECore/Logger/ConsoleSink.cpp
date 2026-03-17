@@ -1,11 +1,10 @@
 #include "ConsoleSink.h"
 
-#include <fmt/core.h>
-#include <fmt/chrono.h>
+#include <Generated/ConsoleSink.gen.hpp>
 #include <chrono>
 #include <cstdio>
-
-#include <Generated/ConsoleSink.gen.hpp>
+#include <fmt/chrono.h>
+#include <fmt/core.h>
 
 namespace BECore {
 
@@ -31,8 +30,7 @@ namespace BECore {
         // Get current time
         const auto now = std::chrono::system_clock::now();
         const auto time = std::chrono::system_clock::to_time_t(now);
-        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-            now.time_since_epoch()) % 1000;
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
         // Thread-safe localtime conversion
         std::tm tm_buf;
@@ -50,14 +48,9 @@ namespace BECore {
             const char* color = LogLevelColor(level);
             const char* reset = LogColorReset;
 
-            fmt::print(stream,
-                "{}[{}]{} [{:%H:%M:%S}.{:03d}] {}\n",
-                color, level, reset,
-                tm_buf, ms.count(), message);
+            fmt::print(stream, "{}[{}]{} [{:%H:%M:%S}.{:03d}] {}\n", color, level, reset, tm_buf, ms.count(), message);
         } else {
-            fmt::print(stream,
-                "[{}] [{:%H:%M:%S}.{:03d}] {}\n",
-                level, tm_buf, ms.count(), message);
+            fmt::print(stream, "[{}] [{:%H:%M:%S}.{:03d}] {}\n", level, tm_buf, ms.count(), message);
         }
     }
 

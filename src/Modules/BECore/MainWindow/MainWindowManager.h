@@ -1,7 +1,7 @@
 #pragma once
 
-#include <BECore/MainWindow/MainWindowAccessor.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/MainWindow/MainWindowAccessor.h>
 
 namespace BECore {
 
@@ -25,4 +25,3 @@ namespace BECore {
     };
 
 }  // namespace BECore
-

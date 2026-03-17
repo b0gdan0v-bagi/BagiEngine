@@ -62,8 +62,6 @@ namespace BECore {
 
         // Конструктор для поддержки PassKey<Derived> -> PassKey<Base>
         template <typename U>
-        requires (std::derived_from<U, T> || std::same_as<U, T>)
-        constexpr PassKey(PassKey<U>&&) noexcept {}
+        requires(std::derived_from<U, T> || std::same_as<U, T>) constexpr PassKey(PassKey<U>&&) noexcept {}
     };
 }  // namespace BECore
-

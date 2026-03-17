@@ -115,9 +115,7 @@ namespace BECore::Tests {
         // Test ForEachFieldStatic with empty event
         TestEmptyEvent emptyEvent;
         int emptyCount = 0;
-        TestEmptyEvent::ForEachFieldStatic(emptyEvent, [&](auto, auto&) {
-            emptyCount++;
-        });
+        TestEmptyEvent::ForEachFieldStatic(emptyEvent, [&](auto, auto&) { emptyCount++; });
         ASSERT(emptyCount == 0, "Empty event should iterate 0 fields");
 
         // Test ForEachFieldStatic with data event

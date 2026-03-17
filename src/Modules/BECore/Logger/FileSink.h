@@ -3,7 +3,6 @@
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Logger/LogEvent.h>
 
-
 namespace BECore {
 
     class FileSink : public ILogSink {
@@ -15,12 +14,13 @@ namespace BECore {
 
         void Initialize() override;
 
-        bool IsOpen() const { return _file.is_open(); }
+        bool IsOpen() const {
+            return _file.is_open();
+        }
 
         void Write(LogLevel level, eastl::string_view message) override;
 
     private:
-
         void OnLogEvent(const LogEvent& event);
 
         void OnFlushEvent();
@@ -30,8 +30,12 @@ namespace BECore {
             return _filename;
         }
 
-        void SetAppend(bool append) { _append = append; }
-        bool IsAppend() const { return _append; }
+        void SetAppend(bool append) {
+            _append = append;
+        }
+        bool IsAppend() const {
+            return _append;
+        }
 
     private:
         BE_REFLECT_FIELD eastl::string _filename = "engine.log";

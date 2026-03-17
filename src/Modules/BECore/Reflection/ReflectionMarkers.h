@@ -67,9 +67,9 @@ namespace BECore {
 #define BE_CLASS(ClassName, ...)                                                                                                                                                                       \
 public:                                                                                                                                                                                                \
     /** @brief Get the type name as string_view */                                                                                                                                                     \
-    static eastl::string_view GetStaticTypeName();                                                                                                                                           \
+    static eastl::string_view GetStaticTypeName();                                                                                                                                                     \
     /** @brief Get the number of reflected fields */                                                                                                                                                   \
-    static size_t GetStaticFieldCount();                                                                                                                                                     \
+    static size_t GetStaticFieldCount();                                                                                                                                                               \
     /** @brief Iterate over all reflected fields (mutable) */                                                                                                                                          \
     template <typename Func>                                                                                                                                                                           \
     static constexpr void ForEachFieldStatic(ClassName& obj, Func&& func);                                                                                                                             \
@@ -77,18 +77,26 @@ public:                                                                         
     template <typename Func>                                                                                                                                                                           \
     static constexpr void ForEachFieldStatic(const ClassName& obj, Func&& func);                                                                                                                       \
     /** @brief Get static ClassMeta for this type (defined in generated code) */                                                                                                                       \
-    static const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                   \
+    static const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                             \
     /** @brief Get runtime ClassMeta for this instance (virtual -- correct type returned through base pointer) */                                                                                      \
-    virtual const ::BECore::ClassMeta& GetTypeMeta() const { return GetStaticTypeMeta(); }                                                                                                             \
+    virtual const ::BECore::ClassMeta& GetTypeMeta() const {                                                                                                                                           \
+        return GetStaticTypeMeta();                                                                                                                                                                    \
+    }                                                                                                                                                                                                  \
     /** @brief Check if this instance is of type T */                                                                                                                                                  \
     template <typename T>                                                                                                                                                                              \
-    bool Is() const { return GetTypeMeta() == T::GetStaticTypeMeta(); }                                                                                                                                \
+    bool Is() const {                                                                                                                                                                                  \
+        return GetTypeMeta() == T::GetStaticTypeMeta();                                                                                                                                                \
+    }                                                                                                                                                                                                  \
     /** @brief Cast to type T, returns nullptr if type mismatch */                                                                                                                                     \
     template <typename T>                                                                                                                                                                              \
-    T* Cast() { return Is<T>() ? static_cast<T*>(this) : nullptr; }                                                                                                                                   \
+    T* Cast() {                                                                                                                                                                                        \
+        return Is<T>() ? static_cast<T*>(this) : nullptr;                                                                                                                                              \
+    }                                                                                                                                                                                                  \
     /** @brief Cast to type T (const), returns nullptr if type mismatch */                                                                                                                             \
     template <typename T>                                                                                                                                                                              \
-    const T* Cast() const { return Is<T>() ? static_cast<const T*>(this) : nullptr; }                                                                                                       \
+    const T* Cast() const {                                                                                                                                                                            \
+        return Is<T>() ? static_cast<const T*>(this) : nullptr;                                                                                                                                        \
+    }                                                                                                                                                                                                  \
     /** @brief Serialize all reflected fields to ISerializer (write/save) */                                                                                                                           \
     void Serialize(::BECore::ISerializer& s) const;                                                                                                                                                    \
     /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                      \
@@ -121,28 +129,28 @@ public:
 // @param EventName The name of the containing event struct
 // =============================================================================
 
-#define BE_EVENT(EventName)                                                                                                                                                                                \
-public:                                                                                                                                                                                                   \
-    /** @brief Get the event type name as string_view */                                                                                                                                                  \
-    static eastl::string_view GetStaticTypeName();                                                                                                                                              \
-    /** @brief Get static ClassMeta for this event type (defined in generated code) */                                                                                                                    \
-    static const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                      \
-    /** @brief Get event type hash for efficient dispatch */                                                                                                                                              \
-    static uint64_t GetStaticTypeHash();                                                                                                                                                        \
-    /** @brief Get the number of reflected fields */                                                                                                                                                      \
-    static size_t GetStaticFieldCount();                                                                                                                                                        \
-    /** @brief Iterate over all reflected fields (const) */                                                                                                                                               \
-    template <typename Func>                                                                                                                                                                              \
-    static constexpr void ForEachFieldStatic(const EventName& obj, Func&& func);                                                                                                                          \
-    /** @brief Serialize all reflected fields to ISerializer (write/save) */                                                                                                                              \
-    void Serialize(::BECore::ISerializer& s) const;                                                                                                                                                       \
-    /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                         \
-    void Deserialize(::BECore::IDeserializer& d);                                                                                                                                                         \
-                                                                                                                                                                                                          \
-private:                                                                                                                                                                                                  \
-    template <typename, typename>                                                                                                                                                                         \
-    friend struct ::BECore::ReflectionTraits;                                                                                                                                                             \
-                                                                                                                                                                                                          \
+#define BE_EVENT(EventName)                                                                                                                                                                            \
+public:                                                                                                                                                                                                \
+    /** @brief Get the event type name as string_view */                                                                                                                                               \
+    static eastl::string_view GetStaticTypeName();                                                                                                                                                     \
+    /** @brief Get static ClassMeta for this event type (defined in generated code) */                                                                                                                 \
+    static const ::BECore::ClassMeta& GetStaticTypeMeta();                                                                                                                                             \
+    /** @brief Get event type hash for efficient dispatch */                                                                                                                                           \
+    static uint64_t GetStaticTypeHash();                                                                                                                                                               \
+    /** @brief Get the number of reflected fields */                                                                                                                                                   \
+    static size_t GetStaticFieldCount();                                                                                                                                                               \
+    /** @brief Iterate over all reflected fields (const) */                                                                                                                                            \
+    template <typename Func>                                                                                                                                                                           \
+    static constexpr void ForEachFieldStatic(const EventName& obj, Func&& func);                                                                                                                       \
+    /** @brief Serialize all reflected fields to ISerializer (write/save) */                                                                                                                           \
+    void Serialize(::BECore::ISerializer& s) const;                                                                                                                                                    \
+    /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                      \
+    void Deserialize(::BECore::IDeserializer& d);                                                                                                                                                      \
+                                                                                                                                                                                                       \
+private:                                                                                                                                                                                               \
+    template <typename, typename>                                                                                                                                                                      \
+    friend struct ::BECore::ReflectionTraits;                                                                                                                                                          \
+                                                                                                                                                                                                       \
 public:
 
 // =============================================================================
@@ -180,4 +188,3 @@ public:
 #define BE_REFLECT_FIELD /* BE_REFLECT_FIELD */
 #define BE_FUNCTION      /* BE_FUNCTION */
 #endif
-

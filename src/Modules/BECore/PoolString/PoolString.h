@@ -33,6 +33,7 @@ namespace BECore {
 
     class PoolString {
         friend class PoolStringChain;
+
     public:
         // Используем адрес заранее созданной константы
         constexpr PoolString() noexcept : _entry(&Details::g_EmptyEntryStore.header) {}

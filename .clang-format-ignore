@@ -3,7 +3,6 @@ external/
 build/
 .venv/
 # Vendored modules under src/Modules
-src/Modules/BECore
 src/Modules/EABase
 src/Modules/EnTT
 src/Modules/fmt

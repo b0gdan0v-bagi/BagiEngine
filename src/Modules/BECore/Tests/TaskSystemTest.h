@@ -1,13 +1,13 @@
 #pragma once
 
 #include <BECore/Tests/ITest.h>
-#include <TaskSystem/Task.h>
-#include <TaskSystem/TaskHandle.h>
-#include <TaskSystem/ThreadPool.h>
-#include <TaskSystem/TaskQueue.h>
 #include <TaskSystem/CancellationToken.h>
+#include <TaskSystem/Task.h>
 #include <TaskSystem/TaskGroup.h>
+#include <TaskSystem/TaskHandle.h>
+#include <TaskSystem/TaskQueue.h>
 #include <TaskSystem/TaskStatistics.h>
+#include <TaskSystem/ThreadPool.h>
 
 namespace BECore::Tests {
 
@@ -39,4 +39,4 @@ namespace BECore::Tests {
     // Compile-time validation of test class
     static_assert(ValidTest<TaskSystemTest>);
 
-} // namespace BECore::Tests
+}  // namespace BECore::Tests

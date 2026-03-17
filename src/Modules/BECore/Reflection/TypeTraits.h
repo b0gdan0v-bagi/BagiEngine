@@ -17,10 +17,9 @@ namespace BECore {
     template <typename Class, typename T>
     struct FieldInfo {
         eastl::string_view name;
-        T Class::*ptr;
+        T Class::* ptr;
 
-        constexpr FieldInfo(eastl::string_view n, T Class::*p) noexcept
-            : name(n), ptr(p) {}
+        constexpr FieldInfo(eastl::string_view n, T Class::* p) noexcept : name(n), ptr(p) {}
     };
 
     /**
@@ -60,9 +59,13 @@ namespace BECore {
      */
     template <typename T>
     concept HasReflection = requires {
-        { ReflectionTraits<T>::reflected } -> std::convertible_to<bool>;
+        {
+            ReflectionTraits<T>::reflected
+        } -> std::convertible_to<bool>;
         requires ReflectionTraits<T>::reflected == true;
-        { ReflectionTraits<T>::name } -> std::convertible_to<eastl::string_view>;
+        {
+            ReflectionTraits<T>::name
+        } -> std::convertible_to<eastl::string_view>;
         ReflectionTraits<T>::fields;
     };
 
@@ -73,8 +76,7 @@ namespace BECore {
      * @return Number of fields in the reflection traits
      */
     template <typename T>
-        requires HasReflection<T>
-    constexpr size_t FieldCount() {
+    requires HasReflection<T> constexpr size_t FieldCount() {
         return std::tuple_size_v<decltype(ReflectionTraits<T>::fields)>;
     }
 
@@ -90,12 +92,9 @@ namespace BECore {
      * static_assert(!HasField<Player>("mana"));
      */
     template <typename T>
-        requires HasReflection<T>
-    consteval bool HasField(eastl::string_view name) {
+    requires HasReflection<T> consteval bool HasField(eastl::string_view name) {
         bool found = false;
-        std::apply([&](auto&&... fields) {
-            ((found = found || (fields.name == name)), ...);
-        }, ReflectionTraits<T>::fields);
+        std::apply([&](auto&&... fields) { ((found = found || (fields.name == name)), ...); }, ReflectionTraits<T>::fields);
         return found;
     }
 
@@ -110,8 +109,7 @@ namespace BECore {
      * static_assert(GetFieldInfo<Player, 0>().name == "health");
      */
     template <typename T, size_t I>
-        requires HasReflection<T> && (I < FieldCount<T>())
-    constexpr auto GetFieldInfo() {
+        requires HasReflection<T> && (I < FieldCount<T>()) constexpr auto GetFieldInfo() {
         return std::get<I>(ReflectionTraits<T>::fields);
     }
 
@@ -124,22 +122,16 @@ namespace BECore {
      * @param func Function to call for each field (receives name and value reference)
      */
     template <typename T, typename Func>
-        requires HasReflection<T>
-    constexpr void ForEachField(T& obj, Func&& func) {
-        std::apply([&](auto&&... fields) {
-            (func(fields.name, obj.*(fields.ptr)), ...);
-        }, ReflectionTraits<T>::fields);
+    requires HasReflection<T> constexpr void ForEachField(T& obj, Func&& func) {
+        std::apply([&](auto&&... fields) { (func(fields.name, obj.*(fields.ptr)), ...); }, ReflectionTraits<T>::fields);
     }
 
     /**
      * @brief Const version of ForEachField
      */
     template <typename T, typename Func>
-        requires HasReflection<T>
-    constexpr void ForEachField(const T& obj, Func&& func) {
-        std::apply([&](auto&&... fields) {
-            (func(fields.name, obj.*(fields.ptr)), ...);
-        }, ReflectionTraits<T>::fields);
+    requires HasReflection<T> constexpr void ForEachField(const T& obj, Func&& func) {
+        std::apply([&](auto&&... fields) { (func(fields.name, obj.*(fields.ptr)), ...); }, ReflectionTraits<T>::fields);
     }
 
     // =========================================================================
@@ -153,7 +145,9 @@ namespace BECore {
      */
     template <typename T>
     concept HasMethodReflection = requires {
-        { ReflectionTraits<T>::reflected } -> std::convertible_to<bool>;
+        {
+            ReflectionTraits<T>::reflected
+        } -> std::convertible_to<bool>;
         requires ReflectionTraits<T>::reflected == true;
         ReflectionTraits<T>::methods;
     };
@@ -165,8 +159,7 @@ namespace BECore {
      * @return Number of methods in the reflection traits
      */
     template <typename T>
-        requires HasMethodReflection<T>
-    constexpr size_t MethodCount() {
+    requires HasMethodReflection<T> constexpr size_t MethodCount() {
         return std::tuple_size_v<decltype(ReflectionTraits<T>::methods)>;
     }
 
@@ -182,12 +175,9 @@ namespace BECore {
      * static_assert(!HasMethod<Player>("Fly"));
      */
     template <typename T>
-        requires HasMethodReflection<T>
-    consteval bool HasMethod(eastl::string_view name) {
+    requires HasMethodReflection<T> consteval bool HasMethod(eastl::string_view name) {
         bool found = false;
-        std::apply([&](auto&&... methods) {
-            ((found = found || (methods.name == name)), ...);
-        }, ReflectionTraits<T>::methods);
+        std::apply([&](auto&&... methods) { ((found = found || (methods.name == name)), ...); }, ReflectionTraits<T>::methods);
         return found;
     }
 
@@ -202,8 +192,7 @@ namespace BECore {
      * static_assert(GetMethodInfo<Player, 0>().name == "TakeDamage");
      */
     template <typename T, size_t I>
-        requires HasMethodReflection<T> && (I < MethodCount<T>())
-    constexpr auto GetMethodInfo() {
+        requires HasMethodReflection<T> && (I < MethodCount<T>()) constexpr auto GetMethodInfo() {
         return std::get<I>(ReflectionTraits<T>::methods);
     }
 
@@ -217,10 +206,7 @@ namespace BECore {
      * static_assert(ReflectedDerivedFrom<ConsoleSink, ILogSink>);
      */
     template <typename Derived, typename Base>
-    concept ReflectedDerivedFrom =
-        HasReflection<Derived> &&
-        HasReflection<Base> &&
-        std::is_base_of_v<Base, Derived>;
+    concept ReflectedDerivedFrom = HasReflection<Derived> && HasReflection<Base> && std::is_base_of_v<Base, Derived>;
 
     /**
      * @brief Helper to iterate over all reflected methods
@@ -230,11 +216,8 @@ namespace BECore {
      * @param func Function to call for each method (receives MethodInfo)
      */
     template <typename T, typename Func>
-        requires HasMethodReflection<T>
-    constexpr void ForEachMethod(Func&& func) {
-        std::apply([&](auto&&... methods) {
-            (func(methods), ...);
-        }, ReflectionTraits<T>::methods);
+    requires HasMethodReflection<T> constexpr void ForEachMethod(Func&& func) {
+        std::apply([&](auto&&... methods) { (func(methods), ...); }, ReflectionTraits<T>::methods);
     }
 
     namespace Detail {
@@ -273,8 +256,7 @@ namespace BECore {
          * @brief Helper to find and invoke a method by name
          */
         template <typename Ret, typename T, typename... Args, typename MethodTuple, size_t... Is>
-        constexpr Ret InvokeMethodImpl(T& obj, eastl::string_view name, MethodTuple& methods,
-                             std::index_sequence<Is...>, Args&&... args) {
+        constexpr Ret InvokeMethodImpl(T& obj, eastl::string_view name, MethodTuple& methods, std::index_sequence<Is...>, Args&&... args) {
             Ret result{};
             // Fold expression with short-circuit - stops at first match
             (TryInvokeOne(std::get<Is>(methods), obj, name, result, std::forward<Args>(args)...) || ...);
@@ -285,8 +267,7 @@ namespace BECore {
          * @brief Helper for void return type
          */
         template <typename T, typename... Args, typename MethodTuple, size_t... Is>
-        constexpr void InvokeMethodVoidImpl(T& obj, eastl::string_view name, MethodTuple& methods,
-                                  std::index_sequence<Is...>, Args&&... args) {
+        constexpr void InvokeMethodVoidImpl(T& obj, eastl::string_view name, MethodTuple& methods, std::index_sequence<Is...>, Args&&... args) {
             // Fold expression with short-circuit - stops at first match
             (TryInvokeOneVoid(std::get<Is>(methods), obj, name, std::forward<Args>(args)...) || ...);
         }
@@ -311,19 +292,14 @@ namespace BECore {
      * bool result = InvokeMethod<bool>(obj, "Initialize", node);
      */
     template <typename Ret, typename T, typename... Args>
-        requires HasMethodReflection<T>
-    constexpr Ret InvokeMethod(T& obj, eastl::string_view name, Args&&... args) {
+    requires HasMethodReflection<T> constexpr Ret InvokeMethod(T& obj, eastl::string_view name, Args&&... args) {
         constexpr auto& methods = ReflectionTraits<T>::methods;
         constexpr size_t count = std::tuple_size_v<std::decay_t<decltype(methods)>>;
-        
+
         if constexpr (std::is_void_v<Ret>) {
-            Detail::InvokeMethodVoidImpl(obj, name, methods, 
-                                         std::make_index_sequence<count>{},
-                                         std::forward<Args>(args)...);
+            Detail::InvokeMethodVoidImpl(obj, name, methods, std::make_index_sequence<count>{}, std::forward<Args>(args)...);
         } else {
-            return Detail::InvokeMethodImpl<Ret>(obj, name, methods,
-                                                  std::make_index_sequence<count>{},
-                                                  std::forward<Args>(args)...);
+            return Detail::InvokeMethodImpl<Ret>(obj, name, methods, std::make_index_sequence<count>{}, std::forward<Args>(args)...);
         }
     }
 

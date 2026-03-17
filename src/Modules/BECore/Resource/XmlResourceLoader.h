@@ -7,10 +7,10 @@ namespace BECore {
 
     /**
      * @brief Resource loader for XML configuration files
-     * 
+     *
      * Loads XML files via FileSystem and creates XmlResource instances.
      * Supports async and sync loading modes.
-     * 
+     *
      * @example
      * auto loader = New<XmlResourceLoader>();
      * auto resource = co_await loader->LoadAsync("config/game.xml");
@@ -20,21 +20,21 @@ namespace BECore {
     public:
         XmlResourceLoader() = default;
         ~XmlResourceLoader() override = default;
-        
+
         /**
          * @brief Check if this loader can handle given extension
          * @param extension File extension
          * @return true if extension is ".xml"
          */
         bool CanLoad(eastl::string_view extension) const override;
-        
+
         /**
          * @brief Load XML resource asynchronously
          * @param path Virtual path to XML file
          * @return Task that resolves to XmlResource
          */
         Task<IntrusivePtr<IResource>> LoadAsync(PoolString path) override;
-        
+
         /**
          * @brief Load XML resource synchronously
          * @param path Virtual path to XML file

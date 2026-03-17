@@ -1,7 +1,5 @@
 #pragma once
 
-
-
 #include <cstddef>
 
 namespace BECore {
@@ -101,7 +99,7 @@ namespace BECore {
                 auto diff = static_cast<std::ptrdiff_t>(seq) - static_cast<std::ptrdiff_t>(_readHead + 1);
 
                 if (diff != 0) {
-                    break; // Entry not yet ready (or buffer empty)
+                    break;  // Entry not yet ready (or buffer empty)
                 }
 
                 callback(cell.entry);
@@ -139,4 +137,4 @@ namespace BECore {
         Cell _buffer[Capacity];
     };
 
-} // namespace BECore
+}  // namespace BECore

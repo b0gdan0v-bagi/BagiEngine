@@ -10,5 +10,4 @@ namespace BECore {
     void Delete(T* ptr) {
         delete ptr;
     }
-}
-
+}  // namespace BECore

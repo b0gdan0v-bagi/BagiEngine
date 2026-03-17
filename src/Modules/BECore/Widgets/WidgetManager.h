@@ -15,7 +15,6 @@ namespace BECore {
         void CreateWidgets();
 
     private:
-
         eastl::vector<IntrusivePtr<IWidget>> _widgets;
     };
 

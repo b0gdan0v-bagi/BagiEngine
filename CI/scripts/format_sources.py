@@ -24,7 +24,6 @@ DEFAULT_IGNORE_PATTERNS = [
     "external/",
     "build/",
     ".venv/",
-    "src/Modules/BECore",
     "src/Modules/EABase",
     "src/Modules/EnTT",
     "src/Modules/fmt",

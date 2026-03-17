@@ -1,6 +1,5 @@
 #include "FormatTest.h"
 
-
 #include <Generated/FormatTest.gen.hpp>
 
 namespace BECore::Tests {
@@ -41,7 +40,7 @@ namespace BECore::Tests {
 
         // 7. User-defined literal _format tests
         using namespace BECore::Literals;
-        
+
         eastl::string s5 = "Hello, {}!"_format("World");
         ASSERT(s5 == "Hello, World!");
 

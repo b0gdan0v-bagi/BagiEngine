@@ -8,12 +8,12 @@ namespace BECore {
 
     /**
      * @brief Manager for loading and caching all XML configurations
-     * 
+     *
      * Scans config/ directory recursively and loads all XML files in parallel
      * using TaskManager. Provides centralized access to all configs by name.
-     * 
+     *
      * @note Access via CoreManager::GetConfigManager()
-     * 
+     *
      * @example
      * // Get config by name (without extension)
      * auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
@@ -34,7 +34,7 @@ namespace BECore {
 
         /**
          * @brief Initialize - scan and load all XML files from config/
-         * 
+         *
          * Uses TaskManager for parallel loading.
          * Blocks until all configs are loaded.
          * Safe to call multiple times - subsequent calls are no-ops.
@@ -112,8 +112,7 @@ namespace BECore {
          * @param dir Directory to scan
          * @param filesToLoad Output vector of (path, name) pairs
          */
-        void ScanDirectory(const std::filesystem::path& dir,
-                          eastl::vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const;
+        void ScanDirectory(const std::filesystem::path& dir, eastl::vector<eastl::pair<std::filesystem::path, PoolString>>& filesToLoad) const;
 
         /**
          * @brief Load single config file asynchronously

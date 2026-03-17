@@ -21,4 +21,3 @@ namespace BECore {
         std::function<void()> _onExit;
     };
 }  // namespace BECore
-

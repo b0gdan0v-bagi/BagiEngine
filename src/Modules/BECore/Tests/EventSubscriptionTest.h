@@ -13,7 +13,7 @@ namespace BECore::Tests {
 
     namespace TestEvents {
         struct SimpleEvent : public EventBase<SimpleEvent> {};
-        
+
         struct DataEvent : public EventBase<DataEvent> {
             int value = 0;
             constexpr explicit DataEvent(int v) : value(v) {}
@@ -26,6 +26,7 @@ namespace BECore::Tests {
 
     class SimpleSubscriber : public SubscriptionHolder {
         friend class EventSubscriptionTest;
+
     public:
         int callCount = 0;
         int lastValue = 0;

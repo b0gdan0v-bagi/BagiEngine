@@ -1,16 +1,16 @@
 #pragma once
 
-#include <BECore/Tests/ITest.h>
+#include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/XmlResource.h>
-#include <BECore/Resource/ResourceHandle.h>
+#include <BECore/Tests/ITest.h>
 #include <TaskSystem/Task.h>
 
 namespace BECore::Tests {
 
     /**
      * @brief Tests for ResourceManager functionality
-     * 
+     *
      * Tests async/sync loading, caching, and serialization integration.
      */
     class ResourceManagerTest : public ITest {
@@ -20,7 +20,7 @@ namespace BECore::Tests {
         ~ResourceManagerTest() override = default;
 
         bool Run() override;
-        
+
         eastl::string_view GetName() override {
             return GetStaticTypeName();
         }
@@ -35,10 +35,10 @@ namespace BECore::Tests {
             static_assert(EnumUtils<ResourceState>::ToString(ResourceState::Loading) == "Loading");
             static_assert(EnumUtils<ResourceState>::ToString(ResourceState::Unloaded) == "Unloaded");
             static_assert(EnumUtils<ResourceState>::ToString(ResourceState::Failed) == "Failed");
-            
+
             // Validate ResourceHandle constraints
             static_assert(std::derived_from<XmlResource, IResource>);
-            
+
             // Validate resource handle can be constructed
             static_assert(std::is_constructible_v<ResourceHandle<XmlResource>>);
         }

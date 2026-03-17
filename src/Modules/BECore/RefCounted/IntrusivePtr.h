@@ -2,8 +2,10 @@
 
 namespace BECore {
 
-    template <typename T> class IntrusivePtrNonAtomic {
-        template <typename U> friend class IntrusivePtrNonAtomic;
+    template <typename T>
+    class IntrusivePtrNonAtomic {
+        template <typename U>
+        friend class IntrusivePtrNonAtomic;
 
     public:
         IntrusivePtrNonAtomic() = default;
@@ -24,13 +26,15 @@ namespace BECore {
             other._ptr = nullptr;
         }
 
-        template <typename U> IntrusivePtrNonAtomic(const IntrusivePtrNonAtomic<U>& other) : _ptr(static_cast<T*>(other._ptr)) {
+        template <typename U>
+        IntrusivePtrNonAtomic(const IntrusivePtrNonAtomic<U>& other) : _ptr(static_cast<T*>(other._ptr)) {
             if (_ptr != nullptr) {
                 _ptr->AddRef();
             }
         }
 
-        template <typename U> IntrusivePtrNonAtomic(IntrusivePtrNonAtomic<U>&& other) noexcept : _ptr(other._ptr) {
+        template <typename U>
+        IntrusivePtrNonAtomic(IntrusivePtrNonAtomic<U>&& other) noexcept : _ptr(other._ptr) {
             static_assert(std::is_base_of_v<T, U>, "U must be derived from T");
             other._ptr = nullptr;
         }
@@ -78,7 +82,8 @@ namespace BECore {
             return *this;
         }
 
-        template <typename U> IntrusivePtrNonAtomic& operator=(const IntrusivePtrNonAtomic<U>& other) {
+        template <typename U>
+        IntrusivePtrNonAtomic& operator=(const IntrusivePtrNonAtomic<U>& other) {
             static_assert(std::is_base_of_v<T, U> || std::is_same_v<T, U>, "T must be base of U or same as U");
             T* ptr = static_cast<T*>(other._ptr);
             if (ptr != nullptr) {
@@ -91,7 +96,8 @@ namespace BECore {
             return *this;
         }
 
-        template <typename U> IntrusivePtrNonAtomic& operator=(IntrusivePtrNonAtomic<U>&& other) noexcept {
+        template <typename U>
+        IntrusivePtrNonAtomic& operator=(IntrusivePtrNonAtomic<U>&& other) noexcept {
             static_assert(std::is_base_of_v<T, U>, "U must be derived from T");
             if (_ptr != nullptr) {
                 _ptr->ReleaseRef();
@@ -173,11 +179,13 @@ namespace BECore {
         T* _ptr = nullptr;
     };
 
-template <typename T> class IntrusivePtrAtomic {
-    template <typename U> friend class IntrusivePtrAtomic;
+    template <typename T>
+    class IntrusivePtrAtomic {
+        template <typename U>
+        friend class IntrusivePtrAtomic;
 
-public:
-    IntrusivePtrAtomic() = default;
+    public:
+        IntrusivePtrAtomic() = default;
 
         explicit IntrusivePtrAtomic(T* ptr) : _ptr(ptr) {
             if (_ptr != nullptr) {
@@ -195,15 +203,17 @@ public:
             other._ptr = nullptr;
         }
 
-        template <typename U> IntrusivePtrAtomic(const IntrusivePtrAtomic<U>& other) : _ptr(other.Get()) {
+        template <typename U>
+        IntrusivePtrAtomic(const IntrusivePtrAtomic<U>& other) : _ptr(other.Get()) {
             if (_ptr != nullptr) {
                 _ptr->AddRef();
             }
         }
 
-    template <typename U> IntrusivePtrAtomic(IntrusivePtrAtomic<U>&& other) noexcept : _ptr(other._ptr) {
-        other._ptr = nullptr;  // Don't release - just transfer ownership
-    }
+        template <typename U>
+        IntrusivePtrAtomic(IntrusivePtrAtomic<U>&& other) noexcept : _ptr(other._ptr) {
+            other._ptr = nullptr;  // Don't release - just transfer ownership
+        }
 
         ~IntrusivePtrAtomic() {
             Reset();
@@ -244,7 +254,8 @@ public:
             return *this;
         }
 
-        template <typename U> IntrusivePtrAtomic& operator=(const IntrusivePtrAtomic<U>& other) {
+        template <typename U>
+        IntrusivePtrAtomic& operator=(const IntrusivePtrAtomic<U>& other) {
             if (other.Get() != nullptr) {
                 other.Get()->AddRef();
             }
@@ -255,14 +266,15 @@ public:
             return *this;
         }
 
-    template <typename U> IntrusivePtrAtomic& operator=(IntrusivePtrAtomic<U>&& other) noexcept {
-        if (_ptr != nullptr) {
-            _ptr->ReleaseRef();
+        template <typename U>
+        IntrusivePtrAtomic& operator=(IntrusivePtrAtomic<U>&& other) noexcept {
+            if (_ptr != nullptr) {
+                _ptr->ReleaseRef();
+            }
+            _ptr = other._ptr;
+            other._ptr = nullptr;  // Don't release - just transfer ownership
+            return *this;
         }
-        _ptr = other._ptr;
-        other._ptr = nullptr;  // Don't release - just transfer ownership
-        return *this;
-    }
 
         T& operator*() const {
             assert(_ptr != nullptr);
@@ -326,7 +338,8 @@ public:
         T* _ptr = nullptr;
     };
 
-    template <typename T> IntrusivePtrNonAtomic<T> MakeIntrusiveNonAtomic(T* ptr) {
+    template <typename T>
+    IntrusivePtrNonAtomic<T> MakeIntrusiveNonAtomic(T* ptr) {
         return IntrusivePtrNonAtomic<T>(ptr);
     }
 
@@ -335,7 +348,8 @@ public:
         return IntrusivePtrNonAtomic<T>(new T(std::forward<Args>(args)...));
     }
 
-    template <typename T> IntrusivePtrAtomic<T> MakeIntrusiveAtomic(T* ptr) {
+    template <typename T>
+    IntrusivePtrAtomic<T> MakeIntrusiveAtomic(T* ptr) {
         return IntrusivePtrAtomic<T>(ptr);
     }
 
@@ -344,9 +358,11 @@ public:
         return IntrusivePtrAtomic<T>(new T(std::forward<Args>(args)...));
     }
 
-    template <typename T> using IntrusivePtr = IntrusivePtrNonAtomic<T>;
+    template <typename T>
+    using IntrusivePtr = IntrusivePtrNonAtomic<T>;
 
-    template <typename T> IntrusivePtr<T> MakeIntrusive(T* ptr) {
+    template <typename T>
+    IntrusivePtr<T> MakeIntrusive(T* ptr) {
         return IntrusivePtr<T>(ptr);
     }
 
@@ -355,4 +371,3 @@ public:
         return IntrusivePtr<T>(new T(std::forward<Args>(args)...));
     }
 }  // namespace BECore
-
