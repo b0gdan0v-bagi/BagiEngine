@@ -94,11 +94,11 @@ namespace BECore {
         requires IsIntrusivePtr<Ptr> void DeserializeIntrusiveBody(Archive& d, Ptr& ptr) {
             using T = typename IntrusivePtrPointeeType<Ptr>::type;
             if (!ptr) {
-                if constexpr (HasFactory<T>) {
-                    eastl::string typeStr;
-                    if (d.ReadAttribute("type", typeStr))
-                        ptr = AbstractFactory<T>::GetInstance().Create(eastl::string_view(typeStr.data(), typeStr.size()));
+                eastl::string typeStr;
+                if (d.ReadAttribute("type", typeStr)) {
+                    ptr = AbstractFactory<T>::GetInstance().Create(eastl::string_view(typeStr.data(), typeStr.size()));
                 }
+
                 if (!ptr) {
                     if constexpr (!std::is_abstract_v<T>)
                         ptr = New<T>();
@@ -316,7 +316,8 @@ namespace BECore {
             vec.reserve(count);
             for (size_t i = 0; i < count; ++i) {
                 if (d.BeginArrayElement()) {
-                    vec.push_back(Detail::MakeElement<Elem>(d));
+                    const auto elem = Detail::MakeElement<Elem>(d);
+                    vec.push_back(elem);
                     d.EndArrayElement();
                 }
             }

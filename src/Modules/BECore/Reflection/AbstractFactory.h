@@ -95,6 +95,14 @@ namespace BECore {
         }
 
     private:
+        static constexpr eastl::string_view _resolveDebugName() {
+            if constexpr (HasReflection<BaseType>) {
+                return ReflectionTraits<BaseType>::name;
+            } else {
+                return {};
+            }
+        }
+
         AbstractFactory() = default;
 
         BasePtr _findAndCreate(uint64_t hash) const {
@@ -103,6 +111,7 @@ namespace BECore {
             return {};
         }
 
+        eastl::string_view _debugName = _resolveDebugName();
         eastl::hash_map<uint64_t, CreatorFunc> _creators;
         eastl::vector<ClassMeta> _metas;
     };
