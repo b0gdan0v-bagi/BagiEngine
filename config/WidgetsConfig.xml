@@ -13,5 +13,7 @@
       type="ImGuiWidget" />
     <widget
       type="ConfigEditorWidget" />
+    <widget
+      type="SceneEditorWidget" />
   </widgets>
 </root>

@@ -30,7 +30,9 @@ namespace BECore {
         }
 
         PoolString GetName() const;
+        void SetName(PoolString name);
         entt::entity GetEntity() const;
+        const eastl::vector<IntrusivePtr<IComponent>>& GetComponents() const;
 
     private:
         friend class Scene;

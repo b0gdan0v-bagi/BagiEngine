@@ -84,8 +84,16 @@ namespace BECore {
         return _name;
     }
 
+    void SceneNode::SetName(PoolString name) {
+        _name = name;
+    }
+
     entt::entity SceneNode::GetEntity() const {
         return _entity;
+    }
+
+    const eastl::vector<IntrusivePtr<IComponent>>& SceneNode::GetComponents() const {
+        return _components;
     }
 
 }  // namespace BECore
