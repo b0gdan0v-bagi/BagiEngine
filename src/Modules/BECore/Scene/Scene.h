@@ -16,6 +16,12 @@ namespace BECore {
         void Update();
         void Draw();
 
+        /**
+         * @brief Sync the runtime hierarchy back into the serializable _nodes field.
+         *        Call before saving so that nodes added at runtime are included.
+         */
+        void PrepareForSave();
+
         entt::registry& GetRegistry();
         SceneNode& GetRootNode();
         PoolString GetName() const;

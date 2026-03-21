@@ -22,6 +22,40 @@
               a="255" />
           </components>
         </node>
+        <node
+          name="NewNode">
+          <components>
+            <component
+              type="TransformComponent"
+              x="85.0999985"
+              y="24.2000008"
+              width="19"
+              height="233" />
+            <component
+              type="QuadRendererComponent"
+              r="255"
+              g="160"
+              b="0"
+              a="255" />
+          </components>
+        </node>
+        <node
+          name="try">
+          <components>
+            <component
+              type="TransformComponent"
+              x="150.600006"
+              y="21.3999996"
+              width="20.2000008"
+              height="20.1000004" />
+            <component
+              type="QuadRendererComponent"
+              r="159"
+              g="0"
+              b="0"
+              a="255" />
+          </components>
+        </node>
       </nodes>
     </scene>
   </scenes>

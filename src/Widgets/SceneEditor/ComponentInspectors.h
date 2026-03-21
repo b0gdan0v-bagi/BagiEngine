@@ -10,9 +10,9 @@ namespace BECore {
      * Dispatches to the correct renderer based on component type.
      * Changes are applied directly to the component (live editing).
      *
-     * @param component The component to inspect and edit
+     * @param component The component to inspect and edit (must not be null)
      * @return True if any field was changed
      */
-    bool RenderComponentInspector(IntrusivePtr<IComponent> component);
+    bool RenderComponentInspector(IComponent* component);
 
 }  // namespace BECore

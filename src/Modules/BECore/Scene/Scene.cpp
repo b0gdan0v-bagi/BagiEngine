@@ -37,6 +37,12 @@ namespace BECore {
         return _name;
     }
 
+    void Scene::PrepareForSave() {
+        if (_rootNode) {
+            _nodes = _rootNode->_children;
+        }
+    }
+
     IntrusivePtr<SceneNode> Scene::CreateNode(PoolString name, SceneNode* parent) {
         auto node = BECore::New<SceneNode>();
         node->_name = name;

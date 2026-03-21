@@ -2,7 +2,10 @@
 
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Widgets/IWidget.h>
-#include <EASTL/string.h>
+
+namespace pugi {
+    class xml_node;
+}
 
 namespace BECore {
 
@@ -27,11 +30,10 @@ namespace BECore {
 
     private:
         /**
-         * @brief Recursively render the hierarchy tree starting from a node
-         * @param node The node to render and its children
-         * @param nodeId Unique identifier for ImGui tree node
+         * @brief Recursively render the hierarchy tree starting from a node.
+         *        Uses the node pointer as the ImGui tree node ID.
          */
-        void RenderHierarchyNode(SceneNode& node, int nodeId);
+        void RenderHierarchyNode(SceneNode& node);
 
         /**
          * @brief Render the inspector panel for the selected node
@@ -39,20 +41,26 @@ namespace BECore {
         void RenderInspector();
 
         /**
-         * @brief Show a popup to add a new child node
+         * @brief Render the "Add Node" modal popup
          */
         void RenderAddNodePopup();
 
         /**
-         * @brief Show a popup to add a new component to the selected node
+         * @brief Render the "Add Component" modal popup
          */
         void RenderAddComponentPopup();
 
+        /**
+         * @brief Serialize the active scene to SceneConfig.xml via ConfigManager
+         */
+        void SaveScene();
+
         SceneNode* _selectedNode = nullptr;
-        eastl::string _nodeNameBuffer;
+        SceneNode* _contextMenuTargetNode = nullptr;  // node to add a child to (null = root)
+        char _nodeNameBuffer[256] = {};
         bool _showAddNodePopup = false;
         bool _showAddComponentPopup = false;
-        int _hierarchyNodeCounter = 0;
+        bool _isDirty = false;
     };
 
 }  // namespace BECore
