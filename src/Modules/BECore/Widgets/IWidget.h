@@ -13,6 +13,7 @@ namespace BECore {
         BE_FUNCTION virtual bool Initialize(IDeserializer& deserializer) = 0;
 
         BE_FUNCTION virtual void Update() = 0;
+        BE_FUNCTION virtual void DrawScreen() {}
         BE_FUNCTION virtual void Draw() = 0;
     };
 

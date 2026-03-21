@@ -11,6 +11,7 @@ namespace BECore {
 
         void RegisterWidget(IntrusivePtr<IWidget> widget);
         void UpdateAll() const;
+        void DrawScreenAll() const;
         void DrawAll() const;
         void CreateWidgets();
 

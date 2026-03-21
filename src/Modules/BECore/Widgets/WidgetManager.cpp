@@ -21,6 +21,14 @@ namespace BECore {
         }
     }
 
+    void WidgetManager::DrawScreenAll() const {
+        for (auto& widget : _widgets) {
+            if (widget) {
+                widget->DrawScreen();
+            }
+        }
+    }
+
     void WidgetManager::DrawAll() const {
         for (auto& widget : _widgets) {
             if (widget) {

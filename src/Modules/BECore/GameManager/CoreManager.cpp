@@ -53,6 +53,7 @@ namespace BECore {
         _widgetManager.UpdateAll();
         _sceneManager->UpdateAll();
         EventsQueueRegistry::UpdateAll();
+        _widgetManager.DrawScreenAll();
         _widgetManager.DrawAll();
         _sceneManager->DrawAll();
     }
