@@ -1,5 +1,6 @@
 #include "ClickableComponent.h"
 
+#include <BECore/Input/ActionsLibrary.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/SceneNode.h>
 #include <CoreSDL/SDLEvents.h>
@@ -9,6 +10,9 @@
 namespace BECore {
 
     void ClickableComponent::OnAttached() {
+        if (!_actionName.Empty()) {
+            ActionsLibrary::GetInstance().Add(_actionName);
+        }
         Subscribe<SDLEvents::MouseButtonDownEvent, &ClickableComponent::OnMouseButtonDown>(this);
     }
 

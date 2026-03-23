@@ -3,8 +3,11 @@
 #include "ImGuiPropertyVisitor.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Input/ActionsLibrary.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Resource/TextureLibrary.h>
+#include <BECore/Scene/Components/ChangeToRandomColorDebugComponent.h>
+#include <BECore/Scene/Components/ClickableComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <EASTL/unordered_map.h>
 #include <imgui.h>
@@ -136,6 +139,76 @@ namespace BECore {
 
         const bool _registeredSpriteRenderer = [] {
             RegisterComponentInspector<SpriteRendererComponent>(eastl::function<bool(SpriteRendererComponent&)>(InspectSpriteRenderer));
+            return true;
+        }();
+
+        // -----------------------------------------------------------------
+        // Shared helper: action combo + optional "Add new action" input
+        // noneLabel — displayed when current is empty ("(none)" / "(any)")
+        // showAdd   — show text field + button to register a new action
+        // -----------------------------------------------------------------
+        bool ActionCombo(const char* label, PoolString& current,
+                         const char* noneLabel, bool showAdd) {
+            const auto& entries = ActionsLibrary::GetInstance().GetAll();
+            bool changed = false;
+
+            int currentIndex = -1;
+            for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
+                if (entries[i] == current) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+
+            const char* preview = currentIndex >= 0 ? entries[currentIndex].CStr() : noneLabel;
+            if (ImGui::BeginCombo(label, preview)) {
+                if (ImGui::Selectable(noneLabel, currentIndex < 0)) {
+                    current = PoolString{};
+                    changed = true;
+                }
+                for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
+                    const bool isSelected = (currentIndex == i);
+                    if (ImGui::Selectable(entries[i].CStr(), isSelected)) {
+                        current = entries[i];
+                        changed = true;
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            if (showAdd) {
+                static char newActionBuf[128] = {};
+                ImGui::InputText("##new_action", newActionBuf, sizeof(newActionBuf));
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Add")) {
+                    if (newActionBuf[0] != '\0') {
+                        ActionsLibrary::GetInstance().Add(PoolString::Intern(newActionBuf));
+                        newActionBuf[0] = '\0';
+                    }
+                }
+            }
+
+            return changed;
+        }
+
+        bool InspectClickable(ClickableComponent& c) {
+            return ActionCombo("Action##clickable_action", c._actionName, "(none)", true);
+        }
+
+        const bool _registeredClickable = [] {
+            RegisterComponentInspector<ClickableComponent>(eastl::function<bool(ClickableComponent&)>(InspectClickable));
+            return true;
+        }();
+
+        bool InspectChangeToRandomColor(ChangeToRandomColorDebugComponent& c) {
+            return ActionCombo("Filter##random_color_filter", c._actionFilter, "(any)", false);
+        }
+
+        const bool _registeredChangeToRandomColor = [] {
+            RegisterComponentInspector<ChangeToRandomColorDebugComponent>(eastl::function<bool(ChangeToRandomColorDebugComponent&)>(InspectChangeToRandomColor));
             return true;
         }();
 
