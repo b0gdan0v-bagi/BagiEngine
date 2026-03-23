@@ -4,6 +4,7 @@
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <CoreSDL/SDLMainWindow.h>
+#include <CoreVulkan/VulkanTexture.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/VulkanRendererBackend.gen.hpp>
@@ -62,6 +63,10 @@ namespace BECore {
             return false;
         }
 
+        if (!_texturePipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass())) {
+            return false;
+        }
+
         if (!CreateCommandPool()) {
             return false;
         }
@@ -108,6 +113,7 @@ namespace BECore {
         }
 
         _rectPipeline.Destroy(vkDevice);
+        _texturePipeline.Destroy(vkDevice);
         _swapchain.Destroy(_device);
 
         // Surface must be destroyed before the instance
@@ -266,13 +272,40 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) {
-        (void)texture;
-        (void)srcRect;
-        (void)dstX;
-        (void)dstY;
-        (void)dstW;
-        (void)dstH;
-        // TODO: textured quad / blit via Vulkan (SDLTexture exposes VkImage or similar when wired)
+        if (!_frameActive) {
+            return;
+        }
+
+        auto* vkTexture = dynamic_cast<VulkanTexture*>(&texture);
+        if (!vkTexture || vkTexture->GetDescriptorSet() == VK_NULL_HANDLE) {
+            return;
+        }
+
+        float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
+        if (srcRect && !srcRect->IsEmpty()) {
+            const float texW = vkTexture->GetWidth();
+            const float texH = vkTexture->GetHeight();
+            if (texW > 0.0f && texH > 0.0f) {
+                u0 = srcRect->x / texW;
+                v0 = srcRect->y / texH;
+                u1 = (srcRect->x + srcRect->w) / texW;
+                v1 = (srcRect->y + srcRect->h) / texH;
+            }
+        }
+
+        VulkanTexturePipeline::PushConstants pc{};
+        pc.dstX = dstX;
+        pc.dstY = dstY;
+        pc.dstW = dstW;
+        pc.dstH = dstH;
+        pc.u0 = u0;
+        pc.v0 = v0;
+        pc.u1 = u1;
+        pc.v1 = v1;
+        pc.screenW = static_cast<float>(_swapchain.GetExtent().width);
+        pc.screenH = static_cast<float>(_swapchain.GetExtent().height);
+
+        _texturePipeline.Draw(_commandBuffers[_currentFrame], vkTexture->GetDescriptorSet(), pc, _swapchain.GetExtent());
     }
 
     void VulkanRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {

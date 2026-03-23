@@ -10,7 +10,12 @@
 namespace BECore {
 
     bool SDLTextureLoader::CanLoad(eastl::string_view extension) const {
-        return extension == ".bmp" || extension == ".png" || extension == ".jpg" || extension == ".jpeg";
+        if (extension != ".bmp" && extension != ".png" && extension != ".jpg" && extension != ".jpeg") {
+            return false;
+        }
+        // Only handle textures when the active renderer is the SDL backend.
+        const auto& renderer = CoreManager::GetRenderer();
+        return renderer && dynamic_cast<SDLRendererBackend*>(renderer.Get()) != nullptr;
     }
 
     Task<IntrusivePtr<IResource>> SDLTextureLoader::LoadAsync(PoolString path) {

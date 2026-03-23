@@ -4,6 +4,7 @@
 #include <CoreVulkan/VulkanDevice.h>
 #include <CoreVulkan/VulkanRectPipeline.h>
 #include <CoreVulkan/VulkanSwapchain.h>
+#include <CoreVulkan/VulkanTexturePipeline.h>
 #include <EASTL/vector.h>
 #include <vulkan/vulkan.h>
 
@@ -68,6 +69,16 @@ namespace BECore {
             return kMaxFramesInFlight;
         }
 
+        VkCommandPool GetCommandPool() const {
+            return _commandPool;
+        }
+        VulkanTexturePipeline& GetTexturePipeline() {
+            return _texturePipeline;
+        }
+        const VulkanDevice& GetVulkanDevice() const {
+            return _device;
+        }
+
     private:
         bool CreateCommandPool();
         bool CreateCommandBuffers();
@@ -85,6 +96,7 @@ namespace BECore {
         VulkanDevice _device;
         VulkanSwapchain _swapchain;
         VulkanRectPipeline _rectPipeline;
+        VulkanTexturePipeline _texturePipeline;
 
         VkSurfaceKHR _surface = VK_NULL_HANDLE;
 

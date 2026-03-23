@@ -1,11 +1,9 @@
 #include "VulkanDevice.h"
 
 #include <BECore/Logger/LogEvent.h>
-
-#include <SDL3/SDL_vulkan.h>
-
-#include <EASTL/vector.h>
 #include <EASTL/string.h>
+#include <EASTL/vector.h>
+#include <SDL3/SDL_vulkan.h>
 
 namespace BECore {
 
@@ -57,19 +55,19 @@ namespace BECore {
         eastl::vector<const char*> extensions(sdlExts, sdlExts + sdlExtCount);
 
         VkApplicationInfo appInfo{};
-        appInfo.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName   = "BagiEngine";
+        appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        appInfo.pApplicationName = "BagiEngine";
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.pEngineName        = "BagiEngine";
-        appInfo.engineVersion      = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion         = VK_API_VERSION_1_3;
+        appInfo.pEngineName = "BagiEngine";
+        appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+        appInfo.apiVersion = VK_API_VERSION_1_3;
 
         VkInstanceCreateInfo createInfo{};
-        createInfo.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        createInfo.pApplicationInfo        = &appInfo;
-        createInfo.enabledExtensionCount   = static_cast<uint32_t>(extensions.size());
+        createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        createInfo.pApplicationInfo = &appInfo;
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
-        createInfo.enabledLayerCount       = 0;
+        createInfo.enabledLayerCount = 0;
 
         return vkCreateInstance(&createInfo, nullptr, &_instance) == VK_SUCCESS;
     }
@@ -94,12 +92,12 @@ namespace BECore {
             vkGetPhysicalDeviceProperties(device, &props);
             if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
                 _physicalDevice = device;
-                _queueFamilies  = FindQueueFamilies(device, surface);
+                _queueFamilies = FindQueueFamilies(device, surface);
                 LOG_INFO(Format("Vulkan: Selected discrete GPU: {}", props.deviceName));
                 return true;
             }
             if (fallback == VK_NULL_HANDLE) {
-                fallback       = device;
+                fallback = device;
                 _queueFamilies = FindQueueFamilies(device, surface);
             }
         }
@@ -115,16 +113,16 @@ namespace BECore {
     }
 
     bool VulkanDevice::CreateLogicalDevice() {
-        const uint32_t gfx     = _queueFamilies.graphicsFamily;
+        const uint32_t gfx = _queueFamilies.graphicsFamily;
         const uint32_t present = _queueFamilies.presentFamily;
 
         eastl::vector<VkDeviceQueueCreateInfo> queueInfos;
         const float priority = 1.0f;
 
         VkDeviceQueueCreateInfo queueInfo{};
-        queueInfo.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
         queueInfo.queueFamilyIndex = gfx;
-        queueInfo.queueCount       = 1;
+        queueInfo.queueCount = 1;
         queueInfo.pQueuePriorities = &priority;
         queueInfos.push_back(queueInfo);
 
@@ -137,24 +135,23 @@ namespace BECore {
         VkPhysicalDeviceFeatures features{};
 
         VkDeviceCreateInfo createInfo{};
-        createInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.queueCreateInfoCount    = static_cast<uint32_t>(queueInfos.size());
-        createInfo.pQueueCreateInfos       = queueInfos.data();
-        createInfo.enabledExtensionCount   = static_cast<uint32_t>(std::size(kDeviceExtensions));
+        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueInfos.size());
+        createInfo.pQueueCreateInfos = queueInfos.data();
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(std::size(kDeviceExtensions));
         createInfo.ppEnabledExtensionNames = kDeviceExtensions;
-        createInfo.pEnabledFeatures        = &features;
+        createInfo.pEnabledFeatures = &features;
 
         if (vkCreateDevice(_physicalDevice, &createInfo, nullptr, &_device) != VK_SUCCESS) {
             return false;
         }
 
-        vkGetDeviceQueue(_device, gfx,     0, &_graphicsQueue);
+        vkGetDeviceQueue(_device, gfx, 0, &_graphicsQueue);
         vkGetDeviceQueue(_device, present, 0, &_presentQueue);
         return true;
     }
 
-    VulkanQueueFamilyIndices VulkanDevice::FindQueueFamilies(
-        VkPhysicalDevice device, VkSurfaceKHR surface) const {
+    VulkanQueueFamilyIndices VulkanDevice::FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) const {
 
         VulkanQueueFamilyIndices indices;
 
@@ -217,6 +214,50 @@ namespace BECore {
         vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
 
         return formatCount > 0 && presentModeCount > 0;
+    }
+
+    uint32_t VulkanDevice::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const {
+        VkPhysicalDeviceMemoryProperties memProps{};
+        vkGetPhysicalDeviceMemoryProperties(_physicalDevice, &memProps);
+
+        for (uint32_t i = 0; i < memProps.memoryTypeCount; ++i) {
+            if ((typeFilter & (1u << i)) && (memProps.memoryTypes[i].propertyFlags & properties) == properties) {
+                return i;
+            }
+        }
+        return UINT32_MAX;
+    }
+
+    VkCommandBuffer VulkanDevice::BeginSingleTimeCommands(VkCommandPool pool) const {
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandPool = pool;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer cmd = VK_NULL_HANDLE;
+        vkAllocateCommandBuffers(_device, &allocInfo, &cmd);
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(cmd, &beginInfo);
+
+        return cmd;
+    }
+
+    void VulkanDevice::EndSingleTimeCommands(VkCommandPool pool, VkCommandBuffer cmd) const {
+        vkEndCommandBuffer(cmd);
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmd;
+
+        vkQueueSubmit(_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(_graphicsQueue);
+
+        vkFreeCommandBuffers(_device, pool, 1, &cmd);
     }
 
 }  // namespace BECore

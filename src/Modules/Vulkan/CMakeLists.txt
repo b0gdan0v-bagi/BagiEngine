@@ -140,11 +140,15 @@ endmacro()
 
 compile_shader(vert rect kRectVertSpv)
 compile_shader(frag rect kRectFragSpv)
+compile_shader(vert texture kTextureVertSpv)
+compile_shader(frag texture kTextureFragSpv)
 
 add_custom_target(VulkanShaders
     DEPENDS
         "${_SHADER_BIN_DIR}/rect_vert_spv.h"
         "${_SHADER_BIN_DIR}/rect_frag_spv.h"
+        "${_SHADER_BIN_DIR}/texture_vert_spv.h"
+        "${_SHADER_BIN_DIR}/texture_frag_spv.h"
 )
 set_target_properties(VulkanShaders PROPERTIES FOLDER "Modules")
 add_dependencies(VulkanModule VulkanShaders)
