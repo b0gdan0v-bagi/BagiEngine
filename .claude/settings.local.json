@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /d/AHobbyProjects/BagiEngine -type d -name *[Tt]est* -o -name *[Gg]test*)",
+      "Bash(xargs basename:*)"
+    ]
+  }
+}
