@@ -34,6 +34,7 @@ These are included directly via `add_subdirectory()`:
 | Library | Path | Type |
 |---------|------|------|
 | SDL3 | `external/SDL/` | Shared library |
+| SDL_image | `external/SDL_image/` | Image loading dependency for texture pipeline |
 
 ### Dependency Loading Order in Root CMakeLists.txt
 
@@ -43,6 +44,9 @@ add_subdirectory(src/Modules/EABase)
 
 # 2. SDL3 (git submodule)
 add_subdirectory(external/SDL)
+
+# 2.1 SDL_image (git submodule, after SDL)
+add_subdirectory(external/SDL_image)
 
 # 3. Other vendored libraries
 add_subdirectory(src/Modules/EnTT)
@@ -90,6 +94,11 @@ BECoreModule must be first (provides PCH):
 - MSVC: `/FI"BECore/pch.h"` for force include
 - MSVC: `/W4` warnings
 - GCC/Clang: `-Wall -Wextra`
+
+## Dependency Notes
+
+- Keep SDL_image wired after SDL in root dependency setup to avoid missing SDL linkage during texture-related builds.
+- Document new rendering dependencies in CMake when introducing asset/texture features to prevent drift between code and build config.
 
 ## Output Directory Structure
 

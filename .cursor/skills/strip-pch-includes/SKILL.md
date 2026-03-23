@@ -61,3 +61,10 @@ uv run python CI/scripts/strip_pch_includes.py --all --dir src/Widgets
 | Folder  | **All** = entire `src/` and `config/`; **Choose folder** = only that path (e.g. `src/Widgets`). |
 | Scope   | **Changed** = only git-modified files; **All files** = all matching sources in the folder.     |
 | Dry run | If set, only reports what would be removed; does not write files.      |
+
+## Recommended Execution Order
+
+1. Dry-run first (`--dry-run --changed` or `--dry-run --all --dir <subfolder>`).
+2. Apply to a bounded scope (single module or folder).
+3. Validate build for that scope.
+4. Expand to wider scope only after successful verification.

@@ -45,3 +45,26 @@ File: `config/WidgetsConfig.xml`
 ## ImGui Widgets
 
 Use `ImGui::Begin()`/`ImGui::End()` in `Draw()` method for ImGui-based widgets.
+
+## Scene Editor Conventions
+
+Scene editor code is split across two focused layers:
+
+- `SceneEditorWidget` - orchestration layer (selection flow, scene-level actions, widget window structure).
+- `ComponentInspectors` - field editing layer (component-specific controls and value edits).
+
+### Responsibilities
+
+- Keep selection and scene navigation logic in `SceneEditorWidget`.
+- Keep per-component UI and property widgets in `ComponentInspectors`.
+- Avoid duplicating component edit logic in `SceneEditorWidget`.
+
+### Config and Data Source
+
+- Scene editor behavior must stay aligned with `config/SceneConfig.xml`.
+- New editable scene/component fields should be represented in config and then surfaced through inspectors.
+
+### Practical Rules
+
+- Prefer adding a new inspector handler over adding ad-hoc inline ImGui fields in the main scene widget.
+- Maintain clear Update/Draw separation even for editor widgets (state changes in update path, rendering in draw path).

@@ -8,7 +8,7 @@ BagiEngine is a C++23 game engine with modular architecture.
 
 - **Language**: C++23
 - **Build System**: CMake 3.31+ with Ninja
-- **Graphics**: SDL3, ImGui
+- **Graphics**: SDL3, SDL_image, ImGui
 - **ECS**: EnTT
 - **Containers**: EASTL (preferred over std::)
 - **XML**: pugixml
@@ -93,6 +93,24 @@ BECore → Math → Events → TaskSystem → SDL → Application
 - **Expected errors**: `std::expected<T, E>`
 - **Programming errors**: `ASSERT()`
 - **Critical errors**: `FATALERROR()`
+
+## Recent Architecture Changes (Last 40 Commits)
+
+- **Scene Editor workflow expanded**: `SceneEditorWidget` + `ComponentInspectors` now actively drive scene/component editing and rely on `config/SceneConfig.xml`.
+- **Texture rendering pipeline updated**: `SpriteRendererComponent` and texture backend flow (`ITexture` + SDL/Vulkan integrations) were extended and refined.
+- **Reflection/serialization evolved**: project converged on split reader/writer interfaces (`IDeserializer` / `ISerializer`) with updated meta generator templates.
+- **Build dependencies changed**: SDL_image was added as an external submodule and should be treated as part of rendering dependency setup.
+- **Code maintenance tooling hardened**: clang-format, tidy-fix, and strip-pch-includes workflows are now explicit and should be applied intentionally by scope.
+
+## Serialization/Reflection Direction
+
+- Use split interfaces (`ISerializer` for write, `IDeserializer` for read); do not introduce legacy archive-style APIs.
+- Keep codegen-driven reflection (`CI/meta_generator`) as the source of truth for generated reflection/serialization behavior.
+
+## Scene Editor Guidance
+
+- Treat `SceneEditorWidget` as orchestration/UI flow layer and `ComponentInspectors` as field-level editing layer.
+- Prefer scene/component configuration consistency with `config/SceneConfig.xml` when adding or changing editor behavior.
 
 ## Planning
 

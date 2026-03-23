@@ -17,6 +17,8 @@ SDL3 integration for window management, rendering, and input handling.
 | `SDLMainWindow` | Window and renderer management |
 | `SDLEventsProvider` | SDL event polling and conversion |
 | `MainWindowAccessor` | Access to window/renderer |
+| `SDLTexture` | SDL-backed implementation of `ITexture` |
+| `SDLTextureLoader` | Texture loading/creation pipeline |
 
 ## SDL3 vs SDL2 Differences
 
@@ -41,3 +43,15 @@ Frame order:
 3. `ImGui::NewFrame()`
 4. ... render ...
 5. `ImGui_ImplSDLRenderer3_RenderDrawData()`
+
+## Texture Pipeline (SDL)
+
+- Engine-facing code should depend on `IRenderer` / `ITexture`, not raw SDL texture handles.
+- SDL module provides concrete texture path through `SDLTexture` and `SDLTextureLoader`.
+- Scene components (e.g. sprite/quad renderers) should consume texture abstractions from BECore interfaces.
+
+## Error Handling and Fallbacks
+
+- Validate texture load/create results and surface failures via logging/assertion flow consistent with BECore rules.
+- Prefer explicit fallback behavior (placeholder texture, skip draw, or disabled component state) over silent failure.
+- Keep file-system/asset path resolution centralized; avoid ad-hoc relative path handling in render code.

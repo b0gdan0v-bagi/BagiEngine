@@ -165,6 +165,13 @@ In `BECore/Reflection/FieldSerializer.h`, `SerializeField` / `DeserializeField` 
 
 Prefer these overloads in custom `Serialize`/`Deserialize` instead of manual `BeginArray`/`BeginObject` where they fit.
 
+### Current direction (important)
+
+- Treat `FieldSerializer` overloads as the canonical extension point for container/pointer support.
+- Keep factory-backed polymorphic container flow aligned with generated enum/factory traits from `meta_generator`.
+- When adding new serializable container shapes, extend both serialization and deserialization paths symmetrically.
+- Prefer generated/reflection-driven paths over one-off manual XML loops in component code.
+
 ## Best Practices
 
 - Put `BE_REFLECT_FIELD` on **same line** as field
@@ -173,6 +180,7 @@ Prefer these overloads in custom `Serialize`/`Deserialize` instead of manual `Be
 - Use `WriteAttribute()`/`ReadAttribute()` for primitives
 - Check `HasErrors()` after deserialization
 - Field names with underscore prefix are automatically stripped for XML
+- Keep examples and code aligned with split interfaces: `Serialize(ISerializer&) const`, `Deserialize(IDeserializer&)`
 
 ## Don't
 

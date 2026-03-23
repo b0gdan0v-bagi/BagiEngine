@@ -51,6 +51,13 @@ python CI/scripts/tidy_fix.py --changed --build-dir build/ClangWindowsSolution
 python CI/scripts/format_sources.py --changed
 ```
 
+Recommended order:
+
+1. Run `tidy_fix.py` with `--changed` first.
+2. Re-run Clang-Format on changed files.
+3. Inspect diff for behavioral edits around transformed control-flow statements.
+4. Run quick build/tests for touched modules before commit.
+
 ## Requirements
 
 - **clang-tidy** on `PATH`, or **LIBCLANG_PATH** set to the LLVM bin directory (same as for clang-format and Meta Generator).
@@ -66,3 +73,8 @@ python CI/scripts/format_sources.py --changed
 | All     | All `.cpp`, `.c` under `src/` and `config/`           |
 
 **Ignore:** Reads [.clang-format-ignore](.clang-format-ignore) (required). Same exclusions as clang-format — `external/`, `build/`, `.venv/`, vendored modules.
+
+## Side-Effect Checks
+
+- `readability-braces-around-statements` should be mostly mechanical, but always check nearby single-line conditionals for altered intent.
+- Avoid combining tidy-fix with unrelated refactors in one change set.

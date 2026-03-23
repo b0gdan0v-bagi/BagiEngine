@@ -1,0 +1,40 @@
+---
+description: Rules for rendering architecture and texture pipeline
+globs:
+  - "src/Modules/BECore/Renderer/**/*"
+  - "src/Modules/BECore/Scene/Components/*RendererComponent*"
+  - "src/Modules/SDL/src/CoreSDL/*Renderer*"
+  - "src/Modules/SDL/src/CoreSDL/*Texture*"
+  - "src/Modules/Vulkan/src/CoreVulkan/*Renderer*"
+alwaysApply: false
+---
+
+# Rendering Module Guidelines
+
+## Layer Responsibilities
+
+- `BECore/Renderer` owns engine-level abstractions (`IRenderer`, `ITexture`).
+- Backend modules (`SDL`, `Vulkan`) provide concrete implementations.
+- Scene components (`QuadRendererComponent`, `SpriteRendererComponent`) consume renderer abstractions, not backend-specific types.
+
+## Texture Pipeline
+
+- Asset/file loading and backend texture creation should go through dedicated loader classes (for SDL: `SDLTextureLoader`).
+- Keep texture lifetime and ownership behind `ITexture` interfaces.
+- Do not expose backend resource handles in scene/component public APIs.
+
+## Serialization and Components
+
+- Texture-related component fields should be serialization-friendly and stable (path/key/descriptor rather than backend runtime handle).
+- Reflection/serialization code should serialize data required to rebuild texture state, not transient backend objects.
+
+## Cross-Backend Compatibility
+
+- New renderer-facing features should define behavior at `IRenderer`/`ITexture` level first.
+- SDL and Vulkan backends should implement equivalent behavior where supported.
+- If a backend cannot support a feature, document fallback behavior explicitly (skip draw, placeholder, or warning).
+
+## Error Handling
+
+- Validate resource loading and creation paths; log failures with enough context to trace asset and component origin.
+- Avoid silent render failures; emit warning/error and apply predictable fallback.
