@@ -34,5 +34,15 @@ namespace BECore {
             d.ReadAttribute("b", b);
             d.ReadAttribute("a", a);
         }
+
+        template <typename Visitor>
+        bool VisitProperties(Visitor& v) {
+            bool changed = false;
+            changed |= v.Visit("r", r);
+            changed |= v.Visit("g", g);
+            changed |= v.Visit("b", b);
+            changed |= v.Visit("a", a);
+            return changed;
+        }
     };
 }  // namespace BECore

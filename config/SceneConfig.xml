@@ -10,16 +10,18 @@
           <components>
             <component
               type="TransformComponent"
-              x="120"
-              y="100"
-              width="50"
-              height="50" />
+              x="146.800003"
+              y="107.699997"
+              width="42.5"
+              height="71.6999969" />
             <component
-              type="QuadRendererComponent"
-              r="255"
-              g="0"
-              b="0"
-              a="255" />
+              type="QuadRendererComponent">
+              <color
+                r="255"
+                g="255"
+                b="0"
+                a="255" />
+            </component>
           </components>
         </node>
         <node
@@ -32,11 +34,13 @@
               width="19"
               height="233" />
             <component
-              type="QuadRendererComponent"
-              r="255"
-              g="0"
-              b="0"
-              a="255" />
+              type="QuadRendererComponent">
+              <color
+                r="255"
+                g="0"
+                b="0"
+                a="255" />
+            </component>
           </components>
         </node>
         <node
@@ -49,11 +53,13 @@
               width="20.2000008"
               height="20.1000004" />
             <component
-              type="QuadRendererComponent"
-              r="255"
-              g="0"
-              b="0"
-              a="255" />
+              type="QuadRendererComponent">
+              <color
+                r="255"
+                g="0"
+                b="0"
+                a="255" />
+            </component>
           </components>
         </node>
         <node
@@ -66,7 +72,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -79,7 +92,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -92,7 +112,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -105,7 +132,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -118,7 +152,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -131,7 +172,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -144,7 +192,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -157,7 +212,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -170,7 +232,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="assets/chess_test.png">
+              <srcRect
+                x="60"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -183,7 +252,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -196,7 +272,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
         <node
@@ -209,7 +292,14 @@
               width="80"
               height="80" />
             <component
-              type="SpriteRendererComponent" />
+              type="SpriteRendererComponent"
+              texturePath="">
+              <srcRect
+                x="0"
+                y="0"
+                w="0"
+                h="0" />
+            </component>
           </components>
         </node>
       </nodes>

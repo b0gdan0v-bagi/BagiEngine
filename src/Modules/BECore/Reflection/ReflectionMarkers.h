@@ -46,6 +46,9 @@ namespace BECore {
     class ISerializer;
     class IDeserializer;
 
+    // Forward declaration for property visitor (AcceptPropertyVisitor)
+    class IPropertyVisitor;
+
 }  // namespace BECore
 
 // =============================================================================
@@ -101,6 +104,8 @@ public:                                                                         
     virtual void Serialize(::BECore::ISerializer& s) const;                                                                                                                                            \
     /** @brief Deserialize all reflected fields from IDeserializer (read/load) */                                                                                                                      \
     virtual void Deserialize(::BECore::IDeserializer& d);                                                                                                                                              \
+    /** @brief Visit all reflected fields for in-place editing (e.g. ImGui inspector) */                                                                                                               \
+    virtual bool AcceptPropertyVisitor(::BECore::IPropertyVisitor& v);                                                                                                                                 \
                                                                                                                                                                                                        \
 private:                                                                                                                                                                                               \
     template <typename, typename>                                                                                                                                                                      \

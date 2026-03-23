@@ -11,6 +11,7 @@
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/MethodInfo.h>
 #include <BECore/Reflection/DataAccessor.h>
+#include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/String.h>
 #include <EASTL/string_view.h>
@@ -245,6 +246,20 @@ void {{ cls.full_qualified_name }}::Deserialize(::BECore::IDeserializer& d) {
 {% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
     ::BECore::Ser::Load(d, {{ field.name }}, "{{ xml_name }}");
 {% endfor %}
+}
+
+// {{ cls.full_qualified_name }}::AcceptPropertyVisitor() - auto-generated from BE_REFLECT_FIELD markers
+// Visits all reflected fields for in-place editing (e.g. ImGui inspector)
+bool {{ cls.full_qualified_name }}::AcceptPropertyVisitor(::BECore::IPropertyVisitor& v) {
+{% if cls.parent_has_be_class %}
+    {{ cls.parent_full_qualified_name }}::AcceptPropertyVisitor(v);
+{% endif %}
+    bool changed = false;
+{% for field in cls.fields %}
+{% set xml_name = field.name[1:] if field.name.startswith('_') else field.name %}
+    changed |= ::BECore::PropVisit::Visit(v, {{ field.name }}, "{{ xml_name }}");
+{% endfor %}
+    return changed;
 }
 
 {% if cls.factory_base_fqn %}

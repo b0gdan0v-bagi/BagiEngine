@@ -7,8 +7,6 @@
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
-#include <BECore/Scene/Components/QuadRendererComponent.h>
-#include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
@@ -34,27 +32,13 @@ namespace BECore {
                 const auto& typeMeta = comp->GetTypeMeta();
                 compEl.append_attribute("type").set_value(typeMeta.typeName.data());
 
-                if (typeMeta.typeName == eastl::string_view("TransformComponent")) {
-                    const auto& t = static_cast<const TransformComponent&>(*comp);
-                    compEl.append_attribute("x").set_value(t._x);
-                    compEl.append_attribute("y").set_value(t._y);
-                    compEl.append_attribute("width").set_value(t._width);
-                    compEl.append_attribute("height").set_value(t._height);
-                } else if (typeMeta.typeName == eastl::string_view("QuadRendererComponent")) {
-                    const auto& q = static_cast<const QuadRendererComponent&>(*comp);
-                    compEl.append_attribute("r").set_value(static_cast<unsigned int>(q._color.r));
-                    compEl.append_attribute("g").set_value(static_cast<unsigned int>(q._color.g));
-                    compEl.append_attribute("b").set_value(static_cast<unsigned int>(q._color.b));
-                    compEl.append_attribute("a").set_value(static_cast<unsigned int>(q._color.a));
-                } else {
-                    XmlSerializer s;
-                    comp->Serialize(s);
-                    const auto& srcRoot = s.GetRootNode();
-                    for (auto attr = srcRoot.first_attribute(); attr; attr = attr.next_attribute())
-                        compEl.append_attribute(attr.name()).set_value(attr.value());
-                    for (auto child = srcRoot.first_child(); child; child = child.next_sibling())
-                        compEl.append_copy(child);
-                }
+                XmlSerializer s;
+                comp->Serialize(s);
+                const auto& srcRoot = s.GetRootNode();
+                for (auto attr = srcRoot.first_attribute(); attr; attr = attr.next_attribute())
+                    compEl.append_attribute(attr.name()).set_value(attr.value());
+                for (auto child = srcRoot.first_child(); child; child = child.next_sibling())
+                    compEl.append_copy(child);
             }
         }
 
