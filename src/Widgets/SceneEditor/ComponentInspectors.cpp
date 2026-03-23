@@ -1,7 +1,9 @@
 #include "ComponentInspectors.h"
 
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
+#include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <imgui.h>
 
@@ -41,6 +43,67 @@ namespace BECore {
                 q._color.a = static_cast<uint8_t>(colorFloat[3] * 255.0f);
                 changed = true;
             }
+            return changed;
+        }
+
+        if (typeMeta.typeName == eastl::string_view("SpriteRendererComponent")) {
+            auto& s = static_cast<SpriteRendererComponent&>(*component);
+
+            static eastl::vector<PoolString> cachedAssets;
+            static bool assetsLoaded = false;
+
+            if (!assetsLoaded) {
+                static const eastl::string_view extensions[] = {".png", ".jpg", ".jpeg", ".bmp"};
+                cachedAssets = CoreManager::GetFileSystem().EnumerateFiles("assets"_intern, eastl::span<const eastl::string_view>(extensions));
+                assetsLoaded = true;
+            }
+
+            int currentIndex = -1;
+            for (int i = 0; i < static_cast<int>(cachedAssets.size()); ++i) {
+                if (cachedAssets[i] == s._texturePath) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+
+            if (ImGui::BeginCombo("Texture##sprite_texture", currentIndex >= 0 ? cachedAssets[currentIndex].CStr() : "(none)")) {
+                for (int i = 0; i < static_cast<int>(cachedAssets.size()); ++i) {
+                    const bool isSelected = (currentIndex == i);
+                    if (ImGui::Selectable(cachedAssets[i].CStr(), isSelected)) {
+                        s._texturePath = cachedAssets[i];
+                        s.ReloadTexture();
+                        changed = true;
+                        currentIndex = i;
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::TextUnformatted("Source Rect:");
+
+            ImGui::PushItemWidth(60.0f);
+            if (ImGui::DragFloat("X##srcRect_x", &s._srcRect.x, 0.5f)) {
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::DragFloat("Y##srcRect_y", &s._srcRect.y, 0.5f)) {
+                changed = true;
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::PushItemWidth(60.0f);
+            if (ImGui::DragFloat("W##srcRect_w", &s._srcRect.w, 0.5f, 0.0f)) {
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::DragFloat("H##srcRect_h", &s._srcRect.h, 0.5f, 0.0f)) {
+                changed = true;
+            }
+            ImGui::PopItemWidth();
+
             return changed;
         }
 

@@ -16,7 +16,7 @@ namespace BECore {
 
         BE_REFLECT_FIELD Color _color{255, 0, 0, 255};
 
-        void Initialize() override;
+        void OnAttached() override;
 
     private:
         void OnDraw(const SceneEvents::SceneDrawEvent&);

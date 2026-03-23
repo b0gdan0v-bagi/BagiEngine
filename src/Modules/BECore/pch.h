@@ -11,6 +11,7 @@
 #include <EASTL/hash_map.h>
 #include <EASTL/internal/config.h>
 #include <EASTL/shared_ptr.h>
+#include <EASTL/span.h>
 #include <EASTL/string.h>
 #include <EASTL/fixed_string.h>
 #include <EASTL/string_view.h>

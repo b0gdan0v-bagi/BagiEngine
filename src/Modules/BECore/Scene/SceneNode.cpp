@@ -45,6 +45,7 @@ namespace BECore {
         component->_node = this;
         _components.push_back(component);
         component->Initialize();
+        component->OnAttached();
     }
 
     void SceneNode::RemoveComponent(PoolString typeName) {
@@ -72,7 +73,7 @@ namespace BECore {
         for (auto& comp : _components) {
             comp->_scene = scene;
             comp->_node = this;
-            comp->Initialize();
+            comp->OnAttached();
         }
 
         for (auto& child : _children) {

@@ -8,10 +8,7 @@
 
 namespace BECore {
 
-    void QuadRendererComponent::Initialize() {
-        if (!_node) {
-            return;
-        }
+    void QuadRendererComponent::OnAttached() {
         Subscribe<SceneEvents::SceneDrawEvent, &QuadRendererComponent::OnDraw>(this);
     }
 

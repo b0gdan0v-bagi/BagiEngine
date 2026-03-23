@@ -93,6 +93,16 @@ namespace BECore {
         bool BeginArrayElement() override;
         void EndArrayElement() override;
 
+        /**
+         * @brief Get the root XML node for direct manipulation
+         *
+         * Used to copy serialized component data into a different XML tree
+         * without creating intermediate serializers.
+         */
+        const pugi::xml_node& GetRootNode() const {
+            return _nodeStack.front();
+        }
+
     private:
         /**
          * @brief Get or create child node with given name

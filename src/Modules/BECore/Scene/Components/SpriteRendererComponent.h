@@ -19,7 +19,14 @@ namespace BECore {
         BE_REFLECT_FIELD PoolString _texturePath;
         BE_REFLECT_FIELD Rect _srcRect{};
 
-        void Initialize() override;
+        void OnAttached() override;
+
+        /**
+         * @brief Reload texture from _texturePath and re-subscribe to draw events
+         *
+         * Call this when _texturePath is changed in the editor.
+         */
+        void ReloadTexture();
 
     private:
         void OnDraw(const SceneEvents::SceneDrawEvent&);

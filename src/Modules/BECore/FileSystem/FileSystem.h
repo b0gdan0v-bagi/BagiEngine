@@ -35,6 +35,15 @@ namespace BECore {
 
         std::filesystem::path GetMountedPath(PoolString virtualPath) const;
 
+        /**
+         * @brief Recursively enumerate files in a mounted directory matching given extensions
+         *
+         * @param mountPoint Virtual mount point (e.g., "assets")
+         * @param extensions File extensions to match (e.g., {".png", ".jpg"})
+         * @return Vector of virtual paths (e.g., "assets/subdir/file.png"), sorted
+         */
+        eastl::vector<PoolString> EnumerateFiles(PoolString mountPoint, eastl::span<const eastl::string_view> extensions) const;
+
     private:
         std::filesystem::path _rootPath;
         UnorderedPoolMap<std::filesystem::path> _mountPoints;

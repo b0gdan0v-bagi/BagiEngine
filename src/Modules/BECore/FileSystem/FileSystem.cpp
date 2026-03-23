@@ -1,5 +1,7 @@
 #include "FileSystem.h"
 
+#include <EASTL/sort.h>
+
 namespace BECore {
 
     void FileSystem::Initialize() {
@@ -112,6 +114,86 @@ namespace BECore {
             return it->second;
         }
         return {};
+    }
+
+    eastl::vector<PoolString> FileSystem::EnumerateFiles(PoolString mountPoint, eastl::span<const eastl::string_view> extensions) const {
+        eastl::vector<PoolString> result;
+
+        auto it = _mountPoints.find(mountPoint);
+        if (it == _mountPoints.end()) {
+            return result;
+        }
+
+        const auto& basePath = it->second;
+
+        eastl::vector<std::filesystem::path> files;
+
+        std::error_code ec;
+        std::filesystem::recursive_directory_iterator fileSystemIt(basePath, std::filesystem::directory_options::skip_permission_denied, ec);
+        if (ec) {
+            LOG_ERROR(Format("FileSystem::EnumerateFiles: error opening '{}': {}", mountPoint.ToStringView(), ec.message()).c_str());
+            return result;
+        }
+        std::filesystem::recursive_directory_iterator fileSystemItEnd;
+
+        while (fileSystemIt != fileSystemItEnd) {
+            const auto& entry = *fileSystemIt;
+            if (entry.is_regular_file()) {
+                const auto& filePath = entry.path();
+                auto ext = filePath.extension().string();
+
+                bool matches = false;
+                for (const auto& targetExt : extensions) {
+                    // Case-insensitive extension comparison
+                    if (ext.size() == targetExt.size()) {
+                        bool same = true;
+                        for (size_t i = 0; i < ext.size(); ++i) {
+                            char a = std::tolower(static_cast<unsigned char>(ext[i]));
+                            char b = std::tolower(static_cast<unsigned char>(targetExt[i]));
+                            if (a != b) {
+                                same = false;
+                                break;
+                            }
+                        }
+                        if (same) {
+                            matches = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (matches) {
+                    files.push_back(filePath);
+                }
+            }
+
+            fileSystemIt.increment(ec);
+            if (ec) {
+                LOG_ERROR(Format("FileSystem::EnumerateFiles: error scanning '{}': {}", mountPoint.ToStringView(), ec.message()).c_str());
+                break;
+            }
+        }
+
+        eastl::sort(files.begin(), files.end());
+
+        for (const auto& filePath : files) {
+            auto relativePath = std::filesystem::relative(filePath, basePath);
+            eastl::string virtualPath(mountPoint.ToStringView().data(), mountPoint.ToStringView().size());
+            virtualPath += "/";
+            const std::string relStr = relativePath.string();
+            virtualPath.append(relStr.data(), relStr.size());
+
+            // Normalize to forward slashes
+            for (auto& ch : virtualPath) {
+                if (ch == '\\') {
+                    ch = '/';
+                }
+            }
+
+            result.push_back(PoolString::Intern(eastl::string_view(virtualPath.data(), virtualPath.size())));
+        }
+
+        return result;
     }
 
     std::filesystem::path FileSystem::FindRootDirectory() const {

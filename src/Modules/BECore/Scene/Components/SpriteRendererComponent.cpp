@@ -8,8 +8,8 @@
 
 namespace BECore {
 
-    void SpriteRendererComponent::Initialize() {
-        if (!_node || _texturePath.Empty()) {
+    void SpriteRendererComponent::OnAttached() {
+        if (_texturePath.Empty()) {
             return;
         }
         _texture = CoreManager::GetResourceManager().Load<ITexture>(_texturePath.ToStringView());
@@ -17,6 +17,23 @@ namespace BECore {
             LOG_ERROR(Format("SpriteRendererComponent: failed to load texture '{}'", _texturePath.ToStringView()).c_str());
             return;
         }
+        Subscribe<SceneEvents::SceneDrawEvent, &SpriteRendererComponent::OnDraw>(this);
+    }
+
+    void SpriteRendererComponent::ReloadTexture() {
+        UnsubscribeAll();
+        _texture.Reset();
+
+        if (!_node || _texturePath.Empty()) {
+            return;
+        }
+
+        _texture = CoreManager::GetResourceManager().Load<ITexture>(_texturePath.ToStringView());
+        if (!_texture) {
+            LOG_ERROR(Format("SpriteRendererComponent: failed to reload texture '{}'", _texturePath.ToStringView()).c_str());
+            return;
+        }
+
         Subscribe<SceneEvents::SceneDrawEvent, &SpriteRendererComponent::OnDraw>(this);
     }
 

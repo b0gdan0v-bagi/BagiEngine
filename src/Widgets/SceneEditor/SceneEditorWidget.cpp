@@ -6,6 +6,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/IComponent.h>
@@ -45,6 +46,14 @@ namespace BECore {
                     compEl.append_attribute("g").set_value(static_cast<unsigned int>(q._color.g));
                     compEl.append_attribute("b").set_value(static_cast<unsigned int>(q._color.b));
                     compEl.append_attribute("a").set_value(static_cast<unsigned int>(q._color.a));
+                } else {
+                    XmlSerializer s;
+                    comp->Serialize(s);
+                    const auto& srcRoot = s.GetRootNode();
+                    for (auto attr = srcRoot.first_attribute(); attr; attr = attr.next_attribute())
+                        compEl.append_attribute(attr.name()).set_value(attr.value());
+                    for (auto child = srcRoot.first_child(); child; child = child.next_sibling())
+                        compEl.append_copy(child);
                 }
             }
         }
