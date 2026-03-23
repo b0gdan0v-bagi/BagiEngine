@@ -38,6 +38,7 @@ namespace BECore {
         _assertHandlerManager = MakeFromConfig<AssertHandlerManager>("AssertHandlersConfig");
         _assertHandlerManager->Initialize();
         _resourceManager.Initialize();
+        _textureLibrary.Initialize();
         _testManager.RunAllTests();
     }
 

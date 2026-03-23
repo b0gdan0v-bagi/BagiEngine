@@ -54,6 +54,7 @@
 #include <BECore/Utils/PassKey.h>
 #include <BECore/PoolString/PoolString.h>
 #include <BECore/PoolString/StaticPoolString.h>
+#include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <BECore/Utils/Overload.h>
 #include <BECore/RefCounted/RefCounted.h>

@@ -1,6 +1,7 @@
 #include "SpriteRendererComponent.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/SceneNode.h>
 #include <Events/SceneEvents.h>
@@ -8,7 +9,24 @@
 
 namespace BECore {
 
+    namespace {
+        void ResolveFromLibrary(PoolString spriteId, PoolString& texturePath, Rect& srcRect) {
+            if (spriteId.Empty()) {
+                return;
+            }
+            const auto* entry = CoreManager::GetTextureLibrary().GetSprite(spriteId);
+            if (!entry) {
+                LOG_ERROR(Format("SpriteRendererComponent: sprite '{}' not found in TextureLibrary", spriteId.ToStringView()).c_str());
+                return;
+            }
+            texturePath = entry->texturePath;
+            srcRect = entry->srcRect;
+        }
+    }  // namespace
+
     void SpriteRendererComponent::OnAttached() {
+        ResolveFromLibrary(_spriteId, _texturePath, _srcRect);
+
         if (_texturePath.Empty()) {
             return;
         }
@@ -23,6 +41,8 @@ namespace BECore {
     void SpriteRendererComponent::ReloadTexture() {
         UnsubscribeAll();
         _texture.Reset();
+
+        ResolveFromLibrary(_spriteId, _texturePath, _srcRect);
 
         if (!_node || _texturePath.Empty()) {
             return;

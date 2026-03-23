@@ -7,6 +7,7 @@
 #include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Resource/ResourceManager.h>
+#include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Tests/TestManager.h>
 #include <BECore/Widgets/WidgetManager.h>
@@ -75,6 +76,10 @@ namespace BECore {
             return *GetInstance()._sceneManager;
         }
 
+        static TextureLibrary& GetTextureLibrary() {
+            return GetInstance()._textureLibrary;
+        }
+
         // Pre-initialization function (FileSystem, AssertHandlers, Tests)
         void OnApplicationPreInit(PassKey<Application>);
 
@@ -99,6 +104,7 @@ namespace BECore {
         MainWindowManager _mainWindowManager;
         RendererManager _rendererManager;
         IntrusivePtrAtomic<SceneManager> _sceneManager;
+        TextureLibrary _textureLibrary;
     };
 
 }  // namespace BECore

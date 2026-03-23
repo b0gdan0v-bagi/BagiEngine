@@ -35,10 +35,7 @@ namespace BECore {
         bool Visit(eastl::string_view name, PoolString& value) override;
         bool Visit(eastl::string_view name, eastl::string& value) override;
 
-        bool VisitEnum(eastl::string_view name,
-                       const eastl::string_view* enumNames,
-                       size_t enumCount,
-                       size_t& selectedIndex) override;
+        bool VisitEnum(eastl::string_view name, const eastl::string_view* enumNames, size_t enumCount, size_t& selectedIndex) override;
 
         bool BeginCompound(eastl::string_view name) override;
         void EndCompound() override;

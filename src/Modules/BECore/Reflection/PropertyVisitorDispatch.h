@@ -1,7 +1,7 @@
 #pragma once
 
-#include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/RefCounted/IntrusivePtr.h>
+#include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/Utils/EnumUtils.h>
 #include <EASTL/vector.h>
 #include <cstdio>
@@ -45,7 +45,9 @@ namespace BECore {
             };
 
             template <typename Ptr>
-            concept IsIntrusivePtr = requires { typename IntrusivePtrPointee<Ptr>::type; };
+            concept IsIntrusivePtr = requires {
+                typename IntrusivePtrPointee<Ptr>::type;
+            };
 
         }  // namespace Detail
 
@@ -98,11 +100,11 @@ namespace BECore {
         // =====================================================================
 
         template <typename Ptr>
-        requires (Detail::IsIntrusivePtr<Ptr> &&
-                  requires(typename Detail::IntrusivePtrPointee<Ptr>::type& t, IPropertyVisitor& v) {
-                      { t.AcceptPropertyVisitor(v) } -> std::same_as<bool>;
-                  })
-        bool Visit(IPropertyVisitor& v, Ptr& ptr, eastl::string_view key) {
+        requires(Detail::IsIntrusivePtr<Ptr>&& requires(typename Detail::IntrusivePtrPointee<Ptr>::type& t, IPropertyVisitor& v) {
+            {
+                t.AcceptPropertyVisitor(v)
+            } -> std::same_as<bool>;
+        }) bool Visit(IPropertyVisitor& v, Ptr& ptr, eastl::string_view key) {
             if (!ptr) {
                 return false;
             }
@@ -119,8 +121,7 @@ namespace BECore {
         // =====================================================================
 
         template <typename Ptr, typename Alloc>
-        requires Detail::IsIntrusivePtr<Ptr>
-        bool Visit(IPropertyVisitor& v, eastl::vector<Ptr, Alloc>& vec, eastl::string_view key) {
+        requires Detail::IsIntrusivePtr<Ptr> bool Visit(IPropertyVisitor& v, eastl::vector<Ptr, Alloc>& vec, eastl::string_view key) {
             bool changed = false;
             if (v.BeginCompound(key)) {
                 char indexBuf[32];
@@ -138,13 +139,11 @@ namespace BECore {
         // =====================================================================
 
         template <typename T>
-        requires (!Detail::IsIntrusivePtr<T> &&
-                  !IsReflectedEnum<T> &&
-                  !std::is_arithmetic_v<T> &&
-                  requires(T& t, IPropertyVisitor& v) {
-                      { t.AcceptPropertyVisitor(v) } -> std::same_as<bool>;
-                  })
-        bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {
+        requires(!Detail::IsIntrusivePtr<T> && !IsReflectedEnum<T> && !std::is_arithmetic_v<T> && requires(T & t, IPropertyVisitor& v) {
+            {
+                t.AcceptPropertyVisitor(v)
+            } -> std::same_as<bool>;
+        }) bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {
             if (v.BeginCompound(key)) {
                 bool changed = value.AcceptPropertyVisitor(v);
                 v.EndCompound();
@@ -158,9 +157,8 @@ namespace BECore {
         // =====================================================================
 
         template <typename T>
-        requires IsReflectedEnum<T>
-        bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {
-            const auto& names  = EnumUtils<T>::Names();
+        requires IsReflectedEnum<T> bool Visit(IPropertyVisitor& v, T& value, eastl::string_view key) {
+            const auto& names = EnumUtils<T>::Names();
             const auto& values = EnumUtils<T>::Values();
             size_t selected = 0;
             for (size_t i = 0; i < values.size(); ++i) {

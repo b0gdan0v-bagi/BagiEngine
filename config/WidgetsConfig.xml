@@ -15,5 +15,7 @@
       type="ConfigEditorWidget" />
     <widget
       type="SceneEditorWidget" />
+    <widget
+      type="TextureEditorWidget" />
   </widgets>
 </root>

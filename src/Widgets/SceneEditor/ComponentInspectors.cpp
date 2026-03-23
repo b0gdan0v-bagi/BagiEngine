@@ -2,8 +2,9 @@
 
 #include "ImGuiPropertyVisitor.h"
 
-#include <BECore/Reflection/ClassMeta.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/ClassMeta.h>
+#include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <EASTL/unordered_map.h>
 #include <imgui.h>
@@ -19,6 +20,52 @@ namespace BECore {
 
         bool InspectSpriteRenderer(SpriteRendererComponent& s) {
             bool changed = false;
+
+            // -----------------------------------------------------------------
+            // Sprite ID — pick from TextureLibrary
+            // -----------------------------------------------------------------
+            const auto& entries = CoreManager::GetTextureLibrary().GetAll();
+
+            int currentSpriteIndex = -1;
+            for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
+                if (entries[i].name == s._spriteId) {
+                    currentSpriteIndex = i;
+                    break;
+                }
+            }
+
+            const char* spritePreview = currentSpriteIndex >= 0 ? entries[currentSpriteIndex].name.CStr() : "(none)";
+            if (ImGui::BeginCombo("Sprite##sprite_id", spritePreview)) {
+                if (ImGui::Selectable("(none)", currentSpriteIndex < 0)) {
+                    s._spriteId = PoolString{};
+                    s.ReloadTexture();
+                    changed = true;
+                    currentSpriteIndex = -1;
+                }
+                for (int i = 0; i < static_cast<int>(entries.size()); ++i) {
+                    const bool isSelected = (currentSpriteIndex == i);
+                    if (ImGui::Selectable(entries[i].name.CStr(), isSelected)) {
+                        s._spriteId = entries[i].name;
+                        s.ReloadTexture();
+                        changed = true;
+                        currentSpriteIndex = i;
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            ImGui::Separator();
+
+            // -----------------------------------------------------------------
+            // Texture path + srcRect — read-only when a sprite ID is active
+            // -----------------------------------------------------------------
+            const bool lockedBySprite = !s._spriteId.Empty();
+            if (lockedBySprite) {
+                ImGui::BeginDisabled();
+            }
 
             static eastl::vector<PoolString> cachedAssets;
             static bool assetsLoaded = false;
@@ -53,6 +100,11 @@ namespace BECore {
                 ImGui::EndCombo();
             }
 
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Refresh##tex")) {
+                assetsLoaded = false;
+            }
+
             ImGui::TextUnformatted("Source Rect:");
 
             ImGui::PushItemWidth(60.0f);
@@ -74,6 +126,10 @@ namespace BECore {
                 changed = true;
             }
             ImGui::PopItemWidth();
+
+            if (lockedBySprite) {
+                ImGui::EndDisabled();
+            }
 
             return changed;
         }

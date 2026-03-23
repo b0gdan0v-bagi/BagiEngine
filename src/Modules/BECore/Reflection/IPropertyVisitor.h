@@ -40,10 +40,7 @@ namespace BECore {
          * Default implementation returns false (no-op). Override in subclasses to provide
          * UI (e.g. ImGui::BeginCombo) for selecting enum values.
          */
-        virtual bool VisitEnum(eastl::string_view name,
-                               const eastl::string_view* enumNames,
-                               size_t enumCount,
-                               size_t& selectedIndex) {
+        virtual bool VisitEnum(eastl::string_view name, const eastl::string_view* enumNames, size_t enumCount, size_t& selectedIndex) {
             return false;
         }
 

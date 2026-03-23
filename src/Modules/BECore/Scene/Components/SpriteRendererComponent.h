@@ -16,6 +16,7 @@ namespace BECore {
         SpriteRendererComponent() = default;
         ~SpriteRendererComponent() override = default;
 
+        BE_REFLECT_FIELD PoolString _spriteId;
         BE_REFLECT_FIELD PoolString _texturePath;
         BE_REFLECT_FIELD Rect _srcRect{};
 

@@ -117,10 +117,7 @@ namespace BECore {
         return ImGui::TreeNode(label);
     }
 
-    bool ImGuiPropertyVisitor::VisitEnum(eastl::string_view name,
-                                         const eastl::string_view* enumNames,
-                                         size_t enumCount,
-                                         size_t& selectedIndex) {
+    bool ImGuiPropertyVisitor::VisitEnum(eastl::string_view name, const eastl::string_view* enumNames, size_t enumCount, size_t& selectedIndex) {
         char label[128];
         MakeLabel(label, sizeof(label), name, _idCounter++);
         const char* preview = selectedIndex < enumCount ? enumNames[selectedIndex].data() : "";
