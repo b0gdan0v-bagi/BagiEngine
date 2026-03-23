@@ -67,18 +67,19 @@
           <components>
             <component
               type="TransformComponent"
-              x="10"
-              y="200"
-              width="80"
+              x="116.099998"
+              y="223.300003"
+              width="73.0999985"
               height="80" />
             <component
               type="SpriteRendererComponent"
-              texturePath="">
+              spriteId="King"
+              texturePath="assets/chess_test.png">
               <srcRect
-                x="0"
-                y="0"
-                w="0"
-                h="0" />
+                x="24.5"
+                y="19.25"
+                w="78.75"
+                h="166.25" />
             </component>
           </components>
         </node>
@@ -93,6 +94,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="">
               <srcRect
                 x="0"
@@ -113,6 +115,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="">
               <srcRect
                 x="0"
@@ -133,6 +136,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="">
               <srcRect
                 x="0"
@@ -153,6 +157,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="">
               <srcRect
                 x="0"
@@ -173,6 +178,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="">
               <srcRect
                 x="0"
@@ -193,6 +199,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="">
               <srcRect
                 x="0"
@@ -213,6 +220,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="">
               <srcRect
                 x="0"
@@ -233,6 +241,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="assets/chess_test.png">
               <srcRect
                 x="60"
@@ -253,6 +262,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="">
               <srcRect
                 x="0"
@@ -273,6 +283,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="">
               <srcRect
                 x="0"
@@ -293,6 +304,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
+              spriteId=""
               texturePath="">
               <srcRect
                 x="0"

@@ -6,6 +6,7 @@
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <Generated/TextureEditorWidget.gen.hpp>
+#include <cstdint>
 #include <imgui.h>
 
 namespace BECore {
@@ -212,13 +213,14 @@ namespace BECore {
                 _imageScaleY = texH / displayH;
 
                 ImGui::TextUnformatted("Texture Preview:");
-                ImGui::Image((ImTextureID)_previewTexture->GetNativeHandle(), ImVec2(displayW, displayH), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(1, 1, 1, 0.5f));
-
-                // Store image position for coordinate conversion
+                // InvisibleButton captures mouse as an active ImGui item so the window is not dragged while selecting.
+                ImGui::InvisibleButton("##tex_preview_drag", ImVec2(displayW, displayH));
                 _imageOrigin = ImGui::GetItemRectMin();
+                const ImVec2 imageMax(_imageOrigin.x + displayW, _imageOrigin.y + displayH);
 
-                // Get draw list for overlay
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
+                const ImTextureID texId = static_cast<ImTextureID>(reinterpret_cast<std::uintptr_t>(_previewTexture->GetNativeHandle()));
+                drawList->AddImage(texId, _imageOrigin, imageMax, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f));
 
                 // Draw current srcRect as overlay
                 if (!entry.srcRect.IsEmpty()) {
@@ -227,25 +229,23 @@ namespace BECore {
                     drawList->AddRect(rectMin, rectMax, ImGui::GetColorU32(ImVec4(0.0f, 1.0f, 0.0f, 1.0f)), 0.0f, 0, 2.0f);
                 }
 
-                // Handle drag-to-select
-                if (ImGui::IsItemHovered()) {
-                    if (ImGui::IsMouseClicked(0)) {
-                        _isDragging = true;
-                        const ImVec2 mouseScreenPos = ImGui::GetMousePos();
-                        _dragStartPos.x = (mouseScreenPos.x - _imageOrigin.x) * _imageScaleX;
-                        _dragStartPos.y = (mouseScreenPos.y - _imageOrigin.y) * _imageScaleY;
-                        _dragEndPos = _dragStartPos;
-                    }
+                // Drag-to-select: start when preview item is activated (click), track while dragging, finish on release.
+                if (ImGui::IsItemActivated()) {
+                    _isDragging = true;
+                    const ImVec2 mouseScreenPos = ImGui::GetMousePos();
+                    _dragStartPos.x = (mouseScreenPos.x - _imageOrigin.x) * _imageScaleX;
+                    _dragStartPos.y = (mouseScreenPos.y - _imageOrigin.y) * _imageScaleY;
+                    _dragEndPos = _dragStartPos;
                 }
 
                 if (_isDragging) {
                     const ImVec2 mouseScreenPos = ImGui::GetMousePos();
-                    _dragEndPos.x = (mouseScreenPos.x - _imageOrigin.x) * _imageScaleX;
-                    _dragEndPos.y = (mouseScreenPos.y - _imageOrigin.y) * _imageScaleY;
-
-                    // Clamp to texture bounds
-                    _dragEndPos.x = eastl::clamp(_dragEndPos.x, 0.0f, texW);
-                    _dragEndPos.y = eastl::clamp(_dragEndPos.y, 0.0f, texH);
+                    float texX = (mouseScreenPos.x - _imageOrigin.x) * _imageScaleX;
+                    float texY = (mouseScreenPos.y - _imageOrigin.y) * _imageScaleY;
+                    texX = eastl::clamp(texX, 0.0f, texW);
+                    texY = eastl::clamp(texY, 0.0f, texH);
+                    _dragEndPos.x = texX;
+                    _dragEndPos.y = texY;
 
                     // Draw preview rectangle during drag
                     const ImVec2 dragScreenMin(_imageOrigin.x + eastl::min(_dragStartPos.x, _dragEndPos.x) / _imageScaleX, _imageOrigin.y + eastl::min(_dragStartPos.y, _dragEndPos.y) / _imageScaleY);
@@ -253,10 +253,9 @@ namespace BECore {
                     drawList->AddRectFilled(dragScreenMin, dragScreenMax, ImGui::GetColorU32(ImVec4(0.0f, 1.0f, 0.0f, 0.3f)));
                     drawList->AddRect(dragScreenMin, dragScreenMax, ImGui::GetColorU32(ImVec4(0.0f, 1.0f, 0.0f, 1.0f)), 0.0f, 0, 2.0f);
 
-                    if (ImGui::IsMouseReleased(0)) {
+                    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
                         _isDragging = false;
 
-                        // Compute final rect
                         const float minX = eastl::min(_dragStartPos.x, _dragEndPos.x);
                         const float minY = eastl::min(_dragStartPos.y, _dragEndPos.y);
                         const float maxX = eastl::max(_dragStartPos.x, _dragEndPos.x);

@@ -1,4 +1,14 @@
 <?xml version="1.0"?>
 <root>
-  <sprites />
+  <sprites>
+    <sprite
+      name="King"
+      texturePath="assets/chess_test.png">
+      <srcRect
+        x="24.5"
+        y="19.25"
+        w="78.75"
+        h="166.25" />
+    </sprite>
+  </sprites>
 </root>
