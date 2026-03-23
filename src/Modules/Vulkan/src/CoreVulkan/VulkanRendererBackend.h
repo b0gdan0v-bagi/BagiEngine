@@ -39,6 +39,7 @@ namespace BECore {
         void Clear(const Color& color) override;
         void Present() override;
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
+        void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) override;
 
         // Vulkan handles exposed for imgui_impl_vulkan integration
         VkInstance GetVkInstance() const {

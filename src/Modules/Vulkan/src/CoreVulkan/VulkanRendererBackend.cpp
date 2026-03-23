@@ -265,6 +265,16 @@ namespace BECore {
         _rectPipeline.Draw(_commandBuffers[_currentFrame], x, y, w, h, color, _swapchain.GetExtent());
     }
 
+    void VulkanRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) {
+        (void)texture;
+        (void)srcRect;
+        (void)dstX;
+        (void)dstY;
+        (void)dstW;
+        (void)dstH;
+        // TODO: textured quad / blit via Vulkan (SDLTexture exposes VkImage or similar when wired)
+    }
+
     void VulkanRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {
         Clear(event.color);
     }

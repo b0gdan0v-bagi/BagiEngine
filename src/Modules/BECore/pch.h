@@ -45,6 +45,7 @@
 
 // Math
 #include <BECore/Math/Color.h>
+#include <BECore/Math/Rect.h>
 
 // Core
 #include <BECore/Utils/String.h>

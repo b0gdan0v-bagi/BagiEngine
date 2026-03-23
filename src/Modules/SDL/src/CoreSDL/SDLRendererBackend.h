@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Renderer/ITexture.h>
 
 struct SDL_Renderer;
 
@@ -23,6 +24,7 @@ namespace BECore {
         void Clear(const Color& color) override;
         void Present() override;
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
+        void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) override;
 
         SDL_Renderer* GetSDLRenderer() const {
             return _renderer;

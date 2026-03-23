@@ -4,6 +4,7 @@ namespace BECore {
 
     class IDeserializer;
     class IMainWindow;
+    class ITexture;
 
     class IRenderer : public RefCounted, public SubscriptionHolder {
         BE_CLASS(IRenderer, FACTORY_BASE)
@@ -18,6 +19,7 @@ namespace BECore {
         BE_FUNCTION virtual void Clear(const Color& color) = 0;
         BE_FUNCTION virtual void Present() = 0;
         BE_FUNCTION virtual void DrawFilledRect(float x, float y, float w, float h, const Color& color) = 0;
+        BE_FUNCTION virtual void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) = 0;
     };
 
 }  // namespace BECore

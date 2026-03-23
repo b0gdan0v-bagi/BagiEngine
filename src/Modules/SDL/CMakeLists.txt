@@ -57,6 +57,7 @@ target_link_libraries(SDLModule PUBLIC
     BECoreModule
     EventsModule
     SDL3-shared
+    SDL3_image::SDL3_image
     pugixml
     Vulkan::Headers
 )

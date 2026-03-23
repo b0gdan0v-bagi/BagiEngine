@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <CoreSDL/SDLMainWindow.h>
+#include <CoreSDL/SDLTexture.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/SDLRendererBackend.gen.hpp>
@@ -65,6 +66,25 @@ namespace BECore {
             SDL_SetRenderDrawColor(_renderer, color.r, color.g, color.b, color.a);
             SDL_FRect rect{x, y, w, h};
             SDL_RenderFillRect(_renderer, &rect);
+        }
+    }
+
+    void SDLRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) {
+        if (!_renderer) {
+            return;
+        }
+        auto* sdlTexture = dynamic_cast<SDLTexture*>(&texture);
+        if (!sdlTexture || !sdlTexture->GetSDLTexture()) {
+            return;
+        }
+
+        SDL_FRect dst{dstX, dstY, dstW, dstH};
+
+        if (srcRect && !srcRect->IsEmpty()) {
+            SDL_FRect src{srcRect->x, srcRect->y, srcRect->w, srcRect->h};
+            SDL_RenderTexture(_renderer, sdlTexture->GetSDLTexture(), &src, &dst);
+        } else {
+            SDL_RenderTexture(_renderer, sdlTexture->GetSDLTexture(), nullptr, &dst);
         }
     }
 
