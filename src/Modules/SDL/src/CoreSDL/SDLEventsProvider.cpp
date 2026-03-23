@@ -32,9 +32,15 @@ namespace BECore {
     }
 
     void SDLEventsProvider::ConvertSDLEvent(const SDL_Event& sdlEvent) {
+        SDLEvents::SDLEventWrapper::Emit(sdlEvent);
+
         switch (sdlEvent.type) {
             case SDL_EVENT_QUIT:
                 ApplicationEvents::QuitEvent::Emit();
+                break;
+
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                SDLEvents::MouseButtonDownEvent::Emit(sdlEvent.button);
                 break;
 
                 /*case SDL_EVENT_KEY_DOWN: {
@@ -82,8 +88,6 @@ namespace BECore {
                     */
 
             default:
-                // Для всех остальных событий отправляем обёртку
-                SDLEvents::SDLEventWrapper::Emit(sdlEvent);
                 break;
         }
     }

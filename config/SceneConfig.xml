@@ -6,11 +6,11 @@
       name="MainScene">
       <nodes>
         <node
-          name="RedQuad">
+          name="YellowQuad">
           <components>
             <component
               type="TransformComponent"
-              x="146.800003"
+              x="167.300003"
               y="107.699997"
               width="42.5"
               height="71.6999969" />
@@ -22,6 +22,12 @@
                 b="0"
                 a="255" />
             </component>
+            <component
+              type="ClickableComponent"
+              actionName="MyClick" />
+            <component
+              type="ChangeToRandomColorDebugComponent"
+              actionFilter="MyClick" />
           </components>
         </node>
         <node
@@ -29,7 +35,7 @@
           <components>
             <component
               type="TransformComponent"
-              x="85.0999985"
+              x="86.0999985"
               y="24.2000008"
               width="19"
               height="233" />
@@ -48,7 +54,7 @@
           <components>
             <component
               type="TransformComponent"
-              x="159.600006"
+              x="182.899994"
               y="21.3999996"
               width="20.2000008"
               height="20.1000004" />
