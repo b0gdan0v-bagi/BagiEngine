@@ -22,6 +22,10 @@ namespace BECore {
         float GetWidth() const override;
         float GetHeight() const override;
 
+        void* GetNativeHandle() const override {
+            return static_cast<void*>(_texture);
+        }
+
         SDL_Texture* GetSDLTexture() const {
             return _texture;
         }

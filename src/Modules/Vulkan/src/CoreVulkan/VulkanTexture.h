@@ -31,6 +31,10 @@ namespace BECore {
         float GetWidth() const override;
         float GetHeight() const override;
 
+        void* GetNativeHandle() const override {
+            return static_cast<void*>(_descriptorSet);
+        }
+
         VkImageView GetImageView() const {
             return _imageView;
         }

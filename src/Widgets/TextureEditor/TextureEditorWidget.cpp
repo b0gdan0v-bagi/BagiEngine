@@ -2,6 +2,8 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Renderer/ITexture.h>
+#include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <Generated/TextureEditorWidget.gen.hpp>
 #include <imgui.h>
@@ -175,19 +177,121 @@ namespace BECore {
         ImGui::Separator();
 
         // -----------------------------------------------------------------
+        // Texture preview with drag-to-select
+        // -----------------------------------------------------------------
+        if (!entry.texturePath.Empty()) {
+            // Load texture if path changed
+            if (entry.texturePath != _previewLoadedPath) {
+                _previewTexture = CoreManager::GetResourceManager().Load<ITexture>(entry.texturePath.ToStringView());
+                _previewLoadedPath = entry.texturePath;
+                _isDragging = false;
+            }
+
+            // Display texture preview if loaded
+            if (_previewTexture && _previewTexture->GetState() == ResourceState::Loaded) {
+                const float texW = _previewTexture->GetWidth();
+                const float texH = _previewTexture->GetHeight();
+                const float maxDisplaySize = 400.0f;
+
+                // Calculate display size preserving aspect ratio
+                float displayW = texW;
+                float displayH = texH;
+                if (displayW > maxDisplaySize || displayH > maxDisplaySize) {
+                    const float aspectRatio = texW / texH;
+                    if (texW > texH) {
+                        displayW = maxDisplaySize;
+                        displayH = maxDisplaySize / aspectRatio;
+                    } else {
+                        displayH = maxDisplaySize;
+                        displayW = maxDisplaySize * aspectRatio;
+                    }
+                }
+
+                // Calculate scales for coordinate conversion
+                _imageScaleX = texW / displayW;
+                _imageScaleY = texH / displayH;
+
+                ImGui::TextUnformatted("Texture Preview:");
+                ImGui::Image((ImTextureID)_previewTexture->GetNativeHandle(), ImVec2(displayW, displayH), ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1), ImVec4(1, 1, 1, 0.5f));
+
+                // Store image position for coordinate conversion
+                _imageOrigin = ImGui::GetItemRectMin();
+
+                // Get draw list for overlay
+                ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+                // Draw current srcRect as overlay
+                if (!entry.srcRect.IsEmpty()) {
+                    const ImVec2 rectMin(_imageOrigin.x + entry.srcRect.x / _imageScaleX, _imageOrigin.y + entry.srcRect.y / _imageScaleY);
+                    const ImVec2 rectMax(rectMin.x + entry.srcRect.w / _imageScaleX, rectMin.y + entry.srcRect.h / _imageScaleY);
+                    drawList->AddRect(rectMin, rectMax, ImGui::GetColorU32(ImVec4(0.0f, 1.0f, 0.0f, 1.0f)), 0.0f, 0, 2.0f);
+                }
+
+                // Handle drag-to-select
+                if (ImGui::IsItemHovered()) {
+                    if (ImGui::IsMouseClicked(0)) {
+                        _isDragging = true;
+                        const ImVec2 mouseScreenPos = ImGui::GetMousePos();
+                        _dragStartPos.x = (mouseScreenPos.x - _imageOrigin.x) * _imageScaleX;
+                        _dragStartPos.y = (mouseScreenPos.y - _imageOrigin.y) * _imageScaleY;
+                        _dragEndPos = _dragStartPos;
+                    }
+                }
+
+                if (_isDragging) {
+                    const ImVec2 mouseScreenPos = ImGui::GetMousePos();
+                    _dragEndPos.x = (mouseScreenPos.x - _imageOrigin.x) * _imageScaleX;
+                    _dragEndPos.y = (mouseScreenPos.y - _imageOrigin.y) * _imageScaleY;
+
+                    // Clamp to texture bounds
+                    _dragEndPos.x = eastl::clamp(_dragEndPos.x, 0.0f, texW);
+                    _dragEndPos.y = eastl::clamp(_dragEndPos.y, 0.0f, texH);
+
+                    // Draw preview rectangle during drag
+                    const ImVec2 dragScreenMin(_imageOrigin.x + eastl::min(_dragStartPos.x, _dragEndPos.x) / _imageScaleX, _imageOrigin.y + eastl::min(_dragStartPos.y, _dragEndPos.y) / _imageScaleY);
+                    const ImVec2 dragScreenMax(_imageOrigin.x + eastl::max(_dragStartPos.x, _dragEndPos.x) / _imageScaleX, _imageOrigin.y + eastl::max(_dragStartPos.y, _dragEndPos.y) / _imageScaleY);
+                    drawList->AddRectFilled(dragScreenMin, dragScreenMax, ImGui::GetColorU32(ImVec4(0.0f, 1.0f, 0.0f, 0.3f)));
+                    drawList->AddRect(dragScreenMin, dragScreenMax, ImGui::GetColorU32(ImVec4(0.0f, 1.0f, 0.0f, 1.0f)), 0.0f, 0, 2.0f);
+
+                    if (ImGui::IsMouseReleased(0)) {
+                        _isDragging = false;
+
+                        // Compute final rect
+                        const float minX = eastl::min(_dragStartPos.x, _dragEndPos.x);
+                        const float minY = eastl::min(_dragStartPos.y, _dragEndPos.y);
+                        const float maxX = eastl::max(_dragStartPos.x, _dragEndPos.x);
+                        const float maxY = eastl::max(_dragStartPos.y, _dragEndPos.y);
+
+                        entry.srcRect.x = minX;
+                        entry.srcRect.y = minY;
+                        entry.srcRect.w = maxX - minX;
+                        entry.srcRect.h = maxY - minY;
+
+                        lib.AddOrUpdate(entry);
+                        _isDirty = true;
+                    }
+                }
+
+                ImGui::TextUnformatted("Click and drag on the texture to select the sprite area.");
+            }
+        }
+
+        ImGui::Separator();
+
+        // -----------------------------------------------------------------
         // srcRect editing
         // -----------------------------------------------------------------
-        ImGui::TextUnformatted("Source Rect:");
+        ImGui::TextUnformatted("Source Rect (precise adjustment):");
 
         Rect rect = entry.srcRect;
         bool rectChanged = false;
 
         ImGui::PushItemWidth(70.0f);
-        if (ImGui::DragFloat("X##sr_x", &rect.x, 0.5f)) {
+        if (ImGui::DragFloat("X##sr_x", &rect.x, 0.5f, 0.0f)) {
             rectChanged = true;
         }
         ImGui::SameLine();
-        if (ImGui::DragFloat("Y##sr_y", &rect.y, 0.5f)) {
+        if (ImGui::DragFloat("Y##sr_y", &rect.y, 0.5f, 0.0f)) {
             rectChanged = true;
         }
         ImGui::PopItemWidth();

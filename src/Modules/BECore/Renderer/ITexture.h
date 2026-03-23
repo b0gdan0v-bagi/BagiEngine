@@ -11,6 +11,8 @@ namespace BECore {
 
         [[nodiscard]] virtual float GetWidth() const = 0;
         [[nodiscard]] virtual float GetHeight() const = 0;
+
+        [[nodiscard]] virtual void* GetNativeHandle() const = 0;
     };
 
 }  // namespace BECore

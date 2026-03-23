@@ -1,7 +1,10 @@
 #pragma once
 
+#include <BECore/Renderer/ITexture.h>
+#include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Widgets/IWidget.h>
 #include <EASTL/vector.h>
+#include <imgui.h>
 
 namespace BECore {
 
@@ -11,6 +14,8 @@ namespace BECore {
      * Two-panel layout:
      *   Left  - Scrollable list of all named sprite entries; [+ Add] button
      *   Right - Edit the selected entry (name, texture file, srcRect); [Delete] button
+     *
+     * Right panel now includes interactive texture preview with drag-to-select for srcRect.
      *
      * [Save] persists changes to config/TextureLibrary.xml.
      */
@@ -37,6 +42,16 @@ namespace BECore {
 
         char _nameEditBuffer[256] = {};
         bool _nameDirty = false;
+
+        // Texture preview and drag state
+        ResourceHandle<ITexture> _previewTexture;
+        PoolString _previewLoadedPath;
+        bool _isDragging = false;
+        ImVec2 _dragStartPos{};
+        ImVec2 _dragEndPos{};
+        ImVec2 _imageOrigin{};
+        float _imageScaleX = 1.0f;
+        float _imageScaleY = 1.0f;
     };
 
 }  // namespace BECore
