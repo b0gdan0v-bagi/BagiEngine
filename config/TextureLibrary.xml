@@ -2,12 +2,21 @@
 <root>
   <sprites>
     <sprite
-      name="King"
+      name="WhiteKing"
       texturePath="assets/chess_test.png">
       <srcRect
         x="24.5"
         y="19.25"
         w="78.75"
+        h="166.25" />
+    </sprite>
+    <sprite
+      name="WhineQueen"
+      texturePath="assets/chess_test.png">
+      <srcRect
+        x="138.25"
+        y="21"
+        w="82.25"
         h="166.25" />
     </sprite>
   </sprites>

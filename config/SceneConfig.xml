@@ -79,7 +79,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
-              spriteId="King"
+              spriteId="WhiteKing"
               texturePath="assets/chess_test.png">
               <srcRect
                 x="24.5"
@@ -94,19 +94,19 @@
           <components>
             <component
               type="TransformComponent"
-              x="100"
+              x="208.699997"
               y="200"
               width="80"
               height="80" />
             <component
               type="SpriteRendererComponent"
-              spriteId=""
-              texturePath="">
+              spriteId="WhineQueen"
+              texturePath="assets/chess_test.png">
               <srcRect
-                x="0"
-                y="0"
-                w="0"
-                h="0" />
+                x="138.25"
+                y="21"
+                w="82.25"
+                h="166.25" />
             </component>
           </components>
         </node>

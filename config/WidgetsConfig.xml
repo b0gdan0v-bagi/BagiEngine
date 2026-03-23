@@ -2,15 +2,25 @@
 <root>
   <widgets>
     <widget
-      type="ClearScreenWidget">
+      type="ImGuiWidget" />
+    <widget
+      type="EditorLayoutWidget" />
+    <widget
+      type="ViewportWidget">
       <clearColor
-        r="100"
-        g="120"
-        b="200"
+        r="50"
+        g="50"
+        b="50"
         a="255" />
     </widget>
     <widget
-      type="ImGuiWidget" />
+      type="ClearScreenWidget">
+      <clearColor
+        r="30"
+        g="30"
+        b="30"
+        a="255" />
+    </widget>
     <widget
       type="ConfigEditorWidget" />
     <widget

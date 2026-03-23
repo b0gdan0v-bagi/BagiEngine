@@ -26,6 +26,10 @@ namespace BECore {
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
         void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) override;
 
+        IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) override;
+        void SetRenderTarget(IRenderTarget* target) override;
+        void UnsetRenderTarget() override;
+
         SDL_Renderer* GetSDLRenderer() const {
             return _renderer;
         }

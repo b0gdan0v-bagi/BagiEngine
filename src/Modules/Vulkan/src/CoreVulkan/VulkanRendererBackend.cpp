@@ -4,6 +4,7 @@
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <CoreSDL/SDLMainWindow.h>
+#include <CoreVulkan/VulkanRenderTarget.h>
 #include <CoreVulkan/VulkanTexture.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
@@ -77,6 +78,7 @@ namespace BECore {
             return false;
         }
 
+        Subscribe<RenderEvents::NewFrameEvent, &VulkanRendererBackend::OnNewFrame>(this);
         Subscribe<RenderEvents::SetRenderDrawColorEvent, &VulkanRendererBackend::OnSetRenderDrawColor>(this);
         Subscribe<RenderEvents::RenderClearEvent, &VulkanRendererBackend::OnRenderClear>(this);
         Subscribe<RenderEvents::RenderPresentEvent, &VulkanRendererBackend::OnRenderPresent>(this);
@@ -126,8 +128,8 @@ namespace BECore {
         _device.Destroy();
     }
 
-    void VulkanRendererBackend::BeginFrame() {
-        if (_frameActive) {
+    void VulkanRendererBackend::AcquireFrame() {
+        if (_frameAcquired) {
             return;
         }
 
@@ -150,26 +152,36 @@ namespace BECore {
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         vkBeginCommandBuffer(cmd, &beginInfo);
 
-        // Begin render pass with the current clear color
+        _frameAcquired = true;
+    }
+
+    void VulkanRendererBackend::BeginFrame() {
+        // Begin the swapchain render pass. AcquireFrame() must have been called first.
+        if (!_frameAcquired || _inSwapchainPass) {
+            return;
+        }
+
+        VkCommandBuffer cmd = _commandBuffers[_currentFrame];
+
         VkClearValue clearValue{};
         clearValue.color = _clearColor;
 
         VkRenderPassBeginInfo rpBegin{};
-        rpBegin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        rpBegin.renderPass = _swapchain.GetRenderPass();
+        rpBegin.sType       = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rpBegin.renderPass  = _swapchain.GetRenderPass();
         rpBegin.framebuffer = _swapchain.GetFramebuffer(_currentImageIndex);
-        rpBegin.renderArea.offset = {0, 0};
-        rpBegin.renderArea.extent = _swapchain.GetExtent();
+        rpBegin.renderArea  = {{0, 0}, _swapchain.GetExtent()};
         rpBegin.clearValueCount = 1;
-        rpBegin.pClearValues = &clearValue;
+        rpBegin.pClearValues    = &clearValue;
 
         vkCmdBeginRenderPass(cmd, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
 
-        _frameActive = true;
+        _currentExtent   = _swapchain.GetExtent();
+        _inSwapchainPass = true;
     }
 
     void VulkanRendererBackend::EndFrame() {
-        if (!_frameActive) {
+        if (!_inSwapchainPass) {
             return;
         }
 
@@ -184,16 +196,17 @@ namespace BECore {
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = &_imageAvailableSemaphores[frameIdx];
-        submitInfo.pWaitDstStageMask = &waitStage;
+        submitInfo.pWaitSemaphores    = &_imageAvailableSemaphores[frameIdx];
+        submitInfo.pWaitDstStageMask  = &waitStage;
         submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &cmd;
+        submitInfo.pCommandBuffers    = &cmd;
         submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &_renderFinishedSemaphores[frameIdx];
+        submitInfo.pSignalSemaphores    = &_renderFinishedSemaphores[frameIdx];
 
         vkQueueSubmit(_device.GetGraphicsQueue(), 1, &submitInfo, _inFlightFences[frameIdx]);
 
-        _frameActive = false;
+        _inSwapchainPass = false;
+        _frameAcquired   = false;
     }
 
     void VulkanRendererBackend::Clear(const Color& color) {
@@ -265,14 +278,14 @@ namespace BECore {
     // =========================================================================
 
     void VulkanRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
-        if (!_frameActive) {
+        if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
-        _rectPipeline.Draw(_commandBuffers[_currentFrame], x, y, w, h, color, _swapchain.GetExtent());
+        _rectPipeline.Draw(_commandBuffers[_currentFrame], x, y, w, h, color, _currentExtent);
     }
 
     void VulkanRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) {
-        if (!_frameActive) {
+        if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
 
@@ -294,22 +307,107 @@ namespace BECore {
         }
 
         VulkanTexturePipeline::PushConstants pc{};
-        pc.dstX = dstX;
-        pc.dstY = dstY;
-        pc.dstW = dstW;
-        pc.dstH = dstH;
-        pc.u0 = u0;
-        pc.v0 = v0;
-        pc.u1 = u1;
-        pc.v1 = v1;
-        pc.screenW = static_cast<float>(_swapchain.GetExtent().width);
-        pc.screenH = static_cast<float>(_swapchain.GetExtent().height);
+        pc.dstX    = dstX;
+        pc.dstY    = dstY;
+        pc.dstW    = dstW;
+        pc.dstH    = dstH;
+        pc.u0      = u0;
+        pc.v0      = v0;
+        pc.u1      = u1;
+        pc.v1      = v1;
+        pc.screenW = static_cast<float>(_currentExtent.width);
+        pc.screenH = static_cast<float>(_currentExtent.height);
 
-        _texturePipeline.Draw(_commandBuffers[_currentFrame], vkTexture->GetDescriptorSet(), pc, _swapchain.GetExtent());
+        _texturePipeline.Draw(_commandBuffers[_currentFrame], vkTexture->GetDescriptorSet(), pc, _currentExtent);
+    }
+
+    IntrusivePtr<IRenderTarget> VulkanRendererBackend::CreateRenderTarget(uint32_t width, uint32_t height) {
+        auto target = New<VulkanRenderTarget>();
+        if (!target->Initialize(_device.GetDevice(), _device.GetPhysicalDevice(),
+                                 _swapchain.GetImageFormat(), width, height)) {
+            LOG_ERROR("VulkanRendererBackend: CreateRenderTarget failed");
+            return {};
+        }
+        return target;
+    }
+
+    void VulkanRendererBackend::SetRenderTarget(IRenderTarget* target) {
+        ASSERT(!_inOffscreenPass && !_inSwapchainPass && _frameAcquired);
+        auto* vkTarget = static_cast<VulkanRenderTarget*>(target);
+
+        VkCommandBuffer cmd = _commandBuffers[_currentFrame];
+
+        VkClearValue clearValue{};
+        clearValue.color = _clearColor;
+
+        VkRenderPassBeginInfo rpInfo{};
+        rpInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        rpInfo.renderPass      = vkTarget->GetRenderPass();
+        rpInfo.framebuffer     = vkTarget->GetFramebuffer();
+        rpInfo.renderArea      = {{0, 0}, vkTarget->GetExtent()};
+        rpInfo.clearValueCount = 1;
+        rpInfo.pClearValues    = &clearValue;
+
+        vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        const VkExtent2D ext = vkTarget->GetExtent();
+
+        VkViewport vp{};
+        vp.x        = 0.0f;
+        vp.y        = 0.0f;
+        vp.width    = static_cast<float>(ext.width);
+        vp.height   = static_cast<float>(ext.height);
+        vp.minDepth = 0.0f;
+        vp.maxDepth = 1.0f;
+        vkCmdSetViewport(cmd, 0, 1, &vp);
+
+        VkRect2D scissor{{0, 0}, ext};
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        _currentExtent      = ext;
+        _inOffscreenPass    = true;
+        _lastOffscreenImage = vkTarget->GetImage();
+    }
+
+    void VulkanRendererBackend::UnsetRenderTarget() {
+        if (!_inOffscreenPass) {
+            return;
+        }
+
+        VkCommandBuffer cmd = _commandBuffers[_currentFrame];
+        vkCmdEndRenderPass(cmd);
+
+        // The render pass transitions the image to SHADER_READ_ONLY_OPTIMAL via finalLayout.
+        // Add an explicit pipeline barrier so the swapchain pass's fragment shader can read it.
+        VkImageMemoryBarrier barrier{};
+        barrier.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.newLayout           = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+        barrier.image = _lastOffscreenImage;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask               = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.dstAccessMask               = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(cmd,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        _inOffscreenPass   = false;
+        _lastOffscreenImage = VK_NULL_HANDLE;
     }
 
     void VulkanRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {
         Clear(event.color);
+    }
+
+    void VulkanRendererBackend::OnNewFrame() {
+        AcquireFrame();
     }
 
     void VulkanRendererBackend::OnRenderClear() {

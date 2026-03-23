@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Renderer/IRenderTarget.h>
 #include <CoreVulkan/VulkanDevice.h>
 #include <CoreVulkan/VulkanRectPipeline.h>
 #include <CoreVulkan/VulkanSwapchain.h>
@@ -41,6 +42,10 @@ namespace BECore {
         void Present() override;
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
         void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) override;
+
+        IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) override;
+        void SetRenderTarget(IRenderTarget* target) override;
+        void UnsetRenderTarget() override;
 
         // Vulkan handles exposed for imgui_impl_vulkan integration
         VkInstance GetVkInstance() const {
@@ -84,6 +89,12 @@ namespace BECore {
         bool CreateCommandBuffers();
         bool CreateSyncObjects();
 
+        // Acquires the next swapchain image and opens the command buffer.
+        // Called from OnNewFrame() — BEFORE the swapchain render pass begins so that
+        // ViewportWidget can insert an offscreen render pass first.
+        void AcquireFrame();
+
+        void OnNewFrame();
         void OnRenderClear();
         void OnRenderPresent();
         void OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event);
@@ -110,9 +121,21 @@ namespace BECore {
 
         uint32_t _currentFrame = 0;
         uint32_t _currentImageIndex = 0;
-        bool _frameActive = false;
 
-        // Clear color set by SetRenderDrawColorEvent
+        // true when the command buffer is open (frame acquired, not yet presented)
+        bool _frameAcquired = false;
+        // true when inside the swapchain render pass (between OnRenderClear and OnRenderPresent)
+        bool _inSwapchainPass = false;
+        // true when inside an offscreen render pass (between SetRenderTarget/UnsetRenderTarget)
+        bool _inOffscreenPass = false;
+
+        // Current render extent — offscreen target size or swapchain extent depending on active pass
+        VkExtent2D _currentExtent = {};
+
+        // Image handle of the current offscreen target (needed for the barrier in UnsetRenderTarget)
+        VkImage _lastOffscreenImage = VK_NULL_HANDLE;
+
+        // Clear color set by SetRenderDrawColorEvent (used for the swapchain pass)
         VkClearColorValue _clearColor = {{0.0f, 0.0f, 0.0f, 1.0f}};
     };
 

@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <BECore/Renderer/IRenderTarget.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLTexture.h>
 #include <Events/ApplicationEvents.h>
@@ -87,6 +88,15 @@ namespace BECore {
             SDL_RenderTexture(_renderer, sdlTexture->GetSDLTexture(), nullptr, &dst);
         }
     }
+
+    IntrusivePtr<IRenderTarget> SDLRendererBackend::CreateRenderTarget(uint32_t /*width*/, uint32_t /*height*/) {
+        // Not yet implemented for the SDL backend.
+        return {};
+    }
+
+    void SDLRendererBackend::SetRenderTarget(IRenderTarget* /*target*/) {}
+
+    void SDLRendererBackend::UnsetRenderTarget() {}
 
     void SDLRendererBackend::OnRenderClear() {
         if (_renderer) {

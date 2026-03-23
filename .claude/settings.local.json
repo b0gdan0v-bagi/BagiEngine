@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(find /d/AHobbyProjects/BagiEngine -type d -name *[Tt]est* -o -name *[Gg]test*)",
-      "Bash(xargs basename:*)"
+      "Bash(xargs basename:*)",
+      "Bash(cmake -B build/ClangWindows -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)",
+      "Bash(cmake -B build/ClangWindowsSolution -G \"Visual Studio 17 2022\" -A x64 -T ClangCL)"
     ]
   }
 }

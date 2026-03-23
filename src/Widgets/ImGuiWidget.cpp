@@ -32,6 +32,7 @@ namespace BECore {
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
         ImGui::StyleColorsDark();
 
@@ -61,16 +62,6 @@ namespace BECore {
     }
 
     void ImGuiWidget::Update() {
-        if (!_isInitialized) {
-            return;
-        }
-
-        if (ImGui::Begin("Debug Widget")) {
-            if (ImGui::Button("Quit")) {
-                ApplicationEvents::QuitEvent::Emit();
-            }
-        }
-        ImGui::End();
     }
 
     SDL_Window* ImGuiWidget::GetSDLWindow() {
