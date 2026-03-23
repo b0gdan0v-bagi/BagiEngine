@@ -34,7 +34,7 @@
             <component
               type="QuadRendererComponent"
               r="255"
-              g="160"
+              g="0"
               b="0"
               a="255" />
           </components>
@@ -44,16 +44,172 @@
           <components>
             <component
               type="TransformComponent"
-              x="150.600006"
+              x="159.600006"
               y="21.3999996"
               width="20.2000008"
               height="20.1000004" />
             <component
               type="QuadRendererComponent"
-              r="159"
+              r="255"
               g="0"
               b="0"
               a="255" />
+          </components>
+        </node>
+        <node
+          name="WhiteKing">
+          <components>
+            <component
+              type="TransformComponent"
+              x="10"
+              y="200"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="WhiteQueen">
+          <components>
+            <component
+              type="TransformComponent"
+              x="100"
+              y="200"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="WhiteRook">
+          <components>
+            <component
+              type="TransformComponent"
+              x="190"
+              y="200"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="WhiteBishop">
+          <components>
+            <component
+              type="TransformComponent"
+              x="280"
+              y="200"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="WhiteKnight">
+          <components>
+            <component
+              type="TransformComponent"
+              x="370"
+              y="200"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="WhitePawn">
+          <components>
+            <component
+              type="TransformComponent"
+              x="460"
+              y="200"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="BlackKing">
+          <components>
+            <component
+              type="TransformComponent"
+              x="10"
+              y="300"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="BlackQueen">
+          <components>
+            <component
+              type="TransformComponent"
+              x="100"
+              y="300"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="BlackRook">
+          <components>
+            <component
+              type="TransformComponent"
+              x="190"
+              y="300"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="BlackBishop">
+          <components>
+            <component
+              type="TransformComponent"
+              x="280"
+              y="300"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="BlackKnight">
+          <components>
+            <component
+              type="TransformComponent"
+              x="370"
+              y="300"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
+          </components>
+        </node>
+        <node
+          name="BlackPawn">
+          <components>
+            <component
+              type="TransformComponent"
+              x="460"
+              y="300"
+              width="80"
+              height="80" />
+            <component
+              type="SpriteRendererComponent" />
           </components>
         </node>
       </nodes>
