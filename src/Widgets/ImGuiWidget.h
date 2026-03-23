@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Widgets/IWidget.h>
+#include <string>
 
 struct SDL_Window;
 
@@ -29,6 +30,7 @@ namespace BECore {
         void OnSDLEvent(const SDLEvents::SDLEventWrapper& event) const;
 
         bool _isInitialized = false;
+        std::string _iniFilePath;
     };
 
 }  // namespace BECore

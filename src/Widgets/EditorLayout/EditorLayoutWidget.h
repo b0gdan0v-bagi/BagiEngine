@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Widgets/IWidget.h>
+#include <imgui.h>
 
 namespace BECore {
 
@@ -18,6 +19,12 @@ namespace BECore {
         BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
         BE_FUNCTION void Update() override;
         BE_FUNCTION void Draw() override;
+
+    private:
+        void BuildDefaultLayout(ImGuiID dockspaceId, ImVec2 size);
+
+        bool _layoutInitialized = false;
+        bool _forceResetLayout  = false;
     };
 
 }  // namespace BECore

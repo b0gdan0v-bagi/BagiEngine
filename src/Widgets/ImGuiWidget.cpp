@@ -29,6 +29,9 @@ namespace BECore {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
+        // Store imgui.ini in config/ (project root), so it survives clean builds.
+        _iniFilePath = (CoreManager::GetFileSystem().GetRootPath() / "config" / "imgui.ini").string();
+        io.IniFilename = _iniFilePath.c_str();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;

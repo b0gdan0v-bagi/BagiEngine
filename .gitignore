@@ -32,6 +32,9 @@ __pycache__/
 launcher_config.json
 meta_generator_settings.json
 
+# ImGui layout (user-specific, generated at runtime)
+config/imgui.ini
+
 # Environment variables (user-specific)
 .env
 

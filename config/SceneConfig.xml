@@ -142,13 +142,13 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
-              spriteId=""
-              texturePath="">
+              spriteId="WhiteBishop"
+              texturePath="assets/chess_test.png">
               <srcRect
-                x="0"
-                y="0"
-                w="0"
-                h="0" />
+                x="360.5"
+                y="42"
+                w="92.75"
+                h="141.75" />
             </component>
           </components>
         </node>

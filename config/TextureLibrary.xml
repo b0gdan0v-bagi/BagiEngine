@@ -19,5 +19,14 @@
         w="82.25"
         h="166.25" />
     </sprite>
+    <sprite
+      name="WhiteBishop"
+      texturePath="assets/chess_test.png">
+      <srcRect
+        x="360.5"
+        y="42"
+        w="92.75"
+        h="141.75" />
+    </sprite>
   </sprites>
 </root>
