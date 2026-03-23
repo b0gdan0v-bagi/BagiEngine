@@ -5,3 +5,7 @@
 [submodule "external/Vulkan-Headers"]
 	path = external/Vulkan-Headers
 	url = https://github.com/KhronosGroup/Vulkan-Headers.git
+[submodule "external/SDL_image"]
+	path = external/SDL_image
+	url = https://github.com/libsdl-org/SDL_image.git
+	# Fixed at tag: release-3.2.0 (requires SDL 3.2.0)
