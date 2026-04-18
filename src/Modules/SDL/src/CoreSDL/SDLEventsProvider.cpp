@@ -4,6 +4,7 @@
 
 #include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>
+#include <imgui.h>
 
 namespace BECore {
 
@@ -40,7 +41,11 @@ namespace BECore {
                 break;
 
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                SDLEvents::MouseButtonDownEvent::Emit(sdlEvent.button);
+                // Only forward to game code when ImGui is not consuming the mouse.
+                // ViewportWidget re-emits with viewport-local coords when the image is hovered.
+                if (!ImGui::GetIO().WantCaptureMouse) {
+                    SDLEvents::MouseButtonDownEvent::Emit(sdlEvent.button);
+                }
                 break;
 
                 /*case SDL_EVENT_KEY_DOWN: {

@@ -3,7 +3,9 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <CoreSDL/SDLEvents.h>
 #include <Generated/ViewportWidget.gen.hpp>
+#include <SDL3/SDL.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -50,6 +52,30 @@ namespace BECore {
 
             // Display the result as an ImGui image.
             ImGui::Image(reinterpret_cast<ImTextureID>(_renderTarget->GetImGuiTextureId()), size);
+
+            // Re-emit mouse button events with viewport-local coordinates so
+            // ClickableComponent (which works in scene space) receives correct coords.
+            if (ImGui::IsItemHovered()) {
+                const ImVec2 imgMin   = ImGui::GetItemRectMin();
+                const ImVec2 mousePos = ImGui::GetMousePos();
+                const float  localX   = mousePos.x - imgMin.x;
+                const float  localY   = mousePos.y - imgMin.y;
+
+                static constexpr Uint8 sdlButtons[] = {
+                    SDL_BUTTON_LEFT, SDL_BUTTON_RIGHT, SDL_BUTTON_MIDDLE
+                };
+                for (int i = 0; i < 3; ++i) {
+                    if (ImGui::IsMouseClicked(i)) {
+                        SDL_MouseButtonEvent btn{};
+                        btn.type   = SDL_EVENT_MOUSE_BUTTON_DOWN;
+                        btn.button = sdlButtons[i];
+                        btn.down   = true;
+                        btn.x      = localX;
+                        btn.y      = localY;
+                        SDLEvents::MouseButtonDownEvent::Emit(btn);
+                    }
+                }
+            }
         }
 
         ImGui::End();
