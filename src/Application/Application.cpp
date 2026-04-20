@@ -5,6 +5,7 @@
 #include <BECore/Logger/LogEvent.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
+#include <Games/GameManager.h>
 
 namespace BECore {
 
@@ -23,6 +24,9 @@ namespace BECore {
 
         CoreManager::GetInstance().OnApplicationInit({});
 
+        // Boot the game layer once core systems (config, scenes, widgets) are up.
+        GameManager::GetInstance().Initialize();
+
         return _isRunning;
     }
 
@@ -39,6 +43,7 @@ namespace BECore {
     }
 
     void Application::Cleanup() {
+        GameManager::GetInstance().Shutdown();
         ApplicationEvents::ApplicationCleanUpEvent::Emit();
         CoreManager::GetInstance().OnApplicationDeinit({});
     }

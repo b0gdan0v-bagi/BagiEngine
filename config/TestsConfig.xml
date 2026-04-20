@@ -9,5 +9,7 @@
         <test type="ReflectionEventTest" enabled="true" />
         <test type="TaskSystemTest" enabled="true" />
         <test type="ResourceManagerTest" enabled="true" />
+        <test type="MoveGeneratorTest" enabled="true" />
+        <test type="Match3GameModelTest" enabled="true" />
     </tests>
 </root>

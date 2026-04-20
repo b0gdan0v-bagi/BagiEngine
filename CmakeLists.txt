@@ -330,6 +330,12 @@ add_subdirectory(src/Modules/SDL)
 set(VULKAN_SDK "C:/VulkanSDK/1.4.341.1" CACHE PATH "Path to Vulkan SDK (optional; used for loader on Windows)")
 add_subdirectory(src/Modules/Vulkan)
 
+# Game-layer modules (base infrastructure + concrete games).
+# Order matters: Games provides IGame/GameManager; concrete games depend on it.
+add_subdirectory(src/Modules/Games)
+add_subdirectory(src/Modules/Chess)
+add_subdirectory(src/Modules/Match3)
+
 file(GLOB_RECURSE SOURCES 
     "src/*.cpp" 
     "src/*.h"
@@ -380,6 +386,14 @@ target_link_libraries(MyGame PRIVATE
 )
 
 target_link_libraries(MyGame PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,VulkanModule>)
+
+# Game modules: WHOLE_ARCHIVE so that AbstractFactory<IGame> static initializers
+# (auto-registration of derived games) survive linker dead-stripping.
+target_link_libraries(MyGame PRIVATE
+    $<LINK_LIBRARY:WHOLE_ARCHIVE,GamesModule>
+    $<LINK_LIBRARY:WHOLE_ARCHIVE,ChessModule>
+    $<LINK_LIBRARY:WHOLE_ARCHIVE,Match3Module>
+)
 target_compile_definitions(MyGame PRIVATE IMGUI_VULKAN_AVAILABLE=1)
 
 # =============================================================================

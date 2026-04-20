@@ -27,5 +27,7 @@
       type="SceneEditorWidget" />
     <widget
       type="TextureEditorWidget" />
+    <widget
+      type="GameSelectorWidget" />
   </widgets>
 </root>
