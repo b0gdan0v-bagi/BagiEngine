@@ -31,6 +31,7 @@ __pycache__/
 # Launcher config (user-specific)
 launcher_config.json
 meta_generator_settings.json
+CMakeUserPresets.json
 
 # ImGui layout (user-specific, generated at runtime)
 config/imgui.ini
