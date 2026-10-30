@@ -1,7 +1,6 @@
 ---
-description: Rules for SDL module development
-globs: src/Modules/SDL/**/*
-alwaysApply: false
+paths:
+  - "src/Modules/SDL/**/*"
 ---
 
 # SDL Module Guidelines

@@ -1,12 +1,10 @@
 ---
-description: Rules for rendering architecture and texture pipeline
-globs:
+paths:
   - "src/Modules/BECore/Renderer/**/*"
   - "src/Modules/BECore/Scene/Components/*RendererComponent*"
   - "src/Modules/SDL/src/CoreSDL/*Renderer*"
   - "src/Modules/SDL/src/CoreSDL/*Texture*"
   - "src/Modules/Vulkan/src/CoreVulkan/*Renderer*"
-alwaysApply: false
 ---
 
 # Rendering Module Guidelines

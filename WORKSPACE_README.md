@@ -97,7 +97,7 @@ LIBCLANG_PATH=C:/Program Files/LLVM
 
 - **CMake Configure** - настройка проекта с выбором генератора и компилятора
 - **CMake Build** - сборка проекта
-- **Open IDE** - открытие проекта в Cursor / Visual Studio / Xcode
+- **Open IDE** - открытие проекта в VS Code / Visual Studio / Xcode
 - **Pipelines** - цепочки действий (например: Configure -> Build -> Open IDE)
 - **Сохранение настроек** - последние настройки сохраняются между запусками
 
@@ -121,17 +121,19 @@ LIBCLANG_PATH=C:/Program Files/LLVM
 
 ## Альтернативный способ (все платформы)
 
-Если у вас `cursor` добавлен в PATH:
+Если у вас `code` добавлен в PATH:
 
 **Windows:**
 ```cmd
-cursor CI\BagiEngine.code-workspace
+code CI\BagiEngine.code-workspace
 ```
 
 **macOS/Linux:**
 ```bash
-cursor CI/BagiEngine.code-workspace
+code CI/BagiEngine.code-workspace
 ```
+
+На macOS команда `code` появляется после «Shell Command: Install 'code' command in PATH» в палитре команд VS Code.
 
 ## Структура проекта
 
@@ -156,7 +158,7 @@ BagiEngine/
 │   └── SDL/             # SDL3 (git submodule)
 ├── config/              # XML configuration files
 ├── build/Generated/     # Auto-generated reflection code
-├── .cursorignore        # Игнорирование vendored для AI
+├── .claude/             # Rules, skills и планы для Claude Code
 └── CI/
     ├── setup_venv.bat       # Настройка .venv через uv (Windows CMD)
     ├── setup_venv.ps1       # Настройка .venv через uv (PowerShell)
@@ -171,7 +173,7 @@ BagiEngine/
 
 Используйте `BE_CLASS` и `BE_REFLECT_FIELD` для автоматической сериализации.
 Примитивы → XML атрибуты, классы → вложенные элементы.
-Подробнее: `.cursor/rules/reflection-module.mdc`
+Подробнее: `.claude/rules/reflection-module.md`
 
 ## Ручная сборка (без Launcher)
 

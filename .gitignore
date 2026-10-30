@@ -11,7 +11,7 @@
 *.filters
 *.user
 
-# Cursor / VS Code
+# VS Code
 .vscode/
 .cache/
 

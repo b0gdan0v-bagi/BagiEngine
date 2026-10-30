@@ -1,9 +1,7 @@
 ---
-description: Rules for Widget development
-globs: 
-  - src/Widgets/**/*
-  - src/Modules/BECore/Widgets/**/*
-alwaysApply: false
+paths:
+  - "src/Widgets/**/*"
+  - "src/Modules/BECore/Widgets/**/*"
 ---
 
 # Widget System Guidelines

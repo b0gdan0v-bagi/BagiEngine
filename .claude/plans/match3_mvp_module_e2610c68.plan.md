@@ -34,7 +34,7 @@ isProject: false
 
 # Match3 MVP
 
-Добавляем `Match3Game` как вторую конкретную реализацию `IGame` поверх уже готовой Games-инфраструктуры (см. [chess-mvp-module](.cursor/plans/chess-mvp-module_5d6e2126.plan.md)). Никаких правок в `src/Modules/Games`, `GameManager`, `GameSelectorWidget`, `SceneManager::SetActiveScene` не делаем — всё это уже заложено chess-планом.
+Добавляем `Match3Game` как вторую конкретную реализацию `IGame` поверх уже готовой Games-инфраструктуры (см. [chess-mvp-module](chess-mvp-module_5d6e2126.plan.md)). Никаких правок в `src/Modules/Games`, `GameManager`, `GameSelectorWidget`, `SceneManager::SetActiveScene` не делаем — всё это уже заложено chess-планом.
 
 ## Архитектура
 
@@ -184,7 +184,7 @@ BECore -> Math -> Events -> TaskSystem -> SDL -> Games -> Chess -> Match3 -> App
 
 ## 8. Важные детали (по правилам проекта)
 
-- Все идентификаторы — `PoolString` + литералы `"..."_intern` (см. [.cursorrules](.cursorrules)).
+- Все идентификаторы — `PoolString` + литералы `"..."_intern` (см. [CLAUDE.md](../../CLAUDE.md)).
 - Все коллекции — EASTL (`eastl::vector`, `eastl::optional`, `eastl::hash_set`).
 - Для рандома — `eastl::default_random_engine` (или `std::mt19937` если EASTL не предоставляет — без `<random>` в заголовках, унести в `.cpp`).
 - Никаких `enum class` — `CORE_ENUM`.

@@ -522,12 +522,10 @@ class ActionExecutor:
         
         return self._run_streaming_command(cmd, env, on_output, timeout=600)
     
-    def open_cursor(self) -> ActionResult:
-        """Open project in Cursor IDE with workspace file.
+    def open_vscode(self) -> ActionResult:
+        """Open project in Visual Studio Code with workspace file.
         
-        The workspace file (CI/BagiEngine.code-workspace) points to the project root,
-        where .cursorrules and .cursor/rules/ are located. Cursor will automatically
-        load these rules when opening the workspace.
+        The workspace file (CI/BagiEngine.code-workspace) points to the project root.
         """
         platform = get_current_platform()
         
@@ -541,25 +539,25 @@ class ActionExecutor:
         
         try:
             if platform == Platform.WINDOWS:
-                # Try common Cursor paths on Windows
-                cursor_paths = [
-                    Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Cursor" / "Cursor.exe",
-                    Path(os.environ.get("PROGRAMFILES", "")) / "Cursor" / "Cursor.exe",
-                    Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Cursor" / "Cursor.exe",
+                # Try common VS Code paths on Windows
+                code_paths = [
+                    Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Microsoft VS Code" / "Code.exe",
+                    Path(os.environ.get("PROGRAMFILES", "")) / "Microsoft VS Code" / "Code.exe",
+                    Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Microsoft VS Code" / "Code.exe",
                 ]
                 
-                cursor_exe = None
-                for path in cursor_paths:
+                code_exe = None
+                for path in code_paths:
                     if path.exists():
-                        cursor_exe = path
+                        code_exe = path
                         break
                 
-                if cursor_exe:
+                if code_exe:
                     # Use absolute path to workspace file
                     # DETACHED_PROCESS makes the process independent of parent
                     # Redirect stdio to fully detach from parent process
                     subprocess.Popen(
-                        [str(cursor_exe), str(self.workspace_file.resolve())],
+                        [str(code_exe), str(self.workspace_file.resolve())],
                         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
                         stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL,
@@ -568,7 +566,7 @@ class ActionExecutor:
                 else:
                     # Try from PATH
                     subprocess.Popen(
-                        ["cursor", str(self.workspace_file.resolve())], 
+                        ["code", str(self.workspace_file.resolve())],
                         shell=True,
                         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
                         stdin=subprocess.DEVNULL,
@@ -579,56 +577,55 @@ class ActionExecutor:
             elif platform == Platform.MACOS:
                 # Try command from PATH first (most reliable)
                 try:
-                    # Check if cursor command is available
+                    # Check if code command is available
                     result = subprocess.run(
-                        ["which", "cursor"],
+                        ["which", "code"],
                         capture_output=True,
                         timeout=2
                     )
                     if result.returncode == 0:
                         subprocess.Popen(
-                            ["cursor", str(self.workspace_file.resolve())],
+                            ["code", str(self.workspace_file.resolve())],
                             start_new_session=True
                         )
                     else:
-                        raise FileNotFoundError("cursor command not in PATH")
+                        raise FileNotFoundError("code command not in PATH")
                 except (FileNotFoundError, subprocess.TimeoutExpired):
                     # Fallback to direct app bundle path
-                    cursor_app = Path("/Applications/Cursor.app")
-                    if cursor_app.exists():
+                    vscode_app = Path("/Applications/Visual Studio Code.app")
+                    if vscode_app.exists():
                         # Use the executable inside the app bundle
-                        cursor_exe = cursor_app / "Contents" / "Resources" / "app" / "bin" / "cursor"
-                        if cursor_exe.exists():
+                        code_exe = vscode_app / "Contents" / "Resources" / "app" / "bin" / "code"
+                        if code_exe.exists():
                             subprocess.Popen(
-                                [str(cursor_exe), str(self.workspace_file.resolve())],
+                                [str(code_exe), str(self.workspace_file.resolve())],
                                 start_new_session=True
                             )
                         else:
                             # Fallback to open command
                             subprocess.Popen(
-                                ["open", "-a", "Cursor", str(self.workspace_file.resolve())],
+                                ["open", "-a", "Visual Studio Code", str(self.workspace_file.resolve())],
                                 start_new_session=True
                             )
                     else:
                         return ActionResult(
                             False,
                             "",
-                            "Cursor not found. Please install Cursor or add it to PATH."
+                            "VS Code not found. Please install Visual Studio Code or add it to PATH."
                         )
             else:
                 # Linux - try from PATH
                 subprocess.Popen(
-                    ["cursor", str(self.workspace_file.resolve())],
+                    ["code", str(self.workspace_file.resolve())],
                     start_new_session=True
                 )
-            
+
             return ActionResult(
-                True, 
-                f"Cursor opened with workspace: {self.workspace_file.name}\n"
-                f"Workspace points to project root where .cursorrules and .cursor/rules/ are located."
+                True,
+                f"VS Code opened with workspace: {self.workspace_file.name}"
             )
         except Exception as e:
-            return ActionResult(False, "", f"Failed to open Cursor: {e}")
+            return ActionResult(False, "", f"Failed to open VS Code: {e}")
     
     def open_visual_studio(self, vs_build_dirs: Optional[list[str]] = None) -> ActionResult:
         """Open project in Visual Studio.
@@ -780,10 +777,10 @@ class ActionExecutor:
             "close_vs": self.close_visual_studio,
             "clean_build": lambda: self.clean_build(kwargs.get("compiler", "MSVC"), kwargs.get("build_type", "Debug")),
             "clean_all_builds": self.clean_all_builds,
-            "open_cursor": self.open_cursor,
+            "open_vscode": self.open_vscode,
             "open_vs": lambda: self.open_visual_studio(kwargs.get("vs_build_dirs")),
             "open_xcode": self.open_xcode,
-            "open_ide": lambda: self._open_ide(kwargs.get("ide", "cursor")),
+            "open_ide": lambda: self._open_ide(kwargs.get("ide", "vscode")),
         }
         
         if action_id not in action_map:
@@ -794,7 +791,7 @@ class ActionExecutor:
     def _open_ide(self, ide: str) -> ActionResult:
         """Open the specified IDE."""
         ide_map = {
-            "cursor": self.open_cursor,
+            "vscode": self.open_vscode,
             "vs": self.open_visual_studio,
             "xcode": self.open_xcode,
         }
@@ -831,10 +828,10 @@ ACTIONS = {
         description="Clean all build directories (permanent deletion via git clean)",
         platforms=[Platform.WINDOWS, Platform.MACOS, Platform.LINUX]
     ),
-    "open_cursor": Action(
-        id="open_cursor",
-        name="Open Cursor",
-        description="Open project in Cursor IDE",
+    "open_vscode": Action(
+        id="open_vscode",
+        name="Open VS Code",
+        description="Open project in Visual Studio Code",
         platforms=[Platform.WINDOWS, Platform.MACOS, Platform.LINUX]
     ),
     "close_vs": Action(

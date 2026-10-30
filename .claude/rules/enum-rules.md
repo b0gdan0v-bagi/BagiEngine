@@ -1,7 +1,5 @@
 ---
-description: Guidelines for CORE_ENUM macro and EnumUtils class
-globs:
-  - "**/EnumUtils.h"
+paths:
   - "**/*.h"
   - "**/*.cpp"
 ---

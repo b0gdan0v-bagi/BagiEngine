@@ -1,7 +1,6 @@
 ---
-description: Rules for Logger module development
-globs: src/Modules/BECore/Logger/**/*
-alwaysApply: false
+paths:
+  - "src/Modules/BECore/Logger/**/*"
 ---
 
 # Logger Module Guidelines

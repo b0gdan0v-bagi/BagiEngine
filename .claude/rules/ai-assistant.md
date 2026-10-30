@@ -1,9 +1,3 @@
----
-description: Instructions for AI assistant when working with BagiEngine
-globs: "**/*"
-alwaysApply: true
----
-
 # AI Assistant Instructions
 
 ## Language Preferences

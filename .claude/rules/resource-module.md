@@ -1,3 +1,8 @@
+---
+paths:
+  - "src/Modules/BECore/Resource/**/*"
+---
+
 # Resource Module Guidelines
 
 **Glob pattern:** `src/Modules/BECore/Resource/**/*`

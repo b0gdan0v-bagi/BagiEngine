@@ -1,11 +1,9 @@
 ---
-description: Rules for Test system and Assertions
-globs: 
-  - src/Modules/BECore/Tests/**/*
-  - src/Modules/BECore/Assert/**/*
-  - config/TestsConfig.xml
-  - config/AssertHandlersConfig.xml
-alwaysApply: false
+paths:
+  - "src/Modules/BECore/Tests/**/*"
+  - "src/Modules/BECore/Assert/**/*"
+  - "config/TestsConfig.xml"
+  - "config/AssertHandlersConfig.xml"
 ---
 
 # Test System & Assertions

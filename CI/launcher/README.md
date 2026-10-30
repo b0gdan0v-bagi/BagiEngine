@@ -7,7 +7,7 @@ PyQt6-based launcher for BagiEngine project with build configuration management 
 - **Multi-configuration builds** - manage multiple compiler/generator combinations
 - **Pipeline system** - create custom build workflows
 - **Real-time output** - stream CMake output during configuration and build
-- **IDE integration** - open project in Cursor, Visual Studio, or Xcode
+- **IDE integration** - open project in VS Code, Visual Studio, or Xcode
 - **Environment configuration** - load settings from `.env` file
 
 ## Environment Configuration
@@ -116,7 +116,7 @@ Create custom build workflows by checking actions in execution order:
 - **Clean Build** - remove build artifacts (per-config)
 - **CMake Configure** - configure project (per-config)
 - **CMake Build** - compile project (per-config)
-- **Open Cursor/VS/Xcode** - launch IDE
+- **Open VS Code / Visual Studio / Xcode** - launch IDE
 
 ### Example Pipelines
 
@@ -125,11 +125,11 @@ Create custom build workflows by checking actions in execution order:
 2. Clean Build (all configs)
 3. CMake Configure (all configs)
 4. CMake Build (all configs)
-5. Open Cursor
+5. Open VS Code
 
 **Quick Configure:**
 1. CMake Configure (active config)
-2. Open Cursor
+2. Open VS Code
 
 ## Quick Actions
 
@@ -137,7 +137,7 @@ Single-click shortcuts for common tasks:
 - **CMake Configure** - configure with active configuration
 - **CMake Build** - build with active configuration
 - **Clean** - remove build artifacts (confirmation required)
-- **Open Cursor** - launch Cursor IDE with workspace
+- **Open VS Code** - launch Visual Studio Code with workspace
 - **Open Visual Studio** - open .sln file (if using VS generator)
 - **Meta Generator** - configure LLVM path and generate reflection code
 - **Settings** - manage build configurations

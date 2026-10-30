@@ -1,7 +1,6 @@
 ---
-description: Rules for Events module development
-globs: src/Modules/Events/**/*
-alwaysApply: false
+paths:
+  - "src/Modules/Events/**/*"
 ---
 
 # Events Module Guidelines

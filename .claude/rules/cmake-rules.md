@@ -1,10 +1,8 @@
 ---
-description: Rules for CMake configuration
-globs: 
-  - CMakeLists.txt
+paths:
   - "**/CMakeLists.txt"
-  - "*.cmake"
-alwaysApply: false
+  - "**/CmakeLists.txt"
+  - "**/*.cmake"
 ---
 
 # CMake Guidelines for BagiEngine
