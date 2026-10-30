@@ -4,23 +4,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build Commands
 
+Use the presets from `CMakePresets.json` (same ones VS Code CMake Tools shows). Each preset builds into `build/<preset>/`; the `build` skill automates this.
+
 ```bash
-# Configure (Ninja recommended)
-cmake -B build -G Ninja
-
-# Build
-cmake --build build
-
-# With explicit compiler (Clang)
-cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
-cmake --build build
-
-# Visual Studio
-cmake -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Debug
+cmake --list-presets=build                 # presets available on this OS
+cmake --preset macos-debug                 # configure (also regenerates reflection code)
+cmake --build --preset macos-debug         # build MyGame
 ```
 
-C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output lands in `build/{CompilerName}{PlatformName}/`.
+| OS | Presets |
+|----|---------|
+| macOS | `macos-debug`, `macos-release` (Clang + Ninja) |
+| Windows | `windows-msvc-{debug,release}`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
+
+Per-machine settings go in `CMakeUserPresets.json` (git-ignored). Without presets (legacy flat `build/`):
+
+```bash
+cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+cmake --build build
+```
+
+C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output lands in `build/{CompilerName}{PlatformName}/` regardless of preset, so Debug and Release Ninja presets overwrite each other's executable. Reflection code is generated at configure time: re-run `cmake --preset ...` after changing `BE_CLASS` / `BE_REFLECT_FIELD`.
 
 ## Running Tests
 
@@ -116,4 +120,4 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 ## Rules and Skills
 
 - `.claude/rules/` holds module-specific guidance (Core, Events, Reflection, Resource, Rendering, SDL, TaskSystem, Widgets, Tests, CMake, enums). Most rules load when matching files are read; read the relevant rule before changing a module.
-- `.claude/skills/` holds `clang-format`, `strip-pch-includes`, `tidy-fix` and `cpp-senior-programmer`.
+- `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix` and `cpp-senior-programmer`.

@@ -3,6 +3,7 @@ paths:
   - "**/CMakeLists.txt"
   - "**/CmakeLists.txt"
   - "**/*.cmake"
+  - "CMakePresets.json"
 ---
 
 # CMake Guidelines for BagiEngine
@@ -97,6 +98,18 @@ BECoreModule must be first (provides PCH):
 
 - Keep SDL_image wired after SDL in root dependency setup to avoid missing SDL linkage during texture-related builds.
 - Document new rendering dependencies in CMake when introducing asset/texture features to prevent drift between code and build config.
+
+## Presets
+
+`CMakePresets.json` (project root) is the single source of build configurations; VS Code CMake Tools, the CLI and the `build` skill all use it.
+
+- Hidden bases are composed via `inherits`: generator (`ninja`, `vs2022`), build type (`debug`, `release`), compiler (`clang`, `msvc`), host `condition` (`host-macos`, `host-windows`). Visible presets are named `<os>-<toolchain>-<type>`.
+- Every `binaryDir` is `${sourceDir}/build/${presetName}`. Build presets target `MyGame` and carry the same host `condition`, so other OSes' presets stay hidden.
+- Release presets set `ENGINE_ENABLE_ASSERTS=OFF` / `ENGINE_ENABLE_EXPECTS=OFF` explicitly (the logic in the root `CmakeLists.txt` that should do this for `CMAKE_BUILD_TYPE=Release` never fires because `option()` has already defined the cache entries).
+- Ninja on Windows uses `architecture`/`toolset` with `strategy: external` so CMake Tools loads the Visual Studio environment. A plain shell does not get it; use the `windows-vs2022-*` presets there.
+- Do not put per-machine values (`VULKAN_SDK`, ccache, LLVM paths) in `CMakePresets.json`; use `CMakeUserPresets.json` (git-ignored).
+- When adding a preset, add the matching build preset and extend the preset list in `CLAUDE.md` and the `build` skill.
+- Do not pre-set a variable to `""` before `find_program()`/`find_path()`: the search is skipped (this broke the `glslc` PATH fallback in `src/Modules/Vulkan/CMakeLists.txt`).
 
 ## Output Directory Structure
 

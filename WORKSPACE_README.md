@@ -177,19 +177,38 @@ BagiEngine/
 
 ## Ручная сборка (без Launcher)
 
-### CMake с Ninja
+### CMake presets (рекомендуется)
+
+Конфигурации описаны в `CMakePresets.json`; те же пресеты использует расширение CMake Tools в VS Code.
+Каждый пресет собирается в свой каталог `build/<имя-пресета>/`.
+```bash
+cmake --list-presets=build            # пресеты, доступные на этой ОС
+cmake --preset macos-debug            # configure (заодно генерирует reflection-код)
+cmake --build --preset macos-debug    # сборка MyGame
+```
+
+| ОС | Пресеты |
+|----|---------|
+| macOS | `macos-debug`, `macos-release` (Clang + Ninja) |
+| Windows | `windows-msvc-{debug,release}`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
+
+Настройки конкретной машины (например `VULKAN_SDK`, ccache) кладите в `CMakeUserPresets.json` — он в `.gitignore`.
+Исполняемый файл всегда лежит в `build/{Compiler}{Platform}/MyGame`, поэтому Debug и Release (Ninja) затирают друг друга.
+Reflection-код генерируется на этапе configure: после правок `BE_CLASS` / `BE_REFLECT_FIELD` повторите `cmake --preset ...`.
+
+### CMake с Ninja (без пресетов, старый плоский `build/`)
 ```bash
 cmake -B build -G Ninja
 cmake --build build
 ```
 
-### CMake с Visual Studio
+### CMake с Visual Studio (без пресетов)
 ```bash
 cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Debug
 ```
 
-### CMake с Clang
+### CMake с Clang (без пресетов)
 ```bash
 cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 cmake --build build
@@ -201,6 +220,9 @@ cmake --build build
 1. IDE автоматически загрузит все настройки
 2. Рекомендуемые расширения будут предложены к установке
 3. IntelliSense будет настроен для C++23
+4. CMake Tools работает через пресеты (`cmake.useCMakePresets: always`): выберите пресет командами
+   **CMake: Select Configure Preset** и **CMake: Select Build Preset** (или в строке состояния), затем **CMake: Configure** и F7 (сборка).
+   F5 запускает отладку собранного `MyGame` (путь берётся из `${command:cmake.launchTargetPath}`)
 
 ### Горячие клавиши:
 - **Ctrl/Cmd + Shift + B** - собрать проект
