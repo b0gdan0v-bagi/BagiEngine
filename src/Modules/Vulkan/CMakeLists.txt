@@ -11,6 +11,7 @@
 
 get_filename_component(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
+get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
 
 set(VULKAN_LOADER_ROOT "${PROJECT_ROOT}/external/Vulkan-Loader")
 
