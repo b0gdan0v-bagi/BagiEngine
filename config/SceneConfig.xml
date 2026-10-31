@@ -100,7 +100,7 @@
               height="80" />
             <component
               type="SpriteRendererComponent"
-              spriteId="WhineQueen"
+              spriteId="WhiteQueen"
               texturePath="assets/chess_test.png">
               <srcRect
                 x="138.25"
