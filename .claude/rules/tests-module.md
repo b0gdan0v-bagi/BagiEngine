@@ -24,7 +24,7 @@ Default to GoogleTest. Add an `ITest` only when the check cannot run in the test
 tests/
 ├── CMakeLists.txt      # target BagiEngineTests via be_add_game_tests
 ├── Common/             # BagiEngineTestSupport (static lib): TestMain.cpp, EngineEnvironment, AssertBridge, Printers.h
-└── BECore/             # engine tests (+ ReflectionTest.h / ReflectionEventTest.h: reflected test data)
+└── BECore/             # engine tests (+ ReflectionTest.h / ReflectionEventTest.h / SceneEventsTest.h: reflected test data)
 games/<Name>/tests/     # a game's tests, built as <Name>Tests by be_add_game_tests in games/<Name>/CMakeLists.txt
 ```
 

@@ -6,7 +6,7 @@ Known problems that are not being worked on yet. One entry per problem: where it
 
 Direction for the engine, not a problem entry. The engine has strong infrastructure (reflection, layered config, TaskSystem, ImGui editor, tests) and no runtime for a real 2D game: no frame time, no animation, text, audio or input mapping, and the game cannot run without the editor. The entries below follow this order. Every "missing" statement was found by reading the code, not by running a game.
 
-1. **Hygiene:** CI (entry below), scene-scoped events (entry above).
+1. **Hygiene:** CI (entry below). Scene-scoped events are done: components subscribe with `SubscribeInScene` (`BECore/Scene/CLAUDE.md`).
 2. **Time and run modes:** frame time, game-only run mode.
 3. **Minimum for a 2D game, in this order:** animation, 2D rendering, text, audio, input mapping, in-game UI.
 4. **Owner decisions:** renderer backends, what ECS means in this engine.
@@ -35,25 +35,6 @@ Direction for the engine, not a problem entry. The engine has strong infrastruct
 
 The same pattern (an enum hint whose names differ from what the loader expects) can exist for other registered fields: `LogLevel` for `sink/@minLevel` is fine because `minLevel` is read through `EnumUtils`, but check any new `RegisterEnum` call against the loader that reads the attribute.
 
-## Scene events are global: components of inactive scenes still react to `SceneDrawEvent` / `SceneUpdateEvent`
-
-**Where:** `src/Modules/BECore/Scene/Scene.cpp` (`Update` / `Draw` emit `SceneEvents::*`), `SceneNode.cpp` (`WireToScene` calls `OnAttached()`), `SceneManager.cpp` (`SetActiveScene` only swaps the pointer), `Scene/Components/QuadRendererComponent.cpp` and `SpriteRendererComponent.cpp` (subscribe in `OnAttached()` without checking the scene).
-
-**What is wrong** (found by reading the code, not reproduced in a running game):
-
-1. `SceneUpdateEvent` and `SceneDrawEvent` are `EventBase` events with one static dispatcher per type, so they are not tied to a scene.
-2. Every scene is deserialized and initialized when `SceneConfig` loads (`Scene::Initialize()` is called by the reflection loader), so `OnAttached()` runs for the components of **all** scenes and each one subscribes to the global events.
-3. `SceneManager::SetActiveScene()` only changes which scene emits the events. When a scene is active, the quads and sprites of every other loaded scene should still receive `SceneDrawEvent` and be drawn on top of it. This used to show up as `MainScene` (3 `QuadRendererComponent` and 12 `SpriteRendererComponent` nodes) under `ChessScene`; since the games were split out of the engine, a game's `SceneConfig.xml` replaces the engine's and holds only the game's own scenes, so a game executable no longer loads `MainScene` and the symptom is hidden, not fixed.
-4. Game components avoid this on their own: `ChessBoardComponent` / `ChessPieceComponent` do nothing unless `GameManager::GetActive()` is `ChessGame`. The built-in renderer components have no such check.
-
-**Check first:** reproduce it with a game that has two scenes (or a gtest with two scenes), and update this entry and `BECore/Scene/CLAUDE.md` with what you find.
-
-**A fix has to cover:**
-
-- a scene-scoped dispatch: either the scene's components subscribe only while their scene is active (attach/detach on `SetActiveScene`), or the event carries the emitting scene and handlers ignore foreign scenes;
-- the same for `ClickableComponent` (global `SDLEvents::MouseButtonDownEvent`) and `ChangeToRandomColorDebugComponent` (global `ActionEvent`), which also react regardless of the active scene;
-- a gtest with two scenes where only the active one draws and reacts (needs a renderer double or an event counter, so it can run without a window).
-
 ## No CI: builds and tests run only on a developer machine
 
 **Where:** the repository has no `.github/` and no other pipeline definition. Presets are in `CMakePresets.json`, tests run through `ctest --preset ...`.
@@ -67,7 +48,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 - a workflow for macOS (`macos-debug`) and Windows (one MSVC or Clang preset) that checks out the submodules (`git submodule update --init --recursive`, `external/googletest` included), configures, builds the game and test targets and runs `ctest`;
 - a decision for the Vulkan loader DLL on the Windows runner (install the SDK, fetch the loader, or build without the Vulkan backend), after checking whether the test executables need it at all;
-- a guard on the number of tests (145 at the last count): it must not drop;
+- a guard on the number of tests (152 at the last count): it must not drop;
 - a Linux job once Linux presets exist (see the entry on test gaps and platforms).
 
 ## No frame time: update has no `deltaTime` and no fixed step
@@ -172,7 +153,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - the SDL conversions restored or rewritten so key, mouse and window events are emitted again, with a rule for when ImGui keeps the input;
 - an `InputMap` read from XML config (layered, so a game ships its own): key / button / axis → action, with pressed, held and released states and an axis value;
 - gamepad support through SDL3 events;
-- the scene-scoped dispatch from the scene events entry (`ClickableComponent` is named there);
+- components that react to mapped actions or raw input subscribe with `SubscribeInScene`, so only the active scene reacts (`ClickableComponent` already does);
 - a gtest that feeds raw events and checks the resulting actions.
 
 ## No in-game UI: UI exists only as ImGui editor panels
@@ -252,12 +233,11 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 **What is missing** (found by reading the repository):
 
-1. `Scene`, `SceneManager`, `Renderer`, `Widgets` and the components have no tests. The tests cover reflection, events, file system, resources, TaskSystem, format, enums and the pure game rules.
+1. `Renderer`, `Widgets` and most components have no tests. `Scene` / `SceneManager` are covered only for which scene reacts to events (`SceneEventsTest`). The tests cover reflection, events, file system, resources, TaskSystem, format, enums and the pure game rules.
 2. There are no Linux presets although the CMake has a Linux branch.
 
 **A fix has to cover:**
 
-- the two-scene gtest from the scene events entry as the first scene test;
 - a renderer test double (an `IRenderer` that records calls), so components can be tested without a window;
 - Linux presets (`linux-debug`, `linux-release`) and a CI job once the CI entry is done.
 

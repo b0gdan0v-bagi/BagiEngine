@@ -35,7 +35,7 @@ namespace BECore {
             LOG_ERROR(Format("SpriteRendererComponent: failed to load texture '{}'", _texturePath.ToStringView()).c_str());
             return;
         }
-        Subscribe<SceneEvents::SceneDrawEvent, &SpriteRendererComponent::OnDraw>(this);
+        SubscribeInScene<SceneEvents::SceneDrawEvent, &SpriteRendererComponent::OnDraw>(this);
     }
 
     void SpriteRendererComponent::ReloadTexture() {
@@ -54,7 +54,7 @@ namespace BECore {
             return;
         }
 
-        Subscribe<SceneEvents::SceneDrawEvent, &SpriteRendererComponent::OnDraw>(this);
+        SubscribeInScene<SceneEvents::SceneDrawEvent, &SpriteRendererComponent::OnDraw>(this);
     }
 
     void SpriteRendererComponent::OnDraw(const SceneEvents::SceneDrawEvent&) {

@@ -5,6 +5,8 @@
 
 namespace BECore {
 
+    class SceneManager;
+
     class Scene : public RefCounted {
         BE_CLASS(Scene, FACTORY_BASE)
     public:
@@ -15,6 +17,18 @@ namespace BECore {
 
         void Update();
         void Draw();
+
+        /**
+         * @brief True while this is the scene that SceneManager updates and draws.
+         *
+         * Scene events and input events are global, so every loaded scene's components receive them;
+         * IComponent::SubscribeInScene uses this flag to let only the active scene's components react.
+         * A scene that no SceneManager has activated is never active.
+         */
+        bool IsActive() const;
+
+        /// Called by SceneManager only, when the active scene changes.
+        void SetActive(bool active, PassKey<SceneManager>);
 
         /**
          * @brief Sync the runtime hierarchy back into the serializable _nodes field.
@@ -33,6 +47,7 @@ namespace BECore {
         BE_REFLECT_FIELD eastl::vector<IntrusivePtr<SceneNode>> _nodes;
         entt::registry _registry;
         IntrusivePtr<SceneNode> _rootNode;
+        bool _active = false;
     };
 
 }  // namespace BECore

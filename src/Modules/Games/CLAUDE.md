@@ -47,5 +47,5 @@ The engine must stay free of game names: no engine code, CMake or config outside
 
 ## Gotchas
 
-- Scene events are global (see `BECore/Scene/CLAUDE.md`), so a game's components should check that their game is the active one before acting on clicks or drawing. Chess does it with `GameManager::GetInstance().GetActive()->Cast<ChessGame>()`.
+- Scene and input events are global (see `BECore/Scene/CLAUDE.md`): a game's components subscribe with `SubscribeInScene`, so they react only while their scene is active. A component that reads the game's shared model must still check that the game is the active one. Chess does it with `GameManager::GetInstance().GetActive()->Cast<ChessGame>()`.
 - `IGame` has no per-frame hook: per-frame work belongs in a component on the game's scene.

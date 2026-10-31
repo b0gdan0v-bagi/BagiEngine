@@ -26,6 +26,9 @@ namespace BECore {
         Scene* GetSceneByName(PoolString name) const;
 
     private:
+        /// Makes @p scene the active one and keeps Scene::IsActive() in step. @p scene may be null.
+        void Activate(Scene* scene);
+
         BE_REFLECT_FIELD eastl::vector<IntrusivePtr<Scene>> _scenes;
         Scene* _activeScene = nullptr;
     };

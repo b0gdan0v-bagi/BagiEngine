@@ -16,4 +16,8 @@ namespace BECore {
         return *_node;
     }
 
+    bool IComponent::IsSceneActive() const {
+        return _scene != nullptr && _scene->IsActive();
+    }
+
 }  // namespace BECore

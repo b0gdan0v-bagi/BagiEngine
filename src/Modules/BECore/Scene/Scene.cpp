@@ -25,6 +25,14 @@ namespace BECore {
         SceneEvents::SceneDrawEvent::Emit();
     }
 
+    bool Scene::IsActive() const {
+        return _active;
+    }
+
+    void Scene::SetActive(bool active, PassKey<SceneManager>) {
+        _active = active;
+    }
+
     entt::registry& Scene::GetRegistry() {
         return _registry;
     }
