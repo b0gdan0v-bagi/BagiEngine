@@ -1,11 +1,26 @@
-#include "MoveGeneratorTest.h"
-
 #include <Chess/Game/ChessBoard.h>
+#include <Chess/Game/ChessTypes.h>
 #include <Chess/Game/MoveGenerator.h>
+#include <Common/Printers.h>
 #include <EASTL/algorithm.h>
-#include <Generated/MoveGeneratorTest.gen.hpp>
 
+/**
+ * Pseudo-legal move generation coverage for ChessBoard + MoveGenerator.
+ *
+ * MVP scope, same restrictions as the gameplay layer: no castling, no
+ * en-passant, no pawn promotion, no check/checkmate. We only verify that
+ * each piece kind reaches the squares allowed by basic movement rules and
+ * is correctly blocked by friendly / enemy pieces.
+ */
 namespace BECore::Chess::Tests {
+
+    // Compile-time checks: a regression breaks the build.
+    static_assert(Square::IsInside(0, 0));
+    static_assert(Square::IsInside(7, 7));
+    static_assert(!Square::IsInside(-1, 0));
+    static_assert(!Square::IsInside(0, 8));
+    static_assert(Square{3, 4}.Index() == 4 * 8 + 3);
+    static_assert(Square::FromIndex(35) == (Square{3, 4}));
 
     namespace {
 
@@ -16,135 +31,111 @@ namespace BECore::Chess::Tests {
 
     }  // namespace
 
-    bool MoveGeneratorTest::Run() {
-        TestCompileTime();
-        LOG_INFO("[MoveGeneratorTest] Compile-time tests OK");
-        LOG_INFO("[MoveGeneratorTest] Starting runtime tests...");
-
-        ASSERT(TestPawnFromStart());
-        ASSERT(TestPawnBlocked());
-        ASSERT(TestPawnCapture());
-        ASSERT(TestKnightOpening());
-        ASSERT(TestRookOpenAndBlocked());
-        ASSERT(TestBishopDiagonals());
-        ASSERT(TestQueenCombination());
-        ASSERT(TestKingNeighbors());
-        ASSERT(TestStartingPositionMoveCounts());
-        ASSERT(TestCaptureRemovesPiece());
-
-        LOG_INFO("[MoveGeneratorTest] All tests passed!");
-        return true;
+    TEST(MoveGeneratorTest, CompileTimeChecks) {
+        SUCCEED() << "The static_asserts above are the check";
     }
 
-    bool MoveGeneratorTest::TestPawnFromStart() {
+    TEST(MoveGeneratorTest, PawnFromStart) {
         ChessBoard board;
         board.ResetToStart();
         // e2 = file 4, rank 1.
         const auto moves = MoveGenerator::Generate(board, Square{4, 1});
-        ASSERT(moves.size() == 2);
-        ASSERT(Contains(moves, (Square{4, 2})));
-        ASSERT(Contains(moves, (Square{4, 3})));
-        return true;
+        EXPECT_EQ(moves.size(), 2u);
+        EXPECT_TRUE(Contains(moves, Square{4, 2}));
+        EXPECT_TRUE(Contains(moves, Square{4, 3}));
     }
 
-    bool MoveGeneratorTest::TestPawnBlocked() {
+    TEST(MoveGeneratorTest, PawnBlocked) {
         ChessBoard board;
         board.Set(Square{4, 1}, Piece{PieceType::Pawn, PieceColor::White});
         board.Set(Square{4, 2}, Piece{PieceType::Pawn, PieceColor::Black});
         const auto moves = MoveGenerator::Generate(board, Square{4, 1});
-        ASSERT(moves.empty());
-        return true;
+        EXPECT_TRUE(moves.empty());
     }
 
-    bool MoveGeneratorTest::TestPawnCapture() {
+    TEST(MoveGeneratorTest, PawnCapture) {
         ChessBoard board;
         board.Set(Square{4, 3}, Piece{PieceType::Pawn, PieceColor::White});
         board.Set(Square{3, 4}, Piece{PieceType::Pawn, PieceColor::Black});
         board.Set(Square{5, 4}, Piece{PieceType::Pawn, PieceColor::Black});
         const auto moves = MoveGenerator::Generate(board, Square{4, 3});
-        ASSERT(Contains(moves, (Square{4, 4})));  // forward push
-        ASSERT(Contains(moves, (Square{3, 4})));  // diagonal capture left
-        ASSERT(Contains(moves, (Square{5, 4})));  // diagonal capture right
-        ASSERT(moves.size() == 3);                // not 4: not on starting rank, no double push
-        return true;
+        EXPECT_TRUE(Contains(moves, Square{4, 4})) << "forward push";
+        EXPECT_TRUE(Contains(moves, Square{3, 4})) << "diagonal capture left";
+        EXPECT_TRUE(Contains(moves, Square{5, 4})) << "diagonal capture right";
+        EXPECT_EQ(moves.size(), 3u) << "not 4: not on starting rank, no double push";
     }
 
-    bool MoveGeneratorTest::TestKnightOpening() {
+    TEST(MoveGeneratorTest, KnightOpening) {
         ChessBoard board;
         board.ResetToStart();
         // b1 knight = file 1, rank 0. Should reach a3 and c3 only (d2 blocked by pawn).
         const auto moves = MoveGenerator::Generate(board, Square{1, 0});
-        ASSERT(moves.size() == 2);
-        ASSERT(Contains(moves, (Square{0, 2})));
-        ASSERT(Contains(moves, (Square{2, 2})));
-        return true;
+        EXPECT_EQ(moves.size(), 2u);
+        EXPECT_TRUE(Contains(moves, Square{0, 2}));
+        EXPECT_TRUE(Contains(moves, Square{2, 2}));
     }
 
-    bool MoveGeneratorTest::TestRookOpenAndBlocked() {
+    TEST(MoveGeneratorTest, RookOpenAndBlocked) {
         ChessBoard board;
         board.Set(Square{4, 4}, Piece{PieceType::Rook, PieceColor::White});
         // Lone rook in the middle of an empty board reaches 14 squares (7 + 7).
         const auto moves = MoveGenerator::Generate(board, Square{4, 4});
-        ASSERT(moves.size() == 14);
+        EXPECT_EQ(moves.size(), 14u);
 
-        // Block one direction with a friendly piece — that ray is fully cut.
+        // Block one direction with a friendly piece: that ray is fully cut.
         board.Set(Square{4, 6}, Piece{PieceType::Pawn, PieceColor::White});
         const auto blocked = MoveGenerator::Generate(board, Square{4, 4});
-        ASSERT(!Contains(blocked, (Square{4, 6})));
-        ASSERT(!Contains(blocked, (Square{4, 7})));
-        ASSERT(Contains(blocked, (Square{4, 5})));
+        EXPECT_FALSE(Contains(blocked, Square{4, 6}));
+        EXPECT_FALSE(Contains(blocked, Square{4, 7}));
+        EXPECT_TRUE(Contains(blocked, Square{4, 5}));
 
-        // Replace with an enemy piece — rook can capture it but not pass through.
+        // Replace with an enemy piece: rook can capture it but not pass through.
         board.Set(Square{4, 6}, Piece{PieceType::Pawn, PieceColor::Black});
         const auto enemyBlock = MoveGenerator::Generate(board, Square{4, 4});
-        ASSERT(Contains(enemyBlock, (Square{4, 6})));
-        ASSERT(!Contains(enemyBlock, (Square{4, 7})));
-        return true;
+        EXPECT_TRUE(Contains(enemyBlock, Square{4, 6}));
+        EXPECT_FALSE(Contains(enemyBlock, Square{4, 7}));
     }
 
-    bool MoveGeneratorTest::TestBishopDiagonals() {
+    TEST(MoveGeneratorTest, BishopDiagonals) {
         ChessBoard board;
         board.Set(Square{3, 3}, Piece{PieceType::Bishop, PieceColor::White});
         const auto moves = MoveGenerator::Generate(board, Square{3, 3});
         // From d4 a lone bishop reaches 13 squares.
-        ASSERT(moves.size() == 13);
-        ASSERT(Contains(moves, (Square{0, 0})));
-        ASSERT(Contains(moves, (Square{6, 0})));
-        ASSERT(Contains(moves, (Square{0, 6})));
-        ASSERT(Contains(moves, (Square{7, 7})));
+        EXPECT_EQ(moves.size(), 13u);
+        EXPECT_TRUE(Contains(moves, Square{0, 0}));
+        EXPECT_TRUE(Contains(moves, Square{6, 0}));
+        EXPECT_TRUE(Contains(moves, Square{0, 6}));
+        EXPECT_TRUE(Contains(moves, Square{7, 7}));
         // No straight moves.
-        ASSERT(!Contains(moves, (Square{3, 5})));
-        ASSERT(!Contains(moves, (Square{5, 3})));
-        return true;
+        EXPECT_FALSE(Contains(moves, Square{3, 5}));
+        EXPECT_FALSE(Contains(moves, Square{5, 3}));
     }
 
-    bool MoveGeneratorTest::TestQueenCombination() {
+    TEST(MoveGeneratorTest, QueenCombination) {
         ChessBoard board;
         board.Set(Square{3, 3}, Piece{PieceType::Queen, PieceColor::White});
         const auto moves = MoveGenerator::Generate(board, Square{3, 3});
         // Lone queen on d4 reaches 27 squares (rook 14 + bishop 13).
-        ASSERT(moves.size() == 27);
-        return true;
+        EXPECT_EQ(moves.size(), 27u);
     }
 
-    bool MoveGeneratorTest::TestKingNeighbors() {
+    TEST(MoveGeneratorTest, KingNeighbors) {
         ChessBoard board;
         board.Set(Square{4, 4}, Piece{PieceType::King, PieceColor::White});
         const auto moves = MoveGenerator::Generate(board, Square{4, 4});
-        ASSERT(moves.size() == 8);
+        EXPECT_EQ(moves.size(), 8u);
 
-        // Corner — king reaches 3 squares.
+        // Corner: king reaches 3 squares.
         ChessBoard corner;
         corner.Set(Square{0, 0}, Piece{PieceType::King, PieceColor::White});
         const auto cornerMoves = MoveGenerator::Generate(corner, Square{0, 0});
-        ASSERT(cornerMoves.size() == 3);
-        ASSERT(Contains(cornerMoves, (Square{1, 0})));
-        ASSERT(Contains(cornerMoves, (Square{0, 1})));
-        ASSERT(Contains(cornerMoves, (Square{1, 1})));
-        return true;
+        EXPECT_EQ(cornerMoves.size(), 3u);
+        EXPECT_TRUE(Contains(cornerMoves, Square{1, 0}));
+        EXPECT_TRUE(Contains(cornerMoves, Square{0, 1}));
+        EXPECT_TRUE(Contains(cornerMoves, Square{1, 1}));
     }
 
-    bool MoveGeneratorTest::TestStartingPositionMoveCounts() {
+    TEST(MoveGeneratorTest, StartingPositionMoveCounts) {
         ChessBoard board;
         board.ResetToStart();
         // Sum of all White pseudo-legal moves at the opening position is 20.
@@ -154,21 +145,19 @@ namespace BECore::Chess::Tests {
                 total += MoveGenerator::Generate(board, Square{static_cast<int8_t>(file), static_cast<int8_t>(rank)}).size();
             }
         }
-        ASSERT(total == 20);
-        return true;
+        EXPECT_EQ(total, 20u);
     }
 
-    bool MoveGeneratorTest::TestCaptureRemovesPiece() {
+    TEST(MoveGeneratorTest, CaptureRemovesPiece) {
         ChessBoard board;
         board.Set(Square{4, 3}, Piece{PieceType::Pawn, PieceColor::White});
         board.Set(Square{3, 4}, Piece{PieceType::Pawn, PieceColor::Black});
-        ASSERT(!board.Get(Square{3, 4}).IsEmpty());
+        ASSERT_FALSE(board.Get(Square{3, 4}).IsEmpty());
         board.Move(Square{4, 3}, Square{3, 4});
-        ASSERT(board.Get(Square{4, 3}).IsEmpty());
+        EXPECT_TRUE(board.Get(Square{4, 3}).IsEmpty());
         const Piece captured = board.Get(Square{3, 4});
-        ASSERT(captured.type == PieceType::Pawn);
-        ASSERT(captured.color == PieceColor::White);
-        return true;
+        EXPECT_TRUE(captured.type == PieceType::Pawn);
+        EXPECT_TRUE(captured.color == PieceColor::White);
     }
 
 }  // namespace BECore::Chess::Tests

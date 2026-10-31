@@ -10,7 +10,8 @@
       "src/Modules/BECore/Math",
       "src/Modules/BECore/Renderer",
       "src/Modules/BECore/Scene",
-      "src/Modules/BECore/Scene/Components"
+      "src/Modules/BECore/Scene/Components",
+      "tests/BECore"
     ],
     "scan_dirs": [
       "src/Modules/BECore/Application",
@@ -30,12 +31,11 @@
       "src/Modules/Chess/src/Chess",
       "src/Modules/Chess/src/Chess/Game",
       "src/Modules/Chess/src/Chess/Components",
-      "src/Modules/Chess/src/Chess/Tests",
       "src/Modules/Match3/src/Match3",
       "src/Modules/Match3/src/Match3/Game",
       "src/Modules/Match3/src/Match3/Components",
-      "src/Modules/Match3/src/Match3/Tests"
+      "tests/BECore"
     ],
-    "include_dirs": ["src/Modules", "src", "src/Modules/Games/src", "src/Modules/Chess/src", "src/Modules/Match3/src"]
+    "include_dirs": ["src/Modules", "src", "src/Modules/Games/src", "src/Modules/Chess/src", "src/Modules/Match3/src", "tests"]
   }
 }

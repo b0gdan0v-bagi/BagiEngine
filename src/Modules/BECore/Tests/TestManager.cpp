@@ -17,7 +17,7 @@ namespace BECore {
         }
 
         if (tests.empty()) {
-            LOG_WARNING("[TestManager] No tests loaded from TestsConfig");
+            LOG_INFO("[TestManager] No runtime tests enabled in TestsConfig");
             return;
         }
 

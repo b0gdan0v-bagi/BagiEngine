@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <root>
+    <!--
+        Runtime tests (ITest, see BECore/Tests/ITest.h) that run inside the live engine at startup.
+        The unit / module tests are GoogleTest tests in tests/ (target BagiEngineTests), not listed here.
+
+        type: ITest class name
+        enabled: whether the test runs
+    -->
     <tests>
-        <test type="PoolStringTest" enabled="true" />
-        <test type="FormatTest" enabled="true" />
-        <test type="EnumUtilsTest" enabled="true" />
-        <test type="ReflectionTest" enabled="true" />
-        <test type="EventSubscriptionTest" enabled="true" />
-        <test type="ReflectionEventTest" enabled="true" />
-        <test type="TaskSystemTest" enabled="true" />
-        <test type="ResourceManagerTest" enabled="true" />
-        <test type="MoveGeneratorTest" enabled="true" />
-        <test type="Match3GameModelTest" enabled="true" />
+        <test type="EngineSmokeTest" enabled="true" />
     </tests>
 </root>
