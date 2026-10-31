@@ -35,6 +35,7 @@ CMakeUserPresets.json
 
 # ImGui layout (user-specific, generated at runtime)
 config/imgui.ini
+games/*/config/imgui.ini
 
 # Environment variables (user-specific)
 .env

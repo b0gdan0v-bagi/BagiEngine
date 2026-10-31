@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<SceneManager>
+  <scenes>
+    <scene
+      type="Scene"
+      name="Match3Scene">
+      <nodes>
+        <node name="Board">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="0" height="0" />
+            <component type="Match3BoardComponent" originX="100" originY="80" cellSize="64" seed="1337" />
+          </components>
+        </node>
+      </nodes>
+    </scene>
+  </scenes>
+</SceneManager>

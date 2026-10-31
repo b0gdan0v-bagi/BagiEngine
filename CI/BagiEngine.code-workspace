@@ -190,7 +190,7 @@
 		"version": "0.2.0",
 		"configurations": [
 			{
-				"name": "Debug MyGame (macOS)",
+				"name": "Debug game (macOS)",
 				"type": "cppdbg",
 				"request": "launch",
 				"program": "${command:cmake.launchTargetPath}",
@@ -206,7 +206,7 @@
 				}
 			},
 			{
-				"name": "Debug MyGame (Windows)",
+				"name": "Debug game (Windows)",
 				"type": "cppdbg",
 				"request": "launch",
 				"program": "${command:cmake.launchTargetPath}",
@@ -231,7 +231,7 @@
 				]
 			},
 			{
-				"name": "Debug MyGame (Windows MSVC)",
+				"name": "Debug game (Windows MSVC)",
 				"type": "cppvsdbg",
 				"request": "launch",
 				"program": "${command:cmake.launchTargetPath}",
@@ -261,7 +261,8 @@
 				"label": "CMake: build",
 				"command": "build",
 				"targets": [
-					"MyGame"
+					"BagiChess",
+					"BagiMatch3"
 				],
 				"problemMatcher": "$gcc",
 				"group": {
@@ -274,13 +275,14 @@
 				"label": "CMake: clean rebuild",
 				"command": "cleanRebuild",
 				"targets": [
-					"MyGame"
+					"BagiChess",
+					"BagiMatch3"
 				],
 				"problemMatcher": "$gcc",
 				"group": "build"
 			},
 			{
-				"label": "Run MyGame",
+				"label": "Run game",
 				"type": "shell",
 				"command": "${command:cmake.launchTargetPath}",
 				"options": {
