@@ -18,17 +18,30 @@ namespace BECore {
 
         LOG_INFO("[ConfigManager] Initializing...");
 
-        // Получаем путь к config/ через FileSystem из CoreManager
-        auto configPath = CoreManager::GetFileSystem().ResolvePath("config");
-        if (configPath.empty() || !std::filesystem::exists(configPath)) {
+        // Слои config/ из FileSystem (движок, затем игра): одноимённый файл верхнего слоя перекрывает нижний
+        const auto layers = CoreManager::GetFileSystem().GetMountLayers("config"_intern);
+        if (layers.empty()) {
             LOG_WARNING("[ConfigManager] Config directory not found, skipping initialization");
             _initialized.store(true, std::memory_order_release);
             return;
         }
 
-        // Сканируем директорию для поиска XML файлов
+        // Сканируем слои для поиска XML файлов
         eastl::vector<eastl::pair<std::filesystem::path, PoolString>> filesToLoad;
-        ScanDirectory(configPath, filesToLoad);
+        for (const auto& layer : layers) {
+            eastl::vector<eastl::pair<std::filesystem::path, PoolString>> layerFiles;
+            ScanDirectory(layer, layerFiles);
+
+            for (auto& layerFile : layerFiles) {
+                auto existing = eastl::find_if(filesToLoad.begin(), filesToLoad.end(), [&](const auto& loaded) { return loaded.second == layerFile.second; });
+                if (existing != filesToLoad.end()) {
+                    LOG_INFO(Format("[ConfigManager] Config '{}' from {} overrides {}", layerFile.second.ToStringView(), layerFile.first.string(), existing->first.string()).c_str());
+                    *existing = eastl::move(layerFile);
+                } else {
+                    filesToLoad.push_back(eastl::move(layerFile));
+                }
+            }
+        }
 
         if (filesToLoad.empty()) {
             LOG_WARNING("[ConfigManager] No XML files found in config directory");
