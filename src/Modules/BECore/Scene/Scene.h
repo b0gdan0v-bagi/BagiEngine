@@ -15,6 +15,11 @@ namespace BECore {
 
         void Initialize();
 
+        /**
+         * @brief Emit SceneFixedUpdateEvent once per fixed step due this frame, then SceneUpdateEvent.
+         *
+         * Reads the frame from CoreManager::GetTime(), so call it once per frame, after Time advanced.
+         */
         void Update();
         void Draw();
 

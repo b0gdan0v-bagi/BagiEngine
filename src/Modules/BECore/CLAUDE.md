@@ -2,7 +2,7 @@
 
 ## CoreManager
 
-Central service locator (`GameManager/CoreManager.h`): one static getter per subsystem (`GetFileSystem()`, `GetConfigManager()`, `GetLoggerManager()`, `GetResourceManager()`, `GetTaskManager()`, `GetSceneManager()`, `GetWidgetManager()`, `GetRenderer()`, `GetTextureLibrary()`, ...). A new global service goes here, not into another `Singleton`.
+Central service locator (`GameManager/CoreManager.h`): one static getter per subsystem (`GetFileSystem()`, `GetConfigManager()`, `GetLoggerManager()`, `GetResourceManager()`, `GetTaskManager()`, `GetSceneManager()`, `GetWidgetManager()`, `GetRenderer()`, `GetTextureLibrary()`, `GetTime()`, ...). A new global service goes here, not into another `Singleton`.
 
 **Lifecycle** (called from `Application`, each takes `PassKey<Application>`):
 
@@ -14,6 +14,24 @@ Central service locator (`GameManager/CoreManager.h`): one static getter per sub
 | `OnApplicationDeinit` | `TaskManager::Shutdown` |
 
 **`InitializeCoreServices()` order:** CRT debug hooks → temporary `OutputSink` + `StackTraceHandler` → `FileSystem` → `TaskManager` → `ConfigManager` → `LoggerManager` → `AssertHandlerManager` → `ResourceManager` → `TextureLibrary`.
+
+## Frame order and time
+
+`Application::Run` repeats this once per frame:
+
+| # | Stage | Where | Does |
+|---|-------|-------|------|
+| 0 | Clock | `Time::Tick` | Measures the frame time; every value below is fixed for the rest of the frame |
+| 1 | Input | `EventsProviderManager::ProcessEvents` | Window and mouse events become `SDLEvents` and `InputEvents::ActionEvent` |
+| 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread |
+| 3 | Logic | `SceneManager::UpdateAll` | `SceneFixedUpdateEvent` (zero or more, a constant step), then `SceneUpdateEvent` (once, with the frame time) |
+| 4 | Render | `WidgetManager::UpdateAll`, `DrawScreenAll`, `DrawAll` | UI, `SceneDrawEvent` through `ViewportWidget`, ImGui render and present |
+
+Logic reads input and writes state; render only reads state. Do not draw from `SceneUpdateEvent` handlers and do not change game state from `SceneDrawEvent`.
+
+**Time** (`CoreManager::GetTime()`, `Time/Time.h`): `GetDeltaTime()` is the seconds the last frame took, `GetTotalTime()` the game time since the first frame, `GetFrameCount()` counts frames from 1. The frame time is clamped to `Time::kMaxFrameTime` (0.25 s), so a pause in the debugger is one long frame, not a jump. Scale movement and animation by `SceneUpdateEvent::deltaTime`, never by "per frame" constants. Logic that must give the same result at any frame rate (physics-like integration, replays) goes into `SceneFixedUpdateEvent`: its `deltaTime` is always `Time::GetFixedDeltaTime()` (1/60 s by default), and the leftover time carries over to the next frame, so the number of steps per second is constant.
+
+`Time::Advance(seconds)` takes the frame time as a number, so a test drives a component with a fake clock at any frame rate: `CoreManager::GetTime().Advance(1.0 / 30)`, then `SceneManager::UpdateAll()`. Reset the clock in `TearDown` (`Time::Reset()`, and `SetFixedDeltaTime` back if the test changed it). Example: `tests/BECore/TimeTest.cpp`.
 
 The GoogleTest executable (`tests/`) brings up the same services through `OnTestEnvironmentInit(PassKey<Tests::EngineEnvironment>)`. That path skips `TestManager` and disables `DebugBreakHandler`, so a failed assert is reported by gtest instead of trapping the process. See `.claude/rules/tests-module.md`.
 

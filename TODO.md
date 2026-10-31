@@ -4,10 +4,10 @@ Known problems that are not being worked on yet. One entry per problem: where it
 
 ## Roadmap
 
-Direction for the engine, not a problem entry. The engine has strong infrastructure (reflection, layered config, TaskSystem, ImGui editor, tests) and no runtime for a real 2D game: no frame time, no animation, text, audio or input mapping, and the game cannot run without the editor. The entries below follow this order. Every "missing" statement was found by reading the code, not by running a game.
+Direction for the engine, not a problem entry. The engine has strong infrastructure (reflection, layered config, TaskSystem, ImGui editor, tests) and no runtime for a real 2D game: no animation, text, audio or input mapping, and the game cannot run without the editor. The entries below follow this order. Every "missing" statement was found by reading the code, not by running a game.
 
 1. **Hygiene:** CI is deferred by the project owner (entry below; the Linux job in the test-gaps entry waits for it). Scene-scoped events are done: components subscribe with `SubscribeInScene` (`BECore/Scene/CLAUDE.md`).
-2. **Time and run modes:** frame time, game-only run mode.
+2. **Time and run modes:** frame time is done: `Time` gives `deltaTime` and a fixed step, and the frame order is written down (`BECore/CLAUDE.md`, "Frame order and time"). The game-only run mode is next.
 3. **Minimum for a 2D game, in this order:** animation, 2D rendering, text, audio, input mapping, in-game UI.
 4. **Owner decisions:** renderer backends, what ECS means in this engine.
 5. **Content and quality:** prefabs, saves / hot-reload / packing, test gaps and platforms, the reflection generator.
@@ -50,24 +50,8 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 - a workflow for macOS (`macos-debug`) and Windows (one MSVC or Clang preset) that checks out the submodules (`git submodule update --init --recursive`, `external/googletest` included), configures, builds the game and test targets and runs `ctest`;
 - a decision for the Vulkan loader DLL on the Windows runner (install the SDK, fetch the loader, or build without the Vulkan backend), after checking whether the test executables need it at all;
-- a guard on the number of tests (152 at the last count): it must not drop;
+- a guard on the number of tests (165 at the last count): it must not drop;
 - a Linux job once Linux presets exist (see the entry on test gaps and platforms).
-
-## No frame time: update has no `deltaTime` and no fixed step
-
-**Where:** `src/Modules/BECore/Scene/Scene.cpp` (`Scene::Update` emits `SceneEvents::SceneUpdateEvent::Emit()` with no payload), `GameManager/CoreManager.cpp` (`OnGameCycle`), `src/Application/Application.cpp` (`Run` loop).
-
-**What is missing** (found by reading the code, not by running a game):
-
-1. Nothing measures frame time. A search of `BECore`, `Application`, `SDL`, `Widgets` and the games finds a clock only in the logger sinks (timestamps), so movement and animation cannot be frame-rate independent.
-2. `SceneUpdateEvent` carries no data, and there is no fixed-step update for game logic.
-
-**A fix has to cover:**
-
-- a `Time` service (`Singleton`) updated once per frame in `Application::Run`, with `deltaTime`, total time and a frame counter;
-- `dt` available to components (in `SceneUpdateEvent` or through `Time`), and a fixed-step update for logic that must be deterministic;
-- the stage order of a frame (input → logic → render) written down in `BECore/CLAUDE.md`;
-- a gtest that drives a component with a fake clock and shows its result does not depend on the frame rate.
 
 ## No game-only run mode: the game exists only inside the editor viewport
 
@@ -89,7 +73,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 **Where:** `games/Match3/CLAUDE.md` ("`Match3GameModel` never animates"), `games/Match3/src/Match3/Components/Match3BoardComponent.cpp`, `src/Modules/TaskSystem/` (coroutines that animation could use).
 
-**What is missing** (found by reading the code, not by running a game): no way to change a property over time. Match3 resolves a whole cascade instantly, and Chess pieces jump to the target square. Depends on the frame time entry.
+**What is missing** (found by reading the code, not by running a game): no way to change a property over time. Match3 resolves a whole cascade instantly, and Chess pieces jump to the target square. The frame time it needs exists now (`Time`, `BECore/CLAUDE.md`).
 
 **A fix has to cover:**
 

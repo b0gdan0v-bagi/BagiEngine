@@ -10,6 +10,7 @@
 #include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Tests/TestManager.h>
+#include <BECore/Time/Time.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/EventsProviderManager.h>
 
@@ -84,6 +85,10 @@ namespace BECore {
             return GetInstance()._textureLibrary;
         }
 
+        static Time& GetTime() {
+            return GetInstance()._time;
+        }
+
         // Pre-initialization function (FileSystem, AssertHandlers, runtime ITests)
         void OnApplicationPreInit(PassKey<Application>);
 
@@ -117,6 +122,7 @@ namespace BECore {
         RendererManager _rendererManager;
         IntrusivePtrAtomic<SceneManager> _sceneManager;
         TextureLibrary _textureLibrary;
+        Time _time;
     };
 
 }  // namespace BECore

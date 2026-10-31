@@ -7,7 +7,7 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 | Class | Role |
 |-------|------|
 | `SceneManager` | Built with `MakeFromConfig<SceneManager>("SceneConfig")` in `CoreManager::OnApplicationInit`. Holds `_scenes`; the first one is active after `Initialize()`. `SetActiveScene(name)`, `GetActiveScene()`, `GetSceneByName()`; `UpdateAll()` / `DrawAll()` drive the active scene. It is the only writer of `Scene::IsActive()` |
-| `Scene` | `FACTORY_BASE`. Owns the `entt::registry`, a runtime root node (`"Root"`) and the serialized `_nodes`. `Update()` / `Draw()` emit `SceneEvents::SceneUpdateEvent` / `SceneDrawEvent`. `IsActive()` is true for the scene `SceneManager` currently drives. `PrepareForSave()` copies the live hierarchy back into `_nodes` (the scene editor calls it before saving) |
+| `Scene` | `FACTORY_BASE`. Owns the `entt::registry`, a runtime root node (`"Root"`) and the serialized `_nodes`. `Update()` emits `SceneEvents::SceneFixedUpdateEvent` once per fixed step due in the frame, then `SceneUpdateEvent` with the frame time (both read `CoreManager::GetTime()`); `Draw()` emits `SceneDrawEvent`. `IsActive()` is true for the scene `SceneManager` currently drives. `PrepareForSave()` copies the live hierarchy back into `_nodes` (the scene editor calls it before saving) |
 | `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_components`, children, an `entt::entity`. `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild` |
 | `IComponent` | `FACTORY_BASE` and `SubscriptionHolder`; gets its `Scene&` / `SceneNode&` through `GetScene()` / `GetNode()` |
 
@@ -55,4 +55,4 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 - A game's own state is a separate check: Chess components also do nothing unless `GameManager::GetActive()` is `ChessGame`, because they read the shared model from there.
 - `tests/BECore/SceneEventsTest.cpp` loads two scenes from an XML string and shows how to test a component without a window or a renderer. Use the same setup for a new component.
 - Do not keep `SceneNode*` / `IComponent*` across scene edits; hold `IntrusivePtr` or look the node up again.
-- Do not draw from `Update` or change state from `Draw`; the frame order is in `BECore/CLAUDE.md`.
+- Do not draw from `Update` or change state from `Draw`; the frame order and the use of `deltaTime` are in `BECore/CLAUDE.md`. Movement and animation scale by `SceneUpdateEvent::deltaTime`.

@@ -34,6 +34,7 @@ namespace BECore {
 
         while (_isRunning) {
 
+            CoreManager::GetTime().Tick({});
             RenderEvents::NewFrameEvent::Emit();
             CoreManager::GetInstance().OnGameCycle({});
             RenderEvents::RenderPresentEvent::Emit();

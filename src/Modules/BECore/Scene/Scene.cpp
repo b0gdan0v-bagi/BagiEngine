@@ -1,5 +1,6 @@
 #include "Scene.h"
 
+#include <BECore/GameManager/CoreManager.h>
 #include <Events/SceneEvents.h>
 #include <Generated/Scene.gen.hpp>
 
@@ -18,7 +19,11 @@ namespace BECore {
     }
 
     void Scene::Update() {
-        SceneEvents::SceneUpdateEvent::Emit();
+        const Time& time = CoreManager::GetTime();
+        for (uint32_t step = 0; step < time.GetFixedStepCount(); ++step) {
+            SceneEvents::SceneFixedUpdateEvent::Emit(time.GetFixedDeltaTime());
+        }
+        SceneEvents::SceneUpdateEvent::Emit(time.GetDeltaTime());
     }
 
     void Scene::Draw() {
