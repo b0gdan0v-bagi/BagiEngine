@@ -31,7 +31,7 @@ todos:
     status: completed
   - id: build-and-format
     content: Собрать, проверить работу (combo переключения игр работает; ChessScene поднимается; фигуры двигаются по правилам, взятие работает, очерёдность меняется), прогнать clang-format и strip-pch-includes на изменённых файлах.
-    status: in_progress
+    status: completed
 isProject: false
 ---
 
