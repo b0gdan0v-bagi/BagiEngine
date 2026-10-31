@@ -31,7 +31,7 @@ games/<Name>/
 ├── CMakeLists.txt   # be_add_module + be_add_game_reflection + be_add_game_executable + be_add_game_tests
 ├── CLAUDE.md
 ├── src/<Name>/      # Game/ (plain C++ rules), Components/ (scene glue), <Name>Game.{h,cpp}
-├── config/          # SceneConfig.xml with the game's scene(s), TextureLibrary.xml, ...
+├── config/          # ApplicationConfig.xml (mode="Game"), SceneConfig.xml with the game's scene(s), TextureLibrary.xml, ...
 ├── assets/
 └── tests/           # gtest sources, built as <Name>Tests
 ```
@@ -40,8 +40,9 @@ games/<Name>/
 2. Add `add_subdirectory(<Name>)` to `games/CMakeLists.txt`.
 3. Derive `IGame` with `BE_CLASS(<Name>Game)`, include `<Generated/<Name>Game.gen.hpp>` in the `.cpp`. The game's reflection needs no entry in `reflection_targets.json` (that file lists engine directories only): `be_add_game_reflection` scans the game's own `src/` and treats the engine's reflected headers as reference.
 4. Put a `Scene` with the name returned by `GetSceneName()` into `games/<Name>/config/SceneConfig.xml`. It replaces the engine's `SceneConfig.xml`, so it must contain every scene the game uses.
-5. Re-run `cmake --preset ...`, add `Bagi<Name>` to the `targets` of the build presets in `CMakePresets.json`.
-6. Keep the rules in a plain-C++ `Game/` folder, scene glue in `Components/`, tests in `tests/` (see `games/Chess/CLAUDE.md`).
+5. Copy the engine's `config/ApplicationConfig.xml` into `games/<Name>/config/` and set `mode="Game"`: the executable then starts without the editor (see "Run mode" in `BECore/CLAUDE.md`). Without the file the game starts in Editor mode. The game's file replaces the engine's, so it keeps `type`, `renderer` and `path`.
+6. Re-run `cmake --preset ...`, add `Bagi<Name>` to the `targets` of the build presets in `CMakePresets.json`.
+7. Keep the rules in a plain-C++ `Game/` folder, scene glue in `Components/`, tests in `tests/` (see `games/Chess/CLAUDE.md`).
 
 The engine must stay free of game names: no engine code, CMake or config outside `games/` refers to a concrete game.
 
@@ -49,3 +50,4 @@ The engine must stay free of game names: no engine code, CMake or config outside
 
 - Scene and input events are global (see `BECore/Scene/CLAUDE.md`): a game's components subscribe with `SubscribeInScene`, so they react only while their scene is active. A component that reads the game's shared model must still check that the game is the active one. Chess does it with `GameManager::GetInstance().GetActive()->Cast<ChessGame>()`.
 - `IGame` has no per-frame hook: per-frame work belongs in a component on the game's scene.
+- In Game mode there is no ImGui context. A game component must not call `ImGui::` without checking `ImGui::GetCurrentContext()`, and a game that needs a HUD before the engine has text rendering lists `ImGuiWidget` in its own `GameWidgetsConfig.xml`.

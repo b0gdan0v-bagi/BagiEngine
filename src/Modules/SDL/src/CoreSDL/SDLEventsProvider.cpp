@@ -8,6 +8,15 @@
 
 namespace BECore {
 
+    namespace {
+
+        // The Game run mode has no ImGui context at all, and ImGui::GetIO() needs one.
+        bool IsMouseCapturedByUI() {
+            return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse;
+        }
+
+    }  // namespace
+
     bool SDLEventsProvider::Initialize() {
         if (_isInitialized) {
             return true;
@@ -42,8 +51,9 @@ namespace BECore {
 
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 // Only forward to game code when ImGui is not consuming the mouse.
-                // ViewportWidget re-emits with viewport-local coords when the image is hovered.
-                if (!ImGui::GetIO().WantCaptureMouse) {
+                // Editor: ViewportWidget re-emits with viewport-local coords when the image is hovered.
+                // Game: no ImGui, the window coordinates are the scene coordinates.
+                if (!IsMouseCapturedByUI()) {
                     SDLEvents::MouseButtonDownEvent::Emit(sdlEvent.button);
                 }
                 break;

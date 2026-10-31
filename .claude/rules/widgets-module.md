@@ -23,15 +23,15 @@ All methods are `BE_FUNCTION`.
 
 ## Widget Lifecycle
 
-1. `WidgetManager::CreateWidgets()` (from `CoreManager::OnApplicationInit`) creates each configured widget through `AbstractFactory<IWidget>` using the default constructor.
+1. `WidgetManager::CreateWidgets()` (from `CoreManager::OnApplicationInit`) reads the run mode (`mode` in `ApplicationConfig.xml`, see `BECore/CLAUDE.md`) and creates each widget of that mode's config through `AbstractFactory<IWidget>` using the default constructor.
 2. `Initialize(deserializer)`: load config, subscribe to events.
 3. Every frame, from `CoreManager::OnGameCycle`: `UpdateAll()` → (queued events) → `DrawScreenAll()` → `DrawAll()`, in registration order.
 4. Destruction: `SubscriptionHolder` drops the event subscriptions.
 
 ## XML Configuration
 
-File: `config/WidgetsConfig.xml`, entries `<widget type="..."/>` under `<widgets>`:
-- `type`: widget class name (`ImGuiWidget`, `EditorLayoutWidget`, `ViewportWidget`, ...)
+File: `config/WidgetsConfig.xml` (Editor mode) or `config/GameWidgetsConfig.xml` (Game mode: `ClearScreenWidget` + `SceneRenderWidget`, no ImGui, so a Game-mode widget must not touch ImGui). Entries `<widget type="..."/>` under `<widgets>`:
+- `type`: widget class name (`ImGuiWidget`, `EditorLayoutWidget`, `ViewportWidget`, `SceneRenderWidget`, ...)
 - widget-specific settings as child elements or attributes (for example `<clearColor r g b a/>`), read in `Initialize`
 - the file order is the creation and update order; there is no `name` or `priority` attribute
 

@@ -66,7 +66,7 @@ src/
     ├── Vulkan/         # Vulkan renderer backend
     ├── Games/          # IGame / GameManager: the engine-game contract
     └── EABase/, EnTT/, fmt/, imgui/, pugixml/   # vendored
-config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, Tests, default SceneConfig)
+config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, default SceneConfig)
 games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Chess, Match3)
 tests/                  # GoogleTest executable BagiEngineTests (BECore) + Common (BagiEngineTestSupport)
 ```

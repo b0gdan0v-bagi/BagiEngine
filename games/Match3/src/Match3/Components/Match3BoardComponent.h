@@ -25,7 +25,8 @@ namespace BECore::Match3 {
      * Match3Game::Start() looks the component up via the active scene and
      * triggers Reset(_seed).
      *
-     * Also draws a small ImGui "Match3" HUD with score and a Reset button.
+     * Also draws a small ImGui "Match3" HUD with score and a Reset button, but only
+     * while an ImGui context exists (the Editor run mode); the Game run mode has none.
      */
     class Match3BoardComponent : public IComponent {
         BE_CLASS(Match3BoardComponent)
@@ -61,6 +62,7 @@ namespace BECore::Match3 {
     private:
         void OnDraw(const SceneEvents::SceneDrawEvent&);
         void OnMouseDown(const SDLEvents::MouseButtonDownEvent&);
+        void DrawHud();
 
         Match3GameModel _model;
         static Match3BoardComponent* s_active;

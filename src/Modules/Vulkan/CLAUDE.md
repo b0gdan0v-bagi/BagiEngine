@@ -22,7 +22,7 @@ Driven by events, not by direct calls:
 
 1. `RenderEvents::NewFrameEvent` → `AcquireFrame()`: acquire the swapchain image and open the command buffer. This happens **before** the swapchain render pass so `ViewportWidget` can insert an offscreen pass first.
 2. `SetRenderTarget` / `UnsetRenderTarget` open and close an offscreen pass (the barrier on the target image is recorded in `UnsetRenderTarget`).
-3. `RenderClearEvent` → begin the swapchain pass; widgets record their draw commands into it.
+3. `RenderClearEvent` → begin the swapchain pass; widgets record their draw commands into it. In Game run mode there is no offscreen pass: `SceneRenderWidget` draws the scene into this pass in `DrawScreen()`.
 4. `RenderPresentEvent` → end the pass, submit, present.
 
 ImGui goes through `ImGuiInit/NewFrame/Render/ShutdownEvent` like the SDL backend (`imgui_impl_vulkan`, which is why the backend exposes `GetVk*` getters). `ApplicationCleanUpEvent` calls `Destroy()`.

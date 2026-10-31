@@ -18,6 +18,8 @@ src/Match3/
     └── Match3BoardComponent      owns the model; draws board, gems and an ImGui HUD (score, Reset); routes clicks
 ```
 
+- `BagiMatch3` starts in Game mode (`config/ApplicationConfig.xml`, `mode="Game"`): no editor, no ImGui, so the HUD is skipped and there is no score or Reset on screen until the engine has text rendering (TODO.md). Set `mode="Editor"` to get the HUD and the scene editor back.
+
 - Unlike Chess, the model is owned by the scene component, not by the `IGame`.
 - `Match3GameModel` never animates: a successful swap resolves the whole cascade (remove → gravity → refill → repeat) before returning, so the board is stable after every public call. Keep animation, if added, in the component.
 - Public gameplay surface is `Reset(seed)`, `OnCellClicked` (two-step select/swap) and `TrySwap`. Use the seed for reproducible tests.

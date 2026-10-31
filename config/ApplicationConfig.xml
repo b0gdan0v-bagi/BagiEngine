@@ -2,4 +2,5 @@
 <root
   type="SDL3ApplicationFabric"
   renderer="VulkanRendererBackend"
-  path="config/SDLWindowConfig.xml" />
+  path="config/SDLWindowConfig.xml"
+  mode="Editor" />

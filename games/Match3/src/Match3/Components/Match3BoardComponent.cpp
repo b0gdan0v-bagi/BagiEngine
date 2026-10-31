@@ -86,6 +86,15 @@ namespace BECore::Match3 {
             renderer.DrawFilledRect(px + _cellSize - t, py, t, _cellSize, kSelectionHighlight);
         }
 
+        DrawHud();
+    }
+
+    void Match3BoardComponent::DrawHud() {
+        // The Game run mode has no ImGui; the HUD moves to an engine text component later (see TODO.md).
+        if (ImGui::GetCurrentContext() == nullptr) {
+            return;
+        }
+
         ImGui::SetNextWindowSize(ImVec2(220.0f, 90.0f), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Match3")) {
             ImGui::Text("Score: %d", _model.GetScore());

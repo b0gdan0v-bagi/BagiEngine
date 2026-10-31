@@ -9,11 +9,24 @@ Central service locator (`GameManager/CoreManager.h`): one static getter per sub
 | Call | Does |
 |------|------|
 | `OnApplicationPreInit` | `InitializeCoreServices()`, then runs the enabled runtime `ITest`s through `TestManager` |
-| `OnApplicationInit` | creates widgets, builds `SceneManager` from `SceneConfig` |
+| `OnApplicationInit` | creates the widgets of the run mode (see below), builds `SceneManager` from `SceneConfig` |
 | `OnGameCycle` | events → `TaskManager::Update` → scene update → widgets update → queued events → `DrawScreenAll` → `DrawAll` |
 | `OnApplicationDeinit` | `TaskManager::Shutdown` |
 
 **`InitializeCoreServices()` order:** CRT debug hooks → temporary `OutputSink` + `StackTraceHandler` → `FileSystem` → `TaskManager` → `ConfigManager` → `LoggerManager` → `AssertHandlerManager` → `ResourceManager` → `TextureLibrary`.
+
+## Run mode
+
+`mode` in `config/ApplicationConfig.xml` (`RunMode`, `Application/RunMode.h`) picks the widget set that `WidgetManager::CreateWidgets()` creates; a missing or unknown value is `Editor` (logged as a warning).
+
+| Mode | Widgets from | What runs |
+|------|--------------|-----------|
+| `Editor` (engine default) | `config/WidgetsConfig.xml` | ImGui, the editor panels, the scene in `ViewportWidget` (offscreen target) |
+| `Game` | `config/GameWidgetsConfig.xml` | `ClearScreenWidget` and `SceneRenderWidget`: no ImGui, the scene is drawn straight into the back buffer |
+
+In Game mode window coordinates are scene coordinates: `SDLEventsProvider` forwards every mouse click unchanged because there is no ImGui context to capture it (in Editor mode `ViewportWidget` re-emits clicks with viewport-local coordinates). Code that touches ImGui outside a widget must check `ImGui::GetCurrentContext()` first; `Match3BoardComponent` does so for its HUD.
+
+A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` with `mode="Game"`. A game's file replaces the engine's whole file, so it repeats `type`, `renderer` and `path`. To open a game in the editor, set `mode="Editor"` there. A game can also ship its own `GameWidgetsConfig.xml` (for example to add `ImGuiWidget` for a HUD). Tests: `tests/BECore/RunModeTest.cpp`, `tests/BECore/SDLEventsProviderTest.cpp`.
 
 ## Frame order and time
 
@@ -25,7 +38,7 @@ Central service locator (`GameManager/CoreManager.h`): one static getter per sub
 | 1 | Input | `EventsProviderManager::ProcessEvents` | Window and mouse events become `SDLEvents` and `InputEvents::ActionEvent` |
 | 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread |
 | 3 | Logic | `SceneManager::UpdateAll` | `SceneFixedUpdateEvent` (zero or more, a constant step), then `SceneUpdateEvent` (once, with the frame time) |
-| 4 | Render | `WidgetManager::UpdateAll`, `DrawScreenAll`, `DrawAll` | UI, `SceneDrawEvent` through `ViewportWidget`, ImGui render and present |
+| 4 | Render | `WidgetManager::UpdateAll`, `DrawScreenAll`, `DrawAll` | Editor: UI and `SceneDrawEvent` through `ViewportWidget`, then ImGui render. Game: `SceneDrawEvent` through `SceneRenderWidget::DrawScreen`. Present at the end of the frame |
 
 Logic reads input and writes state; render only reads state. Do not draw from `SceneUpdateEvent` handlers and do not change game state from `SceneDrawEvent`.
 

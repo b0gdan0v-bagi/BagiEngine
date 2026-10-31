@@ -1,5 +1,6 @@
 #include "WidgetManager.h"
 
+#include <BECore/Application/RunMode.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -38,9 +39,14 @@ namespace BECore {
     }
 
     void WidgetManager::CreateWidgets() {
-        const auto rootNode = CoreManager::GetConfigManager().GetConfig("WidgetsConfig"_intern);
+        const RunMode mode = ReadRunMode(CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern));
+        LOG_INFO("Run mode: {}"_format(EnumUtils<RunMode>::ToString(mode)));
+
+        const PoolString configName = GetWidgetsConfigName(mode);
+        const auto rootNode = CoreManager::GetConfigManager().GetConfig(configName);
 
         if (!rootNode) {
+            LOG_ERROR("WidgetManager: config '{}' not found, no widgets created"_format(configName.ToStringView()));
             return;
         }
 

@@ -4,17 +4,17 @@ Known problems that are not being worked on yet. One entry per problem: where it
 
 ## Roadmap
 
-Direction for the engine, not a problem entry. The engine has strong infrastructure (reflection, layered config, TaskSystem, ImGui editor, tests) and no runtime for a real 2D game: no animation, text, audio or input mapping, and the game cannot run without the editor. The entries below follow this order. Every "missing" statement was found by reading the code, not by running a game.
+Direction for the engine, not a problem entry. The engine has strong infrastructure (reflection, layered config, TaskSystem, ImGui editor, tests) and no runtime for a real 2D game: no animation, text, audio or input mapping. The entries below follow this order. Every "missing" statement was found by reading the code, not by running a game.
 
 1. **Hygiene:** CI is deferred by the project owner (entry below; the Linux job in the test-gaps entry waits for it). Scene-scoped events are done: components subscribe with `SubscribeInScene` (`BECore/Scene/CLAUDE.md`).
-2. **Time and run modes:** frame time is done: `Time` gives `deltaTime` and a fixed step, and the frame order is written down (`BECore/CLAUDE.md`, "Frame order and time"). The game-only run mode is next, then the external control API (MCP, WebSocket) that lets a model or a program play a game.
+2. **Time and run modes:** frame time and the Game run mode are done: `Time` gives `deltaTime` and a fixed step, the frame order is written down, and `mode="Game"` in a game's `ApplicationConfig.xml` starts it without the editor (`BECore/CLAUDE.md`, "Frame order and time" and "Run mode"). The external control API (MCP, WebSocket) that lets a model or a program play a game is next.
 3. **Minimum for a 2D game, in this order:** animation, 2D rendering, text, audio, input mapping, in-game UI.
 4. **Owner decisions:** renderer backends, what ECS means in this engine.
 5. **Content and quality:** prefabs, saves / hot-reload / packing, test gaps and platforms, the reflection generator.
 
 **Not now:** networking for players (servers, multiplayer; the control API in stage 2 is a local development tool, not this), 3D, a physics engine of our own (take Box2D when physics is needed), a scripting language, a rewrite to pure ECS (reflection, the inspector and serialization are built around `IComponent`), mobile and web.
 
-**Driver:** build a third small game (arcade or platformer) so that each feature in stage 3 has a concrete consumer (movement with `dt`, camera, animation, sound, score text, gamepad), and make Match3 animated as the regression check. Stages 1 to 3 are done when `BagiMatch3` runs without the editor, gems fall smoothly, the score is drawn with an engine font, a match plays a sound, input goes through an input map, and CI builds and tests it on macOS and Windows (CI is deferred, so that last point waits for its entry).
+**Driver:** build a third small game (arcade or platformer) so that each feature in stage 3 has a concrete consumer (movement with `dt`, camera, animation, sound, score text, gamepad), and make Match3 animated as the regression check. Stages 1 to 3 are done when gems fall smoothly (`BagiMatch3` already runs without the editor), the score is drawn with an engine font, a match plays a sound, input goes through an input map, and CI builds and tests it on macOS and Windows (CI is deferred, so that last point waits for its entry).
 
 ## Config Editor: the sink `type` dropdown offers values the logger factory cannot resolve
 
@@ -50,24 +50,8 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 - a workflow for macOS (`macos-debug`) and Windows (one MSVC or Clang preset) that checks out the submodules (`git submodule update --init --recursive`, `external/googletest` included), configures, builds the game and test targets and runs `ctest`;
 - a decision for the Vulkan loader DLL on the Windows runner (install the SDK, fetch the loader, or build without the Vulkan backend), after checking whether the test executables need it at all;
-- a guard on the number of tests (165 at the last count): it must not drop;
+- a guard on the number of tests (177 at the last count): it must not drop;
 - a Linux job once Linux presets exist (see the entry on test gaps and platforms).
-
-## No game-only run mode: the game exists only inside the editor viewport
-
-**Where:** `config/WidgetsConfig.xml` (always creates `EditorLayoutWidget`, `ViewportWidget` and the editors), `src/Widgets/Viewport/ViewportWidget.cpp` (the only caller of `SceneManager::DrawAll()`), the comment at the end of `CoreManager::OnGameCycle`.
-
-**What is wrong** (found by reading the code, not by running a game):
-
-1. The scene is drawn only by `ViewportWidget`: it renders into an offscreen target and shows it with `ImGui::Image`. A game can replace `WidgetsConfig.xml` (content layering), but without `ViewportWidget` nothing draws the scene.
-2. Mouse clicks reach `ClickableComponent` and the game components in scene space only because `ViewportWidget` re-emits `MouseButtonDownEvent` with viewport-local coordinates (`SDLEventsProvider` forwards the raw event, in window coordinates, only when ImGui does not want the mouse). Only mouse-button-down exists on both paths, for the left, right and middle buttons.
-3. So every game executable ships with the editor, and a game cannot be run or shown as a product.
-
-**A fix has to cover:**
-
-- an Editor / Game mode chosen by config (the game's own `WidgetsConfig.xml` or a field in `ApplicationConfig.xml`), the editor behavior unchanged;
-- in Game mode the scene is drawn straight into the back buffer by a runtime owner instead of `ViewportWidget`, and window input goes to the scene without the viewport remapping;
-- `BagiChess` and `BagiMatch3` start in Game mode without ImGui panels (the Match3 HUD is ImGui today, see the text entry).
 
 ## No external control: a game can be played only by a human at the window
 
@@ -78,7 +62,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 1. No control channel: nothing listens on a socket or a pipe, there is no MCP server, no WebSocket or JSON dependency.
 2. No way for a program to read the game state or make a move. Match3 has `TrySwap(a, b)`, but Chess moves only through `OnSquareClicked`, a two-step select / move that imitates mouse clicks. Nothing lists the actions a game offers in its current state.
 3. Chess cannot talk to a chess engine: no FEN, no move notation (UCI `e2e4`), and the rules are pseudo-legal (no check, castling, en passant or promotion, see `games/Chess/CLAUDE.md`), so Stockfish and the model would disagree on what a legal move is.
-4. No run without a person: the window and the renderer are always created, and the scene is drawn only through `ViewportWidget` (see the game-only run mode entry). The loop ticks the real clock and has no "advance N frames" step; `Time::Advance(seconds)` exists, but only tests call it.
+4. No run without a person: the window and the renderer are always created (the Game run mode removed the editor, not the window). The loop ticks the real clock and has no "advance N frames" step; `Time::Advance(seconds)` exists, but only tests call it.
 5. No observation beyond the window: `IRenderer` cannot read pixels back, so there is no screenshot. The scene state can be dumped through `ISerializer`.
 
 **A fix has to cover** (the goal: a whole game can be developed, played and tested by a model or by an external program with no human at the window; Chess against Stockfish is the acceptance example):
@@ -87,7 +71,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - a game-side interface that the engine finds without knowing game names (state snapshot, legal actions, apply an action), implemented by Chess and Match3; no engine code refers to a concrete game;
 - a WebSocket server (JSON, request id and response, state-change push) in a new module placed in the module order of `CLAUDE.md` without a cycle; localhost only, off by default, enabled by config or a command-line flag. This is a development tool, not the player networking from "Not now";
 - an MCP server so Claude can play and debug a game. Recommendation: a thin separate process in `tools/` that maps MCP tools (`get_state`, `perform_action`, `step`, `screenshot`, `reset`) onto the WebSocket, so the engine has no MCP dependency;
-- a headless mode on top of the game-only run mode: a hidden or absent window, offscreen rendering for screenshots, an optional manual clock (`Time::Advance`) for deterministic runs; a screenshot needs a pixel readback in `IRenderer` and in both backends;
+- a headless mode on top of the Game run mode (`RunMode`, `BECore/CLAUDE.md`): a hidden or absent window, offscreen rendering for screenshots, an optional manual clock (`Time::Advance`) for deterministic runs; a screenshot needs a pixel readback in `IRenderer` and in both backends;
 - Chess rules and notation in `Game/`, each with gtests: FEN in and out, UCI move parse and format, full legal moves (check, mate, castling, en passant, promotion) checked against known perft counts, and a model-level move that does not go through clicks;
 - a Stockfish bridge as an external script in `tools/`: it reads the position over the WebSocket, asks Stockfish over UCI and sends the move back, so Stockfish is never linked into the engine;
 - tests: command dispatch with a fake transport, a smoke test that starts a game headless and plays a few moves through a WebSocket client, and a Chess ↔ Stockfish game as an optional check that is skipped when Stockfish is not installed.
@@ -128,7 +112,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 **Where:** `games/Match3/src/Match3/Components/Match3BoardComponent.cpp` (the score is `ImGui::Text` in an ImGui window), `src/Modules/BECore/Resource/` (where a font loader would go), `external/` (SDL_image is the only SDL add-on).
 
-**What is missing** (found by reading the code, not by running a game): fonts, glyph rendering and a text component. This ties the Match3 HUD to ImGui, which is an obstacle for the game-only run mode.
+**What is missing** (found by reading the code, not by running a game): fonts, glyph rendering and a text component. The Match3 HUD is ImGui, and the Game run mode has no ImGui, so `BagiMatch3` shows no score and has no Reset button until the HUD moves to a text component.
 
 **A fix has to cover:**
 
