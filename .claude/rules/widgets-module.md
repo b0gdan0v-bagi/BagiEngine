@@ -8,61 +8,56 @@ paths:
 
 ## Overview
 
-Widgets are UI/rendering components implementing `IWidget`. Managed by `WidgetManager`, configured via XML.
+Widgets are UI/rendering components implementing `IWidget` (a `FACTORY_BASE` that also derives `SubscriptionHolder`). `WidgetManager` creates them from XML and drives them every frame.
 
 ## IWidget Interface
 
+All methods are `BE_FUNCTION`.
+
 | Method | Purpose |
 |--------|---------|
-| `Initialize(const XmlNode&)` | Load config, subscribe to events |
-| `Update()` | Called every frame (logic) |
-| `Draw()` | Called every frame (rendering) |
+| `Initialize(IDeserializer&)` | Read the widget's own `<widget>` node, subscribe to events; return `false` on failure |
+| `Update()` | Every frame, logic |
+| `DrawScreen()` | Optional, screen-level drawing before ImGui; default is empty |
+| `Draw()` | Every frame, ImGui/rendering |
 
 ## Widget Lifecycle
 
-1. Construction — default constructor, no init
-2. `Initialize(XmlNode)` — load config, subscribe to events
-3. `Update()` → `Draw()` — every frame
-4. Destruction — cleanup, unsubscribe from events
+1. `WidgetManager::CreateWidgets()` (from `CoreManager::OnApplicationInit`) creates each configured widget through `AbstractFactory<IWidget>` using the default constructor.
+2. `Initialize(deserializer)`: load config, subscribe to events.
+3. Every frame, from `CoreManager::OnGameCycle`: `UpdateAll()` → (queued events) → `DrawScreenAll()` → `DrawAll()`, in registration order.
+4. Destruction: `SubscriptionHolder` drops the event subscriptions.
 
 ## XML Configuration
 
-File: `config/WidgetsConfig.xml`
-- `type` — widget class name
-- `name` — widget identifier
-- `priority` — processing order
+File: `config/WidgetsConfig.xml`, entries `<widget type="..."/>` under `<widgets>`:
+- `type`: widget class name (`ImGuiWidget`, `EditorLayoutWidget`, `ViewportWidget`, ...)
+- widget-specific settings as child elements or attributes (for example `<clearColor r g b a/>`), read in `Initialize`
+- the file order is the creation and update order; there is no `name` or `priority` attribute
 
 ## Best Practices
 
-- **Single Responsibility** — one widget = one purpose
-- **XML Configuration** — all tunable parameters from XML
-- **Event-Driven** — use events for widget communication
-- **Lazy Initialization** — initialize resources in `Initialize()`, not constructor
-- **Separation** — `Update()` for logic, `Draw()` for rendering
-
-## ImGui Widgets
-
-Use `ImGui::Begin()`/`ImGui::End()` in `Draw()` method for ImGui-based widgets.
+- **Single Responsibility**: one widget, one purpose.
+- **XML Configuration**: tunable parameters come from the widget's XML node.
+- **Event-Driven**: communicate through events, not direct widget-to-widget calls.
+- **Lazy Initialization**: set up resources in `Initialize()`, not in the constructor.
+- **Separation**: `Update()` for logic, `Draw()` for rendering.
+- ImGui widgets call `ImGui::Begin()` / `ImGui::End()` inside `Draw()`.
 
 ## Scene Editor Conventions
 
-Scene editor code is split across two focused layers:
+Scene editor code is split across focused layers:
 
-- `SceneEditorWidget` - orchestration layer (selection flow, scene-level actions, widget window structure).
-- `ComponentInspectors` - field editing layer (component-specific controls and value edits).
+- `SceneEditorWidget`: orchestration (selection flow, scene-level actions, window structure).
+- `ComponentInspectors`: per-component editing. `RenderComponentInspector` uses a custom inspector registered with `RegisterComponentInspector` when there is one, and otherwise the generic `ImGuiPropertyVisitor` driven by the component's generated `AcceptPropertyVisitor`.
+- `ImGuiPropertyVisitor`: the `IPropertyVisitor` implementation that renders ImGui controls for reflected fields.
 
-### Responsibilities
+Rules:
+- Keep selection and scene navigation in `SceneEditorWidget`; keep component field editing in `ComponentInspectors`. Do not duplicate edit logic in the scene widget.
+- A new editable field only needs `BE_REFLECT_FIELD`; the generic visitor shows it. Write a custom inspector only when the generic one is not enough.
+- Scene editor behavior stays aligned with `config/SceneConfig.xml`. New editable scene/component fields are represented there and then surfaced through inspectors.
+- Keep Update/Draw separation in editor widgets too (state changes in update, rendering in draw).
 
-- Keep selection and scene navigation logic in `SceneEditorWidget`.
-- Keep per-component UI and property widgets in `ComponentInspectors`.
-- Avoid duplicating component edit logic in `SceneEditorWidget`.
+## Config Editor
 
-### Config and Data Source
-
-- Scene editor behavior must stay aligned with `config/SceneConfig.xml`.
-- New editable scene/component fields should be represented in config and then surfaced through inspectors.
-
-### Practical Rules
-
-- Prefer adding a new inspector handler over adding ad-hoc inline ImGui fields in the main scene widget.
-- Maintain clear Update/Draw separation even for editor widgets (state changes in update path, rendering in draw path).
+`ConfigEditorWidget` edits any loaded XML config. Field typing comes from `ConfigFieldSchema` (registered enums per config path, for example `LoggerConfig` → `sink/@type`), the controls from `FieldInspectors`, and edits stay in `StagedChanges` until the user saves. New config attributes with a fixed value set should be registered in the schema.

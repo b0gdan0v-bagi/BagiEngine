@@ -34,7 +34,10 @@ These are included directly via `add_subdirectory()`:
 |---------|------|------|
 | SDL3 | `external/SDL/` | Shared library |
 | SDL_image | `external/SDL_image/` | Image loading dependency for texture pipeline |
+| Vulkan-Headers | `external/Vulkan-Headers/` | Include-only, provides the `Vulkan::Headers` target |
 | GoogleTest | `external/googletest/` | Test framework for `BagiEngineTests` (pinned to `v1.17.0`) |
+
+`external/Vulkan-Loader/` is not a submodule: it is tracked in the repository and holds the prebuilt Windows loader (`vulkan-1.lib`); `VULKAN_SDK`, when set and containing `Lib/vulkan-1.lib`, is used for linking instead.
 
 ### Dependency Loading Order in Root CMakeLists.txt
 
@@ -47,6 +50,9 @@ add_subdirectory(external/SDL)
 
 # 2.1 SDL_image (git submodule, after SDL)
 add_subdirectory(external/SDL_image)
+
+# 2.2 Vulkan-Headers (git submodule)
+add_subdirectory(external/Vulkan-Headers)
 
 # 3. Other vendored libraries
 add_subdirectory(src/Modules/EnTT)
@@ -77,7 +83,18 @@ Each engine module has its own `CMakeLists.txt`:
 - Create `STATIC` library
 - Include directories: own `src/` + cross-module path
 - Link to `BECoreModule` if needed
-- Reuse PCH: `target_precompile_headers(MyModule REUSE_FROM BECoreModule)`
+- Reuse PCH: `target_precompile_headers(MyModule REUSE_FROM BECoreModule)`. Targets whose sources rely on the PCH contents (`MyGame`, `ChessModule`, `BagiEngineTests`) also force-include it (`/FI"BECore/pch.h"` on MSVC, `-include "BECore/pch.h"` elsewhere)
+- Reflected classes in the module: add its source directory to `source_dirs` / `scan_dirs` of `BECoreModule` in `CI/meta_generator/reflection_targets.json`. Only `BECoreModule` calls `add_reflection_target()`; other modules do not get their own entry
+- Registration code (factories) lives in static initializers, so executables link the engine libraries with `WHOLE_ARCHIVE` (see root `CmakeLists.txt` and `tests/CMakeLists.txt`)
+
+## Build Options
+
+| Option | Default | Effect |
+|--------|---------|--------|
+| `ENGINE_NO_EXCEPTIONS` | `ON` | `-fno-exceptions` / `/EHs-c-`, `ENGINE_NO_EXCEPTIONS=1`, `EASTL_EXCEPTIONS_ENABLED=0` |
+| `ENGINE_ENABLE_ASSERTS` | `ON` | `ASSERT` / `FATALERROR`; compiled out when `OFF` |
+| `ENGINE_ENABLE_EXPECTS` | `ON` | `EXPECT`; compiled out when `OFF` |
+| `ENGINE_BUILD_TESTS` | `ON` | GoogleTest and the `BagiEngineTests` target |
 
 ## Module Dependencies Order
 
@@ -107,9 +124,9 @@ BECoreModule must be first (provides PCH):
 
 ## Platform-Specific
 
-- MSVC: `/FI"BECore/pch.h"` for force include
-- MSVC: `/W4` warnings
-- GCC/Clang: `-Wall -Wextra`
+- MSVC: `/FI"BECore/pch.h"` for force include; exceptions off with `/EHs-c-`
+- Clang/GCC: `-include "BECore/pch.h"`; exceptions off with `-fno-exceptions`
+- The project sets no `/W4` or `-Wall -Wextra` of its own for engine targets; `COMPILER_CLANG` / `COMPILER_GCC` / `COMPILER_MSVC` are defined globally
 
 ## Dependency Notes
 

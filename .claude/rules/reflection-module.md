@@ -1,136 +1,104 @@
 ---
 paths:
-  - "**/Reflection/**/*"
-  - "**/*Test*.h"
-  - "**/*Test*.cpp"
+  - "src/Modules/BECore/Reflection/**/*"
+  - "CI/meta_generator/**/*"
+  - "tests/BECore/Reflection*"
 ---
 
 # Reflection System Guidelines
 
 ## Overview
 
-Compile-time reflection with Python code generator (meta_generator). Auto-generates `Serialize()` (write) and `Deserialize()` (read) methods.
+Compile-time reflection with a Python code generator (`meta_generator`). `BE_CLASS` / `BE_EVENT` plus `BE_REFLECT_FIELD` markers produce `.gen.hpp` files with `Serialize()` (write), `Deserialize()` (read), field iteration and type metadata.
 
 ## Codegen (meta_generator)
 
-- **Script:** `CI/meta_generator/meta_generator.py`
-- **Target config:** `CI/meta_generator/reflection_targets.json` — per target: `source_dirs`, `scan_dirs`, `include_dirs`
-- **Run:** `--target BECoreModule --project-root . --output-dir build/Generated --cache-dir build` (optionally `--settings meta_generator_settings.json`)
-- **Cache:** `metadata_cache.json` in `cache-dir`
+- **Script:** `CI/meta_generator/meta_generator.py`; run automatically at configure time by `add_reflection_target()` in the root `CmakeLists.txt` (so re-run `cmake --preset ...` after changing markers).
+- **Target config:** `CI/meta_generator/reflection_targets.json`, per target `source_dirs`, `scan_dirs`, `include_dirs`. Only `BECoreModule` has an entry, and its `scan_dirs` also cover SDL, Vulkan, Games, Chess, Match3, `src/Widgets` and `tests/BECore`. **A new directory with reflected classes must be added there.**
+- **Manual run:** `--target BECoreModule --project-root . --output-dir build/Generated --cache-dir build` (optionally `--settings meta_generator_settings.json`). The cache is `metadata_cache.json` in `cache-dir`.
+- Output goes to `build/Generated/`. Never edit generated files.
 
 ## Architecture
 
-The serialization system uses **separate interfaces** for reading and writing:
+Separate interfaces for writing and reading, sharing the structural base `IArchiveBase` (`BeginObject` / `EndObject`, `BeginArray` / `EndArray`, `BeginArrayElement` / `EndArrayElement`):
 
-- **`ISerializer`** - Interface for writing data (save/export)
-  - Methods: `Write()`, `WriteAttribute()`
-  - Implementations: `XmlSerializer`, `BinarySerializer`
-  
-- **`IDeserializer`** - Interface for reading data (load/import)
-  - Methods: `Read()`, `ReadAttribute()`
-  - Error tracking: `HasErrors()`, `GetErrors()`, `ClearErrors()`
-  - Implementations: `XmlDeserializer`, `BinaryDeserializer`
+- **`ISerializer`**: `Write()`, `WriteAttribute()`. Implementations: `XmlSerializer`, `BinarySerializer`.
+- **`IDeserializer`**: `Read()`, `ReadAttribute()`, errors via `HasErrors()` / `GetErrors()` / `ClearErrors()` (`DeserializeError`: `path`, `errorMessage`, `line`). Implementations: `XmlDeserializer`, `BinaryDeserializer`.
+- **`IPropertyVisitor`**: in-place field editing (ImGui inspector, `ImGuiPropertyVisitor`), reached through the generated `AcceptPropertyVisitor()`.
 
 ## Macros
 
 | Macro | Purpose |
 |-------|---------|
-| `BE_CLASS(Name)` | Reflection + auto `Serialize()` + `Deserialize()` |
-| `BE_CLASS(Name, FACTORY_BASE)` | Factory/enum generation for hierarchy |
-| `BE_REFLECT_FIELD` | Mark field for serialization (same line!) |
-| `BE_FUNCTION` | Mark method for reflection |
+| `BE_CLASS(Name)` | Reflection + `Serialize` / `Deserialize` + `AcceptPropertyVisitor` + `Is<T>()` / `Cast<T>()` |
+| `BE_CLASS(Name, FACTORY_BASE)` | Also generates the type enum and `AbstractFactory` registration for the hierarchy |
+| `BE_EVENT(Name)` | Lightweight variant for events (`.claude/rules/reflection-events.md`) |
+| `BE_REFLECT_FIELD` | Mark a field for serialization (same line as the field) |
+| `BE_FUNCTION` | Mark a method for reflection |
 
 ## Serialization
 
-| Type | XML Format | Method |
-|------|------------|--------|
-| Primitives (int, bool, string, PoolString) | Attributes | `WriteAttribute()` / `ReadAttribute()` |
-| Classes (BE_CLASS) | Child elements | `BeginObject()` + `Serialize()` / `Deserialize()` |
+The generated `Serialize` calls `Ser::Save(s, field, "name")` for every field, `Deserialize` calls `Ser::Load`. `Ser::Save` / `Ser::Load` (`Reflection/DataAccessor.h`) pick a `Ser::DataAccessor<T>` specialization:
 
-**Field naming:** Underscore prefix is automatically stripped for XML names:
-- C++ field: `_clearColor` → XML name: `clearColor`
-- C++ field: `_filename` → XML name: `filename`
+| Type | Written as |
+|------|-----------|
+| arithmetic, `eastl::string`, `PoolString`, reflected enum (`CORE_ENUM`) | attribute (`WriteAttribute` / `ReadAttribute`) |
+| type with `Serialize` / `Deserialize` | child object: `BeginObject(key)` + `Serialize` |
+| `eastl::vector<T>` (and fixed arrays) | array; elements are objects or a `value` attribute |
+| `eastl::vector<IntrusivePtr<Base>>` with a factory | array; each element has `type` (class name) and `enabled` attributes, created through `AbstractFactory`; `Initialize()` is called on loaded elements when present |
+| `IntrusivePtrAtomic<T>` / `IntrusivePtrNonAtomic<T>` | one child element; null is skipped |
 
-```xml
-<Player health="100" name="Hero">
-    <Position x="10" y="20"/>
-</Player>
-```
-
-## Usage
-
-### Writing (Save/Export)
+**Field naming:** a leading underscore is stripped for the serialized name (`_clearColor` → `clearColor`).
 
 ```cpp
-// Class definition
 struct Player {
     BE_CLASS(Player)
-    BE_REFLECT_FIELD int32_t health = 100;  // ✓ Same line
+    BE_REFLECT_FIELD int32_t health = 100;      // same line as the marker
     BE_REFLECT_FIELD PoolString name;
-    BE_REFLECT_FIELD Math::Color _clearColor;  // XML: clearColor
-    bool _internal = false;  // Not serialized (no BE_REFLECT_FIELD)
+    BE_REFLECT_FIELD Math::Color _clearColor;   // serialized as "clearColor"
+    bool _internal = false;                     // no marker: not serialized
 };
 
-// Serialization (writing)
 XmlSerializer serializer;
 if (serializer.BeginObject("Player")) {
-    player.Serialize(serializer);  // const method
+    player.Serialize(serializer);               // const
     serializer.EndObject();
 }
 serializer.SaveToFile("save.xml");
-```
 
-### Reading (Load/Import)
-
-```cpp
-// Deserialization (reading)
 XmlDeserializer deserializer;
 deserializer.LoadFromFile("save.xml");
 if (deserializer.BeginObject("Player")) {
-    player.Deserialize(deserializer);  // non-const method
+    player.Deserialize(deserializer);
     deserializer.EndObject();
 }
-
-// Check for errors
 if (deserializer.HasErrors()) {
     for (const auto& err : deserializer.GetErrors()) {
-        LOG_ERROR("Deserialize error: {} - {} (line {})", 
-                  err.path, err.errorMessage, err.line);
+        LOG_ERROR("Deserialize error: {} - {} (line {})"_format(err.path, err.errorMessage, err.line));
     }
 }
 ```
 
-### Arrays
+```xml
+<Player health="100" name="Hero"><clearColor r="..." g="..." b="..." a="..."/></Player>
+```
 
-Arrays require an `elementName` parameter:
+### Manual arrays
+
+Prefer `Ser::Save` / `Ser::Load` on a container field. When a hand-written loop is unavoidable, every element sits in its own `BeginArrayElement()` scope:
 
 ```cpp
-// Writing
 size_t count = items.size();
 if (serializer.BeginArray("items", "item", count)) {
     for (const auto& item : items) {
-        item.Serialize(serializer);
+        if (serializer.BeginArrayElement()) {
+            item.Serialize(serializer);
+            serializer.EndArrayElement();
+        }
     }
     serializer.EndArray();
 }
-
-// Reading
-size_t count = 0;
-if (deserializer.BeginArray("items", "item", count)) {
-    items.resize(count);
-    for (auto& item : items) {
-        item.Deserialize(deserializer);
-    }
-    deserializer.EndArray();
-}
-```
-
-XML result:
-```xml
-<items count="2">
-    <item>A</item>
-    <item>B</item>
-</items>
+// Reading: BeginArray fills `count`; loop count times over BeginArrayElement() / EndArrayElement().
 ```
 
 ## Binary Format
@@ -161,55 +129,38 @@ if (deserializer.LoadFromFile("save.bin") && deserializer.BeginObject("Player"))
 
 ## Factory Generation (FACTORY_BASE)
 
-Use `BE_CLASS(Name, FACTORY_BASE)` on base class. Include `<Generated/EnumXxx.gen.hpp>`.
+`BE_CLASS(Name, FACTORY_BASE)` on a base class generates `Generated/EnumXxx.gen.hpp` (type enum named after the base, `FactoryTraits<Base>` with the XML element name) and an `AbstractFactory<Base>` that derived classes register with from their own `.gen.hpp`. Include the derived class's `.gen.hpp` in its `.cpp`, and keep the library linked with `WHOLE_ARCHIVE` so the registration is not dropped.
 
-| Base Class | Enum | Factory |
-|------------|------|---------|
-| `ILogSink` | `LogSinkType` | `LogSinkFactory` |
-| `IWidget` | `WidgetType` | `WidgetFactory` |
+Current bases: `ILogSink`, `IWidget`, `IAssertHandler`, `ITest`, `IRenderer`, `ITexture`, `IResource`, `IResourceLoader`, `IApplicationFabric`, `IComponent`, `SceneNode`, `Scene`, `IGame` (`grep -rn FACTORY_BASE src`).
 
 ## Generated Methods
 
 | Method | Description |
 |--------|-------------|
-| `GetStaticTypeName()` | Type name as `string_view` |
-| `GetStaticTypeMeta()` | `ClassMeta&` for type |
-| `Is<T>()` / `Cast<T>()` | Runtime type checking |
-| `Serialize(Serializer&) const` | Auto-generated write method |
-| `Deserialize(Deserializer&)` | Auto-generated read method |
+| `GetStaticTypeName()` / `GetStaticTypeMeta()` / `GetStaticFieldCount()` | Static type name, `ClassMeta`, field count |
+| `GetTypeMeta()` | Virtual, correct through a base pointer |
+| `Is<T>()` / `Cast<T>()` | Runtime type checks (use instead of `dynamic_cast`) |
+| `ForEachFieldStatic(obj, func)` | Iterate reflected fields (mutable and const) |
+| `Serialize(ISerializer&) const` / `Deserialize(IDeserializer&)` | Write / read |
+| `AcceptPropertyVisitor(IPropertyVisitor&)` | In-place editing |
 
-## Container and pointer serialization
+## Extension Points
 
-In `BECore/Reflection/DataAccessor.h`, `Ser::Save` / `Ser::Load` dispatch to `Ser::DataAccessor<T>` specializations for:
-
-- Types with `Serialize`/`Deserialize` — one child element per object
-- `eastl::vector<T>` — child elements with `value` attribute or `Serialize()` per element
-- `eastl::vector<IntrusivePtr<Base>>` with factory — `type` and `enabled` attributes, creation via `FactoryTraits`
-- `IntrusivePtrAtomic<T>` / `IntrusivePtrNonAtomic<T>` — one child element; null = skip
-
-Prefer these overloads in custom `Serialize`/`Deserialize` instead of manual `BeginArray`/`BeginObject` where they fit.
-
-### Current direction (important)
-
-- Treat `Ser::DataAccessor<T>` specializations as the canonical extension point for container/pointer support.
-- Keep factory-backed polymorphic container flow aligned with generated enum/factory traits from `meta_generator`.
-- When adding new serializable container shapes, extend both serialization and deserialization paths symmetrically.
-- Prefer generated/reflection-driven paths over one-off manual XML loops in component code.
+- `Ser::DataAccessor<T>` specializations are the canonical way to support a new container or pointer shape. Extend save and load symmetrically.
+- Keep factory-backed polymorphic containers aligned with the generated enum/factory traits.
+- Prefer reflection-driven paths over one-off manual XML loops in component code.
 
 ## Best Practices
 
-- Put `BE_REFLECT_FIELD` on **same line** as field
-- Include `.gen.hpp` in .cpp only
-- Use `Is<T>()`/`Cast<T>()` instead of `dynamic_cast`
-- Use `WriteAttribute()`/`ReadAttribute()` for primitives
-- Check `HasErrors()` after deserialization
-- Field names with underscore prefix are automatically stripped for XML
-- Keep examples and code aligned with split interfaces: `Serialize(ISerializer&) const`, `Deserialize(IDeserializer&)`
+- `BE_REFLECT_FIELD` on the **same line** as the field.
+- Include `.gen.hpp` in a `.cpp` only, never in a header.
+- Check `HasErrors()` after deserialization.
+- Keep code on the split interfaces: `Serialize(ISerializer&) const`, `Deserialize(IDeserializer&)`.
 
 ## Don't
 
-- Reflect pointers/references directly
-- Put `BE_REFLECT_FIELD` on separate line
-- Include `.gen.hpp` in headers
-- Modify generated files
-- Use old `IArchive` interface (deprecated, use `ISerializer`/`IDeserializer`)
+- Reflect raw pointers or references.
+- Put `BE_REFLECT_FIELD` on a separate line.
+- Include `.gen.hpp` in headers.
+- Modify generated files.
+- Add an archive-style API that reads and writes through one interface.

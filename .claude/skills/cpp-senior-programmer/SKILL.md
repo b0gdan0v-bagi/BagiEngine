@@ -285,8 +285,8 @@ Example task wording in a plan:
 ## Additional Resources
 
 - **Design patterns**: See [patterns.md](patterns.md) for detailed pattern implementations
-- **Module-specific rules**: See `.claude/rules/` directory:
-  - Core module: `core-module.md`
-  - Event system: `events-module.md`
-  - Widget system: `widgets-module.md`
-  - SDL integration: `sdl-module.md`
+- **Module-specific rules**: nested `CLAUDE.md` next to the code, plus `.claude/rules/` for guidance that spans directories:
+  - Core module: `src/Modules/BECore/CLAUDE.md`
+  - Event system: `src/Modules/Events/CLAUDE.md`
+  - Widget system: `.claude/rules/widgets-module.md`
+  - SDL integration: `src/Modules/SDL/CLAUDE.md`
