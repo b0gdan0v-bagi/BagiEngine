@@ -51,7 +51,7 @@ namespace BECore {
      *
      * @example
      * template<typename T>
-     * void Serialize(IArchive& archive, T& obj) {
+     * void Save(ISerializer& serializer, const T& obj) {
      *     if constexpr (HasReflection<T>) {
      *         // Use ReflectionTraits<T>::fields
      *     }
