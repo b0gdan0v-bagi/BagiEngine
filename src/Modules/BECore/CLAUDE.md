@@ -17,18 +17,9 @@ Central service locator (`GameManager/CoreManager.h`): one static getter per sub
 
 The GoogleTest executable (`tests/`) brings up the same services through `OnTestEnvironmentInit(PassKey<Tests::EngineEnvironment>)`. That path skips `TestManager` and disables `DebugBreakHandler`, so a failed assert is reported by gtest instead of trapping the process. See `.claude/rules/tests-module.md`.
 
-## ConfigManager
+## Subsystem guides
 
-**DO**: use `ConfigManager` for all config access:
-```cpp
-auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
-```
-
-**DON'T**: create config loaders manually or call `LoadFromVirtualPath()` directly.
-
-- Loads every XML under `config/` recursively at startup, in parallel through `TaskManager`; `Initialize()` blocks until all are loaded.
-- A config is identified by its filename stem (without `.xml`); `GetConfig` returns an `XmlNode` (invalid node when not found).
-- Configs are cached in `UnorderedPoolMap<ConfigEntry>`; writes are serialized by a mutex.
+Nested `CLAUDE.md` files in `BECore/`: `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `FileSystem/` (virtual paths and mount points), `Scene/` (scene graph and components), `Logger/`, `Resource/`. Always read configs through `ConfigManager`, never by creating loaders by hand.
 
 ## Assert (CRTDebugHook, StackTrace)
 

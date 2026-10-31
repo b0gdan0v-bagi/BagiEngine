@@ -147,6 +147,6 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 
 ## Rules and Skills
 
-- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/`, `BECore/Logger/`, `BECore/Resource/`, `Events/`, `TaskSystem/`, `SDL/`. Claude Code loads one when a file under that directory is read.
+- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`), `Events/`, `TaskSystem/`, `SDL/`, `Vulkan/`, `Games/`, `Chess/`, `Match3/`. Claude Code loads one when a file under that directory is read.
 - `.claude/rules/` holds guidance that spans several directories or matches by file name (`paths:` frontmatter): CMake, Reflection, Reflection events (`*Event.h`), Rendering, Widgets, Tests. Read the relevant file before changing that area.
 - `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix` and `cpp-senior-programmer`.

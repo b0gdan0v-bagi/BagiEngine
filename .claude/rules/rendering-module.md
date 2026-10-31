@@ -34,9 +34,9 @@ paths:
 - If a backend cannot support a feature, document the fallback explicitly (skip draw, placeholder, or warning).
 - ImGui reaches the backend through `RenderEvents::ImGui*Event`, not direct calls (see `src/Modules/SDL/CLAUDE.md`).
 
-## Vulkan Shaders
+## Vulkan specifics
 
-GLSL sources live in `Vulkan/shaders/*.glsl`. At build time `glslc` (from `VULKAN_SDK`, else on `PATH`) compiles them to SPIR-V and `Vulkan/cmake/SpvToHeader.cmake` embeds them as `constexpr uint32_t[]` headers in the build directory. A new shader needs an entry in `Vulkan/CMakeLists.txt`.
+Frame lifecycle, loader linking and the shader pipeline (GLSL → SPIR-V → embedded header) are in `src/Modules/Vulkan/CLAUDE.md`.
 
 ## Error Handling
 

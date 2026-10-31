@@ -1,0 +1,44 @@
+# Config Module Guidelines
+
+## Overview
+
+XML configuration: every file under `config/` is loaded once at startup and read through `ConfigManager`. Parsing is pugixml behind thin wrappers; reflected objects are filled from a config with the serialization layer (`.claude/rules/reflection-module.md`).
+
+## Components
+
+| Class | Role |
+|-------|------|
+| `ConfigManager` | Loads and caches all configs; reached via `CoreManager::GetConfigManager()` |
+| `XmlDocument` | `RefCountedAtomic` owner of a `pugi::xml_document`: load/save file or string, `GetRoot()` |
+| `XmlConfig` | Handle over an `IntrusivePtrAtomic<XmlDocument>`: `LoadFromVirtualPath`, `LoadFromFile`, `LoadFromString`, `SaveToFile` |
+| `XmlNode` | Lightweight pugi node wrapper: `GetChild(name)`, `Children()`, `Name()`, `ParseAttribute<T>(name)` → `std::optional<T>`; `if (node)` is the validity check |
+| `MakeFromConfig<T>(name)` (`ConfigFactory.h`) | `New<T>()` + `Deserialize` from the named config; returns defaults when the config is missing. Include from `.cpp` files only (pulls in `CoreManager.h`) |
+
+## ConfigManager
+
+**DO**: read configs through the manager.
+```cpp
+auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern);
+```
+
+**DON'T**: create loaders by hand or call `LoadFromVirtualPath()` directly for engine configs.
+
+- `Initialize()` scans `config/` recursively, loads every XML in parallel through `TaskManager` and blocks until done. A second call is a no-op.
+- The key is the **file stem** (without `.xml`), so two files with the same stem in different subfolders collide.
+- `GetConfig` takes a `PoolString` or an `eastl::string_view` (the latter avoids interning) and returns an invalid `XmlNode` when the name is unknown, so check it.
+- Documents live in `UnorderedPoolMap<ConfigEntry>`; writes are serialized by a mutex.
+- Editor support: `GetAllConfigNames()`, `GetConfigFilePath(name)`, `SaveConfig(name)`, `ReloadConfig(name)` (replaces the cached document). Code that holds an `XmlNode` from before a reload must fetch it again.
+
+## Reading values
+
+```cpp
+if (auto title = node.ParseAttribute<eastl::string_view>("title")) { /* use *title */ }
+```
+
+Prefer a reflected struct plus `MakeFromConfig<T>` / `Deserialize` over hand-written attribute loops. Hand-parsing with `XmlNode` is for small, fixed shapes (for example `ApplicationConfig.xml`).
+
+## Adding a config
+
+1. Drop `config/<Name>.xml`; it is picked up by name at the next start.
+2. Consume it with `GetConfig("<Name>"_intern)` or `MakeFromConfig<T>("<Name>")`.
+3. If users should edit it in the Config Editor, register enum or flag hints in `ConfigEditorWidget::Initialize` (`src/Widgets/ConfigEditor/`).
