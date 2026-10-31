@@ -23,22 +23,27 @@ namespace BECore {
          * Создает новый токен отмены.
          */
         static CancellationToken Create() {
-            return CancellationToken(eastl::make_shared<std::atomic<bool>>(false));
+            return CancellationToken(eastl::make_shared<State>());
         }
 
         /**
-         * Проверяет, была ли запрошена отмена.
+         * Checks whether cancellation was requested on this token or on any of its parents.
          */
         [[nodiscard]] bool IsCancelled() const {
-            return _cancelled && _cancelled->load(std::memory_order_acquire);
+            for (const State* state = _state.get(); state != nullptr; state = state->parent.get()) {
+                if (state->cancelled.load(std::memory_order_acquire)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /**
-         * Запрашивает отмену.
+         * Requests cancellation. Parent tokens are not affected.
          */
         void Cancel() {
-            if (_cancelled) {
-                _cancelled->store(true, std::memory_order_release);
+            if (_state) {
+                _state->cancelled.store(true, std::memory_order_release);
             }
         }
 
@@ -57,23 +62,29 @@ namespace BECore {
          * Проверяет валидность токена.
          */
         [[nodiscard]] bool IsValid() const {
-            return _cancelled != nullptr;
+            return _state != nullptr;
         }
 
         /**
-         * Создает связанный токен (дочерний).
-         * Отмена родителя автоматически отменяет дочерний.
+         * Creates a linked (child) token.
+         * Cancelling the parent cancels the child; cancelling the child leaves the parent alone.
+         * The child keeps its parent alive through shared_ptr, so destruction order does not matter.
          */
         [[nodiscard]] CancellationToken CreateLinked() const {
-            auto child = Create();
-            // TODO: реализовать связывание
-            return child;
+            auto state = eastl::make_shared<State>();
+            state->parent = _state;
+            return CancellationToken(std::move(state));
         }
 
     private:
-        explicit CancellationToken(eastl::shared_ptr<std::atomic<bool>> cancelled) : _cancelled(std::move(cancelled)) {}
+        struct State {
+            std::atomic<bool> cancelled{false};
+            eastl::shared_ptr<State> parent;
+        };
 
-        eastl::shared_ptr<std::atomic<bool>> _cancelled;
+        explicit CancellationToken(eastl::shared_ptr<State> state) : _state(std::move(state)) {}
+
+        eastl::shared_ptr<State> _state;
     };
 
 }  // namespace BECore

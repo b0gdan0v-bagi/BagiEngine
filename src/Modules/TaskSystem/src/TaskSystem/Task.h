@@ -1,6 +1,7 @@
 #pragma once
 
 #include <TaskSystem/TaskPriority.h>
+#include <condition_variable>
 #include <coroutine>
 
 namespace BECore {
@@ -10,6 +11,58 @@ namespace BECore {
     class Task;
 
     namespace Detail {
+
+        /**
+         * CompletionEvent - one-shot signal "the coroutine reached final_suspend".
+         *
+         * Owned by TaskHandle; the promise only keeps a pointer to it. A waiting thread blocks on a condition
+         * variable instead of spinning, and reads an atomic flag instead of the coroutine frame state
+         * (which the worker thread is writing at the same time).
+         */
+        class CompletionEvent {
+        public:
+            CompletionEvent() = default;
+
+            CompletionEvent(const CompletionEvent&) = delete;
+            CompletionEvent& operator=(const CompletionEvent&) = delete;
+
+            /**
+             * Marks the task as finished and wakes all waiters.
+             * The notification is sent under the mutex: a waiter cannot return (and destroy the event)
+             * until this method releases the lock.
+             */
+            void Signal() {
+                std::lock_guard lock(_mutex);
+                _signaled.store(true, std::memory_order_release);
+                _condition.notify_all();
+            }
+
+            /**
+             * Wakes waiters without finishing the task, so they re-check their own predicate (used by Cancel).
+             */
+            void Wake() {
+                std::lock_guard lock(_mutex);
+                _condition.notify_all();
+            }
+
+            [[nodiscard]] bool IsSignaled() const noexcept {
+                return _signaled.load(std::memory_order_acquire);
+            }
+
+            /**
+             * Blocks until the task has finished or interrupted() returns true.
+             */
+            template <typename Predicate>
+            void WaitUntil(Predicate interrupted) {
+                std::unique_lock lock(_mutex);
+                _condition.wait(lock, [&] { return _signaled.load(std::memory_order_acquire) || interrupted(); });
+            }
+
+        private:
+            std::mutex _mutex;
+            std::condition_variable _condition;
+            std::atomic<bool> _signaled{false};
+        };
 
         /**
          * Базовый promise_type для Task<T>.
@@ -27,8 +80,15 @@ namespace BECore {
             template <typename PromiseType>
             std::coroutine_handle<> await_suspend(std::coroutine_handle<PromiseType> h) noexcept {
                 auto& promise = h.promise();
-                if (promise._continuation) {
-                    return promise._continuation;
+
+                // After Signal() a waiting thread may destroy the frame, so nothing is read from the promise past it.
+                const std::coroutine_handle<> continuation = promise._continuation;
+                if (promise._completion) {
+                    promise._completion->Signal();
+                }
+
+                if (continuation) {
+                    return continuation;
                 }
                 return std::noop_coroutine();
             }
@@ -40,6 +100,7 @@ namespace BECore {
         struct TaskPromiseBase {
             TaskError _error = TaskError::None;
             std::coroutine_handle<> _continuation;
+            CompletionEvent* _completion = nullptr;  // set by TaskHandle; null for tasks awaited via co_await
 
             auto initial_suspend() noexcept {
                 return std::suspend_always{};

@@ -9,11 +9,11 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 | Component | Purpose |
 |-----------|---------|
 | `Task<T>` | Coroutine return type with `promise_type`; move-only |
-| `TaskHandle<T>` | Handle for tracking and cancelling a task; `GetResult()` returns `std::expected` |
+| `TaskHandle<T>` | Handle for tracking and cancelling a task; `GetResult()` returns `std::expected`. `Wait()` blocks on a condition variable (no spinning) and also returns when the handle is cancelled; completion is signalled from the promise's `final_suspend` (`Detail::CompletionEvent`) |
 | `TaskManager` | Singleton: `Run()`, `RunOnMainThread()`, `RunDelayed()` |
 | `ThreadPool` | Worker threads with work stealing (`TaskQueue::TrySteal`) |
 | `TaskScheduler` | Priority queues, delayed tasks |
-| `CancellationToken` | Cancellation support (`Create()`, `CreateLinked()`, `IsCancelled()`) |
+| `CancellationToken` | Cancellation support (`Create()`, `CreateLinked()`, `IsCancelled()`). A linked child sees its parent's cancellation (checked by polling up the chain); cancelling the child does not touch the parent |
 | `TaskGroup` | Manages related tasks: `Add()`, `WaitAll()`, `CancelAll()` |
 | `EventAwaiter<E>` | Awaits an `EventBase` event |
 

@@ -2,7 +2,6 @@
 
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskPriority.h>
-#include <thread>
 
 namespace BECore {
 
@@ -90,6 +89,10 @@ namespace BECore {
         TaskHandle() = default;
 
         explicit TaskHandle(Task<T>&& task) : _task(std::move(task)) {
+            // The handle lives on the heap and never moves, so the promise can keep a pointer to _completion.
+            if (_task.IsValid()) {
+                _task.GetHandle().promise()._completion = &_completion;
+            }
             SetStatus(TaskStatus::Pending);
         }
 
@@ -100,21 +103,28 @@ namespace BECore {
         // =================================================================
 
         [[nodiscard]] bool IsDone() const override {
-            return _task.IsDone();
+            return !_task.IsValid() || _completion.IsSignaled();
         }
 
         void Cancel() override {
             if (GetStatus() == TaskStatus::Pending || GetStatus() == TaskStatus::Running) {
                 SetStatus(TaskStatus::Cancelled);
                 _cancelled.store(true, std::memory_order_release);
+                _completion.Wake();
             }
         }
 
+        /**
+         * Blocks until the task has finished or the handle has been cancelled.
+         * Never call it on the main thread for a task scheduled with ThreadType::MainThread: that queue is drained
+         * in TaskManager::Update, so the wait would block itself.
+         */
         void Wait() override {
-            while (!IsDone() && !_cancelled.load(std::memory_order_acquire)) {
-                // Spin wait (TODO: replace with proper synchronization)
-                std::this_thread::yield();
+            if (!_task.IsValid()) {
+                return;
             }
+
+            _completion.WaitUntil([this] { return IsCancelled(); });
 
             // Обновляем статус после завершения
             if (IsDone() && GetStatus() == TaskStatus::Running) {
@@ -196,6 +206,8 @@ namespace BECore {
         }
 
     private:
+        // Declared before _task: the coroutine frame is destroyed first, the event it signals last.
+        Detail::CompletionEvent _completion;
         Task<T> _task;
         std::atomic<bool> _cancelled{false};
     };

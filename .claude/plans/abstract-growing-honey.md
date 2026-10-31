@@ -1,57 +1,118 @@
-# Закрыть ветку `tmp/delete_cursor`
+# TaskSystem: нормальное ожидание в TaskHandle + связанные CancellationToken
 
 ## Context
 
-Вы вернулись к проекту и не помните, где остановились. По репозиторию видно: последняя сессия (30 окт) закончила CMake-пресеты,
-настройку VS Code и скилл `build`. Всё закоммичено, дерево чистое, ветка на 9 коммитов впереди `main`
-(Cursor → VS Code, фикс macOS-сборки, vendored Vulkan loader, `CMakePresets.json`, скилл `build`).
+В `src/Modules/TaskSystem` остались два TODO, которые мешают по-настоящему:
 
-Цель: подтвердить, что ветка в рабочем состоянии, подчистить хвосты от прошлых задач и смерджить её в `main`,
-чтобы дальше работать с чистого места.
+1. `TaskHandle::Wait()` ([TaskHandle.h:113](../../src/Modules/TaskSystem/src/TaskSystem/TaskHandle.h)) крутится в цикле
+   `yield()`. Его вызывает `TaskGroup::WaitAll()` на главном потоке при старте ([ConfigManager.cpp:49](../../src/Modules/BECore/Config/ConfigManager.cpp)),
+   так что пока грузятся конфиги, главный поток сжигает ядро. Кроме CPU там есть настоящая гонка: `IsDone()` читает
+   `coroutine_handle::done()`, то есть поле во фрейме корутины, пока воркер его пишет.
+2. `CancellationToken::CreateLinked()` ([CancellationToken.h:67](../../src/Modules/TaskSystem/src/TaskSystem/CancellationToken.h))
+   возвращает независимый токен, хотя в комментарии обещано "отмена родителя отменяет дочерний".
 
-Хвосты, которые видны сейчас:
+Цель: заменить спин на блокирующее ожидание без гонок и реализовать связывание токенов. Поведение API не меняется.
 
-- В [chess-плане](chess-mvp-module_5d6e2126.plan.md) пункт `build-and-format` всё ещё `in_progress`, хотя в match3-плане такой же пункт
-  `completed` и код закоммичен (`1c8c99a1 MVP chess / match3 game`). Неизвестно, прогонялись ли `clang-format` и `strip-pch-includes`
-  на Chess/Match3/Games (`clang-format` в PATH нет, скилл работает через `LIBCLANG_PATH`).
-- Свежесть сборки: `build/macos-debug/compile_commands.json` от 18:20, exe `build/ClangmacOS/MyGame` от 18:13.
-  Это не доказывает, что итоговое состояние ветки собирается и тесты зелёные.
-- Не проверено (из [плана пресетов](cmake-presets-wobbly-mist.md)): Windows-пресеты и UI CMake Tools (F5/F7, выбор пресета).
+## Что делаем и как
 
-## Шаги
+### 1. Сигнал завершения в promise ([Task.h](../../src/Modules/TaskSystem/src/TaskSystem/Task.h))
 
-1. **Сборка.** Скилл `build` (`macos-debug`). Конфигурация не нужна: `git status` чистый, `BE_CLASS`/`BE_REFLECT_FIELD` после последнего
-   configure не менялись. Если скилл решит иначе, подчиняемся ему. Сборка идёт в фоне, лог в scratchpad.
-2. **Тесты при старте.** Запустить `build/ClangmacOS/MyGame` (скилл `run`): тесты из `config/TestsConfig.xml` идут в
-   `CoreManager::OnApplicationPreInit`. Смотрим в логе результаты 10 включённых тестов (в том числе `MoveGeneratorTest`,
-   `Match3GameModelTest`), затем закрываем окно. Заодно быстро проверить в `GameSelectorWidget` переключение Chess ↔ Match3.
-3. **Форматирование.** Скилл `clang-format` на `src/Modules/Games`, `src/Modules/Chess`, `src/Modules/Match3`. Если есть правки,
-   они идут отдельным коммитом (`Apply clang-format to Games/Chess/Match3`), чтобы не мешаться с остальным.
-4. **Includes.** Скилл `strip-pch-includes`: сначала dry-run по тем же трём модулям, применять только если нашлись дубли.
-   После правок повторить шаг 1, чтобы убедиться, что сборка не сломалась.
-5. **Chess-план.** В `.claude/plans/chess-mvp-module_5d6e2126.plan.md` поменять `build-and-format` на `completed`, если шаги 1-4 зелёные.
-6. **Merge.** Мердж `tmp/delete_cursor` → `main` и push — внешнее действие, поэтому перед ним спрошу, как вы хотите: PR через `gh`
-   или локальный merge. Ветку удалять только по вашей просьбе.
+Новый файл не нужен (иначе придётся делать re-configure из-за `GLOB_RECURSE`), всё живёт в `Detail` рядом с `FinalAwaiter`.
 
-## Критичные файлы и что переиспользуем
+- `Detail::CompletionEvent`: `std::mutex` + `std::condition_variable` + `std::atomic<bool> _signaled`.
+  - `Signal()`: под мьютексом ставит флаг и делает `notify_all` (уведомление под замком, чтобы ждущий не успел уничтожить
+    событие раньше, чем сигналящий закончит с ним работать).
+  - `Wake()`: берёт мьютекс и делает `notify_all`. Нужен для `Cancel()`, чтобы ждущий перепроверил предикат.
+  - `IsSignaled()`: `load(acquire)`.
+  - `WaitUntil(extraPredicate)`: `cv.wait(lock, [] { return _signaled || extraPredicate(); })`.
+- `TaskPromiseBase` получает `CompletionEvent* _completion = nullptr`.
+- `FinalAwaiter::await_suspend`: сначала забрать `_continuation` в локальную переменную, потом `_completion->Signal()`,
+  потом вернуть сохранённое. После `Signal()` ждущий поток вправе уничтожить фрейм, поэтому из promise после этого
+  ничего читать нельзя. Заодно закрывается существующее окно, когда ещё не вернувшийся `await_suspend` читал уже
+  освобождённый фрейм.
+- Добавить `#include <condition_variable>` (в PCH его нет, `<mutex>` и `<atomic>` там есть).
 
-- Скиллы: `.claude/skills/build`, `clang-format`, `strip-pch-includes`, `run` (ничего нового не пишем).
-- [CMakePresets.json](../../CMakePresets.json): пресеты `macos-debug` / `macos-release`.
-- [config/TestsConfig.xml](../../config/TestsConfig.xml): список включённых тестов.
-- [chess-mvp-module_5d6e2126.plan.md](chess-mvp-module_5d6e2126.plan.md): правка статуса одного пункта.
+### 2. `TaskHandle` ([TaskHandle.h](../../src/Modules/TaskSystem/src/TaskSystem/TaskHandle.h))
+
+- Член `CompletionEvent _completion;` объявить ПЕРЕД `_task`, тогда `_task` (и фрейм) разрушится раньше, чем событие.
+  В конструкторе `TaskHandle(Task<T>&&)` зарегистрировать `_task.GetHandle().promise()._completion = &_completion`.
+  Объект живёт в куче через `MakeIntrusive` и не перемещается (пользовательский деструктор отключает move, копирование
+  запрещено атомиками), так что адрес стабилен.
+- `IsDone()`: `!_task.IsValid() || _completion.IsSignaled()`. Это убирает гонку на чтении фрейма. Для невалидной задачи
+  результат тот же, что и сейчас.
+- `Wait()`: `_completion.WaitUntil([this] { return IsCancelled(); })`, дальше прежняя подстановка статуса
+  `Running → Completed`. Ранний выход при отмене сохраняем: отменённая до запуска задача никогда не стартует
+  (`Start()` проверяет `Pending`), и без этого `Wait()` блокировался бы навсегда.
+- `Cancel()`: после выставления `_cancelled` вызвать `_completion.Wake()`.
+- Комментарий к `Wait()`: нельзя звать на главном потоке для задачи, запланированной на `ThreadType::MainThread`
+  (очередь главного потока разбирается в `TaskManager::Update`, и ожидание заблокирует сам себя). Это правило уже есть в
+  `tasksystem-module.md`, поведение такое же, как у старого спина.
+
+### 3. Связанные токены ([CancellationToken.h](../../src/Modules/TaskSystem/src/TaskSystem/CancellationToken.h))
+
+Опрос вместо подписок: без колбэков, без блокировок и без проблем со временем жизни.
+
+- Приватное `struct State { std::atomic<bool> cancelled{false}; eastl::shared_ptr<State> parent; };`
+  вместо `shared_ptr<atomic<bool>>`.
+- `Create()` создаёт `State`. `CreateLinked()` создаёт `State` с `parent = _state` (у невалидного родителя `parent`
+  остаётся пустым, токен всё равно валиден, как сейчас).
+- `IsCancelled()`: идёт вверх по цепочке `parent` и возвращает `true` при первом взведённом флаге.
+- `Cancel()` взводит только свой флаг: отмена ребёнка родителя не трогает. `CheckCancellation()` и `TaskGroup` менять не нужно.
+
+## Файлы
+
+- Меняю: `TaskSystem/Task.h`, `TaskSystem/TaskHandle.h`, `TaskSystem/CancellationToken.h`.
+- Обновляю доку: `src/Modules/TaskSystem/CLAUDE.md` (одна строка про `Wait()` и `CreateLinked()`; файл переехал из `.claude/rules/tasksystem-module.md` при ревизии правил, старого пути больше нет и пересоздавать его не нужно).
+- НЕ трогаю: `BECore/Tests/**`, `config/TestsConfig.xml`, корневой `CmakeLists.txt`, `.gitmodules`, `external/`
+  (это территория агента, который выносит тесты в gtest, и у него в рабочем дереве незакоммиченные правки).
 
 ## Верификация
 
-- Шаг 1 завершился с кодом 0, `build/ClangmacOS/MyGame` обновился по mtime.
-- В логе запуска нет упавших тестов; Chess и Match3 переключаются в `GameSelectorWidget`.
-- После форматирования и strip-pch: `git diff --stat` содержит только ожидаемые файлы, повторная сборка зелёная.
-- `git status` чистый после коммитов; `git log main..HEAD` показывает ожидаемый набор коммитов перед merge.
+Тесты в этой сессии не пишу (вы сказали, что тестами занят другой агент). Проверяю тем, что есть:
 
-## Что остаётся вам
+1. Перед сборкой проверяю `pgrep ninja|cmake`: если другой агент собирает в `build/macos-debug`, жду, чтобы не перетирать
+   его сборку. Если сборка падает из-за его недоделанных правок (googletest в CMake), останавливаюсь и сообщаю, а не обхожу.
+2. Скилл `build`, пресет `macos-debug`, только сборка (новых файлов нет, configure не нужен). Жду exit code 0.
+3. Скилл `run`: движок стартует, `ConfigManager` грузит конфиги через `TaskGroup::WaitAll()` (это и есть новый путь
+   `Wait()`), в логе `[ConfigManager] Loaded N configs` и `TaskSystemTest ... All tests PASSED`, `Results: 10 passed, 0 failed`,
+   без зависания на старте.
+4. Скилл `clang-format --changed`, затем `strip-pch-includes` (dry-run на `src/Modules/TaskSystem`). Повторная сборка.
+5. `git status`: изменены только перечисленные файлы. Коммит только по вашей просьбе.
 
-- Проверить в VS Code: выбор пресета в CMake Tools, F7 (сборка), F5 (отладка). Я это не могу проверить отсюда.
-- Windows-пресеты (MSVC env, ClangCL, VS 2022) не запускались ни разу; их нужно прогнать на Windows-машине.
+Чего я не смогу проверить: гонки и нагрузку (нет TSan в пресетах, нет стресс-теста). Поэтому в план для вашего
+gtest-агента кладу готовые кейсы, которые стоит добавить после миграции:
+- `Wait()` на задаче с `Delay(50ms)` возвращается после неё, а не сразу и не по спину;
+- `Wait()` на отменённой до запуска задаче возвращается, `GetResult()` даёт `Cancelled`;
+- `Cancel()` из другого потока будит заблокированный `Wait()`;
+- `CreateLinked()`: отмена родителя видна в ребёнке (в том числе через два уровня), отмена ребёнка родителя не трогает.
 
-## Вне scope (на потом)
+## Вне scope (и почему)
 
-`BinarySerializer`/`BinaryDeserializer`, TODO в `TaskSystem`, пересоздание swapchain в Vulkan, разделение выходных каталогов Debug/Release.
+- **`EventAwaiterWithTimeout` (таймаут):** `EventAwaiter` подписывается на собственный локальный `entt::dispatcher`, а не на
+  dispatcher из `EventBase<T>` (у него свой на каждый тип события), поэтому реальные события до него не доходят.
+  `WaitForEvent` нигде не используется. Таймаут поверх неработающей основы бессмысленен, нужен отдельный разговор о том,
+  как подключить awaiter к `EventBase`.
+- **Приоритеты в `TaskScheduler::DispatchToThreadPool`:** `ThreadPool::Submit` раскладывает задачи по FIFO-очередям
+  round-robin. Приоритеты требуют приоритетной очереди в `TaskQueue` и решения про work stealing. Это отдельная задача.
+- **Сырой `handlePtr` в лямбде `TaskManager::Run`:** если выбросить `IntrusivePtr` до запуска, лямбда обратится к
+  освобождённому handle. Похоже на реальную проблему, но не входит в "спин-цикл". Предлагаю отдельным шагом.
+- **`MarkCompleted()` никто не вызывает:** `GetStatus()` у завершённой задачи остаётся `Running`, пока кто-то не вызовет `Wait()`.
+  Тоже отдельный шаг.
+
+## Статус: реализовано, не закоммичено
+
+Пока шла работа, другой агент закоммитил вынос тестов в GoogleTest (`tests/`, цель `BagiEngineTests`) и сам
+`BinarySerializer`/`BinaryDeserializer` (`07624b8b`). Поэтому пункты "Верификация" 1-3 выполнены в таком виде:
+
+- Сборка `macos-debug`, цели `MyGame` и `BagiEngineTests`: exit code 0, 0 предупреждений. Configure перезапускал, потому что
+  дерево ушло вперёд (новые файлы в `Reflection/` и `tests/`).
+- `BagiEngineTests`: 110 из 110 тестов зелёные, включая 9 из `TaskSystemTest`. Строки `Results: 10 passed` больше нет,
+  тесты вынесены из движка.
+- Запуск `MyGame`: `ConfigManager` загрузил 9 конфигов через `TaskGroup::WaitAll()` (новый путь `Wait()`),
+  `EngineSmokeTest` прошёл, зависаний нет. Процесс остановлен вручную.
+- `clang-format --changed` применён (потребовался `PATH` с `/opt/homebrew/opt/llvm/bin`), `strip-pch-includes` в dry-run
+  ничего не нашёл, `<condition_variable>` в PCH нет и остаётся явным.
+- Изменены только `Task.h`, `TaskHandle.h`, `CancellationToken.h` и `src/Modules/TaskSystem/CLAUDE.md`.
+
+Остаётся: кейсы из списка выше (блокирующий `Wait()`, отмена из другого потока, `CreateLinked()`) в
+`tests/BECore/TaskSystemTest.cpp`. Существующие тесты ни блокирующее ожидание, ни связанные токены не проверяют.
