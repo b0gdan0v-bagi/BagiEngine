@@ -441,6 +441,38 @@ namespace BECore::Tests {
         EXPECT_EQ(*result, 42);
     }
 
+    TEST(TaskSystemTest, ConcurrentStartAndCancelKeepStatusConsistent) {
+        // Start() and Cancel() race on a Pending handle. Whoever wins, the status and the cancelled flag must agree:
+        // a Cancel() that lands between Start()'s check and its store must not be overwritten by Running.
+        constexpr int kRounds = 20000;
+        int inconsistent = 0;
+
+        for (int round = 0; round < kRounds; ++round) {
+            auto handle = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());
+            std::atomic<int> arrived{0};
+            auto rendezvous = [&arrived] {
+                arrived.fetch_add(1);
+                while (arrived.load() < 2) {
+                    std::this_thread::yield();
+                }
+            };
+
+            std::thread canceller([&] {
+                rendezvous();
+                handle->Cancel();
+            });
+            rendezvous();
+            handle->Start();
+            canceller.join();
+
+            if (handle->IsCancelled() != (handle->GetStatus() == TaskStatus::Cancelled)) {
+                ++inconsistent;
+            }
+        }
+
+        EXPECT_EQ(inconsistent, 0) << "Start() overwrote a concurrent Cancel(): cancelled flag and status disagree";
+    }
+
     TEST(TaskSystemTest, LinkedTokenSeesParentCancellation) {
         auto parent = CancellationToken::Create();
         auto child = parent.CreateLinked();

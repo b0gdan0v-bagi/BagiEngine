@@ -169,10 +169,12 @@ namespace BECore {
          * reference (fire and forget); the coroutine is resumed from pool threads that own nothing.
          * The caller of Start() must hold a reference of its own: the task may finish, and release the
          * last one, before Resume() returns.
+         * Pending -> Running is one atomic step: a Cancel() that gets there first wins and the task never starts,
+         * instead of Start() overwriting its Cancelled status.
          */
         void Start() {
-            if (GetStatus() == TaskStatus::Pending) {
-                SetStatus(TaskStatus::Running);
+            TaskStatus expected = TaskStatus::Pending;
+            if (_status.compare_exchange_strong(expected, TaskStatus::Running, std::memory_order_acq_rel)) {
                 _completion.SetKeepAlive(IntrusivePtr<RefCountedAtomic>(this));
                 _task.Resume();
             }
