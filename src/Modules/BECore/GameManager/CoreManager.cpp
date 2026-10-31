@@ -17,6 +17,24 @@ namespace BECore {
     }
 
     void CoreManager::OnApplicationPreInit(PassKey<Application>) {
+        InitializeCoreServices();
+        _testManager.RunAllTests();
+    }
+
+    void CoreManager::OnTestEnvironmentInit(PassKey<Tests::EngineEnvironment>) {
+        InitializeCoreServices();
+
+        // A failed assert has to be reported by the test runner, not trap the whole test process
+        if (auto* debugBreak = _assertHandlerManager->GetHandler<DebugBreakHandler>()) {
+            debugBreak->SetEnabled(false);
+        }
+    }
+
+    void CoreManager::OnTestEnvironmentDeinit(PassKey<Tests::EngineEnvironment>) {
+        TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
+    }
+
+    void CoreManager::InitializeCoreServices() {
         // Install CRT debug hooks as early as possible
         InstallCRTDebugHooks();
 
@@ -39,7 +57,6 @@ namespace BECore {
         _assertHandlerManager->Initialize();
         _resourceManager.Initialize();
         _textureLibrary.Initialize();
-        _testManager.RunAllTests();
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {

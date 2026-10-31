@@ -91,6 +91,28 @@ else()
 endif()
 
 # =============================================================================
+# Tests (GoogleTest)
+# =============================================================================
+# Added after the exception options above on purpose: gtest then inherits the same
+# -fno-exceptions / ENGINE_NO_EXCEPTIONS as the test translation units.
+option(ENGINE_BUILD_TESTS "Build the BagiEngineTests gtest executable" ON)
+
+if(ENGINE_BUILD_TESTS)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/googletest/CMakeLists.txt")
+        message(FATAL_ERROR "GoogleTest submodule is missing. Run: git submodule update --init external/googletest "
+                            "(or configure with -DENGINE_BUILD_TESTS=OFF to skip the tests).")
+    endif()
+    message(STATUS "Configuring GoogleTest...")
+    enable_testing()
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+    # MSVC: gtest defaults to the static CRT (/MT) while the engine uses /MD
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    add_subdirectory(external/googletest)
+    set_target_properties(gtest PROPERTIES FOLDER "External")
+endif()
+
+# =============================================================================
 # Platform Detection
 # =============================================================================
 if(WIN32)
@@ -336,7 +358,11 @@ add_subdirectory(src/Modules/Games)
 add_subdirectory(src/Modules/Chess)
 add_subdirectory(src/Modules/Match3)
 
-file(GLOB_RECURSE SOURCES 
+if(ENGINE_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
+
+file(GLOB_RECURSE SOURCES
     "src/*.cpp" 
     "src/*.h"
     "src/*.cxx"

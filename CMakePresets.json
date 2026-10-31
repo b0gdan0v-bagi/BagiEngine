@@ -228,5 +228,101 @@
             "configurePreset": "windows-vs2022-clangcl",
             "configuration": "Release"
         }
+    ],
+    "testPresets": [
+        {
+            "name": "test-base",
+            "hidden": true,
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error"
+            }
+        },
+        {
+            "name": "test-macos",
+            "hidden": true,
+            "inherits": "test-base",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "test-windows",
+            "hidden": true,
+            "inherits": "test-base",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "macos-debug",
+            "displayName": "macOS Clang Debug",
+            "inherits": "test-macos",
+            "configurePreset": "macos-debug"
+        },
+        {
+            "name": "macos-release",
+            "displayName": "macOS Clang Release",
+            "inherits": "test-macos",
+            "configurePreset": "macos-release"
+        },
+        {
+            "name": "windows-msvc-debug",
+            "displayName": "Windows MSVC Ninja Debug",
+            "inherits": "test-windows",
+            "configurePreset": "windows-msvc-debug"
+        },
+        {
+            "name": "windows-msvc-release",
+            "displayName": "Windows MSVC Ninja Release",
+            "inherits": "test-windows",
+            "configurePreset": "windows-msvc-release"
+        },
+        {
+            "name": "windows-clang-debug",
+            "displayName": "Windows Clang Ninja Debug",
+            "inherits": "test-windows",
+            "configurePreset": "windows-clang-debug"
+        },
+        {
+            "name": "windows-clang-release",
+            "displayName": "Windows Clang Ninja Release",
+            "inherits": "test-windows",
+            "configurePreset": "windows-clang-release"
+        },
+        {
+            "name": "windows-vs2022-debug",
+            "displayName": "Windows Visual Studio 2022 (MSVC) Debug",
+            "inherits": "test-windows",
+            "configurePreset": "windows-vs2022",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-vs2022-release",
+            "displayName": "Windows Visual Studio 2022 (MSVC) Release",
+            "inherits": "test-windows",
+            "configurePreset": "windows-vs2022",
+            "configuration": "Release"
+        },
+        {
+            "name": "windows-vs2022-clangcl-debug",
+            "displayName": "Windows Visual Studio 2022 (ClangCL) Debug",
+            "inherits": "test-windows",
+            "configurePreset": "windows-vs2022-clangcl",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-vs2022-clangcl-release",
+            "displayName": "Windows Visual Studio 2022 (ClangCL) Release",
+            "inherits": "test-windows",
+            "configurePreset": "windows-vs2022-clangcl",
+            "configuration": "Release"
+        }
     ]
 }

@@ -19,6 +19,10 @@ namespace BECore {
     class Application;
     class TaskManager;
 
+    namespace Tests {
+        class EngineEnvironment;
+    }  // namespace Tests
+
     class CoreManager : public Singleton<CoreManager> {
     public:
         CoreManager() = default;
@@ -80,8 +84,13 @@ namespace BECore {
             return GetInstance()._textureLibrary;
         }
 
-        // Pre-initialization function (FileSystem, AssertHandlers, Tests)
+        // Pre-initialization function (FileSystem, AssertHandlers, runtime ITests)
         void OnApplicationPreInit(PassKey<Application>);
+
+        // Core services for the gtest executable: the same services as OnApplicationPreInit,
+        // without running the runtime ITests and with the debugger break on assert disabled
+        void OnTestEnvironmentInit(PassKey<Tests::EngineEnvironment>);
+        void OnTestEnvironmentDeinit(PassKey<Tests::EngineEnvironment>);
 
         // Application initialization function
         void OnApplicationInit(PassKey<Application>);
@@ -93,6 +102,9 @@ namespace BECore {
         void OnApplicationDeinit(PassKey<Application>);
 
     private:
+        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary
+        void InitializeCoreServices();
+
         FileSystem _fileSystem;
         ConfigManager _configManager;
         IntrusivePtrAtomic<LoggerManager> _loggerManager;
