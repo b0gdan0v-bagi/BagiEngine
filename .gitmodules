@@ -9,3 +9,7 @@
 	path = external/SDL_image
 	url = https://github.com/libsdl-org/SDL_image.git
 	# Fixed at tag: release-3.2.0 (requires SDL 3.2.0)
+[submodule "external/googletest"]
+	path = external/googletest
+	url = https://github.com/google/googletest.git
+	# Fixed at tag: v1.17.0
