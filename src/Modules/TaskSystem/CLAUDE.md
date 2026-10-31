@@ -10,7 +10,7 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 |-----------|---------|
 | `Task<T>` | Coroutine return type with `promise_type`; move-only |
 | `TaskHandle<T>` | Handle for tracking and cancelling a task; `GetResult()` returns `std::expected`. `Wait()` blocks on a condition variable (no spinning) and also returns when the handle is cancelled; completion is signalled from the promise's `final_suspend` (`Detail::CompletionEvent`) |
-| `TaskManager` | Singleton: `Run()`, `RunOnMainThread()`, `RunDelayed()` |
+| `TaskManager` | Singleton: `Run()`, `RunOnMainThread()`, `RunDelayed()`. The scheduled job owns a reference to the handle and `Start()` makes the handle keep itself alive until the coroutine finishes, so dropping the returned handle (fire and forget) is safe; keep it only to `Wait()`, `Cancel()` or read the result |
 | `ThreadPool` | Worker threads with work stealing (`TaskQueue::TrySteal`) |
 | `TaskScheduler` | Priority queues, delayed tasks |
 | `CancellationToken` | Cancellation support (`Create()`, `CreateLinked()`, `IsCancelled()`). A linked child sees its parent's cancellation (checked by polling up the chain); cancelling the child does not touch the parent |
@@ -54,6 +54,7 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 - Ignore cancellation tokens.
 - Hold locks across `co_await`.
 - Call `Task::GetResult()` on a task suspended on the pool: it resumes the coroutine in a loop and races with the pool. Start it with `TaskManager::Run(...)` and wait on the returned handle (`.claude/rules/tests-module.md`).
+- Count on a task surviving `TaskManager::Shutdown()`: the scheduler drops its queues, so a task parked on `Delay` or `SwitchTo*` is never resumed, and its self-reference (plus the coroutine frame) is leaked rather than freed. `Wait()` on such a handle blocks forever.
 
 ## Thread Safety
 

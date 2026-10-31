@@ -1,8 +1,12 @@
+#include <BECore/GameManager/CoreManager.h>
+#include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <TaskSystem/Awaitables.h>
 #include <TaskSystem/CancellationToken.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskGroup.h>
 #include <TaskSystem/TaskHandle.h>
+#include <TaskSystem/TaskManager.h>
 #include <TaskSystem/TaskQueue.h>
 #include <TaskSystem/TaskStatistics.h>
 #include <TaskSystem/ThreadPool.h>
@@ -107,7 +111,57 @@ namespace BECore::Tests {
 
         constexpr auto kLetWaiterBlock = std::chrono::milliseconds(30);
 
+        /// State shared between a test and a coroutine; the test owns it and outlives every task that uses it.
+        struct LifetimeProbe {
+            std::atomic<bool> gate{false};
+            std::atomic<bool> finished{false};
+            std::atomic<bool> frameDestroyed{false};
+            std::atomic<bool> destroyedBeforeFinish{false};
+        };
+
+        /// Passed to a coroutine by value, so it lives in the coroutine frame and is destroyed with it.
+        /// Records whether the frame went away before the task body completed.
+        class FrameGuard {
+        public:
+            explicit FrameGuard(LifetimeProbe& probe) : _probe(&probe) {}
+            FrameGuard(FrameGuard&& other) noexcept : _probe(std::exchange(other._probe, nullptr)) {}
+
+            FrameGuard(const FrameGuard&) = delete;
+            FrameGuard& operator=(const FrameGuard&) = delete;
+            FrameGuard& operator=(FrameGuard&&) = delete;
+
+            ~FrameGuard() {
+                if (_probe != nullptr) {
+                    _probe->destroyedBeforeFinish.store(!_probe->finished.load(std::memory_order_acquire), std::memory_order_release);
+                    _probe->frameDestroyed.store(true, std::memory_order_release);
+                }
+            }
+
+        private:
+            LifetimeProbe* _probe;
+        };
+
+        /// Waits for probe.gate on whatever thread runs it, optionally after hopping to the pool first.
+        Task<void> ProbeTask([[maybe_unused]] FrameGuard guard, LifetimeProbe& probe, bool hopToBackground) {
+            if (hopToBackground) {
+                co_await SwitchToBackground();
+            }
+            while (!probe.gate.load(std::memory_order_acquire)) {
+                std::this_thread::yield();
+            }
+            probe.finished.store(true, std::memory_order_release);
+            co_return;
+        }
+
     }  // namespace
+
+    /// Tests that go through the real TaskManager (and so need the engine core services).
+    class TaskManagerLifetimeTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+    };
 
     TEST(TaskSystemTest, TaskBasic) {
         {
@@ -398,6 +452,62 @@ namespace BECore::Tests {
         group.CancelAll();
 
         EXPECT_TRUE(linked.IsCancelled()) << "A token linked to the group token must be cancelled by CancelAll()";
+    }
+
+    TEST_F(TaskManagerLifetimeTest, DroppedHandleKeepsTaskAliveUntilItFinishes) {
+        LifetimeProbe probe;
+
+        CoreManager::GetTaskManager().Run(ProbeTask(FrameGuard(probe), probe, false));  // handle dropped on the spot
+
+        std::this_thread::sleep_for(kLetWaiterBlock);  // the body is now running on a worker, held at the gate
+        EXPECT_FALSE(probe.frameDestroyed.load()) << "The coroutine frame was destroyed while the task was still running";
+
+        probe.gate.store(true, std::memory_order_release);
+        EXPECT_TRUE(WaitUntil([&probe]() { return probe.finished.load(); })) << "The task never ran to completion";
+        EXPECT_TRUE(WaitUntil([&probe]() { return probe.frameDestroyed.load(); })) << "The frame leaked after the task finished";
+        EXPECT_FALSE(probe.destroyedBeforeFinish.load()) << "The frame was destroyed before the task body completed";
+    }
+
+    TEST_F(TaskManagerLifetimeTest, DroppedHandleKeepsTaskAliveAcrossThreadHop) {
+        LifetimeProbe probe;
+
+        // Parks on SwitchToBackground first: the awaiter only keeps a coroutine_handle, nothing else owns the frame.
+        CoreManager::GetTaskManager().Run(ProbeTask(FrameGuard(probe), probe, true));
+
+        std::this_thread::sleep_for(kLetWaiterBlock);
+        EXPECT_FALSE(probe.frameDestroyed.load()) << "The coroutine frame was destroyed while the task was suspended or running";
+
+        probe.gate.store(true, std::memory_order_release);
+        EXPECT_TRUE(WaitUntil([&probe]() { return probe.finished.load(); })) << "The task never ran to completion";
+        EXPECT_TRUE(WaitUntil([&probe]() { return probe.frameDestroyed.load(); })) << "The frame leaked after the task finished";
+        EXPECT_FALSE(probe.destroyedBeforeFinish.load());
+    }
+
+    TEST_F(TaskManagerLifetimeTest, KeptHandleOwnsTaskAfterItFinishes) {
+        LifetimeProbe probe;
+
+        auto handle = CoreManager::GetTaskManager().Run(ProbeTask(FrameGuard(probe), probe, false));
+        probe.gate.store(true, std::memory_order_release);
+        handle->Wait();
+
+        EXPECT_TRUE(probe.finished.load());
+        EXPECT_FALSE(probe.frameDestroyed.load()) << "The frame must live as long as the caller holds the handle";
+
+        handle.Reset();
+        EXPECT_TRUE(WaitUntil([&probe]() { return probe.frameDestroyed.load(); })) << "The frame was not released after the last reference went away";
+        EXPECT_FALSE(probe.destroyedBeforeFinish.load());
+    }
+
+    TEST_F(TaskManagerLifetimeTest, TaskCancelledBeforeStartIsReleasedWithItsHandle) {
+        LifetimeProbe probe;
+        auto handle = MakeIntrusive<TaskHandle<void>>(ProbeTask(FrameGuard(probe), probe, false));
+
+        handle->Cancel();
+        handle->Start();  // a cancelled handle is no longer Pending, so it must not keep itself alive
+        handle.Reset();
+
+        EXPECT_TRUE(probe.frameDestroyed.load()) << "A task that never started must not outlive its last handle";
+        EXPECT_TRUE(probe.destroyedBeforeFinish.load());
     }
 
     TEST(TaskSystemTest, TaskStatistics) {

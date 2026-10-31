@@ -176,10 +176,15 @@ namespace BECore {
 
         /**
          * Запускает выполнение задачи.
+         * From here until the coroutine finishes the handle keeps itself alive, so the caller may drop its
+         * reference (fire and forget); the coroutine is resumed from pool threads that own nothing.
+         * The caller of Start() must hold a reference of its own: the task may finish, and release the
+         * last one, before Resume() returns.
          */
         void Start() {
             if (GetStatus() == TaskStatus::Pending) {
                 SetStatus(TaskStatus::Running);
+                _completion.SetKeepAlive(IntrusivePtr<RefCountedAtomic>(this));
                 _task.Resume();
             }
         }

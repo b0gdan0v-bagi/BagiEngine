@@ -62,12 +62,7 @@ namespace BECore {
         IntrusivePtr<TaskHandle<T>> Run(Task<T> task, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background) {
             auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
 
-            auto* handlePtr = handle.Get();
-            _scheduler.Schedule(
-                [handlePtr]() {
-                    handlePtr->Start();  // Start() сам вызывает Resume()
-                },
-                priority, threadType);
+            _scheduler.Schedule(MakeStartTask(handle), priority, threadType);
 
             return handle;
         }
@@ -79,12 +74,7 @@ namespace BECore {
         IntrusivePtr<TaskHandle<T>> RunDelayed(Task<T> task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background) {
             auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
 
-            auto* handlePtr = handle.Get();
-            _scheduler.ScheduleDelayed(
-                [handlePtr]() {
-                    handlePtr->Start();  // Start() сам вызывает Resume()
-                },
-                delay, priority, threadType);
+            _scheduler.ScheduleDelayed(MakeStartTask(handle), delay, priority, threadType);
 
             return handle;
         }
@@ -138,6 +128,19 @@ namespace BECore {
         }
 
     private:
+        /**
+         * Builds the scheduler job that starts @p handle. The job owns a reference, so the task survives even if
+         * the caller drops the returned handle before the job runs (Start() then keeps it alive until completion).
+         * The reference is moved into a local so a pool worker does not hold on to it after the job has run.
+         */
+        template <typename T>
+        static TaskQueue::TaskFunc MakeStartTask(IntrusivePtr<TaskHandle<T>> handle) {
+            return [handle]() mutable {
+                auto owned = std::move(handle);
+                owned->Start();  // Start() сам вызывает Resume()
+            };
+        }
+
         bool _isInitialized = false;
         std::thread::id _mainThreadId;
 

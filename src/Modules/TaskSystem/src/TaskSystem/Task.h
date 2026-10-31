@@ -27,14 +27,28 @@ namespace BECore {
             CompletionEvent& operator=(const CompletionEvent&) = delete;
 
             /**
-             * Marks the task as finished and wakes all waiters.
+             * Makes the owner of this event stay alive until the task finishes.
+             * Signal() hands the reference back, so the owner may be destroyed right inside Signal().
+             */
+            void SetKeepAlive(IntrusivePtr<RefCountedAtomic> owner) {
+                std::lock_guard lock(_mutex);
+                _keepAlive = std::move(owner);
+            }
+
+            /**
+             * Marks the task as finished, wakes all waiters and drops the keep-alive reference.
              * The notification is sent under the mutex: a waiter cannot return (and destroy the event)
-             * until this method releases the lock.
+             * until the lock is released. Nothing may touch the event after this call returns: if the
+             * keep-alive reference was the last one, the event is gone.
              */
             void Signal() {
-                std::lock_guard lock(_mutex);
-                _signaled.store(true, std::memory_order_release);
-                _condition.notify_all();
+                IntrusivePtr<RefCountedAtomic> keepAlive;
+                {
+                    std::lock_guard lock(_mutex);
+                    _signaled.store(true, std::memory_order_release);
+                    keepAlive = std::move(_keepAlive);
+                    _condition.notify_all();
+                }
             }
 
             /**
@@ -62,6 +76,7 @@ namespace BECore {
             std::mutex _mutex;
             std::condition_variable _condition;
             std::atomic<bool> _signaled{false};
+            IntrusivePtr<RefCountedAtomic> _keepAlive;  // guarded by _mutex
         };
 
         /**
