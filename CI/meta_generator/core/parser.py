@@ -35,6 +35,8 @@ _RE_METHOD = re.compile(
     re.DOTALL,
 )
 _RE_IDENT = re.compile(r'[A-Za-z_]\w*$')
+# Pure virtual declaration: `virtual X Foo() const = 0;`
+_RE_PURE_VIRTUAL = re.compile(r'\)\s*(?:const\s*)?(?:noexcept\s*)?(?:override\s*)?=\s*0\s*;')
 
 
 def _strip_comments(text: str) -> str:
@@ -305,6 +307,7 @@ class RegexParser:
                 namespace=ns,
                 is_factory_base=is_factory_base,
                 is_event=is_event,
+                is_abstract=bool(_RE_PURE_VIRTUAL.search(body)),
                 parent_class=parent_class,
                 source_file=str(source_path),
                 line=line_no,

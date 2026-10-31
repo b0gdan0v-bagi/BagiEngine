@@ -22,7 +22,7 @@ class MetadataCache:
     to detect when files need to be re-parsed.
     """
     
-    CACHE_VERSION = "2.0"  # Bumped for regex parser (replaces libclang)
+    CACHE_VERSION = "2.1"  # 2.1: ClassData.is_abstract
     
     def __init__(self, cache_path: Path):
         """

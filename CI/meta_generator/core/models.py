@@ -207,6 +207,7 @@ class ClassData:
     methods: List[MethodData] = field(default_factory=list)
     is_factory_base: bool = False  # True if marked with BE_CLASS(Name, FACTORY_BASE)
     is_event: bool = False  # True if marked with BE_EVENT (lightweight, no _typeMeta)
+    is_abstract: bool = False  # True if the class body declares a pure virtual method
     parent_class: Optional[str] = None  # Direct parent class name if inheriting
     source_file: str = ""
     line: int = 0
@@ -227,6 +228,7 @@ class ClassData:
             "methods": [m.to_dict() for m in self.methods],
             "is_factory_base": self.is_factory_base,
             "is_event": self.is_event,
+            "is_abstract": self.is_abstract,
             "parent_class": self.parent_class,
             "source_file": self.source_file,
             "line": self.line,
@@ -247,6 +249,7 @@ class ClassData:
             methods=methods,
             is_factory_base=data.get("is_factory_base", False),
             is_event=data.get("is_event", False),
+            is_abstract=data.get("is_abstract", False),
             parent_class=data.get("parent_class"),
             source_file=data.get("source_file", ""),
             line=data.get("line", 0),
