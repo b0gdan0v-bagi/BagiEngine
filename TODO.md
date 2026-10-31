@@ -6,7 +6,7 @@ Known problems that are not being worked on yet. One entry per problem: where it
 
 Direction for the engine, not a problem entry. The engine has strong infrastructure (reflection, layered config, TaskSystem, ImGui editor, tests) and no runtime for a real 2D game: no frame time, no animation, text, audio or input mapping, and the game cannot run without the editor. The entries below follow this order. Every "missing" statement was found by reading the code, not by running a game.
 
-1. **Hygiene:** CI (entry below). Scene-scoped events are done: components subscribe with `SubscribeInScene` (`BECore/Scene/CLAUDE.md`).
+1. **Hygiene:** CI is deferred by the project owner (entry below; the Linux job in the test-gaps entry waits for it). Scene-scoped events are done: components subscribe with `SubscribeInScene` (`BECore/Scene/CLAUDE.md`).
 2. **Time and run modes:** frame time, game-only run mode.
 3. **Minimum for a 2D game, in this order:** animation, 2D rendering, text, audio, input mapping, in-game UI.
 4. **Owner decisions:** renderer backends, what ECS means in this engine.
@@ -14,7 +14,7 @@ Direction for the engine, not a problem entry. The engine has strong infrastruct
 
 **Not now:** networking, 3D, a physics engine of our own (take Box2D when physics is needed), a scripting language, a rewrite to pure ECS (reflection, the inspector and serialization are built around `IComponent`), mobile and web.
 
-**Driver:** build a third small game (arcade or platformer) so that each feature in stage 3 has a concrete consumer (movement with `dt`, camera, animation, sound, score text, gamepad), and make Match3 animated as the regression check. Stages 1 to 3 are done when `BagiMatch3` runs without the editor, gems fall smoothly, the score is drawn with an engine font, a match plays a sound, input goes through an input map, and CI builds and tests it on macOS and Windows.
+**Driver:** build a third small game (arcade or platformer) so that each feature in stage 3 has a concrete consumer (movement with `dt`, camera, animation, sound, score text, gamepad), and make Match3 animated as the regression check. Stages 1 to 3 are done when `BagiMatch3` runs without the editor, gems fall smoothly, the score is drawn with an engine font, a match plays a sound, input goes through an input map, and CI builds and tests it on macOS and Windows (CI is deferred, so that last point waits for its entry).
 
 ## Config Editor: the sink `type` dropdown offers values the logger factory cannot resolve
 
@@ -36,6 +36,8 @@ Direction for the engine, not a problem entry. The engine has strong infrastruct
 The same pattern (an enum hint whose names differ from what the loader expects) can exist for other registered fields: `LogLevel` for `sink/@minLevel` is fine because `minLevel` is read through `EnumUtils`, but check any new `RegisterEnum` call against the loader that reads the attribute.
 
 ## No CI: builds and tests run only on a developer machine
+
+**Status:** deferred by the project owner on 2026-10-31. Skip it when taking the next roadmap item; the entry stays as the record of what a fix has to cover.
 
 **Where:** the repository has no `.github/` and no other pipeline definition. Presets are in `CMakePresets.json`, tests run through `ctest --preset ...`.
 
