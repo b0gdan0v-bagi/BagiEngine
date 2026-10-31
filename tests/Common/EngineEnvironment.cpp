@@ -25,6 +25,10 @@ namespace BECore::Tests {
         if (g_coreServicesUp) {
             return;
         }
+#ifdef BAGI_ENGINE_ROOT
+        // The working directory is inside whichever repository builds the tests: pin the engine's config/ and assets/
+        CoreManager::GetFileSystem().AddContentRoot(BAGI_ENGINE_ROOT);
+#endif
         CoreManager::GetInstance().OnTestEnvironmentInit(PassKey<EngineEnvironment>{});
         g_coreServicesUp = true;
     }
