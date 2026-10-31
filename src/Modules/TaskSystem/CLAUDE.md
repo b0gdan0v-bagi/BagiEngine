@@ -9,7 +9,7 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 | Component | Purpose |
 |-----------|---------|
 | `Task<T>` | Coroutine return type with `promise_type`; move-only |
-| `TaskHandle<T>` | Handle for tracking and cancelling a task; `GetResult()` returns `std::expected`. `Wait()` blocks on a condition variable (no spinning) and also returns when the handle is cancelled; completion is signalled from the promise's `final_suspend` (`Detail::CompletionEvent`) |
+| `TaskHandle<T>` | Handle for tracking and cancelling a task; `GetResult()` returns `std::expected`. `Wait()` blocks on a condition variable (no spinning) and also returns when the handle is cancelled; completion is signalled from the promise's `final_suspend` (`Detail::CompletionEvent`). `GetStatus()` is derived: a stored `Running` that is already done reads as `Completed`, and `Cancel()` on a finished task is a no-op that keeps its result |
 | `TaskManager` | Singleton: `Run()`, `RunOnMainThread()`, `RunDelayed()`. The scheduled job owns a reference to the handle and `Start()` makes the handle keep itself alive until the coroutine finishes, so dropping the returned handle (fire and forget) is safe; keep it only to `Wait()`, `Cancel()` or read the result |
 | `ThreadPool` | Worker threads with work stealing (`TaskQueue::TrySteal`) |
 | `TaskScheduler` | Priority queues, delayed tasks |

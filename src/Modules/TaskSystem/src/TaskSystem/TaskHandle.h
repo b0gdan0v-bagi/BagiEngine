@@ -30,9 +30,15 @@ namespace BECore {
 
         /**
          * Получает статус задачи.
+         * The coroutine finishes on its own thread without touching _status, so a stored Running that is already
+         * done is reported as Completed here instead of waiting for someone to update it.
          */
         [[nodiscard]] TaskStatus GetStatus() const {
-            return _status.load(std::memory_order_acquire);
+            const TaskStatus status = _status.load(std::memory_order_acquire);
+            if (status == TaskStatus::Running && IsDone()) {
+                return TaskStatus::Completed;
+            }
+            return status;
         }
 
         /**
@@ -106,8 +112,12 @@ namespace BECore {
             return !_task.IsValid() || _completion.IsSignaled();
         }
 
+        /**
+         * Cancels the handle. A task that has already finished stays Completed and keeps its result.
+         */
         void Cancel() override {
-            if (GetStatus() == TaskStatus::Pending || GetStatus() == TaskStatus::Running) {
+            const TaskStatus status = GetStatus();
+            if (status == TaskStatus::Pending || status == TaskStatus::Running) {
                 SetStatus(TaskStatus::Cancelled);
                 _cancelled.store(true, std::memory_order_release);
                 _completion.Wake();
@@ -125,11 +135,6 @@ namespace BECore {
             }
 
             _completion.WaitUntil([this] { return IsCancelled(); });
-
-            // Обновляем статус после завершения
-            if (IsDone() && GetStatus() == TaskStatus::Running) {
-                SetStatus(TaskStatus::Completed);
-            }
         }
 
         // =================================================================
@@ -186,17 +191,6 @@ namespace BECore {
                 SetStatus(TaskStatus::Running);
                 _completion.SetKeepAlive(IntrusivePtr<RefCountedAtomic>(this));
                 _task.Resume();
-            }
-        }
-
-        /**
-         * Отмечает задачу как завершенную.
-         * Примечание: ResumeContinuation не вызывается здесь,
-         * так как FinalAwaiter делает симметричный transfer к continuation.
-         */
-        void MarkCompleted() {
-            if (!_cancelled.load(std::memory_order_acquire)) {
-                SetStatus(TaskStatus::Completed);
             }
         }
 

@@ -390,6 +390,45 @@ namespace BECore::Tests {
         EXPECT_TRUE(WaitUntil([&waiter]() { return waiter.HasReturned(); })) << "Cancel() did not wake the blocked Wait()";
     }
 
+    TEST(TaskSystemTest, StatusIsCompletedWithoutCallingWait) {
+        auto handle = MakeIntrusive<TaskHandle<int>>(SimpleIntTask(21));
+        EXPECT_TRUE(handle->GetStatus() == TaskStatus::Pending);
+
+        handle->Start();  // finishes inline
+
+        EXPECT_TRUE(handle->IsDone());
+        EXPECT_TRUE(handle->GetStatus() == TaskStatus::Completed) << "A finished task reported a stale status";
+    }
+
+    TEST(TaskSystemTest, StatusFollowsATaskRunningOnThePool) {
+        std::atomic<bool> gate{false};
+        std::atomic<bool> finished{false};
+        IntrusivePtr<TaskHandle<void>> handle;
+        ThreadPool pool(1);
+        handle = StartOnPool(pool, GatedTask(gate, finished));
+
+        EXPECT_TRUE(WaitUntil([&handle]() { return handle->GetStatus() == TaskStatus::Running; })) << "The task never reported Running";
+        EXPECT_FALSE(handle->IsDone());
+
+        gate.store(true, std::memory_order_release);
+        EXPECT_TRUE(WaitUntil([&handle]() { return handle->IsDone(); })) << "The task never finished";
+        EXPECT_TRUE(handle->GetStatus() == TaskStatus::Completed) << "A finished task reported a stale status";
+    }
+
+    TEST(TaskSystemTest, CancelAfterCompletionIsIgnored) {
+        auto handle = MakeIntrusive<TaskHandle<int>>(SimpleIntTask(21));
+        handle->Start();
+        ASSERT_TRUE(handle->IsDone());
+
+        handle->Cancel();
+
+        EXPECT_FALSE(handle->IsCancelled()) << "Cancelling a finished task must not mark it cancelled";
+        EXPECT_TRUE(handle->GetStatus() == TaskStatus::Completed);
+        auto result = handle->GetResult();
+        ASSERT_TRUE(result.has_value()) << "The result of a finished task was discarded by a late Cancel()";
+        EXPECT_EQ(*result, 42);
+    }
+
     TEST(TaskSystemTest, LinkedTokenSeesParentCancellation) {
         auto parent = CancellationToken::Create();
         auto child = parent.CreateLinked();
