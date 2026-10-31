@@ -9,7 +9,7 @@ Use the presets from `CMakePresets.json` (same ones VS Code CMake Tools shows). 
 ```bash
 cmake --list-presets=build                 # presets available on this OS
 cmake --preset macos-debug                 # configure (also regenerates reflection code)
-cmake --build --preset macos-debug         # build MyGame
+cmake --build --preset macos-debug         # build the game executables (BagiChess, BagiMatch3)
 ```
 
 | OS | Presets |
@@ -24,14 +24,14 @@ cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 cmake --build build
 ```
 
-C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output lands in `build/{CompilerName}{PlatformName}/` regardless of preset, so Debug and Release Ninja presets overwrite each other's executable. Reflection code is generated at configure time: re-run `cmake --preset ...` after changing `BE_CLASS` / `BE_REFLECT_FIELD`.
+C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output lands in `build/{CompilerName}{PlatformName}/` regardless of preset, so Debug and Release Ninja presets overwrite each other's executables. Reflection code is generated at configure time: re-run `cmake --preset ...` after changing `BE_CLASS` / `BE_REFLECT_FIELD`.
 
 ## Running Tests
 
-Unit and module tests are GoogleTest tests in `tests/`, built as a separate executable `BagiEngineTests` (not part of the game). The GoogleTest submodule needs `git submodule update --init external/googletest`; `-DENGINE_BUILD_TESTS=OFF` skips the whole thing.
+Unit and module tests are GoogleTest tests, built as separate executables (not part of the games): `BagiEngineTests` for the engine (`tests/`), `ChessTests` and `Match3Tests` next to their game (`games/<Name>/tests/`). The GoogleTest submodule needs `git submodule update --init external/googletest`; `-DENGINE_BUILD_TESTS=OFF` skips the whole thing.
 
 ```bash
-cmake --build --preset macos-debug --target BagiEngineTests      # --target overrides the preset's MyGame
+cmake --build --preset macos-debug --target BagiEngineTests ChessTests Match3Tests   # --target overrides the preset's game targets
 ctest --preset macos-debug                                       # every test in its own process
 build/ClangmacOS/BagiEngineTests --gtest_filter='Reflection*'    # run directly; cwd must be inside the repository
 ```
@@ -40,32 +40,38 @@ Runtime tests that need the live engine are `ITest` classes (`src/Modules/BECore
 
 ## Architecture Overview
 
-BagiEngine is a C++23 game engine with modular ECS architecture (EnTT). The main entry is `src/main.cpp` → `Application::Initialize()/Run()`.
+BagiEngine is a C++23 game engine with modular ECS architecture (EnTT). The main entry is `src/main.cpp` → `Application::Initialize()/Run()`; each game executable compiles it.
+
+**Engine and games:** the engine knows nothing about concrete games. A game lives in `games/<Name>/` (module, executable, `config/`, `assets/`, `tests/`), reaches the engine only through `cmake/BagiEngine.cmake` (`be_add_module`, `be_add_game_reflection`, `be_add_game_executable`, `be_add_game_tests`) and registers an `IGame` in `AbstractFactory<IGame>`. One executable is one game. `games/` is built to move out into separate repositories that carry this repository as a submodule (`engine/`); no engine code, CMake or config outside `games/` refers to a concrete game. See `src/Modules/Games/CLAUDE.md`.
 
 **Stack:** CMake 3.31+ with Ninja, SDL3 + SDL_image, ImGui, EnTT (ECS), EASTL, pugixml (XML), fmt, magic_enum (reflection), GoogleTest (tests).
 
 **Module order (bottom → top; every module links `BECoreModule`, which provides the PCH):**
 ```
-BECore → Events → TaskSystem → SDL / Vulkan → Games → Chess / Match3 → MyGame (src/main.cpp, src/Application, src/Widgets)
+BECore → Events → TaskSystem → SDL / Vulkan → Games → Runtime (src/Application, src/Widgets) → games/<Name> → game executable (src/main.cpp)
 ```
 
 **Layout:**
 ```
+cmake/BagiEngine.cmake  # engine setup + the be_* functions games build on
 src/
-├── Application/        # Entry point
-├── Widgets/            # Game widgets
+├── main.cpp            # Entry point, compiled into every game executable
+├── Application/        # Application loop        (RuntimeModule)
+├── Widgets/            # Editor widgets           (RuntimeModule)
 └── Modules/
     ├── BECore/         # Core engine (math types live in BECore/Math/)
     ├── Events/         # Event system
     ├── TaskSystem/     # Async tasks (coroutines)
     ├── SDL/            # SDL3 integration
     ├── Vulkan/         # Vulkan renderer backend
-    ├── Games/          # IGame infrastructure
-    ├── Chess/, Match3/ # IGame implementations
+    ├── Games/          # IGame / GameManager: the engine-game contract
     └── EABase/, EnTT/, fmt/, imgui/, pugixml/   # vendored
-config/                 # XML configuration files
-tests/                  # GoogleTest executable BagiEngineTests (BECore, Chess, Match3, Common)
+config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, Tests, default SceneConfig)
+games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Chess, Match3)
+tests/                  # GoogleTest executable BagiEngineTests (BECore) + Common (BagiEngineTestSupport)
 ```
+
+**Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.
 
 **Vendored code** (`EABase/`, `EnTT/`, `fmt/`, `imgui/`, `pugixml/`): do not edit it, and leave it out of broad searches.
 
@@ -81,7 +87,7 @@ tests/                  # GoogleTest executable BagiEngineTests (BECore, Chess, 
 
 `Events` (CRTP pub/sub: `EventBase<T>`, `SubscriptionHolder` for RAII) and `TaskSystem` (async coroutines: `TaskManager`, `Task<T>`) are sibling modules, not part of BECore.
 
-UI widgets live in `src/Widgets/`. `SceneEditorWidget` handles orchestration/UI flow; `ComponentInspectors` handles per-field editing via `IPropertyVisitor`. Scene editor behavior is driven by `config/SceneConfig.xml`; keep scene/component configuration consistent with it when adding or changing editor behavior.
+UI widgets live in `src/Widgets/` (engine editor UI, not game UI). `SceneEditorWidget` handles orchestration/UI flow; `ComponentInspectors` handles per-field editing via `IPropertyVisitor`. Scene editor behavior is driven by `SceneConfig.xml` (the active game's, see layering); keep scene/component configuration consistent with it when adding or changing editor behavior.
 
 Reflection code is generated by `CI/meta_generator/meta_generator.py` (Python, regex-based). `BE_CLASS` and `BE_REFLECT_FIELD` macros are the generation triggers.
 
@@ -147,6 +153,6 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 
 ## Rules and Skills
 
-- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`), `Events/`, `TaskSystem/`, `SDL/`, `Vulkan/`, `Games/`, `Chess/`, `Match3/`. Claude Code loads one when a file under that directory is read.
+- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`), `Events/`, `TaskSystem/`, `SDL/`, `Vulkan/`, `Games/`, and `games/Chess/`, `games/Match3/`. Claude Code loads one when a file under that directory is read.
 - `.claude/rules/` holds guidance that spans several directories or matches by file name (`paths:` frontmatter): CMake, Reflection, Reflection events (`*Event.h`), Rendering, Widgets, Tests. Read the relevant file before changing that area.
 - `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix` and `cpp-senior-programmer`.

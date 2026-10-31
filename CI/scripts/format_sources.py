@@ -95,9 +95,9 @@ def get_changed_files(project_root: Path, ignore_patterns: list[str]) -> list[Pa
 
 
 def get_all_source_files(project_root: Path, ignore_patterns: list[str]) -> list[Path]:
-    """Return list of all source files under src/ and config/, respecting ignore."""
+    """Return list of all source files under src/, config/ and games/, respecting ignore."""
     result = []
-    for top in ("src", "config"):
+    for top in ("src", "config", "games"):
         top_path = project_root / top
         if not top_path.is_dir():
             continue
@@ -120,7 +120,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Apply .clang-format to project sources.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--changed", action="store_true", help="Format only changed files (git)")
-    group.add_argument("--all", action="store_true", help="Format all sources under src/ and config/")
+    group.add_argument("--all", action="store_true", help="Format all sources under src/, config/ and games/")
     args = parser.parse_args()
 
     project_root = Path(__file__).resolve().parent.parent.parent

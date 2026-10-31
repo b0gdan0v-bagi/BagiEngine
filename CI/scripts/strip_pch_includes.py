@@ -3,12 +3,12 @@
 Remove #include lines from C/C++ sources that are already present in the PCH.
 
 Parses src/Modules/BECore/pch.h (or given path), collects include paths, then
-walks sources under src/ and config/ and removes matching includes. Supports
+walks sources under src/, config/ and games/ and removes matching includes. Supports
 --dir to limit to a subfolder (e.g. src/Widgets) for incremental runs.
 
 Modes:
   --changed  Only files with uncommitted changes (git).
-  --all      All C/C++ sources under src/ and config/.
+  --all      All C/C++ sources under src/, config/ and games/.
 
 Options:
   --dir REL_PATH  Only process files under this path (relative to project root).
@@ -132,7 +132,7 @@ def main() -> int:
     )
     scope = parser.add_mutually_exclusive_group(required=True)
     scope.add_argument("--changed", action="store_true", help="Only changed files (git)")
-    scope.add_argument("--all", action="store_true", help="All sources under src/ and config/")
+    scope.add_argument("--all", action="store_true", help="All sources under src/, config/ and games/")
     parser.add_argument(
         "--dir",
         metavar="REL_PATH",

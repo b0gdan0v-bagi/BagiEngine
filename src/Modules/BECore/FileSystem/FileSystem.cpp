@@ -5,22 +5,41 @@
 namespace BECore {
 
     void FileSystem::Initialize() {
-        if (_rootPath.empty()) {
-            _rootPath = FindRootDirectory();
+        if (_roots.empty()) {
+            AddContentRoot(FindRootDirectory());
         }
 
-        // Автоматически монтируем стандартные директории, если они существуют
-        if (!_rootPath.empty()) {
-            std::filesystem::path configPath = _rootPath / "config";
-            if (std::filesystem::exists(configPath) && std::filesystem::is_directory(configPath)) {
-                Mount("config"_intern, configPath);
-            }
-
-            std::filesystem::path assetsPath = _rootPath / "assets";
-            if (std::filesystem::exists(assetsPath) && std::filesystem::is_directory(assetsPath)) {
-                Mount("assets"_intern, assetsPath);
+        // Автоматически монтируем стандартные директории каждого корня, если они существуют.
+        // Корни идут от младшего приоритета к старшему, поэтому слой игры перекрывает слой движка.
+        for (const auto& root : _roots) {
+            for (const PoolString name : eastl::array<PoolString, 2>{"config"_intern, "assets"_intern}) {
+                const auto dirName = name.ToStringView();
+                std::filesystem::path dirPath = root / std::string_view(dirName.data(), dirName.size());
+                if (std::filesystem::exists(dirPath) && std::filesystem::is_directory(dirPath)) {
+                    Mount(name, dirPath);
+                }
             }
         }
+    }
+
+    void FileSystem::AddContentRoot(const std::filesystem::path& root) {
+        if (root.empty()) {
+            return;
+        }
+
+        std::filesystem::path normalizedRoot = std::filesystem::absolute(root).lexically_normal();
+        if (eastl::find(_roots.begin(), _roots.end(), normalizedRoot) != _roots.end()) {
+            return;
+        }
+
+        _roots.push_back(normalizedRoot);
+        _rootPath = _roots.back();
+    }
+
+    void FileSystem::SetRootPath(const std::filesystem::path& rootPath) {
+        _roots.clear();
+        _rootPath.clear();
+        AddContentRoot(rootPath);
     }
 
     bool FileSystem::Mount(PoolString virtualPath, const std::filesystem::path& realPath) {
@@ -28,7 +47,7 @@ namespace BECore {
             return false;
         }
 
-        std::filesystem::path normalizedPath = std::filesystem::absolute(realPath);
+        std::filesystem::path normalizedPath = std::filesystem::absolute(realPath).lexically_normal();
         if (!std::filesystem::exists(normalizedPath)) {
             return false;
         }
@@ -37,7 +56,10 @@ namespace BECore {
             return false;
         }
 
-        _mountPoints[virtualPath] = normalizedPath;
+        auto& layers = _mountPoints[virtualPath];
+        if (eastl::find(layers.begin(), layers.end(), normalizedPath) == layers.end()) {
+            layers.push_back(std::move(normalizedPath));
+        }
         return true;
     }
 
@@ -69,26 +91,27 @@ namespace BECore {
             mountPoint = virtualPath;
         }
 
-        // 4. Поиск по точке монтирования (Гетерогенный поиск без аллокаций)
+        // 4. Поиск по точке монтирования (Гетерогенный поиск без аллокаций), слои от старшего приоритета к младшему
         auto it = _mountPoints.Find(mountPoint);
 
         if (it != _mountPoints.end()) {
-            // it->second это std::filesystem::path
-            std::filesystem::path fullPath = it->second;
+            for (auto layer = it->second.rbegin(); layer != it->second.rend(); ++layer) {
+                std::filesystem::path fullPath = *layer;
 
-            if (!remainingPath.empty()) {
-                // Конвертируем оставшийся кусочек в path при склейке
-                fullPath /= std::string_view(remainingPath.data(), remainingPath.size());
-            }
+                if (!remainingPath.empty()) {
+                    // Конвертируем оставшийся кусочек в path при склейке
+                    fullPath /= std::string_view(remainingPath.data(), remainingPath.size());
+                }
 
-            if (std::filesystem::exists(fullPath)) {
-                return fullPath;
+                if (std::filesystem::exists(fullPath)) {
+                    return fullPath;
+                }
             }
         }
 
-        // 5. Поиск относительно корня
-        if (!_rootPath.empty()) {
-            std::filesystem::path rootFullPath = _rootPath / std::string_view(virtualPath.data(), virtualPath.size());
+        // 5. Поиск относительно корней, от старшего приоритета к младшему
+        for (auto root = _roots.rbegin(); root != _roots.rend(); ++root) {
+            std::filesystem::path rootFullPath = *root / std::string_view(virtualPath.data(), virtualPath.size());
             if (std::filesystem::exists(rootFullPath)) {
                 return rootFullPath;
             }
@@ -110,6 +133,14 @@ namespace BECore {
 
     std::filesystem::path FileSystem::GetMountedPath(PoolString virtualPath) const {
         auto it = _mountPoints.find(virtualPath);
+        if (it != _mountPoints.end() && !it->second.empty()) {
+            return it->second.back();
+        }
+        return {};
+    }
+
+    eastl::vector<std::filesystem::path> FileSystem::GetMountLayers(PoolString virtualPath) const {
+        auto it = _mountPoints.find(virtualPath);
         if (it != _mountPoints.end()) {
             return it->second;
         }
@@ -124,60 +155,61 @@ namespace BECore {
             return result;
         }
 
-        const auto& basePath = it->second;
-
+        // Relative paths from all layers: a file present in several layers is listed once
         eastl::vector<std::filesystem::path> files;
 
-        std::error_code ec;
-        std::filesystem::recursive_directory_iterator fileSystemIt(basePath, std::filesystem::directory_options::skip_permission_denied, ec);
-        if (ec) {
-            LOG_ERROR(Format("FileSystem::EnumerateFiles: error opening '{}': {}", mountPoint.ToStringView(), ec.message()).c_str());
-            return result;
-        }
-        std::filesystem::recursive_directory_iterator fileSystemItEnd;
+        for (const auto& basePath : it->second) {
+            std::error_code ec;
+            std::filesystem::recursive_directory_iterator fileSystemIt(basePath, std::filesystem::directory_options::skip_permission_denied, ec);
+            if (ec) {
+                LOG_ERROR(Format("FileSystem::EnumerateFiles: error opening '{}': {}", mountPoint.ToStringView(), ec.message()).c_str());
+                continue;
+            }
+            std::filesystem::recursive_directory_iterator fileSystemItEnd;
 
-        while (fileSystemIt != fileSystemItEnd) {
-            const auto& entry = *fileSystemIt;
-            if (entry.is_regular_file()) {
-                const auto& filePath = entry.path();
-                auto ext = filePath.extension().string();
+            while (fileSystemIt != fileSystemItEnd) {
+                const auto& entry = *fileSystemIt;
+                if (entry.is_regular_file()) {
+                    const auto& filePath = entry.path();
+                    auto ext = filePath.extension().string();
 
-                bool matches = false;
-                for (const auto& targetExt : extensions) {
-                    // Case-insensitive extension comparison
-                    if (ext.size() == targetExt.size()) {
-                        bool same = true;
-                        for (size_t i = 0; i < ext.size(); ++i) {
-                            char a = std::tolower(static_cast<unsigned char>(ext[i]));
-                            char b = std::tolower(static_cast<unsigned char>(targetExt[i]));
-                            if (a != b) {
-                                same = false;
+                    bool matches = false;
+                    for (const auto& targetExt : extensions) {
+                        // Case-insensitive extension comparison
+                        if (ext.size() == targetExt.size()) {
+                            bool same = true;
+                            for (size_t i = 0; i < ext.size(); ++i) {
+                                char a = std::tolower(static_cast<unsigned char>(ext[i]));
+                                char b = std::tolower(static_cast<unsigned char>(targetExt[i]));
+                                if (a != b) {
+                                    same = false;
+                                    break;
+                                }
+                            }
+                            if (same) {
+                                matches = true;
                                 break;
                             }
                         }
-                        if (same) {
-                            matches = true;
-                            break;
-                        }
+                    }
+
+                    if (matches) {
+                        files.push_back(std::filesystem::relative(filePath, basePath));
                     }
                 }
 
-                if (matches) {
-                    files.push_back(filePath);
+                fileSystemIt.increment(ec);
+                if (ec) {
+                    LOG_ERROR(Format("FileSystem::EnumerateFiles: error scanning '{}': {}", mountPoint.ToStringView(), ec.message()).c_str());
+                    break;
                 }
-            }
-
-            fileSystemIt.increment(ec);
-            if (ec) {
-                LOG_ERROR(Format("FileSystem::EnumerateFiles: error scanning '{}': {}", mountPoint.ToStringView(), ec.message()).c_str());
-                break;
             }
         }
 
         eastl::sort(files.begin(), files.end());
+        files.erase(eastl::unique(files.begin(), files.end()), files.end());
 
-        for (const auto& filePath : files) {
-            auto relativePath = std::filesystem::relative(filePath, basePath);
+        for (const auto& relativePath : files) {
             eastl::string virtualPath(mountPoint.ToStringView().data(), mountPoint.ToStringView().size());
             virtualPath += "/";
             const std::string relStr = relativePath.string();

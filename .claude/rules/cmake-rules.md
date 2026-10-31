@@ -1,7 +1,6 @@
 ---
 paths:
   - "**/CMakeLists.txt"
-  - "**/CmakeLists.txt"
   - "**/*.cmake"
   - "CMakePresets.json"
 ---
@@ -39,40 +38,45 @@ These are included directly via `add_subdirectory()`:
 
 `external/Vulkan-Loader/` is not a submodule: it is tracked in the repository and holds the prebuilt Windows loader (`vulkan-1.lib`); `VULKAN_SDK`, when set and containing `Lib/vulkan-1.lib`, is used for linking instead.
 
-### Dependency Loading Order in Root CMakeLists.txt
+## Entry Points
+
+- **`cmake/BagiEngine.cmake`** is the engine's entry point: dependencies, options, compiler/platform/output setup, the reflection functions, the engine modules and the public `be_*` functions. A top-level project `include()`s it right after `project()`. It is `include()`d, not `add_subdirectory()`'d, so `add_compile_definitions` / `-fno-exceptions` / output dirs also apply to the games. Every engine path in it goes through `BAGI_ENGINE_DIR` (the engine checkout), never `CMAKE_SOURCE_DIR`, because a game that carries the engine as a submodule is the top-level project.
+- **Root `CMakeLists.txt`** (this repository): `project(BagiEngine)`, `include(cmake/BagiEngine.cmake)`, `add_subdirectory(tests)`, `add_subdirectory(games)` when `games/` exists.
+- **`games/<Name>/CMakeLists.txt`**: a game. It also works as the root of its own repository (standalone block at the top: `if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)` -> `project()` + `include(engine/cmake/BagiEngine.cmake)`).
+
+### Dependency Loading Order in `cmake/BagiEngine.cmake`
 
 ```cmake
 # 1. Vendored EA Libraries
-add_subdirectory(src/Modules/EABase)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/EABase)
 
-# 2. SDL3 (git submodule)
-add_subdirectory(external/SDL)
-
-# 2.1 SDL_image (git submodule, after SDL)
-add_subdirectory(external/SDL_image)
-
-# 2.2 Vulkan-Headers (git submodule)
-add_subdirectory(external/Vulkan-Headers)
-
-# 3. Other vendored libraries
-add_subdirectory(src/Modules/EnTT)
-add_subdirectory(src/Modules/pugixml)
-add_subdirectory(src/Modules/imgui)
-add_subdirectory(src/Modules/fmt)
-
+# 2. SDL3 (git submodule), then SDL_image, then Vulkan-Headers
+# 3. Other vendored libraries: EnTT, pugixml, imgui, fmt
 # 4. GoogleTest (if ENGINE_BUILD_TESTS) -- after the ENGINE_NO_EXCEPTIONS block, see below
-
-# 5. Engine modules (BECore first!)
-add_subdirectory(src/Modules/BECore)
-add_subdirectory(src/Modules/Events)
-add_subdirectory(src/Modules/TaskSystem)
-add_subdirectory(src/Modules/SDL)
-add_subdirectory(src/Modules/Vulkan)
-add_subdirectory(src/Modules/Games)    # then Chess, Match3
-
-# 6. Tests (if ENGINE_BUILD_TESTS)
-add_subdirectory(tests)
+# 5. Reflection functions (add_reflection_target, be_add_game_reflection)
+# 6. Engine modules (BECore first!)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/BECore)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Events)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/TaskSystem)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/SDL)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Vulkan)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
+add_subdirectory(${BAGI_ENGINE_DIR}/src)          # RuntimeModule: src/Application + src/Widgets
+# 7. Test support (BagiEngineTestSupport), if ENGINE_BUILD_TESTS
 ```
+
+The vendored `src/Modules/imgui/CMakeLists.txt` uses `${CMAKE_SOURCE_DIR}/external/SDL/include`; `BagiEngine.cmake` adds the right path with `target_include_directories(imgui ...)` instead of editing vendored code.
+
+## Public API (`cmake/BagiEngine.cmake`)
+
+| Function | Purpose |
+|----------|---------|
+| `be_add_module(<Name> [LINK libs...])` | STATIC `<Name>Module` from `<dir>/src/**`: PCH reuse + force-include, `IMGUI_VULKAN_AVAILABLE=1`, `REFLECTION_GENERATED=1`, include roots (engine `src`, `src/Modules`, own `src`, build dir). Used by `Games` and the games |
+| `be_add_game_reflection(<Target> [SOURCE_DIRS ..] [INCLUDE_DIRS ..])` | Runs the generator for a game module (defaults: `<dir>/src`); the engine's reflected headers are only parsed as reference. See `reflection-module.md` |
+| `be_add_game_executable(<Name> [GAME_ROOT dir] [SOURCES ..] [MODULES ..])` | Executable from the engine's `src/main.cpp`: `WHOLE_ARCHIVE` engine runtime and game modules, `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` defines, DLL/dylib copy, rpath, natvis |
+| `be_add_game_tests(<Name> SOURCES .. [LINK ..])` | gtest executable on `BagiEngineTestSupport` + `gtest_discover_tests` (only when `ENGINE_BUILD_TESTS`) |
+| `be_link_engine(<target> [WITH_RUNTIME])` | `WHOLE_ARCHIVE` link of the engine core (and, with `WITH_RUNTIME`, renderer backends, `Games`, `Runtime`) |
+| `be_force_include_pch(<target>)` | `/FI"BECore/pch.h"` (MSVC) or `-include "BECore/pch.h"` |
 
 There is no `Math` CMake module: the math types live in `BECore/Math/` and are part of `BECoreModule`.
 
@@ -80,12 +84,12 @@ There is no `Math` CMake module: the math types live in `BECore/Math/` and are p
 
 Each engine module has its own `CMakeLists.txt`:
 - Collect sources with `file(GLOB_RECURSE ...)`
-- Create `STATIC` library
+- Create `STATIC` library (`be_add_module` does this for modules laid out as `<dir>/src/<Name>/`)
 - Include directories: own `src/` + cross-module path
 - Link to `BECoreModule` if needed
-- Reuse PCH: `target_precompile_headers(MyModule REUSE_FROM BECoreModule)`. Targets whose sources rely on the PCH contents (`MyGame`, `ChessModule`, `BagiEngineTests`) also force-include it (`/FI"BECore/pch.h"` on MSVC, `-include "BECore/pch.h"` elsewhere)
-- Reflected classes in the module: add its source directory to `source_dirs` / `scan_dirs` of `BECoreModule` in `CI/meta_generator/reflection_targets.json`. Only `BECoreModule` calls `add_reflection_target()`; other modules do not get their own entry
-- Registration code (factories) lives in static initializers, so executables link the engine libraries with `WHOLE_ARCHIVE` (see root `CmakeLists.txt` and `tests/CMakeLists.txt`)
+- Reuse PCH: `target_precompile_headers(MyModule REUSE_FROM BECoreModule)`. Targets whose sources rely on the PCH contents (game executables, `RuntimeModule`, game modules, test executables) also force-include it via `be_force_include_pch`
+- Reflected classes in an **engine** module: add its source directory to `source_dirs` / `scan_dirs` of `BECoreModule` in `CI/meta_generator/reflection_targets.json`. Only `BECoreModule` calls `add_reflection_target()`. **Game** modules call `be_add_game_reflection()` instead and have no entry in that file
+- Registration code (factories) lives in static initializers, so executables link the engine libraries and the game modules with `WHOLE_ARCHIVE` (`be_link_engine`, `be_add_game_executable`)
 
 ## Build Options
 
@@ -94,7 +98,7 @@ Each engine module has its own `CMakeLists.txt`:
 | `ENGINE_NO_EXCEPTIONS` | `ON` | `-fno-exceptions` / `/EHs-c-`, `ENGINE_NO_EXCEPTIONS=1`, `EASTL_EXCEPTIONS_ENABLED=0` |
 | `ENGINE_ENABLE_ASSERTS` | `ON` | `ASSERT` / `FATALERROR`; compiled out when `OFF` |
 | `ENGINE_ENABLE_EXPECTS` | `ON` | `EXPECT`; compiled out when `OFF` |
-| `ENGINE_BUILD_TESTS` | `ON` | GoogleTest and the `BagiEngineTests` target |
+| `ENGINE_BUILD_TESTS` | `ON` | GoogleTest, `BagiEngineTestSupport`, `BagiEngineTests` and the game test executables |
 
 ## Module Dependencies Order
 
@@ -103,15 +107,15 @@ BECoreModule must be first (provides PCH):
 2. `Events`
 3. `TaskSystem`
 4. `SDL`
-5. `Vulkan`, `Games`, `Chess`, `Match3`
+5. `Vulkan`, `Games`, `Runtime` (`src/`), then the games in `games/`
 
 ## Tests (GoogleTest)
 
-- `ENGINE_BUILD_TESTS` (default `ON`) controls `enable_testing()`, `add_subdirectory(external/googletest)` and `add_subdirectory(tests)`.
-- GoogleTest is added **after** the `ENGINE_NO_EXCEPTIONS` block in the root `CmakeLists.txt` on purpose, so it is compiled with the same `-fno-exceptions` as the test sources. `gtest_force_shared_crt` is `ON` (the engine uses `/MD`); `BUILD_GMOCK` and `INSTALL_GTEST` are `OFF`.
-- `tests/CMakeLists.txt` builds the executable `BagiEngineTests` the same way as `MyGame`: `REUSE_FROM BECoreModule` PCH, force-include of `BECore/pch.h`, `IMGUI_VULKAN_AVAILABLE=1` + `REFLECTION_GENERATED=1`, `${CMAKE_BINARY_DIR}` on the include path for `<Generated/*.gen.hpp>`, and `WHOLE_ARCHIVE` for `BECoreModule` / `EventsModule` / `TaskSystemModule` so static-initializer registrations survive.
-- `gtest_discover_tests(BagiEngineTests DISCOVERY_MODE PRE_TEST)`: tests are listed when `ctest` starts and run from `build/<preset>/tests`; `FileSystem` finds `config/` by walking up from the working directory. Do not pass `WORKING_DIRECTORY` (not even inside `PROPERTIES`): it also moves `cmake_test_discovery_*.json` there, which litters the source tree when it is the repository root. An out-of-tree build directory needs the executable started from inside the repository.
-- Build it with `cmake --build --preset <preset> --target BagiEngineTests`: `--target` on the command line replaces the preset's `MyGame`.
+- `ENGINE_BUILD_TESTS` (default `ON`) controls `enable_testing()`, `add_subdirectory(external/googletest)`, `BagiEngineTestSupport` and the test executables.
+- GoogleTest is added **after** the `ENGINE_NO_EXCEPTIONS` block in `cmake/BagiEngine.cmake` on purpose, so it is compiled with the same `-fno-exceptions` as the test sources. `gtest_force_shared_crt` is `ON` (the engine uses `/MD`); `BUILD_GMOCK` and `INSTALL_GTEST` are `OFF`.
+- Every test executable is created with `be_add_game_tests`: `BagiEngineTests` (`tests/CMakeLists.txt`), `ChessTests`, `Match3Tests` (`games/<Name>/CMakeLists.txt`). The function applies the `REUSE_FROM BECoreModule` PCH, force-include of `BECore/pch.h`, `IMGUI_VULKAN_AVAILABLE=1` + `REFLECTION_GENERATED=1`, `${CMAKE_BINARY_DIR}` on the include path for `<Generated/*.gen.hpp>`, and `WHOLE_ARCHIVE` for `BECoreModule` / `EventsModule` / `TaskSystemModule` so static-initializer registrations survive. `main()`, the engine environment and the assert bridge come from the static library `BagiEngineTestSupport` (`tests/Common/`).
+- `gtest_discover_tests(<Name> DISCOVERY_MODE PRE_TEST)`: tests are listed when `ctest` starts and run from the executable's binary directory (`build/<preset>/tests`, `build/<preset>/games/<Name>`); without content roots `FileSystem` finds `config/` by walking up from the working directory. The test environment pins the engine's `config/` / `assets/` through `BAGI_ENGINE_ROOT`. Do not pass `WORKING_DIRECTORY` (not even inside `PROPERTIES`): it also moves `cmake_test_discovery_*.json` there, which litters the source tree when it is the repository root. An out-of-tree build directory needs the executable started from inside the repository.
+- Build them with `cmake --build --preset <preset> --target BagiEngineTests ChessTests Match3Tests`: `--target` on the command line replaces the preset's game targets.
 
 ## Best Practices
 
@@ -138,9 +142,9 @@ BECoreModule must be first (provides PCH):
 `CMakePresets.json` (project root) is the single source of build configurations; VS Code CMake Tools, the CLI and the `build` skill all use it.
 
 - Hidden bases are composed via `inherits`: generator (`ninja`, `vs2022`), build type (`debug`, `release`), compiler (`clang`, `msvc`), host `condition` (`host-macos`, `host-windows`). Visible presets are named `<os>-<toolchain>-<type>`.
-- Every `binaryDir` is `${sourceDir}/build/${presetName}`. Build presets target `MyGame` and carry the same host `condition`, so other OSes' presets stay hidden.
+- Every `binaryDir` is `${sourceDir}/build/${presetName}`. Build presets target the game executables (`BagiChess`, `BagiMatch3`) and carry the same host `condition`, so other OSes' presets stay hidden. A new game's executable is added to `targets` of `build-base`.
 - `testPresets` mirror the build presets (same names, hidden `test-base` / `test-macos` / `test-windows`) and set `outputOnFailure`. Use `ctest --preset <preset>`.
-- Release presets set `ENGINE_ENABLE_ASSERTS=OFF` / `ENGINE_ENABLE_EXPECTS=OFF` explicitly (the logic in the root `CmakeLists.txt` that should do this for `CMAKE_BUILD_TYPE=Release` never fires because `option()` has already defined the cache entries).
+- Release presets set `ENGINE_ENABLE_ASSERTS=OFF` / `ENGINE_ENABLE_EXPECTS=OFF` explicitly (the logic in `cmake/BagiEngine.cmake` that should do this for `CMAKE_BUILD_TYPE=Release` never fires because `option()` has already defined the cache entries).
 - Ninja on Windows uses `architecture`/`toolset` with `strategy: external` so CMake Tools loads the Visual Studio environment. A plain shell does not get it; use the `windows-vs2022-*` presets there.
 - Do not put per-machine values (`VULKAN_SDK`, ccache, LLVM paths) in `CMakePresets.json`; use `CMakeUserPresets.json` (git-ignored).
 - When adding a preset, add the matching build preset **and test preset** and extend the preset list in `CLAUDE.md` and the `build` skill.
@@ -151,7 +155,7 @@ BECoreModule must be first (provides PCH):
 Build outputs are organized by compiler and platform:
 ```
 build/{Compiler}{Platform}/
-├── MyGame.exe           # Executable
+├── BagiChess.exe        # Game executables (BagiMatch3.exe, ...), test executables (BagiEngineTests.exe, ChessTests.exe, ...)
 ├── SDL3.dll             # Runtime dependencies
 └── lib/                 # Static libraries
 ```

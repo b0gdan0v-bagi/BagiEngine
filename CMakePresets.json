@@ -142,7 +142,7 @@
         {
             "name": "build-base",
             "hidden": true,
-            "targets": ["MyGame"]
+            "targets": ["BagiChess", "BagiMatch3"]
         },
         {
             "name": "build-macos",

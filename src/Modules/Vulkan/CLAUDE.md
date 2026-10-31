@@ -2,7 +2,7 @@
 
 ## Overview
 
-`VulkanModule` is the second renderer backend: `VulkanRendererBackend` implements `IRenderer` (see `.claude/rules/rendering-module.md` for the rules shared with SDL). It is selected by `renderer="VulkanRendererBackend"` in `config/ApplicationConfig.xml`; the window itself still comes from `SDLMainWindow` (`SDL_WINDOW_VULKAN` in `config/SDLWindowConfig.xml`). Links `BECoreModule`, `EventsModule`, `SDLModule` and `Vulkan::Headers`; `MyGame` links it with `WHOLE_ARCHIVE`.
+`VulkanModule` is the second renderer backend: `VulkanRendererBackend` implements `IRenderer` (see `.claude/rules/rendering-module.md` for the rules shared with SDL). It is selected by `renderer="VulkanRendererBackend"` in `config/ApplicationConfig.xml`; the window itself still comes from `SDLMainWindow` (`SDL_WINDOW_VULKAN` in `config/SDLWindowConfig.xml`). Links `BECoreModule`, `EventsModule`, `SDLModule` and `Vulkan::Headers`; every game executable links it with `WHOLE_ARCHIVE` (`be_add_game_executable`).
 
 ## Components (`src/CoreVulkan/`)
 
@@ -29,7 +29,7 @@ ImGui goes through `ImGuiInit/NewFrame/Render/ShutdownEvent` like the SDL backen
 
 ## Build
 
-- **Loader:** Windows links `vulkan-1.lib` from `VULKAN_SDK` when set and present, else from `external/Vulkan-Loader/Windows/Lib`. macOS requires `external/Vulkan-Loader/macOS/lib/libvulkan.1.dylib` and fails configure without it. Linux uses the system loader. `*.dll` files are git-ignored; populate them as described in `external/Vulkan-Loader/README.md`. `VULKAN_SDK` is a per-machine cache value (default in the root `CmakeLists.txt`), override it in `CMakeUserPresets.json`.
+- **Loader:** Windows links `vulkan-1.lib` from `VULKAN_SDK` when set and present, else from `external/Vulkan-Loader/Windows/Lib`. macOS requires `external/Vulkan-Loader/macOS/lib/libvulkan.1.dylib` and fails configure without it. Linux uses the system loader. `*.dll` files are git-ignored; populate them as described in `external/Vulkan-Loader/README.md`. `VULKAN_SDK` is a per-machine cache value (default in `cmake/BagiEngine.cmake`), override it in `CMakeUserPresets.json`.
 - **Shaders:** `shaders/<name>.<stage>.glsl` → `glslc` → `.spv` → `cmake/SpvToHeader.cmake` → `<name>_<stage>_spv.h` with a `constexpr uint32_t` array in the build directory (private include path). A new shader is one `compile_shader(<stage> <name> <kVarName>)` line in `CMakeLists.txt` plus its header in the `VulkanShaders` target's `DEPENDS`. `glslc` comes from `VULKAN_SDK`, else `PATH`; do not pre-set `_GLSLC` to `""` (the search is then skipped).
 - The target needs `IMGUI_VULKAN_AVAILABLE=1` consistent with `BECoreModule` because it reuses its PCH.
 

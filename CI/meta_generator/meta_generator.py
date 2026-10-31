@@ -68,6 +68,29 @@ def collect_known_enums(dirs: List[Path]) -> Set[str]:
     return enums
 
 
+def load_target_config(target: str, project_root: Path):
+    """Load one entry of reflection_targets.json, or print an error and return None."""
+    config_path = Path(__file__).parent / "reflection_targets.json"
+    if not config_path.exists():
+        print(f"ERROR: Reflection targets config not found: {config_path}", file=sys.stderr)
+        return None
+    with open(config_path, encoding='utf-8') as f:
+        targets_config = json.load(f)
+    if target not in targets_config:
+        print(f"ERROR: Unknown target '{target}' in reflection_targets.json. Known: {list(targets_config.keys())}", file=sys.stderr)
+        return None
+    return targets_config[target]
+
+
+def is_under(path: Path, directory: Path) -> bool:
+    """True if *path* lies inside *directory* (both resolved)."""
+    try:
+        path.resolve().relative_to(directory.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def main() -> int:
     """Main entry point for CLI."""
     parser = argparse.ArgumentParser(
@@ -146,6 +169,27 @@ Examples:
     )
 
     parser.add_argument(
+        '--reference-dir',
+        action='append',
+        dest='reference_dirs',
+        default=[],
+        help='Directory parsed only for class/enum information (factory bases, parents), '
+             'never generated. Used when this target builds on classes owned by another target'
+    )
+
+    parser.add_argument(
+        '--reference-target',
+        help='Target name from reflection_targets.json whose source/scan dirs are used as reference dirs '
+             'and whose include dirs are appended to --include-dir (paths resolved against --project-root)'
+    )
+
+    parser.add_argument(
+        '--manifest',
+        help='Write the list of .gen.hpp files owned by this run (all source/scan dirs, not only the '
+             'regenerated ones) to this file, one path per line'
+    )
+
+    parser.add_argument(
         '--force', '-f',
         action='store_true',
         help='Force full rescan (ignore cache)'
@@ -168,21 +212,15 @@ Examples:
     output_dir = Path(args.output_dir)
     cache_dir = Path(args.cache_dir)
 
+    project_root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
+
     # Load dirs from config when --target is set
     if args.target:
         if args.source_dirs or args.scan_dirs or args.include_dirs:
             print("Warning: --source-dir/--scan-dir/--include-dir are ignored when --target is set", file=sys.stderr)
-        project_root = Path(args.project_root).resolve() if args.project_root else Path.cwd()
-        config_path = Path(__file__).parent / "reflection_targets.json"
-        if not config_path.exists():
-            print(f"ERROR: Reflection targets config not found: {config_path}", file=sys.stderr)
+        cfg = load_target_config(args.target, project_root)
+        if cfg is None:
             return 1
-        with open(config_path, encoding='utf-8') as f:
-            targets_config = json.load(f)
-        if args.target not in targets_config:
-            print(f"ERROR: Unknown target '{args.target}' in reflection_targets.json. Known: {list(targets_config.keys())}", file=sys.stderr)
-            return 1
-        cfg = targets_config[args.target]
         source_dirs = [project_root / d for d in cfg.get("source_dirs", [])]
         scan_dirs = [project_root / d for d in cfg.get("scan_dirs", [])]
         include_dirs = [str(project_root / d) for d in cfg.get("include_dirs", [])]
@@ -190,8 +228,16 @@ Examples:
         if not args.source_dirs:
             parser.error("Either --target or at least one --source-dir is required")
         source_dirs = [Path(d) for d in args.source_dirs]
-        include_dirs = args.include_dirs
+        include_dirs = list(args.include_dirs)
         scan_dirs = [Path(d) for d in args.scan_dirs] if args.scan_dirs else source_dirs
+
+    reference_dirs = [Path(d) for d in args.reference_dirs]
+    if args.reference_target:
+        ref_cfg = load_target_config(args.reference_target, project_root)
+        if ref_cfg is None:
+            return 1
+        reference_dirs += [project_root / d for d in ref_cfg.get("source_dirs", []) + ref_cfg.get("scan_dirs", [])]
+        include_dirs += [str(project_root / d) for d in ref_cfg.get("include_dirs", [])]
 
     def log(msg: str):
         if not args.quiet:
@@ -202,7 +248,7 @@ Examples:
             print(msg)
 
     # Pre-scan for CORE_ENUM types across all dirs
-    all_scan_dirs = list(set(source_dirs + scan_dirs))
+    all_scan_dirs = list(set(source_dirs + scan_dirs + reference_dirs))
     known_enums = collect_known_enums(all_scan_dirs)
     verbose_log(f"Known enums ({len(known_enums)}): {sorted(known_enums)}")
 
@@ -265,6 +311,20 @@ Examples:
             if not args.quiet:
                 print(f"Error processing {file_path}: {e}", file=sys.stderr)
 
+    # Reference headers belong to another target: parse them so factory bases, parents and
+    # CORE_ENUMs are known, but never queue them for generation.
+    if reference_dirs:
+        reference_files = scan_headers(reference_dirs) if args.force else cache.get_outdated_files(reference_dirs)
+        verbose_log(f"Parsing {len(reference_files)} reference files")
+        for file_path in reference_files:
+            try:
+                classes, enums = cpp_parser.parse_file(file_path)
+                cache.update_file(file_path, classes, enums)
+            except Exception as e:
+                error_count += 1
+                if not args.quiet:
+                    print(f"Error processing reference {file_path}: {e}", file=sys.stderr)
+
     if scan_dirs:
         verbose_log("Scanning for derived classes...")
         scan_headers_list = scan_headers(scan_dirs)
@@ -303,7 +363,7 @@ Examples:
                 print(f"Error generating {file_path}: {e}", file=sys.stderr)
 
     # Cleanup deleted files from cache
-    scanned_dirs = source_dirs + scan_dirs
+    scanned_dirs = source_dirs + scan_dirs + reference_dirs
     existing_files_in_scanned_dirs = set(scan_headers(scanned_dirs))
 
     to_remove = []
@@ -324,6 +384,20 @@ Examples:
 
     if to_remove:
         verbose_log(f"Removed {len(to_remove)} deleted files from cache")
+
+    # Manifest: every .gen.hpp this run owns, including files that were up to date
+    if args.manifest:
+        owned_dirs = source_dirs + scan_dirs
+        owned = set()
+        for cached_path, meta in cache.files.items():
+            if not (meta.classes or meta.enums):
+                continue
+            if any(is_under(Path(cached_path), d) for d in owned_dirs):
+                owned.add(str(output_dir / (Path(cached_path).stem + ".gen.hpp")))
+        manifest_path = Path(args.manifest)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text("\n".join(sorted(owned)) + "\n", encoding="utf-8")
+        verbose_log(f"Manifest: {len(owned)} files -> {manifest_path}")
 
     # Save cache
     t0_save = time.perf_counter()

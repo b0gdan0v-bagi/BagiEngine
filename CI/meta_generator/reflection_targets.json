@@ -28,14 +28,8 @@
       "src/Modules/SDL/src/CoreSDL",
       "src/Modules/Vulkan/src/CoreVulkan",
       "src/Modules/Games/src/Games",
-      "src/Modules/Chess/src/Chess",
-      "src/Modules/Chess/src/Chess/Game",
-      "src/Modules/Chess/src/Chess/Components",
-      "src/Modules/Match3/src/Match3",
-      "src/Modules/Match3/src/Match3/Game",
-      "src/Modules/Match3/src/Match3/Components",
       "tests/BECore"
     ],
-    "include_dirs": ["src/Modules", "src", "src/Modules/Games/src", "src/Modules/Chess/src", "src/Modules/Match3/src", "tests"]
+    "include_dirs": ["src/Modules", "src", "src/Modules/Games/src", "tests"]
   }
 }

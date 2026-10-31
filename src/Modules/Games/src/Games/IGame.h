@@ -5,8 +5,8 @@ namespace BECore {
     /**
      * @brief Base interface for a self-contained game.
      *
-     * Each concrete game (Chess, Checkers, ...) is a separate module that derives from
-     * IGame and is auto-registered into AbstractFactory<IGame> via BE_CLASS reflection.
+     * Each concrete game lives outside the engine, in its own module, derives from IGame
+     * and is auto-registered into AbstractFactory<IGame> via BE_CLASS reflection.
      *
      * GameManager enumerates AbstractFactory<IGame>::GetRegisteredTypes() at startup,
      * instantiates one of each, and activates the default (configured in

@@ -2,7 +2,7 @@
 
 ## Overview
 
-XML configuration: every file under `config/` is loaded once at startup and read through `ConfigManager`. Parsing is pugixml behind thin wrappers; reflected objects are filled from a config with the serialization layer (`.claude/rules/reflection-module.md`).
+XML configuration: every file under `config/` (the engine's and the game's, see layering below) is loaded once at startup and read through `ConfigManager`. Parsing is pugixml behind thin wrappers; reflected objects are filled from a config with the serialization layer (`.claude/rules/reflection-module.md`).
 
 ## Components
 
@@ -23,8 +23,9 @@ auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern)
 
 **DON'T**: create loaders by hand or call `LoadFromVirtualPath()` directly for engine configs.
 
-- `Initialize()` scans `config/` recursively, loads every XML in parallel through `TaskManager` and blocks until done. A second call is a no-op.
-- The key is the **file stem** (without `.xml`), so two files with the same stem in different subfolders collide.
+- `Initialize()` scans every layer of the `config` mount point (engine first, game on top) recursively, loads every XML in parallel through `TaskManager` and blocks until done. A second call is a no-op.
+- The key is the **file stem** (without `.xml`). Two files with the same stem in different layers do not collide: the upper layer wins and the log says `Config 'X' from <path> overrides <path>`. A game's `SceneConfig.xml` therefore replaces the engine's entire file, it is not merged. Two files with the same stem inside one layer still collide (the one scanned later wins).
+- `SaveConfig` writes to the file the config was loaded from, i.e. into the layer that won.
 - `GetConfig` takes a `PoolString` or an `eastl::string_view` (the latter avoids interning) and returns an invalid `XmlNode` when the name is unknown, so check it.
 - Documents live in `UnorderedPoolMap<ConfigEntry>`; writes are serialized by a mutex.
 - Editor support: `GetAllConfigNames()`, `GetConfigFilePath(name)`, `SaveConfig(name)`, `ReloadConfig(name)` (replaces the cached document). Code that holds an `XmlNode` from before a reload must fetch it again.

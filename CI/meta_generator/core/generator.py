@@ -248,7 +248,8 @@ class CodeGenerator:
             elif cls.is_factory_base and not cls.is_event:
                 short = cls.name.split('::')[-1]
                 fb = factory_base_map.get(short)
-                if fb and len(fb.derived) == 1 and fb.derived[0].name == cls.name:
+                # A base without derived classes registers itself, unless it cannot be instantiated.
+                if fb and len(fb.derived) == 1 and fb.derived[0].name == cls.name and not cls.is_abstract:
                     factory_base_fqn = cls.full_qualified_name
 
             cls_dict = {

@@ -2,7 +2,7 @@
 
 ## Overview
 
-`Match3Game` is an `IGame` (scene `Match3Scene`): a Bejeweled-style MVP. Infrastructure and registration: `src/Modules/Games/CLAUDE.md`. Namespace `BECore::Match3`.
+`Match3Game` is an `IGame` (scene `Match3Scene`): a Bejeweled-style MVP. Executable `BagiMatch3`. Infrastructure and registration: `src/Modules/Games/CLAUDE.md`. Namespace `BECore::Match3`. The scene is in `games/Match3/config/SceneConfig.xml`.
 
 ## Layout
 
@@ -25,4 +25,4 @@ src/Match3/
 
 ## Tests
 
-`tests/Match3/Match3GameModelTest.cpp` exercises the model without engine services. New rules go into `Game/` with a gtest case (`.claude/rules/tests-module.md`).
+`games/Match3/tests/Match3GameModelTest.cpp` (executable `Match3Tests`) exercises the model without engine services. New rules go into `Game/` with a gtest case (`.claude/rules/tests-module.md`).
