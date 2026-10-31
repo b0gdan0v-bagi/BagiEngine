@@ -5,7 +5,7 @@ description: Builds BagiEngine through CMakePresets.json (the same presets VS Co
 
 # Build (BagiEngine)
 
-Builds the `MyGame` target with `CMakePresets.json` from the project root. Each preset builds into its own `build/<preset>/` directory.
+Builds the `MyGame` target (or the `BagiEngineTests` gtest executable, see `tests`) with `CMakePresets.json` from the project root. Each preset builds into its own `build/<preset>/` directory.
 
 ## Arguments (all optional)
 
@@ -14,11 +14,12 @@ Builds the `MyGame` target with `CMakePresets.json` from the project root. Each 
 | `debug` / `release` | Build type. Default: `debug`. |
 | `clean` | Add `--clean-first` to the build. |
 | `configure` | Force a configure step. |
+| `tests` | Build the `BagiEngineTests` target (`--target BagiEngineTests`, which replaces the preset's `MyGame`) instead of the game. Run the tests afterwards only when asked: `ctest --preset <p>`. |
 | `<preset name>` | Use this preset as-is; skip auto-selection. |
 
 ## Presets
 
-| Preset (configure + build) | Host | Toolchain |
+| Preset (configure + build + test) | Host | Toolchain |
 |----------------------------|------|-----------|
 | `macos-debug`, `macos-release` | macOS | Clang + Ninja |
 | `windows-msvc-debug`, `windows-msvc-release` | Windows | MSVC (`cl`) + Ninja |
@@ -39,9 +40,9 @@ Run everything from the project root.
 
 2. **Decide whether to configure** (`cmake --preset <p>`). Configure if any of these holds, or when unsure:
    - `build/<p>/CMakeCache.txt` does not exist, or the `configure` argument was given.
-   - `git status --porcelain -- src` shows added, deleted, renamed or untracked (`??`) files. Sources are collected with `GLOB_RECURSE` and no `CONFIGURE_DEPENDS`.
+   - `git status --porcelain -- src tests` shows added, deleted, renamed or untracked (`??`) files. Sources are collected with `GLOB_RECURSE` and no `CONFIGURE_DEPENDS`.
    - `CMakePresets.json`, `CMakeUserPresets.json` or any `*.cmake` changed. Edits to `CMakeLists.txt` are picked up by Ninja itself.
-   - A changed or new file under `src/` contains `BE_CLASS` or `BE_REFLECT_FIELD` (`git diff --name-only HEAD -- src`, plus untracked files, then `grep -l`). **Reflection code is generated only at configure time** (`add_reflection_target` -> `execute_process`), into `build/<p>/Generated/`. A plain build leaves stale `*.gen.hpp`.
+   - A changed or new file under `src/` or `tests/` contains `BE_CLASS`, `BE_EVENT` or `BE_REFLECT_FIELD` (`git diff --name-only HEAD -- src tests`, plus untracked files, then `grep -l`). **Reflection code is generated only at configure time** (`add_reflection_target` -> `execute_process`), into `build/<p>/Generated/`. A plain build leaves stale `*.gen.hpp`.
 
 3. **Build:** `cmake --build --preset <p>` (add `--clean-first` for `clean`; `--verbose` to see compiler commands). Ninja already uses all cores.
    - A first build in a new `build/<p>/` is full (SDL, SDL_image, ImGui, ...) and takes minutes. Run it in the background with output redirected to a log file in the scratchpad and wait for the completion notification. Do not poll, and do not set a timeout that would cut the build off.
@@ -62,7 +63,7 @@ Run everything from the project root.
 - Release presets turn `ENGINE_ENABLE_ASSERTS` and `ENGINE_ENABLE_EXPECTS` off; Debug keeps them on. The Visual Studio presets are multi-config and leave both on.
 - Exceptions are disabled (`ENGINE_NO_EXCEPTIONS`). C++23 is required.
 - The root file is spelled `CmakeLists.txt` (lowercase `m`). It works on macOS and Windows only because their file systems ignore case.
-- Do not run the executable after a build unless asked. It opens a window and runs the engine tests at startup (`CoreManager::OnApplicationPreInit`). To launch it, use the `run` skill.
+- Do not run the game after a build unless asked. It opens a window and runs the runtime `ITest`s at startup (`CoreManager::OnApplicationPreInit`). To launch it, use the `run` skill. `BagiEngineTests` opens no window, but still run it only when asked.
 - After building C++ changes, remind the user about the `clang-format` and `strip-pch-includes` skills (CLAUDE.md). Do not run them unasked.
 
 ## Local overrides

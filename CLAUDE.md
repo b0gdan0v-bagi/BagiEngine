@@ -28,13 +28,21 @@ C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output l
 
 ## Running Tests
 
-Tests run automatically during `CoreManager::OnApplicationPreInit()`. They are enabled/disabled per-class via `config/TestsConfig.xml`. There is no standalone test binary — tests run as part of engine startup.
+Unit and module tests are GoogleTest tests in `tests/`, built as a separate executable `BagiEngineTests` (not part of the game). The GoogleTest submodule needs `git submodule update --init external/googletest`; `-DENGINE_BUILD_TESTS=OFF` skips the whole thing.
+
+```bash
+cmake --build --preset macos-debug --target BagiEngineTests      # --target overrides the preset's MyGame
+ctest --test-dir build/macos-debug --output-on-failure           # every test in its own process
+build/ClangmacOS/BagiEngineTests --gtest_filter='Reflection*'    # run directly; cwd must be inside the repository
+```
+
+Runtime tests that need the live engine are `ITest` classes (`src/Modules/BECore/Tests/`). `CoreManager::OnApplicationPreInit()` runs the ones enabled in `config/TestsConfig.xml` at game startup.
 
 ## Architecture Overview
 
 BagiEngine is a C++23 game engine with modular ECS architecture (EnTT). The main entry is `src/main.cpp` → `Application::Initialize()/Run()`.
 
-**Stack:** CMake 3.31+ with Ninja, SDL3 + SDL_image, ImGui, EnTT (ECS), EASTL, pugixml (XML), fmt, magic_enum (reflection).
+**Stack:** CMake 3.31+ with Ninja, SDL3 + SDL_image, ImGui, EnTT (ECS), EASTL, pugixml (XML), fmt, magic_enum (reflection), GoogleTest (tests).
 
 **Module dependency order (bottom → top):**
 ```
@@ -57,6 +65,7 @@ src/
     ├── Chess/, Match3/ # IGame implementations
     └── EABase/, EnTT/, fmt/, imgui/, pugixml/   # vendored
 config/                 # XML configuration files
+tests/                  # GoogleTest executable BagiEngineTests (BECore, Chess, Match3, Common)
 ```
 
 **Vendored code** (`EABase/`, `EnTT/`, `fmt/`, `imgui/`, `pugixml/`): do not edit it, and leave it out of broad searches.

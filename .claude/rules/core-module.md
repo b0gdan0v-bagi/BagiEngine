@@ -11,8 +11,10 @@ Central hub for core subsystems. Access via static methods:
 - `GetFileSystem()`, `GetConfigManager()`, `GetLoggerManager()`
 - `GetAssertHandlerManager()`, `GetTestManager()`, `GetResourceManager()`
 
-**Initialization order** (in `OnApplicationPreInit`):
-1. `FileSystem` → 2. `TaskManager` → 3. `ConfigManager` → 4. `LoggerManager` → 5. `AssertHandlerManager` → 6. `ResourceManager` → 7. `TestManager`
+**Initialization order** (`InitializeCoreServices()`, called by `OnApplicationPreInit`):
+1. `FileSystem` → 2. `TaskManager` → 3. `ConfigManager` → 4. `LoggerManager` → 5. `AssertHandlerManager` → 6. `ResourceManager` → 7. `TextureLibrary`
+
+`OnApplicationPreInit` then runs the runtime `ITest`s through `TestManager`. The GoogleTest executable (`tests/`) brings up the same services through `OnTestEnvironmentInit(PassKey<Tests::EngineEnvironment>)`, which skips `TestManager` and disables `DebugBreakHandler` so a failed assert is reported by gtest instead of trapping the process.
 
 ## ConfigManager
 
@@ -45,7 +47,7 @@ Don't use for: temporary strings, user-facing text
 ## File Organization
 
 - One class per file: `ClassName.h` + `ClassName.cpp`
-- Tests: `BECore/Tests/TestName.h`
+- Tests: GoogleTest tests in `tests/<Module>/` (see `tests-module.md`); only runtime `ITest`s live in `BECore/Tests/`
 
 ## Checklist
 
