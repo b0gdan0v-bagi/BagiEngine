@@ -24,12 +24,12 @@ The serialization system uses **separate interfaces** for reading and writing:
 
 - **`ISerializer`** - Interface for writing data (save/export)
   - Methods: `Write()`, `WriteAttribute()`
-  - Implementations: `XmlSerializer` (Binary planned)
+  - Implementations: `XmlSerializer`, `BinarySerializer`
   
 - **`IDeserializer`** - Interface for reading data (load/import)
   - Methods: `Read()`, `ReadAttribute()`
   - Error tracking: `HasErrors()`, `GetErrors()`, `ClearErrors()`
-  - Implementations: `XmlDeserializer` (Binary planned)
+  - Implementations: `XmlDeserializer`, `BinaryDeserializer`
 
 ## Macros
 
@@ -95,7 +95,7 @@ if (deserializer.BeginObject("Player")) {
 if (deserializer.HasErrors()) {
     for (const auto& err : deserializer.GetErrors()) {
         LOG_ERROR("Deserialize error: {} - {} (line {})", 
-                  err.fieldName, err.errorMessage, err.line);
+                  err.path, err.errorMessage, err.line);
     }
 }
 ```
@@ -133,6 +133,32 @@ XML result:
 </items>
 ```
 
+## Binary Format
+
+`BinarySerializer` / `BinaryDeserializer` take the same call sequence as the XML pair, so every type that serializes to XML serializes to binary without changes. Use it for saves and caches where size and speed matter more than readability.
+
+```cpp
+BinarySerializer serializer;
+if (serializer.BeginObject("Player")) {
+    player.Serialize(serializer);
+    serializer.EndObject();
+}
+serializer.SaveToFile("save.bin");          // or serializer.GetData() -> eastl::vector<uint8_t>
+
+BinaryDeserializer deserializer;
+if (deserializer.LoadFromFile("save.bin") && deserializer.BeginObject("Player")) {
+    player.Deserialize(deserializer);
+    deserializer.EndObject();
+}
+```
+
+- Layout (`BinaryFormat.h`): header `"BEBN"` + `u16 version` + `u32 payloadSize`, then entries `u8 tag | u16 nameLen | name | payload`. Objects and arrays carry a `u32 size` patched in `EndObject` / `EndArray` / `EndArrayElement`. Little-endian only (`static_assert` on the host). Tag values are part of the format: never renumber, only append.
+- Entries are matched **by name**, not by position: skip-defaults, null pointers and empty optionals simply write nothing. `Write()` and `WriteAttribute()` produce the same entry (binary has no attribute/child split). A name written twice reads as the last write.
+- The array count in the stream is the number of `BeginArrayElement` calls, not the `count` argument of `BeginArray` (factory-backed vectors skip null elements).
+- `LoadFromBuffer` / `LoadFromFile` validate the whole stream up front (header, payload size, tags, sizes, nesting depth <= `BinaryFormat::MaxDepth`). A truncated or corrupt stream fails there with an error and exposes nothing; reads after a successful load never go out of bounds.
+- Errors follow XML: `Read()` reports `Element not found`, `ReadAttribute()` / `BeginObject()` / `BeginArray()` stay silent for a missing entry. A type mismatch (for example an `int32` entry read as `float`) is always reported: there is no implicit widening.
+- Tests: `tests/BECore/ReflectionTest.cpp`, `Binary*` cases (round-trips, wire-format bytes, corrupt-stream handling). Changing the layout breaks `BinaryWireFormat` on purpose: bump `CurrentVersion` and update the expected bytes.
+
 ## Factory Generation (FACTORY_BASE)
 
 Use `BE_CLASS(Name, FACTORY_BASE)` on base class. Include `<Generated/EnumXxx.gen.hpp>`.
@@ -154,7 +180,7 @@ Use `BE_CLASS(Name, FACTORY_BASE)` on base class. Include `<Generated/EnumXxx.ge
 
 ## Container and pointer serialization
 
-In `BECore/Reflection/FieldSerializer.h`, `SerializeField` / `DeserializeField` are defined for:
+In `BECore/Reflection/DataAccessor.h`, `Ser::Save` / `Ser::Load` dispatch to `Ser::DataAccessor<T>` specializations for:
 
 - Types with `Serialize`/`Deserialize` — one child element per object
 - `eastl::vector<T>` — child elements with `value` attribute or `Serialize()` per element
@@ -165,7 +191,7 @@ Prefer these overloads in custom `Serialize`/`Deserialize` instead of manual `Be
 
 ### Current direction (important)
 
-- Treat `FieldSerializer` overloads as the canonical extension point for container/pointer support.
+- Treat `Ser::DataAccessor<T>` specializations as the canonical extension point for container/pointer support.
 - Keep factory-backed polymorphic container flow aligned with generated enum/factory traits from `meta_generator`.
 - When adding new serializable container shapes, extend both serialization and deserialization paths symmetrically.
 - Prefer generated/reflection-driven paths over one-off manual XML loops in component code.

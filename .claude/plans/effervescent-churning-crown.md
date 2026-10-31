@@ -176,3 +176,16 @@ tests/
 
 - План `abstract-growing-honey.md` (BinarySerializer): его разделы «Тесты» и «Порядок работы и проверка» теперь нужно перенацелить на `tests/BECore/ReflectionTest.cpp` (gtest-макросы) и `BagiEngineTests --gtest_filter='Reflection*'`; заглушку `DISABLED_BinarySerialization` заменить настоящими тестами.
 - Проверка на Windows-пресетах (`gtest_force_shared_crt`, копирование DLL).
+
+## Статус: бинарная сериализация (BinarySerializer / BinaryDeserializer)
+
+После переноса тестов закрыт отложенный пункт: `DISABLED_BinarySerialization` заменён реализацией и тестами.
+
+- Код: `Reflection/BinaryFormat.h`, `BinarySerializer.h/.cpp`, `BinaryDeserializer.h/.cpp` (production-код в `BECoreModule`, подхвачен `GLOB_RECURSE`).
+- Формат: заголовок `"BEBN"` + `u16 version` + `u32 payloadSize`, записи `u8 tag | u16 nameLen | name | payload`, размеры объектов и массивов патчатся при закрытии. Отличие от черновика в плане BinarySerializer: в заголовок добавлен `payloadSize`, иначе обрезание ровно по границе верхнеуровневой записи не отличить от целого потока.
+- Поведение: поиск по имени, повторная запись читается как last-write-wins, `Read` сообщает «Element not found», `ReadAttribute`/`BeginObject` молчат, несовпадение типа всегда ошибка (без неявного расширения).
+- Устойчивость: весь поток валидируется при загрузке (заголовок, размеры, теги, глубина <= 128), после успешной загрузки чтение не выходит за границы.
+- Тесты: 29 кейсов `ReflectionTest.Binary*` в `tests/BECore/ReflectionTest.cpp`. Негативный контроль: пять намеренно внесённых дефектов (проверка `payloadSize`, лимит глубины, счётчик элементов массива, last-write-wins, проверка типа) каждый ловится своими тестами. Первый прогон показал, что без положительного контроля `BinaryRejectsBadHeaders` проходил бы вакуумно, поэтому контроль добавлен.
+- Результат: `ctest --preset macos-debug` и `macos-release` — 110/110.
+- Не проверено: сборка под MSVC/Windows (в формате используются `memcpy` и `static_assert` на little-endian), ASan/UBSan-прогон мутационных тестов.
+
