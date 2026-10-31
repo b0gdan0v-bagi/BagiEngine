@@ -1,9 +1,7 @@
 ---
-description: Guidelines for BE_EVENT reflection-based event types
-globs: 
+paths:
   - "**/*Event.h"
   - "**/*Events.h"
-alwaysApply: false
 ---
 
 # Reflection Events Guidelines

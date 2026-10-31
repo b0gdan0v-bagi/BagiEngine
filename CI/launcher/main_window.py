@@ -908,10 +908,10 @@ class MainWindow(QMainWindow):
             btn.clicked.connect(self._clean_build)
             layout.addWidget(btn)
         
-        # Open Cursor button
-        if "open_cursor" in available:
-            btn = QPushButton("Open Cursor")
-            btn.clicked.connect(lambda: self._run_single_action("open_cursor"))
+        # Open VS Code button
+        if "open_vscode" in available:
+            btn = QPushButton("Open VS Code")
+            btn.clicked.connect(lambda: self._run_single_action("open_vscode"))
             layout.addWidget(btn)
         
         # Open Visual Studio button (Windows only)
@@ -973,9 +973,9 @@ class MainWindow(QMainWindow):
         
         # Define action order explicitly for logical grouping
         # Actions that need per-config checkboxes: clean_build, cmake_configure, cmake_build
-        # Actions that are static: close_vs (before clean), open_cursor, open_vs, open_xcode
+        # Actions that are static: close_vs (before clean), open_vscode, open_vs, open_xcode
         self._config_actions = ["clean_build", "cmake_configure", "cmake_build"]
-        self._static_actions = ["open_cursor", "open_vs", "open_xcode"]
+        self._static_actions = ["open_vscode", "open_vs", "open_xcode"]
         self._pre_clean_actions = ["close_vs"]  # Actions that go before clean operations
         
         self.step_checkboxes: dict[str, QCheckBox] = {}

@@ -1,10 +1,8 @@
 ---
-description: Rules for Reflection and Serialization system
-globs:
+paths:
   - "**/Reflection/**/*"
   - "**/*Test*.h"
   - "**/*Test*.cpp"
-alwaysApply: false
 ---
 
 # Reflection System Guidelines

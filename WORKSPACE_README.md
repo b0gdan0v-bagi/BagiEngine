@@ -97,7 +97,7 @@ LIBCLANG_PATH=C:/Program Files/LLVM
 
 - **CMake Configure** - настройка проекта с выбором генератора и компилятора
 - **CMake Build** - сборка проекта
-- **Open IDE** - открытие проекта в Cursor / Visual Studio / Xcode
+- **Open IDE** - открытие проекта в VS Code / Visual Studio / Xcode
 - **Pipelines** - цепочки действий (например: Configure -> Build -> Open IDE)
 - **Сохранение настроек** - последние настройки сохраняются между запусками
 
@@ -121,17 +121,19 @@ LIBCLANG_PATH=C:/Program Files/LLVM
 
 ## Альтернативный способ (все платформы)
 
-Если у вас `cursor` добавлен в PATH:
+Если у вас `code` добавлен в PATH:
 
 **Windows:**
 ```cmd
-cursor CI\BagiEngine.code-workspace
+code CI\BagiEngine.code-workspace
 ```
 
 **macOS/Linux:**
 ```bash
-cursor CI/BagiEngine.code-workspace
+code CI/BagiEngine.code-workspace
 ```
+
+На macOS команда `code` появляется после «Shell Command: Install 'code' command in PATH» в палитре команд VS Code.
 
 ## Структура проекта
 
@@ -156,7 +158,7 @@ BagiEngine/
 │   └── SDL/             # SDL3 (git submodule)
 ├── config/              # XML configuration files
 ├── build/Generated/     # Auto-generated reflection code
-├── .cursorignore        # Игнорирование vendored для AI
+├── .claude/             # Rules, skills и планы для Claude Code
 └── CI/
     ├── setup_venv.bat       # Настройка .venv через uv (Windows CMD)
     ├── setup_venv.ps1       # Настройка .venv через uv (PowerShell)
@@ -171,23 +173,42 @@ BagiEngine/
 
 Используйте `BE_CLASS` и `BE_REFLECT_FIELD` для автоматической сериализации.
 Примитивы → XML атрибуты, классы → вложенные элементы.
-Подробнее: `.cursor/rules/reflection-module.mdc`
+Подробнее: `.claude/rules/reflection-module.md`
 
 ## Ручная сборка (без Launcher)
 
-### CMake с Ninja
+### CMake presets (рекомендуется)
+
+Конфигурации описаны в `CMakePresets.json`; те же пресеты использует расширение CMake Tools в VS Code.
+Каждый пресет собирается в свой каталог `build/<имя-пресета>/`.
+```bash
+cmake --list-presets=build            # пресеты, доступные на этой ОС
+cmake --preset macos-debug            # configure (заодно генерирует reflection-код)
+cmake --build --preset macos-debug    # сборка MyGame
+```
+
+| ОС | Пресеты |
+|----|---------|
+| macOS | `macos-debug`, `macos-release` (Clang + Ninja) |
+| Windows | `windows-msvc-{debug,release}`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
+
+Настройки конкретной машины (например `VULKAN_SDK`, ccache) кладите в `CMakeUserPresets.json` — он в `.gitignore`.
+Исполняемый файл всегда лежит в `build/{Compiler}{Platform}/MyGame`, поэтому Debug и Release (Ninja) затирают друг друга.
+Reflection-код генерируется на этапе configure: после правок `BE_CLASS` / `BE_REFLECT_FIELD` повторите `cmake --preset ...`.
+
+### CMake с Ninja (без пресетов, старый плоский `build/`)
 ```bash
 cmake -B build -G Ninja
 cmake --build build
 ```
 
-### CMake с Visual Studio
+### CMake с Visual Studio (без пресетов)
 ```bash
 cmake -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Debug
 ```
 
-### CMake с Clang
+### CMake с Clang (без пресетов)
 ```bash
 cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 cmake --build build
@@ -199,6 +220,9 @@ cmake --build build
 1. IDE автоматически загрузит все настройки
 2. Рекомендуемые расширения будут предложены к установке
 3. IntelliSense будет настроен для C++23
+4. CMake Tools работает через пресеты (`cmake.useCMakePresets: always`): выберите пресет командами
+   **CMake: Select Configure Preset** и **CMake: Select Build Preset** (или в строке состояния), затем **CMake: Configure** и F7 (сборка).
+   F5 запускает отладку собранного `MyGame` (путь берётся из `${command:cmake.launchTargetPath}`)
 
 ### Горячие клавиши:
 - **Ctrl/Cmd + Shift + B** - собрать проект

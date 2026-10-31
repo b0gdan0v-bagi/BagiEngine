@@ -39,10 +39,10 @@ class Config:
         "generator": "Ninja",
         "compiler": "MSVC",
         "pipelines": {
-            "full_build": ["cmake_configure", "cmake_build", "open_cursor"],
+            "full_build": ["cmake_configure", "cmake_build", "open_vscode"],
             "configure_only": ["cmake_configure"],
             "build_only": ["cmake_build"],
-            "quick_open": ["open_cursor"]
+            "quick_open": ["open_vscode"]
         },
         "last_pipeline": "full_build",
         "build_configurations": [
@@ -51,7 +51,10 @@ class Config:
         ],
         "pipeline_step_states": {}  # Checkbox states for pipeline builder
     }
-    
+
+    # Action ids that were renamed; saved configs from older versions still use them
+    LEGACY_ACTION_IDS = {"open_cursor": "open_vscode"}
+
     def __init__(self, config_path: Path):
         self.config_path = config_path
         self._data: dict[str, Any] = {}
@@ -67,7 +70,32 @@ class Config:
                 self._data = self.DEFAULT_CONFIG.copy()
         else:
             self._data = self.DEFAULT_CONFIG.copy()
-    
+
+        self._migrate_legacy_ids()
+
+    def _migrate_legacy_ids(self) -> None:
+        """Rename action/IDE ids saved by older versions. Saves only if something changed."""
+        changed = False
+
+        for steps in self._data.get("pipelines", {}).values():
+            for i, step in enumerate(steps):
+                if step in self.LEGACY_ACTION_IDS:
+                    steps[i] = self.LEGACY_ACTION_IDS[step]
+                    changed = True
+
+        states = self._data.get("pipeline_step_states", {})
+        for old_id, new_id in self.LEGACY_ACTION_IDS.items():
+            if old_id in states:
+                states[new_id] = states.pop(old_id)
+                changed = True
+
+        if self._data.get("last_ide") == "cursor":
+            self._data["last_ide"] = "vscode"
+            changed = True
+
+        if changed:
+            self.save()
+
     def save(self) -> None:
         """Save configuration to file."""
         with open(self.config_path, 'w', encoding='utf-8') as f:
@@ -84,7 +112,7 @@ class Config:
     
     @property
     def last_ide(self) -> str:
-        return self.get("last_ide", "cursor")
+        return self.get("last_ide", "vscode")
     
     @last_ide.setter
     def last_ide(self, value: str) -> None:

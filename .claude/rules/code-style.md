@@ -1,10 +1,8 @@
 ---
-description: C++ code style rules for BagiEngine
-globs:
+paths:
   - "**/*.cpp"
   - "**/*.h"
   - "**/*.hpp"
-alwaysApply: true
 ---
 
 # C++ Code Style

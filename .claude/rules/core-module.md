@@ -1,7 +1,6 @@
 ---
-description: Rules for BECore module development
-globs: src/Modules/BECore/**/*
-alwaysApply: false
+paths:
+  - "src/Modules/BECore/**/*"
 ---
 
 # BECore Module Guidelines

@@ -163,7 +163,7 @@ BECore -> Math -> Events -> TaskSystem -> SDL -> Games -> Chess -> Application(M
 
 ## 8. Важные детали (по правилам проекта)
 
-- Все идентификаторы — `PoolString` + литералы `"..."_intern` (см. [.cursorrules](.cursorrules)).
+- Все идентификаторы — `PoolString` + литералы `"..."_intern` (см. [CLAUDE.md](../../CLAUDE.md)).
 - Все коллекции — EASTL.
 - Никаких `enum class` — `CORE_ENUM`.
 - Никаких сырых `new`/`delete`. `IGame` — `RefCounted` + `IntrusivePtr` (см. [src/Modules/BECore/Scene/IComponent.h](src/Modules/BECore/Scene/IComponent.h) как образец `BE_CLASS(..., FACTORY_BASE)`).

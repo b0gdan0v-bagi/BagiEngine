@@ -11,6 +11,7 @@
 
 get_filename_component(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
+get_filename_component(PROJECT_ROOT "${PROJECT_ROOT}" DIRECTORY)
 
 set(VULKAN_LOADER_ROOT "${PROJECT_ROOT}/external/Vulkan-Loader")
 
@@ -88,7 +89,7 @@ endif()
 # =============================================================================
 
 # Locate glslc: prefer VULKAN_SDK bin directory, then fall back to system PATH.
-set(_GLSLC "")
+# Note: do not pre-set _GLSLC to "" - find_program() treats an already-set variable as "found" and skips the search.
 if(WIN32 AND VULKAN_SDK AND EXISTS "${VULKAN_SDK}/Bin/glslc.exe")
     set(_GLSLC "${VULKAN_SDK}/Bin/glslc.exe")
 elseif(UNIX AND VULKAN_SDK AND EXISTS "${VULKAN_SDK}/bin/glslc")

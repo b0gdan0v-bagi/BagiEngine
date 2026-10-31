@@ -36,7 +36,7 @@ todos:
     content: Создать comprehensive тесты для всех компонентов TaskSystem
     status: pending
   - id: create-documentation
-    content: "Создать документацию: docs/TaskSystem.md, .cursor/rules/tasksystem-module.mdc, примеры"
+    content: "Создать документацию: docs/TaskSystem.md, .claude/rules/tasksystem-module.md, примеры"
     status: pending
 ---
 
@@ -272,9 +272,9 @@ void CoreManager::OnApplicationDeinit(PassKey<Application>) {
 - Переиспользование PCH от BECore (`REUSE_FROM BECoreModule`)
 - Force Include для `BECore/pch.h`
 
-### Cursor Rules
+### Rules
 
-**Файл:** `.cursor/rules/tasksystem-module.mdc`
+**Файл:** `.claude/rules/tasksystem-module.md`
 
 Создать правила для работы с TaskSystem:
 - Паттерны использования корутин
@@ -427,6 +427,6 @@ Task<void> UpdateNPCLoop(NPC& npc) {
 
 Добавить в проект:
 - `docs/TaskSystem.md` - полное руководство пользователя
-- Обновить `.cursor/rules/tasksystem-module.mdc`
+- Обновить `.claude/rules/tasksystem-module.md`
 - Добавить примеры в `examples/TaskSystemExamples/`
 - Обновить главный README с описанием TaskSystem

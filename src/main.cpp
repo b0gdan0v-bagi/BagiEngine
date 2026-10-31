@@ -1,8 +1,5 @@
 #include <Application/Application.h>
 
-#ifdef PLATFORM_WINDOWS
-#include <windows.h>
-
 int RunApplication() {
     if (!BECore::Application::GetInstance().Initialize()) {
         return -1;
@@ -12,6 +9,9 @@ int RunApplication() {
 
     return 0;
 }
+
+#ifdef PLATFORM_WINDOWS
+#include <windows.h>
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     return RunApplication();

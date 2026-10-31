@@ -1,7 +1,6 @@
 ---
-description: Rules for TaskSystem module development
-globs: src/Modules/TaskSystem/**/*
-alwaysApply: false
+paths:
+  - "src/Modules/TaskSystem/**/*"
 ---
 
 # TaskSystem Module Guidelines

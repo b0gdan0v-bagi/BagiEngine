@@ -1,7 +1,0 @@
-﻿# Vendored dependencies
-
-src/Modules/EABase/
-src/Modules/EnTT/
-src/Modules/fmt/
-src/Modules/imgui/
-src/Modules/pugixml/
