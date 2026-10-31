@@ -39,3 +39,14 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - a scene-scoped dispatch: either the scene's components subscribe only while their scene is active (attach/detach on `SetActiveScene`), or the event carries the emitting scene and handlers ignore foreign scenes;
 - the same for `ClickableComponent` (global `SDLEvents::MouseButtonDownEvent`) and `ChangeToRandomColorDebugComponent` (global `ActionEvent`), which also react regardless of the active scene;
 - a gtest with two scenes where only the active one draws and reacts (needs a renderer double or an event counter, so it can run without a window).
+
+## Merge `task-system-wait` into `main`
+
+**Where:** branch `task-system-wait`, 7 commits on top of `main` (`3a93d7a5`, so a fast-forward is possible): `c5f08a8b`, `4555d3b4`, `a8515896`, `db8a467d`, `507431e1`, `655b2972`, `eeb320fe`. Nothing is pushed; `main` is 21 commits ahead of `origin/main`.
+
+**State:**
+
+- [x] Commit: the TaskSystem work (blocking `Wait()`, linked `CancellationToken`s, handle lifetime, derived status, `Start()`/`Cancel()` race, shutdown abandon) is committed. The only untracked file left is `.claude/plans/typed-jumping-toast.md`, which belongs to another task.
+- [ ] Merge into `main`: `git switch main && git merge --ff-only task-system-wait`, then re-run `cmake --build --preset macos-debug --target MyGame BagiEngineTests` and `ctest --preset macos-debug` (136 tests expected).
+
+**Not decided yet:** pushing `main`; what to do with `stash@{0}` ("On main: auto").
