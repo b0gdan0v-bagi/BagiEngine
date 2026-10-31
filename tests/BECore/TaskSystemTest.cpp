@@ -15,6 +15,18 @@
 
 namespace BECore::Tests {
 
+    // A handle is not awaitable: nothing would resume a coroutine suspended on it. Wait() blocks, a Task<T> is awaited directly.
+    template <typename THandle>
+    concept AwaitableHandle = requires(THandle & handle) {
+        handle.await_ready();
+    };
+
+    static_assert(!AwaitableHandle<TaskHandleBase>);
+    static_assert(!AwaitableHandle<TaskHandle<int>>);
+    static_assert(AwaitableHandle<Task<int>>);  // guards the concept itself: a Task is awaited directly
+
+    TEST(TaskSystemTest, CompileTimeChecks) {}
+
     namespace {
 
         // Helper: simple coroutine returning void

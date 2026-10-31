@@ -54,6 +54,7 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 - Ignore cancellation tokens.
 - Hold locks across `co_await`.
 - Call `Task::GetResult()` on a task suspended on the pool: it resumes the coroutine in a loop and races with the pool. Start it with `TaskManager::Run(...)` and wait on the returned handle (`.claude/rules/tests-module.md`).
+- `co_await` a `TaskHandle` (it is not awaitable; nothing would resume the waiter). Block with `Wait()` off the main thread, or `co_await` the `Task<T>` itself when one coroutine calls another.
 - Count on a task surviving `TaskManager::Shutdown()`: the scheduler drops its queues, so a task parked on `Delay` or `SwitchTo*` is never resumed, and its self-reference (plus the coroutine frame) is leaked rather than freed. `Wait()` on such a handle blocks forever.
 
 ## Thread Safety

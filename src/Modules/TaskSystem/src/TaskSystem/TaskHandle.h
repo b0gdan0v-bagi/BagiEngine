@@ -48,28 +48,12 @@ namespace BECore {
             return _error.load(std::memory_order_acquire);
         }
 
-        // Awaitable interface для co_await TaskHandleBase
-        bool await_ready() const noexcept {
-            return IsDone();
-        }
-        void await_suspend(std::coroutine_handle<> continuation) noexcept {
-            _continuation = continuation;
-        }
-        void await_resume() noexcept {}
-
     protected:
         std::atomic<TaskStatus> _status{TaskStatus::Pending};
         std::atomic<TaskError> _error{TaskError::None};
-        std::coroutine_handle<> _continuation;
 
         void SetStatus(TaskStatus status) {
             _status.store(status, std::memory_order_release);
-        }
-
-        void ResumeContinuation() {
-            if (_continuation) {
-                _continuation.resume();
-            }
         }
     };
 
@@ -196,8 +180,6 @@ namespace BECore {
 
         /**
          * Отмечает задачу как завершенную с ошибкой.
-         * Примечание: ResumeContinuation не вызывается здесь,
-         * так как FinalAwaiter делает симметричный transfer к continuation.
          */
         void MarkFailed(TaskError error = TaskError::Exception) {
             _error.store(error, std::memory_order_release);
