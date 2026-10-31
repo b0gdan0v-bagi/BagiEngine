@@ -13,10 +13,12 @@ Compile-time reflection with a Python code generator (`meta_generator`). `BE_CLA
 
 ## Codegen (meta_generator)
 
-- **Script:** `CI/meta_generator/meta_generator.py`; run automatically at configure time by `add_reflection_target()` in the root `CmakeLists.txt` (so re-run `cmake --preset ...` after changing markers).
-- **Target config:** `CI/meta_generator/reflection_targets.json`, per target `source_dirs`, `scan_dirs`, `include_dirs`. Only `BECoreModule` has an entry, and its `scan_dirs` also cover SDL, Vulkan, Games, Chess, Match3, `src/Widgets` and `tests/BECore`. **A new directory with reflected classes must be added there.**
-- **Manual run:** `--target BECoreModule --project-root . --output-dir build/Generated --cache-dir build` (optionally `--settings meta_generator_settings.json`). The cache is `metadata_cache.json` in `cache-dir`.
-- Output goes to `build/Generated/`. Never edit generated files.
+- **Script:** `CI/meta_generator/meta_generator.py`; run automatically at configure time (so re-run `cmake --preset ...` after changing markers) by `add_reflection_target()` for the engine and `be_add_game_reflection()` for each game, both in `cmake/BagiEngine.cmake`.
+- **Engine target config:** `CI/meta_generator/reflection_targets.json`, per target `source_dirs`, `scan_dirs`, `include_dirs`. Only `BECoreModule` has an entry, and its `scan_dirs` also cover SDL, Vulkan, Games, `src/Widgets` and `tests/BECore`. **A new directory with reflected engine classes must be added there.** The file lists engine directories only: it never names a game.
+- **Game targets:** `be_add_game_reflection(<Target>)` passes the game's `src/` as `--source-dir`/`--include-dir` and `--reference-target BECoreModule`. Reference headers (the engine's) are parsed for factory bases, parents and `CORE_ENUM`s, but nothing is generated for them. A game has its own cache (`build/<preset>/.meta_cache/<Target>/`) and no entry in `reflection_targets.json`; its `#include` paths are computed from the game's `src/`, so `games/Chess/src/Chess/ChessGame.h` is included as `<Chess/ChessGame.h>`.
+- **Manifest:** every run writes `--manifest` (`.meta_cache/<Target>/generated_files.txt`): the `.gen.hpp` files that run owns, including the ones that were up to date. CMake adds exactly those to the target; the engine and the games share `Generated/`, so it is never globbed.
+- **Manual run:** `--target BECoreModule --project-root . --output-dir build/Generated --cache-dir build` (engine), or `--source-dir games/Chess/src --include-dir games/Chess/src --reference-target BECoreModule --project-root . --output-dir ... --cache-dir ...` (game). The cache is `metadata_cache.json` in `cache-dir`.
+- Output goes to `build/<preset>/Generated/`. Never edit generated files.
 
 ## Architecture
 
@@ -132,6 +134,8 @@ if (deserializer.LoadFromFile("save.bin") && deserializer.BeginObject("Player"))
 `BE_CLASS(Name, FACTORY_BASE)` on a base class generates `Generated/EnumXxx.gen.hpp` (type enum named after the base, `FactoryTraits<Base>` with the XML element name) and an `AbstractFactory<Base>` that derived classes register with from their own `.gen.hpp`. Include the derived class's `.gen.hpp` in its `.cpp`, and keep the library linked with `WHOLE_ARCHIVE` so the registration is not dropped.
 
 Current bases: `ILogSink`, `IWidget`, `IAssertHandler`, `ITest`, `IRenderer`, `ITexture`, `IResource`, `IResourceLoader`, `IApplicationFabric`, `IComponent`, `SceneNode`, `Scene`, `IGame` (`grep -rn FACTORY_BASE src`).
+
+A base class that has no derived class in the scanned directories registers itself in the factory, so it must be instantiable. The parser marks a class as abstract when its body declares a pure virtual method (`= 0;`) and the generator then skips that self-registration. This is what lets `IGame` live in the engine without any game: the engine's own run sees no `IGame` descendant, the game's run sees `ChessGame` and registers it in `AbstractFactory<IGame>`.
 
 ## Generated Methods
 

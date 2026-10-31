@@ -24,7 +24,7 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 </scenes></SceneManager>
 ```
 
-`type` is the component class name; field names lose the leading underscore. Scenes in use: `MainScene`, `ChessScene`, `Match3Scene`.
+`type` is the component class name; field names lose the leading underscore. Every `SceneConfig.xml` replaces the one below it in the content layers (see `FileSystem/CLAUDE.md`): the engine's own file holds a debug `MainScene`, and a game's file holds only that game's scenes, so a game executable never loads `MainScene`.
 
 ## Component lifecycle
 

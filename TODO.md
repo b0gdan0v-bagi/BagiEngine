@@ -29,10 +29,10 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 1. `SceneUpdateEvent` and `SceneDrawEvent` are `EventBase` events with one static dispatcher per type, so they are not tied to a scene.
 2. Every scene is deserialized and initialized when `SceneConfig` loads (`Scene::Initialize()` is called by the reflection loader), so `OnAttached()` runs for the components of **all** scenes and each one subscribes to the global events.
-3. `SceneManager::SetActiveScene()` only changes which scene emits the events. When `ChessScene` is active, the quads and sprites that belong to `MainScene` (`config/SceneConfig.xml`: 3 `QuadRendererComponent` and 12 `SpriteRendererComponent` nodes there) should still receive `SceneDrawEvent` and be drawn on top of the chess board.
+3. `SceneManager::SetActiveScene()` only changes which scene emits the events. When a scene is active, the quads and sprites of every other loaded scene should still receive `SceneDrawEvent` and be drawn on top of it. This used to show up as `MainScene` (3 `QuadRendererComponent` and 12 `SpriteRendererComponent` nodes) under `ChessScene`; since the games were split out of the engine, a game's `SceneConfig.xml` replaces the engine's and holds only the game's own scenes, so a game executable no longer loads `MainScene` and the symptom is hidden, not fixed.
 4. Game components avoid this on their own: `ChessBoardComponent` / `ChessPieceComponent` do nothing unless `GameManager::GetActive()` is `ChessGame`. The built-in renderer components have no such check.
 
-**Check first:** start the game with Chess as the default game (`config/GamesConfig.xml`) and see whether `MainScene` content is visible in the viewport. If it is not, find what filters it and update this entry and `BECore/Scene/CLAUDE.md`.
+**Check first:** reproduce it with a game that has two scenes (or a gtest with two scenes), and update this entry and `BECore/Scene/CLAUDE.md` with what you find.
 
 **A fix has to cover:**
 
@@ -47,6 +47,6 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 **State:**
 
 - [x] Commit: the TaskSystem work (blocking `Wait()`, linked `CancellationToken`s, handle lifetime, derived status, `Start()`/`Cancel()` race, shutdown abandon) is committed. The only untracked file left is `.claude/plans/typed-jumping-toast.md`, which belongs to another task.
-- [ ] Merge into `main`: `git switch main && git merge --ff-only task-system-wait`, then re-run `cmake --build --preset macos-debug --target MyGame BagiEngineTests` and `ctest --preset macos-debug` (136 tests expected).
+- [ ] Merge into `main`: `git switch main && git merge --ff-only task-system-wait`, then re-run `cmake --build --preset macos-debug --target BagiChess BagiMatch3 BagiEngineTests ChessTests Match3Tests` and `ctest --preset macos-debug` (the number of tests must not drop; 145 on the `engine-game-isolation` branch).
 
 **Not decided yet:** pushing `main`; what to do with `stash@{0}` ("On main: auto").

@@ -5,7 +5,7 @@ description: Builds BagiEngine through CMakePresets.json (the same presets VS Co
 
 # Build (BagiEngine)
 
-Builds the `MyGame` target (or the `BagiEngineTests` gtest executable, see `tests`) with `CMakePresets.json` from the project root. Each preset builds into its own `build/<preset>/` directory.
+Builds the game executables `BagiChess` and `BagiMatch3` (or the gtest executables `BagiEngineTests`, `ChessTests`, `Match3Tests`, see `tests`) with `CMakePresets.json` from the project root. Each preset builds into its own `build/<preset>/` directory.
 
 ## Arguments (all optional)
 
@@ -14,7 +14,7 @@ Builds the `MyGame` target (or the `BagiEngineTests` gtest executable, see `test
 | `debug` / `release` | Build type. Default: `debug`. |
 | `clean` | Add `--clean-first` to the build. |
 | `configure` | Force a configure step. |
-| `tests` | Build the `BagiEngineTests` target (`--target BagiEngineTests`, which replaces the preset's `MyGame`) instead of the game. Run the tests afterwards only when asked: `ctest --preset <p>`. |
+| `tests` | Build the gtest targets (`--target BagiEngineTests ChessTests Match3Tests`, which replaces the preset's game targets) instead of the games. Run the tests afterwards only when asked: `ctest --preset <p>`. |
 | `<preset name>` | Use this preset as-is; skip auto-selection. |
 
 ## Presets
@@ -40,9 +40,9 @@ Run everything from the project root.
 
 2. **Decide whether to configure** (`cmake --preset <p>`). Configure if any of these holds, or when unsure:
    - `build/<p>/CMakeCache.txt` does not exist, or the `configure` argument was given.
-   - `git status --porcelain -- src tests` shows added, deleted, renamed or untracked (`??`) files. Sources are collected with `GLOB_RECURSE` and no `CONFIGURE_DEPENDS`.
+   - `git status --porcelain -- src tests games` shows added, deleted, renamed or untracked (`??`) files. Sources are collected with `GLOB_RECURSE` and no `CONFIGURE_DEPENDS`.
    - `CMakePresets.json`, `CMakeUserPresets.json` or any `*.cmake` changed. Edits to `CMakeLists.txt` are picked up by Ninja itself.
-   - A changed or new file under `src/` or `tests/` contains `BE_CLASS`, `BE_EVENT` or `BE_REFLECT_FIELD` (`git diff --name-only HEAD -- src tests`, plus untracked files, then `grep -l`). **Reflection code is generated only at configure time** (`add_reflection_target` -> `execute_process`), into `build/<p>/Generated/`. A plain build leaves stale `*.gen.hpp`.
+   - A changed or new file under `src/`, `tests/` or `games/` contains `BE_CLASS`, `BE_EVENT` or `BE_REFLECT_FIELD` (`git diff --name-only HEAD -- src tests games`, plus untracked files, then `grep -l`). **Reflection code is generated only at configure time** (`add_reflection_target` / `be_add_game_reflection` -> `execute_process`), into `build/<p>/Generated/`. A plain build leaves stale `*.gen.hpp`.
 
 3. **Build:** `cmake --build --preset <p>` (add `--clean-first` for `clean`; `--verbose` to see compiler commands). Ninja already uses all cores.
    - A first build in a new `build/<p>/` is full (SDL, SDL_image, ImGui, ...) and takes minutes. Run it in the background with output redirected to a log file in the scratchpad and wait for the completion notification. Do not poll, and do not set a timeout that would cut the build off.
@@ -57,13 +57,13 @@ Run everything from the project root.
 
 ## Output location and gotchas
 
-- Executable: `build/{Clang|MSVC}{macOS|Windows}/MyGame[.exe]` (`CmakeLists.txt` sets the output directory from compiler + platform, **not** from the preset). Debug and Release Ninja presets therefore **overwrite each other's executable**; the last build wins. Visual Studio generators add a `Debug/` or `Release/` subfolder.
+- Executables: `build/{Clang|MSVC}{macOS|Windows}/BagiChess[.exe]`, `BagiMatch3[.exe]` and the test executables (`cmake/BagiEngine.cmake` sets the output directory from compiler + platform, **not** from the preset). Debug and Release Ninja presets therefore **overwrite each other's executable**; the last build wins. Visual Studio generators add a `Debug/` or `Release/` subfolder.
 - `compile_commands.json` lives in `build/<p>/`. Pass it to `tidy-fix` explicitly when several presets are configured: `--build-dir build/<p>`.
 - Do not use `cmake -B build ...` (the old flat `build/` directory) and do not edit anything under `build/`.
 - Release presets turn `ENGINE_ENABLE_ASSERTS` and `ENGINE_ENABLE_EXPECTS` off; Debug keeps them on. The Visual Studio presets are multi-config and leave both on.
 - Exceptions are disabled (`ENGINE_NO_EXCEPTIONS`). C++23 is required.
-- The root file is spelled `CmakeLists.txt` (lowercase `m`). It works on macOS and Windows only because their file systems ignore case.
-- Do not run the game after a build unless asked. It opens a window and runs the runtime `ITest`s at startup (`CoreManager::OnApplicationPreInit`). To launch it, use the `run` skill. `BagiEngineTests` opens no window, but still run it only when asked.
+- The engine setup is `cmake/BagiEngine.cmake` (included by the root `CMakeLists.txt` and by the games' own repositories); a change there needs a configure, like any `*.cmake`.
+- Do not run the game after a build unless asked. It opens a window and runs the runtime `ITest`s at startup (`CoreManager::OnApplicationPreInit`). To launch it, use the `run` skill. The gtest executables open no window, but still run them only when asked.
 - After building C++ changes, remind the user about the `clang-format` and `strip-pch-includes` skills (CLAUDE.md). Do not run them unasked.
 
 ## Local overrides

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Infrastructure for several self-contained games in one executable. `Games` provides `IGame` and `GameManager`; each concrete game (`Chess`, `Match3`) is its own module that derives from `IGame` and registers itself in `AbstractFactory<IGame>` through `BE_CLASS` reflection. There is no hand-written registrar.
+The contract between the engine and a game. `Games` provides `IGame` and `GameManager`; each concrete game (`Chess`, `Match3`) lives outside the engine in `games/<Name>/`, derives from `IGame` and registers itself in `AbstractFactory<IGame>` through `BE_CLASS` reflection. There is no hand-written registrar. One executable links one game; `GameManager` still handles several registered games (switching, `GetAll()`), but no widget exposes it.
 
 ## IGame
 
@@ -10,26 +10,40 @@ Infrastructure for several self-contained games in one executable. `Games` provi
 
 | Member | Meaning |
 |--------|---------|
-| `GetName()` | Unique id, also the display label and the key in `config/GamesConfig.xml` |
-| `GetSceneName()` | Name of the `Scene` in `config/SceneConfig.xml` that the game wants active |
+| `GetName()` | Unique id, also the display label and the key in `GamesConfig.xml` |
+| `GetSceneName()` | Name of the `Scene` in the game's `config/SceneConfig.xml` that the game wants active |
 | `Start()` / `Stop()` / `Reset()` | Game became active / is being replaced / restart the session without changing the scene |
 
 ## GameManager
 
 `Singleton<GameManager>`, driven by `Application`: `Initialize()` runs in `Application::Initialize()`, `Shutdown()` on exit.
 
-- `Initialize()` creates one instance of every registered `IGame`, reads `config/GamesConfig.xml` (`<defaultGame name="Chess"/>`) and activates the default, or the first registered game when none is configured.
+- `Initialize()` creates one instance of every registered `IGame`, reads an optional `GamesConfig.xml` (`<defaultGame name="Chess"/>`) and activates the default, or the first registered game when none is configured. A game executable has exactly one registered game, so no `GamesConfig.xml` is needed.
 - `SwitchTo(name)`: `Stop()` on the old game → `SceneManager::SetActiveScene(GetSceneName())` → `Start()` on the new one. Unknown or already-active names are a no-op.
-- `ResetActive()` calls `IGame::Reset()`; `GetActive()` / `GetAll()` for lookups. `GameSelectorWidget` (`src/Widgets/GameSelector/`) is the UI over these calls.
+- `ResetActive()` calls `IGame::Reset()`; `GetActive()` / `GetAll()` for lookups.
 
 ## Adding a game
 
-1. New module `src/Modules/<Name>/` with a `CMakeLists.txt` modeled on `Chess/CMakeLists.txt`: `STATIC` library, `REUSE_FROM BECoreModule` plus the `BECore/pch.h` force-include, `REFLECTION_GENERATED=1`, links `BECoreModule`, `EventsModule`, `GamesModule`, `SDLModule`.
-2. `add_subdirectory(src/Modules/<Name>)` after `Games` in the root `CmakeLists.txt`, and link it into `MyGame` with `WHOLE_ARCHIVE` (otherwise the linker drops the registration). Add it to `tests/CMakeLists.txt` if it has tests.
-3. Put the module's source directories into `scan_dirs` of `CI/meta_generator/reflection_targets.json` (and the include dir into `include_dirs`), then re-run `cmake --preset ...`.
-4. Derive `IGame` with `BE_CLASS(<Name>Game)`, include `<Generated/<Name>Game.gen.hpp>` in the `.cpp`.
-5. Add a `Scene` with the name returned by `GetSceneName()` to `config/SceneConfig.xml`.
-6. Keep the rules in a plain-C++ `Game/` folder, scene glue in `Components/`, tests in `tests/<Name>/` (see `Chess/CLAUDE.md`).
+A game is a directory `games/<Name>/` that works both inside this repository and as the root of its own repository (the engine then sits next to it as the git submodule `engine/`). Model it on `games/Chess/`:
+
+```
+games/<Name>/
+├── CMakeLists.txt   # be_add_module + be_add_game_reflection + be_add_game_executable + be_add_game_tests
+├── CLAUDE.md
+├── src/<Name>/      # Game/ (plain C++ rules), Components/ (scene glue), <Name>Game.{h,cpp}
+├── config/          # SceneConfig.xml with the game's scene(s), TextureLibrary.xml, ...
+├── assets/
+└── tests/           # gtest sources, built as <Name>Tests
+```
+
+1. `CMakeLists.txt`: start with the standalone block (`if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR) ... include(engine/cmake/BagiEngine.cmake)`), then `be_add_module(<Name> LINK BECoreModule EventsModule GamesModule SDLModule)`, `be_add_game_reflection(<Name>Module)`, `be_add_game_executable(Bagi<Name> GAME_ROOT ${CMAKE_CURRENT_SOURCE_DIR} MODULES <Name>Module)` and, under `ENGINE_BUILD_TESTS`, `be_add_game_tests(<Name>Tests SOURCES ... LINK <Name>Module)`. The functions are documented in `cmake/BagiEngine.cmake`.
+2. Add `add_subdirectory(<Name>)` to `games/CMakeLists.txt`.
+3. Derive `IGame` with `BE_CLASS(<Name>Game)`, include `<Generated/<Name>Game.gen.hpp>` in the `.cpp`. The game's reflection needs no entry in `reflection_targets.json` (that file lists engine directories only): `be_add_game_reflection` scans the game's own `src/` and treats the engine's reflected headers as reference.
+4. Put a `Scene` with the name returned by `GetSceneName()` into `games/<Name>/config/SceneConfig.xml`. It replaces the engine's `SceneConfig.xml`, so it must contain every scene the game uses.
+5. Re-run `cmake --preset ...`, add `Bagi<Name>` to the `targets` of the build presets in `CMakePresets.json`.
+6. Keep the rules in a plain-C++ `Game/` folder, scene glue in `Components/`, tests in `tests/` (see `games/Chess/CLAUDE.md`).
+
+The engine must stay free of game names: no engine code, CMake or config outside `games/` refers to a concrete game.
 
 ## Gotchas
 

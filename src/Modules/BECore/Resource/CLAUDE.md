@@ -20,7 +20,7 @@ IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
 
 - `ResourceState` (`CORE_ENUM`): `Unloaded` → `Loading` → `Loaded` or `Failed`.
 - `ResourceHandle<T>` wraps `IntrusivePtr<T>`: implicit `bool` for validity, `->` / `*`, last-access time (kept for a future LRU, not used yet).
-- `TextureLibrary` (`CoreManager::GetTextureLibrary()`) maps sprite names to texture path + source rect. It is loaded from `config/TextureLibrary.xml` after `ConfigManager`, and `SpriteRendererComponent` and the texture editor use it.
+- `TextureLibrary` (`CoreManager::GetTextureLibrary()`) maps sprite names to texture path + source rect. It is loaded from `TextureLibrary.xml` (the active game's `config/`, the engine ships none) after `ConfigManager`; a missing file leaves the library empty, and `SpriteRendererComponent` and the texture editor use it.
 
 ## ResourceManager API
 

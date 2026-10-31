@@ -184,7 +184,7 @@ BagiEngine/
 ```bash
 cmake --list-presets=build            # пресеты, доступные на этой ОС
 cmake --preset macos-debug            # configure (заодно генерирует reflection-код)
-cmake --build --preset macos-debug    # сборка MyGame
+cmake --build --preset macos-debug    # сборка игр (BagiChess, BagiMatch3)
 ```
 
 | ОС | Пресеты |
@@ -193,7 +193,7 @@ cmake --build --preset macos-debug    # сборка MyGame
 | Windows | `windows-msvc-{debug,release}`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
 
 Настройки конкретной машины (например `VULKAN_SDK`, ccache) кладите в `CMakeUserPresets.json` — он в `.gitignore`.
-Исполняемый файл всегда лежит в `build/{Compiler}{Platform}/MyGame`, поэтому Debug и Release (Ninja) затирают друг друга.
+Исполняемые файлы всегда лежат в `build/{Compiler}{Platform}/` (`BagiChess`, `BagiMatch3`), поэтому Debug и Release (Ninja) затирают друг друга.
 Reflection-код генерируется на этапе configure: после правок `BE_CLASS` / `BE_REFLECT_FIELD` повторите `cmake --preset ...`.
 
 ### CMake с Ninja (без пресетов, старый плоский `build/`)
@@ -222,7 +222,7 @@ cmake --build build
 3. IntelliSense будет настроен для C++23
 4. CMake Tools работает через пресеты (`cmake.useCMakePresets: always`): выберите пресет командами
    **CMake: Select Configure Preset** и **CMake: Select Build Preset** (или в строке состояния), затем **CMake: Configure** и F7 (сборка).
-   F5 запускает отладку собранного `MyGame` (путь берётся из `${command:cmake.launchTargetPath}`)
+   F5 запускает отладку выбранной игры (цель выбирается командой **CMake: Set Launch/Debug Target**, путь берётся из `${command:cmake.launchTargetPath}`)
 
 ### Горячие клавиши:
 - **Ctrl/Cmd + Shift + B** - собрать проект
