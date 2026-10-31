@@ -4,13 +4,12 @@
 #include <BECore/Scene/SceneNode.h>
 #include <Events/InputEvents.h>
 #include <Generated/ChangeToRandomColorDebugComponent.gen.hpp>
-
 #include <cstdlib>
 
 namespace BECore {
 
     void ChangeToRandomColorDebugComponent::OnAttached() {
-        Subscribe<InputEvents::ActionEvent, &ChangeToRandomColorDebugComponent::OnAction>(this);
+        SubscribeInScene<InputEvents::ActionEvent, &ChangeToRandomColorDebugComponent::OnAction>(this);
     }
 
     void ChangeToRandomColorDebugComponent::OnAction(const InputEvents::ActionEvent& e) {
@@ -23,12 +22,7 @@ namespace BECore {
             return;
         }
 
-        quad->_color = Color{
-            static_cast<uint8_t>(rand() % 256),
-            static_cast<uint8_t>(rand() % 256),
-            static_cast<uint8_t>(rand() % 256),
-            255
-        };
+        quad->_color = Color{static_cast<uint8_t>(rand() % 256), static_cast<uint8_t>(rand() % 256), static_cast<uint8_t>(rand() % 256), 255};
     }
 
 }  // namespace BECore

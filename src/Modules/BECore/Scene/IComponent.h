@@ -27,11 +27,41 @@ namespace BECore {
         Scene& GetScene() const;
         SceneNode& GetNode() const;
 
+        /// True while this component's scene is the active one (see Scene::IsActive()). False before the component is attached.
+        bool IsSceneActive() const;
+
     protected:
+        /**
+         * @brief Subscribe to a global event, but run @p Handler only while this component's scene is active.
+         *
+         * Scene events (SceneUpdateEvent, SceneDrawEvent) and input events (MouseButtonDownEvent, ActionEvent) are global:
+         * every loaded scene's components receive them, not just the active scene's. Use this instead of Subscribe for
+         * any handler that draws, reads input or changes game state. Plain Subscribe is for handlers that must run
+         * whichever scene is active.
+         *
+         * The connection itself is permanent, only the call is filtered, so switching the active scene never connects
+         * or disconnects anything (doing that from inside a handler is undefined behavior).
+         *
+         * @example
+         * SubscribeInScene<SceneEvents::SceneDrawEvent, &MyComponent::OnDraw>(this);
+         */
+        template <typename Event, auto Handler, typename T>
+        void SubscribeInScene(T* instance) {
+            Subscribe<Event, &InvokeInActiveScene<Event, Handler, T>>(instance);
+        }
+
         SceneNode* _node = nullptr;
 
     private:
         friend class SceneNode;
+
+        template <typename Event, auto Handler, typename T>
+        static void InvokeInActiveScene(T* self, const Event& event) {
+            if (self->IsSceneActive()) {
+                (self->*Handler)(event);
+            }
+        }
+
         Scene* _scene = nullptr;
     };
 

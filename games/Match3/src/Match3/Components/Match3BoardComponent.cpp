@@ -50,8 +50,8 @@ namespace BECore::Match3 {
     void Match3BoardComponent::OnAttached() {
         s_active = this;
         _model.Reset(_seed);
-        Subscribe<SceneEvents::SceneDrawEvent, &Match3BoardComponent::OnDraw>(this);
-        Subscribe<SDLEvents::MouseButtonDownEvent, &Match3BoardComponent::OnMouseDown>(this);
+        SubscribeInScene<SceneEvents::SceneDrawEvent, &Match3BoardComponent::OnDraw>(this);
+        SubscribeInScene<SDLEvents::MouseButtonDownEvent, &Match3BoardComponent::OnMouseDown>(this);
     }
 
     void Match3BoardComponent::OnDraw(const SceneEvents::SceneDrawEvent&) {

@@ -5,7 +5,7 @@
 namespace BECore {
 
     void SceneManager::Initialize() {
-        _activeScene = _scenes.empty() ? nullptr : _scenes[0].Get();
+        Activate(_scenes.empty() ? nullptr : _scenes[0].Get());
     }
 
     void SceneManager::UpdateAll() const {
@@ -36,7 +36,17 @@ namespace BECore {
         if (_activeScene == scene) {
             return;
         }
+        Activate(scene);
+    }
+
+    void SceneManager::Activate(Scene* scene) {
+        if (_activeScene) {
+            _activeScene->SetActive(false, {});
+        }
         _activeScene = scene;
+        if (_activeScene) {
+            _activeScene->SetActive(true, {});
+        }
     }
 
     Scene* SceneManager::GetSceneByName(PoolString name) const {

@@ -13,7 +13,7 @@ namespace BECore {
         if (!_actionName.Empty()) {
             ActionsLibrary::GetInstance().Add(_actionName);
         }
-        Subscribe<SDLEvents::MouseButtonDownEvent, &ClickableComponent::OnMouseButtonDown>(this);
+        SubscribeInScene<SDLEvents::MouseButtonDownEvent, &ClickableComponent::OnMouseButtonDown>(this);
     }
 
     void ClickableComponent::OnMouseButtonDown(const SDLEvents::MouseButtonDownEvent& e) {
@@ -28,8 +28,7 @@ namespace BECore {
 
         const float x = e.button.x;
         const float y = e.button.y;
-        if (x >= transform->_x && x <= transform->_x + transform->_width &&
-            y >= transform->_y && y <= transform->_y + transform->_height) {
+        if (x >= transform->_x && x <= transform->_x + transform->_width && y >= transform->_y && y <= transform->_y + transform->_height) {
             InputEvents::ActionEvent::Emit(_actionName);
         }
     }
