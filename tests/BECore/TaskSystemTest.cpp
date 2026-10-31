@@ -3,6 +3,7 @@
 #include <Common/Printers.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/CancellationToken.h>
+#include <TaskSystem/LiveTasks.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskGroup.h>
 #include <TaskSystem/TaskHandle.h>
@@ -126,6 +127,7 @@ namespace BECore::Tests {
         /// State shared between a test and a coroutine; the test owns it and outlives every task that uses it.
         struct LifetimeProbe {
             std::atomic<bool> gate{false};
+            std::atomic<bool> parked{false};
             std::atomic<bool> finished{false};
             std::atomic<bool> frameDestroyed{false};
             std::atomic<bool> destroyedBeforeFinish{false};
@@ -161,6 +163,16 @@ namespace BECore::Tests {
             while (!probe.gate.load(std::memory_order_acquire)) {
                 std::this_thread::yield();
             }
+            probe.finished.store(true, std::memory_order_release);
+            co_return;
+        }
+
+        /// Parks on a delay that never expires within a test run, standing in for a task that Shutdown strands.
+        /// The delayed job still holds the (now dangling) coroutine_handle until the engine environment shuts down,
+        /// where it is dropped unrun; nothing in the test process pumps TaskManager::Update.
+        Task<void> ParkedTask([[maybe_unused]] FrameGuard guard, LifetimeProbe& probe) {
+            probe.parked.store(true, std::memory_order_release);
+            co_await Delay(std::chrono::hours(1));
             probe.finished.store(true, std::memory_order_release);
             co_return;
         }
@@ -591,6 +603,103 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(probe.frameDestroyed.load()) << "A task that never started must not outlive its last handle";
         EXPECT_TRUE(probe.destroyedBeforeFinish.load());
+    }
+
+    TEST_F(TaskManagerLifetimeTest, AbandonCancelsParkedTaskAndWakesWaiter) {
+        LifetimeProbe probe;
+        auto handle = CoreManager::GetTaskManager().Run(ParkedTask(FrameGuard(probe), probe));
+        ASSERT_TRUE(WaitUntil([&probe]() { return probe.parked.load(); })) << "The task never reached its delay";
+
+        AsyncWaiter waiter(handle);
+        std::this_thread::sleep_for(kLetWaiterBlock);
+        ASSERT_FALSE(waiter.HasReturned()) << "Wait() returned for a task that is still parked";
+
+        Detail::LiveTasks::GetInstance().AbandonAll();
+
+        ASSERT_TRUE(WaitUntil([&waiter]() { return waiter.HasReturned(); })) << "Wait() on an abandoned task never returned";
+        EXPECT_TRUE(handle->IsCancelled());
+        EXPECT_TRUE(handle->GetStatus() == TaskStatus::Cancelled);
+        auto result = handle->GetResult();
+        ASSERT_FALSE(result.has_value());
+        EXPECT_TRUE(result.error() == TaskError::Cancelled);
+        EXPECT_FALSE(probe.finished.load());
+    }
+
+    TEST_F(TaskManagerLifetimeTest, AbandonFreesParkedTaskWhoseHandleWasDropped) {
+        LifetimeProbe probe;
+        CoreManager::GetTaskManager().Run(ParkedTask(FrameGuard(probe), probe));  // fire and forget
+        ASSERT_TRUE(WaitUntil([&probe]() { return probe.parked.load(); })) << "The task never reached its delay";
+        EXPECT_FALSE(probe.frameDestroyed.load()) << "The frame must live while the task is parked";
+
+        Detail::LiveTasks::GetInstance().AbandonAll();
+
+        EXPECT_TRUE(probe.frameDestroyed.load()) << "The self-reference of a stranded task leaked its frame";
+        EXPECT_TRUE(probe.destroyedBeforeFinish.load());
+    }
+
+    TEST_F(TaskManagerLifetimeTest, AbandonKeepsFrameWhileCallerHoldsTheHandle) {
+        LifetimeProbe probe;
+        auto handle = CoreManager::GetTaskManager().Run(ParkedTask(FrameGuard(probe), probe));
+        ASSERT_TRUE(WaitUntil([&probe]() { return probe.parked.load(); })) << "The task never reached its delay";
+
+        Detail::LiveTasks::GetInstance().AbandonAll();
+        EXPECT_FALSE(probe.frameDestroyed.load()) << "The frame is owned by the caller's handle and must outlive Abandon";
+
+        handle.Reset();
+        EXPECT_TRUE(probe.frameDestroyed.load()) << "The frame was not released with the last handle";
+    }
+
+    TEST_F(TaskManagerLifetimeTest, AbandonCancelsTaskThatWasNeverStarted) {
+        std::atomic<bool> ran{false};
+        auto handle = MakeIntrusive<TaskHandle<void>>(FlagTask(ran));  // Pending: its Start() job was lost with a queue
+        AsyncWaiter waiter(handle);
+        std::this_thread::sleep_for(kLetWaiterBlock);
+        ASSERT_FALSE(waiter.HasReturned());
+
+        Detail::LiveTasks::GetInstance().AbandonAll();
+
+        ASSERT_TRUE(WaitUntil([&waiter]() { return waiter.HasReturned(); })) << "Wait() on a task that can never start never returned";
+        EXPECT_TRUE(handle->GetStatus() == TaskStatus::Cancelled);
+
+        handle->Start();  // a late Start() must not revive it
+        EXPECT_FALSE(ran.load());
+    }
+
+    TEST_F(TaskManagerLifetimeTest, AbandonLeavesFinishedTaskAlone) {
+        auto handle = CoreManager::GetTaskManager().Run(SimpleIntTask(21));
+        handle->Wait();
+
+        Detail::LiveTasks::GetInstance().AbandonAll();
+
+        EXPECT_TRUE(handle->GetStatus() == TaskStatus::Completed);
+        EXPECT_FALSE(handle->IsCancelled());
+        auto result = handle->GetResult();
+        ASSERT_TRUE(result.has_value()) << "A finished task lost its result to Abandon";
+        EXPECT_EQ(*result, 42);
+    }
+
+    TEST_F(TaskManagerLifetimeTest, HandlesComingAndGoingWhileAbandonAllRuns) {
+        // Registration and AbandonAll share one lock: a handle that is being destroyed must never be seen half gone.
+        constexpr int kThreads = 4;
+        constexpr int kHandlesPerThread = 5000;
+        std::atomic<int> running{kThreads};
+
+        eastl::vector<std::thread> threads;
+        for (int i = 0; i < kThreads; ++i) {
+            threads.emplace_back([&running] {
+                for (int n = 0; n < kHandlesPerThread; ++n) {
+                    auto handle = MakeIntrusive<TaskHandle<void>>(SimpleVoidTask());  // never started: stays Pending
+                }
+                running.fetch_sub(1);
+            });
+        }
+        while (running.load() > 0) {
+            Detail::LiveTasks::GetInstance().AbandonAll();
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+        SUCCEED();
     }
 
     TEST(TaskSystemTest, TaskStatistics) {

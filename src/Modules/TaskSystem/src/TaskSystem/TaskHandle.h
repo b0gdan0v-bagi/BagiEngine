@@ -1,5 +1,6 @@
 #pragma once
 
+#include <TaskSystem/LiveTasks.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskPriority.h>
 
@@ -49,6 +50,14 @@ namespace BECore {
         }
 
     protected:
+        friend class Detail::LiveTasks;
+
+        /**
+         * The task is never going to run again (TaskManager::Shutdown): cancels it so waiters return, and hands back
+         * the reference it holds on itself, if any. Only LiveTasks::AbandonAll calls it.
+         */
+        [[nodiscard]] virtual IntrusivePtr<RefCountedAtomic> Abandon() = 0;
+
         std::atomic<TaskStatus> _status{TaskStatus::Pending};
         std::atomic<TaskError> _error{TaskError::None};
 
@@ -188,11 +197,19 @@ namespace BECore {
             SetStatus(TaskStatus::Failed);
         }
 
+    protected:
+        IntrusivePtr<RefCountedAtomic> Abandon() override {
+            Cancel();  // a task that has already finished keeps its result
+            return _completion.ReleaseKeepAlive();
+        }
+
     private:
         // Declared before _task: the coroutine frame is destroyed first, the event it signals last.
         Detail::CompletionEvent _completion;
         Task<T> _task;
         std::atomic<bool> _cancelled{false};
+        // Last on purpose: destroyed first, so the handle is out of LiveTasks before any member above goes away.
+        Detail::LiveTaskRegistration _registration{*this};
     };
 
 }  // namespace BECore

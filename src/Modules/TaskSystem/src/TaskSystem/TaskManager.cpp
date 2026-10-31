@@ -51,8 +51,13 @@ namespace BECore {
         // Останавливаем пул потоков
         if (_threadPool) {
             _threadPool->Shutdown();
-            _threadPool.reset();
         }
+
+        // Nothing resumes coroutines any more, so every task that has not finished is stuck for good: cancel it
+        // (Wait() returns) and drop its self-reference (the frame is freed with the last handle).
+        Detail::LiveTasks::GetInstance().AbandonAll();
+
+        _threadPool.reset();
 
         _isInitialized = false;
 

@@ -36,7 +36,7 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 |--------|-------------|
 | `Initialize()` | `CoreManager::InitializeCoreServices()` (game PreInit and `OnTestEnvironmentInit`), before `ConfigManager` |
 | `Update()` | `CoreManager::OnGameCycle` once per frame; this is where main-thread tasks run |
-| `Shutdown()` | `OnApplicationDeinit` and `OnTestEnvironmentDeinit` |
+| `Shutdown()` | `OnApplicationDeinit` and `OnTestEnvironmentDeinit`; stops the scheduler, joins the pool, then abandons the tasks that are left (cancelled, self-reference dropped) |
 
 ## Best Practices
 
@@ -55,7 +55,8 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 - Hold locks across `co_await`.
 - Call `Task::GetResult()` on a task suspended on the pool: it resumes the coroutine in a loop and races with the pool. Start it with `TaskManager::Run(...)` and wait on the returned handle (`.claude/rules/tests-module.md`).
 - `co_await` a `TaskHandle` (it is not awaitable; nothing would resume the waiter). Block with `Wait()` off the main thread, or `co_await` the `Task<T>` itself when one coroutine calls another.
-- Count on a task surviving `TaskManager::Shutdown()`: the scheduler drops its queues, so a task parked on `Delay` or `SwitchTo*` is never resumed, and its self-reference (plus the coroutine frame) is leaked rather than freed. `Wait()` on such a handle blocks forever.
+- Count on a task surviving `TaskManager::Shutdown()`: the scheduler drops its queues, so a task parked on `Delay` or `SwitchTo*` is never resumed. Shutdown then abandons every task that has not finished (`Detail::LiveTasks::AbandonAll()`): the handle becomes `Cancelled` (`Wait()` returns, `GetResult()` gives `Cancelled`) and the coroutine frame is freed with the last handle.
+- Start tasks after `TaskManager::Shutdown()`: the scheduler drops them, and nothing abandons them any more, so `Wait()` on such a handle blocks forever.
 
 ## Thread Safety
 

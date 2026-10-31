@@ -52,6 +52,16 @@ namespace BECore {
             }
 
             /**
+             * Takes the keep-alive reference away from a task that will never finish (see LiveTasks::AbandonAll).
+             * The caller releases it outside its own locks. Empty if the task never started or has already finished,
+             * because Signal() hands the reference back itself.
+             */
+            [[nodiscard]] IntrusivePtr<RefCountedAtomic> ReleaseKeepAlive() {
+                std::lock_guard lock(_mutex);
+                return std::move(_keepAlive);
+            }
+
+            /**
              * Wakes waiters without finishing the task, so they re-check their own predicate (used by Cancel).
              */
             void Wake() {
