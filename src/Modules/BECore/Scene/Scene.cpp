@@ -1,6 +1,7 @@
 #include "Scene.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <EASTL/sort.h>
 #include <Events/SceneEvents.h>
 #include <Generated/Scene.gen.hpp>
 
@@ -27,7 +28,28 @@ namespace BECore {
     }
 
     void Scene::Draw() {
-        SceneEvents::SceneDrawEvent::Emit();
+        if (!_rootNode) {
+            return;
+        }
+
+        _drawEntries.clear();
+        CollectDrawEntries(*_rootNode);
+
+        // The keys are unique (order is the traversal index), so an unstable sort still gives one result.
+        eastl::sort(_drawEntries.begin(), _drawEntries.end(), [](const SceneDrawEntry& a, const SceneDrawEntry& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
+
+        for (const SceneDrawEntry& entry : _drawEntries) {
+            for (const auto& component : entry.node->GetComponents()) {
+                component->OnDraw();
+            }
+        }
+    }
+
+    void Scene::CollectDrawEntries(SceneNode& node) {
+        _drawEntries.push_back({node.GetLayer(), static_cast<uint32_t>(_drawEntries.size()), &node});
+        for (const auto& child : node.GetChildren()) {
+            CollectDrawEntries(*child);
+        }
     }
 
     bool Scene::IsActive() const {

@@ -96,13 +96,13 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - Match3 as the first consumer (swap, fall and refill animation) while the model stays animation-free (the rule in `games/Match3/CLAUDE.md`);
 - gtests for the easing math and for tween ordering with a fake clock.
 
-## 2D rendering is minimal: no layers, rotation, camera or blending
+## 2D rendering is minimal: no rotation, camera or blending
 
 **Where:** `src/Modules/BECore/Renderer/IRenderer.h` (`DrawFilledRect`, `DrawTexture` are the whole drawing surface), `SDLRendererBackend.cpp`, `Vulkan/src/CoreVulkan/VulkanRendererBackend.cpp`, `Scene/Components/TransformComponent.h` (position and size in screen pixels).
 
 **What is missing** (found by reading the code, not by running a game):
 
-1. No z-order or layers: draw order is the order of event handlers.
+1. Layers exist, but only per node: `SceneNode::GetLayer()` plus the scene order sort the draw pass (`Scene/CLAUDE.md`, "Draw order"). A child does not inherit its parent's layer, and there is no sort key finer than the node (a sprite and a quad on one node cannot interleave with other nodes).
 2. No rotation or scale of a sprite, no flip, no tint or alpha beyond the rect color.
 3. No 2D camera: positions are screen pixels, so scrolling and zoom need a camera transform.
 4. No blend modes.
@@ -111,7 +111,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 **A fix has to cover:**
 
 - each capability first in `IRenderer` / `TransformComponent`, then in both backends (`.claude/rules/rendering-module.md`; a backend that cannot do it documents the fallback);
-- a layer (sort key) on renderer components with a stable order;
+- layer inheritance from the parent, if a hierarchy of drawn nodes needs it;
 - a camera that maps world to screen, used by the renderer components;
 - a decision on the backends before the work starts (see the entry on renderer backends).
 
@@ -190,11 +190,11 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 **What is wrong** (found by reading the code):
 
 1. The registry holds one empty entity per `SceneNode`. Components are polymorphic `IComponent` objects stored in the node; there are no registry views, systems or component storage. The architecture description in `CLAUDE.md` promises more than the code does.
-2. Rendering is a per-component event handler on `SceneDrawEvent`, so there is nowhere to sort or batch draws.
+2. Rendering is a per-component `OnDraw()` call from `Scene::Draw()`. The pass sorts nodes by layer, but a component still issues its `IRenderer` calls itself, so there is nowhere to batch draws.
 
 **A fix has to cover** (a decision of the project owner, the recommendation is below):
 
-- recommendation: keep the object model (`SceneNode` + `IComponent` fits reflection and the inspector) and make rendering a system that collects `TransformComponent` + renderer data from the registry, sorts by layer and hands a batch to `IRenderer`. This gives EnTT a real job and prepares the 2D rendering and batching entries;
+- recommendation: keep the object model (`SceneNode` + `IComponent` fits reflection and the inspector) and make rendering a system that collects `TransformComponent` + renderer data from the registry, sorts by layer (the sorted node pass of `Scene::Draw()` is the first step) and hands a batch to `IRenderer`. This gives EnTT a real job and prepares the 2D rendering and batching entries;
 - the alternative is to say plainly that this is a scene graph in the Unity style and drop EnTT if ids are all it provides;
 - not a rewrite to pure ECS;
 - record the decision in `Scene/CLAUDE.md` and correct the wording in `CLAUDE.md`.

@@ -22,8 +22,4 @@ namespace BECore::SceneEvents {
         explicit SceneFixedUpdateEvent(float dt) : deltaTime(dt) {}
     };
 
-    struct SceneDrawEvent : public EventBase<SceneDrawEvent> {
-        BE_EVENT(SceneDrawEvent)
-    };
-
 }  // namespace BECore::SceneEvents

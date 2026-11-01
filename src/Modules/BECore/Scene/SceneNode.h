@@ -31,6 +31,16 @@ namespace BECore {
 
         PoolString GetName() const;
         void SetName(PoolString name);
+
+        /**
+         * @brief Draw layer of this node: a lower layer is drawn first (further back).
+         *
+         * Nodes with the same layer are drawn in scene order. The layer belongs to the node alone, its children do not
+         * inherit it. See Scene::Draw().
+         */
+        int32_t GetLayer() const;
+        void SetLayer(int32_t layer);
+
         entt::entity GetEntity() const;
         const eastl::vector<IntrusivePtr<IComponent>>& GetComponents() const;
 
@@ -40,6 +50,7 @@ namespace BECore {
         void WireToScene(Scene* scene, SceneNode* parent);
 
         BE_REFLECT_FIELD PoolString _name;
+        BE_REFLECT_FIELD int32_t _layer = 0;
         entt::entity _entity = entt::null;
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;

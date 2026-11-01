@@ -24,6 +24,16 @@ namespace BECore {
          */
         virtual void OnAttached() {}
 
+        /**
+         * @brief Draw this component. Called once per frame while its scene is the active one.
+         *
+         * Scene::Draw() calls it in draw order: nodes sorted by SceneNode::GetLayer(), equal layers in scene order
+         * (depth-first, a parent before its children, siblings as in the config), the components of a node in their order.
+         * Override it to draw and do not subscribe to an event for drawing: the order of event handlers is not defined.
+         * Draw only, never change game state or add and remove nodes here.
+         */
+        virtual void OnDraw() {}
+
         Scene& GetScene() const;
         SceneNode& GetNode() const;
 
@@ -34,16 +44,16 @@ namespace BECore {
         /**
          * @brief Subscribe to a global event, but run @p Handler only while this component's scene is active.
          *
-         * Scene events (SceneUpdateEvent, SceneDrawEvent) and input events (MouseButtonDownEvent, ActionEvent) are global:
+         * Scene events (SceneUpdateEvent) and input events (MouseButtonDownEvent, ActionEvent) are global:
          * every loaded scene's components receive them, not just the active scene's. Use this instead of Subscribe for
-         * any handler that draws, reads input or changes game state. Plain Subscribe is for handlers that must run
-         * whichever scene is active.
+         * any handler that reads input or changes game state. Plain Subscribe is for handlers that must run
+         * whichever scene is active. Drawing is not an event: override OnDraw().
          *
          * The connection itself is permanent, only the call is filtered, so switching the active scene never connects
          * or disconnects anything (doing that from inside a handler is undefined behavior).
          *
          * @example
-         * SubscribeInScene<SceneEvents::SceneDrawEvent, &MyComponent::OnDraw>(this);
+         * SubscribeInScene<SceneEvents::SceneUpdateEvent, &MyComponent::OnUpdate>(this);
          */
         template <typename Event, auto Handler, typename T>
         void SubscribeInScene(T* instance) {

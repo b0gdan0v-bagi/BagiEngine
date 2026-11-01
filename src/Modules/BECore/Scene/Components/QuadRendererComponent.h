@@ -4,10 +4,6 @@
 
 namespace BECore {
 
-    namespace SceneEvents {
-        struct SceneDrawEvent;
-    }
-
     class QuadRendererComponent : public IComponent {
         BE_CLASS(QuadRendererComponent)
     public:
@@ -16,10 +12,7 @@ namespace BECore {
 
         BE_REFLECT_FIELD Color _color{255, 0, 0, 255};
 
-        void OnAttached() override;
-
-    private:
-        void OnDraw(const SceneEvents::SceneDrawEvent&);
+        void OnDraw() override;
     };
 
 }  // namespace BECore

@@ -5,9 +5,6 @@
 
 namespace BECore {
 
-    namespace SceneEvents {
-        struct SceneDrawEvent;
-    }
     namespace SDLEvents {
         struct MouseButtonDownEvent;
     }
@@ -40,6 +37,7 @@ namespace BECore::Match3 {
         BE_REFLECT_FIELD uint32_t _seed = 1337;
 
         void OnAttached() override;
+        void OnDraw() override;
 
         Match3GameModel& GetModel() noexcept {
             return _model;
@@ -60,7 +58,6 @@ namespace BECore::Match3 {
         }
 
     private:
-        void OnDraw(const SceneEvents::SceneDrawEvent&);
         void OnMouseDown(const SDLEvents::MouseButtonDownEvent&);
         void DrawHud();
 

@@ -3,7 +3,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <CoreSDL/SDLEvents.h>
-#include <Events/SceneEvents.h>
 #include <Generated/Match3BoardComponent.gen.hpp>
 #include <imgui.h>
 
@@ -50,11 +49,10 @@ namespace BECore::Match3 {
     void Match3BoardComponent::OnAttached() {
         s_active = this;
         _model.Reset(_seed);
-        SubscribeInScene<SceneEvents::SceneDrawEvent, &Match3BoardComponent::OnDraw>(this);
         SubscribeInScene<SDLEvents::MouseButtonDownEvent, &Match3BoardComponent::OnMouseDown>(this);
     }
 
-    void Match3BoardComponent::OnDraw(const SceneEvents::SceneDrawEvent&) {
+    void Match3BoardComponent::OnDraw() {
         auto& renderer = *CoreManager::GetRenderer();
 
         const float boardSide = _cellSize * static_cast<float>(kBoardSize);

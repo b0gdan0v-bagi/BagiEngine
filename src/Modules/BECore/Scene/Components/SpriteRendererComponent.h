@@ -6,10 +6,6 @@
 
 namespace BECore {
 
-    namespace SceneEvents {
-        struct SceneDrawEvent;
-    }
-
     class SpriteRendererComponent : public IComponent {
         BE_CLASS(SpriteRendererComponent)
     public:
@@ -21,17 +17,16 @@ namespace BECore {
         BE_REFLECT_FIELD Rect _srcRect{};
 
         void OnAttached() override;
+        void OnDraw() override;
 
         /**
-         * @brief Reload texture from _texturePath and re-subscribe to draw events
+         * @brief Reload the texture from the sprite id or _texturePath
          *
-         * Call this when _texturePath is changed in the editor.
+         * Call this when _spriteId or _texturePath is changed in the editor.
          */
         void ReloadTexture();
 
     private:
-        void OnDraw(const SceneEvents::SceneDrawEvent&);
-
         ResourceHandle<ITexture> _texture;
     };
 

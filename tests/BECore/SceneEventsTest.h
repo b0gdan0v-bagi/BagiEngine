@@ -6,7 +6,6 @@ namespace BECore {
 
     namespace SceneEvents {
         struct SceneUpdateEvent;
-        struct SceneDrawEvent;
     }  // namespace SceneEvents
 
 }  // namespace BECore
@@ -14,9 +13,11 @@ namespace BECore {
 namespace BECore::Tests {
 
     /**
-     * @brief Counts the scene events its component receives.
+     * @brief Counts the updates and draws its component receives.
      *
-     * Reflected so a SceneConfig-style XML can create it by type name (see SceneEventsTest.cpp).
+     * drawIndex is the position of its last OnDraw call in the draw pass (0 for the first component drawn), so a test
+     * can compare the draw order of several nodes. Reflected so a SceneConfig-style XML can create it by type name
+     * (see SceneEventsTest.cpp).
      */
     class SceneEventCounter : public IComponent {
         BE_CLASS(SceneEventCounter)
@@ -26,12 +27,13 @@ namespace BECore::Tests {
 
         int updateCount = 0;
         int drawCount = 0;
+        int drawIndex = -1;
 
         void OnAttached() override;
+        void OnDraw() override;
 
     private:
         void OnUpdate(const SceneEvents::SceneUpdateEvent&);
-        void OnDraw(const SceneEvents::SceneDrawEvent&);
     };
 
 }  // namespace BECore::Tests

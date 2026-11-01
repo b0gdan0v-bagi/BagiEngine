@@ -63,7 +63,7 @@ struct MyEvent {
 
 ```cpp
 struct FastEvent : EventBase<FastEvent> { int value = 0; FastEvent() = default; explicit FastEvent(int v) : value(v) {} };  // dispatch only
-struct SceneDrawEvent : EventBase<SceneDrawEvent> { BE_EVENT(SceneDrawEvent) };   // dispatch + reflection (Events/SceneEvents.h)
+struct SceneFixedUpdateEvent : EventBase<SceneFixedUpdateEvent> { BE_EVENT(SceneFixedUpdateEvent) BE_REFLECT_FIELD float deltaTime = 0.0f; /* ctors omitted */ };   // dispatch + reflection (Events/SceneEvents.h)
 struct DebugData { BE_EVENT(DebugData) BE_REFLECT_FIELD int value = 0; }; // data only, cannot be Emit()ted
 ```
 

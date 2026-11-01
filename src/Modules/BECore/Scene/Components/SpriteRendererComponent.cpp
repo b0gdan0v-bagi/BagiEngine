@@ -4,7 +4,6 @@
 #include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/SceneNode.h>
-#include <Events/SceneEvents.h>
 #include <Generated/SpriteRendererComponent.gen.hpp>
 
 namespace BECore {
@@ -33,13 +32,10 @@ namespace BECore {
         _texture = CoreManager::GetResourceManager().Load<ITexture>(_texturePath.ToStringView());
         if (!_texture) {
             LOG_ERROR(Format("SpriteRendererComponent: failed to load texture '{}'", _texturePath.ToStringView()).c_str());
-            return;
         }
-        SubscribeInScene<SceneEvents::SceneDrawEvent, &SpriteRendererComponent::OnDraw>(this);
     }
 
     void SpriteRendererComponent::ReloadTexture() {
-        UnsubscribeAll();
         _texture.Reset();
 
         ResolveFromLibrary(_spriteId, _texturePath, _srcRect);
@@ -51,13 +47,10 @@ namespace BECore {
         _texture = CoreManager::GetResourceManager().Load<ITexture>(_texturePath.ToStringView());
         if (!_texture) {
             LOG_ERROR(Format("SpriteRendererComponent: failed to reload texture '{}'", _texturePath.ToStringView()).c_str());
-            return;
         }
-
-        SubscribeInScene<SceneEvents::SceneDrawEvent, &SpriteRendererComponent::OnDraw>(this);
     }
 
-    void SpriteRendererComponent::OnDraw(const SceneEvents::SceneDrawEvent&) {
+    void SpriteRendererComponent::OnDraw() {
         if (!_texture) {
             return;
         }

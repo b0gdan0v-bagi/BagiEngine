@@ -11,17 +11,24 @@
 
 namespace BECore::Tests {
 
+    namespace {
+
+        // Position of the next OnDraw call in the draw pass; the fixture resets it before every test.
+        int g_nextDrawIndex = 0;
+
+    }  // namespace
+
     void SceneEventCounter::OnAttached() {
         SubscribeInScene<SceneEvents::SceneUpdateEvent, &SceneEventCounter::OnUpdate>(this);
-        SubscribeInScene<SceneEvents::SceneDrawEvent, &SceneEventCounter::OnDraw>(this);
     }
 
     void SceneEventCounter::OnUpdate(const SceneEvents::SceneUpdateEvent&) {
         ++updateCount;
     }
 
-    void SceneEventCounter::OnDraw(const SceneEvents::SceneDrawEvent&) {
+    void SceneEventCounter::OnDraw() {
         ++drawCount;
+        drawIndex = g_nextDrawIndex++;
     }
 
     namespace {
@@ -45,7 +52,7 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        // The quads are never drawn here: SceneDrawEvent is not emitted, so no renderer is needed.
+        // The quads are never drawn here: Scene::Draw() is not called, so no renderer is needed.
         constexpr const char* kColorScenesXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="A"><nodes>
@@ -63,6 +70,55 @@ namespace BECore::Tests {
     </components></node>
   </nodes></scene>
 </scenes></SceneManager>)";
+
+        // Every node has a SceneEventCounter, so its drawIndex tells where the node sits in the draw pass.
+        // "Order": three nodes on the default layer.
+        // "Layers": a node in front (layer 1), one behind (layer -1), the others on the default layer.
+        // "BackFirst" / "BackLast": the Chess shape, a background node (layer -1) and a piece, in both scene orders.
+        // "Nested" / "NestedLayer": a parent and a sibling; the tests add a child to the parent at runtime
+        // (the XML has no children), and in "NestedLayer" the parent has layer 1.
+        constexpr const char* kDrawOrderScenesXml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Order"><nodes>
+    <node name="First"><components><component type="SceneEventCounter"/></components></node>
+    <node name="Second"><components><component type="SceneEventCounter"/></components></node>
+    <node name="Third"><components><component type="SceneEventCounter"/></components></node>
+  </nodes></scene>
+  <scene type="Scene" name="Layers"><nodes>
+    <node name="Front" layer="1"><components><component type="SceneEventCounter"/></components></node>
+    <node name="Middle"><components><component type="SceneEventCounter"/></components></node>
+    <node name="Back" layer="-1"><components><component type="SceneEventCounter"/></components></node>
+    <node name="Middle2"><components><component type="SceneEventCounter"/></components></node>
+  </nodes></scene>
+  <scene type="Scene" name="BackFirst"><nodes>
+    <node name="Board" layer="-1"><components><component type="SceneEventCounter"/></components></node>
+    <node name="Piece"><components><component type="SceneEventCounter"/></components></node>
+  </nodes></scene>
+  <scene type="Scene" name="BackLast"><nodes>
+    <node name="Piece"><components><component type="SceneEventCounter"/></components></node>
+    <node name="Board" layer="-1"><components><component type="SceneEventCounter"/></components></node>
+  </nodes></scene>
+  <scene type="Scene" name="Nested"><nodes>
+    <node name="Parent"><components><component type="SceneEventCounter"/></components></node>
+    <node name="Sibling"><components><component type="SceneEventCounter"/></components></node>
+  </nodes></scene>
+  <scene type="Scene" name="NestedLayer"><nodes>
+    <node name="Parent" layer="1"><components><component type="SceneEventCounter"/></components></node>
+    <node name="Sibling"><components><component type="SceneEventCounter"/></components></node>
+  </nodes></scene>
+</scenes></SceneManager>)";
+
+        SceneNode* FindNode(SceneNode& node, PoolString name) {
+            if (node.GetName() == name) {
+                return &node;
+            }
+            for (const auto& child : node.GetChildren()) {
+                if (auto* found = FindNode(*child, name)) {
+                    return found;
+                }
+            }
+            return nullptr;
+        }
 
         constexpr uint32_t PackColor(const Color& c) {
             return (uint32_t{c.r} << 24) | (uint32_t{c.g} << 16) | (uint32_t{c.b} << 8) | uint32_t{c.a};
@@ -99,6 +155,10 @@ namespace BECore::Tests {
 
     class SceneEventsTest : public ::testing::Test {
     protected:
+        void SetUp() override {
+            g_nextDrawIndex = 0;
+        }
+
         void TearDown() override {
             // Destroying the scenes drops the components' event connections
             _manager.Reset();
@@ -123,6 +183,18 @@ namespace BECore::Tests {
         template <typename T>
         IntrusivePtr<T> GetProbeComponent(PoolString name) const {
             return GetScene(name).GetRootNode().GetChildren().front()->GetComponent<T>();
+        }
+
+        /// The SceneEventCounter on the node @p nodeName of scene @p sceneName, found at any depth. Empty if there is none.
+        IntrusivePtr<SceneEventCounter> GetCounter(PoolString sceneName, PoolString nodeName) const {
+            SceneNode* node = FindNode(GetScene(sceneName).GetRootNode(), nodeName);
+            return node ? node->GetComponent<SceneEventCounter>() : IntrusivePtr<SceneEventCounter>{};
+        }
+
+        /// Draws the active scene once with a fresh draw index, so drawIndex counts from 0 for this frame.
+        void DrawFrame() {
+            g_nextDrawIndex = 0;
+            _manager->DrawAll();
         }
 
         IntrusivePtrAtomic<SceneManager> _manager;
@@ -222,6 +294,119 @@ namespace BECore::Tests {
         _manager->SetActiveScene("B"_intern);
         _manager->UpdateAll();
         EXPECT_EQ(counter->updateCount, 1);
+    }
+
+    TEST_F(SceneEventsTest, DrawsNodesOfTheSameLayerInSceneOrder) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes(kDrawOrderScenesXml));
+        auto first = GetCounter("Order"_intern, "First"_intern);
+        auto second = GetCounter("Order"_intern, "Second"_intern);
+        auto third = GetCounter("Order"_intern, "Third"_intern);
+        ASSERT_TRUE(first);
+        ASSERT_TRUE(second);
+        ASSERT_TRUE(third);
+
+        DrawFrame();
+
+        EXPECT_EQ(first->drawIndex, 0);
+        EXPECT_EQ(second->drawIndex, 1);
+        EXPECT_EQ(third->drawIndex, 2);
+    }
+
+    TEST_F(SceneEventsTest, DrawsALowerLayerFirstWhateverItsPlaceInTheScene) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes(kDrawOrderScenesXml));
+        _manager->SetActiveScene("Layers"_intern);
+        auto front = GetCounter("Layers"_intern, "Front"_intern);
+        auto middle = GetCounter("Layers"_intern, "Middle"_intern);
+        auto back = GetCounter("Layers"_intern, "Back"_intern);
+        auto middle2 = GetCounter("Layers"_intern, "Middle2"_intern);
+        ASSERT_TRUE(front);
+        ASSERT_TRUE(middle);
+        ASSERT_TRUE(back);
+        ASSERT_TRUE(middle2);
+        EXPECT_EQ(front->GetNode().GetLayer(), 1);
+        EXPECT_EQ(middle->GetNode().GetLayer(), 0);
+        EXPECT_EQ(back->GetNode().GetLayer(), -1);
+
+        DrawFrame();
+
+        EXPECT_EQ(back->drawIndex, 0);
+        EXPECT_EQ(middle->drawIndex, 1);
+        EXPECT_EQ(middle2->drawIndex, 2);
+        EXPECT_EQ(front->drawIndex, 3);
+    }
+
+    TEST_F(SceneEventsTest, BackgroundLayerIsDrawnBeforeThePieceInEitherSceneOrder) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes(kDrawOrderScenesXml));
+
+        for (const char* sceneName : {"BackFirst", "BackLast"}) {
+            const PoolString scene = PoolString::Intern(sceneName);
+            _manager->SetActiveScene(scene);
+            auto board = GetCounter(scene, "Board"_intern);
+            auto piece = GetCounter(scene, "Piece"_intern);
+            ASSERT_TRUE(board) << sceneName;
+            ASSERT_TRUE(piece) << sceneName;
+
+            DrawFrame();
+
+            EXPECT_EQ(board->drawIndex, 0) << sceneName;
+            EXPECT_EQ(piece->drawIndex, 1) << sceneName;
+        }
+    }
+
+    TEST_F(SceneEventsTest, DrawsAParentThenItsChildrenThenTheNextSibling) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes(kDrawOrderScenesXml));
+        _manager->SetActiveScene("Nested"_intern);
+        SceneNode* parent = FindNode(GetScene("Nested"_intern).GetRootNode(), "Parent"_intern);
+        ASSERT_NE(parent, nullptr);
+        auto child = parent->AddChild("Child"_intern);
+        auto childCounter = BECore::New<SceneEventCounter>();
+        child->AddComponent(childCounter);
+        auto parentCounter = GetCounter("Nested"_intern, "Parent"_intern);
+        auto sibling = GetCounter("Nested"_intern, "Sibling"_intern);
+        ASSERT_TRUE(parentCounter);
+        ASSERT_TRUE(sibling);
+
+        DrawFrame();
+
+        EXPECT_EQ(parentCounter->drawIndex, 0);
+        EXPECT_EQ(childCounter->drawIndex, 1);
+        EXPECT_EQ(sibling->drawIndex, 2);
+    }
+
+    TEST_F(SceneEventsTest, AChildDoesNotInheritTheLayerOfItsParent) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes(kDrawOrderScenesXml));
+        _manager->SetActiveScene("NestedLayer"_intern);
+        SceneNode* parent = FindNode(GetScene("NestedLayer"_intern).GetRootNode(), "Parent"_intern);
+        ASSERT_NE(parent, nullptr);
+        auto child = parent->AddChild("Child"_intern);
+        auto childCounter = BECore::New<SceneEventCounter>();
+        child->AddComponent(childCounter);
+        auto parentCounter = GetCounter("NestedLayer"_intern, "Parent"_intern);
+        auto sibling = GetCounter("NestedLayer"_intern, "Sibling"_intern);
+        ASSERT_TRUE(parentCounter);
+        ASSERT_TRUE(sibling);
+
+        DrawFrame();
+
+        // The child and the sibling are on layer 0, the parent alone is on layer 1, so it comes last.
+        EXPECT_EQ(childCounter->drawIndex, 0);
+        EXPECT_EQ(sibling->drawIndex, 1);
+        EXPECT_EQ(parentCounter->drawIndex, 2);
+    }
+
+    TEST_F(SceneEventsTest, ARemovedComponentIsNotDrawn) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes(kDrawOrderScenesXml));
+        auto first = GetCounter("Order"_intern, "First"_intern);
+        auto second = GetCounter("Order"_intern, "Second"_intern);
+        ASSERT_TRUE(first);
+        ASSERT_TRUE(second);
+
+        first->GetNode().RemoveComponent("SceneEventCounter"_intern);
+        DrawFrame();
+
+        EXPECT_EQ(first->drawCount, 0);
+        EXPECT_EQ(second->drawCount, 1);
+        EXPECT_EQ(second->drawIndex, 0);
     }
 
     TEST_F(SceneEventsTest, ActionEventRecolorsOnlyTheActiveScenesQuad) {

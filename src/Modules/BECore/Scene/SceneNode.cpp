@@ -89,6 +89,14 @@ namespace BECore {
         _name = name;
     }
 
+    int32_t SceneNode::GetLayer() const {
+        return _layer;
+    }
+
+    void SceneNode::SetLayer(int32_t layer) {
+        _layer = layer;
+    }
+
     entt::entity SceneNode::GetEntity() const {
         return _entity;
     }

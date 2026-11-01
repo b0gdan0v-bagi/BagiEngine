@@ -20,6 +20,9 @@ namespace BECore {
         void BuildNodeXml(pugi::xml_node parent, const SceneNode& node) {
             pugi::xml_node nodeEl = parent.append_child("node");
             nodeEl.append_attribute("name").set_value(node.GetName().CStr());
+            if (node.GetLayer() != 0) {
+                nodeEl.append_attribute("layer").set_value(node.GetLayer());
+            }
 
             const auto& components = node.GetComponents();
             if (components.empty()) {
@@ -208,6 +211,16 @@ namespace BECore {
         snprintf(nameBuffer, sizeof(nameBuffer), "%s", _selectedNode->GetName().CStr());
         if (ImGui::InputText("##node_name", nameBuffer, sizeof(nameBuffer))) {
             _selectedNode->SetName(PoolString::Intern(eastl::string_view(nameBuffer)));
+            _isDirty = true;
+        }
+
+        // Draw layer: a lower layer is drawn first, equal layers in scene order
+        ImGui::TextUnformatted("Layer:");
+        ImGui::SameLine();
+
+        int32_t layer = _selectedNode->GetLayer();
+        if (ImGui::InputInt("##node_layer", &layer)) {
+            _selectedNode->SetLayer(layer);
             _isDirty = true;
         }
 

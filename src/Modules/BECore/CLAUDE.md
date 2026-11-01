@@ -39,9 +39,9 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 | 1b | Commands | `ControlService::Drain` | Requests of the external control API run here, so they see this frame's input (`Control/CLAUDE.md`) |
 | 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread |
 | 3 | Logic | `SceneManager::UpdateAll` | `SceneFixedUpdateEvent` (zero or more, a constant step), then `SceneUpdateEvent` (once, with the frame time) |
-| 4 | Render | `WidgetManager::UpdateAll`, `DrawScreenAll`, `DrawAll` | Editor: UI and `SceneDrawEvent` through `ViewportWidget`, then ImGui render. Game: `SceneDrawEvent` through `SceneRenderWidget::DrawScreen`. Present at the end of the frame |
+| 4 | Render | `WidgetManager::UpdateAll`, `DrawScreenAll`, `DrawAll` | Editor: UI and `Scene::Draw()` through `ViewportWidget`, then ImGui render. Game: `Scene::Draw()` through `SceneRenderWidget::DrawScreen`. `Scene::Draw()` calls `IComponent::OnDraw()` in layer order (`Scene/CLAUDE.md`). Present at the end of the frame |
 
-Logic reads input and writes state; render only reads state. Do not draw from `SceneUpdateEvent` handlers and do not change game state from `SceneDrawEvent`.
+Logic reads input and writes state; render only reads state. Do not draw from `SceneUpdateEvent` handlers and do not change game state from `OnDraw()`.
 
 After the present and `LogEvent::Flush()` the loop calls `ControlService::EndFrame()`: it runs the frame end hooks and counts down a control call that waits for frames (a `step`, a `screenshot`).
 
