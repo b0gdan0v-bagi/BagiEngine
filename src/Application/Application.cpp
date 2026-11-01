@@ -39,6 +39,9 @@ namespace BECore {
             return false;
         }
 
+        // Before the first frame: the loop reads it from the start
+        CoreManager::GetControlService().SetManualClock(controlSettings->manualClock);
+
         if (!ApplicationFabric::GetInstance().Create()) {
             return false;
         }
@@ -58,14 +61,26 @@ namespace BECore {
 
     void Application::Run() {
 
+        ControlService& control = CoreManager::GetControlService();
+
         while (_isRunning) {
 
-            CoreManager::GetTime().Tick({});
+            if (control.IsManualClock()) {
+                // Game time moves only for the frames that a `step` asks for; in between the window and the requests stay alive
+                if (!control.IsStepDue()) {
+                    CoreManager::GetInstance().OnIdleCycle({});
+                    LogEvent::Flush();
+                    continue;
+                }
+                CoreManager::GetTime().Advance(control.GetStepSeconds());
+            } else {
+                CoreManager::GetTime().Tick({});
+            }
             RenderEvents::NewFrameEvent::Emit();
             CoreManager::GetInstance().OnGameCycle({});
             RenderEvents::RenderPresentEvent::Emit();
             LogEvent::Flush();
-            CoreManager::GetControlService().EndFrame();
+            control.EndFrame();
         }
         Cleanup();
     }

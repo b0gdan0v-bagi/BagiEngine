@@ -38,12 +38,21 @@ namespace BECore {
             }
             settings.port = *port;
         }
+        if (const auto text = applicationConfig.GetAttribute(ControlAttributes::kManualClock)) {
+            const auto manualClock = applicationConfig.ParseAttribute<bool>(ControlAttributes::kManualClock);
+            if (!manualClock) {
+                return std::unexpected(InvalidSetting(Format("ApplicationConfig: {}=\"{}\" is not a boolean (true, false, 1 or 0)", ControlAttributes::kManualClock, *text)));
+            }
+            settings.manualClock = *manualClock;
+        }
 
         bool portOnCommandLine = false;
         for (const eastl::string& arg : args) {
             const eastl::string_view argument(arg.data(), arg.size());
             if (argument == ControlArguments::kControl) {
                 settings.enabled = true;
+            } else if (argument == ControlArguments::kManualClock) {
+                settings.manualClock = true;
             } else if (argument.starts_with(ControlArguments::kControlPortPrefix)) {
                 const eastl::string_view value = argument.substr(ControlArguments::kControlPortPrefix.size());
                 const auto port = ParsePort(value);
@@ -59,6 +68,9 @@ namespace BECore {
 
         if (portOnCommandLine && !settings.enabled) {
             return std::unexpected(InvalidSetting(Format("{}N has no effect without {}", ControlArguments::kControlPortPrefix, ControlArguments::kControl)));
+        }
+        if (settings.manualClock && !settings.enabled) {
+            return std::unexpected(InvalidSetting(Format("{} needs {}: without the control API nobody could step the game", ControlArguments::kManualClock, ControlArguments::kControl)));
         }
         return settings;
     }

@@ -9,6 +9,13 @@
 
 namespace BECore {
 
+    namespace {
+
+        /// Longest wait of an idle cycle: how late the window events and the requests of a client are looked at
+        constexpr std::chrono::milliseconds kIdleWait{8};
+
+    }  // namespace
+
     const IntrusivePtr<IMainWindow>& CoreManager::GetMainWindow() {
         return GetInstance()._mainWindowManager.GetMainWindow();
     }
@@ -78,6 +85,14 @@ namespace BECore {
         EventsQueueRegistry::UpdateAll();
         _widgetManager.DrawScreenAll();  // Game: SceneRenderWidget draws the scene into the back buffer
         _widgetManager.DrawAll();        // ImGui::Render + GPU present
+    }
+
+    void CoreManager::OnIdleCycle(PassKey<Application>) {
+        _eventsProviderManager.ProcessEvents();  // the window keeps answering and a close still quits
+        _controlService.Drain();
+        if (!_controlService.IsStepDue()) {
+            _controlService.WaitForRequests(kIdleWait);
+        }
     }
 
     void CoreManager::OnApplicationDeinit(PassKey<Application>) {

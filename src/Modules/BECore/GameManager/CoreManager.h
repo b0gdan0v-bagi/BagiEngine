@@ -108,6 +108,9 @@ namespace BECore {
         // Функция игрового цикла
         void OnGameCycle(PassKey<Application>);
 
+        // Idle cycle of the manual clock: no frame runs, the window stays alive and control requests are answered (Control/CLAUDE.md)
+        void OnIdleCycle(PassKey<Application>);
+
         // Функция деинициализации приложения
         void OnApplicationDeinit(PassKey<Application>);
 

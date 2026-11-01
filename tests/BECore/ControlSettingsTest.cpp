@@ -174,4 +174,58 @@ namespace BECore::Tests {
         EXPECT_FALSE(settings->enabled);
     }
 
+    TEST(ControlSettingsTest, ManualClockIsOffByDefault) {
+        const auto settings = Resolve({"--control"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_FALSE(settings->manualClock);
+    }
+
+    TEST(ControlSettingsTest, CommandLineTurnsTheManualClockOn) {
+        const auto settings = Resolve({"--control", "--manual-clock"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_TRUE(settings->enabled);
+        EXPECT_TRUE(settings->manualClock);
+    }
+
+    TEST(ControlSettingsTest, ManualClockCanComeFromTheConfig) {
+        const auto settings = Resolve({}, R"(<root control="true" manualClock="true"/>)");
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_TRUE(settings->enabled);
+        EXPECT_TRUE(settings->manualClock);
+
+        const auto off = Resolve({}, R"(<root control="true" manualClock="0"/>)");
+        ASSERT_TRUE(off.has_value());
+        EXPECT_FALSE(off->manualClock);
+    }
+
+    TEST(ControlSettingsTest, ManualClockOnTheCommandLineBeatsTheConfig) {
+        const auto settings = Resolve({"--manual-clock"}, R"(<root control="true" manualClock="false"/>)");
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_TRUE(settings->manualClock);
+    }
+
+    TEST(ControlSettingsTest, ManualClockWithoutTheApiIsAnError) {
+        // Nobody could step the game: it would freeze
+        ExpectInvalid(Resolve({"--manual-clock"}));
+        ExpectInvalid(Resolve({}, R"(<root manualClock="true"/>)"));
+        ExpectInvalid(Resolve({"--manual-clock"}, R"(<root control="false"/>)"));
+    }
+
+    TEST(ControlSettingsTest, ManualClockSwitchedOffWithoutTheApiIsFine) {
+        const auto settings = Resolve({}, R"(<root manualClock="false"/>)");
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_FALSE(settings->manualClock);
+    }
+
+    TEST(ControlSettingsTest, ManualClockAttributeThatIsNotABooleanIsAnError) {
+        ExpectInvalid(Resolve({"--control"}, R"(<root manualClock="maybe"/>)"));
+        ExpectInvalid(Resolve({"--control"}, R"(<root manualClock=""/>)"));
+    }
+
+    TEST(ControlSettingsTest, ManualClockFlagLookalikesAreIgnored) {
+        const auto settings = Resolve({"--control", "--manual-clock=1", "--manual-clocks", "manual-clock"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_FALSE(settings->manualClock);
+    }
+
 }  // namespace BECore::Tests

@@ -3,6 +3,8 @@
 #include <BECore/Control/ControlTypes.h>
 #include <BECore/Control/JsonFwd.h>
 #include <EASTL/deque.h>
+#include <chrono>
+#include <condition_variable>
 
 namespace BECore {
 
@@ -21,6 +23,11 @@ namespace BECore {
      * Order: requests run in the order they were posted (per posting thread). Drain() runs them at frame stage 1b,
      * between input and tasks. A handler that defers its answer (ControlCall::DeferFrames) is a barrier: the requests
      * behind it wait until it is answered, except those of methods registered with bypassBarrier.
+     *
+     * Manual clock: with SetManualClock(true) the application does not run frames by itself. It runs one only while
+     * IsStepDue() says so, i.e. while a deferred call (a `step`, a `screenshot`) waits for frames, and moves the game
+     * clock by GetStepSeconds() per frame. In between it only answers requests (WaitForRequests) and keeps the window
+     * alive. Every state of this lives here, so that a test can play the application loop without the application.
      *
      * Everything except Post() belongs to the main thread.
      */
@@ -60,14 +67,36 @@ namespace BECore {
         /// Sends {"event":..,"data":..} to the event sink, if there is one
         void Publish(eastl::string_view event, const Json& data);
 
-        /// Runs @p hook at the end of every frame, before a deferred call is completed
-        void AddFrameEndHook(FrameEndHook hook);
+        /// Runs @p hook at the end of every frame, before a deferred call is completed. A hook of the same @p name is replaced, so registering a module again adds nothing
+        void SetFrameEndHook(eastl::string_view name, FrameEndHook hook);
 
         /// Runs the queued requests (frame stage 1b)
         void Drain();
 
         /// Ends a frame: runs the frame end hooks, then counts a deferred call down and completes it at zero
         void EndFrame();
+
+        /// Turns the manual clock on or off; Application does it once, before the first frame
+        void SetManualClock(bool enabled) {
+            _manualClock = enabled;
+        }
+
+        [[nodiscard]] bool IsManualClock() const {
+            return _manualClock;
+        }
+
+        /// With the manual clock: true while a deferred call waits for frames, so the next frame has to run. Always false on the real clock
+        [[nodiscard]] bool IsStepDue() const {
+            return _manualClock && _pending != nullptr;
+        }
+
+        /// Seconds the frame that IsStepDue() asks for lasts (what the pending call gave to DeferFrames)
+        [[nodiscard]] double GetStepSeconds() const {
+            return _pendingSeconds;
+        }
+
+        /// Blocks until a request has been posted or @p timeout has passed (the idle wait of the manual clock). Main thread
+        void WaitForRequests(std::chrono::milliseconds timeout);
 
         /// Answers every queued and deferred request with shutting_down and stops accepting requests
         void Shutdown();
@@ -78,6 +107,10 @@ namespace BECore {
             Handler handler;
             bool bypassBarrier = false;
         };
+        struct HookEntry {
+            eastl::string name;
+            FrameEndHook hook;
+        };
 
         static void ParseRequest(eastl::string_view text, Request& request);
 
@@ -86,6 +119,7 @@ namespace BECore {
         void Settle(eastl::unique_ptr<ControlCall> call);
 
         std::mutex _mutex;
+        std::condition_variable _posted;                  // notified by Post(); WaitForRequests() waits on it
         eastl::deque<eastl::unique_ptr<Request>> _queue;  // posted, not yet seen by the main thread; guarded by _mutex
         bool _stopped = false;                            // guarded by _mutex
 
@@ -94,8 +128,10 @@ namespace BECore {
         eastl::hash_map<eastl::string, HandlerEntry> _handlers;
         eastl::unique_ptr<ControlCall> _pending;
         uint32_t _pendingFramesLeft = 0;
+        double _pendingSeconds = kDefaultStepSeconds;
+        bool _manualClock = false;
         EventSink _eventSink;
-        eastl::vector<FrameEndHook> _frameEndHooks;
+        eastl::vector<HookEntry> _frameEndHooks;
     };
 
 }  // namespace BECore

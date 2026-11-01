@@ -108,6 +108,23 @@ namespace BECore::Tests {
                     bypassBarrier);
             }
 
+            /// The application loop of the manual clock: a frame runs while a step is due. Returns how many ran
+            int RunDueFrames() {
+                constexpr int kGuard = 1000;  // a loop that does not end would hang the test run
+                int frames = 0;
+                while (service.IsStepDue() && frames < kGuard) {
+                    CoreManager::GetTime().Advance(service.GetStepSeconds());
+                    service.Drain();
+                    service.EndFrame();
+                    ++frames;
+                }
+                return frames;
+            }
+
+            const Json* ResultOf(size_t index) const {
+                return index < responses.size() ? FindJsonMember(responses[index], "result") : nullptr;
+            }
+
             ControlService service;
             std::vector<Json> responses;
             std::vector<std::string> order;
@@ -520,7 +537,7 @@ namespace BECore::Tests {
 
     TEST_F(ControlServiceTest, FrameEndHooksRunBeforeADeferredCallCompletes) {
         RegisterDeferring("hold", 1);
-        service.AddFrameEndHook([this] { order.push_back("hook"); });
+        service.SetFrameEndHook("test", [this] { order.push_back("hook"); });
 
         Post(MakeRequest(1, "hold"));
         service.Drain();
@@ -672,6 +689,368 @@ namespace BECore::Tests {
         service.Drain();
 
         EXPECT_EQ(counter.count, 1);
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(IdOf(responses[0]), 2);
+    }
+
+    TEST_F(ControlServiceTest, StatusReportsWhetherTheClockIsManual) {
+        RegisterControlBuiltins(service);
+
+        Post(MakeRequest(1, "status"));
+        service.Drain();
+        service.SetManualClock(true);
+        Post(MakeRequest(2, "status"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 2u);
+        EXPECT_FALSE(GetJsonBool(*ResultOf(0), "manualClock").value_or(true));
+        EXPECT_TRUE(GetJsonBool(*ResultOf(1), "manualClock").value_or(false));
+    }
+
+    TEST_F(ControlServiceTest, TheClockIsRealUnlessTurnedManual) {
+        EXPECT_FALSE(service.IsManualClock());
+        EXPECT_FALSE(service.IsStepDue());
+
+        service.SetManualClock(true);
+        EXPECT_TRUE(service.IsManualClock());
+        EXPECT_FALSE(service.IsStepDue());  // nothing waits for frames
+    }
+
+    TEST_F(ControlServiceTest, RealClockNeverAsksForAFrame) {
+        RegisterDeferring("wait", 3);
+        Post(MakeRequest(1, "wait"));
+        service.Drain();
+
+        EXPECT_FALSE(service.IsStepDue());  // the loop ticks by itself and the call counts those frames
+        service.EndFrame();
+        service.EndFrame();
+        EXPECT_TRUE(responses.empty());
+        service.EndFrame();
+        EXPECT_EQ(responses.size(), 1u);
+    }
+
+    TEST_F(ControlServiceTest, ManualClockRunsOneFramePerFrameAskedFor) {
+        service.SetManualClock(true);
+        RegisterDeferring("wait", 3);
+        Post(MakeRequest(1, "wait"));
+        service.Drain();
+
+        ASSERT_TRUE(service.IsStepDue());
+        EXPECT_EQ(RunDueFrames(), 3);
+
+        EXPECT_FALSE(service.IsStepDue());
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_TRUE(IsOk(responses[0]));
+        EXPECT_EQ(order, (std::vector<std::string>{"wait", "wait-done"}));
+    }
+
+    TEST_F(ControlServiceTest, ManualClockAnswersOnlyAfterTheLastFrame) {
+        service.SetManualClock(true);
+        RegisterDeferring("wait", 3);
+        Post(MakeRequest(1, "wait"));
+        service.Drain();
+
+        for (int frame = 1; frame <= 2; ++frame) {
+            ASSERT_TRUE(service.IsStepDue());
+            service.EndFrame();
+            EXPECT_TRUE(responses.empty()) << "answered after frame " << frame;
+        }
+        ASSERT_TRUE(service.IsStepDue());
+        service.EndFrame();
+        EXPECT_EQ(responses.size(), 1u);
+        EXPECT_FALSE(service.IsStepDue());
+    }
+
+    TEST_F(ControlServiceTest, ManualClockHoldsTheRequestsBehindAStepUntilItsFramesHaveRun) {
+        service.SetManualClock(true);
+        RegisterDeferring("wait", 2);
+        RegisterRecording("after");
+        Post(MakeRequest(1, "wait"));
+        Post(MakeRequest(2, "after"));
+        service.Drain();
+        EXPECT_EQ(order, (std::vector<std::string>{"wait"}));
+
+        EXPECT_EQ(RunDueFrames(), 2);  // each frame drains: "after" stays behind the barrier until the second one ends
+        EXPECT_EQ(order, (std::vector<std::string>{"wait", "wait-done"}));
+
+        service.Drain();  // the idle cycle
+        EXPECT_EQ(order, (std::vector<std::string>{"wait", "wait-done", "after"}));
+        EXPECT_EQ(IdOf(responses.back()), 2);
+    }
+
+    TEST_F(ControlServiceTest, TwoStepsInARowRunTheirFramesOneAfterTheOther) {
+        service.SetManualClock(true);
+        RegisterDeferring("wait", 2);
+        Post(MakeRequest(1, "wait"));
+        Post(MakeRequest(2, "wait"));
+        service.Drain();
+
+        EXPECT_EQ(RunDueFrames(), 2);
+        EXPECT_FALSE(service.IsStepDue());  // the second step is still in the inbox: an idle cycle takes it up
+        service.Drain();
+        EXPECT_TRUE(service.IsStepDue());
+        EXPECT_EQ(RunDueFrames(), 2);
+        ASSERT_EQ(responses.size(), 2u);
+        EXPECT_EQ(IdOf(responses[0]), 1);
+        EXPECT_EQ(IdOf(responses[1]), 2);
+    }
+
+    TEST_F(ControlServiceTest, StepSecondsAreWhatTheCallAskedFor) {
+        service.SetManualClock(true);
+        service.RegisterHandler("slow", [](ControlCall& call) { call.DeferFrames(1, 0.125, [](ControlCall& done) { done.Reply(Json::object()); }); });
+        Post(MakeRequest(1, "slow"));
+        service.Drain();
+
+        ASSERT_TRUE(service.IsStepDue());
+        EXPECT_DOUBLE_EQ(service.GetStepSeconds(), 0.125);
+    }
+
+    TEST_F(ControlServiceTest, StepSecondsDefaultToASixtiethOfASecond) {
+        service.SetManualClock(true);
+        RegisterDeferring("wait", 1);
+        Post(MakeRequest(1, "wait"));
+        service.Drain();
+
+        EXPECT_DOUBLE_EQ(service.GetStepSeconds(), kDefaultStepSeconds);
+    }
+
+    TEST_F(ControlServiceTest, NegativeAndNotANumberStepSecondsAreZero) {
+        service.SetManualClock(true);
+        const double notANumber = std::numeric_limits<double>::quiet_NaN();
+        for (const double seconds : {-1.0, notANumber}) {
+            service.RegisterHandler("odd", [seconds](ControlCall& call) { call.DeferFrames(1, seconds, [](ControlCall& done) { done.Reply(Json::object()); }); });
+            Post(MakeRequest(1, "odd"));
+            service.Drain();
+
+            ASSERT_TRUE(service.IsStepDue());
+            EXPECT_EQ(service.GetStepSeconds(), 0.0);
+            RunDueFrames();
+        }
+    }
+
+    TEST_F(ControlServiceTest, ShutdownEndsAStepThatIsRunning) {
+        service.SetManualClock(true);
+        RegisterDeferring("wait", 100);
+        Post(MakeRequest(1, "wait"));
+        service.Drain();
+        ASSERT_TRUE(service.IsStepDue());
+
+        service.Shutdown();
+
+        EXPECT_FALSE(service.IsStepDue());
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(ErrorCode(responses[0]), "shutting_down");
+    }
+
+    TEST_F(ControlServiceTest, WaitForRequestsTimesOutWhenNothingIsPosted) {
+        const auto start = std::chrono::steady_clock::now();
+        service.WaitForRequests(std::chrono::milliseconds(30));
+        EXPECT_GE(std::chrono::steady_clock::now() - start, std::chrono::milliseconds(25));
+    }
+
+    TEST_F(ControlServiceTest, WaitForRequestsReturnsAtOnceWhenARequestIsWaiting) {
+        Post(MakeRequest(1, "ping"));
+
+        const auto start = std::chrono::steady_clock::now();
+        service.WaitForRequests(std::chrono::seconds(30));
+        EXPECT_LT(std::chrono::steady_clock::now() - start, std::chrono::seconds(10));
+    }
+
+    TEST_F(ControlServiceTest, WaitForRequestsWakesWhenAnotherThreadPosts) {
+        RegisterRecording("hello");
+        std::thread client([this] { service.Post(MakeRequest(1, "hello"), [](eastl::string) {}); });
+
+        const auto start = std::chrono::steady_clock::now();
+        service.WaitForRequests(std::chrono::seconds(30));
+        const auto waited = std::chrono::steady_clock::now() - start;
+        client.join();
+
+        EXPECT_LT(waited, std::chrono::seconds(10));
+        service.Drain();
+        EXPECT_EQ(order, (std::vector<std::string>{"hello"}));
+    }
+
+    TEST_F(ControlServiceTest, FrameEndHookOfTheSameNameIsReplaced) {
+        service.SetFrameEndHook("a", [this] { order.push_back("first"); });
+        service.SetFrameEndHook("a", [this] { order.push_back("second"); });
+
+        service.EndFrame();
+
+        EXPECT_EQ(order, (std::vector<std::string>{"second"}));
+    }
+
+    TEST_F(ControlServiceTest, FrameEndHooksOfDifferentNamesRunInTheOrderTheyWereSet) {
+        service.SetFrameEndHook("a", [this] { order.push_back("a"); });
+        service.SetFrameEndHook("b", [this] { order.push_back("b"); });
+        service.SetFrameEndHook("a", [this] { order.push_back("a2"); });  // keeps its place
+
+        service.EndFrame();
+
+        EXPECT_EQ(order, (std::vector<std::string>{"a2", "b"}));
+    }
+
+    TEST_F(ControlServiceTest, AFrameEndHookMayAddAnotherHookWhichRunsInTheSameFrame) {
+        service.SetFrameEndHook("outer", [this] {
+            order.push_back("outer");
+            service.SetFrameEndHook("inner", [this] { order.push_back("inner"); });
+        });
+
+        service.EndFrame();
+        EXPECT_EQ(order, (std::vector<std::string>{"outer", "inner"}));
+        service.EndFrame();  // "inner" is set again, not added a second time
+        EXPECT_EQ(order, (std::vector<std::string>{"outer", "inner", "outer", "inner"}));
+    }
+
+    TEST_F(ControlServiceTest, StepAdvancesTheClockByTheFramesAskedFor) {
+        RegisterControlBuiltins(service);
+        service.SetManualClock(true);
+        CoreManager::GetTime().Reset();
+
+        Json params = Json::object();
+        params["frames"] = 3;
+        params["dt"] = 0.1;
+        Post(MakeRequest(1, "step", params));
+        Post(MakeRequest(2, "status"));
+        service.Drain();
+        EXPECT_TRUE(responses.empty());
+
+        EXPECT_EQ(RunDueFrames(), 3);
+        service.Drain();  // the status behind the step
+
+        ASSERT_EQ(responses.size(), 2u);
+        EXPECT_EQ(IdOf(responses[0]), 1);
+        ASSERT_NE(ResultOf(0), nullptr);
+        EXPECT_EQ(GetJsonInt(*ResultOf(0), "frame").value_or(0), 3);
+        EXPECT_NEAR(GetJsonNumber(*ResultOf(0), "totalTime").value_or(0.0), 0.3, 1e-9);
+        EXPECT_NEAR(GetJsonNumber(*ResultOf(0), "deltaTime").value_or(0.0), 0.1, 1e-6);
+
+        EXPECT_EQ(IdOf(responses[1]), 2);
+        EXPECT_EQ(GetJsonInt(*ResultOf(1), "frame").value_or(0), 3);
+    }
+
+    TEST_F(ControlServiceTest, StepWithoutParamsIsOneFrameOfASixtiethOfASecond) {
+        RegisterControlBuiltins(service);
+        service.SetManualClock(true);
+        CoreManager::GetTime().Reset();
+
+        Post(MakeRequest(1, "step"));
+        service.Drain();
+
+        EXPECT_EQ(RunDueFrames(), 1);
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(GetJsonInt(*ResultOf(0), "frame").value_or(0), 1);
+        EXPECT_NEAR(GetJsonNumber(*ResultOf(0), "totalTime").value_or(0.0), kDefaultStepSeconds, 1e-9);
+    }
+
+    TEST_F(ControlServiceTest, StepWithZeroSecondsRunsFramesWithoutMovingTheClock) {
+        RegisterControlBuiltins(service);
+        service.SetManualClock(true);
+        CoreManager::GetTime().Reset();
+
+        Json params = Json::object();
+        params["frames"] = 2;
+        params["dt"] = 0;
+        Post(MakeRequest(1, "step", params));
+        service.Drain();
+
+        EXPECT_EQ(RunDueFrames(), 2);
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(GetJsonInt(*ResultOf(0), "frame").value_or(0), 2);
+        EXPECT_EQ(GetJsonNumber(*ResultOf(0), "totalTime").value_or(-1.0), 0.0);
+    }
+
+    TEST_F(ControlServiceTest, StepTakesTheLargestFrameCountAndTheLongestFrame) {
+        RegisterControlBuiltins(service);
+        service.SetManualClock(true);
+
+        Json params = Json::object();
+        params["frames"] = kMaxStepFrames;
+        params["dt"] = Time::kMaxFrameTime;
+        Post(MakeRequest(1, "step", params));
+        service.Drain();
+
+        EXPECT_TRUE(service.IsStepDue());
+        EXPECT_DOUBLE_EQ(service.GetStepSeconds(), Time::kMaxFrameTime);
+        EXPECT_TRUE(responses.empty());  // accepted: not answered with an error
+    }
+
+    TEST_F(ControlServiceTest, StepRefusesParamsThatAreNotInRange) {
+        RegisterControlBuiltins(service);
+        service.SetManualClock(true);
+
+        Json zeroFrames = Json::object();
+        zeroFrames["frames"] = 0;
+        Json negativeFrames = Json::object();
+        negativeFrames["frames"] = -3;
+        Json tooManyFrames = Json::object();
+        tooManyFrames["frames"] = static_cast<int64_t>(kMaxStepFrames) + 1;
+        Json fractionalFrames = Json::object();
+        fractionalFrames["frames"] = 1.5;
+        Json textFrames = Json::object();
+        textFrames["frames"] = "3";
+        Json nullFrames = Json::object();
+        nullFrames["frames"] = nullptr;
+        Json negativeDt = Json::object();
+        negativeDt["dt"] = -0.1;
+        Json tooLongDt = Json::object();
+        tooLongDt["dt"] = Time::kMaxFrameTime + 0.01;
+        Json textDt = Json::object();
+        textDt["dt"] = "fast";
+        Json nullDt = Json::object();
+        nullDt["dt"] = nullptr;
+
+        const std::vector<Json> bad = {zeroFrames, negativeFrames, tooManyFrames, fractionalFrames, textFrames, nullFrames, negativeDt, tooLongDt, textDt, nullDt};
+        int64_t id = 0;
+        for (const Json& params : bad) {
+            Post(MakeRequest(++id, "step", params));
+        }
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), bad.size());
+        for (size_t i = 0; i < responses.size(); ++i) {
+            EXPECT_FALSE(IsOk(responses[i])) << DumpJson(bad[i]).c_str();
+            EXPECT_EQ(ErrorCode(responses[i]), "invalid_params") << DumpJson(bad[i]).c_str();
+            EXPECT_FALSE(ErrorMessage(responses[i]).empty());
+        }
+        EXPECT_FALSE(service.IsStepDue());  // a refused step asks for no frame
+    }
+
+    TEST_F(ControlServiceTest, StepOnTheRealClockCountsTheFramesTheLoopRunsAnyway) {
+        RegisterControlBuiltins(service);
+        CoreManager::GetTime().Reset();
+
+        Json params = Json::object();
+        params["frames"] = 2;
+        params["dt"] = 0.2;  // ignored: the frames take their own time
+        Post(MakeRequest(1, "step", params));
+        service.Drain();
+
+        EXPECT_FALSE(service.IsStepDue());
+        CoreManager::GetTime().Advance(0.01);
+        service.EndFrame();
+        EXPECT_TRUE(responses.empty());
+        CoreManager::GetTime().Advance(0.01);
+        service.EndFrame();
+
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(GetJsonInt(*ResultOf(0), "frame").value_or(0), 2);
+        EXPECT_NEAR(GetJsonNumber(*ResultOf(0), "totalTime").value_or(0.0), 0.02, 1e-9);
+    }
+
+    TEST_F(ControlServiceTest, QuitEndsAStepOfManyFrames) {
+        RegisterControlBuiltins(service);
+        service.SetManualClock(true);
+        QuitCounter counter;
+        counter.Subscribe<ApplicationEvents::QuitEvent, &QuitCounter::OnQuit>(&counter);
+
+        Json params = Json::object();
+        params["frames"] = kMaxStepFrames;
+        Post(MakeRequest(1, "step", params));
+        service.Drain();
+        Post(MakeRequest(2, "quit"));
+        service.Drain();
+
+        EXPECT_EQ(counter.count, 1);  // a step of ten minutes does not make the application unquittable
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(IdOf(responses[0]), 2);
     }

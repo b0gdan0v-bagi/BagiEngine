@@ -74,6 +74,7 @@ namespace BECore {
             std::lock_guard<std::mutex> lock(_mutex);
             if (!_stopped) {
                 _queue.push_back(std::move(request));
+                _posted.notify_one();
                 return;
             }
         }
@@ -99,8 +100,14 @@ namespace BECore {
         _eventSink(DumpJson(message));
     }
 
-    void ControlService::AddFrameEndHook(FrameEndHook hook) {
-        _frameEndHooks.push_back(std::move(hook));
+    void ControlService::SetFrameEndHook(eastl::string_view name, FrameEndHook hook) {
+        for (HookEntry& entry : _frameEndHooks) {
+            if (entry.name == name) {
+                entry.hook = std::move(hook);
+                return;
+            }
+        }
+        _frameEndHooks.push_back(HookEntry{eastl::string(name), std::move(hook)});
     }
 
     bool ControlService::BypassesBarrier(const Request& request) const {
@@ -167,14 +174,21 @@ namespace BECore {
         }
 
         _pendingFramesLeft = call->_deferFrames;
+        _pendingSeconds = call->_deferSeconds;
         call->_deferFrames = 0;
         _pending = std::move(call);
     }
 
+    void ControlService::WaitForRequests(std::chrono::milliseconds timeout) {
+        std::unique_lock<std::mutex> lock(_mutex);
+        _posted.wait_for(lock, timeout, [this] { return !_queue.empty(); });
+    }
+
     void ControlService::EndFrame() {
-        // By index: a hook may add hooks
+        // By index: a hook may add hooks. A copy: a hook may replace itself
         for (size_t i = 0; i < _frameEndHooks.size(); ++i) {
-            _frameEndHooks[i]();
+            const FrameEndHook hook = _frameEndHooks[i].hook;
+            hook();
         }
 
         if (!_pending) {

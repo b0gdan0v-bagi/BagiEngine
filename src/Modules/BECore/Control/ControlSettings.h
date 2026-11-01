@@ -11,18 +11,21 @@ namespace BECore {
     namespace ControlArguments {
         inline constexpr eastl::string_view kControl = "--control";
         inline constexpr eastl::string_view kControlPortPrefix = "--control-port=";
+        inline constexpr eastl::string_view kManualClock = "--manual-clock";
     }  // namespace ControlArguments
 
     /// Attributes of the ApplicationConfig root that ResolveControlSettings() reads
     namespace ControlAttributes {
         inline constexpr eastl::string_view kControl = "control";
         inline constexpr eastl::string_view kControlPort = "controlPort";
+        inline constexpr eastl::string_view kManualClock = "manualClock";
     }  // namespace ControlAttributes
 
     /// How the external control API is started: off by default, a development tool that has to be asked for
     struct ControlSettings {
         bool enabled = false;
         uint16_t port = kDefaultControlPort;  // 0 asks the system for a free port
+        bool manualClock = false;             // frames run only on a `step`; ControlService::SetManualClock
     };
 
     /**
@@ -34,10 +37,12 @@ namespace BECore {
      * |--------------|-----------|---------|
      * | --control | control="true" / "false" (also 1 / 0) | start the WebSocket server |
      * | --control-port=N | controlPort="N" | port, 0 to 65535 (0 is a free port picked by the system) |
+     * | --manual-clock | manualClock="true" / "false" (also 1 / 0) | the game clock moves only on a `step` (see ControlService) |
      *
      * Arguments it does not know are ignored (a game may have flags of its own). A value that cannot be read, a bare
-     * `--control-port`, and `--control-port` while the API stays off are errors: the caller stops the start-up,
-     * because a person who asked for the API has to be told that it did not start.
+     * `--control-port`, and `--control-port` or the manual clock while the API stays off are errors: the caller stops
+     * the start-up, because a person who asked for the API has to be told that it did not start (and a manual clock
+     * that nobody can step would freeze the game).
      *
      * @param args Command line without the program name
      * @param applicationConfig Root of ApplicationConfig; an empty node is allowed

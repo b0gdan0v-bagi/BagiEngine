@@ -55,6 +55,15 @@ namespace BECore {
          */
         void DeferFrames(uint32_t frames, DoneFn done);
 
+        /**
+         * @brief DeferFrames() that also says how long each of the frames is, in seconds.
+         *
+         * Only a manual clock (ControlService::IsManualClock) uses @p secondsPerFrame: while this call is pending the
+         * application runs one frame of that length per step. On the real clock the frames take the time they take.
+         * A value that is not positive is a frame of zero seconds (a screenshot wants one: nothing moves).
+         */
+        void DeferFrames(uint32_t frames, double secondsPerFrame, DoneFn done);
+
         [[nodiscard]] bool IsAnswered() const {
             return _answered;
         }
@@ -68,6 +77,7 @@ namespace BECore {
         ControlReplyFn _reply;
         DoneFn _done;
         uint32_t _deferFrames = 0;
+        double _deferSeconds = kDefaultStepSeconds;
         bool _answered = false;
     };
 

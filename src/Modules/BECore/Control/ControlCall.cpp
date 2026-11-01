@@ -48,11 +48,16 @@ namespace BECore {
     }
 
     void ControlCall::DeferFrames(uint32_t frames, DoneFn done) {
+        DeferFrames(frames, kDefaultStepSeconds, std::move(done));
+    }
+
+    void ControlCall::DeferFrames(uint32_t frames, double secondsPerFrame, DoneFn done) {
         EXPECT(!_answered, "ControlCall: the call is already answered");
         if (_answered) {
             return;
         }
         _deferFrames = std::max(frames, 1u);
+        _deferSeconds = secondsPerFrame > 0.0 ? secondsPerFrame : 0.0;  // not a number counts as zero too
         _done = std::move(done);
     }
 

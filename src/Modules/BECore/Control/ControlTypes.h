@@ -12,6 +12,9 @@ namespace BECore {
     /// ControlService::Shutdown() (answered on the posting thread).
     using ControlReplyFn = std::function<void(eastl::string)>;
 
+    /// Frame time of a frame that a deferred call asks for when it does not say how long the frame is: one frame at 60 fps
+    inline constexpr double kDefaultStepSeconds = 1.0 / 60.0;
+
     /// Error codes of the control protocol. They are part of the protocol: clients match on them.
     namespace ControlErrors {
         inline constexpr eastl::string_view kParseError = "parse_error";
