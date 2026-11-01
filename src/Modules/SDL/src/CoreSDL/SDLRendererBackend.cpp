@@ -15,14 +15,22 @@
 
 namespace BECore {
 
+    namespace {
+
+        constexpr const char* kSoftwareRenderer = "software";
+
+    }  // namespace
+
     bool SDLRendererBackend::Initialize(IMainWindow& window) {
         auto* sdlWindow = dynamic_cast<SDLMainWindow*>(&window);
         if (!sdlWindow) {
             return false;
         }
 
-        _renderer = SDL_CreateRenderer(sdlWindow->GetSDLWindow(), nullptr);
+        // A headless window has no GPU surface behind it: only the software renderer works there
+        _renderer = SDL_CreateRenderer(sdlWindow->GetSDLWindow(), sdlWindow->IsHeadless() ? kSoftwareRenderer : nullptr);
         if (!_renderer) {
+            LOG_ERROR("SDLRendererBackend: cannot create the renderer: {}"_format(SDL_GetError()));
             return false;
         }
 
@@ -39,6 +47,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::Destroy() {
+        _captureCallback = nullptr;  // nothing will be presented any more
         if (_renderer) {
             SDL_DestroyRenderer(_renderer);
             _renderer = nullptr;
@@ -57,9 +66,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::Present() {
-        if (_renderer) {
-            SDL_RenderPresent(_renderer);
-        }
+        PresentFrame();
     }
 
     void SDLRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
@@ -125,9 +132,54 @@ namespace BECore {
     }
 
     void SDLRendererBackend::OnRenderPresent() {
+        PresentFrame();
+    }
+
+    void SDLRendererBackend::PresentFrame() {
         if (_renderer) {
+            ServeCapture();  // the pixels have to be read before the present: after it the back buffer is undefined
             SDL_RenderPresent(_renderer);
         }
+    }
+
+    void SDLRendererBackend::RequestCapture(CaptureCallback callback) {
+        if (_captureCallback) {
+            CaptureCallback superseded = std::move(_captureCallback);
+            superseded(std::unexpected(eastl::string("the capture was replaced by a newer request")));
+        }
+        _captureCallback = std::move(callback);
+    }
+
+    void SDLRendererBackend::ServeCapture() {
+        if (!_captureCallback) {
+            return;
+        }
+        CaptureCallback callback = std::move(_captureCallback);
+        _captureCallback = nullptr;
+
+        SDL_Surface* surface = SDL_RenderReadPixels(_renderer, nullptr);
+        if (!surface) {
+            callback(std::unexpected(Format("SDL_RenderReadPixels failed: {}", SDL_GetError())));
+            return;
+        }
+        SDL_Surface* rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
+        SDL_DestroySurface(surface);
+        if (!rgba) {
+            callback(std::unexpected(Format("converting the captured pixels failed: {}", SDL_GetError())));
+            return;
+        }
+
+        PixelBuffer image;
+        image.width = static_cast<uint32_t>(rgba->w);
+        image.height = static_cast<uint32_t>(rgba->h);
+        const size_t rowBytes = static_cast<size_t>(rgba->w) * 4;
+        image.rgba.resize(rowBytes * static_cast<size_t>(rgba->h));
+        const auto* source = static_cast<const uint8_t*>(rgba->pixels);
+        for (int row = 0; row < rgba->h; ++row) {  // the surface may pad its rows
+            std::copy_n(source + static_cast<size_t>(row) * static_cast<size_t>(rgba->pitch), rowBytes, image.rgba.begin() + static_cast<ptrdiff_t>(static_cast<size_t>(row) * rowBytes));
+        }
+        SDL_DestroySurface(rgba);
+        callback(std::move(image));
     }
 
     void SDLRendererBackend::OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event) {

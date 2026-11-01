@@ -6,7 +6,7 @@
 
 namespace BECore {
 
-    bool ApplicationFabric::Create() {
+    bool ApplicationFabric::Create(const ApplicationOptions& options) {
         const auto configNode = CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern);
 
         if (!configNode) {
@@ -23,7 +23,7 @@ namespace BECore {
             return false;
         }
 
-        return fabric->Create(configNode);
+        return fabric->Create(configNode, options);
     }
 
 }  // namespace BECore

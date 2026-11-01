@@ -1,6 +1,7 @@
 #include "Application.h"
 
 #include <BECore/Application/ApplicationFabric.h>
+#include <BECore/Application/RunMode.h>
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
@@ -42,7 +43,17 @@ namespace BECore {
         // Before the first frame: the loop reads it from the start
         CoreManager::GetControlService().SetManualClock(controlSettings->manualClock);
 
-        if (!ApplicationFabric::GetInstance().Create()) {
+        // The editor draws its viewport into an offscreen target, which the software renderer of a headless run does not have
+        const auto& applicationConfig = CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern);
+        if (controlSettings->headless && ReadRunMode(applicationConfig) == RunMode::Editor) {
+            LOG_ERROR("Headless: the Editor run mode cannot run without a window; set mode=\"Game\" in ApplicationConfig.xml");
+            LogEvent::Flush();
+            return false;
+        }
+
+        ApplicationOptions options;
+        options.headless = controlSettings->headless;
+        if (!ApplicationFabric::GetInstance().Create(options)) {
             return false;
         }
 

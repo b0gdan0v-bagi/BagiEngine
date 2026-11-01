@@ -16,6 +16,20 @@ namespace BECore {
         int GetWidth() const override;
         int GetHeight() const override;
 
+        /**
+         * @brief Makes the window a headless one: call it before Initialize().
+         *
+         * Initialize() then asks SDL for its dummy video driver (no real window appears, nothing is shown) and takes
+         * SDL_WINDOW_VULKAN out of the configured flags, which that driver cannot honour.
+         */
+        void SetHeadless(bool headless) {
+            _headless = headless;
+        }
+
+        [[nodiscard]] bool IsHeadless() const {
+            return _headless;
+        }
+
         SDL_Window* GetSDLWindow() const {
             return _window;
         }
@@ -26,6 +40,7 @@ namespace BECore {
         SDL_Window* _window = nullptr;
         int _width = 0;
         int _height = 0;
+        bool _headless = false;
     };
 
 }  // namespace BECore

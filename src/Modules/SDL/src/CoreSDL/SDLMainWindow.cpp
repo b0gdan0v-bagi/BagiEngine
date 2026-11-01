@@ -10,10 +10,21 @@
 
 namespace BECore {
 
+    namespace {
+
+        constexpr const char* kHeadlessVideoDriver = "dummy";
+
+    }  // namespace
+
     SDLMainWindow::SDLMainWindow() = default;
     SDLMainWindow::~SDLMainWindow() = default;
 
     bool SDLMainWindow::Initialize(eastl::string_view configPath) {
+
+        // The video driver is read by SDL_Init, so the hint has to come first
+        if (_headless) {
+            SDL_SetHint(SDL_HINT_VIDEO_DRIVER, kHeadlessVideoDriver);
+        }
 
         if (!SDL_Init(SDL_INIT_VIDEO)) {
             return false;
@@ -23,6 +34,7 @@ namespace BECore {
         ScopeGuard guard([&]() {
             if (!initialized) {
                 SDL_Quit();
+                SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);
             }
         });
 
@@ -45,6 +57,9 @@ namespace BECore {
         if (!windowConfig._windowFlags.empty()) {
             flags = SDLUtils::ParseWindowFlags(eastl::string_view(windowConfig._windowFlags.data(), windowConfig._windowFlags.size()));
         }
+        if (_headless) {
+            flags &= ~SDL_WINDOW_VULKAN;  // the dummy driver has no Vulkan surface; the software renderer draws instead
+        }
 
         _window = SDL_CreateWindow(windowConfig._title.c_str(), windowConfig._width, windowConfig._height, flags);
         if (!_window) {
@@ -66,6 +81,7 @@ namespace BECore {
             _window = nullptr;
         }
         SDL_Quit();
+        SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);  // the next window picks its driver again
         _width = 0;
         _height = 0;
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Application/ApplicationMainAccess.h>
+#include <BECore/Application/ApplicationOptions.h>
 #include <BECore/MainWindow/MainWindowAccessor.h>
 
 namespace BECore {
@@ -13,7 +14,7 @@ namespace BECore {
         IApplicationFabric() = default;
         ~IApplicationFabric() override = default;
 
-        BE_FUNCTION virtual bool Create(const XmlNode& configNode) = 0;
+        BE_FUNCTION virtual bool Create(const XmlNode& configNode, const ApplicationOptions& options) = 0;
     };
 
 }  // namespace BECore

@@ -7,7 +7,7 @@ namespace BECore {
     class SDL3ApplicationFabric : public IApplicationFabric {
         BE_CLASS(SDL3ApplicationFabric)
     public:
-        bool Create(const XmlNode& configNode) override;
+        bool Create(const XmlNode& configNode, const ApplicationOptions& options) override;
     };
 
 }  // namespace BECore

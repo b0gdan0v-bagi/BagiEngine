@@ -33,6 +33,9 @@ namespace BECore {
         float GetOutputWidth() const override;
         float GetOutputHeight() const override;
 
+        /// Serves the request just before the next SDL_RenderPresent with SDL_RenderReadPixels
+        void RequestCapture(CaptureCallback callback) override;
+
         SDL_Renderer* GetSDLRenderer() const {
             return _renderer;
         }
@@ -40,6 +43,8 @@ namespace BECore {
     private:
         void OnRenderClear();
         void OnRenderPresent();
+        void PresentFrame();
+        void ServeCapture();
         void OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event);
 
         void OnImGuiInit();
@@ -48,6 +53,7 @@ namespace BECore {
         void OnImGuiRender();
 
         SDL_Renderer* _renderer = nullptr;
+        CaptureCallback _captureCallback;
     };
 
 }  // namespace BECore

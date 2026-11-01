@@ -1,0 +1,512 @@
+#include <BECore/Control/ControlCall.h>
+#include <BECore/Control/ControlService.h>
+#include <BECore/Control/Json.h>
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Renderer/IRenderer.h>
+#include <Common/EngineEnvironment.h>
+#include <Common/Printers.h>
+#include <CoreSDL/SDLMainWindow.h>
+#include <CoreSDL/SDLRendererBackend.h>
+#include <CoreSDL/SDLScreenshot.h>
+#include <Events/RenderEvents.h>
+#include <SDL3_image/SDL_image.h>
+#include <array>
+#include <gtest/gtest.h>
+
+namespace BECore::Tests {
+
+    namespace {
+
+        constexpr const char* kWindowConfig = "config/SDLWindowConfig.xml";
+        constexpr eastl::string_view kPngBase64Prefix = "iVBORw0KGgo";  // the 8 bytes of a PNG signature in base64
+
+        using Pixel = std::array<uint8_t, 4>;
+
+        const Color kBackground{10, 20, 30, 255};
+        const Color kRed{255, 0, 0, 255};
+
+        Pixel PixelAt(const PixelBuffer& image, uint32_t x, uint32_t y) {
+            const size_t offset = (static_cast<size_t>(y) * image.width + x) * 4;
+            return {image.rgba[offset], image.rgba[offset + 1], image.rgba[offset + 2], image.rgba[offset + 3]};
+        }
+
+        Pixel AsPixel(const Color& color) {
+            return {color.r, color.g, color.b, color.a};
+        }
+
+        PixelBuffer MakeImage(uint32_t width, uint32_t height, const Color& fill) {
+            PixelBuffer image;
+            image.width = width;
+            image.height = height;
+            image.rgba.resize(static_cast<size_t>(width) * height * 4);
+            for (size_t i = 0; i < image.rgba.size(); i += 4) {
+                image.rgba[i] = fill.r;
+                image.rgba[i + 1] = fill.g;
+                image.rgba[i + 2] = fill.b;
+                image.rgba[i + 3] = fill.a;
+            }
+            return image;
+        }
+
+        /// The size that the IHDR chunk of a PNG file gives (big-endian, at bytes 16 to 23)
+        std::pair<uint32_t, uint32_t> PngSize(const eastl::vector<uint8_t>& png) {
+            const auto read = [&png](size_t at) {
+                return (static_cast<uint32_t>(png[at]) << 24) | (static_cast<uint32_t>(png[at + 1]) << 16) | (static_cast<uint32_t>(png[at + 2]) << 8) | png[at + 3];
+            };
+            return {read(16), read(20)};
+        }
+
+        /// The pixels of a PNG file in memory, as the engine's RGBA layout; empty when SDL cannot read it
+        PixelBuffer DecodePng(const eastl::vector<uint8_t>& png) {
+            PixelBuffer image;
+            SDL_Surface* loaded = IMG_Load_IO(SDL_IOFromConstMem(png.data(), png.size()), true);
+            if (loaded == nullptr) {
+                return image;
+            }
+            SDL_Surface* rgba = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32);
+            SDL_DestroySurface(loaded);
+            if (rgba == nullptr) {
+                return image;
+            }
+            image.width = static_cast<uint32_t>(rgba->w);
+            image.height = static_cast<uint32_t>(rgba->h);
+            const size_t rowBytes = static_cast<size_t>(rgba->w) * 4;
+            image.rgba.resize(rowBytes * static_cast<size_t>(rgba->h));
+            for (int row = 0; row < rgba->h; ++row) {
+                const auto* source = static_cast<const uint8_t*>(rgba->pixels) + static_cast<size_t>(row) * static_cast<size_t>(rgba->pitch);
+                std::copy_n(source, rowBytes, image.rgba.begin() + static_cast<ptrdiff_t>(static_cast<size_t>(row) * rowBytes));
+            }
+            SDL_DestroySurface(rgba);
+            return image;
+        }
+
+        /// A renderer that draws nothing and keeps the default RequestCapture, like a backend that cannot read its output back
+        class BlindRenderer : public IRenderer {
+        public:
+            bool Initialize(IMainWindow&) override {
+                return true;
+            }
+            void Destroy() override {}
+            void BeginFrame() override {}
+            void EndFrame() override {}
+            void Clear(const Color&) override {}
+            void Present() override {}
+            void DrawFilledRect(float, float, float, float, const Color&) override {}
+            void DrawTexture(ITexture&, const Rect*, float, float, float, float) override {}
+            IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t, uint32_t) override {
+                return {};
+            }
+            void SetRenderTarget(IRenderTarget*) override {}
+            void UnsetRenderTarget() override {}
+            float GetOutputWidth() const override {
+                return 0.0f;
+            }
+            float GetOutputHeight() const override {
+                return 0.0f;
+            }
+        };
+
+        /// A headless window with the SDL renderer on it. A machine without the dummy video driver skips the test.
+        class SDLCaptureTest : public ::testing::Test {
+        protected:
+            static void SetUpTestSuite() {
+                EngineEnvironment::EnsureCoreServices();
+            }
+
+            void SetUp() override {
+                window = New<SDLMainWindow>();
+                window->SetHeadless(true);
+                if (!window->Initialize(kWindowConfig)) {
+                    window.Reset();
+                    GTEST_SKIP() << "no headless window: " << SDL_GetError();
+                }
+                renderer = New<SDLRendererBackend>();
+                if (!renderer->Initialize(*window)) {
+                    renderer.Reset();
+                    GTEST_SKIP() << "no software renderer: " << SDL_GetError();
+                }
+            }
+
+            void TearDown() override {
+                if (renderer) {
+                    renderer->Destroy();
+                }
+                if (window) {
+                    window->Destroy();
+                }
+            }
+
+            /// Draws the background and a red rectangle at (100, 50) of 200 by 100
+            void DrawFrame() {
+                renderer->Clear(kBackground);
+                renderer->DrawFilledRect(100.0f, 50.0f, 200.0f, 100.0f, kRed);
+            }
+
+            IntrusivePtr<SDLMainWindow> window;
+            IntrusivePtr<SDLRendererBackend> renderer;
+        };
+
+        std::string ErrorCode(const Json& response) {
+            const Json* error = FindJsonMember(response, "error");
+            const auto code = error != nullptr ? GetJsonString(*error, "code") : std::nullopt;
+            return code ? std::string(code->c_str(), code->size()) : std::string();
+        }
+
+        /// A ControlService of its own with the `screenshot` method, answering from the window and renderer of SDLCaptureTest
+        class ScreenshotControlTest : public SDLCaptureTest {
+        protected:
+            void SetUp() override {
+                SDLCaptureTest::SetUp();
+                if (IsSkipped()) {
+                    return;
+                }
+                previousRenderer = CoreManager::GetRenderer();
+                CoreManager::GetRendererManager().SetRenderer(renderer);
+                RegisterScreenshotControl(service);
+            }
+
+            void TearDown() override {
+                CoreManager::GetRendererManager().SetRenderer(previousRenderer);
+                SDLCaptureTest::TearDown();
+            }
+
+            void Post(const char* method, const Json& params = Json()) {
+                Json request = Json::object();
+                request["id"] = ++lastId;
+                request["method"] = method;
+                if (!params.is_null()) {
+                    request["params"] = params;
+                }
+                service.Post(DumpJson(request), [this](eastl::string text) {
+                    auto parsed = ParseJson(text);
+                    responses.push_back(parsed ? std::move(*parsed) : Json());
+                });
+            }
+
+            const Json* Result(size_t index) const {
+                return index < responses.size() ? FindJsonMember(responses[index], "result") : nullptr;
+            }
+
+            ControlService service;
+            std::vector<Json> responses;
+            IntrusivePtr<IRenderer> previousRenderer;
+            int64_t lastId = 0;
+        };
+
+    }  // namespace
+
+    TEST_F(SDLCaptureTest, TheWindowIsHeadlessAndHasNoGpuSurface) {
+        EXPECT_TRUE(window->IsHeadless());
+        EXPECT_EQ(std::string(SDL_GetCurrentVideoDriver()), "dummy");
+        EXPECT_GT(renderer->GetOutputWidth(), 0.0f);
+        EXPECT_GT(renderer->GetOutputHeight(), 0.0f);
+    }
+
+    TEST_F(SDLCaptureTest, CaptureReadsWhatWasDrawn) {
+        std::optional<CaptureResult> captured;
+        DrawFrame();
+        renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
+        renderer->Present();
+
+        ASSERT_TRUE(captured.has_value());
+        ASSERT_TRUE(captured->has_value()) << captured->error().c_str();
+        const PixelBuffer& image = **captured;
+        EXPECT_EQ(static_cast<float>(image.width), renderer->GetOutputWidth());
+        EXPECT_EQ(static_cast<float>(image.height), renderer->GetOutputHeight());
+        ASSERT_EQ(image.rgba.size(), static_cast<size_t>(image.width) * image.height * 4);
+        EXPECT_EQ(PixelAt(image, 150, 80), AsPixel(kRed));
+        EXPECT_EQ(PixelAt(image, 5, 5), AsPixel(kBackground));
+        EXPECT_EQ(PixelAt(image, 400, 300), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, CaptureIsServedAtThePresentAndOnlyOnce) {
+        int calls = 0;
+        DrawFrame();
+        renderer->RequestCapture([&calls](CaptureResult) { ++calls; });
+        EXPECT_EQ(calls, 0);  // not before the frame is presented
+
+        renderer->Present();
+        EXPECT_EQ(calls, 1);
+        DrawFrame();
+        renderer->Present();
+        EXPECT_EQ(calls, 1);
+    }
+
+    TEST_F(SDLCaptureTest, NewerRequestReplacesTheOlderOne) {
+        std::optional<CaptureResult> first;
+        std::optional<CaptureResult> second;
+        DrawFrame();
+        renderer->RequestCapture([&first](CaptureResult result) { first = std::move(result); });
+        renderer->RequestCapture([&second](CaptureResult result) { second = std::move(result); });
+
+        ASSERT_TRUE(first.has_value());  // answered at once, with an error
+        EXPECT_FALSE(first->has_value());
+        EXPECT_FALSE(second.has_value());
+        renderer->Present();
+        ASSERT_TRUE(second.has_value());
+        EXPECT_TRUE(second->has_value());
+    }
+
+    TEST_F(SDLCaptureTest, PresentWithoutARequestIsAnOrdinaryPresent) {
+        DrawFrame();
+        renderer->Present();
+        SUCCEED();
+    }
+
+    TEST_F(SDLCaptureTest, CaptureStillWorksWhenThePresentComesFromTheRenderEvent) {
+        std::optional<CaptureResult> captured;
+        DrawFrame();
+        renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
+        RenderEvents::RenderPresentEvent::Emit();
+
+        ASSERT_TRUE(captured.has_value());
+        EXPECT_TRUE(captured->has_value());
+    }
+
+    TEST_F(SDLCaptureTest, DestroyDropsAPendingRequest) {
+        int calls = 0;
+        renderer->RequestCapture([&calls](CaptureResult) { ++calls; });
+
+        renderer->Destroy();
+
+        EXPECT_EQ(calls, 0);
+    }
+
+    TEST(RendererCaptureDefaultTest, ARendererThatCannotReadItsOutputAnswersWithAnError) {
+        BlindRenderer renderer;
+        std::optional<CaptureResult> captured;
+
+        renderer.RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
+
+        ASSERT_TRUE(captured.has_value());
+        ASSERT_FALSE(captured->has_value());
+        EXPECT_FALSE(captured->error().empty());
+    }
+
+    TEST(EncodePngTest, PngHasTheSizeOfTheImage) {
+        const auto png = EncodePng(MakeImage(64, 32, kRed), 0);
+
+        ASSERT_TRUE(png.has_value()) << png.error().c_str();
+        EXPECT_EQ(png->width, 64u);
+        EXPECT_EQ(png->height, 32u);
+        ASSERT_GT(png->bytes.size(), 24u);
+        const std::array<uint8_t, 8> signature{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+        EXPECT_TRUE(std::equal(signature.begin(), signature.end(), png->bytes.begin()));
+        EXPECT_EQ(PngSize(png->bytes), (std::pair<uint32_t, uint32_t>{64, 32}));
+    }
+
+    TEST(EncodePngTest, PixelsSurviveTheRoundTrip) {
+        PixelBuffer image = MakeImage(8, 4, kBackground);
+        const size_t marked = (static_cast<size_t>(2) * image.width + 5) * 4;  // pixel (5, 2)
+        image.rgba[marked] = 200;
+        image.rgba[marked + 1] = 100;
+        image.rgba[marked + 2] = 50;
+        image.rgba[marked + 3] = 255;
+
+        const auto png = EncodePng(image, 0);
+        ASSERT_TRUE(png.has_value()) << png.error().c_str();
+        const PixelBuffer decoded = DecodePng(png->bytes);
+
+        ASSERT_EQ(decoded.width, 8u);
+        ASSERT_EQ(decoded.height, 4u);
+        EXPECT_EQ(PixelAt(decoded, 5, 2), (Pixel{200, 100, 50, 255}));
+        EXPECT_EQ(PixelAt(decoded, 0, 0), AsPixel(kBackground));
+        EXPECT_EQ(decoded.rgba, image.rgba);
+    }
+
+    TEST(EncodePngTest, ALargeImageIsScaledDownKeepingItsProportions) {
+        const auto wide = EncodePng(MakeImage(1920, 1080, kBackground), 1024);
+        ASSERT_TRUE(wide.has_value()) << wide.error().c_str();
+        EXPECT_EQ(wide->width, 1024u);
+        EXPECT_EQ(wide->height, 576u);
+        EXPECT_EQ(PngSize(wide->bytes), (std::pair<uint32_t, uint32_t>{1024, 576}));
+
+        const auto tall = EncodePng(MakeImage(100, 400, kBackground), 200);
+        ASSERT_TRUE(tall.has_value()) << tall.error().c_str();
+        EXPECT_EQ(tall->width, 50u);
+        EXPECT_EQ(tall->height, 200u);
+    }
+
+    TEST(EncodePngTest, ScalingKeepsTheColourOfAFlatImage) {
+        const auto png = EncodePng(MakeImage(400, 200, kRed), 100);
+        ASSERT_TRUE(png.has_value()) << png.error().c_str();
+
+        const PixelBuffer decoded = DecodePng(png->bytes);
+        ASSERT_EQ(decoded.width, 100u);
+        ASSERT_EQ(decoded.height, 50u);
+        EXPECT_EQ(PixelAt(decoded, 50, 25), AsPixel(kRed));
+    }
+
+    TEST(EncodePngTest, AnImageIsNeverScaledUp) {
+        const auto png = EncodePng(MakeImage(64, 64, kRed), 1024);
+        ASSERT_TRUE(png.has_value()) << png.error().c_str();
+        EXPECT_EQ(png->width, 64u);
+        EXPECT_EQ(png->height, 64u);
+    }
+
+    TEST(EncodePngTest, ZeroMaxSideMeansNoScaling) {
+        const auto png = EncodePng(MakeImage(300, 200, kRed), 0);
+        ASSERT_TRUE(png.has_value()) << png.error().c_str();
+        EXPECT_EQ(png->width, 300u);
+        EXPECT_EQ(png->height, 200u);
+    }
+
+    TEST(EncodePngTest, ASideIsNeverScaledToNothing) {
+        const auto png = EncodePng(MakeImage(4000, 1, kRed), 100);
+        ASSERT_TRUE(png.has_value()) << png.error().c_str();
+        EXPECT_EQ(png->width, 100u);
+        EXPECT_EQ(png->height, 1u);
+    }
+
+    TEST(EncodePngTest, EmptyAndTruncatedImagesAreRefused) {
+        EXPECT_FALSE(EncodePng(PixelBuffer{}, 0).has_value());
+
+        PixelBuffer truncated = MakeImage(4, 4, kRed);
+        truncated.rgba.resize(truncated.rgba.size() - 1);
+        EXPECT_FALSE(EncodePng(truncated, 0).has_value());
+
+        PixelBuffer noWidth = MakeImage(4, 4, kRed);
+        noWidth.width = 0;
+        EXPECT_FALSE(EncodePng(noWidth, 0).has_value());
+    }
+
+    TEST_F(ScreenshotControlTest, ScreenshotAnswersAtTheEndOfTheFrameWithAPng) {
+        DrawFrame();
+        Post("screenshot");
+        service.Drain();
+        EXPECT_TRUE(responses.empty());  // the picture is taken when the frame is presented
+
+        renderer->Present();
+        EXPECT_TRUE(responses.empty());  // and the answer goes out at the end of the frame
+        service.EndFrame();
+
+        ASSERT_EQ(responses.size(), 1u);
+        ASSERT_NE(Result(0), nullptr);
+        const auto base64 = GetJsonString(*Result(0), "png_base64");
+        ASSERT_TRUE(base64.has_value());
+        EXPECT_TRUE(eastl::string_view(base64->data(), base64->size()).starts_with(kPngBase64Prefix));
+        const int64_t width = GetJsonInt(*Result(0), "width").value_or(0);
+        const int64_t height = GetJsonInt(*Result(0), "height").value_or(0);
+        EXPECT_EQ(width, 1024);  // the window of the engine config is 1920 by 1080, cut to the default 1024
+        EXPECT_EQ(height, 576);
+    }
+
+    TEST_F(ScreenshotControlTest, MaxSizeSetsTheLongerSide) {
+        DrawFrame();
+        Json params = Json::object();
+        params["maxSize"] = 200;
+        Post("screenshot", params);
+        service.Drain();
+        renderer->Present();
+        service.EndFrame();
+
+        ASSERT_EQ(responses.size(), 1u);
+        ASSERT_NE(Result(0), nullptr);
+        EXPECT_EQ(GetJsonInt(*Result(0), "width").value_or(0), 200);
+        EXPECT_EQ(GetJsonInt(*Result(0), "height").value_or(0), 113);
+    }
+
+    TEST_F(ScreenshotControlTest, MaxSizeOutOfRangeIsRefusedAndAsksForNoFrame) {
+        service.SetManualClock(true);
+        Json tooSmall = Json::object();
+        tooSmall["maxSize"] = static_cast<int64_t>(kMinScreenshotSize) - 1;
+        Json tooLarge = Json::object();
+        tooLarge["maxSize"] = static_cast<int64_t>(kMaxScreenshotSize) + 1;
+        Json fractional = Json::object();
+        fractional["maxSize"] = 100.5;
+        Json text = Json::object();
+        text["maxSize"] = "big";
+        Json nothing = Json::object();
+        nothing["maxSize"] = nullptr;
+
+        for (const Json& params : {tooSmall, tooLarge, fractional, text, nothing}) {
+            Post("screenshot", params);
+        }
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 5u);
+        for (const Json& response : responses) {
+            EXPECT_EQ(ErrorCode(response), "invalid_params");
+        }
+        EXPECT_FALSE(service.IsStepDue());
+    }
+
+    TEST_F(ScreenshotControlTest, TheLargestAndSmallestSizesAreAccepted) {
+        for (const uint32_t size : {kMinScreenshotSize, kMaxScreenshotSize}) {
+            DrawFrame();
+            Json params = Json::object();
+            params["maxSize"] = size;
+            Post("screenshot", params);
+            service.Drain();
+            renderer->Present();
+            service.EndFrame();
+        }
+
+        ASSERT_EQ(responses.size(), 2u);
+        EXPECT_EQ(GetJsonInt(*Result(0), "width").value_or(0), static_cast<int64_t>(kMinScreenshotSize));
+        EXPECT_NE(Result(1), nullptr);
+    }
+
+    TEST_F(ScreenshotControlTest, OnTheManualClockAScreenshotIsOneFrameOfZeroSeconds) {
+        service.SetManualClock(true);
+        Post("screenshot");
+        service.Drain();
+
+        ASSERT_TRUE(service.IsStepDue());
+        EXPECT_EQ(service.GetStepSeconds(), 0.0);
+
+        DrawFrame();
+        renderer->Present();
+        service.EndFrame();
+        EXPECT_FALSE(service.IsStepDue());
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_NE(Result(0), nullptr);
+    }
+
+    TEST_F(ScreenshotControlTest, ScreenshotFailsWhenNoFrameWasPresented) {
+        Post("screenshot");
+        service.Drain();
+
+        service.EndFrame();  // the frame ended without a present
+
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(ErrorCode(responses[0]), "capture_failed");
+    }
+
+    TEST_F(ScreenshotControlTest, ScreenshotFailsAtOnceWhereTheRendererCannotCapture) {
+        CoreManager::GetRendererManager().SetRenderer(New<BlindRenderer>());
+        Post("screenshot");
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 1u);  // refused in the handler: no frame is waited for
+        EXPECT_EQ(ErrorCode(responses[0]), "capture_failed");
+        EXPECT_FALSE(service.IsStepDue());
+    }
+
+    TEST_F(ScreenshotControlTest, ScreenshotFailsWithoutARenderer) {
+        CoreManager::GetRendererManager().SetRenderer({});
+        Post("screenshot");
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(ErrorCode(responses[0]), "capture_failed");
+    }
+
+    TEST_F(ScreenshotControlTest, ARequestBehindAScreenshotWaitsForItsFrame) {
+        service.RegisterHandler("after", [](ControlCall& call) { call.Reply(Json::object()); });
+        DrawFrame();
+        Post("screenshot");
+        Post("after");
+        service.Drain();
+        EXPECT_TRUE(responses.empty());
+
+        renderer->Present();
+        service.EndFrame();
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 2u);
+        EXPECT_NE(Result(0), nullptr);
+        EXPECT_EQ(GetJsonInt(responses[1], "id").value_or(0), 2);
+    }
+
+}  // namespace BECore::Tests
