@@ -2,7 +2,7 @@
 
 ## Overview
 
-The core of the external control API: a program or a model sends commands, the engine runs them on the main thread. This directory has no transport and no game knowledge. A transport (the WebSocket server of the `RemoteControl` module) feeds `ControlService::Post()`; modules above BECore register the methods (`ping`, `status`, `step`, `quit` live here; the game methods are registered by `Games`, the screenshot by `SDL`). The goal and the stages are in `TODO.md` ("No external control") and `.claude/plans/`.
+The core of the external control API: a program or a model sends commands, the engine runs them on the main thread. This directory has no transport and no game knowledge. A transport (the WebSocket server of the `RemoteControl` module) feeds `ControlService::Post()`; modules above BECore register the methods (`ping`, `status`, `step`, `quit` live here; the game methods are registered by `Games`, the screenshot by `SDL`). What is left to do (Windows, a capture on Vulkan, delayed tasks on the manual clock) is in `TODO.md` ("Control API: checked on macOS only ..."); the tools that use the API are in `tools/control/CLAUDE.md`.
 
 | File | Purpose |
 |------|---------|

@@ -38,6 +38,8 @@ build/ClangmacOS/BagiEngineTests --gtest_filter='Reflection*'    # run directly;
 
 Runtime tests that need the live engine are `ITest` classes (`src/Modules/BECore/Tests/`). `CoreManager::OnApplicationPreInit()` runs the ones enabled in `config/TestsConfig.xml` at game startup.
 
+`ctest` also runs `BagiMatch3ControlSmoke` and `BagiChessControlSmoke`: Python scripts that start the game `--headless` and play it over the control API. They are skipped (exit code 77) when the executable is not built, and `--target` above builds no game, so build `BagiMatch3 BagiChess` as well to run them. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests` (`tools/control/CLAUDE.md`).
+
 ## Architecture Overview
 
 BagiEngine is a C++23 game engine with modular ECS architecture (EnTT). The main entry is `src/main.cpp` → `Application::Initialize()/Run()`; each game executable compiles it.

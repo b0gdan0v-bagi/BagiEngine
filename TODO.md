@@ -13,7 +13,7 @@ Known problems that are not being worked on yet. One entry per problem: where it
 Direction for the engine, not a problem entry. The engine has strong infrastructure (reflection, layered config, TaskSystem, ImGui editor, tests) and no runtime for a real 2D game: no animation, text, audio or input mapping. The entries below follow this order. Every "missing" statement was found by reading the code, not by running a game.
 
 1. **Hygiene:** CI is deferred by the project owner (entry below; the Linux job in the test-gaps entry waits for it). The link from this file to a task tracker and a dashboard is done: `tools/todo_sync/`.
-2. **External control API (in progress):** a model or a program plays a game over MCP / WebSocket (entry below).
+2. **External control API (done on macOS):** a model or a program plays a game over MCP / WebSocket (`tools/control/CLAUDE.md`, `src/Modules/RemoteControl/CLAUDE.md`); what is left (Windows, a capture on Vulkan, the Stockfish games in CI, the clock of delayed tasks) is the entry below.
 3. **Minimum for a 2D game, in this order:** animation, 2D rendering, text, audio, input mapping, in-game UI (and the choice of how its screens are authored, entry below).
 4. **Owner decisions:** renderer backends (the Android and web targets in the release entry weigh in), what ECS means in this engine.
 5. **Content and quality:** prefabs, saves / hot-reload / packing, test gaps and platforms, the reflection generator.
@@ -59,33 +59,31 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 - a workflow for macOS (`macos-debug`) and Windows (one MSVC or Clang preset) that checks out the submodules (`git submodule update --init --recursive`, `external/googletest` included), configures, builds the game and test targets and runs `ctest`;
 - a decision for the Vulkan loader DLL on the Windows runner (install the SDK, fetch the loader, or build without the Vulkan backend), after checking whether the test executables need it at all;
-- a guard on the number of tests (284 at the last count): it must not drop;
+- a guard on the number of tests (669 ctest entries at the last count, from `ctest --preset macos-debug -N`; the pytest suites of `tools/` come on top: 93 in `tools/control/tests`, 49 in `tools/todo_sync/tests`): it must not drop;
 - a Linux job once Linux presets exist (see the entry on test gaps and platforms).
 
-## No external control: a game can be played only by a human at the window
+## Control API: checked on macOS only, no capture on Vulkan, Stockfish games run by hand
 
-**Status:** in progress since 2026-11-01. Stages 0 to 9 are done: the spikes, the command queue, the game interface with the Match3 adapter, the WebSocket server with its start-up flags, the manual clock with `step` and the `state_changed` push, headless mode with `screenshot`, the full Chess rules (FEN, UCI), the Chess adapter, the MCP server and the Stockfish bridge (`tools/control/CLAUDE.md`; `BECore/Control/CLAUDE.md`, `Games/CLAUDE.md`, `games/Match3/CLAUDE.md`, `games/Chess/CLAUDE.md`, `RemoteControl/CLAUDE.md`, `SDL/CLAUDE.md`; `BagiChess --control --headless --manual-clock` plays over `ws://127.0.0.1:8765` with no window: state, legal moves, a move, a position by FEN). A full Chess game against Stockfish 19 was played with every position cross-checked, and a model drives `BagiChess` through the MCP server. Next: the closing stage (docs sweep, test counts, what is left below).
+**Status:** open since 2026-11-01. The control API is done and tested on macOS: the command queue, the game interface with the Match3 and Chess adapters, the WebSocket server, the manual clock with `step`, headless mode with `screenshot`, the MCP server and the Stockfish bridge (`BECore/Control/CLAUDE.md`, `RemoteControl/CLAUDE.md`, `tools/control/CLAUDE.md`). Measured there: Chess against Stockfish 19 to a mate with every position cross-checked, and 11,274 positions of random games with no difference in the legal moves. What is left is below.
 
 **Stage:** 2
 
-**Plan:** `.claude/plans/buzzing-tinkering-cat.md`
+**Where:** `src/Modules/RemoteControl/` (Winsock code path), `src/Modules/SDL/` (the `dummy` driver and the software renderer), `src/Modules/Vulkan/src/CoreVulkan/VulkanRendererBackend.cpp` (`RequestCapture`), `tools/control/`, `src/Modules/TaskSystem/src/TaskSystem/TaskScheduler.cpp` (`ScheduleDelayed`).
 
-**Spike results** (macOS, AppleClang 17, SDL 3.2.0; Windows and MSVC not checked yet):
+**What is left:**
 
-- Headless: `SDL_VIDEO_DRIVER=dummy` with the software renderer works (pixels correct, PNG through `IMG_SavePNG_IO` into memory, byte-identical to the Metal result). A hidden window on the `cocoa` driver with the software renderer does **not** (`software not available`); with Metal it works. The `offscreen` driver needs OpenGL / GLES. So `--headless` means the SDL backend on the `dummy` video driver, no window at all.
-- nlohmann/json with `JSON_NOEXCEPTION`: `at()`, `get<T>()` on the wrong type, `value()` on a non-object and const `operator[]` by a missing key abort the process. Client JSON is read only through the checked helpers of `BECore/Control/Json.h`.
+1. Windows is unchecked: Winsock and `ws2_32`, the `WinMain` arguments, the `dummy` video driver with the software renderer, and the Python tools (`game_process.py`; the tests that make a fake executable with a shebang are skipped there) have not been built or run on it.
+2. The Vulkan backend cannot be seen or run without a window: `--headless` and `screenshot` work on the SDL software renderer only, and `VulkanRendererBackend::RequestCapture` answers with an error (MoltenVK has no headless surface on macOS). Whether that gap is worth closing depends on the decision about the renderer backends.
+3. The Stockfish games run by hand: `tools/control/tests/test_stockfish.py` plays real games when Stockfish and a built `BagiChess` exist and skips otherwise, and pytest is not part of ctest, so nothing runs it on a push.
+4. Delayed tasks use the wall clock: `TaskScheduler::ScheduleDelayed` computes `Clock::now() + delay`, so `co_await Delay(...)` and `TaskManager::RunDelayed` do not follow `Time::Advance`. A timer or an animation built on them would run in real time under `--manual-clock` and break the determinism the manual clock is for. Nothing in a game uses them yet (only `TaskSystemTest`).
+5. A person playing against Stockfish at the window was not tried (the bridge waits for the person's move by polling `get_state`).
 
-**Where:** `src/Application/Application.cpp` (`Run()` is a blocking loop on the real clock, input comes only from the SDL window), `games/Chess/src/Chess/ChessGameControl.h` (the Chess adapter), `src/Modules/RemoteControl/` (the WebSocket server, built and tested on macOS only).
+**A fix has to cover:**
 
-**What is missing** (found by reading the code and searching `src`, `games` and CMake, not by running a game):
-
-1. Windows is unchecked: Winsock, `ws2_32`, the `WinMain` arguments, the Python tools (`game_process.py` and the shebang fakes of the tests) have not been built or run there.
-2. The Vulkan backend cannot be seen or run without a window: `--headless` and `screenshot` work on the SDL software renderer only (macOS; Windows is unchecked), and `VulkanRendererBackend::RequestCapture` answers with an error. Whether that gap is worth closing depends on the decision about the renderer backends.
-
-**A fix has to cover** (the goal: a whole game can be developed, played and tested by a model or by an external program with no human at the window; Chess against Stockfish is the acceptance example):
-
-- the `RemoteControl` tests, the capture tests, the smoke test and `tools/control/tests` built and run on Windows (the server, the headless path, the MCP server and the bridge are done and tested on macOS);
-- the Stockfish games as a ctest entry or a CI step: `tools/control/tests/test_stockfish.py` plays real games when Stockfish and a built `BagiChess` exist and skips otherwise, but nothing runs it automatically, because pytest is not wired into ctest.
+- the `RemoteControl` tests, the capture tests, the smoke tests and `tools/control/tests` built and run on Windows;
+- a capture on the Vulkan backend, or the decision that the SDL software path is the only one to test on;
+- the Stockfish games as a ctest entry or a CI step (see the CI entry);
+- delayed tasks driven by game time (feed the scheduler from `Time`, or add a game-time delay beside the wall-clock one) before the animation work uses them.
 
 ## Third game: Mahjong solitaire
 
