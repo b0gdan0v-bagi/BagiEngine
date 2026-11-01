@@ -47,11 +47,30 @@ namespace BECore {
             explicit MouseWheelEvent(const SDL_MouseWheelEvent& w) : wheel(w) {}
         };
 
+        /// Typed text, already UTF-8 (SDL sends it only between SDL_StartTextInput and SDL_StopTextInput)
+        struct TextInputEvent : public EventBase<TextInputEvent> {
+            eastl::string text;
+
+            explicit TextInputEvent(eastl::string_view t) : text(t.data(), t.size()) {}
+        };
+
         // События окна
+        // Resize, pixel size, display scale, move, focus and close request; window.type says which
         struct WindowEvent : public EventBase<WindowEvent> {
             SDL_WindowEvent window;
 
             explicit WindowEvent(const SDL_WindowEvent& w) : window(w) {}
+        };
+
+        /// The area that notches and system bars leave free has changed: read it from IMainWindow::GetSafeArea()
+        struct SafeAreaChangedEvent : public EventBase<SafeAreaChangedEvent> {};
+
+        /// The display has been rotated (a phone or tablet turned)
+        struct DisplayOrientationChangedEvent : public EventBase<DisplayOrientationChangedEvent> {
+            SDL_DisplayID display;
+            SDL_DisplayOrientation orientation;
+
+            DisplayOrientationChangedEvent(SDL_DisplayID d, SDL_DisplayOrientation o) : display(d), orientation(o) {}
         };
 
         // Обёртка для любого SDL события (для совместимости)

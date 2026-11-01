@@ -22,10 +22,14 @@ namespace BECore {
         BE_FUNCTION void Draw() override;
 
     private:
+        // Mouse input of the image as the scene's input: origin is the image's top-left corner on the screen
+        void ForwardMouse(float originX, float originY, bool hovered);
+
         BE_REFLECT_FIELD BECore::Color _clearColor{30, 30, 30, 255};
         IntrusivePtr<IRenderTarget> _renderTarget;
-        uint32_t _lastWidth  = 0;
+        uint32_t _lastWidth = 0;
         uint32_t _lastHeight = 0;
+        bool _pressedInViewport[3] = {false, false, false};  // left, right, middle: pressed over the image and not yet released
     };
 
 }  // namespace BECore

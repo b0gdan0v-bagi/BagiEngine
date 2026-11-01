@@ -38,7 +38,12 @@ Updated as the work goes; the dashboard counts these lines.
 - [x] Stage 1.6 Default font: PT Sans (ParaType, OFL 1.1) in `assets/fonts/` with its license; Basic Latin, Latin-1, Cyrillic and punctuation covered (`FontTest`)
 - [x] Stage 1 look at the text on the SDL backend (headless screenshot of a text sheet: Cyrillic, sizes 12 to 72, alignment, ellipsis, auto-fit, alpha)
 - [ ] Stage 1 manual look at the text on Vulkan (owner; the same scene ran on Vulkan without errors)
-- [ ] Stage 2 Input and window metrics
+- [x] Stage 2.1 `IMainWindow::GetPixelDensity/GetDisplayScale/GetSafeArea` with neutral defaults, answered by `SDLMainWindow`
+- [x] Stage 2.2 `ConvertSDLEvent`: mouse up/motion/wheel, keys, text input, window events, `SafeAreaChangedEvent`, `DisplayOrientationChangedEvent`; mouse follows `WantCaptureMouse`, keyboard `WantCaptureKeyboard`
+- [x] Stage 2.3 `UIInput` (`CoreManager::GetUIInput()`): ordered handlers, first to consume wins, the game gets what is left; changes inside a handler are deferred
+- [x] Stage 2.4 `ViewportWidget` feeds `UIInput` with viewport-local down, up, motion and wheel (a press that began in the image is followed to its release)
+- [x] Stage 2.5 tests: `SDLEventsProviderTest` (14), `UIInputTest` (11), `WindowMetricsTest` (5)
+- [ ] Stage 2 look at the editor viewport input by hand (owner: click, drag out of the image, wheel; no test can open the ImGui editor)
 - [ ] Stage 3 Canvases and adaptive layout, pure core
 - [ ] Stage 4 Controls, the XML front-end and the first screens
 - [ ] Stage 5 Decision spike: XML, web-style front-end, RmlUi

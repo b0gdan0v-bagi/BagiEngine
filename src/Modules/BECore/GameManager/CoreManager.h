@@ -4,6 +4,7 @@
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/Input/UIInput.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/MainWindow/MainWindowManager.h>
 #include <BECore/Renderer/RendererManager.h>
@@ -99,6 +100,10 @@ namespace BECore {
             return GetInstance()._controlService;
         }
 
+        static UIInput& GetUIInput() {
+            return GetInstance()._uiInput;
+        }
+
         // Pre-initialization function (FileSystem, AssertHandlers, runtime ITests)
         void OnApplicationPreInit(PassKey<Application>);
 
@@ -138,6 +143,7 @@ namespace BECore {
         FontAtlasLibrary _fontAtlasLibrary;
         Time _time;
         ControlService _controlService;
+        UIInput _uiInput;
     };
 
 }  // namespace BECore

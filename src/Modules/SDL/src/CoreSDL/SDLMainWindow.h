@@ -15,6 +15,9 @@ namespace BECore {
         bool IsValid() const override;
         int GetWidth() const override;
         int GetHeight() const override;
+        float GetPixelDensity() const override;
+        float GetDisplayScale() const override;
+        Rect GetSafeArea() const override;
 
         /**
          * @brief Makes the window a headless one: call it before Initialize().

@@ -98,4 +98,23 @@ namespace BECore {
         return _height;
     }
 
+    float SDLMainWindow::GetPixelDensity() const {
+        // 0 is SDL's answer for "failed" (and for no window)
+        const float density = _window != nullptr ? SDL_GetWindowPixelDensity(_window) : 0.0f;
+        return density > 0.0f ? density : IMainWindow::GetPixelDensity();
+    }
+
+    float SDLMainWindow::GetDisplayScale() const {
+        const float scale = _window != nullptr ? SDL_GetWindowDisplayScale(_window) : 0.0f;
+        return scale > 0.0f ? scale : IMainWindow::GetDisplayScale();
+    }
+
+    Rect SDLMainWindow::GetSafeArea() const {
+        SDL_Rect area{};
+        if (_window == nullptr || !SDL_GetWindowSafeArea(_window, &area) || area.w <= 0 || area.h <= 0) {
+            return IMainWindow::GetSafeArea();
+        }
+        return Rect(static_cast<float>(area.x), static_cast<float>(area.y), static_cast<float>(area.w), static_cast<float>(area.h));
+    }
+
 }  // namespace BECore
