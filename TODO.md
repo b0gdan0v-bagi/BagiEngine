@@ -64,7 +64,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## No external control: a game can be played only by a human at the window
 
-**Status:** in progress since 2026-11-01. Stages 0 to 2 are done: the spikes, the command queue and the game interface with the Match3 adapter (`BECore/Control/CLAUDE.md`, `Games/CLAUDE.md`, `games/Match3/CLAUDE.md`). Next: the WebSocket server, manual clock and step, headless and screenshot, then Chess rules and the Stockfish and MCP bridges.
+**Status:** in progress since 2026-11-01. Stages 0 to 2 are done: the spikes, the command queue and the game interface with the Match3 adapter (`BECore/Control/CLAUDE.md`, `Games/CLAUDE.md`, `games/Match3/CLAUDE.md`). Chess has its full rules, FEN, UCI and a model-level move (`games/Chess/CLAUDE.md`). Next: the WebSocket server, manual clock and step, headless and screenshot, then the Chess adapter and the Stockfish and MCP bridges.
 
 **Stage:** 2
 
@@ -75,15 +75,14 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - Headless: `SDL_VIDEO_DRIVER=dummy` with the software renderer works (pixels correct, PNG through `IMG_SavePNG_IO` into memory, byte-identical to the Metal result). A hidden window on the `cocoa` driver with the software renderer does **not** (`software not available`); with Metal it works. The `offscreen` driver needs OpenGL / GLES. So `--headless` means the SDL backend on the `dummy` video driver, no window at all.
 - nlohmann/json with `JSON_NOEXCEPTION`: `at()`, `get<T>()` on the wrong type, `value()` on a non-object and const `operator[]` by a missing key abort the process. Client JSON is read only through the checked helpers of `BECore/Control/Json.h`.
 
-**Where:** `src/Application/Application.cpp` (`Run()` is a blocking loop on the real clock, input comes only from the SDL window), `games/Chess/src/Chess/Game/ChessGameModel.h` (`OnSquareClicked(Square)` is the only way to move), `external/` (no socket or WebSocket library).
+**Where:** `src/Application/Application.cpp` (`Run()` is a blocking loop on the real clock, input comes only from the SDL window), `games/Chess/src/Chess/Game/ChessGameModel.h` (`TryMove(Move)` plays a move, `OnSquareClicked(Square)` imitates the mouse; neither can be reached from outside the process), `external/` (no socket or WebSocket library).
 
 **What is missing** (found by reading the code and searching `src`, `games` and CMake, not by running a game):
 
 1. No transport: nothing listens on a socket or a pipe, and there is no MCP server. The commands only reach the queue from code in the process.
-2. Chess has no state and actions interface for a program: it moves only through `OnSquareClicked`, a two-step select / move that imitates mouse clicks, and nothing lists the moves it offers.
-3. Chess cannot talk to a chess engine: no FEN, no move notation (UCI `e2e4`), and the rules are pseudo-legal (no check, castling, en passant or promotion, see `games/Chess/CLAUDE.md`), so Stockfish and the model would disagree on what a legal move is.
-4. No run without a person: the window and the renderer are always created (the Game run mode removed the editor, not the window). The loop ticks the real clock and has no "advance N frames" step; `Time::Advance(seconds)` exists, but only tests call it.
-5. No observation beyond the window: `IRenderer` cannot read pixels back, so there is no screenshot. The scene state can be dumped through `ISerializer`.
+2. Chess has no adapter that exposes its state and actions to a program. The pieces exist in the model (`MoveGenerator::GenerateLegal`, `ChessGameModel::TryMove`, `Position::ToFen`, UCI through `MoveGenerator::ParseUci`), but nothing outside the process can reach them and the model cannot be set to a given position.
+3. No run without a person: the window and the renderer are always created (the Game run mode removed the editor, not the window). The loop ticks the real clock and has no "advance N frames" step; `Time::Advance(seconds)` exists, but only tests call it.
+4. No observation beyond the window: `IRenderer` cannot read pixels back, so there is no screenshot. The scene state can be dumped through `ISerializer`.
 
 **A fix has to cover** (the goal: a whole game can be developed, played and tested by a model or by an external program with no human at the window; Chess against Stockfish is the acceptance example):
 
@@ -91,7 +90,6 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - a WebSocket server (JSON, request id and response, state-change push) in a new module placed in the module order of `CLAUDE.md` without a cycle; localhost only, off by default, enabled by config or a command-line flag. This is a development tool, not the player networking from "Not now";
 - an MCP server so Claude can play and debug a game. Recommendation: a thin separate process in `tools/` that maps MCP tools (`get_state`, `perform_action`, `step`, `screenshot`, `reset`) onto the WebSocket, so the engine has no MCP dependency;
 - a headless mode on top of the Game run mode (`RunMode`, `BECore/CLAUDE.md`): a hidden or absent window, offscreen rendering for screenshots, an optional manual clock (`Time::Advance`) for deterministic runs; a screenshot needs a pixel readback in `IRenderer` and in both backends;
-- Chess rules and notation in `Game/`, each with gtests: FEN in and out, UCI move parse and format, full legal moves (check, mate, castling, en passant, promotion) checked against known perft counts, and a model-level move that does not go through clicks;
 - a Stockfish bridge as an external script in `tools/`: it reads the position over the WebSocket, asks Stockfish over UCI and sends the move back, so Stockfish is never linked into the engine;
 - tests: a smoke test that starts a game headless and plays a few moves through a WebSocket client, and a Chess ↔ Stockfish game as an optional check that is skipped when Stockfish is not installed.
 
