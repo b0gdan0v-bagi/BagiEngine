@@ -11,6 +11,7 @@ Central service locator (`GameManager/CoreManager.h`): one static getter per sub
 | `OnApplicationPreInit` | `InitializeCoreServices()`, then runs the enabled runtime `ITest`s through `TestManager` |
 | `OnApplicationInit` | creates the widgets of the run mode (see below), builds `SceneManager` from `SceneConfig` |
 | `OnGameCycle` | events → control commands (`ControlService::Drain`) → `TaskManager::Update` → scene update → widgets update → queued events → `DrawScreenAll` → `DrawAll` |
+| `OnIdleCycle` | the manual clock between steps instead of `OnGameCycle`: events → `Drain` → wait for a request (up to 8 ms). No frame runs |
 | `OnApplicationDeinit` | `ControlService::Shutdown`, `TaskManager::Shutdown` |
 
 **`InitializeCoreServices()` order:** CRT debug hooks → temporary `OutputSink` + `StackTraceHandler` → `FileSystem` → `TaskManager` → `ConfigManager` → `LoggerManager` → `AssertHandlerManager` → `ResourceManager` → `TextureLibrary` → the builtin control methods (`RegisterControlBuiltins`).
@@ -34,7 +35,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 
 | # | Stage | Where | Does |
 |---|-------|-------|------|
-| 0 | Clock | `Time::Tick` | Measures the frame time; every value below is fixed for the rest of the frame |
+| 0 | Clock | `Time::Tick` (real clock) or `Time::Advance(step seconds)` (manual clock) | Measures or sets the frame time; every value below is fixed for the rest of the frame |
 | 1 | Input | `EventsProviderManager::ProcessEvents` | Window and mouse events become `SDLEvents` and `InputEvents::ActionEvent` |
 | 1b | Commands | `ControlService::Drain` | Requests of the external control API run here, so they see this frame's input (`Control/CLAUDE.md`) |
 | 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread |
@@ -44,6 +45,8 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 Logic reads input and writes state; render only reads state. Do not draw from `SceneUpdateEvent` handlers and do not change game state from `OnDraw()`.
 
 After the present and `LogEvent::Flush()` the loop calls `ControlService::EndFrame()`: it runs the frame end hooks and counts down a control call that waits for frames (a `step`, a `screenshot`).
+
+With the manual clock (`--manual-clock`, `Control/CLAUDE.md`) `Application::Run` skips the whole frame unless a `step` or another deferred control call asks for one, and calls `CoreManager::OnIdleCycle` instead. The frame it does run is the same as above, so game logic cannot tell the clocks apart except that `deltaTime` is what the client asked for.
 
 **Time** (`CoreManager::GetTime()`, `Time/Time.h`): `GetDeltaTime()` is the seconds the last frame took, `GetTotalTime()` the game time since the first frame, `GetFrameCount()` counts frames from 1. The frame time is clamped to `Time::kMaxFrameTime` (0.25 s), so a pause in the debugger is one long frame, not a jump. Scale movement and animation by `SceneUpdateEvent::deltaTime`, never by "per frame" constants. Logic that must give the same result at any frame rate (physics-like integration, replays) goes into `SceneFixedUpdateEvent`: its `deltaTime` is always `Time::GetFixedDeltaTime()` (1/60 s by default), and the leftover time carries over to the next frame, so the number of steps per second is constant.
 

@@ -2,14 +2,14 @@
 
 ## Overview
 
-The core of the external control API: a program or a model sends commands, the engine runs them on the main thread. This directory has no transport and no game knowledge. A transport (the WebSocket server of the `RemoteControl` module) feeds `ControlService::Post()`; modules above BECore register the methods (`ping`, `status`, `quit` live here; the game methods are registered by `Games`, the screenshot by `SDL`). The goal and the stages are in `TODO.md` ("No external control") and `.claude/plans/`.
+The core of the external control API: a program or a model sends commands, the engine runs them on the main thread. This directory has no transport and no game knowledge. A transport (the WebSocket server of the `RemoteControl` module) feeds `ControlService::Post()`; modules above BECore register the methods (`ping`, `status`, `step`, `quit` live here; the game methods are registered by `Games`, the screenshot by `SDL`). The goal and the stages are in `TODO.md` ("No external control") and `.claude/plans/`.
 
 | File | Purpose |
 |------|---------|
 | `ControlService` | Thread-safe FIFO queue of requests, handler table, barrier, deferred answers, push events. One instance: `CoreManager::GetControlService()` |
 | `ControlCall` | One request being handled: `Params()`, `Reply()`, `Fail()`, `DeferFrames()` |
-| `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `quit` |
-| `ControlSettings` | `ResolveControlSettings(args, applicationConfig)`: the start-up flags and attributes of the API (see "Starting the API"), a pure function |
+| `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `quit` |
+| `ControlSettings` | `ResolveControlSettings(args, applicationConfig)`: the start-up flags and attributes of the API, the manual clock included (see "Starting the API"), a pure function |
 | `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn` |
 | `Json.h`, `JsonFwd.h` | nlohmann/json behind checked helpers (see "JSON rules") |
 | `Utils/Base64.h` (one level up) | Base64 for the screenshot and the WebSocket handshake |
@@ -22,10 +22,12 @@ JSON text, one message per request.
 request   {"id": 1, "method": "perform_action", "params": {...}}     id: integer or string, required; params: object, optional
 response  {"id": 1, "ok": true,  "result": {...}}
           {"id": 1, "ok": false, "error": {"code": "illegal_action", "message": "..."}}
-push      {"event": "state_changed", "data": {...}}
+push      {"event": "state_changed", "data": {"game": "Chess", "version": 12, "state": {...}}}
 ```
 
 Error codes are strings and part of the protocol (`ControlErrors`): `parse_error`, `invalid_request`, `invalid_params`, `unknown_method`, `request_too_large`, `internal_error`, `shutting_down`. A method adds its own (`illegal_action`, ...). A request that cannot be parsed gets `"id": null`. `ping` reports `ControlService::kProtocolVersion`; change it when the format changes incompatibly.
+
+`state_changed` is the only push so far (`GameControl` publishes it, `Games/CLAUDE.md`). It is sent at the end of the frame in which the state version of the active game moved, whoever moved it: a client, a reset, a click of a person. `data` is what `get_state` answers (`game`, `version`, `state`; `state` is left out when the game cannot give it). The first frame only records the version, so nothing is pushed for the state a client connects to. An action that a client makes with the manual clock waits for the next frame like everything else (see "Manual clock and `step`").
 
 ## Frame and threads
 
@@ -33,8 +35,8 @@ Error codes are strings and part of the protocol (`ControlErrors`): `parse_error
 - `CoreManager::OnGameCycle` calls `Drain()` as stage **1b**: after input, before `TaskManager::Update`. A command therefore sees this frame's input and what it changes is seen by this frame's logic and render. `Application::Run` calls `EndFrame()` after the present.
 - Requests run in the order they were posted (per posting thread). Do not use `TaskManager` for commands: its main-thread queue is a priority queue and does not keep the order of equal priorities.
 - A handler ends in exactly one of `Reply()`, `Fail()`, `DeferFrames()`; one that does none gets `internal_error` and an error log line.
-- `DeferFrames(n, done)` answers later: `done` runs at the end of the frame in which the counter (starting at `n`, at least 1) reaches zero. While a call is deferred it is a **barrier**: the requests behind it wait, so a client that pipelines `step` and `get_state` gets the state after the step. A method registered with `bypassBarrier` (`quit`) still runs, but cannot defer itself.
-- `AddFrameEndHook()` runs at every `EndFrame()`, before a deferred call completes (the state-change push uses it).
+- `DeferFrames(n, done)` answers later: `done` runs at the end of the frame in which the counter (starting at `n`, at least 1) reaches zero. `DeferFrames(n, secondsPerFrame, done)` also says how long each frame lasts, which only the manual clock uses (negative or not a number is zero; the default is `kDefaultStepSeconds`, 1/60). While a call is deferred it is a **barrier**: the requests behind it wait, so a client that pipelines `step` and `get_state` gets the state after the step. A method registered with `bypassBarrier` (`quit`) still runs, but cannot defer itself.
+- `SetFrameEndHook(name, hook)` runs `hook` at every `EndFrame()`, before a deferred call completes (the state-change push uses it). Setting a name again replaces its hook, so a module that registers twice (`GameManager::Initialize()` does, once per test) adds nothing. A hook that sets another one is fine: the new one runs in the same frame.
 - `Shutdown()` (from `OnApplicationDeinit`) answers everything queued or deferred with `shutting_down`; a request posted later is answered at once on the posting thread. Stop the transport before it.
 - Never use `ASSERT` / `EXPECT` / `FATALERROR` on data from a client: a bad request is an error response, not a bug in the engine.
 - Method names live in an `eastl::hash_map<eastl::string, ...>`, not in `PoolString`: a client must not be able to grow the pool (`ControlServiceTest` checks this with `PoolString::Find`).
@@ -49,6 +51,27 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 - Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport: it bounds the nesting that a client can send.
 - nlohmann uses `std::string` inside; convert to `eastl::string` at the edge, which the helpers do.
 
+## Manual clock and `step`
+
+`step {"frames": N, "dt": seconds}` is a deferred call: it answers when `N` frames (1 to `kMaxStepFrames`, default 1) have ended, with the clock as `status` reports it (`frame`, `totalTime`, `deltaTime`, `fixedDeltaTime`). `dt` is 0 to `Time::kMaxFrameTime` (default 1/60). Both are checked as client data: out of range, fractional (`frames: 1.5`), the wrong type or `null` is `invalid_params`.
+
+The two clocks differ in who runs the frames:
+
+| | Real clock (default) | Manual clock (`--manual-clock`) |
+|---|---|---|
+| Frames | run all the time; `Time::Tick` measures them | run only while `ControlService::IsStepDue()`; `Time::Advance(GetStepSeconds())` sets their length |
+| `step` | waits for `N` frames; `dt` is ignored | makes `N` frames of `dt` seconds, then answers |
+| Between steps | | `Application::Run` calls `CoreManager::OnIdleCycle`: input, `Drain()`, then `WaitForRequests` (up to 8 ms, woken by `Post`). The window stays alive and `quit` still works |
+
+While a step runs it is the barrier, so a pipelined `step` + `get_state` gives the state after the frames. `quit` bypasses the barrier and ends even a step of `kMaxStepFrames`. A call that defers frames for another reason (the `screenshot` of the headless stage will ask for one frame of `dt` 0) uses the same machinery: `IsStepDue()` is true while any deferred call is pending, so the next frame runs and its `EndFrame()` counts it down. All of this state lives in `ControlService`, so `ControlServiceTest` plays the application loop (`RunDueFrames`) without an application.
+
+What the manual clock means for a client:
+
+- Game time and the frame number stand still between steps. A request that changes the state (`perform_action`, `reset`) applies at once, in the idle cycle, but the scene reacts (logic, render, the `state_changed` push) in the next frame, so send a `step` after it.
+- Tasks, animations and fixed updates also move only with steps; `dt` 0 makes frames in which nothing moves.
+- The window is not redrawn between steps. A frame renders as usual, including the present.
+- `--manual-clock` without `--control` is an error: nobody could step the game.
+
 ## Starting the API
 
 The API is off by default: a game has to be asked for it. `Application::Initialize()` calls `ResolveControlSettings()` right after the core services are up (before the window exists) and, when the API is enabled, starts the `RemoteControl` server after `GameManager::Initialize()`, so the game methods are registered before the first client connects.
@@ -57,14 +80,15 @@ The API is off by default: a game has to be asked for it. `Application::Initiali
 |--------------|----------------------------------------|---------|
 | `--control` | `control="true"` (or `false`, `1`, `0`) | start the WebSocket server |
 | `--control-port=N` | `controlPort="N"` | port 0 to 65535; 0 asks the system for a free one; default `kDefaultControlPort` (8765) |
+| `--manual-clock` | `manualClock="true"` (or `false`, `1`, `0`) | frames run only on `step` (see "Manual clock and `step`"); needs the API. The flag only turns it on, so a game that has `manualClock="true"` in its config cannot switch it off from the command line |
 
-The command line beats the attribute, the attribute beats the default. Unknown arguments are ignored (a game may have flags of its own). A value that cannot be read, a bare `--control-port`, and `--control-port=N` while the API stays off are errors: the start-up stops with a line in the log (`Application::Initialize()` flushes the log itself, because nothing else does before the first frame), so the person who asked for the API is not left waiting for it. A port that is taken stops the start-up the same way. The settings are in `ControlSettings.h`; a stage that adds a setting (manual clock, headless) adds its field and its two spellings there.
+The command line beats the attribute, the attribute beats the default. Unknown arguments are ignored (a game may have flags of its own). A value that cannot be read, a bare `--control-port`, and `--control-port=N` or the manual clock while the API stays off are errors: the start-up stops with a line in the log (`Application::Initialize()` flushes the log itself, because nothing else does before the first frame), so the person who asked for the API is not left waiting for it. A port that is taken stops the start-up the same way. The settings are in `ControlSettings.h`; a stage that adds a setting (headless) adds its field and its two spellings there.
 
 ## Methods
 
 | Where | Methods |
 |-------|---------|
-| `BECore/Control/ControlBuiltins` | `ping`, `status`, `quit` |
+| `BECore/Control/ControlBuiltins` | `ping`, `status`, `step`, `quit` |
 | `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state` (`Games/CLAUDE.md`) |
 
 ## Adding a method
@@ -77,4 +101,4 @@ The command line beats the attribute, the attribute beats the default. Unknown a
 
 ## Tests
 
-`tests/BECore/ControlServiceTest.cpp` (queue, order across threads, barrier, deferred answers, shutdown, builtins), `JsonTest.cpp` (checked helpers, garbage, nesting), `Base64Test.cpp` (RFC 4648 vectors), `ControlSettingsTest.cpp` (priority of the flags, attributes and defaults, every kind of invalid value). The transport has its own tests, see `RemoteControl/CLAUDE.md`.
+`tests/BECore/ControlServiceTest.cpp` (queue, order across threads, barrier, deferred answers, hooks, the manual clock and `step`, shutdown, builtins), `GameControlTest.cpp` (the state-change push), `JsonTest.cpp` (checked helpers, garbage, nesting), `Base64Test.cpp` (RFC 4648 vectors), `ControlSettingsTest.cpp` (priority of the flags, attributes and defaults, the manual clock, every kind of invalid value). The transport has its own tests, see `RemoteControl/CLAUDE.md`.
