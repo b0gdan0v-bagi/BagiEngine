@@ -1,0 +1,4 @@
+# Only bagi_mcp.py needs mcp (the MCP server; 2.x renamed FastMCP to MCPServer). The WebSocket client, the Stockfish
+# bridge and the tests use the standard library; pytest is for the tests.
+mcp>=2.0,<3
+pytest>=7.0.0

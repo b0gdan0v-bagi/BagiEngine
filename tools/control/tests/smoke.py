@@ -14,7 +14,6 @@ Exit code: 0 passed, 1 failed, 77 skipped (the executable does not exist; ctest 
 import argparse
 import base64
 import json
-import socket
 import subprocess
 import sys
 import tempfile
@@ -25,13 +24,13 @@ from typing import Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bagi_control_client import BagiControlClient, ConnectionClosed, ControlError  # noqa: E402
+from game_process import free_port, log_tail  # noqa: E402
 from png_reader import PngError, PngImage, read_png  # noqa: E402
 
 EXIT_PASSED = 0
 EXIT_FAILED = 1
 EXIT_SKIPPED = 77
 
-LOG_TAIL_LINES = 25
 CONNECT_RETRY_SECONDS = 0.1
 BOARD_SIZE = 8
 EVENT_TIMEOUT_SECONDS = 5.0
@@ -63,20 +62,6 @@ def expect_error(code: str, action: Callable[[], object], description: str) -> N
         check(error.code == code, f"{description}: expected the error '{code}', got '{error.code}'")
         return
     raise SmokeFailure(f"{description}: expected the error '{code}', got a success")
-
-
-def free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.bind(("127.0.0.1", 0))
-        return probe.getsockname()[1]
-
-
-def log_tail(log_path: Path) -> str:
-    try:
-        lines = log_path.read_text(errors="replace").splitlines()
-    except OSError:
-        return "(no log)"
-    return "\n".join(lines[-LOG_TAIL_LINES:])
 
 
 def connect(process: subprocess.Popen, port: int, timeout: float) -> BagiControlClient:

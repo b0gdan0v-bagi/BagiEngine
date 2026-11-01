@@ -64,7 +64,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## No external control: a game can be played only by a human at the window
 
-**Status:** in progress since 2026-11-01. Stages 0 to 8 are done: the spikes, the command queue, the game interface with the Match3 adapter, the WebSocket server with its start-up flags, the manual clock with `step` and the `state_changed` push, headless mode with `screenshot`, the full Chess rules (FEN, UCI) and the Chess adapter (`BECore/Control/CLAUDE.md`, `Games/CLAUDE.md`, `games/Match3/CLAUDE.md`, `games/Chess/CLAUDE.md`, `RemoteControl/CLAUDE.md`, `SDL/CLAUDE.md`; `BagiChess --control --headless --manual-clock` plays over `ws://127.0.0.1:8765` with no window: state, legal moves, a move, a position by FEN). Next: the Stockfish and MCP bridges.
+**Status:** in progress since 2026-11-01. Stages 0 to 9 are done: the spikes, the command queue, the game interface with the Match3 adapter, the WebSocket server with its start-up flags, the manual clock with `step` and the `state_changed` push, headless mode with `screenshot`, the full Chess rules (FEN, UCI), the Chess adapter, the MCP server and the Stockfish bridge (`tools/control/CLAUDE.md`; `BECore/Control/CLAUDE.md`, `Games/CLAUDE.md`, `games/Match3/CLAUDE.md`, `games/Chess/CLAUDE.md`, `RemoteControl/CLAUDE.md`, `SDL/CLAUDE.md`; `BagiChess --control --headless --manual-clock` plays over `ws://127.0.0.1:8765` with no window: state, legal moves, a move, a position by FEN). A full Chess game against Stockfish 19 was played with every position cross-checked, and a model drives `BagiChess` through the MCP server. Next: the closing stage (docs sweep, test counts, what is left below).
 
 **Stage:** 2
 
@@ -79,15 +79,13 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 **What is missing** (found by reading the code and searching `src`, `games` and CMake, not by running a game):
 
-1. No MCP server: the WebSocket server exists, but a model cannot reach it as tools yet. Windows is unchecked: Winsock, `ws2_32` and the `WinMain` arguments have not been built or run there.
+1. Windows is unchecked: Winsock, `ws2_32`, the `WinMain` arguments, the Python tools (`game_process.py` and the shebang fakes of the tests) have not been built or run there.
 2. The Vulkan backend cannot be seen or run without a window: `--headless` and `screenshot` work on the SDL software renderer only (macOS; Windows is unchecked), and `VulkanRendererBackend::RequestCapture` answers with an error. Whether that gap is worth closing depends on the decision about the renderer backends.
 
 **A fix has to cover** (the goal: a whole game can be developed, played and tested by a model or by an external program with no human at the window; Chess against Stockfish is the acceptance example):
 
-- the `RemoteControl` tests, the capture tests and the smoke test built and run on Windows (the server and the headless path are done and tested on macOS);
-- an MCP server so Claude can play and debug a game. Recommendation: a thin separate process in `tools/` that maps MCP tools (`get_state`, `perform_action`, `step`, `screenshot`, `reset`) onto the WebSocket, so the engine has no MCP dependency;
-- a Stockfish bridge as an external script in `tools/`: it reads the position over the WebSocket, asks Stockfish over UCI and sends the move back, so Stockfish is never linked into the engine;
-- tests: a Chess ↔ Stockfish game as an optional check that is skipped when Stockfish is not installed (the Chess scenario of the smoke test, `BagiChessControlSmoke`, exists).
+- the `RemoteControl` tests, the capture tests, the smoke test and `tools/control/tests` built and run on Windows (the server, the headless path, the MCP server and the bridge are done and tested on macOS);
+- the Stockfish games as a ctest entry or a CI step: `tools/control/tests/test_stockfish.py` plays real games when Stockfish and a built `BagiChess` exist and skips otherwise, but nothing runs it automatically, because pytest is not wired into ctest.
 
 ## Third game: Mahjong solitaire
 

@@ -56,7 +56,7 @@ from bagi_control_client import BagiControlClient
 with BagiControlClient() as c: print(c.call('get_state'))"
 ```
 
-`tools/control/bagi_control_client.py` is a client with the Python standard library only (`call(method, params)`, pushed events in `events`, `ControlError` for an error response). `websocat ws://127.0.0.1:8765` works too: type `{"id":1,"method":"ping"}`. Check what listens with `lsof -nP -iTCP:8765 -sTCP:LISTEN`.
+`tools/control/bagi_control_client.py` is a client with the Python standard library only (`call(method, params)`, pushed events in `events`, `ControlError` for an error response). `websocat ws://127.0.0.1:8765` works too: type `{"id":1,"method":"ping"}`. A model reaches the API through the MCP server `tools/control/bagi_mcp.py`, a program through `tools/control/stockfish_bridge.py` (Chess against Stockfish): both are separate processes over this WebSocket (`tools/control/CLAUDE.md`). Check what listens with `lsof -nP -iTCP:8765 -sTCP:LISTEN`.
 
 ## Tests
 
