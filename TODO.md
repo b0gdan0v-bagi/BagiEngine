@@ -6,7 +6,7 @@ Known problems that are not being worked on yet. One entry per problem: where it
 
 Direction for the engine, not a problem entry. The engine has strong infrastructure (reflection, layered config, TaskSystem, ImGui editor, tests) and no runtime for a real 2D game: no animation, text, audio or input mapping. The entries below follow this order. Every "missing" statement was found by reading the code, not by running a game.
 
-1. **Hygiene:** CI is deferred by the project owner (entry below; the Linux job in the test-gaps entry waits for it).
+1. **Hygiene:** CI is deferred by the project owner (entry below; the Linux job in the test-gaps entry waits for it); the link from this file to a task tracker or dashboard (entry below).
 2. **External control API (in progress):** a model or a program plays a game over MCP / WebSocket (entry below).
 3. **Minimum for a 2D game, in this order:** animation, 2D rendering, text, audio, input mapping, in-game UI (and the choice of how its screens are authored, entry below).
 4. **Owner decisions:** renderer backends (the Android and web targets in the release entry weigh in), what ECS means in this engine.
@@ -53,6 +53,35 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - a decision for the Vulkan loader DLL on the Windows runner (install the SDK, fetch the loader, or build without the Vulkan backend), after checking whether the test executables need it at all;
 - a guard on the number of tests (284 at the last count): it must not drop;
 - a Linux job once Linux presets exist (see the entry on test gaps and platforms).
+
+## TODO.md is read only by people: no link to a task tracker or a dashboard
+
+**Where:** `TODO.md`, `.claude/plans/*.md`, `CI/scripts/` (the place of the existing Python helper scripts) and `tools/` (where a script of this kind would go; it holds only `natvis/` now).
+
+**What is missing** (found by reading the repository, not by running anything):
+
+1. No machine-readable structure. An entry has no id, its status is prose (`**Status:** deferred by the project owner on 2026-10-31`), it has no roadmap stage, and its plan is only a path inside the text.
+2. No view of progress. The roadmap stages, the in-progress entries with their plan checklists, and the deferred entries with their age can be seen only by reading the whole file.
+3. No path to the owner's personal tracker. Entries are copied by hand or not at all.
+
+**Options** (a decision of the project owner; the tools named are candidates, none is evaluated):
+
+1. **A generated static dashboard:** a script turns `TODO.md` and the plans into one local HTML page. No service, no account.
+2. **A self-hosted or local personal tracker** (Vikunja, Plane, a Taskwarrior or Obsidian-kanban file, GitHub Projects): a script pushes the entries through its API or file format.
+3. **Both:** the dashboard first, the tracker adapter on top of the same parser.
+
+Recommendation: option 3, in that order. `TODO.md` stays the source of truth because models read and edit it; the export is one-way and is never edited back.
+
+**A fix has to cover:**
+
+- a small convention in `TODO.md`, with the current entries migrated: a stable id per entry (the heading slug is enough), `**Status:**` starting with one keyword (`open`, `in progress`, `deferred`) plus a date, `**Stage:**` (the roadmap number), `**Plan:**` (a path). Written down in the file header next to the "one entry per problem" rule;
+- a parser in `tools/todo_sync/` (Python, run with the `CI/` venv, no engine code): `TODO.md` → JSON with id, title, status, date, stage, plan and the plan's checkbox progress. It tolerates entries that lack the new fields;
+- a dashboard generator on that JSON: roadmap stages with entry counts by status, in-progress entries with plan progress, deferred entries with their age. The output goes to a git-ignored folder;
+- the tracker adapter: idempotent by entry id (create or update); an entry that disappears from `TODO.md` is closed in the tracker, because finished entries are dropped, not marked done; `--dry-run` prints what would change;
+- the token and URL come from environment variables or a git-ignored per-machine file and are never committed (the same idea as `CMakeUserPresets.json`);
+- a refresh path: a command, optionally a skill (like `build`) or a git hook on commits that touch `TODO.md`; CI waits for its entry;
+- tests: the parser on a fixture copy of `TODO.md` (entry count, statuses, a plan with checkboxes) and the adapter against a fake HTTP server or its `--dry-run` output;
+- games moved out to their own repositories can carry their own `TODO.md`: the tool takes the paths as arguments and names no concrete game.
 
 ## No external control: a game can be played only by a human at the window
 
