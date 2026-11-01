@@ -6,15 +6,16 @@ Known problems that are not being worked on yet. One entry per problem: where it
 
 Direction for the engine, not a problem entry. The engine has strong infrastructure (reflection, layered config, TaskSystem, ImGui editor, tests) and no runtime for a real 2D game: no animation, text, audio or input mapping. The entries below follow this order. Every "missing" statement was found by reading the code, not by running a game.
 
-1. **Hygiene:** CI is deferred by the project owner (entry below; the Linux job in the test-gaps entry waits for it). Scene-scoped events are done: components subscribe with `SubscribeInScene` (`BECore/Scene/CLAUDE.md`).
-2. **Time and run modes:** frame time and the Game run mode are done: `Time` gives `deltaTime` and a fixed step, the frame order is written down, and `mode="Game"` in a game's `ApplicationConfig.xml` starts it without the editor (`BECore/CLAUDE.md`, "Frame order and time" and "Run mode"). The external control API (MCP, WebSocket) that lets a model or a program play a game is next.
-3. **Minimum for a 2D game, in this order:** animation, 2D rendering, text, audio, input mapping, in-game UI.
-4. **Owner decisions:** renderer backends, what ECS means in this engine.
+1. **Hygiene:** CI is deferred by the project owner (entry below; the Linux job in the test-gaps entry waits for it).
+2. **External control API (in progress):** a model or a program plays a game over MCP / WebSocket (entry below).
+3. **Minimum for a 2D game, in this order:** animation, 2D rendering, text, audio, input mapping, in-game UI (and the choice of how its screens are authored, entry below).
+4. **Owner decisions:** renderer backends (the Android and web targets in the release entry weigh in), what ECS means in this engine.
 5. **Content and quality:** prefabs, saves / hot-reload / packing, test gaps and platforms, the reflection generator.
+6. **Third game and releases:** Mahjong, then release builds for PC, Android and web.
 
-**Not now:** networking for players (servers, multiplayer; the control API in stage 2 is a local development tool, not this), 3D, a physics engine of our own (take Box2D when physics is needed), a scripting language, a rewrite to pure ECS (reflection, the inspector and serialization are built around `IComponent`), mobile and web.
+**Not now:** networking for players (servers, multiplayer; the control API in stage 2 is a local development tool, not this), 3D, a physics engine of our own (take Box2D when physics is needed), a scripting language, and a rewrite to pure ECS (reflection, the inspector and serialization are built around `IComponent`).
 
-**Driver:** build a third small game (arcade or platformer) so that each feature in stage 3 has a concrete consumer (movement with `dt`, camera, animation, sound, score text, gamepad), and make Match3 animated as the regression check. Stages 1 to 3 are done when gems fall smoothly (`BagiMatch3` already runs without the editor), the score is drawn with an engine font, a match plays a sound, input goes through an input map, and CI builds and tests it on macOS and Windows (CI is deferred, so that last point waits for its entry).
+**Driver:** the third game is Mahjong solitaire (entry below), so that stage 3 has a concrete consumer: animation (a pair leaves the board), text (timer, score), audio (a match sound), input mapping (mouse and touch) and in-game UI (new game, shuffle, hint). It does not need a camera, movement with `dt` or a gamepad, so those wait for a game that needs them. Make Match3 animated as the regression check. Stages 1 to 3 are done when tiles and gems animate, the score and the timer are drawn with an engine font, a match plays a sound, input goes through an input map, and CI builds and tests it on macOS and Windows (CI is deferred, so that last point waits for its entry).
 
 ## Config Editor: the sink `type` dropdown offers values the logger factory cannot resolve
 
@@ -50,38 +51,52 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 - a workflow for macOS (`macos-debug`) and Windows (one MSVC or Clang preset) that checks out the submodules (`git submodule update --init --recursive`, `external/googletest` included), configures, builds the game and test targets and runs `ctest`;
 - a decision for the Vulkan loader DLL on the Windows runner (install the SDK, fetch the loader, or build without the Vulkan backend), after checking whether the test executables need it at all;
-- a guard on the number of tests (272 at the last count): it must not drop;
+- a guard on the number of tests (284 at the last count): it must not drop;
 - a Linux job once Linux presets exist (see the entry on test gaps and platforms).
 
 ## No external control: a game can be played only by a human at the window
 
-**Status:** in progress since 2026-11-01, plan in `.claude/plans/buzzing-tinkering-cat.md`. Done: the command queue in `BECore/Control/` (`ControlService`, `ping` / `status` / `quit`, nlohmann/json with exceptions off, Base64; frame stage 1b; `BECore/Control/CLAUDE.md`), and the game interface (`IControllableGame`, the game methods of `Games/GameControl`) with the Match3 adapter, legal swaps and a platform-independent RNG (`Games/CLAUDE.md`, `games/Match3/CLAUDE.md`). Next: the WebSocket server, manual clock and step, headless and screenshot, then Chess rules and the Stockfish and MCP bridges.
+**Status:** in progress since 2026-11-01, plan in `.claude/plans/buzzing-tinkering-cat.md`. Stages 0 to 2 are done: the spikes, the command queue and the game interface with the Match3 adapter (`BECore/Control/CLAUDE.md`, `Games/CLAUDE.md`, `games/Match3/CLAUDE.md`). Next: the WebSocket server, manual clock and step, headless and screenshot, then Chess rules and the Stockfish and MCP bridges.
 
 **Spike results** (macOS, AppleClang 17, SDL 3.2.0; Windows and MSVC not checked yet):
 
 - Headless: `SDL_VIDEO_DRIVER=dummy` with the software renderer works (pixels correct, PNG through `IMG_SavePNG_IO` into memory, byte-identical to the Metal result). A hidden window on the `cocoa` driver with the software renderer does **not** (`software not available`); with Metal it works. The `offscreen` driver needs OpenGL / GLES. So `--headless` means the SDL backend on the `dummy` video driver, no window at all.
 - nlohmann/json with `JSON_NOEXCEPTION`: `at()`, `get<T>()` on the wrong type, `value()` on a non-object and const `operator[]` by a missing key abort the process. Client JSON is read only through the checked helpers of `BECore/Control/Json.h`.
 
-**Where:** `src/Application/Application.cpp` (`Run()` is a blocking loop on the real clock, input comes only from the SDL window), `src/Modules/Games/` (`IGame` has `Start` / `Stop` / `Reset` and nothing to read the state or make a move), `games/Chess/src/Chess/Game/ChessGameModel.h` (`OnSquareClicked(Square)` is the only way to move), `games/Match3/src/Match3/Game/Match3GameModel.h` (`TrySwap` takes a move directly), `src/Modules/TaskSystem/` (`SwitchToMainThread()` is how another thread hands work to the frame), `external/` (no socket, WebSocket or JSON library).
+**Where:** `src/Application/Application.cpp` (`Run()` is a blocking loop on the real clock, input comes only from the SDL window), `games/Chess/src/Chess/Game/ChessGameModel.h` (`OnSquareClicked(Square)` is the only way to move), `external/` (no socket or WebSocket library).
 
 **What is missing** (found by reading the code and searching `src`, `games` and CMake, not by running a game):
 
-1. No control channel: nothing listens on a socket or a pipe, there is no MCP server, no WebSocket or JSON dependency.
-2. No way for a program to read the game state or make a move. Match3 has `TrySwap(a, b)`, but Chess moves only through `OnSquareClicked`, a two-step select / move that imitates mouse clicks. Nothing lists the actions a game offers in its current state.
+1. No transport: nothing listens on a socket or a pipe, and there is no MCP server. The commands only reach the queue from code in the process.
+2. Chess has no state and actions interface for a program: it moves only through `OnSquareClicked`, a two-step select / move that imitates mouse clicks, and nothing lists the moves it offers.
 3. Chess cannot talk to a chess engine: no FEN, no move notation (UCI `e2e4`), and the rules are pseudo-legal (no check, castling, en passant or promotion, see `games/Chess/CLAUDE.md`), so Stockfish and the model would disagree on what a legal move is.
 4. No run without a person: the window and the renderer are always created (the Game run mode removed the editor, not the window). The loop ticks the real clock and has no "advance N frames" step; `Time::Advance(seconds)` exists, but only tests call it.
 5. No observation beyond the window: `IRenderer` cannot read pixels back, so there is no screenshot. The scene state can be dumped through `ISerializer`.
 
 **A fix has to cover** (the goal: a whole game can be developed, played and tested by a model or by an external program with no human at the window; Chess against Stockfish is the acceptance example):
 
-- a control service in `CoreManager`, independent of any transport: commands (list games, switch, reset, get state, list actions, perform an action, step N frames, screenshot, quit) queued from any thread and run on the main thread at a fixed stage of the frame, never on the socket thread;
-- a game-side interface that the engine finds without knowing game names (state snapshot, legal actions, apply an action), implemented by Chess and Match3; no engine code refers to a concrete game;
+- the game-side interface (`IControllableGame`) implemented by Chess, as it is for Match3; the `step N frames` and `screenshot` commands on the existing control service;
 - a WebSocket server (JSON, request id and response, state-change push) in a new module placed in the module order of `CLAUDE.md` without a cycle; localhost only, off by default, enabled by config or a command-line flag. This is a development tool, not the player networking from "Not now";
 - an MCP server so Claude can play and debug a game. Recommendation: a thin separate process in `tools/` that maps MCP tools (`get_state`, `perform_action`, `step`, `screenshot`, `reset`) onto the WebSocket, so the engine has no MCP dependency;
 - a headless mode on top of the Game run mode (`RunMode`, `BECore/CLAUDE.md`): a hidden or absent window, offscreen rendering for screenshots, an optional manual clock (`Time::Advance`) for deterministic runs; a screenshot needs a pixel readback in `IRenderer` and in both backends;
 - Chess rules and notation in `Game/`, each with gtests: FEN in and out, UCI move parse and format, full legal moves (check, mate, castling, en passant, promotion) checked against known perft counts, and a model-level move that does not go through clicks;
 - a Stockfish bridge as an external script in `tools/`: it reads the position over the WebSocket, asks Stockfish over UCI and sends the move back, so Stockfish is never linked into the engine;
-- tests: command dispatch with a fake transport, a smoke test that starts a game headless and plays a few moves through a WebSocket client, and a Chess ↔ Stockfish game as an optional check that is skipped when Stockfish is not installed.
+- tests: a smoke test that starts a game headless and plays a few moves through a WebSocket client, and a Chess ↔ Stockfish game as an optional check that is skipped when Stockfish is not installed.
+
+## Third game: Mahjong solitaire
+
+**Where:** `games/Chess` and `games/Match3` (the models to follow), `cmake/BagiEngine.cmake` (`be_add_module`, `be_add_game_reflection`, `be_add_game_executable`, `be_add_game_tests`), `src/Modules/Games/CLAUDE.md` (the engine-game contract), `src/Modules/Games/src/Games/IControllableGame.h`.
+
+**What is missing:** the game. Assumed: tile-matching solitaire (Shanghai), one player. The four-player rules game needs AI players and is out of scope. It is the consumer that the roadmap "Driver" asks for.
+
+**A fix has to cover:**
+
+- `games/Mahjong/` built like the other two: an `IGame` registered in `AbstractFactory<IGame>`, a rules model with no rendering and no animation, an executable `BagiMahjong`, `MahjongTests`; no engine code names the game;
+- the rules as pure code with gtests: layouts of stacked layers, the free-tile rule (nothing on top, and the left or right side open), pair matching (flowers and seasons match within their group), a deal that is always solvable (generated by playing backwards), shuffle when no move is left, hint, undo, a seeded platform-independent RNG like Match3's;
+- a control API adapter (`IControllableGame`): the state and the list of free pairs as actions, so a model can play and test it;
+- stacked tiles use the node `layer` that the draw pass already sorts by (`SceneNode::SetLayer` at runtime, `Scene/CLAUDE.md`, "Draw order"): one node per tile, the layer from its height in the layout. No renderer work is needed first;
+- the features it consumes: animation, text, audio, input mapping with touch, in-game UI, save game (resume a deal);
+- the first game to go through the release entry on all three targets.
 
 ## No animation: no tweens, easing or timelines
 
@@ -168,6 +183,30 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - anchoring to the window or viewport size;
 - a main-menu scene in one of the games as the first consumer.
 
+## Game UI has no LLM-friendly authoring path yet: choose one before building it
+
+**Where:** `src/Widgets/` (the editor panels are ImGui code), `games/*/config/SceneConfig.xml` and `Scene/CLAUDE.md` (scenes are XML; positions are absolute pixels in `TransformComponent`), the control API entry (a screenshot is planned, not built). No Figma or other UI import exists in the repository.
+
+**What is wrong** (found by reading the code, not by running anything): in-game UI does not exist yet (entry above), so its authoring format is still free to choose. A model can edit XML as text, but it cannot see the result until the screenshot exists, a designer's mockup has no path into the engine, and absolute pixel positions break on other screen sizes (Android, web).
+
+**Options** (a decision of the project owner):
+
+1. **Declarative UI in the engine's own XML** (panel, label, button, anchors), edited as text and checked by a control API screenshot and a scene dump. No new dependency; it fits reflection and the scene editor.
+2. **Figma as the source:** (a) the model reads the design through the Figma MCP server and writes the XML itself; or (b) a script in `tools/` imports a Figma file through the Figma REST API (frames to panels, text to labels, components to prefabs, exported images to an atlas) with a layer naming convention as the contract. Both need the text, layout and prefab pieces first.
+3. **An HTML/CSS-like UI library** (RmlUi is the candidate; whether it fits all three release targets is not checked). Models know HTML and CSS well, but it is a large dependency with its own layout and text.
+4. **Dear ImGui for game UI** stays what it is today: for tools. It is code, not data, and the entry above puts game UI on `IRenderer`.
+
+Recommendation: option 1, built for a model's edit, run, screenshot loop. Option 2(a) can be tried at once with no engine work; 2(b) only when real Figma files exist.
+
+**A fix has to cover:**
+
+- the chosen path recorded in `Scene/CLAUDE.md` (or a UI doc next to the code);
+- UI in plain text files with stable node names and no editor-only state, so a model can read and diff them;
+- the feedback loop: screenshot and scene dump from the control API, and hot-reload of scene files in Game mode (the saves / hot-reload entry);
+- layout (anchors, sizes) computed in pure code and covered by gtests at several aspect ratios, without a window;
+- a short "how to build a screen" section with the component list and one example screen in the nested `CLAUDE.md`, the place models read;
+- if Figma is chosen: the layer naming convention, the importer in `tools/` and a fixture file in a test.
+
 ## Renderer backends: one decision, then batching
 
 **Where:** `src/Modules/BECore/Renderer/IRenderer.h`, `src/Modules/SDL/`, `src/Modules/Vulkan/`, `external/Vulkan-Loader/` (vendored loader for macOS, which runs Vulkan on top of Metal).
@@ -226,6 +265,27 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - a save game service built on `BinarySerializer` (versioned, name-keyed as the format already is) with a Chess or Match3 model as the first consumer;
 - hot-reload of textures and configs in Editor mode through `FileSystem` and `ConfigManager::ReloadConfig`;
 - later: a pak file behind the virtual `FileSystem` mount points, so a release reads packed assets through the same paths.
+
+## No release builds: games run only as developer executables
+
+**Where:** `cmake/BagiEngine.cmake` (a target is Windows, Apple or else "Linux"; `SDL_SHARED ON`; `be_add_game_executable` bakes the checkout paths into `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` and copies the Vulkan loader), `CMakePresets.json` (macOS and Windows only; the release presets only turn asserts off), `src/Application/Application.cpp` (`Run()` is a blocking `while`), `src/Modules/TaskSystem/`, `Logger/FileSink.h` and `Control/ControlService` (threads and mutexes), `config/ApplicationConfig.xml` (`renderer="VulkanRendererBackend"`), `src/Modules/SDL/src/CoreSDL/SDLEventsProvider.cpp` (no touch or app-lifecycle events), `FileSystem/CLAUDE.md` (writes go to the resolved path in the checkout), `external/SDL/android-project` and the SDL Emscripten support (present, not used).
+
+**What is missing** (found by reading the repository, not by building for these targets):
+
+1. **PC:** no packaging. The content roots are the absolute paths of the developer's checkout and the assets are loose files, so a copied build runs only where the checkout is. There is no macOS `.app`, no Windows archive or installer, no version or icon. The Windows Vulkan DLL is git-ignored (see the CI entry). Saves and edited configs would be written into the checkout.
+2. **Android:** no NDK toolchain and no Gradle project (SDL ships a template), and CMake would call an Android build "Linux". There are no touch events, no pause / resume handling and no per-app storage path, and the layout is fixed pixels.
+3. **Web:** no Emscripten toolchain. `Run()` never gives control back to the browser, `TaskSystem`, `FileSink` and the control service use threads (browser threads need SharedArrayBuffer and special headers, or a single-thread build), SDL is built shared, the assets are loose files, and Vulkan does not run in a browser.
+4. The control API's server is a development tool and must not ship in a release.
+
+**A fix has to cover:**
+
+- **backend first:** web has no Vulkan, so Vulkan cannot be the only release backend. Recommendation: the SDL renderer on all release targets (option (a) in the renderer entry); the SDL3 GPU option (c) must first be checked for a browser backend;
+- a release configuration: Game mode, no ImGui or editor widgets, the control server off, content roots relative to the executable (`SDL_GetBasePath`), saves and user config in `SDL_GetPrefPath`, packed assets (the pak in the entry above);
+- **PC** (Windows and macOS; Linux if wanted, with the presets from the test-gaps entry): a release preset, a `.app` bundle and a Windows folder or zip, a version, the Vulkan DLL question settled;
+- **web:** an Emscripten preset, static SDL, a frame callback instead of the blocking loop, a decision on threads, a preloaded pak, an HTML shell;
+- **Android:** an NDK preset on top of SDL's `android-project`, touch and lifecycle events in `SDLEventsProvider` (with the input mapping entry), safe-area and screen size handling (with the UI entry), a signed APK or AAB;
+- one command (or one CI job per target) that produces the artifacts, and a smoke run per target;
+- the order: PC first (packaging and relative roots), then web, then Android. Mahjong is the first game to release because it needs only mouse and touch.
 
 ## Test gaps and platforms
 
