@@ -1,0 +1,369 @@
+#include <RemoteControl/WebSocketFrame.h>
+#include <gtest/gtest.h>
+
+namespace BECore::Tests {
+
+    namespace {
+
+        constexpr WebSocketMask kMask = {0x37, 0xFA, 0x21, 0x3D};  // the key of the examples in RFC 6455, section 5.7
+
+        eastl::vector<uint8_t> Bytes(std::initializer_list<int> values) {
+            eastl::vector<uint8_t> bytes;
+            for (const int value : values) {
+                bytes.push_back(static_cast<uint8_t>(value));
+            }
+            return bytes;
+        }
+
+        eastl::span<const uint8_t> Span(const eastl::vector<uint8_t>& bytes) {
+            return eastl::span<const uint8_t>(bytes.data(), bytes.size());
+        }
+
+        eastl::span<const uint8_t> TextBytes(std::string_view text) {
+            return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+        }
+
+        std::string TextOf(const WebSocketMessage& message) {
+            return std::string(message.GetText().data(), message.GetText().size());
+        }
+
+        using PopResult = std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError>;
+
+        /// The next message, which the test expects to be there
+        WebSocketMessage PopMessage(WebSocketFrameParser& parser) {
+            PopResult result = parser.Pop();
+            EXPECT_TRUE(result.has_value()) << (result.has_value() ? "" : result.error().reason.c_str());
+            if (!result.has_value() || !result->has_value()) {
+                ADD_FAILURE() << "no message was ready";
+                return {};
+            }
+            return std::move(**result);
+        }
+
+        void ExpectNothingReady(WebSocketFrameParser& parser) {
+            const PopResult result = parser.Pop();
+            ASSERT_TRUE(result.has_value()) << result.error().reason.c_str();
+            EXPECT_FALSE(result->has_value());
+        }
+
+        void ExpectViolation(WebSocketFrameParser& parser, uint16_t closeCode) {
+            const PopResult result = parser.Pop();
+            ASSERT_FALSE(result.has_value()) << "the frame was accepted";
+            EXPECT_EQ(result.error().closeCode, closeCode) << result.error().reason.c_str();
+            EXPECT_FALSE(result.error().reason.empty());
+        }
+
+        /// The frames of @p frames put into a fresh parser in one piece
+        void ExpectViolationOf(const eastl::vector<uint8_t>& frames, uint16_t closeCode, size_t maxMessageBytes = ControlService::kMaxRequestBytes) {
+            WebSocketFrameParser parser(maxMessageBytes);
+            parser.Feed(Span(frames));
+            ExpectViolation(parser, closeCode);
+        }
+
+    }  // namespace
+
+    TEST(WebSocketFrameTest, MaskedHelloOfRfc6455) {
+        WebSocketFrameParser parser;
+        parser.Feed(Span(Bytes({0x81, 0x85, 0x37, 0xFA, 0x21, 0x3D, 0x7F, 0x9F, 0x4D, 0x51, 0x58})));
+        const WebSocketMessage message = PopMessage(parser);
+        EXPECT_EQ(message.kind, WebSocketMessageKind::Text);
+        EXPECT_EQ(TextOf(message), "Hello");
+        ExpectNothingReady(parser);
+    }
+
+    TEST(WebSocketFrameTest, EncodesTheExamplesOfRfc6455) {
+        EXPECT_EQ(EncodeTextFrame("Hello"), Bytes({0x81, 0x05, 0x48, 0x65, 0x6C, 0x6C, 0x6F}));
+        EXPECT_EQ(EncodeTextFrame("Hello", kMask), Bytes({0x81, 0x85, 0x37, 0xFA, 0x21, 0x3D, 0x7F, 0x9F, 0x4D, 0x51, 0x58}));
+        EXPECT_EQ(EncodeFrame(WebSocketOpcode::kPing, TextBytes("Hello")), Bytes({0x89, 0x05, 0x48, 0x65, 0x6C, 0x6C, 0x6F}));
+        EXPECT_EQ(EncodeFrame(WebSocketOpcode::kPong, TextBytes("Hello"), kMask), Bytes({0x8A, 0x85, 0x37, 0xFA, 0x21, 0x3D, 0x7F, 0x9F, 0x4D, 0x51, 0x58}));
+    }
+
+    TEST(WebSocketFrameTest, EncodesTheLengthInTheShortestForm) {
+        const std::string payload125(125, 'a');
+        const std::string payload126(126, 'a');
+        const std::string payload65535(65535, 'a');
+        const std::string payload65536(65536, 'a');
+
+        const auto frame125 = EncodeTextFrame(eastl::string_view(payload125.data(), payload125.size()));
+        EXPECT_EQ(frame125.size(), 2u + 125);
+        EXPECT_EQ(frame125[1], 125);
+
+        const auto frame126 = EncodeTextFrame(eastl::string_view(payload126.data(), payload126.size()));
+        EXPECT_EQ(frame126.size(), 4u + 126);
+        EXPECT_EQ(frame126[1], 126);
+        EXPECT_EQ(frame126[2], 0x00);
+        EXPECT_EQ(frame126[3], 126);
+
+        const auto frame65535 = EncodeTextFrame(eastl::string_view(payload65535.data(), payload65535.size()));
+        EXPECT_EQ(frame65535.size(), 4u + 65535);
+        EXPECT_EQ(frame65535[1], 126);
+        EXPECT_EQ(frame65535[2], 0xFF);
+        EXPECT_EQ(frame65535[3], 0xFF);
+
+        const auto frame65536 = EncodeTextFrame(eastl::string_view(payload65536.data(), payload65536.size()));
+        EXPECT_EQ(frame65536.size(), 10u + 65536);
+        EXPECT_EQ(frame65536[1], 127);
+        EXPECT_EQ(frame65536[7], 0x01);
+        EXPECT_EQ(frame65536[8], 0x00);
+        EXPECT_EQ(frame65536[9], 0x00);
+    }
+
+    TEST(WebSocketFrameTest, MessagesOfEveryLengthFormRoundTrip) {
+        for (const size_t length : {0u, 1u, 125u, 126u, 127u, 65535u, 65536u, 100000u}) {
+            const std::string payload(length, 'x');
+            WebSocketFrameParser parser;
+            parser.Feed(Span(EncodeTextFrame(eastl::string_view(payload.data(), payload.size()), kMask)));
+            const WebSocketMessage message = PopMessage(parser);
+            EXPECT_EQ(message.kind, WebSocketMessageKind::Text) << length;
+            EXPECT_EQ(TextOf(message), payload) << length;
+        }
+    }
+
+    TEST(WebSocketFrameTest, TheMaskIsAppliedByTheBytePosition) {
+        const std::string payload = "The quick brown fox jumps over the lazy dog";
+        WebSocketFrameParser parser;
+        parser.Feed(Span(EncodeTextFrame(eastl::string_view(payload.data(), payload.size()), WebSocketMask{0x01, 0x02, 0x03, 0x04})));
+        EXPECT_EQ(TextOf(PopMessage(parser)), payload);
+    }
+
+    TEST(WebSocketFrameTest, BytesMayArriveOneAtATime) {
+        const eastl::vector<uint8_t> frame = EncodeTextFrame("{\"id\":1,\"method\":\"ping\"}", kMask);
+        WebSocketFrameParser parser;
+        for (size_t i = 0; i + 1 < frame.size(); ++i) {
+            parser.Feed(eastl::span<const uint8_t>(&frame[i], 1));
+            ExpectNothingReady(parser);
+        }
+        parser.Feed(eastl::span<const uint8_t>(&frame.back(), 1));
+        EXPECT_EQ(TextOf(PopMessage(parser)), "{\"id\":1,\"method\":\"ping\"}");
+    }
+
+    TEST(WebSocketFrameTest, SeveralFramesInOnePieceComeOutInOrder) {
+        eastl::vector<uint8_t> bytes = EncodeTextFrame("one", kMask);
+        const eastl::vector<uint8_t> second = EncodeTextFrame("two", kMask);
+        const eastl::vector<uint8_t> third = EncodeTextFrame("three", kMask);
+        bytes.insert(bytes.end(), second.begin(), second.end());
+        bytes.insert(bytes.end(), third.begin(), third.end());
+
+        WebSocketFrameParser parser;
+        parser.Feed(Span(bytes));
+        EXPECT_EQ(TextOf(PopMessage(parser)), "one");
+        EXPECT_EQ(TextOf(PopMessage(parser)), "two");
+        EXPECT_EQ(TextOf(PopMessage(parser)), "three");
+        ExpectNothingReady(parser);
+    }
+
+    TEST(WebSocketFrameTest, ParserKeepsWorkingAfterTheBufferWasDrained) {
+        WebSocketFrameParser parser;
+        parser.Feed(Span(EncodeTextFrame("first", kMask)));
+        EXPECT_EQ(TextOf(PopMessage(parser)), "first");
+        parser.Feed(Span(EncodeTextFrame("second", kMask)));
+        EXPECT_EQ(TextOf(PopMessage(parser)), "second");
+    }
+
+    TEST(WebSocketFrameTest, FragmentsArePutTogether) {
+        eastl::vector<uint8_t> bytes = EncodeFrame(WebSocketOpcode::kText, TextBytes("Hel"), kMask, /*fin=*/false);
+        const eastl::vector<uint8_t> last = EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("lo"), kMask, /*fin=*/true);
+        bytes.insert(bytes.end(), last.begin(), last.end());
+
+        WebSocketFrameParser parser;
+        parser.Feed(Span(bytes));
+        const WebSocketMessage message = PopMessage(parser);
+        EXPECT_EQ(message.kind, WebSocketMessageKind::Text);
+        EXPECT_EQ(TextOf(message), "Hello");
+        ExpectNothingReady(parser);
+    }
+
+    TEST(WebSocketFrameTest, FragmentWithoutTheEndWaits) {
+        WebSocketFrameParser parser;
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kText, TextBytes("Hel"), kMask, /*fin=*/false)));
+        ExpectNothingReady(parser);
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("l"), kMask, /*fin=*/false)));
+        ExpectNothingReady(parser);
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("o"), kMask, /*fin=*/true)));
+        EXPECT_EQ(TextOf(PopMessage(parser)), "Hello");
+    }
+
+    TEST(WebSocketFrameTest, PingBetweenFragmentsIsAnsweredFirst) {
+        eastl::vector<uint8_t> bytes = EncodeFrame(WebSocketOpcode::kText, TextBytes("Hel"), kMask, /*fin=*/false);
+        const eastl::vector<uint8_t> ping = EncodeFrame(WebSocketOpcode::kPing, TextBytes("beat"), kMask);
+        const eastl::vector<uint8_t> last = EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("lo"), kMask);
+        bytes.insert(bytes.end(), ping.begin(), ping.end());
+        bytes.insert(bytes.end(), last.begin(), last.end());
+
+        WebSocketFrameParser parser;
+        parser.Feed(Span(bytes));
+        const WebSocketMessage first = PopMessage(parser);
+        EXPECT_EQ(first.kind, WebSocketMessageKind::Ping);
+        EXPECT_EQ(TextOf(first), "beat");
+        const WebSocketMessage second = PopMessage(parser);
+        EXPECT_EQ(second.kind, WebSocketMessageKind::Text);
+        EXPECT_EQ(TextOf(second), "Hello");
+    }
+
+    TEST(WebSocketFrameTest, PingAndPongKeepTheirPayload) {
+        WebSocketFrameParser parser;
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kPing, TextBytes("a"), kMask)));
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kPong, TextBytes("b"), kMask)));
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kPing, {}, kMask)));
+        const WebSocketMessage ping = PopMessage(parser);
+        EXPECT_EQ(ping.kind, WebSocketMessageKind::Ping);
+        EXPECT_EQ(TextOf(ping), "a");
+        const WebSocketMessage pong = PopMessage(parser);
+        EXPECT_EQ(pong.kind, WebSocketMessageKind::Pong);
+        EXPECT_EQ(TextOf(pong), "b");
+        const WebSocketMessage emptyPing = PopMessage(parser);
+        EXPECT_EQ(emptyPing.kind, WebSocketMessageKind::Ping);
+        EXPECT_TRUE(emptyPing.payload.empty());
+    }
+
+    TEST(WebSocketFrameTest, BinaryMessageIsReportedAsBinary) {
+        WebSocketFrameParser parser;
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kBinary, Span(Bytes({1, 2, 3})), kMask)));
+        const WebSocketMessage message = PopMessage(parser);
+        EXPECT_EQ(message.kind, WebSocketMessageKind::Binary);
+        EXPECT_EQ(message.payload, Bytes({1, 2, 3}));
+    }
+
+    TEST(WebSocketFrameTest, CloseFrameCarriesCodeAndReason) {
+        WebSocketFrameParser parser;
+        parser.Feed(Span(EncodeCloseFrame(WebSocketCloseCode::kNormal, "bye", kMask)));
+        const WebSocketMessage message = PopMessage(parser);
+        EXPECT_EQ(message.kind, WebSocketMessageKind::Close);
+        EXPECT_EQ(message.closeCode, WebSocketCloseCode::kNormal);
+        EXPECT_EQ(TextOf(message), "bye");
+    }
+
+    TEST(WebSocketFrameTest, CloseFrameWithoutPayloadHasNoStatus) {
+        WebSocketFrameParser parser;
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kClose, {}, kMask)));
+        const WebSocketMessage message = PopMessage(parser);
+        EXPECT_EQ(message.kind, WebSocketMessageKind::Close);
+        EXPECT_EQ(message.closeCode, WebSocketCloseCode::kNoStatusReceived);
+    }
+
+    TEST(WebSocketFrameTest, CloseFrameWithAnInvalidCodeIsAProtocolError) {
+        ExpectViolationOf(EncodeFrame(WebSocketOpcode::kClose, Span(Bytes({0x42})), kMask), WebSocketCloseCode::kProtocolError);  // one byte
+        for (const uint16_t code : {uint16_t{0}, uint16_t{999}, uint16_t{1004}, uint16_t{1005}, uint16_t{1006}, uint16_t{1015}, uint16_t{2999}, uint16_t{5000}}) {
+            SCOPED_TRACE(code);
+            ExpectViolationOf(EncodeCloseFrame(code, {}, kMask), WebSocketCloseCode::kProtocolError);
+        }
+        for (const uint16_t code : {uint16_t{1000}, uint16_t{1003}, uint16_t{1007}, uint16_t{1011}, uint16_t{3000}, uint16_t{4999}}) {
+            SCOPED_TRACE(code);
+            WebSocketFrameParser parser;
+            parser.Feed(Span(EncodeCloseFrame(code, {}, kMask)));
+            EXPECT_EQ(PopMessage(parser).closeCode, code);
+        }
+    }
+
+    TEST(WebSocketFrameTest, EncodedCloseFrameCutsALongReason) {
+        const std::string reason(300, 'r');
+        const eastl::vector<uint8_t> frame = EncodeCloseFrame(WebSocketCloseCode::kGoingAway, eastl::string_view(reason.data(), reason.size()));
+        EXPECT_EQ(frame[0], 0x88);
+        EXPECT_EQ(frame[1], kMaxControlPayload);
+        EXPECT_EQ(frame[2], 0x03);
+        EXPECT_EQ(frame[3], 0xE9);  // 1001
+        EXPECT_EQ(frame.size(), 2u + kMaxControlPayload);
+    }
+
+    TEST(WebSocketFrameTest, UnmaskedClientFrameIsAProtocolError) {
+        ExpectViolationOf(EncodeTextFrame("Hello"), WebSocketCloseCode::kProtocolError);
+    }
+
+    TEST(WebSocketFrameTest, ReservedBitsAreAProtocolError) {
+        for (const int bit : {0x40, 0x20, 0x10}) {
+            eastl::vector<uint8_t> frame = EncodeTextFrame("Hello", kMask);
+            frame[0] = static_cast<uint8_t>(frame[0] | bit);
+            SCOPED_TRACE(bit);
+            ExpectViolationOf(frame, WebSocketCloseCode::kProtocolError);
+        }
+    }
+
+    TEST(WebSocketFrameTest, UnknownOpcodesAreAProtocolError) {
+        for (const uint8_t opcode : {uint8_t{0x3}, uint8_t{0x7}, uint8_t{0xB}, uint8_t{0xF}}) {
+            SCOPED_TRACE(static_cast<int>(opcode));
+            ExpectViolationOf(EncodeFrame(opcode, {}, kMask), WebSocketCloseCode::kProtocolError);
+        }
+    }
+
+    TEST(WebSocketFrameTest, ControlFramesAreShortAndWhole) {
+        const std::string payload126(126, 'p');
+        ExpectViolationOf(EncodeFrame(WebSocketOpcode::kPing, TextBytes(payload126), kMask), WebSocketCloseCode::kProtocolError);
+        ExpectViolationOf(EncodeFrame(WebSocketOpcode::kPing, TextBytes("x"), kMask, /*fin=*/false), WebSocketCloseCode::kProtocolError);
+        ExpectViolationOf(EncodeFrame(WebSocketOpcode::kClose, {}, kMask, /*fin=*/false), WebSocketCloseCode::kProtocolError);
+
+        const std::string payload125(125, 'p');
+        WebSocketFrameParser parser;
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kPing, TextBytes(payload125), kMask)));
+        EXPECT_EQ(PopMessage(parser).payload.size(), 125u);
+    }
+
+    TEST(WebSocketFrameTest, ContinuationWithoutAStartIsAProtocolError) {
+        ExpectViolationOf(EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("lo"), kMask), WebSocketCloseCode::kProtocolError);
+    }
+
+    TEST(WebSocketFrameTest, NewMessageBeforeTheEndOfTheFragmentsIsAProtocolError) {
+        eastl::vector<uint8_t> bytes = EncodeFrame(WebSocketOpcode::kText, TextBytes("Hel"), kMask, /*fin=*/false);
+        const eastl::vector<uint8_t> intruder = EncodeTextFrame("other", kMask);
+        bytes.insert(bytes.end(), intruder.begin(), intruder.end());
+        ExpectViolationOf(bytes, WebSocketCloseCode::kProtocolError);
+    }
+
+    TEST(WebSocketFrameTest, MessageOverTheLimitIsTooBig) {
+        const std::string payload(11, 'x');
+        ExpectViolationOf(EncodeTextFrame(eastl::string_view(payload.data(), payload.size()), kMask), WebSocketCloseCode::kMessageTooBig, /*maxMessageBytes=*/10);
+
+        // The limit itself is fine
+        WebSocketFrameParser parser(10);
+        parser.Feed(Span(EncodeTextFrame("0123456789", kMask)));
+        EXPECT_EQ(TextOf(PopMessage(parser)), "0123456789");
+    }
+
+    TEST(WebSocketFrameTest, LimitIsCheckedOnTheAnnouncedLengthBeforeThePayloadArrives) {
+        // The header of a frame that announces a megabyte more than the limit, and nothing after it
+        const uint64_t length = ControlService::kMaxRequestBytes + 1;
+        eastl::vector<uint8_t> header = Bytes({0x81, 0xFF});
+        for (int shift = 56; shift >= 0; shift -= 8) {
+            header.push_back(static_cast<uint8_t>(length >> shift));
+        }
+        ExpectViolationOf(header, WebSocketCloseCode::kMessageTooBig);
+    }
+
+    TEST(WebSocketFrameTest, LengthWithTheTopBitSetIsTooBig) {
+        const eastl::vector<uint8_t> header = Bytes({0x81, 0xFF, 0x80, 0, 0, 0, 0, 0, 0, 0});
+        ExpectViolationOf(header, WebSocketCloseCode::kMessageTooBig);
+    }
+
+    TEST(WebSocketFrameTest, FragmentsTogetherCountAgainstTheLimit) {
+        eastl::vector<uint8_t> bytes = EncodeFrame(WebSocketOpcode::kText, TextBytes("123456"), kMask, /*fin=*/false);
+        const eastl::vector<uint8_t> more = EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("78901"), kMask, /*fin=*/true);
+        bytes.insert(bytes.end(), more.begin(), more.end());
+        ExpectViolationOf(bytes, WebSocketCloseCode::kMessageTooBig, /*maxMessageBytes=*/10);
+    }
+
+    TEST(WebSocketFrameTest, ControlFramesDoNotCountAgainstTheLimit) {
+        WebSocketFrameParser parser(10);
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kPing, TextBytes("0123456789012345"), kMask)));
+        EXPECT_EQ(PopMessage(parser).kind, WebSocketMessageKind::Ping);
+    }
+
+    TEST(WebSocketFrameTest, FirstViolationIsFinal) {
+        WebSocketFrameParser parser;
+        parser.Feed(Span(EncodeTextFrame("unmasked")));
+        ExpectViolation(parser, WebSocketCloseCode::kProtocolError);
+
+        parser.Feed(Span(EncodeTextFrame("fine", kMask)));
+        ExpectViolation(parser, WebSocketCloseCode::kProtocolError);
+    }
+
+    TEST(WebSocketFrameTest, IncompleteHeadersWaitForMoreBytes) {
+        const eastl::vector<uint8_t> frame = EncodeFrame(WebSocketOpcode::kText, TextBytes(std::string(300, 'a')), kMask);
+        // 1 byte, the first byte of the 16-bit length, the whole length but not the mask, the mask but not all of the payload
+        for (const size_t size : {size_t{1}, size_t{3}, size_t{4}, size_t{7}, size_t{100}}) {
+            WebSocketFrameParser parser;
+            parser.Feed(eastl::span<const uint8_t>(frame.data(), size));
+            SCOPED_TRACE(size);
+            ExpectNothingReady(parser);
+        }
+    }
+
+}  // namespace BECore::Tests

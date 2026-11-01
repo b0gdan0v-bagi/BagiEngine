@@ -8,4 +8,4 @@ file(GLOB_RECURSE TESTS_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/BECore/*.h"
 )
 
-be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES})
+be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule)

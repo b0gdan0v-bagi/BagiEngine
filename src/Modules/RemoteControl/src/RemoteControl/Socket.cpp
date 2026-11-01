@@ -1,0 +1,297 @@
+#include "Socket.h"
+
+#ifdef PLATFORM_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <cerrno>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+#endif
+
+namespace BECore {
+
+    namespace {
+
+        constexpr int kListenBacklog = 8;
+
+#ifdef PLATFORM_WINDOWS
+        using NativeSocket = SOCKET;
+        constexpr NativeSocket kNativeInvalid = INVALID_SOCKET;
+
+        int LastError() {
+            return WSAGetLastError();
+        }
+
+        bool IsTimeout(int error) {
+            return error == WSAETIMEDOUT || error == WSAEWOULDBLOCK;
+        }
+
+        bool IsInterrupted(int) {
+            return false;
+        }
+
+        /// Winsock has to be started once before the first socket; it stays up until the process ends
+        void EnsureSocketLibrary() {
+            static const bool started = [] {
+                WSADATA data{};
+                return WSAStartup(MAKEWORD(2, 2), &data) == 0;
+            }();
+            (void)started;
+        }
+
+        void CloseNative(NativeSocket handle) {
+            closesocket(handle);
+        }
+
+        constexpr int kSendFlags = 0;
+        constexpr int kShutdownBoth = SD_BOTH;
+#else
+        using NativeSocket = int;
+        constexpr NativeSocket kNativeInvalid = -1;
+
+        int LastError() {
+            return errno;
+        }
+
+        bool IsTimeout(int error) {
+            return error == EAGAIN || error == EWOULDBLOCK;
+        }
+
+        bool IsInterrupted(int error) {
+            return error == EINTR;
+        }
+
+        void EnsureSocketLibrary() {}
+
+        void CloseNative(NativeSocket handle) {
+            close(handle);
+        }
+
+#ifdef PLATFORM_MACOS
+        constexpr int kSendFlags = 0;  // no MSG_NOSIGNAL on macOS: SO_NOSIGPIPE is set on every socket instead
+#else
+        constexpr int kSendFlags = MSG_NOSIGNAL;
+#endif
+        constexpr int kShutdownBoth = SHUT_RDWR;
+#endif
+
+        NativeSocket ToNative(intptr_t handle) {
+            return static_cast<NativeSocket>(handle);
+        }
+
+        sockaddr_in LoopbackAddress(uint16_t port) {
+            sockaddr_in address{};
+            address.sin_family = AF_INET;
+            address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            address.sin_port = htons(port);
+            return address;
+        }
+
+        eastl::string DescribeError(eastl::string_view what, int error) {
+            return Format("{} failed (error {})", what, error);
+        }
+
+        /// A new TCP socket that does not raise SIGPIPE when the peer is gone; the handle is invalid when it could not be made
+        NativeSocket CreateTcpSocket() {
+            EnsureSocketLibrary();
+            const NativeSocket handle = socket(AF_INET, SOCK_STREAM, 0);
+#ifdef PLATFORM_MACOS
+            if (handle != kNativeInvalid) {
+                const int enable = 1;
+                setsockopt(handle, SOL_SOCKET, SO_NOSIGPIPE, &enable, sizeof(enable));
+            }
+#endif
+            return handle;
+        }
+
+        /// Waits until @p handle can be read (a connection to accept) for at most @p timeout; false on timeout or on an error
+        bool WaitReadable(NativeSocket handle, std::chrono::milliseconds timeout) {
+            pollfd descriptor{};
+            descriptor.fd = handle;
+            descriptor.events = POLLIN;
+            const int milliseconds = static_cast<int>(timeout.count());
+#ifdef PLATFORM_WINDOWS
+            return WSAPoll(&descriptor, 1, milliseconds) > 0;
+#else
+            return poll(&descriptor, 1, milliseconds) > 0;
+#endif
+        }
+
+    }  // namespace
+
+    Socket::~Socket() {
+        Close();
+    }
+
+    Socket::Socket(Socket&& other) noexcept : _handle(std::exchange(other._handle, kInvalidHandle)) {}
+
+    Socket& Socket::operator=(Socket&& other) noexcept {
+        if (this != &other) {
+            Close();
+            _handle = std::exchange(other._handle, kInvalidHandle);
+        }
+        return *this;
+    }
+
+    std::expected<Socket, eastl::string> Socket::Listen(uint16_t port) {
+        const NativeSocket handle = CreateTcpSocket();
+        if (handle == kNativeInvalid) {
+            return std::unexpected(DescribeError("socket()", LastError()));
+        }
+        Socket socketGuard(static_cast<intptr_t>(handle));
+
+#ifdef PLATFORM_WINDOWS
+        // SO_REUSEADDR on Windows would let another process take the port over; the exclusive flag refuses a taken port
+        const BOOL exclusive = TRUE;
+        setsockopt(handle, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&exclusive), sizeof(exclusive));
+#else
+        const int reuse = 1;
+        setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+#endif
+
+        const sockaddr_in address = LoopbackAddress(port);
+        if (bind(handle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
+            return std::unexpected(DescribeError(Format("bind() to 127.0.0.1:{}", port), LastError()));
+        }
+        if (listen(handle, kListenBacklog) != 0) {
+            return std::unexpected(DescribeError("listen()", LastError()));
+        }
+        return std::move(socketGuard);
+    }
+
+    std::expected<Socket, eastl::string> Socket::Connect(uint16_t port) {
+        const NativeSocket handle = CreateTcpSocket();
+        if (handle == kNativeInvalid) {
+            return std::unexpected(DescribeError("socket()", LastError()));
+        }
+        Socket socketGuard(static_cast<intptr_t>(handle));
+
+        const sockaddr_in address = LoopbackAddress(port);
+        if (connect(handle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
+            return std::unexpected(DescribeError(Format("connect() to 127.0.0.1:{}", port), LastError()));
+        }
+        return std::move(socketGuard);
+    }
+
+    std::expected<Socket, SocketError> Socket::Accept(std::chrono::milliseconds timeout) {
+        if (!IsValid()) {
+            return std::unexpected(SocketError::Failed);
+        }
+        // Closing or shutting down a listening socket does not wake accept() on every system, so the wait is a poll
+        // that the caller repeats; a shut down socket makes poll() report it readable and accept() fail
+        if (!WaitReadable(ToNative(_handle), timeout)) {
+            return std::unexpected(SocketError::TimedOut);
+        }
+
+        for (;;) {
+            const NativeSocket accepted = accept(ToNative(_handle), nullptr, nullptr);
+            if (accepted != kNativeInvalid) {
+#ifdef PLATFORM_MACOS
+                const int enable = 1;
+                setsockopt(accepted, SOL_SOCKET, SO_NOSIGPIPE, &enable, sizeof(enable));
+#endif
+                return Socket(static_cast<intptr_t>(accepted));
+            }
+            if (!IsInterrupted(LastError())) {
+                return std::unexpected(SocketError::Failed);
+            }
+        }
+    }
+
+    bool Socket::SendAll(eastl::span<const uint8_t> data) {
+        if (!IsValid()) {
+            return false;
+        }
+        size_t sent = 0;
+        while (sent < data.size()) {
+            // Winsock takes an int length, POSIX a size_t: stay inside int for both
+            const auto chunk = static_cast<int>(std::min<size_t>(data.size() - sent, std::numeric_limits<int>::max()));
+            const auto written = send(ToNative(_handle), reinterpret_cast<const char*>(data.data() + sent), chunk, kSendFlags);
+            if (written < 0) {
+                if (IsInterrupted(LastError())) {
+                    continue;
+                }
+                return false;
+            }
+            sent += static_cast<size_t>(written);
+        }
+        return true;
+    }
+
+    std::expected<size_t, SocketError> Socket::Receive(eastl::span<uint8_t> buffer) {
+        if (!IsValid() || buffer.empty()) {
+            return std::unexpected(SocketError::Failed);
+        }
+        for (;;) {
+            const auto length = static_cast<int>(std::min<size_t>(buffer.size(), std::numeric_limits<int>::max()));
+            const auto received = recv(ToNative(_handle), reinterpret_cast<char*>(buffer.data()), length, 0);
+            if (received > 0) {
+                return static_cast<size_t>(received);
+            }
+            if (received == 0) {
+                return std::unexpected(SocketError::Closed);
+            }
+            const int error = LastError();
+            if (IsInterrupted(error)) {
+                continue;
+            }
+            return std::unexpected(IsTimeout(error) ? SocketError::TimedOut : SocketError::Failed);
+        }
+    }
+
+    bool Socket::SetReceiveTimeout(std::chrono::milliseconds timeout) {
+        if (!IsValid()) {
+            return false;
+        }
+#ifdef PLATFORM_WINDOWS
+        const DWORD milliseconds = static_cast<DWORD>(timeout.count());
+        return setsockopt(ToNative(_handle), SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&milliseconds), sizeof(milliseconds)) == 0;
+#else
+        timeval value{};
+        value.tv_sec = static_cast<decltype(value.tv_sec)>(timeout.count() / 1000);
+        value.tv_usec = static_cast<decltype(value.tv_usec)>((timeout.count() % 1000) * 1000);
+        return setsockopt(ToNative(_handle), SOL_SOCKET, SO_RCVTIMEO, &value, sizeof(value)) == 0;
+#endif
+    }
+
+    void Socket::ShutdownBoth() {
+        if (IsValid()) {
+            shutdown(ToNative(_handle), kShutdownBoth);
+        }
+    }
+
+    void Socket::Close() {
+        if (IsValid()) {
+            CloseNative(ToNative(_handle));
+            _handle = kInvalidHandle;
+        }
+    }
+
+    uint16_t Socket::GetLocalPort() const {
+        if (!IsValid()) {
+            return 0;
+        }
+        sockaddr_in address{};
+#ifdef PLATFORM_WINDOWS
+        int size = sizeof(address);
+#else
+        socklen_t size = sizeof(address);
+#endif
+        if (getsockname(ToNative(_handle), reinterpret_cast<sockaddr*>(&address), &size) != 0) {
+            return 0;
+        }
+        return ntohs(address.sin_port);
+    }
+
+}  // namespace BECore

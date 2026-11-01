@@ -449,6 +449,7 @@ endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/BECore)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Events)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/TaskSystem)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RemoteControl)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/SDL)
 
 # Optional: path to Vulkan SDK (Windows). If set and Lib/vulkan-1.lib exists, used for linking; else vendored external/Vulkan-Loader is used.

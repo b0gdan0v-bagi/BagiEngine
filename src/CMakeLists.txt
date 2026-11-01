@@ -35,6 +35,7 @@ target_link_libraries(RuntimeModule PUBLIC
     BECoreModule
     EventsModule
     TaskSystemModule
+    RemoteControlModule
     GamesModule
     SDLModule
     VulkanModule
