@@ -63,7 +63,7 @@ The two clocks differ in who runs the frames:
 | `step` | waits for `N` frames; `dt` is ignored | makes `N` frames of `dt` seconds, then answers |
 | Between steps | | `Application::Run` calls `CoreManager::OnIdleCycle`: input, `Drain()`, then `WaitForRequests` (up to 8 ms, woken by `Post`). The window stays alive and `quit` still works |
 
-While a step runs it is the barrier, so a pipelined `step` + `get_state` gives the state after the frames. `quit` bypasses the barrier and ends even a step of `kMaxStepFrames`. A call that defers frames for another reason (the `screenshot` of the headless stage will ask for one frame of `dt` 0) uses the same machinery: `IsStepDue()` is true while any deferred call is pending, so the next frame runs and its `EndFrame()` counts it down. All of this state lives in `ControlService`, so `ControlServiceTest` plays the application loop (`RunDueFrames`) without an application.
+While a step runs it is the barrier, so a pipelined `step` + `get_state` gives the state after the frames. `quit` bypasses the barrier and ends even a step of `kMaxStepFrames`. A call that defers frames for another reason (`screenshot` asks for one frame of `dt` 0) uses the same machinery: `IsStepDue()` is true while any deferred call is pending, so the next frame runs and its `EndFrame()` counts it down. All of this state lives in `ControlService`, so `ControlServiceTest` plays the application loop (`RunDueFrames`) without an application.
 
 What the manual clock means for a client:
 
@@ -80,15 +80,17 @@ The API is off by default: a game has to be asked for it. `Application::Initiali
 |--------------|----------------------------------------|---------|
 | `--control` | `control="true"` (or `false`, `1`, `0`) | start the WebSocket server |
 | `--control-port=N` | `controlPort="N"` | port 0 to 65535; 0 asks the system for a free one; default `kDefaultControlPort` (8765) |
+| `--headless` | `headless="true"` (or `false`, `1`, `0`) | no window: the SDL software renderer on the dummy video driver, a screenshot is the way to see the game (`SDL/CLAUDE.md`, "Headless and screenshots"); needs the API and the Game run mode |
 | `--manual-clock` | `manualClock="true"` (or `false`, `1`, `0`) | frames run only on `step` (see "Manual clock and `step`"); needs the API. The flag only turns it on, so a game that has `manualClock="true"` in its config cannot switch it off from the command line |
 
-The command line beats the attribute, the attribute beats the default. Unknown arguments are ignored (a game may have flags of its own). A value that cannot be read, a bare `--control-port`, and `--control-port=N` or the manual clock while the API stays off are errors: the start-up stops with a line in the log (`Application::Initialize()` flushes the log itself, because nothing else does before the first frame), so the person who asked for the API is not left waiting for it. A port that is taken stops the start-up the same way. The settings are in `ControlSettings.h`; a stage that adds a setting (headless) adds its field and its two spellings there.
+The command line beats the attribute, the attribute beats the default. Unknown arguments are ignored (a game may have flags of its own). A value that cannot be read, a bare `--control-port`, and `--control-port=N`, the manual clock or headless mode while the API stays off are errors: the start-up stops with a line in the log (`Application::Initialize()` flushes the log itself, because nothing else does before the first frame), so the person who asked for the API is not left waiting for it. A port that is taken stops the start-up the same way. The settings are in `ControlSettings.h`; a stage that adds a setting adds its field and its two spellings there. What headless means for the window and the renderer reaches the SDL module as `ApplicationOptions` (`ApplicationFabric::Create(options)`), not as ControlSettings, which the SDL module does not see.
 
 ## Methods
 
 | Where | Methods |
 |-------|---------|
 | `BECore/Control/ControlBuiltins` | `ping`, `status`, `step`, `quit` |
+| `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
 | `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state` (`Games/CLAUDE.md`) |
 
 ## Adding a method

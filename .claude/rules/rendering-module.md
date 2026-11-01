@@ -36,7 +36,7 @@ paths:
 ## Cross-Backend Compatibility
 
 - Define new renderer-facing behavior at the `IRenderer` / `ITexture` level first, then implement it in both backends where supported.
-- If a backend cannot support a feature, document the fallback explicitly (skip draw, placeholder, or warning).
+- If a backend cannot support a feature, document the fallback explicitly (skip draw, placeholder, or warning). `IRenderer::RequestCapture()` is an example: it is not pure, the default answers with an error, `SDLRendererBackend` reads its pixels back at the present and `VulkanRendererBackend` keeps the default (`src/Modules/Vulkan/CLAUDE.md`, "No capture").
 - ImGui reaches the backend through `RenderEvents::ImGui*Event`, not direct calls (see `src/Modules/SDL/CLAUDE.md`).
 
 ## Vulkan specifics

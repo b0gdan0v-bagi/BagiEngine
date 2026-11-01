@@ -82,7 +82,7 @@ tools/                  # developer tools: natvis, todo_sync (TODO.md dashboard 
 | Subsystem | Purpose |
 |-----------|---------|
 | `GameManager/CoreManager` | Central service locator — owns FileSystem, ConfigManager, Logger, SceneManager, ResourceManager, etc. |
-| `Control/` | External control API core: a thread-safe command queue run on the main thread at frame stage 1b (`ControlService`, JSON through nlohmann with exceptions off) and the start-up flags (`ControlSettings`). The WebSocket transport is the `RemoteControl` module; start a game with `--control` to use it |
+| `Control/` | External control API core: a thread-safe command queue run on the main thread at frame stage 1b (`ControlService`, JSON through nlohmann with exceptions off) and the start-up flags (`ControlSettings`). The WebSocket transport is the `RemoteControl` module; start a game with `--control` to use it (`--manual-clock`, `--headless`, `step` and `screenshot`: `Control/CLAUDE.md`) |
 | `Scene/` | Scene graph (SceneNode → IComponent), serialization |
 | `Reflection/` | IPropertyVisitor, ISerializer/IDeserializer, BE_CLASS codegen markers |
 | `Resource/` | TextureLibrary, resource pooling |
