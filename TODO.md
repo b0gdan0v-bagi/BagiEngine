@@ -1,12 +1,18 @@
 # TODO
 
-Known problems that are not being worked on yet. One entry per problem: where it is, what is wrong, what a fix has to cover.
+Known problems that are not being worked on yet. One entry per problem: where it is, what is wrong, what a fix has to cover. A finished entry is deleted, not marked done.
+
+**Entry fields.** `tools/todo_sync/` reads this file to build a progress dashboard and to export the entries to a task tracker (its `CLAUDE.md` has the commands). The entry id is the slug of its heading, so renaming a heading makes a new entry for the tracker. Every field below is optional and sits on its own line near the top of the entry:
+
+- `**Status:**` starts with one keyword, `open` (the default), `in progress` or `deferred`, then a date `YYYY-MM-DD` and free text;
+- `**Stage:**` the roadmap number (1 to 6); a problem outside the roadmap order has none;
+- `**Plan:**` the path of a plan under `.claude/plans/`; its `- [ ]` / `- [x]` lines give the progress.
 
 ## Roadmap
 
 Direction for the engine, not a problem entry. The engine has strong infrastructure (reflection, layered config, TaskSystem, ImGui editor, tests) and no runtime for a real 2D game: no animation, text, audio or input mapping. The entries below follow this order. Every "missing" statement was found by reading the code, not by running a game.
 
-1. **Hygiene:** CI is deferred by the project owner (entry below; the Linux job in the test-gaps entry waits for it); the link from this file to a task tracker or dashboard (entry below).
+1. **Hygiene:** CI is deferred by the project owner (entry below; the Linux job in the test-gaps entry waits for it). The link from this file to a task tracker and a dashboard is done: `tools/todo_sync/`.
 2. **External control API (in progress):** a model or a program plays a game over MCP / WebSocket (entry below).
 3. **Minimum for a 2D game, in this order:** animation, 2D rendering, text, audio, input mapping, in-game UI (and the choice of how its screens are authored, entry below).
 4. **Owner decisions:** renderer backends (the Android and web targets in the release entry weigh in), what ECS means in this engine.
@@ -40,6 +46,8 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 **Status:** deferred by the project owner on 2026-10-31. Skip it when taking the next roadmap item; the entry stays as the record of what a fix has to cover.
 
+**Stage:** 1
+
 **Where:** the repository has no `.github/` and no other pipeline definition. Presets are in `CMakePresets.json`, tests run through `ctest --preset ...`.
 
 **What is missing** (found by reading the repository, not by running anything):
@@ -54,38 +62,13 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - a guard on the number of tests (284 at the last count): it must not drop;
 - a Linux job once Linux presets exist (see the entry on test gaps and platforms).
 
-## TODO.md is read only by people: no link to a task tracker or a dashboard
-
-**Where:** `TODO.md`, `.claude/plans/*.md`, `CI/scripts/` (the place of the existing Python helper scripts) and `tools/` (where a script of this kind would go; it holds only `natvis/` now).
-
-**What is missing** (found by reading the repository, not by running anything):
-
-1. No machine-readable structure. An entry has no id, its status is prose (`**Status:** deferred by the project owner on 2026-10-31`), it has no roadmap stage, and its plan is only a path inside the text.
-2. No view of progress. The roadmap stages, the in-progress entries with their plan checklists, and the deferred entries with their age can be seen only by reading the whole file.
-3. No path to the owner's personal tracker. Entries are copied by hand or not at all.
-
-**Options** (a decision of the project owner; the tools named are candidates, none is evaluated):
-
-1. **A generated static dashboard:** a script turns `TODO.md` and the plans into one local HTML page. No service, no account.
-2. **A self-hosted or local personal tracker** (Vikunja, Plane, a Taskwarrior or Obsidian-kanban file, GitHub Projects): a script pushes the entries through its API or file format.
-3. **Both:** the dashboard first, the tracker adapter on top of the same parser.
-
-Recommendation: option 3, in that order. `TODO.md` stays the source of truth because models read and edit it; the export is one-way and is never edited back.
-
-**A fix has to cover:**
-
-- a small convention in `TODO.md`, with the current entries migrated: a stable id per entry (the heading slug is enough), `**Status:**` starting with one keyword (`open`, `in progress`, `deferred`) plus a date, `**Stage:**` (the roadmap number), `**Plan:**` (a path). Written down in the file header next to the "one entry per problem" rule;
-- a parser in `tools/todo_sync/` (Python, run with the `CI/` venv, no engine code): `TODO.md` → JSON with id, title, status, date, stage, plan and the plan's checkbox progress. It tolerates entries that lack the new fields;
-- a dashboard generator on that JSON: roadmap stages with entry counts by status, in-progress entries with plan progress, deferred entries with their age. The output goes to a git-ignored folder;
-- the tracker adapter: idempotent by entry id (create or update); an entry that disappears from `TODO.md` is closed in the tracker, because finished entries are dropped, not marked done; `--dry-run` prints what would change;
-- the token and URL come from environment variables or a git-ignored per-machine file and are never committed (the same idea as `CMakeUserPresets.json`);
-- a refresh path: a command, optionally a skill (like `build`) or a git hook on commits that touch `TODO.md`; CI waits for its entry;
-- tests: the parser on a fixture copy of `TODO.md` (entry count, statuses, a plan with checkboxes) and the adapter against a fake HTTP server or its `--dry-run` output;
-- games moved out to their own repositories can carry their own `TODO.md`: the tool takes the paths as arguments and names no concrete game.
-
 ## No external control: a game can be played only by a human at the window
 
-**Status:** in progress since 2026-11-01, plan in `.claude/plans/buzzing-tinkering-cat.md`. Stages 0 to 2 are done: the spikes, the command queue and the game interface with the Match3 adapter (`BECore/Control/CLAUDE.md`, `Games/CLAUDE.md`, `games/Match3/CLAUDE.md`). Next: the WebSocket server, manual clock and step, headless and screenshot, then Chess rules and the Stockfish and MCP bridges.
+**Status:** in progress since 2026-11-01. Stages 0 to 2 are done: the spikes, the command queue and the game interface with the Match3 adapter (`BECore/Control/CLAUDE.md`, `Games/CLAUDE.md`, `games/Match3/CLAUDE.md`). Next: the WebSocket server, manual clock and step, headless and screenshot, then Chess rules and the Stockfish and MCP bridges.
+
+**Stage:** 2
+
+**Plan:** `.claude/plans/buzzing-tinkering-cat.md`
 
 **Spike results** (macOS, AppleClang 17, SDL 3.2.0; Windows and MSVC not checked yet):
 
@@ -114,6 +97,8 @@ Recommendation: option 3, in that order. `TODO.md` stays the source of truth bec
 
 ## Third game: Mahjong solitaire
 
+**Stage:** 6
+
 **Where:** `games/Chess` and `games/Match3` (the models to follow), `cmake/BagiEngine.cmake` (`be_add_module`, `be_add_game_reflection`, `be_add_game_executable`, `be_add_game_tests`), `src/Modules/Games/CLAUDE.md` (the engine-game contract), `src/Modules/Games/src/Games/IControllableGame.h`.
 
 **What is missing:** the game. Assumed: tile-matching solitaire (Shanghai), one player. The four-player rules game needs AI players and is out of scope. It is the consumer that the roadmap "Driver" asks for.
@@ -129,6 +114,8 @@ Recommendation: option 3, in that order. `TODO.md` stays the source of truth bec
 
 ## No animation: no tweens, easing or timelines
 
+**Stage:** 3
+
 **Where:** `games/Match3/CLAUDE.md` ("`Match3GameModel` never animates"), `games/Match3/src/Match3/Components/Match3BoardComponent.cpp`, `src/Modules/TaskSystem/` (coroutines that animation could use).
 
 **What is missing** (found by reading the code, not by running a game): no way to change a property over time. Match3 resolves a whole cascade instantly, and Chess pieces jump to the target square. The frame time it needs exists now (`Time`, `BECore/CLAUDE.md`).
@@ -141,6 +128,8 @@ Recommendation: option 3, in that order. `TODO.md` stays the source of truth bec
 - gtests for the easing math and for tween ordering with a fake clock.
 
 ## 2D rendering is minimal: no rotation, camera or blending
+
+**Stage:** 3
 
 **Where:** `src/Modules/BECore/Renderer/IRenderer.h` (`DrawFilledRect`, `DrawTexture` are the whole drawing surface), `SDLRendererBackend.cpp`, `Vulkan/src/CoreVulkan/VulkanRendererBackend.cpp`, `Scene/Components/TransformComponent.h` (position and size in scene units, which are output pixels unless the scene sets a view size).
 
@@ -200,6 +189,8 @@ Recommendation: option 3, in that order. `TODO.md` stays the source of truth bec
 
 ## No text rendering in the engine: text exists only in ImGui
 
+**Stage:** 3
+
 **Where:** `games/Match3/src/Match3/Components/Match3BoardComponent.cpp` (the score is `ImGui::Text` in an ImGui window), `src/Modules/BECore/Resource/` (where a font loader would go), `external/` (SDL_image is the only SDL add-on).
 
 **What is missing** (found by reading the code, not by running a game): fonts, glyph rendering and a text component. The Match3 HUD is ImGui, and the Game run mode has no ImGui, so `BagiMatch3` shows no score and has no Reset button until the HUD moves to a text component.
@@ -212,6 +203,8 @@ Recommendation: option 3, in that order. `TODO.md` stays the source of truth bec
 
 ## No audio
 
+**Stage:** 3
+
 **Where:** no module, no dependency (`external/` has SDL, SDL_image, Vulkan headers and loader, googletest).
 
 **What is missing** (found by searching `src`, `games` and CMake): sound effects and music.
@@ -223,6 +216,8 @@ Recommendation: option 3, in that order. `TODO.md` stays the source of truth bec
 - volume and mute in config; tests run without an audio device (a null or dummy driver).
 
 ## Input has no mapping layer: actions are just names
+
+**Stage:** 3
 
 **Where:** `src/Modules/BECore/Input/ActionsLibrary.h` (a set of action names), `src/Modules/Events/src/Events/InputEvents.h` (`ActionEvent`), `src/Modules/SDL/src/CoreSDL/SDLEventsProvider.cpp` (`ConvertSDLEvent`), `SDLEvents.h` (key and mouse event types, no gamepad events), `Scene/Components/ClickableComponent.cpp`.
 
@@ -241,6 +236,8 @@ Recommendation: option 3, in that order. `TODO.md` stays the source of truth bec
 
 ## No in-game UI: UI exists only as ImGui editor panels
 
+**Stage:** 3
+
 **Where:** `src/Widgets/` (editor widgets), `Scene/Components/ClickableComponent.cpp` (the only clickable thing on a scene).
 
 **What is missing** (found by reading the code, not by running a game): buttons, panels, labels and layout that belong to a game and render through `IRenderer`. Do this after text rendering and input mapping.
@@ -252,6 +249,8 @@ Recommendation: option 3, in that order. `TODO.md` stays the source of truth bec
 - a main-menu scene in one of the games as the first consumer.
 
 ## Game UI has no LLM-friendly authoring path yet: choose one before building it
+
+**Stage:** 3
 
 **Where:** `src/Widgets/` (the editor panels are ImGui code), `games/*/config/SceneConfig.xml` and `Scene/CLAUDE.md` (scenes are XML; positions are absolute pixels in `TransformComponent`), the control API entry (a screenshot is planned, not built). No Figma or other UI import exists in the repository.
 
@@ -277,6 +276,8 @@ Recommendation: option 1, built for a model's edit, run, screenshot loop. Option
 
 ## Renderer backends: one decision, then batching
 
+**Stage:** 4
+
 **Where:** `src/Modules/BECore/Renderer/IRenderer.h`, `src/Modules/SDL/`, `src/Modules/Vulkan/`, `external/Vulkan-Loader/` (vendored loader for macOS, which runs Vulkan on top of Metal).
 
 **What is wrong** (found by reading the code and docs):
@@ -291,6 +292,8 @@ Recommendation: option 1, built for a model's edit, run, screenshot loop. Option
 - record the decision in `rendering-module.md` and `Vulkan/CLAUDE.md`.
 
 ## ECS is nominal: EnTT only hands out entity ids
+
+**Stage:** 4
 
 **Where:** `src/Modules/BECore/Scene/Scene.h` (`entt::registry _registry`), `SceneNode.cpp` (`_entity = scene->GetRegistry().create()`), `Scene/IComponent.h`, `Scene/CLAUDE.md`, `CLAUDE.md` ("modular ECS architecture").
 
@@ -307,6 +310,8 @@ Recommendation: option 1, built for a model's edit, run, screenshot loop. Option
 - record the decision in `Scene/CLAUDE.md` and correct the wording in `CLAUDE.md`.
 
 ## No prefabs: all of a game's scenes live in one `SceneConfig.xml`
+
+**Stage:** 5
 
 **Where:** `games/*/config/SceneConfig.xml`, `Scene/CLAUDE.md` ("Every `SceneConfig.xml` replaces the one below it"), `Scene/SceneManager.cpp`.
 
@@ -332,6 +337,8 @@ Recommendation: option 1, built for a model's edit, run, screenshot loop. Option
 
 ## No save games, hot-reload or asset packing
 
+**Stage:** 5
+
 **Where:** `src/Modules/BECore/Reflection/BinarySerializer.h` / `BinaryDeserializer.h` (format in `.claude/rules/reflection-module.md`), `src/Modules/BECore/FileSystem/`, `Resource/`.
 
 **What is missing** (found by reading the code, not by running a game):
@@ -347,6 +354,8 @@ Recommendation: option 1, built for a model's edit, run, screenshot loop. Option
 - later: a pak file behind the virtual `FileSystem` mount points, so a release reads packed assets through the same paths.
 
 ## No release builds: games run only as developer executables
+
+**Stage:** 6
 
 **Where:** `cmake/BagiEngine.cmake` (a target is Windows, Apple or else "Linux"; `SDL_SHARED ON`; `be_add_game_executable` bakes the checkout paths into `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` and copies the Vulkan loader), `CMakePresets.json` (macOS and Windows only; the release presets only turn asserts off), `src/Application/Application.cpp` (`Run()` is a blocking `while`), `src/Modules/TaskSystem/`, `Logger/FileSink.h` and `Control/ControlService` (threads and mutexes), `config/ApplicationConfig.xml` (`renderer="VulkanRendererBackend"`), `src/Modules/SDL/src/CoreSDL/SDLEventsProvider.cpp` (no touch or app-lifecycle events), `FileSystem/CLAUDE.md` (writes go to the resolved path in the checkout), `external/SDL/android-project` and the SDL Emscripten support (present, not used).
 
@@ -369,6 +378,8 @@ Recommendation: option 1, built for a model's edit, run, screenshot loop. Option
 
 ## Test gaps and platforms
 
+**Stage:** 5
+
 **Where:** `tests/BECore/` (engine tests), `games/*/tests/`, `CMakePresets.json` (macOS and Windows presets only), `cmake/BagiEngine.cmake` (it has a Linux branch).
 
 **What is missing** (found by reading the repository):
@@ -382,6 +393,8 @@ Recommendation: option 1, built for a model's edit, run, screenshot loop. Option
 - Linux presets (`linux-debug`, `linux-release`) and a CI job once the CI entry is done.
 
 ## The reflection generator is regex-based
+
+**Stage:** 5
 
 **Where:** `CI/meta_generator/` (`core/parser.py`, `core/generator.py`, about 2000 lines of Python), `CI/meta_generator/reflection_targets.json`.
 

@@ -69,6 +69,7 @@ src/
 config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, default SceneConfig)
 games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Chess, Match3)
 tests/                  # GoogleTest executable BagiEngineTests (BECore) + Common (BagiEngineTestSupport)
+tools/                  # developer tools: natvis, todo_sync (TODO.md dashboard and Vikunja export; Python, pytest)
 ```
 
 **Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.
@@ -156,4 +157,5 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 
 - Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`), `Events/`, `TaskSystem/`, `SDL/`, `Vulkan/`, `Games/`, and `games/Chess/`, `games/Match3/`. Claude Code loads one when a file under that directory is read.
 - `.claude/rules/` holds guidance that spans several directories or matches by file name (`paths:` frontmatter): CMake, Reflection, Reflection events (`*Event.h`), Rendering, Widgets, Tests. Read the relevant file before changing that area.
-- `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix` and `cpp-senior-programmer`.
+- `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `todo-sync` (TODO.md dashboard and Vikunja export, `tools/todo_sync/CLAUDE.md`) and `cpp-senior-programmer`.
+- `TODO.md` entries carry optional `**Status:**`, `**Stage:**` and `**Plan:**` lines (format in the file header). Keep them current when work on an entry starts or stops, and delete an entry when it is finished. Run `todo-sync check` after editing the file.
