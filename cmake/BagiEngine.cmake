@@ -10,7 +10,7 @@
 # and output directories set here must apply to the game's targets as well.
 #
 # Public API (defined below): be_add_module, be_add_game_reflection, be_add_game_executable,
-# be_add_game_tests, be_link_engine, be_force_include_pch.
+# be_add_game_tests, be_add_game_control_tests, be_link_engine, be_force_include_pch.
 # =============================================================================
 include_guard(GLOBAL)
 
@@ -613,5 +613,30 @@ if(ENGINE_BUILD_TESTS)
         be_deploy_runtime_libs(${NAME})
 
         gtest_discover_tests(${NAME} DISCOVERY_MODE PRE_TEST)
+    endfunction()
+
+    # be_add_game_control_tests(<ExeTarget> [SCRIPT <file>])
+    # ctest entry <ExeTarget>ControlSmoke: starts the game executable with the control API on a free port and plays a
+    # short scenario over WebSocket (tools/control/tests/smoke.py, or SCRIPT with the same arguments). Call it from the
+    # game's CMakeLists, not from the engine's tests/, so that no engine CMake names a game. It needs Python 3, does not
+    # build the executable (a missing one is a skip) and opens the game window until headless mode exists. The script
+    # exits with 77 for "skipped".
+    function(be_add_game_control_tests EXE_TARGET)
+        cmake_parse_arguments(ARG "" "SCRIPT" "" ${ARGN})
+        if(NOT ARG_SCRIPT)
+            set(ARG_SCRIPT ${BAGI_ENGINE_DIR}/tools/control/tests/smoke.py)
+        endif()
+        if(NOT Python3_FOUND)
+            message(WARNING "be_add_game_control_tests(${EXE_TARGET}): Python3 not found, the control smoke test is not registered")
+            return()
+        endif()
+
+        set(TEST_NAME ${EXE_TARGET}ControlSmoke)
+        add_test(NAME ${TEST_NAME} COMMAND ${Python3_EXECUTABLE} ${ARG_SCRIPT} --exe $<TARGET_FILE:${EXE_TARGET}>)
+        set_tests_properties(${TEST_NAME} PROPERTIES
+            SKIP_RETURN_CODE 77
+            TIMEOUT 120
+            RUN_SERIAL TRUE
+        )
     endfunction()
 endif()

@@ -28,4 +28,7 @@ if(ENGINE_BUILD_TESTS)
         SOURCES ${MATCH3_TEST_SOURCES}
         LINK Match3Module
     )
+
+    # Starts BagiMatch3 with the control API and plays a few moves over WebSocket
+    be_add_game_control_tests(BagiMatch3)
 endif()
