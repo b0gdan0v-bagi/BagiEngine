@@ -67,6 +67,7 @@ Tests: `tests/BECore/ViewTransformTest.cpp` (the math), `tests/BECore/SceneViewT
 | `SpriteRendererComponent` | `_spriteId`, `_texturePath`, `_srcRect` | Draws a texture in `OnDraw()`; `_spriteId` resolves through `TextureLibrary` |
 | `ClickableComponent` | `_actionName` | On mouse-down inside the transform rect, emits `InputEvents::ActionEvent(_actionName)` |
 | `ChangeToRandomColorDebugComponent` | `_actionFilter` | Debug: recolors the node's quad on a matching action |
+| `TextComponent` | `_text`, `_fontPath`, `_fontSize`, `_color`, `_align`, `_overflow`, `_wrap`, `_lineSpacing`, `_minFontSize` | Draws text in the node's transform box in `OnDraw()` (`Text/CLAUDE.md`) |
 | `RenderProbeComponent` | none | Debug: from the node's transform origin draws a row of cells that show the renderer primitives (texture from pixels, tint, half alpha, translucent rects, nested clips), to look at both backends |
 
 ## Adding a component

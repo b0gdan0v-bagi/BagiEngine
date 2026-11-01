@@ -11,10 +11,12 @@ ResourceManager (CoreManager::GetResourceManager())
     ├── ResourceCache        thread-safe (std::shared_mutex), no eviction in v1
     └── IResourceLoader[]    picked by file extension via CanLoad()
          ├── XmlResourceLoader   (.xml  → XmlResource)
-         └── SDLTextureLoader / VulkanTextureLoader   (images → ITexture)
+         ├── SDLTextureLoader / VulkanTextureLoader   (images → ITexture)
+         └── FontLoader          (.ttf/.otf → Font, CPU only; `Text/CLAUDE.md`)
 
 IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
     ├── XmlResource
+    ├── Font
     └── SerializedResource<T>   (reflected types)
 ```
 

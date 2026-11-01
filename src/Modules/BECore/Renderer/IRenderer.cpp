@@ -3,6 +3,11 @@
 
 namespace BECore {
 
+    IRenderer::IRenderer() {
+        static std::atomic<uint64_t> nextId{1};
+        _id = nextId.fetch_add(1, std::memory_order_relaxed);
+    }
+
     void IRenderer::RequestCapture(CaptureCallback callback) {
         if (callback) {
             callback(std::unexpected(eastl::string("this renderer backend cannot read its output back")));

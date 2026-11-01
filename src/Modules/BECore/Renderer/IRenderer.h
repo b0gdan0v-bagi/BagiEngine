@@ -23,8 +23,18 @@ namespace BECore {
     class IRenderer : public RefCounted, public SubscriptionHolder {
         BE_CLASS(IRenderer, FACTORY_BASE)
     public:
-        IRenderer() = default;
+        IRenderer();
         ~IRenderer() override = default;
+
+        // Tells one renderer from another for as long as the process runs, even when a later one is allocated at the
+        // address of an earlier one. Whoever keeps GPU objects of a renderer (the glyph atlases) remembers it.
+        [[nodiscard]] uint64_t GetId() const {
+            return _id;
+        }
+
+        // Blocks until the GPU has finished everything that was submitted. Call it before releasing textures that a
+        // frame in flight may still use. The default does nothing (the SDL renderer has no frames in flight).
+        virtual void WaitIdle() {}
 
         BE_FUNCTION virtual bool Initialize(IMainWindow& window) = 0;
         BE_FUNCTION virtual void Destroy() = 0;
@@ -95,6 +105,7 @@ namespace BECore {
     private:
         static constexpr Color kWhite{255, 255, 255, 255};
 
+        uint64_t _id = 0;
         ViewTransform _viewTransform;
         // Each entry is already intersected with the one below it
         eastl::vector<Rect> _clipStack;

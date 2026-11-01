@@ -115,6 +115,8 @@ namespace BECore {
             _controlServer.reset();
         }
         GameManager::GetInstance().Shutdown();
+        // The glyph pages are GPU textures: they go before the renderer's own cleanup destroys the device
+        CoreManager::GetFontAtlasLibrary().Clear();
         ApplicationEvents::ApplicationCleanUpEvent::Emit();
         CoreManager::GetInstance().OnApplicationDeinit({});
     }

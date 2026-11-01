@@ -27,6 +27,7 @@ These are included directly via `add_subdirectory()`:
 | ImGui | `src/Modules/imgui/` | Immediate mode GUI |
 | fmt | `src/Modules/fmt/` | Formatting library |
 | nlohmann/json | `src/Modules/nlohmann/` | JSON for the external control API; the `nlohmann_json` target defines `JSON_NOEXCEPTION` (use it only through `BECore/Control/Json.h`) |
+| stb | `src/Modules/stb/` | `stb_truetype.h` for glyph metrics and rasterization (INTERFACE target `stb`; the implementation is compiled only in `BECore/Text/Font.cpp`; trusted font files only) |
 
 ### Git Submodules (in `external/`)
 
@@ -52,7 +53,7 @@ These are included directly via `add_subdirectory()`:
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/EABase)
 
 # 2. SDL3 (git submodule), then SDL_image, then Vulkan-Headers
-# 3. Other vendored libraries: EnTT, pugixml, imgui, fmt, nlohmann
+# 3. Other vendored libraries: EnTT, pugixml, imgui, fmt, nlohmann, stb
 # 4. GoogleTest (if ENGINE_BUILD_TESTS) -- after the ENGINE_NO_EXCEPTIONS block, see below
 # 5. Reflection functions (add_reflection_target, be_add_game_reflection)
 # 6. Engine modules (BECore first!)

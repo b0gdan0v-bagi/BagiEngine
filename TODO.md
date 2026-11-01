@@ -112,7 +112,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 1. A person cannot play the computer: both sides of the game are mouse clicks. Stockfish plays only through `tools/control/stockfish_bridge.py`, which needs the control API switched on, Python and an installed Stockfish, and a person at the window on the real clock (not tried yet, see the control entry). It is a test and development tool, not a feature of the game.
 2. There is no engine inside the game, and nothing in `src` or `games` starts a process (a search for `popen`, `posix_spawn`, `CreateProcess` finds nothing). Stockfish is GPL-3.0 and the repository has no license file, so what linking or shipping it would require is not settled. The web target of the release entry cannot start a process and Android can do it only in ways an app should not rely on, so an engine for them has to run in the game's own process.
-3. There is no analysis of any kind: no evaluation, best move or lines, no move list on the screen, no takeback, no stepping through the game, no resign or draw offer, no clocks, no PGN. The model keeps `GetStartFen()` and `GetMoves()`, which are enough to rebuild any earlier position, and `Position::UndoMove()` exists, but no player action uses them. The renderer has no text (entry "No text rendering"), so the window cannot show a number, a move or an opening name.
+3. There is no analysis of any kind: no evaluation, best move or lines, no move list on the screen, no takeback, no stepping through the game, no resign or draw offer, no clocks, no PGN. The model keeps `GetStartFen()` and `GetMoves()`, which are enough to rebuild any earlier position, and `Position::UndoMove()` exists, but no player action uses them. The engine can draw text now (`TextComponent`, `BECore/Text/CLAUDE.md`), but there is no in-game UI to lay out a move list, a number or an opening name (entry "No in-game UI").
 4. The choices a person needs have no place to live: which side to play, the strength of the opponent, a new game, resign, and the piece of a promotion (a click on the last rank always plays the queen; the other pieces are reachable only through `TryMove` and UCI).
 
 **A fix has to cover** (a direction to confirm with the owner, not a decision):
@@ -195,25 +195,8 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 **A fix has to cover:**
 
 - a view size for `Match3Scene` (the board at (100, 80) with the same margin on every side is about `viewWidth="712" viewHeight="672"`, to be checked in the running game);
-- where the HUD goes in a mode that has ImGui: its window does not move with the fitted board.
-
-## No text rendering in the engine: text exists only in ImGui
-
-**Status:** in progress since 2026-11-01. Stage 0 of the plan (renderer primitives) is done; text is stage 1.
-
-**Stage:** 3
-
-**Plan:** `.claude/plans/magical-leaping-blossom.md`
-
-**Where:** `games/Match3/src/Match3/Components/Match3BoardComponent.cpp` (the score is `ImGui::Text` in an ImGui window), `src/Modules/BECore/Resource/` (where a font loader would go), `external/` (SDL_image is the only SDL add-on).
-
-**What is missing** (found by reading the code, not by running a game): fonts, glyph rendering and a text component. The Match3 HUD is ImGui, and the Game run mode has no ImGui, so `BagiMatch3` shows no score and has no Reset button until the HUD moves to a text component.
-
-**A fix has to cover:**
-
-- a font loader as an `IResourceLoader` (SDL3_ttf, or a glyph atlas built at load time) following `Resource/CLAUDE.md`;
-- a `TextComponent` (text, font, size, color, alignment) drawn through `IRenderer`, so it works in both backends;
-- the Match3 score moved from ImGui to the text component.
+- where the HUD goes in a mode that has ImGui: its window does not move with the fitted board;
+- the score and the Reset button in Game mode: text exists (`TextComponent`), but the HUD still needs a canvas and a button, so this waits for the in-game UI (plan stage 4: `.claude/plans/magical-leaping-blossom.md`).
 
 ## No audio
 
@@ -262,11 +245,11 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 **Where:** `src/Widgets/` (editor widgets), `Scene/Components/ClickableComponent.cpp` (the only clickable thing on a scene).
 
-**What is missing** (found by reading the code, not by running a game): buttons, panels, labels and layout that belong to a game and render through `IRenderer`. Do this after text rendering and input mapping.
+**What is missing** (found by reading the code, not by running a game): buttons, panels, labels and layout that belong to a game and render through `IRenderer`. Text is drawn already (`TextComponent`); do this after input mapping.
 
 **A fix has to cover:**
 
-- a few scene components (panel, label, button with normal / hover / pressed state) on top of `TransformComponent`, `TextComponent` and the input map;
+- a few scene components (panel, label, button with normal / hover / pressed state) on top of `TransformComponent`, `TextComponent` (done) and the input map;
 - anchoring to the window or viewport size;
 - a main-menu scene in one of the games as the first consumer.
 

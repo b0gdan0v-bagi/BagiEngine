@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<TextConfig
+  defaultFont="assets/fonts/PT_Sans-Web-Regular.ttf"
+  pageSize="1024">
+  <!-- Code points whose glyphs are drawn up front when a font is first used at a size. Any other glyph is drawn when a text first needs it. -->
+  <preload>
+    <range name="Basic Latin" from="32" to="126" />
+    <range name="Latin-1 Supplement" from="160" to="255" />
+    <range name="Cyrillic" from="1024" to="1279" />
+    <range name="General Punctuation" from="8208" to="8231" />
+    <range name="Numero Sign" from="8470" to="8470" />
+  </preload>
+</TextConfig>

@@ -36,6 +36,7 @@ namespace BECore {
 
         bool Initialize(IMainWindow& window) override;
         void Destroy() override;
+        void WaitIdle() override;
         void BeginFrame() override;
         void EndFrame() override;
         void Clear(const Color& color) override;

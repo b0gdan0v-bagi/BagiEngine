@@ -30,7 +30,14 @@ Updated as the work goes; the dashboard counts these lines.
 - [x] Stage 0.4 `RecordingRenderer` in `tests/Common`, clip and forwarding tests, SDL pixel tests
 - [x] Stage 0.5 `RenderProbeComponent` for the manual check on both backends
 - [ ] Stage 0 manual look at the probe on Vulkan (owner)
-- [ ] Stage 1 Text
+- [x] Stage 1.1 `stb_truetype.h` v1.26 vendored in `src/Modules/stb/`, vendored lists updated
+- [x] Stage 1.2 `Font` and `FontLoader` (CPU only, `.ttf` / `.otf`)
+- [x] Stage 1.3 `FontAtlas`, `ShelfPacker`, `FontAtlasLibrary`, `TextSettings` and `config/TextConfig.xml`; new pages instead of rewriting one; the library is cleared by `Application::Cleanup()` before the renderer dies (`IRenderer::WaitIdle()`, `GetId()` were added for it)
+- [x] Stage 1.4 `TextLayout` (wrap, align, line spacing, clip / ellipsis / auto-fit) with gtests on the real font
+- [x] Stage 1.5 `TextRenderer` and `TextComponent`
+- [x] Stage 1.6 Default font: PT Sans (ParaType, OFL 1.1) in `assets/fonts/` with its license; Basic Latin, Latin-1, Cyrillic and punctuation covered (`FontTest`)
+- [x] Stage 1 look at the text on the SDL backend (headless screenshot of a text sheet: Cyrillic, sizes 12 to 72, alignment, ellipsis, auto-fit, alpha)
+- [ ] Stage 1 manual look at the text on Vulkan (owner; the same scene ran on Vulkan without errors)
 - [ ] Stage 2 Input and window metrics
 - [ ] Stage 3 Canvases and adaptive layout, pure core
 - [ ] Stage 4 Controls, the XML front-end and the first screens

@@ -66,6 +66,7 @@ namespace BECore {
         _assertHandlerManager->Initialize();
         _resourceManager.Initialize();
         _textureLibrary.Initialize();
+        _fontAtlasLibrary.Initialize();
 
         RegisterControlBuiltins(_controlService);
     }

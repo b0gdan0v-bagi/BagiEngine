@@ -93,6 +93,12 @@ namespace BECore {
         return true;
     }
 
+    void VulkanRendererBackend::WaitIdle() {
+        if (_device.GetDevice() != VK_NULL_HANDLE) {
+            vkDeviceWaitIdle(_device.GetDevice());
+        }
+    }
+
     void VulkanRendererBackend::Destroy() {
         VkDevice vkDevice = _device.GetDevice();
         if (vkDevice == VK_NULL_HANDLE) {

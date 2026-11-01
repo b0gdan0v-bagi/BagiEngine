@@ -11,6 +11,7 @@
 #include <BECore/Resource/TextureLibrary.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Tests/TestManager.h>
+#include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Time/Time.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/EventsProviderManager.h>
@@ -86,6 +87,10 @@ namespace BECore {
             return GetInstance()._textureLibrary;
         }
 
+        static FontAtlasLibrary& GetFontAtlasLibrary() {
+            return GetInstance()._fontAtlasLibrary;
+        }
+
         static Time& GetTime() {
             return GetInstance()._time;
         }
@@ -115,7 +120,7 @@ namespace BECore {
         void OnApplicationDeinit(PassKey<Application>);
 
     private:
-        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, the builtin control methods
+        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, FontAtlasLibrary, the builtin control methods
         void InitializeCoreServices();
 
         FileSystem _fileSystem;
@@ -130,6 +135,7 @@ namespace BECore {
         RendererManager _rendererManager;
         IntrusivePtrAtomic<SceneManager> _sceneManager;
         TextureLibrary _textureLibrary;
+        FontAtlasLibrary _fontAtlasLibrary;
         Time _time;
         ControlService _controlService;
     };

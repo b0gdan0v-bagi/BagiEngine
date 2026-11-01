@@ -46,7 +46,7 @@ BagiEngine is a C++23 game engine with modular ECS architecture (EnTT). The main
 
 **Engine and games:** the engine knows nothing about concrete games. A game lives in `games/<Name>/` (module, executable, `config/`, `assets/`, `tests/`), reaches the engine only through `cmake/BagiEngine.cmake` (`be_add_module`, `be_add_game_reflection`, `be_add_game_executable`, `be_add_game_tests`) and registers an `IGame` in `AbstractFactory<IGame>`. One executable is one game. `games/` is built to move out into separate repositories that carry this repository as a submodule (`engine/`); no engine code, CMake or config outside `games/` refers to a concrete game. See `src/Modules/Games/CLAUDE.md`.
 
-**Stack:** CMake 3.31+ with Ninja, SDL3 + SDL_image, ImGui, EnTT (ECS), EASTL, pugixml (XML), nlohmann/json (control API only), fmt, magic_enum (reflection), GoogleTest (tests).
+**Stack:** CMake 3.31+ with Ninja, SDL3 + SDL_image, ImGui, EnTT (ECS), EASTL, pugixml (XML), nlohmann/json (control API only), stb_truetype (text), fmt, magic_enum (reflection), GoogleTest (tests).
 
 **Module order (bottom → top; every module links `BECoreModule`, which provides the PCH):**
 ```
@@ -68,8 +68,8 @@ src/
     ├── SDL/            # SDL3 integration
     ├── Vulkan/         # Vulkan renderer backend
     ├── Games/          # IGame / GameManager: the engine-game contract
-    └── EABase/, EnTT/, fmt/, imgui/, nlohmann/, pugixml/   # vendored
-config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, default SceneConfig)
+    └── EABase/, EnTT/, fmt/, imgui/, nlohmann/, pugixml/, stb/   # vendored
+config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, Text, default SceneConfig; assets/fonts/ has the default font)
 games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Chess, Match3)
 tests/                  # GoogleTest executable BagiEngineTests (BECore) + Common (BagiEngineTestSupport)
 tools/                  # developer tools: natvis, todo_sync (TODO.md dashboard and Vikunja export; Python, pytest), control (Python: the control API client and smoke test, the MCP server, the Stockfish bridge; `tools/control/CLAUDE.md`)
@@ -77,7 +77,7 @@ tools/                  # developer tools: natvis, todo_sync (TODO.md dashboard 
 
 **Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.
 
-**Vendored code** (`EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`, `pugixml/`): do not edit it, and leave it out of broad searches.
+**Vendored code** (`EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`, `pugixml/`, `stb/`): do not edit it, and leave it out of broad searches.
 
 **Key subsystems in `src/Modules/BECore/`:**
 
@@ -88,6 +88,7 @@ tools/                  # developer tools: natvis, todo_sync (TODO.md dashboard 
 | `Scene/` | Scene graph (SceneNode → IComponent), serialization |
 | `Reflection/` | IPropertyVisitor, ISerializer/IDeserializer, BE_CLASS codegen markers |
 | `Resource/` | TextureLibrary, resource pooling |
+| `Text/` | Fonts (`stb_truetype`), pure text layout, glyph atlases in page textures, `TextComponent` (`Text/CLAUDE.md`) |
 | `Renderer/` | `IRenderer` / `ITexture`; backend (`SDLRendererBackend` or `VulkanRendererBackend`) is picked by `renderer` in `config/ApplicationConfig.xml` |
 
 `Events` (CRTP pub/sub: `EventBase<T>`, `SubscriptionHolder` for RAII) and `TaskSystem` (async coroutines: `TaskManager`, `Task<T>`) are sibling modules, not part of BECore.
@@ -158,7 +159,7 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 
 ## Rules and Skills
 
-- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, and `games/Chess/`, `games/Match3/`, and `tools/control/`. Claude Code loads one when a file under that directory is read.
+- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`, `Text/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, and `games/Chess/`, `games/Match3/`, and `tools/control/`. Claude Code loads one when a file under that directory is read.
 - `.claude/rules/` holds guidance that spans several directories or matches by file name (`paths:` frontmatter): CMake, Reflection, Reflection events (`*Event.h`), Rendering, Widgets, Tests. Read the relevant file before changing that area.
 - `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `todo-sync` (TODO.md dashboard and Vikunja export, `tools/todo_sync/CLAUDE.md`) and `cpp-senior-programmer`.
 - `TODO.md` entries carry optional `**Status:**`, `**Stage:**` and `**Plan:**` lines (format in the file header). Keep them current when work on an entry starts or stops, and delete an entry when it is finished. Run `todo-sync check` after editing the file.
