@@ -52,7 +52,13 @@ Updated as the work goes; the dashboard counts these lines.
 - [x] Stage 3.6 Several canvases in one scene: draw order by node layer, input order refreshed on every draw, `modal`, show / hide by name (`SetVisibleByName`); covered in `UICanvasComponentTest`
 - [x] Stage 3.7 Editor preview: `ViewportWidget` toolbar with aspect presets and a safe-area simulation (`UIPreview`, `UIPreviewTest` (9)); the viewport hands its safe area to canvases through `UIEnvironment::SetSafeAreaOverride`
 - [ ] Stage 3 look at the viewport presets by hand (owner: pick 16:9 / 4:3 / 21:9 / 9:16, a notch and side insets; the outline must match the layout; no test can open the ImGui editor)
-- [ ] Stage 4 Controls, the XML front-end and the first screens
+- [x] Stage 4.1 Reflection check: `UIElement` is a `FACTORY_BASE` (XML element `element`), the style is flat attributes, `UILength` / `UIEdges` / `UIColor` are one attribute each, variants are `<variants><variant when="...">`; `UICanvasComponent` has `_elements` and `_variants`; XML and binary round-trip, a scene file lays out like code; an unknown `type` is reported; `UIReflectionTest` (14)
+- [ ] Stage 4.2 `UIDocument` and the XML `IResourceLoader` (`source="ui/hud.ui.xml"`), a tree from a property bag
+- [ ] Stage 4.3 Controls: `UIPanel`, `UIImage`, `UILabel`, `UIButton`, `UIStack`
+- [ ] Stage 4.4 `UIVars`, label binding, show / hide by name
+- [ ] Stage 4.5 gtests of the controls: hit testing, button states, draw calls at two aspect ratios, re-layout, the validator matrix
+- [ ] Stage 4.6 Match3: view size, HUD canvas, Reset on `ActionEvent`, main menu scene
+- [ ] Stage 4.7 Chess: HUD canvas with a turn label and Reset
 - [ ] Stage 5 Decision spike: XML, web-style front-end, RmlUi
 - [ ] Stage 6 Widen the chosen path
 - [ ] Stage 7 Editor and tooling
@@ -223,6 +229,7 @@ No controls yet: the point is that the adaptive machinery is proven in code befo
 ### Stage 4 — Controls, the XML front-end and the first screens (L)
 
 1. Reflection check first: a gtest loads a component with nested `vector<IntrusivePtr<UIElement>>` children from an XML string, saves it back and gets the same text. Includes how `UILength` (`"90%"`) and the `when` conditions are written as strings. If something fails, fix it here, before building on it.
+   *Done (4.1).* What the check found: the generator knows a factory field only by `IntrusivePtrAtomic<T>` / `IntrusivePtrNonAtomic<T>` (not the `IntrusivePtr` alias), and named a base without derived classes `uielement` (`ELEMENT=element` fixes the name now); a style as a nested object would have made the file verbose, so `UIElementStyle` is written flat through its own `DataAccessor`; `Ser::Save` drops a value equal to `T{}` under skip-defaults, which would lose `visible="false"` and an override `x="0"`, so those use `DataAccessor::Save` directly; a vector of factory objects accepted an unknown `type` silently (now reported).
 2. The format boundary: `UIDocument` (`IResource`) and the XML `IResourceLoader`, so a canvas can take `source="ui/hud.ui.xml"` as well as inline children; a gtest builds the same tree from inline XML, from a file, and from a property bag built in code (the check noted under "Front-ends").
 3. Controls: `UIPanel` (color, optional sprite with 9-slice border), `UIImage` (sprite, `aspectRatio` fit — also the aspect option the Chess sprite entry asks for), `UILabel`, `UIButton`, `UIStack`.
 4. `UIVars` and label binding; a lookup by name for show/hide of an element or a canvas.

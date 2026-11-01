@@ -6,7 +6,7 @@ In-game UI that the engine draws through `IRenderer`, in both backends and both 
 
 **Adaptivity is the foundation.** Window size, aspect ratio, orientation, safe area, pixel density and a user scale are inputs of every layout, and every screen must pass `ValidateOnMatrix` (below) with no issues before it is considered done.
 
-What exists (plan stage 3): canvases, the scaler, the layout rules, responsive variants, the validator and the host component. What does not exist yet: the controls (panel, label, button), `UIVars`, the XML front-end and the first real screens (stage 4). Elements are plain rects with a color, built in code.
+What exists (plan stages 3 and 4.1): canvases, the scaler, the layout rules, responsive variants, the validator, the host component, and the reflection of the element tree and the variants, so a screen can be written in `SceneConfig.xml` (see "Writing a screen in XML"). What does not exist yet: the controls (panel, label, button), `UIVars`, `UIDocument` and the first real screens (the rest of stage 4). Elements are plain rects with a color.
 
 ```
 UICanvasComponent (scene component, reflected fields: space, scaleMode, ...)
@@ -27,8 +27,11 @@ UIElement tree (root = the canvas; children are the elements)
 | `UILayoutContext` | Everything layout depends on besides the tree: output size, pixel density, display scale, safe area, user scale, the scene's view size, the node box of a World canvas. Has `operator==` |
 | `UICanvasScaler` | The one pure function `Resolve(params, context)` → `UICanvasResolved` |
 | `UIEnvironment` (`CoreManager::GetUIEnvironment()`) | `UISettings` from `config/UIConfig.xml` (`userScale`, `minTouchSize`) and `MakeContext(window, outputW, outputH)`: puts the window's metrics into a context. `SetSafeAreaOverride()` is for the editor viewport |
-| `UIElement` | A node: `name`, `layout` (Anchor or Stack), `style` (authored) and `active` (after variants), `rect` (laid out), `children`, `blocksInput`, `interactive`, `ignoreSafeArea`, `color`; virtual `CheckContent()` |
-| `UIVariant` | `when` (`UIVariantCondition`) + `overrides` per named element (`UIElementOverride`); `UIVariants::Apply` |
+| `UIElement` | A node, `FACTORY_BASE` with the XML element name `element`: `name`, `layout` (Anchor or Stack), `style` (authored) and `active` (after variants), `rect` (laid out), `children`, `blocksInput`, `interactive`, `ignoreSafeArea`, `color`; virtual `CheckContent()`. The fields except `active` and `rect` are reflected |
+| `UIElementStyle` | The authored properties that a variant can change (`visible`, `rect`, `stack`, `fontSize`); written as flat attributes of its element |
+| `UIColor` | A `Color` that a file writes in one attribute (`color="0,0,0,160"` or `"#000000A0"`) |
+| `UIText` (`UIValueText.h`) | Pure text forms of `UILength` (`"90%"`), `UIEdges` (`"8"` or `"l,t,r,b"`), colors, numbers; `UIAttr` (`UIAttributeIO.h`) reads and writes them as attributes |
+| `UIVariant` | `when` (`UIVariantCondition`, text form `orientation:portrait;minAspect:1.5`) + `overrides` per named element (`UIElementOverride`); `UIVariants::Apply` |
 | `UITreeLayout::Run` | Lays out a whole tree |
 | `UICanvasLayout` | The pure pipeline above with a cache, `HitTest`, `Validate`, the counters tests read. Public fields: `params`, `root`, `variants` |
 | `UILayoutValidator` | `Validate(root, resolved, options)` → `UILayoutIssue`s |
@@ -82,7 +85,37 @@ A canvas holds `variants` (`UICanvasLayout::variants`): `UIVariant { when, overr
 
 **Design rules the matrix enforces:** use anchors and percents, not absolute positions; give interactive elements at least 48 units at the reference size and set `minScale` so they stay touch targets; give a screen a variant for the shapes where it does not fit (a portrait canvas is the usual one); let text wrap, cut with an ellipsis or shrink.
 
-## Building a screen in code (until the XML front-end)
+## Writing a screen in XML
+
+The elements and variants of a canvas are reflected fields of `UICanvasComponent` (`_elements`, `_variants`), so a screen is data in `SceneConfig.xml`:
+
+```xml
+<node name="Hud" layer="10"><components>
+  <component type="UICanvasComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="0.7" useSafeArea="true">
+    <elements>
+      <element type="UIElement" name="Panel" anchor="TopLeft" x="16" y="16" width="220" height="96" color="0,0,0,160" blocksInput="true">
+        <children>
+          <element type="UIElement" name="Score" x="12" y="10" width="40%" height="28"/>
+        </children>
+      </element>
+    </elements>
+    <variants>
+      <variant when="orientation:portrait">
+        <overrides><set element="Panel" anchor="Top" x="0" y="16" width="90%"/></overrides>
+      </variant>
+    </variants>
+  </component>
+</components></node>
+```
+
+- **An element** is `<element type="...">`, `type` is the class name from `AbstractFactory<UIElement>` (a control is one more derived class). An unknown type is reported as a deserialize error (and the element becomes a plain `UIElement`). Children go in a `<children>` array.
+- **The style is flat:** `visible`, `anchor`, `x`, `y`, `width`, `height`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, `aspectRatio`, `aspectMode`, `margin`, `flex`, `direction`, `spacing`, `padding`, `wrap`, `crossAlign`, `fontSize` are attributes of the element, and only values that differ from the default are written. A length is `220`, `220px` or `90%`; `margin` and `padding` are one number or `left,top,right,bottom`; a color is `r,g,b,a` or `#RRGGBB[AA]`. A malformed value is reported with the attribute name and the default stays.
+- **A variant** is `when` (the set parts as `name:value` separated by `;`: `orientation` (`portrait`, `landscape`, `any`), `minAspect`, `maxAspect`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`) and a list of `<set element="Name" .../>` overrides with only the properties to change (`visible`, `anchor`, `x`, `y`, `width`, `height`, `direction`, `fontSize`). An override is written even when its value equals the type's default (`x="0"` is a decision).
+- **Saving:** `_elements` and `_variants` are the inline part of the screen; `Initialize()` hands them to the layout once (the same element objects, so edits through either are the same edits). Elements added in code with `GetRoot().AddChild()` are runtime-only and are not saved back.
+- A binary save (`BinarySerializer`) carries the same tree.
+- Why `IntrusivePtrNonAtomic<UIElement>` and not `IntrusivePtr<UIElement>` in the field declarations: the generator looks for the long name to find the factory field (`.claude/rules/reflection-module.md`).
+
+## Building a screen in code
 
 ```cpp
 void MyHud::OnAttached() {  // the node has a UICanvasComponent before this component in its list
@@ -98,13 +131,7 @@ void MyHud::OnAttached() {  // the node has a UICanvasComponent before this comp
 }
 ```
 
-```xml
-<node name="Hud" layer="10"><components>
-  <component type="UICanvasComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="0.7" useSafeArea="true"/>
-</components></node>
-```
-
-The elements and variants are not reflected yet: they cannot be written in `SceneConfig.xml` until stage 4 (task 4.1 checks that nested children round-trip).
+Code and a file can be mixed: the canvas of a node comes from the file, a component adds more elements in `OnAttached()`.
 
 ## Editor preview
 
@@ -121,8 +148,8 @@ The elements and variants are not reflected yet: they cannot be written in `Scen
 
 ## Not done
 
-Controls (`UIPanel`, `UIImage`, `UILabel`, `UIButton`), `UIVars`, `UIDocument` and the XML front-end, reflection of elements and variants, clipping of children to their parent, scrolling, focus and gamepad navigation, a `ClickableComponent` replacement for buttons, the debug overlay and the control API methods (`ui_tree`, `ui_click`). The first two plus the XML front-end are stage 4 of the plan.
+Controls (`UIPanel`, `UIImage`, `UILabel`, `UIButton`), `UIVars`, `UIDocument` (a screen in a file of its own), clipping of children to their parent, scrolling, focus and gamepad navigation, a `ClickableComponent` replacement for buttons, the debug overlay, an inspector for variants and the control API methods (`ui_tree`, `ui_click`). The first four are the rest of stage 4 of the plan.
 
 ## Tests
 
-`tests/BECore/`: `UILayoutTest` (anchors, stretch, limits, aspect, stack), `UICanvasScalerTest` (every space and mode, safe area, the context comparison), `UISettingsTest` (settings, `UIEnvironment`), `UIVariantTest` (conditions, order, restoring, tree layout), `UICanvasLayoutTest` (cache, variant runs, hit testing, the matrix itself and shipped-style screens), `UILayoutValidatorTest`, `UICanvasComponentTest` (a scene from XML into a `RecordingRenderer`: drawing in each space, the view transform handed back, input order, press following, modal, inactive scenes), `UIPreviewTest`.
+`tests/BECore/`: `UILayoutTest` (anchors, stretch, limits, aspect, stack), `UICanvasScalerTest` (every space and mode, safe area, the context comparison), `UISettingsTest` (settings, `UIEnvironment`), `UIVariantTest` (conditions, order, restoring, tree layout), `UICanvasLayoutTest` (cache, variant runs, hit testing, the matrix itself and shipped-style screens), `UILayoutValidatorTest`, `UICanvasComponentTest` (a scene from XML into a `RecordingRenderer`: drawing in each space, the view transform handed back, input order, press following, modal, inactive scenes), `UIPreviewTest`, `UIReflectionTest` (the text forms, the tree and variants through XML and binary, malformed values, an unknown type, a screen from a scene file laid out in both orientations).

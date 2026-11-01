@@ -42,6 +42,12 @@ namespace BECore {
         BE_REFLECT_FIELD bool _visible = true;  ///< drawn and, with `inputEnabled`, takes input
         BE_REFLECT_FIELD bool _inputEnabled = true;
 
+        /// The elements and variants written inline in the scene file (`<elements><element type="UIPanel" .../></elements>`, `<variants>`). Initialize() hands them to
+        /// the layout; they stay here as the part of the screen that is saved back. Elements added in code are not in this list
+        BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> _elements;  // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
+        BE_REFLECT_FIELD eastl::vector<UIVariant> _variants;
+
+        void Initialize() override;
         void OnAttached() override;
         void OnDraw() override;
 
@@ -94,6 +100,7 @@ namespace BECore {
         int _inputOrder = 0;
         bool _registered = false;
         uint32_t _consumedButtons = 0;  // bit per SDL button that went down on this canvas and is not up yet
+        bool _authoredAdopted = false;  // Initialize() has handed `_elements` and `_variants` to the layout
     };
 
 }  // namespace BECore

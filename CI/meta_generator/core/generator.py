@@ -388,7 +388,8 @@ class CodeGenerator:
                     factory_base.derived.append(derived)
             
             if factory_base.derived:
-                element = compute_element_name(base_cls.name, factory_base.derived[0].name)
+                # An explicit ELEMENT=name in BE_CLASS wins over the name derived from the class names
+                element = base_cls.element_name or compute_element_name(base_cls.name, factory_base.derived[0].name)
             else:
                 element = base_cls.element_name or base_cls.name.lstrip('I').lower()
                 short_name = base_cls.name

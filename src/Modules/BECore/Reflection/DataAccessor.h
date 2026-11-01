@@ -97,8 +97,11 @@ namespace BECore {
                     using Pointee = typename ::BECore::Detail::IntrusivePtrPointeeType<T>::type;
                     if (!item) {
                         eastl::string typeStr;
-                        if (d.ReadAttribute("type", typeStr))
+                        if (d.ReadAttribute("type", typeStr)) {
                             item = AbstractFactory<Pointee>::GetInstance().Create(eastl::string_view(typeStr.data(), typeStr.size()));
+                            if (!item && HasFactory<Pointee>)
+                                d.ReportError("type", eastl::string_view(Format("Unknown factory type: '{}'", typeStr).c_str()));
+                        }
                         if (!item) {
                             if constexpr (!std::is_abstract_v<Pointee>)
                                 item = New<Pointee>();

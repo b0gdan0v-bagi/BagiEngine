@@ -37,6 +37,19 @@ namespace BECore {
         }
     }
 
+    void UICanvasComponent::Initialize() {
+        // Called after loading and again by AddComponent: the written elements are handed over once
+        if (_authoredAdopted) {
+            return;
+        }
+        _authoredAdopted = true;
+        for (const auto& element : _elements) {
+            _layout.root->children.push_back(element);
+        }
+        _layout.variants.insert(_layout.variants.end(), _variants.begin(), _variants.end());
+        _layout.Invalidate();
+    }
+
     void UICanvasComponent::OnAttached() {
         // The scene attaches its nodes one by one while it fills its tree, so this rank may be provisional: RefreshInputOrder() settles it on every draw
         _inputOrder = GetScene().GetDrawRank(GetNode());

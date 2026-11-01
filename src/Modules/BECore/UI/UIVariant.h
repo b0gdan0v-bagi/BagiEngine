@@ -22,6 +22,14 @@ namespace BECore {
         float maxHeight = 0.0f;
 
         [[nodiscard]] bool Matches(const Rect& bounds) const;
+
+        /// The set parts as "name:value" separated by ';' (`orientation:portrait;minAspect:1.5`), in the order of the fields; empty when nothing is set
+        [[nodiscard]] eastl::string ToText() const;
+
+        /// Reads the form of ToText(); the names and `portrait` / `landscape` / `any` are case-insensitive. The error names the part that was not understood
+        [[nodiscard]] static std::expected<UIVariantCondition, eastl::string> FromText(eastl::string_view text);
+
+        [[nodiscard]] bool operator==(const UIVariantCondition&) const = default;
     };
 
     /// The properties of one named element that a variant replaces; an unset one is left as it is
@@ -37,13 +45,45 @@ namespace BECore {
         std::optional<float> fontSize;
 
         void ApplyTo(UIElementStyle& style) const;
+
+        /// In a file: `<set element="Hud" anchor="Top" x="0" width="90%"/>`, only the set properties are attributes
+        void Serialize(ISerializer& s) const;
+        void Deserialize(IDeserializer& d);
+
+        [[nodiscard]] bool operator==(const UIElementOverride&) const = default;
     };
 
     /// A responsive variant: while `when` holds for the canvas bounds, `overrides` are in effect
     struct UIVariant {
         UIVariantCondition when;
         eastl::vector<UIElementOverride> overrides;
+
+        /// In a file: `<variant when="orientation:portrait"><overrides><set element="Hud" .../></overrides></variant>`
+        void Serialize(ISerializer& s) const;
+        void Deserialize(IDeserializer& d);
+
+        [[nodiscard]] bool operator==(const UIVariant&) const = default;
     };
+
+    namespace Ser {
+
+        /// A list of variants is `<variants><variant .../>...</variants>` in a file, not the `item` elements a general vector gets
+        template <>
+        struct DataAccessor<eastl::vector<UIVariant>> {
+            static void Save(ISerializer& s, const eastl::vector<UIVariant>& variants, eastl::string_view key);
+            static bool Load(IDeserializer& d, eastl::vector<UIVariant>& variants, eastl::string_view key);
+        };
+
+    }  // namespace Ser
+
+    namespace PropVisit {
+
+        /// The inspector does not edit variants yet (editor tooling is stage 7 of the UI plan): they are shown as nothing
+        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<UIVariant>& /*variants*/, eastl::string_view /*key*/) {
+            return false;
+        }
+
+    }  // namespace PropVisit
 
     class UIVariants {
     public:

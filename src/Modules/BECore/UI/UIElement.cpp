@@ -1,5 +1,7 @@
 #include "UIElement.h"
 
+#include <Generated/UIElement.gen.hpp>
+
 namespace BECore {
 
     IntrusivePtr<UIElement> UIElement::AddChild(PoolString childName) {

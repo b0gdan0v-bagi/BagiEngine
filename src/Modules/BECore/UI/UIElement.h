@@ -1,21 +1,12 @@
 #pragma once
 
-#include <BECore/UI/UIRectSpec.h>
+#include <BECore/UI/UIColor.h>
+#include <BECore/UI/UIElementStyle.h>
 
 namespace BECore {
 
     /// How an element lays out its children: each one against the element's rect through its own anchor, or one after another
     CORE_ENUM(UILayoutKind, uint8_t, Anchor, Stack)
-
-    /// Everything a variant can change about an element
-    struct UIElementStyle {
-        bool visible = true;
-        UIRectSpec rect;
-        UIStackSpec stack;      ///< used when the element's layout is Stack
-        float fontSize = 0.0f;  ///< in UI units; 0 leaves the element's own size. Elements without text ignore it
-
-        [[nodiscard]] bool operator==(const UIElementStyle&) const = default;
-    };
 
     /// What an element says about its content once it has a rect: the layout validator reads it
     struct UIContentFit {
@@ -31,22 +22,27 @@ namespace BECore {
      * `active`, and a canvas that goes back to a shape no variant touches gets `style` again. `rect` is the result of the layout,
      * in the units of the canvas, in canvas coordinates (not relative to the parent). Public fields, like the scene components: after changing
      * one, call UICanvasComponent::Invalidate().
+     *
+     * **In a file.** An element is `<element type="UIPanel" name="Hud" ...>` and its authored state is reflected: `name`, `layout`, the style as flat
+     * attributes (UIElementStyle), `color`, `blocksInput`, `interactive`, `ignoreSafeArea` and a `<children>` array of elements. The type names come
+     * from AbstractFactory<UIElement>, so a control is one more derived class. `active` and `rect` are results and are not saved.
      */
     class UIElement : public RefCounted {
+        BE_CLASS(UIElement, FACTORY_BASE, ELEMENT = element)
     public:
         UIElement() = default;
         ~UIElement() override = default;
 
-        PoolString name;
-        UILayoutKind layout = UILayoutKind::Anchor;
-        UIElementStyle style;
+        BE_REFLECT_FIELD PoolString name;
+        BE_REFLECT_FIELD UILayoutKind layout = UILayoutKind::Anchor;
+        BE_REFLECT_FIELD UIElementStyle style;
         UIElementStyle active;
-        Color color{0, 0, 0, 0};      ///< the fill the canvas draws for this element; a transparent color draws nothing
-        bool blocksInput = false;     ///< a hit test finds it: a click on it does not reach what is below
-        bool interactive = false;     ///< it takes clicks (a button): hit-testable, and the validator checks its touch size
-        bool ignoreSafeArea = false;  ///< a child of the canvas root only: laid out against the whole canvas, not the safe area (a background)
-        Rect rect;                    ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
-        eastl::vector<IntrusivePtr<UIElement>> children;
+        BE_REFLECT_FIELD UIColor color;                                             ///< the fill the canvas draws for this element; a transparent color draws nothing
+        BE_REFLECT_FIELD bool blocksInput = false;                                  ///< a hit test finds it: a click on it does not reach what is below
+        BE_REFLECT_FIELD bool interactive = false;                                  ///< it takes clicks (a button): hit-testable, and the validator checks its touch size
+        BE_REFLECT_FIELD bool ignoreSafeArea = false;                               ///< a child of the canvas root only: laid out against the whole canvas, not the safe area (a background)
+        Rect rect;                                                                  ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
+        BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> children;  // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
 
         /// Adds a plain child with this name and returns it
         IntrusivePtr<UIElement> AddChild(PoolString childName);

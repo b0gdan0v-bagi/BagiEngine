@@ -135,6 +135,8 @@ if (deserializer.LoadFromFile("save.bin") && deserializer.BeginObject("Player"))
 
 Current bases: `ILogSink`, `IWidget`, `IAssertHandler`, `ITest`, `IRenderer`, `ITexture`, `IResource`, `IResourceLoader`, `IApplicationFabric`, `IComponent`, `SceneNode`, `Scene`, `IGame` (`grep -rn FACTORY_BASE src`).
 
+`BE_CLASS(Name, FACTORY_BASE, ELEMENT=element)` fixes the XML element name of the array that holds the base's objects; without it the name comes from the common suffix of the base and its first derived class (`ILogSink` + `ConsoleSink` give `sink`), or from the base name when it has no derived class. A class has a factory field only when the generator finds `IntrusivePtrAtomic<Base>` or `IntrusivePtrNonAtomic<Base>` in the field's type: the `IntrusivePtr<Base>` alias is not matched, so spell the long name in the declaration of a reflected `eastl::vector<IntrusivePtrNonAtomic<Base>>` (`UIElement::children`). A loaded element whose `type` is not registered is reported (`Unknown factory type`) and falls back to the base class when that is not abstract.
+
 A base class that has no derived class in the scanned directories registers itself in the factory, so it must be instantiable. The parser marks a class as abstract when its body declares a pure virtual method (`= 0;`) and the generator then skips that self-registration. This is what lets `IGame` live in the engine without any game: the engine's own run sees no `IGame` descendant, the game's run sees `ChessGame` and registers it in `AbstractFactory<IGame>`.
 
 ## Generated Methods
