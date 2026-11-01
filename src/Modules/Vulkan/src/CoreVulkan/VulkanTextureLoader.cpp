@@ -136,8 +136,9 @@ namespace BECore {
             return texture;
         }
 
-        // Always work with RGBA8 to match VK_FORMAT_R8G8B8A8_SRGB.
-        SDL_Surface* surface = SDL_ConvertSurface(rawSurface, SDL_PIXELFORMAT_RGBA8888);
+        // Bytes in memory must be R,G,B,A to match VK_FORMAT_R8G8B8A8_SRGB. RGBA32 is that byte order on any
+        // endianness; the packed RGBA8888 is A,B,G,R in memory on little-endian and would swap the channels.
+        SDL_Surface* surface = SDL_ConvertSurface(rawSurface, SDL_PIXELFORMAT_RGBA32);
         SDL_DestroySurface(rawSurface);
         if (!surface) {
             LOG_ERROR(Format("VulkanTextureLoader: failed to convert surface '{}': {}", path.ToStringView(), SDL_GetError()).c_str());

@@ -1,67 +1,43 @@
-# Chess: pieces are not drawn — make draw order explicit (layer + sorted pass)
+# Chess: pieces cover the squares — transparent atlas and texture byte order
 
 ## Context
 
-In `BagiChess` the board shows but the 32 pieces do not. I have not run the game (plan mode, and `engine.log` from the last runs is 0 bytes), so the cause comes from reading the code. The verification section confirms or refutes it.
+Part 1 (done, commit `693be62d` on branch `draw-layers`): the board was painted over the pieces because draw order followed the event dispatcher. `Scene::Draw()` now sorts nodes by (`layer`, traversal index) and calls `IComponent::OnDraw()`; the Chess `Board` is on layer -1.
 
-**Cause: draw order depends on the event dispatcher.** Every drawing component subscribes to the global `SceneDrawEvent`, which goes through `entt::dispatcher`. In the vendored EnTT 3.13.2 `sigh::publish` calls listeners from the last connected to the first (`src/Modules/EnTT/entt/signal/sigh.hpp:170`, "Order isn't guaranteed"). `SceneNode::WireToScene` connects components in `<nodes>` order, and in `games/Chess/config/SceneConfig.xml` the `Board` node is first. So `ChessBoardComponent::OnDraw` runs last and paints 64 opaque `DrawFilledRect` squares over the sprites (`ChessBoardComponent.cpp:56-68`). The Board has been first since the MVP commit `1c8c99a1`.
+Part 2 (this plan): the pieces are now drawn on top, but each one hides its square. "Piece drawing overlaps the cell drawing." Two causes, both found by reading the code and decoding the atlas (no screenshot is possible from the agent session):
 
-The user asked for a general fix: sorting, so that no game depends on handler order. `TODO.md` ("2D rendering is minimal", item 1: "no z-order or layers: draw order is the order of event handlers") and the entry on rendering as a per-component event handler ("nowhere to sort or batch draws") already describe the gap. This plan closes the ordering part of it and nothing more (no camera, rotation, blending or batching).
+1. **The atlas is fully opaque.** `games/Chess/assets/chess_test.png` is stored as RGBA, but the alpha of all 266,700 pixels is 255 (decoded with a small zlib script), and the background is near-white (`253..255` per channel). Every sprite therefore paints an opaque white 80x80 rectangle over its square, so the square color and the legal-move highlights under a piece are never seen. Blending is not the problem: both Vulkan pipelines already use `SRC_ALPHA / ONE_MINUS_SRC_ALPHA` (`VulkanTexturePipeline.cpp:119-127`, `texture.frag.glsl` returns the texel unchanged).
+2. **Engine bug in the texture upload, which a transparent atlas would hit at once.** `VulkanTextureLoader.cpp:140` converts the surface to `SDL_PIXELFORMAT_RGBA8888` and uploads it as `VK_FORMAT_R8G8B8A8_SRGB`. `RGBA8888` is a packed format: on little-endian (macOS arm64, Windows x86) its bytes in memory are A,B,G,R (`external/SDL/include/SDL3/SDL_pixels.h:690-693`: `RGBA32` is `ABGR8888`, `ABGR32` is `RGBA8888`). Vulkan then reads R=A, G=B, B=G and **alpha = the red channel**. With the opaque white background it hid itself (alpha = 254), but dark pieces (red about 40-60) already get alpha about 0.2 and a red cast, and a transparent background stored as `(255,255,255,0)` would be read as alpha 255 and stay opaque. So step 1 below is a precondition of step 2, not an extra.
 
-Ruled out by reading: the texture path and `TextureLibrary.xml` (the atlas `games/Chess/assets/chess_test.png` is 700x381 RGBA, its virtual path resolves through the game layer), the Vulkan `DrawTexture` path and shaders, `ChessPieceComponent::OnUpdate` (late registration covers `GameManager` starting after the scene loads) and `SubscribeInScene`.
-
-## Design
-
-`Scene::Draw()` stops emitting a global event. It walks its own node tree, sorts, and calls `OnDraw()` on the components in that order:
-
-- **Order key = (`layer` of the node, traversal index).** Traversal is depth-first, a parent before its children, siblings in `<nodes>` order, so equal layers draw in document order (later on top, as in any scene editor). Keys are unique, so `eastl::sort` is deterministic (no stable sort, no allocator buffer).
-- **`layer`** is a reflected `int32_t` on `SceneNode`, default 0, XML attribute `layer` on `<node>`. It is per node, not per component, so a node without a `TransformComponent` (the Chess `Board`) can have one, and the field exists once instead of in every renderer. A node's own layer is used; children do not inherit it (kept simple, documented).
-- **`IComponent::OnDraw()`**: a new virtual with an empty default, next to `OnAttached()`. Components override it and no longer subscribe. This removes the lifetime problem a registry would add: a removed component or node simply is not found by the next walk, and only the active scene's `Draw()` runs, so no `SubscribeInScene` filtering is needed for drawing.
-- **`SceneDrawEvent` is removed.** Nothing else listens to it (checked: four components and one test probe). Keeping it would leave a second, unordered way to draw.
-- The sort runs per frame over a reused member vector in `Scene` (`{layer, index, SceneNode*}`), so there is no allocation after the first frame. `OnDraw` must not add or remove nodes (the existing rule: do not change state from the draw phase).
+Ruled out: draw order (fixed in part 1), the `DrawTexture` pipeline and shader, the `TextureLibrary` entries (srcRects stay valid as the atlas size does not change).
 
 ## Changes
 
-1. **Engine, `src/Modules/BECore/Scene/`**
-   - `IComponent.h`: `virtual void OnDraw() {}` with a doc comment (called once per frame in draw order while the scene is active; draw only; do not subscribe to events to draw). Update the `SubscribeInScene` comment, which names `SceneDrawEvent` as its example.
-   - `SceneNode.h/.cpp`: `BE_REFLECT_FIELD int32_t _layer = 0;`, `GetLayer()` / `SetLayer()`.
-   - `Scene.h/.cpp`: `Draw()` builds the list, sorts by (layer, index) and calls each node's components' `OnDraw()` in component order.
-   - `src/Modules/Events/src/Events/SceneEvents.h`: remove `SceneDrawEvent`.
-2. **Components move from `SubscribeInScene<SceneDrawEvent>` to `void OnDraw() override`** (drop the `SceneEvents` forward declaration and the include if it becomes unused):
-   - `QuadRendererComponent` (its `OnAttached` becomes empty, remove it).
-   - `SpriteRendererComponent`: `OnAttached` only loads the texture; `ReloadTexture` loses the `UnsubscribeAll()` and re-subscribe; fix the header comment "re-subscribe to draw events".
-   - `games/Chess/.../ChessBoardComponent` and `games/Match3/.../Match3BoardComponent` (they keep their `MouseButtonDownEvent` subscription).
-3. **Scene editor, `src/Widgets/SceneEditor/SceneEditorWidget.cpp`**: `BuildNodeXml` writes the `layer` attribute when it is not 0 (the editor saves nodes by hand, not through reflection, so the field would be lost on save otherwise); `RenderInspector` gets a `Layer` `ImGui::InputInt` that calls `SetLayer` and sets `_isDirty`.
-4. **Chess config, `games/Chess/config/SceneConfig.xml`**: `Board` gets `layer="-1"` with a comment (background). The result no longer depends on node order. Nothing else in the file changes.
-5. **Tests, `tests/BECore/SceneEventsTest.{h,cpp}`** (the fixture loads scenes from an XML string and needs no renderer):
-   - `SceneEventCounter` switches to `OnDraw() override` and records `drawIndex` from a static counter that the fixture resets, so a test can compare the position of each node in the draw pass.
-   - Cases: equal layers draw in document order; a lower layer draws first whatever its position in `<nodes>` (the Chess shape: background node first and last in XML give the same result); depth-first order (parent, its children, then the next sibling); the existing active-scene case still holds (inactive scene is not drawn); a component removed at runtime is not drawn; `layer` is read from the XML attribute.
-6. **Docs**
-   - `src/Modules/BECore/Scene/CLAUDE.md`: Scene row (`Draw()` description), XML shape (`layer`), component lifecycle (`OnDraw`), the component table row for `QuadRendererComponent`, a "Draw order" note (key, depth-first, no inheritance, MainScene note below), and the first Gotcha that names `SceneDrawEvent`.
-   - `src/Modules/BECore/CLAUDE.md`: frame order row 4 and the "do not change game state from `SceneDrawEvent`" sentence.
-   - `src/Modules/Events/CLAUDE.md` and `.claude/rules/reflection-events.md` (line 66 uses `SceneDrawEvent` as an example event): drop the event and pick another example.
-   - `games/Chess/CLAUDE.md`: one line that the board is the background layer.
-   - `TODO.md`: item 1 of "2D rendering is minimal" (layers: done, node `layer` plus document order; left: layer inheritance, a camera) and the draw-handler entry about nowhere to sort or batch (the draw pass is now that place).
-
-## Behavior changes to expect
-
-- The engine debug `MainScene` quads (`config/SceneConfig.xml`) now overlap in document order; before, it was the reverse by accident.
-- Highlights of the selected square and legal moves (drawn in the board's `OnDraw`) end up under the pieces.
+1. **`src/Modules/Vulkan/src/CoreVulkan/VulkanTextureLoader.cpp:139-140`**: convert to `SDL_PIXELFORMAT_RGBA32` (the byte-array order R,G,B,A on any endianness) and fix the comment to say that. One line in `src/Modules/Vulkan/CLAUDE.md` (`VulkanTextureLoader` row): textures are uploaded in RGBA byte order to match `VK_FORMAT_R8G8B8A8_SRGB`. The SDL backend (`SDLTextureLoader`) is untouched: `SDL_CreateTextureFromSurface` does not have this problem.
+2. **Atlas with a real alpha channel**, same file name and size (700x381), so `TextureLibrary.xml` keeps its srcRects:
+   - A one-off script in the scratchpad (pure Python with `zlib`; PIL is not installed, and the script is not added to the repo). Flood fill from the image border over near-white pixels (every channel >= 235, which covers the `253..255` noise); those pixels get alpha 0. The outlines of the pieces are closed, so the white bodies of the white pieces stay opaque.
+   - Edge pixels that touch the removed region get a partial alpha from their darkness and the neighbouring outline color, so there is no light halo on the brown board.
+   - Overwrite `games/Chess/assets/chess_test.png`; the original stays in git history.
+   - `TextureLibrary.xml`: the header comment says the atlas has a transparent background.
+3. **Docs**: `games/Chess/CLAUDE.md` one line (the piece atlas needs an alpha channel: a sprite with an opaque background hides the square under it).
+4. No new gtest: the loader needs a Vulkan device (nothing in `tests/` creates one), so step 1 is checked against the SDL header and by running the game. Part 1's draw-order tests stay as they are.
 
 ## Not changing (noting only)
 
-The atlas cell is 116.67x190.5 and is drawn into an 80x80 square, so the pieces will look squeezed horizontally. Fixing it needs a decision on aspect ratio (destination rect or letterboxed sprite). I will leave it unless asked.
+- The atlas cell is 116.67x190.5 and is drawn into an 80x80 square, so the pieces look stretched horizontally. Fixing it needs a decision (fit by height and center, or crop the cells). Left out unless asked.
+- Selected-square and legal-move highlights are drawn under the pieces (board on layer -1). With a transparent atlas they now show around the figure, which is the intended picture.
 
 ## Verification
 
-1. `cmake --preset macos-debug` (reflection regenerates for the new field and the removed event), then `cmake --build --preset macos-debug --target BagiEngineTests ChessTests Match3Tests BagiChess BagiMatch3`.
-2. `build/ClangmacOS/BagiEngineTests --gtest_filter='SceneEvents*'`, then `ctest --preset macos-debug` (all 177+ tests; the new cases must pass).
-3. Run `build/ClangmacOS/BagiChess`: board with 32 pieces, a click on a pawn highlights its square under the piece. If the pieces are still missing, the diagnosis is incomplete: read `engine.log` after the run for `SpriteRendererComponent` and `VulkanTextureLoader` errors and check `DrawTexture` inside the swapchain pass. Setting `mode="Editor"` in `games/Chess/config/ApplicationConfig.xml` renders the scene through an offscreen target and helps to compare.
-4. Run `build/ClangmacOS/BagiMatch3`: unchanged picture. In Editor mode, set a node layer in the inspector, save, and check that `layer` is in the written `SceneConfig.xml`.
-5. Finish with the `clang-format` skill on the changed C++ files and `strip-pch-includes` for the files whose includes changed (a subfolder at a time, dry run first).
+1. Check the new PNG with the same decoder: corner and border pixels alpha 0, the body of a white piece alpha 255, no fully transparent cell, and the opaque share per cell in a plausible range. Composite it over the board colors (light `240,217,181`, dark `181,136,99`) into a preview PNG in the scratchpad and look at it (`Read` shows images) for leaks into the white bodies and for halos.
+2. `cmake --build --preset macos-debug --target BagiEngineTests ChessTests Match3Tests BagiChess BagiMatch3` (no reflection change, so no re-configure), then `ctest --preset macos-debug` (284 tests must still pass).
+3. Run `build/ClangmacOS/BagiChess` and look: squares visible around every figure, no white boxes, black pieces dark (not ghostly red), a click on a pawn shows the highlights around the figure. If the black pieces still look wrong, the byte-order reading is incomplete: compare with `BagiMatch3`, which uses the same upload path for its textures.
+4. `clang-format` skill on `VulkanTextureLoader.cpp`; no include changes, so `strip-pch-includes` has nothing to do.
+5. Commit on `draw-layers` only when asked; no push.
 
 ## Status (done)
 
-- Changes 1-6 implemented; `clang-format` applied (Homebrew LLVM on `PATH`), `strip-pch-includes` dry run found nothing to remove.
-- `BagiEngineTests`, `ChessTests`, `Match3Tests`: 284/284 pass under `ctest --preset macos-debug`, including 6 new draw-order cases in `SceneEventsTest`.
-- `BagiChess` starts in Game mode with a clean log (texture `assets/chess_test.png` loaded, no sprite or assert errors), which rules out the texture-loading path. Not verified: the picture itself (no screenshot access from the agent session), so the user has to look at the window.
+- `VulkanTextureLoader.cpp` converts to `SDL_PIXELFORMAT_RGBA32`; `Vulkan/CLAUDE.md` and `games/Chess/CLAUDE.md` say so; `TextureLibrary.xml` comment updated.
+- `games/Chess/assets/chess_test.png` now has a real alpha channel: 203,460 transparent pixels, 12 connected figures (one per piece), the border is fully transparent, the bodies of the white pieces stay opaque. The same pass rebuilt the bottom-right corner of the black pawn's base, which the image generator's watermark had covered with a grey triangle (mirror of the left side, the pawn is symmetric about x = 639.5). The one-off script is not in the repo; the original atlas is in git history.
+- Build of all five targets is clean, `ctest --preset macos-debug` 284/284. `BagiChess` starts with a clean log and loads the texture. Not verified: the picture itself (no screenshot access from the agent session).
+- Not committed (commit on `draw-layers` only when asked).
