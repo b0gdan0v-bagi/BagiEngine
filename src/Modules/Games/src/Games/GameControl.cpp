@@ -35,6 +35,50 @@ namespace BECore {
             return result;
         }
 
+        /**
+         * Publishes `state_changed` at the end of a frame when the state version of the active game moved since the
+         * last look. It sees every change: an action of a client, a reset, a click of a person. The first look only
+         * records the version, because there is nothing to compare with and no client can have missed anything.
+         */
+        class StateChangeWatcher {
+        public:
+            explicit StateChangeWatcher(ControlService& service) : _service(service) {}
+
+            void OnFrameEnd() {
+                const auto active = FindActiveControllable();
+                if (!active) {
+                    _seen.reset();
+                    return;
+                }
+
+                const eastl::string name(active->game->GetName().ToStringView());
+                const uint64_t version = active->control->GetStateVersion();
+                if (_seen && _seen->game == name && _seen->version == version) {
+                    return;
+                }
+                const bool firstLook = !_seen;
+                _seen = Seen{name, version};
+                if (firstLook) {
+                    return;
+                }
+
+                Json data = DescribeGame(*active);
+                if (auto state = active->control->GetState()) {
+                    data["state"] = std::move(*state);
+                }
+                _service.Publish(GameControlEvents::kStateChanged, data);
+            }
+
+        private:
+            struct Seen {
+                eastl::string game;
+                uint64_t version = 0;
+            };
+
+            ControlService& _service;
+            std::optional<Seen> _seen;
+        };
+
         void HandleListGames(ControlCall& call) {
             const GameManager& manager = GameManager::GetInstance();
 
@@ -169,6 +213,9 @@ namespace BECore {
         service.RegisterHandler("list_actions", HandleListActions);
         service.RegisterHandler("perform_action", HandlePerformAction);
         service.RegisterHandler("set_state", HandleSetState);
+
+        auto watcher = eastl::make_shared<StateChangeWatcher>(service);
+        service.SetFrameEndHook(GameControlEvents::kStateChanged, [watcher] { watcher->OnFrameEnd(); });
     }
 
 }  // namespace BECore

@@ -14,6 +14,12 @@ namespace BECore {
         inline constexpr eastl::string_view kUnsupported = "unsupported";
     }  // namespace GameControlErrors
 
+    /// Events that the game layer pushes to the clients of the control API
+    namespace GameControlEvents {
+        /// {"game", "version", "state"}: the state version of the active game moved (published at the end of a frame)
+        inline constexpr eastl::string_view kStateChanged = "state_changed";
+    }  // namespace GameControlEvents
+
     /**
      * @brief What a game offers to an external controller (a program or a model): its state, its legal actions and a way to act.
      *

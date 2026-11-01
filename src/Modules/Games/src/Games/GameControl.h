@@ -17,6 +17,9 @@ namespace BECore {
      * | perform_action | the action object itself, as listed by list_actions | {"game", "version", "outcome"} |
      * | set_state | the game's state (Chess: {"fen"}) | {"game", "version"} |
      *
+     * It also installs a frame end hook that pushes {"event":"state_changed","data":{"game","version","state"}} when the state
+     * version of the active game moved (an action, a reset, a click of a person); see GameControlEvents.
+     *
      * The methods act on GameManager's active game, looked up on every call. Errors: no_active_game, not_controllable,
      * unknown_game, plus the game's own (GameControlErrors in IControllableGame.h). GameManager::Initialize() calls this.
      * Registering twice replaces the handlers.

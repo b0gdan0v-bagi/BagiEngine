@@ -4,6 +4,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Games/GameControl.h>
 #include <Games/GameManager.h>
 #include <Generated/GameControlTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -433,6 +434,161 @@ namespace BECore::Tests {
         for (const char* method : {"get_state", "list_actions", "perform_action", "set_state", "reset"}) {
             EXPECT_EQ(ErrorCode(Call(method)), "no_active_game") << method;
         }
+    }
+
+    namespace {
+
+        /// Collects what the active control service pushes to its clients, and stops doing so when it goes out of scope
+        class EventCollector {
+        public:
+            EventCollector() {
+                CoreManager::GetControlService().SetEventSink([this](const eastl::string& text) {
+                    auto parsed = ParseJson(text);
+                    events.push_back(parsed ? std::move(*parsed) : Json());
+                });
+            }
+
+            ~EventCollector() {
+                CoreManager::GetControlService().SetEventSink(nullptr);
+            }
+
+            EventCollector(const EventCollector&) = delete;
+            EventCollector& operator=(const EventCollector&) = delete;
+
+            std::vector<Json> events;
+        };
+
+        std::string EventName(const Json& event) {
+            const auto name = GetJsonString(event, "event");
+            return name ? std::string(name->c_str(), name->size()) : std::string();
+        }
+
+        const Json* EventData(const Json& event) {
+            return FindJsonMember(event, "data");
+        }
+
+    }  // namespace
+
+    TEST_F(GameControlTest, StateChangeIsPushedAtTheEndOfTheFrame) {
+        ControlService& service = CoreManager::GetControlService();
+        EventCollector collector;
+        service.EndFrame();  // the first look only records the version
+
+        const Json acted = Call("perform_action", [] {
+            Json inc = Json::object();
+            inc["type"] = "inc";
+            return inc;
+        }());
+        ASSERT_TRUE(Succeeded(acted));
+        EXPECT_TRUE(collector.events.empty());  // not before the frame ends
+        service.EndFrame();
+
+        ASSERT_EQ(collector.events.size(), 1u);
+        EXPECT_EQ(EventName(collector.events[0]), "state_changed");
+        const Json* data = EventData(collector.events[0]);
+        ASSERT_NE(data, nullptr);
+        EXPECT_EQ(GetJsonString(*data, "game").value_or("").c_str(), std::string("FakeControllable"));
+        EXPECT_EQ(GetJsonInt(*data, "version").value_or(-1), 1);
+        const Json* state = FindJsonMember(*data, "state");
+        ASSERT_NE(state, nullptr);
+        EXPECT_EQ(GetJsonInt(*state, "counter").value_or(-1), 1);
+    }
+
+    TEST_F(GameControlTest, NothingIsPushedWhenTheStateDidNotMove) {
+        ControlService& service = CoreManager::GetControlService();
+        EventCollector collector;
+
+        service.EndFrame();
+        service.EndFrame();
+        Call("get_state");
+        Call("list_actions");
+        service.EndFrame();
+
+        EXPECT_TRUE(collector.events.empty());
+    }
+
+    TEST_F(GameControlTest, TheFirstLookOnlyRecordsTheVersion) {
+        ControlService& service = CoreManager::GetControlService();
+        Controllable()->version = 7;  // moved before anybody looked
+        EventCollector collector;
+
+        service.EndFrame();
+
+        EXPECT_TRUE(collector.events.empty());
+    }
+
+    TEST_F(GameControlTest, OneChangeIsPushedOnce) {
+        ControlService& service = CoreManager::GetControlService();
+        EventCollector collector;
+        service.EndFrame();
+
+        Controllable()->version += 5;  // a change of any size is one event
+        service.EndFrame();
+        service.EndFrame();
+
+        ASSERT_EQ(collector.events.size(), 1u);
+        EXPECT_EQ(GetJsonInt(*EventData(collector.events[0]), "version").value_or(-1), 5);
+    }
+
+    TEST_F(GameControlTest, AChangeThatNoClientMadeIsPushedToo) {
+        // A click of a person moves the version without a request
+        ControlService& service = CoreManager::GetControlService();
+        EventCollector collector;
+        service.EndFrame();
+
+        Controllable()->counter = 41;
+        ++Controllable()->version;
+        service.EndFrame();
+
+        ASSERT_EQ(collector.events.size(), 1u);
+        const Json* state = FindJsonMember(*EventData(collector.events[0]), "state");
+        ASSERT_NE(state, nullptr);
+        EXPECT_EQ(GetJsonInt(*state, "counter").value_or(-1), 41);
+    }
+
+    TEST_F(GameControlTest, ResetAndSetStateArePushedToo) {
+        ControlService& service = CoreManager::GetControlService();
+        EventCollector collector;
+        service.EndFrame();
+
+        Json start = Json::object();
+        start["start"] = 10;
+        ASSERT_TRUE(Succeeded(Call("reset", start)));
+        service.EndFrame();
+        Json state = Json::object();
+        state["counter"] = 20;
+        ASSERT_TRUE(Succeeded(Call("set_state", state)));
+        service.EndFrame();
+
+        ASSERT_EQ(collector.events.size(), 2u);
+        EXPECT_EQ(GetJsonInt(*FindJsonMember(*EventData(collector.events[0]), "state"), "counter").value_or(-1), 10);
+        EXPECT_EQ(GetJsonInt(*FindJsonMember(*EventData(collector.events[1]), "state"), "counter").value_or(-1), 20);
+    }
+
+    TEST_F(GameControlTest, AGameThatCannotBeControlledPushesNothing) {
+        ControlService& service = CoreManager::GetControlService();
+        EventCollector collector;
+        service.EndFrame();
+
+        GameManager::GetInstance().SwitchTo("FakePlain"_intern);
+        service.EndFrame();
+        service.EndFrame();
+
+        EXPECT_TRUE(collector.events.empty());
+    }
+
+    TEST_F(GameControlTest, RegisteringTheGameMethodsAgainDoesNotDoublePushes) {
+        // GameManager::Initialize() registers them again for every test; a run of the game does it once
+        ControlService& service = CoreManager::GetControlService();
+        RegisterGameControl(service);
+        RegisterGameControl(service);
+        EventCollector collector;
+        service.EndFrame();
+
+        ++Controllable()->version;
+        service.EndFrame();
+
+        EXPECT_EQ(collector.events.size(), 1u);
     }
 
 }  // namespace BECore::Tests
