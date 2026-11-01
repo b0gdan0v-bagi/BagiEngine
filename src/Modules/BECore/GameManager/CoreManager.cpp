@@ -2,6 +2,7 @@
 
 #include <BECore/Assert/CRTDebugHook.h>
 #include <BECore/Config/ConfigFactory.h>
+#include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Logger/OutputSink.h>
 #include <Events/EventsQueueRegistry.h>
 #include <TaskSystem/TaskManager.h>
@@ -31,6 +32,7 @@ namespace BECore {
     }
 
     void CoreManager::OnTestEnvironmentDeinit(PassKey<Tests::EngineEnvironment>) {
+        _controlService.Shutdown();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }
 
@@ -57,6 +59,8 @@ namespace BECore {
         _assertHandlerManager->Initialize();
         _resourceManager.Initialize();
         _textureLibrary.Initialize();
+
+        RegisterControlBuiltins(_controlService);
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
@@ -65,8 +69,9 @@ namespace BECore {
         _sceneManager->Initialize();
     }
 
-    void CoreManager::OnGameCycle(PassKey<Application>) const {
+    void CoreManager::OnGameCycle(PassKey<Application>) {
         _eventsProviderManager.ProcessEvents();
+        _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
         TaskManager::GetInstance().Update(PassKey<CoreManager>{});
         _sceneManager->UpdateAll();  // game logic before UI
         _widgetManager.UpdateAll();  // clear, build the ImGui frame (Editor: ViewportWidget draws the scene)
@@ -76,6 +81,7 @@ namespace BECore {
     }
 
     void CoreManager::OnApplicationDeinit(PassKey<Application>) {
+        _controlService.Shutdown();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }
 

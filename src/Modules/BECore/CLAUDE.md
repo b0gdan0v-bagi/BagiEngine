@@ -10,10 +10,10 @@ Central service locator (`GameManager/CoreManager.h`): one static getter per sub
 |------|------|
 | `OnApplicationPreInit` | `InitializeCoreServices()`, then runs the enabled runtime `ITest`s through `TestManager` |
 | `OnApplicationInit` | creates the widgets of the run mode (see below), builds `SceneManager` from `SceneConfig` |
-| `OnGameCycle` | events → `TaskManager::Update` → scene update → widgets update → queued events → `DrawScreenAll` → `DrawAll` |
-| `OnApplicationDeinit` | `TaskManager::Shutdown` |
+| `OnGameCycle` | events → control commands (`ControlService::Drain`) → `TaskManager::Update` → scene update → widgets update → queued events → `DrawScreenAll` → `DrawAll` |
+| `OnApplicationDeinit` | `ControlService::Shutdown`, `TaskManager::Shutdown` |
 
-**`InitializeCoreServices()` order:** CRT debug hooks → temporary `OutputSink` + `StackTraceHandler` → `FileSystem` → `TaskManager` → `ConfigManager` → `LoggerManager` → `AssertHandlerManager` → `ResourceManager` → `TextureLibrary`.
+**`InitializeCoreServices()` order:** CRT debug hooks → temporary `OutputSink` + `StackTraceHandler` → `FileSystem` → `TaskManager` → `ConfigManager` → `LoggerManager` → `AssertHandlerManager` → `ResourceManager` → `TextureLibrary` → the builtin control methods (`RegisterControlBuiltins`).
 
 ## Run mode
 
@@ -36,11 +36,14 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 |---|-------|-------|------|
 | 0 | Clock | `Time::Tick` | Measures the frame time; every value below is fixed for the rest of the frame |
 | 1 | Input | `EventsProviderManager::ProcessEvents` | Window and mouse events become `SDLEvents` and `InputEvents::ActionEvent` |
+| 1b | Commands | `ControlService::Drain` | Requests of the external control API run here, so they see this frame's input (`Control/CLAUDE.md`) |
 | 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread |
 | 3 | Logic | `SceneManager::UpdateAll` | `SceneFixedUpdateEvent` (zero or more, a constant step), then `SceneUpdateEvent` (once, with the frame time) |
 | 4 | Render | `WidgetManager::UpdateAll`, `DrawScreenAll`, `DrawAll` | Editor: UI and `SceneDrawEvent` through `ViewportWidget`, then ImGui render. Game: `SceneDrawEvent` through `SceneRenderWidget::DrawScreen`. Present at the end of the frame |
 
 Logic reads input and writes state; render only reads state. Do not draw from `SceneUpdateEvent` handlers and do not change game state from `SceneDrawEvent`.
+
+After the present and `LogEvent::Flush()` the loop calls `ControlService::EndFrame()`: it runs the frame end hooks and counts down a control call that waits for frames (a `step`, a `screenshot`).
 
 **Time** (`CoreManager::GetTime()`, `Time/Time.h`): `GetDeltaTime()` is the seconds the last frame took, `GetTotalTime()` the game time since the first frame, `GetFrameCount()` counts frames from 1. The frame time is clamped to `Time::kMaxFrameTime` (0.25 s), so a pause in the debugger is one long frame, not a jump. Scale movement and animation by `SceneUpdateEvent::deltaTime`, never by "per frame" constants. Logic that must give the same result at any frame rate (physics-like integration, replays) goes into `SceneFixedUpdateEvent`: its `deltaTime` is always `Time::GetFixedDeltaTime()` (1/60 s by default), and the leftover time carries over to the next frame, so the number of steps per second is constant.
 
@@ -50,7 +53,7 @@ The GoogleTest executable (`tests/`) brings up the same services through `OnTest
 
 ## Subsystem guides
 
-Nested `CLAUDE.md` files in `BECore/`: `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `FileSystem/` (virtual paths and mount points), `Scene/` (scene graph and components), `Logger/`, `Resource/`. Always read configs through `ConfigManager`, never by creating loaders by hand.
+Nested `CLAUDE.md` files in `BECore/`: `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `Control/` (external control API core, JSON rules), `FileSystem/` (virtual paths and mount points), `Scene/` (scene graph and components), `Logger/`, `Resource/`. Always read configs through `ConfigManager`, never by creating loaders by hand.
 
 ## Assert (CRTDebugHook, StackTrace)
 

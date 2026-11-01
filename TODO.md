@@ -50,10 +50,17 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 - a workflow for macOS (`macos-debug`) and Windows (one MSVC or Clang preset) that checks out the submodules (`git submodule update --init --recursive`, `external/googletest` included), configures, builds the game and test targets and runs `ctest`;
 - a decision for the Vulkan loader DLL on the Windows runner (install the SDK, fetch the loader, or build without the Vulkan backend), after checking whether the test executables need it at all;
-- a guard on the number of tests (177 at the last count): it must not drop;
+- a guard on the number of tests (227 at the last count): it must not drop;
 - a Linux job once Linux presets exist (see the entry on test gaps and platforms).
 
 ## No external control: a game can be played only by a human at the window
+
+**Status:** in progress since 2026-11-01, plan in `.claude/plans/buzzing-tinkering-cat.md`. Done: the command queue in `BECore/Control/` (`ControlService`, `ping` / `status` / `quit`, nlohmann/json with exceptions off, Base64; frame stage 1b; `BECore/Control/CLAUDE.md`). Next: the game interface with Match3, the WebSocket server, manual clock and step, headless and screenshot, then Chess rules and the Stockfish and MCP bridges.
+
+**Spike results** (macOS, AppleClang 17, SDL 3.2.0; Windows and MSVC not checked yet):
+
+- Headless: `SDL_VIDEO_DRIVER=dummy` with the software renderer works (pixels correct, PNG through `IMG_SavePNG_IO` into memory, byte-identical to the Metal result). A hidden window on the `cocoa` driver with the software renderer does **not** (`software not available`); with Metal it works. The `offscreen` driver needs OpenGL / GLES. So `--headless` means the SDL backend on the `dummy` video driver, no window at all.
+- nlohmann/json with `JSON_NOEXCEPTION`: `at()`, `get<T>()` on the wrong type, `value()` on a non-object and const `operator[]` by a missing key abort the process. Client JSON is read only through the checked helpers of `BECore/Control/Json.h`.
 
 **Where:** `src/Application/Application.cpp` (`Run()` is a blocking loop on the real clock, input comes only from the SDL window), `src/Modules/Games/` (`IGame` has `Start` / `Stop` / `Reset` and nothing to read the state or make a move), `games/Chess/src/Chess/Game/ChessGameModel.h` (`OnSquareClicked(Square)` is the only way to move), `games/Match3/src/Match3/Game/Match3GameModel.h` (`TrySwap` takes a move directly), `src/Modules/TaskSystem/` (`SwitchToMainThread()` is how another thread hands work to the frame), `external/` (no socket, WebSocket or JSON library).
 

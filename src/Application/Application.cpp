@@ -39,6 +39,7 @@ namespace BECore {
             CoreManager::GetInstance().OnGameCycle({});
             RenderEvents::RenderPresentEvent::Emit();
             LogEvent::Flush();
+            CoreManager::GetControlService().EndFrame();
         }
         GetInstance().Cleanup();
     }

@@ -2,6 +2,7 @@
 
 #include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Config/ConfigManager.h>
+#include <BECore/Control/ControlService.h>
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/MainWindow/MainWindowManager.h>
@@ -89,6 +90,10 @@ namespace BECore {
             return GetInstance()._time;
         }
 
+        static ControlService& GetControlService() {
+            return GetInstance()._controlService;
+        }
+
         // Pre-initialization function (FileSystem, AssertHandlers, runtime ITests)
         void OnApplicationPreInit(PassKey<Application>);
 
@@ -101,13 +106,13 @@ namespace BECore {
         void OnApplicationInit(PassKey<Application>);
 
         // Функция игрового цикла
-        void OnGameCycle(PassKey<Application>) const;
+        void OnGameCycle(PassKey<Application>);
 
         // Функция деинициализации приложения
         void OnApplicationDeinit(PassKey<Application>);
 
     private:
-        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary
+        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, the builtin control methods
         void InitializeCoreServices();
 
         FileSystem _fileSystem;
@@ -123,6 +128,7 @@ namespace BECore {
         IntrusivePtrAtomic<SceneManager> _sceneManager;
         TextureLibrary _textureLibrary;
         Time _time;
+        ControlService _controlService;
     };
 
 }  // namespace BECore
