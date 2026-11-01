@@ -12,6 +12,7 @@
       "src/Modules/BECore/Scene",
       "src/Modules/BECore/Scene/Components",
       "src/Modules/BECore/Text",
+      "src/Modules/BECore/UI",
       "tests/BECore"
     ],
     "scan_dirs": [
@@ -26,6 +27,7 @@
       "src/Modules/BECore/Scene",
       "src/Modules/BECore/Scene/Components",
       "src/Modules/BECore/Text",
+      "src/Modules/BECore/UI",
       "src/Widgets",
       "src/Modules/SDL/src/CoreSDL",
       "src/Modules/Vulkan/src/CoreVulkan",

@@ -41,6 +41,14 @@ namespace BECore {
         void Draw();
 
         /**
+         * @brief The place of @p node in the draw order: how many nodes Draw() draws before it. A higher rank is drawn later, so on top.
+         *
+         * It follows the same rule as Draw() (layer, then scene order), computed from the tree as it is now, with no draw before it needed.
+         * Input handlers use it to ask the topmost first. 0 for a node that is not in this scene.
+         */
+        int32_t GetDrawRank(const SceneNode& node) const;
+
+        /**
          * @brief Size of the scene's view in scene units (XML `viewWidth`, `viewHeight`), 0 when it has none.
          *
          * With a view size the scene is drawn scaled to fit the render output and centered, so it looks the same in a

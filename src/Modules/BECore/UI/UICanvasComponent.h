@@ -1,0 +1,99 @@
+#pragma once
+
+#include <BECore/Input/UIInput.h>
+#include <BECore/Scene/IComponent.h>
+#include <BECore/UI/UICanvasLayout.h>
+
+namespace BECore {
+
+    class IRenderer;
+    class Scene;
+
+    /**
+     * @brief A canvas of in-game UI on a scene node: the unit that owns a coordinate space, a scale and an input order. A scene may have many.
+     *
+     * The reflected fields choose the space and the scaler (UICanvasScaler); the element tree, the variants and the cached layout are a UICanvasLayout, which
+     * the component feeds with the context of each frame (output size, window metrics, the scene's view size, the node's box for a World canvas).
+     *
+     * **Drawing.** `OnDraw()` runs in the scene's draw order (node layer, then scene order), sets the canvas's own view transform for its elements and restores the scene's
+     * afterwards. Elements here are plain rects with a color; the controls come with the XML front-end.
+     *
+     * **Input.** The canvas registers as a UIInput handler, with the draw rank of its node as the order: the topmost canvas is asked first, and a `modal`
+     * canvas consumes every mouse event while it is shown, so nothing below it and no game code sees one. Otherwise a canvas consumes an event that lands on
+     * a hit-testable element (motion over one is consumed as a hover, unless a button is held whose press the canvas did not take: that drag is the game's),
+     * uses the layout of its last draw, and follows a press that it consumed to the release. A canvas of an inactive scene, a hidden
+     * one (`visible`) and one with `inputEnabled` off never consume anything.
+     */
+    class UICanvasComponent : public IComponent, public IUIInputHandler {
+        BE_CLASS(UICanvasComponent)
+    public:
+        UICanvasComponent() = default;
+        ~UICanvasComponent() override;
+
+        BE_REFLECT_FIELD CanvasSpace _space = CanvasSpace::Screen;
+        BE_REFLECT_FIELD CanvasScaleMode _scaleMode = CanvasScaleMode::ScaleWithScreen;
+        BE_REFLECT_FIELD float _referenceWidth = 1280.0f;
+        BE_REFLECT_FIELD float _referenceHeight = 720.0f;
+        BE_REFLECT_FIELD float _match = 0.5f;
+        BE_REFLECT_FIELD float _minScale = 0.25f;
+        BE_REFLECT_FIELD float _maxScale = 8.0f;
+        BE_REFLECT_FIELD bool _useSafeArea = false;
+        BE_REFLECT_FIELD bool _modal = false;   ///< while shown, no mouse event gets past this canvas
+        BE_REFLECT_FIELD bool _visible = true;  ///< drawn and, with `inputEnabled`, takes input
+        BE_REFLECT_FIELD bool _inputEnabled = true;
+
+        void OnAttached() override;
+        void OnDraw() override;
+
+        bool OnMouseButtonDown(const SDL_MouseButtonEvent& event) override;
+        bool OnMouseButtonUp(const SDL_MouseButtonEvent& event) override;
+        bool OnMouseMotion(const SDL_MouseMotionEvent& event) override;
+        bool OnMouseWheel(const SDL_MouseWheelEvent& event) override;
+
+        /// The layout: the tree (`root`), the variants and the result of the last draw. After editing the tree or the variants call Invalidate()
+        [[nodiscard]] UICanvasLayout& GetLayout() {
+            return _layout;
+        }
+        [[nodiscard]] const UICanvasLayout& GetLayout() const {
+            return _layout;
+        }
+        [[nodiscard]] UIElement& GetRoot() {
+            return *_layout.root;
+        }
+        void Invalidate() {
+            _layout.Invalidate();
+        }
+
+        /// Lays the canvas out for an output of this size now, as the next draw would. Draw() does it itself; this is for a caller that needs the rects before one
+        void UpdateLayout(float outputWidth, float outputHeight);
+
+        /// The place in the input order that this canvas has registered with (see UIInput::Register)
+        [[nodiscard]] int GetInputOrder() const {
+            return _inputOrder;
+        }
+
+        /// True between a mouse press that this canvas took and its release: the canvas keeps consuming the motion in between
+        [[nodiscard]] bool HoldsPress() const {
+            return _consumedButtons != 0;
+        }
+
+        /// Shows or hides every canvas on a node with this name in @p scene; false when there is none
+        static bool SetVisibleByName(Scene& scene, PoolString nodeName, bool visible);
+
+    private:
+        [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;
+        void SyncParams();
+        void DrawElement(IRenderer& renderer, const UIElement& element) const;
+        void RefreshInputOrder();
+
+        /// The element under a point in output pixels, by the layout of the last draw
+        [[nodiscard]] UIElement* HitTestOutput(float outputX, float outputY) const;
+        [[nodiscard]] bool TakesInput() const;
+
+        UICanvasLayout _layout;
+        int _inputOrder = 0;
+        bool _registered = false;
+        uint32_t _consumedButtons = 0;  // bit per SDL button that went down on this canvas and is not up yet
+    };
+
+}  // namespace BECore

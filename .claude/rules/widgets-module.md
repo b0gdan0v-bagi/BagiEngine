@@ -10,10 +10,10 @@ paths:
 
 Widgets are the engine's per-frame building blocks implementing `IWidget` (a `FACTORY_BASE` that also derives `SubscriptionHolder`). `WidgetManager` creates them from XML and drives them every frame. There are two kinds:
 
-- **Editor panels**: `SceneEditorWidget`, `ConfigEditorWidget`, `TextureEditorWidget`, `EditorLayoutWidget`, `ViewportWidget`. They build ImGui windows.
+- **Editor panels**: `SceneEditorWidget`, `ConfigEditorWidget`, `TextureEditorWidget`, `EditorLayoutWidget`, `ViewportWidget`. They build ImGui windows. `ViewportWidget` also has aspect presets and a safe-area simulation for looking at a UI layout in several shapes (`src/Modules/BECore/UI/CLAUDE.md`, "Editor preview").
 - **Frame widgets**: steps of the render frame that are not UI. `ClearScreenWidget` clears the back buffer and opens the swapchain pass, `SceneRenderWidget` draws the scene (Game mode), `ImGuiWidget` begins and renders the ImGui frame (Editor mode).
 
-A widget is not game UI. In-game UI is a scene feature (`TODO.md`, "No in-game UI"); do not build it on `IWidget`.
+A widget is not game UI. In-game UI is a scene feature, canvases of `UICanvasComponent` (`src/Modules/BECore/UI/CLAUDE.md`); do not build it on `IWidget`.
 
 ## IWidget Interface
 

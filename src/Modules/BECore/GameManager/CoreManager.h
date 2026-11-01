@@ -14,6 +14,7 @@
 #include <BECore/Tests/TestManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Time/Time.h>
+#include <BECore/UI/UIEnvironment.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/EventsProviderManager.h>
 
@@ -104,6 +105,10 @@ namespace BECore {
             return GetInstance()._uiInput;
         }
 
+        static UIEnvironment& GetUIEnvironment() {
+            return GetInstance()._uiEnvironment;
+        }
+
         // Pre-initialization function (FileSystem, AssertHandlers, runtime ITests)
         void OnApplicationPreInit(PassKey<Application>);
 
@@ -125,7 +130,7 @@ namespace BECore {
         void OnApplicationDeinit(PassKey<Application>);
 
     private:
-        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, FontAtlasLibrary, the builtin control methods
+        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, FontAtlasLibrary, UIEnvironment, the builtin control methods
         void InitializeCoreServices();
 
         FileSystem _fileSystem;
@@ -138,12 +143,14 @@ namespace BECore {
         EventsProviderManager _eventsProviderManager;
         MainWindowManager _mainWindowManager;
         RendererManager _rendererManager;
+        // Declared before _sceneManager, so they outlive the scenes: a canvas unregisters from UIInput when its scene is destroyed
+        UIInput _uiInput;
+        UIEnvironment _uiEnvironment;
         IntrusivePtrAtomic<SceneManager> _sceneManager;
         TextureLibrary _textureLibrary;
         FontAtlasLibrary _fontAtlasLibrary;
         Time _time;
         ControlService _controlService;
-        UIInput _uiInput;
     };
 
 }  // namespace BECore

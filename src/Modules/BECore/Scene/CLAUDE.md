@@ -41,6 +41,7 @@ Drawing is not an event. `Scene::Draw()` walks the node tree, sorts the nodes by
 - A node's own layer counts, children do not inherit it. A child of a layer-1 node is on layer 0 unless it has its own.
 - The active scene only: an inactive scene's `Draw()` is not called, so `OnDraw()` needs no `IsSceneActive()` check. A removed component or node is not found by the next walk.
 - Override `OnDraw()` in a component and do not subscribe to an event to draw. `OnDraw()` only reads state and issues renderer calls; it must not add or remove nodes or components (the walk holds pointers into the tree).
+- `Scene::GetDrawRank(node)` is the position of a node in this order (how many nodes are drawn before it), computed from the tree as it is, with no draw before it. Input handlers that must ask the topmost first use it (`UICanvasComponent` registers with it, `UI/CLAUDE.md`).
 - The scene editor shows `Layer` in the node inspector and writes it back to `SceneConfig.xml` when it is not 0.
 
 Tests: `tests/BECore/SceneEventsTest.cpp` (`SceneEventCounter::drawIndex` is the position in the draw pass).
@@ -68,6 +69,7 @@ Tests: `tests/BECore/ViewTransformTest.cpp` (the math), `tests/BECore/SceneViewT
 | `ClickableComponent` | `_actionName` | On mouse-down inside the transform rect, emits `InputEvents::ActionEvent(_actionName)` |
 | `ChangeToRandomColorDebugComponent` | `_actionFilter` | Debug: recolors the node's quad on a matching action |
 | `TextComponent` | `_text`, `_fontPath`, `_fontSize`, `_color`, `_align`, `_overflow`, `_wrap`, `_lineSpacing`, `_minFontSize` | Draws text in the node's transform box in `OnDraw()` (`Text/CLAUDE.md`) |
+| `UICanvasComponent` | `_space`, `_scaleMode`, `_referenceWidth`, `_referenceHeight`, `_match`, `_minScale`, `_maxScale`, `_useSafeArea`, `_modal`, `_visible`, `_inputEnabled` | A canvas of in-game UI: owns an element tree, lays it out for the output, draws it with its own view transform and takes mouse input through `UIInput` (`UI/CLAUDE.md`) |
 | `RenderProbeComponent` | none | Debug: from the node's transform origin draws a row of cells that show the renderer primitives (texture from pixels, tint, half alpha, translucent rects, nested clips), to look at both backends |
 
 ## Adding a component

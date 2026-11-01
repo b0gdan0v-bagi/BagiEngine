@@ -44,7 +44,14 @@ Updated as the work goes; the dashboard counts these lines.
 - [x] Stage 2.4 `ViewportWidget` feeds `UIInput` with viewport-local down, up, motion and wheel (a press that began in the image is followed to its release)
 - [x] Stage 2.5 tests: `SDLEventsProviderTest` (14), `UIInputTest` (11), `WindowMetricsTest` (5)
 - [ ] Stage 2 look at the editor viewport input by hand (owner: click, drag out of the image, wheel; no test can open the ImGui editor)
-- [ ] Stage 3 Canvases and adaptive layout, pure core
+- [x] Stage 3.1 `UILength`, `UIRectSpec`, `UIStackSpec` and the pure `UILayout` (anchors, stretch, percent, min/max, aspect lock, stack with flex and wrap), `UILayoutTest` (31)
+- [x] Stage 3.2 `UICanvasScaler` (`CanvasSpace`, `CanvasScaleMode`, `UICanvasResolved`), `UILayoutContext`, `UISettings` + `config/UIConfig.xml`, `UIEnvironment` (`CoreManager::GetUIEnvironment()`: settings, window metrics as a context, a safe-area override for the editor viewport); `UICanvasScalerTest` (19), `UISettingsTest` (9)
+- [x] Stage 3.3 `UIElement` tree (plain, not reflected yet), `UIVariant` (conditions, overrides, `UIVariants::Apply`), `UITreeLayout`; `UIVariantTest` (22)
+- [x] Stage 3.4 `UICanvasLayout` (pure pipeline: scale, variants, layout, cache, hit test), `UILayoutValidator`, `tests/Common/UILayoutMatrix.h` (`ValidateOnMatrix`); `UICanvasLayoutTest` (18), `UILayoutValidatorTest` (15)
+- [x] Stage 3.5 `UICanvasComponent` (reflected fields, owns a `UICanvasLayout`, scoped view transform, `UIInput` handler, `Scene::GetDrawRank`); `UICanvasComponentTest` (30)
+- [x] Stage 3.6 Several canvases in one scene: draw order by node layer, input order refreshed on every draw, `modal`, show / hide by name (`SetVisibleByName`); covered in `UICanvasComponentTest`
+- [x] Stage 3.7 Editor preview: `ViewportWidget` toolbar with aspect presets and a safe-area simulation (`UIPreview`, `UIPreviewTest` (9)); the viewport hands its safe area to canvases through `UIEnvironment::SetSafeAreaOverride`
+- [ ] Stage 3 look at the viewport presets by hand (owner: pick 16:9 / 4:3 / 21:9 / 9:16, a notch and side insets; the outline must match the layout; no test can open the ImGui editor)
 - [ ] Stage 4 Controls, the XML front-end and the first screens
 - [ ] Stage 5 Decision spike: XML, web-style front-end, RmlUi
 - [ ] Stage 6 Widen the chosen path
@@ -151,6 +158,16 @@ button:hover { background: #3a6; }
 
 - Button: normal / hover / pressed / disabled looks; press and release inside the rect emits `ActionEvent(action)`; a press that began on the button stays captured until release.
 - `UIVars`: `PoolString` → string with a version counter. Game code does `UIVars.Set("score"_intern, Format("{}", s))`; labels re-lay out when the version changes. Only a variable table, no expression language.
+
+## What stage 3 settled (read before stage 4)
+
+- **`UICanvasLayout` is the pure core** (scale, variants, layout, cache, hit test, validator); `UICanvasComponent` is a thin host around one. The matrix helper (`tests/Common/UILayoutMatrix.h`) and later the debug overlay and the control API work on a `UICanvasLayout`.
+- **`UIElement` is a plain class, not reflected yet.** `style` is what is authored, `active` what is in effect after variants, `rect` the result. Task 4.1 makes it a `FACTORY_BASE` and checks that nested children, `UILength` strings and `UIVariant` round-trip.
+- **Content checks go through `UIContentFit CheckContent(width, height, scale)`** (virtual on `UIElement`): `UILabel` (task 4.3) implements it with `TextLayout`, and the validator's `TextDoesNotFit` rule then has a real producer. Until then it is covered with a test element.
+- **Touch size is measured as the user sees it:** `min(w, h) * scale / pixelDensity` in window units against `UISettings::minTouchSize` (32). The first screens must give buttons 48 units at the reference size and set `minScale` (0.7 keeps them above 32 px on a near-square 480 px window); the matrix reports it otherwise.
+- **The reflected fields are `visible` / `inputEnabled`**, not `enabled`: a vector of factory-made components writes an `enabled` attribute on every element.
+- **Input order:** `Scene::GetDrawRank` (the draw order computed from the tree) registered with `UIInput`, refreshed in `OnDraw()` because a scene attaches its nodes before its tree is complete. A canvas uses the layout of its last draw for input. A drag that began elsewhere (a held button whose press the canvas did not take) is not consumed by a hover.
+- `CoreManager` declares `_uiInput` and `_uiEnvironment` before `_sceneManager` so they outlive the scenes (a canvas unregisters in its destructor).
 
 ## Not changing
 

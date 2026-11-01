@@ -274,7 +274,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## No in-game UI: UI exists only as ImGui editor panels
 
-**Status:** in progress since 2026-11-01. Stages 3 and 4 of the plan (canvases, adaptive layout, controls).
+**Status:** in progress since 2026-11-01. Stages 0 to 3 of the plan are done (renderer primitives, text, input, canvases and adaptive layout with the size matrix); stage 4 (controls, the XML front-end, the first screens) is next.
 
 **Stage:** 3
 
@@ -282,12 +282,11 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 **Where:** `src/Widgets/` (editor widgets), `Scene/Components/ClickableComponent.cpp` (the only clickable thing on a scene).
 
-**What is missing** (found by reading the code, not by running a game): buttons, panels, labels and layout that belong to a game and render through `IRenderer`. Text is drawn already (`TextComponent`); do this after input mapping.
+**What is missing** (found by reading the code, not by running a game): the controls (panel, label, button) and the screens of the games. Text is drawn (`TextComponent`), canvases, anchored and stacked layout, responsive variants, hit testing and the layout validator exist (`src/Modules/BECore/UI/CLAUDE.md`); elements are plain rects built in code and cannot be written in `SceneConfig.xml` yet.
 
 **A fix has to cover:**
 
-- a few scene components (panel, label, button with normal / hover / pressed state) on top of `TransformComponent`, `TextComponent` (done) and the input map;
-- anchoring to the window or viewport size;
+- a few controls (panel, label, button with normal / hover / pressed state) on the element tree of `UICanvasComponent`, with `TextComponent`'s layout for the label;
 - a main-menu scene in one of the games as the first consumer.
 
 ## Game UI has no LLM-friendly authoring path yet: choose one before building it

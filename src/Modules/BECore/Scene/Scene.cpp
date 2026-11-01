@@ -58,6 +58,40 @@ namespace BECore {
         }
     }
 
+    namespace {
+
+        // A node is drawn before the target when its layer is lower, or when it has the target's layer and the walk (scene order) reaches it first
+        struct RankWalk {
+            const SceneNode* target = nullptr;
+            int32_t targetLayer = 0;
+            int32_t rank = 0;
+            bool found = false;
+
+            void Visit(const SceneNode& node) {
+                if (&node == target) {
+                    found = true;
+                } else if (node.GetLayer() < targetLayer || (node.GetLayer() == targetLayer && !found)) {
+                    ++rank;
+                }
+                for (const auto& child : node.GetChildren()) {
+                    Visit(*child);
+                }
+            }
+        };
+
+    }  // namespace
+
+    int32_t Scene::GetDrawRank(const SceneNode& node) const {
+        if (!_rootNode) {
+            return 0;
+        }
+        RankWalk walk;
+        walk.target = &node;
+        walk.targetLayer = node.GetLayer();
+        walk.Visit(*_rootNode);
+        return walk.found ? walk.rank : 0;
+    }
+
     float Scene::GetViewWidth() const {
         return _viewWidth;
     }
