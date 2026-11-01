@@ -66,12 +66,16 @@ namespace BECore {
             }
             const auto widgetPtr = AbstractFactory<IWidget>::GetInstance().Create(*widgetTypeName);
             if (!widgetPtr) {
+                LOG_ERROR("WidgetManager: unknown widget type '{}' in '{}'"_format(*widgetTypeName, configName.ToStringView()));
                 continue;
             }
 
             XmlDeserializer deserializer;
             deserializer.LoadFromXmlNode(widgetNode);
-            widgetPtr->Initialize(deserializer);
+            if (!widgetPtr->Initialize(deserializer)) {
+                LOG_ERROR("WidgetManager: widget '{}' failed to initialize and is not registered"_format(*widgetTypeName));
+                continue;
+            }
 
             RegisterWidget(widgetPtr);
         }

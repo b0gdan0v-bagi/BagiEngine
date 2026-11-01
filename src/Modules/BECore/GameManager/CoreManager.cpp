@@ -68,12 +68,11 @@ namespace BECore {
     void CoreManager::OnGameCycle(PassKey<Application>) const {
         _eventsProviderManager.ProcessEvents();
         TaskManager::GetInstance().Update(PassKey<CoreManager>{});
-        _sceneManager->UpdateAll();         // game logic before UI
-        _widgetManager.UpdateAll();         // UI + scene rendering via ViewportWidget
+        _sceneManager->UpdateAll();  // game logic before UI
+        _widgetManager.UpdateAll();  // clear, build the ImGui frame (Editor: ViewportWidget draws the scene)
         EventsQueueRegistry::UpdateAll();
-        _widgetManager.DrawScreenAll();
-        _widgetManager.DrawAll();           // ImGui::Render + GPU present
-        // Scene DrawAll is now driven by ViewportWidget inside UpdateAll()
+        _widgetManager.DrawScreenAll();  // Game: SceneRenderWidget draws the scene into the back buffer
+        _widgetManager.DrawAll();        // ImGui::Render + GPU present
     }
 
     void CoreManager::OnApplicationDeinit(PassKey<Application>) {
