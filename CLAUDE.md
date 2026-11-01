@@ -48,7 +48,7 @@ BagiEngine is a C++23 game engine with modular ECS architecture (EnTT). The main
 
 **Module order (bottom → top; every module links `BECoreModule`, which provides the PCH):**
 ```
-BECore → Events → TaskSystem → SDL / Vulkan → Games → Runtime (src/Application, src/Widgets) → games/<Name> → game executable (src/main.cpp)
+BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Runtime (src/Application, src/Widgets) → games/<Name> → game executable (src/main.cpp)
 ```
 
 **Layout:**
@@ -62,6 +62,7 @@ src/
     ├── BECore/         # Core engine (math types live in BECore/Math/)
     ├── Events/         # Event system
     ├── TaskSystem/     # Async tasks (coroutines)
+    ├── RemoteControl/  # WebSocket server of the control API (localhost, off by default)
     ├── SDL/            # SDL3 integration
     ├── Vulkan/         # Vulkan renderer backend
     ├── Games/          # IGame / GameManager: the engine-game contract
@@ -69,7 +70,7 @@ src/
 config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, default SceneConfig)
 games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Chess, Match3)
 tests/                  # GoogleTest executable BagiEngineTests (BECore) + Common (BagiEngineTestSupport)
-tools/                  # developer tools: natvis, todo_sync (TODO.md dashboard and Vikunja export; Python, pytest)
+tools/                  # developer tools: natvis, todo_sync (TODO.md dashboard and Vikunja export; Python, pytest), control (Python client and smoke test of the control API)
 ```
 
 **Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.
@@ -81,7 +82,7 @@ tools/                  # developer tools: natvis, todo_sync (TODO.md dashboard 
 | Subsystem | Purpose |
 |-----------|---------|
 | `GameManager/CoreManager` | Central service locator — owns FileSystem, ConfigManager, Logger, SceneManager, ResourceManager, etc. |
-| `Control/` | External control API core: a thread-safe command queue run on the main thread at frame stage 1b (`ControlService`, JSON through nlohmann with exceptions off) |
+| `Control/` | External control API core: a thread-safe command queue run on the main thread at frame stage 1b (`ControlService`, JSON through nlohmann with exceptions off) and the start-up flags (`ControlSettings`). The WebSocket transport is the `RemoteControl` module; start a game with `--control` to use it |
 | `Scene/` | Scene graph (SceneNode → IComponent), serialization |
 | `Reflection/` | IPropertyVisitor, ISerializer/IDeserializer, BE_CLASS codegen markers |
 | `Resource/` | TextureLibrary, resource pooling |
@@ -155,7 +156,7 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 
 ## Rules and Skills
 
-- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`), `Events/`, `TaskSystem/`, `SDL/`, `Vulkan/`, `Games/`, and `games/Chess/`, `games/Match3/`. Claude Code loads one when a file under that directory is read.
+- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, and `games/Chess/`, `games/Match3/`. Claude Code loads one when a file under that directory is read.
 - `.claude/rules/` holds guidance that spans several directories or matches by file name (`paths:` frontmatter): CMake, Reflection, Reflection events (`*Event.h`), Rendering, Widgets, Tests. Read the relevant file before changing that area.
 - `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `todo-sync` (TODO.md dashboard and Vikunja export, `tools/todo_sync/CLAUDE.md`) and `cpp-senior-programmer`.
 - `TODO.md` entries carry optional `**Status:**`, `**Stage:**` and `**Plan:**` lines (format in the file header). Keep them current when work on an entry starts or stops, and delete an entry when it is finished. Run `todo-sync check` after editing the file.

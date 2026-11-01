@@ -9,6 +9,7 @@ The core of the external control API: a program or a model sends commands, the e
 | `ControlService` | Thread-safe FIFO queue of requests, handler table, barrier, deferred answers, push events. One instance: `CoreManager::GetControlService()` |
 | `ControlCall` | One request being handled: `Params()`, `Reply()`, `Fail()`, `DeferFrames()` |
 | `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `quit` |
+| `ControlSettings` | `ResolveControlSettings(args, applicationConfig)`: the start-up flags and attributes of the API (see "Starting the API"), a pure function |
 | `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn` |
 | `Json.h`, `JsonFwd.h` | nlohmann/json behind checked helpers (see "JSON rules") |
 | `Utils/Base64.h` (one level up) | Base64 for the screenshot and the WebSocket handshake |
@@ -48,6 +49,17 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 - Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport: it bounds the nesting that a client can send.
 - nlohmann uses `std::string` inside; convert to `eastl::string` at the edge, which the helpers do.
 
+## Starting the API
+
+The API is off by default: a game has to be asked for it. `Application::Initialize()` calls `ResolveControlSettings()` right after the core services are up (before the window exists) and, when the API is enabled, starts the `RemoteControl` server after `GameManager::Initialize()`, so the game methods are registered before the first client connects.
+
+| Command line | `ApplicationConfig.xml` root attribute | Meaning |
+|--------------|----------------------------------------|---------|
+| `--control` | `control="true"` (or `false`, `1`, `0`) | start the WebSocket server |
+| `--control-port=N` | `controlPort="N"` | port 0 to 65535; 0 asks the system for a free one; default `kDefaultControlPort` (8765) |
+
+The command line beats the attribute, the attribute beats the default. Unknown arguments are ignored (a game may have flags of its own). A value that cannot be read, a bare `--control-port`, and `--control-port=N` while the API stays off are errors: the start-up stops with a line in the log (`Application::Initialize()` flushes the log itself, because nothing else does before the first frame), so the person who asked for the API is not left waiting for it. A port that is taken stops the start-up the same way. The settings are in `ControlSettings.h`; a stage that adds a setting (manual clock, headless) adds its field and its two spellings there.
+
 ## Methods
 
 | Where | Methods |
@@ -65,4 +77,4 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 
 ## Tests
 
-`tests/BECore/ControlServiceTest.cpp` (queue, order across threads, barrier, deferred answers, shutdown, builtins), `JsonTest.cpp` (checked helpers, garbage, nesting), `Base64Test.cpp` (RFC 4648 vectors).
+`tests/BECore/ControlServiceTest.cpp` (queue, order across threads, barrier, deferred answers, shutdown, builtins), `JsonTest.cpp` (checked helpers, garbage, nesting), `Base64Test.cpp` (RFC 4648 vectors), `ControlSettingsTest.cpp` (priority of the flags, attributes and defaults, every kind of invalid value). The transport has its own tests, see `RemoteControl/CLAUDE.md`.

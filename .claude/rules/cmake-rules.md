@@ -59,6 +59,7 @@ add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/EABase)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/BECore)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Events)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/TaskSystem)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RemoteControl)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/SDL)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Vulkan)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
@@ -76,6 +77,7 @@ The vendored `src/Modules/imgui/CMakeLists.txt` uses `${CMAKE_SOURCE_DIR}/extern
 | `be_add_game_reflection(<Target> [SOURCE_DIRS ..] [INCLUDE_DIRS ..])` | Runs the generator for a game module (defaults: `<dir>/src`); the engine's reflected headers are only parsed as reference. See `reflection-module.md` |
 | `be_add_game_executable(<Name> [GAME_ROOT dir] [SOURCES ..] [MODULES ..])` | Executable from the engine's `src/main.cpp`: `WHOLE_ARCHIVE` engine runtime and game modules, `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` defines, DLL/dylib copy, rpath, natvis |
 | `be_add_game_tests(<Name> SOURCES .. [LINK ..])` | gtest executable on `BagiEngineTestSupport` + `gtest_discover_tests` (only when `ENGINE_BUILD_TESTS`) |
+| `be_add_game_control_tests(<ExeTarget> [SCRIPT file])` | ctest entry `<ExeTarget>ControlSmoke`: runs `tools/control/tests/smoke.py` (or `SCRIPT`) against the game executable, which it starts with `--control`; exit code 77 is a skip (executable not built). Call it from the game's CMakeLists, never from the engine's `tests/`. Opens the game window until headless mode exists (only when `ENGINE_BUILD_TESTS`) |
 | `be_link_engine(<target> [WITH_RUNTIME])` | `WHOLE_ARCHIVE` link of the engine core (and, with `WITH_RUNTIME`, renderer backends, `Games`, `Runtime`) |
 | `be_force_include_pch(<target>)` | `/FI"BECore/pch.h"` (MSVC) or `-include "BECore/pch.h"` |
 
@@ -107,8 +109,9 @@ BECoreModule must be first (provides PCH):
 1. `BECore` — first!
 2. `Events`
 3. `TaskSystem`
-4. `SDL`
-5. `Vulkan`, `Games`, `Runtime` (`src/`), then the games in `games/`
+4. `RemoteControl` (`be_add_module`; links `ws2_32` on Windows; has no static initializers, so it is linked plainly: `RuntimeModule` links it for the executables and `BagiEngineTests` takes it through `LINK RemoteControlModule`)
+5. `SDL`
+6. `Vulkan`, `Games`, `Runtime` (`src/`), then the games in `games/`
 
 ## Tests (GoogleTest)
 
