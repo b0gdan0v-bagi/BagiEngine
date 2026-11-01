@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Renderer/ViewTransform.h>
+
 namespace BECore {
 
     class IDeserializer;
@@ -28,6 +30,23 @@ namespace BECore {
         BE_FUNCTION virtual IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) = 0;
         BE_FUNCTION virtual void SetRenderTarget(IRenderTarget* target) = 0;
         BE_FUNCTION virtual void UnsetRenderTarget() = 0;
+
+        // Size in pixels of the target being drawn into: the offscreen target between SetRenderTarget() and
+        // UnsetRenderTarget(), else the back buffer while its pass is open. 0 before the first pass.
+        virtual float GetOutputWidth() const = 0;
+        virtual float GetOutputHeight() const = 0;
+
+        // Maps the coordinates of DrawFilledRect() and DrawTexture() to output pixels (the identity by default). The
+        // scene sets it around its draw pass to fit its view to the output (Scene::Draw()). The backends apply it.
+        void SetViewTransform(const ViewTransform& transform) {
+            _viewTransform = transform;
+        }
+        const ViewTransform& GetViewTransform() const {
+            return _viewTransform;
+        }
+
+    private:
+        ViewTransform _viewTransform;
     };
 
 }  // namespace BECore

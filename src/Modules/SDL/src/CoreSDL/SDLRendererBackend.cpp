@@ -65,7 +65,8 @@ namespace BECore {
     void SDLRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
         if (_renderer) {
             SDL_SetRenderDrawColor(_renderer, color.r, color.g, color.b, color.a);
-            SDL_FRect rect{x, y, w, h};
+            const Rect out = GetViewTransform().ToOutput(x, y, w, h);
+            SDL_FRect rect{out.x, out.y, out.w, out.h};
             SDL_RenderFillRect(_renderer, &rect);
         }
     }
@@ -79,7 +80,8 @@ namespace BECore {
             return;
         }
 
-        SDL_FRect dst{dstX, dstY, dstW, dstH};
+        const Rect out = GetViewTransform().ToOutput(dstX, dstY, dstW, dstH);
+        SDL_FRect dst{out.x, out.y, out.w, out.h};
 
         if (srcRect && !srcRect->IsEmpty()) {
             SDL_FRect src{srcRect->x, srcRect->y, srcRect->w, srcRect->h};
@@ -97,6 +99,24 @@ namespace BECore {
     void SDLRendererBackend::SetRenderTarget(IRenderTarget* /*target*/) {}
 
     void SDLRendererBackend::UnsetRenderTarget() {}
+
+    float SDLRendererBackend::GetOutputWidth() const {
+        int width = 0;
+        int height = 0;
+        if (_renderer) {
+            SDL_GetCurrentRenderOutputSize(_renderer, &width, &height);
+        }
+        return static_cast<float>(width);
+    }
+
+    float SDLRendererBackend::GetOutputHeight() const {
+        int width = 0;
+        int height = 0;
+        if (_renderer) {
+            SDL_GetCurrentRenderOutputSize(_renderer, &width, &height);
+        }
+        return static_cast<float>(height);
+    }
 
     void SDLRendererBackend::OnRenderClear() {
         if (_renderer) {

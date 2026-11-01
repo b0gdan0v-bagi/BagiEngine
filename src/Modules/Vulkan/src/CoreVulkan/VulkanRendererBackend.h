@@ -47,6 +47,13 @@ namespace BECore {
         void SetRenderTarget(IRenderTarget* target) override;
         void UnsetRenderTarget() override;
 
+        float GetOutputWidth() const override {
+            return static_cast<float>(_currentExtent.width);
+        }
+        float GetOutputHeight() const override {
+            return static_cast<float>(_currentExtent.height);
+        }
+
         // Vulkan handles exposed for imgui_impl_vulkan integration
         VkInstance GetVkInstance() const {
             return _device.GetInstance();

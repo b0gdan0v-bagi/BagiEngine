@@ -17,6 +17,11 @@ paths:
 - The backend is chosen at startup by the `renderer` attribute of `config/ApplicationConfig.xml` (`SDLRendererBackend` or `VulkanRendererBackend`); `IRenderer` is a `FACTORY_BASE`, so a new backend is just another registered `IRenderer`.
 - `IRenderTarget` is an offscreen target shown as an ImGui image (the viewport). Obtain it from `IRenderer::CreateRenderTarget()`; do not assume a backend behind `GetImGuiTextureId()`.
 
+## Output size and view transform
+
+- `IRenderer::GetOutputWidth()` / `GetOutputHeight()` are the pixel size of the target being drawn into (the back buffer, or the offscreen target between `SetRenderTarget()` and `UnsetRenderTarget()`); they are 0 before the first pass opens.
+- `IRenderer::SetViewTransform()` sets a `ViewTransform` (scale and offset, identity by default) that `DrawFilledRect()` and `DrawTexture()` apply to their destination rect. It is state of the interface, so both backends apply it the same way (`GetViewTransform().ToOutput(x, y, w, h)`) and a new backend must do the same. `Scene::Draw()` sets it around its draw pass and resets it, so a scene with a view size fits any output (`src/Modules/BECore/Scene/CLAUDE.md`, "View size"). Only the destination is mapped: source rects and UVs are untouched.
+
 ## Texture Pipeline
 
 - Texture loading goes through dedicated `IResourceLoader` classes (`SDLTextureLoader`, `VulkanTextureLoader`), so it follows `src/Modules/BECore/Resource/CLAUDE.md`.

@@ -30,6 +30,9 @@ namespace BECore {
         void SetRenderTarget(IRenderTarget* target) override;
         void UnsetRenderTarget() override;
 
+        float GetOutputWidth() const override;
+        float GetOutputHeight() const override;
+
         SDL_Renderer* GetSDLRenderer() const {
             return _renderer;
         }

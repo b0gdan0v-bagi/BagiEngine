@@ -8,7 +8,7 @@
 
 | Class | Role |
 |-------|------|
-| `VulkanRendererBackend` | `IRenderer`: frame lifecycle, command buffers, per-frame sync (`kMaxFramesInFlight = 2`), ImGui backend |
+| `VulkanRendererBackend` | `IRenderer`: frame lifecycle, command buffers, per-frame sync (`kMaxFramesInFlight = 2`), ImGui backend. `GetOutputWidth/Height()` is the extent of the open pass (swapchain or offscreen target); `DrawFilledRect` / `DrawTexture` apply `IRenderer::GetViewTransform()` to the rect on the CPU, so the shaders always get output pixels |
 | `VulkanDevice` | Instance, GPU pick, logical device. Two-step init: `InitializeInstance()`, then `InitializeDevice(surface)` (the surface needs the instance). Memory-type lookup and single-time command helpers |
 | `VulkanSwapchain` | Swapchain and its render pass. `AcquireNextImage` / `Present` return `false` when the swapchain is out of date |
 | `VulkanRectPipeline`, `VulkanTexturePipeline` | Graphics pipelines for `DrawFilledRect` and `DrawTexture` |

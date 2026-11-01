@@ -281,7 +281,8 @@ namespace BECore {
         if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
-        _rectPipeline.Draw(_commandBuffers[_currentFrame], x, y, w, h, color, _currentExtent);
+        const Rect rect = GetViewTransform().ToOutput(x, y, w, h);
+        _rectPipeline.Draw(_commandBuffers[_currentFrame], rect.x, rect.y, rect.w, rect.h, color, _currentExtent);
     }
 
     void VulkanRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) {
@@ -306,11 +307,13 @@ namespace BECore {
             }
         }
 
+        const Rect dst = GetViewTransform().ToOutput(dstX, dstY, dstW, dstH);
+
         VulkanTexturePipeline::PushConstants pc{};
-        pc.dstX    = dstX;
-        pc.dstY    = dstY;
-        pc.dstW    = dstW;
-        pc.dstH    = dstH;
+        pc.dstX    = dst.x;
+        pc.dstY    = dst.y;
+        pc.dstW    = dst.w;
+        pc.dstH    = dst.h;
         pc.u0      = u0;
         pc.v0      = v0;
         pc.u1      = u1;
