@@ -274,6 +274,14 @@ namespace BECore::Tests {
         EXPECT_EQ(GameManager::GetInstance().GetActive()->GetName(), "FakeControllable"_intern);
     }
 
+    TEST_F(GameControlTest, SwitchGameDoesNotInternTheNameOfAClient) {
+        Json unknown = Json::object();
+        unknown["name"] = "client_only_game_7f3a91";
+
+        EXPECT_EQ(ErrorCode(Call("switch_game", unknown)), "unknown_game");
+        EXPECT_FALSE(PoolString::Find("client_only_game_7f3a91").has_value());
+    }
+
     TEST_F(GameControlTest, GetStateWrapsTheStateOfTheGame) {
         Controllable()->counter = 5;
         Controllable()->version = 9;

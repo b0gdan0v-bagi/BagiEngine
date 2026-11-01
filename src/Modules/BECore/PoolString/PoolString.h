@@ -40,6 +40,9 @@ namespace BECore {
 
         static PoolString Intern(eastl::string_view str);
 
+        /// Returns the pooled string equal to `str`, or nullopt when no such string was interned. Never adds to the pool.
+        [[nodiscard]] static std::optional<PoolString> Find(eastl::string_view str);
+
         [[nodiscard]] constexpr uint64_t HashValue() const noexcept {
             return _entry->hash;
         }

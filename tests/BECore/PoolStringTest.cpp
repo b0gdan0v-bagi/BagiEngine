@@ -14,6 +14,31 @@ namespace BECore::Tests {
         SUCCEED() << "The static_asserts at the top of this file are the check";
     }
 
+    TEST(PoolStringTest, FindDoesNotAddAString) {
+        EXPECT_FALSE(PoolString::Find("pool_find_never_interned_3c81").has_value());
+        EXPECT_FALSE(PoolString::Find("pool_find_never_interned_3c81").has_value());
+    }
+
+    TEST(PoolStringTest, FindReturnsTheInternedString) {
+        const PoolString interned = PoolString::Intern("pool_find_interned_9a47");
+        const auto found = PoolString::Find("pool_find_interned_9a47");
+        ASSERT_TRUE(found.has_value());
+        EXPECT_EQ(*found, interned);
+    }
+
+    TEST(PoolStringTest, FindOfAnEmptyStringIsTheEmptyPoolString) {
+        const auto found = PoolString::Find("");
+        ASSERT_TRUE(found.has_value());
+        EXPECT_EQ(*found, PoolString());
+    }
+
+    TEST(PoolStringTest, FindDistinguishesStringsWithTheSamePrefix) {
+        const PoolString interned = PoolString::Intern("pool_find_prefix_b6d5");
+        EXPECT_FALSE(PoolString::Find("pool_find_prefix_b6d5x").has_value());
+        EXPECT_FALSE(PoolString::Find("pool_find_prefix_b6d").has_value());
+        EXPECT_TRUE(PoolString::Find("pool_find_prefix_b6d5").has_value());
+    }
+
     TEST(PoolStringTest, Literal) {
         PoolStringChain lit("literal");
         EXPECT_EQ(lit.View(), "literal");

@@ -37,7 +37,7 @@ Writing the adapter of a game:
 - `GetStateVersion()` must grow on every change a controller has to see (a new game, every committed action) and never go back; it is how a client knows the state moved, and the frame-end push of `state_changed` will use it.
 - The parameters of `PerformAction`, `Reset` and `SetState` come from a client. Read them with the checked helpers of `BECore/Control/Json.h` (nlohmann aborts the process on a bad access in this build) and range-check numbers as `int64_t` before narrowing. A bad value is an error, not an assert. `illegal_action` means the action is well-formed but not legal now.
 - The state and the actions are for a model to read: short, self-explanatory names, a board as strings, no internal ids.
-- `switch_game` looks the name up among the games; do not intern a client's string into `PoolString`.
+- `switch_game` looks the name up among the games; do not intern a client's string into `PoolString` (`GameControlTest` checks this with `PoolString::Find`).
 - Tests: the engine-level methods are covered with fake games in `tests/BECore/GameControlTest.*` (`FakeControllableGame`, `FakePlainGame`); the adapter of a game is tested in the game's own tests.
 
 ## GameManager

@@ -49,6 +49,16 @@ namespace BECore {
             _currentPage = eastl::make_unique<Page>();
         }
 
+        const Entry* Find(eastl::string_view str) {
+            if (str.empty()) {
+                return &Details::g_EmptyEntryStore.header;
+            }
+
+            const uint64_t hash = String::GetHash(str);
+            std::shared_lock lock(_mutex);
+            return _table.Find(hash, str);
+        }
+
         const Entry* GetOrAdd(eastl::string_view str) {
             if (str.empty()) {
                 return &Details::g_EmptyEntryStore.header;
@@ -95,6 +105,13 @@ namespace BECore {
 
     PoolString PoolString::Intern(eastl::string_view str) {
         return PoolString(Storage::Instance().GetOrAdd(str));
+    }
+
+    std::optional<PoolString> PoolString::Find(eastl::string_view str) {
+        if (const Entry* entry = Storage::Instance().Find(str)) {
+            return PoolString(entry);
+        }
+        return std::nullopt;
     }
 
 }  // namespace BECore

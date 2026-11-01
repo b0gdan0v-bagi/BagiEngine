@@ -36,7 +36,7 @@ Error codes are strings and part of the protocol (`ControlErrors`): `parse_error
 - `AddFrameEndHook()` runs at every `EndFrame()`, before a deferred call completes (the state-change push uses it).
 - `Shutdown()` (from `OnApplicationDeinit`) answers everything queued or deferred with `shutting_down`; a request posted later is answered at once on the posting thread. Stop the transport before it.
 - Never use `ASSERT` / `EXPECT` / `FATALERROR` on data from a client: a bad request is an error response, not a bug in the engine.
-- Method names live in an `eastl::hash_map<eastl::string, ...>`, not in `PoolString`: a client must not be able to grow the pool.
+- Method names live in an `eastl::hash_map<eastl::string, ...>`, not in `PoolString`: a client must not be able to grow the pool (`ControlServiceTest` checks this with `PoolString::Find`).
 
 ## JSON rules
 

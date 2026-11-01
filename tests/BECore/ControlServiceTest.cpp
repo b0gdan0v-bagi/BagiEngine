@@ -166,6 +166,15 @@ namespace BECore::Tests {
         EXPECT_EQ(IdOf(responses[0]), 3);
     }
 
+    TEST_F(ControlServiceTest, UnknownMethodNameIsNotInterned) {
+        Post(MakeRequest(1, "client_only_method_5d02e8"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(ErrorCode(responses[0]), "unknown_method");
+        EXPECT_FALSE(PoolString::Find("client_only_method_5d02e8").has_value());
+    }
+
     TEST_F(ControlServiceTest, LongMethodNameIsCutInTheMessage) {
         Post(MakeRequest(1, std::string(5000, 'm')));
         service.Drain();
