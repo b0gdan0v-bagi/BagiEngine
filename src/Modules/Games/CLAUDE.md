@@ -13,6 +13,32 @@ The contract between the engine and a game. `Games` provides `IGame` and `GameMa
 | `GetName()` | Unique id, also the display label and the key in `GamesConfig.xml` |
 | `GetSceneName()` | Name of the `Scene` in the game's `config/SceneConfig.xml` that the game wants active |
 | `Start()` / `Stop()` / `Reset()` | Game became active / is being replaced / restart the session without changing the scene |
+| `AsControllable()` | The game's `IControllableGame` for the external control API, or `nullptr` (the default) |
+
+## Control API (`IControllableGame`, `GameControl`)
+
+A program or a model plays a game through `IControllableGame` (`Games/IControllableGame.h`), which the game hands out from `IGame::AsControllable()`. The engine asks through that call, never through a cast, so no engine code names a game. `GameManager::Initialize()` calls `RegisterGameControl()`, which registers the methods below in `CoreManager::GetControlService()` (protocol and threading: `BECore/Control/CLAUDE.md`). They act on the active game, looked up on every call.
+
+| Method | Params | Result |
+|--------|--------|--------|
+| `list_games` | none | `{"active": name or null, "games": [{"name", "scene", "controllable"}]}` |
+| `switch_game` | `{"name"}` | `{"active"}` |
+| `reset` | the game's options (Match3: `{"seed"}`) | `{"game", "version"}`; a game that is not controllable gets a plain `IGame::Reset()` and no version |
+| `get_state` | none | `{"game", "version", "state"}` |
+| `list_actions` | none | `{"game", "version", "actions": [..]}` |
+| `perform_action` | the action object itself, one of `actions` | `{"game", "version", "outcome"}` (`version` is the one after the action) |
+| `set_state` | the game's state (Chess: `{"fen"}`) | `{"game", "version"}` |
+
+`IControllableGame`: `GetState()`, `GetActions()` (a JSON array; every element is accepted by `PerformAction` as is), `PerformAction(action)`, `Reset(options)`, `SetState(state)` (default: `unsupported`), `GetStateVersion()`. Errors are `std::expected<.., ControlError>`; `GameControlErrors` has `no_active_game`, `not_controllable`, `unknown_game`, `no_active_model`, `illegal_action`, `unsupported`, and a bad parameter is `ControlErrors::kInvalidParams`.
+
+Writing the adapter of a game:
+
+- Keep the rules free of JSON: the adapter is a small class next to the game (`Match3GameControl`) that the `IGame` owns and returns from `AsControllable()`. It may reach a model that lives in a scene component through a provider function, which is also what lets a test drive it without a scene.
+- `GetStateVersion()` must grow on every change a controller has to see (a new game, every committed action) and never go back; it is how a client knows the state moved, and the frame-end push of `state_changed` will use it.
+- The parameters of `PerformAction`, `Reset` and `SetState` come from a client. Read them with the checked helpers of `BECore/Control/Json.h` (nlohmann aborts the process on a bad access in this build) and range-check numbers as `int64_t` before narrowing. A bad value is an error, not an assert. `illegal_action` means the action is well-formed but not legal now.
+- The state and the actions are for a model to read: short, self-explanatory names, a board as strings, no internal ids.
+- `switch_game` looks the name up among the games; do not intern a client's string into `PoolString`.
+- Tests: the engine-level methods are covered with fake games in `tests/BECore/GameControlTest.*` (`FakeControllableGame`, `FakePlainGame`); the adapter of a game is tested in the game's own tests.
 
 ## GameManager
 

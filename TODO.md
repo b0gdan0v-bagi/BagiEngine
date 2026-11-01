@@ -50,12 +50,12 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 - a workflow for macOS (`macos-debug`) and Windows (one MSVC or Clang preset) that checks out the submodules (`git submodule update --init --recursive`, `external/googletest` included), configures, builds the game and test targets and runs `ctest`;
 - a decision for the Vulkan loader DLL on the Windows runner (install the SDK, fetch the loader, or build without the Vulkan backend), after checking whether the test executables need it at all;
-- a guard on the number of tests (227 at the last count): it must not drop;
+- a guard on the number of tests (272 at the last count): it must not drop;
 - a Linux job once Linux presets exist (see the entry on test gaps and platforms).
 
 ## No external control: a game can be played only by a human at the window
 
-**Status:** in progress since 2026-11-01, plan in `.claude/plans/buzzing-tinkering-cat.md`. Done: the command queue in `BECore/Control/` (`ControlService`, `ping` / `status` / `quit`, nlohmann/json with exceptions off, Base64; frame stage 1b; `BECore/Control/CLAUDE.md`). Next: the game interface with Match3, the WebSocket server, manual clock and step, headless and screenshot, then Chess rules and the Stockfish and MCP bridges.
+**Status:** in progress since 2026-11-01, plan in `.claude/plans/buzzing-tinkering-cat.md`. Done: the command queue in `BECore/Control/` (`ControlService`, `ping` / `status` / `quit`, nlohmann/json with exceptions off, Base64; frame stage 1b; `BECore/Control/CLAUDE.md`), and the game interface (`IControllableGame`, the game methods of `Games/GameControl`) with the Match3 adapter, legal swaps and a platform-independent RNG (`Games/CLAUDE.md`, `games/Match3/CLAUDE.md`). Next: the WebSocket server, manual clock and step, headless and screenshot, then Chess rules and the Stockfish and MCP bridges.
 
 **Spike results** (macOS, AppleClang 17, SDL 3.2.0; Windows and MSVC not checked yet):
 

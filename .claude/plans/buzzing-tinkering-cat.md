@@ -210,7 +210,7 @@ while (_isRunning) {
 
 - [x] Этап 0 спайки S1-S4 (macOS; Windows и MSVC не проверены)
 - [x] Этап 1 ядро команд (50 новых тестов, всего 227 зелёных; clang-format и strip-pch-includes применены; не закоммичено)
-- [ ] Этап 2 интерфейс игры + Match3
+- [x] Этап 2 интерфейс игры + Match3 (+45 тестов, всего 272 зелёных; отличия от плана: `GetState`/`GetActions` возвращают `std::expected`; ответ методов `{game, version, state|actions|outcome}`, `game` и `version` добавляет `GameControl`, а не адаптер; Match3 получает модель через provider, чтобы адаптер тестировался без сцены; `perform_action` принимает действие как params без обёртки)
 - [ ] Этап 3 WebSocket + опции запуска
 - [ ] Этап 4 ручные часы, шаг, push
 - [ ] Этап 5 headless + скриншот

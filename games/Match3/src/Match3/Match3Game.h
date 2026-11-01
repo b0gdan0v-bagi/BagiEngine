@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Games/IGame.h>
+#include <Match3/Match3GameControl.h>
 
 namespace BECore::Match3 {
 
@@ -14,11 +15,14 @@ namespace BECore::Match3 {
      *
      * Auto-registered into AbstractFactory<IGame> via the BE_CLASS reflection
      * machinery — no extra hand-written registrar required.
+     *
+     * Owns the adapter of the external control API (Match3GameControl), which reaches the
+     * model of the active board component.
      */
     class Match3Game : public IGame {
         BE_CLASS(Match3Game)
     public:
-        Match3Game() = default;
+        Match3Game();
         ~Match3Game() override = default;
 
         PoolString GetName() const override;
@@ -27,6 +31,11 @@ namespace BECore::Match3 {
         void Start() override;
         void Stop() override;
         void Reset() override;
+
+        IControllableGame* AsControllable() override;
+
+    private:
+        Match3GameControl _control;
     };
 
 }  // namespace BECore::Match3

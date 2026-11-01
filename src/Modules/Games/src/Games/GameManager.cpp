@@ -3,10 +3,13 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Scene/SceneManager.h>
+#include <Games/GameControl.h>
 
 namespace BECore {
 
     void GameManager::Initialize() {
+        RegisterGameControl(CoreManager::GetControlService());
+
         const auto& metas = AbstractFactory<IGame>::GetInstance().GetRegisteredTypes();
         _games.reserve(metas.size());
         for (const auto& meta : metas) {

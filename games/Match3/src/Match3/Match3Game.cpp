@@ -5,6 +5,18 @@
 
 namespace BECore::Match3 {
 
+    Match3Game::Match3Game()
+        : _control([]() {
+              if (auto* board = Match3BoardComponent::GetActive()) {
+                  return Match3ControlTarget{&board->GetModel(), board->GetSeed()};
+              }
+              return Match3ControlTarget{};
+          }) {}
+
+    IControllableGame* Match3Game::AsControllable() {
+        return &_control;
+    }
+
     PoolString Match3Game::GetName() const {
         return "Match3"_intern;
     }

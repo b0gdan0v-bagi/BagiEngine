@@ -9,10 +9,12 @@ namespace BECore::Match3 {
     }
 
     void Match3GameModel::Reset(uint32_t seed) {
+        _seed = seed;
         _rng.seed(seed);
         _score = 0;
         _selected.reset();
         GenerateInitialBoard();
+        ++_version;
     }
 
     void Match3GameModel::OnCellClicked(Cell c) {
@@ -52,7 +54,36 @@ namespace BECore::Match3 {
         }
 
         ResolveCascade();
+        ++_version;
         return true;
+    }
+
+    bool Match3GameModel::WouldSwapMatch(Cell a, Cell b) const {
+        if (!a.IsInside() || !b.IsInside() || !IsAdjacent(a, b)) {
+            return false;
+        }
+
+        Match3Board trial = _board;
+        trial.Swap(a, b);
+        return MatchFinder::HasAnyMatch(trial);
+    }
+
+    eastl::vector<eastl::pair<Cell, Cell>> Match3GameModel::GetLegalSwaps() const {
+        eastl::vector<eastl::pair<Cell, Cell>> swaps;
+        for (int8_t row = 0; row < kBoardSize; ++row) {
+            for (int8_t col = 0; col < kBoardSize; ++col) {
+                const Cell from{col, row};
+                const Cell right{static_cast<int8_t>(col + 1), row};
+                const Cell below{col, static_cast<int8_t>(row + 1)};
+                if (WouldSwapMatch(from, right)) {
+                    swaps.emplace_back(from, right);
+                }
+                if (WouldSwapMatch(from, below)) {
+                    swaps.emplace_back(from, below);
+                }
+            }
+        }
+        return swaps;
     }
 
     int Match3GameModel::ResolveCascade() {
@@ -83,8 +114,9 @@ namespace BECore::Match3 {
     }
 
     GemType Match3GameModel::RandomGem() {
-        std::uniform_int_distribution<int> dist(1, static_cast<int>(kGemTypeCount));
-        return static_cast<GemType>(dist(_rng));
+        // Not std::uniform_int_distribution: its output differs between standard libraries, mt19937's does not.
+        // The modulo bias (6 does not divide 2^32) is below 1.5e-9 per gem, irrelevant for a game.
+        return static_cast<GemType>(1 + _rng() % static_cast<uint32_t>(kGemTypeCount));
     }
 
     void Match3GameModel::GenerateInitialBoard() {

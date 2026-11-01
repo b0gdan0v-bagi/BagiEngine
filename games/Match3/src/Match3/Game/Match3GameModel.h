@@ -33,9 +33,22 @@ namespace BECore::Match3 {
          * re-rolled until it does not equal the two cells immediately to the
          * left or above). Resets score and selection.
          *
-         * @param seed Deterministic RNG seed. Same seed -> same starting board.
+         * @param seed Deterministic RNG seed. Same seed -> same starting board, on every platform: the gems come from
+         *             std::mt19937 (its sequence is fixed by the standard) through a plain modulo, not from a std
+         *             distribution (those differ between standard libraries). The same seed and the same swaps give
+         *             the same board and score, which is what a replay or an external controller relies on.
          */
         void Reset(uint32_t seed = 0);
+
+        /// Seed of the last Reset()
+        [[nodiscard]] uint32_t GetSeed() const noexcept {
+            return _seed;
+        }
+
+        /// Counts the changes a controller has to see: every Reset() and every committed swap. Never goes back
+        [[nodiscard]] uint64_t GetVersion() const noexcept {
+            return _version;
+        }
 
         [[nodiscard]] const Match3Board& GetBoard() const noexcept {
             return _board;
@@ -76,6 +89,22 @@ namespace BECore::Match3 {
         bool TrySwap(Cell a, Cell b);
 
         /**
+         * @brief Would TrySwap(a, b) commit? Does not change the model (it tries the swap on a copy of the board).
+         *
+         * False for cells outside the board and for cells that are not 4-neighbour adjacent.
+         */
+        [[nodiscard]] bool WouldSwapMatch(Cell a, Cell b) const;
+
+        /**
+         * @brief Every swap that TrySwap would commit, each pair once: a cell with its right and its lower neighbour
+         *        (`first` is the left or upper cell). Row by row, left to right, right neighbour before lower.
+         */
+        [[nodiscard]] eastl::vector<eastl::pair<Cell, Cell>> GetLegalSwaps() const;
+
+        /// True when @p a and @p b are 4-neighbours (they differ by one in exactly one coordinate)
+        [[nodiscard]] static bool IsAdjacent(Cell a, Cell b) noexcept;
+
+        /**
          * @brief Resolve any matches currently on the board (remove -> gravity
          *        -> refill -> repeat). Used by tests and Reset() recovery; the
          *        normal play path goes through TrySwap().
@@ -94,7 +123,6 @@ namespace BECore::Match3 {
         }
 
     private:
-        [[nodiscard]] static bool IsAdjacent(Cell a, Cell b) noexcept;
         [[nodiscard]] GemType RandomGem();
         void GenerateInitialBoard();
         void ApplyGravity();
@@ -103,6 +131,8 @@ namespace BECore::Match3 {
         Match3Board _board;
         eastl::optional<Cell> _selected;
         int _score = 0;
+        uint32_t _seed = 0;
+        uint64_t _version = 0;
         std::mt19937 _rng;
     };
 

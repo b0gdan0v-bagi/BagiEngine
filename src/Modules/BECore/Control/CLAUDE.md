@@ -48,6 +48,13 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 - Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport: it bounds the nesting that a client can send.
 - nlohmann uses `std::string` inside; convert to `eastl::string` at the edge, which the helpers do.
 
+## Methods
+
+| Where | Methods |
+|-------|---------|
+| `BECore/Control/ControlBuiltins` | `ping`, `status`, `quit` |
+| `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state` (`Games/CLAUDE.md`) |
+
 ## Adding a method
 
 1. Write a handler `void(ControlCall&)` in the module that owns the behaviour (BECore only for things that need nothing above it).

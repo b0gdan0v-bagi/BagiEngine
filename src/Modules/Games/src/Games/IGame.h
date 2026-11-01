@@ -2,6 +2,8 @@
 
 namespace BECore {
 
+    class IControllableGame;
+
     /**
      * @brief Base interface for a self-contained game.
      *
@@ -33,6 +35,12 @@ namespace BECore {
         virtual void Start() {}
         virtual void Stop() {}
         virtual void Reset() {}
+
+        /// The interface of the external control API (state, actions, perform), or nullptr when the game cannot be driven
+        /// from outside. The engine asks through this call instead of casting, so it never names a concrete game.
+        virtual IControllableGame* AsControllable() {
+            return nullptr;
+        }
     };
 
 }  // namespace BECore
