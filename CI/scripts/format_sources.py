@@ -19,6 +19,9 @@ from pathlib import Path
 # Extensions that clang-format should process
 SOURCE_EXTENSIONS = {".cpp", ".c", ".h", ".hpp", ".cxx", ".hxx", ".cc"}
 
+# Homebrew prefixes on Apple Silicon and Intel
+MACOS_HOMEBREW_PREFIXES = ("/opt/homebrew", "/usr/local")
+
 
 def load_ignore_patterns(project_root: Path) -> list[str]:
     """Load ignore patterns from .clang-format-ignore (required). Exits with error if not found."""
@@ -43,26 +46,64 @@ def is_excluded(rel_path: str, ignore_patterns: list[str]) -> bool:
     return False
 
 
+def _libclang_candidates(exe_name: str) -> list[Path]:
+    """Candidates derived from LIBCLANG_PATH. It may be the LLVM root, its bin or its lib directory."""
+    libclang_path = os.environ.get("LIBCLANG_PATH")
+    if not libclang_path:
+        return []
+    base = Path(libclang_path)
+    return [base / exe_name, base / "bin" / exe_name, base.parent / "bin" / exe_name]
+
+
+def _venv_candidates(project_root: Path, exe_name: str) -> list[Path]:
+    """The clang-format pip package from requirements.txt installed into the project venv."""
+    bin_dir = "Scripts" if sys.platform == "win32" else "bin"
+    return [project_root / ".venv" / bin_dir / exe_name]
+
+
+def _macos_candidates(exe_name: str) -> list[Path]:
+    """Homebrew LLVM is keg-only (never linked into PATH); Xcode ships clang-format behind xcrun."""
+    result = []
+    for prefix in MACOS_HOMEBREW_PREFIXES:
+        opt = Path(prefix) / "opt"
+        result.append(opt / "llvm" / "bin" / exe_name)
+        result.extend(sorted(opt.glob("llvm@*/bin/" + exe_name), reverse=True))
+
+    try:
+        out = subprocess.run(["xcrun", "--find", "clang-format"], capture_output=True, text=True, timeout=10)
+        if out.returncode == 0 and out.stdout.strip():
+            result.append(Path(out.stdout.strip()))
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    return result
+
+
 def find_clang_format(project_root: Path) -> Path | None:
-    """Locate clang-format: PATH first, then LIBCLANG_PATH."""
+    """Locate clang-format: PATH, LIBCLANG_PATH, project .venv, then (macOS) Homebrew LLVM and Xcode."""
     import shutil
 
     exe = shutil.which("clang-format")
     if exe:
         return Path(exe)
 
-    libclang_path = os.environ.get("LIBCLANG_PATH")
-    if libclang_path:
-        base = Path(libclang_path)
-        if sys.platform == "win32":
-            candidates = [base / "clang-format.exe", base / "bin" / "clang-format.exe"]
-        else:
-            candidates = [base / "clang-format", base / "bin" / "clang-format"]
-        for p in candidates:
-            if p.exists():
-                return p
+    exe_name = "clang-format.exe" if sys.platform == "win32" else "clang-format"
+    candidates = _libclang_candidates(exe_name) + _venv_candidates(project_root, exe_name)
+    if sys.platform == "darwin":
+        candidates += _macos_candidates(exe_name)
+    for p in candidates:
+        if p.is_file():
+            return p
 
     return None
+
+
+def get_version(clang_format: Path) -> str:
+    """First line of `clang-format --version`, or an empty string if it cannot be run."""
+    try:
+        out = subprocess.run([str(clang_format), "--version"], capture_output=True, text=True, timeout=10)
+    except (subprocess.TimeoutExpired, OSError):
+        return ""
+    return out.stdout.strip().splitlines()[0] if out.stdout.strip() else ""
 
 
 def get_changed_files(project_root: Path, ignore_patterns: list[str]) -> list[Path]:
@@ -131,10 +172,14 @@ def main() -> int:
     clang_format = find_clang_format(project_root)
     if not clang_format:
         print(
-            "Error: clang-format not found. Add it to PATH or set LIBCLANG_PATH to LLVM bin directory.",
+            "Error: clang-format not found. Searched PATH, LIBCLANG_PATH (and its bin/ and ../bin), "
+            "the project .venv and, on macOS, Homebrew LLVM and Xcode.\n"
+            "Install it with `brew install llvm` or `pip install -r requirements.txt`, "
+            "or set LIBCLANG_PATH to the LLVM directory.",
             file=sys.stderr,
         )
         return 1
+    print(f"Using clang-format: {clang_format} ({get_version(clang_format)})")
 
     ignore_patterns = load_ignore_patterns(project_root)
     if args.changed:
@@ -153,7 +198,7 @@ def main() -> int:
     for path in files:
         rel = path.relative_to(project_root)
         try:
-            subprocess.run(
+            result = subprocess.run(
                 [str(clang_format), "-i", str(path)],
                 cwd=project_root,
                 capture_output=True,
@@ -161,6 +206,10 @@ def main() -> int:
                 timeout=10,
                 creationflags=creationflags,
             )
+            if result.returncode != 0:
+                failed.append((str(rel), result.stderr.strip()))
+                print(f"Error: {rel} - {result.stderr.strip()}", file=sys.stderr)
+                continue
             print(str(rel))
         except (subprocess.TimeoutExpired, Exception) as e:
             failed.append((str(rel), str(e)))

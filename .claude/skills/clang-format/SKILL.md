@@ -42,7 +42,7 @@ uv run python CI/scripts/format_sources.py --all
 
 ## Requirements
 
-- **clang-format** must be on `PATH`, or **LIBCLANG_PATH** set to the LLVM bin directory (same as for Meta Generator).
+- **clang-format** is looked up in this order: `PATH`; **LIBCLANG_PATH** (the LLVM directory, its `bin/`, or `../bin` when it points at `lib/`, same as for Meta Generator); the project `.venv` (pip package from `requirements.txt`); on macOS Homebrew LLVM (`/opt/homebrew/opt/llvm`, keg-only, so it is not on `PATH`) and then Xcode (`xcrun --find clang-format`). The script prints which binary and version it uses.
 - Script path: [CI/scripts/format_sources.py](CI/scripts/format_sources.py).
 - Config: root [.clang-format](.clang-format).
 
