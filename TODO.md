@@ -142,13 +142,13 @@ Recommendation: option 3, in that order. `TODO.md` stays the source of truth bec
 
 ## 2D rendering is minimal: no rotation, camera or blending
 
-**Where:** `src/Modules/BECore/Renderer/IRenderer.h` (`DrawFilledRect`, `DrawTexture` are the whole drawing surface), `SDLRendererBackend.cpp`, `Vulkan/src/CoreVulkan/VulkanRendererBackend.cpp`, `Scene/Components/TransformComponent.h` (position and size in screen pixels).
+**Where:** `src/Modules/BECore/Renderer/IRenderer.h` (`DrawFilledRect`, `DrawTexture` are the whole drawing surface), `SDLRendererBackend.cpp`, `Vulkan/src/CoreVulkan/VulkanRendererBackend.cpp`, `Scene/Components/TransformComponent.h` (position and size in scene units, which are output pixels unless the scene sets a view size).
 
 **What is missing** (found by reading the code, not by running a game):
 
 1. Layers exist, but only per node: `SceneNode::GetLayer()` plus the scene order sort the draw pass (`Scene/CLAUDE.md`, "Draw order"). A child does not inherit its parent's layer, and there is no sort key finer than the node (a sprite and a quad on one node cannot interleave with other nodes).
 2. No rotation or scale of a sprite, no flip, no tint or alpha beyond the rect color.
-3. No 2D camera: positions are screen pixels, so scrolling and zoom need a camera transform.
+3. No movable 2D camera: a scene can fit a fixed view size to the output (`viewWidth` / `viewHeight`, `Scene/CLAUDE.md`, "View size"), but scrolling and zoom need a camera transform on top of that.
 4. No blend modes.
 5. A node has only absolute pixel coordinates, no parent-relative transform.
 
@@ -158,6 +158,45 @@ Recommendation: option 3, in that order. `TODO.md` stays the source of truth bec
 - layer inheritance from the parent, if a hierarchy of drawn nodes needs it;
 - a camera that maps world to screen, used by the renderer components;
 - a decision on the backends before the work starts (see the entry on renderer backends).
+
+## The render output size is fixed at startup: the Vulkan swapchain is never recreated, and there is no HiDPI
+
+**Where:** `src/Modules/Vulkan/src/CoreVulkan/VulkanRendererBackend.cpp` (`AcquireFrame()`: "swapchain out-of-date (TODO: recreate on resize)"; `Present()` ignores the result of `VulkanSwapchain::Present`), `VulkanSwapchain.cpp` (`ChooseExtent`), `SDLEventsProvider.cpp` (the `SDL_EVENT_WINDOW_RESIZED` case sits in a commented-out block, so no resize event is emitted), `config/SDLWindowConfig.xml` (no `SDL_WINDOW_HIGH_PIXEL_DENSITY`).
+
+**What is wrong** (found by reading the code, not reproduced by resizing a running window):
+
+1. The swapchain is created once, with the extent the surface reports at that moment. When the window changes size, `AcquireNextImage` returns "out of date", `AcquireFrame()` returns without recreating anything and the frame is skipped. The compositor may stretch the old image instead, and then the picture is distorted. `Present()` does not look at the result either.
+2. Since the scene view fit (`Scene::Draw()`, `IRenderer::GetOutputWidth()`), the picture follows the output size, so a recreated swapchain is all that is missing: nothing else has to learn about the new size.
+3. The window has no `SDL_WINDOW_HIGH_PIXEL_DENSITY`, so on a Retina display the output is in window points and the OS scales it up by 2 (measured from a screenshot of `BagiChess`: exactly 2 px per scene unit; not checked in MoltenVK or SDL code). The picture is soft, and screenshots of the control API will be point-sized.
+
+**A fix has to cover:**
+
+- recreate the swapchain, its image views and framebuffers (the render pass only when the format changes) on out-of-date / suboptimal and after a resize, with `vkDeviceWaitIdle` first; skip drawing while the window is minimized (extent 0);
+- a decision on HiDPI: the output in pixels with a scale factor for the scene view, or points as today (the editor viewport and ImGui scale differently);
+- check `Present` and `AcquireNextImage` results in one place;
+- a manual check list (maximize, resize by hand, minimize and restore, move between displays), because no test creates a Vulkan device.
+
+## Chess pieces are drawn stretched: the atlas cell is not square
+
+**Where:** `games/Chess/config/TextureLibrary.xml` (every cell is 116.67x190.5 of `assets/chess_test.png`), `games/Chess/src/Chess/Components/ChessPieceComponent.cpp` (sets the transform to the square size), `Scene/Components/SpriteRendererComponent.cpp` (`DrawTexture` into the whole transform rect).
+
+**What is wrong:** a sprite is drawn into the full rect of its node, and a piece node is a square, so a 116.67x190.5 cell (width to height 0.61) is stretched horizontally by about 1.6x: the pieces look wide and squat. There is no way to keep the aspect ratio of a sprite.
+
+**A fix has to cover:**
+
+- either an aspect-preserving mode in `SpriteRendererComponent` (fit by height and center, which also helps every other sprite; see the 2D rendering entry), or cells cropped to squares in the atlas and the `srcRect` values;
+- the legal-move and selection highlights are drawn by the board in the full square, so they must still line up with the piece after the change.
+
+## Match3 does not scale to the window: its scene has no view size
+
+**Where:** `games/Match3/config/SceneConfig.xml` (`Match3Scene` has no `viewWidth` / `viewHeight`), `Match3BoardComponent` (`originX="100" originY="80" cellSize="64"`, 8x8 board).
+
+**What is wrong:** the scene view fit is opt-in, and only `ChessScene` declares a view size. The Match3 board is 512x512 units in a window of about 1632x910, so it fills a small part of it, as the Chess board did. Its HUD is an ImGui window (`ImGui::Begin("Match3")`), shown only where an ImGui context exists (Editor mode; the Game mode widget set has no `ImGuiWidget` and Match3 ships no `GameWidgetsConfig.xml`). It is in window pixels and is not part of the scene fit.
+
+**A fix has to cover:**
+
+- a view size for `Match3Scene` (the board at (100, 80) with the same margin on every side is about `viewWidth="712" viewHeight="672"`, to be checked in the running game);
+- where the HUD goes in a mode that has ImGui: its window does not move with the fitted board.
 
 ## No text rendering in the engine: text exists only in ImGui
 
@@ -278,6 +317,18 @@ Recommendation: option 1, built for a model's edit, run, screenshot loop. Option
 - a prefab: a node (with children and components) in its own XML file, instantiated by name with per-instance overrides, and the same instantiation at runtime (`Scene::CreateNode` equivalent);
 - scenes loaded from separate files listed in `SceneConfig.xml`, keeping the layering rule (a game's file wins);
 - the scene editor saving prefab instances without flattening them.
+
+## The scene editor saves only the active scene
+
+**Where:** `src/Widgets/SceneEditor/SceneEditorWidget.cpp` (`SaveScene()`).
+
+**What is wrong** (found by reading the code, not by saving in the editor): `SaveScene()` removes the whole `<scenes>` element of `SceneConfig` and writes back one `<scene>`, the active one. A config with two scenes (the engine's own file has a debug `MainScene`; a game with a menu would have more) loses every other scene on the first save. The same code writes the scene attributes by hand (`type`, `name`, `viewWidth`, `viewHeight`), so a new reflected field of `Scene` is dropped on save unless it is added there.
+
+**A fix has to cover:**
+
+- replace only the `<scene>` element with the active scene's name and keep the others as they are;
+- write the scene attributes through the reflection (`Scene::Serialize`) instead of by hand;
+- a round-trip test of the save path (load, edit, save, load) with two scenes.
 
 ## No save games, hot-reload or asset packing
 
