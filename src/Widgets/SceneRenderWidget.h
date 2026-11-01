@@ -8,7 +8,8 @@ namespace BECore {
 
     // Draws the active scene straight into the back buffer: the Game run mode's replacement for ViewportWidget.
     // ClearScreenWidget::Update() opens the swapchain pass, so the scene is drawn in DrawScreen(), after every
-    // widget's Update(). Window coordinates are scene coordinates, so mouse events need no remapping.
+    // widget's Update(). A scene with a view size is fitted to the window by Scene::Draw(); mouse events are in window
+    // pixels and components map them with Scene::ScreenToSceneX/Y.
     class SceneRenderWidget : public IWidget {
         BE_CLASS(SceneRenderWidget)
     public:

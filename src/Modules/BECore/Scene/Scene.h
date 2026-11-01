@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Renderer/ViewTransform.h>
 #include <BECore/Scene/SceneNode.h>
 #include <entt/entt.hpp>
 
@@ -40,6 +41,25 @@ namespace BECore {
         void Draw();
 
         /**
+         * @brief Size of the scene's view in scene units (XML `viewWidth`, `viewHeight`), 0 when it has none.
+         *
+         * With a view size the scene is drawn scaled to fit the render output and centered, so it looks the same in a
+         * window of any size; without one a unit is a pixel. Everything in the scene (transforms, board origins) is
+         * in these units.
+         */
+        float GetViewWidth() const;
+        float GetViewHeight() const;
+
+        /**
+         * @brief Map a mouse position in render output pixels (window or viewport-local) to scene units.
+         *
+         * Uses the transform of the last Draw(); the identity before the first draw and for a scene without a view
+         * size. Mouse handlers compare their event position with scene geometry through these.
+         */
+        float ScreenToSceneX(float outputX) const;
+        float ScreenToSceneY(float outputY) const;
+
+        /**
          * @brief True while this is the scene that SceneManager updates and draws.
          *
          * Scene events and input events are global, so every loaded scene's components receive them;
@@ -67,10 +87,13 @@ namespace BECore {
         void CollectDrawEntries(SceneNode& node);
 
         BE_REFLECT_FIELD PoolString _name;
+        BE_REFLECT_FIELD float _viewWidth = 0.0f;
+        BE_REFLECT_FIELD float _viewHeight = 0.0f;
         BE_REFLECT_FIELD eastl::vector<IntrusivePtr<SceneNode>> _nodes;
         entt::registry _registry;
         IntrusivePtr<SceneNode> _rootNode;
         eastl::vector<SceneDrawEntry> _drawEntries;  // reused every frame, so Draw() allocates only while it grows
+        ViewTransform _viewTransform;                // fit of the view to the output, set by Draw(), read by ScreenToScene*
         bool _active = false;
     };
 

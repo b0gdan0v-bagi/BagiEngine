@@ -361,6 +361,10 @@ namespace BECore {
         pugi::xml_node sceneEl = scenesEl.append_child("scene");
         sceneEl.append_attribute("type").set_value("Scene");
         sceneEl.append_attribute("name").set_value(scene->GetName().CStr());
+        if (scene->GetViewWidth() > 0.0f && scene->GetViewHeight() > 0.0f) {
+            sceneEl.append_attribute("viewWidth").set_value(scene->GetViewWidth());
+            sceneEl.append_attribute("viewHeight").set_value(scene->GetViewHeight());
+        }
 
         pugi::xml_node nodesEl = sceneEl.append_child("nodes");
         for (const auto& nodePtr : scene->GetRootNode().GetChildren()) {

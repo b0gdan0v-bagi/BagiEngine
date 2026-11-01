@@ -54,7 +54,7 @@ namespace BECore {
             ImGui::Image(reinterpret_cast<ImTextureID>(_renderTarget->GetImGuiTextureId()), size);
 
             // Re-emit mouse button events with viewport-local coordinates so
-            // ClickableComponent (which works in scene space) receives correct coords.
+            // the scene can map them to scene units (Scene::ScreenToSceneX/Y) with the fit of its last draw.
             if (ImGui::IsItemHovered()) {
                 const ImVec2 imgMin   = ImGui::GetItemRectMin();
                 const ImVec2 mousePos = ImGui::GetMousePos();

@@ -2,6 +2,7 @@
 
 #include <BECore/Input/ActionsLibrary.h>
 #include <BECore/Scene/Components/TransformComponent.h>
+#include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -26,8 +27,8 @@ namespace BECore {
             return;
         }
 
-        const float x = e.button.x;
-        const float y = e.button.y;
+        const float x = GetScene().ScreenToSceneX(e.button.x);
+        const float y = GetScene().ScreenToSceneY(e.button.y);
         if (x >= transform->_x && x <= transform->_x + transform->_width && y >= transform->_y && y <= transform->_y + transform->_height) {
             InputEvents::ActionEvent::Emit(_actionName);
         }

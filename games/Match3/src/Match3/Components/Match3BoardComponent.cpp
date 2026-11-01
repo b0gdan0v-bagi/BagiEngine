@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Scene/Scene.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Generated/Match3BoardComponent.gen.hpp>
 #include <imgui.h>
@@ -107,8 +108,8 @@ namespace BECore::Match3 {
 
     void Match3BoardComponent::OnMouseDown(const SDLEvents::MouseButtonDownEvent& e) {
         const float boardSide = _cellSize * static_cast<float>(kBoardSize);
-        const float localX = e.button.x - _originX;
-        const float localY = e.button.y - _originY;
+        const float localX = GetScene().ScreenToSceneX(e.button.x) - _originX;
+        const float localY = GetScene().ScreenToSceneY(e.button.y) - _originY;
         if (localX < 0.0f || localY < 0.0f || localX >= boardSide || localY >= boardSide) {
             return;
         }

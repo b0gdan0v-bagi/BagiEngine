@@ -24,7 +24,7 @@ Central service locator (`GameManager/CoreManager.h`): one static getter per sub
 | `Editor` (engine default) | `config/WidgetsConfig.xml` | ImGui, the editor panels, the scene in `ViewportWidget` (offscreen target) |
 | `Game` | `config/GameWidgetsConfig.xml` | `ClearScreenWidget` and `SceneRenderWidget`: no ImGui, the scene is drawn straight into the back buffer |
 
-In Game mode window coordinates are scene coordinates: `SDLEventsProvider` forwards every mouse click unchanged because there is no ImGui context to capture it (in Editor mode `ViewportWidget` re-emits clicks with viewport-local coordinates). Code that touches ImGui outside a widget must check `ImGui::GetCurrentContext()` first; `Match3BoardComponent` does so for its HUD.
+In Game mode `SDLEventsProvider` forwards every mouse click unchanged (window coordinates) because there is no ImGui context to capture it; in Editor mode `ViewportWidget` re-emits clicks with viewport-local coordinates. Either way the position is in render output pixels, not scene units: a scene with a view size is scaled to the output, so a handler maps the position with `Scene::ScreenToSceneX/Y` (`Scene/CLAUDE.md`, "View size"). Code that touches ImGui outside a widget must check `ImGui::GetCurrentContext()` first; `Match3BoardComponent` does so for its HUD.
 
 A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` with `mode="Game"`. A game's file replaces the engine's whole file, so it repeats `type`, `renderer` and `path`. To open a game in the editor, set `mode="Editor"` there. A game can also ship its own `GameWidgetsConfig.xml` (for example to add `ImGuiWidget` for a HUD). Tests: `tests/BECore/RunModeTest.cpp`, `tests/BECore/SDLEventsProviderTest.cpp`.
 

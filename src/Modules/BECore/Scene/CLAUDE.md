@@ -7,7 +7,7 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 | Class | Role |
 |-------|------|
 | `SceneManager` | Built with `MakeFromConfig<SceneManager>("SceneConfig")` in `CoreManager::OnApplicationInit`. Holds `_scenes`; the first one is active after `Initialize()`. `SetActiveScene(name)`, `GetActiveScene()`, `GetSceneByName()`; `UpdateAll()` / `DrawAll()` drive the active scene. It is the only writer of `Scene::IsActive()` |
-| `Scene` | `FACTORY_BASE`. Owns the `entt::registry`, a runtime root node (`"Root"`) and the serialized `_nodes`. `Update()` emits `SceneEvents::SceneFixedUpdateEvent` once per fixed step due in the frame, then `SceneUpdateEvent` with the frame time (both read `CoreManager::GetTime()`); `Draw()` calls `IComponent::OnDraw()` of every component in draw order (see "Draw order"). `IsActive()` is true for the scene `SceneManager` currently drives. `PrepareForSave()` copies the live hierarchy back into `_nodes` (the scene editor calls it before saving) |
+| `Scene` | `FACTORY_BASE`. Owns the `entt::registry`, a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` (see "View size"). `Update()` emits `SceneEvents::SceneFixedUpdateEvent` once per fixed step due in the frame, then `SceneUpdateEvent` with the frame time (both read `CoreManager::GetTime()`); `Draw()` calls `IComponent::OnDraw()` of every component in draw order (see "Draw order"). `IsActive()` is true for the scene `SceneManager` currently drives. `PrepareForSave()` copies the live hierarchy back into `_nodes` (the scene editor calls it before saving) |
 | `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_layer` (attribute `layer`, default 0), `_components`, children, an `entt::entity`. `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild`. The XML describes the top-level nodes and their components only; children exist at runtime (`AddChild`) |
 | `IComponent` | `FACTORY_BASE` and `SubscriptionHolder`; gets its `Scene&` / `SceneNode&` through `GetScene()` / `GetNode()` |
 
@@ -24,7 +24,7 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 </scenes></SceneManager>
 ```
 
-`type` is the component class name; field names lose the leading underscore. A node can carry `layer="-1"` (see "Draw order"). Every `SceneConfig.xml` replaces the one below it in the content layers (see `FileSystem/CLAUDE.md`): the engine's own file holds a debug `MainScene`, and a game's file holds only that game's scenes, so a game executable never loads `MainScene`.
+`type` is the component class name; field names lose the leading underscore. A `scene` can carry `viewWidth` / `viewHeight` (see "View size") and a node can carry `layer="-1"` (see "Draw order"). Every `SceneConfig.xml` replaces the one below it in the content layers (see `FileSystem/CLAUDE.md`): the engine's own file holds a debug `MainScene`, and a game's file holds only that game's scenes, so a game executable never loads `MainScene`.
 
 ## Component lifecycle
 
@@ -45,11 +45,24 @@ Drawing is not an event. `Scene::Draw()` walks the node tree, sorts the nodes by
 
 Tests: `tests/BECore/SceneEventsTest.cpp` (`SceneEventCounter::drawIndex` is the position in the draw pass).
 
+## View size
+
+A scene says how big its picture is in scene units: `<scene type="Scene" name="ChessScene" viewWidth="840" viewHeight="760">`. Everything in the scene (transforms, board origins and cell sizes) is in these units, and the engine fits the view to whatever the render output is:
+
+- `Scene::Draw()` asks the renderer for its output size, builds `ViewTransform::Fit(viewWidth, viewHeight, outputW, outputH)` (one uniform scale, the view centered, bars on the free sides), sets it with `IRenderer::SetViewTransform()` for the draw pass and resets it after. The backends apply it to every rect (`.claude/rules/rendering-module.md`). It is computed every frame, so a window or viewport of any size, resized or not, needs no event.
+- Without a view size (both 0, the default) the transform is the identity: one unit is one output pixel, as before. A game that does not need scaling declares nothing. Without a renderer (tests) it is the identity too.
+- Mouse positions arrive in output pixels (window pixels in Game mode, viewport-local in Editor mode). A handler maps them with `GetScene().ScreenToSceneX(e.button.x)` / `ScreenToSceneY(...)` before it compares them with scene geometry; `ClickableComponent`, `ChessBoardComponent` and `Match3BoardComponent` do. The mapping uses the transform of the last draw (the identity before the first one).
+- Pick the view size as the bounding box of the content with the margins you want to keep: the board of Chess is 640x640 at (100, 60), so the view is 840x760. A view with a different aspect than the window gets bars; the bars show the clear color.
+- The scene editor saves `viewWidth` / `viewHeight` when they are set.
+- Not handled: the Vulkan swapchain is not recreated when the window is resized (a TODO in `VulkanRendererBackend::AcquireFrame()`), so the output size is the one the swapchain was created with.
+
+Tests: `tests/BECore/ViewTransformTest.cpp` (the math), `tests/BECore/SceneViewTest.cpp` (the fit during a draw with a fake renderer, `ScreenToScene*`, a click in scene units).
+
 ## Built-in components (`Components/`)
 
 | Component | Fields | Behavior |
 |-----------|--------|----------|
-| `TransformComponent` | `_x`, `_y`, `_width`, `_height` | Position/size in screen pixels; others read it |
+| `TransformComponent` | `_x`, `_y`, `_width`, `_height` | Position/size in scene units (pixels when the scene has no view size); others read it |
 | `QuadRendererComponent` | `_color` | Draws a filled rect at the node's transform in `OnDraw()` |
 | `SpriteRendererComponent` | `_spriteId`, `_texturePath`, `_srcRect` | Draws a texture in `OnDraw()`; `_spriteId` resolves through `TextureLibrary` |
 | `ClickableComponent` | `_actionName` | On mouse-down inside the transform rect, emits `InputEvents::ActionEvent(_actionName)` |

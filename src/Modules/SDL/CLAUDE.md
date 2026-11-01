@@ -11,7 +11,7 @@ SDL3 integration: window, input events and the SDL renderer backend. `Vulkan` is
 | `SDL3ApplicationFabric` | `IApplicationFabric`: creates the window from `SDLWindowConfig.xml`, the renderer named by `renderer` in `config/ApplicationConfig.xml` (default `SDLRendererBackend`) and the events provider |
 | `SDLMainWindow` | `IMainWindow` implementation; window only, the renderer is separate |
 | `SDLRendererBackend` | `IRenderer` implementation on the SDL renderer; owns the ImGui SDL backends. `GetOutputWidth/Height()` is `SDL_GetCurrentRenderOutputSize`; the draw calls apply `IRenderer::GetViewTransform()` to their rects |
-| `SDLEventsProvider` / `SDLEvents.h` | SDL event polling and conversion to engine events. A mouse-button-down goes to game code unchanged (window coordinates) unless an ImGui context exists and wants the mouse; Game run mode has no context, so every click goes through (`tests/BECore/SDLEventsProviderTest.cpp`) |
+| `SDLEventsProvider` / `SDLEvents.h` | SDL event polling and conversion to engine events. A mouse-button-down goes to game code unchanged (output pixels, not scene units: `Scene::ScreenToSceneX/Y` maps them) unless an ImGui context exists and wants the mouse; Game run mode has no context, so every click goes through (`tests/BECore/SDLEventsProviderTest.cpp`) |
 | `SDLTexture` / `SDLTextureLoader` | `ITexture` implementation and its `IResourceLoader` |
 | `SDLWindowConfig` | Window settings (`config/SDLWindowConfig.xml`: title, size, `windowFlags`) |
 | `SDLUtils` | Shared SDL helpers |

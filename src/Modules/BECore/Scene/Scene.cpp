@@ -1,6 +1,7 @@
 #include "Scene.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Renderer/IRenderer.h>
 #include <EASTL/sort.h>
 #include <Events/SceneEvents.h>
 #include <Generated/Scene.gen.hpp>
@@ -38,11 +39,39 @@ namespace BECore {
         // The keys are unique (order is the traversal index), so an unstable sort still gives one result.
         eastl::sort(_drawEntries.begin(), _drawEntries.end(), [](const SceneDrawEntry& a, const SceneDrawEntry& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
 
+        // The fit follows the output size of every frame, so a resized window or viewport needs no event.
+        IRenderer* renderer = CoreManager::GetRenderer().Get();
+        _viewTransform = renderer ? ViewTransform::Fit(_viewWidth, _viewHeight, renderer->GetOutputWidth(), renderer->GetOutputHeight()) : ViewTransform{};
+        if (renderer) {
+            renderer->SetViewTransform(_viewTransform);
+        }
+
         for (const SceneDrawEntry& entry : _drawEntries) {
             for (const auto& component : entry.node->GetComponents()) {
                 component->OnDraw();
             }
         }
+
+        // Widgets and ImGui draw in output pixels, so the scene's fit must not leak out of its pass.
+        if (renderer) {
+            renderer->SetViewTransform({});
+        }
+    }
+
+    float Scene::GetViewWidth() const {
+        return _viewWidth;
+    }
+
+    float Scene::GetViewHeight() const {
+        return _viewHeight;
+    }
+
+    float Scene::ScreenToSceneX(float outputX) const {
+        return _viewTransform.ToViewX(outputX);
+    }
+
+    float Scene::ScreenToSceneY(float outputY) const {
+        return _viewTransform.ToViewY(outputY);
     }
 
     void Scene::CollectDrawEntries(SceneNode& node) {
