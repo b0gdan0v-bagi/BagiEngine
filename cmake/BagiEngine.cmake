@@ -618,10 +618,10 @@ if(ENGINE_BUILD_TESTS)
     # be_add_game_control_tests(<ExeTarget> [SCRIPT <file>])
     # ctest entry <ExeTarget>ControlSmoke: starts the game executable with the control API on a free port and plays a
     # short scenario over WebSocket, once on the real clock and once with --manual-clock (tools/control/tests/smoke.py,
-    # or SCRIPT with the same arguments). Call it from the
-    # game's CMakeLists, not from the engine's tests/, so that no engine CMake names a game. It needs Python 3, does not
-    # build the executable (a missing one is a skip) and opens the game window until headless mode exists. The script
-    # exits with 77 for "skipped".
+    # or SCRIPT with the same arguments). Call it from the game's CMakeLists, not from the engine's tests/, so that no
+    # engine CMake names a game. It needs Python 3 and does not build the executable (a missing one is a skip). The
+    # script runs the game --headless (no window; a SCRIPT has to do the same if it does not want one). It exits with 77
+    # for "skipped".
     function(be_add_game_control_tests EXE_TARGET)
         cmake_parse_arguments(ARG "" "SCRIPT" "" ${ARGN})
         if(NOT ARG_SCRIPT)

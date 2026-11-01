@@ -4,11 +4,14 @@
     python tools/control/tests/smoke.py --exe build/ClangmacOS/BagiMatch3
 
 The game is started twice, once on the real clock and once with --manual-clock (game time moves only on `step`). The
-scenario is the one of Match3 (a swap on a seeded board). Until headless mode exists the game opens its window.
+scenario is the one of Match3 (a swap on a seeded board). The game runs --headless (no window, drawn in memory), which also
+lets the test look at screenshots; --window runs it in a real window instead (it needs a display, and a screenshot is not
+possible on the Vulkan backend, so those checks are left out).
 Exit code: 0 passed, 1 failed, 77 skipped (the executable does not exist; ctest reads 77 as "skipped").
 """
 
 import argparse
+import base64
 import json
 import socket
 import subprocess
@@ -21,6 +24,7 @@ from typing import Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bagi_control_client import BagiControlClient, ConnectionClosed, ControlError  # noqa: E402
+from png_reader import PngError, PngImage, read_png  # noqa: E402
 
 EXIT_PASSED = 0
 EXIT_FAILED = 1
@@ -32,6 +36,9 @@ BOARD_SIZE = 8
 EVENT_TIMEOUT_SECONDS = 5.0
 IDLE_CHECK_SECONDS = 0.3  # how long the manual clock is watched not moving
 DEFAULT_STEP_SECONDS = 1.0 / 60.0
+DEFAULT_SCREENSHOT_SIZE = 1024
+SMALL_SCREENSHOT_SIZE = 200
+BOARD_COLORS = 5  # a Match3 board shows at least this many different colours (tiles, background, frame)
 CLOCK_TOLERANCE = 1e-6
 
 
@@ -167,7 +174,49 @@ def check_state_push(client: BagiControlClient, action_outcome: dict) -> None:
     check(data["state"] == client.call("get_state")["state"], "state_changed carries another state than get_state")
 
 
-def run_real_clock_scenario(client: BagiControlClient) -> None:
+def take_screenshot(client: BagiControlClient, params: dict | None = None) -> PngImage:
+    """A `screenshot` call, decoded; the size it reports has to be the size of the picture."""
+    shot = client.call("screenshot", params)
+    try:
+        image = read_png(base64.b64decode(shot["png_base64"]))
+    except (PngError, ValueError) as error:
+        raise SmokeFailure(f"the screenshot is not a readable PNG: {error}") from error
+    check((image.width, image.height) == (shot["width"], shot["height"]), f"the screenshot says {shot['width']}x{shot['height']}, the picture is {image.width}x{image.height}")
+    return image
+
+
+def check_screenshot_basics(client: BagiControlClient) -> None:
+    """What a screenshot has to be on either clock: a picture of the board, not larger than asked."""
+    client.call("reset", {"seed": 1})
+    image = take_screenshot(client)
+    check(max(image.width, image.height) == DEFAULT_SCREENSHOT_SIZE, f"the default screenshot is {image.width}x{image.height}, its longer side should be {DEFAULT_SCREENSHOT_SIZE}")
+    check(len(image.colors()) >= BOARD_COLORS, f"the screenshot has {len(image.colors())} colours, it does not look like a board")
+
+    small = take_screenshot(client, {"maxSize": SMALL_SCREENSHOT_SIZE})
+    check(max(small.width, small.height) == SMALL_SCREENSHOT_SIZE, f"maxSize {SMALL_SCREENSHOT_SIZE} gave {small.width}x{small.height}")
+    expect_error("invalid_params", lambda: client.call("screenshot", {"maxSize": 5}), "a screenshot of 5 pixels")
+
+
+def check_screenshots_on_the_manual_clock(client: BagiControlClient) -> None:
+    """On the manual clock a screenshot is one frame in which nothing moves, and it shows what the game state says."""
+    before = client.call("status")
+
+    client.call("reset", {"seed": 1})
+    first = take_screenshot(client)
+    after = client.call("status")
+    check(after["frame"] == before["frame"] + 1, f"a screenshot took {after['frame'] - before['frame']} frames, not one")
+    check(approx(after["totalTime"], before["totalTime"]), "a screenshot moved the game time")
+
+    client.call("reset", {"seed": 1})
+    again = take_screenshot(client)
+    check(again.rows == first.rows, "the same seed looked different in two screenshots")
+
+    client.call("reset", {"seed": 2})
+    other = take_screenshot(client)
+    check(other.rows != first.rows, "another seed looked the same: the screenshot does not follow the game")
+
+
+def run_real_clock_scenario(client: BagiControlClient, headless: bool) -> None:
     status = client.call("status")
     check(status["frame"] >= 1, f"status reports frame {status['frame']}")
     check(status["manualClock"] is False, "the manual clock is on without --manual-clock")
@@ -184,8 +233,11 @@ def run_real_clock_scenario(client: BagiControlClient) -> None:
     after = client.call("step", {"frames": 3})["frame"]
     check(after >= before + 3, f"step 3 moved the frame from {before} to {after}")
 
+    if headless:
+        check_screenshot_basics(client)
 
-def run_manual_clock_scenario(client: BagiControlClient) -> None:
+
+def run_manual_clock_scenario(client: BagiControlClient, headless: bool) -> None:
     status = client.call("status")
     check(status["manualClock"] is True, f"--manual-clock did not turn the manual clock on: {status}")
     check(status["frame"] == 0 and status["totalTime"] == 0, f"a frame ran before the first step: {status}")
@@ -229,6 +281,12 @@ def run_manual_clock_scenario(client: BagiControlClient) -> None:
     check_state_push(client, outcome)
     check(not client.events or all(event["data"].get("version") != outcome["version"] for event in client.events), "the same change was pushed twice")
 
+    if headless:
+        check_screenshot_basics(client)
+        check_screenshots_on_the_manual_clock(client)
+    else:
+        expect_error("capture_failed", lambda: client.call("screenshot"), "a screenshot on a backend that cannot capture")
+
 
 SCENARIOS = [
     ("real clock", [], run_real_clock_scenario),
@@ -236,13 +294,13 @@ SCENARIOS = [
 ]
 
 
-def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], None], startup_timeout: float, shutdown_timeout: float, port: int) -> None:
+def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient, bool], None], headless: bool, startup_timeout: float, shutdown_timeout: float, port: int) -> None:
     """Runs the game with the control API and the scenario, then quits it. Raises when anything fails; the log goes with it."""
     with tempfile.TemporaryDirectory() as temp_dir:
         log_path = Path(temp_dir) / "game.log"
         with open(log_path, "wb") as log:
             process = subprocess.Popen(
-                [str(exe), "--control", f"--control-port={port}", *flags],
+                [str(exe), "--control", f"--control-port={port}", *(["--headless"] if headless else []), *flags],
                 cwd=exe.parent,
                 stdout=log,
                 stderr=subprocess.STDOUT,
@@ -250,7 +308,7 @@ def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient], No
             try:
                 client = connect(process, port, startup_timeout)
                 try:
-                    scenario(client)
+                    scenario(client, headless)
                     client.call("quit")
                 finally:
                     try:
@@ -274,6 +332,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--exe", required=True, type=Path, help="the game executable")
     parser.add_argument("--port", type=int, default=0, help="control port (default: a free one for every run)")
+    parser.add_argument("--window", action="store_true", help="run the game in a real window instead of --headless (needs a display; no screenshot checks)")
     parser.add_argument("--startup-timeout", type=float, default=30.0, help="seconds to wait for the control API")
     parser.add_argument("--shutdown-timeout", type=float, default=15.0, help="seconds to wait for the game to exit after quit")
     args = parser.parse_args()
@@ -286,7 +345,7 @@ def main() -> int:
     for name, flags, scenario in SCENARIOS:
         print(f"{name}: running", flush=True)
         try:
-            play(exe, flags, scenario, args.startup_timeout, args.shutdown_timeout, args.port or free_port())
+            play(exe, flags, scenario, not args.window, args.startup_timeout, args.shutdown_timeout, args.port or free_port())
         except SmokeFailure as error:
             print(f"FAILED ({name}): {error}")
             return EXIT_FAILED
