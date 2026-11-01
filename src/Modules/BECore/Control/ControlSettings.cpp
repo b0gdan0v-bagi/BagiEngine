@@ -45,6 +45,13 @@ namespace BECore {
             }
             settings.manualClock = *manualClock;
         }
+        if (const auto text = applicationConfig.GetAttribute(ControlAttributes::kHeadless)) {
+            const auto headless = applicationConfig.ParseAttribute<bool>(ControlAttributes::kHeadless);
+            if (!headless) {
+                return std::unexpected(InvalidSetting(Format("ApplicationConfig: {}=\"{}\" is not a boolean (true, false, 1 or 0)", ControlAttributes::kHeadless, *text)));
+            }
+            settings.headless = *headless;
+        }
 
         bool portOnCommandLine = false;
         for (const eastl::string& arg : args) {
@@ -53,6 +60,8 @@ namespace BECore {
                 settings.enabled = true;
             } else if (argument == ControlArguments::kManualClock) {
                 settings.manualClock = true;
+            } else if (argument == ControlArguments::kHeadless) {
+                settings.headless = true;
             } else if (argument.starts_with(ControlArguments::kControlPortPrefix)) {
                 const eastl::string_view value = argument.substr(ControlArguments::kControlPortPrefix.size());
                 const auto port = ParsePort(value);
@@ -71,6 +80,10 @@ namespace BECore {
         }
         if (settings.manualClock && !settings.enabled) {
             return std::unexpected(InvalidSetting(Format("{} needs {}: without the control API nobody could step the game", ControlArguments::kManualClock, ControlArguments::kControl)));
+        }
+        if (settings.headless && !settings.enabled) {
+            return std::unexpected(
+                InvalidSetting(Format("{} needs {}: without the control API nobody could reach a game that has no window", ControlArguments::kHeadless, ControlArguments::kControl)));
         }
         return settings;
     }

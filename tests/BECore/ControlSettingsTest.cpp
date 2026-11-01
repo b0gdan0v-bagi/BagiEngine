@@ -228,4 +228,66 @@ namespace BECore::Tests {
         EXPECT_FALSE(settings->manualClock);
     }
 
+    TEST(ControlSettingsTest, HeadlessIsOffByDefault) {
+        const auto settings = Resolve({"--control"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_FALSE(settings->headless);
+    }
+
+    TEST(ControlSettingsTest, CommandLineTurnsHeadlessOn) {
+        const auto settings = Resolve({"--control", "--headless"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_TRUE(settings->headless);
+        EXPECT_FALSE(settings->manualClock);
+    }
+
+    TEST(ControlSettingsTest, HeadlessAndTheManualClockAreIndependent) {
+        const auto both = Resolve({"--control", "--headless", "--manual-clock"});
+        ASSERT_TRUE(both.has_value());
+        EXPECT_TRUE(both->headless);
+        EXPECT_TRUE(both->manualClock);
+
+        const auto clockOnly = Resolve({"--control", "--manual-clock"});
+        ASSERT_TRUE(clockOnly.has_value());
+        EXPECT_FALSE(clockOnly->headless);
+    }
+
+    TEST(ControlSettingsTest, HeadlessCanComeFromTheConfigAndTheCommandLineBeatsIt) {
+        const auto fromConfig = Resolve({}, R"(<root control="true" headless="true"/>)");
+        ASSERT_TRUE(fromConfig.has_value());
+        EXPECT_TRUE(fromConfig->headless);
+
+        const auto off = Resolve({}, R"(<root control="true" headless="0"/>)");
+        ASSERT_TRUE(off.has_value());
+        EXPECT_FALSE(off->headless);
+
+        const auto flagBeatsConfig = Resolve({"--headless"}, R"(<root control="true" headless="false"/>)");
+        ASSERT_TRUE(flagBeatsConfig.has_value());
+        EXPECT_TRUE(flagBeatsConfig->headless);
+    }
+
+    TEST(ControlSettingsTest, HeadlessWithoutTheApiIsAnError) {
+        // A game without a window that nobody can reach would run unseen
+        ExpectInvalid(Resolve({"--headless"}));
+        ExpectInvalid(Resolve({}, R"(<root headless="true"/>)"));
+        ExpectInvalid(Resolve({"--headless"}, R"(<root control="false"/>)"));
+    }
+
+    TEST(ControlSettingsTest, HeadlessSwitchedOffWithoutTheApiIsFine) {
+        const auto settings = Resolve({}, R"(<root headless="false"/>)");
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_FALSE(settings->headless);
+    }
+
+    TEST(ControlSettingsTest, HeadlessAttributeThatIsNotABooleanIsAnError) {
+        ExpectInvalid(Resolve({"--control"}, R"(<root headless="yes please"/>)"));
+        ExpectInvalid(Resolve({"--control"}, R"(<root headless=""/>)"));
+    }
+
+    TEST(ControlSettingsTest, HeadlessFlagLookalikesAreIgnored) {
+        const auto settings = Resolve({"--control", "--headless=1", "--headlessly", "headless"});
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_FALSE(settings->headless);
+    }
+
 }  // namespace BECore::Tests
