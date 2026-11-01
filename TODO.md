@@ -64,7 +64,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## No external control: a game can be played only by a human at the window
 
-**Status:** in progress since 2026-11-01. Stages 0 to 5 are done: the spikes, the command queue, the game interface with the Match3 adapter, the WebSocket server with its start-up flags, the manual clock with `step` and the `state_changed` push, and headless mode with `screenshot` (`BECore/Control/CLAUDE.md`, `Games/CLAUDE.md`, `games/Match3/CLAUDE.md`, `RemoteControl/CLAUDE.md`, `SDL/CLAUDE.md`; `BagiMatch3 --control --headless --manual-clock` plays over `ws://127.0.0.1:8765` with no window). Chess has its full rules, FEN, UCI and a model-level move (`games/Chess/CLAUDE.md`). Next: the Chess adapter, then the Stockfish and MCP bridges.
+**Status:** in progress since 2026-11-01. Stages 0 to 8 are done: the spikes, the command queue, the game interface with the Match3 adapter, the WebSocket server with its start-up flags, the manual clock with `step` and the `state_changed` push, headless mode with `screenshot`, the full Chess rules (FEN, UCI) and the Chess adapter (`BECore/Control/CLAUDE.md`, `Games/CLAUDE.md`, `games/Match3/CLAUDE.md`, `games/Chess/CLAUDE.md`, `RemoteControl/CLAUDE.md`, `SDL/CLAUDE.md`; `BagiChess --control --headless --manual-clock` plays over `ws://127.0.0.1:8765` with no window: state, legal moves, a move, a position by FEN). Next: the Stockfish and MCP bridges.
 
 **Stage:** 2
 
@@ -75,21 +75,19 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - Headless: `SDL_VIDEO_DRIVER=dummy` with the software renderer works (pixels correct, PNG through `IMG_SavePNG_IO` into memory, byte-identical to the Metal result). A hidden window on the `cocoa` driver with the software renderer does **not** (`software not available`); with Metal it works. The `offscreen` driver needs OpenGL / GLES. So `--headless` means the SDL backend on the `dummy` video driver, no window at all.
 - nlohmann/json with `JSON_NOEXCEPTION`: `at()`, `get<T>()` on the wrong type, `value()` on a non-object and const `operator[]` by a missing key abort the process. Client JSON is read only through the checked helpers of `BECore/Control/Json.h`.
 
-**Where:** `src/Application/Application.cpp` (`Run()` is a blocking loop on the real clock, input comes only from the SDL window), `games/Chess/src/Chess/Game/ChessGameModel.h` (`TryMove(Move)` plays a move, `OnSquareClicked(Square)` imitates the mouse; neither can be reached from outside the process), `src/Modules/RemoteControl/` (the WebSocket server, built and tested on macOS only).
+**Where:** `src/Application/Application.cpp` (`Run()` is a blocking loop on the real clock, input comes only from the SDL window), `games/Chess/src/Chess/ChessGameControl.h` (the Chess adapter), `src/Modules/RemoteControl/` (the WebSocket server, built and tested on macOS only).
 
 **What is missing** (found by reading the code and searching `src`, `games` and CMake, not by running a game):
 
 1. No MCP server: the WebSocket server exists, but a model cannot reach it as tools yet. Windows is unchecked: Winsock, `ws2_32` and the `WinMain` arguments have not been built or run there.
-2. Chess has no adapter that exposes its state and actions to a program. The pieces exist in the model (`MoveGenerator::GenerateLegal`, `ChessGameModel::TryMove`, `Position::ToFen`, UCI through `MoveGenerator::ParseUci`), but nothing outside the process can reach them and the model cannot be set to a given position.
-3. The Vulkan backend cannot be seen or run without a window: `--headless` and `screenshot` work on the SDL software renderer only (macOS; Windows is unchecked), and `VulkanRendererBackend::RequestCapture` answers with an error. Whether that gap is worth closing depends on the decision about the renderer backends.
+2. The Vulkan backend cannot be seen or run without a window: `--headless` and `screenshot` work on the SDL software renderer only (macOS; Windows is unchecked), and `VulkanRendererBackend::RequestCapture` answers with an error. Whether that gap is worth closing depends on the decision about the renderer backends.
 
 **A fix has to cover** (the goal: a whole game can be developed, played and tested by a model or by an external program with no human at the window; Chess against Stockfish is the acceptance example):
 
-- the game-side interface (`IControllableGame`) implemented by Chess, as it is for Match3; the game methods on the existing control service (`step` and `screenshot` exist);
 - the `RemoteControl` tests, the capture tests and the smoke test built and run on Windows (the server and the headless path are done and tested on macOS);
 - an MCP server so Claude can play and debug a game. Recommendation: a thin separate process in `tools/` that maps MCP tools (`get_state`, `perform_action`, `step`, `screenshot`, `reset`) onto the WebSocket, so the engine has no MCP dependency;
 - a Stockfish bridge as an external script in `tools/`: it reads the position over the WebSocket, asks Stockfish over UCI and sends the move back, so Stockfish is never linked into the engine;
-- tests: a Chess scenario joins the smoke test (`BagiMatch3ControlSmoke`, which runs headless), and a Chess ↔ Stockfish game as an optional check that is skipped when Stockfish is not installed.
+- tests: a Chess ↔ Stockfish game as an optional check that is skipped when Stockfish is not installed (the Chess scenario of the smoke test, `BagiChessControlSmoke`, exists).
 
 ## Third game: Mahjong solitaire
 

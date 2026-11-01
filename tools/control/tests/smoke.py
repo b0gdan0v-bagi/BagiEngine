@@ -4,7 +4,8 @@
     python tools/control/tests/smoke.py --exe build/ClangmacOS/BagiMatch3
 
 The game is started twice, once on the real clock and once with --manual-clock (game time moves only on `step`). The
-scenario is the one of Match3 (a swap on a seeded board). The game runs --headless (no window, drawn in memory), which also
+scenario is the one of Match3 (a swap on a seeded board); another game brings its own script that calls run_smoke() with its
+scenarios (games/Chess/tests/control_smoke.py). The game runs --headless (no window, drawn in memory), which also
 lets the test look at screenshots; --window runs it in a real window instead (it needs a display, and a screenshot is not
 possible on the Vulkan backend, so those checks are left out).
 Exit code: 0 passed, 1 failed, 77 skipped (the executable does not exist; ctest reads 77 as "skipped").
@@ -328,8 +329,9 @@ def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient, boo
                     process.wait()
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+def run_smoke(description: str, scenarios: list[tuple[str, list[str], Callable[[BagiControlClient, bool], None]]]) -> int:
+    """Parses the command line and plays every scenario (name, extra game flags, function(client, headless)) in a fresh game."""
+    parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--exe", required=True, type=Path, help="the game executable")
     parser.add_argument("--port", type=int, default=0, help="control port (default: a free one for every run)")
     parser.add_argument("--window", action="store_true", help="run the game in a real window instead of --headless (needs a display; no screenshot checks)")
@@ -342,7 +344,7 @@ def main() -> int:
         return EXIT_SKIPPED
 
     exe = args.exe.resolve()  # the game runs with its own directory as the working directory
-    for name, flags, scenario in SCENARIOS:
+    for name, flags, scenario in scenarios:
         print(f"{name}: running", flush=True)
         try:
             play(exe, flags, scenario, not args.window, args.startup_timeout, args.shutdown_timeout, args.port or free_port())
@@ -352,6 +354,10 @@ def main() -> int:
 
     print("PASSED")
     return EXIT_PASSED
+
+
+def main() -> int:
+    return run_smoke(__doc__, SCENARIOS)
 
 
 if __name__ == "__main__":

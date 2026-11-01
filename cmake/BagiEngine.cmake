@@ -621,7 +621,8 @@ if(ENGINE_BUILD_TESTS)
     # or SCRIPT with the same arguments). Call it from the game's CMakeLists, not from the engine's tests/, so that no
     # engine CMake names a game. It needs Python 3 and does not build the executable (a missing one is a skip). The
     # script runs the game --headless (no window; a SCRIPT has to do the same if it does not want one). It exits with 77
-    # for "skipped".
+    # for "skipped". The test environment has BAGI_ENGINE_DIR (the engine checkout), so that a game's SCRIPT can import
+    # the helpers of tools/control/tests/smoke.py.
     function(be_add_game_control_tests EXE_TARGET)
         cmake_parse_arguments(ARG "" "SCRIPT" "" ${ARGN})
         if(NOT ARG_SCRIPT)
@@ -638,6 +639,7 @@ if(ENGINE_BUILD_TESTS)
             SKIP_RETURN_CODE 77
             TIMEOUT 120
             RUN_SERIAL TRUE
+            ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
         )
     endfunction()
 endif()
