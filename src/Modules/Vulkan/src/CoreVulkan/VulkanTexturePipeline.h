@@ -11,16 +11,18 @@ namespace BECore {
      * shader (6 vertices, no VBO). The texture is bound via descriptor set 0,
      * binding 0 (combined image sampler).
      *
-     * Push constant layout (40 bytes — same total as VulkanRectPipeline):
+     * Push constant layout (56 bytes, matches texture.vert.glsl / texture.frag.glsl):
      *   offset  0 : vec4  dstRect    — x, y, w, h in pixels
      *   offset 16 : vec4  srcUV      — u0, v0, u1, v1 in [0, 1]
-     *   offset 32 : vec2  screenSize — viewport width, height in pixels
+     *   offset 32 : vec4  tint       — r, g, b, a in [0, 1], multiplied with the sampled texel
+     *   offset 48 : vec2  screenSize — viewport width, height in pixels
      */
     class VulkanTexturePipeline {
     public:
         struct PushConstants {
             float dstX, dstY, dstW, dstH;
             float u0, v0, u1, v1;
+            float tintR, tintG, tintB, tintA;
             float screenW, screenH;
         };
 
@@ -45,7 +47,8 @@ namespace BECore {
             return _descriptorPool;
         }
 
-        void Draw(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const PushConstants& pc, VkExtent2D extent) const;
+        // @p scissor is the clip in framebuffer pixels (the whole extent when nothing is clipped)
+        void Draw(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const PushConstants& pc, const VkRect2D& scissor) const;
 
     private:
         VkShaderModule CreateShaderModule(VkDevice device, const uint32_t* code, uint32_t sizeInBytes) const;

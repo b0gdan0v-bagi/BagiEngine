@@ -6,6 +6,7 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Generated/SceneViewTest.gen.hpp>
@@ -37,35 +38,6 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        /// A renderer that draws nothing and reports a settable output size.
-        class FakeRenderer : public IRenderer {
-        public:
-            bool Initialize(IMainWindow&) override {
-                return true;
-            }
-            void Destroy() override {}
-            void BeginFrame() override {}
-            void EndFrame() override {}
-            void Clear(const Color&) override {}
-            void Present() override {}
-            void DrawFilledRect(float, float, float, float, const Color&) override {}
-            void DrawTexture(ITexture&, const Rect*, float, float, float, float) override {}
-            IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t, uint32_t) override {
-                return {};
-            }
-            void SetRenderTarget(IRenderTarget*) override {}
-            void UnsetRenderTarget() override {}
-            float GetOutputWidth() const override {
-                return width;
-            }
-            float GetOutputHeight() const override {
-                return height;
-            }
-
-            float width = 800.0f;
-            float height = 600.0f;
-        };
-
         /// Collects every ActionEvent that is emitted while it is alive.
         class ActionRecorder : public SubscriptionHolder {
         public:
@@ -96,7 +68,7 @@ namespace BECore::Tests {
     class SceneViewTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            _renderer = BECore::New<FakeRenderer>();
+            _renderer = BECore::New<RecordingRenderer>();
             CoreManager::GetRendererManager().SetRenderer(_renderer);
 
             XmlDeserializer deserializer;
@@ -121,7 +93,7 @@ namespace BECore::Tests {
             return GetScene(sceneName).GetRootNode().GetChildren().front()->GetComponent<ViewProbe>();
         }
 
-        IntrusivePtr<FakeRenderer> _renderer;
+        IntrusivePtr<RecordingRenderer> _renderer;
         IntrusivePtrAtomic<SceneManager> _manager;
     };
 

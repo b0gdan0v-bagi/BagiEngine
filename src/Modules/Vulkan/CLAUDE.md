@@ -8,12 +8,13 @@
 
 | Class | Role |
 |-------|------|
-| `VulkanRendererBackend` | `IRenderer`: frame lifecycle, command buffers, per-frame sync (`kMaxFramesInFlight = 2`), ImGui backend. `GetOutputWidth/Height()` is the extent of the open pass (swapchain or offscreen target); `DrawFilledRect` / `DrawTexture` apply `IRenderer::GetViewTransform()` to the rect on the CPU, so the shaders always get output pixels |
+| `VulkanRendererBackend` | `IRenderer`: frame lifecycle, command buffers, per-frame sync (`kMaxFramesInFlight = 2`), ImGui backend. `GetOutputWidth/Height()` is the extent of the open pass (swapchain or offscreen target); `DrawFilledRect` / `DrawTexture` apply `IRenderer::GetViewTransform()` to the rect on the CPU, so the shaders always get output pixels; `ResolveScissor()` turns the clip stack into the scissor of each draw (whole extent when unclipped, draw skipped when the clip is empty); `CreateTexture()` goes through `VulkanTextureUpload` |
 | `VulkanDevice` | Instance, GPU pick, logical device. Two-step init: `InitializeInstance()`, then `InitializeDevice(surface)` (the surface needs the instance). Memory-type lookup and single-time command helpers |
 | `VulkanSwapchain` | Swapchain and its render pass. `AcquireNextImage` / `Present` return `false` when the swapchain is out of date |
-| `VulkanRectPipeline`, `VulkanTexturePipeline` | Graphics pipelines for `DrawFilledRect` and `DrawTexture` |
+| `VulkanRectPipeline`, `VulkanTexturePipeline` | Graphics pipelines for `DrawFilledRect` and `DrawTexture`. Both take the scissor of the draw as a parameter. The texture pipeline's push constants are 56 bytes: `dstRect`, `srcUV`, `tint` (vec4, multiplied with the texel in `texture.frag.glsl`), `screenSize`; the vertex and fragment shaders declare the same block |
+| `VulkanTextureUpload` | Pixels in memory to a `VulkanTexture` (staging buffer, device-local image, view, sampler, descriptor set, one single-time command buffer). Shared by `VulkanTextureLoader` (pixels decoded from a file) and `CreateTexture()`; main thread only |
 | `VulkanTexture` | `ITexture`: image + memory + view + sampler + descriptor set (set 0). Destroy it only when the GPU is idle |
-| `VulkanTextureLoader` | `IResourceLoader` for `.bmp .png .jpg .jpeg`; `CanLoad` is true **only while the active renderer is the Vulkan backend** (`SDLTextureLoader` does the mirror check). Pixels are uploaded as `SDL_PIXELFORMAT_RGBA32` (bytes R,G,B,A) to match `VK_FORMAT_R8G8B8A8_SRGB`; the packed `RGBA8888` would swap the channels on little-endian |
+| `VulkanTextureLoader` | `IResourceLoader` for `.bmp .png .jpg .jpeg`; `CanLoad` is true **only while the active renderer is the Vulkan backend** (`SDLTextureLoader` does the mirror check). It decodes and converts the file, `VulkanTextureUpload` uploads. Pixels are uploaded as `SDL_PIXELFORMAT_RGBA32` (bytes R,G,B,A) to match `VK_FORMAT_R8G8B8A8_SRGB`; the packed `RGBA8888` would swap the channels on little-endian |
 | `VulkanRenderTarget` | `IRenderTarget`: offscreen target; `GetImGuiTextureId()` is a `VkDescriptorSet` from `ImGui_ImplVulkan_AddTexture` |
 
 ## Frame lifecycle

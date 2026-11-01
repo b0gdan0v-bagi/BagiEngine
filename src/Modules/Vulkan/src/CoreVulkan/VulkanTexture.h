@@ -47,6 +47,7 @@ namespace BECore {
 
     private:
         friend class VulkanTextureLoader;
+        friend class VulkanTextureUpload;
 
         void SetLoaded(PoolString path, VkDevice device, VkDescriptorPool descriptorPool, VkImage image, VkDeviceMemory memory, VkImageView imageView, VkSampler sampler, VkDescriptorSet descriptorSet,
                        float width, float height);

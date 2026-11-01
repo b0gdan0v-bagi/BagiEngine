@@ -146,9 +146,9 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 **What is missing** (found by reading the code, not by running a game):
 
 1. Layers exist, but only per node: `SceneNode::GetLayer()` plus the scene order sort the draw pass (`Scene/CLAUDE.md`, "Draw order"). A child does not inherit its parent's layer, and there is no sort key finer than the node (a sprite and a quad on one node cannot interleave with other nodes).
-2. No rotation or scale of a sprite, no flip, no tint or alpha beyond the rect color.
+2. No rotation or scale of a sprite, no flip. (A tint with alpha, `IRenderer::PushClipRect()` and `CreateTexture()` exist: `rendering-module.md`, "Drawing primitives".)
 3. No movable 2D camera: a scene can fit a fixed view size to the output (`viewWidth` / `viewHeight`, `Scene/CLAUDE.md`, "View size"), but scrolling and zoom need a camera transform on top of that.
-4. No blend modes.
+4. One blend mode only: straight alpha over the target. No additive or multiply.
 5. A node has only absolute pixel coordinates, no parent-relative transform.
 
 **A fix has to cover:**
@@ -199,7 +199,11 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## No text rendering in the engine: text exists only in ImGui
 
+**Status:** in progress since 2026-11-01. Stage 0 of the plan (renderer primitives) is done; text is stage 1.
+
 **Stage:** 3
+
+**Plan:** `.claude/plans/magical-leaping-blossom.md`
 
 **Where:** `games/Match3/src/Match3/Components/Match3BoardComponent.cpp` (the score is `ImGui::Text` in an ImGui window), `src/Modules/BECore/Resource/` (where a font loader would go), `external/` (SDL_image is the only SDL add-on).
 
@@ -227,7 +231,11 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## Input has no mapping layer: actions are just names
 
+**Status:** in progress since 2026-11-01. Stage 2 of the plan (restored events, window metrics, `UIInput`) is the part of this entry that the in-game UI needs; the action map itself stays open.
+
 **Stage:** 3
+
+**Plan:** `.claude/plans/magical-leaping-blossom.md`
 
 **Where:** `src/Modules/BECore/Input/ActionsLibrary.h` (a set of action names), `src/Modules/Events/src/Events/InputEvents.h` (`ActionEvent`), `src/Modules/SDL/src/CoreSDL/SDLEventsProvider.cpp` (`ConvertSDLEvent`), `SDLEvents.h` (key and mouse event types, no gamepad events), `Scene/Components/ClickableComponent.cpp`.
 
@@ -246,7 +254,11 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## No in-game UI: UI exists only as ImGui editor panels
 
+**Status:** in progress since 2026-11-01. Stages 3 and 4 of the plan (canvases, adaptive layout, controls).
+
 **Stage:** 3
+
+**Plan:** `.claude/plans/magical-leaping-blossom.md`
 
 **Where:** `src/Widgets/` (editor widgets), `Scene/Components/ClickableComponent.cpp` (the only clickable thing on a scene).
 
@@ -260,7 +272,11 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## Game UI has no LLM-friendly authoring path yet: choose one before building it
 
+**Status:** in progress since 2026-11-01. Stage 5 of the plan is the spike that measures the options; the owner decides after it.
+
 **Stage:** 3
+
+**Plan:** `.claude/plans/magical-leaping-blossom.md`
 
 **Where:** `src/Widgets/` (the editor panels are ImGui code), `games/*/config/SceneConfig.xml` and `Scene/CLAUDE.md` (scenes are XML; positions are absolute pixels in `TransformComponent`), the control API entry (a screenshot is planned, not built). No Figma or other UI import exists in the repository.
 
@@ -394,12 +410,11 @@ Recommendation: option 1, built for a model's edit, run, screenshot loop. Option
 
 **What is missing** (found by reading the repository):
 
-1. `Renderer`, `Widgets` and most components have no tests. `Scene` / `SceneManager` are covered only for which scene reacts to events (`SceneEventsTest`). The tests cover reflection, events, file system, resources, TaskSystem, format, enums and the pure game rules.
+1. `Widgets` and most components have no tests (`Renderer` has the primitives and the view fit, with the `RecordingRenderer` double in `tests/Common`). `Scene` / `SceneManager` are covered only for which scene reacts to events (`SceneEventsTest`). The tests cover reflection, events, file system, resources, TaskSystem, format, enums and the pure game rules.
 2. There are no Linux presets although the CMake has a Linux branch.
 
 **A fix has to cover:**
 
-- a renderer test double (an `IRenderer` that records calls), so components can be tested without a window;
 - Linux presets (`linux-debug`, `linux-release`) and a CI job once the CI entry is done.
 
 ## Config and data code reads XmlNode by hand where the factory and reflection path already fits

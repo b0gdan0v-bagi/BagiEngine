@@ -6,6 +6,7 @@ struct SDL_Texture;
 
 namespace BECore {
 
+    class SDLRendererBackend;
     class SDLTextureLoader;
 
     class SDLTexture : public ITexture {
@@ -32,6 +33,7 @@ namespace BECore {
 
     private:
         friend class SDLTextureLoader;
+        friend class SDLRendererBackend;
 
         void SetLoaded(PoolString path, SDL_Texture* texture, float width, float height);
         void SetFailed(PoolString path);

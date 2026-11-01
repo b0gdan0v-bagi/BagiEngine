@@ -18,6 +18,7 @@ namespace BECore {
     namespace {
 
         constexpr const char* kSoftwareRenderer = "software";
+        constexpr uint32_t kBytesPerPixel = 4;
 
     }  // namespace
 
@@ -70,7 +71,8 @@ namespace BECore {
     }
 
     void SDLRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
-        if (_renderer) {
+        if (_renderer && !IsClipEmpty()) {
+            SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(_renderer, color.r, color.g, color.b, color.a);
             const Rect out = GetViewTransform().ToOutput(x, y, w, h);
             SDL_FRect rect{out.x, out.y, out.w, out.h};
@@ -78,8 +80,8 @@ namespace BECore {
         }
     }
 
-    void SDLRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) {
-        if (!_renderer) {
+    void SDLRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) {
+        if (!_renderer || IsClipEmpty()) {
             return;
         }
         auto* sdlTexture = dynamic_cast<SDLTexture*>(&texture);
@@ -87,15 +89,60 @@ namespace BECore {
             return;
         }
 
+        // The texture is shared, so its modulation is set on every draw: an untinted draw after a tinted one must not inherit it
+        SDL_Texture* handle = sdlTexture->GetSDLTexture();
+        SDL_SetTextureColorMod(handle, tint.r, tint.g, tint.b);
+        SDL_SetTextureAlphaMod(handle, tint.a);
+
         const Rect out = GetViewTransform().ToOutput(dstX, dstY, dstW, dstH);
         SDL_FRect dst{out.x, out.y, out.w, out.h};
 
         if (srcRect && !srcRect->IsEmpty()) {
             SDL_FRect src{srcRect->x, srcRect->y, srcRect->w, srcRect->h};
-            SDL_RenderTexture(_renderer, sdlTexture->GetSDLTexture(), &src, &dst);
+            SDL_RenderTexture(_renderer, handle, &src, &dst);
         } else {
-            SDL_RenderTexture(_renderer, sdlTexture->GetSDLTexture(), nullptr, &dst);
+            SDL_RenderTexture(_renderer, handle, nullptr, &dst);
         }
+    }
+
+    IntrusivePtr<ITexture> SDLRendererBackend::CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) {
+        if (!_renderer || !rgba || width == 0 || height == 0) {
+            return {};
+        }
+        // RGBA32 is the byte order R,G,B,A on any endianness, which is what the caller hands over
+        SDL_Texture* handle = SDL_CreateTexture(_renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, static_cast<int>(width), static_cast<int>(height));
+        if (!handle) {
+            LOG_ERROR("SDLRendererBackend: cannot create a {}x{} texture: {}"_format(width, height, SDL_GetError()));
+            return {};
+        }
+        if (!SDL_UpdateTexture(handle, nullptr, rgba, static_cast<int>(width * kBytesPerPixel))) {
+            LOG_ERROR("SDLRendererBackend: cannot fill a {}x{} texture: {}"_format(width, height, SDL_GetError()));
+            SDL_DestroyTexture(handle);
+            return {};
+        }
+        SDL_SetTextureBlendMode(handle, SDL_BLENDMODE_BLEND);
+
+        auto texture = New<SDLTexture>();
+        texture->SetLoaded("<memory>"_intern, handle, static_cast<float>(width), static_cast<float>(height));
+        return texture;
+    }
+
+    void SDLRendererBackend::OnClipRectChanged() {
+        if (!_renderer) {
+            return;
+        }
+        const std::optional<Rect> clip = GetClipRect();
+        if (!clip) {
+            SDL_SetRenderClipRect(_renderer, nullptr);
+            return;
+        }
+        // Grow to whole pixels, so a rect on a fraction never cuts a pixel that it touches
+        const int left = static_cast<int>(std::floor(clip->x));
+        const int top = static_cast<int>(std::floor(clip->y));
+        const int right = static_cast<int>(std::ceil(clip->x + clip->w));
+        const int bottom = static_cast<int>(std::ceil(clip->y + clip->h));
+        const SDL_Rect rect{left, top, right - left, bottom - top};
+        SDL_SetRenderClipRect(_renderer, &rect);
     }
 
     IntrusivePtr<IRenderTarget> SDLRendererBackend::CreateRenderTarget(uint32_t /*width*/, uint32_t /*height*/) {

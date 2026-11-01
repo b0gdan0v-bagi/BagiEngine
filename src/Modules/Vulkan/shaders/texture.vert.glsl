@@ -3,6 +3,7 @@
 layout(push_constant) uniform PC {
     vec4 dstRect;    // x, y, w, h in pixels
     vec4 srcUV;      // u0, v0, u1, v1 in [0, 1]
+    vec4 tint;       // r, g, b, a in [0, 1] (used by the fragment shader)
     vec2 screenSize; // viewport width, height in pixels
 } pc;
 

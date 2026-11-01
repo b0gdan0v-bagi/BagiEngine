@@ -6,6 +6,7 @@
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreVulkan/VulkanRenderTarget.h>
 #include <CoreVulkan/VulkanTexture.h>
+#include <CoreVulkan/VulkanTextureUpload.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/VulkanRendererBackend.gen.hpp>
@@ -277,21 +278,49 @@ namespace BECore {
     // Event handlers (translate engine render events to Vulkan calls)
     // =========================================================================
 
+    bool VulkanRendererBackend::ResolveScissor(VkRect2D& scissor) const {
+        scissor = VkRect2D{{0, 0}, _currentExtent};
+        const std::optional<Rect> clip = GetClipRect();
+        if (!clip) {
+            return true;
+        }
+        // A scissor offset cannot be negative and must stay inside the framebuffer; grow the rect to whole pixels first
+        const auto clampToExtent = [](float value, uint32_t limit) { return static_cast<int32_t>(std::clamp(value, 0.0f, static_cast<float>(limit))); };
+        const int32_t left = clampToExtent(std::floor(clip->x), _currentExtent.width);
+        const int32_t top = clampToExtent(std::floor(clip->y), _currentExtent.height);
+        const int32_t right = clampToExtent(std::ceil(clip->x + clip->w), _currentExtent.width);
+        const int32_t bottom = clampToExtent(std::ceil(clip->y + clip->h), _currentExtent.height);
+        if (right <= left || bottom <= top) {
+            return false;
+        }
+        scissor = VkRect2D{{left, top}, {static_cast<uint32_t>(right - left), static_cast<uint32_t>(bottom - top)}};
+        return true;
+    }
+
     void VulkanRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
         if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
+        VkRect2D scissor{};
+        if (!ResolveScissor(scissor)) {
+            return;
+        }
         const Rect rect = GetViewTransform().ToOutput(x, y, w, h);
-        _rectPipeline.Draw(_commandBuffers[_currentFrame], rect.x, rect.y, rect.w, rect.h, color, _currentExtent);
+        _rectPipeline.Draw(_commandBuffers[_currentFrame], rect.x, rect.y, rect.w, rect.h, color, _currentExtent, scissor);
     }
 
-    void VulkanRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) {
+    void VulkanRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) {
         if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
 
         auto* vkTexture = dynamic_cast<VulkanTexture*>(&texture);
         if (!vkTexture || vkTexture->GetDescriptorSet() == VK_NULL_HANDLE) {
+            return;
+        }
+
+        VkRect2D scissor{};
+        if (!ResolveScissor(scissor)) {
             return;
         }
 
@@ -309,6 +338,7 @@ namespace BECore {
 
         const Rect dst = GetViewTransform().ToOutput(dstX, dstY, dstW, dstH);
 
+        constexpr float kColorScale = 1.0f / 255.0f;
         VulkanTexturePipeline::PushConstants pc{};
         pc.dstX    = dst.x;
         pc.dstY    = dst.y;
@@ -318,10 +348,25 @@ namespace BECore {
         pc.v0      = v0;
         pc.u1      = u1;
         pc.v1      = v1;
+        pc.tintR   = static_cast<float>(tint.r) * kColorScale;
+        pc.tintG   = static_cast<float>(tint.g) * kColorScale;
+        pc.tintB   = static_cast<float>(tint.b) * kColorScale;
+        pc.tintA   = static_cast<float>(tint.a) * kColorScale;
         pc.screenW = static_cast<float>(_currentExtent.width);
         pc.screenH = static_cast<float>(_currentExtent.height);
 
-        _texturePipeline.Draw(_commandBuffers[_currentFrame], vkTexture->GetDescriptorSet(), pc, _currentExtent);
+        _texturePipeline.Draw(_commandBuffers[_currentFrame], vkTexture->GetDescriptorSet(), pc, scissor);
+    }
+
+    IntrusivePtr<ITexture> VulkanRendererBackend::CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) {
+        if (!rgba || width == 0 || height == 0) {
+            return {};
+        }
+        auto texture = VulkanTextureUpload::Upload(*this, "<memory>"_intern, rgba, width, height);
+        if (texture->GetState() != ResourceState::Loaded) {
+            return {};
+        }
+        return texture;
     }
 
     IntrusivePtr<IRenderTarget> VulkanRendererBackend::CreateRenderTarget(uint32_t width, uint32_t height) {

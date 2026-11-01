@@ -49,7 +49,7 @@ namespace BECore {
         VkPushConstantRange pushRange{};
         pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         pushRange.offset = 0;
-        pushRange.size = sizeof(PushConstants);  // 40 bytes
+        pushRange.size = sizeof(PushConstants);  // 56 bytes
 
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -222,7 +222,7 @@ namespace BECore {
         return descriptorSet;
     }
 
-    void VulkanTexturePipeline::Draw(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const PushConstants& pc, VkExtent2D extent) const {
+    void VulkanTexturePipeline::Draw(VkCommandBuffer cmd, VkDescriptorSet descriptorSet, const PushConstants& pc, const VkRect2D& scissor) const {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipeline);
 
         VkViewport viewport{};
@@ -232,7 +232,6 @@ namespace BECore {
         viewport.maxDepth = 1.0f;
         vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-        VkRect2D scissor{{0, 0}, extent};
         vkCmdSetScissor(cmd, 0, 1, &scissor);
 
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);

@@ -35,8 +35,9 @@ namespace BECore {
         bool Initialize(VkDevice device, VkRenderPass renderPass);
         void Destroy(VkDevice device);
 
+        // @p extent is the framebuffer size, @p scissor the clip in framebuffer pixels (the whole extent when nothing is clipped)
         void Draw(VkCommandBuffer cmd, float x, float y, float w, float h,
-                  const Color& color, VkExtent2D extent) const;
+                  const Color& color, VkExtent2D extent, const VkRect2D& scissor) const;
 
     private:
         VkShaderModule CreateShaderModule(VkDevice device, const uint32_t* code, uint32_t sizeInBytes) const;

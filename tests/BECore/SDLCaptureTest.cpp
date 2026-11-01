@@ -5,6 +5,7 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLRendererBackend.h>
 #include <CoreSDL/SDLScreenshot.h>
@@ -81,28 +82,11 @@ namespace BECore::Tests {
         }
 
         /// A renderer that draws nothing and keeps the default RequestCapture, like a backend that cannot read its output back
-        class BlindRenderer : public IRenderer {
+        class BlindRenderer : public RecordingRenderer {
         public:
-            bool Initialize(IMainWindow&) override {
-                return true;
-            }
-            void Destroy() override {}
-            void BeginFrame() override {}
-            void EndFrame() override {}
-            void Clear(const Color&) override {}
-            void Present() override {}
-            void DrawFilledRect(float, float, float, float, const Color&) override {}
-            void DrawTexture(ITexture&, const Rect*, float, float, float, float) override {}
-            IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t, uint32_t) override {
-                return {};
-            }
-            void SetRenderTarget(IRenderTarget*) override {}
-            void UnsetRenderTarget() override {}
-            float GetOutputWidth() const override {
-                return 0.0f;
-            }
-            float GetOutputHeight() const override {
-                return 0.0f;
+            BlindRenderer() {
+                width = 0.0f;
+                height = 0.0f;
             }
         };
 
@@ -142,9 +126,39 @@ namespace BECore::Tests {
                 renderer->DrawFilledRect(100.0f, 50.0f, 200.0f, 100.0f, kRed);
             }
 
+            /// Presents the frame and returns what was on the back buffer
+            PixelBuffer PresentAndRead() {
+                std::optional<CaptureResult> captured;
+                renderer->RequestCapture([&captured](CaptureResult result) { captured = std::move(result); });
+                renderer->Present();
+                if (!captured || !captured->has_value()) {
+                    ADD_FAILURE() << "the frame was not captured";
+                    return {};
+                }
+                return std::move(**captured);
+            }
+
+            /// A texture of one color, made through the renderer
+            IntrusivePtr<ITexture> MakeSolidTexture(uint32_t width, uint32_t height, const Color& color) {
+                const PixelBuffer image = MakeImage(width, height, color);
+                return renderer->CreateTexture(image.rgba.data(), width, height);
+            }
+
             IntrusivePtr<SDLMainWindow> window;
             IntrusivePtr<SDLRendererBackend> renderer;
         };
+
+        /// True when every channel is within @p tolerance (a software blend rounds differently from the exact value)
+        bool IsNear(const Pixel& actual, const Pixel& expected, int tolerance) {
+            for (size_t i = 0; i < actual.size(); ++i) {
+                if (std::abs(static_cast<int>(actual[i]) - static_cast<int>(expected[i])) > tolerance) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        constexpr int kBlendTolerance = 4;
 
         std::string ErrorCode(const Json& response) {
             const Json* error = FindJsonMember(response, "error");
@@ -270,6 +284,136 @@ namespace BECore::Tests {
         renderer->Destroy();
 
         EXPECT_EQ(calls, 0);
+    }
+
+    TEST_F(SDLCaptureTest, ATranslucentRectBlendsWithWhatIsBehindIt) {
+        renderer->Clear(kBackground);
+        renderer->DrawFilledRect(100.0f, 50.0f, 200.0f, 100.0f, Color{255, 0, 0, 128});
+
+        const PixelBuffer image = PresentAndRead();
+
+        // 128 / 255 of red over (10, 20, 30)
+        EXPECT_TRUE(IsNear(PixelAt(image, 150, 80), {133, 10, 15, 255}, kBlendTolerance));
+        EXPECT_EQ(PixelAt(image, 5, 5), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, CreateTextureMakesATextureOfTheGivenSize) {
+        auto texture = MakeSolidTexture(8, 4, kRed);
+
+        ASSERT_TRUE(texture);
+        EXPECT_FLOAT_EQ(texture->GetWidth(), 8.0f);
+        EXPECT_FLOAT_EQ(texture->GetHeight(), 4.0f);
+        EXPECT_EQ(texture->GetState(), ResourceState::Loaded);
+        EXPECT_NE(texture->GetNativeHandle(), nullptr);
+    }
+
+    TEST_F(SDLCaptureTest, CreateTextureRefusesAnEmptyImage) {
+        const uint8_t pixel[4] = {};
+
+        EXPECT_FALSE(renderer->CreateTexture(pixel, 0, 1));
+        EXPECT_FALSE(renderer->CreateTexture(pixel, 1, 0));
+        EXPECT_FALSE(renderer->CreateTexture(nullptr, 1, 1));
+    }
+
+    TEST_F(SDLCaptureTest, ATextureFromPixelsDrawsItsColors) {
+        auto texture = MakeSolidTexture(4, 4, Color{0, 255, 0, 255});
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->DrawTexture(*texture, nullptr, 100.0f, 50.0f, 40.0f, 40.0f);
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_EQ(PixelAt(image, 120, 70), AsPixel(Color{0, 255, 0, 255}));
+        EXPECT_EQ(PixelAt(image, 90, 70), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, TheTintMultipliesTheTexelAndDoesNotStick) {
+        auto texture = MakeSolidTexture(4, 4, Color{255, 255, 255, 255});
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->DrawTexture(*texture, nullptr, 0.0f, 0.0f, 40.0f, 40.0f, Color{255, 0, 0, 255});
+        renderer->DrawTexture(*texture, nullptr, 100.0f, 0.0f, 40.0f, 40.0f);  // the same texture, untinted
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_EQ(PixelAt(image, 20, 20), AsPixel(kRed));
+        EXPECT_EQ(PixelAt(image, 120, 20), AsPixel(Color{255, 255, 255, 255}));
+    }
+
+    TEST_F(SDLCaptureTest, TheTintAlphaFadesTheTexture) {
+        auto texture = MakeSolidTexture(4, 4, Color{255, 255, 255, 255});
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->DrawTexture(*texture, nullptr, 0.0f, 0.0f, 40.0f, 40.0f, Color{255, 255, 255, 128});
+        const PixelBuffer image = PresentAndRead();
+
+        // 128 / 255 of white over (10, 20, 30)
+        EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {132, 137, 142, 255}, kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, AClippedRectDrawsOnlyInsideTheClip) {
+        renderer->Clear(kBackground);
+        renderer->PushClipRect({100.0f, 50.0f, 50.0f, 50.0f});
+        renderer->DrawFilledRect(0.0f, 0.0f, 400.0f, 300.0f, kRed);
+        renderer->PopClipRect();
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_EQ(PixelAt(image, 120, 70), AsPixel(kRed));
+        EXPECT_EQ(PixelAt(image, 99, 70), AsPixel(kBackground));
+        EXPECT_EQ(PixelAt(image, 151, 70), AsPixel(kBackground));
+        EXPECT_EQ(PixelAt(image, 120, 49), AsPixel(kBackground));
+        EXPECT_EQ(PixelAt(image, 120, 101), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, ATextureIsClippedLikeARect) {
+        auto texture = MakeSolidTexture(4, 4, Color{255, 255, 255, 255});
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->PushClipRect({0.0f, 0.0f, 20.0f, 100.0f});
+        renderer->DrawTexture(*texture, nullptr, 0.0f, 0.0f, 40.0f, 40.0f);
+        renderer->PopClipRect();
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_EQ(PixelAt(image, 10, 20), AsPixel(Color{255, 255, 255, 255}));
+        EXPECT_EQ(PixelAt(image, 30, 20), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, PoppingTheClipDrawsEverywhereAgain) {
+        renderer->Clear(kBackground);
+        renderer->PushClipRect({0.0f, 0.0f, 10.0f, 10.0f});
+        renderer->PopClipRect();
+        renderer->DrawFilledRect(100.0f, 50.0f, 50.0f, 50.0f, kRed);
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_EQ(PixelAt(image, 120, 70), AsPixel(kRed));
+    }
+
+    TEST_F(SDLCaptureTest, AnEmptyClipHidesTheDraws) {
+        renderer->Clear(kBackground);
+        renderer->PushClipRect({0.0f, 0.0f, 10.0f, 10.0f});
+        renderer->PushClipRect({200.0f, 200.0f, 10.0f, 10.0f});
+        renderer->DrawFilledRect(0.0f, 0.0f, 400.0f, 300.0f, kRed);
+        renderer->PopClipRect();
+        renderer->PopClipRect();
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_EQ(PixelAt(image, 5, 5), AsPixel(kBackground));
+        EXPECT_EQ(PixelAt(image, 205, 205), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, TheClipIsInOutputPixelsAndNotMovedByTheViewTransform) {
+        renderer->Clear(kBackground);
+        renderer->SetViewTransform({2.0f, 0.0f, 0.0f});
+        renderer->PushClipRect({100.0f, 0.0f, 50.0f, 50.0f});
+        renderer->DrawFilledRect(0.0f, 0.0f, 200.0f, 100.0f, kRed);  // 0..400 by 0..200 in pixels
+        renderer->PopClipRect();
+        renderer->SetViewTransform({});
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_EQ(PixelAt(image, 120, 20), AsPixel(kRed));
+        EXPECT_EQ(PixelAt(image, 80, 20), AsPixel(kBackground));
     }
 
     TEST(RendererCaptureDefaultTest, ARendererThatCannotReadItsOutputAnswersWithAnError) {

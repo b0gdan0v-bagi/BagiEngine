@@ -24,7 +24,9 @@ namespace BECore {
         void Clear(const Color& color) override;
         void Present() override;
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
-        void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) override;
+        using IRenderer::DrawTexture;
+        void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) override;
+        IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override;
 
         IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) override;
         void SetRenderTarget(IRenderTarget* target) override;
@@ -39,6 +41,10 @@ namespace BECore {
         SDL_Renderer* GetSDLRenderer() const {
             return _renderer;
         }
+
+    protected:
+        /// Hands the clip rect to SDL; the draw calls skip everything while the clip is empty
+        void OnClipRectChanged() override;
 
     private:
         void OnRenderClear();

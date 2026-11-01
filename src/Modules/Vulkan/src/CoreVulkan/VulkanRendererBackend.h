@@ -41,7 +41,9 @@ namespace BECore {
         void Clear(const Color& color) override;
         void Present() override;
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
-        void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) override;
+        using IRenderer::DrawTexture;
+        void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) override;
+        IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override;
 
         IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) override;
         void SetRenderTarget(IRenderTarget* target) override;
@@ -92,6 +94,10 @@ namespace BECore {
         }
 
     private:
+        // The scissor of the next draw: the clip rect cut to the current extent, or the whole extent when nothing is
+        // clipped. False when the clip leaves nothing visible, so the draw is skipped.
+        bool ResolveScissor(VkRect2D& scissor) const;
+
         bool CreateCommandPool();
         bool CreateCommandBuffers();
         bool CreateSyncObjects();

@@ -22,9 +22,17 @@ paths:
 - `IRenderer::GetOutputWidth()` / `GetOutputHeight()` are the pixel size of the target being drawn into (the back buffer, or the offscreen target between `SetRenderTarget()` and `UnsetRenderTarget()`); they are 0 before the first pass opens.
 - `IRenderer::SetViewTransform()` sets a `ViewTransform` (scale and offset, identity by default) that `DrawFilledRect()` and `DrawTexture()` apply to their destination rect. It is state of the interface, so both backends apply it the same way (`GetViewTransform().ToOutput(x, y, w, h)`) and a new backend must do the same. `Scene::Draw()` sets it around its draw pass and resets it, so a scene with a view size fits any output (`src/Modules/BECore/Scene/CLAUDE.md`, "View size"). Only the destination is mapped: source rects and UVs are untouched.
 
+## Drawing primitives
+
+- **Tint:** `DrawTexture(texture, src, x, y, w, h, tint)` multiplies the texel by `tint` (white leaves it, the alpha of the tint fades it). It is the virtual one; the six-argument overload is a non-virtual helper that forwards with white, so a backend adds `using IRenderer::DrawTexture;` next to its override (the override hides the helper otherwise). The method is not `BE_FUNCTION`: the generated method table takes `&IRenderer::DrawTexture`, which an overloaded name makes ambiguous. A backend must not leave a tint on a shared texture: SDL sets the color and alpha modulation on every draw.
+- **Alpha:** `DrawFilledRect()` and `DrawTexture()` blend straight alpha over the target in both backends (the SDL backend sets `SDL_BLENDMODE_BLEND` on the rect path and on the textures it makes).
+- **Clip:** `PushClipRect(rect)` / `PopClipRect()` keep a stack on the interface. The rect is in **output pixels, after the view transform** (a scene transform does not move it; code that has a rect in scene units maps it with `GetViewTransform().ToOutput(...)` first). Pushed rects nest: each entry is already intersected with the one below. A push that leaves nothing gives an empty clip (`IsClipEmpty()`), and both backends then skip every draw. A backend reads `GetClipRect()`: SDL applies it in `OnClipRectChanged()`, Vulkan resolves it into the scissor of each draw (`ResolveScissor()`, cut to the extent). An unbalanced push leaks into the next frame, so pair them at the call site.
+- **`CreateTexture(rgba, width, height)`:** a texture from pixels (RGBA8, red first, straight alpha, rows from the top, copied). It returns an empty pointer for a zero size or when the backend fails. Main thread only, like every GPU call; never inside `LoadAsync`. Vulkan textures are destroyed only when the GPU is idle (`VulkanTexture`).
+- A test that needs a renderer uses `RecordingRenderer` (`tests/Common/RecordingRenderer.h`): it records the calls in output pixels with the clip in effect, reports a settable output size and keeps the pixels of the textures it makes. `RenderProbeComponent` is the debug component that draws every primitive for a look at both backends.
+
 ## Texture Pipeline
 
-- Texture loading goes through dedicated `IResourceLoader` classes (`SDLTextureLoader`, `VulkanTextureLoader`), so it follows `src/Modules/BECore/Resource/CLAUDE.md`.
+- Texture loading goes through dedicated `IResourceLoader` classes (`SDLTextureLoader`, `VulkanTextureLoader`), so it follows `src/Modules/BECore/Resource/CLAUDE.md`. Textures from pixels in memory come from `IRenderer::CreateTexture()` instead and are not cached by path.
 - Keep texture lifetime and ownership behind `ITexture`. Do not expose backend handles in scene/component public APIs (`GetNativeHandle()` is for backend code).
 - Named sprites come from `TextureLibrary` (`config/TextureLibrary.xml`): name → texture path + source rect.
 
