@@ -1,5 +1,5 @@
 ---
-status: in progress 2026-11-02 branch todo/chess-pieces-are-drawn-stretched-the-atlas-cell-is-not
+status: review 2026-11-02 branch todo/chess-pieces-are-drawn-stretched-the-atlas-cell-is-not: SpriteRendererComponent gets fit="Contain" (SpriteFit) and the 32 Chess pieces use it; 1202 of 1202 ctest tests pass, headless screenshots checked
 id: chess-pieces-are-drawn-stretched-the-atlas-cell-is-not
 ---
 # Chess pieces are drawn stretched: the atlas cell is not square
