@@ -135,6 +135,18 @@ if(ENGINE_BUILD_TESTS)
 endif()
 
 # =============================================================================
+# RmlUi (vendored, optional)
+# =============================================================================
+# Added after the exception options above on purpose, like GoogleTest. Nothing in the engine links it yet: it is
+# the third candidate for how UI screens are authored (.claude/plans/ui-authoring-decision.md).
+option(ENGINE_UI_RMLUI "Build the vendored RmlUi (a candidate for authoring UI screens; not linked into the engine yet)" OFF)
+
+if(ENGINE_UI_RMLUI)
+    message(STATUS "Configuring RmlUi (vendored)...")
+    add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RmlUi)
+endif()
+
+# =============================================================================
 # Platform Detection
 # =============================================================================
 if(WIN32)

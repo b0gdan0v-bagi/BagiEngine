@@ -28,6 +28,7 @@ These are included directly via `add_subdirectory()`:
 | fmt | `src/Modules/fmt/` | Formatting library |
 | nlohmann/json | `src/Modules/nlohmann/` | JSON for the external control API; the `nlohmann_json` target defines `JSON_NOEXCEPTION` (use it only through `BECore/Control/Json.h`) |
 | stb | `src/Modules/stb/` | `stb_truetype.h` for glyph metrics and rasterization (INTERFACE target `stb`; the implementation is compiled only in `BECore/Text/Font.cpp`; trusted font files only) |
+| RmlUi | `src/Modules/RmlUi/` | RmlUi 6.3 core (MIT), the third candidate for authoring UI screens. STATIC target `rmlui_core` (alias `RmlUi::Core`), added only when `ENGINE_UI_RMLUI=ON` and after the `ENGINE_NO_EXCEPTIONS` block (like GoogleTest). Its CMake file replaces the upstream ones; the font engine is `RMLUI_FONT_ENGINE=freetype` (needs FreeType installed) or `none`. Nothing links it yet |
 
 ### Git Submodules (in `external/`)
 
@@ -103,6 +104,7 @@ Each engine module has its own `CMakeLists.txt`:
 | `ENGINE_ENABLE_ASSERTS` | `ON` | `ASSERT` / `FATALERROR`; compiled out when `OFF` |
 | `ENGINE_ENABLE_EXPECTS` | `ON` | `EXPECT`; compiled out when `OFF` |
 | `ENGINE_BUILD_TESTS` | `ON` | GoogleTest, `BagiEngineTestSupport`, `BagiEngineTests` and the game test executables |
+| `ENGINE_UI_RMLUI` | `OFF` | Builds the vendored RmlUi (`rmlui_core`); no engine module links it yet |
 
 ## Module Dependencies Order
 

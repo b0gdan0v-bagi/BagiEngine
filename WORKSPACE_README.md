@@ -153,6 +153,7 @@ BagiEngine/
 │       ├── EnTT/        # ECS framework (vendored)
 │       ├── pugixml/     # XML parser (vendored)
 │       ├── imgui/       # ImGui (vendored)
+│       ├── RmlUi/       # RmlUi core (vendored, built with ENGINE_UI_RMLUI=ON)
 │       └── fmt/         # Formatting (vendored)
 ├── external/
 │   └── SDL/             # SDL3 (git submodule)
