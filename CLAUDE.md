@@ -157,11 +157,13 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 
 - Apply `clang-format` to changed files before pushing.
 - If includes were added or modified, run `strip-pch-includes` to avoid duplicating PCH-provided headers.
+- The status `review` of a `todo/` entry is set only by the `todo-loop` skill, in the branch of the task; `main` is not touched, and after the merge the owner deletes the entry file.
 - For complex tasks, keep a plan and update it as work progresses. Plan mode writes it to the local store `~/.claude/plans/`; plans are not committed. Link the plan from the `todo/` entry with `plan: NAME.md`, run `todo-sync push` so the tracker task carries its checklist, and delete the plan (and the `plan:` line) when the work is done. Include testing and documentation tasks. For plans with substantial C++ changes, end with a formatting step (skill `clang-format`) and an includes step (skill `strip-pch-includes`; use a subfolder and dry-run first if doing it in parts).
 
 ## Rules and Skills
 
 - Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`, `Text/`, `UI/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, `RmlUiHost/`, and `games/Chess/`, `games/Match3/`, and `tools/control/`. Claude Code loads one when a file under that directory is read.
 - `.claude/rules/` holds guidance that spans several directories or matches by file name (`paths:` frontmatter): CMake, Reflection, Reflection events (`*Event.h`), Rendering, Widgets, Tests. Read the relevant file before changing that area.
-- `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `todo-sync` (`todo/` dashboard and Vikunja sync, `tools/todo_sync/CLAUDE.md`) and `cpp-senior-programmer`.
+- `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `todo-sync` (`todo/` dashboard and Vikunja sync, `tools/todo_sync/CLAUDE.md`), `todo-loop` (works the `todo/` entries one by one, each in its own local branch `todo/<id>`, through the agents of `.claude/agents/`), `todo-add` (records an idea as a new entry) and `cpp-senior-programmer`.
+- `.claude/agents/` holds the four agents of `todo-loop`: `todo-classifier` (haiku), `todo-architect`, `todo-developer` and `todo-reviewer` (sonnet). `TODO.md` in the root only points at `todo/`.
 - The todo list is the folder `todo/`: one markdown file per entry, with optional front matter `status:`, `stage:` and `plan:` (format in `todo/README.md`). Keep them current when work on an entry starts or stops, and delete the file when the entry is finished. Run `todo-sync check` after editing. The tracker (Vikunja) is synced both ways: `pull` brings back a task closed or created there, then `push` exports (`tools/todo_sync/CLAUDE.md`).

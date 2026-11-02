@@ -28,6 +28,8 @@ Run from the project root. The Python is the repo venv (`.venv/bin/python`, on W
 4. If the settings are missing, the tool says which of `VIKUNJA_URL` / `VIKUNJA_TOKEN` is not set. Do not ask for the token in chat and never print it: the user puts it into the git-ignored `.env`.
 5. After a `dashboard`, give the file path. The page cannot be looked at from the agent session, so do not describe how it looks.
 
+The `todo-loop` skill never runs `push` or `pull`: it makes no network calls and leaves the tracker alone. After the owner merges a `todo/<id>` branch, run `pull` and then `push` here.
+
 ## Report
 
 State the command, the totals (`N create, N update, N close, N reopen, N unchanged`, or for `pull` `N closed in Vikunja, N created in Vikunja`) and any `[warn]` lines (a `[warn]` that a plan is complete means: delete the plan file and the `plan:` line). Say plainly when a step failed or was skipped.
