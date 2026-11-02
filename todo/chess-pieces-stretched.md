@@ -1,4 +1,5 @@
 ---
+status: in progress 2026-11-02 branch todo/chess-pieces-are-drawn-stretched-the-atlas-cell-is-not
 id: chess-pieces-are-drawn-stretched-the-atlas-cell-is-not
 ---
 # Chess pieces are drawn stretched: the atlas cell is not square
