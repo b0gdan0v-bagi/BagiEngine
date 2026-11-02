@@ -13,7 +13,8 @@ ResourceManager (CoreManager::GetResourceManager())
          ├── XmlResourceLoader   (.xml  → XmlResource)
          ├── SDLTextureLoader / VulkanTextureLoader   (images → ITexture)
          ├── FontLoader          (.ttf/.otf → Font, CPU only; `Text/CLAUDE.md`)
-         └── UIDocumentLoader    (.ui.xml → UIDocument; `UI/CLAUDE.md`)
+         ├── UIDocumentLoader    (.ui.xml → UIDocument; `UI/CLAUDE.md`)
+         └── UIWebDocumentLoader (.ui.html → UIDocument, the web-style front-end; `UI/CLAUDE.md`)
 
 IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
     ├── XmlResource

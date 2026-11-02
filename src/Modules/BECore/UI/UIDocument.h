@@ -36,6 +36,7 @@ namespace BECore {
 
     private:
         friend class UIDocumentLoader;
+        friend class UIWebDocumentLoader;
 
         void SetLoaded(PoolString path, XmlConfig config);
         void SetFailed(PoolString path);

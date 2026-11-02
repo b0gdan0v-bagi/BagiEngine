@@ -36,6 +36,7 @@ UIElement tree (root = the canvas; children are the elements)
 | `UISprite`, `UINineSlice` | The texture of a sprite name (TextureLibrary, or given by code); the pure cutting of a picture into nine pieces |
 | `UIScreenContent` | The reflected pair `elements` + `variants` that a screen is made of; what a document and any other front-end reads |
 | `UIDocument` (`IResource`), `UIDocumentLoader` | A screen in a `.ui.xml` file: the parsed XML, `Instantiate(content)` builds fresh elements from it for each canvas |
+| `UIWebCompiler`, `UIHtmlParser`, `UICssParser`, `UIWebDocumentLoader` | The web-style front-end: HTML + CSS in, the text of a `.ui.xml` out (see "Writing a screen in HTML and CSS"); the loader takes `.ui.html` |
 | `UIVariant` | `when` (`UIVariantCondition`, text form `orientation:portrait;minAspect:1.5`) + `overrides` per named element (`UIElementOverride`); `UIVariants::Apply` |
 | `UITreeLayout::Run` | Lays out a whole tree |
 | `UICanvasLayout` | The pure pipeline above with a cache, `HitTest`, `Validate`, the counters tests read. Public fields: `params`, `root`, `variants` |
@@ -120,9 +121,64 @@ The elements and variants of a canvas are reflected fields of `UICanvasComponent
 - **A variant** is `when` (the set parts as `name:value` separated by `;`: `orientation` (`portrait`, `landscape`, `any`), `minAspect`, `maxAspect`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`) and a list of `<set element="Name" .../>` overrides with only the properties to change (`visible`, `anchor`, `x`, `y`, `width`, `height`, `direction`, `fontSize`). An override is written even when its value equals the type's default (`x="0"` is a decision).
 - **Saving:** `_elements` and `_variants` are the inline part of the screen; `Initialize()` hands them to the layout once (the same element objects, so edits through either are the same edits). Elements added in code with `GetRoot().AddChild()` are runtime-only and are not saved back.
 - **A screen in a file of its own:** `source="assets/ui/hud.ui.xml"` on the canvas loads a `UIDocument`; the file is `<ui><elements>...</elements><variants>...</variants></ui>`, the same two blocks as inline. The document's elements come first, the inline ones after them (drawn on top; a later variant wins). The elements of a file belong to the file: `_elements` stays the inline part, and only that is saved back. A missing or unreadable file is logged and the canvas keeps its inline screen; a bad value in a file is logged with its line and the rest is built. Every canvas gets elements of its own (`Instantiate`), because the layout results live in the elements. `ResourceManager` picks the loader by the longest suffix of the name, so `x.ui.xml` goes to `UIDocumentLoader` and a plain `x.xml` to `XmlResourceLoader`.
-- **Another front-end** (the web-style one of the plan's stage 5) needs no new tree: it resolves its own syntax into the attributes above and hands them to `XmlDeserializer`. The test builds such a tree in memory with pugixml (`XmlDeserializer::LoadFromXmlNode(XmlNode(node))`, no file and no string) and gets the same elements as from the XML.
+- **Another front-end** needs no new tree: it resolves its own syntax into the attributes above and hands them to `XmlDeserializer`. The web-style one writes the XML text (next section); `UIDocumentTest` also builds such a tree in memory with pugixml (`XmlDeserializer::LoadFromXmlNode(XmlNode(node))`, no file and no string) and gets the same elements as from the XML.
 - A binary save (`BinarySerializer`) carries the same tree.
 - Why `IntrusivePtrNonAtomic<UIElement>` and not `IntrusivePtr<UIElement>` in the field declarations: the generator looks for the long name to find the factory field (`.claude/rules/reflection-module.md`).
+
+## Writing a screen in HTML and CSS
+
+The second front-end is a source-to-source compiler: `UIWebCompiler::Compile(html, loadStylesheet, report)` turns HTML-like markup and CSS-like styles into the text of a `.ui.xml`, and everything after that is the XML front-end (the same factories, layout, variants, validator and tests). `UIWebDocumentLoader` takes `.ui.html` files (`source="ui/menu.ui.html"` on a canvas, like `.ui.xml`), reads the `<link rel="stylesheet" href>` files next to it, and logs what it left out as warnings with the file and line. It is a subset on purpose, not a browser: what falls outside is an issue in `UIWebReport` (also the numbers: elements, rules, declarations, declarations unsupported, variants), never silent.
+
+```html
+<link rel="stylesheet" href="hud.css">
+<div id="Hud" class="hud">
+  <span id="Score">Score: {score}</span>
+  <button id="Reset" data-action="Match3Reset">Reset</button>
+</div>
+```
+```css
+.hud    { anchor: top-left; left: 16px; top: 16px; width: 220px; height: 96px; background: #000000A0; }
+#Score  { left: 12px; top: 10px; width: 150px; height: 32px; font-size: 28px; }
+#Reset  { anchor: bottom-right; right: 12px; bottom: 10px; width: 96px; height: 48px; font-size: 24px; }
+button  { background: rgb(40, 90, 60); }
+button:hover { background: #3a6; }
+@media (orientation: portrait) { .hud { anchor: top; left: 0; width: 90%; } }
+```
+
+**Elements.** `id` is the `name`. `class` is for selectors only. `hidden` hides. `html` and `body` are transparent, `head`, `style`, `link`, `script`, `meta`, `title` are skipped.
+
+| HTML | Becomes |
+|------|---------|
+| `button` | `UIButton`: `data-action` (or `action`) is the action, `disabled` disables, the text is the label |
+| `img` | `UIImage`: `src` is the sprite name, `object-fit: fill` is `stretch` |
+| an element with text of its own and only inline elements (`b`, `span`, `br`, ...) in it, or a `span`, `p`, `h1`-`h6`, `label`, `strong`... with only text in it, also an empty one | `UILabel`: the text with white space collapsed, `<br>` a line break; its `background` is the fill behind the text |
+| any other, with a `background-image` | `UIPanel` |
+| any other | `UIElement` (a group) |
+
+A group takes clicks only when it has a visible `background` (or `pointer-events: auto`): a full-screen wrapper must not swallow the clicks of the game under it. A panel and a label with a background do, as a plate does in a browser. `pointer-events: none` turns it off. Text beside block elements is reported and dropped (put it in a `<span>`); a tag outside the table is read as a `<div>` and reported; every element needs its end tag (`<p>` and `<li>` are not closed by the next sibling).
+
+**The cascade** is CSS's: `!important`, then a `style=""` attribute, then specificity (ids, classes and pseudo-classes, tags), then source order, across `<style>` and `<link>` in document order. Selectors: tag, `*`, `#id`, `.class`, compounds, a selector list, the descendant (space) and child (`>`) combinators, `:hover` / `:active` / `:disabled` on the last part. Inherited: `color`, `font-size`, `font-family`, `text-align`, `line-height`, `white-space` (a button keeps its own alignment and wrapping, like a browser's default style sheet). Shorthands and longhands are separate names in the cascade, so the later declaration of the two wins by order, not by CSS's expansion rules.
+
+**Properties.**
+
+| CSS | Engine |
+|-----|--------|
+| `display: none`, `visibility: hidden` | `visible="false"` |
+| `display: flex`, `flex-direction: row\|column`, `gap`, `padding`, `flex-wrap: wrap`, `align-items`, `flex` / `flex-grow` | `layout="Stack"`, `direction` (a row is the default of CSS, so `Horizontal` is written), `spacing`, `padding`, `wrapChildren`, `crossAlign`, `flex` (the first number). `justify-content` has no counterpart |
+| `left`, `top`, `right`, `bottom` (px) | The anchor is `TopLeft` unless only `right` / `bottom` is set; `x = left - right`, `y = top - bottom`. All four, or `inset`, is `Stretch` with the distances (plus `margin`) as the margin |
+| `anchor` (not CSS): `top-left`, `top`, `center`, ..., `stretch` | `anchor` (centering needs it: `left: 50%` is not an offset in units) |
+| `width`, `height`, `min-`, `max-` (px or %), `aspect-ratio`, `object-fit: cover` on a box with a ratio | the lengths, `aspectRatio`, `aspectMode="Fill"` |
+| `background`, `background-color`, `background-image: url(Name)`, `border-image-slice` | `color`, `sprite`, `sliceBorder` (sprite names are TextureLibrary names) |
+| `color`, `font-size` (px), `font-family` (a path to a font file; a generic family is the default font), `text-align`, `vertical-align: top\|middle\|bottom`, `text-overflow: ellipsis\|clip`, `white-space: normal\|nowrap`, `line-height` (a number, or px against the font size) | `textColor`, `fontSize`, `font`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing` |
+| `-be-text-fit: shrink`, `-be-min-font-size` (engine-only) | `overflow="AutoFit"`, `minFontSize` |
+| `position: absolute\|relative\|static\|fixed`, `box-sizing`, `cursor`, `user-select` | accepted, mean nothing |
+| `button:hover`, `:active`, `:disabled` with `background` | `hoverColor`, `pressedColor`, `disabledColor` (anything else in a state rule is reported) |
+
+Lengths are px and %, a color is `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()` or a few names. Not understood and reported (the list the decision record counts): `em`, `rem`, `vw`, `vh`, `calc()`, `var()`, `opacity`, `border`, `border-radius`, `box-shadow`, `transform`, `transition`, `animation`, `z-index`, `overflow`, `font-weight`, `letter-spacing`, `margin` on an element that does not fill its parent (a stack has `gap`), `justify-content`, `grid`, attribute selectors, `+`, `~`, other pseudo-classes and pseudo-elements, `@import`, `@font-face`, `@keyframes`.
+
+**`@media`.** A query is `and`-joined `(feature: value)` terms (`orientation`, `min-` / `max-` `width`, `height` and `aspect-ratio`, `aspect-ratio`) with commas for "or"; it becomes a `UIVariantCondition`, so widths are in canvas units (the bounds after the scaler), not browser pixels. For each block the cascade runs again with its rules and what differs from the base becomes the overrides of the variant (`UIElementOverride`: visibility, anchor, offset, size, direction, font size), so `display: block` can undo a base `display: none`. A block that changes anything else (a background, a margin) reports it. An element a variant names but that has no `id` gets a name (`div-1`).
+
+**Checking a screen.** The compile is pure, so a test gives it strings: `tests/BECore/UIWebTest.cpp` compares the Match3 menu in HTML + CSS with the shipped XML (same rect for every element at five sizes) and runs it through `ValidateOnMatrix`. The report is the place to look when a screen does not look as written.
 
 ## Controls
 
@@ -209,4 +265,4 @@ hot reload of a document, clipping of children to their parent, scrolling, focus
 
 ## Tests
 
-`tests/BECore/`: `UILayoutTest` (anchors, stretch, limits, aspect, stack), `UICanvasScalerTest` (every space and mode, safe area, the context comparison), `UISettingsTest` (settings, `UIEnvironment`), `UIVariantTest` (conditions, order, restoring, tree layout), `UICanvasLayoutTest` (cache, variant runs, hit testing, the matrix itself and shipped-style screens), `UILayoutValidatorTest`, `UICanvasComponentTest` (a scene from XML into a `RecordingRenderer`: drawing in each space, the view transform handed back, input order, press following, modal, inactive scenes), `UIPreviewTest`, `UIReflectionTest` (the text forms, the tree and variants through XML and binary, malformed values, an unknown type, a screen from a scene file laid out in both orientations), `UIDocumentTest` (a file, inline XML and a tree built in memory give the same elements; the loader choice; canvases of one file do not share layout; file and inline together; a missing, a broken and a partly bad file), `UINineSliceTest`, `UIScreenTest` (a HUD of controls through `ValidateOnMatrix`, the same HUD drawn in landscape and portrait, at twice the size, with a variant that hides an element and restores it, with a bound score; a deliberately broken one is caught), `UIVarsTest` (set, get, version, expand, escapes, unset names, Cyrillic), `UIControlsTest` (every control from a file and back, every property of every control, hit testing, draw calls of panel, nine-slice, image and label, scale and variants, overflow and the validator, variables in labels and their layout cost, show and hide by name, button states and clicks from synthetic mouse events).
+`tests/BECore/`: `UILayoutTest` (anchors, stretch, limits, aspect, stack), `UICanvasScalerTest` (every space and mode, safe area, the context comparison), `UISettingsTest` (settings, `UIEnvironment`), `UIVariantTest` (conditions, order, restoring, tree layout), `UICanvasLayoutTest` (cache, variant runs, hit testing, the matrix itself and shipped-style screens), `UILayoutValidatorTest`, `UICanvasComponentTest` (a scene from XML into a `RecordingRenderer`: drawing in each space, the view transform handed back, input order, press following, modal, inactive scenes), `UIPreviewTest`, `UIReflectionTest` (the text forms, the tree and variants through XML and binary, malformed values, an unknown type, a screen from a scene file laid out in both orientations), `UIWebTest` (the HTML reader, the CSS reader, the Match3 menu and a HUD in HTML + CSS against the XML, the cascade, each property group, `@media`, the report, a `.ui.html` file through the resource manager), `UIDocumentTest` (a file, inline XML and a tree built in memory give the same elements; the loader choice; canvases of one file do not share layout; file and inline together; a missing, a broken and a partly bad file), `UINineSliceTest`, `UIScreenTest` (a HUD of controls through `ValidateOnMatrix`, the same HUD drawn in landscape and portrait, at twice the size, with a variant that hides an element and restores it, with a bound score; a deliberately broken one is caught), `UIVarsTest` (set, get, version, expand, escapes, unset names, Cyrillic), `UIControlsTest` (every control from a file and back, every property of every control, hit testing, draw calls of panel, nine-slice, image and label, scale and variants, overflow and the validator, variables in labels and their layout cost, show and hide by name, button states and clicks from synthetic mouse events).
