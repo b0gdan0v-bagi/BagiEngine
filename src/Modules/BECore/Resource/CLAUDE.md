@@ -12,7 +12,8 @@ ResourceManager (CoreManager::GetResourceManager())
     └── IResourceLoader[]    picked by file extension via CanLoad()
          ├── XmlResourceLoader   (.xml  → XmlResource)
          ├── SDLTextureLoader / VulkanTextureLoader   (images → ITexture)
-         └── FontLoader          (.ttf/.otf → Font, CPU only; `Text/CLAUDE.md`)
+         ├── FontLoader          (.ttf/.otf → Font, CPU only; `Text/CLAUDE.md`)
+         └── UIDocumentLoader    (.ui.xml → UIDocument; `UI/CLAUDE.md`)
 
 IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
     ├── XmlResource
@@ -45,7 +46,7 @@ Task<void> LoadAssets() {
 
 ## Adding a loader
 
-Derive from `IResourceLoader` with `BE_CLASS(MyLoader)`, implement `CanLoad` / `LoadAsync` / `LoadSync` (see `SDL/CoreSDL/SDLTextureLoader.h`). **No manual registration**: the generator registers the class in `AbstractFactory<IResourceLoader>` from its `.gen.hpp`, and `ResourceManager::Initialize()` creates and registers every registered type. Include the `.gen.hpp` in the loader's own `.cpp`, and make sure its directory is in `reflection_targets.json`.
+Derive from `IResourceLoader` with `BE_CLASS(MyLoader)`, implement `CanLoad` / `LoadAsync` / `LoadSync` (see `SDL/CoreSDL/SDLTextureLoader.h`). A loader is chosen by the longest suffix of the file name that some loader accepts (`ResourceManager::FindLoaderForPath`): `ui/hud.ui.xml` asks for `.ui.xml` and then `.xml`, so a format inside XML files gets a loader of its own and `CanLoad` receives the whole suffix. **No manual registration**: the generator registers the class in `AbstractFactory<IResourceLoader>` from its `.gen.hpp`, and `ResourceManager::Initialize()` creates and registers every registered type. Include the `.gen.hpp` in the loader's own `.cpp`, and make sure its directory is in `reflection_targets.json`.
 
 `LoadAsync` must not block the caller. To leave the calling thread, `co_await SwitchToBackground()` (`TaskSystem/Awaitables.h`).
 

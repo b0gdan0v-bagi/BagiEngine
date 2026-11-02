@@ -5,6 +5,7 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/UI/UIDocument.h>
 #include <Generated/UICanvasComponent.gen.hpp>
 
 namespace BECore {
@@ -37,12 +38,30 @@ namespace BECore {
         }
     }
 
+    void UICanvasComponent::AdoptDocument() {
+        const auto document = CoreManager::GetResourceManager().Load<UIDocument>(_source.ToStringView());
+        if (!document || document->GetState() != ResourceState::Loaded) {
+            LOG_ERROR("UICanvasComponent: cannot load the screen '{}'"_format(_source.ToStringView()));
+            return;
+        }
+        // Errors in the file are logged by Instantiate(); what could be read is used
+        UIScreenContent content;
+        static_cast<void>(document->Instantiate(content));
+        for (const auto& element : content.elements) {
+            _layout.root->children.push_back(element);
+        }
+        _layout.variants.insert(_layout.variants.end(), content.variants.begin(), content.variants.end());
+    }
+
     void UICanvasComponent::Initialize() {
         // Called after loading and again by AddComponent: the written elements are handed over once
         if (_authoredAdopted) {
             return;
         }
         _authoredAdopted = true;
+        if (!_source.Empty()) {
+            AdoptDocument();
+        }
         for (const auto& element : _elements) {
             _layout.root->children.push_back(element);
         }

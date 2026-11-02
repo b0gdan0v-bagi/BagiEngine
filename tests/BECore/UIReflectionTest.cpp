@@ -9,6 +9,7 @@
 #include <BECore/UI/UIValueText.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/UITreeCompare.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -97,30 +98,10 @@ namespace BECore::Tests {
             return canvas;
         }
 
-        void ExpectSameTree(const UIElement& expected, const UIElement& actual) {
-            EXPECT_EQ(expected.name, actual.name);
-            EXPECT_EQ(expected.layout, actual.layout);
-            EXPECT_TRUE(expected.style == actual.style) << "style of " << expected.name.CStr();
-            EXPECT_EQ(expected.color.r, actual.color.r);
-            EXPECT_EQ(expected.color.g, actual.color.g);
-            EXPECT_EQ(expected.color.b, actual.color.b);
-            EXPECT_EQ(expected.color.a, actual.color.a);
-            EXPECT_EQ(expected.blocksInput, actual.blocksInput);
-            EXPECT_EQ(expected.interactive, actual.interactive);
-            EXPECT_EQ(expected.ignoreSafeArea, actual.ignoreSafeArea);
-            ASSERT_EQ(expected.children.size(), actual.children.size());
-            for (size_t i = 0; i < expected.children.size(); ++i) {
-                ExpectSameTree(*expected.children[i], *actual.children[i]);
-            }
-        }
-
         void ExpectSameCanvas(const UICanvasComponent& expected, const UICanvasComponent& actual) {
             EXPECT_EQ(expected._space, actual._space);
             EXPECT_FLOAT_EQ(expected._minScale, actual._minScale);
-            ASSERT_EQ(expected._elements.size(), actual._elements.size());
-            for (size_t i = 0; i < expected._elements.size(); ++i) {
-                ExpectSameTree(*expected._elements[i], *actual._elements[i]);
-            }
+            ExpectSameElements(expected._elements, actual._elements);
             EXPECT_TRUE(expected._variants == actual._variants);
         }
 

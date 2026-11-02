@@ -47,12 +47,15 @@ namespace BECore {
         return nullptr;
     }
 
-    eastl::string_view ResourceManager::GetExtension(eastl::string_view path) const {
-        auto pos = path.find_last_of('.');
-        if (pos == eastl::string_view::npos) {
-            return eastl::string_view{};
+    IResourceLoader* ResourceManager::FindLoaderForPath(eastl::string_view path) const {
+        const size_t nameStart = path.find_last_of("/\\");
+        const eastl::string_view name = nameStart == eastl::string_view::npos ? path : path.substr(nameStart + 1);
+        for (size_t dot = name.find('.'); dot != eastl::string_view::npos; dot = name.find('.', dot + 1)) {
+            if (auto* loader = FindLoader(name.substr(dot))) {
+                return loader;
+            }
         }
-        return path.substr(pos);
+        return nullptr;
     }
 
 }  // namespace BECore

@@ -42,6 +42,10 @@ namespace BECore {
         BE_REFLECT_FIELD bool _visible = true;  ///< drawn and, with `inputEnabled`, takes input
         BE_REFLECT_FIELD bool _inputEnabled = true;
 
+        /// A screen in a file of its own, a UIDocument such as `assets/ui/hud.ui.xml`. Its elements and variants come first, the inline ones below come after them
+        /// (drawn on top, and a later variant wins). The elements of a file belong to the file: they are not saved back with the scene
+        BE_REFLECT_FIELD PoolString _source;
+
         /// The elements and variants written inline in the scene file (`<elements><element type="UIPanel" .../></elements>`, `<variants>`). Initialize() hands them to
         /// the layout; they stay here as the part of the screen that is saved back. Elements added in code are not in this list
         BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> _elements;  // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
@@ -89,6 +93,7 @@ namespace BECore {
     private:
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;
         void SyncParams();
+        void AdoptDocument();
         void DrawElement(IRenderer& renderer, const UIElement& element) const;
         void RefreshInputOrder();
 

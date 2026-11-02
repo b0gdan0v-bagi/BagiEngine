@@ -133,17 +133,19 @@ namespace BECore {
     private:
         /**
          * @brief Find appropriate loader for file extension
-         * @param extension File extension (e.g., ".xml")
+         * @param extension File extension (e.g., ".xml", ".ui.xml")
          * @return Pointer to loader or nullptr if none found
          */
         IResourceLoader* FindLoader(eastl::string_view extension) const;
 
         /**
-         * @brief Extract file extension from path
+         * @brief Find the loader of a file by the longest suffix of its name that a loader accepts
+         *
+         * "ui/hud.ui.xml" asks for ".ui.xml" first and ".xml" next, so a format that lives inside XML files can have its own loader.
          * @param path File path
-         * @return Extension including dot (e.g., ".xml")
+         * @return Pointer to loader or nullptr if none found
          */
-        eastl::string_view GetExtension(eastl::string_view path) const;
+        IResourceLoader* FindLoaderForPath(eastl::string_view path) const;
 
         ResourceCache _cache;
         eastl::vector<IntrusivePtr<IResourceLoader>> _loaders;
@@ -165,10 +167,9 @@ namespace BECore {
         }
 
         // Find appropriate loader
-        auto extension = GetExtension(path);
-        auto* loader = FindLoader(extension);
+        auto* loader = FindLoaderForPath(path);
         if (!loader) {
-            LOG_ERROR(Format("No loader found for extension: {}", extension).c_str());
+            LOG_ERROR(Format("No loader found for: {}", path).c_str());
             co_return ResourceHandle<T>();
         }
 
@@ -207,10 +208,9 @@ namespace BECore {
         }
 
         // Find appropriate loader
-        auto extension = GetExtension(path);
-        auto* loader = FindLoader(extension);
+        auto* loader = FindLoaderForPath(path);
         if (!loader) {
-            LOG_ERROR(Format("No loader found for extension: {}", extension).c_str());
+            LOG_ERROR(Format("No loader found for: {}", path).c_str());
             return ResourceHandle<T>();
         }
 
