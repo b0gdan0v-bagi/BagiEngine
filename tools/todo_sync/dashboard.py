@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Render the parsed TODO.md (see todo_parser.py) as one self-contained HTML page.
+Render the parsed todo/ folder (see todo_parser.py) as one self-contained HTML page.
 
 Inline CSS, no scripts, no network. Light and dark follow prefers-color-scheme.
-Every piece of text from TODO.md goes through html.escape.
+Every piece of text from todo/ goes through html.escape.
 """
 
 from datetime import date
@@ -66,7 +66,10 @@ def _age(entry: dict, today: date) -> str:
 def _progress(entry: dict) -> str:
     progress = entry["planProgress"]
     if not progress:
-        return '<span class="meta">no checklist</span>' if entry["plan"] else ""
+        if not entry["plan"]:
+            return ""
+        text = "no checklist" if entry["planFound"] else "plan not on this machine"
+        return f'<span class="meta">{text}</span>'
     percent = round(100 * progress["done"] / progress["total"])
     return (
         f'<span class="bar" title="{percent}%"><span style="width: {percent}%"></span></span>'
@@ -128,7 +131,7 @@ def render_dashboard(data: dict, today: date) -> str:
 
     body = [
         "<h1>TODO dashboard</h1>",
-        f'<div class="muted">Generated {today.isoformat()} from TODO.md. {len(entries)} entries.</div>',
+        f'<div class="muted">Generated {today.isoformat()} from todo/. {len(entries)} entries.</div>',
         f'<div class="totals">{totals}</div>',
         section("Roadmap", "".join(stage_panels)),
         section("In progress", f"<ul class='panel'>{in_progress_rows}</ul>" if in_progress else '<p class="muted">Nothing in progress.</p>'),

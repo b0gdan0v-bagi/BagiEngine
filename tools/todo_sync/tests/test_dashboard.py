@@ -9,8 +9,8 @@ TODAY = date(2026, 11, 11)
 
 
 @pytest.fixture
-def page(sample_todo, sample_root):
-    return render_dashboard(parse_todo(sample_todo, sample_root), TODAY)
+def page(sample_todo, sample_plans):
+    return render_dashboard(parse_todo(sample_todo, sample_plans), TODAY)
 
 
 def test_is_a_self_contained_page(page):
@@ -39,10 +39,11 @@ def test_deferred_entry_shows_its_age(page):
     assert "since 2026-10-31, 11 days" in page
 
 
-def test_entry_without_a_date_says_so(sample_todo, sample_root):
-    data = parse_todo(sample_todo, sample_root)
-    data["entries"][1]["status"] = "deferred"
-    data["entries"][1]["date"] = None
+def test_entry_without_a_date_says_so(sample_todo, sample_plans):
+    data = parse_todo(sample_todo, sample_plans)
+    entry = next(item for item in data["entries"] if item["id"] == "open-with-stage")
+    entry["status"] = "deferred"
+    entry["date"] = None
     assert "no date" in render_dashboard(data, TODAY)
 
 
@@ -53,13 +54,19 @@ def test_entries_without_a_known_stage_are_listed_apart(page):
     assert "Open entry with a stage" not in section
 
 
-def test_in_progress_entry_with_a_plan_without_checkboxes(sample_todo, sample_root):
-    data = parse_todo(sample_todo, sample_root)
+def test_in_progress_entry_with_a_plan_without_checkboxes(sample_todo, sample_plans):
+    data = parse_todo(sample_todo, sample_plans)
     for entry in data["entries"]:
         entry["planProgress"] = None
     assert "no checklist" in render_dashboard(data, TODAY)
 
 
-def test_text_from_todo_md_is_escaped(page):
+def test_text_from_the_entries_is_escaped(page):
     assert "<b>& co</b>" not in page
     assert "&lt;b&gt;&amp; co&lt;/b&gt;" in page
+
+
+def test_a_plan_that_is_not_on_this_machine_says_so(sample_todo, tmp_path):
+    page = render_dashboard(parse_todo(sample_todo, tmp_path / "no-plans"), TODAY)
+    assert "plan not on this machine" in page
+    assert "no checklist" not in page

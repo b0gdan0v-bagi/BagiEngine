@@ -12,7 +12,12 @@ sys.path.insert(0, str(TOOL_DIR))
 
 @pytest.fixture
 def sample_todo() -> Path:
-    return FIXTURES / "TODO.sample.md"
+    return FIXTURES / "todo"
+
+
+@pytest.fixture
+def sample_plans() -> Path:
+    return FIXTURES / "plans"
 
 
 @pytest.fixture

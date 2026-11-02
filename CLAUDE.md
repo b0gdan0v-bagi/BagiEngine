@@ -73,7 +73,7 @@ src/
 config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, Text, UI, default SceneConfig; assets/fonts/ has the default font)
 games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Chess, Match3)
 tests/                  # GoogleTest executable BagiEngineTests (BECore) + Common (BagiEngineTestSupport)
-tools/                  # developer tools: natvis, todo_sync (TODO.md dashboard and Vikunja export; Python, pytest), control (Python: the control API client and smoke test, the MCP server, the Stockfish bridge; `tools/control/CLAUDE.md`)
+tools/                  # developer tools: natvis, todo_sync (`todo/` dashboard and Vikunja sync; Python, pytest), control (Python: the control API client and smoke test, the MCP server, the Stockfish bridge; `tools/control/CLAUDE.md`)
 ```
 
 **Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.
@@ -157,11 +157,11 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 
 - Apply `clang-format` to changed files before pushing.
 - If includes were added or modified, run `strip-pch-includes` to avoid duplicating PCH-provided headers.
-- For complex tasks, save a plan to `.claude/plans/PLAN_NAME.md` (plan mode writes there via `plansDirectory`) and update it as work progresses. Include testing and documentation tasks. For plans with substantial C++ changes, end with a formatting step (skill `clang-format`) and an includes step (skill `strip-pch-includes`; use a subfolder and dry-run first if doing it in parts).
+- For complex tasks, keep a plan and update it as work progresses. Plan mode writes it to the local store `~/.claude/plans/`; plans are not committed. Link the plan from the `todo/` entry with `plan: NAME.md`, run `todo-sync push` so the tracker task carries its checklist, and delete the plan (and the `plan:` line) when the work is done. Include testing and documentation tasks. For plans with substantial C++ changes, end with a formatting step (skill `clang-format`) and an includes step (skill `strip-pch-includes`; use a subfolder and dry-run first if doing it in parts).
 
 ## Rules and Skills
 
 - Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`, `Text/`, `UI/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, `RmlUiHost/`, and `games/Chess/`, `games/Match3/`, and `tools/control/`. Claude Code loads one when a file under that directory is read.
 - `.claude/rules/` holds guidance that spans several directories or matches by file name (`paths:` frontmatter): CMake, Reflection, Reflection events (`*Event.h`), Rendering, Widgets, Tests. Read the relevant file before changing that area.
-- `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `todo-sync` (TODO.md dashboard and Vikunja export, `tools/todo_sync/CLAUDE.md`) and `cpp-senior-programmer`.
-- `TODO.md` entries carry optional `**Status:**`, `**Stage:**` and `**Plan:**` lines (format in the file header). Keep them current when work on an entry starts or stops, and delete an entry when it is finished. Run `todo-sync check` after editing the file.
+- `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `todo-sync` (`todo/` dashboard and Vikunja sync, `tools/todo_sync/CLAUDE.md`) and `cpp-senior-programmer`.
+- The todo list is the folder `todo/`: one markdown file per entry, with optional front matter `status:`, `stage:` and `plan:` (format in `todo/README.md`). Keep them current when work on an entry starts or stops, and delete the file when the entry is finished. Run `todo-sync check` after editing. The tracker (Vikunja) is synced both ways: `pull` brings back a task closed or created there, then `push` exports (`tools/todo_sync/CLAUDE.md`).

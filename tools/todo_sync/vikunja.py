@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-One-way export of the parsed TODO.md (see todo_parser.py) to a Vikunja project.
+Export of the parsed todo/ folder (see todo_parser.py) to a Vikunja project (pull.py reads back what changed there).
 
 Checked against Vikunja 2.7.1 (REST /api/v1, scoped API token as a Bearer token).
 
@@ -10,7 +10,7 @@ Nothing is stored locally, so another machine finds the same tasks.
 Owned fields: title, description, done and the labels "in progress", "deferred", "stage N".
 Everything else on a task (priority, due date, assignees, comments, other labels) is kept:
 an update is read-modify-write, because POST /tasks/{id} replaces the whole task.
-A task whose entry left TODO.md is marked done, never deleted. Tasks without the marker are never touched.
+A task whose entry left todo/ is marked done, never deleted. Tasks without the marker are never touched.
 
 The token is never printed. Standard library only.
 """
@@ -37,6 +37,11 @@ ENV_PROJECT = "VIKUNJA_PROJECT"
 
 MARKER_PREFIX = "todo-sync:id="
 _MARKER_RE = re.compile(r"todo-sync:id=([\w-]+)")
+PLAN_MARKER_PREFIX = "todo-sync:plan="
+PLAN_BLOCK_START = f"<p>{PLAN_MARKER_PREFIX}"
+_PLAN_MARKER_RE = re.compile(r"<p>todo-sync:plan=([^<\s]+)</p>")
+PLAN_MAX_ITEMS = 300
+PLAN_ITEM_MAX_LENGTH = 240
 _MANAGED_LABEL_RE = re.compile(r"^(?:in progress|deferred|stage \d+)$")
 _BETWEEN_TAGS_RE = re.compile(r">\s+<")
 _ENV_LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
@@ -129,20 +134,82 @@ class VikunjaClient:
 # --- what a task should look like -------------------------------------------------------------
 
 
-def render_description(entry: dict, stage_title: str | None) -> str:
-    """The marker first, then the entry's facts. Plain <p> blocks, so the Vikunja editor keeps them."""
+def _inline_html(text: str) -> str:
+    """Escaped text with `code` and **bold** kept; a long item is cut."""
+    if len(text) > PLAN_ITEM_MAX_LENGTH:
+        text = text[:PLAN_ITEM_MAX_LENGTH].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
+    html = escape(text)
+    html = re.sub(r"`([^`]+)`", r"<code>\1</code>", html)
+    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", html)
+
+
+def render_plan_block(plan: str, checklist: dict) -> str:
+    """
+    The copy of a plan's checklist: a visible marker paragraph, the plan's title, and under each
+    heading its boxes as the editor's task list, so Vikunja shows the progress itself.
+    """
+    parts = [f"{PLAN_BLOCK_START}{escape(plan)}</p>", f"<h3>{escape(checklist['title'])}</h3>"]
+    shown = 0
+    total = sum(len(section["items"]) for section in checklist["sections"])
+    for section in checklist["sections"]:
+        items = section["items"][: max(PLAN_MAX_ITEMS - shown, 0)]
+        if not items:
+            break
+        shown += len(items)
+        if section["heading"] and section["heading"] != checklist["title"]:
+            parts.append(f"<h4>{escape(section['heading'])}</h4>")
+        parts.append('<ul data-type="taskList">')
+        for item in items:
+            checked = "true" if item["done"] else "false"
+            box = ' checked="checked"' if item["done"] else ""
+            parts.append(
+                f'<li data-checked="{checked}" data-type="taskItem"><label><input type="checkbox"{box}><span></span></label>'
+                f"<div><p>{_inline_html(item['text'])}</p></div></li>"
+            )
+        parts.append("</ul>")
+    if shown < total:
+        parts.append(f"<p>…cut: {shown} of {total} items shown, the rest is in the plan file</p>")
+    return "".join(parts)
+
+
+def plan_block_of(task: dict | None) -> tuple[str, str] | None:
+    """(plan name, the block) already in a task's description, or None."""
+    description = (task or {}).get("description") or ""
+    start = description.find(PLAN_BLOCK_START)
+    match = _PLAN_MARKER_RE.match(description, start) if start >= 0 else None
+    return (match.group(1), description[start:]) if match else None
+
+
+def strip_plan_block(description: str) -> str:
+    start = (description or "").find(PLAN_BLOCK_START)
+    return description[:start] if start >= 0 else description
+
+
+def render_description(entry: dict, stage_title: str | None, plan_block: str = "") -> str:
+    """The marker first, then the entry's facts, then the plan block. Plain <p> blocks, so the Vikunja editor keeps them."""
     status = entry["status"] + (f" since {entry['date']}" if entry["date"] else "")
     blocks = [f"{MARKER_PREFIX}{entry['id']}", f"<strong>Status:</strong> {escape(status)}"]
     if entry["stage"] is not None:
         stage = f"{entry['stage']}: {stage_title}" if stage_title else str(entry["stage"])
         blocks.append(f"<strong>Stage:</strong> {escape(stage)}")
     if entry["plan"]:
-        progress = entry["planProgress"]
-        suffix = f" ({progress['done']} / {progress['total']} done)" if progress else ""
-        blocks.append(f"<strong>Plan:</strong> {escape(entry['plan'])}{escape(suffix)}")
+        blocks.append(f"<strong>Plan:</strong> {escape(entry['plan'])}")
     if entry["summary"]:
         blocks.append(escape(entry["summary"]))
-    return "".join(f"<p>{block}</p>" for block in blocks)
+    return "".join(f"<p>{block}</p>" for block in blocks) + plan_block
+
+
+def desired_plan_block(entry: dict, task: dict | None) -> str:
+    """
+    From the plan file when it is here. When it is not (another machine), the block already in the task
+    stays, so a push from a machine without the plan never erases the copy. No plan: line: no block.
+    """
+    if not entry["plan"]:
+        return ""
+    if entry["planFound"]:
+        return render_plan_block(entry["plan"], entry["planChecklist"]) if entry["planChecklist"] else ""
+    existing = plan_block_of(task)
+    return existing[1] if existing and existing[0] == entry["plan"] else ""
 
 
 def desired_labels(entry: dict) -> set[str]:
@@ -178,7 +245,7 @@ class Action:
 
 
 def plan_actions(data: dict, tasks: list[dict]) -> tuple[list[Action], list[str]]:
-    """Compare TODO.md entries with the project's tasks. Returns the actions and the warnings."""
+    """Compare todo/ entries with the project's tasks. Returns the actions and the warnings."""
     stage_titles = {stage["number"]: stage["title"] for stage in data["stages"]}
     warnings: list[str] = []
     by_marker: dict[str, dict] = {}
@@ -195,9 +262,9 @@ def plan_actions(data: dict, tasks: list[dict]) -> tuple[list[Action], list[str]
     wanted_ids = set()
     for entry in data["entries"]:
         wanted_ids.add(entry["id"])
-        description = render_description(entry, stage_titles.get(entry["stage"]))
-        labels = desired_labels(entry)
         task = by_marker.get(entry["id"])
+        description = render_description(entry, stage_titles.get(entry["stage"]), desired_plan_block(entry, task))
+        labels = desired_labels(entry)
         action = Action(CREATE, entry["id"], task, entry["title"], description, labels)
         if task is not None:
             current = {label["title"] for label in task.get("labels") or [] if _MANAGED_LABEL_RE.match(label["title"])}
@@ -215,7 +282,11 @@ def plan_actions(data: dict, tasks: list[dict]) -> tuple[list[Action], list[str]
 
     for entry_id, task in by_marker.items():
         if entry_id not in wanted_ids and not task.get("done"):
-            actions.append(Action(CLOSE, entry_id, task, task["title"]))
+            stripped = strip_plan_block(task.get("description") or "")
+            close = Action(CLOSE, entry_id, task, task["title"], stripped)
+            if stripped != (task.get("description") or ""):
+                close.changes.append("plan copy removed")
+            actions.append(close)
     return actions, warnings
 
 
@@ -232,11 +303,19 @@ class Report:
         return ", ".join(f"{count} {kind}" for kind, count in self.counts.items())
 
 
-def _find_project(client: VikunjaClient, title: str, report: Report) -> dict | None:
+def find_project(client: VikunjaClient, title: str, report: Report) -> dict | None:
     found = [p for p in client.get_all(f"/projects?s={urllib.parse.quote(title)}") if p.get("title") == title and not p.get("is_archived")]
     if len(found) > 1:
         report.warnings.append(f"{len(found)} projects are titled '{title}'; using project {found[0]['id']}")
     return found[0] if found else None
+
+
+def list_tasks(client: VikunjaClient, project: dict | None) -> list[dict]:
+    """Every task of the project, done ones included (a project that does not exist yet has none)."""
+    if project is None:
+        return []
+    task_filter = urllib.parse.quote(f"project_id = {project['id']}")
+    return client.get_all(f"/tasks?filter={task_filter}")
 
 
 def _label_ids(client: VikunjaClient, titles: set[str], dry_run: bool) -> dict[str, int]:
@@ -259,15 +338,12 @@ def _set_labels(client: VikunjaClient, task: dict | None, task_id: int, labels: 
 
 def sync(client: VikunjaClient, data: dict, project_title: str, dry_run: bool = False) -> Report:
     report = Report()
-    project = _find_project(client, project_title, report)
+    project = find_project(client, project_title, report)
     if project is None:
         report.lines.append(f"project '{project_title}': {'would create' if dry_run else 'create'}")
         if not dry_run:
             project, _ = client.request("PUT", "/projects", {"title": project_title})
-    tasks: list[dict] = []
-    if project is not None:
-        task_filter = urllib.parse.quote(f"project_id = {project['id']}")
-        tasks = client.get_all(f"/tasks?filter={task_filter}")
+    tasks = list_tasks(client, project)
 
     actions, warnings = plan_actions(data, tasks)
     report.warnings.extend(warnings)
@@ -276,6 +352,10 @@ def sync(client: VikunjaClient, data: dict, project_title: str, dry_run: bool = 
 
     for action in actions:
         report.counts[action.kind] += 1
+        if action.kind == REOPEN:
+            report.warnings.append(
+                f"entry '{action.entry_id}' reopens a task that is done in Vikunja: closed there since the last push? run pull"
+            )
         if action.kind != UNCHANGED:
             detail = f" ({', '.join(action.changes)})" if action.changes and action.kind != CREATE else ""
             report.lines.append(f"{action.kind:<7} {action.entry_id}{detail}")
@@ -292,7 +372,9 @@ def sync(client: VikunjaClient, data: dict, project_title: str, dry_run: bool = 
         # (an UPDATE is never a done task, so only CLOSE leaves it done)
         task = dict(action.task)
         task["done"] = action.kind == CLOSE
-        if action.kind != CLOSE:
+        if action.kind == CLOSE:
+            task["description"] = action.description  # the entry's text stays, only the plan copy goes
+        else:
             task["title"], task["description"] = action.title, action.description
         client.request("POST", f"/tasks/{task['id']}", task)
         if "labels" in action.changes:
