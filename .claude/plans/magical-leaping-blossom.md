@@ -59,7 +59,12 @@ Updated as the work goes; the dashboard counts these lines.
 - [x] Stage 4.5 gtests of the controls and of a whole screen: hit testing and z-order, button states and clicks from synthetic events, draw calls of each control, a HUD through the size matrix and in two shapes with a variant (`UIScreenTest` (7)); the screens the games ship go through the same matrix with 4.6 and 4.7
 - [x] Stage 4.6 Match3: view size 712 x 672, the HUD as a `SceneView` canvas in the margins of the view (score, Reset, Menu, seed) replacing the ImGui block, `Match3Reset` / `Match3Menu` answered by the board, a `MainMenu` scene with Play and Quit (`Match3MenuComponent`) as the first scene; `Match3UiTest` (11) runs the shipped file through the size matrix; a `reset` or an action over the control API enters the game from the menu, so a screenshot shows the board (looked at on the SDL software renderer: menu, board with the HUD, the score after a move)
 - [x] Stage 4.7 Chess: the HUD as a `SceneView` canvas in the margins of the view (the turn, the status in words, Reset), the view is 840 x 800 with the board at (100, 80); `StatusText` (pure), `ChessBoardComponent` publishes `turn` and `status` and answers `ChessReset`; `StatusTextTest` (7), `ChessUiTest` (8)
-- [ ] Stage 5 Decision spike: XML, web-style front-end, RmlUi
+- [x] Stage 5.1 Web-style front-end (B): `UIHtmlParser`, `UICssParser`, `UIWebCompiler` (HTML + CSS to the text of a `.ui.xml`, cascade, inheritance, `@media` to variants, button states, an issue report with counters), `UIWebDocumentLoader` for `.ui.html`; the Match3 menu in HTML + CSS lays out like the shipped XML at five sizes and passes the matrix; `UIWebTest` (41 with 5.2)
+- [x] Stage 5.2 Measured A and B on the three shipped screens (menu, Match3 HUD, Chess HUD: the same rects, no issue, size matrix) and on a 1,001-element screen; the Match3 and Chess HUDs in HTML + CSS are covered by `UIWebTest` (41)
+- [x] Stage 5.3a RmlUi vendored like pugixml and stb, not as a submodule (a submodule add was refused): `src/Modules/RmlUi` (6.3, core only, unedited, own `CMakeLists.txt` and `README.md`), behind `ENGINE_UI_RMLUI` (OFF by default), built with `-fno-exceptions` and FreeType from Homebrew; `rmlui_core` builds; nothing links it yet
+- [ ] Stage 5.3b RmlUi host (C) on the SDL backend: `IRenderer::DrawGeometry`, the render / system / file interfaces, `RmlUiDocumentComponent`, the Match3 screens as `.rml`, the numbers for the C column (steps in `ui-authoring-decision.md`)
+- [x] Stage 5.4 Decision record `.claude/plans/ui-authoring-decision.md`: filled for A and B, C marked not measured
+- [ ] Stage 5 owner decision: A, A with B, or wait for the C data
 - [ ] Stage 6 Widen the chosen path
 - [ ] Stage 7 Editor and tooling
 

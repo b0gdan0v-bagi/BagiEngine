@@ -262,7 +262,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## No in-game UI: UI exists only as ImGui editor panels
 
-**Status:** in progress since 2026-11-01. Stages 0 to 3 of the plan are done (renderer primitives, text, input, canvases and adaptive layout with the size matrix); stage 4 has started: stage 4 is done (elements and variants are reflected, screens can live in `.ui.xml` files, panel, image, label, button and stack exist, labels follow `UIVars`, a screen is tested on the size matrix; Match3 has a main menu and an engine-drawn HUD, Chess has an engine-drawn HUD); stage 5 (the authoring spike) is next, and the owner decides after it.
+**Status:** in progress since 2026-11-01. Stages 0 to 3 of the plan are done (renderer primitives, text, input, canvases and adaptive layout with the size matrix); stage 4 has started: stage 4 is done (elements and variants are reflected, screens can live in `.ui.xml` files, panel, image, label, button and stack exist, labels follow `UIVars`, a screen is tested on the size matrix; Match3 has a main menu and an engine-drawn HUD, Chess has an engine-drawn HUD); stage 5 (the authoring spike) has the data for A and B, and the owner decides.
 
 **Stage:** 3
 
@@ -279,7 +279,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## Game UI has no LLM-friendly authoring path yet: choose one before building it
 
-**Status:** in progress since 2026-11-01. Stage 5 of the plan is the spike that measures the options; the owner decides after it.
+**Status:** in progress since 2026-11-01. Stage 5 of the plan is the spike that measures the options: A (the engine's XML) and B (a web-style HTML + CSS front-end, `.ui.html`) are built and measured, with all three shipped screens written both ways (`.claude/plans/ui-authoring-decision.md`); C (RmlUi) is vendored in `src/Modules/RmlUi` (behind `ENGINE_UI_RMLUI`, compiles with `-fno-exceptions`) but has no host yet, so it is not measured. The owner decides: A with B as a second loader, or wait for the C data.
 
 **Stage:** 3
 
