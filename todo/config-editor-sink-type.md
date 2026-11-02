@@ -1,4 +1,5 @@
 ---
+status: review 2026-11-02 branch todo/config-editor-the-sink-type-dropdown-offers-values-the: the sink type dropdown lists the factory's class names and shows the current value, unknown sink types are logged as errors, edit-save-reload is covered by a round-trip test; 1194 of 1194 ctest tests pass
 id: config-editor-the-sink-type-dropdown-offers-values-the
 ---
 # Config Editor: the sink `type` dropdown offers values the logger factory cannot resolve

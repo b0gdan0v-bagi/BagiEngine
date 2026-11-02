@@ -6,6 +6,17 @@
 namespace BECore {
 
     /**
+     * @brief Write every error the deserializer collected to the log, one LOG_ERROR per error.
+     *
+     * Form: `Config 'LoggerConfig': sinks[0].type: Unknown factory type: 'Console'`. The path is left out when the
+     * error has none (a document that does not parse), and ` (line N)` is appended when it has a line.
+     *
+     * @param configName    Name of the config the deserializer read, for the message.
+     * @param deserializer  Deserializer that finished (or failed) reading the config.
+     */
+    void LogDeserializeErrors(eastl::string_view configName, const IDeserializer& deserializer);
+
+    /**
      * @brief Create a RefCounted object and immediately deserialize it from a named XML config.
      *
      * Replaces the pattern:
@@ -22,6 +33,9 @@ namespace BECore {
      * @endcode
      *
      * If the config is not found, the object is returned with default field values.
+     * Errors the deserializer reports (an unknown factory `type`, a malformed value) are written to the log with
+     * LogDeserializeErrors(); the object keeps what could be read. A message logged before LoggerManager has its
+     * sinks stays in the log ring buffer and reaches them later, so this also works for LoggerConfig itself.
      *
      * @note Include this header from .cpp files only — it pulls in CoreManager.h.
      *
@@ -38,6 +52,9 @@ namespace BECore {
             XmlDeserializer d;
             d.LoadFromXmlNode(root);
             obj->Deserialize(d);
+            if (d.HasErrors()) {
+                LogDeserializeErrors(configName, d);
+            }
         }
         return obj;
     }

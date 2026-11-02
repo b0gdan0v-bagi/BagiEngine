@@ -9,6 +9,8 @@ namespace BECore {
     namespace {
 
         constexpr size_t k_textBufSize = 256;
+        constexpr const char* k_unknownValueMarker = "(not a known value)";
+        constexpr ImVec4 k_unknownValueColor{1.0f, 0.8f, 0.0f, 1.0f};
         using TextBuf = eastl::array<char, k_textBufSize>;
 
         // Persistent char buffers for InputText fields, keyed by widgetId
@@ -74,22 +76,34 @@ namespace BECore {
                 }
             }
 
-            // Build null-terminated list for ImGui combo
-            eastl::string items;
-            for (const auto& opt : options) {
-                items.append(opt);
-                items.push_back('\0');
-            }
-            items.push_back('\0');
+            // A value that is not an option (a typo, or a name the code no longer knows) is shown as it is and flagged
+            const bool isUnknown = selectedIndex < 0 && !currentValue.empty();
+            const eastl::string preview{currentValue.data(), currentValue.size()};
 
             const eastl::string label = Format("##{}", widgetId);
-            ImGui::SetNextItemWidth(-1.0f);
-            if (ImGui::Combo(label.c_str(), &selectedIndex, items.c_str())) {
-                if (selectedIndex >= 0 && selectedIndex < static_cast<int>(options.size())) {
-                    return {true, options[static_cast<size_t>(selectedIndex)]};
+            ImGui::SetNextItemWidth(isUnknown ? -(ImGui::CalcTextSize(k_unknownValueMarker).x + ImGui::GetStyle().ItemSpacing.x) : -1.0f);
+
+            InspectorResult result;
+            if (ImGui::BeginCombo(label.c_str(), preview.c_str())) {
+                for (int i = 0; i < static_cast<int>(options.size()); ++i) {
+                    const bool isSelected = (i == selectedIndex);
+                    ImGui::PushID(i);
+                    if (ImGui::Selectable(options[static_cast<size_t>(i)].c_str(), isSelected) && !isSelected) {
+                        result = {true, options[static_cast<size_t>(i)]};
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::PopID();
                 }
+                ImGui::EndCombo();
             }
-            return {};
+
+            if (isUnknown) {
+                ImGui::SameLine();
+                ImGui::TextColored(k_unknownValueColor, "%s", k_unknownValueMarker);
+            }
+            return result;
         }
 
         InspectorResult RenderFlags(const eastl::string& widgetId, eastl::string_view currentValue, const eastl::vector<eastl::string>& options) {

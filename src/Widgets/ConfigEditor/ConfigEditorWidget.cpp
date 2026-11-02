@@ -5,7 +5,7 @@
 
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/Logger/LogSinkType.h>
+#include <BECore/Logger/ILogSink.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <Generated/ConfigEditorWidget.gen.hpp>
 #include <imgui.h>
@@ -19,7 +19,7 @@ namespace BECore {
     bool ConfigEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
         auto& schema = ConfigFieldSchema::GetInstance();
 
-        schema.RegisterEnum<LogSinkType>("LoggerConfig"_intern, "sink/@type");
+        schema.RegisterFactoryTypes<ILogSink>("LoggerConfig"_intern, "sink/@type");
         schema.RegisterEnum<LogLevel>("LoggerConfig"_intern, "sink/@minLevel");
         schema.RegisterFlags("SDLWindowConfig"_intern, "window/@windowFlags", {"SDL_WINDOW_FULLSCREEN",    "SDL_WINDOW_OPENGL",
                                                                                "SDL_WINDOW_OCCLUDED",      "SDL_WINDOW_HIDDEN",

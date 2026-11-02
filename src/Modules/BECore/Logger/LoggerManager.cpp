@@ -15,6 +15,7 @@ namespace BECore {
 
         if (_sinks.empty()) {
             // Fallback: create a default console sink if config not found or empty
+            LOG_WARNING("LoggerConfig yields no sinks, falling back to a ConsoleSink");
             _sinks.push_back(BECore::New<ConsoleSink>());
         }
 

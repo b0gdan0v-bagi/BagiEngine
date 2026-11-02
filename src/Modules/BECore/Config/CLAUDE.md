@@ -12,7 +12,7 @@ XML configuration: every file under `config/` (the engine's and the game's, see 
 | `XmlDocument` | `RefCountedAtomic` owner of a `pugi::xml_document`: load/save file or string, `GetRoot()` |
 | `XmlConfig` | Handle over an `IntrusivePtrAtomic<XmlDocument>`: `LoadFromVirtualPath`, `LoadFromFile`, `LoadFromString`, `SaveToFile` |
 | `XmlNode` | Lightweight pugi node wrapper: `GetChild(name)`, `Children()`, `Name()`, `ParseAttribute<T>(name)` → `std::optional<T>`; `if (node)` is the validity check |
-| `MakeFromConfig<T>(name)` (`ConfigFactory.h`) | `New<T>()` + `Deserialize` from the named config; returns defaults when the config is missing. Include from `.cpp` files only (pulls in `CoreManager.h`) |
+| `MakeFromConfig<T>(name)` (`ConfigFactory.h`) | `New<T>()` + `Deserialize` from the named config; returns defaults when the config is missing. Errors the deserializer reports (an unknown factory `type`, a malformed value) are written to the log, one `LOG_ERROR` each, by `LogDeserializeErrors(configName, deserializer)` (`Config 'LoggerConfig': sinks[0].type: Unknown factory type: 'Console'`); the object keeps what could be read. Include from `.cpp` files only (pulls in `CoreManager.h`) |
 
 ## ConfigManager
 
@@ -42,4 +42,4 @@ Prefer a reflected struct plus `MakeFromConfig<T>` / `Deserialize` over hand-wri
 
 1. Drop `config/<Name>.xml`; it is picked up by name at the next start.
 2. Consume it with `GetConfig("<Name>"_intern)` or `MakeFromConfig<T>("<Name>")`.
-3. If users should edit it in the Config Editor, register enum or flag hints in `ConfigEditorWidget::Initialize` (`src/Widgets/ConfigEditor/`).
+3. If users should edit it in the Config Editor, register enum or flag hints in `ConfigEditorWidget::Initialize` (`src/Widgets/ConfigEditor/`): `RegisterEnum<E>` for an enum, `RegisterFactoryTypes<Base>` for a `type` attribute resolved by `AbstractFactory<Base>`. The options must be the strings the loader accepts (for a factory, the class names), so take them from the factory or the enum, never from a copy.

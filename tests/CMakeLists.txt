@@ -17,4 +17,4 @@ if(ENGINE_UI_RMLUI)
     list(APPEND TESTS_SOURCES ${RMLUI_TESTS_SOURCES})
 endif()
 
-be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule)
+be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule RuntimeModule)

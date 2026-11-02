@@ -37,7 +37,9 @@ File: `config/LoggerConfig.xml`, entries `<sink .../>`:
 - `priority`: processing order (lower runs first)
 - `minLevel`: minimum level to process
 
-If the config yields no sinks, `LoggerManager` falls back to a `ConsoleSink`.
+A `type` that is not registered in the factory is logged as an error by `MakeFromConfig` (`Config 'LoggerConfig': sinks[0].type: Unknown factory type: 'Console'`) and the entry is dropped. A `sink` without a `type` is dropped without a message. If the config yields no sinks, `LoggerManager` logs a warning and falls back to a `ConsoleSink`. The error and the warning are written while the sinks are still being built, so they sit in the ring buffer and reach the sinks at the first `LogEvent::Flush()`.
+
+`GetSinks()` and `GetSink<T>()` of `LoggerManager` are public (`CoreManager::GetLoggerManager().GetSink<ConsoleSink>()`). Tests: `tests/BECore/LoggerConfigTest.cpp` (unknown type reported and dropped, the fallback warning), `tests/BECore/ConfigFieldSchemaTest.cpp` (the Config Editor offers exactly the factory names), `tests/BECore/ConfigEditorSaveTest.cpp` (the round trip: every offered type is staged, saved to a temporary file, reloaded and built into a `LoggerManager`; a value outside the dropdown is reported on reload). A test that builds sinks points every `FileSink` `filename` into a temporary directory and lets the `LoggerManager` go out of scope before it ends.
 
 ## Best Practices
 
