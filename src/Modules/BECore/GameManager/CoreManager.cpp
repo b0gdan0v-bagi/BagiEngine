@@ -4,6 +4,7 @@
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Logger/OutputSink.h>
+#include <BECore/UI/UIControl.h>
 #include <Events/EventsQueueRegistry.h>
 #include <TaskSystem/TaskManager.h>
 
@@ -74,6 +75,7 @@ namespace BECore {
         _uiEnvironment.Initialize();
 
         RegisterControlBuiltins(_controlService);
+        RegisterUIControl(_controlService);
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {

@@ -202,6 +202,62 @@ def check_screenshots_on_the_manual_clock(client: BagiControlClient) -> None:
     check(other.rows != first.rows, "another seed looked the same: the screenshot does not follow the game")
 
 
+def find_ui_element(tree: dict, name: str) -> dict | None:
+    """The first element called `name` in the canvases of a `ui_tree` answer."""
+    def search(element: dict) -> dict | None:
+        if element["name"] == name:
+            return element
+        for child in element["children"]:
+            found = search(child)
+            if found is not None:
+                return found
+        return None
+
+    for canvas in tree["canvases"]:
+        for element in canvas["elements"]:
+            found = search(element)
+            if found is not None:
+                return found
+    return None
+
+
+def check_ui_methods(client: BagiControlClient) -> None:
+    """The in-game UI over the control API: the tree has rects, and a click acts like a user's (Match3: from the menu into the game and back)."""
+    client.call("step", {"frames": 2})
+    tree = client.call("ui_tree")
+    if tree["scene"] != "MainMenu":  # the earlier checks of this scenario may have switched to the game; go back by its Menu button
+        client.call("ui_click", {"name": "Menu"})
+        client.call("step", {"frames": 2})
+        tree = client.call("ui_tree")
+    check(tree["scene"] == "MainMenu", f"the Menu button did not lead to the menu: {tree['scene']}")
+    play = find_ui_element(tree, "Play")
+    check(play is not None and play["action"] == "Match3Play" and play["visible"], f"the menu has no visible Play button: {play}")
+    check(play["outputRect"]["w"] > 0 and play["outputRect"]["h"] > 0, f"the Play button has no size: {play['outputRect']}")
+    check(all(canvas["laidOut"] and not canvas["issues"] for canvas in tree["canvases"]), f"the menu has layout issues: {tree}")
+
+    expect_error("not_found", lambda: client.call("ui_click", {"name": "NoSuchElement"}), "a click on an element that does not exist")
+    expect_error("not_clickable", lambda: client.call("ui_click", {"name": "Title"}), "a click on a label")
+    expect_error("invalid_params", lambda: client.call("ui_click", {}), "a click without a name")
+
+    clicked = client.call("ui_click", {"name": "Play"})
+    check(clicked["consumed"] and clicked["action"] == "Match3Play", f"the click on Play was not taken: {clicked}")
+    client.call("step", {"frames": 2})
+    tree = client.call("ui_tree")
+    check(tree["scene"] != "MainMenu", f"Play did not leave the menu: {tree['scene']}")
+    check(find_ui_element(tree, "Reset") is not None and find_ui_element(tree, "Score") is not None, "the game scene has no Reset button or Score label")
+
+    client.call("reset", {"seed": 2})
+    client.call("perform_action", client.call("list_actions")["actions"][0])
+    check(client.call("get_state")["state"]["score"] > 0, "the first move scored nothing")
+    client.call("ui_click", {"name": "Reset"})
+    client.call("step", {"frames": 2})
+    check(client.call("get_state")["state"]["score"] == 0, "the click on Reset did not reset the game")
+
+    client.call("ui_click", {"name": "Menu"})
+    client.call("step", {"frames": 2})
+    check(client.call("ui_tree")["scene"] == "MainMenu", "the click on Menu did not go back to the menu")
+
+
 def run_real_clock_scenario(client: BagiControlClient, headless: bool) -> None:
     status = client.call("status")
     check(status["frame"] >= 1, f"status reports frame {status['frame']}")
@@ -272,6 +328,8 @@ def run_manual_clock_scenario(client: BagiControlClient, headless: bool) -> None
         check_screenshots_on_the_manual_clock(client)
     else:
         expect_error("capture_failed", lambda: client.call("screenshot"), "a screenshot on a backend that cannot capture")
+
+    check_ui_methods(client)
 
 
 SCENARIOS = [

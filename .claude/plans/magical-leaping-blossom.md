@@ -70,7 +70,8 @@ Updated as the work goes; the dashboard counts these lines.
 - [x] Stage 6.3 Hot reload of an RML document (`RmlUiDocumentComponent`, in any run mode): `RmlUiFileInterface` records an `RmlUiFileStamp` (path, write time, size) of each file a load opens, the draw polls them every `UISettings::hotReloadInterval` seconds of game time (`config/UIConfig.xml`, 0.5; 0 is off), `Reload()` / `ReloadIfChanged()` are public; the new document is loaded before the old one goes, RmlUi's style sheet and template caches are dropped before each load so a changed `.rcss` is read again; `RmlUiHostTest` +10, `UISettingsTest` +1. Found on the way: RmlUi's parser takes any text for a document (an empty file, plain words, `<<<>>>` all load), so a typo does not fail the load and "the old document stays" covers an unreadable file only. Not reloaded: images and fonts. Not looked at in a running game (the gtests drive the real component, file interface and clock)
 - [ ] Stage 6.4 What the element tree still needs for HUDs and menus that RmlUi is not used for: `UIProgressBar`, `UIToggle`, `UISlider`, a string table; each when a screen asks for it (Mahjong is the first consumer)
 - [ ] Stage 6 manual look at an RML screen on Vulkan (owner)
-- [ ] Stage 7 Editor and tooling
+- [x] Stage 7.1 Control API methods `ui_tree` and `ui_click` (`UIControl`, registered by `CoreManager`): the canvases and elements of the active scene with rects in UI units and in output pixels (the pixels of a `screenshot`), text, actions, the validator's findings; a click is a real move, press and release through `UIInput` on the middle of a visible button, refused with `not_found` / `not_clickable` / `no_scene` and a message that says why; `UIControlApiTest` (22); the same two as tools of the MCP server (`bagi_mcp.py`, pytest +1 scenario); the Match3 control smoke plays the menu through them (Play, a move, Reset, Menu). **Played in a running headless `BagiMatch3`**: the tree of the menu and the HUD at 1920 x 1080 (scale 1.5, no issue), Play, a move (score 0 to 3), Reset (back to 0), Menu. TouchTargetTooSmall and the other findings come through `issues`
+- [ ] Stage 7 rest: the scene editor's tree view of canvases and elements, a custom inspector for anchor presets and variants, the debug overlay (ImGui, cannot be looked at from an agent session: owner or a session with a screen)
 
 ## What the code says (shapes the design)
 
@@ -290,7 +291,7 @@ Decided on 2026-11-02: A with B on the element tree for HUDs and menus, RmlUi fo
 
 - `SceneEditorWidget`: a tree view of canvases and elements (read-only for a tree built from a file, with add/remove for inline XML children), a custom inspector for anchor presets and variants; the generic visitor already shows reflected fields.
 - A debug overlay on each canvas (element outlines, names, the safe area, the validator's findings).
-- Control API methods `ui_tree` (canvases and elements with resolved rects, validator issues) and `ui_click(name)`; with the planned screenshot this gives the edit, run, look loop that the authoring TODO entry asks for. Depends on `buzzing-tinkering-cat.md`.
+- Control API methods `ui_tree` (canvases and elements with resolved rects, validator issues) and `ui_click(name)`; with the screenshot this gives the edit, run, look loop that the authoring TODO entry asks for. **Done (7.1).**
 
 ## Docs and bookkeeping
 

@@ -149,6 +149,35 @@ def screenshot(max_size: int | None = None) -> Image:
 
 @server.tool()
 @reports_errors
+def ui_tree() -> dict[str, Any]:
+    """The in-game UI of the active scene: {scene, canvases}. Step a frame first, the rects are those of the last drawn frame.
+
+    A canvas has node, space, visible, modal, inputEnabled, takesInput, laidOut, scale, bounds and its elements (a tree) and the `issues` that the
+    layout validator found (TouchTargetTooSmall, OutsideCanvas, TextDoesNotFit...). An element has type, name, visible, interactive, rect (UI units of
+    the canvas) and outputRect (the pixels of a screenshot), text for a label or a button, action and disabled for a button, and children.
+    Not shown: the documents of RmlUi screens.
+    """
+    return session.call("ui_tree")
+
+
+@server.tool()
+@reports_errors
+def ui_click(name: str, canvas: str | None = None) -> dict[str, Any]:
+    """Presses the left mouse button on the middle of the visible button called `name`, like a user, and answers where it clicked.
+
+    canvas: the scene node of the canvas, when several canvases have an element of that name. A button that cannot be pressed is an error:
+    not_found (no such element), not_clickable (hidden, not a button, covered by another element, or its canvas takes no input; the message says
+    which), no_scene. `consumed` in the answer says whether a canvas took the press; a click that nobody took reaches the game, as a user's would.
+    The action runs at once but the picture follows only after a step.
+    """
+    params: dict[str, Any] = {"name": name}
+    if canvas is not None:
+        params["canvas"] = canvas
+    return session.call("ui_click", params)
+
+
+@server.tool()
+@reports_errors
 def game_log(lines: int = 40) -> str:
     """The last lines of the output of the game that launch_game started: use it when the game fails or an action is refused for no visible reason."""
     return session.game_log(lines)

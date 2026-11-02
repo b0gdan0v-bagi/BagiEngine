@@ -28,7 +28,7 @@ STOCKFISH=/path/to/stockfish .venv/bin/python -m pytest tools/control/tests/test
 
 ## The MCP server
 
-`claude mcp add bagi -- .venv/bin/python tools/control/bagi_mcp.py` (Windows: `.venv\Scripts\python`). The repository has no `.mcp.json`: the interpreter path differs per OS and machine, and a project file makes every contributor approve a server they may not want. Tools: `launch_game`, `connect`, `status`, `get_state`, `list_actions`, `perform_action`, `set_state`, `reset`, `step`, `screenshot` (an image), `game_log`, `quit`. `launch_game` starts the game `--headless --manual-clock`, so a screenshot works and nothing moves until `step`.
+`claude mcp add bagi -- .venv/bin/python tools/control/bagi_mcp.py` (Windows: `.venv\Scripts\python`). The repository has no `.mcp.json`: the interpreter path differs per OS and machine, and a project file makes every contributor approve a server they may not want. Tools: `launch_game`, `connect`, `status`, `get_state`, `list_actions`, `perform_action`, `set_state`, `reset`, `step`, `screenshot` (an image), `ui_tree`, `ui_click`, `game_log`, `quit`. `launch_game` starts the game `--headless --manual-clock`, so a screenshot works and nothing moves until `step`.
 
 - Written for `mcp` 2.x (`MCPServer`, `ToolError`); 1.x had `FastMCP` and is not supported.
 - **Every tool is wrapped in `reports_errors`.** The server shows the model only the message of a `ToolError`; any other exception becomes "Error executing tool X" and the model would never see `illegal_action` or `promotion_required`. A new tool needs the decorator; `test_dispatch.py` checks this over a real stdio connection.

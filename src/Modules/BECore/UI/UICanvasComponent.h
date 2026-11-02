@@ -82,6 +82,9 @@ namespace BECore {
             return _inputOrder;
         }
 
+        /// True while the canvas is shown, has input on and its scene is the active one: the only time it consumes an event
+        [[nodiscard]] bool TakesInput() const;
+
         /// True between a mouse press that this canvas took and its release: the canvas keeps consuming the motion in between
         [[nodiscard]] bool HoldsPress() const {
             return _consumedButtons != 0;
@@ -105,8 +108,6 @@ namespace BECore {
 
         /// The element under a point in output pixels, by the layout of the last draw
         [[nodiscard]] UIElement* HitTestOutput(float outputX, float outputY) const;
-        [[nodiscard]] bool TakesInput() const;
-
         // Pointer state of the interactive elements (UIElement::hovered, pressed, OnClick)
         void SetHovered(UIElement* element);
         void ClearPointerState();

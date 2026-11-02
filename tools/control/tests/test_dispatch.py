@@ -37,6 +37,12 @@ def echo_handler(method: str, params: dict | None):
         return {"frame": 8, "params": params}
     if method == "screenshot":
         return {"width": 2, "height": 1, "png_base64": base64.b64encode(b"\x89PNG-fake").decode("ascii"), "params": params}
+    if method == "ui_tree":
+        return {"scene": "Fake", "canvases": []}
+    if method == "ui_click":
+        if (params or {}).get("name") == "Nothing":
+            raise FakeError("not_found", "no element named 'Nothing'")
+        return {"clicked": (params or {}).get("name"), "params": params}
     if method == "quit":
         raise QuitServer({"quitting": True})
     raise FakeError("unknown_method", method)
@@ -222,7 +228,7 @@ def test_launch_of_a_missing_executable_names_the_path(session, tmp_path):
 
 
 EXPECTED_TOOLS = {
-    "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "game_log", "quit",
+    "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "game_log", "quit",
 }
 
 
@@ -256,6 +262,18 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             stepped = await client.call_tool("step", {"frames": 2})
             assert not stepped.is_error
 
+            tree = await client.call_tool("ui_tree", {})
+            assert not tree.is_error and "canvases" in tree.content[0].text
+
+            clicked = await client.call_tool("ui_click", {"name": "Ok"})
+            assert not clicked.is_error and "Ok" in clicked.content[0].text
+            within = await client.call_tool("ui_click", {"name": "Ok", "canvas": "Debug"})
+            assert not within.is_error
+
+            missing = await client.call_tool("ui_click", {"name": "Nothing"})
+            assert missing.is_error and "not_found" in missing.content[0].text
+
     asyncio.run(scenario())
     assert requests_of(server, "screenshot")[-1] == {"maxSize": 64}
     assert requests_of(server, "step")[-1] == {"frames": 2}
+    assert requests_of(server, "ui_click")[:2] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}]
