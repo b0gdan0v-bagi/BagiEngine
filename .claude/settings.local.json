@@ -3,7 +3,21 @@
     "allow": [
       "Bash(xargs basename:*)",
       "Bash(cmake -B build/ClangWindows -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++)",
-      "Bash(cmake -B build/ClangWindowsSolution -G \"Visual Studio 17 2022\" -A x64 -T ClangCL)"
+      "Bash(cmake -B build/ClangWindowsSolution -G \"Visual Studio 17 2022\" -A x64 -T ClangCL)",
+      "Edit(~/.claude/plans/todo-loop-*)",
+      "Write(~/.claude/plans/todo-loop-*)",
+      "Bash(git switch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch --list:*)",
+      "Bash(cmake:*)",
+      "Bash(ctest:*)",
+      "Bash(.venv/bin/python tools/todo_sync/todo_sync.py check:*)",
+      "Bash(.venv/bin/python tools/todo_sync/todo_sync.py parse:*)",
+      "Bash(.venv/bin/python -m pytest:*)"
+    ],
+    "deny": [
+      "Bash(git push:*)"
     ]
   }
 }
