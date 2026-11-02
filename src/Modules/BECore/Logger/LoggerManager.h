@@ -36,7 +36,6 @@ namespace BECore {
          */
         void Initialize();
 
-    private:
         /**
          * @brief Get sink by type
          *
@@ -61,6 +60,7 @@ namespace BECore {
             return _sinks;
         }
 
+    private:
         /**
          * @brief Sort sinks by priority (lower first)
          */
