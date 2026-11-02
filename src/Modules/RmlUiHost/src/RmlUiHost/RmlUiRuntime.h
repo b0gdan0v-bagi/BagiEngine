@@ -37,6 +37,9 @@ namespace BECore {
         [[nodiscard]] RmlUiFontEngine& GetFontEngine() {
             return _fonts;
         }
+        [[nodiscard]] RmlUiFileInterface& GetFileInterface() {
+            return _files;
+        }
 
         /// A name for a new context, unique for the life of the process
         [[nodiscard]] Rml::String NextContextName();

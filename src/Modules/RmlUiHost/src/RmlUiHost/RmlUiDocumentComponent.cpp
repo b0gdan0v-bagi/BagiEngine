@@ -117,7 +117,7 @@ namespace BECore {
         if (_source.Empty()) {
             return;
         }
-        Rml::ElementDocument* document = _context->LoadDocument(Rml::String(_source.ToStringView().data(), _source.ToStringView().size()));
+        Rml::ElementDocument* document = LoadSource();
         if (!document) {
             LOG_ERROR("RmlUiDocumentComponent: cannot load the document '{}'"_format(_source.ToStringView()));
             return;
@@ -125,10 +125,59 @@ namespace BECore {
         AttachDocument(document);
     }
 
+    Rml::ElementDocument* RmlUiDocumentComponent::LoadSource() {
+        RmlUiFileInterface& files = RmlUiRuntime::GetInstance().GetFileInterface();
+        // RmlUi keeps style sheets and templates by path, so a cached one would not be opened again: drop them, and the list of files below is the whole document
+        Rml::Factory::ClearStyleSheetCache();
+        Rml::Factory::ClearTemplateCache();
+        files.BeginRecording();
+        Rml::ElementDocument* document = _context->LoadDocument(Rml::String(_source.ToStringView().data(), _source.ToStringView().size()));
+        _watched = files.EndRecording();
+        return document;
+    }
+
+    bool RmlUiDocumentComponent::Reload() {
+        if (_source.Empty() || !_context) {
+            return false;
+        }
+        Rml::ElementDocument* document = LoadSource();
+        if (!document) {
+            LOG_ERROR("RmlUiDocumentComponent: cannot reload the document '{}', the old one stays"_format(_source.ToStringView()));
+            return false;
+        }
+        if (_document) {
+            _context->UnloadDocument(_document);
+        }
+        AttachDocument(document);
+        LOG_INFO("RmlUiDocumentComponent: reloaded '{}'"_format(_source.ToStringView()));
+        return true;
+    }
+
+    bool RmlUiDocumentComponent::ReloadIfChanged() {
+        const bool changed = std::any_of(_watched.begin(), _watched.end(), [](const RmlUiFileStamp& stamp) { return stamp.IsStale(); });
+        return changed && Reload();
+    }
+
+    void RmlUiDocumentComponent::PollFiles() {
+        const float interval = CoreManager::GetUIEnvironment().GetSettings().hotReloadInterval;
+        if (interval <= 0.0f || _source.Empty()) {
+            return;
+        }
+        const double now = CoreManager::GetTime().GetTotalTime();
+        // A clock that went back (Time::Reset) polls at once
+        if (now >= _lastPollTime && now - _lastPollTime < interval) {
+            return;
+        }
+        _lastPollTime = now;
+        ReloadIfChanged();
+    }
+
     bool RmlUiDocumentComponent::SetMarkup(const eastl::string& markup) {
         if (!_context && !CreateContext()) {
             return false;
         }
+        // The markup replaces whatever `source` gave, so there are no files to watch
+        _watched.clear();
         if (_document) {
             _context->UnloadDocument(_document);
             _document = nullptr;
@@ -222,6 +271,7 @@ namespace BECore {
     void RmlUiDocumentComponent::OnDraw() {
         // Also while hidden, so a document that is shown later (a modal dialog) already has its place in the input order
         RefreshInputOrder();
+        PollFiles();
 
         const auto& renderer = CoreManager::GetRenderer();
         if (!_visible) {

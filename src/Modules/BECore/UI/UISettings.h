@@ -8,7 +8,7 @@ namespace BECore {
      * @brief Settings of the in-game UI, read from `config/UIConfig.xml`.
      *
      * ```xml
-     * <UIConfig userScale="1.0" minTouchSize="32"/>
+     * <UIConfig userScale="1.0" minTouchSize="32" hotReloadInterval="0.5"/>
      * ```
      */
     struct UISettings {
@@ -17,6 +17,9 @@ namespace BECore {
 
         /// The smallest side of an interactive element in window units (what the user sees, whatever the canvas scale): the layout validator flags a smaller one
         float minTouchSize = 32.0f;
+
+        /// How often, in seconds of game time, a document that comes from a file looks at its files and loads itself again when one changed (the RmlUi host); 0 turns it off
+        float hotReloadInterval = 0.5f;
 
         /// The user scale is kept inside this range, so a bad value cannot make the UI vanish or fill the screen
         static constexpr float kMinUserScale = 0.5f;

@@ -99,6 +99,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         }
 
         void SetUp() override {
+            _savedSettings = CoreManager::GetUIEnvironment().GetSettings();
             _renderer = New<RecordingRenderer>();
             _renderer->width = 800.0f;
             _renderer->height = 600.0f;
@@ -114,6 +115,12 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
 
         void TearDown() override {
             _manager.Reset();
+            _fileManager.Reset();
+            CoreManager::GetUIEnvironment().SetSettings(_savedSettings);
+            CoreManager::GetTime().Reset();
+            if (!_directory.empty()) {
+                std::filesystem::remove_all(_directory);
+            }
             CoreManager::GetUIVars().Clear();
             CoreManager::GetRendererManager().SetRenderer({});
             EXPECT_EQ(RmlUiRuntime::GetInstance().GetHolderCount(), 0);
@@ -154,8 +161,49 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
             return static_cast<size_t>(std::count_if(renderer.calls.begin(), renderer.calls.end(), [](const DrawCall& call) { return call.kind == DrawKind::Geometry; }));
         }
 
+        /// A directory of its own, named after the running test (the tests of one executable run in parallel processes)
+        std::filesystem::path MakeDirectory() {
+            _directory = std::filesystem::temp_directory_path() / Format("BagiEngineRmlUiHostTest_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()).c_str();
+            std::filesystem::remove_all(_directory);
+            std::filesystem::create_directories(_directory);
+            return _directory;
+        }
+
+        /// Writes a file and moves its time two seconds on, so an edit is seen whatever the resolution of the file system's clock
+        static void Write(const std::filesystem::path& path, const char* text) {
+            {
+                std::ofstream(path, std::ios::binary | std::ios::trunc) << text;
+            }
+            std::error_code error;
+            std::filesystem::last_write_time(path, std::filesystem::file_time_type::clock::now() + std::chrono::seconds(++_edits * 2), error);
+        }
+
+        /// A scene with one RmlUiDocumentComponent whose `source` is @p source (a real path), drawn in the output of the fixture's renderer
+        IntrusivePtr<RmlUiDocumentComponent> OpenFile(const std::filesystem::path& source) {
+            const eastl::string scene = Format(R"(<SceneManager><scenes><scene type="Scene" name="File"><nodes><node name="Doc"><components>
+  <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ConstantPixelSize" source="{}"/>
+</components></node></nodes></scene></scenes></SceneManager>)",
+                                               source.generic_string());
+            XmlDeserializer deserializer;
+            EXPECT_TRUE(deserializer.LoadFromString(scene));
+            _fileManager = New<SceneManager>();
+            _fileManager->Deserialize(deserializer);
+            _fileManager->Initialize();
+            _fileManager->SetActiveScene("File"_intern);
+            return _fileManager->GetSceneByName("File"_intern)->GetRootNode().GetChildren()[0]->GetComponent<RmlUiDocumentComponent>();
+        }
+
+        void DrawFile() {
+            _renderer->ClearCalls();
+            _fileManager->DrawAll();
+        }
+
         IntrusivePtr<RecordingRenderer> _renderer;
         IntrusivePtrAtomic<SceneManager> _manager;
+        IntrusivePtrAtomic<SceneManager> _fileManager;
+        UISettings _savedSettings;
+        std::filesystem::path _directory;
+        static inline int _edits = 0;
     };
 
     TEST_F(RmlUiHostTest, TheFieldsComeFromTheSceneConfig) {
@@ -474,6 +522,191 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         doc.Reset();
         manager.Reset();
         std::filesystem::remove_all(directory);
+    }
+
+    // ---- hot reload ---------------------------------------------------------------------------------------------------------------
+
+    namespace {
+
+        constexpr const char* kBoxDocument = R"(<rml><head><link type="text/rcss" href="menu.rcss"/></head><body><div id="box"></div></body></rml>)";
+
+        eastl::string BoxStyle(int left) {
+            return Format("body {{ width: 100%; height: 100%; }} #box {{ position: absolute; left: {}dp; top: 34dp; width: 56dp; height: 78dp; background-color: #123456; }}", left);
+        }
+
+    }  // namespace
+
+    TEST_F(RmlUiHostTest, AChangedStylesheetLoadsTheDocumentAgain) {
+        const auto directory = MakeDirectory();
+        Write(directory / "menu.rml", kBoxDocument);
+        Write(directory / "menu.rcss", BoxStyle(12).c_str());
+        auto doc = OpenFile(directory / "menu.rml");
+        ASSERT_NE(doc->GetDocument(), nullptr);
+        DrawFile();
+        ASSERT_NEAR(BoxOf(*doc, "box").x, 12.0f, kTolerance);
+
+        Write(directory / "menu.rcss", BoxStyle(80).c_str());
+        EXPECT_TRUE(doc->ReloadIfChanged());
+
+        DrawFile();
+        EXPECT_NEAR(BoxOf(*doc, "box").x, 80.0f, kTolerance) << "the style sheet was read again, not taken from the cache";
+        EXPECT_FALSE(doc->ReloadIfChanged()) << "the new files are the ones watched now";
+    }
+
+    TEST_F(RmlUiHostTest, AChangedDocumentFileLoadsTheDocumentAgain) {
+        const auto directory = MakeDirectory();
+        Write(directory / "menu.rml", kBoxDocument);
+        Write(directory / "menu.rcss", BoxStyle(12).c_str());
+        auto doc = OpenFile(directory / "menu.rml");
+        DrawFile();
+        ASSERT_EQ(doc->GetDocument()->GetElementById("extra"), nullptr);
+
+        Write(directory / "menu.rml", R"(<rml><head><link type="text/rcss" href="menu.rcss"/></head><body><div id="box"></div><div id="extra"></div></body></rml>)");
+
+        EXPECT_TRUE(doc->ReloadIfChanged());
+        EXPECT_NE(doc->GetDocument()->GetElementById("extra"), nullptr);
+    }
+
+    TEST_F(RmlUiHostTest, ADocumentThatHasNotChangedIsLeftAlone) {
+        const auto directory = MakeDirectory();
+        Write(directory / "menu.rml", kBoxDocument);
+        Write(directory / "menu.rcss", BoxStyle(12).c_str());
+        auto doc = OpenFile(directory / "menu.rml");
+        Rml::ElementDocument* before = doc->GetDocument();
+
+        EXPECT_FALSE(doc->ReloadIfChanged());
+
+        EXPECT_EQ(doc->GetDocument(), before);
+    }
+
+    // RmlUi's parser takes nearly any text for a document, so a load fails only when the file cannot be read
+    TEST_F(RmlUiHostTest, ADocumentThatCannotBeReadKeepsTheOldOneOnScreen) {
+        const auto directory = MakeDirectory();
+        Write(directory / "menu.rml", kBoxDocument);
+        Write(directory / "menu.rcss", BoxStyle(12).c_str());
+        auto doc = OpenFile(directory / "menu.rml");
+        DrawFile();
+        Rml::ElementDocument* before = doc->GetDocument();
+
+        std::filesystem::remove(directory / "menu.rml");
+        EXPECT_FALSE(doc->ReloadIfChanged()) << "a file that is gone (an editor saves by deleting and renaming) is not a change yet";
+        EXPECT_FALSE(doc->Reload());
+
+        EXPECT_EQ(doc->GetDocument(), before) << "the screen is not blanked";
+        DrawFile();
+        EXPECT_NEAR(BoxOf(*doc, "box").x, 12.0f, kTolerance);
+
+        Write(directory / "menu.rml", kBoxDocument);
+        Write(directory / "menu.rcss", BoxStyle(40).c_str());
+        EXPECT_TRUE(doc->ReloadIfChanged()) << "the file is back, and the load is tried again";
+        DrawFile();
+        EXPECT_NEAR(BoxOf(*doc, "box").x, 40.0f, kTolerance);
+    }
+
+    TEST_F(RmlUiHostTest, AFileThatIsWrittenLaterIsNoticed) {
+        const auto directory = MakeDirectory();
+        auto doc = OpenFile(directory / "late.rml");
+        ASSERT_EQ(doc->GetDocument(), nullptr);
+
+        Write(directory / "menu.rcss", BoxStyle(25).c_str());
+        Write(directory / "late.rml", R"(<rml><head><link type="text/rcss" href="menu.rcss"/></head><body><div id="box"></div></body></rml>)");
+
+        EXPECT_TRUE(doc->ReloadIfChanged());
+        ASSERT_NE(doc->GetDocument(), nullptr);
+        DrawFile();
+        EXPECT_NEAR(BoxOf(*doc, "box").x, 25.0f, kTolerance);
+    }
+
+    TEST_F(RmlUiHostTest, TheDrawLooksAtTheFilesOncePerInterval) {
+        UISettings settings = _savedSettings;
+        settings.hotReloadInterval = 0.5f;
+        CoreManager::GetUIEnvironment().SetSettings(settings);
+        const auto directory = MakeDirectory();
+        Write(directory / "menu.rml", kBoxDocument);
+        Write(directory / "menu.rcss", BoxStyle(12).c_str());
+        auto doc = OpenFile(directory / "menu.rml");
+        DrawFile();  // the first draw looks, and finds nothing
+
+        Write(directory / "menu.rcss", BoxStyle(80).c_str());
+        DrawFile();
+        EXPECT_NEAR(BoxOf(*doc, "box").x, 12.0f, kTolerance) << "less than an interval has passed";
+
+        // The clock clamps a frame to Time::kMaxFrameTime, so three frames make more than the interval
+        for (int frame = 0; frame < 3; ++frame) {
+            CoreManager::GetTime().Advance(Time::kMaxFrameTime);
+        }
+        DrawFile();
+        EXPECT_NEAR(BoxOf(*doc, "box").x, 80.0f, kTolerance);
+    }
+
+    TEST_F(RmlUiHostTest, AnIntervalOfZeroTurnsHotReloadOff) {
+        UISettings settings = _savedSettings;
+        settings.hotReloadInterval = 0.0f;
+        CoreManager::GetUIEnvironment().SetSettings(settings);
+        const auto directory = MakeDirectory();
+        Write(directory / "menu.rml", kBoxDocument);
+        Write(directory / "menu.rcss", BoxStyle(12).c_str());
+        auto doc = OpenFile(directory / "menu.rml");
+        DrawFile();
+
+        Write(directory / "menu.rcss", BoxStyle(80).c_str());
+        for (int frame = 0; frame < 8; ++frame) {
+            CoreManager::GetTime().Advance(Time::kMaxFrameTime);
+        }
+        DrawFile();
+
+        EXPECT_NEAR(BoxOf(*doc, "box").x, 12.0f, kTolerance);
+        EXPECT_TRUE(doc->ReloadIfChanged()) << "a call still works";
+    }
+
+    TEST_F(RmlUiHostTest, AReloadKeepsTheVariablesAndTheActions) {
+        const auto directory = MakeDirectory();
+        constexpr const char* markup = R"(<rml><head><style>body {{ width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color: white; pointer-events: none; }}
+#play {{ position: absolute; left: {}dp; top: 100dp; width: 120dp; height: 40dp; background-color: #285a3c; pointer-events: auto; }}</style></head>
+<body data-model="vars"><button id="play" data-action="Match3Play">Score {{{{vars.score}}}}</button></body></rml>)";
+        Write(directory / "menu.rml", Format(markup, 100).c_str());
+        auto doc = OpenFile(directory / "menu.rml");
+        CoreManager::GetUIVars().Set("score"_intern, 7);
+        DrawFile();
+        ASSERT_EQ(doc->GetDocument()->GetElementById("play")->GetInnerRML(), "Score 7");
+
+        Write(directory / "menu.rml", Format(markup, 300).c_str());
+        ASSERT_TRUE(doc->ReloadIfChanged());
+        CoreManager::GetUIVars().Set("score"_intern, 8);
+        DrawFile();
+
+        EXPECT_EQ(doc->GetDocument()->GetElementById("play")->GetInnerRML(), "Score 8") << "the model of the context follows the new document";
+        Recorder recorder;
+        UIInput& input = CoreManager::GetUIInput();
+        EXPECT_FALSE(input.DispatchMouseButtonDown(Button(150.0f, 120.0f, true))) << "the old place of the button is empty";
+        input.DispatchMouseButtonUp(Button(150.0f, 120.0f, false));
+        EXPECT_TRUE(recorder.actions.empty());
+        EXPECT_TRUE(input.DispatchMouseButtonDown(Button(350.0f, 120.0f, true)));
+        input.DispatchMouseButtonUp(Button(350.0f, 120.0f, false));
+        ASSERT_EQ(recorder.actions.size(), 1u);
+        EXPECT_EQ(recorder.actions[0], "Match3Play"_intern);
+    }
+
+    TEST_F(RmlUiHostTest, MarkupFromCodeIsNotReplacedByTheFiles) {
+        const auto directory = MakeDirectory();
+        Write(directory / "menu.rml", kBoxDocument);
+        Write(directory / "menu.rcss", BoxStyle(12).c_str());
+        auto doc = OpenFile(directory / "menu.rml");
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<div id="other"></div>)")));
+
+        Write(directory / "menu.rcss", BoxStyle(80).c_str());
+
+        EXPECT_FALSE(doc->ReloadIfChanged());
+        EXPECT_NE(doc->GetDocument()->GetElementById("other"), nullptr);
+    }
+
+    TEST_F(RmlUiHostTest, AComponentWithoutASourceHasNothingToReload) {
+        auto doc = Doc("Main");
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<div id="box"></div>)")));
+
+        EXPECT_FALSE(doc->Reload());
+        EXPECT_FALSE(doc->ReloadIfChanged());
+        EXPECT_NE(doc->GetDocument()->GetElementById("box"), nullptr);
     }
 
     TEST_F(RmlUiHostTest, AMissingFileLeavesTheComponentWithoutADocument) {

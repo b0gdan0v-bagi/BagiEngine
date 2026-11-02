@@ -17,6 +17,9 @@ namespace BECore {
         if (auto minTouchSize = node.ParseAttribute<float>("minTouchSize")) {
             settings.minTouchSize = std::max(*minTouchSize, 0.0f);
         }
+        if (auto hotReloadInterval = node.ParseAttribute<float>("hotReloadInterval")) {
+            settings.hotReloadInterval = std::max(*hotReloadInterval, 0.0f);
+        }
         return settings;
     }
 

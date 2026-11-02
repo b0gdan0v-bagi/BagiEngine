@@ -1,4 +1,5 @@
 <?xml version="1.0"?>
 <UIConfig
   userScale="1.0"
-  minTouchSize="32" />
+  minTouchSize="32"
+  hotReloadInterval="0.5" />

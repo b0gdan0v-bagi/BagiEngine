@@ -60,13 +60,20 @@ namespace BECore::Tests {
 
         EXPECT_FLOAT_EQ(settings.userScale, 1.0f);
         EXPECT_FLOAT_EQ(settings.minTouchSize, 32.0f);
+        EXPECT_FLOAT_EQ(settings.hotReloadInterval, 0.5f);
     }
 
     TEST(UISettingsPureTest, AttributesOverrideTheDefaults) {
-        const UISettings settings = Parse(R"(<UIConfig userScale="1.5" minTouchSize="44"/>)");
+        const UISettings settings = Parse(R"(<UIConfig userScale="1.5" minTouchSize="44" hotReloadInterval="2"/>)");
 
         EXPECT_FLOAT_EQ(settings.userScale, 1.5f);
         EXPECT_FLOAT_EQ(settings.minTouchSize, 44.0f);
+        EXPECT_FLOAT_EQ(settings.hotReloadInterval, 2.0f);
+    }
+
+    TEST(UISettingsPureTest, ZeroTurnsHotReloadOffAndANegativeIntervalIsZero) {
+        EXPECT_FLOAT_EQ(Parse(R"(<UIConfig hotReloadInterval="0"/>)").hotReloadInterval, 0.0f);
+        EXPECT_FLOAT_EQ(Parse(R"(<UIConfig hotReloadInterval="-3"/>)").hotReloadInterval, 0.0f);
     }
 
     TEST(UISettingsPureTest, TheUserScaleIsKeptInsideItsRange) {
@@ -76,10 +83,11 @@ namespace BECore::Tests {
     }
 
     TEST(UISettingsPureTest, AMalformedAttributeKeepsTheDefault) {
-        const UISettings settings = Parse(R"(<UIConfig userScale="big" minTouchSize="small"/>)");
+        const UISettings settings = Parse(R"(<UIConfig userScale="big" minTouchSize="small" hotReloadInterval="often"/>)");
 
         EXPECT_FLOAT_EQ(settings.userScale, 1.0f);
         EXPECT_FLOAT_EQ(settings.minTouchSize, 32.0f);
+        EXPECT_FLOAT_EQ(settings.hotReloadInterval, 0.5f);
     }
 
     TEST_F(UISettingsTest, TheShippedConfigGivesTheDefaults) {
@@ -87,6 +95,7 @@ namespace BECore::Tests {
 
         EXPECT_FLOAT_EQ(settings.userScale, 1.0f);
         EXPECT_FLOAT_EQ(settings.minTouchSize, 32.0f);
+        EXPECT_FLOAT_EQ(settings.hotReloadInterval, 0.5f);
     }
 
     TEST(UIEnvironmentTest, WithoutAWindowTheMetricsAreNeutral) {

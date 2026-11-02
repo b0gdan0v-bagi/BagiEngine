@@ -5,6 +5,7 @@
 #include <BECore/UI/UICanvasScaler.h>
 #include <RmlUi/Core/DataModelHandle.h>
 #include <RmlUi/Core/EventListener.h>
+#include <RmlUiHost/RmlUiFileInterface.h>
 #include <RmlUiHost/RmlUiVarsDefinition.h>
 
 namespace Rml {
@@ -34,6 +35,11 @@ namespace BECore {
      * **Input.** Everything under the pointer takes the event, including `body`: a wrapper that must let clicks through says `pointer-events: none`, the same decision
      * the HTML front-end makes with its "a group takes clicks only with a background" rule. A `click` is queued by the listener and the action is emitted after RmlUi has
      * finished with the event, because a handler may switch scenes and destroy this component.
+     *
+     * **Hot reload.** A document that comes from `source` notes the files it read (the `.rml`, its `.rcss`, templates). Every `UISettings::hotReloadInterval` seconds of game time
+     * the draw looks at them and, when one changed, loads the document again (Reload()). A document that cannot be loaded is logged and the one on screen stays,
+     * and the next save is tried again. RmlUi's parser takes nearly any text for a document, so a typo in markup shows on screen (and in the log), it does not fail the load.
+     * Not reloaded: images and fonts, and a document from SetMarkup().
      */
     class RmlUiDocumentComponent : public IComponent, public IUIInputHandler {
         BE_CLASS(RmlUiDocumentComponent)
@@ -67,6 +73,13 @@ namespace BECore {
 
         /// Replaces the document with this markup (tests, generated screens). @return false when RmlUi refused it
         bool SetMarkup(const eastl::string& markup);
+
+        /// Loads the document of `source` again now, replacing the one on screen (the data model and the component's fields stay; the state of the old document's elements, such as hover, does not).
+        /// The old document stays when the new one cannot be loaded. @return true when a new document is in place; false also for a component without a `source`
+        bool Reload();
+
+        /// Reload() when a file the document was made of changed since it was read. @return true when a new document replaced the old one
+        bool ReloadIfChanged();
 
         /// Lays the document out for an output of this size and runs the data-model update, as the next draw would, without drawing. For a test that reads the boxes
         void UpdateLayout(float outputWidth, float outputHeight);
@@ -111,6 +124,12 @@ namespace BECore {
         bool CreateContext();
         void DestroyContext();
         void AttachDocument(Rml::ElementDocument* document);
+
+        /// Loads `source` and notes the files it read in `_watched`, also when the load fails (a file that is mended later is then noticed)
+        [[nodiscard]] Rml::ElementDocument* LoadSource();
+
+        /// ReloadIfChanged() at the pace of `UISettings::hotReloadInterval`
+        void PollFiles();
         void SyncVars();
         void FlushActions();
 
@@ -125,6 +144,9 @@ namespace BECore {
         uint64_t _varsVersion = 0;
         ActionListener _listener;
         bool _holdsRuntime = false;
+
+        eastl::vector<RmlUiFileStamp> _watched;
+        double _lastPollTime = -std::numeric_limits<double>::infinity();
 
         float _originX = 0.0f;
         float _originY = 0.0f;

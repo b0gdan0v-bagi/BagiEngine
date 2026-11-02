@@ -4,12 +4,58 @@
 
 namespace BECore {
 
+    RmlUiFileStamp RmlUiFileStamp::Of(const std::filesystem::path& path) {
+        RmlUiFileStamp stamp;
+        stamp.path = path;
+        std::error_code error;
+        const auto lastWrite = std::filesystem::last_write_time(path, error);
+        if (error) {
+            return stamp;
+        }
+        const auto size = std::filesystem::file_size(path, error);
+        if (error) {
+            return stamp;
+        }
+        stamp.lastWrite = lastWrite;
+        stamp.size = size;
+        return stamp;
+    }
+
+    bool RmlUiFileStamp::IsStale() const {
+        std::error_code error;
+        const auto lastWrite = std::filesystem::last_write_time(path, error);
+        if (error) {
+            return false;
+        }
+        const auto currentSize = std::filesystem::file_size(path, error);
+        if (error) {
+            return false;
+        }
+        return lastWrite != this->lastWrite || currentSize != size;
+    }
+
+    void RmlUiFileInterface::BeginRecording() {
+        _recorded.clear();
+        _isRecording = true;
+    }
+
+    eastl::vector<RmlUiFileStamp> RmlUiFileInterface::EndRecording() {
+        _isRecording = false;
+        return std::move(_recorded);
+    }
+
     Rml::FileHandle RmlUiFileInterface::Open(const Rml::String& path) {
         const eastl::string_view virtualPath(path.data(), path.size());
         std::filesystem::path realPath = CoreManager::GetFileSystem().ResolvePath(virtualPath);
         std::error_code error;
         if (realPath.empty() || !std::filesystem::is_regular_file(realPath, error)) {
             realPath = std::filesystem::path(path);
+        }
+        if (_isRecording) {
+            const bool known = std::any_of(_recorded.begin(), _recorded.end(), [&](const RmlUiFileStamp& stamp) { return stamp.path == realPath; });
+            if (!known) {
+                _recorded.push_back(RmlUiFileStamp::Of(realPath));
+            }
         }
         std::ifstream file(realPath, std::ios::binary | std::ios::ate);
         if (!file) {
