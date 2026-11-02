@@ -48,12 +48,12 @@ Tests: `tests/BECore/SceneEventsTest.cpp` (`SceneEventCounter::drawIndex` is the
 
 ## View size
 
-A scene says how big its picture is in scene units: `<scene type="Scene" name="ChessScene" viewWidth="840" viewHeight="760">`. Everything in the scene (transforms, board origins and cell sizes) is in these units, and the engine fits the view to whatever the render output is:
+A scene says how big its picture is in scene units: `<scene type="Scene" name="ChessScene" viewWidth="840" viewHeight="800">`. Everything in the scene (transforms, board origins and cell sizes) is in these units, and the engine fits the view to whatever the render output is:
 
 - `Scene::Draw()` asks the renderer for its output size, builds `ViewTransform::Fit(viewWidth, viewHeight, outputW, outputH)` (one uniform scale, the view centered, bars on the free sides), sets it with `IRenderer::SetViewTransform()` for the draw pass and resets it after. The backends apply it to every rect (`.claude/rules/rendering-module.md`). It is computed every frame, so a window or viewport of any size, resized or not, needs no event.
 - Without a view size (both 0, the default) the transform is the identity: one unit is one output pixel, as before. A game that does not need scaling declares nothing. Without a renderer (tests) it is the identity too.
 - Mouse positions (down, up, motion and wheel alike) arrive in output pixels (window pixels in Game mode, viewport-local in Editor mode). A handler maps them with `GetScene().ScreenToSceneX(e.button.x)` / `ScreenToSceneY(...)` before it compares them with scene geometry; `ClickableComponent`, `ChessBoardComponent` and `Match3BoardComponent` do. The mapping uses the transform of the last draw (the identity before the first one).
-- Pick the view size as the bounding box of the content with the margins you want to keep: the board of Chess is 640x640 at (100, 60), so the view is 840x760. A view with a different aspect than the window gets bars; the bars show the clear color.
+- Pick the view size as the bounding box of the content with the margins you want to keep: the board of Chess is 640x640 at (100, 80), so the view is 840x800: 100 units on the sides, and 80 above and below for the HUD, which lives in those margins as a `SceneView` canvas (`UI/CLAUDE.md`). A view with a different aspect than the window gets bars; the bars show the clear color.
 - The scene editor saves `viewWidth` / `viewHeight` when they are set.
 - Not handled: the Vulkan swapchain is not recreated when the window is resized (a TODO in `VulkanRendererBackend::AcquireFrame()`), so the output size is the one the swapchain was created with.
 

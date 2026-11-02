@@ -58,7 +58,7 @@ Updated as the work goes; the dashboard counts these lines.
 - [x] Stage 4.4 `UIVars` (`CoreManager::GetUIVars()`), `{name}` binding in `UILabel` (expanded only when the text or the version changed), show / hide of an element by name (`SetElementVisible`, `SetElementVisibleByName`); `UIVarsTest` (10), cases in `UIControlsTest`
 - [x] Stage 4.5 gtests of the controls and of a whole screen: hit testing and z-order, button states and clicks from synthetic events, draw calls of each control, a HUD through the size matrix and in two shapes with a variant (`UIScreenTest` (7)); the screens the games ship go through the same matrix with 4.6 and 4.7
 - [x] Stage 4.6 Match3: view size 712 x 672, the HUD as a `SceneView` canvas in the margins of the view (score, Reset, Menu, seed) replacing the ImGui block, `Match3Reset` / `Match3Menu` answered by the board, a `MainMenu` scene with Play and Quit (`Match3MenuComponent`) as the first scene; `Match3UiTest` (11) runs the shipped file through the size matrix; a `reset` or an action over the control API enters the game from the menu, so a screenshot shows the board (looked at on the SDL software renderer: menu, board with the HUD, the score after a move)
-- [ ] Stage 4.7 Chess: HUD canvas with a turn label and Reset
+- [x] Stage 4.7 Chess: the HUD as a `SceneView` canvas in the margins of the view (the turn, the status in words, Reset), the view is 840 x 800 with the board at (100, 80); `StatusText` (pure), `ChessBoardComponent` publishes `turn` and `status` and answers `ChessReset`; `StatusTextTest` (7), `ChessUiTest` (8)
 - [ ] Stage 5 Decision spike: XML, web-style front-end, RmlUi
 - [ ] Stage 6 Widen the chosen path
 - [ ] Stage 7 Editor and tooling
@@ -244,6 +244,8 @@ No controls yet: the point is that the adaptive machinery is proven in code befo
 
    Also found: the game opens on the menu, so the control smoke test (`reset` with another seed, then compare screenshots) saw the menu both times. A controller that plays has to see the board, so `Match3ControlTarget::enterGame` makes a `reset` and a played action switch to the board's scene. And `CoreManager::GetSceneManager()` is empty in the gtest executable, so `EngineEnvironment::UseSceneManager` hands a test's own manager over (`SetSceneManagerForTest`, guarded by `PassKey`); `be_add_game_tests` got `WHOLE_ARCHIVE` because a test that loads the game's scene file needs the game's components registered.
 7. Chess: a `Screen` canvas with a turn label and a Reset button, with the same portrait variant. The promotion picker waits for `chess-staged-stream.md`.
+
+   *Done (4.7), the same change as in 4.6:* a `SceneView` HUD in the margins of the view, not a `Screen` canvas with a portrait variant. The view grew from 760 to 800 units (the board moved from y=60 to y=80) because a 56-unit button, the smallest that is a 32 px touch target at the Chess fit scale (0.57), did not fit the old 60-unit margin. The reason of the end of a game is now on screen, where it had only gone to the log.
 
 ### Stage 5 — Decision spike: XML, web-style front-end, RmlUi (L, time-boxed)
 
