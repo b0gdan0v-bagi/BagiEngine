@@ -43,16 +43,18 @@ namespace BECore::Tests {
         uint32_t _height = 0;
     };
 
-    CORE_ENUM(DrawKind, uint8_t, Rect, Texture)
+    CORE_ENUM(DrawKind, uint8_t, Rect, Texture, Geometry)
 
-    /// One call of DrawFilledRect() or DrawTexture() as the backend would see it
+    /// One call of DrawFilledRect(), DrawTexture() or DrawGeometry() as the backend would see it
     struct DrawCall {
         DrawKind kind = DrawKind::Rect;
-        Rect rect;    ///< the destination in output pixels, after the view transform
-        Color color;  ///< the fill color of a rect, the tint of a texture
+        Rect rect;    ///< the destination in output pixels, after the view transform; for geometry the box around its vertices
+        Color color;  ///< the fill color of a rect, the tint of a texture, the color of the first vertex of geometry
         const ITexture* texture = nullptr;
-        std::optional<Rect> source;  ///< the source rect of a texture draw, as it was passed
-        std::optional<Rect> clip;    ///< the clip in effect for this call
+        std::optional<Rect> source;              ///< the source rect of a texture draw, as it was passed
+        std::optional<Rect> clip;                ///< the clip in effect for this call
+        eastl::vector<GeometryVertex> vertices;  ///< geometry: the vertices with their positions in output pixels (translation and view transform applied)
+        eastl::vector<int> indices;              ///< geometry: the indices as they were passed
     };
 
     /**
@@ -99,6 +101,36 @@ namespace BECore::Tests {
             }
             call.clip = GetClipRect();
             calls.push_back(call);
+        }
+
+        void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) override {
+            if (IsClipEmpty() || vertices.empty()) {
+                return;
+            }
+            DrawCall call;
+            call.kind = DrawKind::Geometry;
+            call.texture = texture;
+            call.color = vertices[0].color;
+            call.clip = GetClipRect();
+            const ViewTransform& view = GetViewTransform();
+            float left = 0.0f;
+            float top = 0.0f;
+            float right = 0.0f;
+            float bottom = 0.0f;
+            for (const GeometryVertex& vertex : vertices) {
+                GeometryVertex mapped = vertex;
+                mapped.x = (vertex.x + translateX) * view.scale + view.offsetX;
+                mapped.y = (vertex.y + translateY) * view.scale + view.offsetY;
+                const bool first = call.vertices.empty();
+                left = first ? mapped.x : std::min(left, mapped.x);
+                top = first ? mapped.y : std::min(top, mapped.y);
+                right = first ? mapped.x : std::max(right, mapped.x);
+                bottom = first ? mapped.y : std::max(bottom, mapped.y);
+                call.vertices.push_back(mapped);
+            }
+            call.rect = Rect{left, top, right - left, bottom - top};
+            call.indices.assign(indices.begin(), indices.end());
+            calls.push_back(std::move(call));
         }
 
         IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override {

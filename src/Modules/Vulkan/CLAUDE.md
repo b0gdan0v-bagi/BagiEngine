@@ -32,6 +32,10 @@ ImGui goes through `ImGuiInit/NewFrame/Render/ShutdownEvent` like the SDL backen
 
 `VulkanRendererBackend` does not implement `IRenderer::RequestCapture()`: the default answers with an error, and the `screenshot` method of the control API therefore answers `capture_failed` on this backend. A screenshot needs `--headless` (the SDL software renderer) until a Vulkan readback is written. The decision on the backends (`TODO.md`, "Renderer backends") comes first.
 
+## No geometry
+
+`VulkanRendererBackend` does not override `IRenderer::DrawGeometry()` (indexed triangles with a color and a UV per vertex): the default logs once and draws nothing, so what needs it (the RmlUi host, `src/Modules/RmlUiHost/CLAUDE.md`) shows on the SDL backend only. It needs a pipeline of its own (a vertex buffer in place of the push-constant rect) and a dynamic vertex buffer per frame in flight; the texture pipeline's tint and scissor already fit it.
+
 ## Build
 
 - **Loader:** Windows links `vulkan-1.lib` from `VULKAN_SDK` when set and present, else from `external/Vulkan-Loader/Windows/Lib`. macOS requires `external/Vulkan-Loader/macOS/lib/libvulkan.1.dylib` and fails configure without it. Linux uses the system loader. `*.dll` files are git-ignored; populate them as described in `external/Vulkan-Loader/README.md`. `VULKAN_SDK` is a per-machine cache value (default in `cmake/BagiEngine.cmake`), override it in `CMakeUserPresets.json`.

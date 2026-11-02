@@ -352,6 +352,101 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {132, 137, 142, 255}, kBlendTolerance));
     }
 
+    TEST_F(SDLCaptureTest, UntexturedGeometryFillsItsTrianglesWithTheVertexColors) {
+        const eastl::vector<GeometryVertex> quad = {
+            {100.0f, 50.0f, kRed, 0.0f, 0.0f},
+            {200.0f, 50.0f, kRed, 1.0f, 0.0f},
+            {200.0f, 150.0f, kRed, 1.0f, 1.0f},
+            {100.0f, 150.0f, kRed, 0.0f, 1.0f},
+        };
+        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        renderer->Clear(kBackground);
+
+        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 20.0f, 10.0f);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_EQ(PixelAt(image, 170, 100), AsPixel(kRed));         // inside the quad, which the translation moved to (120, 60) to (220, 160)
+        EXPECT_EQ(PixelAt(image, 110, 100), AsPixel(kBackground));  // where it was before the translation
+        EXPECT_EQ(PixelAt(image, 170, 40), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, GeometryBlendsByTheAlphaOfItsVertices) {
+        const Color half{255, 0, 0, 128};
+        const eastl::vector<GeometryVertex> quad = {
+            {0.0f, 0.0f, half, 0.0f, 0.0f},
+            {100.0f, 0.0f, half, 1.0f, 0.0f},
+            {100.0f, 100.0f, half, 1.0f, 1.0f},
+            {0.0f, 100.0f, half, 0.0f, 1.0f},
+        };
+        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        renderer->Clear(kBackground);
+
+        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        // 128/255 of red over (10, 20, 30)
+        EXPECT_TRUE(IsNear(PixelAt(image, 50, 50), {132, 10, 15, 255}, kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, GeometryWithATextureMultipliesTheTexelByTheVertexColor) {
+        auto texture = MakeSolidTexture(4, 4, Color{255, 255, 255, 255});
+        ASSERT_TRUE(texture);
+        const Color green{0, 255, 0, 255};
+        const eastl::vector<GeometryVertex> quad = {
+            {0.0f, 0.0f, green, 0.0f, 0.0f},
+            {100.0f, 0.0f, green, 1.0f, 0.0f},
+            {100.0f, 100.0f, green, 1.0f, 1.0f},
+            {0.0f, 100.0f, green, 0.0f, 1.0f},
+        };
+        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        renderer->Clear(kBackground);
+
+        renderer->DrawGeometry(texture.Get(), {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 50, 50), {0, 255, 0, 255}, kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, GeometryIsClippedLikeARect) {
+        const eastl::vector<GeometryVertex> quad = {
+            {0.0f, 0.0f, kRed, 0.0f, 0.0f},
+            {200.0f, 0.0f, kRed, 1.0f, 0.0f},
+            {200.0f, 200.0f, kRed, 1.0f, 1.0f},
+            {0.0f, 200.0f, kRed, 0.0f, 1.0f},
+        };
+        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        renderer->Clear(kBackground);
+
+        renderer->PushClipRect({50.0f, 50.0f, 40.0f, 40.0f});
+        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        renderer->PopClipRect();
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_EQ(PixelAt(image, 60, 60), AsPixel(kRed));
+        EXPECT_EQ(PixelAt(image, 120, 120), AsPixel(kBackground));
+        EXPECT_EQ(PixelAt(image, 20, 20), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, GeometryWithAnIndexOutOfRangeDrawsNothing) {
+        const eastl::vector<GeometryVertex> triangle = {
+            {0.0f, 0.0f, kRed, 0.0f, 0.0f},
+            {200.0f, 0.0f, kRed, 1.0f, 0.0f},
+            {0.0f, 200.0f, kRed, 0.0f, 1.0f},
+        };
+        const eastl::vector<int> indices = {0, 1, 7};
+        renderer->Clear(kBackground);
+
+        renderer->DrawGeometry(nullptr, {triangle.data(), triangle.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_EQ(PixelAt(image, 20, 20), AsPixel(kBackground));
+    }
+
     TEST_F(SDLCaptureTest, AClippedRectDrawsOnlyInsideTheClip) {
         renderer->Clear(kBackground);
         renderer->PushClipRect({100.0f, 50.0f, 50.0f, 50.0f});

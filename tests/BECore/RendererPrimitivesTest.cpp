@@ -184,6 +184,86 @@ namespace BECore::Tests {
 
     namespace {
 
+        /// A quad of 10 by 20 at the origin, two triangles
+        const eastl::vector<GeometryVertex> kQuad = {
+            {0.0f, 0.0f, kRed, 0.0f, 0.0f},
+            {10.0f, 0.0f, kRed, 1.0f, 0.0f},
+            {10.0f, 20.0f, kRed, 1.0f, 1.0f},
+            {0.0f, 20.0f, kRed, 0.0f, 1.0f},
+        };
+        const eastl::vector<int> kQuadIndices = {0, 1, 2, 0, 2, 3};
+
+    }  // namespace
+
+    TEST(RendererGeometryTest, TheTranslationAndTheViewTransformMoveEveryVertex) {
+        RecordingRenderer renderer;
+        renderer.SetViewTransform({2.0f, 100.0f, 50.0f});
+
+        renderer.DrawGeometry(nullptr, {kQuad.data(), kQuad.size()}, {kQuadIndices.data(), kQuadIndices.size()}, 5.0f, 1.0f);
+
+        ASSERT_EQ(renderer.calls.size(), 1u);
+        const DrawCall& call = renderer.calls[0];
+        EXPECT_EQ(call.kind, DrawKind::Geometry);
+        ASSERT_EQ(call.vertices.size(), 4u);
+        EXPECT_FLOAT_EQ(call.vertices[0].x, (0.0f + 5.0f) * 2.0f + 100.0f);
+        EXPECT_FLOAT_EQ(call.vertices[0].y, (0.0f + 1.0f) * 2.0f + 50.0f);
+        EXPECT_FLOAT_EQ(call.vertices[2].x, (10.0f + 5.0f) * 2.0f + 100.0f);
+        EXPECT_FLOAT_EQ(call.vertices[2].y, (20.0f + 1.0f) * 2.0f + 50.0f);
+        EXPECT_FLOAT_EQ(call.vertices[2].u, 1.0f);  // the texture coordinates are not mapped
+        EXPECT_FLOAT_EQ(call.rect.x, 110.0f);
+        EXPECT_FLOAT_EQ(call.rect.w, 20.0f);
+        EXPECT_FLOAT_EQ(call.rect.h, 40.0f);
+        EXPECT_EQ(call.indices, kQuadIndices);
+    }
+
+    TEST(RendererGeometryTest, TheDrawCarriesTheTextureAndTheClip) {
+        RecordingRenderer renderer;
+        auto texture = MakeTexture(renderer, 4, 4);
+        ASSERT_TRUE(texture);
+
+        renderer.PushClipRect({1.0f, 2.0f, 30.0f, 40.0f});
+        renderer.DrawGeometry(texture.Get(), {kQuad.data(), kQuad.size()}, {kQuadIndices.data(), kQuadIndices.size()}, 0.0f, 0.0f);
+        renderer.PopClipRect();
+
+        ASSERT_EQ(renderer.calls.size(), 1u);
+        EXPECT_EQ(renderer.calls[0].texture, texture.Get());
+        ASSERT_TRUE(renderer.calls[0].clip.has_value());
+        EXPECT_FLOAT_EQ(renderer.calls[0].clip->w, 30.0f);
+    }
+
+    TEST(RendererGeometryTest, AnEmptyClipHidesTheDraw) {
+        RecordingRenderer renderer;
+        renderer.PushClipRect({0.0f, 0.0f, 10.0f, 10.0f});
+        renderer.PushClipRect({50.0f, 50.0f, 10.0f, 10.0f});
+
+        renderer.DrawGeometry(nullptr, {kQuad.data(), kQuad.size()}, {kQuadIndices.data(), kQuadIndices.size()}, 0.0f, 0.0f);
+
+        EXPECT_TRUE(renderer.calls.empty());
+    }
+
+    namespace {
+
+        /// A renderer that keeps the default DrawGeometry, like a backend without the primitive
+        class NoGeometryRenderer : public RecordingRenderer {
+        public:
+            void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) override {
+                IRenderer::DrawGeometry(texture, vertices, indices, translateX, translateY);
+            }
+        };
+
+    }  // namespace
+
+    TEST(RendererGeometryTest, TheDefaultDrawsNothingAndDoesNotCrash) {
+        NoGeometryRenderer renderer;
+
+        renderer.DrawGeometry(nullptr, {kQuad.data(), kQuad.size()}, {kQuadIndices.data(), kQuadIndices.size()}, 0.0f, 0.0f);
+        renderer.DrawGeometry(nullptr, {kQuad.data(), kQuad.size()}, {kQuadIndices.data(), kQuadIndices.size()}, 0.0f, 0.0f);
+
+        EXPECT_TRUE(renderer.calls.empty());
+    }
+
+    namespace {
+
         constexpr const char* kProbeSceneXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Probe" viewWidth="1000" viewHeight="600"><nodes>

@@ -16,6 +16,15 @@ namespace BECore {
         eastl::vector<uint8_t> rgba;
     };
 
+    /// One corner of a triangle for IRenderer::DrawGeometry()
+    struct GeometryVertex {
+        float x = 0.0f;  ///< the position, in the units of DrawFilledRect() (the translation and the view transform are applied to it)
+        float y = 0.0f;
+        Color color;     ///< straight alpha; it multiplies the texel of a textured draw, or is the color itself of an untextured one
+        float u = 0.0f;  ///< the position in the texture, 0 to 1 over the whole texture
+        float v = 0.0f;
+    };
+
     /// The image, or why it could not be taken
     using CaptureResult = std::expected<PixelBuffer, eastl::string>;
     using CaptureCallback = std::function<void(CaptureResult)>;
@@ -51,6 +60,14 @@ namespace BECore {
         void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH) {
             DrawTexture(texture, srcRect, dstX, dstY, dstW, dstH, kWhite);
         }
+
+        // Draws indexed triangles (three indices per triangle) with a color and a texture coordinate per vertex, the primitive of a library that
+        // brings its own layout and draws shapes of any form (RmlUi). @p texture is optional: without one the vertex colors are the fill. Each position
+        // is moved by (@p translateX, @p translateY), then by the view transform, and the draw obeys the clip like the other primitives. Alpha is
+        // straight and blended over the target. An index past the vertices ends the draw.
+        // Not BE_FUNCTION (spans). The default logs once and draws nothing, for a backend without the primitive: the Vulkan backend (it needs a pipeline of its own
+        // and a dynamic vertex buffer, .claude/rules/rendering-module.md).
+        virtual void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY);
 
         // Makes a texture from pixels in memory: RGBA8 (red first), straight alpha, rows packed from the top, so
         // @p rgba holds `width * height * 4` bytes. The pixels are copied. Empty when the size is zero or the backend fails.
@@ -106,6 +123,7 @@ namespace BECore {
         static constexpr Color kWhite{255, 255, 255, 255};
 
         uint64_t _id = 0;
+        bool _geometryWarned = false;
         ViewTransform _viewTransform;
         // Each entry is already intersected with the one below it
         eastl::vector<Rect> _clipStack;

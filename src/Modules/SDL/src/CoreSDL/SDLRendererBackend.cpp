@@ -19,6 +19,9 @@ namespace BECore {
 
         constexpr const char* kSoftwareRenderer = "software";
         constexpr uint32_t kBytesPerPixel = 4;
+        constexpr float kChannelMax = 255.0f;
+        constexpr size_t kIndicesPerTriangle = 3;
+        constexpr int kFloatsPerColor = 4;
 
     }  // namespace
 
@@ -125,6 +128,52 @@ namespace BECore {
         auto texture = New<SDLTexture>();
         texture->SetLoaded("<memory>"_intern, handle, static_cast<float>(width), static_cast<float>(height));
         return texture;
+    }
+
+    void SDLRendererBackend::DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) {
+        if (!_renderer || IsClipEmpty() || vertices.empty() || indices.size() < kIndicesPerTriangle) {
+            return;
+        }
+        SDL_Texture* handle = nullptr;
+        if (texture) {
+            const auto* sdlTexture = dynamic_cast<SDLTexture*>(texture);
+            if (!sdlTexture || !sdlTexture->GetSDLTexture()) {
+                return;
+            }
+            handle = sdlTexture->GetSDLTexture();
+        }
+        const int vertexCount = static_cast<int>(vertices.size());
+        for (const int index : indices) {
+            if (index < 0 || index >= vertexCount) {
+                LOG_ERROR("SDLRendererBackend: DrawGeometry got the index {} for {} vertices, so nothing is drawn"_format(index, vertexCount));
+                return;
+            }
+        }
+
+        const ViewTransform& view = GetViewTransform();
+        _geometryPositions.resize(vertices.size() * 2);
+        _geometryColors.resize(vertices.size() * kFloatsPerColor);
+        _geometryTexCoords.resize(vertices.size() * 2);
+        for (size_t i = 0; i < vertices.size(); ++i) {
+            const GeometryVertex& vertex = vertices[i];
+            _geometryPositions[i * 2] = (vertex.x + translateX) * view.scale + view.offsetX;
+            _geometryPositions[i * 2 + 1] = (vertex.y + translateY) * view.scale + view.offsetY;
+            _geometryColors[i * kFloatsPerColor] = static_cast<float>(vertex.color.r) / kChannelMax;
+            _geometryColors[i * kFloatsPerColor + 1] = static_cast<float>(vertex.color.g) / kChannelMax;
+            _geometryColors[i * kFloatsPerColor + 2] = static_cast<float>(vertex.color.b) / kChannelMax;
+            _geometryColors[i * kFloatsPerColor + 3] = static_cast<float>(vertex.color.a) / kChannelMax;
+            _geometryTexCoords[i * 2] = vertex.u;
+            _geometryTexCoords[i * 2 + 1] = vertex.v;
+        }
+
+        // An untextured draw blends by the draw mode; a texture by its own (the colors multiply the texel, SDL ignores the modulation of the texture here)
+        SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
+        const bool drawn =
+            SDL_RenderGeometryRaw(_renderer, handle, _geometryPositions.data(), 2 * sizeof(float), reinterpret_cast<const SDL_FColor*>(_geometryColors.data()), kFloatsPerColor * sizeof(float),
+                                  _geometryTexCoords.data(), 2 * sizeof(float), vertexCount, indices.data(), static_cast<int>(indices.size() - indices.size() % kIndicesPerTriangle), sizeof(int));
+        if (!drawn) {
+            LOG_ERROR("SDLRendererBackend: DrawGeometry failed: {}"_format(SDL_GetError()));
+        }
     }
 
     void SDLRendererBackend::OnClipRectChanged() {

@@ -27,6 +27,7 @@ namespace BECore {
         using IRenderer::DrawTexture;
         void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) override;
         IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override;
+        void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) override;
 
         IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) override;
         void SetRenderTarget(IRenderTarget* target) override;
@@ -52,6 +53,11 @@ namespace BECore {
         void PresentFrame();
         void ServeCapture();
         void OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event);
+
+        // Scratch of DrawGeometry(): the vertices in the planar layout SDL_RenderGeometryRaw takes, kept between calls so a draw does not allocate
+        eastl::vector<float> _geometryPositions;
+        eastl::vector<float> _geometryColors;
+        eastl::vector<float> _geometryTexCoords;
 
         void OnImGuiInit();
         void OnImGuiShutdown();
