@@ -1,0 +1,32 @@
+# RmlUiHost Module Guidelines
+
+## Overview
+
+The host of the vendored RmlUi (`src/Modules/RmlUi`, HTML-like `.rml` documents and CSS-like `.rcss` styles with a DOM and a layout engine of their own): the interfaces RmlUi calls, and the scene component that draws one document. It is the third candidate for authoring a UI screen (`.claude/plans/ui-authoring-decision.md`) and is **off by default**: `-DENGINE_UI_RMLUI=ON` builds `rmlui_core` and this module, and `be_link_engine` links the module into every executable and test executable (`WHOLE_ARCHIVE`, the component registers in a static initializer). With the option off nothing here is compiled and no game or test notices. The default font engine of RmlUi is FreeType, which has to be installed (`brew install freetype`).
+
+| File | Purpose |
+|------|---------|
+| `RmlUiRuntime` | `Singleton`: the interfaces and the library, up while any document holds it (`Acquire()` / `Release()`). Installs the interfaces, `Rml::Initialise()`, loads the default font of `TextConfig.xml` (`font-family: "PT Sans"` for the shipped one). Shuts RmlUi down with the last holder and on `ApplicationCleanUpEvent`, before the renderer is destroyed (the textures belong to it) |
+| `RmlUiRenderInterface` | `Rml::RenderInterface` over `IRenderer::DrawGeometry()`, `ITexture` and the clip stack. Converts the premultiplied colors and generated pixels of RmlUi to the straight alpha of `IRenderer` once, at compile / generate time. Counts what it did (`GetStats()`) |
+| `RmlUiSystemInterface`, `RmlUiFileInterface` | The game clock and the logger; files through `FileSystem` (virtual paths, layered like every file; a path it cannot resolve is tried as a real one, so a test can use a temporary directory) |
+| `RmlUiVarsDefinition` | `UIVars` seen by a data model as the struct `vars` |
+| `RmlUiDocumentComponent` | The scene component |
+
+## The component
+
+`<component type="RmlUiDocumentComponent" space="Screen" scaleMode="ScaleWithScreen" source="assets/ui/menu.rml"/>`. It has the fields of `UICanvasComponent` that resolve the scaler (`space`, `scaleMode`, reference size, `match`, `minScale`, `maxScale`, `useSafeArea`), `modal`, `visible`, `inputEnabled`, and `source`. `SetMarkup(text)` loads a document from a string (tests, generated screens).
+
+- **Units.** The context is the size of the resolved rect in **output pixels**, and its density-independent pixel ratio is the canvas scale, so **`1dp` is one UI unit**, the `px` of a `UICanvasComponent` screen, and text is rasterised at its final size (no blur from scaling). Write sizes in `dp` and `%`; a `px` is a real pixel and does not follow the scaler. The context origin is the top-left of the content bounds (the safe bounds when `useSafeArea`), and the draw uses a view transform of scale 1 and that offset.
+- **A screen needs `body { width: 100%; height: 100%; }`** (the body has no size in RmlUi, so a percentage in a screen would be of nothing), and a `font-family` that names a loaded face.
+- **Input.** `UIInput` handler in the draw rank of the node, like a canvas. Everything under the pointer takes the event, `body` included, so a wrapper that must let clicks through says `pointer-events: none` (it is inherited: set it on `body` and `pointer-events: auto` on buttons). A press the document took is followed to its release; a drag that began elsewhere is the game's; `modal` takes everything.
+- **Actions.** A `data-action="Name"` attribute on an element (or an ancestor of the clicked one; not when an element on the way has `disabled`) emits `InputEvents::ActionEvent` on click. The listener queues the action and the component emits it after RmlUi has finished with the event, because a handler may switch scenes and destroy the component (the same reason a `UICanvasComponent` clicks last).
+- **UIVars.** `<body data-model="vars">` and `{{vars.score}}`. The component marks the model dirty when `UIVars::GetVersion()` changes. A game keeps calling `CoreManager::GetUIVars().Set(...)` whichever authoring path draws the screen.
+- **Not seen by the engine.** The document has its own DOM: the scene editor shows one component, `UILayoutValidator` and the control API's tree do not see into it. `tests/RmlUiHost/RmlUiScreensTest.cpp` replaces the validator for its three screens: the same rects as the shipped XML on every case of the size matrix, nothing outside the content, buttons over the touch size, no text that overflows its box (RmlUi's `GetScrollWidth() > GetClientWidth()`).
+
+## What the render interface does not do
+
+CSS `transform`, the clip mask (`overflow` with rounded corners), layers, filters (`filter`, `backdrop-filter`, `drop-shadow`), shaders (gradients, `box-shadow`). RmlUi's defaults for the optional interface methods draw nothing for them, so a document that needs them lacks them without a message. `overflow: hidden` works (a clip rect). `<img src>` loads a texture file through `ResourceManager`, not a `TextureLibrary` sprite name. The Vulkan backend has no `DrawGeometry` (it needs a pipeline of its own and a dynamic vertex buffer): the default of `IRenderer` logs once and draws nothing, so RmlUi documents show on the SDL backend only (`.claude/rules/rendering-module.md`).
+
+## Tests (`tests/RmlUiHost/`, in `BagiEngineTests` only when the option is on)
+
+`RmlUiHostTest` (geometry in output pixels, straight alpha, glyph texture, scale, a scene view, clips, hidden, clicks, hover, modal, `UIVars`, a document from a file with its `.rcss`, lifetime), `RmlUiScreensTest` (the three shipped screens through the size matrix, a deliberately broken screen is caught), `RmlUiSdlTest` (pixels from the software SDL renderer; set `BAGI_TEST_SCREENSHOT_DIR` to also write the PNGs), `UIAuthoringBenchmarkTest` (one screen of 1,001 elements in XML, HTML + CSS and RML; prints the table that the decision record quotes, asserts no timing). The screens of the tests are in `RmlUiScreens.h`. Run them in a build of their own, because every build writes into `build/ClangmacOS/`: `cmake --preset macos-debug -B build/macos-rmlui -DENGINE_UI_RMLUI=ON`, then `ctest --test-dir build/macos-rmlui`; delete the executables of that build from `build/ClangmacOS/` before building `macos-debug` again, or ninja takes them for up to date.

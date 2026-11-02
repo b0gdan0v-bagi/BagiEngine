@@ -9,7 +9,7 @@ Only the core is here: `Include/RmlUi/Core`, `Include/RmlUi/Config`, `Include/Rm
 
 The third-party headers inside `Include/RmlUi/Core/Containers/` (`robin_hood.h`, `itlib/`) are MIT and carry their own notices.
 
-It is built only with `-DENGINE_UI_RMLUI=ON` (off by default), and nothing in the engine links it yet: it is the third candidate of stage 5 of `.claude/plans/magical-leaping-blossom.md`, see `.claude/plans/ui-authoring-decision.md`.
+It is built only with `-DENGINE_UI_RMLUI=ON` (off by default), and only the host module `src/Modules/RmlUiHost` links it (`CLAUDE.md` there): it is the third candidate of stage 5 of `.claude/plans/magical-leaping-blossom.md`, see `.claude/plans/ui-authoring-decision.md`.
 
 Build notes:
 

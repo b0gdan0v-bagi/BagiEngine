@@ -28,7 +28,7 @@ These are included directly via `add_subdirectory()`:
 | fmt | `src/Modules/fmt/` | Formatting library |
 | nlohmann/json | `src/Modules/nlohmann/` | JSON for the external control API; the `nlohmann_json` target defines `JSON_NOEXCEPTION` (use it only through `BECore/Control/Json.h`) |
 | stb | `src/Modules/stb/` | `stb_truetype.h` for glyph metrics and rasterization (INTERFACE target `stb`; the implementation is compiled only in `BECore/Text/Font.cpp`; trusted font files only) |
-| RmlUi | `src/Modules/RmlUi/` | RmlUi 6.3 core (MIT), the third candidate for authoring UI screens. STATIC target `rmlui_core` (alias `RmlUi::Core`), added only when `ENGINE_UI_RMLUI=ON` and after the `ENGINE_NO_EXCEPTIONS` block (like GoogleTest). Its CMake file replaces the upstream ones; the font engine is `RMLUI_FONT_ENGINE=freetype` (needs FreeType installed) or `none`. Nothing links it yet |
+| RmlUi | `src/Modules/RmlUi/` | RmlUi 6.3 core (MIT), the third candidate for authoring UI screens. STATIC target `rmlui_core` (alias `RmlUi::Core`), added only when `ENGINE_UI_RMLUI=ON` and after the `ENGINE_NO_EXCEPTIONS` block (like GoogleTest). Its CMake file replaces the upstream ones; the font engine is `RMLUI_FONT_ENGINE=freetype` (needs FreeType installed) or `none`. The module `RmlUiHost` (`src/Modules/RmlUiHost/`) is its host |
 
 ### Git Submodules (in `external/`)
 
@@ -104,7 +104,7 @@ Each engine module has its own `CMakeLists.txt`:
 | `ENGINE_ENABLE_ASSERTS` | `ON` | `ASSERT` / `FATALERROR`; compiled out when `OFF` |
 | `ENGINE_ENABLE_EXPECTS` | `ON` | `EXPECT`; compiled out when `OFF` |
 | `ENGINE_BUILD_TESTS` | `ON` | GoogleTest, `BagiEngineTestSupport`, `BagiEngineTests` and the game test executables |
-| `ENGINE_UI_RMLUI` | `OFF` | Builds the vendored RmlUi (`rmlui_core`); no engine module links it yet |
+| `ENGINE_UI_RMLUI` | `OFF` | Builds the vendored RmlUi (`rmlui_core`) and its host `RmlUiHostModule` (`be_add_module` + `be_add_game_reflection`, after `Games`); `be_link_engine` links the host `WHOLE_ARCHIVE` into every executable and test executable, and `tests/RmlUiHost/` joins `BagiEngineTests`. A build with it writes the same `build/<Compiler><Platform>/` as one without: use a build directory of its own and delete its executables before building the other |
 
 ## Module Dependencies Order
 
@@ -114,7 +114,7 @@ BECoreModule must be first (provides PCH):
 3. `TaskSystem`
 4. `RemoteControl` (`be_add_module`; links `ws2_32` on Windows; has no static initializers, so it is linked plainly: `RuntimeModule` links it for the executables and `BagiEngineTests` takes it through `LINK RemoteControlModule`)
 5. `SDL`
-6. `Vulkan`, `Games`, `Runtime` (`src/`), then the games in `games/`
+6. `Vulkan`, `Games`, `RmlUiHost` (only with `ENGINE_UI_RMLUI`), `Runtime` (`src/`), then the games in `games/`
 
 ## Tests (GoogleTest)
 

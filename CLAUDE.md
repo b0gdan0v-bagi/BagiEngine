@@ -68,6 +68,7 @@ src/
     ├── SDL/            # SDL3 integration
     ├── Vulkan/         # Vulkan renderer backend
     ├── Games/          # IGame / GameManager: the engine-game contract
+    ├── RmlUiHost/      # host of the vendored RmlUi (only with -DENGINE_UI_RMLUI=ON)
     └── EABase/, EnTT/, fmt/, imgui/, nlohmann/, pugixml/, RmlUi/, stb/   # vendored
 config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, Text, UI, default SceneConfig; assets/fonts/ has the default font)
 games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Chess, Match3)
@@ -77,7 +78,7 @@ tools/                  # developer tools: natvis, todo_sync (TODO.md dashboard 
 
 **Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.
 
-**Vendored code** (`EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`, `pugixml/`, `RmlUi/`, `stb/`): do not edit it, and leave it out of broad searches. `RmlUi/` is built only with `-DENGINE_UI_RMLUI=ON` and nothing links it yet (`.claude/plans/ui-authoring-decision.md`).
+**Vendored code** (`EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`, `pugixml/`, `RmlUi/`, `stb/`): do not edit it, and leave it out of broad searches. `RmlUi/` is built only with `-DENGINE_UI_RMLUI=ON`, together with its host module `RmlUiHost` (`src/Modules/RmlUiHost/CLAUDE.md`, `.claude/plans/ui-authoring-decision.md`).
 
 **Key subsystems in `src/Modules/BECore/`:**
 
@@ -160,7 +161,7 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 
 ## Rules and Skills
 
-- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`, `Text/`, `UI/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, and `games/Chess/`, `games/Match3/`, and `tools/control/`. Claude Code loads one when a file under that directory is read.
+- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`, `Text/`, `UI/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, `RmlUiHost/`, and `games/Chess/`, `games/Match3/`, and `tools/control/`. Claude Code loads one when a file under that directory is read.
 - `.claude/rules/` holds guidance that spans several directories or matches by file name (`paths:` frontmatter): CMake, Reflection, Reflection events (`*Event.h`), Rendering, Widgets, Tests. Read the relevant file before changing that area.
 - `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `todo-sync` (TODO.md dashboard and Vikunja export, `tools/todo_sync/CLAUDE.md`) and `cpp-senior-programmer`.
 - `TODO.md` entries carry optional `**Status:**`, `**Stage:**` and `**Plan:**` lines (format in the file header). Keep them current when work on an entry starts or stops, and delete an entry when it is finished. Run `todo-sync check` after editing the file.

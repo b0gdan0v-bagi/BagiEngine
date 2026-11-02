@@ -137,9 +137,10 @@ endif()
 # =============================================================================
 # RmlUi (vendored, optional)
 # =============================================================================
-# Added after the exception options above on purpose, like GoogleTest. Nothing in the engine links it yet: it is
-# the third candidate for how UI screens are authored (.claude/plans/ui-authoring-decision.md).
-option(ENGINE_UI_RMLUI "Build the vendored RmlUi (a candidate for authoring UI screens; not linked into the engine yet)" OFF)
+# Added after the exception options above on purpose, like GoogleTest. It is the third candidate for how UI screens
+# are authored (.claude/plans/ui-authoring-decision.md); with the option ON the RmlUiHost module (its host, below) is built
+# and linked into every executable.
+option(ENGINE_UI_RMLUI "Build the vendored RmlUi and its host module RmlUiHost (a candidate for authoring UI screens)" OFF)
 
 if(ENGINE_UI_RMLUI)
     message(STATUS "Configuring RmlUi (vendored)...")
@@ -309,6 +310,11 @@ function(be_link_engine TARGET_NAME)
         $<LINK_LIBRARY:WHOLE_ARCHIVE,TaskSystemModule>
     )
 
+    # The component of the RmlUi host registers in a static initializer too
+    if(TARGET RmlUiHostModule)
+        target_link_libraries(${TARGET_NAME} PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,RmlUiHostModule>)
+    endif()
+
     if(ARG_WITH_RUNTIME)
         target_link_libraries(${TARGET_NAME} PRIVATE
             $<LINK_LIBRARY:WHOLE_ARCHIVE,SDLModule>
@@ -471,6 +477,11 @@ add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Vulkan)
 
 # Game infrastructure (IGame, GameManager). Concrete games live outside the engine and register through it.
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
+
+# The host of the vendored RmlUi: the interfaces over the engine and the scene component (only with ENGINE_UI_RMLUI)
+if(ENGINE_UI_RMLUI)
+    add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RmlUiHost)
+endif()
 
 # Application loop, widgets and the editor UI. Linked into every game executable.
 add_subdirectory(${BAGI_ENGINE_DIR}/src)

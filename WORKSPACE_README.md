@@ -154,6 +154,7 @@ BagiEngine/
 │       ├── pugixml/     # XML parser (vendored)
 │       ├── imgui/       # ImGui (vendored)
 │       ├── RmlUi/       # RmlUi core (vendored, built with ENGINE_UI_RMLUI=ON)
+│       ├── RmlUiHost/   # its host: render/system/file interfaces and RmlUiDocumentComponent (ENGINE_UI_RMLUI=ON)
 │       └── fmt/         # Formatting (vendored)
 ├── external/
 │   └── SDL/             # SDL3 (git submodule)
