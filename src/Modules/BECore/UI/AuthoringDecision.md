@@ -1,6 +1,6 @@
 # How an in-game UI screen is authored: the data for the decision
 
-Stage 5 of `.claude/plans/magical-leaping-blossom.md`. This file holds what was measured; the owner's decision is the last section. Status: **all three candidates are built and measured** (A and B on the element tree, C as a separate host). "Reading the data" reads the numbers; it does not choose.
+Stage 5 of the UI plan in the local plan store. This file holds what was measured; the owner's decision is the last section. Status: **all three candidates are built and measured** (A and B on the element tree, C as a separate host). "Reading the data" reads the numbers; it does not choose.
 
 The three candidates, for the same screens:
 
@@ -102,4 +102,4 @@ Findings while writing B:
 
 **2026-11-02, the owner: A with B, and RmlUi for the screens that need scrolling, text input or animation.** HUDs and menus stay on the element tree, written as `.ui.xml` or as `.ui.html` + CSS (B is a second loader onto the same tree). A screen with a scrolling list, a text field or an animation is an `.rml` document in `RmlUiDocumentComponent`. The seam (a scene component, `UIInput`, `ActionEvent`, `UIVars`) lets one game use both.
 
-What this asks of the code, in `.claude/plans/magical-leaping-blossom.md`, stage 6: the Vulkan `DrawGeometry` (RmlUi showed on the SDL backend only when this was written; done in stage 6.1), the font engine (FreeType from the system today), hot reload of documents, and on the element tree only the small controls that a screen asks for. `UIScrollView`, `UITextInput`, UI animation, grid layout and focus navigation are **not** built on the element tree: they are RmlUi's.
+What this asks of the code, in the UI plan (local plan store), stage 6: the Vulkan `DrawGeometry` (RmlUi showed on the SDL backend only when this was written; done in stage 6.1), the font engine (FreeType from the system today), hot reload of documents, and on the element tree only the small controls that a screen asks for. `UIScrollView`, `UITextInput`, UI animation, grid layout and focus navigation are **not** built on the element tree: they are RmlUi's.

@@ -150,7 +150,7 @@ button { width: 56dp; height: 24dp; font-size: 14dp; background-color: rgb(40, 9
     }  // namespace
 
     /// Not an assertion of speed (a timing test would be flaky): it builds one screen three ways, measures each and prints the table that
-    /// `.claude/plans/ui-authoring-decision.md` quotes. The asserts only check that the three screens are the same size and drew something.
+    /// `src/Modules/BECore/UI/AuthoringDecision.md` quotes. The asserts only check that the three screens are the same size and drew something.
     class UIAuthoringBenchmarkTest : public ::testing::Test {
     protected:
         static void SetUpTestSuite() {

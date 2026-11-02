@@ -31,7 +31,7 @@ ImGui goes through `ImGuiInit/NewFrame/Render/ShutdownEvent` like the SDL backen
 
 ## No capture
 
-`VulkanRendererBackend` does not implement `IRenderer::RequestCapture()`: the default answers with an error, and the `screenshot` method of the control API therefore answers `capture_failed` on this backend. A screenshot needs `--headless` (the SDL software renderer) until a Vulkan readback is written. The decision on the backends (`TODO.md`, "Renderer backends") comes first.
+`VulkanRendererBackend` does not implement `IRenderer::RequestCapture()`: the default answers with an error, and the `screenshot` method of the control API therefore answers `capture_failed` on this backend. A screenshot needs `--headless` (the SDL software renderer) until a Vulkan readback is written. The decision on the backends (`todo/renderer-backends.md`) comes first.
 
 ## Geometry
 

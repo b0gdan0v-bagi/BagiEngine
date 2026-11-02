@@ -138,7 +138,7 @@ endif()
 # RmlUi (vendored, optional)
 # =============================================================================
 # Added after the exception options above on purpose, like GoogleTest. It is the third candidate for how UI screens
-# are authored (.claude/plans/ui-authoring-decision.md); with the option ON the RmlUiHost module (its host, below) is built
+# are authored (src/Modules/BECore/UI/AuthoringDecision.md); with the option ON the RmlUiHost module (its host, below) is built
 # and linked into every executable.
 option(ENGINE_UI_RMLUI "Build the vendored RmlUi and its host module RmlUiHost (a candidate for authoring UI screens)" OFF)
 

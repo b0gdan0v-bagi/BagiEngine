@@ -13,7 +13,7 @@ namespace BECore {
      * @brief What a compile of the web-style front-end did and what it left out.
      *
      * Nothing the compile cannot apply is silent: the property, selector, tag or value is an issue, and the rest of the screen is still built. The counters
-     * are the numbers of the decision record ("CSS reach", `.claude/plans/ui-authoring-decision.md`).
+     * are the numbers of the decision record ("CSS reach", `src/Modules/BECore/UI/AuthoringDecision.md`).
      */
     struct UIWebReport {
         eastl::vector<UIWebIssue> issues;

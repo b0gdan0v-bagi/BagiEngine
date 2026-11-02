@@ -22,7 +22,7 @@ namespace BECore {
     /**
      * @brief A scene component that draws one RmlUi document (HTML-like markup and CSS-like styles in `.rml` / `.rcss`) and routes the mouse to it.
      *
-     * This is the third candidate for authoring a screen (`.claude/plans/ui-authoring-decision.md`): the document has a DOM and a layout engine of its own, so it is not
+     * This is the third candidate for authoring a screen (`src/Modules/BECore/UI/AuthoringDecision.md`): the document has a DOM and a layout engine of its own, so it is not
      * a UIElement tree, and the scene editor, the validator and the control API's tree do not see into it. What it shares with a UICanvasComponent is the seam:
      * the same space / scale mode / safe area fields resolve to a rect and a scale with UICanvasScaler; it is drawn in the scene's draw order; it registers with UIInput in
      * the same order and consumes a mouse event that lands on an element; a `data-action` attribute on an element (a `<button>`) emits `InputEvents::ActionEvent` on click;

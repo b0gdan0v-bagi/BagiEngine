@@ -2,7 +2,7 @@
 
 ## Overview
 
-The host of the vendored RmlUi (`src/Modules/RmlUi`, HTML-like `.rml` documents and CSS-like `.rcss` styles with a DOM and a layout engine of their own): the interfaces RmlUi calls, and the scene component that draws one document. It is the third candidate for authoring a UI screen (`.claude/plans/ui-authoring-decision.md`) and is **off by default**: `-DENGINE_UI_RMLUI=ON` builds `rmlui_core` and this module, and `be_link_engine` links the module into every executable and test executable (`WHOLE_ARCHIVE`, the component registers in a static initializer). With the option off nothing here is compiled and no game or test notices. RmlUi is built with `RMLUI_FONT_ENGINE=none`: its text is drawn by `RmlUiFontEngine` over the engine's own `Font`, so nothing has to be installed.
+The host of the vendored RmlUi (`src/Modules/RmlUi`, HTML-like `.rml` documents and CSS-like `.rcss` styles with a DOM and a layout engine of their own): the interfaces RmlUi calls, and the scene component that draws one document. It is the third candidate for authoring a UI screen (`src/Modules/BECore/UI/AuthoringDecision.md`) and is **off by default**: `-DENGINE_UI_RMLUI=ON` builds `rmlui_core` and this module, and `be_link_engine` links the module into every executable and test executable (`WHOLE_ARCHIVE`, the component registers in a static initializer). With the option off nothing here is compiled and no game or test notices. RmlUi is built with `RMLUI_FONT_ENGINE=none`: its text is drawn by `RmlUiFontEngine` over the engine's own `Font`, so nothing has to be installed.
 
 | File | Purpose |
 |------|---------|

@@ -2,7 +2,7 @@
 
 ## Overview
 
-In-game UI that the engine draws through `IRenderer`, in both backends and both run modes. ImGui is not involved (it stays the tool UI: editor panels in `src/Widgets/`, `.claude/rules/widgets-module.md`). Plan and the stages still to come: `.claude/plans/magical-leaping-blossom.md`.
+In-game UI that the engine draws through `IRenderer`, in both backends and both run modes. ImGui is not involved (it stays the tool UI: editor panels in `src/Widgets/`, `.claude/rules/widgets-module.md`). Plan and the stages still to come: the UI plan in the local plan store (the `todo/` entries link it); the authoring decision and its data: `AuthoringDecision.md` in this folder.
 
 **Adaptivity is the foundation.** Window size, aspect ratio, orientation, safe area, pixel density and a user scale are inputs of every layout, and every screen must pass `ValidateOnMatrix` (below) with no issues before it is considered done.
 

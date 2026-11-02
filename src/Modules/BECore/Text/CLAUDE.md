@@ -29,7 +29,7 @@ Font (.ttf/.otf bytes, CPU)  ->  TextLayout (pure: lines, glyph positions)  ->  
 
 - A font size is the **em square in pixels** (CSS `font-size`), not the ascent plus descent. At 16 the line is a little taller than 16 (`Font::GetVerticalMetrics(16).LineHeight()`).
 - A text is laid out and rasterized in **output pixels**. `TextComponent` takes its size in scene units, multiplies by the scale of `IRenderer::GetViewTransform()` and rounds to a whole pixel (`FontAtlasLibrary::QuantizeSize`): a scene that is fitted to a bigger output gets sharp text, not a stretched picture. `TextRenderer::Draw()` converts back to the units of the view and snaps each glyph to a whole output pixel, so the atlas picture is drawn 1:1.
-- The UI canvases (`UILabel`, `.claude/plans/magical-leaping-blossom.md`) use the same path: the effective size is the UI size times the canvas scale times the pixel density, and a canvas sets its own view transform around its draw.
+- The UI canvases (`UILabel`, the UI plan in the local plan store) use the same path: the effective size is the UI size times the canvas scale times the pixel density, and a canvas sets its own view transform around its draw.
 - `AutoFit` steps in whole pixels, which also keeps the number of atlases small. One atlas costs about 40 ms the first time (the preload), then nothing.
 
 ## Using text in a scene
