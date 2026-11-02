@@ -8,6 +8,19 @@
 
 namespace BECore {
 
+    eastl::string_view UILabel::GetDisplayText() const {
+        if (!UIVars::HasPlaceholders(text)) {
+            return eastl::string_view(text.data(), text.size());
+        }
+        const UIVars& variables = CoreManager::GetUIVars();
+        if (_expandedVersion != variables.GetVersion() || _expandedSource != text) {
+            _expanded = variables.Expand(eastl::string_view(text.data(), text.size()));
+            _expandedSource = text;
+            _expandedVersion = variables.GetVersion();
+        }
+        return eastl::string_view(_expanded.data(), _expanded.size());
+    }
+
     float UILabel::GetFontSize() const {
         return active.fontSize > 0.0f ? active.fontSize : DefaultFontSize;
     }
@@ -46,7 +59,8 @@ namespace BECore {
     }
 
     void UILabel::DrawText(IRenderer& renderer) {
-        if (text.empty() || rect.IsEmpty() || textColor.a == 0) {
+        const eastl::string_view shown = GetDisplayText();
+        if (shown.empty() || rect.IsEmpty() || textColor.a == 0) {
             return;
         }
         Font* resolved = ResolveFont();
@@ -55,7 +69,7 @@ namespace BECore {
             return;
         }
 
-        const TextLayoutResult& layout = _layoutCache.Get(*resolved, eastl::string_view(text.data(), text.size()), MakeOptions(rect.w, rect.h, scale));
+        const TextLayoutResult& layout = _layoutCache.Get(*resolved, shown, MakeOptions(rect.w, rect.h, scale));
         if (layout.glyphs.empty()) {
             return;
         }
@@ -85,11 +99,12 @@ namespace BECore {
 
     UIContentFit UILabel::CheckContent(float width, float height, float scale) const {
         UIContentFit fit;
-        Font* resolved = text.empty() ? nullptr : ResolveFont();
+        const eastl::string_view shown = GetDisplayText();
+        Font* resolved = shown.empty() ? nullptr : ResolveFont();
         if (!resolved || width <= 0.0f || height <= 0.0f || scale <= 0.0f) {
             return fit;
         }
-        const TextLayoutResult layout = TextLayout::Layout(*resolved, eastl::string_view(text.data(), text.size()), MakeOptions(width, height, scale));
+        const TextLayoutResult layout = TextLayout::Layout(*resolved, shown, MakeOptions(width, height, scale));
         fit.hasContent = true;
         fit.fits = !layout.overflowed && !layout.truncated;
         fit.canShrink = overflow != TextOverflow::Clip;

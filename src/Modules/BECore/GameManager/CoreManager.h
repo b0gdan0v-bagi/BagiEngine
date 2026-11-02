@@ -15,6 +15,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Time/Time.h>
 #include <BECore/UI/UIEnvironment.h>
+#include <BECore/UI/UIVars.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/EventsProviderManager.h>
 
@@ -109,6 +110,11 @@ namespace BECore {
             return GetInstance()._uiEnvironment;
         }
 
+        /// The variables that UI text is bound to (`text="Score: {score}"`)
+        static UIVars& GetUIVars() {
+            return GetInstance()._uiVars;
+        }
+
         // Pre-initialization function (FileSystem, AssertHandlers, runtime ITests)
         void OnApplicationPreInit(PassKey<Application>);
 
@@ -146,6 +152,7 @@ namespace BECore {
         // Declared before _sceneManager, so they outlive the scenes: a canvas unregisters from UIInput when its scene is destroyed
         UIInput _uiInput;
         UIEnvironment _uiEnvironment;
+        UIVars _uiVars;
         IntrusivePtrAtomic<SceneManager> _sceneManager;
         TextureLibrary _textureLibrary;
         FontAtlasLibrary _fontAtlasLibrary;

@@ -90,6 +90,12 @@ namespace BECore {
         /// Shows or hides every canvas on a node with this name in @p scene; false when there is none
         static bool SetVisibleByName(Scene& scene, PoolString nodeName, bool visible);
 
+        /// Shows or hides the first element of this canvas with this name (its authored `style.visible`; a variant that sets `visible` still wins); false when there is none
+        bool SetElementVisible(PoolString elementName, bool visible);
+
+        /// The same in every canvas of @p scene; true when at least one element was found
+        static bool SetElementVisibleByName(Scene& scene, PoolString elementName, bool visible);
+
     private:
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;
         void SyncParams();

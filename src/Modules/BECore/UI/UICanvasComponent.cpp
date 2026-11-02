@@ -30,6 +30,17 @@ namespace BECore {
             return found;
         }
 
+        bool SetElementVisibleIn(SceneNode& node, PoolString elementName, bool visible) {
+            bool found = false;
+            if (auto canvas = node.GetComponent<UICanvasComponent>()) {
+                found = canvas->SetElementVisible(elementName, visible);
+            }
+            for (const auto& child : node.GetChildren()) {
+                found |= SetElementVisibleIn(*child, elementName, visible);
+            }
+            return found;
+        }
+
     }  // namespace
 
     UICanvasComponent::~UICanvasComponent() {
@@ -272,6 +283,20 @@ namespace BECore {
 
     bool UICanvasComponent::SetVisibleByName(Scene& scene, PoolString nodeName, bool visible) {
         return SetVisibleIn(scene.GetRootNode(), nodeName, visible);
+    }
+
+    bool UICanvasComponent::SetElementVisible(PoolString elementName, bool visible) {
+        UIElement* element = _layout.root->FindByName(elementName);
+        if (!element) {
+            return false;
+        }
+        element->style.visible = visible;
+        Invalidate();
+        return true;
+    }
+
+    bool UICanvasComponent::SetElementVisibleByName(Scene& scene, PoolString elementName, bool visible) {
+        return SetElementVisibleIn(scene.GetRootNode(), elementName, visible);
     }
 
 }  // namespace BECore

@@ -135,6 +135,7 @@ namespace BECore::Tests {
         }
 
         void TearDown() override {
+            CoreManager::GetUIVars().Clear();
             _canvas.Reset();
             _manager.Reset();
             CoreManager::GetRendererManager().SetRenderer({});
@@ -366,6 +367,115 @@ namespace BECore::Tests {
         EXPECT_FALSE(label->wrap);
         EXPECT_FALSE(label->style.stack.wrap);
         EXPECT_TRUE(canvas->_elements[1]->style.stack.wrap);
+    }
+
+    // ---- variables and show / hide by name --------------------------------------------------------------------------------
+
+    TEST_F(UIControlsTest, ALabelFollowsItsVariables) {
+        auto& title = Get<UILabel>("Title");
+        title.text = "Score: {score}";
+        UIVars& vars = CoreManager::GetUIVars();
+
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Score: ") << "a variable nobody set is empty";
+        EXPECT_EQ(GlyphsIn(title).size(), 6u);  // S c o r e :
+
+        vars.Set("score"_intern, 5);
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Score: 5");
+        EXPECT_EQ(GlyphsIn(title).size(), 7u);
+
+        vars.Set("score"_intern, 100);
+        Draw();
+        EXPECT_EQ(GlyphsIn(title).size(), 9u);
+    }
+
+    TEST_F(UIControlsTest, ALabelIsLaidOutAgainOnlyWhenItsTextChanged) {
+        auto& title = Get<UILabel>("Title");
+        title.text = "Score: {score}";
+        UIVars& vars = CoreManager::GetUIVars();
+        vars.Set("score"_intern, 5);
+
+        Draw();
+        const uint32_t afterFirst = title.GetLayoutCount();
+        Draw();
+        Draw();
+        EXPECT_EQ(title.GetLayoutCount(), afterFirst) << "an unchanged screen costs no layout";
+
+        vars.Set("other"_intern, 1);  // a variable the label does not show still moves the version, but the shown text stays
+        Draw();
+        EXPECT_EQ(title.GetLayoutCount(), afterFirst);
+
+        vars.Set("score"_intern, 6);
+        Draw();
+        EXPECT_EQ(title.GetLayoutCount(), afterFirst + 1);
+    }
+
+    TEST_F(UIControlsTest, ABracedTextWithoutAVariableIsShownWithoutBraces) {
+        auto& title = Get<UILabel>("Title");
+        title.text = "{{x}}";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "{x}");
+    }
+
+    TEST_F(UIControlsTest, TheValidatorSeesTheTextThatIsShown) {
+        auto& title = Get<UILabel>("Title");
+        title.text = "{line}";
+        title.wrap = false;
+        title.overflow = TextOverflow::Clip;
+        title.style.rect.height = UILength::Px(40.0f);  // a line of 24 units is a little over 30 high, so the fixture's 30 would not hold even "Short"
+        _canvas->Invalidate();
+        const auto textIssues = [this]() {
+            Draw();
+            size_t count = 0;
+            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
+                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
+            }
+            return count;
+        };
+
+        CoreManager::GetUIVars().Set("line"_intern, "Short");
+        EXPECT_EQ(textIssues(), 0u);
+        CoreManager::GetUIVars().Set("line"_intern, "A value that is much too long for a label of this width");
+        EXPECT_EQ(textIssues(), 1u);
+    }
+
+    TEST_F(UIControlsTest, AnElementIsHiddenAndShownByName) {
+        Draw();
+        auto& title = Get<UILabel>("Title");
+        ASSERT_FALSE(GlyphsIn(title).empty());
+
+        EXPECT_TRUE(_canvas->SetElementVisible(PoolString::Intern("Title"), false));
+        Draw();
+        EXPECT_TRUE(title.rect.IsEmpty());
+        EXPECT_TRUE(_renderer->calls.size() > 0);
+        for (const DrawCall& call : _renderer->calls) {
+            EXPECT_FALSE(call.kind == DrawKind::Texture && call.rect.x < 200.0f && call.rect.y < 50.0f) << "the hidden label draws nothing";
+        }
+
+        EXPECT_TRUE(_canvas->SetElementVisible(PoolString::Intern("Title"), true));
+        Draw();
+        EXPECT_FALSE(GlyphsIn(title).empty());
+
+        EXPECT_FALSE(_canvas->SetElementVisible(PoolString::Intern("NoSuchElement"), false));
+    }
+
+    TEST_F(UIControlsTest, AHiddenButtonTakesNoClicks) {
+        ActionRecorder actions;
+        Draw();
+        auto& ok = Get<UIButton>("Ok");
+        const Rect c = Center(ok);
+
+        Scene& scene = *_manager->GetSceneByName(PoolString::Intern("Main"));
+        EXPECT_TRUE(UICanvasComponent::SetElementVisibleByName(scene, PoolString::Intern("Ok"), false));
+        Draw();
+
+        CoreManager::GetUIInput().DispatchMouseButtonDown(Button(c.x, c.y, true));
+        CoreManager::GetUIInput().DispatchMouseButtonUp(Button(c.x, c.y, false));
+        EXPECT_EQ(actions.Total(), 0u);
+        EXPECT_EQ(_canvas->GetLayout().HitTest(c.x, c.y), &Get<UIPanel>("Plate")) << "the click lands on the plate below";
+
+        EXPECT_FALSE(UICanvasComponent::SetElementVisibleByName(scene, PoolString::Intern("NoSuchElement"), true));
     }
 
     // ---- hit testing ------------------------------------------------------------------------------------------------------

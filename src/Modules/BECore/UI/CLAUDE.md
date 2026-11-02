@@ -6,7 +6,7 @@ In-game UI that the engine draws through `IRenderer`, in both backends and both 
 
 **Adaptivity is the foundation.** Window size, aspect ratio, orientation, safe area, pixel density and a user scale are inputs of every layout, and every screen must pass `ValidateOnMatrix` (below) with no issues before it is considered done.
 
-What exists (plan stages 3 and 4.1 to 4.3): canvases, the scaler, the layout rules, responsive variants, the validator, the host component, the reflection of the element tree and the variants, so a screen can be written in `SceneConfig.xml` or in a `.ui.xml` file of its own (see "Writing a screen in XML"), and the controls: `UIPanel`, `UIImage`, `UILabel`, `UIButton`, `UIStack` (see "Controls"). What does not exist yet: `UIVars` and the first real screens (the rest of stage 4).
+What exists (plan stages 3 and 4.1 to 4.3): canvases, the scaler, the layout rules, responsive variants, the validator, the host component, the reflection of the element tree and the variants, so a screen can be written in `SceneConfig.xml` or in a `.ui.xml` file of its own (see "Writing a screen in XML"), and the controls: `UIPanel`, `UIImage`, `UILabel`, `UIButton`, `UIStack` (see "Controls"). and `UIVars` for text that follows the game (see "Variables"). What does not exist yet: the first real screens (the rest of stage 4).
 
 ```
 UICanvasComponent (scene component, reflected fields: space, scaleMode, ...)
@@ -32,6 +32,7 @@ UIElement tree (root = the canvas; children are the elements)
 | `UIColor` | A `Color` that a file writes in one attribute (`color="0,0,0,160"` or `"#000000A0"`) |
 | `UIText` (`UIValueText.h`) | Pure text forms of `UILength` (`"90%"`), `UIEdges` (`"8"` or `"l,t,r,b"`), colors, numbers; `UIAttr` (`UIAttributeIO.h`) reads and writes them as attributes |
 | `UIPanel`, `UIImage`, `UILabel`, `UIButton`, `UIStack` | The controls, derived from `UIElement`; one section below |
+| `UIVars` (`CoreManager::GetUIVars()`) | The variables that label text is bound to: name to text, with a version that grows on every change; `Expand()` replaces `{name}` |
 | `UISprite`, `UINineSlice` | The texture of a sprite name (TextureLibrary, or given by code); the pure cutting of a picture into nine pieces |
 | `UIScreenContent` | The reflected pair `elements` + `variants` that a screen is made of; what a document and any other front-end reads |
 | `UIDocument` (`IResource`), `UIDocumentLoader` | A screen in a `.ui.xml` file: the parsed XML, `Instantiate(content)` builds fresh elements from it for each canvas |
@@ -150,6 +151,25 @@ A control is a `UIElement` subclass registered in `AbstractFactory<UIElement>`; 
 - **Skip-defaults.** A control field that defaults to something other than its type's zero (`wrap` true, `textColor` white) is dropped by a serializer that skips defaults, because the check is "equal to `T{}`". The editor does not use that mode; do not save UI with it.
 - Adding a control: derive from `UIElement` (or `UILabel`), `BE_CLASS(Name)` with `BE_REFLECT_FIELD`s, override `DrawSelf`, include the `.gen.hpp` in the `.cpp`. Names that are hard to guess go in the attribute list above, and the class registers itself, also when it derives from another control.
 
+## Variables
+
+A label shows game state without the game touching the label:
+
+```cpp
+CoreManager::GetUIVars().Set("score"_intern, 120);   // a number is written like Format() writes it; a string works too
+```
+
+```xml
+<element type="UILabel" name="Score" text="Score: {score}" .../>
+```
+
+- `UIVars` is a table of name to text and nothing more (no expressions). `Set` with the value that is already there changes nothing; `Remove` and `Clear` count as changes. The version never goes back, so a label that expanded its text at an older version knows to do it again.
+- **Placeholders.** `{name}` is replaced by the variable of that name; a variable nobody set is empty; `{{` and `}}` are literal braces; an unclosed `{` stays as written.
+- **Cost.** A label expands its text again only when its `text` or the version of the variables changed, and lays it out again only when the expanded text (or the size, the font, an option) changed, so an unchanged screen costs a comparison per label (`UILabel::GetLayoutCount()` in the tests). A variable the label does not show moves the version but not the shown text, so nothing is laid out.
+- `UILayoutValidator` checks the text that is shown (`CheckContent()` uses `GetDisplayText()`): a screen test sets the variables to their longest realistic values and runs the matrix.
+- The table is global, so a test clears it in `TearDown` (`CoreManager::GetUIVars().Clear()`).
+- **Show and hide by name.** A whole screen: `UICanvasComponent::SetVisibleByName(scene, nodeName, visible)`. One element: `canvas->SetElementVisible(name, visible)` or, in every canvas of a scene, `UICanvasComponent::SetElementVisibleByName(scene, name, visible)`. They set the authored `style.visible`, so a hidden element gets an empty rect, draws nothing, takes no clicks and takes no room in a stack; a variant that sets `visible` for the same element still wins.
+
 ## Building a screen in code
 
 ```cpp
@@ -183,8 +203,8 @@ Code and a file can be mixed: the canvas of a node comes from the file, a compon
 
 ## Not done
 
-`UIVars` (text bound to variables), hot reload of a document, clipping of children to their parent, scrolling, focus and gamepad navigation, keyboard and gamepad activation of a button, a `UITextInput`, the debug overlay, an inspector for variants and the control API methods (`ui_tree`, `ui_click`). `UIVars` and the first screens are the rest of stage 4 of the plan.
+hot reload of a document, clipping of children to their parent, scrolling, focus and gamepad navigation, keyboard and gamepad activation of a button, a `UITextInput`, the debug overlay, an inspector for variants and the control API methods (`ui_tree`, `ui_click`). The first screens are the rest of stage 4 of the plan.
 
 ## Tests
 
-`tests/BECore/`: `UILayoutTest` (anchors, stretch, limits, aspect, stack), `UICanvasScalerTest` (every space and mode, safe area, the context comparison), `UISettingsTest` (settings, `UIEnvironment`), `UIVariantTest` (conditions, order, restoring, tree layout), `UICanvasLayoutTest` (cache, variant runs, hit testing, the matrix itself and shipped-style screens), `UILayoutValidatorTest`, `UICanvasComponentTest` (a scene from XML into a `RecordingRenderer`: drawing in each space, the view transform handed back, input order, press following, modal, inactive scenes), `UIPreviewTest`, `UIReflectionTest` (the text forms, the tree and variants through XML and binary, malformed values, an unknown type, a screen from a scene file laid out in both orientations), `UIDocumentTest` (a file, inline XML and a tree built in memory give the same elements; the loader choice; canvases of one file do not share layout; file and inline together; a missing, a broken and a partly bad file), `UINineSliceTest`, `UIControlsTest` (every control from a file and back, every property of every control, hit testing, draw calls of panel, nine-slice, image and label, scale and variants, overflow and the validator, button states and clicks from synthetic mouse events).
+`tests/BECore/`: `UILayoutTest` (anchors, stretch, limits, aspect, stack), `UICanvasScalerTest` (every space and mode, safe area, the context comparison), `UISettingsTest` (settings, `UIEnvironment`), `UIVariantTest` (conditions, order, restoring, tree layout), `UICanvasLayoutTest` (cache, variant runs, hit testing, the matrix itself and shipped-style screens), `UILayoutValidatorTest`, `UICanvasComponentTest` (a scene from XML into a `RecordingRenderer`: drawing in each space, the view transform handed back, input order, press following, modal, inactive scenes), `UIPreviewTest`, `UIReflectionTest` (the text forms, the tree and variants through XML and binary, malformed values, an unknown type, a screen from a scene file laid out in both orientations), `UIDocumentTest` (a file, inline XML and a tree built in memory give the same elements; the loader choice; canvases of one file do not share layout; file and inline together; a missing, a broken and a partly bad file), `UINineSliceTest`, `UIVarsTest` (set, get, version, expand, escapes, unset names, Cyrillic), `UIControlsTest` (every control from a file and back, every property of every control, hit testing, draw calls of panel, nine-slice, image and label, scale and variants, overflow and the validator, variables in labels and their layout cost, show and hide by name, button states and clicks from synthetic mouse events).
