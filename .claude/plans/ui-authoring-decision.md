@@ -1,29 +1,55 @@
 # How an in-game UI screen is authored: the data for the decision
 
-Stage 5 of `.claude/plans/magical-leaping-blossom.md`. The owner decides; this file holds what was measured. Status: **A and B are built and measured; C (RmlUi) is vendored and compiles, but no host is built**, see the last section for what is needed.
+Stage 5 of `.claude/plans/magical-leaping-blossom.md`. The owner decides; this file holds what was measured. Status: **all three candidates are built and measured** (A and B on the element tree, C as a separate host). The last section reads the data; it does not choose.
 
 The three candidates, for the same screens:
 
 - **A. The engine's XML** (`.ui.xml`, or inline in `SceneConfig.xml`): stage 4. Elements are `<element type="UIButton" ...>`, the style is flat attributes, responsive variants are `<variants>`.
 - **B. A web-style front-end** (`.ui.html` + CSS): stage 5.1. A compiler writes the text of an A document, so it builds the same tree through the same factories (`UI/CLAUDE.md`, "Writing a screen in HTML and CSS").
-- **C. RmlUi** as a separate host with its own DOM and layout. Vendored (`src/Modules/RmlUi`), no host yet.
+- **C. RmlUi** as a separate host with its own DOM and layout (`.rml` + `.rcss`): stage 5.3. The vendored library (`src/Modules/RmlUi`) and its host (`src/Modules/RmlUiHost`, `CLAUDE.md` there), both behind `-DENGINE_UI_RMLUI=ON`, off by default.
+
+Numbers are from a Debug and a Release build on macOS (Apple M4 Pro, 12 cores, Apple Clang), so they are good for comparing the three, not as absolute figures. The tests that produce them are in the repository (`tests/RmlUiHost/`, and `UIWebTest` for B).
 
 ## What was measured
 
-Numbers are from a Debug build on macOS (Apple M4 Pro, Clang), so they are only good for comparing A with B. `BECoreModule` is the only module touched; no new dependency.
-
 | Question | A: XML | B: HTML + CSS | C: RmlUi |
 |---|---|---|---|
-| **Integration cost** | Stage 4 (reflection of the tree, `UIDocument`, controls): not counted here | **+2,850 lines** in 11 files (`UIHtmlParser`, `UICssParser`, `UIWebCompiler`, `UIWebText`, `UIWebReport`, `UIWebDocumentLoader`), +900 lines of test (41 cases), one `friend` line in `UIDocument.h`; about one working session; no submodule | not measured |
-| **Same screens** | The three shipped screens (Match3 menu, Match3 HUD, Chess HUD) | All three written in HTML + CSS with **0 issues**; every element gets the same rect as the shipped XML at 4 to 5 window shapes (`UIWebTest.TheMenuInHtmlAndCssLaysOutLikeTheShippedXml`, `TheMatch3HudInHtml...`, `TheChessHudInHtml...`); the menu and both HUDs pass `ValidateOnMatrix` with the longest words | not measured |
-| **Adaptivity** | Anchors, percents, limits, stack, variants, safe area, validator on the matrix | Same machinery: `@media (orientation / min-width / max-width / min-aspect-ratio ...)` becomes a `UIVariantCondition` (widths are canvas units, not browser pixels); the matrix and the validator work unchanged | not measured |
-| **Source size** (250 cards × 4 elements = 1,001 elements) | 99,537 bytes of XML | 30,070 bytes of HTML + CSS (a third), which compile to 130,065 bytes of XML | not measured |
-| **Build cost of a 1,001-element screen** | parse + build 5.0 ms | compile 18.9 ms + parse + build 4.6 ms (a document is compiled once, when it is loaded) | not measured |
-| **Runtime** (same tree) | layout 0.23 ms cold, 0 cached, 0.21 ms after `Invalidate()`; draw 0.57 ms, 2,890 draw calls | identical: it is the same tree | not measured |
-| **Build and size** | - | 5 sources: about 1.3 s to compile together, 5.9 MB of Debug objects (the unit of the Debug build; a Release figure was not taken) | clean build time and binary size delta: not measured |
-| **Backend fit** | Rect + texture + tint + clip: both backends, today | Same | needs `DrawGeometry` (indexed triangles with vertex color and UV) in `IRenderer`: SDL has `SDL_RenderGeometry`; Vulkan needs a new pipeline and a dynamic vertex buffer. Not built |
-| **Model edit loop** | Text file, stable names, validator, report | Text file in a notation models know well; the compile **reports every property, selector, tag and value it cannot apply** with the line (`UIWebReport`), so a wrong guess is not silent; no screenshot yet (control API: `ui_tree`, `ui_click` are stage 7) | not measured |
-| **Fit with the engine** | Native: reflection, scene editor tree view (stage 7), hit testing, gtests of layout | Native, since it is A underneath. The editor shows the compiled tree, and edits made there do not go back into the HTML | An RmlUi document has its own DOM: opaque to the scene editor, tested only through a context with stub interfaces |
+| **Integration cost** | Stage 4 (reflection of the tree, `UIDocument`, controls): not counted here | +2,850 lines in 11 files (`UIHtmlParser`, `UICssParser`, `UIWebCompiler`, `UIWebText`, `UIWebReport`, `UIWebDocumentLoader`), +900 lines of test (41 cases), one `friend` line in `UIDocument.h`; no dependency | **+1,033 lines in 12 files** (`RmlUiHost`: render, system and file interfaces, runtime, `UIVars` adapter, the component), +1,413 lines of test (28 cases), `IRenderer::DrawGeometry` (about 120 lines in `IRenderer`, `SDLRendererBackend` and `RecordingRenderer`, 9 cases), the vendored library (**3.2 MB**, 444 files, unedited); **FreeType** from the system for its font engine (`brew install freetype`; a real adoption vendors it or writes a `FontEngineInterface` over `FontAtlas`). One working session each for B and C |
+| **Same screens** | The three shipped screens (Match3 menu, Match3 HUD, Chess HUD) | All three in HTML + CSS with 0 issues; every element on the same rect as the shipped XML (`UIWebTest`) | All three in RML + RCSS: **every element on the same rect as the shipped XML in all 138 cases of the size matrix** (10 aspect ratios, 480 to 2160 px short side, no insets / notch / side insets; `RmlUiScreensTest`), nothing outside the content, buttons over the touch size, no text overflowing its box. A deliberately broken screen is caught by the same checks. Looked at on the SDL software renderer (menu, both HUDs, and the menu inside a running `BagiMatch3`) |
+| **Adaptivity** | Anchors, percents, limits, stack, variants, safe area, validator on the matrix | The same machinery: `@media` becomes a `UIVariantCondition`; the matrix and the validator work unchanged | The same scaler decides the rect and the scale; the context is that rect in pixels and `dp` is a UI unit, so a screen in `dp` and `%` follows it. Flexbox, `max-width` and `%` did what the XML stack does. **No validator**: the checks above are written on RmlUi's boxes (`GetAbsoluteOffset`, `GetBox`, `GetScrollWidth` against `GetClientWidth` for text that does not fit), they exist for the test's screens only |
+| **Source size** (the 1,001-element screen below) | 120,061 bytes | 76,338 bytes (compiles to the XML) | 76,547 bytes |
+| **Backend fit** | Rect + texture + tint + clip: both backends | Same | Needs `DrawGeometry`: done for SDL (`SDL_RenderGeometryRaw`), **not for Vulkan** (a pipeline and a dynamic vertex buffer; the default logs once and draws nothing), so RmlUi documents show on the SDL backend only. CSS `transform`, filters, shaders, gradients, `box-shadow` and the rounded clip mask are not implemented by the render interface: RmlUi draws nothing for them, silently |
+| **Platforms** | Whatever the engine runs on | Same | The core is portable C++; FreeType is the added dependency. SDL backend only for now. Android and web not tried |
+| **Model edit loop** | Text file, stable names, validator, report | Text in a notation models know well; the compile reports every property, selector, tag and value it cannot apply with the line | Text in the same notation (RmlUi's dialect: `dp` units, `data-model`, `{{vars.x}}`); RmlUi reports what it cannot parse through our logger (`RmlUi: ...`). There is no report of what the host ignores: an unsupported effect is silent. Screenshots through the control API work as for the others |
+| **Fit with the engine** | Native: reflection, scene editor tree view (stage 7), hit testing, gtests of layout | Native, since it is A underneath | A scene component beside the canvases: draw order, `UIInput` order, `modal`, `ActionEvent`, `UIVars` all line up (`{{vars.score}}` through an adapter, not `{score}`). The document is opaque to the scene editor, `UILayoutValidator` and `ui_tree`; edits in the editor do not reach it |
+
+### One screen of 1,001 elements (250 cards x 4: a plate, two labels, a button), all in the frame
+
+`UIAuthoringBenchmarkTest`, one process, the three formats on the same generated screen. This replaces the first figures of this record, which came from a script that was not kept and a screen that was partly outside the window (RmlUi does not draw what is outside; the element tree does).
+
+| | Debug A | Debug B | Debug C | Release A | Release B | Release C |
+|---|---|---|---|---|---|---|
+| source bytes | 120,061 | 76,338 | 76,547 | same | same | same |
+| load: parse and build (ms) | 4.6 | 29.4 | 19.5 | 2.1 | 5.6 | 6.0 |
+| layout, first (ms) | 0.13 | 0.10 | 4.4 | 0.04 | 0.03 | 0.64 |
+| layout, window resized (ms) | 0.10 | 0.10 | 3.7 | 0.02 | 0.02 | 0.53 |
+| layout, nothing changed (ms) | 0.00 | 0.00 | 0.04 | 0.00 | 0.00 | 0.02 |
+| draw, first: glyphs are made (ms) | 10.5 | (A's tree) | 8.0 | 3.1 | (A's tree) | 1.05 |
+| draw, warm (ms) | 1.28 | (A's tree) | 2.4 | 0.09 | (A's tree) | 0.40 |
+| draw calls per frame | 4,780 | (A's tree) | 1,250 | 4,780 | (A's tree) | 1,250 |
+| heap of the screen (KB) | 625 | (A's tree) | 4,726 | 625 | (A's tree) | 4,726 |
+
+B is A's tree once compiled, so its layout and draw are A's. Draw calls: the engine draws a glyph at a time, RmlUi one geometry per text run (21,120 vertices a frame). RmlUi's layout costs 16 to 37 times the element tree's here (the first layout and a resize, Debug and Release alike) and is still under a millisecond in Release; it lays the whole document out again when the window changes.
+
+### Build and size
+
+| | Without RmlUi | With RmlUi | Delta |
+|---|---|---|---|
+| `BagiMatch3`, Release | 5,187,864 bytes | 7,162,360 bytes | **+1,974,496 bytes (+1.97 MB, +38%)** |
+| `BagiMatch3`, Release, `strip -x` | 4,813,808 bytes | 6,535,984 bytes | +1,722,176 bytes (+1.72 MB, +36%) |
+| clean build of `rmlui_core` (+ the host in Release) | | Debug: 7.5 s wall, 79 s CPU; Release: 15.6 s wall, 172 s CPU | on 12 cores |
+
+B: five sources, about 1.3 s to compile together, 5.9 MB of Debug objects. The default build (`ENGINE_UI_RMLUI=OFF`) is unchanged: no RmlUi symbol in the executables, no extra target.
 
 ### CSS reach (B)
 
@@ -41,36 +67,33 @@ What is **outside** the subset (reported when it appears, never silent) and what
 | Text next to block elements, `<p>` closed by the next sibling | Not a browser's HTML parser | Not planned |
 | The cascade of shorthands and longhands | They are separate names (the later declaration wins, not CSS's expansion) | Small, a table of what a shorthand sets |
 
-Findings while writing it:
+Findings while writing B:
 
-1. **A wrapper `div` must not take clicks.** A full-screen `div` that only groups elements would swallow every click of the game under it (a `UIPanel` takes input). The compile makes a group take clicks only with a visible background or `pointer-events: auto`. This is a place where "CSS semantics" and "game UI semantics" differ, and each such place needs a rule.
-2. **A `div` with loose text is a label,** and an element with only inline children and no text of its own is a container. The first version merged `<div><span id="a">1</span><span id="b">2</span></div>` into one label; the test of a nested selector found it.
-3. **Specificity bites a model the way it bites a web developer:** `#Reset { background }` beats `button:hover { background }`. The compile follows CSS, which is right and not obvious.
-4. **Centering has no CSS spelling that the engine can take** (`left: 50%` is not an offset in units, `justify-content` has no counterpart), so the front-end adds one non-CSS property, `anchor`, as the plan's sketch had. Two engine-only properties (`-be-text-fit`, `-be-min-font-size`) cover text auto-fit.
-5. **A button keeps its own text alignment** (the compile does not let `text-align` reach it), as a browser's default style sheet does.
-6. The compile is **2,850 lines**, more than the roughly 1,000 the first estimate had in mind: the property table, the cascade, the variants diff and the state rules are each a real piece. That is the size of a "subset" that three screens did not outgrow, and not the size of the whole of CSS.
+1. **A wrapper `div` must not take clicks.** A full-screen `div` that only groups elements would swallow every click of the game under it. The compile makes a group take clicks only with a visible background or `pointer-events: auto`.
+2. **A `div` with loose text is a label,** and an element with only inline children and no text of its own is a container.
+3. **Specificity bites a model the way it bites a web developer:** `#Reset { background }` beats `button:hover { background }`.
+4. **Centering has no CSS spelling that the engine can take**, so the front-end adds one non-CSS property, `anchor`, and two engine-only ones for text auto-fit.
+5. **A button keeps its own text alignment**, as a browser's default style sheet does.
+6. The compile is **2,850 lines**, more than the roughly 1,000 first estimated: the property table, the cascade, the variants diff and the state rules are each a real piece.
 
-## What is not measured, and why
+### What building C showed
 
-**C (RmlUi) is vendored and compiles, but no host is built, so the C column above stays empty.** The plan added it as a submodule; that command was refused when this stage ran, and the owner chose to vendor it the way pugixml and stb are (`src/Modules/RmlUi/`, tag `6.3`, MIT). What that step showed:
-
-- Only the core is copied: `Include/RmlUi/{Core,Config,Core.h}` and `Source/Core`, unedited: 444 files, **3.2 MB** (the whole upstream repository is 24.8 MB with samples, tests and backends). The upstream CMake files are replaced by one of ours; the Debugger (fonts under the SIL OFL), the Lua / SVG / Lottie plugins and the backends are left out.
-- It sits behind `ENGINE_UI_RMLUI` (OFF by default) and is added after the `ENGINE_NO_EXCEPTIONS` block like GoogleTest, so it compiles with the engine's `-fno-exceptions`. The only change needed for that is the define `ITLIB_FLAT_MAP_NO_THROW` (its flat map throws otherwise); `robin_hood.h` detects the missing exceptions itself. The RTTI is RmlUi's own (`rmlui_dynamic_cast`), not the language's.
-- `rmlui_core` builds clean on macOS Debug (Apple Clang, FreeType from Homebrew). Its objects are 94 MB and the archive 97 MB **with debug info**, so that is not a binary-size figure: the delta of a linked game is not measured yet.
-- Nothing in the engine links it, so the default build is unchanged.
-
-What the work still needs, in order:
-
-1. FreeType for RmlUi's default font engine (Homebrew has it on this machine for the spike; a real adoption would vendor FreeType too, or write a font engine over our `FontAtlas`: six methods of `FontEngineInterface`).
-2. `IRenderer::DrawGeometry` with an `SDL_RenderGeometry` implementation (and the recording double); the Vulkan geometry pipeline estimated, not built.
-3. `RmlUiRenderInterface` / `SystemInterface` / `FileInterface` over `IRenderer`, `CoreManager::GetTime()`, `LOG_*` and `FileSystem`; `RmlUiDocumentComponent` feeding `UIInput`, the canvas bounds, scale and safe area, and emitting `ActionEvent` for `data-action`.
-4. The Match3 menu and HUD as `.rml` / `.rcss`, through the size matrix with stub interfaces, plus a clean build time and binary size delta, and the runtime on the same 1,001-element screen.
-
-Questions only this work answers: how large the clean build delta is, whether RmlUi's layout can be made to agree with the safe area and the scaler (the validator is ours, so it would need an adapter), and whether its features (scrolling, data binding, transitions, spatial navigation) are worth a second DOM. From its documentation (not checked here): RmlUi has flexbox, transitions and animations, data binding and spatial navigation, its render interface needs compile / render / release geometry, texture load and generate, and scissor, and its default font engine is FreeType.
+1. **RmlUi is used as designed, with few seams.** The three interfaces (render, system, file) are 8 + 2 + 6 methods; the optional ones (transform, clip mask, layers, filters, shaders) are left at their defaults. `Context` per document, `dp` ratio from the scaler, `ProcessMouse*` from `UIInput`, `click` listener to `ActionEvent`: no surprise in the library.
+2. **Premultiplied alpha.** RmlUi's vertex colors and generated textures are premultiplied; `IRenderer` blends straight alpha. The host converts once, when the geometry is compiled or the texture generated. Looked at: no dark halos on text. This is a cost that every RmlUi backend pays and a bug waiting in the first one that forgets it.
+3. **The same click-through decision, the other way round.** An RmlUi element takes the click wherever it has a box, `body` included (`IsMouseInteracting()` is true over anything but the context root), so the full-screen wrapper problem of finding 1 shows up as "put `pointer-events: none` on `body`, `auto` on buttons". It is inherited.
+4. **`body` has no size** in RmlUi (`body { width: 100%; height: 100% }` is the first line of every screen), and `dp`, not `px`, is the unit that follows the scaler.
+5. **A click can destroy the component.** RmlUi dispatches `click` from inside `ProcessMouseButtonUp`; a handler of `ActionEvent` that switches scenes would free the context it is running in. The host queues the action and emits it after the call (as `UICanvasComponent` clicks last).
+6. **RmlUi culls elements outside the window; the element tree does not.** The first version of the benchmark compared that, not the formats.
+7. **Silent gaps.** What the render interface does not implement draws nothing without a message. A check of "does this screen use only what the host supports" does not exist (B's report is what the other path offers).
+8. **The font engine brings FreeType.** Without a system FreeType the library does not build (`RMLUI_FONT_ENGINE=none` plus a `FontEngineInterface` over `FontAtlas` is the alternative, six methods, not tried). One face is loaded (`TextConfig.xml`'s default font); weights and fallback faces are not set up.
+9. **Text binding is RmlUi's own** (`data-model` and `{{ }}`): the host exposes `UIVars` as the struct `vars` through a small custom `VariableDefinition`, so game code is unchanged and a screen says `{{vars.score}}` where the others say `{score}`.
+10. **Textures:** `<img src>` takes a file path, not a `TextureLibrary` sprite name; a sprite from an atlas would need a decorator or a host-side lookup. The three screens use none.
+11. **Tool support:** nothing in the scene editor, the validator or `ui_tree` reaches into a document; its tests need a context with a renderer double (`RecordingRenderer` records geometry for that, `RmlUiHostTest`).
 
 ## Reading the data
 
-- **A already covers every screen the repository ships.** B covers them too, with no gap found, and adds a notation that models and designers know, at a cost of about 2,850 lines that live in one place and leave the runtime alone.
-- **B is cheap to keep and cheap to drop:** nothing but a loader depends on it, and a screen written in HTML can be turned into the XML it compiles to (the compile output is the A document).
-- **The features that A and B lack** are in stage 6 of the plan: scrolling, sliders, toggles, focus and gamepad navigation, text input, animation. RmlUi has some of them built in. Whether they are cheaper to build on the element tree (the plan estimates a control each, `UITextInput` being the largest) or to take with a second DOM is the open question that the missing C data would settle.
-- If the owner chooses now without C: the data supports **A as the base with B as an optional second loader**, and the Mahjong game (the consumer of stage 6 in the roadmap) as the point where a missing control would bring RmlUi back for a second look.
+- **A already covers every screen the repository ships.** B covers them too, with no gap found, and adds a notation that models and designers know, at a cost of about 2,850 lines in one place and nothing in the runtime. **C covers them as well**, in the same notation family, with every rect on the XML's, and brings features that A and B lack (flexbox in full, transitions and animations, data binding, `overflow` with scrolling, spatial navigation, `:focus`, `@media` on more features, hot reload of a document through the library).
+- **What C costs, measured:** +1.97 MB of executable (+38%), +4.7 MB of heap per 1,000 elements (7.5 times the element tree), a layout 16 to 37 times slower (still under a millisecond in Release for 1,001 elements, relaid out on every window change), a system dependency (FreeType), a render interface to finish for Vulkan (not started) and to keep complete for features (nothing is reported when one is missing), and a second DOM that the engine's tooling cannot see (no validator, no editor view, no `ui_tree`). Its draw is cheaper in calls (1,250 against 4,780) and its text is cheaper to make the first time in Release (1.05 ms against 3.1).
+- **What C buys:** the controls of stage 6 that A and B would build one by one (`UIScrollView`, slider, toggle, progress bar, focus and gamepad navigation, animation, `UITextInput` being the largest) exist in RmlUi, with their CSS.
+- **The decision is between building those controls (the plan estimates each) and living with a second DOM.** Nothing measured says one is wrong: the measurements say what each costs.
+- If the owner chooses now: the data supports **A as the base with B as an optional second loader** (nothing but a loader depends on B, and a screen written in HTML compiles to the XML it stands for), and **RmlUi kept as the optional module it is** (off by default, nothing in the engine depends on it), to be taken up again when Mahjong, the consumer of stage 6 in the roadmap, needs a control that is more than a week of work on the element tree, or when the Vulkan backend gets `DrawGeometry`. The alternative the data also supports is to **make C the path for screens with scrolling, text input or animation** and keep A and B for HUDs and menus, since the seam (a scene component, `UIInput`, `ActionEvent`, `UIVars`) already allows both in one game.
