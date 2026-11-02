@@ -56,7 +56,7 @@ Updated as the work goes; the dashboard counts these lines.
 - [x] Stage 4.2 `UIDocument` and `UIDocumentLoader` for `.ui.xml` (`ResourceManager` picks a loader by the longest suffix), `source` on the canvas, `UIScreenContent`; the same tree from inline XML, a file and a property bag built in memory; `UIDocumentTest` (11)
 - [x] Stage 4.3 Controls: `UIPanel` (fill, sprite, nine-slice), `UIImage` (fit or stretch), `UILabel` (text, vertical align, overflow, `CheckContent`), `UIButton` (hover / pressed / disabled, click emits `ActionEvent`), `UIStack`; the canvas tracks hover, press and click; `UISprite`, `UINineSlice`, `TextLayoutCache`; `UINineSliceTest` (5), `UIControlsTest` (27)
 - [x] Stage 4.4 `UIVars` (`CoreManager::GetUIVars()`), `{name}` binding in `UILabel` (expanded only when the text or the version changed), show / hide of an element by name (`SetElementVisible`, `SetElementVisibleByName`); `UIVarsTest` (10), cases in `UIControlsTest`
-- [ ] Stage 4.5 gtests of the controls: hit testing, button states, draw calls at two aspect ratios, re-layout, the validator matrix
+- [x] Stage 4.5 gtests of the controls and of a whole screen: hit testing and z-order, button states and clicks from synthetic events, draw calls of each control, a HUD through the size matrix and in two shapes with a variant (`UIScreenTest` (7)); the screens the games ship go through the same matrix with 4.6 and 4.7
 - [ ] Stage 4.6 Match3: view size, HUD canvas, Reset on `ActionEvent`, main menu scene
 - [ ] Stage 4.7 Chess: HUD canvas with a turn label and Reset
 - [ ] Stage 5 Decision spike: XML, web-style front-end, RmlUi
