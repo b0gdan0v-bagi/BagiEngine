@@ -1,12 +1,12 @@
 #include "SceneEditorWidget.h"
 
 #include "ComponentInspectors.h"
+#include "SceneConfigWriter.h"
 
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Reflection/IDeserializer.h>
-#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
@@ -14,38 +14,6 @@
 #include <imgui.h>
 
 namespace BECore {
-
-    namespace {
-
-        void BuildNodeXml(pugi::xml_node parent, const SceneNode& node) {
-            pugi::xml_node nodeEl = parent.append_child("node");
-            nodeEl.append_attribute("name").set_value(node.GetName().CStr());
-            if (node.GetLayer() != 0) {
-                nodeEl.append_attribute("layer").set_value(node.GetLayer());
-            }
-
-            const auto& components = node.GetComponents();
-            if (components.empty()) {
-                return;
-            }
-
-            pugi::xml_node compsEl = nodeEl.append_child("components");
-            for (const auto& comp : components) {
-                pugi::xml_node compEl = compsEl.append_child("component");
-                const auto& typeMeta = comp->GetTypeMeta();
-                compEl.append_attribute("type").set_value(typeMeta.typeName.data());
-
-                XmlSerializer s;
-                comp->Serialize(s);
-                const auto& srcRoot = s.GetRootNode();
-                for (auto attr = srcRoot.first_attribute(); attr; attr = attr.next_attribute())
-                    compEl.append_attribute(attr.name()).set_value(attr.value());
-                for (auto child = srcRoot.first_child(); child; child = child.next_sibling())
-                    compEl.append_copy(child);
-            }
-        }
-
-    }  // namespace
 
     // =========================================================================
     // IWidget interface
@@ -344,31 +312,14 @@ namespace BECore {
             return;
         }
 
-        scene->PrepareForSave();
-
         auto& configManager = CoreManager::GetConfigManager();
         auto xmlRoot = configManager.GetConfig("SceneConfig"_intern);
         if (!xmlRoot) {
             return;
         }
 
-        pugi::xml_node pugiRoot = xmlRoot.GetPugiNode();  // <SceneManager>
-
-        // Rebuild <scenes> from the current runtime state
-        pugiRoot.remove_child("scenes");
-        pugi::xml_node scenesEl = pugiRoot.append_child("scenes");
-
-        pugi::xml_node sceneEl = scenesEl.append_child("scene");
-        sceneEl.append_attribute("type").set_value("Scene");
-        sceneEl.append_attribute("name").set_value(scene->GetName().CStr());
-        if (scene->GetViewWidth() > 0.0f && scene->GetViewHeight() > 0.0f) {
-            sceneEl.append_attribute("viewWidth").set_value(scene->GetViewWidth());
-            sceneEl.append_attribute("viewHeight").set_value(scene->GetViewHeight());
-        }
-
-        pugi::xml_node nodesEl = sceneEl.append_child("nodes");
-        for (const auto& nodePtr : scene->GetRootNode().GetChildren()) {
-            BuildNodeXml(nodesEl, *nodePtr.Get());
+        if (!WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene)) {  // <SceneManager>
+            return;
         }
 
         if (configManager.SaveConfig("SceneConfig"_intern)) {
