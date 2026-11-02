@@ -1,4 +1,5 @@
 ---
+status: in progress 2026-11-02 branch todo/config-editor-the-sink-type-dropdown-offers-values-the
 id: config-editor-the-sink-type-dropdown-offers-values-the
 ---
 # Config Editor: the sink `type` dropdown offers values the logger factory cannot resolve
