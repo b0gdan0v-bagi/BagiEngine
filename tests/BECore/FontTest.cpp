@@ -40,6 +40,11 @@ namespace BECore::Tests {
         EXPECT_EQ(font->GetPath(), PoolString::Intern(kDefaultFontPath));
     }
 
+    // The name a CSS font-family says: RmlUi's documents name the default font by it
+    TEST_F(FontTest, TheFamilyNameComesFromTheNameTable) {
+        EXPECT_EQ(font->GetFamilyName(), "PT Sans");
+    }
+
     TEST_F(FontTest, TheSameFileIsLoadedOnce) {
         auto again = LoadDefaultFont();
 

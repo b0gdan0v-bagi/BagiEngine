@@ -37,6 +37,8 @@ namespace BECore {
         Rml::SetSystemInterface(&_system);
         Rml::SetRenderInterface(&_render);
         Rml::SetFileInterface(&_files);
+        // The library has no font engine of its own in this build (RMLUI_FONT_ENGINE is none); the engine's `Font` draws the text
+        Rml::SetFontEngineInterface(&_fonts);
         if (!Rml::Initialise()) {
             LOG_ERROR("RmlUiRuntime: Rml::Initialise failed");
             return false;

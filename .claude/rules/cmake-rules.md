@@ -28,7 +28,7 @@ These are included directly via `add_subdirectory()`:
 | fmt | `src/Modules/fmt/` | Formatting library |
 | nlohmann/json | `src/Modules/nlohmann/` | JSON for the external control API; the `nlohmann_json` target defines `JSON_NOEXCEPTION` (use it only through `BECore/Control/Json.h`) |
 | stb | `src/Modules/stb/` | `stb_truetype.h` for glyph metrics and rasterization (INTERFACE target `stb`; the implementation is compiled only in `BECore/Text/Font.cpp`; trusted font files only) |
-| RmlUi | `src/Modules/RmlUi/` | RmlUi 6.3 core (MIT), the third candidate for authoring UI screens. STATIC target `rmlui_core` (alias `RmlUi::Core`), added only when `ENGINE_UI_RMLUI=ON` and after the `ENGINE_NO_EXCEPTIONS` block (like GoogleTest). Its CMake file replaces the upstream ones; the font engine is `RMLUI_FONT_ENGINE=freetype` (needs FreeType installed) or `none`. The module `RmlUiHost` (`src/Modules/RmlUiHost/`) is its host |
+| RmlUi | `src/Modules/RmlUi/` | RmlUi 6.3 core (MIT), the third candidate for authoring UI screens. STATIC target `rmlui_core` (alias `RmlUi::Core`), added only when `ENGINE_UI_RMLUI=ON` and after the `ENGINE_NO_EXCEPTIONS` block (like GoogleTest). Its CMake file replaces the upstream ones; `RMLUI_FONT_ENGINE` is `none` by default (the host installs `RmlUiFontEngine` over the engine's `Font`, so no FreeType is needed) or `freetype` (RmlUi's own engine, needs FreeType installed; the host does not use it). The module `RmlUiHost` (`src/Modules/RmlUiHost/`) is its host |
 
 ### Git Submodules (in `external/`)
 
@@ -104,7 +104,7 @@ Each engine module has its own `CMakeLists.txt`:
 | `ENGINE_ENABLE_ASSERTS` | `ON` | `ASSERT` / `FATALERROR`; compiled out when `OFF` |
 | `ENGINE_ENABLE_EXPECTS` | `ON` | `EXPECT`; compiled out when `OFF` |
 | `ENGINE_BUILD_TESTS` | `ON` | GoogleTest, `BagiEngineTestSupport`, `BagiEngineTests` and the game test executables |
-| `ENGINE_UI_RMLUI` | `OFF` | Builds the vendored RmlUi (`rmlui_core`) and its host `RmlUiHostModule` (`be_add_module` + `be_add_game_reflection`, after `Games`); `be_link_engine` links the host `WHOLE_ARCHIVE` into every executable and test executable, and `tests/RmlUiHost/` joins `BagiEngineTests`. A build with it writes the same `build/<Compiler><Platform>/` as one without: use a build directory of its own and delete its executables before building the other |
+| `ENGINE_UI_RMLUI` | `OFF` | Builds the vendored RmlUi (`rmlui_core`) and its host `RmlUiHostModule` (`be_add_module` + `be_add_game_reflection`, after `Games`); `be_link_engine` links the host `WHOLE_ARCHIVE` into every executable and test executable, and `tests/RmlUiHost/` joins `BagiEngineTests`. Presets: `macos-rmlui-debug` / `macos-rmlui-release`. A build with it writes the same `build/<Compiler><Platform>/` as one without: the presets have a build directory of their own, but delete the executables of one kind before building the other |
 
 ## Module Dependencies Order
 
@@ -148,7 +148,7 @@ BECoreModule must be first (provides PCH):
 
 `CMakePresets.json` (project root) is the single source of build configurations; VS Code CMake Tools, the CLI and the `build` skill all use it.
 
-- Hidden bases are composed via `inherits`: generator (`ninja`, `vs2022`), build type (`debug`, `release`), compiler (`clang`, `msvc`), host `condition` (`host-macos`, `host-windows`). Visible presets are named `<os>-<toolchain>-<type>`.
+- Hidden bases are composed via `inherits`: generator (`ninja`, `vs2022`), build type (`debug`, `release`), the RmlUi switch (`rmlui`: `ENGINE_UI_RMLUI=ON`, for `macos-rmlui-debug` / `macos-rmlui-release`; no Windows ones until the host is built there), compiler (`clang`, `msvc`), host `condition` (`host-macos`, `host-windows`). Visible presets are named `<os>-<toolchain>-<type>`.
 - Every `binaryDir` is `${sourceDir}/build/${presetName}`. Build presets target the game executables (`BagiChess`, `BagiMatch3`) and carry the same host `condition`, so other OSes' presets stay hidden. A new game's executable is added to `targets` of `build-base`.
 - `testPresets` mirror the build presets (same names, hidden `test-base` / `test-macos` / `test-windows`) and set `outputOnFailure`. Use `ctest --preset <preset>`.
 - Release presets set `ENGINE_ENABLE_ASSERTS=OFF` / `ENGINE_ENABLE_EXPECTS=OFF` explicitly (the logic in `cmake/BagiEngine.cmake` that should do this for `CMAKE_BUILD_TYPE=Release` never fires because `option()` has already defined the cache entries).

@@ -37,6 +37,14 @@
             }
         },
         {
+            "name": "rmlui",
+            "hidden": true,
+            "description": "Also builds the vendored RmlUi and its host module RmlUiHost",
+            "cacheVariables": {
+                "ENGINE_UI_RMLUI": "ON"
+            }
+        },
+        {
             "name": "clang",
             "hidden": true,
             "cacheVariables": {
@@ -102,6 +110,16 @@
             "name": "macos-release",
             "displayName": "macOS Clang Release",
             "inherits": ["ninja", "host-macos", "clang", "release"]
+        },
+        {
+            "name": "macos-rmlui-debug",
+            "displayName": "macOS Clang Debug with RmlUi",
+            "inherits": ["ninja", "host-macos", "clang", "debug", "rmlui"]
+        },
+        {
+            "name": "macos-rmlui-release",
+            "displayName": "macOS Clang Release with RmlUi",
+            "inherits": ["ninja", "host-macos", "clang", "release", "rmlui"]
         },
         {
             "name": "windows-msvc-debug",
@@ -175,6 +193,18 @@
             "displayName": "macOS Clang Release",
             "inherits": "build-macos",
             "configurePreset": "macos-release"
+        },
+        {
+            "name": "macos-rmlui-debug",
+            "displayName": "macOS Clang Debug with RmlUi",
+            "inherits": "build-macos",
+            "configurePreset": "macos-rmlui-debug"
+        },
+        {
+            "name": "macos-rmlui-release",
+            "displayName": "macOS Clang Release with RmlUi",
+            "inherits": "build-macos",
+            "configurePreset": "macos-rmlui-release"
         },
         {
             "name": "windows-msvc-debug",
@@ -271,6 +301,18 @@
             "displayName": "macOS Clang Release",
             "inherits": "test-macos",
             "configurePreset": "macos-release"
+        },
+        {
+            "name": "macos-rmlui-debug",
+            "displayName": "macOS Clang Debug with RmlUi",
+            "inherits": "test-macos",
+            "configurePreset": "macos-rmlui-debug"
+        },
+        {
+            "name": "macos-rmlui-release",
+            "displayName": "macOS Clang Release with RmlUi",
+            "inherits": "test-macos",
+            "configurePreset": "macos-rmlui-release"
         },
         {
             "name": "windows-msvc-debug",

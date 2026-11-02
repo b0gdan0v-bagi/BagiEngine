@@ -12,7 +12,7 @@ Font (.ttf/.otf bytes, CPU)  ->  TextLayout (pure: lines, glyph positions)  ->  
 
 | Class | Role |
 |-------|------|
-| `Font` (`IResource`) | The bytes of a font file and the parsed `stbtt_fontinfo` (hidden behind `Impl`; the only file with the stb implementation is `Font.cpp`). Metrics, advances, kerning (the `kern` table only), `RasterizeGlyph()` to a coverage bitmap. `FindGlyph(cp)` is 0 for a missing code point, `ResolveGlyph(cp)` falls back to U+FFFD, then `?`, then `.notdef`. All queries are const and thread safe |
+| `Font` (`IResource`) | The bytes of a font file and the parsed `stbtt_fontinfo` (hidden behind `Impl`; the only file with the stb implementation is `Font.cpp`). Metrics, advances, kerning (the `kern` table only), `RasterizeGlyph()` to a coverage bitmap. `GetFamilyName()` reads the family from the name table ("PT Sans"; the RmlUi host registers the font under it). `FindGlyph(cp)` is 0 for a missing code point, `ResolveGlyph(cp)` falls back to U+FFFD, then `?`, then `.notdef`. All queries are const and thread safe |
 | `FontLoader` (`IResourceLoader`) | `.ttf` / `.otf`. Reads the file and parses it: CPU only, so it may run in `LoadAsync` on a pool thread |
 | `Utf8` | `DecodeNext` (a malformed byte gives U+FFFD and consumes one byte, so a loop always ends), `Append`, `CountCodePoints` |
 | `TextLayout::Layout(font, utf8, options)` | Pure. Lines, wrapping, alignment, line spacing, overflow (`Clip`, `Ellipsis`, `AutoFit`) to `PositionedGlyph`s: pen position of each glyph on its baseline, relative to the top-left of the text box. Rules are in the header comment |

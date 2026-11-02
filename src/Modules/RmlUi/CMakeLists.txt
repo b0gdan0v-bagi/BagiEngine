@@ -3,9 +3,10 @@
 # Left out: the Debugger (its fonts are under the SIL OFL), the Lua, SVG and Lottie plugins, the backends, samples and tests.
 # The upstream CMake files are replaced by this one; it is added by cmake/BagiEngine.cmake behind ENGINE_UI_RMLUI.
 
-# The font engine: "freetype" (RmlUi's default, needs FreeType installed) or "none" (the host registers its own FontEngineInterface)
-set(RMLUI_FONT_ENGINE "freetype" CACHE STRING "RmlUi font engine: freetype or none")
-set_property(CACHE RMLUI_FONT_ENGINE PROPERTY STRINGS freetype none)
+# The font engine: "none" (the default here: the host, src/Modules/RmlUiHost, registers a FontEngineInterface over the engine's own fonts, so nothing
+# but the engine is needed) or "freetype" (RmlUi's own engine, needs FreeType installed; the host does not use it, it installs its own)
+set(RMLUI_FONT_ENGINE "none" CACHE STRING "RmlUi font engine: none or freetype")
+set_property(CACHE RMLUI_FONT_ENGINE PROPERTY STRINGS none freetype)
 
 file(GLOB_RECURSE RMLUI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Source/Core/*.cpp")
 file(GLOB_RECURSE RMLUI_FONT_ENGINE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Source/Core/FontEngineDefault/*.cpp")

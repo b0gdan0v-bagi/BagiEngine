@@ -22,6 +22,7 @@ Builds the game executables `BagiChess` and `BagiMatch3` (or the gtest executabl
 | Preset (configure + build + test) | Host | Toolchain |
 |----------------------------|------|-----------|
 | `macos-debug`, `macos-release` | macOS | Clang + Ninja |
+| `macos-rmlui-debug`, `macos-rmlui-release` | macOS | Clang + Ninja, with `ENGINE_UI_RMLUI=ON` (RmlUi host and its tests). Build the tests with `--target BagiEngineTests ...` to get the `tests/RmlUiHost/` cases; the executables land in the same `build/ClangmacOS/` as the plain presets' |
 | `windows-msvc-debug`, `windows-msvc-release` | Windows | MSVC (`cl`) + Ninja |
 | `windows-clang-debug`, `windows-clang-release` | Windows | Clang + Ninja |
 | `windows-vs2022-{debug,release}` | Windows | Visual Studio 2022, MSVC |

@@ -10,7 +10,6 @@
 #include <RmlUi/Core.h>
 #include <RmlUiHost/RmlUiDocumentComponent.h>
 #include <RmlUiHost/RmlUiRuntime.h>
-#include <fstream>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -228,6 +227,45 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_TRUE(textured);
         EXPECT_GE(_renderer->texturesCreated, 1u);
         EXPECT_GT(BoxOf(*doc, "t").w, 0.0f);
+    }
+
+    // The glyphs of the text sit on pages of the font engine; each quad is four vertices and six indices, with its UV inside the page
+    TEST_F(RmlUiHostTest, TextIsMadeOfGlyphQuadsInsideThePage) {
+        auto doc = Doc("Main");
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<p id="t">Hello, Привет</p>)")));
+
+        Draw("Main");
+
+        size_t quads = 0;
+        for (const DrawCall& call : _renderer->calls) {
+            if (call.kind != DrawKind::Geometry || call.texture == nullptr) {
+                continue;
+            }
+            EXPECT_EQ(call.vertices.size() % 4, 0u);
+            EXPECT_EQ(call.indices.size(), call.vertices.size() / 4 * 6);
+            quads += call.vertices.size() / 4;
+            for (const GeometryVertex& vertex : call.vertices) {
+                EXPECT_GE(vertex.u, 0.0f);
+                EXPECT_LE(vertex.u, 1.0f);
+                EXPECT_GE(vertex.v, 0.0f);
+                EXPECT_LE(vertex.v, 1.0f);
+            }
+        }
+        EXPECT_EQ(quads, 12u);  // "Hello, Привет" without the space: 11 letters and a comma
+    }
+
+    // A texture made from a page is never rewritten: a glyph that comes after the first draw goes to a new page
+    TEST_F(RmlUiHostTest, AGlyphThatComesAfterTheFirstDrawGoesToANewPage) {
+        auto doc = Doc("Main");
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<p>Hello</p>)")));
+        Draw("Main");
+        const size_t pagesBefore = RmlUiRuntime::GetInstance().GetFontEngine().GetPageCount();
+        ASSERT_GE(pagesBefore, 1u);
+
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<p>Привет</p>)")));
+        Draw("Main");
+
+        EXPECT_EQ(RmlUiRuntime::GetInstance().GetFontEngine().GetPageCount(), pagesBefore + 1);
     }
 
     TEST_F(RmlUiHostTest, TheContextFollowsTheScaleOfTheScaler) {

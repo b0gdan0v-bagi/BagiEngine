@@ -14,7 +14,7 @@ cmake --build --preset macos-debug         # build the game executables (BagiChe
 
 | OS | Presets |
 |----|---------|
-| macOS | `macos-debug`, `macos-release` (Clang + Ninja) |
+| macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-rmlui-debug`, `macos-rmlui-release`: the same with `ENGINE_UI_RMLUI=ON` (the RmlUi host and its tests; no system library is needed, the engine's own fonts draw the text) |
 | Windows | `windows-msvc-{debug,release}`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
 
 Per-machine settings go in `CMakeUserPresets.json` (git-ignored). Without presets (legacy flat `build/`):

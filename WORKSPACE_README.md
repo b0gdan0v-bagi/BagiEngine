@@ -191,7 +191,7 @@ cmake --build --preset macos-debug    # сборка игр (BagiChess, BagiMatc
 
 | ОС | Пресеты |
 |----|---------|
-| macOS | `macos-debug`, `macos-release` (Clang + Ninja) |
+| macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-rmlui-debug`, `macos-rmlui-release` — то же с `ENGINE_UI_RMLUI=ON` (хост RmlUi и его тесты; сторонние библиотеки не нужны, шрифты читает движок) |
 | Windows | `windows-msvc-{debug,release}`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
 
 Настройки конкретной машины (например `VULKAN_SDK`, ccache) кладите в `CMakeUserPresets.json` — он в `.gitignore`.

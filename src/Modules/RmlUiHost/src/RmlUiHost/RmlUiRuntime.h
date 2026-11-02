@@ -1,6 +1,7 @@
 #pragma once
 
 #include <RmlUiHost/RmlUiFileInterface.h>
+#include <RmlUiHost/RmlUiFontEngine.h>
 #include <RmlUiHost/RmlUiRenderInterface.h>
 #include <RmlUiHost/RmlUiSystemInterface.h>
 
@@ -33,6 +34,9 @@ namespace BECore {
         [[nodiscard]] RmlUiRenderInterface& GetRenderInterface() {
             return _render;
         }
+        [[nodiscard]] RmlUiFontEngine& GetFontEngine() {
+            return _fonts;
+        }
 
         /// A name for a new context, unique for the life of the process
         [[nodiscard]] Rml::String NextContextName();
@@ -44,6 +48,7 @@ namespace BECore {
         RmlUiRenderInterface _render;
         RmlUiSystemInterface _system;
         RmlUiFileInterface _files;
+        RmlUiFontEngine _fonts;
         int _holders = 0;
         uint32_t _nextContext = 1;
         bool _isUp = false;

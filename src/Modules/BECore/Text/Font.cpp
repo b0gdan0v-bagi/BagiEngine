@@ -1,5 +1,6 @@
 #include "Font.h"
 
+#include <BECore/Text/Utf8.h>
 #include <Generated/Font.gen.hpp>
 
 // The one translation unit that holds the stb_truetype implementation (src/Modules/stb/README.md). The functions stay
@@ -24,6 +25,10 @@ namespace BECore {
 
         constexpr char32_t kQuestionMark = U'?';
         constexpr char32_t kReplacementCharacter = 0xFFFD;
+        // The 'name' table id of the font family ("PT Sans"), and the size of one UTF-16 unit in it
+        constexpr int kFamilyNameId = 1;
+        constexpr int kUtf16UnitBytes = 2;
+        constexpr int kByteBits = 8;
 
     }  // namespace
 
@@ -66,6 +71,30 @@ namespace BECore {
 
     PoolString Font::GetPath() const {
         return _path;
+    }
+
+    eastl::string Font::GetFamilyName() const {
+        eastl::string family;
+        if (!_impl) {
+            return family;
+        }
+        int length = 0;
+        // The Windows entry is UTF-16 big endian (only the Basic Multilingual Plane is read: a family name outside it would be a surprise)
+        const char* name = stbtt_GetFontNameString(&_impl->info, &length, STBTT_PLATFORM_ID_MICROSOFT, STBTT_MS_EID_UNICODE_BMP, STBTT_MS_LANG_ENGLISH, kFamilyNameId);
+        if (name != nullptr && length >= kUtf16UnitBytes) {
+            for (int i = 0; i + 1 < length; i += kUtf16UnitBytes) {
+                const auto high = static_cast<char32_t>(static_cast<unsigned char>(name[i]));
+                const auto low = static_cast<char32_t>(static_cast<unsigned char>(name[i + 1]));
+                Utf8::Append(family, (high << kByteBits) | low);
+            }
+            return family;
+        }
+        // The Macintosh entry is one byte per character
+        name = stbtt_GetFontNameString(&_impl->info, &length, STBTT_PLATFORM_ID_MAC, STBTT_MAC_EID_ROMAN, STBTT_MAC_LANG_ENGLISH, kFamilyNameId);
+        if (name != nullptr) {
+            family.assign(name, static_cast<size_t>(length));
+        }
+        return family;
     }
 
     uint64_t Font::GetMemoryUsage() const {
