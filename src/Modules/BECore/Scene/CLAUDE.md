@@ -65,7 +65,7 @@ Tests: `tests/BECore/ViewTransformTest.cpp` (the math), `tests/BECore/SceneViewT
 |-----------|--------|----------|
 | `TransformComponent` | `_x`, `_y`, `_width`, `_height` | Position/size in scene units (pixels when the scene has no view size); others read it |
 | `QuadRendererComponent` | `_color` | Draws a filled rect at the node's transform in `OnDraw()` |
-| `SpriteRendererComponent` | `_spriteId`, `_texturePath`, `_srcRect` | Draws a texture in `OnDraw()`; `_spriteId` resolves through `TextureLibrary` |
+| `SpriteRendererComponent` | `_spriteId`, `_texturePath`, `_srcRect`, `_fit` | Draws a texture in `OnDraw()`; `_spriteId` resolves through `TextureLibrary`. `_fit` (`SpriteFit`, `Components/SpriteFit.h`) is `Stretch` (default: the texture covers the node's rect, whatever its aspect) or `Contain` (`fit="Contain"`: the aspect of `_srcRect`, or of the whole texture when it is empty, is kept and the sprite is centered in the rect; `FitSpriteRect()`, computed in scene units). `SetTexture()` hands it a texture that is not from the library (one from `IRenderer::CreateTexture()`); `ReloadTexture()` drops it |
 | `ClickableComponent` | `_actionName` | On mouse-down inside the transform rect, emits `InputEvents::ActionEvent(_actionName)` |
 | `ChangeToRandomColorDebugComponent` | `_actionFilter` | Debug: recolors the node's quad on a matching action |
 | `TextComponent` | `_text`, `_fontPath`, `_fontSize`, `_color`, `_align`, `_overflow`, `_wrap`, `_lineSpacing`, `_minFontSize` | Draws text in the node's transform box in `OnDraw()` (`Text/CLAUDE.md`) |

@@ -2,6 +2,7 @@
 
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceHandle.h>
+#include <BECore/Scene/Components/SpriteFit.h>
 #include <BECore/Scene/IComponent.h>
 
 namespace BECore {
@@ -15,6 +16,7 @@ namespace BECore {
         BE_REFLECT_FIELD PoolString _spriteId;
         BE_REFLECT_FIELD PoolString _texturePath;
         BE_REFLECT_FIELD Rect _srcRect{};
+        BE_REFLECT_FIELD SpriteFit _fit = SpriteFit::Stretch;
 
         void OnAttached() override;
         void OnDraw() override;
@@ -25,6 +27,14 @@ namespace BECore {
          * Call this when _spriteId or _texturePath is changed in the editor.
          */
         void ReloadTexture();
+
+        /**
+         * @brief Draw a texture that does not come from the library or a path
+         *
+         * For a texture made from pixels (IRenderer::CreateTexture()). It is not serialized: ReloadTexture() drops it.
+         * _srcRect still picks the part to draw; empty means the whole texture.
+         */
+        void SetTexture(IntrusivePtr<ITexture> texture);
 
     private:
         ResourceHandle<ITexture> _texture;

@@ -50,6 +50,10 @@ namespace BECore {
         }
     }
 
+    void SpriteRendererComponent::SetTexture(IntrusivePtr<ITexture> texture) {
+        _texture = ResourceHandle<ITexture>(std::move(texture));
+    }
+
     void SpriteRendererComponent::OnDraw() {
         if (!_texture) {
             return;
@@ -59,7 +63,10 @@ namespace BECore {
             return;
         }
         const Rect* src = _srcRect.IsEmpty() ? nullptr : &_srcRect;
-        CoreManager::GetRenderer()->DrawTexture(*_texture, src, transform->_x, transform->_y, transform->_width, transform->_height);
+        const float srcWidth = src ? src->w : _texture->GetWidth();
+        const float srcHeight = src ? src->h : _texture->GetHeight();
+        const Rect dst = FitSpriteRect(srcWidth, srcHeight, Rect{transform->_x, transform->_y, transform->_width, transform->_height}, _fit);
+        CoreManager::GetRenderer()->DrawTexture(*_texture, src, dst.x, dst.y, dst.w, dst.h);
     }
 
 }  // namespace BECore
