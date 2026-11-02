@@ -1,5 +1,7 @@
 #include "Match3Game.h"
 
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Scene/Scene.h>
 #include <Generated/Match3Game.gen.hpp>
 #include <Match3/Components/Match3BoardComponent.h>
 
@@ -8,7 +10,10 @@ namespace BECore::Match3 {
     Match3Game::Match3Game()
         : _control([]() {
               if (auto* board = Match3BoardComponent::GetActive()) {
-                  return Match3ControlTarget{&board->GetModel(), board->GetSeed()};
+                  Match3ControlTarget target{&board->GetModel(), board->GetSeed()};
+                  // The game opens on its menu; a controller that resets or plays is in the game, and a screenshot has to show the board
+                  target.enterGame = [board]() { CoreManager::GetSceneManager().SetActiveScene(board->GetScene().GetName()); };
+                  return target;
               }
               return Match3ControlTarget{};
           }) {}
@@ -22,7 +27,8 @@ namespace BECore::Match3 {
     }
 
     PoolString Match3Game::GetSceneName() const {
-        return "Match3Scene"_intern;
+        // The game opens on its main menu; Play switches to Match3Scene
+        return "MainMenu"_intern;
     }
 
     void Match3Game::Start() {

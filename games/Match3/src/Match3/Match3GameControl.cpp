@@ -125,6 +125,9 @@ namespace BECore::Match3 {
         Json outcome = Json::object();
         outcome["scoreGained"] = model.GetScore() - scoreBefore;
         outcome["score"] = model.GetScore();
+        if (target.enterGame) {
+            target.enterGame();
+        }
         return outcome;
     }
 
@@ -144,6 +147,9 @@ namespace BECore::Match3 {
         }
 
         target.model->Reset(seed);
+        if (target.enterGame) {
+            target.enterGame();
+        }
         return {};
     }
 

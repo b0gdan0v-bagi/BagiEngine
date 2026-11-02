@@ -9,6 +9,9 @@ namespace BECore::Match3 {
     struct Match3ControlTarget {
         Match3GameModel* model = nullptr;  // null: no board is active (its scene is not the active one)
         uint32_t defaultSeed = 0;
+        /// Called after a controller started a game (a successful Reset or action): the game shows its board, so a screenshot shows what is being played.
+        /// Match3Game switches from the main menu to the scene of the board. Empty in a test that has no scenes.
+        std::function<void()> enterGame;
     };
 
     /**
@@ -22,6 +25,9 @@ namespace BECore::Match3 {
      * A cell is one letter: R red, O orange, Y yellow, G green, B blue, P purple, '.' empty. status is "playing" or "no_moves".
      * Actions: {"type": "swap", "from": {"col", "row"}, "to": {"col", "row"}}, every legal pair once; PerformAction accepts the
      * cells in either order and answers {"scoreGained", "score"}. Reset takes an optional {"seed": 0..4294967295}.
+     *
+     * A Reset and an action that went through call the target's `enterGame`: a controller that plays is in the game, not in its menu.
+     * GetState and GetActions do not.
      */
     class Match3GameControl : public IControllableGame {
     public:

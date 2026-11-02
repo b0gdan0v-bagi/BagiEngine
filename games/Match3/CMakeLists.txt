@@ -24,9 +24,10 @@ be_add_game_executable(BagiMatch3
 
 if(ENGINE_BUILD_TESTS)
     file(GLOB MATCH3_TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp")
+    # WHOLE_ARCHIVE: Match3UiTest loads the shipped SceneConfig.xml, which names components no test references
     be_add_game_tests(Match3Tests
         SOURCES ${MATCH3_TEST_SOURCES}
-        LINK Match3Module
+        WHOLE_ARCHIVE Match3Module
     )
 
     # Starts BagiMatch3 with the control API and plays a few moves over WebSocket

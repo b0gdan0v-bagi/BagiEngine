@@ -583,7 +583,7 @@ if(ENGINE_BUILD_TESTS)
     # inside the repository: FileSystem finds config/ by walking up from it. Do not pass WORKING_DIRECTORY
     # to gtest_discover_tests: it also decides where cmake_test_discovery_*.json is written.
     function(be_add_game_tests NAME)
-        cmake_parse_arguments(ARG "" "" "SOURCES;LINK" ${ARGN})
+        cmake_parse_arguments(ARG "" "" "SOURCES;LINK;WHOLE_ARCHIVE" ${ARGN})
 
         add_executable(${NAME} ${ARG_SOURCES})
         source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Tests" FILES ${ARG_SOURCES})
@@ -602,6 +602,11 @@ if(ENGINE_BUILD_TESTS)
 
         be_link_engine(${NAME})
         target_link_libraries(${NAME} PRIVATE BagiEngineTestSupport SDLModule GamesModule ${ARG_LINK})
+        # Modules whose components must be creatable by name from a scene file (the registration is a static initializer that a plain link drops
+        # when no test names the class), the way be_add_game_executable links the game's modules
+        foreach(MODULE ${ARG_WHOLE_ARCHIVE})
+            target_link_libraries(${NAME} PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,${MODULE}>)
+        endforeach()
 
         if(APPLE)
             # libSDL3 is written next to the executables (CMAKE_LIBRARY_OUTPUT_DIRECTORY)

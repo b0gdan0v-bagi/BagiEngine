@@ -225,18 +225,6 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 - either an aspect-preserving mode in `SpriteRendererComponent` (fit by height and center, which also helps every other sprite; see the 2D rendering entry), or cells cropped to squares in the atlas and the `srcRect` values;
 - the legal-move and selection highlights are drawn by the board in the full square, so they must still line up with the piece after the change.
 
-## Match3 does not scale to the window: its scene has no view size
-
-**Where:** `games/Match3/config/SceneConfig.xml` (`Match3Scene` has no `viewWidth` / `viewHeight`), `Match3BoardComponent` (`originX="100" originY="80" cellSize="64"`, 8x8 board).
-
-**What is wrong:** the scene view fit is opt-in, and only `ChessScene` declares a view size. The Match3 board is 512x512 units in a window of about 1632x910, so it fills a small part of it, as the Chess board did. Its HUD is an ImGui window (`ImGui::Begin("Match3")`), shown only where an ImGui context exists (Editor mode; the Game mode widget set has no `ImGuiWidget` and Match3 ships no `GameWidgetsConfig.xml`). It is in window pixels and is not part of the scene fit.
-
-**A fix has to cover:**
-
-- a view size for `Match3Scene` (the board at (100, 80) with the same margin on every side is about `viewWidth="712" viewHeight="672"`, to be checked in the running game);
-- where the HUD goes in a mode that has ImGui: its window does not move with the fitted board;
-- the score and the Reset button in Game mode: text exists (`TextComponent`), but the HUD still needs a canvas and a button, so this waits for the in-game UI (plan stage 4: `.claude/plans/magical-leaping-blossom.md`).
-
 ## No audio
 
 **Stage:** 3
@@ -274,7 +262,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## No in-game UI: UI exists only as ImGui editor panels
 
-**Status:** in progress since 2026-11-01. Stages 0 to 3 of the plan are done (renderer primitives, text, input, canvases and adaptive layout with the size matrix); stage 4 has started: tasks 4.1 to 4.4 are done (elements and variants are reflected, screens can live in `.ui.xml` files, panel, image, label, button and stack exist, labels follow `UIVars`); the tests of whole screens and the first screens (Match3, Chess) are next.
+**Status:** in progress since 2026-11-01. Stages 0 to 3 of the plan are done (renderer primitives, text, input, canvases and adaptive layout with the size matrix); stage 4 has started: tasks 4.1 to 4.6 are done (elements and variants are reflected, screens can live in `.ui.xml` files, panel, image, label, button and stack exist, labels follow `UIVars`, a screen is tested on the size matrix; Match3 has a main menu and an engine-drawn HUD); the Chess HUD (4.7) is next.
 
 **Stage:** 3
 
@@ -282,12 +270,12 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 **Where:** `src/Widgets/` (editor widgets), `Scene/Components/ClickableComponent.cpp` (the only clickable thing on a scene).
 
-**What is missing** (found by reading the code, not by running a game): the controls (panel, label, button) and the screens of the games. Text is drawn (`TextComponent`), canvases, anchored and stacked layout, responsive variants, hit testing and the layout validator exist (`src/Modules/BECore/UI/CLAUDE.md`); elements are plain rects built in code and cannot be written in `SceneConfig.xml` yet.
+**What is missing** (found by reading the code, not by running a game): the screens of Chess (a turn label and a Reset button). The controls, the XML front-end, `UIVars`, the validator and the first screens (the Match3 menu and HUD) exist (`src/Modules/BECore/UI/CLAUDE.md`, `games/Match3/CLAUDE.md`). The Match3 menu and HUD were looked at once in a headless screenshot of the SDL software renderer (the text, the buttons, the HUD in the margins, the score following a move); nobody has looked at them on Vulkan or in a real window, and the agent session cannot see a screen.
 
 **A fix has to cover:**
 
-- a few controls (panel, label, button with normal / hover / pressed state) on the element tree of `UICanvasComponent`, with `TextComponent`'s layout for the label;
-- a main-menu scene in one of the games as the first consumer.
+- the Chess HUD on the same controls;
+- a look at the screens in a real window on both backends (owner), and the editor viewport presets (the manual checks listed in the plan).
 
 ## Game UI has no LLM-friendly authoring path yet: choose one before building it
 

@@ -123,6 +123,10 @@ namespace BECore {
         void OnTestEnvironmentInit(PassKey<Tests::EngineEnvironment>);
         void OnTestEnvironmentDeinit(PassKey<Tests::EngineEnvironment>);
 
+        // A test builds its scenes from an XML string and owns the manager. Components that switch scenes ask CoreManager::GetSceneManager(), which is
+        // empty in the gtest executable, so the test hands its manager over here (and an empty pointer back at the end)
+        void SetSceneManagerForTest(IntrusivePtrAtomic<SceneManager> manager, PassKey<Tests::EngineEnvironment>);
+
         // Application initialization function
         void OnApplicationInit(PassKey<Application>);
 

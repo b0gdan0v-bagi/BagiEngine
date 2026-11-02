@@ -32,7 +32,12 @@ namespace BECore::Match3::Tests {
 
         class Match3GameControlTest : public ::testing::Test {
         protected:
-            Match3GameControlTest() : control([this] { return Match3ControlTarget{active ? &model : nullptr, kDefaultSeed}; }) {}
+            Match3GameControlTest()
+                : control([this] {
+                      Match3ControlTarget target{active ? &model : nullptr, kDefaultSeed};
+                      target.enterGame = [this] { ++enterGameCalls; };
+                      return target;
+                  }) {}
 
             void SetUp() override {
                 model.Reset(42);
@@ -52,11 +57,35 @@ namespace BECore::Match3::Tests {
             }
 
             bool active = true;
+            int enterGameCalls = 0;
             Match3GameModel model;
             Match3GameControl control;
         };
 
     }  // namespace
+
+    TEST_F(Match3GameControlTest, AControllerThatPlaysEntersTheGame) {
+        // Reading does not
+        State();
+        Actions();
+        EXPECT_EQ(enterGameCalls, 0);
+
+        // A reset does, and so does an action that went through
+        ASSERT_TRUE(control.Reset(Json::object()).has_value());
+        EXPECT_EQ(enterGameCalls, 1);
+        const auto swaps = model.GetLegalSwaps();
+        ASSERT_FALSE(swaps.empty());
+        const auto& swap = swaps.front();
+        ASSERT_TRUE(control.PerformAction(SwapAction(swap.first.col, swap.first.row, swap.second.col, swap.second.row)).has_value());
+        EXPECT_EQ(enterGameCalls, 2);
+
+        // A refused call does not: nothing was played
+        EXPECT_FALSE(control.PerformAction(SwapAction(0, 0, 5, 5)).has_value());
+        Json badSeed = Json::object();
+        badSeed["seed"] = -1;
+        EXPECT_FALSE(control.Reset(badSeed).has_value());
+        EXPECT_EQ(enterGameCalls, 2);
+    }
 
     TEST_F(Match3GameControlTest, WithoutABoardEveryMethodAnswersNoActiveModel) {
         active = false;

@@ -43,6 +43,10 @@ namespace BECore {
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }
 
+    void CoreManager::SetSceneManagerForTest(IntrusivePtrAtomic<SceneManager> manager, PassKey<Tests::EngineEnvironment>) {
+        _sceneManager = std::move(manager);
+    }
+
     void CoreManager::InitializeCoreServices() {
         // Install CRT debug hooks as early as possible
         InstallCRTDebugHooks();

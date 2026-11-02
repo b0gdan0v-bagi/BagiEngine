@@ -4,8 +4,8 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/Scene.h>
 #include <CoreSDL/SDLEvents.h>
+#include <Events/InputEvents.h>
 #include <Generated/Match3BoardComponent.gen.hpp>
-#include <imgui.h>
 
 namespace BECore::Match3 {
 
@@ -51,9 +51,33 @@ namespace BECore::Match3 {
         s_active = this;
         _model.Reset(_seed);
         SubscribeInScene<SDLEvents::MouseButtonDownEvent, &Match3BoardComponent::OnMouseDown>(this);
+        SubscribeInScene<InputEvents::ActionEvent, &Match3BoardComponent::OnAction>(this);
+    }
+
+    void Match3BoardComponent::PublishUiVars() {
+        const uint64_t version = _model.GetVersion();
+        if (version == _publishedVersion) {
+            return;
+        }
+        _publishedVersion = version;
+        UIVars& vars = CoreManager::GetUIVars();
+        vars.Set("score"_intern, _model.GetScore());
+        vars.Set("seed"_intern, _seed);
+    }
+
+    void Match3BoardComponent::OnAction(const InputEvents::ActionEvent& event) {
+        // The actions of the buttons in config/SceneConfig.xml
+        const PoolString resetAction = "Match3Reset"_intern;
+        const PoolString menuAction = "Match3Menu"_intern;
+        if (event.action == resetAction) {
+            _model.Reset(_seed);
+        } else if (event.action == menuAction && !_menuScene.Empty()) {
+            CoreManager::GetSceneManager().SetActiveScene(_menuScene);
+        }
     }
 
     void Match3BoardComponent::OnDraw() {
+        PublishUiVars();
         auto& renderer = *CoreManager::GetRenderer();
 
         const float boardSide = _cellSize * static_cast<float>(kBoardSize);
@@ -84,26 +108,6 @@ namespace BECore::Match3 {
             renderer.DrawFilledRect(px, py, t, _cellSize, kSelectionHighlight);
             renderer.DrawFilledRect(px + _cellSize - t, py, t, _cellSize, kSelectionHighlight);
         }
-
-        DrawHud();
-    }
-
-    void Match3BoardComponent::DrawHud() {
-        // The Game run mode has no ImGui; the HUD moves to an engine text component later (see TODO.md).
-        if (ImGui::GetCurrentContext() == nullptr) {
-            return;
-        }
-
-        ImGui::SetNextWindowSize(ImVec2(220.0f, 90.0f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("Match3")) {
-            ImGui::Text("Score: %d", _model.GetScore());
-            if (ImGui::Button("Reset")) {
-                _model.Reset(_seed);
-            }
-            ImGui::SameLine();
-            ImGui::TextDisabled("seed=%u", _seed);
-        }
-        ImGui::End();
     }
 
     void Match3BoardComponent::OnMouseDown(const SDLEvents::MouseButtonDownEvent& e) {
