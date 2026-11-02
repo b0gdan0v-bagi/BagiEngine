@@ -1,6 +1,6 @@
 # How an in-game UI screen is authored: the data for the decision
 
-Stage 5 of `.claude/plans/magical-leaping-blossom.md`. The owner decides; this file holds what was measured. Status: **all three candidates are built and measured** (A and B on the element tree, C as a separate host). The last section reads the data; it does not choose.
+Stage 5 of `.claude/plans/magical-leaping-blossom.md`. This file holds what was measured; the owner's decision is the last section. Status: **all three candidates are built and measured** (A and B on the element tree, C as a separate host). "Reading the data" reads the numbers; it does not choose.
 
 The three candidates, for the same screens:
 
@@ -85,7 +85,7 @@ Findings while writing B:
 5. **A click can destroy the component.** RmlUi dispatches `click` from inside `ProcessMouseButtonUp`; a handler of `ActionEvent` that switches scenes would free the context it is running in. The host queues the action and emits it after the call (as `UICanvasComponent` clicks last).
 6. **RmlUi culls elements outside the window; the element tree does not.** The first version of the benchmark compared that, not the formats.
 7. **Silent gaps.** What the render interface does not implement draws nothing without a message. A check of "does this screen use only what the host supports" does not exist (B's report is what the other path offers).
-8. **The font engine brings FreeType.** Without a system FreeType the library does not build (`RMLUI_FONT_ENGINE=none` plus a `FontEngineInterface` over `FontAtlas` is the alternative, six methods, not tried). One face is loaded (`TextConfig.xml`'s default font); weights and fallback faces are not set up.
+8. **The font engine brings FreeType** (resolved in stage 6.2: `RmlUiFontEngine` over the engine's `Font`, no FreeType; this was true of the build measured here). Without a system FreeType the library does not build (`RMLUI_FONT_ENGINE=none` plus a `FontEngineInterface` over `FontAtlas` is the alternative, six methods, not tried). One face is loaded (`TextConfig.xml`'s default font); weights and fallback faces are not set up.
 9. **Text binding is RmlUi's own** (`data-model` and `{{ }}`): the host exposes `UIVars` as the struct `vars` through a small custom `VariableDefinition`, so game code is unchanged and a screen says `{{vars.score}}` where the others say `{score}`.
 10. **Textures:** `<img src>` takes a file path, not a `TextureLibrary` sprite name; a sprite from an atlas would need a decorator or a host-side lookup. The three screens use none.
 11. **Tool support:** nothing in the scene editor, the validator or `ui_tree` reaches into a document; its tests need a context with a renderer double (`RecordingRenderer` records geometry for that, `RmlUiHostTest`).
@@ -97,3 +97,9 @@ Findings while writing B:
 - **What C buys:** the controls of stage 6 that A and B would build one by one (`UIScrollView`, slider, toggle, progress bar, focus and gamepad navigation, animation, `UITextInput` being the largest) exist in RmlUi, with their CSS.
 - **The decision is between building those controls (the plan estimates each) and living with a second DOM.** Nothing measured says one is wrong: the measurements say what each costs.
 - If the owner chooses now: the data supports **A as the base with B as an optional second loader** (nothing but a loader depends on B, and a screen written in HTML compiles to the XML it stands for), and **RmlUi kept as the optional module it is** (off by default, nothing in the engine depends on it), to be taken up again when Mahjong, the consumer of stage 6 in the roadmap, needs a control that is more than a week of work on the element tree, or when the Vulkan backend gets `DrawGeometry`. The alternative the data also supports is to **make C the path for screens with scrolling, text input or animation** and keep A and B for HUDs and menus, since the seam (a scene component, `UIInput`, `ActionEvent`, `UIVars`) already allows both in one game.
+
+## Decision
+
+**2026-11-02, the owner: A with B, and RmlUi for the screens that need scrolling, text input or animation.** HUDs and menus stay on the element tree, written as `.ui.xml` or as `.ui.html` + CSS (B is a second loader onto the same tree). A screen with a scrolling list, a text field or an animation is an `.rml` document in `RmlUiDocumentComponent`. The seam (a scene component, `UIInput`, `ActionEvent`, `UIVars`) lets one game use both.
+
+What this asks of the code, in `.claude/plans/magical-leaping-blossom.md`, stage 6: the Vulkan `DrawGeometry` (RmlUi showed on the SDL backend only when this was written; done in stage 6.1), the font engine (FreeType from the system today), hot reload of documents, and on the element tree only the small controls that a screen asks for. `UIScrollView`, `UITextInput`, UI animation, grid layout and focus navigation are **not** built on the element tree: they are RmlUi's.
