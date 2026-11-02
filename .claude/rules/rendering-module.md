@@ -37,6 +37,7 @@ paths:
 - Texture loading goes through dedicated `IResourceLoader` classes (`SDLTextureLoader`, `VulkanTextureLoader`), so it follows `src/Modules/BECore/Resource/CLAUDE.md`. Textures from pixels in memory come from `IRenderer::CreateTexture()` instead and are not cached by path.
 - Keep texture lifetime and ownership behind `ITexture`. Do not expose backend handles in scene/component public APIs (`GetNativeHandle()` is for backend code).
 - Named sprites come from `TextureLibrary` (`config/TextureLibrary.xml`): name → texture path + source rect.
+- The aspect of a sprite is the component's business, not the backends': `SpriteRendererComponent` fits the node's rect with `FitSpriteRect()` (`fit="Contain"`, in scene units, before the view transform) and passes the result to `DrawTexture()`, so a backend only ever sees a destination rect and a source rect. `SpriteRendererComponent::SetTexture()` gives a sprite a texture from pixels (`CreateTexture()`), which is how a test makes one draw.
 
 ## Serialization and Components
 

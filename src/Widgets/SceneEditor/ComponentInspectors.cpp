@@ -134,6 +134,25 @@ namespace BECore {
                 ImGui::EndDisabled();
             }
 
+            // -----------------------------------------------------------------
+            // Fit — the choice of the node, not of the library, so it stays editable with a sprite ID
+            // -----------------------------------------------------------------
+            const auto& fitNames = EnumUtils<SpriteFit>::Names();
+            const auto& fitValues = EnumUtils<SpriteFit>::Values();
+            if (ImGui::BeginCombo("Fit##sprite_fit", EnumUtils<SpriteFit>::ToString(s._fit).data())) {
+                for (size_t i = 0; i < fitNames.size(); ++i) {
+                    const bool isSelected = (s._fit == fitValues[i]);
+                    if (ImGui::Selectable(fitNames[i].data(), isSelected)) {
+                        s._fit = fitValues[i];
+                        changed = true;
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
             return changed;
         }
 
