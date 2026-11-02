@@ -61,6 +61,7 @@ def test_first_sync_creates_the_project_labels_and_a_task_per_entry(fake, client
     assert {label["title"] for label in fake.labels.values()} == {
         "deferred",
         "in progress",
+        "review",
         "stage 1",
         "stage 2",
         "stage 3",
@@ -117,6 +118,21 @@ def test_status_change_swaps_the_managed_labels_and_keeps_foreign_ones(fake, cli
     changed_back = sync(client, data, PROJECT)
     assert changed_back.counts[UPDATE] == 1
     assert label_titles(task_of(fake, "open-with-stage")) == ["my own label", "stage 3"]
+
+
+def test_review_label_is_set_and_removed_with_the_status(fake, client, data):
+    sync(client, data, PROJECT)
+    assert label_titles(task_of(fake, "in-review")) == ["review", "stage 3"]
+    merged = copy.deepcopy(data)
+    entry(merged, "in-review")["status"] = "open"
+
+    report = sync(client, merged, PROJECT)
+
+    assert report.counts[UPDATE] == 1
+    assert label_titles(task_of(fake, "in-review")) == ["stage 3"]
+    back = sync(client, data, PROJECT)
+    assert back.counts[UPDATE] == 1
+    assert label_titles(task_of(fake, "in-review")) == ["review", "stage 3"]
 
 
 def test_update_keeps_priority_and_due_date_set_in_the_tracker(fake, client, data):

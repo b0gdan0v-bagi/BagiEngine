@@ -9,18 +9,18 @@ Every piece of text from todo/ goes through html.escape.
 from datetime import date
 from html import escape
 
-STATUS_LABELS = {"open": "open", "in progress": "in progress", "deferred": "deferred"}
+STATUS_LABELS = {"open": "open", "in progress": "in progress", "review": "review", "deferred": "deferred"}
 NO_STAGE_TITLE = "No stage"
 
 _STYLE = """
 :root {
   --bg: #f7f7f5; --panel: #ffffff; --text: #1f2328; --muted: #656d76; --line: #d8dee4;
-  --open: #656d76; --progress: #1a7f37; --deferred: #9a6700; --bar: #d8dee4;
+  --open: #656d76; --progress: #1a7f37; --review: #0969da; --deferred: #9a6700; --bar: #d8dee4;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0e1116; --panel: #161b22; --text: #e6edf3; --muted: #8d96a0; --line: #30363d;
-    --open: #8d96a0; --progress: #3fb950; --deferred: #d29922; --bar: #30363d;
+    --open: #8d96a0; --progress: #3fb950; --review: #58a6ff; --deferred: #d29922; --bar: #30363d;
   }
 }
 * { box-sizing: border-box; }
@@ -41,7 +41,7 @@ li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; paddi
 li:first-child { border-top: 0; }
 .badge { font-size: 12px; border: 1px solid currentColor; border-radius: 10px; padding: 0 8px; }
 .s-open { color: var(--open); } .s-in-progress { color: var(--progress); }
-.s-deferred { color: var(--deferred); }
+.s-review { color: var(--review); } .s-deferred { color: var(--deferred); }
 .bar { width: 160px; height: 8px; background: var(--bar); border-radius: 4px; overflow: hidden;
   align-self: center; }
 .bar span { display: block; height: 100%; background: var(--progress); }
@@ -112,6 +112,7 @@ def render_dashboard(data: dict, today: date) -> str:
         title = f"Stage {stage['number']}: {stage['title']}"
         stage_panels.append(_panel(title, stage_entries, rows or '<li class="meta">no entries</li>'))
 
+    in_review = [entry for entry in entries if entry["status"] == "review"]
     in_progress = [entry for entry in entries if entry["status"] == "in progress"]
     deferred = [entry for entry in entries if entry["status"] == "deferred"]
     no_stage = [entry for entry in entries if entry["stage"] not in stage_numbers]
@@ -119,6 +120,7 @@ def render_dashboard(data: dict, today: date) -> str:
     def section(heading: str, body: str) -> str:
         return f"<h2>{escape(heading)}</h2>{body}"
 
+    in_review_rows = "".join(_entry_row(entry, today, with_age=True, with_summary=True) for entry in in_review)
     in_progress_rows = "".join(_entry_row(entry, today, with_age=True, with_summary=True) for entry in in_progress)
     deferred_rows = "".join(_entry_row(entry, today, with_age=True, with_summary=True) for entry in deferred)
     no_stage_rows = "".join(_entry_row(entry, today) for entry in no_stage)
@@ -134,6 +136,7 @@ def render_dashboard(data: dict, today: date) -> str:
         f'<div class="muted">Generated {today.isoformat()} from todo/. {len(entries)} entries.</div>',
         f'<div class="totals">{totals}</div>',
         section("Roadmap", "".join(stage_panels)),
+        section("In review", f"<ul class='panel'>{in_review_rows}</ul>" if in_review else '<p class="muted">Nothing waits for review.</p>'),
         section("In progress", f"<ul class='panel'>{in_progress_rows}</ul>" if in_progress else '<p class="muted">Nothing in progress.</p>'),
         section("Deferred", f"<ul class='panel'>{deferred_rows}</ul>" if deferred else '<p class="muted">Nothing deferred.</p>'),
         section(NO_STAGE_TITLE, f"<ul class='panel'>{no_stage_rows}</ul>" if no_stage else '<p class="muted">Every entry has a stage.</p>'),

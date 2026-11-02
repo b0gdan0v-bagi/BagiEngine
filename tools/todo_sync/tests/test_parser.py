@@ -35,7 +35,7 @@ def test_roadmap_and_readme_are_not_entries_and_the_roadmap_gives_the_stages(par
 
 def test_entry_count_and_unique_ids(parsed):
     ids = [entry["id"] for entry in parsed["entries"]]
-    assert len(ids) == 6  # the heading inside the code fence is not a title
+    assert len(ids) == 7  # the heading inside the code fence is not a title
     assert len(set(ids)) == len(ids)
 
 
@@ -68,6 +68,12 @@ def test_stage_only(parsed):
 def test_deferred_status_and_date(parsed):
     entry = by_id(parsed, "deferred")
     assert (entry["status"], entry["date"], entry["stage"]) == ("deferred", "2026-10-31", 1)
+
+
+def test_review_status_with_date_and_text(parsed):
+    entry = by_id(parsed, "in-review")
+    assert (entry["status"], entry["date"], entry["stage"]) == ("review", "2026-11-05", 3)
+    assert "review" in STATUSES
 
 
 def test_in_progress_with_plan_progress(parsed):

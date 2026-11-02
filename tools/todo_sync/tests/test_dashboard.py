@@ -24,9 +24,24 @@ def test_roadmap_stages_with_counts_by_status(page):
     assert "Stage 1: Hygiene" in page
     assert "Stage 2: Control API (in progress)" in page
     # stage 1 holds the deferred entry only
-    assert "0 open · 0 in progress · 1 deferred" in page
+    assert "0 open · 0 in progress · 0 review · 1 deferred" in page
     # stage 2 holds the in-progress entry only
-    assert "0 open · 1 in progress · 0 deferred" in page
+    assert "0 open · 1 in progress · 0 review · 0 deferred" in page
+
+
+def test_review_entry_is_listed_before_the_in_progress_section(page):
+    review = page.split("<h2>In review</h2>")[1].split("<h2>In progress</h2>")[0]
+    assert "Entry waiting for review" in review
+    assert "since 2026-11-05, 6 days" in review
+    assert "A reviewer has not looked at the branch yet" in review
+    assert "s-review" in page
+    assert "--review:" in page
+
+
+def test_in_review_section_says_so_when_empty(sample_todo, sample_plans):
+    data = parse_todo(sample_todo, sample_plans)
+    data["entries"] = [entry for entry in data["entries"] if entry["status"] != "review"]
+    assert "Nothing waits for review." in render_dashboard(data, TODAY)
 
 
 def test_in_progress_entry_shows_plan_progress(page):

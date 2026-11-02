@@ -7,7 +7,7 @@ Checked against Vikunja 2.7.1 (REST /api/v1, scoped API token as a Bearer token)
 Identity: a managed task's description starts with the visible text "todo-sync:id=<entry id>".
 Nothing is stored locally, so another machine finds the same tasks.
 
-Owned fields: title, description, done and the labels "in progress", "deferred", "stage N".
+Owned fields: title, description, done and the labels "in progress", "review", "deferred", "stage N".
 Everything else on a task (priority, due date, assignees, comments, other labels) is kept:
 an update is read-modify-write, because POST /tasks/{id} replaces the whole task.
 A task whose entry left todo/ is marked done, never deleted. Tasks without the marker are never touched.
@@ -42,7 +42,7 @@ PLAN_BLOCK_START = f"<p>{PLAN_MARKER_PREFIX}"
 _PLAN_MARKER_RE = re.compile(r"<p>todo-sync:plan=([^<\s]+)</p>")
 PLAN_MAX_ITEMS = 300
 PLAN_ITEM_MAX_LENGTH = 240
-_MANAGED_LABEL_RE = re.compile(r"^(?:in progress|deferred|stage \d+)$")
+_MANAGED_LABEL_RE = re.compile(r"^(?:in progress|review|deferred|stage \d+)$")
 _BETWEEN_TAGS_RE = re.compile(r">\s+<")
 _ENV_LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
 

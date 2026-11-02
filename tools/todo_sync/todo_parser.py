@@ -4,7 +4,8 @@ Parse the todo/ folder into plain data.
 
 One markdown file per entry. The entry id is the file name without ".md" (or the `id:` field),
 the title is the first "# " line. Optional front matter (`key: value` lines between two `---`):
-  status:  open | in progress | deferred, then a date YYYY-MM-DD and free text
+  status:  open | in progress | review | deferred, then a date YYYY-MM-DD and free text
+           (review: a branch todo/<id> waits for the owner; only the todo-loop skill sets it)
   stage:   the roadmap number
   plan:    the NAME of a plan file in the local plans folder (its "- [ ]" / "- [x]" lines give the progress)
   id:      only to keep a task that was exported under another id
@@ -19,7 +20,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-STATUSES = ("open", "in progress", "deferred")
+STATUSES = ("open", "in progress", "review", "deferred")
 
 README_FILE = "README.md"
 ROADMAP_FILE = "roadmap.md"
