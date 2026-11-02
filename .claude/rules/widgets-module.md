@@ -69,4 +69,9 @@ Rules:
 
 ## Config Editor
 
-`ConfigEditorWidget` edits any loaded XML config. Field typing comes from `ConfigFieldSchema` (registered enums per config path, for example `LoggerConfig` → `sink/@type`), the controls from `FieldInspectors`, and edits stay in `StagedChanges` until the user saves. New config attributes with a fixed value set should be registered in the schema.
+`ConfigEditorWidget` edits any loaded XML config. Field typing comes from `ConfigFieldSchema` (registered fields per config path, for example `LoggerConfig` → `sink/@type`), the controls from `FieldInspectors`, and edits stay in `StagedChanges` until the user saves. New config attributes with a fixed value set should be registered in the schema, in `ConfigEditorWidget::Initialize`:
+
+- a `type` attribute that the loader resolves through `AbstractFactory<Base>` is registered with `RegisterFactoryTypes<Base>(config, "element/@type")`. The options are the class names the factory has registered (sorted), exactly the strings the loader accepts, so the list cannot drift from the code. Do not mirror them in an enum: the `CORE_ENUM` that the generator emits for a `FACTORY_BASE` has other names and another order;
+- an attribute read through `EnumUtils<E>` is registered with `RegisterEnum<E>`; `RegisterFlags` takes the flag names of a `|`-joined value.
+
+An `Enum` combo shows a current value that is not among the options (a typo, or a name the code no longer has) instead of an empty box and marks it `(not a known value)`; choosing an option replaces it. `tests/BECore/ConfigFieldSchemaTest.cpp` checks that the options are creatable by the factory and that the shipped `LoggerConfig.xml` uses only offered values.

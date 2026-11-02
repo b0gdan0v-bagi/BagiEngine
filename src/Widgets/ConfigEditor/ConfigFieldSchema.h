@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Reflection/AbstractFactory.h>
+#include <EASTL/sort.h>
 #include <EASTL/unordered_map.h>
 
 namespace BECore {
@@ -14,7 +16,7 @@ namespace BECore {
     /**
      * @brief Singleton registry mapping (configName, attrPath) to a FieldHint
      *
-     * Supports explicit registration for enum and flags fields.
+     * Supports explicit registration for enum, factory type and flags fields.
      * Falls back to heuristic resolution for unregistered fields.
      *
      * Registration paths use the format "elementName/@attributeName" (e.g. "sink/@type").
@@ -37,6 +39,32 @@ namespace BECore {
             for (const auto& name : names) {
                 hint.options.emplace_back(name.data(), name.size());
             }
+            _hints[key] = std::move(hint);
+        }
+
+        /**
+         * @brief Register an attribute as an enum field whose values are the class names of an AbstractFactory
+         *
+         * The options are the type names of every type registered in AbstractFactory<BaseT>, sorted
+         * alphabetically (the registration order depends on static initializers). They are exactly the strings
+         * AbstractFactory<BaseT>::Create(eastl::string_view) resolves, which is how the loader reads the
+         * "type" attribute of a factory element.
+         *
+         * @tparam BaseT Factory base type (e.g. ILogSink)
+         * @param configName Config file name (without extension)
+         * @param attrPath Path in format "elementName/@attrName"
+         */
+        template <typename BaseT>
+        void RegisterFactoryTypes(PoolString configName, eastl::string_view attrPath) {
+            const eastl::string key = MakeKey(configName, attrPath);
+            FieldHint hint;
+            hint.type = FieldType::Enum;
+            const auto& metas = AbstractFactory<BaseT>::GetInstance().GetRegisteredTypes();
+            hint.options.reserve(metas.size());
+            for (const auto& meta : metas) {
+                hint.options.emplace_back(meta.typeName.data(), meta.typeName.size());
+            }
+            eastl::sort(hint.options.begin(), hint.options.end());
             _hints[key] = std::move(hint);
         }
 

@@ -19,7 +19,7 @@ namespace BECore {
      * - Bool   -> Checkbox
      * - Int    -> InputInt
      * - Float  -> InputFloat
-     * - Enum   -> Combo dropdown
+     * - Enum   -> Combo dropdown; a current value that is not an option is shown in the combo and marked "(not a known value)"
      * - Flags  -> Checkbox per flag, joined with '|'
      * - String -> InputText (confirmed on Enter)
      *

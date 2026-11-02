@@ -42,4 +42,4 @@ Prefer a reflected struct plus `MakeFromConfig<T>` / `Deserialize` over hand-wri
 
 1. Drop `config/<Name>.xml`; it is picked up by name at the next start.
 2. Consume it with `GetConfig("<Name>"_intern)` or `MakeFromConfig<T>("<Name>")`.
-3. If users should edit it in the Config Editor, register enum or flag hints in `ConfigEditorWidget::Initialize` (`src/Widgets/ConfigEditor/`).
+3. If users should edit it in the Config Editor, register enum or flag hints in `ConfigEditorWidget::Initialize` (`src/Widgets/ConfigEditor/`): `RegisterEnum<E>` for an enum, `RegisterFactoryTypes<Base>` for a `type` attribute resolved by `AbstractFactory<Base>`. The options must be the strings the loader accepts (for a factory, the class names), so take them from the factory or the enum, never from a copy.
