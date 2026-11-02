@@ -42,7 +42,8 @@ namespace BECore::Tests {
         /// A directory of our own under the system's temporary one, removed with the object
         class TempDirectory {
         public:
-            TempDirectory() : _path(std::filesystem::temp_directory_path() / "BagiEngineUIDocumentTest") {
+            // One directory per test: ctest runs them in parallel processes, and the constructor clears the directory
+            TempDirectory() : _path(std::filesystem::temp_directory_path() / Format("BagiEngineUIDocumentTest_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()).c_str()) {
                 std::filesystem::remove_all(_path);
                 std::filesystem::create_directories(_path);
             }

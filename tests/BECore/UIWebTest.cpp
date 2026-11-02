@@ -855,7 +855,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
         class TempDirectory {
         public:
-            TempDirectory() : _path(std::filesystem::temp_directory_path() / "BagiEngineUIWebTest") {
+            // One directory per test: ctest runs them in parallel processes, and the constructor clears the directory
+            TempDirectory() : _path(std::filesystem::temp_directory_path() / Format("BagiEngineUIWebTest_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()).c_str()) {
                 std::filesystem::remove_all(_path);
                 std::filesystem::create_directories(_path);
             }
