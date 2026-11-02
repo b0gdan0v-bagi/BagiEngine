@@ -17,6 +17,12 @@
 
 namespace BECore {
 
+    namespace {
+
+        constexpr size_t kIndicesPerTriangle = 3;
+
+    }  // namespace
+
     bool VulkanRendererBackend::Initialize(IMainWindow& window) {
         auto* sdlWindow = dynamic_cast<SDLMainWindow*>(&window);
         if (!sdlWindow) {
@@ -66,6 +72,14 @@ namespace BECore {
         }
 
         if (!_texturePipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass())) {
+            return false;
+        }
+
+        if (!_geometryPipeline.Initialize(_device.GetDevice(), _swapchain.GetRenderPass(), _texturePipeline.GetDescriptorSetLayout())) {
+            return false;
+        }
+
+        if (!_geometryBuffer.Initialize(_device, kMaxFramesInFlight)) {
             return false;
         }
 
@@ -121,8 +135,12 @@ namespace BECore {
             _commandPool = VK_NULL_HANDLE;
         }
 
+        // The white texel's descriptor set belongs to the texture pipeline's pool, so it goes first
+        _whiteTexture = {};
+        _geometryBuffer.Destroy(vkDevice);
         _rectPipeline.Destroy(vkDevice);
         _texturePipeline.Destroy(vkDevice);
+        _geometryPipeline.Destroy(vkDevice);
         _swapchain.Destroy(_device);
 
         // Surface must be destroyed before the instance
@@ -151,6 +169,9 @@ namespace BECore {
         }
 
         vkResetFences(vkDevice, 1, &_inFlightFences[frameIdx]);
+
+        // The fence of this slot was waited on above, so the GPU is done with the geometry of its last use
+        _geometryBuffer.BeginFrame(frameIdx);
 
         VkCommandBuffer cmd = _commandBuffers[frameIdx];
         vkResetCommandBuffer(cmd, 0);
@@ -362,6 +383,72 @@ namespace BECore {
         pc.screenH = static_cast<float>(_currentExtent.height);
 
         _texturePipeline.Draw(_commandBuffers[_currentFrame], vkTexture->GetDescriptorSet(), pc, scissor);
+    }
+
+    VkDescriptorSet VulkanRendererBackend::GetWhiteTextureDescriptorSet() {
+        if (!_whiteTexture) {
+            constexpr uint8_t kWhiteTexel[4] = {255, 255, 255, 255};
+            _whiteTexture = CreateTexture(kWhiteTexel, 1, 1);
+        }
+        const auto* white = static_cast<const VulkanTexture*>(_whiteTexture.Get());
+        return white ? white->GetDescriptorSet() : VK_NULL_HANDLE;
+    }
+
+    void VulkanRendererBackend::DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) {
+        if (!_inSwapchainPass && !_inOffscreenPass) {
+            return;
+        }
+        if (vertices.empty() || indices.size() < kIndicesPerTriangle) {
+            return;
+        }
+
+        // A texture of another backend draws nothing, as in DrawTexture()
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        if (texture) {
+            const auto* vkTexture = dynamic_cast<const VulkanTexture*>(texture);
+            descriptorSet = vkTexture ? vkTexture->GetDescriptorSet() : VK_NULL_HANDLE;
+        } else {
+            descriptorSet = GetWhiteTextureDescriptorSet();
+        }
+        if (descriptorSet == VK_NULL_HANDLE) {
+            return;
+        }
+
+        const int vertexCount = static_cast<int>(vertices.size());
+        for (const int index : indices) {
+            if (index < 0 || index >= vertexCount) {
+                LOG_ERROR("VulkanRendererBackend: DrawGeometry got the index {} for {} vertices, so nothing is drawn"_format(index, vertexCount));
+                return;
+            }
+        }
+
+        VkRect2D scissor{};
+        if (!ResolveScissor(scissor)) {
+            return;
+        }
+
+        // Only whole triangles are drawn, as in the SDL backend
+        const size_t indexCount = indices.size() - indices.size() % kIndicesPerTriangle;
+        VulkanGeometryBuffer::Allocation allocation;
+        if (!_geometryBuffer.Allocate(_currentFrame, vertices.size() * sizeof(VulkanGeometryPipeline::Vertex), indexCount * sizeof(uint32_t), allocation)) {
+            return;
+        }
+
+        const ViewTransform& view = GetViewTransform();
+        auto* out = static_cast<VulkanGeometryPipeline::Vertex*>(allocation.vertices);
+        for (size_t i = 0; i < vertices.size(); ++i) {
+            const GeometryVertex& vertex = vertices[i];
+            const float x = (vertex.x + translateX) * view.scale + view.offsetX;
+            const float y = (vertex.y + translateY) * view.scale + view.offsetY;
+            out[i] = {x, y, vertex.color.r, vertex.color.g, vertex.color.b, vertex.color.a, vertex.u, vertex.v};
+        }
+        auto* outIndices = static_cast<uint32_t*>(allocation.indices);
+        for (size_t i = 0; i < indexCount; ++i) {
+            outIndices[i] = static_cast<uint32_t>(indices[i]);
+        }
+
+        _geometryPipeline.Draw(_commandBuffers[_currentFrame], descriptorSet, allocation.buffer, allocation.vertexOffset, allocation.indexOffset, static_cast<uint32_t>(indexCount), _currentExtent,
+                               scissor);
     }
 
     IntrusivePtr<ITexture> VulkanRendererBackend::CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) {

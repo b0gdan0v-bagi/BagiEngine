@@ -4,6 +4,7 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/SceneNode.h>
+#include <Events/ApplicationEvents.h>
 #include <Generated/RenderProbeComponent.gen.hpp>
 
 namespace BECore {
@@ -44,6 +45,37 @@ namespace BECore {
             return renderer.CreateTexture(pixels.data(), kGradientSize, kGradientSize);
         }
 
+        const Color kCornerRed{kOpaque, 0, 0, kOpaque};
+        const Color kCornerGreen{0, kOpaque, 0, kOpaque};
+        const Color kCornerBlue{0, 0, kOpaque, kOpaque};
+        const Color kCornerFaint{kOpaque, kOpaque, kOpaque, 64};
+        const Color kWhite{kOpaque, kOpaque, kOpaque, kOpaque};
+
+        /// Two triangles over the unit square at the origin, wound the same way the quad of a texture is
+        constexpr std::array<int, 6> kQuadIndices{0, 1, 2, 2, 1, 3};
+
+        /// Untextured: a color per corner, so the interpolation and the blending of the last corner (it is faint) are visible
+        void DrawColorQuad(IRenderer& renderer, float x, float y, float size) {
+            const std::array<GeometryVertex, 4> vertices{{
+                {0.0f, 0.0f, kCornerRed, 0.0f, 0.0f},
+                {size, 0.0f, kCornerGreen, 1.0f, 0.0f},
+                {0.0f, size, kCornerBlue, 0.0f, 1.0f},
+                {size, size, kCornerFaint, 1.0f, 1.0f},
+            }};
+            renderer.DrawGeometry(nullptr, {vertices.data(), vertices.size()}, {kQuadIndices.data(), kQuadIndices.size()}, x, y);
+        }
+
+        /// Textured and mirrored left to right (u runs from 1 to 0), so it differs from DrawTexture() in the corners, drawn through the translation
+        void DrawMirroredTexture(IRenderer& renderer, ITexture& texture, float x, float y, float size) {
+            const std::array<GeometryVertex, 4> vertices{{
+                {0.0f, 0.0f, kWhite, 1.0f, 0.0f},
+                {size, 0.0f, kWhite, 0.0f, 0.0f},
+                {0.0f, size, kWhite, 1.0f, 1.0f},
+                {size, size, kWhite, 0.0f, 1.0f},
+            }};
+            renderer.DrawGeometry(&texture, {vertices.data(), vertices.size()}, {kQuadIndices.data(), kQuadIndices.size()}, x, y);
+        }
+
         void DrawChecker(IRenderer& renderer, float x, float y, float size) {
             const int squares = static_cast<int>(size / kCheckerSquare);
             for (int row = 0; row < squares; ++row) {
@@ -61,6 +93,18 @@ namespace BECore {
         }
 
     }  // namespace
+
+    void RenderProbeComponent::OnAttached() {
+        // Subscribed after the renderer's own handler, so it runs before the renderer destroys its device
+        Subscribe<ApplicationEvents::ApplicationCleanUpEvent, &RenderProbeComponent::OnApplicationCleanUp>(this);
+    }
+
+    void RenderProbeComponent::OnApplicationCleanUp() {
+        if (const auto& renderer = CoreManager::GetRenderer()) {
+            renderer->WaitIdle();
+        }
+        _gradient = {};
+    }
 
     void RenderProbeComponent::OnDraw() {
         const auto& rendererPtr = CoreManager::GetRenderer();
@@ -80,8 +124,8 @@ namespace BECore {
         }
         const auto cellX = [originX](int index) { return originX + static_cast<float>(index) * (kCell + kGap); };
 
-        // Cells 0 to 3 sit on a checkerboard, so transparency is visible
-        for (int cell = 0; cell < 4; ++cell) {
+        // Cells 0 to 3, and 5 and 6, sit on a checkerboard, so transparency is visible
+        for (const int cell : {0, 1, 2, 3, 5, 6}) {
             DrawChecker(renderer, cellX(cell), originY, kCell);
         }
 
@@ -104,6 +148,12 @@ namespace BECore {
         }
         renderer.PopClipRect();
         renderer.PopClipRect();
+
+        // Cells 5 and 6: DrawGeometry(), untextured with a color per corner, and textured, mirrored and moved by its translation
+        DrawColorQuad(renderer, cellX(5), originY, kCell);
+        if (_gradient) {
+            DrawMirroredTexture(renderer, *_gradient, cellX(6), originY, kCell);
+        }
     }
 
 }  // namespace BECore

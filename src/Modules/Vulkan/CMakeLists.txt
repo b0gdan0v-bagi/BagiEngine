@@ -45,7 +45,7 @@ target_include_directories(VulkanModule PUBLIC
     ${CMAKE_BINARY_DIR}
 )
 
-# Generated SPIR-V headers (rect_vert_spv.h, rect_frag_spv.h) land here.
+# Generated SPIR-V headers (rect_vert_spv.h, rect_frag_spv.h, ...) land here.
 target_include_directories(VulkanModule PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/shaders")
 
 target_link_libraries(VulkanModule PUBLIC
@@ -143,6 +143,8 @@ compile_shader(vert rect kRectVertSpv)
 compile_shader(frag rect kRectFragSpv)
 compile_shader(vert texture kTextureVertSpv)
 compile_shader(frag texture kTextureFragSpv)
+compile_shader(vert geometry kGeometryVertSpv)
+compile_shader(frag geometry kGeometryFragSpv)
 
 add_custom_target(VulkanShaders
     DEPENDS
@@ -150,6 +152,8 @@ add_custom_target(VulkanShaders
         "${_SHADER_BIN_DIR}/rect_frag_spv.h"
         "${_SHADER_BIN_DIR}/texture_vert_spv.h"
         "${_SHADER_BIN_DIR}/texture_frag_spv.h"
+        "${_SHADER_BIN_DIR}/geometry_vert_spv.h"
+        "${_SHADER_BIN_DIR}/geometry_frag_spv.h"
 )
 set_target_properties(VulkanShaders PROPERTIES FOLDER "Modules")
 add_dependencies(VulkanModule VulkanShaders)

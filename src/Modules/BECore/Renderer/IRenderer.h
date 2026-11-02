@@ -65,8 +65,8 @@ namespace BECore {
         // brings its own layout and draws shapes of any form (RmlUi). @p texture is optional: without one the vertex colors are the fill. Each position
         // is moved by (@p translateX, @p translateY), then by the view transform, and the draw obeys the clip like the other primitives. Alpha is
         // straight and blended over the target. An index past the vertices ends the draw.
-        // Not BE_FUNCTION (spans). The default logs once and draws nothing, for a backend without the primitive: the Vulkan backend (it needs a pipeline of its own
-        // and a dynamic vertex buffer, .claude/rules/rendering-module.md).
+        // Not BE_FUNCTION (spans). The default logs once and draws nothing, for a backend without the primitive (the SDL and the Vulkan backends both have it,
+        // .claude/rules/rendering-module.md).
         virtual void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY);
 
         // Makes a texture from pixels in memory: RGBA8 (red first), straight alpha, rows packed from the top, so

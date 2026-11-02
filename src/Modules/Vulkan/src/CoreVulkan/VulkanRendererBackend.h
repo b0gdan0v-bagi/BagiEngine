@@ -3,6 +3,8 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/IRenderTarget.h>
 #include <CoreVulkan/VulkanDevice.h>
+#include <CoreVulkan/VulkanGeometryBuffer.h>
+#include <CoreVulkan/VulkanGeometryPipeline.h>
 #include <CoreVulkan/VulkanRectPipeline.h>
 #include <CoreVulkan/VulkanSwapchain.h>
 #include <CoreVulkan/VulkanTexturePipeline.h>
@@ -44,6 +46,7 @@ namespace BECore {
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
         using IRenderer::DrawTexture;
         void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) override;
+        void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) override;
         IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override;
 
         IntrusivePtr<IRenderTarget> CreateRenderTarget(uint32_t width, uint32_t height) override;
@@ -99,6 +102,9 @@ namespace BECore {
         // clipped. False when the clip leaves nothing visible, so the draw is skipped.
         bool ResolveScissor(VkRect2D& scissor) const;
 
+        // The descriptor set of a draw that has no texture: one white texel, made on first use. Null when it cannot be made.
+        VkDescriptorSet GetWhiteTextureDescriptorSet();
+
         bool CreateCommandPool();
         bool CreateCommandBuffers();
         bool CreateSyncObjects();
@@ -122,6 +128,11 @@ namespace BECore {
         VulkanSwapchain _swapchain;
         VulkanRectPipeline _rectPipeline;
         VulkanTexturePipeline _texturePipeline;
+        VulkanGeometryPipeline _geometryPipeline;
+        // Vertices and indices of DrawGeometry(), a set per frame in flight (rewound in AcquireFrame())
+        VulkanGeometryBuffer _geometryBuffer;
+        // Freed in Destroy(), while the descriptor pool of the texture pipeline is still there
+        IntrusivePtr<ITexture> _whiteTexture;
 
         VkSurfaceKHR _surface = VK_NULL_HANDLE;
 

@@ -352,6 +352,37 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(clips[2].x, clips[1].x);
     }
 
+    TEST_F(RenderProbeTest, ItDrawsAColorQuadAndAMirroredTextureThroughGeometry) {
+        _manager->DrawAll();
+
+        eastl::vector<const DrawCall*> geometry;
+        for (const DrawCall& call : _renderer->calls) {
+            if (call.kind == DrawKind::Geometry) {
+                geometry.push_back(&call);
+            }
+        }
+        ASSERT_EQ(geometry.size(), 2u);
+
+        // The 1000 x 600 view fits an 800 x 600 output at scale 0.8 (offset y = 60). Cell 5 starts at x = 10 + 5 * 120 units and y = 20.
+        const DrawCall& colors = *geometry[0];
+        EXPECT_EQ(colors.texture, nullptr);
+        ASSERT_EQ(colors.vertices.size(), 4u);
+        EXPECT_EQ(colors.indices.size(), 6u);
+        EXPECT_FLOAT_EQ(colors.vertices[0].x, 488.0f);
+        EXPECT_FLOAT_EQ(colors.vertices[0].y, 76.0f);
+        EXPECT_FLOAT_EQ(colors.vertices[3].x, 568.0f);
+        EXPECT_EQ(colors.vertices[0].color.r, 255);
+        EXPECT_EQ(colors.vertices[3].color.a, 64);
+
+        // Cell 6 is moved by the translation of the call, not by its vertices, and runs u from 1 to 0
+        const DrawCall& mirrored = *geometry[1];
+        EXPECT_NE(mirrored.texture, nullptr);
+        ASSERT_EQ(mirrored.vertices.size(), 4u);
+        EXPECT_FLOAT_EQ(mirrored.vertices[0].x, 584.0f);
+        EXPECT_FLOAT_EQ(mirrored.vertices[0].u, 1.0f);
+        EXPECT_FLOAT_EQ(mirrored.vertices[1].u, 0.0f);
+    }
+
     TEST_F(RenderProbeTest, ADrawAfterADrawDoesNotCreateAnotherTexture) {
         _manager->DrawAll();
         _manager->DrawAll();
