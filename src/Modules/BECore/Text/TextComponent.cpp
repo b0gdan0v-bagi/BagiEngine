@@ -17,7 +17,7 @@ namespace BECore {
     void TextComponent::ReloadFont() {
         _fontTried = true;
         _font.Reset();
-        _layoutKey.font = nullptr;  // the cached layout belongs to the old font
+        _layoutCache.Reset();  // the cached layout belongs to the old font
 
         const PoolString path = _fontPath.Empty() ? CoreManager::GetFontAtlasLibrary().GetSettings().defaultFont : _fontPath;
         _font = CoreManager::GetResourceManager().Load<Font>(path.ToStringView());
@@ -29,13 +29,6 @@ namespace BECore {
 
     void TextComponent::SetText(eastl::string_view text) {
         _text.assign(text.data(), text.size());
-    }
-
-    bool TextComponent::IsSame(const LayoutKey& a, const LayoutKey& b) {
-        const TextLayoutOptions& x = a.options;
-        const TextLayoutOptions& y = b.options;
-        return a.font == b.font && a.text == b.text && x.fontSize == y.fontSize && x.maxWidth == y.maxWidth && x.maxHeight == y.maxHeight && x.align == y.align && x.lineSpacing == y.lineSpacing &&
-               x.wrap == y.wrap && x.overflow == y.overflow && x.minFontSize == y.minFontSize;
     }
 
     void TextComponent::OnDraw() {
@@ -66,35 +59,30 @@ namespace BECore {
         if (scale <= 0.0f) {
             return;
         }
-        LayoutKey key;
-        key.text = _text;
-        key.font = _font.operator->();
-        key.options.fontSize = static_cast<float>(FontAtlasLibrary::QuantizeSize(_fontSize * scale));
-        key.options.minFontSize = _minFontSize * scale;
-        key.options.maxWidth = boxWidth * scale;
-        key.options.maxHeight = boxHeight * scale;
-        key.options.align = _align;
-        key.options.overflow = _overflow;
-        key.options.wrap = _wrap;
-        key.options.lineSpacing = _lineSpacing;
-        if (!IsSame(key, _layoutKey)) {
-            _layout = TextLayout::Layout(*_font, _text, key.options);
-            _layoutKey = key;
-        }
-        if (_layout.glyphs.empty()) {
+        TextLayoutOptions options;
+        options.fontSize = static_cast<float>(FontAtlasLibrary::QuantizeSize(_fontSize * scale));
+        options.minFontSize = _minFontSize * scale;
+        options.maxWidth = boxWidth * scale;
+        options.maxHeight = boxHeight * scale;
+        options.align = _align;
+        options.overflow = _overflow;
+        options.wrap = _wrap;
+        options.lineSpacing = _lineSpacing;
+        const TextLayoutResult& layout = _layoutCache.Get(*_font, _text, options);
+        if (layout.glyphs.empty()) {
             return;
         }
 
-        auto atlas = CoreManager::GetFontAtlasLibrary().Get(*renderer, IntrusivePtr<Font>(_font.operator->()), FontAtlasLibrary::QuantizeSize(_layout.fontSize));
+        auto atlas = CoreManager::GetFontAtlasLibrary().Get(*renderer, IntrusivePtr<Font>(_font.operator->()), FontAtlasLibrary::QuantizeSize(layout.fontSize));
         if (!atlas) {
             return;
         }
 
-        const bool clip = _layout.overflowed && _overflow == TextOverflow::Clip;
+        const bool clip = layout.overflowed && _overflow == TextOverflow::Clip;
         if (clip) {
             renderer->PushClipRect(renderer->GetViewTransform().ToOutput(boxX, boxY, boxWidth, boxHeight));
         }
-        TextRenderer::Draw(*renderer, *atlas, _layout, boxX, boxY, _color);
+        TextRenderer::Draw(*renderer, *atlas, layout, boxX, boxY, _color);
         if (clip) {
             renderer->PopClipRect();
         }

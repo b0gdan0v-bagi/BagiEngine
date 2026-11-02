@@ -38,6 +38,24 @@ def extract_intrusive_inner_type(type_name: str) -> Optional[str]:
 
 
 
+def find_factory_ancestor(parent_class: Optional[str], classes_by_name: dict, factory_base_names: set) -> str:
+    """Walk up the chain of parents and return the short name of the first factory base, or ''.
+
+    A class registers in the factory of the nearest factory base above it, however many classes sit in between
+    (UIButton : UILabel : UIElement registers in AbstractFactory<UIElement>).
+    """
+    seen: set = set()
+    current = parent_class
+    while current and current not in seen:
+        seen.add(current)
+        short = current.split('::')[-1]
+        if short in factory_base_names:
+            return short
+        parent = classes_by_name.get(current) or classes_by_name.get(short)
+        current = parent.parent_class if parent else None
+    return ''
+
+
 def compute_element_name(base_name: str, first_derived_name: str) -> str:
     """Derive XML element name from the common suffix between base and first derived class.
 
@@ -243,13 +261,15 @@ class CodeGenerator:
             # Resolve factory base FQN for self-registration block
             factory_base_fqn = ""
             if cls.parent_class and not cls.is_event and not cls.is_factory_base:
-                parent_short = cls.parent_class.split('::')[-1]
-                factory_base_fqn = factory_base_fqn_map.get(parent_short, "")
+                ancestor = find_factory_ancestor(cls.parent_class, all_classes_map, set(factory_base_map))
+                factory_base_fqn = factory_base_fqn_map.get(ancestor, "")
             elif cls.is_factory_base and not cls.is_event:
                 short = cls.name.split('::')[-1]
                 fb = factory_base_map.get(short)
                 # A base without derived classes registers itself, unless it cannot be instantiated.
-                if fb and len(fb.derived) == 1 and fb.derived[0].name == cls.name and not cls.is_abstract:
+                # REGISTER_SELF makes a concrete base register itself next to its derived classes.
+                alone = fb is not None and len(fb.derived) == 1 and fb.derived[0].name == cls.name
+                if fb and (alone or cls.register_self) and not cls.is_abstract:
                     factory_base_fqn = cls.full_qualified_name
 
             cls_dict = {
@@ -360,6 +380,8 @@ class CodeGenerator:
         
         # Find all factory base classes
         base_classes = [cls for cls in all_classes if cls.is_factory_base]
+        classes_by_name = {c.name: c for c in all_classes}
+        factory_base_names = {c.name.split('::')[-1] for c in base_classes}
         
         for base_cls in base_classes:
             factory_base = FactoryBaseData(
@@ -372,9 +394,9 @@ class CodeGenerator:
                 include_path=compute_include_path(base_cls.source_file, include_dirs)
             )
             
-            # Find all derived classes
+            # Find all derived classes, direct or through other classes
             for cls in all_classes:
-                if cls.parent_class == base_cls.name:
+                if find_factory_ancestor(cls.parent_class, classes_by_name, factory_base_names) == base_cls.name.split('::')[-1]:
                     short_name = compute_short_name(cls.name, base_cls.name)
                     include_path = compute_include_path(cls.source_file, include_dirs)
                     

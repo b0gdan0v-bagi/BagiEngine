@@ -6,7 +6,7 @@ In-game UI that the engine draws through `IRenderer`, in both backends and both 
 
 **Adaptivity is the foundation.** Window size, aspect ratio, orientation, safe area, pixel density and a user scale are inputs of every layout, and every screen must pass `ValidateOnMatrix` (below) with no issues before it is considered done.
 
-What exists (plan stages 3, 4.1 and 4.2): canvases, the scaler, the layout rules, responsive variants, the validator, the host component, the reflection of the element tree and the variants, so a screen can be written in `SceneConfig.xml` or in a `.ui.xml` file of its own (see "Writing a screen in XML"). What does not exist yet: the controls (panel, label, button), `UIVars` and the first real screens (the rest of stage 4). Elements are plain rects with a color.
+What exists (plan stages 3 and 4.1 to 4.3): canvases, the scaler, the layout rules, responsive variants, the validator, the host component, the reflection of the element tree and the variants, so a screen can be written in `SceneConfig.xml` or in a `.ui.xml` file of its own (see "Writing a screen in XML"), and the controls: `UIPanel`, `UIImage`, `UILabel`, `UIButton`, `UIStack` (see "Controls"). What does not exist yet: `UIVars` and the first real screens (the rest of stage 4).
 
 ```
 UICanvasComponent (scene component, reflected fields: space, scaleMode, ...)
@@ -31,6 +31,8 @@ UIElement tree (root = the canvas; children are the elements)
 | `UIElementStyle` | The authored properties that a variant can change (`visible`, `rect`, `stack`, `fontSize`); written as flat attributes of its element |
 | `UIColor` | A `Color` that a file writes in one attribute (`color="0,0,0,160"` or `"#000000A0"`) |
 | `UIText` (`UIValueText.h`) | Pure text forms of `UILength` (`"90%"`), `UIEdges` (`"8"` or `"l,t,r,b"`), colors, numbers; `UIAttr` (`UIAttributeIO.h`) reads and writes them as attributes |
+| `UIPanel`, `UIImage`, `UILabel`, `UIButton`, `UIStack` | The controls, derived from `UIElement`; one section below |
+| `UISprite`, `UINineSlice` | The texture of a sprite name (TextureLibrary, or given by code); the pure cutting of a picture into nine pieces |
 | `UIScreenContent` | The reflected pair `elements` + `variants` that a screen is made of; what a document and any other front-end reads |
 | `UIDocument` (`IResource`), `UIDocumentLoader` | A screen in a `.ui.xml` file: the parsed XML, `Instantiate(content)` builds fresh elements from it for each canvas |
 | `UIVariant` | `when` (`UIVariantCondition`, text form `orientation:portrait;minAspect:1.5`) + `overrides` per named element (`UIElementOverride`); `UIVariants::Apply` |
@@ -111,13 +113,42 @@ The elements and variants of a canvas are reflected fields of `UICanvasComponent
 ```
 
 - **An element** is `<element type="...">`, `type` is the class name from `AbstractFactory<UIElement>` (a control is one more derived class). An unknown type is reported as a deserialize error (and the element becomes a plain `UIElement`). Children go in a `<children>` array.
-- **The style is flat:** `visible`, `anchor`, `x`, `y`, `width`, `height`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, `aspectRatio`, `aspectMode`, `margin`, `flex`, `direction`, `spacing`, `padding`, `wrap`, `crossAlign`, `fontSize` are attributes of the element, and only values that differ from the default are written. A length is `220`, `220px` or `90%`; `margin` and `padding` are one number or `left,top,right,bottom`; a color is `r,g,b,a` or `#RRGGBB[AA]`. A malformed value is reported with the attribute name and the default stays.
+- **The style is flat:** `visible`, `anchor`, `x`, `y`, `width`, `height`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, `aspectRatio`, `aspectMode`, `margin`, `flex`, `direction`, `spacing`, `padding`, `wrapChildren`, `crossAlign`, `fontSize` are attributes of the element, and only values that differ from the default are written. A length is `220`, `220px` or `90%`; `margin` and `padding` are one number or `left,top,right,bottom`; a color is `r,g,b,a` or `#RRGGBB[AA]`. A malformed value is reported with the attribute name and the default stays.
 - **A variant** is `when` (the set parts as `name:value` separated by `;`: `orientation` (`portrait`, `landscape`, `any`), `minAspect`, `maxAspect`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`) and a list of `<set element="Name" .../>` overrides with only the properties to change (`visible`, `anchor`, `x`, `y`, `width`, `height`, `direction`, `fontSize`). An override is written even when its value equals the type's default (`x="0"` is a decision).
 - **Saving:** `_elements` and `_variants` are the inline part of the screen; `Initialize()` hands them to the layout once (the same element objects, so edits through either are the same edits). Elements added in code with `GetRoot().AddChild()` are runtime-only and are not saved back.
 - **A screen in a file of its own:** `source="assets/ui/hud.ui.xml"` on the canvas loads a `UIDocument`; the file is `<ui><elements>...</elements><variants>...</variants></ui>`, the same two blocks as inline. The document's elements come first, the inline ones after them (drawn on top; a later variant wins). The elements of a file belong to the file: `_elements` stays the inline part, and only that is saved back. A missing or unreadable file is logged and the canvas keeps its inline screen; a bad value in a file is logged with its line and the rest is built. Every canvas gets elements of its own (`Instantiate`), because the layout results live in the elements. `ResourceManager` picks the loader by the longest suffix of the name, so `x.ui.xml` goes to `UIDocumentLoader` and a plain `x.xml` to `XmlResourceLoader`.
 - **Another front-end** (the web-style one of the plan's stage 5) needs no new tree: it resolves its own syntax into the attributes above and hands them to `XmlDeserializer`. The test builds such a tree in memory with pugixml (`XmlDeserializer::LoadFromXmlNode(XmlNode(node))`, no file and no string) and gets the same elements as from the XML.
 - A binary save (`BinarySerializer`) carries the same tree.
 - Why `IntrusivePtrNonAtomic<UIElement>` and not `IntrusivePtr<UIElement>` in the field declarations: the generator looks for the long name to find the factory field (`.claude/rules/reflection-module.md`).
+
+## Controls
+
+A control is a `UIElement` subclass registered in `AbstractFactory<UIElement>`; the `type` of an `<element>` is its class name. Each draws itself in `DrawSelf(IRenderer&)` (the canvas calls it for a visible element, then draws the children over it) with the view transform of the canvas in effect, so it works in canvas units. `color` of every element is a fill behind its content.
+
+| Type | Fields (besides the common ones) | Behavior |
+|------|-----------------------------------|----------|
+| `UIElement` | none | A plain box: the fill, and children. Registers itself (`REGISTER_SELF`) so `type="UIElement"` is a group |
+| `UIPanel` | `sprite`, `sliceBorder`, `spriteTint` | Fill, then the sprite. With a `sliceBorder` (one number or `left,top,right,bottom`, in sprite pixels) the sprite is cut in nine (`UINineSlice`): corners keep their size, one unit per pixel. `blocksInput` is true by default |
+| `UIImage` | `sprite`, `tint`, `stretch` | The sprite as large as fits the rect, centered, keeping its proportions (`stretch="true"` fills the rect). This is the aspect option the Chess pieces need |
+| `UILabel` | `text`, `font`, `textColor`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing`, `minFontSize` | Text in the rect. The size is `fontSize` of the style (24 when 0), so a variant can change it; laid out and rasterized at that size times the canvas scale in whole output pixels, the way `TextComponent` does (`Text/CLAUDE.md`). `overflow` defaults to `Ellipsis`; `Clip` cuts the drawing at the rect and the validator reports it (`TextDoesNotFit`); `AutoFit` shrinks down to `minFontSize` |
+| `UIButton` | `action`, `hoverColor`, `pressedColor`, `disabledColor`, `disabled` | A label on a fill that follows the pointer. `interactive`, centered text, no wrap. A click emits `InputEvents::ActionEvent(action)` |
+| `UIStack` | none | A container whose layout is Stack from the start; `direction`, `spacing`, `padding`, `wrapChildren`, `crossAlign` are the style attributes |
+
+```xml
+<element type="UIPanel" name="Hud" x="16" y="16" width="240" height="120" color="0,0,0,160">
+  <children>
+    <element type="UILabel" name="Score" x="12" y="10" width="216" height="32" text="Score" fontSize="28"/>
+    <element type="UIButton" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" text="Reset" action="Match3Reset" color="40,90,60,255"/>
+  </children>
+</element>
+```
+
+- **Sprites** come from the `TextureLibrary` by name (`sprite="Panel9"`); the texture is loaded on the first draw and again when the name changes, and a name the library does not know is logged once. Code and tests give a texture directly: `panel->GetSprite().SetTexture(texture, srcRect)`.
+- **Button states.** The canvas sets `UIElement::hovered` and `pressed` from the mouse: the pointer over the topmost hit-testable element is hovered (not while a button is held that the canvas did not take: that is the game's drag), a left press on an `interactive` element presses it, and the release calls `OnClick()` only when it lands on the same element, so dragging off the button cancels the click. The fill is `color`, `hoverColor` under the pointer, `pressedColor` while held on the button (a press that moved off is shown as normal), `disabledColor` when `disabled`. A color left transparent is derived from `color`: lighter, darker, half transparent. A disabled button still consumes the click. A hidden canvas clears hover and press. A canvas below a canvas that consumes the motion is not asked, so its hover stays where it was.
+- **Vertical alignment** is the label's own (`TextLayout` has none): the line box is placed at the top, the middle or the bottom of the rect.
+- **The common attribute names are shared.** The style attributes of an element (`wrapChildren`, `direction`, `fontSize`, ...) and the fields of a control are attributes of one `<element>`, so they must not clash: the stack's `wrap` was renamed `wrapChildren` because a label has the text `wrap`. `UIControlsTest.EveryPropertyOfEveryControlSurvivesARoundTrip` sets every property of every control and fails on a clash.
+- **Skip-defaults.** A control field that defaults to something other than its type's zero (`wrap` true, `textColor` white) is dropped by a serializer that skips defaults, because the check is "equal to `T{}`". The editor does not use that mode; do not save UI with it.
+- Adding a control: derive from `UIElement` (or `UILabel`), `BE_CLASS(Name)` with `BE_REFLECT_FIELD`s, override `DrawSelf`, include the `.gen.hpp` in the `.cpp`. Names that are hard to guess go in the attribute list above, and the class registers itself, also when it derives from another control.
 
 ## Building a screen in code
 
@@ -152,8 +183,8 @@ Code and a file can be mixed: the canvas of a node comes from the file, a compon
 
 ## Not done
 
-Controls (`UIPanel`, `UIImage`, `UILabel`, `UIButton`), `UIVars`, hot reload of a document, clipping of children to their parent, scrolling, focus and gamepad navigation, a `ClickableComponent` replacement for buttons, the debug overlay, an inspector for variants and the control API methods (`ui_tree`, `ui_click`). The first two are the rest of stage 4 of the plan.
+`UIVars` (text bound to variables), hot reload of a document, clipping of children to their parent, scrolling, focus and gamepad navigation, keyboard and gamepad activation of a button, a `UITextInput`, the debug overlay, an inspector for variants and the control API methods (`ui_tree`, `ui_click`). `UIVars` and the first screens are the rest of stage 4 of the plan.
 
 ## Tests
 
-`tests/BECore/`: `UILayoutTest` (anchors, stretch, limits, aspect, stack), `UICanvasScalerTest` (every space and mode, safe area, the context comparison), `UISettingsTest` (settings, `UIEnvironment`), `UIVariantTest` (conditions, order, restoring, tree layout), `UICanvasLayoutTest` (cache, variant runs, hit testing, the matrix itself and shipped-style screens), `UILayoutValidatorTest`, `UICanvasComponentTest` (a scene from XML into a `RecordingRenderer`: drawing in each space, the view transform handed back, input order, press following, modal, inactive scenes), `UIPreviewTest`, `UIReflectionTest` (the text forms, the tree and variants through XML and binary, malformed values, an unknown type, a screen from a scene file laid out in both orientations), `UIDocumentTest` (a file, inline XML and a tree built in memory give the same elements; the loader choice; canvases of one file do not share layout; file and inline together; a missing, a broken and a partly bad file).
+`tests/BECore/`: `UILayoutTest` (anchors, stretch, limits, aspect, stack), `UICanvasScalerTest` (every space and mode, safe area, the context comparison), `UISettingsTest` (settings, `UIEnvironment`), `UIVariantTest` (conditions, order, restoring, tree layout), `UICanvasLayoutTest` (cache, variant runs, hit testing, the matrix itself and shipped-style screens), `UILayoutValidatorTest`, `UICanvasComponentTest` (a scene from XML into a `RecordingRenderer`: drawing in each space, the view transform handed back, input order, press following, modal, inactive scenes), `UIPreviewTest`, `UIReflectionTest` (the text forms, the tree and variants through XML and binary, malformed values, an unknown type, a screen from a scene file laid out in both orientations), `UIDocumentTest` (a file, inline XML and a tree built in memory give the same elements; the loader choice; canvases of one file do not share layout; file and inline together; a missing, a broken and a partly bad file), `UINineSliceTest`, `UIControlsTest` (every control from a file and back, every property of every control, hit testing, draw calls of panel, nine-slice, image and label, scale and variants, overflow and the validator, button states and clicks from synthetic mouse events).

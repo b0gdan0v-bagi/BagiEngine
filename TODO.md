@@ -274,7 +274,7 @@ The same pattern (an enum hint whose names differ from what the loader expects) 
 
 ## No in-game UI: UI exists only as ImGui editor panels
 
-**Status:** in progress since 2026-11-01. Stages 0 to 3 of the plan are done (renderer primitives, text, input, canvases and adaptive layout with the size matrix); stage 4 has started: task 4.1 is done (elements and variants are reflected, a screen can be written in `SceneConfig.xml`); `UIDocument`, the controls and the first screens are next.
+**Status:** in progress since 2026-11-01. Stages 0 to 3 of the plan are done (renderer primitives, text, input, canvases and adaptive layout with the size matrix); stage 4 has started: tasks 4.1 to 4.3 are done (elements and variants are reflected, screens can live in `.ui.xml` files, panel, image, label, button and stack exist); `UIVars` and the first screens are next.
 
 **Stage:** 3
 

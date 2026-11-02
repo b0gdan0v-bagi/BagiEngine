@@ -213,6 +213,8 @@ class ClassData:
     line: int = 0
     # Custom XML element name from ELEMENT=xxx option in BE_CLASS macro.
     element_name: Optional[str] = None
+    # REGISTER_SELF option on a FACTORY_BASE: the base registers itself in its factory even when it has derived classes.
+    register_self: bool = False
     # Resolved at generation time (not stored in cache): FQN of the factory base this
     # class derives from, e.g. "BECore::ILogSink". Empty string when not a factory child.
     factory_base_fqn: str = ""
@@ -233,6 +235,7 @@ class ClassData:
             "source_file": self.source_file,
             "line": self.line,
             "element_name": self.element_name,
+            "register_self": self.register_self,
         }
     
     @classmethod
@@ -254,6 +257,7 @@ class ClassData:
             source_file=data.get("source_file", ""),
             line=data.get("line", 0),
             element_name=data.get("element_name"),
+            register_self=data.get("register_self", False),
         )
 
 

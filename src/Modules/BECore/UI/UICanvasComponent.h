@@ -94,18 +94,27 @@ namespace BECore {
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;
         void SyncParams();
         void AdoptDocument();
-        void DrawElement(IRenderer& renderer, const UIElement& element) const;
+        void DrawElement(IRenderer& renderer, UIElement& element) const;
         void RefreshInputOrder();
 
         /// The element under a point in output pixels, by the layout of the last draw
         [[nodiscard]] UIElement* HitTestOutput(float outputX, float outputY) const;
         [[nodiscard]] bool TakesInput() const;
 
+        // Pointer state of the interactive elements (UIElement::hovered, pressed, OnClick)
+        void SetHovered(UIElement* element);
+        void ClearPointerState();
+        /// Ends the press of the left button: the element it began on when the release is on it too, else null
+        [[nodiscard]] IntrusivePtr<UIElement> TakeClick(const SDL_MouseButtonEvent& event);
+        [[nodiscard]] bool ConsumeButtonUp(const SDL_MouseButtonEvent& event);
+
         UICanvasLayout _layout;
         int _inputOrder = 0;
         bool _registered = false;
-        uint32_t _consumedButtons = 0;  // bit per SDL button that went down on this canvas and is not up yet
-        bool _authoredAdopted = false;  // Initialize() has handed `_elements` and `_variants` to the layout
+        uint32_t _consumedButtons = 0;     // bit per SDL button that went down on this canvas and is not up yet
+        IntrusivePtr<UIElement> _hovered;  // the element under the pointer; kept alive here so that a tree edit cannot leave a dangling flag
+        IntrusivePtr<UIElement> _pressed;  // the interactive element the left button went down on and is not up yet
+        bool _authoredAdopted = false;     // Initialize() has handed `_elements` and `_variants` to the layout
     };
 
 }  // namespace BECore

@@ -63,7 +63,7 @@ namespace BECore {
         SaveIfChanged(s, stack.direction, defaults.stack.direction, "direction");
         SaveIfChanged(s, stack.spacing, defaults.stack.spacing, "spacing");
         SaveEdgesIfChanged(s, stack.padding, defaults.stack.padding, "padding");
-        SaveIfChanged(s, stack.wrap, defaults.stack.wrap, "wrap");
+        SaveIfChanged(s, stack.wrap, defaults.stack.wrap, "wrapChildren");
         SaveIfChanged(s, stack.crossAlign, defaults.stack.crossAlign, "crossAlign");
         SaveIfChanged(s, fontSize, defaults.fontSize, "fontSize");
     }
@@ -86,7 +86,7 @@ namespace BECore {
         Ser::Load(d, stack.direction, "direction");
         Ser::Load(d, stack.spacing, "spacing");
         UIAttr::ReadEdges(d, "padding", stack.padding);
-        Ser::Load(d, stack.wrap, "wrap");
+        Ser::Load(d, stack.wrap, "wrapChildren");
         Ser::Load(d, stack.crossAlign, "crossAlign");
         Ser::Load(d, fontSize, "fontSize");
     }
@@ -108,7 +108,7 @@ namespace BECore {
         changed |= PropVisit::Visit(v, rect.flex, "flex");
         changed |= PropVisit::Visit(v, stack.direction, "direction");
         changed |= PropVisit::Visit(v, stack.spacing, "spacing");
-        changed |= PropVisit::Visit(v, stack.wrap, "wrap");
+        changed |= PropVisit::Visit(v, stack.wrap, "wrapChildren");
         changed |= PropVisit::Visit(v, stack.crossAlign, "crossAlign");
         changed |= PropVisit::Visit(v, fontSize, "fontSize");
         return changed;

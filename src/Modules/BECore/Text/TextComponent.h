@@ -3,7 +3,7 @@
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Text/Font.h>
-#include <BECore/Text/TextLayout.h>
+#include <BECore/Text/TextLayoutCache.h>
 
 namespace BECore {
 
@@ -43,22 +43,13 @@ namespace BECore {
 
         /// The layout that the last draw used (empty before the first draw)
         [[nodiscard]] const TextLayoutResult& GetLastLayout() const {
-            return _layout;
+            return _layoutCache.GetLast();
         }
 
     private:
-        struct LayoutKey {
-            eastl::string text;
-            TextLayoutOptions options;
-            const Font* font = nullptr;
-        };
-
-        [[nodiscard]] static bool IsSame(const LayoutKey& a, const LayoutKey& b);
-
         ResourceHandle<Font> _font;
         bool _fontTried = false;
-        LayoutKey _layoutKey;
-        TextLayoutResult _layout;
+        TextLayoutCache _layoutCache;
     };
 
 }  // namespace BECore

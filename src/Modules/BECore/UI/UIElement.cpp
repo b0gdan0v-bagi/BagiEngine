@@ -1,5 +1,6 @@
 #include "UIElement.h"
 
+#include <BECore/Renderer/IRenderer.h>
 #include <Generated/UIElement.gen.hpp>
 
 namespace BECore {
@@ -21,6 +22,12 @@ namespace BECore {
             }
         }
         return nullptr;
+    }
+
+    void UIElement::DrawSelf(IRenderer& renderer) {
+        if (color.a > 0 && !rect.IsEmpty()) {
+            renderer.DrawFilledRect(rect.x, rect.y, rect.w, rect.h, color);
+        }
     }
 
     UIContentFit UIElement::CheckContent(float /*width*/, float /*height*/, float /*scale*/) const {

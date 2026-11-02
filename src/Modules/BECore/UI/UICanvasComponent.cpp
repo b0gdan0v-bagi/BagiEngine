@@ -120,13 +120,11 @@ namespace BECore {
         _layout.Update(MakeContext(outputWidth, outputHeight));
     }
 
-    void UICanvasComponent::DrawElement(IRenderer& renderer, const UIElement& element) const {
+    void UICanvasComponent::DrawElement(IRenderer& renderer, UIElement& element) const {
         if (!element.active.visible) {
             return;
         }
-        if (element.color.a > 0 && !element.rect.IsEmpty()) {
-            renderer.DrawFilledRect(element.rect.x, element.rect.y, element.rect.w, element.rect.h, element.color);
-        }
+        element.DrawSelf(renderer);
         for (const auto& child : element.children) {
             DrawElement(renderer, *child);
         }
@@ -137,6 +135,9 @@ namespace BECore {
         RefreshInputOrder();
 
         const auto& renderer = CoreManager::GetRenderer();
+        if (!_visible) {
+            ClearPointerState();  // a hidden screen keeps no hover and no press
+        }
         if (!renderer || !_visible) {
             return;
         }
@@ -164,22 +165,62 @@ namespace BECore {
         return _layout.HitTest(x, y);
     }
 
+    void UICanvasComponent::SetHovered(UIElement* element) {
+        if (element == _hovered.Get()) {
+            return;
+        }
+        if (_hovered) {
+            _hovered->hovered = false;
+        }
+        _hovered = element ? IntrusivePtr<UIElement>(element) : IntrusivePtr<UIElement>{};
+        if (element) {
+            element->hovered = true;
+        }
+    }
+
+    void UICanvasComponent::ClearPointerState() {
+        if (_hovered) {
+            _hovered->hovered = false;
+            _hovered.Reset();
+        }
+        if (_pressed) {
+            _pressed->pressed = false;
+            _pressed.Reset();
+        }
+    }
+
+    IntrusivePtr<UIElement> UICanvasComponent::TakeClick(const SDL_MouseButtonEvent& event) {
+        if (event.button != SDL_BUTTON_LEFT || !_pressed) {
+            return {};
+        }
+        IntrusivePtr<UIElement> element = _pressed;
+        _pressed.Reset();
+        element->pressed = false;
+        // Letting go anywhere else cancels the click
+        return HitTestOutput(event.x, event.y) == element.Get() ? element : IntrusivePtr<UIElement>{};
+    }
+
     bool UICanvasComponent::OnMouseButtonDown(const SDL_MouseButtonEvent& event) {
         if (!TakesInput()) {
+            ClearPointerState();
             return false;
         }
-        const bool consumed = _modal || HitTestOutput(event.x, event.y) != nullptr;
+        UIElement* hit = HitTestOutput(event.x, event.y);
+        const bool consumed = _modal || hit != nullptr;
         if (consumed) {
             _consumedButtons |= ButtonBit(event.button);
+        }
+        if (hit && hit->interactive && event.button == SDL_BUTTON_LEFT) {
+            if (_pressed) {
+                _pressed->pressed = false;  // a release that never arrived
+            }
+            _pressed = IntrusivePtr<UIElement>(hit);
+            hit->pressed = true;
         }
         return consumed;
     }
 
-    bool UICanvasComponent::OnMouseButtonUp(const SDL_MouseButtonEvent& event) {
-        if (!TakesInput()) {
-            _consumedButtons = 0;
-            return false;
-        }
+    bool UICanvasComponent::ConsumeButtonUp(const SDL_MouseButtonEvent& event) {
         // A press that this canvas took is followed to its release wherever the pointer is
         const uint32_t bit = ButtonBit(event.button);
         if ((_consumedButtons & bit) != 0) {
@@ -189,18 +230,37 @@ namespace BECore {
         return _modal || HitTestOutput(event.x, event.y) != nullptr;
     }
 
-    bool UICanvasComponent::OnMouseMotion(const SDL_MouseMotionEvent& event) {
+    bool UICanvasComponent::OnMouseButtonUp(const SDL_MouseButtonEvent& event) {
         if (!TakesInput()) {
+            _consumedButtons = 0;
+            ClearPointerState();
             return false;
         }
+        // The click runs last: its handlers may do anything, and this canvas is done with the event by then
+        const IntrusivePtr<UIElement> clicked = TakeClick(event);
+        const bool consumed = ConsumeButtonUp(event);
+        if (clicked) {
+            clicked->OnClick();
+        }
+        return consumed;
+    }
+
+    bool UICanvasComponent::OnMouseMotion(const SDL_MouseMotionEvent& event) {
+        if (!TakesInput()) {
+            ClearPointerState();
+            return false;
+        }
+        UIElement* hit = HitTestOutput(event.x, event.y);
+        // A button is held and this canvas did not take its press: a drag of the game, which passing over the UI does not interrupt or light up
+        const bool gameDrag = event.state != 0 && _consumedButtons == 0;
+        SetHovered(gameDrag ? nullptr : hit);
         if (_modal || _consumedButtons != 0) {
             return true;
         }
-        // A button is held and this canvas did not take its press: a drag of the game, which passing over the UI does not interrupt
-        if (event.state != 0) {
+        if (gameDrag) {
             return false;
         }
-        return HitTestOutput(event.x, event.y) != nullptr;  // hovering over an element
+        return hit != nullptr;  // hovering over an element
     }
 
     bool UICanvasComponent::OnMouseWheel(const SDL_MouseWheelEvent& event) {

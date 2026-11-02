@@ -280,6 +280,7 @@ class RegexParser:
             options_str = be.group(3) or ""
             options = [o.strip() for o in options_str.split(",") if o.strip()]
             is_factory_base = any(o.upper() == "FACTORY_BASE" for o in options)
+            register_self = any(o.upper() == "REGISTER_SELF" for o in options)
             element_name = None
             for opt in options:
                 if "=" in opt:
@@ -312,6 +313,7 @@ class RegexParser:
                 source_file=str(source_path),
                 line=line_no,
                 element_name=element_name,
+                register_self=register_self,
             )
 
             self._parse_fields(body, cls)

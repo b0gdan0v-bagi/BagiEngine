@@ -5,6 +5,8 @@
 
 namespace BECore {
 
+    class IRenderer;
+
     /// How an element lays out its children: each one against the element's rect through its own anchor, or one after another
     CORE_ENUM(UILayoutKind, uint8_t, Anchor, Stack)
 
@@ -28,7 +30,7 @@ namespace BECore {
      * from AbstractFactory<UIElement>, so a control is one more derived class. `active` and `rect` are results and are not saved.
      */
     class UIElement : public RefCounted {
-        BE_CLASS(UIElement, FACTORY_BASE, ELEMENT = element)
+        BE_CLASS(UIElement, FACTORY_BASE, ELEMENT = element, REGISTER_SELF)
     public:
         UIElement() = default;
         ~UIElement() override = default;
@@ -43,6 +45,16 @@ namespace BECore {
         BE_REFLECT_FIELD bool ignoreSafeArea = false;                               ///< a child of the canvas root only: laid out against the whole canvas, not the safe area (a background)
         Rect rect;                                                                  ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
         BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> children;  // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
+
+        /// Pointer state, set by the canvas that owns the tree: the pointer is over the element; a press that began on the element is still held
+        bool hovered = false;
+        bool pressed = false;
+
+        /// Draws this element, not its children, with the view transform of the canvas in effect (units of the canvas). The base fills the rect with `color`
+        virtual void DrawSelf(IRenderer& renderer);
+
+        /// A press and its release both landed on this element: the canvas calls it. A button emits its action here
+        virtual void OnClick() {}
 
         /// Adds a plain child with this name and returns it
         IntrusivePtr<UIElement> AddChild(PoolString childName);

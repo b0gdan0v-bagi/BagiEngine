@@ -18,6 +18,17 @@ namespace BECore {
         float bottom = 0.0f;
 
         [[nodiscard]] constexpr bool operator==(const UIEdges&) const = default;
+
+        /// For the inspector: a field of this type is shown as four numbers (a file holds it in one attribute, see UIText::FormatEdges)
+        template <typename Visitor>
+        bool VisitProperties(Visitor& v) {
+            bool changed = false;
+            changed |= v.Visit("left", left);
+            changed |= v.Visit("top", top);
+            changed |= v.Visit("right", right);
+            changed |= v.Visit("bottom", bottom);
+            return changed;
+        }
     };
 
     /**

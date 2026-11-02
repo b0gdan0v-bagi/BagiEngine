@@ -12,6 +12,7 @@ namespace BECore {
      */
     struct UIColor : Color {
         constexpr UIColor() = default;
+        constexpr UIColor(unsigned char r_, unsigned char g_, unsigned char b_, unsigned char a_) : Color(r_, g_, b_, a_) {}
         constexpr UIColor(const Color& color) : Color(color) {}  // NOLINT(google-explicit-constructor): a UI field takes a plain Color
     };
 
