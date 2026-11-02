@@ -1,5 +1,6 @@
 ---
 id: the-scene-editor-saves-only-the-active-scene
+status: in progress 2026-11-02 branch todo/the-scene-editor-saves-only-the-active-scene
 ---
 # The scene editor saves only the active scene
 
