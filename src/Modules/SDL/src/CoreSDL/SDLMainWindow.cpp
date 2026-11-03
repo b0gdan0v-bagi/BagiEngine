@@ -3,7 +3,7 @@
 #include "BECore/Utils/ScopeGuard.h"
 #include "SDLWindowConfig.h"
 
-#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/OpenDeserializer.h>
 #include <CoreSDL/SDLUtils.h>
 #include <Events/ApplicationEvents.h>
 #include <Generated/SDLWindowConfig.gen.hpp>
@@ -38,20 +38,20 @@ namespace BECore {
             }
         });
 
-        XmlConfig config = XmlConfig::Create();
-        if (!config.LoadFromVirtualPath(configPath)) {
+        auto opened = OpenDeserializer(configPath);
+        if (!opened) {
+            LOG_ERROR(Format("[SDLMainWindow] {}", opened.error()).c_str());
             return false;
         }
-
-        auto windowNode = config.GetRoot().GetChild("window");
-        if (!windowNode) {
-            return false;
-        }
+        IDeserializer& deserializer = **opened;
 
         SDLWindowConfig windowConfig;
-        XmlDeserializer deserializer;
-        deserializer.LoadFromXmlNode(windowNode);
+        if (!deserializer.BeginObject("window")) {
+            return false;
+        }
         windowConfig.Deserialize(deserializer);
+        deserializer.EndObject();
+        LogDeserializeErrors(configPath, deserializer);
 
         SDL_WindowFlags flags = 0;
         if (!windowConfig._windowFlags.empty()) {

@@ -2,6 +2,7 @@
 #include <BECore/Logger/ConsoleSink.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/Logger/OutputSink.h>
+#include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
 
 namespace BECore::Tests {

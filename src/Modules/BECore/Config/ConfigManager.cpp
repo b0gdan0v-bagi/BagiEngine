@@ -2,6 +2,7 @@
 
 #include <BECore/FileSystem/FileSystem.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/XmlDeserializer.h>
 #include <EASTL/sort.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/TaskGroup.h>
@@ -74,6 +75,29 @@ namespace BECore {
             return it->second.doc->GetRoot();
         }
         return XmlNode();
+    }
+
+    namespace {
+
+        eastl::unique_ptr<IDeserializer> MakeDeserializer(const XmlNode& root) {
+            if (!root) {
+                return nullptr;
+            }
+            auto deserializer = eastl::make_unique<XmlDeserializer>();
+            if (!deserializer->LoadFromXmlNode(root)) {
+                return nullptr;
+            }
+            return deserializer;
+        }
+
+    }  // namespace
+
+    eastl::unique_ptr<IDeserializer> ConfigManager::CreateDeserializer(PoolString name) const {
+        return MakeDeserializer(GetConfig(name));
+    }
+
+    eastl::unique_ptr<IDeserializer> ConfigManager::CreateDeserializer(eastl::string_view name) const {
+        return MakeDeserializer(GetConfig(name));
     }
 
     bool ConfigManager::HasConfig(PoolString name) const {
