@@ -45,6 +45,12 @@ namespace BECore {
             t.Initialize();
         };
 
+        /// Element-scope hook: `bool Initialize(IDeserializer&)` (the IWidget family has it). See Ser::Detail::LoadElement.
+        template <typename T>
+        concept HasInitializeFrom = requires(T & t, IDeserializer& d) {
+            {t.Initialize(d)}->std::convertible_to<bool>;
+        };
+
         template <typename T, typename Archive>
         concept HasSerialize = requires(const T& t, Archive& a) {
             t.Serialize(a);
@@ -91,6 +97,20 @@ namespace BECore {
                 }
             }
 
+            /**
+             * @brief Loads one array element (a value, an object or a factory-created pointer)
+             *
+             * For an intrusive pointer: creates the object by its `type` attribute when `item` is null, then
+             * calls `Deserialize(d)`, then `Initialize()` when the class has it. A class with
+             * `bool Initialize(IDeserializer&)` (declared on the pointee type, so a factory base declares it
+             * virtual, as IWidget does) has that called too, still inside the element scope (the caller
+             * has opened it with BeginArrayElement), so it can read more of its own element. When it returns
+             * `false` the error "<TypeName> failed to initialize" is reported under the key `type` and `item`
+             * is reset, so LoadVectorLikeFactory drops the element.
+             *
+             * @note The single-pointer accessors (DataAccessor for IntrusivePtr fields) do not call the
+             *       `Initialize(IDeserializer&)` hook: a lone pointer cannot be dropped from a list.
+             */
             template <typename T>
             void LoadElement(IDeserializer& d, T& item) {
                 if constexpr (::BECore::Detail::IsIntrusivePtr<T>) {
@@ -112,6 +132,15 @@ namespace BECore {
                             item->Deserialize(d);
                         if constexpr (::BECore::Detail::HasInitialize<Pointee>)
                             item->Initialize();
+                        if constexpr (::BECore::Detail::HasInitializeFrom<Pointee>) {
+                            if (!item->Initialize(d)) {
+                                eastl::string_view typeName = "element";
+                                if constexpr (HasFactory<Pointee>)
+                                    typeName = item->GetTypeMeta().typeName;
+                                d.ReportError("type", eastl::string_view(Format("{} failed to initialize", typeName).c_str()));
+                                item = {};
+                            }
+                        }
                     }
                 } else if constexpr (::BECore::Detail::HasDeserialize<T, IDeserializer>) {
                     item.Deserialize(d);
@@ -377,6 +406,7 @@ namespace BECore {
                             ptr->Deserialize(d);
                         if constexpr (::BECore::Detail::HasInitialize<T>)
                             ptr->Initialize();
+                        // No Initialize(IDeserializer&) hook here: only the factory vector can drop a failed element (LoadElement).
                     }
                     d.EndObject();
                     return true;
@@ -421,6 +451,7 @@ namespace BECore {
                             ptr->Deserialize(d);
                         if constexpr (::BECore::Detail::HasInitialize<T>)
                             ptr->Initialize();
+                        // No Initialize(IDeserializer&) hook here: only the factory vector can drop a failed element (LoadElement).
                     }
                     d.EndObject();
                     return true;
@@ -431,6 +462,8 @@ namespace BECore {
 
         // =================================================================
         // eastl::vector -- factory (polymorphic) case
+        // (an element with `bool Initialize(IDeserializer&)` gets it called in its own scope;
+        //  `false` drops the element and reports it, see Detail::LoadElement)
         // =================================================================
 
         template <typename Ptr, typename Alloc>
@@ -622,11 +655,7 @@ namespace BECore {
             static void Save(ISerializer& s, const eastl::unordered_map<K, V, Hash, Pred, Alloc>& map, eastl::string_view key) {
                 size_t count = map.size();
                 if (s.BeginArray(key, "entry", count)) {
-                    if constexpr (requires(const K& a, const K& b) {
-                                      {
-                                          a < b
-                                      } -> std::convertible_to<bool>;
-                                  }) {
+                    if constexpr (requires(const K& a, const K& b) { {a < b}->std::convertible_to<bool>; }) {
                         eastl::vector<eastl::pair<const K*, const V*>> sorted;
                         sorted.reserve(map.size());
                         for (const auto& [k, v] : map)
