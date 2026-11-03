@@ -14,7 +14,8 @@ Options:
   --dir REL_PATH  Only process files under this path (relative to project root).
   --dry-run       Report what would be removed without writing files.
 
-Run from project root. Reuses same ignore patterns as format_sources (vendored
+Run from project root; a game with the engine as a submodule runs engine/CI/scripts/strip_pch_includes.py
+--root <the game> (the PCH is always the engine's). Reuses same ignore patterns as format_sources (vendored
 paths excluded); BECore is not excluded so it can be processed by --dir.
 """
 
@@ -30,6 +31,7 @@ if str(_script_dir) not in sys.path:
 
 # Import file discovery and ignore logic from format_sources
 from format_sources import (
+    ENGINE_ROOT,
     SOURCE_EXTENSIONS,
     get_all_source_files,
     get_changed_files,
@@ -128,7 +130,7 @@ def main() -> int:
         "pch",
         nargs="?",
         default="src/Modules/BECore/pch.h",
-        help="Path to PCH header relative to project root (default: src/Modules/BECore/pch.h)",
+        help="Path to PCH header relative to the engine root (default: src/Modules/BECore/pch.h)",
     )
     scope = parser.add_mutually_exclusive_group(required=True)
     scope.add_argument("--changed", action="store_true", help="Only changed files (git)")
@@ -144,10 +146,11 @@ def main() -> int:
         action="store_true",
         help="Only report what would be removed, do not write files",
     )
+    parser.add_argument("--root", metavar="DIR", default=None, help="Project root (default: the engine checkout of this script)")
     args = parser.parse_args()
 
-    project_root = Path(__file__).resolve().parent.parent.parent
-    pch_path = project_root / args.pch.replace("\\", "/")
+    project_root = Path(args.root).resolve() if args.root else ENGINE_ROOT
+    pch_path = ENGINE_ROOT / args.pch.replace("\\", "/")
     if not pch_path.is_file():
         print(f"Error: PCH file not found: {pch_path}", file=sys.stderr)
         return 1

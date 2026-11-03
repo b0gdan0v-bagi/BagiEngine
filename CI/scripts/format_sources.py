@@ -8,6 +8,8 @@ Modes:
 
 Ignore: .clang-format-ignore in project root (required).
 Run from project root. Uses root .clang-format.
+A game that carries the engine as a submodule runs this script from engine/CI/scripts with --root <the game>:
+the game's own .clang-format, .clang-format-ignore and sources are used, the engine's venv and tools are found.
 """
 
 import argparse
@@ -18,6 +20,9 @@ from pathlib import Path
 
 # Extensions that clang-format should process
 SOURCE_EXTENSIONS = {".cpp", ".c", ".h", ".hpp", ".cxx", ".hxx", ".cc"}
+
+# The engine checkout this script belongs to (it is not the project root when the project is a game with engine/ inside)
+ENGINE_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Homebrew prefixes on Apple Silicon and Intel
 MACOS_HOMEBREW_PREFIXES = ("/opt/homebrew", "/usr/local")
@@ -88,6 +93,8 @@ def find_clang_format(project_root: Path) -> Path | None:
 
     exe_name = "clang-format.exe" if sys.platform == "win32" else "clang-format"
     candidates = _libclang_candidates(exe_name) + _venv_candidates(project_root, exe_name)
+    if project_root != ENGINE_ROOT:
+        candidates += _venv_candidates(ENGINE_ROOT, exe_name)
     if sys.platform == "darwin":
         candidates += _macos_candidates(exe_name)
     for p in candidates:
@@ -136,9 +143,11 @@ def get_changed_files(project_root: Path, ignore_patterns: list[str]) -> list[Pa
 
 
 def get_all_source_files(project_root: Path, ignore_patterns: list[str]) -> list[Path]:
-    """Return list of all source files under src/, config/ and games/, respecting ignore."""
+    """Return list of all source files under src/, config/ and games/ (a game repository: src/, config/, tests/), respecting ignore."""
     result = []
-    for top in ("src", "config", "games"):
+    # A game repository keeps its gtest sources in tests/; the engine's own tests/ are not formatted by this script
+    tops = ("src", "config", "games") if project_root == ENGINE_ROOT else ("src", "config", "tests")
+    for top in tops:
         top_path = project_root / top
         if not top_path.is_dir():
             continue
@@ -162,9 +171,10 @@ def main() -> int:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--changed", action="store_true", help="Format only changed files (git)")
     group.add_argument("--all", action="store_true", help="Format all sources under src/, config/ and games/")
+    parser.add_argument("--root", metavar="DIR", default=None, help="Project root (default: the engine checkout of this script)")
     args = parser.parse_args()
 
-    project_root = Path(__file__).resolve().parent.parent.parent
+    project_root = Path(args.root).resolve() if args.root else ENGINE_ROOT
     if not (project_root / ".clang-format").exists():
         print("Error: .clang-format not found in project root.", file=sys.stderr)
         return 1
