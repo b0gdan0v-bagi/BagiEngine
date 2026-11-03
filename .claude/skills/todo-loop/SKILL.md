@@ -1,6 +1,6 @@
 ---
 name: todo-loop
-description: Works through the entries of todo/ one by one, each in its own local branch todo/<id> cut from main, with a classifier, an architect, developers and a reviewer as separate agents, and leaves each branch in status review for the owner. Use when the user asks to run the todo loop, work through the todo list on its own, take the next todo entry, or list what the loop could take.
+description: Works through the entries of todo/ one by one, each in its own local branch todo/<id> cut from main, with a classifier, an architect, developers and a reviewer as separate agents, and leaves each branch in status review for the owner. With `close` it finishes merged branches (deletes the entry, syncs the tracker). Use when the user asks to run the todo loop, work through the todo list on its own, take the next todo entry, list what the loop could take, or says a todo branch is merged and its entry should be closed.
 ---
 
 # todo-loop (BagiEngine)
@@ -11,14 +11,15 @@ State lives in git (a branch `todo/<id>*` that is not merged into `main` means t
 
 ## Arguments (all optional)
 
-`/todo-loop [N] [<id>] [list] [plan-only] [models=role:model,...]`
+`/todo-loop [N] [<id>] [list] [plan-only] [close] [models=role:model,...]`
 
 | Argument | Effect |
 |----------|--------|
-| `N` | Take at most N slices. Default 3. |
+| `N` | Take at most N slices. Default 1. |
 | `<id>` | Work on this entry. If an unmerged branch `todo/<id>*` exists, continue it from the first WP whose boxes are not ticked. |
 | `list` | Only the classifier runs. No branches, no edits. |
 | `plan-only` | Classifier and architect. The branch holds one commit (the status); the plan stays in the plan store. |
+| `close` | After the owner has merged branches: close their entries and sync the tracker (section "Closing merged entries"). Nothing else runs. |
 | `models=classifier:haiku,reviewer:sonnet` | Override the model of a role for this run. Only `haiku` and `sonnet` are allowed; never above `sonnet`. |
 
 ## Roles and models
@@ -45,7 +46,7 @@ Not a stop, a flag: `test -f ~/.claude/skills/kovalev-review-checklist/SKILL.md`
 Then remember the starting branch, `git switch main`, and once per run build `BagiEngineTests ChessTests Match3Tests` plus the games (the smoke tests need them) and run `ctest --preset <p>`. The names of the failing tests go to a file in the scratchpad: the **baseline**.
 ## The loop
 
-1. **Choose.** `git switch main`. Run `.venv/bin/python tools/todo_sync/todo_sync.py check` and `parse`. Taken ids: `git branch --list 'todo/*' --no-merged main` (a merged branch does not take an entry; strip `todo/` and a `-K` suffix). Candidates: entries with `status == "open"` and no taken id, ordered: no stage first, then stages 1 to 6, then by `id`. Entries `in progress` are the owner's; the loop never takes them. Give the classifier the candidates (`id`, `title`, `stage`, `summary`, `file`). Check its `next` yourself: the entry is in `parse`, its status is `open`, no taken branch. With `<id>`, skip the classifier unless `list`. No eligible entry: stop the loop.
+1. **Choose.** `git switch main`. First look for entries that wait to be closed (see "Closing merged entries", step 2). If there are any, ask the owner once (AskUserQuestion): close them now and then continue, or continue without closing. Run `close` only on a "close" answer; never on your own. Run `.venv/bin/python tools/todo_sync/todo_sync.py check` and `parse`. Taken ids: `git branch --list 'todo/*' --no-merged main` (a merged branch does not take an entry; strip `todo/` and a `-K` suffix). Candidates: entries with `status == "open"` and no taken id, ordered: no stage first, then stages 1 to 6, then by `id`. Entries `in progress` are the owner's; the loop never takes them. Give the classifier the candidates (`id`, `title`, `stage`, `summary`, `file`). Check its `next` yourself: the entry is in `parse`, its status is `open`, no taken branch. With `<id>`, skip the classifier unless `list`. No eligible entry: stop the loop.
 2. **Branch.** `git switch -c todo/<id> main` (`todo/<id>-2`, `-3` for the next slice of an entry whose earlier branch is merged: the first free name). First commit changes only the front matter of `todo/<id>.md`: `status: in progress <YYYY-MM-DD> branch todo/<branch-id>` (create the front matter if the entry has none; keep `stage:` and `plan:`).
 3. **Plan.** Start the architect (not for size S) with the entry, branch, size and the `plan`, `planFound`, `planProgress` of the entry. `BLOCKED` goes to "Stopping a task". The plan file is not committed, and the entry's `plan:` line is not changed (it points to the owner's plan; the slice plan is a separate file). With `plan-only`, end the task here with the status commit and go to step 7.
 4. **Implement, WP by WP.** For each WP a new developer, with the WP text, the plan path and the branch. If it ends with `WP incomplete: ...`, start a new developer for the rest (at most 2 times; then the architect cuts again or the task stops).
@@ -54,6 +55,19 @@ Then remember the starting branch, `git switch main`, and once per run build `Ba
 7. **Next.** `git switch main` and go to step 1 until a stop condition. At the end `git switch <starting branch>`.
 
 The edits to the front matter are the only edits you make to a file. Everything else is the agents'.
+
+## Closing merged entries (`close`)
+
+The owner starts it after merging (or answers "close" to the offer in step 1). It is the only mode that commits on `main`, runs `git rm` on an entry file and calls the tracker. No agents: you do it yourself.
+
+1. Preconditions: `git status --porcelain` is empty, `.venv/bin/python` exists. `git switch main`. Without Vikunja settings (`.env` or the environment) steps 5 and 6 are skipped and the report says so.
+2. Find the entries: for each branch of `git branch --list 'todo/*' --merged main`, the entry in `parse` whose `status` starts with `review`, names that branch (`branch todo/<branch-id>`) and whose file still exists. An entry in another status (for example `in progress ... stopped`) is only named in the report. None found: say "nothing to close" and stop, changing nothing.
+3. Per entry: if the status text has `slice K of M, after the merge set the status back to open`, remove the `status:` line from the front matter (keep `stage:`, `plan:`, `id:`; drop the `---` block when it is left empty) and leave the body alone. Otherwise `git rm todo/<file>`.
+4. `todo_sync.py check`, then one commit on `main`: `Close <titles>` (with the Co-Authored-By line the conversation gives).
+5. `todo_sync.py pull` (report only); show it.
+6. `todo_sync.py pull --apply`, then `todo_sync.py push`. Stop at the first failing command and report it; no retries. Files that `pull --apply` deleted or adopted stay uncommitted: name them in the report for the owner to commit.
+
+Never in `close`: git `push`, `fetch`, `branch -d` or `-D`, or any entry other than the ones found in step 2.
 
 ## Stopping a task (status stays `in progress`)
 
@@ -65,8 +79,8 @@ No eligible entry; N slices done; the baseline on `main` is red; the working tre
 
 ## Forbidden (also written into the agents)
 
-`git push`, `git fetch`, `--force`, `reset --hard`, `branch -D`, `clean`, `stash`, `--no-verify`; editing `main`; editing vendored code; editing outside the entry and its WPs; `git rm` of an entry file; any `todo_sync.py push` or `pull` (the loop makes no network call and does not touch the tracker; after the merge the owner runs `pull` and then `push`); putting Homebrew LLVM on `PATH` for `cmake --preset`.
+`git push`, `git fetch`, `--force`, `reset --hard`, `branch -D`, `clean`, `stash`, `--no-verify`; editing `main`; editing vendored code; editing outside the entry and its WPs; `git rm` of an entry file; any `todo_sync.py push` or `pull` (a normal run makes no network call and does not touch the tracker); putting Homebrew LLVM on `PATH` for `cmake --preset`. The one exception is the `close` mode, started by the owner after a merge: there the conductor may commit on `main`, `git rm` the entry files it found and run `pull` and `push`. The agents keep the whole list, always.
 
 ## Report
 
-For the owner, in Russian, short: a table "entry, branch, commits, build/tests, reviewer verdict, plan path"; the skipped entries with reasons; what was not checked (platforms, manual items that the architect left for the owner, the checklist when it was unavailable). End with the owner's queue: `git branch --list 'todo/*' --no-merged main`, and the reminder that after a merge the owner deletes the entry file (`git rm`) or, for a slice, sets the status back to `open`, then runs `todo-sync` `pull` and `push`.
+For the owner, in Russian, short: a table "entry, branch, commits, build/tests, reviewer verdict, plan path"; the skipped entries with reasons; what was not checked (platforms, manual items that the architect left for the owner, the checklist when it was unavailable). End with the owner's queue: `git branch --list 'todo/*' --no-merged main`, and the offer: after the merge run `/todo-loop close`, which deletes the entry file (for a slice, sets the status back to `open`), then runs `pull --apply` and `push`. For `close` itself the report names the closed entries, the commit, the output of `pull` and `push`, and the files left uncommitted.
