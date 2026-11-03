@@ -1,5 +1,5 @@
 ---
-status: deferred, 2026-11-01. The rehearsal of Chess is done (2026-11-03, see "Rehearsal" below), the engine fixes are on branch games/chess; nothing is moved yet.
+status: deferred, 2026-11-01. The rehearsal of Chess is done (2026-11-03, see "Rehearsal" below), the engine fixes are on branch games/chess; Chess is copied into the repository BagiEngine-Chess (2026-11-03, see "Chess moved" below); `games/Chess` is still in the engine, Match3, the workspace and the engine cleanup are not done.
 ---
 # Games live in the engine repository: move them out and add a workspace repository
 
@@ -17,6 +17,8 @@ status: deferred, 2026-11-01. The rehearsal of Chess is done (2026-11-03, see "R
 - `format_sources.py` and `strip_pch_includes.py` took the engine checkout as the project root, so from a game they formatted the engine. They take `--root <game>` now (the game's `.clang-format`, `.clang-format-ignore`, `src/`, `config/`, `tests/`; the engine's venv and PCH).
 - Not an engine break, to do in the game repository: the Stockfish bridge and its test need a `conftest.py` that puts `engine/tools/control` and `engine/tools/control/tests` on `sys.path`, and `REPO_ROOT` of `test_stockfish.py` one level up (`TESTS_DIR.parent`); with that, 25 pass and 3 skip (no Stockfish).
 - Fine as it is: the standalone block of `CMakeLists.txt`, `BAGI_ENGINE_ROOT` for the tests, `control_smoke.py` finding `engine/`, `build/Generated`, the PCH, the Vulkan loader copy.
+
+**Chess moved** (2026-11-03, local, nothing pushed): `git subtree split --prefix=games/Chess` on a clone gave 15 commits (the history before `ae7a26bd`, when the games went into `games/`, stays in the engine); BagiEngine-Chess is that history plus its own commits: the engine as the submodule `engine/` on this branch, the todo-loop skills and agents, `todo/`, `CMakePresets.json` (includes the engine's), `.clang-format`, the Stockfish bridge and its tests in `tools/`, the `build`, `clang-format` and `strip-pch-includes` skills, `CI/setup_venv.*`, `README.md`. Built and tested there: 216 ctest entries pass, the same as in the engine; the bridge tests 25 pass, 3 skip. The engine still has `games/Chess`, `stockfish_bridge.py` and `test_stockfish.py`; they go in the engine cleanup, after the push.
 
 **A fix has to cover:**
 
