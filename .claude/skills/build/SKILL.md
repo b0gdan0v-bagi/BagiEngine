@@ -14,7 +14,7 @@ Builds the game executables `BagiChess` and `BagiMatch3` (or the gtest executabl
 | `debug` / `release` | Build type. Default: `debug`. |
 | `clean` | Add `--clean-first` to the build. |
 | `configure` | Force a configure step. |
-| `tests` | Build the gtest targets (`--target BagiEngineTests ChessTests Match3Tests`, which replaces the preset's game targets) instead of the games. Run the tests afterwards only when asked: `ctest --preset <p>`. |
+| `tests` | Build the gtest targets (`--target BagiEngineTests ChessTests Match3Tests`) instead of everything. Run the tests afterwards only when asked: `ctest --preset <p>`. |
 | `<preset name>` | Use this preset as-is; skip auto-selection. |
 
 ## Presets

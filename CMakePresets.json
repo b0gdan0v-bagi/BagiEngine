@@ -159,8 +159,7 @@
     "buildPresets": [
         {
             "name": "build-base",
-            "hidden": true,
-            "targets": ["BagiChess", "BagiMatch3"]
+            "hidden": true
         },
         {
             "name": "build-macos",

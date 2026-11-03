@@ -9,7 +9,7 @@ Use the presets from `CMakePresets.json` (same ones VS Code CMake Tools shows). 
 ```bash
 cmake --list-presets=build                 # presets available on this OS
 cmake --preset macos-debug                 # configure (also regenerates reflection code)
-cmake --build --preset macos-debug         # build the game executables (BagiChess, BagiMatch3)
+cmake --build --preset macos-debug         # build everything: the game executables (BagiChess, BagiMatch3) and the test executables
 ```
 
 | OS | Presets |
@@ -31,14 +31,14 @@ C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output l
 Unit and module tests are GoogleTest tests, built as separate executables (not part of the games): `BagiEngineTests` for the engine (`tests/`), `ChessTests` and `Match3Tests` next to their game (`games/<Name>/tests/`). The GoogleTest submodule needs `git submodule update --init external/googletest`; `-DENGINE_BUILD_TESTS=OFF` skips the whole thing.
 
 ```bash
-cmake --build --preset macos-debug --target BagiEngineTests ChessTests Match3Tests   # --target overrides the preset's game targets
+cmake --build --preset macos-debug --target BagiEngineTests ChessTests Match3Tests   # only the test executables
 ctest --preset macos-debug                                       # every test in its own process
 build/ClangmacOS/BagiEngineTests --gtest_filter='Reflection*'    # run directly; cwd must be inside the repository
 ```
 
 Runtime tests that need the live engine are `ITest` classes (`src/Modules/BECore/Tests/`). `CoreManager::OnApplicationPreInit()` runs the ones enabled in `config/TestsConfig.xml` at game startup.
 
-`ctest` also runs `BagiMatch3ControlSmoke` and `BagiChessControlSmoke`: Python scripts that start the game `--headless` and play it over the control API. They are skipped (exit code 77) when the executable is not built, and `--target` above builds no game, so build `BagiMatch3 BagiChess` as well to run them. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests` (`tools/control/CLAUDE.md`).
+`ctest` also runs `BagiMatch3ControlSmoke` and `BagiChessControlSmoke`: Python scripts that start the game `--headless` and play it over the control API. They are skipped (exit code 77) when the executable is not built, and a `--target` list without the games (as above) builds none, so add `BagiMatch3 BagiChess` to run them. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests` (`tools/control/CLAUDE.md`).
 
 ## Architecture Overview
 
