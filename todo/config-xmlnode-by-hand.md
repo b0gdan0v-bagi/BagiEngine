@@ -1,5 +1,4 @@
 ---
-status: review 2026-11-03 branch todo/config-xmlnode-by-hand: items 4, 5 and 9 done (ConfigManager::CreateDeserializer and OpenDeserializer, element-scope Initialize hook, reflected WidgetList and TestList, comments fixed); build and full ctest 1241/1241 pass, each WP and the whole slice approved by the reviewer, slice 1 of 5, after the merge set the status back to open
 stage: 5
 ---
 # Config and data code reads XmlNode by hand where the factory and reflection path already fits
