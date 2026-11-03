@@ -62,7 +62,7 @@ build/ClangmacOS/BagiEngineTests --gtest_filter='Reflection*'    # cwd must be i
 
 ## Runtime tests (`ITest`)
 
-Managed by `TestManager`, run in `CoreManager::OnApplicationPreInit()` after the core services are up. The reference example is `BECore/Tests/EngineSmokeTest.h`.
+Managed by `TestManager`, which fills a `Tests::TestList` from `TestsConfig` with `MakeFromConfig` (an unknown `type` is logged and dropped, `enabled="false"` is skipped); run in `CoreManager::OnApplicationPreInit()` after the core services are up. The reference example is `BECore/Tests/EngineSmokeTest.h`.
 
 1. Create a class in `BECore/Tests/` implementing `ITest`
 2. Add `BE_CLASS(TestName)` inside the class

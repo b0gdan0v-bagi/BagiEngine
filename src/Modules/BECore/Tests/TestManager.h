@@ -9,9 +9,6 @@ namespace BECore {
         TestManager() = default;
         ~TestManager() = default;
         void RunAllTests();
-
-    private:
-        eastl::vector<IntrusivePtr<Tests::ITest>> _tests;
     };
 
 }  // namespace BECore

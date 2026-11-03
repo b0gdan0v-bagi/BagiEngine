@@ -40,6 +40,8 @@ if (auto title = node.ParseAttribute<eastl::string_view>("title")) { /* use *tit
 
 Prefer a reflected struct plus `MakeFromConfig<T>` / `Deserialize` over hand-written attribute loops. A caller that needs an `IDeserializer` asks the engine (`CreateDeserializer`, `OpenDeserializer`); it does not construct `XmlDeserializer` for a named config. Hand-parsing with `XmlNode` is for small, fixed shapes (for example `ApplicationConfig.xml`).
 
+A list of factory objects (widgets, runtime tests, log sinks, assert handlers) is a reflected holder with one `eastl::vector<IntrusivePtr...<Base>>` field, filled by `MakeFromConfig<Holder>(name)`; do not write a `<x type>` loop with your own `AbstractFactory` call. `WidgetList` (`BECore/Widgets/`, field `widgets`) and `Tests::TestList` (`BECore/Tests/`, field `tests`) are the shape, `LoggerManager` and its sinks another. The loader reports an unknown `type` (`Config 'GameWidgetsConfig': widgets[1].type: Unknown factory type: 'X'`), skips `enabled="false"` and an element without `type` (no message), and calls the element's `bool Initialize(IDeserializer&)` in its own element scope when the base declares it (`IWidget`): `false` drops the element with `<Type> failed to initialize`. Spell the pointer `IntrusivePtrAtomic` or `IntrusivePtrNonAtomic` in the field, the generator does not match the `IntrusivePtr` alias.
+
 ## Adding a config
 
 1. Drop `config/<Name>.xml`; it is picked up by name at the next start.

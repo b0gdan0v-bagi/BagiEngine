@@ -655,7 +655,11 @@ namespace BECore {
             static void Save(ISerializer& s, const eastl::unordered_map<K, V, Hash, Pred, Alloc>& map, eastl::string_view key) {
                 size_t count = map.size();
                 if (s.BeginArray(key, "entry", count)) {
-                    if constexpr (requires(const K& a, const K& b) { {a < b}->std::convertible_to<bool>; }) {
+                    if constexpr (requires(const K& a, const K& b) {
+                                      {
+                                          a < b
+                                      } -> std::convertible_to<bool>;
+                                  }) {
                         eastl::vector<eastl::pair<const K*, const V*>> sorted;
                         sorted.reserve(map.size());
                         for (const auto& [k, v] : map)
