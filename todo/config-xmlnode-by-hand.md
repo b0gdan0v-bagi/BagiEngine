@@ -1,4 +1,5 @@
 ---
+status: in progress 2026-11-03 branch todo/config-xmlnode-by-hand
 stage: 5
 ---
 # Config and data code reads XmlNode by hand where the factory and reflection path already fits
