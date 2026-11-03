@@ -1,5 +1,6 @@
 ---
 id: the-scene-editor-saves-only-the-active-scene
+status: review 2026-11-02 branch todo/the-scene-editor-saves-only-the-active-scene: Save replaces only the active scene's <scene> element, matched by name, with the attributes from Scene::Serialize; checked by 9 new round-trip tests (SceneEditorSaveTest), ctest 1225/1225, reviewer APPROVE; the hands-on Save in the ImGui editor is left for the owner
 ---
 # The scene editor saves only the active scene
 

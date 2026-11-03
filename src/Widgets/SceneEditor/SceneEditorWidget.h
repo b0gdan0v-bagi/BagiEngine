@@ -51,7 +51,8 @@ namespace BECore {
         void RenderAddComponentPopup();
 
         /**
-         * @brief Serialize the active scene to SceneConfig.xml via ConfigManager
+         * @brief Replace the `<scene>` of the active scene in SceneConfig.xml (WriteSceneToConfig) and save the file
+         *        through ConfigManager. The other scenes of the file stay as they are.
          */
         void SaveScene();
 
