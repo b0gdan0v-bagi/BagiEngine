@@ -1,5 +1,5 @@
 ---
-status: deferred, 2026-11-01. Planned, nothing moved yet.
+status: deferred, 2026-11-01. The rehearsal of Chess is done (2026-11-03, see "Rehearsal" below), the engine fixes are on branch games/chess; nothing is moved yet.
 ---
 # Games live in the engine repository: move them out and add a workspace repository
 
@@ -7,8 +7,16 @@ status: deferred, 2026-11-01. Planned, nothing moved yet.
 
 **What is missing** (found by reading the code, not by building):
 
-1. Each game's `CMakeLists.txt` has a standalone block (`CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR` → `project()` + `include(engine/cmake/BagiEngine.cmake)`), and the engine side is ready for it (`BAGI_ENGINE_ROOT` comes from the location of `BagiEngine.cmake`, `games/` is guarded by `EXISTS`, `be_add_game_control_tests` passes `BAGI_ENGINE_DIR` to a game's script). Nobody has built a game as the top-level project, so the block is untested.
+1. Each game's `CMakeLists.txt` has a standalone block (`CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR` → `project()` + `include(engine/cmake/BagiEngine.cmake)`), and the engine side is ready for it (`BAGI_ENGINE_ROOT` comes from the location of `BagiEngine.cmake`, `games/` is guarded by `EXISTS`, `be_add_game_control_tests` passes `BAGI_ENGINE_DIR` to a game's script). The block was untested; the rehearsal below built Chess that way.
 2. There is no place that builds and tests every game once the games leave. The engine repository alone will build no game.
+
+**Rehearsal of Chess** (2026-11-03; a copy of `games/Chess` with an engine clone in `engine/` and a `CMakePresets.json` that includes the engine's; `macos-debug`): configure, build of `BagiChess` and `ChessTests`, 215 gtest cases and `BagiChessControlSmoke` pass, the same as in the engine repository. Breaks found, all but the last fixed in the engine on branch `games/chess`:
+
+- `requirements.txt` had no `Jinja2`, which `meta_generator` imports: a fresh venv from `CI/setup_venv.*` could not configure (any checkout, not only a game). Added.
+- `build-base.targets` named `BagiChess` and `BagiMatch3`: in a repository with one game `cmake --build --preset` stops with `unknown target 'BagiMatch3'`, and an including `CMakePresets.json` cannot redefine the preset (`Duplicate preset`). The build presets now name no targets (the build is `all`); docs updated.
+- `format_sources.py` and `strip_pch_includes.py` took the engine checkout as the project root, so from a game they formatted the engine. They take `--root <game>` now (the game's `.clang-format`, `.clang-format-ignore`, `src/`, `config/`, `tests/`; the engine's venv and PCH).
+- Not an engine break, to do in the game repository: the Stockfish bridge and its test need a `conftest.py` that puts `engine/tools/control` and `engine/tools/control/tests` on `sys.path`, and `REPO_ROOT` of `test_stockfish.py` one level up (`TESTS_DIR.parent`); with that, 25 pass and 3 skip (no Stockfish).
+- Fine as it is: the standalone block of `CMakeLists.txt`, `BAGI_ENGINE_ROOT` for the tests, `control_smoke.py` finding `engine/`, `build/Generated`, the PCH, the Vulkan loader copy.
 
 **A fix has to cover:**
 
