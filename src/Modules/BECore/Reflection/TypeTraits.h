@@ -288,8 +288,8 @@ namespace BECore {
      * // For a class with BE_FUNCTION void Update():
      * InvokeMethod<void>(obj, "Update");
      *
-     * // For a class with BE_FUNCTION bool Initialize(const XmlNode& node):
-     * bool result = InvokeMethod<bool>(obj, "Initialize", node);
+     * // For a class with BE_FUNCTION bool Initialize(IDeserializer& deserializer):
+     * bool result = InvokeMethod<bool>(obj, "Initialize", deserializer);
      */
     template <typename Ret, typename T, typename... Args>
     requires HasMethodReflection<T> constexpr Ret InvokeMethod(T& obj, eastl::string_view name, Args&&... args) {

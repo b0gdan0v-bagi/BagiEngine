@@ -1,20 +1,13 @@
 #include "TestManager.h"
 
-#include <BECore/GameManager/CoreManager.h>
-#include <BECore/Reflection/DataAccessor.h>
-#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Config/ConfigFactory.h>
+#include <BECore/Tests/TestList.h>
 
 namespace BECore {
 
     void TestManager::RunAllTests() {
-        eastl::vector<IntrusivePtrAtomic<Tests::ITest>> tests;
-
-        auto root = CoreManager::GetConfigManager().GetConfig("TestsConfig");
-        if (root) {
-            XmlDeserializer d;
-            d.LoadFromXmlNode(root);
-            Ser::Load(d, tests, "tests");
-        }
+        const auto list = MakeFromConfig<Tests::TestList>("TestsConfig");
+        const auto& tests = list->tests;
 
         if (tests.empty()) {
             LOG_INFO("[TestManager] No runtime tests enabled in TestsConfig");

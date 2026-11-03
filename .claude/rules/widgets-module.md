@@ -8,7 +8,7 @@ paths:
 
 ## Overview
 
-Widgets are the engine's per-frame building blocks implementing `IWidget` (a `FACTORY_BASE` that also derives `SubscriptionHolder`). `WidgetManager` creates them from XML and drives them every frame. There are two kinds:
+Widgets are the engine's per-frame building blocks implementing `IWidget` (a `FACTORY_BASE` that also derives `SubscriptionHolder`). `WidgetManager` creates them from XML (the reflected holder `WidgetList`, filled by `MakeFromConfig`) and drives them every frame. There are two kinds:
 
 - **Editor panels**: `SceneEditorWidget`, `ConfigEditorWidget`, `TextureEditorWidget`, `EditorLayoutWidget`, `ViewportWidget`. They build ImGui windows. `ViewportWidget` also has aspect presets and a safe-area simulation for looking at a UI layout in several shapes (`src/Modules/BECore/UI/CLAUDE.md`, "Editor preview").
 - **Frame widgets**: steps of the render frame that are not UI. `ClearScreenWidget` clears the back buffer and opens the swapchain pass, `SceneRenderWidget` draws the scene (Game mode), `ImGuiWidget` begins and renders the ImGui frame (Editor mode).
@@ -21,15 +21,15 @@ All methods are `BE_FUNCTION`.
 
 | Method | Purpose |
 |--------|---------|
-| `Initialize(IDeserializer&)` | Read the widget's own `<widget>` node, subscribe to events; return `false` on failure (the widget is then logged and not registered) |
+| `Initialize(IDeserializer&)` | Called by the loader after the widget's reflected fields are read, inside its own `<widget>` scope (read an attribute or child that is not a field here, subscribe to events); return `false` on failure (the widget is then logged and not registered). Do not call `Deserialize(deserializer)` here: the loader has done it |
 | `Update()` | Every frame. An ImGui panel builds its window here (`ImGui::Begin` ... `End`), between `ImGui::NewFrame` and `ImGuiWidget::Draw`. A frame widget issues its render commands here when they must come first (`ClearScreenWidget`) |
 | `DrawScreen()` | Optional, default is empty. Draws into the back buffer after every `Update()` (`SceneRenderWidget` draws the scene here) |
 | `Draw()` | Every frame, after `DrawScreen()`. Normally empty; `ImGuiWidget::Draw()` runs `ImGui::Render()` and the ImGui draw event |
 
 ## Widget Lifecycle
 
-1. `WidgetManager::CreateWidgets()` (from `CoreManager::OnApplicationInit`) reads the run mode (`mode` in `ApplicationConfig.xml`, see `BECore/CLAUDE.md`) and creates each widget of that mode's config through `AbstractFactory<IWidget>` using the default constructor.
-2. `Initialize(deserializer)`: load config, subscribe to events. An unknown `type` or an `Initialize` that returns `false` is logged (`WidgetManager:` error) and the widget is skipped.
+1. `WidgetManager::CreateWidgets()` (from `CoreManager::OnApplicationInit`) reads the run mode (`mode` in `ApplicationConfig.xml`, see `BECore/CLAUDE.md`) and fills a `WidgetList` with `MakeFromConfig<WidgetList>(configName)`: each `<widget type>` is created through `AbstractFactory<IWidget>` with the default constructor and its reflected fields are read. A missing config is logged (`WidgetManager: config '...' not found`) and no widget is created.
+2. `Initialize(deserializer)`: subscribe to events, read what is not a field. An unknown `type` or an `Initialize` that returns `false` is logged once as `Config '<name>': widgets[N]...` (`Unknown factory type: 'X'` / `<Type> failed to initialize`) and the widget is skipped. A `<widget>` without `type` is skipped silently, and `enabled="false"` is honored.
 3. Every frame, from `CoreManager::OnGameCycle`: `UpdateAll()` → (queued events) → `DrawScreenAll()` → `DrawAll()`, in registration order.
 4. Destruction: `SubscriptionHolder` drops the event subscriptions.
 
@@ -37,7 +37,8 @@ All methods are `BE_FUNCTION`.
 
 File: `config/WidgetsConfig.xml` (Editor mode) or `config/GameWidgetsConfig.xml` (Game mode: `ClearScreenWidget` + `SceneRenderWidget`, no ImGui, so a Game-mode widget must not touch ImGui). Entries `<widget type="..."/>` under `<widgets>`:
 - `type`: widget class name (`ImGuiWidget`, `EditorLayoutWidget`, `ViewportWidget`, `SceneRenderWidget`, ...)
-- widget-specific settings as child elements or attributes (for example `<clearColor r g b a/>`), read in `Initialize`
+- widget-specific settings as `BE_REFLECT_FIELD` fields (for example `<clearColor r g b a/>` of `ClearScreenWidget`), filled by the loader; anything else is read in `Initialize`
+- `enabled="false"` skips the entry
 - the file order is the creation and update order; there is no `name` or `priority` attribute
 
 The order is a contract, nothing checks it:

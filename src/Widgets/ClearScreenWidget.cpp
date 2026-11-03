@@ -6,8 +6,8 @@
 
 namespace BECore {
 
-    bool ClearScreenWidget::Initialize(IDeserializer& deserializer) {
-        Deserialize(deserializer);
+    bool ClearScreenWidget::Initialize(IDeserializer& /*deserializer*/) {
+        // _clearColor was read by the loader before this call
         return true;
     }
 

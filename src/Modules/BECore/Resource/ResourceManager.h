@@ -1,7 +1,7 @@
 #pragma once
 
+#include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/TypeTraits.h>
-#include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Resource/IResource.h>
 #include <BECore/Resource/IResourceLoader.h>
 #include <BECore/Resource/ResourceCache.h>
@@ -88,8 +88,8 @@ namespace BECore {
         /**
          * @brief Load and deserialize object via Reflection system
          *
-         * Loads XML and deserializes into type T using reflection.
-         * Convenient wrapper for loading configuration objects.
+         * Opens the file with OpenDeserializer() (the format follows the extension: .xml or .bin) and deserializes
+         * into type T using reflection. Convenient wrapper for loading configuration objects.
          *
          * @tparam T Type with BE_CLASS and BE_REFLECT_FIELD
          * @param path Virtual path to XML/binary file
@@ -238,12 +238,12 @@ namespace BECore {
         // Switch to background thread for I/O
         co_await SwitchToBackground();
 
-        // Create XmlDeserializer and load from virtual path
-        XmlDeserializer deserializer;
-        if (!deserializer.LoadFromVirtualPath(path)) {
-            LOG_ERROR(Format("Failed to load XML for deserialization: {}", path).c_str());
+        auto opened = OpenDeserializer(path);
+        if (!opened) {
+            LOG_ERROR(Format("Failed to load file for deserialization: {}", opened.error()).c_str());
             co_return T{};
         }
+        IDeserializer& deserializer = **opened;
 
         // Deserialize using generated Deserialize method
         T result{};
@@ -251,18 +251,19 @@ namespace BECore {
             result.Deserialize(deserializer);
             deserializer.EndObject();
         }
+        LogDeserializeErrors(path, deserializer);
 
         co_return result;
     }
 
     template <HasReflection T>
     T ResourceManager::LoadSerialized(eastl::string_view path) {
-        // Create XmlDeserializer and load from virtual path
-        XmlDeserializer deserializer;
-        if (!deserializer.LoadFromVirtualPath(path)) {
-            LOG_ERROR(Format("Failed to load XML for deserialization: {}", path).c_str());
+        auto opened = OpenDeserializer(path);
+        if (!opened) {
+            LOG_ERROR(Format("Failed to load file for deserialization: {}", opened.error()).c_str());
             return T{};
         }
+        IDeserializer& deserializer = **opened;
 
         // Deserialize using generated Deserialize method
         T result{};
@@ -270,6 +271,7 @@ namespace BECore {
             result.Deserialize(deserializer);
             deserializer.EndObject();
         }
+        LogDeserializeErrors(path, deserializer);
 
         return result;
     }

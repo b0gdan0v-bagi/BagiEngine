@@ -12,7 +12,9 @@ XML configuration: every file under `config/` (the engine's and the game's, see 
 | `XmlDocument` | `RefCountedAtomic` owner of a `pugi::xml_document`: load/save file or string, `GetRoot()` |
 | `XmlConfig` | Handle over an `IntrusivePtrAtomic<XmlDocument>`: `LoadFromVirtualPath`, `LoadFromFile`, `LoadFromString`, `SaveToFile` |
 | `XmlNode` | Lightweight pugi node wrapper: `GetChild(name)`, `Children()`, `Name()`, `ParseAttribute<T>(name)` → `std::optional<T>`; `if (node)` is the validity check |
-| `MakeFromConfig<T>(name)` (`ConfigFactory.h`) | `New<T>()` + `Deserialize` from the named config; returns defaults when the config is missing. Errors the deserializer reports (an unknown factory `type`, a malformed value) are written to the log, one `LOG_ERROR` each, by `LogDeserializeErrors(configName, deserializer)` (`Config 'LoggerConfig': sinks[0].type: Unknown factory type: 'Console'`); the object keeps what could be read. Include from `.cpp` files only (pulls in `CoreManager.h`) |
+| `ConfigManager::CreateDeserializer(name)` | An `IDeserializer` (`eastl::unique_ptr`) over the root of a named config, or `nullptr` when the config is unknown. The one way for a caller to read a named config through the reflection; it must not outlive a `ReloadConfig` of that config |
+| `OpenDeserializer(virtualPath)` (`Reflection/OpenDeserializer.h`) | An `IDeserializer` for a file, picked by extension (`.xml` gives `XmlDeserializer`, `.bin` gives `BinaryDeserializer`); `std::expected` with a message when the extension is unsupported or the file does not load. The header does not pull `CoreManager.h`. `ResourceManager::LoadSerialized` and `SDLMainWindow` use it |
+| `MakeFromConfig<T>(name)` (`ConfigFactory.h`) | `New<T>()` + `Deserialize` through `CreateDeserializer`; returns defaults when the config is missing. Errors the deserializer reports (an unknown factory `type`, a malformed value) are written to the log, one `LOG_ERROR` each, by `LogDeserializeErrors(configName, deserializer)` (declared in `OpenDeserializer.h`, included by `ConfigFactory.h`; `Config 'LoggerConfig': sinks[0].type: Unknown factory type: 'Console'`); the object keeps what could be read. Include from `.cpp` files only (pulls in `CoreManager.h`) |
 
 ## ConfigManager
 
@@ -36,7 +38,9 @@ auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern)
 if (auto title = node.ParseAttribute<eastl::string_view>("title")) { /* use *title */ }
 ```
 
-Prefer a reflected struct plus `MakeFromConfig<T>` / `Deserialize` over hand-written attribute loops. Hand-parsing with `XmlNode` is for small, fixed shapes (for example `ApplicationConfig.xml`).
+Prefer a reflected struct plus `MakeFromConfig<T>` / `Deserialize` over hand-written attribute loops. A caller that needs an `IDeserializer` asks the engine (`CreateDeserializer`, `OpenDeserializer`); it does not construct `XmlDeserializer` for a named config. Hand-parsing with `XmlNode` is for small, fixed shapes (for example `ApplicationConfig.xml`).
+
+A list of factory objects (widgets, runtime tests, log sinks, assert handlers) is a reflected holder with one `eastl::vector<IntrusivePtr...<Base>>` field, filled by `MakeFromConfig<Holder>(name)`; do not write a `<x type>` loop with your own `AbstractFactory` call. `WidgetList` (`BECore/Widgets/`, field `widgets`) and `Tests::TestList` (`BECore/Tests/`, field `tests`) are the shape, `LoggerManager` and its sinks another. The loader reports an unknown `type` (`Config 'GameWidgetsConfig': widgets[1].type: Unknown factory type: 'X'`), skips `enabled="false"` and an element without `type` (no message), and calls the element's `bool Initialize(IDeserializer&)` in its own element scope when the base declares it (`IWidget`): `false` drops the element with `<Type> failed to initialize`. Spell the pointer `IntrusivePtrAtomic` or `IntrusivePtrNonAtomic` in the field, the generator does not match the `IntrusivePtr` alias.
 
 ## Adding a config
 

@@ -1,10 +1,8 @@
 #include "WidgetManager.h"
 
 #include <BECore/Application/RunMode.h>
-#include <BECore/GameManager/CoreManager.h>
-#include <BECore/Reflection/AbstractFactory.h>
-#include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Widgets/IWidget.h>
+#include <BECore/Config/ConfigFactory.h>
+#include <BECore/Widgets/WidgetList.h>
 
 namespace BECore {
 
@@ -43,41 +41,15 @@ namespace BECore {
         LOG_INFO("Run mode: {}"_format(EnumUtils<RunMode>::ToString(mode)));
 
         const PoolString configName = GetWidgetsConfigName(mode);
-        const auto rootNode = CoreManager::GetConfigManager().GetConfig(configName);
-
-        if (!rootNode) {
+        if (!CoreManager::GetConfigManager().HasConfig(configName)) {
             LOG_ERROR("WidgetManager: config '{}' not found, no widgets created"_format(configName.ToStringView()));
             return;
         }
 
-        const auto widgetsNode = rootNode.GetChild("widgets");
-        if (!widgetsNode) {
-            return;
-        }
-
-        for (const auto widgetNode : widgetsNode.Children()) {
-            auto name = widgetNode.Name();
-            if (name != "widget") {
-                continue;
-            }
-            auto widgetTypeName = widgetNode.ParseAttribute<eastl::string_view>("type");
-            if (!widgetTypeName) {
-                continue;
-            }
-            const auto widgetPtr = AbstractFactory<IWidget>::GetInstance().Create(*widgetTypeName);
-            if (!widgetPtr) {
-                LOG_ERROR("WidgetManager: unknown widget type '{}' in '{}'"_format(*widgetTypeName, configName.ToStringView()));
-                continue;
-            }
-
-            XmlDeserializer deserializer;
-            deserializer.LoadFromXmlNode(widgetNode);
-            if (!widgetPtr->Initialize(deserializer)) {
-                LOG_ERROR("WidgetManager: widget '{}' failed to initialize and is not registered"_format(*widgetTypeName));
-                continue;
-            }
-
-            RegisterWidget(widgetPtr);
+        // Unknown types and widgets whose Initialize returns false are reported by MakeFromConfig and left out of the list
+        const auto list = MakeFromConfig<WidgetList>(configName.ToStringView());
+        for (const auto& widget : list->widgets) {
+            RegisterWidget(widget);
         }
     }
 }  // namespace BECore

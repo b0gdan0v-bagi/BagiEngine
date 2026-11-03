@@ -183,7 +183,7 @@ public:
  *       BE_CLASS(MyClass)
  *   public:
  *       BE_FUNCTION void Update();
- *       BE_FUNCTION bool Initialize(const XmlNode& node);
+ *       BE_FUNCTION bool Initialize(IDeserializer& deserializer);
  *   };
  */
 #define BE_FUNCTION [[clang::annotate("reflect_function")]]

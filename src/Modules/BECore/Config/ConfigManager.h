@@ -1,10 +1,11 @@
 #pragma once
 
 #include <BECore/Config/XmlDocument.h>
-#include <BECore/PoolString/PoolStringMap.h>
 #include <TaskSystem/Task.h>
 
 namespace BECore {
+
+    class IDeserializer;
 
     /**
      * @brief Manager for loading and caching all XML configurations
@@ -54,6 +55,24 @@ namespace BECore {
          * @return Root XmlNode or invalid node if not found
          */
         XmlNode GetConfig(eastl::string_view name) const;
+
+        /**
+         * @brief Get an IDeserializer positioned at the root of a loaded config
+         *
+         * The one way to read a named config through the reflection: the caller does not pick XmlDeserializer itself,
+         * so a config may later come from another format. The deserializer reads the cached document, so it must not
+         * outlive a ReloadConfig of that config.
+         * @param name Config name (without extension)
+         * @return The deserializer, or nullptr if the config is unknown
+         */
+        eastl::unique_ptr<IDeserializer> CreateDeserializer(PoolString name) const;
+
+        /**
+         * @brief Get an IDeserializer over a loaded config — string_view overload
+         * @param name Config name as string_view; avoids PoolString interning overhead
+         * @return The deserializer, or nullptr if the config is unknown
+         */
+        eastl::unique_ptr<IDeserializer> CreateDeserializer(eastl::string_view name) const;
 
         /**
          * @brief Check if config exists

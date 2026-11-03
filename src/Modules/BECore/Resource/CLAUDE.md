@@ -31,7 +31,7 @@ IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
 | Call | Notes |
 |------|-------|
 | `Load<T>(path)` / `LoadAsync<T>(path)` | `T` derives from `IResource`; cached by path; returns `ResourceHandle<T>` (async: `Task<ResourceHandle<T>>`) |
-| `LoadSerialized<T>(path)` / `LoadSerializedAsync<T>(path)` | `T` is a `BE_CLASS` type; deserialized from XML, returned **by value** |
+| `LoadSerialized<T>(path)` / `LoadSerializedAsync<T>(path)` | `T` is a `BE_CLASS` type; opened with `OpenDeserializer` (XML or binary, picked by the file extension), returned **by value** (default-constructed when the file does not load) |
 | `RegisterLoader(loader)` | rarely needed, see below |
 | `ClearCache()` | releases every cached resource |
 
