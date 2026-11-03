@@ -12,7 +12,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        // The tall cell of the Chess atlas, the case that started SpriteFit
+        // A tall atlas cell (116.67 x 190.5), the case that started SpriteFit
         constexpr float kCellX = 583.33f;
         constexpr float kCellWidth = 116.67f;
         constexpr float kCellHeight = 190.5f;

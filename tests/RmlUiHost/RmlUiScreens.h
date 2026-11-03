@@ -67,25 +67,6 @@ button { width: 124dp; height: 48dp; font-size: 24dp; line-height: 48dp; text-al
   <div id="Seed">seed {{vars.seed}}</div>
 </body></rml>)";
 
-    inline constexpr const char* kChessHudXml = R"(<ui><elements>
-  <element type="UILabel" name="Turn" x="100" y="12" width="420" height="56" text="{turn}" fontSize="32" verticalAlign="Center" />
-  <element type="UIButton" name="Reset" anchor="TopRight" x="-100" y="12" width="150" height="56" text="Reset" fontSize="26" action="ChessReset" color="40,90,60,255" />
-  <element type="UILabel" name="Status" anchor="Bottom" y="-12" width="76%" height="56" text="{status}" fontSize="28" align="Center" verticalAlign="Center" />
-</elements></ui>)";
-
-    inline constexpr const char* kChessHudRml = R"(<rml>
-<head><style>
-body { width: 100%; height: 100%; font-family: "PT Sans"; color: white; pointer-events: none; }
-#Turn { position: absolute; left: 100dp; top: 12dp; width: 420dp; height: 56dp; font-size: 32dp; line-height: 56dp; }
-#Reset { position: absolute; right: 100dp; top: 12dp; width: 150dp; height: 56dp; font-size: 26dp; line-height: 56dp; text-align: center; background-color: rgb(40, 90, 60); pointer-events: auto; }
-#Status { position: absolute; left: 12%; width: 76%; bottom: 12dp; height: 56dp; font-size: 28dp; line-height: 56dp; text-align: center; }
-</style></head>
-<body data-model="vars">
-  <div id="Turn">{{vars.turn}}</div>
-  <button id="Reset" data-action="ChessReset">Reset</button>
-  <div id="Status">{{vars.status}}</div>
-</body></rml>)";
-
     struct Screen {
         const char* name;
         const char* xml;
@@ -101,7 +82,6 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; color: white; pointer-
     inline const Screen kScreens[] = {
         {"Match3 menu", kMenuXml, kMenuRml, CanvasSpace::Screen, 0.0f, 0.0f, 0.7f, {"Column", "Title", "Play", "Quit"}, {"Play", "Quit"}},
         {"Match3 HUD", kMatch3HudXml, kMatch3HudRml, CanvasSpace::SceneView, 712.0f, 672.0f, 0.25f, {"Score", "Buttons", "Reset", "Menu", "Seed"}, {"Reset", "Menu"}},
-        {"Chess HUD", kChessHudXml, kChessHudRml, CanvasSpace::SceneView, 840.0f, 800.0f, 0.25f, {"Turn", "Reset", "Status"}, {"Reset"}},
     };
 
     inline constexpr float kRectTolerance = 1.5f;  // the context is a whole number of pixels

@@ -193,16 +193,6 @@ namespace BECore::Tests {
         EXPECT_EQ(report.Problems(), 0u) << report.Describe().c_str();
     }
 
-    TEST_F(RmlUiScreensTest, TheChessHudLaysOutLikeTheShippedXmlOnTheMatrix) {
-        const Screen& screen = kScreens[2];
-        auto doc = Load(screen);
-        SetVars();
-
-        const RunReport report = RunMatrix(screen, *doc);
-
-        EXPECT_EQ(report.Problems(), 0u) << report.Describe().c_str();
-    }
-
     TEST_F(RmlUiScreensTest, ABrokenScreenIsCaught) {
         // The menu with a Play button of 20 units, a Title that is 40 units too tall and a Play text far too big for its button: the checks must see all three
         std::string markup = kMenuRml;

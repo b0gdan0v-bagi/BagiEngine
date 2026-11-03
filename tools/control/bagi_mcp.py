@@ -19,15 +19,15 @@ from bagi_control_client import ControlError
 from bagi_session import GameSession, SessionError
 
 INSTRUCTIONS = """\
-Plays and tests a BagiEngine game (Chess, Match3) through its control API.
+Plays and tests a BagiEngine game (Match3, and any game that implements the control API) through its control API.
 
-Start with launch_game (the path of a built game executable, e.g. build/ClangmacOS/BagiChess); it runs the game headless,
+Start with launch_game (the path of a built game executable, e.g. build/ClangmacOS/BagiMatch3); it runs the game headless,
 with no window, on the manual clock. Then get_state, list_actions and perform_action. On the manual clock game time stands
 still until step: an action changes the state at once (get_state shows it), but the scene, an animation and a screenshot
 follow only after a step, so call step before screenshot when the picture should show the action.
 
 Every action comes from list_actions: pass one of them to perform_action as it is. A refused action is an error with a
-code (illegal_action, game_over, promotion_required, ...), the state stays as it was. Call quit when done.
+code (illegal_action, game_over, ...), the state stays as it was. Call quit when done.
 """
 
 session = GameSession()
@@ -83,8 +83,7 @@ def status() -> dict[str, Any]:
 def get_state() -> dict[str, Any]:
     """The state of the active game: {game, version, state}. `version` grows with every change of the state.
 
-    Chess: state has fen, board (8 strings, rank 8 first, upper case white), turn, status, winner, inCheck, startFen, moves (UCI).
-    Match3: state has the board, the score, the seed and the status.
+    Match3: state has the board, the score, the seed and the status. Every game documents its own state in its control adapter.
     """
     return session.call("get_state")
 
@@ -94,8 +93,8 @@ def get_state() -> dict[str, Any]:
 def list_actions() -> dict[str, Any]:
     """The actions the game takes right now: {game, version, actions}. Pass one of them to perform_action unchanged.
 
-    Chess: {"type": "move", "uci": "e2e4"} for every legal move (a promotion has the piece, "e7e8q"). Empty once the game is over.
     Match3: {"type": "swap", "from": {"col", "row"}, "to": {"col", "row"}} for every swap that makes a match.
+    Other games list their own action types the same way.
     """
     return session.call("list_actions")
 
@@ -103,10 +102,10 @@ def list_actions() -> dict[str, Any]:
 @server.tool()
 @reports_errors
 def perform_action(action: dict[str, Any]) -> dict[str, Any]:
-    """Plays one action from list_actions, e.g. {"type": "move", "uci": "e2e4"}. Answers the outcome (Chess: the new standing).
+    """Plays one action from list_actions, e.g. a Match3 swap. Answers the outcome of the action.
 
-    A refused action is an error and changes nothing: illegal_action (not legal now), game_over, promotion_required
-    (a pawn move to the last rank needs the piece: "e7e8q"), invalid_params (malformed).
+    A refused action is an error and changes nothing: illegal_action (not legal now), game_over, invalid_params (malformed);
+    a game may add its own codes.
     """
     return session.call("perform_action", action)
 
@@ -114,14 +113,14 @@ def perform_action(action: dict[str, Any]) -> dict[str, Any]:
 @server.tool()
 @reports_errors
 def set_state(state: dict[str, Any]) -> dict[str, Any]:
-    """Loads a state into the game. Chess: {"fen": "<FEN>"} starts a game from that position (any reachable one, finished games included)."""
+    """Loads a state into the game, in the form its own `get_state` gives; a game that cannot load one answers unsupported."""
     return session.call("set_state", state)
 
 
 @server.tool()
 @reports_errors
 def reset(options: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Starts the game over. Match3 takes {"seed": N} for a repeatable board; Chess takes no options."""
+    """Starts the game over. Match3 takes {"seed": N} for a repeatable board; options are the game's own."""
     return session.call("reset", options)
 
 

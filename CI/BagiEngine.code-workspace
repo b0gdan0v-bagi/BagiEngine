@@ -261,7 +261,6 @@
 				"label": "CMake: build",
 				"command": "build",
 				"targets": [
-					"BagiChess",
 					"BagiMatch3"
 				],
 				"problemMatcher": "$gcc",
@@ -275,7 +274,6 @@
 				"label": "CMake: clean rebuild",
 				"command": "cleanRebuild",
 				"targets": [
-					"BagiChess",
 					"BagiMatch3"
 				],
 				"problemMatcher": "$gcc",

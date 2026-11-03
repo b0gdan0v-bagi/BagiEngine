@@ -5,7 +5,7 @@ description: Builds BagiEngine through CMakePresets.json (the same presets VS Co
 
 # Build (BagiEngine)
 
-Builds the game executables `BagiChess` and `BagiMatch3` (or the gtest executables `BagiEngineTests`, `ChessTests`, `Match3Tests`, see `tests`) with `CMakePresets.json` from the project root. Each preset builds into its own `build/<preset>/` directory.
+Builds the game executable `BagiMatch3` (or the gtest executables `BagiEngineTests`, `Match3Tests`, see `tests`) with `CMakePresets.json` from the project root. Each preset builds into its own `build/<preset>/` directory.
 
 ## Arguments (all optional)
 
@@ -14,7 +14,7 @@ Builds the game executables `BagiChess` and `BagiMatch3` (or the gtest executabl
 | `debug` / `release` | Build type. Default: `debug`. |
 | `clean` | Add `--clean-first` to the build. |
 | `configure` | Force a configure step. |
-| `tests` | Build the gtest targets (`--target BagiEngineTests ChessTests Match3Tests`) instead of everything. Run the tests afterwards only when asked: `ctest --preset <p>`. |
+| `tests` | Build the gtest targets (`--target BagiEngineTests Match3Tests`) instead of everything. Run the tests afterwards only when asked: `ctest --preset <p>`. |
 | `<preset name>` | Use this preset as-is; skip auto-selection. |
 
 ## Presets
@@ -58,7 +58,7 @@ Run everything from the project root.
 
 ## Output location and gotchas
 
-- Executables: `build/{Clang|MSVC}{macOS|Windows}/BagiChess[.exe]`, `BagiMatch3[.exe]` and the test executables (`cmake/BagiEngine.cmake` sets the output directory from compiler + platform, **not** from the preset). Debug and Release Ninja presets therefore **overwrite each other's executable**; the last build wins. Visual Studio generators add a `Debug/` or `Release/` subfolder.
+- Executables: `build/{Clang|MSVC}{macOS|Windows}/BagiMatch3[.exe]` and the test executables (`cmake/BagiEngine.cmake` sets the output directory from compiler + platform, **not** from the preset). Debug and Release Ninja presets therefore **overwrite each other's executable**; the last build wins. Visual Studio generators add a `Debug/` or `Release/` subfolder.
 - `compile_commands.json` lives in `build/<p>/`. Pass it to `tidy-fix` explicitly when several presets are configured: `--build-dir build/<p>`.
 - Do not use `cmake -B build ...` (the old flat `build/` directory) and do not edit anything under `build/`.
 - Release presets turn `ENGINE_ENABLE_ASSERTS` and `ENGINE_ENABLE_EXPECTS` off; Debug keeps them on. The Visual Studio presets are multi-config and leave both on.

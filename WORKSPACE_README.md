@@ -186,7 +186,7 @@ BagiEngine/
 ```bash
 cmake --list-presets=build            # пресеты, доступные на этой ОС
 cmake --preset macos-debug            # configure (заодно генерирует reflection-код)
-cmake --build --preset macos-debug    # сборка игр (BagiChess, BagiMatch3)
+cmake --build --preset macos-debug    # сборка игры (BagiMatch3)
 ```
 
 | ОС | Пресеты |
@@ -195,7 +195,7 @@ cmake --build --preset macos-debug    # сборка игр (BagiChess, BagiMatc
 | Windows | `windows-msvc-{debug,release}`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
 
 Настройки конкретной машины (например `VULKAN_SDK`, ccache) кладите в `CMakeUserPresets.json` — он в `.gitignore`.
-Исполняемые файлы всегда лежат в `build/{Compiler}{Platform}/` (`BagiChess`, `BagiMatch3`), поэтому Debug и Release (Ninja) затирают друг друга.
+Исполняемые файлы всегда лежат в `build/{Compiler}{Platform}/` (`BagiMatch3`), поэтому Debug и Release (Ninja) затирают друг друга.
 Reflection-код генерируется на этапе configure: после правок `BE_CLASS` / `BE_REFLECT_FIELD` повторите `cmake --preset ...`.
 
 ### CMake с Ninja (без пресетов, старый плоский `build/`)

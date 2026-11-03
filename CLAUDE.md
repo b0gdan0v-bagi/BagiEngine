@@ -9,7 +9,7 @@ Use the presets from `CMakePresets.json` (same ones VS Code CMake Tools shows). 
 ```bash
 cmake --list-presets=build                 # presets available on this OS
 cmake --preset macos-debug                 # configure (also regenerates reflection code)
-cmake --build --preset macos-debug         # build everything: the game executables (BagiChess, BagiMatch3) and the test executables
+cmake --build --preset macos-debug         # build everything: the game executable (BagiMatch3) and the test executables
 ```
 
 | OS | Presets |
@@ -28,17 +28,17 @@ C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output l
 
 ## Running Tests
 
-Unit and module tests are GoogleTest tests, built as separate executables (not part of the games): `BagiEngineTests` for the engine (`tests/`), `ChessTests` and `Match3Tests` next to their game (`games/<Name>/tests/`). The GoogleTest submodule needs `git submodule update --init external/googletest`; `-DENGINE_BUILD_TESTS=OFF` skips the whole thing.
+Unit and module tests are GoogleTest tests, built as separate executables (not part of the games): `BagiEngineTests` for the engine (`tests/`), `Match3Tests` next to its game (`games/<Name>/tests/`). The GoogleTest submodule needs `git submodule update --init external/googletest`; `-DENGINE_BUILD_TESTS=OFF` skips the whole thing.
 
 ```bash
-cmake --build --preset macos-debug --target BagiEngineTests ChessTests Match3Tests   # only the test executables
+cmake --build --preset macos-debug --target BagiEngineTests Match3Tests   # only the test executables
 ctest --preset macos-debug                                       # every test in its own process
 build/ClangmacOS/BagiEngineTests --gtest_filter='Reflection*'    # run directly; cwd must be inside the repository
 ```
 
 Runtime tests that need the live engine are `ITest` classes (`src/Modules/BECore/Tests/`). `CoreManager::OnApplicationPreInit()` runs the ones enabled in `config/TestsConfig.xml` at game startup.
 
-`ctest` also runs `BagiMatch3ControlSmoke` and `BagiChessControlSmoke`: Python scripts that start the game `--headless` and play it over the control API. They are skipped (exit code 77) when the executable is not built, and a `--target` list without the games (as above) builds none, so add `BagiMatch3 BagiChess` to run them. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests` (`tools/control/CLAUDE.md`).
+`ctest` also runs `BagiMatch3ControlSmoke`: a Python script that starts the game `--headless` and plays it over the control API. It is skipped (exit code 77) when the executable is not built, and a `--target` list without the games (as above) builds none, so add `BagiMatch3` to run it. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests` (`tools/control/CLAUDE.md`).
 
 ## Architecture Overview
 
@@ -71,9 +71,9 @@ src/
     ├── RmlUiHost/      # host of the vendored RmlUi (only with -DENGINE_UI_RMLUI=ON)
     └── EABase/, EnTT/, fmt/, imgui/, nlohmann/, pugixml/, RmlUi/, stb/   # vendored
 config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, Text, UI, default SceneConfig; assets/fonts/ has the default font)
-games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Chess, Match3)
+games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Match3; Chess is the repository BagiEngine-Chess, which carries this one as its submodule `engine/`)
 tests/                  # GoogleTest executable BagiEngineTests (BECore) + Common (BagiEngineTestSupport)
-tools/                  # developer tools: natvis, todo_sync (`todo/` dashboard and Vikunja sync; Python, pytest), control (Python: the control API client and smoke test, the MCP server, the Stockfish bridge; `tools/control/CLAUDE.md`)
+tools/                  # developer tools: natvis, todo_sync (`todo/` dashboard and Vikunja sync; Python, pytest), control (Python: the control API client and smoke test, the MCP server; `tools/control/CLAUDE.md`)
 ```
 
 **Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.
@@ -162,7 +162,7 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 
 ## Rules and Skills
 
-- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`, `Text/`, `UI/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, `RmlUiHost/`, and `games/Chess/`, `games/Match3/`, and `tools/control/`. Claude Code loads one when a file under that directory is read.
+- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`, `Text/`, `UI/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, `RmlUiHost/`, and `games/Match3/` and `tools/control/`. Claude Code loads one when a file under that directory is read.
 - `.claude/rules/` holds guidance that spans several directories or matches by file name (`paths:` frontmatter): CMake, Reflection, Reflection events (`*Event.h`), Rendering, Widgets, Tests. Read the relevant file before changing that area.
 - `.claude/skills/` holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `todo-sync` (`todo/` dashboard and Vikunja sync, `tools/todo_sync/CLAUDE.md`), `todo-loop` (works the `todo/` entries one by one, each in its own local branch `todo/<id>`, through the agents of `.claude/agents/`; `/todo-loop close` after the merge deletes the entry and runs `pull` and `push`), `todo-merge` (reports on a `review` branch, asks, then merges it into `main`, closes the entry and deletes the branch), `todo-add` (records an idea as a new entry) and `cpp-senior-programmer`.
 - `.claude/agents/` holds the four agents of `todo-loop`: `todo-classifier` (haiku), `todo-architect`, `todo-developer` and `todo-reviewer` (sonnet). `TODO.md` in the root only points at `todo/`.

@@ -2,7 +2,7 @@
 
 ## Overview
 
-`FileSystem` maps virtual paths to real ones through named mount points. Engine code and XML configs only ever use virtual paths such as `config/LoggerConfig.xml` or `assets/chess_test.png`; accessor: `CoreManager::GetFileSystem()`.
+`FileSystem` maps virtual paths to real ones through named mount points. Engine code and XML configs only ever use virtual paths such as `config/LoggerConfig.xml` or `assets/board.png`; accessor: `CoreManager::GetFileSystem()`.
 
 ## Content roots and layers
 

@@ -13,7 +13,7 @@ Two kinds of tests, in two places:
 
 | Kind | Where | Runs | Use for |
 |------|-------|------|---------|
-| GoogleTest (unit / module) | `tests/` (target `BagiEngineTests`) and `games/<Name>/tests/` (targets `ChessTests`, `Match3Tests`) | `ctest --preset <preset>`, or the binary directly | Everything that can run without the game loop: containers, reflection, serialization, events, tasks, file system layering, game rules |
+| GoogleTest (unit / module) | `tests/` (target `BagiEngineTests`) and `games/<Name>/tests/` (target `Match3Tests`) | `ctest --preset <preset>`, or the binary directly | Everything that can run without the game loop: containers, reflection, serialization, events, tasks, file system layering, game rules |
 | `ITest` (runtime) | `src/Modules/BECore/Tests/`, listed in `config/TestsConfig.xml` | At game startup, from `CoreManager::OnApplicationPreInit()` | Checks that need the live game engine (window, renderer, scene) |
 
 Default to GoogleTest. Add an `ITest` only when the check cannot run in the test executable.
@@ -29,7 +29,7 @@ games/<Name>/tests/     # a game's tests, built as <Name>Tests by be_add_game_te
 ```
 
 ```bash
-cmake --build --preset macos-debug --target BagiEngineTests ChessTests Match3Tests
+cmake --build --preset macos-debug --target BagiEngineTests Match3Tests
 ctest --preset macos-debug                                       # one process per test
 build/ClangmacOS/BagiEngineTests --gtest_filter='Reflection*'    # cwd must be inside the repository (config/ is found by walking up)
 ```
@@ -54,8 +54,8 @@ build/ClangmacOS/BagiEngineTests --gtest_filter='Reflection*'    # cwd must be i
 - The tests of the RmlUi host (`tests/RmlUiHost/`) exist only in a build with `-DENGINE_UI_RMLUI=ON`; `src/Modules/RmlUiHost/CLAUDE.md` says how to build and run them without disturbing the default build directory.
 - A test of `FileSystem` itself builds its own instance on temporary directories (see `tests/BECore/FileSystemTest.cpp`) instead of using the global services.
 - A test of the control API makes a `ControlService` of its own and passes a lambda as the reply function, so it needs no transport and no engine services (see `tests/BECore/ControlServiceTest.cpp`). Do not read client-shaped JSON with nlohmann's throwing accessors, not even in a test: they abort the whole test process (`BECore/Control/CLAUDE.md`).
-- A test of a transport (`tests/BECore/WebSocketServerTest.cpp`) starts the server on port 0, talks to it through a raw `Socket` and plays the main thread itself: it calls `ControlService::Drain()` in the loop that waits for an answer, with a time limit and no fixed `sleep`. Parallel `ctest -j` is safe because every test takes a free port. A test that needs the whole game goes through `be_add_game_control_tests` (`BagiMatch3ControlSmoke`, `BagiChessControlSmoke`), not into a gtest executable. One that needs only an SDL window and renderer makes a headless pair (`tests/BECore/SDLCaptureTest.cpp`: `SDLMainWindow::SetHeadless(true)`, then `SDLRendererBackend`; it skips itself where SDL has no dummy video driver).
-- A test of a Python control tool (`tools/control/tests`) runs against a fake control server, a fake game executable and a fake UCI engine (`fake_control_server.py`, `fake_game.py`, `fake_uci_engine.py`), so it needs neither a built game nor Stockfish; a test that does need them skips itself. See `tools/control/CLAUDE.md`.
+- A test of a transport (`tests/BECore/WebSocketServerTest.cpp`) starts the server on port 0, talks to it through a raw `Socket` and plays the main thread itself: it calls `ControlService::Drain()` in the loop that waits for an answer, with a time limit and no fixed `sleep`. Parallel `ctest -j` is safe because every test takes a free port. A test that needs the whole game goes through `be_add_game_control_tests` (`BagiMatch3ControlSmoke`), not into a gtest executable. One that needs only an SDL window and renderer makes a headless pair (`tests/BECore/SDLCaptureTest.cpp`: `SDLMainWindow::SetHeadless(true)`, then `SDLRendererBackend`; it skips itself where SDL has no dummy video driver).
+- A test of a Python control tool (`tools/control/tests`) runs against a fake control server and a fake game executable (`fake_control_server.py`, `fake_game.py`), so it needs no built game; a test that does need one skips itself. See `tools/control/CLAUDE.md`.
 - A coroutine that suspends on the thread pool (for example `ResourceManager::LoadAsync`) must be run with `CoreManager::GetTaskManager().Run(...)` and waited on through the returned handle. `Task::GetResult()` resume()s the coroutine in a loop and races with the pool.
 - State shared across the process (`PoolString` table, `EventBase<T>` dispatchers, `AbstractFactory<T>`, resource cache) is not reset between tests. Tests must clean up after themselves (unsubscribe, clear the cache). Order dependence is not detected in one process: `ctest` runs each test in its own process, but a plain `BagiEngineTests` run or `--gtest_shuffle` does not.
 - Do not wait with a fixed `sleep`; poll a condition with a timeout (see `WaitUntil` in `tests/BECore/TaskSystemTest.cpp`).

@@ -14,6 +14,6 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/games/CMakeLists.txt)
     add_subdirectory(games)
 endif()
 
-if(MSVC AND TARGET BagiChess)
-    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT BagiChess)
+if(MSVC AND TARGET BagiMatch3)
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT BagiMatch3)
 endif()

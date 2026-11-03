@@ -178,11 +178,9 @@ namespace BECore::Tests {
             auto doc = Load(screen);
             CoreManager::GetUIVars().Set("score"_intern, 1280);
             CoreManager::GetUIVars().Set("seed"_intern, 1337);
-            CoreManager::GetUIVars().Set("turn"_intern, "White to move");
-            CoreManager::GetUIVars().Set("status"_intern, "Check");
 
             const PixelBuffer image = DrawFrame();
-            MaybeSavePng(image, i == 1 ? "rmlui-match3-hud" : "rmlui-chess-hud");
+            MaybeSavePng(image, "rmlui-match3-hud");
 
             ASSERT_FALSE(image.rgba.empty());
             const Rect reset = BoxOf(*doc, "Reset");

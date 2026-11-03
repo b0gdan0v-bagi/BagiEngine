@@ -3,7 +3,7 @@
     from game_process import GameProcess, build_game_command, free_port
 
     port = free_port()
-    with GameProcess(build_game_command(Path("build/ClangmacOS/BagiChess"), port), cwd=Path("build/ClangmacOS")) as game:
+    with GameProcess(build_game_command(Path("build/ClangmacOS/BagiMatch3"), port), cwd=Path("build/ClangmacOS")) as game:
         client = game.connect()
         ...
         client.call("quit")

@@ -43,7 +43,7 @@ Stop with a message when any of these fails:
 
 Not a stop, a flag: `test -f ~/.claude/skills/kovalev-review-checklist/SKILL.md`. Pass the reviewer `checklist: available` or `checklist: unavailable` accordingly.
 
-Then remember the starting branch, `git switch main`, and once per run build `BagiEngineTests ChessTests Match3Tests` plus the games (the smoke tests need them) and run `ctest --preset <p>`. The names of the failing tests go to a file in the scratchpad: the **baseline**.
+Then remember the starting branch, `git switch main`, and once per run build `BagiEngineTests Match3Tests` plus the games (the smoke tests need them) and run `ctest --preset <p>`. The names of the failing tests go to a file in the scratchpad: the **baseline**.
 ## The loop
 
 1. **Choose.** `git switch main`. First look for entries that wait to be closed (see "Closing merged entries", step 2). If there are any, ask the owner once (AskUserQuestion): close them now and then continue, or continue without closing. Run `close` only on a "close" answer; never on your own. Run `.venv/bin/python tools/todo_sync/todo_sync.py check` and `parse`. Taken ids: `git branch --list 'todo/*' --no-merged main` (a merged branch does not take an entry; strip `todo/` and a `-K` suffix). Candidates: entries with `status == "open"` and no taken id, ordered: no stage first, then stages 1 to 6, then by `id`. Entries `in progress` are the owner's; the loop never takes them. Give the classifier the candidates (`id`, `title`, `stage`, `summary`, `file`). Check its `next` yourself: the entry is in `parse`, its status is `open`, no taken branch. With `<id>`, skip the classifier unless `list`. No eligible entry: stop the loop.

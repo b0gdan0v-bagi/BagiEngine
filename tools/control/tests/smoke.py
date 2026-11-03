@@ -5,7 +5,7 @@
 
 The game is started twice, once on the real clock and once with --manual-clock (game time moves only on `step`). The
 scenario is the one of Match3 (a swap on a seeded board); another game brings its own script that calls run_smoke() with its
-scenarios (games/Chess/tests/control_smoke.py). The game runs --headless (no window, drawn in memory), which also
+scenarios (BagiEngine-Chess has one: tests/control_smoke.py). The game runs --headless (no window, drawn in memory), which also
 lets the test look at screenshots; --window runs it in a real window instead (it needs a display, and a screenshot is not
 possible on the Vulkan backend, so those checks are left out).
 Exit code: 0 passed, 1 failed, 77 skipped (the executable does not exist; ctest reads 77 as "skipped").

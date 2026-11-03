@@ -213,7 +213,7 @@ button  { height: 56px; font-size: 28px; }
 #Quit   { background: rgb(90, 50, 50); }
 )";
 
-        // The HUD of Match3 and of Chess as the games ship them (games/*/config/SceneConfig.xml), and the same HUDs in HTML + CSS
+        // The HUD of Match3 as the game ships it (games/Match3/config/SceneConfig.xml), and the same HUD in HTML + CSS
         constexpr const char* kMatch3HudXml = R"(<ui><elements>
   <element type="UILabel" name="Score" x="96" y="12" width="250" height="40" text="Score: {score}" fontSize="28" verticalAlign="Center" />
   <element type="UIStack" name="Buttons" anchor="TopRight" x="-96" y="12" width="260" height="48" direction="Horizontal" spacing="12" crossAlign="Stretch">
@@ -240,23 +240,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 #Reset   { background: rgb(40, 90, 60); }
 #Menu    { background: rgb(70, 70, 100); }
 #Seed    { left: 96px; bottom: 26px; width: 300px; height: 24px; font-size: 16px; color: rgb(190, 190, 190); }
-)";
-
-        constexpr const char* kChessHudXml = R"(<ui><elements>
-  <element type="UILabel" name="Turn" x="100" y="12" width="420" height="56" text="{turn}" fontSize="32" verticalAlign="Center" />
-  <element type="UIButton" name="Reset" anchor="TopRight" x="-100" y="12" width="150" height="56" text="Reset" fontSize="26" action="ChessReset" color="40,90,60,255" />
-  <element type="UILabel" name="Status" anchor="Bottom" y="-12" width="76%" height="56" text="{status}" fontSize="28" align="Center" verticalAlign="Center" />
-</elements></ui>)";
-
-        constexpr const char* kChessHudHtml = R"(
-<span id="Turn">{turn}</span>
-<button id="Reset" data-action="ChessReset">Reset</button>
-<span id="Status">{status}</span>)";
-
-        constexpr const char* kChessHudCss = R"(
-#Turn   { left: 100px; top: 12px; width: 420px; height: 56px; font-size: 32px; vertical-align: middle; }
-#Reset  { anchor: top-right; right: 100px; top: 12px; width: 150px; height: 56px; font-size: 26px; background: rgb(40, 90, 60); }
-#Status { anchor: bottom; bottom: 12px; width: 76%; height: 56px; font-size: 28px; text-align: center; vertical-align: middle; }
 )";
 
     }  // namespace
@@ -552,50 +535,22 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(dynamic_cast<UILabel*>(compiled->Element("Seed"))->textColor.r, 190);
     }
 
-    TEST_F(UIWebTest, TheChessHudInHtmlLaysOutLikeTheShippedXml) {
-        const auto compiled = Compile(kChessHudHtml, kChessHudCss);
-        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
-
-        const UIScreenContent shipped = ReadXml(kChessHudXml);
+    TEST_F(UIWebTest, TheMatch3HudInHtmlPassesTheSizeMatrixInTheMarginsOfItsView) {
+        constexpr float kViewWidth = 712.0f;
+        constexpr float kViewHeight = 672.0f;
+        const auto compiled = Compile(kMatch3HudHtml, kMatch3HudCss);
         LaidOut web(compiled->content);
-        LaidOut xml(shipped);
-        web.InSceneView(840.0f, 800.0f);
-        xml.InSceneView(840.0f, 800.0f);
-        for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {480.0f, 480.0f}, {720.0f, 1280.0f}, {2560.0f, 1080.0f}}) {
-            web.At(width, height);
-            xml.At(width, height);
-            for (const char* name : {"Turn", "Reset", "Status"}) {
-                SCOPED_TRACE(Format("{} at {}x{}", name, width, height).c_str());
-                ExpectSameRect(xml.Find(name), web.Find(name), name);
-            }
-        }
-    }
-
-    TEST_F(UIWebTest, BothHudsInHtmlPassTheSizeMatrixInTheMarginsOfTheirView) {
-        struct Hud {
-            const char* html;
-            const char* css;
-            float viewWidth;
-            float viewHeight;
-        };
-        for (const Hud& hud : {Hud{kMatch3HudHtml, kMatch3HudCss, 712.0f, 672.0f}, Hud{kChessHudHtml, kChessHudCss, 840.0f, 800.0f}}) {
-            const auto compiled = Compile(hud.html, hud.css);
-            LaidOut web(compiled->content);
-            web.InSceneView(hud.viewWidth, hud.viewHeight);
-            // The longest words the games can show
-            CoreManager::GetUIVars().Set("score"_intern, 99999999);
-            CoreManager::GetUIVars().Set("seed"_intern, 4294967295u);
-            CoreManager::GetUIVars().Set("turn"_intern, "White to move");
-            CoreManager::GetUIVars().Set("status"_intern, "Draw: threefold repetition");
-            UILayoutValidatorOptions options;
-            options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
-            UILayoutContext base;
-            base.sceneViewWidth = hud.viewWidth;
-            base.sceneViewHeight = hud.viewHeight;
-            const auto failures = ValidateOnMatrix(web.layout, options, base);
-            EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
-        }
+        web.InSceneView(kViewWidth, kViewHeight);
+        // The longest words the game can show
+        CoreManager::GetUIVars().Set("score"_intern, 99999999);
+        CoreManager::GetUIVars().Set("seed"_intern, 4294967295u);
+        UILayoutValidatorOptions options;
+        options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
+        UILayoutContext base;
+        base.sceneViewWidth = kViewWidth;
+        base.sceneViewHeight = kViewHeight;
+        const auto failures = ValidateOnMatrix(web.layout, options, base);
+        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
     }
 
     // ---- the cascade ---------------------------------------------------------------------------------------------------------

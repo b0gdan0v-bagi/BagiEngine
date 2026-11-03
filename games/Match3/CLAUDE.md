@@ -32,7 +32,7 @@ src/Match3/
 - Actions are answered with `SubscribeInScene`, so a button of one scene does nothing in the other.
 - The control API works while the menu is up: the model belongs to the board component, which exists in every loaded scene.
 
-- Unlike Chess, the model is owned by the scene component, not by the `IGame`.
+- Unlike Chess (BagiEngine-Chess), the model is owned by the scene component, not by the `IGame`.
 - `Match3GameModel` never animates: a successful swap resolves the whole cascade (remove → gravity → refill → repeat) before returning, so the board is stable after every public call. Keep animation, if added, in the component.
 - Public gameplay surface is `Reset(seed)`, `OnCellClicked` (two-step select/swap), `TrySwap`, and for a controller `WouldSwapMatch(a, b)` (tries the swap on a copy, changes nothing), `GetLegalSwaps()` (each neighbour pair once: a cell with its right and its lower neighbour, row by row), `GetSeed()` and `GetVersion()` (grows with every `Reset` and every committed swap).
 - **Determinism:** the same seed gives the same board, and the same seed with the same swaps gives the same board and score, on every platform. The gems come from `std::mt19937` through `1 + rng() % kGemTypeCount`, not from `std::uniform_int_distribution` (its output differs between standard libraries). `Match3LegalSwapsTest` pins the boards of three seeds against an independent MT19937. Do not change how `RandomGem()` draws without updating those boards: every saved seed changes.

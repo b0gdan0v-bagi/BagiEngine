@@ -10,7 +10,7 @@ stage: 2
 
 1. Windows is unchecked: Winsock and `ws2_32`, the `WinMain` arguments, the `dummy` video driver with the software renderer, and the Python tools (`game_process.py`; the tests that make a fake executable with a shebang are skipped there) have not been built or run on it.
 2. The Vulkan backend cannot be seen or run without a window: `--headless` and `screenshot` work on the SDL software renderer only, and `VulkanRendererBackend::RequestCapture` answers with an error (MoltenVK has no headless surface on macOS). Whether that gap is worth closing depends on the decision about the renderer backends.
-3. The Stockfish games run by hand: `tools/control/tests/test_stockfish.py` plays real games when Stockfish and a built `BagiChess` exist and skips otherwise, and pytest is not part of ctest, so nothing runs it on a push.
+3. The Stockfish games run by hand: `tools/tests/test_stockfish.py` of BagiEngine-Chess plays real games when Stockfish and a built `BagiChess` exist and skips otherwise, and pytest is not part of ctest, so nothing runs it on a push.
 4. Delayed tasks use the wall clock: `TaskScheduler::ScheduleDelayed` computes `Clock::now() + delay`, so `co_await Delay(...)` and `TaskManager::RunDelayed` do not follow `Time::Advance`. A timer or an animation built on them would run in real time under `--manual-clock` and break the determinism the manual clock is for. Nothing in a game uses them yet (only `TaskSystemTest`).
 5. A person playing against Stockfish at the window was not tried (the bridge waits for the person's move by polling `get_state`).
 

@@ -79,7 +79,7 @@ The vendored `src/Modules/imgui/CMakeLists.txt` uses `${CMAKE_SOURCE_DIR}/extern
 | `be_add_game_reflection(<Target> [SOURCE_DIRS ..] [INCLUDE_DIRS ..])` | Runs the generator for a game module (defaults: `<dir>/src`); the engine's reflected headers are only parsed as reference. See `reflection-module.md` |
 | `be_add_game_executable(<Name> [GAME_ROOT dir] [SOURCES ..] [MODULES ..])` | Executable from the engine's `src/main.cpp`: `WHOLE_ARCHIVE` engine runtime and game modules, `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` defines, DLL/dylib copy, rpath, natvis |
 | `be_add_game_tests(<Name> SOURCES .. [LINK ..] [WHOLE_ARCHIVE ..])` | gtest executable on `BagiEngineTestSupport` + `gtest_discover_tests` (only when `ENGINE_BUILD_TESTS`). `WHOLE_ARCHIVE` links modules whole, for a test that loads the game's own scene file: a component that no test names is otherwise dropped by the linker and the scene silently lacks it |
-| `be_add_game_control_tests(<ExeTarget> [SCRIPT file])` | ctest entry `<ExeTarget>ControlSmoke`: runs `tools/control/tests/smoke.py` (or `SCRIPT`) against the game executable, which it starts with `--control`; exit code 77 is a skip (executable not built). Call it from the game's CMakeLists, never from the engine's `tests/`. The script runs the game `--headless` (no window; `--window` for a real one), once per clock (only when `ENGINE_BUILD_TESTS`). The test environment has `BAGI_ENGINE_DIR`, so a game's `SCRIPT` (`games/Chess/tests/control_smoke.py`) can import `smoke.py` and call its `run_smoke()` with its own scenarios |
+| `be_add_game_control_tests(<ExeTarget> [SCRIPT file])` | ctest entry `<ExeTarget>ControlSmoke`: runs `tools/control/tests/smoke.py` (or `SCRIPT`) against the game executable, which it starts with `--control`; exit code 77 is a skip (executable not built). Call it from the game's CMakeLists, never from the engine's `tests/`. The script runs the game `--headless` (no window; `--window` for a real one), once per clock (only when `ENGINE_BUILD_TESTS`). The test environment has `BAGI_ENGINE_DIR`, so a game's `SCRIPT` (BagiEngine-Chess has one: `tests/control_smoke.py`) can import `smoke.py` and call its `run_smoke()` with its own scenarios |
 | `be_link_engine(<target> [WITH_RUNTIME])` | `WHOLE_ARCHIVE` link of the engine core (and, with `WITH_RUNTIME`, renderer backends, `Games`, `Runtime`) |
 | `be_force_include_pch(<target>)` | `/FI"BECore/pch.h"` (MSVC) or `-include "BECore/pch.h"` |
 
@@ -120,9 +120,9 @@ BECoreModule must be first (provides PCH):
 
 - `ENGINE_BUILD_TESTS` (default `ON`) controls `enable_testing()`, `add_subdirectory(external/googletest)`, `BagiEngineTestSupport` and the test executables.
 - GoogleTest is added **after** the `ENGINE_NO_EXCEPTIONS` block in `cmake/BagiEngine.cmake` on purpose, so it is compiled with the same `-fno-exceptions` as the test sources. `gtest_force_shared_crt` is `ON` (the engine uses `/MD`); `BUILD_GMOCK` and `INSTALL_GTEST` are `OFF`.
-- Every test executable is created with `be_add_game_tests`: `BagiEngineTests` (`tests/CMakeLists.txt`), `ChessTests`, `Match3Tests` (`games/<Name>/CMakeLists.txt`). The function applies the `REUSE_FROM BECoreModule` PCH, force-include of `BECore/pch.h`, `IMGUI_VULKAN_AVAILABLE=1` + `REFLECTION_GENERATED=1`, `${CMAKE_BINARY_DIR}` on the include path for `<Generated/*.gen.hpp>`, and `WHOLE_ARCHIVE` for `BECoreModule` / `EventsModule` / `TaskSystemModule` so static-initializer registrations survive. `main()`, the engine environment and the assert bridge come from the static library `BagiEngineTestSupport` (`tests/Common/`).
+- Every test executable is created with `be_add_game_tests`: `BagiEngineTests` (`tests/CMakeLists.txt`), `Match3Tests` (`games/<Name>/CMakeLists.txt`). The function applies the `REUSE_FROM BECoreModule` PCH, force-include of `BECore/pch.h`, `IMGUI_VULKAN_AVAILABLE=1` + `REFLECTION_GENERATED=1`, `${CMAKE_BINARY_DIR}` on the include path for `<Generated/*.gen.hpp>`, and `WHOLE_ARCHIVE` for `BECoreModule` / `EventsModule` / `TaskSystemModule` so static-initializer registrations survive. `main()`, the engine environment and the assert bridge come from the static library `BagiEngineTestSupport` (`tests/Common/`).
 - `gtest_discover_tests(<Name> DISCOVERY_MODE PRE_TEST)`: tests are listed when `ctest` starts and run from the executable's binary directory (`build/<preset>/tests`, `build/<preset>/games/<Name>`); without content roots `FileSystem` finds `config/` by walking up from the working directory. The test environment pins the engine's `config/` / `assets/` through `BAGI_ENGINE_ROOT`. Do not pass `WORKING_DIRECTORY` (not even inside `PROPERTIES`): it also moves `cmake_test_discovery_*.json` there, which litters the source tree when it is the repository root. An out-of-tree build directory needs the executable started from inside the repository.
-- Build them with `cmake --build --preset <preset> --target BagiEngineTests ChessTests Match3Tests`: a plain `--build --preset <preset>` builds everything (`all`); the build presets name no targets, so that a game repository can include these presets (a preset name cannot be redefined by the including file).
+- Build them with `cmake --build --preset <preset> --target BagiEngineTests Match3Tests`: a plain `--build --preset <preset>` builds everything (`all`); the build presets name no targets, so that a game repository can include these presets (a preset name cannot be redefined by the including file).
 
 ## Best Practices
 
@@ -162,7 +162,7 @@ BECoreModule must be first (provides PCH):
 Build outputs are organized by compiler and platform:
 ```
 build/{Compiler}{Platform}/
-├── BagiChess.exe        # Game executables (BagiMatch3.exe, ...), test executables (BagiEngineTests.exe, ChessTests.exe, ...)
+├── BagiMatch3.exe       # Game executables, test executables (BagiEngineTests.exe, Match3Tests.exe, ...)
 ├── SDL3.dll             # Runtime dependencies
 └── lib/                 # Static libraries
 ```

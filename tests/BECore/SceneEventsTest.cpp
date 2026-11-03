@@ -74,7 +74,7 @@ namespace BECore::Tests {
         // Every node has a SceneEventCounter, so its drawIndex tells where the node sits in the draw pass.
         // "Order": three nodes on the default layer.
         // "Layers": a node in front (layer 1), one behind (layer -1), the others on the default layer.
-        // "BackFirst" / "BackLast": the Chess shape, a background node (layer -1) and a piece, in both scene orders.
+        // "BackFirst" / "BackLast": a board-like shape, a background node (layer -1) and a piece, in both scene orders.
         // "Nested" / "NestedLayer": a parent and a sibling; the tests add a child to the parent at runtime
         // (the XML has no children), and in "NestedLayer" the parent has layer 1.
         constexpr const char* kDrawOrderScenesXml = R"(

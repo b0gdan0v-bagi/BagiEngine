@@ -4,8 +4,8 @@ No MCP code in here (bagi_mcp.py maps these methods onto tools), so it runs and 
 Standard library only.
 
     session = GameSession()
-    session.launch("build/ClangmacOS/BagiChess")
-    session.call("perform_action", {"type": "move", "uci": "e2e4"})
+    session.launch("build/ClangmacOS/BagiMatch3")
+    session.call("perform_action", {"type": "swap", "from": {"col": 0, "row": 0}, "to": {"col": 1, "row": 0}})
     png, size = session.screenshot()
     session.quit()
 
