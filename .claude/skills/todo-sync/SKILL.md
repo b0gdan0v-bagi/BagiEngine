@@ -28,7 +28,7 @@ Run from the project root. The Python is the repo venv (`.venv/bin/python`, on W
 4. If the settings are missing, the tool says which of `VIKUNJA_URL` / `VIKUNJA_TOKEN` is not set. Do not ask for the token in chat and never print it: the user puts it into the git-ignored `.env`.
 5. After a `dashboard`, give the file path. The page cannot be looked at from the agent session, so do not describe how it looks.
 
-A normal `todo-loop` run never runs `push` or `pull`: it makes no network calls and leaves the tracker alone. After the owner merges a `todo/<id>` branch, `/todo-loop close` deletes the entry and runs `pull --apply` and then `push`; run them here by hand only when that mode is not used.
+A normal `todo-loop` run never runs `push` or `pull`: it makes no network calls and leaves the tracker alone. After the owner merges a `todo/<id>` branch, `/todo-loop close` (or `/todo-merge`, which merges first) deletes the entry and runs `pull --apply` and then `push`; run them here by hand only when that mode is not used.
 
 ## Report
 
