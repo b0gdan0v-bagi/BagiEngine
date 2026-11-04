@@ -3,9 +3,9 @@ name: todo-sync
 description: Refreshes the todo/ progress dashboard, exports todo/ entries to the Vikunja task tracker and pulls closed or new tasks back, through tools/todo_sync. Use when the user asks to update, open or regenerate the TODO dashboard, to sync, push or pull the todo list with Vikunja or the task tracker, or to check that todo/ still parses.
 ---
 
-# TODO sync (BagiEngine)
+# TODO sync
 
-Wraps `tools/todo_sync/todo_sync.py`. Format of the entries, Vikunja settings and what the export owns are in `tools/todo_sync/CLAUDE.md`; the entry format is in `todo/README.md`. The files in `todo/` are the source of truth for the content: edit them, not the tracker (a task closed or created in the tracker comes back with `pull`).
+Wraps `<engine>/tools/todo_sync/todo_sync.py`. Format of the entries, Vikunja settings and what the export owns are in `<engine>/tools/todo_sync/CLAUDE.md`; the entry format is in `todo/README.md`. The files in `todo/` are the source of truth for the content: edit them, not the tracker (a task closed or created in the tracker comes back with `pull`).
 
 ## Arguments (all optional)
 
@@ -20,11 +20,11 @@ Wraps `tools/todo_sync/todo_sync.py`. Format of the entries, Vikunja settings an
 
 ## Workflow
 
-Run from the project root. The Python is the repo venv (`.venv/bin/python`, on Windows `.venv\Scripts\python`); if it is missing, point the user at `CI/setup_venv.*` and stop.
+Run from the project root. `<engine>` is `.` in the engine repository and `engine` in a game; the areas (todo folder, tracker project, env file) are in `.claude/rules/todo-project.md`, and every command below runs once per area with that area's `--todo <todo>`; `pull` and `push` always with `--project <tracker>` (and `--env-file` when the row names one). The Python is the repo venv (`<engine>/.venv/bin/python`, on Windows `<engine>\.venv\Scripts\python`); if it is missing, point the user at `CI/setup_venv.*` and stop.
 
 1. Run `check` first. A format error is a mistake in an entry file: show the message and fix the entry only if asked.
 2. Order: `pull`, then `push`. `pull --apply` deletes files, so run the report-only `pull` first, show it, and apply only when the user asked for it.
-3. For `push`, always run `push --dry-run` first and show the totals. Run the real `push` only when the user asked for it. It writes to the user's tracker, and a wrong `VIKUNJA_PROJECT` would fill the wrong project.
+3. For `push`, always run `push --dry-run` first and show the totals. Run the real `push` only when the user asked for it. It writes to the user's tracker, and a wrong project would fill the wrong one: check the `--project` you pass against the area's row.
 4. If the settings are missing, the tool says which of `VIKUNJA_URL` / `VIKUNJA_TOKEN` is not set. Do not ask for the token in chat and never print it: the user puts it into the git-ignored `.env`.
 5. After a `dashboard`, give the file path. The page cannot be looked at from the agent session, so do not describe how it looks.
 
