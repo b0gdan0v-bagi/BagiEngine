@@ -10,6 +10,7 @@ Read by the skills `build`, `clang-format` and `strip-pch-includes`. The three s
 | `<R>` | the repository to build or format. `.` by default (the repository the session runs in). `engine` only for engine work done from a game checkout; then the skills run from `engine/` and read `engine/.claude/rules/build-project.md`, so `<engine>` is `.` there. Every path below is relative to `<R>`. |
 | `<product>` | the game executable of `<R>`, from the field `Product`. |
 | `<tests>` | the test targets of `<R>`, from the field `Tests`. |
+| `<py>` | the Python interpreter that runs `CI/scripts/*.py`, from the field `Python` (below). |
 | `<p>` | the preset the skill picked. |
 
 ## Build
@@ -88,12 +89,53 @@ Engine, for explaining to the user. With the CMake Tools extension (`cmake.useCM
 
 ## Format
 
-Filled by the next change (the `clang-format` skill).
+Fields the `clang-format` skill reads (the `strip-pch-includes` skill uses `Python` and `Format scope` too). A game fills every row.
+
+| Field | Meaning | Engine value |
+|-------|---------|--------------|
+| Python | the interpreter `<py>`. The two scripts use only the standard library, so no venv is needed; `uv run python` also works. A repository may name its venv interpreter instead (a game on Windows: `engine\.venv\Scripts\python`) | `python3` (Windows: `python`) |
+| `<engine>` and `<R>` | the values of the two terms for the default run | `.` and `.` (so `--root .`, which is also the scripts' default here) |
+| Format scope | the folders `--all` covers (also for `strip-pch-includes`) | `src/`, `config/`, `games/`. The engine's own `tests/` is **not** covered by `--all` (`--changed` formats it) |
+| Ignore file | the `.clang-format-ignore` in the root of `<R>`: required, one path or prefix per line, `#` comments, not merged with a default | `external/`, `build/`, `.venv/`, the vendored modules under `src/Modules/` (EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, Vulkan), `src/Modules/BECore/pch.h`, `src/Modules/BECore/Assert/StackTrace.cpp`. `BECore` itself is project code and is formatted |
+| `--root` | never left out where it matters | a default in the engine repository; **required in a game**, because without it the scripts format the engine |
+| Launcher | whether a GUI runs the same scripts | yes, see "Launcher" |
+
+The commands, written with the engine values (run from the repository root):
+
+```bash
+python3 CI/scripts/format_sources.py --changed --root .
+python3 CI/scripts/format_sources.py --all --root .
+```
+
+For engine work done from a game checkout (`<R>` = `engine`), run them from `engine/` with these same values and the rules file of `engine/`.
+
+`clang-format` lookup (the script prints the binary and the version it chose): `PATH`, `LIBCLANG_PATH`, `.venv` of `<R>` and of the engine, then on macOS Homebrew LLVM (keg-only, not on `PATH`) and Xcode. `--changed` skips untracked files (it reads `git diff --name-only HEAD`), so a new file is formatted by a direct call with `--style=file` (the `clang-format` skill shows the line). Homebrew LLVM goes on `PATH` for that one command only, never for `cmake --preset`. The todo-developer agent (step 5) uses the same commands.
 
 ## Strip PCH includes
 
-Filled by the next change (the `strip-pch-includes` skill).
+Fields the `strip-pch-includes` skill reads (it shares `Python`, `Format scope` and the ignore file with "Format"). A game fills every row.
+
+| Field | Meaning | Engine value |
+|-------|---------|--------------|
+| PCH | the header whose includes are dropped from sources; always the engine's, relative to `<engine>` | `src/Modules/BECore/pch.h` (the script's default) |
+| Strip example dir | a bounded folder of `<R>` for the dry run and the first real pass | `src/Widgets` (also `src/Modules/BECore`, which the script does not exclude) |
+| After a pass | what to build and run to validate the scope | `cmake --build --preset <p>` (the `build` skill), then `ctest --preset <p>`; `BagiEngineTests` for engine code, `Match3Tests` for code under `games/Match3` |
+
+The commands, written with the engine values:
+
+```bash
+python3 CI/scripts/strip_pch_includes.py --dry-run --changed --root .
+python3 CI/scripts/strip_pch_includes.py --dry-run --all --root . --dir src/Widgets
+python3 CI/scripts/strip_pch_includes.py --all --root . --dir src/Widgets
+```
+
+The order stays: dry run, a bounded folder, the build and the tests, then a wider scope.
 
 ## Launcher
 
-Filled by the next change.
+Engine only. A game has no launcher: it fills the heading with "none".
+
+The engine launcher (`!start.cmd` on Windows, `!start.command` on macOS) is a GUI over the same scripts, for a person at the keyboard (an agent runs the commands above). **Quick Actions** has two buttons:
+
+- **Clang-Format**: scope **Only changed files (git)** or **All files (src/, config/)**, then **Run**. The output goes to the launcher log.
+- **Strip PCH includes**: **Limit to folder** (**All (src/, config/)** or **Choose folder...**, for example `src/Widgets` or `src/Modules/BECore`), **Scope** (**Only changed files (git)** or **All files**), the checkbox **Dry run** (report only), then **OK**. The output goes to the launcher log.
