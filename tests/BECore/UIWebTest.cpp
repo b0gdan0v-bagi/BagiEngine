@@ -13,6 +13,7 @@
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
 #include <BECore/UI/UIScreenContent.h>
+#include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <BECore/UI/UIWebText.h>
 #include <Common/EngineEnvironment.h>
@@ -241,6 +242,171 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 #Menu    { background: rgb(70, 70, 100); }
 #Seed    { left: 96px; bottom: 26px; width: 300px; height: 24px; font-size: 16px; color: rgb(190, 190, 190); }
 )";
+
+        // The plate of the choice panel of UISelectorScreenTest (the panel shape of the Chess opponent panel), without the dim behind it, and the same plate in HTML + CSS.
+        // The XML is that test's, with `selectedColor` on every segment and `blocksInput` on the filled groups (a background takes clicks in the HTML front-end)
+        constexpr const char* kPanelXml = R"(<ui><elements>
+  <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
+    <children>
+      <element type="UILabel" name="Title" height="44" text="Opponent" fontSize="30" align="Center" />
+      <element type="UIStack" name="ModeRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
+        <children>
+          <element type="UILabel" name="ModeCaption" width="150" height="56" text="Opponent" fontSize="24" verticalAlign="Center" />
+          <element type="UISegmented" name="Mode" bind="opponentMode" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
+            <children>
+              <element type="UIButton" name="ModeTwo" flex="1" height="56" text="Two players" fontSize="24" value="two" action="SelectorMode" color="70,70,100,255" selectedColor="110,130,200,255" />
+              <element type="UIButton" name="ModeComputer" flex="1" height="56" text="Computer" fontSize="24" value="computer" action="SelectorMode" color="70,70,100,255" selectedColor="110,130,200,255" />
+            </children>
+          </element>
+        </children>
+      </element>
+      <element type="UIStack" name="ColorRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
+        <children>
+          <element type="UILabel" name="ColorCaption" width="150" height="56" text="Play as" fontSize="24" verticalAlign="Center" />
+          <element type="UISegmented" name="Color" bind="opponentColor" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
+            <children>
+              <element type="UIButton" name="ColorWhite" flex="1" height="56" text="White" fontSize="24" value="white" action="SelectorColor" color="70,70,100,255" selectedColor="110,130,200,255" />
+              <element type="UIButton" name="ColorBlack" flex="1" height="56" text="Black" fontSize="24" value="black" action="SelectorColor" color="70,70,100,255" selectedColor="110,130,200,255" />
+            </children>
+          </element>
+        </children>
+      </element>
+      <element type="UIStack" name="EngineRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
+        <children>
+          <element type="UILabel" name="EngineCaption" width="150" height="56" text="Engine" fontSize="24" verticalAlign="Center" />
+          <element type="UISegmented" name="Engine" bind="opponentEngine" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
+            <children>
+              <element type="UIButton" name="EngineStockfish" flex="1" height="56" text="Stockfish" fontSize="24" value="stockfish" action="SelectorEngine" color="70,70,100,255" selectedColor="110,130,200,255" />
+              <element type="UIButton" name="EngineOwn" flex="1" height="56" text="Own engine" fontSize="24" value="own" action="SelectorEngine" color="70,70,100,255" selectedColor="110,130,200,255" />
+            </children>
+          </element>
+        </children>
+      </element>
+      <element type="UIStack" name="LevelRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
+        <children>
+          <element type="UILabel" name="LevelCaption" width="150" height="56" text="Level" fontSize="24" verticalAlign="Center" />
+          <element type="UISegmented" name="Level" bind="opponentLevel" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
+            <children>
+              <element type="UIButton" name="LevelEasy" flex="1" height="56" text="Easy" fontSize="24" value="easy" action="SelectorLevel" color="70,70,100,255" selectedColor="110,130,200,255" />
+              <element type="UIButton" name="LevelMedium" flex="1" height="56" text="Medium" fontSize="24" value="medium" action="SelectorLevel" color="70,70,100,255" selectedColor="110,130,200,255" />
+              <element type="UIButton" name="LevelHard" flex="1" height="56" text="Hard" fontSize="24" value="hard" action="SelectorLevel" color="70,70,100,255" selectedColor="110,130,200,255" />
+              <element type="UIButton" name="LevelMax" flex="1" height="56" text="Max" fontSize="24" value="max" action="SelectorLevel" color="70,70,100,255" selectedColor="110,130,200,255" />
+            </children>
+          </element>
+        </children>
+      </element>
+      <element type="UIButton" name="Ok" height="56" text="OK" fontSize="26" action="SelectorClose" color="40,90,60,255" />
+    </children>
+  </element>
+</elements>
+<variants>
+  <variant when="orientation:portrait">
+    <overrides>
+      <set element="Plate" height="576" />
+      <set element="ModeRow" direction="Vertical" height="96" />
+      <set element="ModeCaption" height="32" />
+      <set element="ColorRow" direction="Vertical" height="96" />
+      <set element="ColorCaption" height="32" />
+      <set element="EngineRow" direction="Vertical" height="96" />
+      <set element="EngineCaption" height="32" />
+      <set element="LevelRow" direction="Vertical" height="96" />
+      <set element="LevelCaption" height="32" />
+      <set element="LevelEasy" fontSize="22" />
+      <set element="LevelMedium" fontSize="22" />
+      <set element="LevelHard" fontSize="22" />
+      <set element="LevelMax" fontSize="22" />
+    </overrides>
+  </variant>
+</variants></ui>)";
+
+        constexpr const char* kPanelHtml = R"(
+<div id="Plate">
+  <span id="Title">Opponent</span>
+  <div id="ModeRow" class="row">
+    <span id="ModeCaption" class="caption">Opponent</span>
+    <div id="Mode" class="group" data-widget="segmented" data-bind="opponentMode">
+      <button id="ModeTwo" data-action="SelectorMode" data-value="two">Two players</button>
+      <button id="ModeComputer" data-action="SelectorMode" data-value="computer">Computer</button>
+    </div>
+  </div>
+  <div id="ColorRow" class="row">
+    <span id="ColorCaption" class="caption">Play as</span>
+    <div id="Color" class="group" data-widget="segmented" data-bind="opponentColor">
+      <button id="ColorWhite" data-action="SelectorColor" data-value="white">White</button>
+      <button id="ColorBlack" data-action="SelectorColor" data-value="black">Black</button>
+    </div>
+  </div>
+  <div id="EngineRow" class="row">
+    <span id="EngineCaption" class="caption">Engine</span>
+    <div id="Engine" class="group" data-widget="segmented" data-bind="opponentEngine">
+      <button id="EngineStockfish" data-action="SelectorEngine" data-value="stockfish">Stockfish</button>
+      <button id="EngineOwn" data-action="SelectorEngine" data-value="own">Own engine</button>
+    </div>
+  </div>
+  <div id="LevelRow" class="row">
+    <span id="LevelCaption" class="caption">Level</span>
+    <div id="Level" class="group" data-widget="segmented" data-bind="opponentLevel">
+      <button id="LevelEasy" data-action="SelectorLevel" data-value="easy">Easy</button>
+      <button id="LevelMedium" data-action="SelectorLevel" data-value="medium">Medium</button>
+      <button id="LevelHard" data-action="SelectorLevel" data-value="hard">Hard</button>
+      <button id="LevelMax" data-action="SelectorLevel" data-value="max">Max</button>
+    </div>
+  </div>
+  <button id="Ok" data-action="SelectorClose">OK</button>
+</div>)";
+
+        constexpr const char* kPanelCss = R"(
+#Plate    { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; width: 94%; max-width: 640px; height: 416px; background: rgb(36, 40, 52); }
+#Title    { height: 44px; font-size: 30px; text-align: center; }
+.row      { display: flex; flex-direction: row; align-items: stretch; gap: 8px; height: 56px; }
+.caption  { width: 150px; height: 56px; font-size: 24px; vertical-align: middle; }
+.group    { display: flex; flex-direction: row; gap: 4px; flex: 1; height: 56px; background: rgb(30, 30, 30); }
+.group button { flex: 1; height: 56px; font-size: 24px; background: rgb(70, 70, 100); }
+.group button:checked { background: rgb(110, 130, 200); }
+#Ok       { height: 56px; font-size: 26px; background: rgb(40, 90, 60); }
+@media (orientation: portrait) {
+  #Plate    { height: 576px; }
+  .row      { flex-direction: column; height: 96px; }
+  .caption  { height: 32px; }
+  #Level button { font-size: 22px; }
+}
+)";
+
+        /// Every attribute of every `element` of @p expected is on the same element of @p actual with the same text, and the other way round: the two XML texts say the same.
+        /// Three spellings are the same thing and are not compared: a `UIStack` is a `UIElement` with `layout="Stack"` (the compile writes the second), and a `Vertical`
+        /// direction is the default and is not written
+        void ExpectSameAttributes(pugi::xml_node expected, pugi::xml_node actual) {
+            ASSERT_EQ(std::string(expected.attribute("name").as_string()), std::string(actual.attribute("name").as_string()));
+            const std::string name = expected.attribute("name").as_string();
+            const auto skipped = [](const pugi::xml_attribute& attribute, const pugi::xml_node& owner) {
+                const std::string key = attribute.name();
+                return key == "layout" || (key == "type" && std::string(attribute.as_string()) == "UIStack" && !owner.attribute("bind")) ||
+                       (key == "direction" && std::string(attribute.as_string()) == "Vertical");
+            };
+            for (pugi::xml_attribute attribute : expected.attributes()) {
+                if (!skipped(attribute, expected)) {
+                    EXPECT_EQ(std::string(attribute.as_string()), std::string(actual.attribute(attribute.name()).as_string())) << name << "." << attribute.name();
+                }
+            }
+            for (pugi::xml_attribute attribute : actual.attributes()) {
+                if (!skipped(attribute, actual) && std::string(attribute.name()) != "type") {
+                    EXPECT_FALSE(expected.attribute(attribute.name()).empty()) << name << " has the extra attribute " << attribute.name();
+                }
+            }
+            const pugi::xml_node expectedChildren = expected.child("children");
+            const pugi::xml_node actualChildren = actual.child("children");
+            pugi::xml_node a = actualChildren.first_child();
+            for (pugi::xml_node e : expectedChildren.children()) {
+                ASSERT_TRUE(a) << name << " lacks a child " << e.attribute("name").as_string();
+                ExpectSameAttributes(e, a);
+                a = a.next_sibling();
+            }
+            EXPECT_FALSE(a) << name << " has more children than expected";
+        }
+
+        const char* const kPanelNames[] = {"Plate",      "Title",       "ModeRow",   "ModeCaption",   "Mode",   "ModeTwo",         "ModeComputer", "ColorRow", "ColorCaption", "Color",
+                                           "ColorWhite", "ColorBlack",  "EngineRow", "EngineCaption", "Engine", "EngineStockfish", "EngineOwn",    "LevelRow", "LevelCaption", "Level",
+                                           "LevelEasy",  "LevelMedium", "LevelHard", "LevelMax",      "Ok"};
 
     }  // namespace
 
@@ -551,6 +717,167 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         base.sceneViewHeight = kViewHeight;
         const auto failures = ValidateOnMatrix(web.layout, options, base);
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
+    }
+
+    // ---- choice groups -------------------------------------------------------------------------------------------------------
+
+    TEST_F(UIWebTest, ThePanelInHtmlAndCssBuildsTheElementsOfTheXml) {
+        const auto compiled = Compile(kPanelHtml, kPanelCss);
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
+
+        pugi::xml_document reference;
+        ASSERT_TRUE(reference.load_string(kPanelXml));
+        ExpectSameAttributes(reference.child("ui").child("elements").child("element"), compiled->document.child("ui").child("elements").child("element"));
+
+        const UIScreenContent expected = ReadXml(kPanelXml);
+        ExpectSameElements(expected.elements, compiled->content.elements);
+        EXPECT_TRUE(expected.variants == compiled->content.variants) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->report.variants, 1u);
+
+        // The fields the tree comparison does not look at
+        const auto* level = dynamic_cast<UISegmented*>(compiled->Element("Level"));
+        ASSERT_NE(level, nullptr) << "a data-widget=\"segmented\" div is a UISegmented";
+        EXPECT_EQ(level->bind.ToStringView(), "opponentLevel");
+        EXPECT_EQ(level->layout, UILayoutKind::Stack);
+        const auto* max = dynamic_cast<UIButton*>(compiled->Element("LevelMax"));
+        ASSERT_NE(max, nullptr);
+        EXPECT_EQ(max->value.ToStringView(), "max");
+        EXPECT_EQ(max->action.ToStringView(), "SelectorLevel");
+        EXPECT_EQ(max->selectedColor.r, 110);
+        EXPECT_EQ(max->selectedColor.g, 130);
+        EXPECT_EQ(max->selectedColor.b, 200);
+        EXPECT_EQ(max->hoverColor.a, 0) << "only :checked was written, so the hover color stays derived";
+    }
+
+    TEST_F(UIWebTest, ThePanelInHtmlLaysOutLikeTheXmlInLandscapeAndPortrait) {
+        const auto compiled = Compile(kPanelHtml, kPanelCss);
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        const UIScreenContent expectedContent = ReadXml(kPanelXml);
+        // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
+        for (const auto& [viewWidth, viewHeight] : {std::pair{840.0f, 800.0f}, {560.0f, 840.0f}}) {
+            LaidOut web(compiled->content);
+            LaidOut xml(expectedContent);
+            web.InSceneView(viewWidth, viewHeight);
+            xml.InSceneView(viewWidth, viewHeight);
+            for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
+                web.At(width, height);
+                xml.At(width, height);
+                for (const char* name : kPanelNames) {
+                    SCOPED_TRACE(Format("{} in a {}x{} view at {}x{}", name, viewWidth, viewHeight, width, height).c_str());
+                    ExpectSameRect(xml.Find(name), web.Find(name), name);
+                }
+            }
+        }
+        // The portrait variant really changed the shape: the rows are taller in portrait than in landscape (each view lays the shared elements out in turn)
+        const struct {
+            float viewWidth;
+            float viewHeight;
+            float rowHeight;
+        } shapes[] = {{840.0f, 800.0f, 56.0f}, {560.0f, 840.0f, 96.0f}};
+        for (const auto& shape : shapes) {
+            LaidOut web(compiled->content);
+            web.InSceneView(shape.viewWidth, shape.viewHeight);
+            web.At(1280.0f, 720.0f);
+            EXPECT_FLOAT_EQ(web.Find("LevelRow")->rect.h, shape.rowHeight) << shape.viewWidth;
+        }
+    }
+
+    TEST_F(UIWebTest, ThePanelInHtmlFollowsTheVariablesAndPassesItsClicksOn) {
+        const auto compiled = Compile(kPanelHtml, kPanelCss);
+        auto* color = dynamic_cast<UISegmented*>(compiled->Element("Color"));
+        auto* white = dynamic_cast<UIButton*>(compiled->Element("ColorWhite"));
+        auto* black = dynamic_cast<UIButton*>(compiled->Element("ColorBlack"));
+        ASSERT_TRUE(color != nullptr && white != nullptr && black != nullptr);
+        color->SyncChildren();
+        EXPECT_FALSE(white->selected || black->selected) << "an unset variable selects nothing";
+        CoreManager::GetUIVars().Set("opponentColor"_intern, "black");
+        color->SyncChildren();
+        EXPECT_FALSE(white->selected);
+        EXPECT_TRUE(black->selected);
+        EXPECT_EQ(color->GetSelectedValue(), "black");
+    }
+
+    TEST_F(UIWebTest, ASegmentedGroupTakesDisabledFromTheAttribute) {
+        const auto compiled = Compile(R"(<div id="g" data-widget="segmented" data-bind="v" disabled><button id="a" data-value="x">A</button></div>)", "div { display: flex; height: 56px }");
+        EXPECT_EQ(compiled->Attr("g", "disabled"), "true");
+        EXPECT_EQ(compiled->Attr("g", "bind"), "v");
+        EXPECT_EQ(compiled->Attr("a", "disabled"), "") << "the group greys its buttons at run time, the button is not disabled itself";
+        EXPECT_EQ(compiled->Attr("a", "value"), "x");
+        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
+        auto* group = dynamic_cast<UISegmented*>(compiled->Element("g"));
+        ASSERT_NE(group, nullptr);
+        EXPECT_TRUE(group->disabled);
+        group->SyncChildren();
+        EXPECT_TRUE(dynamic_cast<UIButton*>(compiled->Element("a"))->groupDisabled);
+    }
+
+    TEST_F(UIWebTest, CheckedAndHoverOnOneButton) {
+        const auto compiled = Compile(R"(<button id="b" data-action="Go" data-value="v">Go</button>)",
+                                      "button { background: #202020 } button:hover { background: #303030 } button:checked { background: #405060 } button:active { background: #101010 }");
+        EXPECT_EQ(compiled->Attr("b", "color"), "32,32,32,255");
+        EXPECT_EQ(compiled->Attr("b", "hoverColor"), "48,48,48,255");
+        EXPECT_EQ(compiled->Attr("b", "selectedColor"), "64,80,96,255");
+        EXPECT_EQ(compiled->Attr("b", "pressedColor"), "16,16,16,255");
+        EXPECT_EQ(compiled->Attr("b", "value"), "v");
+        EXPECT_TRUE(compiled->report.issues.empty());
+
+        // `:checked` counts as a class: a longer selector wins over a plain one, the order breaks ties
+        const auto specific =
+            Compile(R"(<button id="b" class="c">Go</button>)", "button:checked { background: #111111 } button.c:checked { background: #222222 } button:checked { background: #333333 }");
+        EXPECT_EQ(specific->Attr("b", "selectedColor"), "34,34,34,255");
+        const auto onlyChecked = Compile(R"(<button id="b">Go</button>)", "button:checked { background: #111111 }");
+        EXPECT_FALSE(onlyChecked->Has("b", "color")) << "a state rule changes nothing of the base look";
+        EXPECT_EQ(onlyChecked->Attr("b", "selectedColor"), "17,17,17,255");
+    }
+
+    TEST_F(UIWebTest, ACheckedRuleCanChangeOnlyTheBackgroundOfAButton) {
+        const auto compiled = Compile(R"(<button id="b">Go</button><div id="d"></div>)", "button:checked { background: #111111; font-size: 30px } div:checked { background: #222222 }");
+        EXPECT_EQ(compiled->IssuesMentioning("'fontSize' of a <button>"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'color' of a <div>"), 1u) << "the :checked rule of a div has no button to change";
+        EXPECT_EQ(compiled->Attr("b", "selectedColor"), "17,17,17,255");
+    }
+
+    TEST_F(UIWebTest, ChoiceGroupsOutsideTheSubsetAreReported) {
+        // An unknown widget is read as a plain element and reported
+        const auto unknown = Compile(R"(<div id="g" data-widget="slider"></div>)");
+        EXPECT_EQ(unknown->IssuesMentioning("data-widget=\"slider\" is not supported"), 1u);
+        EXPECT_EQ(unknown->Find("g").attribute("type").as_string(), std::string("UIElement"));
+
+        // data-bind with no widget, on a div and on a button
+        const auto bind = Compile(R"(<div id="g" data-bind="v"></div><button id="b" data-bind="w">B</button>)");
+        EXPECT_EQ(bind->IssuesMentioning("data-bind only applies"), 1u) << "one message for both, like every issue";
+        EXPECT_FALSE(bind->Has("g", "bind"));
+        EXPECT_FALSE(bind->Has("b", "bind"));
+
+        // A group that is not display: flex still compiles (a UISegmented is a stack), and says so
+        const auto noFlex = Compile(R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x">A</button></div>)");
+        EXPECT_EQ(noFlex->IssuesMentioning("needs display: flex"), 1u);
+        EXPECT_EQ(noFlex->Attr("g", "bind"), "v");
+        EXPECT_EQ(noFlex->Find("g").attribute("type").as_string(), std::string("UISegmented"));
+        const auto flex = Compile(R"(<div id="g" data-widget="segmented"><button>A</button></div>)", "div { display: flex }");
+        EXPECT_EQ(flex->IssuesMentioning("needs display: flex"), 0u);
+
+        // data-value away from a button, and the widget on a button
+        const auto value = Compile(R"(<div id="g" data-value="x"></div>)");
+        EXPECT_EQ(value->IssuesMentioning("data-value only applies to a <button>"), 1u);
+        EXPECT_FALSE(value->Has("g", "value"));
+        const auto onButton = Compile(R"(<button id="b" data-widget="segmented">B</button>)");
+        EXPECT_EQ(onButton->IssuesMentioning("on a <button> is left out"), 1u);
+        EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), std::string("UIButton"));
+
+        // The widget name is not case sensitive, like a tag
+        const auto upper = Compile(R"(<div id="g" data-widget="Segmented"></div>)", "div { display: flex }");
+        EXPECT_EQ(upper->Find("g").attribute("type").as_string(), std::string("UISegmented"));
+        EXPECT_TRUE(upper->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, AChoiceGroupKeepsItsCounters) {
+        const auto compiled =
+            Compile(R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x">A</button><button id="b" data-value="y">B</button></div>)", "div { display: flex }");
+        EXPECT_EQ(compiled->report.elements, 3u);
+        EXPECT_EQ(compiled->report.rules, 1u);
+        EXPECT_EQ(compiled->report.declarations, 1u);
     }
 
     // ---- the cascade ---------------------------------------------------------------------------------------------------------

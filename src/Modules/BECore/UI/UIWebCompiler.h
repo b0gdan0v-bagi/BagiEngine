@@ -23,7 +23,7 @@ namespace BECore {
      * is the CSS one: specificity (ids, classes, tags), then source order, `!important` first and a `style=""` over a rule. `color`, `font-size`, `font-family`,
      * `text-align` and `line-height` are inherited. `@media` blocks become responsive variants: for each block the cascade is run again with its rules
      * and what changed becomes the overrides of the variant, so a variant can change only what UIElementOverride can (visibility, anchor, offset, size, stack
-     * direction, font size). `:hover`, `:active` and `:disabled` on a button set its three fills.
+     * direction, font size). `:hover`, `:active`, `:disabled` and `:checked` on a button set its four fills (`hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`).
      *
      * Everything outside the subset is an issue in the UIWebReport and is left out; the supported properties are listed in `UI/CLAUDE.md`.
      * The conversion is pure: no resource, window or renderer is touched, so it is tested with strings.

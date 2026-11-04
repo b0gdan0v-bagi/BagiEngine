@@ -95,6 +95,9 @@ namespace BECore {
             if (name == "disabled") {
                 return UICssPseudo::Disabled;
             }
+            if (name == "checked") {
+                return UICssPseudo::Checked;
+            }
             return std::nullopt;
         }
 

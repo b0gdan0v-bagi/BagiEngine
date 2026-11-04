@@ -8,6 +8,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
+#include <BECore/UI/UISegmented.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -27,6 +28,8 @@ namespace BECore::Tests {
         //   Debug (layer 5): Tiny (400, 10, 20 x 20) is a button below the touch size, and a second Ok (500, 100, 80 x 40) with another action.
         //   Menu (layer 20): a modal canvas, hidden at first.
         // "Fit": 400 x 300 units, shown in a 1000 x 600 output: scale 2, offset (100, 0). View is a SceneView canvas with the button Go (10, 10, 50 x 40).
+        // "Choice": 800 x 600 in window pixels. Panel holds Side, a UISegmented bound to `uiApiSide` with the buttons Left and Right (the same action, values "left" and "right"; 150 x 56
+        //   and 150 x 56 at x = 100, 252, y = 100), and Plain (100, 300, 80 x 40) is a button without a value.
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -68,6 +71,21 @@ namespace BECore::Tests {
       </component>
     </components></node>
   </nodes></scene>
+  <scene type="Scene" name="Choice"><nodes>
+    <node name="Panel"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+        <elements>
+          <element type="UISegmented" name="Side" bind="uiApiSide" x="100" y="100" width="302" height="56" direction="Horizontal" spacing="2" color="30,30,30,255">
+            <children>
+              <element type="UIButton" name="Left" flex="1" height="56" text="Left" value="left" action="UIControlApiSide" color="70,70,100,255"/>
+              <element type="UIButton" name="Right" flex="1" height="56" text="Right" value="right" action="UIControlApiSide" color="70,70,100,255"/>
+            </children>
+          </element>
+          <element type="UIButton" name="Plain" x="100" y="300" width="80" height="40" text="Plain" action="UIControlApiPlain" color="40,90,60,255"/>
+        </elements>
+      </component>
+    </components></node>
+  </nodes></scene>
   <scene type="Scene" name="Empty"><nodes/></scene>
 </scenes></SceneManager>)";
 
@@ -96,6 +114,10 @@ namespace BECore::Tests {
             size_t Total() const {
                 return _actions.size();
             }
+            /// The value of the last action ("<none>" when there was none)
+            std::string LastValue() const {
+                return _values.empty() ? std::string("<none>") : std::string(_values.back().ToStringView().data(), _values.back().ToStringView().size());
+            }
 
             int downs = 0;
             int ups = 0;
@@ -103,6 +125,7 @@ namespace BECore::Tests {
         private:
             void OnAction(const InputEvents::ActionEvent& event) {
                 _actions.push_back(event.action);
+                _values.push_back(event.value);
             }
             void OnDown(const SDLEvents::MouseButtonDownEvent&) {
                 ++downs;
@@ -112,6 +135,7 @@ namespace BECore::Tests {
             }
 
             eastl::vector<PoolString> _actions;
+            eastl::vector<PoolString> _values;
         };
 
         std::string Text(const eastl::string& text) {
@@ -451,6 +475,161 @@ namespace BECore::Tests {
         ASSERT_NE(go, nullptr);
         ExpectRect(Member(*go, "rect"), 10.0f, 10.0f, 50.0f, 40.0f);
         ExpectRect(Member(*go, "outputRect"), 120.0f, 20.0f, 100.0f, 80.0f);
+    }
+
+    // ---- the choice group ---------------------------------------------------------------------------------------------------
+
+    TEST_F(UIControlApiTest, ATreeShowsTheValueAndTheSelectionOfAChoiceGroup) {
+        CoreManager::GetUIVars().Set("uiApiSide"_intern, "right");
+        Show("Choice");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* panel = FindCanvas(*Member(response, "result"), "Panel");
+        ASSERT_NE(panel, nullptr);
+        const Json* side = FindElement(*panel, "Side");
+        ASSERT_NE(side, nullptr);
+        EXPECT_EQ(StringMember(*side, "type"), "UISegmented");
+        EXPECT_EQ(StringMember(*side, "bind"), "uiApiSide");
+        EXPECT_EQ(StringMember(*side, "selectedValue"), "right");
+        EXPECT_FALSE(BoolMember(*side, "disabled"));
+        const Json* left = FindElement(*side, "Left");
+        const Json* right = FindElement(*side, "Right");
+        ASSERT_TRUE(left != nullptr && right != nullptr);
+        EXPECT_EQ(StringMember(*left, "value"), "left");
+        EXPECT_EQ(StringMember(*right, "value"), "right");
+        EXPECT_EQ(StringMember(*left, "action"), "UIControlApiSide");
+        EXPECT_FALSE(BoolMember(*left, "selected"));
+        EXPECT_TRUE(BoolMember(*right, "selected"));
+        ExpectRect(Member(*left, "rect"), 100.0f, 100.0f, 150.0f, 56.0f);
+        ExpectRect(Member(*right, "rect"), 252.0f, 100.0f, 150.0f, 56.0f);
+    }
+
+    TEST_F(UIControlApiTest, TheSelectionFollowsTheVariableBetweenTwoTreeCalls) {
+        CoreManager::GetUIVars().Set("uiApiSide"_intern, "left");
+        Show("Choice");
+        const Json first = Call("ui_tree");
+
+        CoreManager::GetUIVars().Set("uiApiSide"_intern, "right");  // no draw in between: the tree must not show the last draw's selection
+        const Json second = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(first) && IsOk(second));
+        const Json* before = FindElement(*FindCanvas(*Member(first, "result"), "Panel"), "Side");
+        const Json* after = FindElement(*FindCanvas(*Member(second, "result"), "Panel"), "Side");
+        ASSERT_TRUE(before != nullptr && after != nullptr);
+        EXPECT_EQ(StringMember(*before, "selectedValue"), "left");
+        EXPECT_TRUE(BoolMember(*FindElement(*before, "Left"), "selected"));
+        EXPECT_FALSE(BoolMember(*FindElement(*before, "Right"), "selected"));
+        EXPECT_EQ(StringMember(*after, "selectedValue"), "right");
+        EXPECT_FALSE(BoolMember(*FindElement(*after, "Left"), "selected"));
+        EXPECT_TRUE(BoolMember(*FindElement(*after, "Right"), "selected"));
+    }
+
+    TEST_F(UIControlApiTest, AnUnsetVariableSelectsNothingAndATreeBeforeTheFirstDrawStillSaysSo) {
+        _manager->SetActiveScene(PoolString::Intern("Choice"));
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* side = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Side");
+        ASSERT_NE(side, nullptr);
+        EXPECT_EQ(StringMember(*side, "selectedValue"), "");
+        EXPECT_FALSE(BoolMember(*FindElement(*side, "Left"), "selected"));
+        EXPECT_FALSE(BoolMember(*FindElement(*side, "Right"), "selected"));
+    }
+
+    TEST_F(UIControlApiTest, ADisabledGroupShowsItsSegmentsAsDisabled) {
+        auto* side = Canvas("Choice", "Panel")->GetLayout().root->children[0]->Cast<UISegmented>();
+        ASSERT_NE(side, nullptr);
+        side->disabled = true;
+        Show("Choice");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* group = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Side");
+        ASSERT_NE(group, nullptr);
+        EXPECT_TRUE(BoolMember(*group, "disabled"));
+        EXPECT_TRUE(BoolMember(*FindElement(*group, "Left"), "disabled")) << "a click on it does nothing, which is what the field says";
+        EXPECT_TRUE(BoolMember(*FindElement(*group, "Right"), "disabled"));
+        EXPECT_FALSE(BoolMember(*FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Plain"), "disabled"));
+    }
+
+    TEST_F(UIControlApiTest, AClickOnASegmentAnswersWithTheActionAndTheValueAndTheListenerGetsThem) {
+        CoreManager::GetUIVars().Set("uiApiSide"_intern, "left");
+        Show("Choice");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("Right"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        const Json& result = *Member(clicked, "result");
+        EXPECT_EQ(StringMember(result, "action"), "UIControlApiSide");
+        EXPECT_EQ(StringMember(result, "value"), "right");
+        EXPECT_EQ(recorder.Count("UIControlApiSide"), 1);
+        EXPECT_EQ(recorder.LastValue(), "right");
+    }
+
+    TEST_F(UIControlApiTest, AChoiceCanBeCheckedEndToEnd) {
+        CoreManager::GetUIVars().Set("uiApiSide"_intern, "left");
+        Show("Choice");
+        const Json before = Call("ui_tree");
+        ASSERT_TRUE(IsOk(before));
+        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(before, "result"), "Panel"), "Left"), "selected"));
+
+        // The click only reports; the game (here the test) answers by setting the variable
+        ASSERT_TRUE(IsOk(Call("ui_click", Click("Right"))));
+        const Json unchanged = Call("ui_tree");
+        ASSERT_TRUE(IsOk(unchanged));
+        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(unchanged, "result"), "Panel"), "Left"), "selected")) << "a click selects nothing by itself";
+        EXPECT_FALSE(BoolMember(*FindElement(*FindCanvas(*Member(unchanged, "result"), "Panel"), "Right"), "selected"));
+
+        CoreManager::GetUIVars().Set("uiApiSide"_intern, "right");
+        const Json after = Call("ui_tree");
+        ASSERT_TRUE(IsOk(after));
+        const Json* panel = FindCanvas(*Member(after, "result"), "Panel");
+        EXPECT_FALSE(BoolMember(*FindElement(*panel, "Left"), "selected"));
+        EXPECT_TRUE(BoolMember(*FindElement(*panel, "Right"), "selected"));
+    }
+
+    TEST_F(UIControlApiTest, ADisabledGroupTakesTheClickAndEmitsNothing) {
+        auto* side = Canvas("Choice", "Panel")->GetLayout().root->children[0]->Cast<UISegmented>();
+        ASSERT_NE(side, nullptr);
+        side->disabled = true;
+        Show("Choice");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("Left"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, APlainButtonHasAnEmptyValueAndNeverSelectedAndALabelHasNeither) {
+        Show("Choice");
+        Recorder recorder;
+
+        const Json tree = Call("ui_tree");
+        const Json clicked = Call("ui_click", Click("Plain"));
+
+        ASSERT_TRUE(IsOk(tree) && IsOk(clicked));
+        const Json* plain = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Plain");
+        ASSERT_NE(plain, nullptr);
+        EXPECT_NE(Member(*plain, "value"), nullptr);
+        EXPECT_EQ(StringMember(*plain, "value"), "");
+        EXPECT_FALSE(BoolMember(*plain, "selected"));
+        EXPECT_EQ(Member(*plain, "bind"), nullptr) << "only a choice group has a bind";
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "");
+        EXPECT_EQ(recorder.Count("UIControlApiPlain"), 1);
+        EXPECT_EQ(recorder.LastValue(), "");
+
+        Show("Main");
+        const Json main = Call("ui_tree");
+        const Json* note = FindElement(*FindCanvas(*Member(main, "result"), "Hud"), "Note");
+        ASSERT_NE(note, nullptr);
+        EXPECT_EQ(Member(*note, "value"), nullptr);
+        EXPECT_EQ(Member(*note, "selected"), nullptr);
     }
 
     // ---- ui_click ---------------------------------------------------------------------------------------------------------

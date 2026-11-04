@@ -10,6 +10,7 @@ namespace BECore {
 
         constexpr int HoverBrighten = 28;
         constexpr int PressDarken = 36;
+        constexpr int SelectedBrighten = 56;  // more than HoverBrighten: a selected button under the pointer is still told from a hovered one
         constexpr float DisabledAlpha = 0.5f;
 
         unsigned char ShiftChannel(unsigned char channel, int delta) {
@@ -30,20 +31,24 @@ namespace BECore {
     }
 
     Color UIButton::GetCurrentFill() const {
-        if (disabled) {
+        if (disabled || groupDisabled) {
             if (disabledColor.a > 0) {
                 return disabledColor;
             }
             return {color.r, color.g, color.b, static_cast<unsigned char>(static_cast<float>(color.a) * DisabledAlpha)};
         }
         // A press that moved off the button is not shown as pressed: letting go there does nothing
+        Color base = color;
+        if (selected) {
+            base = selectedColor.a > 0 ? Color(selectedColor) : Shift(color, SelectedBrighten);
+        }
         if (pressed && hovered) {
-            return pressedColor.a > 0 ? Color(pressedColor) : Shift(color, -PressDarken);
+            return pressedColor.a > 0 ? Color(pressedColor) : Shift(base, -PressDarken);
         }
         if (hovered) {
-            return hoverColor.a > 0 ? Color(hoverColor) : Shift(color, HoverBrighten);
+            return hoverColor.a > 0 ? Color(hoverColor) : Shift(base, HoverBrighten);
         }
-        return color;
+        return base;
     }
 
     void UIButton::DrawSelf(IRenderer& renderer) {
@@ -51,14 +56,22 @@ namespace BECore {
         if (fill.a > 0 && !rect.IsEmpty()) {
             renderer.DrawFilledRect(rect.x, rect.y, rect.w, rect.h, fill);
         }
+        if (selected && !rect.IsEmpty()) {
+            const float height = std::min(kSelectedBarHeight, rect.h);
+            Color bar = textColor;
+            if (disabled || groupDisabled) {
+                bar.a = static_cast<unsigned char>(static_cast<float>(bar.a) * DisabledAlpha);
+            }
+            renderer.DrawFilledRect(rect.x, rect.y + rect.h - height, rect.w, height, bar);
+        }
         DrawText(renderer);
     }
 
     void UIButton::OnClick() {
-        if (disabled || action.Empty()) {
+        if (disabled || groupDisabled || action.Empty()) {
             return;
         }
-        InputEvents::ActionEvent::Emit(action);
+        InputEvents::ActionEvent::Emit(action, value);
     }
 
 }  // namespace BECore

@@ -12,12 +12,14 @@ namespace BECore {
 
         constexpr eastl::string_view HtmlSource = "html";
         constexpr eastl::string_view CssSource = "css";
+        constexpr eastl::string_view WidgetAttribute = "data-widget";
+        constexpr eastl::string_view SegmentedWidget = "segmented";
         constexpr char LineBreakMarker = '\x01';  // a `<br>` while the text of a label is gathered; the white space of the source is never this
         constexpr float DefaultFontSizeForLineHeight = 24.0f;
         constexpr size_t BoxValueMax = 4;
 
         // The kinds of element the compile writes
-        CORE_ENUM(WebKind, uint8_t, Group, Panel, Label, Button, Image)
+        CORE_ENUM(WebKind, uint8_t, Group, Panel, Label, Button, Image, Segmented)
 
         const char* TypeName(WebKind kind) {
             switch (kind) {
@@ -29,6 +31,8 @@ namespace BECore {
                     return "UIButton";
                 case WebKind::Image:
                     return "UIImage";
+                case WebKind::Segmented:
+                    return "UISegmented";
                 case WebKind::Group:
                     break;
             }
@@ -665,7 +669,7 @@ namespace BECore {
             eastl::string text;
         };
 
-        enum class CascadeState { None, Hover, Active, Disabled };
+        enum class CascadeState { None, Hover, Active, Disabled, Checked };
 
         UICssPseudo ToPseudo(CascadeState state) {
             switch (state) {
@@ -675,6 +679,8 @@ namespace BECore {
                     return UICssPseudo::Active;
                 case CascadeState::Disabled:
                     return UICssPseudo::Disabled;
+                case CascadeState::Checked:
+                    return UICssPseudo::Checked;
                 case CascadeState::None:
                     break;
             }
@@ -986,6 +992,30 @@ namespace BECore {
                 }
             }
 
+            /// An element is a choice group when it says `data-widget="segmented"` and is not a button or an image (those keep their own kind and the attribute is reported)
+            [[nodiscard]] static bool IsSegmented(const UIHtmlNode& html) {
+                const eastl::string* widget = html.FindAttribute(WidgetAttribute);
+                return widget != nullptr && UIWebText::ToLower(*widget) == SegmentedWidget && html.tag != "button" && html.tag != "img";
+            }
+
+            /// `data-widget`, `data-bind` and `data-value` outside the places that understand them are reported, never dropped in silence
+            void CheckWidgetAttributes(const UIHtmlNode& html, WebKind kind) {
+                if (const eastl::string* widget = html.FindAttribute(WidgetAttribute)) {
+                    if (kind != WebKind::Segmented) {
+                        const bool known = UIWebText::ToLower(*widget) == SegmentedWidget;
+                        _report.AddOnce(HtmlSource, html.line,
+                                        known ? Format("data-widget=\"{}\" on a <{}> is left out: it belongs on a <div>", widget->c_str(), html.tag.c_str())
+                                              : Format("data-widget=\"{}\" is not supported (\"segmented\" is the only widget)", widget->c_str()));
+                    }
+                }
+                if (kind != WebKind::Segmented && html.HasAttribute("data-bind")) {
+                    _report.AddOnce(HtmlSource, html.line, "data-bind only applies to an element with data-widget=\"segmented\"");
+                }
+                if (kind != WebKind::Button && html.HasAttribute("data-value")) {
+                    _report.AddOnce(HtmlSource, html.line, "data-value only applies to a <button>");
+                }
+            }
+
             void AddNode(int htmlIndex, int parent, const eastl::vector<DeclarationList>& base) {
                 const UIHtmlNode& html = _document.nodes[htmlIndex];
                 WebNode node;
@@ -994,7 +1024,13 @@ namespace BECore {
 
                 bool hasText = false;
                 const bool onlyText = HoldsOnlyText(htmlIndex, hasText);
-                if (html.tag == "button") {
+                const bool segmented = IsSegmented(html);
+                if (segmented) {
+                    node.kind = WebKind::Segmented;
+                    if (!Resolve(base[htmlIndex]).flex) {
+                        _report.AddOnce(HtmlSource, html.line, "a data-widget=\"segmented\" group needs display: flex (it lays its buttons out as a row or a column)");
+                    }
+                } else if (html.tag == "button") {
                     node.kind = WebKind::Button;
                 } else if (html.tag == "img") {
                     node.kind = WebKind::Image;
@@ -1006,6 +1042,7 @@ namespace BECore {
                         _report.AddOnce(HtmlSource, html.line, Format("<{}> is not supported, it is read as a <div>", html.tag.c_str()));
                     }
                 }
+                CheckWidgetAttributes(html, node.kind);
                 if (IsTextKind(node.kind)) {
                     GatherText(htmlIndex, node.text);
                     node.text = CollapseWhitespace(node.text);
@@ -1082,6 +1119,14 @@ namespace BECore {
                     case WebKind::Label:
                     case WebKind::Button:
                         AddText(attrs, r, node, html);
+                        break;
+                    case WebKind::Segmented:
+                        if (const eastl::string* bind = html.FindAttribute("data-bind")) {
+                            attrs.Set("bind", *bind);
+                        }
+                        if (html.HasAttribute("disabled")) {
+                            attrs.Set("disabled", "true");
+                        }
                         break;
                     case WebKind::Group:
                         break;
@@ -1239,6 +1284,9 @@ namespace BECore {
                     if (action != nullptr) {
                         attrs.Set("action", *action);
                     }
+                    if (const eastl::string* value = html.FindAttribute("data-value")) {
+                        attrs.Set("value", *value);
+                    }
                     if (html.HasAttribute("disabled")) {
                         attrs.Set("disabled", "true");
                     }
@@ -1305,9 +1353,10 @@ namespace BECore {
                 return entry;
             }
 
-            /// `:hover`, `:active` and `:disabled` of a button become its hoverColor, pressedColor and disabledColor
+            /// `:hover`, `:active`, `:disabled` and `:checked` of a button become its hoverColor, pressedColor, disabledColor and selectedColor
             void ApplyStates() {
-                static const std::pair<CascadeState, const char*> States[] = {{CascadeState::Hover, "hoverColor"}, {CascadeState::Active, "pressedColor"}, {CascadeState::Disabled, "disabledColor"}};
+                static const std::pair<CascadeState, const char*> States[] = {
+                    {CascadeState::Hover, "hoverColor"}, {CascadeState::Active, "pressedColor"}, {CascadeState::Disabled, "disabledColor"}, {CascadeState::Checked, "selectedColor"}};
                 for (const auto& [state, colorKey] : States) {
                     const UICssPseudo pseudo = ToPseudo(state);
                     const bool used = std::any_of(_sheet.rules.begin(), _sheet.rules.end(), [&](const UICssRule& rule) {

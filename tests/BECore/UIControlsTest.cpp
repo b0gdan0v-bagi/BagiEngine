@@ -9,6 +9,7 @@
 #include <BECore/UI/UIImage.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
+#include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStack.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -43,6 +44,7 @@ namespace BECore::Tests {
           <element type="UIPanel" name="Frame" x="300" y="100" width="100" height="60" sliceBorder="4" blocksInput="false"/>
           <element type="UIButton" name="Off" x="300" y="200" width="80" height="40" text="Off" action="UIControlsTestOff" color="40,90,60,255" disabled="true"/>
           <element type="UIStack" name="Row" x="500" y="10" width="100" height="40" direction="Horizontal" spacing="4"/>
+          <element type="UISegmented" name="Choice" bind="choice" x="500" y="100" width="204" height="48" direction="Horizontal" spacing="4" disabled="true"/>
         </elements>
       </component>
     </components></node>
@@ -83,13 +85,19 @@ namespace BECore::Tests {
             size_t Total() const {
                 return _actions.size();
             }
+            /// The value of the last action, empty when there was none
+            PoolString LastValue() const {
+                return _values.empty() ? PoolString{} : _values.back();
+            }
 
         private:
             void OnAction(const InputEvents::ActionEvent& event) {
                 _actions.push_back(event.action);
+                _values.push_back(event.value);
             }
 
             eastl::vector<PoolString> _actions;
+            eastl::vector<PoolString> _values;
         };
 
         eastl::string ElementToXml(const UIElement& element) {
@@ -204,13 +212,14 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, EveryControlIsMadeByItsTypeName) {
         const UIElement& root = _canvas->GetRoot();
-        ASSERT_EQ(root.children.size(), 5u);
+        ASSERT_EQ(root.children.size(), 6u);
 
         EXPECT_TRUE(root.children[0]->Is<UIPanel>());
         EXPECT_TRUE(root.children[1]->Is<UIImage>());
         EXPECT_TRUE(root.children[2]->Is<UIPanel>());
         EXPECT_TRUE(root.children[3]->Is<UIButton>());
         EXPECT_TRUE(root.children[4]->Is<UIStack>());
+        EXPECT_TRUE(root.children[5]->Is<UISegmented>());
         EXPECT_TRUE(root.children[0]->children[0]->Is<UILabel>());
         EXPECT_TRUE(root.children[0]->children[1]->Is<UIButton>());
     }
@@ -233,6 +242,9 @@ namespace BECore::Tests {
         EXPECT_TRUE(Get<UIPanel>("Plate").blocksInput);  // a panel takes clicks unless it says otherwise
         EXPECT_FALSE(Get<UIPanel>("Frame").blocksInput);
         EXPECT_EQ(Get<UIStack>("Row").layout, UILayoutKind::Stack);
+        EXPECT_EQ(Get<UISegmented>("Choice").layout, UILayoutKind::Stack);
+        EXPECT_EQ(Get<UISegmented>("Choice").bind, PoolString::Intern("choice"));
+        EXPECT_TRUE(Get<UISegmented>("Choice").disabled);
     }
 
     TEST_F(UIControlsTest, TheControlsSaveAndLoadBack) {
@@ -305,7 +317,12 @@ namespace BECore::Tests {
                 button->hoverColor = Color{9, 10, 11, 12};
                 button->pressedColor = Color{13, 14, 15, 16};
                 button->disabledColor = Color{17, 18, 19, 20};
+                button->selectedColor = Color{25, 26, 27, 28};
+                button->value = PoolString::Intern("BusyValue");
                 button->disabled = true;
+            } else if (auto* group = element.Cast<UISegmented>()) {
+                group->bind = PoolString::Intern("busyChoice");
+                group->disabled = true;
             }
             if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>()) {
                 auto* text = label ? label : static_cast<UILabel*>(element.Cast<UIButton>());
@@ -324,7 +341,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(UIControlsTest, EveryPropertyOfEveryControlSurvivesARoundTrip) {
-        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack"}) {
+        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented"}) {
             auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(original) << type;
             SetEveryStyleProperty(original->style);
@@ -849,6 +866,144 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(ok.hovered);
         EXPECT_FALSE(ok.pressed);
+    }
+
+    TEST_F(UIControlsTest, TheClickOfAButtonCarriesItsValue) {
+        ActionRecorder actions;
+        Draw();
+        auto& ok = Get<UIButton>("Ok");
+        const Rect c = Center(ok);
+
+        ASSERT_TRUE(Press(ok));
+        ASSERT_TRUE(Release(c.x, c.y));
+        EXPECT_EQ(actions.Count("UIControlsTestOk"), 1);
+        EXPECT_TRUE(actions.LastValue().Empty()) << "a plain button emits an empty value";
+
+        ok.value = PoolString::Intern("computer");
+        ASSERT_TRUE(Press(ok));
+        ASSERT_TRUE(Release(c.x, c.y));
+        EXPECT_EQ(actions.Count("UIControlsTestOk"), 2);
+        EXPECT_EQ(actions.LastValue(), PoolString::Intern("computer"));
+    }
+
+    TEST_F(UIControlsTest, AValueAndASelectedColorAreReadFromTheFile) {
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString("<root><component><elements><element type=\"UIButton\" name=\"B\" action=\"A\" value=\"two\" selectedColor=\"1,2,3,255\"/>"
+                                                "</elements></component></root>"));
+        auto canvas = New<UICanvasComponent>();
+        ASSERT_TRUE(deserializer.BeginObject("component"));
+        canvas->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+        ASSERT_EQ(canvas->_elements.size(), 1u);
+
+        auto* button = canvas->_elements[0]->Cast<UIButton>();
+        ASSERT_NE(button, nullptr);
+        EXPECT_EQ(button->value, PoolString::Intern("two"));
+        EXPECT_EQ(button->selectedColor.g, 2);
+        EXPECT_FALSE(button->selected) << "the selection is a runtime state, never read from a file";
+        EXPECT_FALSE(button->groupDisabled);
+    }
+
+    TEST_F(UIControlsTest, ASelectedButtonIsFilledLighterAndHasABar) {
+        auto& ok = Get<UIButton>("Ok");
+        const auto barDrawn = [&] {
+            const Rect bar{ok.rect.x, ok.rect.y + ok.rect.h - UIButton::kSelectedBarHeight, ok.rect.w, UIButton::kSelectedBarHeight};  // the rect is laid out by the first draw
+            for (const DrawCall& call : _renderer->calls) {
+                if (call.kind == DrawKind::Rect && Near(call.rect, bar)) {
+                    return std::optional<Color>(call.color);
+                }
+            }
+            return std::optional<Color>();
+        };
+
+        Draw();
+        EXPECT_FALSE(barDrawn()) << "no bar on a button that is not selected";
+        const Color plain = *FillOf(ok);
+        const Color hovered = [&] {
+            const Rect c = Center(ok);
+            MoveTo(c.x, c.y);
+            Draw();
+            const Color result = *FillOf(ok);
+            MoveTo(700.0f, 500.0f);
+            return result;
+        }();
+
+        ok.selected = true;
+        Draw();
+        ASSERT_TRUE(FillOf(ok));
+        EXPECT_GT(FillOf(ok)->r, hovered.r) << "the derived selected fill is lighter than the hover shift";
+        EXPECT_GT(FillOf(ok)->r, plain.r);
+        ASSERT_TRUE(barDrawn());
+        EXPECT_EQ(barDrawn()->r, ok.textColor.r);
+        EXPECT_EQ(barDrawn()->a, ok.textColor.a);
+
+        ok.selected = false;
+        Draw();
+        EXPECT_FALSE(barDrawn());
+        EXPECT_EQ(FillOf(ok)->r, plain.r);
+    }
+
+    TEST_F(UIControlsTest, ASelectedColorWinsOverTheDerivedOne) {
+        auto& ok = Get<UIButton>("Ok");
+        ok.selected = true;
+        ok.selectedColor = Color{7, 8, 9, 255};
+        Draw();
+        EXPECT_EQ(FillOf(ok)->r, 7);
+        EXPECT_EQ(FillOf(ok)->b, 9);
+    }
+
+    TEST_F(UIControlsTest, HoverAndPressShiftFromTheSelectedFill) {
+        auto& ok = Get<UIButton>("Ok");
+        ok.selected = true;
+        ok.selectedColor = Color{100, 100, 100, 255};
+        Draw();
+        const Rect c = Center(ok);
+
+        MoveTo(c.x, c.y);
+        Draw();
+        EXPECT_GT(FillOf(ok)->r, 100) << "lighter than the selected fill under the pointer";
+
+        ASSERT_TRUE(Press(ok));
+        Draw();
+        EXPECT_LT(FillOf(ok)->r, 100) << "darker than the selected fill while held";
+
+        ok.hoverColor = Color{1, 2, 3, 255};
+        ok.pressedColor = Color{4, 5, 6, 255};
+        Draw();
+        EXPECT_EQ(FillOf(ok)->r, 4) << "an explicit pressed color wins";
+        Release(c.x, c.y);
+        Draw();
+        EXPECT_EQ(FillOf(ok)->r, 1) << "an explicit hover color wins";
+    }
+
+    TEST_F(UIControlsTest, DisabledWinsOverSelected) {
+        auto& off = Get<UIButton>("Off");
+        off.selected = true;
+        off.selectedColor = Color{200, 200, 200, 255};
+        Draw();
+        EXPECT_EQ(FillOf(off)->r, kButtonColor.r) << "the grey of a disabled button, not the selected fill";
+        EXPECT_EQ(FillOf(off)->a, kButtonColor.a / 2);
+    }
+
+    TEST_F(UIControlsTest, AGroupDisabledButtonIsGreyAndSwallowsTheClick) {
+        ActionRecorder actions;
+        auto& ok = Get<UIButton>("Ok");
+        ok.groupDisabled = true;
+        Draw();
+        EXPECT_EQ(FillOf(ok)->a, kButtonColor.a / 2);
+
+        const Rect c = Center(ok);
+        EXPECT_TRUE(Press(ok)) << "the click does not fall through to what is below";
+        EXPECT_TRUE(Release(c.x, c.y));
+        EXPECT_EQ(actions.Total(), 0u);
+
+        ok.groupDisabled = false;
+        Draw();
+        EXPECT_EQ(FillOf(ok)->a, kButtonColor.a);
+        ASSERT_TRUE(Press(ok));
+        Release(c.x, c.y);
+        EXPECT_EQ(actions.Count("UIControlsTestOk"), 1);
     }
 
     TEST_F(UIControlsTest, TheValidatorChecksTheTouchSizeOfButtons) {

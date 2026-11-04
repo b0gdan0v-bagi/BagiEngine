@@ -14,6 +14,11 @@ namespace BECore {
      * `hoverColor` under the pointer, `pressedColor` while it is held on the button, `disabledColor` when `disabled`; a color left transparent is derived from `color` (lighter,
      * darker, half transparent). A button is `interactive`, so the layout validator checks that it is big enough to touch (give it 48 units at the reference size).
      * A disabled button still takes the click, it only does nothing with it.
+     *
+     * `value` goes out with the action, `ActionEvent(action, value)`, so several buttons can share one action and tell a listener which one was pressed (the segments of
+     * a choice group). `selected` is a runtime state, set by whoever owns the choice (not read from a file): a selected button is filled from `selectedColor` (lighter
+     * than `color` when left transparent) and has a bar of `kSelectedBarHeight` units in `textColor` along its bottom edge, so the selection does not rest on color alone.
+     * `groupDisabled` is the same for a whole group: it counts as `disabled`.
      */
     class UIButton : public UILabel {
         BE_CLASS(UIButton)
@@ -25,7 +30,15 @@ namespace BECore {
         BE_REFLECT_FIELD UIColor hoverColor;
         BE_REFLECT_FIELD UIColor pressedColor;
         BE_REFLECT_FIELD UIColor disabledColor;
+        BE_REFLECT_FIELD UIColor selectedColor;
+        BE_REFLECT_FIELD PoolString value;       ///< emitted with the action
         BE_REFLECT_FIELD bool disabled = false;  ///< not `enabled`: a vector of factory-made objects writes an `enabled` attribute of its own
+
+        /// The height of the bar at the foot of a selected button, in canvas units
+        static constexpr float kSelectedBarHeight = 4.0f;
+
+        bool selected = false;       ///< runtime, like `hovered`: drawn as the chosen one
+        bool groupDisabled = false;  ///< runtime: the group this button is in is disabled
 
         void DrawSelf(IRenderer& renderer) override;
         void OnClick() override;

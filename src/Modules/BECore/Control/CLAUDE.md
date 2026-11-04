@@ -91,7 +91,7 @@ The command line beats the attribute, the attribute beats the default. Unknown a
 |-------|---------|
 | `BECore/Control/ControlBuiltins` | `ping`, `status`, `step`, `quit` |
 | `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
-| `BECore/UI/UIControl` | `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?}`: a real mouse click on a visible button; codes `no_scene`, `not_found`, `not_clickable`; `UI/CLAUDE.md`, "Control API") |
+| `BECore/UI/UIControl` | `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?}`: a real mouse click on a visible button, the answer has its `action` and `value`; codes `no_scene`, `not_found`, `not_clickable`; `UI/CLAUDE.md`, "Control API") |
 | `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state` (`Games/CLAUDE.md`) |
 
 ## Adding a method
