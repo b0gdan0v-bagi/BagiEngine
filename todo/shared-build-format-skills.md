@@ -1,3 +1,6 @@
+---
+status: in progress 2026-11-04 branch todo/shared-build-format-skills
+---
 # The build, clang-format and strip-pch-includes skills are still two copies
 
 **Where:** `engine/.claude/skills/{build,clang-format,strip-pch-includes}/SKILL.md` and the copies `.claude/skills/{build,clang-format,strip-pch-includes}/SKILL.md` of BagiEngine-Chess (55 to 104 differing lines each).
