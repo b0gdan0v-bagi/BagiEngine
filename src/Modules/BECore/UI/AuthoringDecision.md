@@ -53,7 +53,7 @@ B: five sources, about 1.3 s to compile together, 5.9 MB of Debug objects. The d
 
 ### CSS reach (B)
 
-What the three screens and the tests needed from CSS (all of it supported): `display: none | flex`, `flex-direction`, `gap`, `padding`, `flex-wrap`, `align-items`, `flex`; `left / top / right / bottom / inset` and the non-CSS `anchor`; width, height, min and max in px and %, `aspect-ratio`, `object-fit`; `background`, `background-color`, `background-image`, `border-image-slice`; `color`, `font-size`, `font-family`, `text-align`, `vertical-align`, `text-overflow`, `white-space`, `line-height`; `pointer-events`; `:hover / :active / :disabled` on a button; `@media` on orientation, size and aspect; the cascade with specificity, `!important`, inline `style=""` and inheritance.
+What the three screens and the tests needed from CSS (all of it supported): `display: none | flex`, `flex-direction`, `gap`, `padding`, `flex-wrap`, `align-items`, `flex`; `left / top / right / bottom / inset` and the non-CSS `anchor`; width, height, min and max in px and %, `aspect-ratio`, `object-fit`; `background`, `background-color`, `background-image`, `border-image-slice`; `color`, `font-size`, `font-family`, `text-align`, `vertical-align`, `text-overflow`, `white-space`, `line-height`; `pointer-events`; `:hover / :active / :disabled / :checked` on a button (`:checked` came with the choice groups, `data-widget="segmented"`); `@media` on orientation, size and aspect; the cascade with specificity, `!important`, inline `style=""` and inheritance.
 
 What is **outside** the subset (reported when it appears, never silent) and what it costs:
 

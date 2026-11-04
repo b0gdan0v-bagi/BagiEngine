@@ -9,7 +9,7 @@ namespace BECore {
     CORE_ENUM(UICssCombinator, uint8_t, None, Descendant, Child)
 
     /// The pseudo-classes the front-end understands: the states of a button
-    CORE_ENUM(UICssPseudo, uint8_t, None, Hover, Active, Disabled)
+    CORE_ENUM(UICssPseudo, uint8_t, None, Hover, Active, Disabled, Checked)
 
     struct UICssDeclaration {
         static constexpr uint32_t HtmlSource = 0xFFFFFFFFu;  ///< `sourceId` of a declaration from a `style=""` attribute
@@ -61,7 +61,7 @@ namespace BECore {
      * Reads rules with selector lists, comments, `!important`, and `@media` blocks whose queries are `and`-joined `(feature: value)` terms
      * (`orientation`, `min-` / `max-` `width`, `height` and `aspect-ratio`) separated by commas. A query becomes a UIVariantCondition, so a media block is the
      * same data as a `<variant when="...">` of the XML front-end. Selectors are a tag, `#id`, `.class`, a compound of them, `:hover` / `:active` /
-     * `:disabled` on the last one, and the descendant (space) and child (`>`) combinators. Everything else (attribute selectors, `+`, `~`, other pseudo-classes
+     * `:disabled` / `:checked` on the last one, and the descendant (space) and child (`>`) combinators. Everything else (attribute selectors, `+`, `~`, other pseudo-classes
      * and pseudo-elements, `@import`, `@font-face`, `@keyframes`, nested `@media`) is reported as an issue and left out. A declaration is kept as text; the
      * compiler decides whether it can apply it.
      */
