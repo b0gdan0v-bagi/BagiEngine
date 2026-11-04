@@ -270,10 +270,13 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             within = await client.call_tool("ui_click", {"name": "Ok", "canvas": "Debug"})
             assert not within.is_error
 
+            slid = await client.call_tool("ui_click", {"name": "Volume", "at": 0.25})
+            assert not slid.is_error
+
             missing = await client.call_tool("ui_click", {"name": "Nothing"})
             assert missing.is_error and "not_found" in missing.content[0].text
 
     asyncio.run(scenario())
     assert requests_of(server, "screenshot")[-1] == {"maxSize": 64}
     assert requests_of(server, "step")[-1] == {"frames": 2}
-    assert requests_of(server, "ui_click")[:2] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}]
+    assert requests_of(server, "ui_click")[:3] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}, {"name": "Volume", "at": 0.25}]

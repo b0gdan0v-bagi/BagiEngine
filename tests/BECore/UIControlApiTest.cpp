@@ -9,6 +9,7 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UISegmented.h>
+#include <BECore/UI/UISlider.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -27,9 +28,12 @@ namespace BECore::Tests {
         //   button; Under (500, 300, 80 x 40) is a button with Cover (490, 290, 100 x 60) drawn over it; Note (300, 300, 80 x 40) is a label.
         //   Debug (layer 5): Tiny (400, 10, 20 x 20) is a button below the touch size, and a second Ok (500, 100, 80 x 40) with another action.
         //   Menu (layer 20): a modal canvas, hidden at first.
-        // "Fit": 400 x 300 units, shown in a 1000 x 600 output: scale 2, offset (100, 0). View is a SceneView canvas with the button Go (10, 10, 50 x 40).
-        // "Choice": 800 x 600 in window pixels. Panel holds Side, a UISegmented bound to `uiApiSide` with the buttons Left and Right (the same action, values "left" and "right"; 150 x 56
+        // "Fit": 400 x 300 units, shown in a 1000 x 600 output: scale 2, offset (100, 0). View is a SceneView canvas with the button Go (10, 10, 50 x 40) and the slider Slide (10, 100, 200 x 40,
+        // range 0..100). "Choice": 800 x 600 in window pixels. Panel holds Side, a UISegmented bound to `uiApiSide` with the buttons Left and Right (the same action, values "left" and "right"; 150 x
+        // 56
         //   and 150 x 56 at x = 100, 252, y = 100), and Plain (100, 300, 80 x 40) is a button without a value.
+        // "Values": 800 x 600 in window pixels. Sound is a UIToggle (100, 100, 300 x 56, `uiApiSound`, custom values "on" / "off"), Volume a UISlider (100, 200, 400 x 56, `uiApiVolume`, range 0..1
+        //   in steps of 0.1), Quiet a disabled UISlider (100, 400, 400 x 56), Loading a UIProgressBar (100, 300, 400 x 24, `uiApiLoad`, range 0..100).
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -67,6 +71,7 @@ namespace BECore::Tests {
       <component type="UICanvasComponent" space="SceneView">
         <elements>
           <element type="UIButton" name="Go" x="10" y="10" width="50" height="40" text="Go" action="UIControlApiGo" color="40,90,60,255"/>
+          <element type="UISlider" name="Slide" action="UIControlApiSlide" minValue="0" maxValue="100" x="10" y="100" width="200" height="40"/>
         </elements>
       </component>
     </components></node>
@@ -82,6 +87,18 @@ namespace BECore::Tests {
             </children>
           </element>
           <element type="UIButton" name="Plain" x="100" y="300" width="80" height="40" text="Plain" action="UIControlApiPlain" color="40,90,60,255"/>
+        </elements>
+      </component>
+    </components></node>
+  </nodes></scene>
+  <scene type="Scene" name="Values"><nodes>
+    <node name="Settings"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+        <elements>
+          <element type="UIToggle" name="Sound" bind="uiApiSound" action="UIControlApiSound" onValue="on" offValue="off" text="Sound" x="100" y="100" width="300" height="56" color="30,30,30,255"/>
+          <element type="UISlider" name="Volume" bind="uiApiVolume" action="UIControlApiVolume" minValue="0" maxValue="1" step="0.1" x="100" y="200" width="400" height="56"/>
+          <element type="UIProgressBar" name="Loading" bind="uiApiLoad" minValue="0" maxValue="100" x="100" y="300" width="400" height="24"/>
+          <element type="UISlider" name="Quiet" bind="uiApiQuiet" action="UIControlApiQuiet" disabled="true" x="100" y="400" width="400" height="56"/>
         </elements>
       </component>
     </components></node>
@@ -630,6 +647,262 @@ namespace BECore::Tests {
         ASSERT_NE(note, nullptr);
         EXPECT_EQ(Member(*note, "value"), nullptr);
         EXPECT_EQ(Member(*note, "selected"), nullptr);
+    }
+
+    // ---- the toggle, the progress bar and the slider ----------------------------------------------------------------------
+
+    TEST_F(UIControlApiTest, ATreeShowsTheFieldsOfTheToggleTheProgressBarAndTheSlider) {
+        CoreManager::GetUIVars().Set("uiApiSound"_intern, "on");
+        CoreManager::GetUIVars().Set("uiApiVolume"_intern, "0.3");
+        CoreManager::GetUIVars().Set("uiApiLoad"_intern, "25");
+        Show("Values");
+
+        const Json tree = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(tree)) << ErrorMessage(tree);
+        const Json* canvas = FindCanvas(*Member(tree, "result"), "Settings");
+        ASSERT_NE(canvas, nullptr);
+
+        const Json* sound = FindElement(*canvas, "Sound");
+        ASSERT_NE(sound, nullptr);
+        EXPECT_EQ(StringMember(*sound, "type"), "UIToggle");
+        EXPECT_EQ(StringMember(*sound, "bind"), "uiApiSound");
+        EXPECT_EQ(StringMember(*sound, "onValue"), "on");
+        EXPECT_EQ(StringMember(*sound, "offValue"), "off");
+        EXPECT_TRUE(BoolMember(*sound, "checked"));
+        EXPECT_EQ(StringMember(*sound, "action"), "UIControlApiSound");
+        EXPECT_FALSE(BoolMember(*sound, "disabled"));
+        EXPECT_EQ(StringMember(*sound, "text"), "Sound");
+        EXPECT_TRUE(BoolMember(*sound, "interactive"));
+        ExpectRect(Member(*sound, "rect"), 100.0f, 100.0f, 300.0f, 56.0f);
+
+        const Json* volume = FindElement(*canvas, "Volume");
+        ASSERT_NE(volume, nullptr);
+        EXPECT_EQ(StringMember(*volume, "type"), "UISlider");
+        EXPECT_EQ(StringMember(*volume, "bind"), "uiApiVolume");
+        EXPECT_NEAR(NumberMember(*volume, "minValue"), 0.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "maxValue"), 1.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "step"), 0.1, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "value"), 0.3, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "fraction"), 0.3, kTolerance);
+        EXPECT_EQ(StringMember(*volume, "action"), "UIControlApiVolume");
+        EXPECT_FALSE(BoolMember(*volume, "disabled"));
+        EXPECT_EQ(Member(*volume, "text"), nullptr);
+        EXPECT_TRUE(BoolMember(*FindElement(*canvas, "Quiet"), "disabled"));
+
+        const Json* loading = FindElement(*canvas, "Loading");
+        ASSERT_NE(loading, nullptr);
+        EXPECT_EQ(StringMember(*loading, "type"), "UIProgressBar");
+        EXPECT_EQ(StringMember(*loading, "bind"), "uiApiLoad");
+        EXPECT_NEAR(NumberMember(*loading, "minValue"), 0.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*loading, "maxValue"), 100.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*loading, "fraction"), 0.25, kTolerance);
+        EXPECT_FALSE(BoolMember(*loading, "interactive"));
+        EXPECT_EQ(Member(*loading, "text"), nullptr);
+        EXPECT_EQ(Member(*loading, "action"), nullptr);
+        EXPECT_EQ(Member(*loading, "checked"), nullptr);
+    }
+
+    TEST_F(UIControlApiTest, TheValuesOfTheControlsFollowTheVariablesBetweenTwoTreeCallsWithNoDraw) {
+        Show("Values");
+        const Json before = Call("ui_tree");
+        ASSERT_TRUE(IsOk(before));
+        const Json* canvas = FindCanvas(*Member(before, "result"), "Settings");
+        EXPECT_FALSE(BoolMember(*FindElement(*canvas, "Sound"), "checked"));
+        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Volume"), "value"), 0.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Loading"), "fraction"), 0.0, kTolerance);
+
+        CoreManager::GetUIVars().Set("uiApiSound"_intern, "on");
+        CoreManager::GetUIVars().Set("uiApiVolume"_intern, "0.7");
+        CoreManager::GetUIVars().Set("uiApiLoad"_intern, "50");
+        const Json after = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(after));
+        canvas = FindCanvas(*Member(after, "result"), "Settings");
+        EXPECT_TRUE(BoolMember(*FindElement(*canvas, "Sound"), "checked"));
+        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Volume"), "value"), 0.7, kTolerance);
+        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Volume"), "fraction"), 0.7, kTolerance);
+        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Loading"), "fraction"), 0.5, kTolerance);
+
+        CoreManager::GetUIVars().Set("uiApiLoad"_intern, "not a number");
+        const Json bad = Call("ui_tree");
+        EXPECT_NEAR(NumberMember(*FindElement(*FindCanvas(*Member(bad, "result"), "Settings"), "Loading"), "fraction"), 0.0, kTolerance);
+    }
+
+    TEST_F(UIControlApiTest, AClickOnAToggleAnswersWithTheValueItAsksForAndTheListenerGetsIt) {
+        Show("Values");
+        Recorder recorder;
+
+        const Json turnOn = Call("ui_click", Click("Sound"));
+
+        ASSERT_TRUE(IsOk(turnOn)) << ErrorMessage(turnOn);
+        EXPECT_EQ(StringMember(*Member(turnOn, "result"), "action"), "UIControlApiSound");
+        EXPECT_EQ(StringMember(*Member(turnOn, "result"), "value"), "on");
+        EXPECT_EQ(recorder.Count("UIControlApiSound"), 1);
+        EXPECT_EQ(recorder.LastValue(), "on");
+
+        CoreManager::GetUIVars().Set("uiApiSound"_intern, "on");
+        const Json turnOff = Call("ui_click", Click("Sound"));
+
+        ASSERT_TRUE(IsOk(turnOff));
+        EXPECT_EQ(StringMember(*Member(turnOff, "result"), "value"), "off");
+        EXPECT_EQ(recorder.Count("UIControlApiSound"), 2);
+        EXPECT_EQ(recorder.LastValue(), "off");
+
+        const Json tree = Call("ui_tree");
+        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Settings"), "Sound"), "checked")) << "a click changes nothing by itself";
+    }
+
+    TEST_F(UIControlApiTest, AClickOnASliderWithAtAsksForTheMinimumTheMiddleAndTheMaximum) {
+        Show("Values");
+        Recorder recorder;
+        const struct {
+            double at;
+            const char* value;
+        } cases[] = {{0.0, "0"}, {0.5, "0.5"}, {1.0, "1"}, {0.25, "0.2"}};
+
+        for (const auto& item : cases) {
+            Json params = Click("Volume");
+            params["at"] = item.at;
+            const Json response = Call("ui_click", params);
+
+            ASSERT_TRUE(IsOk(response)) << "at " << item.at << ": " << ErrorMessage(response);
+            const Json& result = *Member(response, "result");
+            EXPECT_TRUE(BoolMember(result, "consumed")) << "at " << item.at;
+            EXPECT_EQ(StringMember(result, "action"), "UIControlApiVolume");
+            EXPECT_EQ(StringMember(result, "value"), item.value) << "at " << item.at;
+            EXPECT_EQ(recorder.LastValue(), item.value) << "at " << item.at;
+        }
+        EXPECT_EQ(recorder.Count("UIControlApiVolume"), 4);
+    }
+
+    TEST_F(UIControlApiTest, ASliderWithoutAtIsPressedInTheMiddleAndAnIntegerAtIsAccepted) {
+        Show("Values");
+        Recorder recorder;
+
+        const Json middle = Call("ui_click", Click("Volume"));
+        ASSERT_TRUE(IsOk(middle)) << ErrorMessage(middle);
+        EXPECT_EQ(StringMember(*Member(middle, "result"), "value"), "0.5");
+
+        Json one = Click("Volume");
+        one["at"] = 1;  // an integer in the JSON text
+        const Json end = Call("ui_click", one);
+        ASSERT_TRUE(IsOk(end)) << ErrorMessage(end);
+        EXPECT_EQ(StringMember(*Member(end, "result"), "value"), "1");
+    }
+
+    TEST_F(UIControlApiTest, AClientSetsASliderEndToEnd) {
+        Show("Values");
+        Json params = Click("Volume");
+        params["at"] = 1.0;
+        ASSERT_TRUE(IsOk(Call("ui_click", params)));
+
+        const Json unchanged = Call("ui_tree");
+        EXPECT_NEAR(NumberMember(*FindElement(*FindCanvas(*Member(unchanged, "result"), "Settings"), "Volume"), "value"), 0.0, kTolerance) << "the game has not answered";
+
+        CoreManager::GetUIVars().Set("uiApiVolume"_intern, "1");
+        const Json answered = Call("ui_tree");
+        const Json* volume = FindElement(*FindCanvas(*Member(answered, "result"), "Settings"), "Volume");
+        EXPECT_NEAR(NumberMember(*volume, "value"), 1.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "fraction"), 1.0, kTolerance);
+    }
+
+    TEST_F(UIControlApiTest, AnAtOutsideZeroToOneOrNotANumberIsInvalidAndNothingIsPressed) {
+        Show("Values");
+        Recorder recorder;
+
+        for (const char* json : {"1.5", "-0.1", "\"0.5\"", "null", "true", "[0.5]", "2", "-1"}) {
+            Json params = Click("Volume");
+            params["at"] = *ParseJson(json);
+            const Json response = Call("ui_click", params);
+
+            EXPECT_FALSE(IsOk(response)) << json;
+            EXPECT_EQ(ErrorCode(response), "invalid_params") << json;
+            EXPECT_NE(ErrorMessage(response).find("'at'"), std::string::npos) << json << ": " << ErrorMessage(response);
+        }
+        // Checked before the scene and the element are looked at
+        Json missing = Click("NoSuchElementAtAll");
+        missing["at"] = 3;
+        EXPECT_EQ(ErrorCode(Call("ui_click", missing)), "invalid_params");
+
+        EXPECT_EQ(recorder.Total(), 0u);
+        EXPECT_EQ(recorder.downs, 0);
+    }
+
+    TEST_F(UIControlApiTest, AtLeavesTheLookupOfAButtonAndTheHitTestWhereThePressLands) {
+        Show("Main");
+        Recorder recorder;
+
+        // Ok is 80 x 40 at (122, 62): at 0 and at 1 are both on it
+        for (double at : {0.0, 1.0}) {
+            Json params = Click("Ok");
+            params["at"] = at;
+            params["canvas"] = std::string("Hud");
+            const Json response = Call("ui_click", params);
+            ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+            EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
+        }
+        EXPECT_EQ(recorder.Count("UIControlApiOk"), 2);
+
+        // Under is covered in the middle, and so at every point of its width up to the cover's edge: at 1 (x = 580) is under Cover (490..590) as well
+        Json covered = Click("Under");
+        covered["at"] = 1.0;
+        EXPECT_EQ(ErrorCode(Call("ui_click", covered)), "not_clickable");
+    }
+
+    TEST_F(UIControlApiTest, ADisabledControlTakesTheClickAndAnswersWithNothingEmitted) {
+        Show("Values");
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("Quiet"));
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
+        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "UIControlApiQuiet");
+        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, AProgressBarCannotBeClicked) {
+        Show("Values");
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("Loading"));
+
+        EXPECT_EQ(ErrorCode(response), "not_clickable");
+        EXPECT_NE(ErrorMessage(response).find("not interactive"), std::string::npos) << ErrorMessage(response);
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, AButtonAndASegmentStillAnswerAsBeforeWhenAtIsGiven) {
+        Show("Choice");
+        Recorder recorder;
+        Json params = Click("Right");
+        params["at"] = 0.5;
+
+        const Json response = Call("ui_click", params);
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "UIControlApiSide");
+        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "right");
+        EXPECT_EQ(recorder.LastValue(), "right");
+        // x of the middle of Right (252..402 -> 327), unchanged from the click without `at`
+        EXPECT_NEAR(NumberMember(*Member(response, "result"), "x"), 327.0, kTolerance);
+    }
+
+    TEST_F(UIControlApiTest, ASliderInASceneViewCanvasIsPressedAtTheScaledPoint) {
+        Show("Fit", 1000.0f, 600.0f);  // scale 2, offset (100, 0)
+        Recorder recorder;
+        Json params = Click("Slide");
+        params["at"] = 0.5;
+
+        const Json response = Call("ui_click", params);
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        EXPECT_NEAR(NumberMember(*Member(response, "result"), "x"), 320.0, kTolerance);  // canvas x 110
+        EXPECT_NEAR(NumberMember(*Member(response, "result"), "y"), 240.0, kTolerance);  // canvas y 120
+        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "50");
+        EXPECT_EQ(recorder.LastValue(), "50");
     }
 
     // ---- ui_click ---------------------------------------------------------------------------------------------------------

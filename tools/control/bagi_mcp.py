@@ -155,8 +155,10 @@ def ui_tree() -> dict[str, Any]:
     layout validator found (TouchTargetTooSmall, OutsideCanvas, TextDoesNotFit...). An element has type, name, visible, interactive, rect (UI units of
     the canvas) and outputRect (the pixels of a screenshot), text for a label or a button, and children. A button also has action, disabled (its own or its
     group's: whether a click does anything), value (sent with the action; "" for a plain button) and selected (the segment of a choice group that the
-    bound variable names). A choice group (type UISegmented) has bind (the variable), selectedValue and disabled; its segments are its children. The
-    selection is that of the moment of the call, the rects those of the last drawn frame.
+    bound variable names). A choice group (type UISegmented) has bind (the variable), selectedValue and disabled; its segments are its children. A toggle
+    (UIToggle, with its caption as text) has bind, onValue, offValue, checked, action and disabled; a progress bar (UIProgressBar) bind, minValue, maxValue and
+    fraction (0..1); a slider (UISlider) bind, minValue, maxValue, step, value (a number), fraction (0..1), action and disabled. The selection, checked, value and
+    fraction are those of the moment of the call, the rects those of the last drawn frame.
     Not shown: the documents of RmlUi screens.
     """
     return session.call("ui_tree")
@@ -164,18 +166,24 @@ def ui_tree() -> dict[str, Any]:
 
 @server.tool()
 @reports_errors
-def ui_click(name: str, canvas: str | None = None) -> dict[str, Any]:
-    """Presses the left mouse button on the middle of the visible button called `name`, like a user, and answers where it clicked.
+def ui_click(name: str, canvas: str | None = None, at: float | None = None) -> dict[str, Any]:
+    """Presses the left mouse button on the middle of the visible button, toggle or slider called `name`, like a user, and answers where it clicked.
 
-    canvas: the scene node of the canvas, when several canvases have an element of that name. A button that cannot be pressed is an error:
+    canvas: the scene node of the canvas, when several canvases have an element of that name.
+    at: a number from 0 to 1, where along the element's width to press (default 0.5, the middle; anything else is invalid_params and nothing is pressed). This is
+    how to set a slider: 0 asks for its minimum, 1 for its maximum, in between a value on its step grid; the answer's `value` is the text that came out.
+    An element that cannot be pressed is an error:
     not_found (no such element), not_clickable (hidden, not a button, covered by another element, or its canvas takes no input; the message says
     which), no_scene. `consumed` in the answer says whether a canvas took the press; a click that nobody took reaches the game, as a user's would.
-    `action` and `value` in the answer are what the button emitted. Clicking a segment of a choice group changes nothing by itself: the game sets the
-    variable, so `step` and read `ui_tree` again to see the new selection. The action runs at once but the picture follows only after a step.
+    `action` and `value` in the answer are what the element emitted (a toggle: the value it asks for; a slider: the value under the press). Clicking a
+    segment of a choice group, a toggle or a slider changes nothing by itself: the game sets the variable, so `step` and read `ui_tree` again to see the new
+    state. A progress bar cannot be clicked. The action runs at once but the picture follows only after a step.
     """
     params: dict[str, Any] = {"name": name}
     if canvas is not None:
         params["canvas"] = canvas
+    if at is not None:
+        params["at"] = at
     return session.call("ui_click", params)
 
 
