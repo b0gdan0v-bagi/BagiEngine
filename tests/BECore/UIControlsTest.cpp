@@ -150,6 +150,7 @@ namespace BECore::Tests {
 
         void TearDown() override {
             CoreManager::GetUIVars().Clear();
+            CoreManager::GetUIStrings().Clear();
             _canvas.Reset();
             _manager.Reset();
             CoreManager::GetRendererManager().SetRenderer({});
@@ -476,6 +477,236 @@ namespace BECore::Tests {
         vars.Set("score"_intern, 6);
         Draw();
         EXPECT_EQ(title.GetLayoutCount(), afterFirst + 1);
+    }
+
+    // ---- strings in texts ---------------------------------------------------------------------------------------------------
+
+    namespace {
+
+        /// English (the default) and Russian; "only.en" has no Russian text, "same" is the same in both, "greet" holds a variable
+        void FillStrings() {
+            UIStrings& strings = CoreManager::GetUIStrings();
+            strings.Set("en"_intern, "menu.start", "Start");
+            strings.Set("en"_intern, "score.title", "Score");
+            strings.Set("en"_intern, "greet", "Hello {name}");
+            strings.Set("en"_intern, "only.en", "English only");
+            strings.Set("en"_intern, "same", "Same");
+            strings.Set("en"_intern, "quoted", "{{#other}}");
+            strings.Set("ru"_intern, "menu.start", "Начать");
+            strings.Set("ru"_intern, "score.title", "Счёт");
+            strings.Set("ru"_intern, "greet", "Привет, {name}");
+            strings.Set("ru"_intern, "same", "Same");
+            strings.Set("ru"_intern, "quoted", "{{#other}}");
+        }
+
+    }  // namespace
+
+    TEST_F(UIControlsTest, ALabelShowsTheStringOfTheCurrentLanguageAndFollowsASwitch) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+        title.text = "{#menu.start}";
+
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Start");
+        EXPECT_EQ(GlyphsIn(title).size(), 5u);
+
+        EXPECT_TRUE(CoreManager::GetUIStrings().SetLanguage("ru"_intern));
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Начать");
+
+        EXPECT_TRUE(CoreManager::GetUIStrings().SetLanguage("en"_intern));
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Start");
+    }
+
+    TEST_F(UIControlsTest, AKeyMissingInTheLanguageFallsBackToTheDefaultOneAndAKeyMissingEverywhereShowsTheKey) {
+        FillStrings();
+        CoreManager::GetUIStrings().SetLanguage("ru"_intern);
+        auto& title = Get<UILabel>("Title");
+
+        title.text = "{#only.en}";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "English only");
+        EXPECT_TRUE(CoreManager::GetUIStrings().GetMissing().empty());
+
+        title.text = "{#menu.options}";
+        for (int frame = 0; frame < 5; ++frame) {
+            Draw();
+        }
+        EXPECT_EQ(title.GetDisplayText(), "menu.options") << "the key itself, never an empty label";
+        EXPECT_FALSE(GlyphsIn(title).empty());
+        ASSERT_EQ(CoreManager::GetUIStrings().GetMissing().size(), 1u) << "a missing key is recorded (and logged) once, not once per frame";
+        EXPECT_EQ(CoreManager::GetUIStrings().GetMissing()[0].key, "menu.options");
+        EXPECT_EQ(CoreManager::GetUIStrings().GetMissing()[0].language, "ru"_intern);
+    }
+
+    TEST_F(UIControlsTest, ATextMixesAStringAndAVariableAndFollowsBoth) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+        title.text = "{#score.title}: {score}";
+        CoreManager::GetUIVars().Set("score"_intern, 5);
+
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Score: 5");
+
+        CoreManager::GetUIVars().Set("score"_intern, 6);
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Score: 6");
+
+        CoreManager::GetUIStrings().SetLanguage("ru"_intern);
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Счёт: 6");
+
+        CoreManager::GetUIVars().Set("score"_intern, 7);
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Счёт: 7");
+    }
+
+    TEST_F(UIControlsTest, AStringThatHoldsAVariableFollowsTheVariable) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+        title.text = "{#greet}";
+        CoreManager::GetUIVars().Set("name"_intern, "Ann");
+
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Hello Ann");
+
+        CoreManager::GetUIVars().Set("name"_intern, "Bob");
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Hello Bob");
+
+        CoreManager::GetUIStrings().SetLanguage("ru"_intern);
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Привет, Bob");
+    }
+
+    TEST_F(UIControlsTest, AStringIsNotResolvedAgainAndALiteralReferenceIsWrittenWithDoubledBraces) {
+        FillStrings();
+        CoreManager::GetUIStrings().Set("en"_intern, "again", "{#menu.start}");
+        auto& title = Get<UILabel>("Title");
+
+        // The result of a reference goes to the variable step, which reads `{#menu.start}` as a variable named "#menu.start" (unset, so empty): not a second string step
+        title.text = "[{#again}]";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "[]");
+
+        // `{{#other}}` in a string survives both steps as the text `{#other}`
+        title.text = "{#quoted}";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "{#other}");
+
+        // and so does a doubled brace in the text itself
+        title.text = "{{#menu.start}}";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "{#menu.start}");
+    }
+
+    TEST_F(UIControlsTest, ATextWithoutABraceOrWithOnlyAVariableIsUntouchedByTheStrings) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+
+        title.text = "#menu.start";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "#menu.start");
+
+        title.text = "{menu.start}";  // a variable, not a string
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "");
+        EXPECT_TRUE(CoreManager::GetUIStrings().GetMissing().empty());
+    }
+
+    TEST_F(UIControlsTest, AButtonAndAToggleShowTheirCaptionsFromTheStrings) {
+        FillStrings();
+        auto& ok = Get<UIButton>("Ok");
+        auto& toggle = Get<UIToggle>("Switch");
+        ok.text = "{#menu.start}";
+        toggle.text = "{#score.title}";
+
+        Draw();
+        EXPECT_EQ(ok.GetDisplayText(), "Start");
+        EXPECT_EQ(toggle.GetDisplayText(), "Score");
+        EXPECT_EQ(GlyphsIn(ok).size(), 5u);
+
+        CoreManager::GetUIStrings().SetLanguage("ru"_intern);
+        Draw();
+        EXPECT_EQ(ok.GetDisplayText(), "Начать");
+        EXPECT_EQ(toggle.GetDisplayText(), "Счёт");
+    }
+
+    TEST_F(UIControlsTest, AnUnchangedScreenWithStringsCostsNoLayoutAndASwitchLaysOutOnlyWhatChanged) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+        auto& ok = Get<UIButton>("Ok");
+        title.text = "{#menu.start}";
+        ok.text = "{#same}";
+        UIStrings& strings = CoreManager::GetUIStrings();
+
+        Draw();
+        const uint32_t titleLayouts = title.GetLayoutCount();
+        const uint32_t okLayouts = ok.GetLayoutCount();
+        EXPECT_GE(titleLayouts, 1u);
+        for (int frame = 0; frame < 5; ++frame) {
+            Draw();
+        }
+        EXPECT_EQ(title.GetLayoutCount(), titleLayouts);
+        EXPECT_EQ(ok.GetLayoutCount(), okLayouts);
+
+        CoreManager::GetUIVars().Set("unrelated"_intern, 1);  // the version moves, the text does not
+        strings.Set("en"_intern, "unrelated.key", "x");       // so does the version of the strings
+        Draw();
+        EXPECT_EQ(title.GetLayoutCount(), titleLayouts);
+        EXPECT_EQ(ok.GetLayoutCount(), okLayouts);
+
+        strings.SetLanguage("ru"_intern);
+        Draw();
+        EXPECT_EQ(title.GetLayoutCount(), titleLayouts + 1) << "the text changed with the language";
+        EXPECT_EQ(ok.GetLayoutCount(), okLayouts) << "the string is the same in both languages, so the same layout is kept";
+
+        Draw();
+        EXPECT_EQ(title.GetLayoutCount(), titleLayouts + 1);
+    }
+
+    TEST_F(UIControlsTest, ALanguageSwitchLeavesALabelThatNamesNoStringAlone) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+        title.text = "Score: {score}";
+        CoreManager::GetUIVars().Set("score"_intern, 5);
+
+        Draw();
+        const uint32_t layouts = title.GetLayoutCount();
+        CoreManager::GetUIStrings().SetLanguage("ru"_intern);
+        Draw();
+
+        EXPECT_EQ(title.GetDisplayText(), "Score: 5");
+        EXPECT_EQ(title.GetLayoutCount(), layouts);
+    }
+
+    TEST_F(UIControlsTest, TheValidatorMeasuresTheStringOfTheCurrentLanguage) {
+        UIStrings& strings = CoreManager::GetUIStrings();
+        strings.Set("en"_intern, "line", "Short");
+        strings.Set("de"_intern, "line", "A value that is much too long for a label of this width");
+        strings.SetDefaultLanguage("en"_intern);
+        auto& title = Get<UILabel>("Title");
+        title.text = "{#line}";
+        title.wrap = false;
+        title.overflow = TextOverflow::Clip;
+        title.style.rect.height = UILength::Px(40.0f);
+        _canvas->Invalidate();
+        const auto textIssues = [this]() {
+            Draw();
+            size_t count = 0;
+            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
+                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
+            }
+            return count;
+        };
+
+        EXPECT_EQ(textIssues(), 0u);
+        EXPECT_TRUE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
+
+        strings.SetLanguage("de"_intern);
+        EXPECT_EQ(textIssues(), 1u);
+        EXPECT_FALSE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
     }
 
     TEST_F(UIControlsTest, ABracedTextWithoutAVariableIsShownWithoutBraces) {

@@ -418,6 +418,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
         void TearDown() override {
             CoreManager::GetUIVars().Clear();
+            CoreManager::GetUIStrings().Clear();
             CoreManager::GetResourceManager().ClearCache();
         }
     };
@@ -996,6 +997,37 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(compiled->Has("t", "font")) << "a generic family is the default font";
         EXPECT_EQ(compiled->Find("e").attribute("type").as_string(), std::string("UILabel")) << "an empty <p> is a label that a variable can fill";
         EXPECT_TRUE(compiled->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, AStringReferenceIsTextLikeAVariableAndReachesTheXmlUntouched) {
+        const auto compiled = Compile(R"(<button id="b" data-action="Start">{#menu.start}</button><span id="s">{#score.title}: {score}</span><p id="q">{{#menu.start}}</p>)");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->Find("b").attribute("type").as_string(), std::string("UIButton"));
+        EXPECT_EQ(compiled->Attr("b", "text"), "{#menu.start}");
+        EXPECT_EQ(compiled->Find("s").attribute("type").as_string(), std::string("UILabel"));
+        EXPECT_EQ(compiled->Attr("s", "text"), "{#score.title}: {score}");
+        EXPECT_EQ(compiled->Attr("q", "text"), "{{#menu.start}}") << "an escaped brace stays escaped";
+        EXPECT_TRUE(compiled->report.issues.empty());
+
+        // and the control made from it shows the string of the current language
+        UIStrings& strings = CoreManager::GetUIStrings();
+        strings.Set("en"_intern, "menu.start", "Start");
+        strings.Set("en"_intern, "score.title", "Score");
+        strings.Set("de"_intern, "menu.start", "Los");
+        strings.Set("de"_intern, "score.title", "Punkte");
+        CoreManager::GetUIVars().Set("score"_intern, 3);
+        auto* button = compiled->Element("b")->Cast<UIButton>();
+        auto* span = compiled->Element("s")->Cast<UILabel>();
+        auto* quoted = compiled->Element("q")->Cast<UILabel>();
+        ASSERT_NE(button, nullptr) << compiled->xml.c_str();
+        ASSERT_NE(span, nullptr);
+        ASSERT_NE(quoted, nullptr);
+        EXPECT_EQ(button->GetDisplayText(), "Start");
+        EXPECT_EQ(span->GetDisplayText(), "Score: 3");
+        EXPECT_EQ(quoted->GetDisplayText(), "{#menu.start}");
+        strings.SetLanguage("de"_intern);
+        EXPECT_EQ(button->GetDisplayText(), "Los");
+        EXPECT_EQ(span->GetDisplayText(), "Punkte: 3");
     }
 
     TEST_F(UIWebTest, PointerEventsDecideWhetherAGroupTakesClicks) {

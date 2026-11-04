@@ -16,7 +16,8 @@ namespace BECore {
      * The size is `fontSize` of the style in UI units (24 when it is 0, so a responsive variant can change it); the text is laid out and rasterized at that size times the
      * scale of the canvas, in whole output pixels (`Text/CLAUDE.md`). `overflow` says what happens to a text that does not fit the rect: `Ellipsis` (the default) ends it
      * with "…", `AutoFit` shrinks it down to `minFontSize`, `Clip` cuts the drawing at the rect (and the layout validator reports it, UIContentFit). `color` is a fill behind the text,
-     * `textColor` is the text. The text may name variables, `text="Score: {score}"`, which follow `CoreManager::GetUIVars()`. Vertical alignment is the label's (TextLayout has none).
+     * `textColor` is the text. The text may name variables, `text="Score: {score}"`, which follow `CoreManager::GetUIVars()`, and strings, `text="{#menu.start}"`, which follow
+     * `CoreManager::GetUIStrings()` and its language. Vertical alignment is the label's (TextLayout has none).
      */
     class UILabel : public UIElement {
         BE_CLASS(UILabel)
@@ -41,8 +42,9 @@ namespace BECore {
         /// overrides this and calls it with the size of that area, so the check measures what is drawn
         [[nodiscard]] UIContentFit CheckContent(float width, float height, float scale) const override;
 
-        /// The text as it is shown: `text` with every `{name}` replaced by the variable of that name (UIVars; `{{` and `}}` are literal braces). It is expanded
-        /// again only when `text` or a variable changed, so a label that does not change is not laid out again either
+        /// The text as it is shown: `text` with every `{#key}` replaced by the string of the current language (UIStrings), then every `{name}` by the variable of that
+        /// name (UIVars; `{{` and `}}` are literal braces). It is made again only when `text`, a variable or (for a text with a `{#key}`) the string table changed, so a
+        /// label that does not change is not laid out again either. A key nobody translated shows as the key and is logged once
         [[nodiscard]] eastl::string_view GetDisplayText() const;
 
         /// The font size in effect, in UI units: `active.fontSize` (after variants), else DefaultFontSize
@@ -75,7 +77,9 @@ namespace BECore {
         mutable TextLayoutCache _layoutCache;
         mutable eastl::string _expandedSource;  // the `text` that _expanded was made from
         mutable eastl::string _expanded;
-        mutable uint64_t _expandedVersion = 0;  // the version of UIVars it was made at
+        mutable uint64_t _expandedVersion = 0;         // the version of UIVars it was made at
+        mutable uint64_t _expandedStringsVersion = 0;  // the version of UIStrings it was made at, read only when _expandedUsesStrings
+        mutable bool _expandedUsesStrings = false;     // the text holds a `{#key}`
     };
 
 }  // namespace BECore

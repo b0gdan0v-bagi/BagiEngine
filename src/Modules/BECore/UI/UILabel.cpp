@@ -13,8 +13,25 @@ namespace BECore {
             return eastl::string_view(text.data(), text.size());
         }
         const UIVars& variables = CoreManager::GetUIVars();
-        if (_expandedVersion != variables.GetVersion() || _expandedSource != text) {
-            _expanded = variables.Expand(eastl::string_view(text.data(), text.size()));
+        UIStrings& strings = CoreManager::GetUIStrings();
+        // A text that names no string does not depend on the string table, so a language switch leaves it alone
+        const bool stale = _expandedSource != text || _expandedVersion != variables.GetVersion() || (_expandedUsesStrings && _expandedStringsVersion != strings.GetVersion());
+        if (stale) {
+            const eastl::string_view source(text.data(), text.size());
+            _expandedUsesStrings = UIStrings::HasReferences(source);
+            if (_expandedUsesStrings) {
+                // Strings first, variables second: a translation may hold `{score}`, and a string is not resolved again
+                const size_t missingBefore = strings.GetMissing().size();
+                const eastl::string resolved = strings.Resolve(source);
+                const auto& missing = strings.GetMissing();
+                for (size_t i = missingBefore; i < missing.size(); ++i) {
+                    LOG_WARNING("UILabel: no string '{}' in the language '{}' or the default one"_format(missing[i].key.c_str(), missing[i].language.ToStringView()));
+                }
+                _expanded = variables.Expand(eastl::string_view(resolved.data(), resolved.size()));
+                _expandedStringsVersion = strings.GetVersion();
+            } else {
+                _expanded = variables.Expand(source);
+            }
             _expandedSource = text;
             _expandedVersion = variables.GetVersion();
         }

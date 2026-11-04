@@ -254,6 +254,22 @@ namespace BECore::Tests {
         EXPECT_TRUE(strings.GetMissing().empty());
     }
 
+    TEST(UIStringsTest, AReferenceInsideAStringIsReadAsAVariableByTheVariableStepSoALiteralOneIsDoubled) {
+        UIStrings strings;
+        strings.Set("en"_intern, "a", "see {#b}");
+        strings.Set("en"_intern, "literal", "see {{#b}}");
+        strings.Set("en"_intern, "b", "bee");
+        UIVars vars;
+
+        // `{#b}` left in a string is not a second string step: `UIVars::Expand` reads it as the variable named "#b", which nobody set, so it ends as nothing
+        EXPECT_EQ(vars.Expand(Resolve(strings, "{#a}")), "see ");
+        vars.Set("#b"_intern, "the variable");
+        EXPECT_EQ(vars.Expand(Resolve(strings, "{#a}")), "see the variable");
+
+        // a translation that wants the literal text `{#b}` writes it with doubled braces
+        EXPECT_EQ(vars.Expand(Resolve(strings, "{#literal}")), "see {#b}");
+    }
+
     TEST(UIStringsTest, AnUnclosedOrEmptyReferenceStaysAsWritten) {
         UIStrings strings = MakeTable();
 

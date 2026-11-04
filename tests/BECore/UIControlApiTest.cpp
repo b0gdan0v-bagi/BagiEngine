@@ -8,6 +8,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
+#include <BECore/UI/UILabel.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISlider.h>
 #include <Common/EngineEnvironment.h>
@@ -211,6 +212,7 @@ namespace BECore::Tests {
 
         void TearDown() override {
             CoreManager::GetUIVars().Clear();
+            CoreManager::GetUIStrings().Clear();
             EngineEnvironment::UseSceneManager({});
             _manager.Reset();
             CoreManager::GetRendererManager().SetRenderer({});
@@ -435,6 +437,29 @@ namespace BECore::Tests {
         const Json* title = FindElement(*hud, "Title");
         ASSERT_NE(title, nullptr);
         EXPECT_EQ(StringMember(*title, "text"), "Score: 42");
+    }
+
+    TEST_F(UIControlApiTest, ALabelShowsTheStringOfTheCurrentLanguageInTheTree) {
+        UIStrings& strings = CoreManager::GetUIStrings();
+        strings.Set("en"_intern, "uiApi.title", "Score");
+        strings.Set("de"_intern, "uiApi.title", "Punkte");
+        CoreManager::GetUIVars().Set("score"_intern, 42);
+        Show("Main");
+        auto* title = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>()->GetRoot().FindByName(PoolString::Intern("Title"));
+        ASSERT_NE(title, nullptr);
+        title->Cast<UILabel>()->text = "{#uiApi.title}: {score}";
+
+        const auto shownText = [this]() {
+            const Json response = Call("ui_tree");
+            EXPECT_TRUE(IsOk(response)) << ErrorMessage(response);
+            const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+            const Json* label = hud ? FindElement(*hud, "Title") : nullptr;
+            return label ? StringMember(*label, "text") : std::string("<no such element>");
+        };
+
+        EXPECT_EQ(shownText(), "Score: 42");
+        strings.SetLanguage("de"_intern);
+        EXPECT_EQ(shownText(), "Punkte: 42") << "the tree reads the text as of now, with no draw in between";
     }
 
     TEST_F(UIControlApiTest, AHiddenElementIsNotVisible) {
