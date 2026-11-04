@@ -9,15 +9,7 @@ namespace BECore {
 
     namespace {
 
-        constexpr int HoverBrighten = 28;
-        constexpr int PressDarken = 36;
-        constexpr float DisabledAlpha = 0.5f;
-        constexpr float OffTrackAlpha = 0.35f;              // of the text color: a track that is there without shouting
-        constexpr Color OnTrackFallback{60, 160, 90, 255};  // the track while on, when `fillColor` is left transparent
-
-        Color WithAlpha(const Color& color, float factor) {
-            return {color.r, color.g, color.b, static_cast<unsigned char>(static_cast<float>(color.a) * factor)};
-        }
+        constexpr float OffTrackAlpha = 0.35f;  // of the text color: a track that is there without shouting
 
     }  // namespace
 
@@ -57,25 +49,25 @@ namespace BECore {
     Color UIToggle::GetCurrentTrack() const {
         Color base;
         if (IsOn()) {
-            base = fillColor.a > 0 ? Color(fillColor) : OnTrackFallback;
+            base = fillColor.a > 0 ? Color(fillColor) : kFillFallback;
         } else {
             base = trackColor.a > 0 ? Color(trackColor) : WithAlpha(textColor, OffTrackAlpha);
         }
         if (disabled) {
-            return WithAlpha(base, DisabledAlpha);
+            return WithAlpha(base, kDisabledAlpha);
         }
         if (pressed && hovered) {
-            return ShiftColor(base, -PressDarken);
+            return ShiftColor(base, -kPressDarken);
         }
         if (hovered) {
-            return ShiftColor(base, HoverBrighten);
+            return ShiftColor(base, kHoverBrighten);
         }
         return base;
     }
 
     Color UIToggle::GetCurrentThumb() const {
         const Color base = thumbColor.a > 0 ? Color(thumbColor) : Color(textColor);
-        return disabled ? WithAlpha(base, DisabledAlpha) : base;
+        return disabled ? WithAlpha(base, kDisabledAlpha) : base;
     }
 
     void UIToggle::DrawSelf(IRenderer& renderer) {
@@ -83,11 +75,11 @@ namespace BECore {
             return;
         }
         if (color.a > 0) {
-            renderer.DrawFilledRect(rect.x, rect.y, rect.w, rect.h, disabled ? WithAlpha(color, DisabledAlpha) : Color(color));
+            renderer.DrawFilledRect(rect.x, rect.y, rect.w, rect.h, disabled ? WithAlpha(color, kDisabledAlpha) : Color(color));
         }
 
         const Parts parts = GetParts(rect);
-        DrawText(renderer, parts.text, disabled ? WithAlpha(textColor, DisabledAlpha) : Color(textColor));
+        DrawText(renderer, parts.text, disabled ? WithAlpha(textColor, kDisabledAlpha) : Color(textColor));
 
         if (!parts.track.IsEmpty()) {
             renderer.DrawFilledRect(parts.track.x, parts.track.y, parts.track.w, parts.track.h, GetCurrentTrack());

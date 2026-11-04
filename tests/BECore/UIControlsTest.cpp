@@ -9,6 +9,7 @@
 #include <BECore/UI/UIImage.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
+#include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStack.h>
 #include <BECore/UI/UIToggle.h>
@@ -47,6 +48,7 @@ namespace BECore::Tests {
           <element type="UIStack" name="Row" x="500" y="10" width="100" height="40" direction="Horizontal" spacing="4"/>
           <element type="UISegmented" name="Choice" bind="choice" x="500" y="100" width="204" height="48" direction="Horizontal" spacing="4" disabled="true"/>
           <element type="UIToggle" name="Switch" bind="switchOn" action="UIControlsTestSwitch" text="Switch" onValue="yes" offValue="no" x="500" y="200" width="204" height="56" disabled="true"/>
+          <element type="UIProgressBar" name="Meter" bind="meter" minValue="10" maxValue="90" x="500" y="300" width="204" height="24"/>
         </elements>
       </component>
     </components></node>
@@ -214,7 +216,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, EveryControlIsMadeByItsTypeName) {
         const UIElement& root = _canvas->GetRoot();
-        ASSERT_EQ(root.children.size(), 7u);
+        ASSERT_EQ(root.children.size(), 8u);
 
         EXPECT_TRUE(root.children[0]->Is<UIPanel>());
         EXPECT_TRUE(root.children[1]->Is<UIImage>());
@@ -223,6 +225,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(root.children[4]->Is<UIStack>());
         EXPECT_TRUE(root.children[5]->Is<UISegmented>());
         EXPECT_TRUE(root.children[6]->Is<UIToggle>());
+        EXPECT_TRUE(root.children[7]->Is<UIProgressBar>());
         EXPECT_TRUE(root.children[0]->children[0]->Is<UILabel>());
         EXPECT_TRUE(root.children[0]->children[1]->Is<UIButton>());
     }
@@ -253,6 +256,10 @@ namespace BECore::Tests {
         EXPECT_EQ(Get<UIToggle>("Switch").offValue, PoolString::Intern("no"));
         EXPECT_TRUE(Get<UIToggle>("Switch").disabled);
         EXPECT_TRUE(Get<UIToggle>("Switch").interactive);
+        EXPECT_EQ(Get<UIProgressBar>("Meter").bind, PoolString::Intern("meter"));
+        EXPECT_FLOAT_EQ(Get<UIProgressBar>("Meter").minValue, 10.0f);
+        EXPECT_FLOAT_EQ(Get<UIProgressBar>("Meter").maxValue, 90.0f);
+        EXPECT_FALSE(Get<UIProgressBar>("Meter").interactive);
     }
 
     TEST_F(UIControlsTest, TheControlsSaveAndLoadBack) {
@@ -340,6 +347,12 @@ namespace BECore::Tests {
                 toggle->trackColor = Color{31, 32, 33, 34};
                 toggle->fillColor = Color{35, 36, 37, 38};
                 toggle->thumbColor = Color{39, 40, 41, 42};
+            } else if (auto* bar = element.Cast<UIProgressBar>()) {
+                bar->bind = PoolString::Intern("busyProgress");
+                bar->minValue = -2.5f;
+                bar->maxValue = 12.5f;
+                bar->trackColor = Color{43, 44, 45, 46};
+                bar->fillColor = Color{47, 48, 49, 50};
             }
             if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>()) {
                 auto* text = label ? label : element.Cast<UIButton>() ? static_cast<UILabel*>(element.Cast<UIButton>()) : static_cast<UILabel*>(element.Cast<UIToggle>());
@@ -358,7 +371,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(UIControlsTest, EveryPropertyOfEveryControlSurvivesARoundTrip) {
-        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle"}) {
+        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle", "UIProgressBar"}) {
             auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(original) << type;
             SetEveryStyleProperty(original->style);

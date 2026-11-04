@@ -1,6 +1,5 @@
 #include "UIValueText.h"
 
-
 namespace BECore::UIText {
 
     namespace {
@@ -52,6 +51,31 @@ namespace BECore::UIText {
             return std::nullopt;
         }
         return value;
+    }
+
+    std::optional<float> ParseFiniteFloat(eastl::string_view text) {
+        const auto value = ParseFloat(text);
+        if (!value || !std::isfinite(*value)) {
+            return std::nullopt;
+        }
+        return value;
+    }
+
+    float FractionInRange(float value, float minValue, float maxValue) {
+        if (!std::isfinite(value) || !std::isfinite(minValue) || !std::isfinite(maxValue) || maxValue <= minValue) {
+            return 0.0f;
+        }
+        // In double: the span of two large floats overflows a float
+        const double fraction = (static_cast<double>(value) - minValue) / (static_cast<double>(maxValue) - minValue);
+        return static_cast<float>(std::clamp(fraction, 0.0, 1.0));
+    }
+
+    float ValueInRange(eastl::string_view text, float minValue, float maxValue) {
+        const auto value = ParseFiniteFloat(text);
+        if (!value || !std::isfinite(minValue) || !std::isfinite(maxValue) || maxValue <= minValue) {
+            return minValue;
+        }
+        return std::clamp(*value, minValue, maxValue);
     }
 
     eastl::string FormatLength(const UILength& length) {
