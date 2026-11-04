@@ -8,6 +8,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UISegmented.h>
 #include <SDL3/SDL_mouse.h>
 
 namespace BECore {
@@ -38,7 +39,7 @@ namespace BECore {
             return json;
         }
 
-        Json DescribeElement(const UIElement& element, const UICanvasResolved* resolved) {
+        Json DescribeElement(UIElement& element, const UICanvasResolved* resolved) {
             Json json = Json::object();
             json["type"] = MakeJsonString(element.GetTypeMeta().typeName);
             json["name"] = MakeJsonString(element.name.ToStringView());
@@ -57,7 +58,16 @@ namespace BECore {
             }
             if (const auto* button = dynamic_cast<const UIButton*>(&element)) {
                 json["action"] = MakeJsonString(button->action.ToStringView());
-                json["disabled"] = button->disabled;
+                json["disabled"] = button->disabled || button->groupDisabled;
+                json["value"] = MakeJsonString(button->value.ToStringView());
+                json["selected"] = button->selected;
+            }
+            if (auto* group = element.Cast<UISegmented>()) {
+                // The segments take `selected` and `groupDisabled` at the draw; apply them now so the tree shows the variable as it is, not as of the last draw
+                group->SyncChildren();
+                json["bind"] = MakeJsonString(group->bind.ToStringView());
+                json["selectedValue"] = MakeJsonString(group->GetSelectedValue());
+                json["disabled"] = group->disabled;
             }
             Json children = Json::array();
             for (const auto& child : element.children) {
@@ -269,6 +279,7 @@ namespace BECore {
                 const auto* button = dynamic_cast<const UIButton*>(target.element.Get());
                 const bool isButton = button != nullptr;
                 const PoolString action = isButton ? button->action : PoolString{};
+                const PoolString value = isButton ? button->value : PoolString{};
 
                 UIInput& input = CoreManager::GetUIInput();
                 SDL_MouseMotionEvent motion{};
@@ -287,6 +298,7 @@ namespace BECore {
                 result["consumed"] = consumed;
                 if (isButton) {
                     result["action"] = MakeJsonString(action.ToStringView());
+                    result["value"] = MakeJsonString(value.ToStringView());
                 }
                 call.Reply(std::move(result));
                 return;
