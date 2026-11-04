@@ -1,4 +1,5 @@
 ---
+status: in progress 2026-11-04 branch todo/no-in-game-ui-ui-exists-only-as-imgui-editor-panels-2
 stage: 3
 plan: magical-leaping-blossom.md
 id: no-in-game-ui-ui-exists-only-as-imgui-editor-panels
