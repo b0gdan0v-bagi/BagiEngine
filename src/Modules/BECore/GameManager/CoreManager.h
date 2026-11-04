@@ -15,6 +15,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Time/Time.h>
 #include <BECore/UI/UIEnvironment.h>
+#include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UIVars.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/EventsProviderManager.h>
@@ -115,6 +116,11 @@ namespace BECore {
             return GetInstance()._uiVars;
         }
 
+        /// The string table of the UI (`text="{#menu.start}"`), loaded from `config/UIStrings.xml` when the game ships one
+        static UIStrings& GetUIStrings() {
+            return GetInstance()._uiStrings;
+        }
+
         // Pre-initialization function (FileSystem, AssertHandlers, runtime ITests)
         void OnApplicationPreInit(PassKey<Application>);
 
@@ -140,7 +146,7 @@ namespace BECore {
         void OnApplicationDeinit(PassKey<Application>);
 
     private:
-        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, FontAtlasLibrary, UIEnvironment, the builtin control methods
+        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, FontAtlasLibrary, UIEnvironment, UIStrings, the builtin control methods
         void InitializeCoreServices();
 
         FileSystem _fileSystem;
@@ -157,6 +163,7 @@ namespace BECore {
         UIInput _uiInput;
         UIEnvironment _uiEnvironment;
         UIVars _uiVars;
+        UIStrings _uiStrings;
         IntrusivePtrAtomic<SceneManager> _sceneManager;
         TextureLibrary _textureLibrary;
         FontAtlasLibrary _fontAtlasLibrary;

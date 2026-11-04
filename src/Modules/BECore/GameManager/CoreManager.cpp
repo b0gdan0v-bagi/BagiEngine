@@ -73,6 +73,7 @@ namespace BECore {
         _textureLibrary.Initialize();
         _fontAtlasLibrary.Initialize();
         _uiEnvironment.Initialize();
+        _uiStrings.Initialize();
 
         RegisterControlBuiltins(_controlService);
         RegisterUIControl(_controlService);
