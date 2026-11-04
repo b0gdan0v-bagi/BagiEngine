@@ -37,6 +37,8 @@ namespace BECore {
         BE_REFLECT_FIELD float minFontSize = 8.0f;  ///< in UI units; the smallest size of AutoFit
 
         void DrawSelf(IRenderer& renderer) override;
+        /// The text against a box of @p width x @p height units. The validator passes the rect; a subclass that draws its text in a smaller area (`DrawText(renderer, area, color)`)
+        /// overrides this and calls it with the size of that area, so the check measures what is drawn
         [[nodiscard]] UIContentFit CheckContent(float width, float height, float scale) const override;
 
         /// The text as it is shown: `text` with every `{name}` replaced by the variable of that name (UIVars; `{{` and `}}` are literal braces). It is expanded
@@ -59,6 +61,10 @@ namespace BECore {
     protected:
         /// Draws the text only, in the rect, over whatever the subclass drew as the fill
         void DrawText(IRenderer& renderer);
+
+        /// Draws the text only, laid out in @p area (canvas units) instead of the rect, in @p color instead of `textColor`: a control that keeps part of its rect for
+        /// something else (the switch of a toggle) draws its caption in the rest. `verticalAlign` is applied inside @p area
+        void DrawText(IRenderer& renderer, const Rect& area, const Color& color);
 
     private:
         [[nodiscard]] TextLayoutOptions MakeOptions(float width, float height, float scale) const;

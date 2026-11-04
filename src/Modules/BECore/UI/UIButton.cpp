@@ -13,14 +13,6 @@ namespace BECore {
         constexpr int SelectedBrighten = 56;  // more than HoverBrighten: a selected button under the pointer is still told from a hovered one
         constexpr float DisabledAlpha = 0.5f;
 
-        unsigned char ShiftChannel(unsigned char channel, int delta) {
-            return static_cast<unsigned char>(std::clamp(static_cast<int>(channel) + delta, 0, 255));
-        }
-
-        Color Shift(const Color& color, int delta) {
-            return {ShiftChannel(color.r, delta), ShiftChannel(color.g, delta), ShiftChannel(color.b, delta), color.a};
-        }
-
     }  // namespace
 
     UIButton::UIButton() {
@@ -40,13 +32,13 @@ namespace BECore {
         // A press that moved off the button is not shown as pressed: letting go there does nothing
         Color base = color;
         if (selected) {
-            base = selectedColor.a > 0 ? Color(selectedColor) : Shift(color, SelectedBrighten);
+            base = selectedColor.a > 0 ? Color(selectedColor) : ShiftColor(color, SelectedBrighten);
         }
         if (pressed && hovered) {
-            return pressedColor.a > 0 ? Color(pressedColor) : Shift(base, -PressDarken);
+            return pressedColor.a > 0 ? Color(pressedColor) : ShiftColor(base, -PressDarken);
         }
         if (hovered) {
-            return hoverColor.a > 0 ? Color(hoverColor) : Shift(base, HoverBrighten);
+            return hoverColor.a > 0 ? Color(hoverColor) : ShiftColor(base, HoverBrighten);
         }
         return base;
     }

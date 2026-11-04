@@ -16,6 +16,12 @@ namespace BECore {
         constexpr UIColor(const Color& color) : Color(color) {}  // NOLINT(google-explicit-constructor): a UI field takes a plain Color
     };
 
+    /// @p color with every channel moved by @p delta (clamped to 0..255), the alpha kept: the lighter and darker states of a control are derived with it
+    [[nodiscard]] inline Color ShiftColor(const Color& color, int delta) {
+        const auto shift = [delta](unsigned char channel) { return static_cast<unsigned char>(std::clamp(static_cast<int>(channel) + delta, 0, 255)); };
+        return {shift(color.r), shift(color.g), shift(color.b), color.a};
+    }
+
     namespace Ser {
 
         template <>

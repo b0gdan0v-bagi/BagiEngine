@@ -11,6 +11,7 @@
 #include <BECore/UI/UIPanel.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStack.h>
+#include <BECore/UI/UIToggle.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -45,6 +46,7 @@ namespace BECore::Tests {
           <element type="UIButton" name="Off" x="300" y="200" width="80" height="40" text="Off" action="UIControlsTestOff" color="40,90,60,255" disabled="true"/>
           <element type="UIStack" name="Row" x="500" y="10" width="100" height="40" direction="Horizontal" spacing="4"/>
           <element type="UISegmented" name="Choice" bind="choice" x="500" y="100" width="204" height="48" direction="Horizontal" spacing="4" disabled="true"/>
+          <element type="UIToggle" name="Switch" bind="switchOn" action="UIControlsTestSwitch" text="Switch" onValue="yes" offValue="no" x="500" y="200" width="204" height="56" disabled="true"/>
         </elements>
       </component>
     </components></node>
@@ -212,7 +214,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, EveryControlIsMadeByItsTypeName) {
         const UIElement& root = _canvas->GetRoot();
-        ASSERT_EQ(root.children.size(), 6u);
+        ASSERT_EQ(root.children.size(), 7u);
 
         EXPECT_TRUE(root.children[0]->Is<UIPanel>());
         EXPECT_TRUE(root.children[1]->Is<UIImage>());
@@ -220,6 +222,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(root.children[3]->Is<UIButton>());
         EXPECT_TRUE(root.children[4]->Is<UIStack>());
         EXPECT_TRUE(root.children[5]->Is<UISegmented>());
+        EXPECT_TRUE(root.children[6]->Is<UIToggle>());
         EXPECT_TRUE(root.children[0]->children[0]->Is<UILabel>());
         EXPECT_TRUE(root.children[0]->children[1]->Is<UIButton>());
     }
@@ -245,6 +248,11 @@ namespace BECore::Tests {
         EXPECT_EQ(Get<UISegmented>("Choice").layout, UILayoutKind::Stack);
         EXPECT_EQ(Get<UISegmented>("Choice").bind, PoolString::Intern("choice"));
         EXPECT_TRUE(Get<UISegmented>("Choice").disabled);
+        EXPECT_EQ(Get<UIToggle>("Switch").bind, PoolString::Intern("switchOn"));
+        EXPECT_EQ(Get<UIToggle>("Switch").onValue, PoolString::Intern("yes"));
+        EXPECT_EQ(Get<UIToggle>("Switch").offValue, PoolString::Intern("no"));
+        EXPECT_TRUE(Get<UIToggle>("Switch").disabled);
+        EXPECT_TRUE(Get<UIToggle>("Switch").interactive);
     }
 
     TEST_F(UIControlsTest, TheControlsSaveAndLoadBack) {
@@ -323,9 +331,18 @@ namespace BECore::Tests {
             } else if (auto* group = element.Cast<UISegmented>()) {
                 group->bind = PoolString::Intern("busyChoice");
                 group->disabled = true;
+            } else if (auto* toggle = element.Cast<UIToggle>()) {
+                toggle->bind = PoolString::Intern("busyOn");
+                toggle->action = PoolString::Intern("BusyToggleAction");
+                toggle->onValue = PoolString::Intern("BusyOn");
+                toggle->offValue = PoolString::Intern("BusyOff");
+                toggle->disabled = true;
+                toggle->trackColor = Color{31, 32, 33, 34};
+                toggle->fillColor = Color{35, 36, 37, 38};
+                toggle->thumbColor = Color{39, 40, 41, 42};
             }
-            if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>()) {
-                auto* text = label ? label : static_cast<UILabel*>(element.Cast<UIButton>());
+            if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>()) {
+                auto* text = label ? label : element.Cast<UIButton>() ? static_cast<UILabel*>(element.Cast<UIButton>()) : static_cast<UILabel*>(element.Cast<UIToggle>());
                 text->text = "Some text";
                 text->font = PoolString::Intern("assets/fonts/Other.ttf");
                 text->textColor = Color{21, 22, 23, 24};
@@ -341,7 +358,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(UIControlsTest, EveryPropertyOfEveryControlSurvivesARoundTrip) {
-        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented"}) {
+        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle"}) {
             auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(original) << type;
             SetEveryStyleProperty(original->style);

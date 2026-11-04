@@ -59,8 +59,12 @@ namespace BECore {
     }
 
     void UILabel::DrawText(IRenderer& renderer) {
+        DrawText(renderer, rect, textColor);
+    }
+
+    void UILabel::DrawText(IRenderer& renderer, const Rect& area, const Color& color) {
         const eastl::string_view shown = GetDisplayText();
-        if (shown.empty() || rect.IsEmpty() || textColor.a == 0) {
+        if (shown.empty() || area.IsEmpty() || color.a == 0) {
             return;
         }
         Font* resolved = ResolveFont();
@@ -69,7 +73,7 @@ namespace BECore {
             return;
         }
 
-        const TextLayoutResult& layout = _layoutCache.Get(*resolved, shown, MakeOptions(rect.w, rect.h, scale));
+        const TextLayoutResult& layout = _layoutCache.Get(*resolved, shown, MakeOptions(area.w, area.h, scale));
         if (layout.glyphs.empty()) {
             return;
         }
@@ -79,7 +83,7 @@ namespace BECore {
         }
 
         // The layout is in output pixels, the origin in the units of the canvas
-        const float freeHeight = std::max(0.0f, rect.h * scale - layout.height);
+        const float freeHeight = std::max(0.0f, area.h * scale - layout.height);
         float offset = 0.0f;
         if (verticalAlign == UIVerticalAlign::Center) {
             offset = freeHeight * 0.5f;
@@ -89,9 +93,9 @@ namespace BECore {
 
         const bool clip = layout.overflowed && overflow == TextOverflow::Clip;
         if (clip) {
-            renderer.PushClipRect(renderer.GetViewTransform().ToOutput(rect.x, rect.y, rect.w, rect.h));
+            renderer.PushClipRect(renderer.GetViewTransform().ToOutput(area.x, area.y, area.w, area.h));
         }
-        TextRenderer::Draw(renderer, *atlas, layout, rect.x, rect.y + offset / scale, textColor);
+        TextRenderer::Draw(renderer, *atlas, layout, area.x, area.y + offset / scale, color);
         if (clip) {
             renderer.PopClipRect();
         }
