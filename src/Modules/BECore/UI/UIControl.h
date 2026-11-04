@@ -40,8 +40,9 @@ namespace BECore {
      * above takes the click and a click that no canvas takes reaches game code. It fails with `not_found` when no element has the name and with `not_clickable`
      * (the message says why) when the ones that do are hidden, not interactive, covered by another element of their canvas, or in a canvas that takes no
      * input. "consumed" says whether a canvas took the press. "action" and "value" (empty for a plain button) are what the button emits with the click,
-     * the same pair as the `ActionEvent`; a choice group does not change by it, the game answers by setting the variable. A disabled button takes the click and does nothing with it. The answer comes
-     * after the click: its handlers (an action that switches the scene) have run.
+     * the same pair as the `ActionEvent`; a choice group does not change by it, the game answers by setting the
+     * variable. A disabled button takes the click and does nothing with it. The answer comes after the click: its handlers (an action that switches the scene)
+     * have run.
      *
      * Not seen: the documents of `RmlUiDocumentComponent` have a DOM of their own.
      *

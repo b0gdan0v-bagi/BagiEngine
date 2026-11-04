@@ -47,10 +47,10 @@ namespace BECore::Tests {
         constexpr float kNarrowestWidth = 480.0f;   // the narrowest window of the matrix, in pixels
         constexpr float kNarrowestHeight = 853.0f;  // 9:16 at that width
 
-        // The Hud canvas: one button that opens the panel.
-        // In a portrait view the Level row is a quarter of a narrow plate on a window with side insets, where "Medium" at 24 does not fit with its air: the variant sets 22.
-        // The panel: a modal canvas, hidden. Landscape rows are 56 high with the caption on the left; the portrait variant (a view taller than wide) turns every row
+        // Two canvases. Hud: one button that opens the panel.
+        // Selector: a modal canvas, hidden. Landscape rows are 56 high with the caption on the left; the portrait variant (a view taller than wide) turns every row
         // into 32 + 8 + 56 = 96 units, caption above group, and the plate grows with it: 32 padding + 44 title + 4 x 96 + 56 OK + 5 x 12 spacing = 576 (416 in landscape).
+        // The same variant sets the font of the Level segments to 22: a quarter of a narrow plate on a window with side insets is too little for "Medium" at 24 with its air.
         constexpr const char* kSelectorXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main" viewWidth="@VIEW_W@" viewHeight="@VIEW_H@"><nodes>
@@ -389,9 +389,11 @@ namespace BECore::Tests {
         template <typename T>
         T& Get(const char* name) const {
             UIElement* element = _selector->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
             T* typed = element ? element->Cast<T>() : nullptr;
-            EXPECT_NE(typed, nullptr) << name << " is not the expected control";
+            if (typed == nullptr) {
+                ADD_FAILURE() << name << (element ? " is not the expected control" : " is not in the panel");
+                std::abort();  // a reference to nothing cannot be returned; the failure above is printed first
+            }
             return *typed;
         }
 
