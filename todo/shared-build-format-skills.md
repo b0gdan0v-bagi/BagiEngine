@@ -1,3 +1,6 @@
+---
+status: review 2026-11-04 branch todo/shared-build-format-skills: the engine half is done (one text of the build, clang-format and strip-pch-includes skills in engine/.claude/skills, the per-repository facts in the new engine/.claude/rules/build-project.md, engine docs updated); checked by three WP reviews and a full build and ctest (game 430 tests, engine alone 1033 tests, all green); the game half (symlinks, the game build-project.md, README/CLAUDE.md/engine-and-todo.md, the fresh-session check) is left, slice 1 of 2, after the merge set the status back to open
+---
 # The build, clang-format and strip-pch-includes skills are still two copies
 
 **Where:** `engine/.claude/skills/{build,clang-format,strip-pch-includes}/SKILL.md` and the copies `.claude/skills/{build,clang-format,strip-pch-includes}/SKILL.md` of BagiEngine-Chess (55 to 104 differing lines each).
