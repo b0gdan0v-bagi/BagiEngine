@@ -1,5 +1,4 @@
 ---
-status: review 2026-11-04 branch todo/no-in-game-ui-ui-exists-only-as-imgui-editor-panels: UISegmented (a radio group of UIButton segments bound to UIVars), ActionEvent and UIButton carry a value, selected look, ui_tree/ui_click, HTML+CSS front-end, a panel screen test on the size matrix; engine ctest 1094/1094, game 528/528 against this branch, slice 1 of 2 (toggle, slider, progress bar, string table, sounds are left), after the merge set the status back to open
 stage: 3
 plan: magical-leaping-blossom.md
 id: no-in-game-ui-ui-exists-only-as-imgui-editor-panels
