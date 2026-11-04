@@ -9,6 +9,7 @@
 #include <BECore/UI/UIImage.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
+#include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStack.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -43,6 +44,7 @@ namespace BECore::Tests {
           <element type="UIPanel" name="Frame" x="300" y="100" width="100" height="60" sliceBorder="4" blocksInput="false"/>
           <element type="UIButton" name="Off" x="300" y="200" width="80" height="40" text="Off" action="UIControlsTestOff" color="40,90,60,255" disabled="true"/>
           <element type="UIStack" name="Row" x="500" y="10" width="100" height="40" direction="Horizontal" spacing="4"/>
+          <element type="UISegmented" name="Choice" bind="choice" x="500" y="100" width="204" height="48" direction="Horizontal" spacing="4" disabled="true"/>
         </elements>
       </component>
     </components></node>
@@ -210,13 +212,14 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, EveryControlIsMadeByItsTypeName) {
         const UIElement& root = _canvas->GetRoot();
-        ASSERT_EQ(root.children.size(), 5u);
+        ASSERT_EQ(root.children.size(), 6u);
 
         EXPECT_TRUE(root.children[0]->Is<UIPanel>());
         EXPECT_TRUE(root.children[1]->Is<UIImage>());
         EXPECT_TRUE(root.children[2]->Is<UIPanel>());
         EXPECT_TRUE(root.children[3]->Is<UIButton>());
         EXPECT_TRUE(root.children[4]->Is<UIStack>());
+        EXPECT_TRUE(root.children[5]->Is<UISegmented>());
         EXPECT_TRUE(root.children[0]->children[0]->Is<UILabel>());
         EXPECT_TRUE(root.children[0]->children[1]->Is<UIButton>());
     }
@@ -239,6 +242,9 @@ namespace BECore::Tests {
         EXPECT_TRUE(Get<UIPanel>("Plate").blocksInput);  // a panel takes clicks unless it says otherwise
         EXPECT_FALSE(Get<UIPanel>("Frame").blocksInput);
         EXPECT_EQ(Get<UIStack>("Row").layout, UILayoutKind::Stack);
+        EXPECT_EQ(Get<UISegmented>("Choice").layout, UILayoutKind::Stack);
+        EXPECT_EQ(Get<UISegmented>("Choice").bind, PoolString::Intern("choice"));
+        EXPECT_TRUE(Get<UISegmented>("Choice").disabled);
     }
 
     TEST_F(UIControlsTest, TheControlsSaveAndLoadBack) {
@@ -314,6 +320,9 @@ namespace BECore::Tests {
                 button->selectedColor = Color{25, 26, 27, 28};
                 button->value = PoolString::Intern("BusyValue");
                 button->disabled = true;
+            } else if (auto* group = element.Cast<UISegmented>()) {
+                group->bind = PoolString::Intern("busyChoice");
+                group->disabled = true;
             }
             if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>()) {
                 auto* text = label ? label : static_cast<UILabel*>(element.Cast<UIButton>());
@@ -332,7 +341,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(UIControlsTest, EveryPropertyOfEveryControlSurvivesARoundTrip) {
-        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack"}) {
+        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented"}) {
             auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(original) << type;
             SetEveryStyleProperty(original->style);
