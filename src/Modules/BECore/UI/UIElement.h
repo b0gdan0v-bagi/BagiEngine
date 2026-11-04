@@ -56,6 +56,20 @@ namespace BECore {
         /// A press and its release both landed on this element: the canvas calls it. A button emits its action here
         virtual void OnClick() {}
 
+        /// The left button went down on this element (it is `interactive`): the canvas calls it at once, not on the release. @p x and @p y are the point in the units of the canvas, like
+        /// `rect`. A click is still decided on the release (`OnClick`); this is for a control that acts while the press is held, such as a slider
+        virtual void OnPress(float x, float y) {
+            static_cast<void>(x);
+            static_cast<void>(y);
+        }
+
+        /// The pointer moved while the left button is held and the press began on this element: called on every motion, wherever the pointer is (also outside the element), until the
+        /// release. Not called for a hover, after the release, or for a press the canvas did not take. @p x and @p y as for `OnPress`
+        virtual void OnDrag(float x, float y) {
+            static_cast<void>(x);
+            static_cast<void>(y);
+        }
+
         /// Adds a plain child with this name and returns it
         IntrusivePtr<UIElement> AddChild(PoolString childName);
 

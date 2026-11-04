@@ -32,7 +32,8 @@ namespace BECore {
     inline constexpr int kPressDarken = 36;        ///< taken from every channel while pressed (the pointer still over the control)
     inline constexpr float kDisabledAlpha = 0.5f;  ///< the share of its alpha a disabled control keeps
 
-    /// The fill of a switched-on or filled part (the toggle's track while on, the progress bar's filled part) when a file sets no `fillColor`
+    /// The fill of a switched-on or filled part (the toggle's track while on, the progress bar's filled part, the slider's track before the thumb) when a file sets no `fillColor`.
+    /// Shared by those controls; a control that wants another fallback adds a constant of its own
     inline constexpr Color kFillFallback{60, 160, 90, 255};
 
     namespace Ser {

@@ -109,6 +109,39 @@ namespace BECore::Tests {
             EXPECT_NEAR(rect.h, h, kTolerance);
         }
 
+        /// An interactive element that records what the canvas tells it
+        class PointerProbe : public UIElement {
+        public:
+            void OnPress(float x, float y) override {
+                presses.push_back({x, y});
+            }
+            void OnDrag(float x, float y) override {
+                drags.push_back({x, y});
+            }
+            void OnClick() override {
+                ++clicks;
+            }
+
+            eastl::vector<std::pair<float, float>> presses;
+            eastl::vector<std::pair<float, float>> drags;
+            int clicks = 0;
+        };
+
+        /// A square probe; @p interactive false makes it a plain blocker
+        IntrusivePtr<PointerProbe> AddProbe(UICanvasComponent& canvas, const char* name, float x, float y, float size, bool interactive = true) {
+            auto probe = New<PointerProbe>();
+            probe->name = PoolString::Intern(name);
+            probe->style.rect.x = x;
+            probe->style.rect.y = y;
+            probe->style.rect.width = UILength::Px(size);
+            probe->style.rect.height = UILength::Px(size);
+            probe->interactive = interactive;
+            probe->blocksInput = true;
+            canvas.GetRoot().children.push_back(probe);
+            canvas.Invalidate();
+            return probe;
+        }
+
         /// A square element with a color that a click on it is consumed by
         IntrusivePtr<UIElement> AddSquare(UICanvasComponent& canvas, const char* name, float x, float y, float size, Color color = Color{255, 255, 255, 255}) {
             auto square = canvas.GetRoot().AddChild(PoolString::Intern(name));
@@ -611,6 +644,153 @@ namespace BECore::Tests {
         input.DispatchMouseButtonUp(Button(120.0f, 120.0f, false));
         EXPECT_FALSE(input.DispatchMouseButtonDown(Button(700.0f, 50.0f, true)));
         EXPECT_EQ(game.downs, 1);
+    }
+
+    // ---- the press and the drag of an element -----------------------------------------------------------------------------
+
+    TEST_F(UICanvasComponentTest, APressCallsOnPressOnceWithTheCanvasPoint) {
+        auto hud = Canvas("Main", "Hud");
+        auto probe = AddProbe(*hud, "Probe", 100.0f, 100.0f, 50.0f);
+        Draw("Main");
+        UIInput& input = CoreManager::GetUIInput();
+
+        ASSERT_TRUE(input.DispatchMouseButtonDown(Button(120.0f, 130.0f, true)));
+        ASSERT_EQ(probe->presses.size(), 1u);
+        EXPECT_NEAR(probe->presses[0].first, 120.0f, kTolerance);
+        EXPECT_NEAR(probe->presses[0].second, 130.0f, kTolerance);
+        EXPECT_TRUE(probe->pressed);
+        EXPECT_EQ(probe->clicks, 0) << "a click is decided on the release";
+
+        input.DispatchMouseButtonUp(Button(120.0f, 130.0f, false));
+        EXPECT_EQ(probe->presses.size(), 1u) << "the release is not a press";
+        EXPECT_EQ(probe->clicks, 1);
+    }
+
+    TEST_F(UICanvasComponentTest, ThePointIsInTheUnitsOfTheCanvasAtAnyScaleAndOffset) {
+        UIInput& input = CoreManager::GetUIInput();
+        {
+            auto hud = Canvas("Main", "Hud");
+            hud->_scaleMode = CanvasScaleMode::ScaleWithScreen;
+            auto probe = AddProbe(*hud, "Probe", 100.0f, 100.0f, 50.0f);  // scale 2 on 2560 x 1440: pixels 200..300
+            _renderer->width = 2560.0f;
+            _renderer->height = 1440.0f;
+            Draw("Main");
+            ASSERT_TRUE(input.DispatchMouseButtonDown(Button(250.0f, 270.0f, true)));
+            ASSERT_EQ(probe->presses.size(), 1u);
+            EXPECT_NEAR(probe->presses[0].first, 125.0f, kTolerance);
+            EXPECT_NEAR(probe->presses[0].second, 135.0f, kTolerance);
+            input.DispatchMouseMotion(Motion(280.0f, 290.0f, SDL_BUTTON_LMASK));
+            ASSERT_EQ(probe->drags.size(), 1u);
+            EXPECT_NEAR(probe->drags[0].first, 140.0f, kTolerance);
+            EXPECT_NEAR(probe->drags[0].second, 145.0f, kTolerance);
+            input.DispatchMouseButtonUp(Button(280.0f, 290.0f, false));
+        }
+        {
+            // A SceneView canvas: the 400 x 300 view is shown at scale 2 in the middle of a 1200 x 600 output, bars of 200 on both sides
+            _renderer->width = 1200.0f;
+            _renderer->height = 600.0f;
+            auto view = Canvas("Fit", "ViewCanvas");
+            auto probe = AddProbe(*view, "Probe", 100.0f, 100.0f, 50.0f);
+            Draw("Fit");
+            ASSERT_TRUE(input.DispatchMouseButtonDown(Button(450.0f, 270.0f, true)));
+            ASSERT_EQ(probe->presses.size(), 1u);
+            EXPECT_NEAR(probe->presses[0].first, 125.0f, kTolerance);
+            EXPECT_NEAR(probe->presses[0].second, 135.0f, kTolerance);
+            input.DispatchMouseMotion(Motion(1000.0f, 20.0f, SDL_BUTTON_LMASK));  // far outside the element, still followed
+            ASSERT_EQ(probe->drags.size(), 1u);
+            EXPECT_NEAR(probe->drags[0].first, 400.0f, kTolerance);
+            EXPECT_NEAR(probe->drags[0].second, 10.0f, kTolerance);
+            input.DispatchMouseButtonUp(Button(1000.0f, 20.0f, false));
+        }
+    }
+
+    TEST_F(UICanvasComponentTest, OnDragIsCalledOnlyWhileTheLeftPressIsHeldOnTheElement) {
+        auto hud = Canvas("Main", "Hud");
+        auto probe = AddProbe(*hud, "Probe", 100.0f, 100.0f, 50.0f);
+        Draw("Main");
+        UIInput& input = CoreManager::GetUIInput();
+
+        input.DispatchMouseMotion(Motion(120.0f, 120.0f));  // a hover
+        EXPECT_TRUE(probe->drags.empty());
+
+        ASSERT_TRUE(input.DispatchMouseButtonDown(Button(120.0f, 120.0f, true)));
+        input.DispatchMouseMotion(Motion(130.0f, 125.0f, SDL_BUTTON_LMASK));
+        input.DispatchMouseMotion(Motion(700.0f, 500.0f, SDL_BUTTON_LMASK));  // out of the element
+        EXPECT_EQ(probe->drags.size(), 2u);
+        input.DispatchMouseMotion(Motion(140.0f, 125.0f, 0));  // the state says no button: no drag
+        EXPECT_EQ(probe->drags.size(), 2u);
+
+        input.DispatchMouseButtonUp(Button(700.0f, 500.0f, false));
+        input.DispatchMouseMotion(Motion(130.0f, 125.0f, SDL_BUTTON_LMASK));  // after the release
+        input.DispatchMouseMotion(Motion(120.0f, 120.0f));
+        EXPECT_EQ(probe->drags.size(), 2u);
+        EXPECT_EQ(probe->presses.size(), 1u);
+        EXPECT_EQ(probe->clicks, 0) << "released elsewhere: no click";
+    }
+
+    TEST_F(UICanvasComponentTest, ARightPressIsNotAPressOfTheElement) {
+        auto hud = Canvas("Main", "Hud");
+        auto probe = AddProbe(*hud, "Probe", 100.0f, 100.0f, 50.0f);
+        Draw("Main");
+        UIInput& input = CoreManager::GetUIInput();
+
+        SDL_MouseButtonEvent right = Button(120.0f, 120.0f, true);
+        right.button = SDL_BUTTON_RIGHT;
+        ASSERT_TRUE(input.DispatchMouseButtonDown(right));
+        input.DispatchMouseMotion(Motion(130.0f, 125.0f, SDL_BUTTON_RMASK));
+        EXPECT_TRUE(probe->presses.empty());
+        EXPECT_TRUE(probe->drags.empty());
+        right.down = false;
+        input.DispatchMouseButtonUp(right);
+    }
+
+    TEST_F(UICanvasComponentTest, APressTheCanvasDidNotTakeIsTheGamesDragAndOnlyInteractiveElementsGetHooks) {
+        auto hud = Canvas("Main", "Hud");
+        auto probe = AddProbe(*hud, "Probe", 100.0f, 100.0f, 50.0f);
+        auto blocker = AddProbe(*hud, "Blocker", 300.0f, 100.0f, 50.0f, false);
+        Draw("Main");
+        GameMouseRecorder game;
+        UIInput& input = CoreManager::GetUIInput();
+
+        // The press began on nothing: dragging over the element is the game's, the element hears nothing
+        ASSERT_FALSE(input.DispatchMouseButtonDown(Button(600.0f, 500.0f, true)));
+        input.DispatchMouseMotion(Motion(120.0f, 120.0f, SDL_BUTTON_LMASK));
+        input.DispatchMouseMotion(Motion(125.0f, 125.0f, SDL_BUTTON_LMASK));
+        EXPECT_TRUE(probe->presses.empty());
+        EXPECT_TRUE(probe->drags.empty());
+        EXPECT_EQ(game.motions, 2);
+        input.DispatchMouseButtonUp(Button(125.0f, 125.0f, false));
+
+        // A blocker that is not interactive takes the press but has no hooks called
+        ASSERT_TRUE(input.DispatchMouseButtonDown(Button(320.0f, 120.0f, true)));
+        input.DispatchMouseMotion(Motion(330.0f, 125.0f, SDL_BUTTON_LMASK));
+        EXPECT_TRUE(blocker->presses.empty());
+        EXPECT_TRUE(blocker->drags.empty());
+        input.DispatchMouseButtonUp(Button(330.0f, 125.0f, false));
+    }
+
+    TEST_F(UICanvasComponentTest, AHiddenCanvasEndsTheDragQuietly) {
+        auto hud = Canvas("Main", "Hud");
+        auto probe = AddProbe(*hud, "Probe", 100.0f, 100.0f, 50.0f);
+        Draw("Main");
+        UIInput& input = CoreManager::GetUIInput();
+
+        ASSERT_TRUE(input.DispatchMouseButtonDown(Button(120.0f, 120.0f, true)));
+        input.DispatchMouseMotion(Motion(130.0f, 125.0f, SDL_BUTTON_LMASK));
+        ASSERT_EQ(probe->drags.size(), 1u);
+
+        hud->_visible = false;
+        Draw("Main");  // a hidden screen keeps no press
+        EXPECT_FALSE(probe->pressed);
+        input.DispatchMouseMotion(Motion(140.0f, 125.0f, SDL_BUTTON_LMASK));
+        input.DispatchMouseButtonUp(Button(140.0f, 125.0f, false));
+        EXPECT_EQ(probe->drags.size(), 1u);
+        EXPECT_EQ(probe->clicks, 0);
+
+        hud->_visible = true;  // and shown again, nothing is left over from the old press
+        Draw("Main");
+        input.DispatchMouseMotion(Motion(140.0f, 125.0f, SDL_BUTTON_LMASK));
+        EXPECT_EQ(probe->drags.size(), 1u);
     }
 
     TEST_F(UICanvasComponentTest, ADestroyedSceneLeavesNoHandlerBehind) {

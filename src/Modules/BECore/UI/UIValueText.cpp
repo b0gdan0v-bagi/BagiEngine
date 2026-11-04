@@ -1,5 +1,7 @@
 #include "UIValueText.h"
 
+#include <cmath>
+
 namespace BECore::UIText {
 
     namespace {

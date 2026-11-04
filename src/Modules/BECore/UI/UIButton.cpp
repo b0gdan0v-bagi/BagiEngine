@@ -8,7 +8,7 @@ namespace BECore {
 
     namespace {
 
-        constexpr int SelectedBrighten = 56;  // more than HoverBrighten: a selected button under the pointer is still told from a hovered one
+        constexpr int SelectedBrighten = 56;  // more than kHoverBrighten: a selected button under the pointer is still told from a hovered one
 
     }  // namespace
 

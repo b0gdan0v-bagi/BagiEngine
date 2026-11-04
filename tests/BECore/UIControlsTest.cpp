@@ -11,6 +11,7 @@
 #include <BECore/UI/UIPanel.h>
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
+#include <BECore/UI/UISlider.h>
 #include <BECore/UI/UIStack.h>
 #include <BECore/UI/UIToggle.h>
 #include <Common/EngineEnvironment.h>
@@ -49,6 +50,7 @@ namespace BECore::Tests {
           <element type="UISegmented" name="Choice" bind="choice" x="500" y="100" width="204" height="48" direction="Horizontal" spacing="4" disabled="true"/>
           <element type="UIToggle" name="Switch" bind="switchOn" action="UIControlsTestSwitch" text="Switch" onValue="yes" offValue="no" x="500" y="200" width="204" height="56" disabled="true"/>
           <element type="UIProgressBar" name="Meter" bind="meter" minValue="10" maxValue="90" x="500" y="300" width="204" height="24"/>
+          <element type="UISlider" name="Level" bind="level" action="UIControlsTestLevel" minValue="2" maxValue="12" step="0.5" x="500" y="400" width="204" height="56" disabled="true"/>
         </elements>
       </component>
     </components></node>
@@ -216,7 +218,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, EveryControlIsMadeByItsTypeName) {
         const UIElement& root = _canvas->GetRoot();
-        ASSERT_EQ(root.children.size(), 8u);
+        ASSERT_EQ(root.children.size(), 9u);
 
         EXPECT_TRUE(root.children[0]->Is<UIPanel>());
         EXPECT_TRUE(root.children[1]->Is<UIImage>());
@@ -226,6 +228,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(root.children[5]->Is<UISegmented>());
         EXPECT_TRUE(root.children[6]->Is<UIToggle>());
         EXPECT_TRUE(root.children[7]->Is<UIProgressBar>());
+        EXPECT_TRUE(root.children[8]->Is<UISlider>());
         EXPECT_TRUE(root.children[0]->children[0]->Is<UILabel>());
         EXPECT_TRUE(root.children[0]->children[1]->Is<UIButton>());
     }
@@ -260,6 +263,13 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(Get<UIProgressBar>("Meter").minValue, 10.0f);
         EXPECT_FLOAT_EQ(Get<UIProgressBar>("Meter").maxValue, 90.0f);
         EXPECT_FALSE(Get<UIProgressBar>("Meter").interactive);
+        EXPECT_EQ(Get<UISlider>("Level").bind, PoolString::Intern("level"));
+        EXPECT_EQ(Get<UISlider>("Level").action, PoolString::Intern("UIControlsTestLevel"));
+        EXPECT_FLOAT_EQ(Get<UISlider>("Level").minValue, 2.0f);
+        EXPECT_FLOAT_EQ(Get<UISlider>("Level").maxValue, 12.0f);
+        EXPECT_FLOAT_EQ(Get<UISlider>("Level").step, 0.5f);
+        EXPECT_TRUE(Get<UISlider>("Level").disabled);
+        EXPECT_TRUE(Get<UISlider>("Level").interactive);
     }
 
     TEST_F(UIControlsTest, TheControlsSaveAndLoadBack) {
@@ -353,6 +363,16 @@ namespace BECore::Tests {
                 bar->maxValue = 12.5f;
                 bar->trackColor = Color{43, 44, 45, 46};
                 bar->fillColor = Color{47, 48, 49, 50};
+            } else if (auto* slider = element.Cast<UISlider>()) {
+                slider->bind = PoolString::Intern("busyLevel");
+                slider->action = PoolString::Intern("BusySliderAction");
+                slider->minValue = -1.5f;
+                slider->maxValue = 7.5f;
+                slider->step = 0.25f;
+                slider->disabled = true;
+                slider->trackColor = Color{51, 52, 53, 54};
+                slider->fillColor = Color{55, 56, 57, 58};
+                slider->thumbColor = Color{59, 60, 61, 62};
             }
             if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>()) {
                 auto* text = label ? label : element.Cast<UIButton>() ? static_cast<UILabel*>(element.Cast<UIButton>()) : static_cast<UILabel*>(element.Cast<UIToggle>());
@@ -371,7 +391,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(UIControlsTest, EveryPropertyOfEveryControlSurvivesARoundTrip) {
-        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle", "UIProgressBar"}) {
+        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle", "UIProgressBar", "UISlider"}) {
             auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(original) << type;
             SetEveryStyleProperty(original->style);
