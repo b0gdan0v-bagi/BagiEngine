@@ -36,7 +36,7 @@ The rules file also names the build and test targets (baseline and reviewer), th
 | `list` | Only the classifier runs. No branches, no edits. |
 | `plan-only` | Classifier and architect. The branch holds one commit (the status); the plan stays in the plan store. |
 | `close` | After the owner has merged branches: close their entries and sync the tracker (section "Closing merged entries"). Nothing else runs. |
-| `models=classifier:haiku,reviewer:sonnet` | Override the model of a role for this run. Only `haiku` and `sonnet` are allowed; never above `sonnet`. |
+| `models=classifier:haiku,reviewer:sonnet` | Override the model of a role for this run. `haiku`, `sonnet` and `opus` are allowed; `opus` is the default of the reviewer only, the other roles stay at or below `sonnet`. |
 
 ## Roles and models
 
@@ -45,7 +45,7 @@ The rules file also names the build and test targets (baseline and reviewer), th
 | Classifier | `todo-classifier` | haiku | Chooses the next eligible entry, answers JSON. |
 | Architect | `todo-architect` | sonnet | Cuts the slice into work packages (WP), writes `~/.claude/plans/todo-loop-<branch-id>.md`, may answer `BLOCKED`. |
 | Developer | `todo-developer` | sonnet | One WP: code, tests, docs, format, commit `WP k/M: ...`. A new agent for every WP. |
-| Reviewer | `todo-reviewer` | sonnet | Fresh context, reads the diff, builds and runs the tests, answers `APPROVE` or `CHANGES`. |
+| Reviewer | `todo-reviewer` | opus | Fresh context, reads the diff, builds and runs the tests, answers `APPROVE` or `CHANGES`. |
 
 Start agents with the Agent tool and `subagent_type` set to the agent's name, one at a time, in the foreground (the checkout is shared, and a background agent cannot ask for permissions). Never use SendMessage to a developer that has finished: each WP gets a new one. Every agent gets the area of the entry (`<R>`, `<base>`, `<todo>`) in its task. Size **S** (from the classifier): skip the architect and give the developer the entry as one WP, with no plan file.
 
