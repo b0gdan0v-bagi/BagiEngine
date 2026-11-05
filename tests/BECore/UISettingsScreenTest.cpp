@@ -33,9 +33,9 @@ namespace BECore::Tests {
      *  - the game answers a toggle with the variable it is bound to, a slider with the volume, a segment with `UIStrings::SetLanguage` and the variable (`SettingsGame` below).
      *
      * **One run per language.** The validator reads the text that is shown, so a screen is checked once for every language of the table, and a new language added to the table
-     * is covered without touching the test (`ForEachLanguage`). The table has `en`, `ru` and `de`, which is deliberately long (every caption is 40 % or more longer than the English
-     * one, and a test holds that). **The validator is not enough for text:** a label with `overflow="Ellipsis"` (the default) "can shrink", so `TextDoesNotFit` is never reported for
-     * it; `Problems()` asks `CheckContent()` of every control on the word that is shown, in every language, on every case of the matrix and in the narrowest window alone.
+     * is covered without touching the test (`ForEachLanguage`). The table has `en`, `ru` and `de`, which is deliberately long (its captions together are 40 % or more longer than the English
+     * ones, counted in characters, and a test holds that). **The validator is not enough for text:** a label with `overflow="Ellipsis"` (the default) "can shrink", so `TextDoesNotFit` is never
+     * reported for it; `Problems()` asks `CheckContent()` of every control on the word that is shown, in every language, on every case of the matrix and in the narrowest window alone.
      *
      * **A row with `crossAlign="Stretch"` gives its children the height of the row**, an explicit `height` or none: a control that is meant to be a touch target of 56 units sits in a
      * row of 56 and the rows that hold a thin or short control (the slider, the progress bar) use `crossAlign="Center"`, so the height written in the file is the height that is laid
@@ -53,7 +53,6 @@ namespace BECore::Tests {
         constexpr float kNarrowestWidth = 480.0f;   // the narrowest window of the matrix, in pixels
         constexpr float kNarrowestHeight = 853.0f;  // 9:16 at that width
         constexpr float kLongerShare = 1.4f;        // the long language is at least this much longer than the English one
-        constexpr size_t kTextControls = 10;        // Title, Sound, MusicCaption, DownloadCaption, Percent, LanguageCaption, three languages, Ok
 
         // Two canvases. Hud: one button that opens the panel. Settings: a modal canvas, hidden.
         // Landscape rows are 56 high with the caption on the left. The portrait variant turns the Language row into 32 + 8 + 56 = 96 units (caption above the three segments)
@@ -164,10 +163,14 @@ namespace BECore::Tests {
 
         struct Language {
             const char* id;
-            const char* title;  // what the title shows in it
+            const char* title;    // what the title shows in it
+            const char* segment;  // the name of its segment in the Language group
         };
 
-        const Language kLanguages[] = {{"en", "Settings"}, {"ru", "Настройки"}, {"de", "Einstellungen ändern"}};
+        const Language kLanguages[] = {{"en", "Settings", "LanguageEn"}, {"ru", "Настройки", "LanguageRu"}, {"de", "Einstellungen ändern", "LanguageDe"}};
+
+        // Every control of the panel that shows a text of the table
+        constexpr const char* kTextControlNames[] = {"Title", "Sound", "MusicCaption", "DownloadCaption", "Percent", "LanguageCaption", "LanguageEn", "LanguageRu", "LanguageDe", "Ok"};
 
         std::string SceneXml(float viewWidth, float viewHeight, const std::function<void(std::string&)>& edit = {}) {
             std::string xml = kSettingsXml;
@@ -623,17 +626,14 @@ namespace BECore::Tests {
             ++languages;
             LayOutInTheNarrowestWindow(layout);
             const float scale = layout.GetResolved().scale;
-            size_t asked = 0;
-            for (const char* name : {"Title", "Sound", "MusicCaption", "DownloadCaption", "Percent", "LanguageCaption", "LanguageEn", "LanguageRu", "LanguageDe", "Ok"}) {
+            for (const char* name : kTextControlNames) {
                 const UIElement* element = _settings->GetRoot().FindByName(PoolString::Intern(name));
                 ASSERT_NE(element, nullptr) << name;
                 const float air = element->Cast<UIButton>() ? kButtonAir : 0.0f;
                 const UIContentFit fit = element->CheckContent(element->rect.w - 2.0f * air, element->rect.h, scale);
                 EXPECT_TRUE(fit.hasContent) << language.ToStringView().data() << " " << name;
                 EXPECT_TRUE(fit.fits) << language.ToStringView().data() << " " << name << " '" << ShownText(*element).c_str() << "' in " << element->rect.w << " units";
-                ++asked;
             }
-            EXPECT_EQ(asked, kTextControls);
         });
         EXPECT_EQ(languages, 3u) << "en, ru and de";
         layout.Invalidate();
@@ -896,15 +896,14 @@ namespace BECore::Tests {
 
         for (const Language& language : kLanguages) {
             Draw();  // the layout of the narrowest window below is not the one the clicks are aimed at
-            const std::string segment = std::string("Language") + (language.id[0] == 'e' ? "En" : language.id[0] == 'r' ? "Ru" : "De");
-            Click(Get<UIButton>(segment.c_str()));
+            Click(Get<UIButton>(language.segment));
             EXPECT_EQ(_game->LastAction(), "SettingsLanguage"_intern) << language.id;
             EXPECT_EQ(_game->LastValue(), PoolString::Intern(language.id));
             Draw();
             EXPECT_EQ(CoreManager::GetUIStrings().GetLanguage(), PoolString::Intern(language.id));
             EXPECT_EQ(ShownText(Get<UILabel>("Title")), language.title) << "the title follows the language at the next draw";
             EXPECT_EQ(ShownText(*_hud->GetRoot().FindByName("Open"_intern)), *CoreManager::GetUIStrings().Find("settings.open")) << "the button of the other canvas follows too";
-            EXPECT_TRUE(Get<UIButton>(segment.c_str()).selected);
+            EXPECT_TRUE(Get<UIButton>(language.segment).selected);
             EXPECT_EQ(Get<UISegmented>("Language").GetSelectedValue(), language.id);
             // The names of the languages are the same in every language
             EXPECT_EQ(ShownText(Get<UIButton>("LanguageDe")), "Deutsch");
@@ -987,7 +986,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UISettingsScreenTest, AWordTooLongInTheLongLanguageIsCaughtInTheNarrowestWindowAlone) {
-        // "Geräuscheffekte" fits the toggle at every size; a longer German word still fits at 689 units wide but not in the area left of the switch on the narrowest window
+        // A German caption made too long for the area left of the switch; the narrowest window (about 689 units of safe width) finds it, and the failure names the language
         std::string table = kStringsXml;
         const std::string original = R"(text="Geräuscheffekte")";
         const size_t at = table.find(original);
