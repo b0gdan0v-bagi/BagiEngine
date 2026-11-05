@@ -8,7 +8,10 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
+#include <BECore/UI/UISlider.h>
+#include <BECore/UI/UIToggle.h>
 #include <SDL3/SDL_mouse.h>
 
 namespace BECore {
@@ -68,6 +71,31 @@ namespace BECore {
                 json["bind"] = MakeJsonString(group->bind.ToStringView());
                 json["selectedValue"] = MakeJsonString(group->GetSelectedValue());
                 json["disabled"] = group->disabled;
+            }
+            // The three value controls read the variable now, not as of the last draw
+            if (const auto* toggle = element.Cast<UIToggle>()) {
+                json["bind"] = MakeJsonString(toggle->bind.ToStringView());
+                json["onValue"] = MakeJsonString(toggle->onValue.ToStringView());
+                json["offValue"] = MakeJsonString(toggle->offValue.ToStringView());
+                json["checked"] = toggle->IsOn();
+                json["action"] = MakeJsonString(toggle->action.ToStringView());
+                json["disabled"] = toggle->disabled;
+            }
+            if (const auto* bar = element.Cast<UIProgressBar>()) {
+                json["bind"] = MakeJsonString(bar->bind.ToStringView());
+                json["minValue"] = bar->minValue;
+                json["maxValue"] = bar->maxValue;
+                json["fraction"] = bar->GetFraction();
+            }
+            if (const auto* slider = element.Cast<UISlider>()) {
+                json["bind"] = MakeJsonString(slider->bind.ToStringView());
+                json["minValue"] = slider->minValue;
+                json["maxValue"] = slider->maxValue;
+                json["step"] = slider->step;
+                json["value"] = slider->GetValue();
+                json["fraction"] = slider->GetFraction();
+                json["action"] = MakeJsonString(slider->action.ToStringView());
+                json["disabled"] = slider->disabled;
             }
             Json children = Json::array();
             for (const auto& child : element.children) {
@@ -167,12 +195,19 @@ namespace BECore {
 
         constexpr float kHalf = 0.5f;
 
-        std::pair<float, float> CenterOf(const Rect& rect) {
-            return {rect.x + rect.w * kHalf, rect.y + rect.h * kHalf};
+        /// The press never lands on the very edge of a rect: the right and bottom edges are outside it for the hit test, and the round trip through output pixels may move a point by a
+        /// rounding error. 0 and 1 of `at` are this far inside
+        constexpr float kEdgeInset = 0.01f;
+        constexpr float kDefaultAt = 0.5f;
+
+        /// The point of a press: @p at (0..1) along the width, the middle of the height
+        std::pair<float, float> PointAt(const Rect& rect, float at) {
+            const float travel = std::max(rect.w - 2.0f * kEdgeInset, 0.0f);
+            return {rect.x + (rect.w - travel) * kHalf + travel * at, rect.y + rect.h * kHalf};
         }
 
         /// Looks for the element to click. A candidate that cannot be clicked is remembered only until a better miss or a hit turns up
-        bool FindClickable(const eastl::vector<CanvasEntry>& canvases, PoolString name, std::optional<PoolString> onlyNode, ClickTarget& target, bool& anyNamed) {
+        bool FindClickable(const eastl::vector<CanvasEntry>& canvases, PoolString name, std::optional<PoolString> onlyNode, float at, ClickTarget& target, bool& anyNamed) {
             anyNamed = false;
             for (const CanvasEntry& entry : canvases) {
                 if (onlyNode && entry.node != *onlyNode) {
@@ -193,7 +228,7 @@ namespace BECore {
                     } else if (element->rect.IsEmpty()) {
                         miss = ClickMiss::Hidden;
                     } else {
-                        const auto [x, y] = CenterOf(element->rect);
+                        const auto [x, y] = PointAt(element->rect, at);
                         const UIElement* top = entry.canvas->GetLayout().HitTest(x, y);
                         if (top != element) {
                             miss = ClickMiss::Covered;
@@ -258,6 +293,15 @@ namespace BECore {
                 // A name that was never interned belongs to no node; client text does not go into the pool
                 onlyNode = PoolString::Find(eastl::string_view(nodeText->c_str(), nodeText->size())).value_or(PoolString{});
             }
+            float at = kDefaultAt;
+            if (FindJsonMember(call.Params(), "at") != nullptr) {
+                const auto atNumber = GetJsonNumber(call.Params(), "at");
+                if (!atNumber || !(*atNumber >= 0.0 && *atNumber <= 1.0)) {
+                    call.Fail(ControlErrors::kInvalidParams, "'at' has to be a number from 0 to 1 (the horizontal position inside the element)");
+                    return;
+                }
+                at = static_cast<float>(*atNumber);
+            }
             Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
             if (scene == nullptr) {
                 call.Fail(UIControlErrors::kNoScene, "there is no active scene");
@@ -269,17 +313,23 @@ namespace BECore {
 
             ClickTarget target;
             bool anyNamed = false;
-            if (name && FindClickable(canvases, *name, onlyNode, target, anyNamed)) {
+            if (name && FindClickable(canvases, *name, onlyNode, at, target, anyNamed)) {
                 // Copy what the answer needs first: a click may switch the scene and destroy the canvas
-                const auto [centerX, centerY] = CenterOf(target.element->rect);
+                const auto [pressX, pressY] = PointAt(target.element->rect, at);
                 const UICanvasResolved& resolved = target.canvas->GetLayout().GetResolved();
-                const float outputX = centerX * resolved.transform.scale + resolved.transform.offsetX;
-                const float outputY = centerY * resolved.transform.scale + resolved.transform.offsetY;
+                const float outputX = pressX * resolved.transform.scale + resolved.transform.offsetX;
+                const float outputY = pressY * resolved.transform.scale + resolved.transform.offsetY;
                 const PoolString canvasNode = target.canvasNode;
                 const auto* button = dynamic_cast<const UIButton*>(target.element.Get());
                 const bool isButton = button != nullptr;
                 const PoolString action = isButton ? button->action : PoolString{};
                 const PoolString value = isButton ? button->value : PoolString{};
+                // A toggle reports the value it asks for, read before the click (a handler may set the variable at once)
+                const auto* toggle = target.element->Cast<UIToggle>();
+                const bool isToggle = toggle != nullptr;
+                const PoolString toggleAction = isToggle ? toggle->action : PoolString{};
+                const PoolString toggleValue = isToggle ? (toggle->IsOn() ? toggle->offValue : toggle->onValue) : PoolString{};
+                const auto* slider = target.element->Cast<UISlider>();
 
                 UIInput& input = CoreManager::GetUIInput();
                 SDL_MouseMotionEvent motion{};
@@ -299,6 +349,13 @@ namespace BECore {
                 if (isButton) {
                     result["action"] = MakeJsonString(action.ToStringView());
                     result["value"] = MakeJsonString(value.ToStringView());
+                } else if (isToggle) {
+                    result["action"] = MakeJsonString(toggleAction.ToStringView());
+                    result["value"] = MakeJsonString(toggleValue.ToStringView());
+                } else if (slider != nullptr) {
+                    // What the press emitted: empty when the slider is disabled or has no action (the element stays alive through `target`)
+                    result["action"] = MakeJsonString(slider->action.ToStringView());
+                    result["value"] = MakeJsonString(slider->GetLastEmittedValue().ToStringView());
                 }
                 call.Reply(std::move(result));
                 return;

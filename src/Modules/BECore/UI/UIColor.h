@@ -16,6 +16,26 @@ namespace BECore {
         constexpr UIColor(const Color& color) : Color(color) {}  // NOLINT(google-explicit-constructor): a UI field takes a plain Color
     };
 
+    /// @p color with every channel moved by @p delta (clamped to 0..255), the alpha kept: the lighter and darker states of a control are derived with it
+    [[nodiscard]] inline Color ShiftColor(const Color& color, int delta) {
+        const auto shift = [delta](unsigned char channel) { return static_cast<unsigned char>(std::clamp(static_cast<int>(channel) + delta, 0, 255)); };
+        return {shift(color.r), shift(color.g), shift(color.b), color.a};
+    }
+
+    /// @p color with its alpha multiplied by @p factor (0..1): the disabled look of a control
+    [[nodiscard]] inline Color WithAlpha(const Color& color, float factor) {
+        return {color.r, color.g, color.b, static_cast<unsigned char>(static_cast<float>(color.a) * factor)};
+    }
+
+    /// The state shifts every control derives its looks from, so a button, a toggle and a slider agree on what hover, press and disabled look like
+    inline constexpr int kHoverBrighten = 28;      ///< added to every channel under the pointer
+    inline constexpr int kPressDarken = 36;        ///< taken from every channel while pressed (the pointer still over the control)
+    inline constexpr float kDisabledAlpha = 0.5f;  ///< the share of its alpha a disabled control keeps
+
+    /// The fill of a switched-on or filled part (the toggle's track while on, the progress bar's filled part, the slider's track before the thumb) when a file sets no `fillColor`.
+    /// Shared by those controls; a control that wants another fallback adds a constant of its own
+    inline constexpr Color kFillFallback{60, 160, 90, 255};
+
     namespace Ser {
 
         template <>

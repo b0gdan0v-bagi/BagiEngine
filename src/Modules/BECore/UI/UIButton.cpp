@@ -8,18 +8,7 @@ namespace BECore {
 
     namespace {
 
-        constexpr int HoverBrighten = 28;
-        constexpr int PressDarken = 36;
-        constexpr int SelectedBrighten = 56;  // more than HoverBrighten: a selected button under the pointer is still told from a hovered one
-        constexpr float DisabledAlpha = 0.5f;
-
-        unsigned char ShiftChannel(unsigned char channel, int delta) {
-            return static_cast<unsigned char>(std::clamp(static_cast<int>(channel) + delta, 0, 255));
-        }
-
-        Color Shift(const Color& color, int delta) {
-            return {ShiftChannel(color.r, delta), ShiftChannel(color.g, delta), ShiftChannel(color.b, delta), color.a};
-        }
+        constexpr int SelectedBrighten = 56;  // more than kHoverBrighten: a selected button under the pointer is still told from a hovered one
 
     }  // namespace
 
@@ -35,18 +24,18 @@ namespace BECore {
             if (disabledColor.a > 0) {
                 return disabledColor;
             }
-            return {color.r, color.g, color.b, static_cast<unsigned char>(static_cast<float>(color.a) * DisabledAlpha)};
+            return WithAlpha(color, kDisabledAlpha);
         }
         // A press that moved off the button is not shown as pressed: letting go there does nothing
         Color base = color;
         if (selected) {
-            base = selectedColor.a > 0 ? Color(selectedColor) : Shift(color, SelectedBrighten);
+            base = selectedColor.a > 0 ? Color(selectedColor) : ShiftColor(color, SelectedBrighten);
         }
         if (pressed && hovered) {
-            return pressedColor.a > 0 ? Color(pressedColor) : Shift(base, -PressDarken);
+            return pressedColor.a > 0 ? Color(pressedColor) : ShiftColor(base, -kPressDarken);
         }
         if (hovered) {
-            return hoverColor.a > 0 ? Color(hoverColor) : Shift(base, HoverBrighten);
+            return hoverColor.a > 0 ? Color(hoverColor) : ShiftColor(base, kHoverBrighten);
         }
         return base;
     }
@@ -60,7 +49,7 @@ namespace BECore {
             const float height = std::min(kSelectedBarHeight, rect.h);
             Color bar = textColor;
             if (disabled || groupDisabled) {
-                bar.a = static_cast<unsigned char>(static_cast<float>(bar.a) * DisabledAlpha);
+                bar = WithAlpha(bar, kDisabledAlpha);
             }
             renderer.DrawFilledRect(rect.x, rect.y + rect.h - height, rect.w, height, bar);
         }

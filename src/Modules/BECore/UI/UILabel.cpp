@@ -13,8 +13,25 @@ namespace BECore {
             return eastl::string_view(text.data(), text.size());
         }
         const UIVars& variables = CoreManager::GetUIVars();
-        if (_expandedVersion != variables.GetVersion() || _expandedSource != text) {
-            _expanded = variables.Expand(eastl::string_view(text.data(), text.size()));
+        UIStrings& strings = CoreManager::GetUIStrings();
+        // A text that names no string does not depend on the string table, so a language switch leaves it alone
+        const bool stale = _expandedSource != text || _expandedVersion != variables.GetVersion() || (_expandedUsesStrings && _expandedStringsVersion != strings.GetVersion());
+        if (stale) {
+            const eastl::string_view source(text.data(), text.size());
+            _expandedUsesStrings = UIStrings::HasReferences(source);
+            if (_expandedUsesStrings) {
+                // Strings first, variables second: a translation may hold `{score}`, and a string is not resolved again
+                const size_t missingBefore = strings.GetMissing().size();
+                const eastl::string resolved = strings.Resolve(source);
+                const auto& missing = strings.GetMissing();
+                for (size_t i = missingBefore; i < missing.size(); ++i) {
+                    LOG_WARNING("UILabel: no string '{}' in the language '{}' or the default one"_format(missing[i].key.c_str(), missing[i].language.ToStringView()));
+                }
+                _expanded = variables.Expand(eastl::string_view(resolved.data(), resolved.size()));
+                _expandedStringsVersion = strings.GetVersion();
+            } else {
+                _expanded = variables.Expand(source);
+            }
             _expandedSource = text;
             _expandedVersion = variables.GetVersion();
         }
@@ -59,8 +76,12 @@ namespace BECore {
     }
 
     void UILabel::DrawText(IRenderer& renderer) {
+        DrawText(renderer, rect, textColor);
+    }
+
+    void UILabel::DrawText(IRenderer& renderer, const Rect& area, const Color& color) {
         const eastl::string_view shown = GetDisplayText();
-        if (shown.empty() || rect.IsEmpty() || textColor.a == 0) {
+        if (shown.empty() || area.IsEmpty() || color.a == 0) {
             return;
         }
         Font* resolved = ResolveFont();
@@ -69,7 +90,7 @@ namespace BECore {
             return;
         }
 
-        const TextLayoutResult& layout = _layoutCache.Get(*resolved, shown, MakeOptions(rect.w, rect.h, scale));
+        const TextLayoutResult& layout = _layoutCache.Get(*resolved, shown, MakeOptions(area.w, area.h, scale));
         if (layout.glyphs.empty()) {
             return;
         }
@@ -79,7 +100,7 @@ namespace BECore {
         }
 
         // The layout is in output pixels, the origin in the units of the canvas
-        const float freeHeight = std::max(0.0f, rect.h * scale - layout.height);
+        const float freeHeight = std::max(0.0f, area.h * scale - layout.height);
         float offset = 0.0f;
         if (verticalAlign == UIVerticalAlign::Center) {
             offset = freeHeight * 0.5f;
@@ -89,9 +110,9 @@ namespace BECore {
 
         const bool clip = layout.overflowed && overflow == TextOverflow::Clip;
         if (clip) {
-            renderer.PushClipRect(renderer.GetViewTransform().ToOutput(rect.x, rect.y, rect.w, rect.h));
+            renderer.PushClipRect(renderer.GetViewTransform().ToOutput(area.x, area.y, area.w, area.h));
         }
-        TextRenderer::Draw(renderer, *atlas, layout, rect.x, rect.y + offset / scale, textColor);
+        TextRenderer::Draw(renderer, *atlas, layout, area.x, area.y + offset / scale, color);
         if (clip) {
             renderer.PopClipRect();
         }

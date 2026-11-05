@@ -12,8 +12,12 @@
 #include <BECore/UI/UIImage.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
+#include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UIScreenContent.h>
 #include <BECore/UI/UISegmented.h>
+#include <BECore/UI/UISlider.h>
+#include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UIToggle.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <BECore/UI/UIWebText.h>
 #include <Common/EngineEnvironment.h>
@@ -408,6 +412,101 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                                            "ColorWhite", "ColorBlack",  "EngineRow", "EngineCaption", "Engine", "EngineStockfish", "EngineOwn",    "LevelRow", "LevelCaption", "Level",
                                            "LevelEasy",  "LevelMedium", "LevelHard", "LevelMax",      "Ok"};
 
+        // The plate of the settings panel of UISettingsScreenTest (kSettingsXml: the `Plate` element of its `Settings` canvas, with its portrait variant), without the dim behind
+        // it and without the `Hud` canvas that opens it. **This mirrors that constant** (it is in an anonymous namespace of that file, so it is copied, as kPanelXml copies the
+        // selector panel): when the settings screen changes, change this too. The one difference is `blocksInput="true"` on the Language group, because a background takes clicks
+        // in the HTML front-end (the same as kPanelXml).
+        constexpr const char* kSettingsPanelXml = R"(<ui><elements>
+  <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
+    <children>
+      <element type="UILabel" name="Title" height="44" text="{#settings.title}" fontSize="30" align="Center"/>
+      <element type="UIToggle" name="Sound" bind="soundOn" action="SettingsSound" height="56" text="{#settings.sound}" fontSize="24" verticalAlign="Center"/>
+      <element type="UIStack" name="MusicRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
+        <children>
+          <element type="UILabel" name="MusicCaption" width="220" height="56" text="{#settings.music}" fontSize="24" verticalAlign="Center"/>
+          <element type="UISlider" name="Volume" bind="volume" action="SettingsVolume" minValue="0" maxValue="1" step="0.1" flex="1" height="56"/>
+        </children>
+      </element>
+      <element type="UIStack" name="DownloadRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
+        <children>
+          <element type="UILabel" name="DownloadCaption" width="220" height="56" text="{#settings.download}" fontSize="24" verticalAlign="Center"/>
+          <element type="UIProgressBar" name="Progress" bind="progress" minValue="0" maxValue="100" flex="1" height="24"/>
+          <element type="UILabel" name="Percent" width="64" height="56" text="{progress}%" fontSize="24" align="Right" verticalAlign="Center"/>
+        </children>
+      </element>
+      <element type="UIStack" name="LanguageRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
+        <children>
+          <element type="UILabel" name="LanguageCaption" width="220" height="56" text="{#settings.language}" fontSize="24" verticalAlign="Center"/>
+          <element type="UISegmented" name="Language" bind="language" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
+            <children>
+              <element type="UIButton" name="LanguageEn" flex="1" height="56" text="{#lang.en}" fontSize="24" value="en" action="SettingsLanguage" color="70,70,100,255"/>
+              <element type="UIButton" name="LanguageRu" flex="1" height="56" text="{#lang.ru}" fontSize="24" value="ru" action="SettingsLanguage" color="70,70,100,255"/>
+              <element type="UIButton" name="LanguageDe" flex="1" height="56" text="{#lang.de}" fontSize="24" value="de" action="SettingsLanguage" color="70,70,100,255"/>
+            </children>
+          </element>
+        </children>
+      </element>
+      <element type="UIButton" name="Ok" height="56" text="{#settings.ok}" fontSize="26" action="SettingsClose" color="40,90,60,255"/>
+    </children>
+  </element>
+</elements>
+<variants>
+  <variant when="orientation:portrait">
+    <overrides>
+      <set element="Plate" height="456"/>
+      <set element="LanguageRow" direction="Vertical" height="96"/>
+      <set element="LanguageCaption" height="32"/>
+    </overrides>
+  </variant>
+</variants></ui>)";
+
+        constexpr const char* kSettingsPanelHtml = R"(
+<div id="Plate">
+  <span id="Title">{#settings.title}</span>
+  <div id="Sound" data-widget="toggle" data-bind="soundOn" data-action="SettingsSound">{#settings.sound}</div>
+  <div id="MusicRow" class="row centered">
+    <span id="MusicCaption" class="caption">{#settings.music}</span>
+    <div id="Volume" data-widget="slider" data-bind="volume" data-action="SettingsVolume" data-min="0" data-max="1" data-step="0.1"></div>
+  </div>
+  <div id="DownloadRow" class="row centered">
+    <span id="DownloadCaption" class="caption">{#settings.download}</span>
+    <div id="Progress" data-widget="progress" data-bind="progress" data-min="0" data-max="100"></div>
+    <span id="Percent">{progress}%</span>
+  </div>
+  <div id="LanguageRow" class="row">
+    <span id="LanguageCaption" class="caption">{#settings.language}</span>
+    <div id="Language" class="group" data-widget="segmented" data-bind="language">
+      <button id="LanguageEn" data-action="SettingsLanguage" data-value="en">{#lang.en}</button>
+      <button id="LanguageRu" data-action="SettingsLanguage" data-value="ru">{#lang.ru}</button>
+      <button id="LanguageDe" data-action="SettingsLanguage" data-value="de">{#lang.de}</button>
+    </div>
+  </div>
+  <button id="Ok" data-action="SettingsClose">{#settings.ok}</button>
+</div>)";
+
+        constexpr const char* kSettingsPanelCss = R"(
+#Plate    { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 12px; padding: 16px; width: 94%; max-width: 640px; height: 416px; background: rgb(36, 40, 52); }
+#Title    { height: 44px; font-size: 30px; text-align: center; }
+#Sound    { height: 56px; font-size: 24px; vertical-align: middle; }
+.row      { display: flex; flex-direction: row; align-items: stretch; gap: 8px; height: 56px; }
+.centered { align-items: center; }
+.caption  { width: 220px; height: 56px; font-size: 24px; vertical-align: middle; }
+#Volume   { flex: 1; height: 56px; }
+#Progress { flex: 1; height: 24px; }
+#Percent  { width: 64px; height: 56px; font-size: 24px; text-align: right; vertical-align: middle; }
+.group    { display: flex; flex-direction: row; gap: 4px; flex: 1; height: 56px; background: rgb(30, 30, 30); }
+.group button { flex: 1; height: 56px; font-size: 24px; background: rgb(70, 70, 100); }
+#Ok       { height: 56px; font-size: 26px; background: rgb(40, 90, 60); }
+@media (orientation: portrait) {
+  #Plate          { height: 456px; }
+  #LanguageRow    { flex-direction: column; height: 96px; }
+  #LanguageCaption { height: 32px; }
+}
+)";
+
+        const char* const kSettingsPanelNames[] = {"Plate",       "Title",           "Sound",    "MusicRow",   "MusicCaption", "Volume",     "DownloadRow", "DownloadCaption", "Progress", "Percent",
+                                                   "LanguageRow", "LanguageCaption", "Language", "LanguageEn", "LanguageRu",   "LanguageDe", "Ok"};
+
     }  // namespace
 
     class UIWebTest : public ::testing::Test {
@@ -418,6 +517,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
         void TearDown() override {
             CoreManager::GetUIVars().Clear();
+            CoreManager::GetUIStrings().Clear();
             CoreManager::GetResourceManager().ClearCache();
         }
     };
@@ -840,8 +940,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
     TEST_F(UIWebTest, ChoiceGroupsOutsideTheSubsetAreReported) {
         // An unknown widget is read as a plain element and reported
-        const auto unknown = Compile(R"(<div id="g" data-widget="slider"></div>)");
-        EXPECT_EQ(unknown->IssuesMentioning("data-widget=\"slider\" is not supported"), 1u);
+        const auto unknown = Compile(R"(<div id="g" data-widget="dropdown"></div>)");
+        EXPECT_EQ(unknown->IssuesMentioning("data-widget=\"dropdown\" is not supported"), 1u);
+        EXPECT_EQ(unknown->IssuesMentioning("\"segmented\", \"toggle\", \"slider\" and \"progress\""), 1u) << "the message names every widget";
         EXPECT_EQ(unknown->Find("g").attribute("type").as_string(), std::string("UIElement"));
 
         // data-bind with no widget, on a div and on a button
@@ -878,6 +979,281 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->report.elements, 3u);
         EXPECT_EQ(compiled->report.rules, 1u);
         EXPECT_EQ(compiled->report.declarations, 1u);
+    }
+
+    // ---- toggle, slider and progress bar ------------------------------------------------------------------------------------------
+
+    TEST_F(UIWebTest, TheSettingsPanelInHtmlAndCssBuildsTheElementsOfTheXml) {
+        const auto compiled = Compile(kSettingsPanelHtml, kSettingsPanelCss);
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
+
+        pugi::xml_document reference;
+        ASSERT_TRUE(reference.load_string(kSettingsPanelXml));
+        ExpectSameAttributes(reference.child("ui").child("elements").child("element"), compiled->document.child("ui").child("elements").child("element"));
+
+        const UIScreenContent expected = ReadXml(kSettingsPanelXml);
+        ExpectSameElements(expected.elements, compiled->content.elements);
+        EXPECT_TRUE(expected.variants == compiled->content.variants) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->report.variants, 1u);
+
+        // The types and the fields the tree comparison does not look at
+        const auto* sound = compiled->Element("Sound")->Cast<UIToggle>();
+        ASSERT_NE(sound, nullptr) << "a data-widget=\"toggle\" div is a UIToggle";
+        EXPECT_EQ(sound->bind.ToStringView(), "soundOn");
+        EXPECT_EQ(sound->action.ToStringView(), "SettingsSound");
+        EXPECT_EQ(sound->onValue.ToStringView(), "true") << "data-on and data-off were not written, so the defaults stand";
+        EXPECT_EQ(sound->offValue.ToStringView(), "false");
+        EXPECT_EQ(sound->text, "{#settings.sound}") << "the caption of a toggle is its text";
+        EXPECT_TRUE(sound->interactive);
+        const auto* volume = compiled->Element("Volume")->Cast<UISlider>();
+        ASSERT_NE(volume, nullptr) << "a data-widget=\"slider\" div is a UISlider";
+        EXPECT_EQ(volume->bind.ToStringView(), "volume");
+        EXPECT_EQ(volume->action.ToStringView(), "SettingsVolume");
+        EXPECT_FLOAT_EQ(volume->minValue, 0.0f);
+        EXPECT_FLOAT_EQ(volume->maxValue, 1.0f);
+        EXPECT_FLOAT_EQ(volume->step, 0.1f);
+        const auto* progress = compiled->Element("Progress")->Cast<UIProgressBar>();
+        ASSERT_NE(progress, nullptr) << "a data-widget=\"progress\" div is a UIProgressBar";
+        EXPECT_EQ(progress->bind.ToStringView(), "progress");
+        EXPECT_FLOAT_EQ(progress->maxValue, 100.0f);
+        EXPECT_FALSE(progress->interactive);
+        EXPECT_FALSE(progress->blocksInput) << "a progress bar takes no input";
+    }
+
+    TEST_F(UIWebTest, TheSettingsPanelInHtmlLaysOutLikeTheXmlInLandscapeAndPortrait) {
+        const auto compiled = Compile(kSettingsPanelHtml, kSettingsPanelCss);
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        const UIScreenContent expectedContent = ReadXml(kSettingsPanelXml);
+        // The view of the Chess board (landscape: the portrait variant is off) and a portrait view (the variant is on)
+        for (const auto& [viewWidth, viewHeight] : {std::pair{840.0f, 800.0f}, {560.0f, 840.0f}}) {
+            LaidOut web(compiled->content);
+            LaidOut xml(expectedContent);
+            web.InSceneView(viewWidth, viewHeight);
+            xml.InSceneView(viewWidth, viewHeight);
+            for (const auto& [width, height] : {std::pair{1280.0f, 720.0f}, {640.0f, 360.0f}, {720.0f, 1280.0f}, {480.0f, 480.0f}, {2560.0f, 1080.0f}}) {
+                web.At(width, height);
+                xml.At(width, height);
+                for (const char* name : kSettingsPanelNames) {
+                    SCOPED_TRACE(Format("{} in a {}x{} view at {}x{}", name, viewWidth, viewHeight, width, height).c_str());
+                    ExpectSameRect(xml.Find(name), web.Find(name), name);
+                }
+            }
+        }
+        // The portrait variant really changed the shape, and the three widgets have a rect (a slider of height 56, a bar of 24)
+        const struct {
+            float viewWidth;
+            float viewHeight;
+            float plateHeight;
+        } shapes[] = {{840.0f, 800.0f, 416.0f}, {560.0f, 840.0f, 456.0f}};
+        for (const auto& shape : shapes) {
+            LaidOut web(compiled->content);
+            web.InSceneView(shape.viewWidth, shape.viewHeight);
+            web.At(1280.0f, 720.0f);
+            EXPECT_FLOAT_EQ(web.Find("Plate")->rect.h, shape.plateHeight) << shape.viewWidth;
+            EXPECT_FLOAT_EQ(web.Find("Volume")->rect.h, 56.0f);
+            EXPECT_GT(web.Find("Volume")->rect.w, 100.0f);
+            EXPECT_FLOAT_EQ(web.Find("Progress")->rect.h, 24.0f);
+            EXPECT_FLOAT_EQ(web.Find("Sound")->rect.h, 56.0f);
+        }
+    }
+
+    TEST_F(UIWebTest, TheSettingsPanelInHtmlFollowsTheVariablesAndTheStrings) {
+        const auto compiled = Compile(kSettingsPanelHtml, kSettingsPanelCss);
+        UIStrings& strings = CoreManager::GetUIStrings();
+        strings.Set("en"_intern, "settings.sound", "Sound");
+        strings.Set("de"_intern, "settings.sound", "Geraeuscheffekte");
+        auto* sound = compiled->Element("Sound")->Cast<UIToggle>();
+        auto* volume = compiled->Element("Volume")->Cast<UISlider>();
+        auto* progress = compiled->Element("Progress")->Cast<UIProgressBar>();
+        ASSERT_TRUE(sound != nullptr && volume != nullptr && progress != nullptr);
+
+        EXPECT_FALSE(sound->IsOn());
+        EXPECT_FLOAT_EQ(progress->GetFraction(), 0.0f);
+        CoreManager::GetUIVars().Set("soundOn"_intern, "true");
+        CoreManager::GetUIVars().Set("volume"_intern, "0.5");
+        CoreManager::GetUIVars().Set("progress"_intern, 25);
+        EXPECT_TRUE(sound->IsOn());
+        EXPECT_FLOAT_EQ(volume->GetValue(), 0.5f);
+        EXPECT_FLOAT_EQ(volume->GetFraction(), 0.5f);
+        EXPECT_FLOAT_EQ(progress->GetFraction(), 0.25f);
+
+        EXPECT_EQ(sound->GetDisplayText(), "Sound");
+        strings.SetLanguage("de"_intern);
+        EXPECT_EQ(sound->GetDisplayText(), "Geraeuscheffekte") << "a {#key} caption of a toggle follows the language";
+    }
+
+    TEST_F(UIWebTest, TheWidgetsTakeTheirAttributesAndColors) {
+        const auto compiled = Compile(R"(
+<div id="t" data-widget="Toggle" data-bind="muted" action="Mute" data-on="1" data-off="0" disabled>Mute</div>
+<div id="s" data-widget="slider" data-bind="v" data-action="Set" data-min="-5" data-max="5.5" data-step="0.5" disabled></div>
+<div id="p" data-widget="progress" data-bind="load" data-max="200"></div>
+<div id="d" data-widget="slider"></div>)",
+                                      R"(
+#t, #s, #p { -be-track-color: #20202080; -be-fill-color: rgb(10, 200, 30); }
+#t, #s { -be-thumb-color: #ffeeddff; }
+#t { background: rgb(1, 2, 3); }
+#p { background: rgb(4, 5, 6); height: 24px; }
+)");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_TRUE(compiled->report.issues.empty()) << compiled->report.issues[0].message.c_str();
+
+        EXPECT_EQ(compiled->Find("t").attribute("type").as_string(), std::string("UIToggle")) << "the widget name is not case sensitive";
+        EXPECT_EQ(compiled->Attr("t", "bind"), "muted");
+        EXPECT_EQ(compiled->Attr("t", "action"), "Mute") << "the plain `action` attribute is accepted as on a button";
+        EXPECT_EQ(compiled->Attr("t", "onValue"), "1");
+        EXPECT_EQ(compiled->Attr("t", "offValue"), "0");
+        EXPECT_EQ(compiled->Attr("t", "disabled"), "true");
+        EXPECT_EQ(compiled->Attr("t", "text"), "Mute");
+        EXPECT_EQ(compiled->Attr("t", "color"), "1,2,3,255") << "the background is the fill behind the caption";
+        EXPECT_EQ(compiled->Attr("t", "trackColor"), "32,32,32,128");
+        EXPECT_EQ(compiled->Attr("t", "fillColor"), "10,200,30,255");
+        EXPECT_EQ(compiled->Attr("t", "thumbColor"), "255,238,221,255");
+        EXPECT_FALSE(compiled->Has("t", "blocksInput")) << "a toggle takes input by itself, whatever its background";
+
+        EXPECT_EQ(compiled->Attr("s", "minValue"), "-5");
+        EXPECT_EQ(compiled->Attr("s", "maxValue"), "5.5");
+        EXPECT_EQ(compiled->Attr("s", "step"), "0.5");
+        EXPECT_EQ(compiled->Attr("s", "disabled"), "true");
+        EXPECT_EQ(compiled->Attr("s", "thumbColor"), "255,238,221,255");
+        EXPECT_EQ(compiled->Attr("s", "fillColor"), "10,200,30,255");
+
+        EXPECT_EQ(compiled->Attr("p", "maxValue"), "200");
+        EXPECT_FALSE(compiled->Has("p", "minValue"));
+        EXPECT_EQ(compiled->Attr("p", "color"), "4,5,6,255");
+        EXPECT_EQ(compiled->Attr("p", "trackColor"), "32,32,32,128");
+        EXPECT_FALSE(compiled->Has("p", "thumbColor"));
+        EXPECT_FALSE(compiled->Has("p", "blocksInput")) << "a progress bar never takes input, a background or not";
+
+        EXPECT_FALSE(compiled->Has("d", "minValue")) << "nothing written, nothing invented";
+        EXPECT_FALSE(compiled->Has("d", "step"));
+
+        // and what the controls read from it
+        const auto* toggle = compiled->Element("t")->Cast<UIToggle>();
+        const auto* slider = compiled->Element("s")->Cast<UISlider>();
+        ASSERT_TRUE(toggle != nullptr && slider != nullptr);
+        EXPECT_TRUE(toggle->disabled);
+        EXPECT_EQ(toggle->onValue.ToStringView(), "1");
+        EXPECT_EQ(toggle->fillColor.g, 200);
+        EXPECT_FLOAT_EQ(slider->minValue, -5.0f);
+        EXPECT_FLOAT_EQ(slider->step, 0.5f);
+        EXPECT_TRUE(slider->disabled);
+    }
+
+    TEST_F(UIWebTest, NumbersOfTheWidgetsAreWrittenAsNumbers) {
+        const auto compiled = Compile(R"(<div id="s" data-widget="slider" data-min=" 0.0 " data-max="1e2" data-step="1.50"></div>)");
+        EXPECT_EQ(compiled->Attr("s", "minValue"), "0");
+        EXPECT_EQ(compiled->Attr("s", "maxValue"), "100");
+        EXPECT_EQ(compiled->Attr("s", "step"), "1.5");
+        EXPECT_TRUE(compiled->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, WidgetMisuseIsReported) {
+        // data-step, data-min, data-max, data-on, data-off, data-action and data-bind with no widget that reads them
+        const auto stray = Compile(R"(<div id="a" data-step="1" data-min="0" data-max="1" data-on="x" data-off="y" data-action="Go" data-bind="v"></div>)");
+        EXPECT_EQ(stray->IssuesMentioning("data-step only applies"), 1u);
+        EXPECT_EQ(stray->IssuesMentioning("data-min only applies"), 1u);
+        EXPECT_EQ(stray->IssuesMentioning("data-max only applies"), 1u);
+        EXPECT_EQ(stray->IssuesMentioning("data-on only applies"), 1u);
+        EXPECT_EQ(stray->IssuesMentioning("data-off only applies"), 1u);
+        EXPECT_EQ(stray->IssuesMentioning("data-action only applies"), 1u);
+        EXPECT_EQ(stray->IssuesMentioning("data-bind only applies"), 1u);
+        for (const char* key : {"step", "minValue", "maxValue", "onValue", "offValue", "action", "bind"}) {
+            EXPECT_FALSE(stray->Has("a", key)) << key << " has no widget to read it, so nothing is written";
+        }
+
+        // data-step on a progress bar, data-on on a slider, data-action on a progress bar and a segmented group
+        const auto wrong = Compile(R"(<div id="p" data-widget="progress" data-step="1" data-action="Go"></div><div id="s" data-widget="slider" data-on="1"></div>)");
+        EXPECT_EQ(wrong->IssuesMentioning("data-step only applies"), 1u);
+        EXPECT_EQ(wrong->IssuesMentioning("data-action only applies"), 1u);
+        EXPECT_EQ(wrong->IssuesMentioning("data-on only applies"), 1u);
+        EXPECT_FALSE(wrong->Has("p", "step"));
+        EXPECT_FALSE(wrong->Has("p", "action"));
+        EXPECT_FALSE(wrong->Has("s", "onValue"));
+
+        // a number that is not one is reported and the default stays
+        const auto bad = Compile(R"(<div id="s" data-widget="slider" data-min="low" data-max="inf" data-step="-1"></div><div id="p" data-widget="progress" data-max="ten"></div>)");
+        EXPECT_EQ(bad->IssuesMentioning("data-min=\"low\" is not a number"), 1u);
+        EXPECT_EQ(bad->IssuesMentioning("data-max=\"inf\" is not a number"), 1u);
+        EXPECT_EQ(bad->IssuesMentioning("data-max=\"ten\" is not a number"), 1u);
+        EXPECT_EQ(bad->IssuesMentioning("data-step=\"-1\" is not a number of 0 or more"), 1u);
+        for (const char* key : {"minValue", "maxValue", "step"}) {
+            EXPECT_FALSE(bad->Has("s", key)) << key;
+        }
+        EXPECT_FALSE(bad->Has("p", "maxValue"));
+
+        // a widget on a button or an image is left out, and a progress bar is not disabled
+        const auto onButton = Compile(R"(<button id="b" data-widget="toggle">B</button><img id="i" src="x" data-widget="slider"><div id="p" data-widget="progress" disabled></div>)");
+        EXPECT_EQ(onButton->IssuesMentioning("data-widget=\"toggle\" on a <button> is left out"), 1u);
+        EXPECT_EQ(onButton->IssuesMentioning("data-widget=\"slider\" on a <img> is left out"), 1u);
+        EXPECT_EQ(onButton->IssuesMentioning("disabled does not apply to a progress bar"), 1u);
+        EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), std::string("UIButton"));
+        EXPECT_EQ(onButton->Find("i").attribute("type").as_string(), std::string("UIImage"));
+        EXPECT_FALSE(onButton->Has("p", "disabled"));
+
+        // content inside a slider or a progress bar has nowhere to go
+        const auto inside = Compile(R"(<div id="s" data-widget="slider"><span id="x">hi</span></div>)");
+        EXPECT_EQ(inside->IssuesMentioning("shows no content"), 1u);
+        EXPECT_TRUE(inside->Find("x").empty()) << "its children are not elements";
+    }
+
+    TEST_F(UIWebTest, WidgetColorsOnAnythingElseAreReported) {
+        const auto compiled = Compile(R"(<div id="d"></div><button id="b">B</button><span id="l">L</span><div id="p" data-widget="progress"></div>)",
+                                      "#d, #b, #l { -be-fill-color: red; -be-track-color: red; } #p { -be-thumb-color: red; } #d { -be-thumb-color: red; }");
+        EXPECT_EQ(compiled->IssuesMentioning("-be-fill-color applies to a toggle, slider or progress bar only"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("-be-track-color applies to a toggle, slider or progress bar only"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("-be-thumb-color applies to a toggle or slider only"), 1u) << "a progress bar has no thumb";
+        for (const char* name : {"d", "b", "l", "p"}) {
+            EXPECT_FALSE(compiled->Has(name, "fillColor")) << name;
+            EXPECT_FALSE(compiled->Has(name, "trackColor")) << name;
+            EXPECT_FALSE(compiled->Has(name, "thumbColor")) << name;
+        }
+        // The value is checked like any property
+        const auto bad = Compile(R"(<div id="t" data-widget="toggle">T</div>)", "#t { -be-fill-color: notacolor; }");
+        EXPECT_EQ(bad->IssuesMentioning("'-be-fill-color: notacolor' is not understood"), 1u);
+        EXPECT_EQ(bad->report.declarationsUnsupported, 1u);
+        EXPECT_FALSE(bad->Has("t", "fillColor"));
+    }
+
+    TEST_F(UIWebTest, AStateRuleOnAWidgetIsReportedAndNotApplied) {
+        const auto compiled =
+            Compile(R"(<div id="t" data-widget="toggle">T</div><div id="s" data-widget="slider"></div><div id="p" data-widget="progress"></div>)",
+                    "div { background: #101010 } #s:hover { background: #202020 } #t:active { background: #303030 } #p:disabled { -be-fill-color: red } #t:checked { background: #404040 }");
+        EXPECT_EQ(compiled->IssuesMentioning("a state rule does not apply to a toggle, slider or progress bar"), 2u) << "one message per property and tag, however many elements";
+        EXPECT_EQ(compiled->IssuesMentioning("('color' of a <div> is left out)"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("('fillColor' of a <div> is left out)"), 1u);
+        EXPECT_EQ(compiled->Attr("t", "color"), "16,16,16,255") << "the base look is kept";
+        EXPECT_EQ(compiled->Attr("s", "color"), "16,16,16,255");
+        for (const char* name : {"t", "s", "p"}) {
+            EXPECT_FALSE(compiled->Has(name, "hoverColor")) << name;
+            EXPECT_FALSE(compiled->Has(name, "pressedColor")) << name;
+            EXPECT_FALSE(compiled->Has(name, "selectedColor")) << name;
+            EXPECT_FALSE(compiled->Has(name, "disabledColor")) << name;
+        }
+        EXPECT_EQ(compiled->Attr("p", "fillColor"), "") << "the rule did not change the base look";
+    }
+
+    TEST_F(UIWebTest, PointerEventsOnAWidgetIsReported) {
+        const auto compiled = Compile(R"(<div id="s" data-widget="slider"></div>)", "#s { pointer-events: none }");
+        EXPECT_EQ(compiled->IssuesMentioning("pointer-events does not apply to a toggle, slider or progress bar"), 1u);
+        EXPECT_FALSE(compiled->Has("s", "blocksInput"));
+    }
+
+    TEST_F(UIWebTest, AWidgetKeepsItsCounters) {
+        const auto compiled =
+            Compile(R"(<div id="t" data-widget="toggle" data-bind="a">T</div><div id="s" data-widget="slider" data-bind="b"></div><div id="p" data-widget="progress" data-bind="c"></div>)",
+                    "div { height: 56px; -be-fill-color: #00ff00 }");
+        EXPECT_EQ(compiled->report.elements, 3u);
+        EXPECT_EQ(compiled->report.rules, 1u);
+        EXPECT_EQ(compiled->report.declarations, 2u);
+        EXPECT_EQ(compiled->report.declarationsUnsupported, 0u);
+        EXPECT_TRUE(compiled->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, AToggleCaptionKeepsItsStringReferenceAndVariables) {
+        const auto compiled = Compile(R"(<div id="t" data-widget="toggle" data-bind="a">{#settings.sound}: <b>{state}</b></div>)");
+        EXPECT_EQ(compiled->Attr("t", "text"), "{#settings.sound}: {state}") << "inline elements are part of the caption";
+        EXPECT_TRUE(compiled->report.issues.empty());
     }
 
     // ---- the cascade ---------------------------------------------------------------------------------------------------------
@@ -996,6 +1372,37 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(compiled->Has("t", "font")) << "a generic family is the default font";
         EXPECT_EQ(compiled->Find("e").attribute("type").as_string(), std::string("UILabel")) << "an empty <p> is a label that a variable can fill";
         EXPECT_TRUE(compiled->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, AStringReferenceIsTextLikeAVariableAndReachesTheXmlUntouched) {
+        const auto compiled = Compile(R"(<button id="b" data-action="Start">{#menu.start}</button><span id="s">{#score.title}: {score}</span><p id="q">{{#menu.start}}</p>)");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->Find("b").attribute("type").as_string(), std::string("UIButton"));
+        EXPECT_EQ(compiled->Attr("b", "text"), "{#menu.start}");
+        EXPECT_EQ(compiled->Find("s").attribute("type").as_string(), std::string("UILabel"));
+        EXPECT_EQ(compiled->Attr("s", "text"), "{#score.title}: {score}");
+        EXPECT_EQ(compiled->Attr("q", "text"), "{{#menu.start}}") << "an escaped brace stays escaped";
+        EXPECT_TRUE(compiled->report.issues.empty());
+
+        // and the control made from it shows the string of the current language
+        UIStrings& strings = CoreManager::GetUIStrings();
+        strings.Set("en"_intern, "menu.start", "Start");
+        strings.Set("en"_intern, "score.title", "Score");
+        strings.Set("de"_intern, "menu.start", "Los");
+        strings.Set("de"_intern, "score.title", "Punkte");
+        CoreManager::GetUIVars().Set("score"_intern, 3);
+        auto* button = compiled->Element("b")->Cast<UIButton>();
+        auto* span = compiled->Element("s")->Cast<UILabel>();
+        auto* quoted = compiled->Element("q")->Cast<UILabel>();
+        ASSERT_NE(button, nullptr) << compiled->xml.c_str();
+        ASSERT_NE(span, nullptr);
+        ASSERT_NE(quoted, nullptr);
+        EXPECT_EQ(button->GetDisplayText(), "Start");
+        EXPECT_EQ(span->GetDisplayText(), "Score: 3");
+        EXPECT_EQ(quoted->GetDisplayText(), "{#menu.start}");
+        strings.SetLanguage("de"_intern);
+        EXPECT_EQ(button->GetDisplayText(), "Los");
+        EXPECT_EQ(span->GetDisplayText(), "Punkte: 3");
     }
 
     TEST_F(UIWebTest, PointerEventsDecideWhetherAGroupTakesClicks) {

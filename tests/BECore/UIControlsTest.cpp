@@ -9,8 +9,11 @@
 #include <BECore/UI/UIImage.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
+#include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
+#include <BECore/UI/UISlider.h>
 #include <BECore/UI/UIStack.h>
+#include <BECore/UI/UIToggle.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -45,6 +48,9 @@ namespace BECore::Tests {
           <element type="UIButton" name="Off" x="300" y="200" width="80" height="40" text="Off" action="UIControlsTestOff" color="40,90,60,255" disabled="true"/>
           <element type="UIStack" name="Row" x="500" y="10" width="100" height="40" direction="Horizontal" spacing="4"/>
           <element type="UISegmented" name="Choice" bind="choice" x="500" y="100" width="204" height="48" direction="Horizontal" spacing="4" disabled="true"/>
+          <element type="UIToggle" name="Switch" bind="switchOn" action="UIControlsTestSwitch" text="Switch" onValue="yes" offValue="no" x="500" y="200" width="204" height="56" disabled="true"/>
+          <element type="UIProgressBar" name="Meter" bind="meter" minValue="10" maxValue="90" x="500" y="300" width="204" height="24"/>
+          <element type="UISlider" name="Level" bind="level" action="UIControlsTestLevel" minValue="2" maxValue="12" step="0.5" x="500" y="400" width="204" height="56" disabled="true"/>
         </elements>
       </component>
     </components></node>
@@ -144,6 +150,7 @@ namespace BECore::Tests {
 
         void TearDown() override {
             CoreManager::GetUIVars().Clear();
+            CoreManager::GetUIStrings().Clear();
             _canvas.Reset();
             _manager.Reset();
             CoreManager::GetRendererManager().SetRenderer({});
@@ -212,7 +219,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, EveryControlIsMadeByItsTypeName) {
         const UIElement& root = _canvas->GetRoot();
-        ASSERT_EQ(root.children.size(), 6u);
+        ASSERT_EQ(root.children.size(), 9u);
 
         EXPECT_TRUE(root.children[0]->Is<UIPanel>());
         EXPECT_TRUE(root.children[1]->Is<UIImage>());
@@ -220,6 +227,9 @@ namespace BECore::Tests {
         EXPECT_TRUE(root.children[3]->Is<UIButton>());
         EXPECT_TRUE(root.children[4]->Is<UIStack>());
         EXPECT_TRUE(root.children[5]->Is<UISegmented>());
+        EXPECT_TRUE(root.children[6]->Is<UIToggle>());
+        EXPECT_TRUE(root.children[7]->Is<UIProgressBar>());
+        EXPECT_TRUE(root.children[8]->Is<UISlider>());
         EXPECT_TRUE(root.children[0]->children[0]->Is<UILabel>());
         EXPECT_TRUE(root.children[0]->children[1]->Is<UIButton>());
     }
@@ -245,6 +255,22 @@ namespace BECore::Tests {
         EXPECT_EQ(Get<UISegmented>("Choice").layout, UILayoutKind::Stack);
         EXPECT_EQ(Get<UISegmented>("Choice").bind, PoolString::Intern("choice"));
         EXPECT_TRUE(Get<UISegmented>("Choice").disabled);
+        EXPECT_EQ(Get<UIToggle>("Switch").bind, PoolString::Intern("switchOn"));
+        EXPECT_EQ(Get<UIToggle>("Switch").onValue, PoolString::Intern("yes"));
+        EXPECT_EQ(Get<UIToggle>("Switch").offValue, PoolString::Intern("no"));
+        EXPECT_TRUE(Get<UIToggle>("Switch").disabled);
+        EXPECT_TRUE(Get<UIToggle>("Switch").interactive);
+        EXPECT_EQ(Get<UIProgressBar>("Meter").bind, PoolString::Intern("meter"));
+        EXPECT_FLOAT_EQ(Get<UIProgressBar>("Meter").minValue, 10.0f);
+        EXPECT_FLOAT_EQ(Get<UIProgressBar>("Meter").maxValue, 90.0f);
+        EXPECT_FALSE(Get<UIProgressBar>("Meter").interactive);
+        EXPECT_EQ(Get<UISlider>("Level").bind, PoolString::Intern("level"));
+        EXPECT_EQ(Get<UISlider>("Level").action, PoolString::Intern("UIControlsTestLevel"));
+        EXPECT_FLOAT_EQ(Get<UISlider>("Level").minValue, 2.0f);
+        EXPECT_FLOAT_EQ(Get<UISlider>("Level").maxValue, 12.0f);
+        EXPECT_FLOAT_EQ(Get<UISlider>("Level").step, 0.5f);
+        EXPECT_TRUE(Get<UISlider>("Level").disabled);
+        EXPECT_TRUE(Get<UISlider>("Level").interactive);
     }
 
     TEST_F(UIControlsTest, TheControlsSaveAndLoadBack) {
@@ -323,9 +349,34 @@ namespace BECore::Tests {
             } else if (auto* group = element.Cast<UISegmented>()) {
                 group->bind = PoolString::Intern("busyChoice");
                 group->disabled = true;
+            } else if (auto* toggle = element.Cast<UIToggle>()) {
+                toggle->bind = PoolString::Intern("busyOn");
+                toggle->action = PoolString::Intern("BusyToggleAction");
+                toggle->onValue = PoolString::Intern("BusyOn");
+                toggle->offValue = PoolString::Intern("BusyOff");
+                toggle->disabled = true;
+                toggle->trackColor = Color{31, 32, 33, 34};
+                toggle->fillColor = Color{35, 36, 37, 38};
+                toggle->thumbColor = Color{39, 40, 41, 42};
+            } else if (auto* bar = element.Cast<UIProgressBar>()) {
+                bar->bind = PoolString::Intern("busyProgress");
+                bar->minValue = -2.5f;
+                bar->maxValue = 12.5f;
+                bar->trackColor = Color{43, 44, 45, 46};
+                bar->fillColor = Color{47, 48, 49, 50};
+            } else if (auto* slider = element.Cast<UISlider>()) {
+                slider->bind = PoolString::Intern("busyLevel");
+                slider->action = PoolString::Intern("BusySliderAction");
+                slider->minValue = -1.5f;
+                slider->maxValue = 7.5f;
+                slider->step = 0.25f;
+                slider->disabled = true;
+                slider->trackColor = Color{51, 52, 53, 54};
+                slider->fillColor = Color{55, 56, 57, 58};
+                slider->thumbColor = Color{59, 60, 61, 62};
             }
-            if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>()) {
-                auto* text = label ? label : static_cast<UILabel*>(element.Cast<UIButton>());
+            if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>()) {
+                auto* text = label ? label : element.Cast<UIButton>() ? static_cast<UILabel*>(element.Cast<UIButton>()) : static_cast<UILabel*>(element.Cast<UIToggle>());
                 text->text = "Some text";
                 text->font = PoolString::Intern("assets/fonts/Other.ttf");
                 text->textColor = Color{21, 22, 23, 24};
@@ -341,7 +392,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(UIControlsTest, EveryPropertyOfEveryControlSurvivesARoundTrip) {
-        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented"}) {
+        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle", "UIProgressBar", "UISlider"}) {
             auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(original) << type;
             SetEveryStyleProperty(original->style);
@@ -426,6 +477,236 @@ namespace BECore::Tests {
         vars.Set("score"_intern, 6);
         Draw();
         EXPECT_EQ(title.GetLayoutCount(), afterFirst + 1);
+    }
+
+    // ---- strings in texts ---------------------------------------------------------------------------------------------------
+
+    namespace {
+
+        /// English (the default) and Russian; "only.en" has no Russian text, "same" is the same in both, "greet" holds a variable
+        void FillStrings() {
+            UIStrings& strings = CoreManager::GetUIStrings();
+            strings.Set("en"_intern, "menu.start", "Start");
+            strings.Set("en"_intern, "score.title", "Score");
+            strings.Set("en"_intern, "greet", "Hello {name}");
+            strings.Set("en"_intern, "only.en", "English only");
+            strings.Set("en"_intern, "same", "Same");
+            strings.Set("en"_intern, "quoted", "{{#other}}");
+            strings.Set("ru"_intern, "menu.start", "Начать");
+            strings.Set("ru"_intern, "score.title", "Счёт");
+            strings.Set("ru"_intern, "greet", "Привет, {name}");
+            strings.Set("ru"_intern, "same", "Same");
+            strings.Set("ru"_intern, "quoted", "{{#other}}");
+        }
+
+    }  // namespace
+
+    TEST_F(UIControlsTest, ALabelShowsTheStringOfTheCurrentLanguageAndFollowsASwitch) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+        title.text = "{#menu.start}";
+
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Start");
+        EXPECT_EQ(GlyphsIn(title).size(), 5u);
+
+        EXPECT_TRUE(CoreManager::GetUIStrings().SetLanguage("ru"_intern));
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Начать");
+
+        EXPECT_TRUE(CoreManager::GetUIStrings().SetLanguage("en"_intern));
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Start");
+    }
+
+    TEST_F(UIControlsTest, AKeyMissingInTheLanguageFallsBackToTheDefaultOneAndAKeyMissingEverywhereShowsTheKey) {
+        FillStrings();
+        CoreManager::GetUIStrings().SetLanguage("ru"_intern);
+        auto& title = Get<UILabel>("Title");
+
+        title.text = "{#only.en}";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "English only");
+        EXPECT_TRUE(CoreManager::GetUIStrings().GetMissing().empty());
+
+        title.text = "{#menu.options}";
+        for (int frame = 0; frame < 5; ++frame) {
+            Draw();
+        }
+        EXPECT_EQ(title.GetDisplayText(), "menu.options") << "the key itself, never an empty label";
+        EXPECT_FALSE(GlyphsIn(title).empty());
+        ASSERT_EQ(CoreManager::GetUIStrings().GetMissing().size(), 1u) << "a missing key is recorded (and logged) once, not once per frame";
+        EXPECT_EQ(CoreManager::GetUIStrings().GetMissing()[0].key, "menu.options");
+        EXPECT_EQ(CoreManager::GetUIStrings().GetMissing()[0].language, "ru"_intern);
+    }
+
+    TEST_F(UIControlsTest, ATextMixesAStringAndAVariableAndFollowsBoth) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+        title.text = "{#score.title}: {score}";
+        CoreManager::GetUIVars().Set("score"_intern, 5);
+
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Score: 5");
+
+        CoreManager::GetUIVars().Set("score"_intern, 6);
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Score: 6");
+
+        CoreManager::GetUIStrings().SetLanguage("ru"_intern);
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Счёт: 6");
+
+        CoreManager::GetUIVars().Set("score"_intern, 7);
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Счёт: 7");
+    }
+
+    TEST_F(UIControlsTest, AStringThatHoldsAVariableFollowsTheVariable) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+        title.text = "{#greet}";
+        CoreManager::GetUIVars().Set("name"_intern, "Ann");
+
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Hello Ann");
+
+        CoreManager::GetUIVars().Set("name"_intern, "Bob");
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Hello Bob");
+
+        CoreManager::GetUIStrings().SetLanguage("ru"_intern);
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "Привет, Bob");
+    }
+
+    TEST_F(UIControlsTest, AStringIsNotResolvedAgainAndALiteralReferenceIsWrittenWithDoubledBraces) {
+        FillStrings();
+        CoreManager::GetUIStrings().Set("en"_intern, "again", "{#menu.start}");
+        auto& title = Get<UILabel>("Title");
+
+        // The result of a reference goes to the variable step, which reads `{#menu.start}` as a variable named "#menu.start" (unset, so empty): not a second string step
+        title.text = "[{#again}]";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "[]");
+
+        // `{{#other}}` in a string survives both steps as the text `{#other}`
+        title.text = "{#quoted}";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "{#other}");
+
+        // and so does a doubled brace in the text itself
+        title.text = "{{#menu.start}}";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "{#menu.start}");
+    }
+
+    TEST_F(UIControlsTest, ATextWithoutABraceOrWithOnlyAVariableIsUntouchedByTheStrings) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+
+        title.text = "#menu.start";
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "#menu.start");
+
+        title.text = "{menu.start}";  // a variable, not a string
+        Draw();
+        EXPECT_EQ(title.GetDisplayText(), "");
+        EXPECT_TRUE(CoreManager::GetUIStrings().GetMissing().empty());
+    }
+
+    TEST_F(UIControlsTest, AButtonAndAToggleShowTheirCaptionsFromTheStrings) {
+        FillStrings();
+        auto& ok = Get<UIButton>("Ok");
+        auto& toggle = Get<UIToggle>("Switch");
+        ok.text = "{#menu.start}";
+        toggle.text = "{#score.title}";
+
+        Draw();
+        EXPECT_EQ(ok.GetDisplayText(), "Start");
+        EXPECT_EQ(toggle.GetDisplayText(), "Score");
+        EXPECT_EQ(GlyphsIn(ok).size(), 5u);
+
+        CoreManager::GetUIStrings().SetLanguage("ru"_intern);
+        Draw();
+        EXPECT_EQ(ok.GetDisplayText(), "Начать");
+        EXPECT_EQ(toggle.GetDisplayText(), "Счёт");
+    }
+
+    TEST_F(UIControlsTest, AnUnchangedScreenWithStringsCostsNoLayoutAndASwitchLaysOutOnlyWhatChanged) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+        auto& ok = Get<UIButton>("Ok");
+        title.text = "{#menu.start}";
+        ok.text = "{#same}";
+        UIStrings& strings = CoreManager::GetUIStrings();
+
+        Draw();
+        const uint32_t titleLayouts = title.GetLayoutCount();
+        const uint32_t okLayouts = ok.GetLayoutCount();
+        EXPECT_GE(titleLayouts, 1u);
+        for (int frame = 0; frame < 5; ++frame) {
+            Draw();
+        }
+        EXPECT_EQ(title.GetLayoutCount(), titleLayouts);
+        EXPECT_EQ(ok.GetLayoutCount(), okLayouts);
+
+        CoreManager::GetUIVars().Set("unrelated"_intern, 1);  // the version moves, the text does not
+        strings.Set("en"_intern, "unrelated.key", "x");       // so does the version of the strings
+        Draw();
+        EXPECT_EQ(title.GetLayoutCount(), titleLayouts);
+        EXPECT_EQ(ok.GetLayoutCount(), okLayouts);
+
+        strings.SetLanguage("ru"_intern);
+        Draw();
+        EXPECT_EQ(title.GetLayoutCount(), titleLayouts + 1) << "the text changed with the language";
+        EXPECT_EQ(ok.GetLayoutCount(), okLayouts) << "the string is the same in both languages, so the same layout is kept";
+
+        Draw();
+        EXPECT_EQ(title.GetLayoutCount(), titleLayouts + 1);
+    }
+
+    TEST_F(UIControlsTest, ALanguageSwitchLeavesALabelThatNamesNoStringAlone) {
+        FillStrings();
+        auto& title = Get<UILabel>("Title");
+        title.text = "Score: {score}";
+        CoreManager::GetUIVars().Set("score"_intern, 5);
+
+        Draw();
+        const uint32_t layouts = title.GetLayoutCount();
+        CoreManager::GetUIStrings().SetLanguage("ru"_intern);
+        Draw();
+
+        EXPECT_EQ(title.GetDisplayText(), "Score: 5");
+        EXPECT_EQ(title.GetLayoutCount(), layouts);
+    }
+
+    TEST_F(UIControlsTest, TheValidatorMeasuresTheStringOfTheCurrentLanguage) {
+        UIStrings& strings = CoreManager::GetUIStrings();
+        strings.Set("en"_intern, "line", "Short");
+        strings.Set("de"_intern, "line", "A value that is much too long for a label of this width");
+        strings.SetDefaultLanguage("en"_intern);
+        auto& title = Get<UILabel>("Title");
+        title.text = "{#line}";
+        title.wrap = false;
+        title.overflow = TextOverflow::Clip;
+        title.style.rect.height = UILength::Px(40.0f);
+        _canvas->Invalidate();
+        const auto textIssues = [this]() {
+            Draw();
+            size_t count = 0;
+            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
+                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
+            }
+            return count;
+        };
+
+        EXPECT_EQ(textIssues(), 0u);
+        EXPECT_TRUE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
+
+        strings.SetLanguage("de"_intern);
+        EXPECT_EQ(textIssues(), 1u);
+        EXPECT_FALSE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
     }
 
     TEST_F(UIControlsTest, ABracedTextWithoutAVariableIsShownWithoutBraces) {

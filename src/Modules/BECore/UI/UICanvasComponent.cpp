@@ -227,6 +227,10 @@ namespace BECore {
             }
             _pressed = IntrusivePtr<UIElement>(hit);
             hit->pressed = true;
+            // Last, like OnClick: the handler may do anything, and this canvas is done with the event by then. The copy keeps the element alive through it
+            const IntrusivePtr<UIElement> pressed = _pressed;
+            const auto [x, y] = _layout.OutputToCanvas(event.x, event.y);
+            pressed->OnPress(x, y);
         }
         return consumed;
     }
@@ -265,6 +269,12 @@ namespace BECore {
         // A button is held and this canvas did not take its press: a drag of the game, which passing over the UI does not interrupt or light up
         const bool gameDrag = event.state != 0 && _consumedButtons == 0;
         SetHovered(gameDrag ? nullptr : hit);
+        if (_pressed && (event.state & SDL_BUTTON_LMASK) != 0) {
+            // The press that began on this element is held: the element follows the pointer wherever it goes. The copy keeps it alive through the handler
+            const IntrusivePtr<UIElement> pressed = _pressed;
+            const auto [x, y] = _layout.OutputToCanvas(event.x, event.y);
+            pressed->OnDrag(x, y);
+        }
         if (_modal || _consumedButtons != 0) {
             return true;
         }

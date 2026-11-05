@@ -29,6 +29,18 @@ namespace BECore {
         /// A number that fills the whole text (surrounding spaces are allowed)
         [[nodiscard]] std::optional<float> ParseFloat(eastl::string_view text);
 
+        /// Like ParseFloat, but "nan", "inf" and "-inf" are refused: a number a control can compute with
+        [[nodiscard]] std::optional<float> ParseFiniteFloat(eastl::string_view text);
+
+        /// Where @p value stands in @p minValue..@p maxValue: `clamp((value - minValue) / (maxValue - minValue), 0, 1)`. 0 for a range that is empty or reversed
+        /// (`maxValue <= minValue`) and for any number that is not finite, so a caller never divides by zero or draws outside its rect. The one place of these rules, shared by the
+        /// progress bar and the slider
+        [[nodiscard]] float FractionInRange(float value, float minValue, float maxValue);
+
+        /// The number a variable's @p text stands for, clamped to @p minValue..@p maxValue; @p minValue for an empty or malformed text, a number that is not finite and a range that is empty or
+        /// reversed
+        [[nodiscard]] float ValueInRange(eastl::string_view text, float minValue, float maxValue);
+
         /// @p text without its leading and trailing spaces
         [[nodiscard]] eastl::string_view Trim(eastl::string_view text);
 
