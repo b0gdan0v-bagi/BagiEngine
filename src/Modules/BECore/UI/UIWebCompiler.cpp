@@ -13,13 +13,12 @@ namespace BECore {
         constexpr eastl::string_view HtmlSource = "html";
         constexpr eastl::string_view CssSource = "css";
         constexpr eastl::string_view WidgetAttribute = "data-widget";
-        constexpr eastl::string_view SegmentedWidget = "segmented";
         constexpr char LineBreakMarker = '\x01';  // a `<br>` while the text of a label is gathered; the white space of the source is never this
         constexpr float DefaultFontSizeForLineHeight = 24.0f;
         constexpr size_t BoxValueMax = 4;
 
         // The kinds of element the compile writes
-        CORE_ENUM(WebKind, uint8_t, Group, Panel, Label, Button, Image, Segmented)
+        CORE_ENUM(WebKind, uint8_t, Group, Panel, Label, Button, Image, Segmented, Toggle, Slider, Progress)
 
         const char* TypeName(WebKind kind) {
             switch (kind) {
@@ -33,14 +32,37 @@ namespace BECore {
                     return "UIImage";
                 case WebKind::Segmented:
                     return "UISegmented";
+                case WebKind::Toggle:
+                    return "UIToggle";
+                case WebKind::Slider:
+                    return "UISlider";
+                case WebKind::Progress:
+                    return "UIProgressBar";
                 case WebKind::Group:
                     break;
             }
             return "UIElement";
         }
 
+        /// A kind whose caption is its text (a toggle's is the label it is made of)
         bool IsTextKind(WebKind kind) {
-            return kind == WebKind::Label || kind == WebKind::Button;
+            return kind == WebKind::Label || kind == WebKind::Button || kind == WebKind::Toggle;
+        }
+
+        // The kinds a `data-widget` names: the value of the attribute (lower case) and what it becomes
+        struct WidgetName {
+            eastl::string_view name;
+            WebKind kind;
+        };
+        constexpr WidgetName WidgetNames[] = {{"segmented", WebKind::Segmented}, {"toggle", WebKind::Toggle}, {"slider", WebKind::Slider}, {"progress", WebKind::Progress}};
+
+        bool IsWidgetKind(WebKind kind) {
+            return std::any_of(std::begin(WidgetNames), std::end(WidgetNames), [kind](const WidgetName& widget) { return widget.kind == kind; });
+        }
+
+        /// A kind that is a control of its own whose children (if the markup has any) are not read as elements: its content is its text or nothing
+        bool ReadsChildren(WebKind kind) {
+            return kind == WebKind::Group || kind == WebKind::Panel || kind == WebKind::Segmented;
         }
 
         bool IsOneOf(eastl::string_view tag, std::initializer_list<eastl::string_view> names) {
@@ -115,6 +137,9 @@ namespace BECore {
             std::optional<bool> wrapText;
             std::optional<float> lineHeightRatio;
             std::optional<float> lineHeightPixels;
+            std::optional<Color> trackColor;
+            std::optional<Color> fillColor;
+            std::optional<Color> thumbColor;
         };
 
         bool ParseOffset(eastl::string_view value, std::optional<float>& out) {
@@ -548,6 +573,30 @@ namespace BECore {
                  }
                  r.minFontSize = *pixels;
                  return true;
+             }},
+            {"-be-track-color",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto color = UIWebText::ParseColor(v);
+                 if (color) {
+                     r.trackColor = *color;
+                 }
+                 return color.has_value();
+             }},
+            {"-be-fill-color",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto color = UIWebText::ParseColor(v);
+                 if (color) {
+                     r.fillColor = *color;
+                 }
+                 return color.has_value();
+             }},
+            {"-be-thumb-color",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto color = UIWebText::ParseColor(v);
+                 if (color) {
+                     r.thumbColor = *color;
+                 }
+                 return color.has_value();
              }},
             {"white-space",
              [](Resolved& r, eastl::string_view v) {
@@ -992,27 +1041,86 @@ namespace BECore {
                 }
             }
 
-            /// An element is a choice group when it says `data-widget="segmented"` and is not a button or an image (those keep their own kind and the attribute is reported)
-            [[nodiscard]] static bool IsSegmented(const UIHtmlNode& html) {
-                const eastl::string* widget = html.FindAttribute(WidgetAttribute);
-                return widget != nullptr && UIWebText::ToLower(*widget) == SegmentedWidget && html.tag != "button" && html.tag != "img";
-            }
-
-            /// `data-widget`, `data-bind` and `data-value` outside the places that understand them are reported, never dropped in silence
-            void CheckWidgetAttributes(const UIHtmlNode& html, WebKind kind) {
-                if (const eastl::string* widget = html.FindAttribute(WidgetAttribute)) {
-                    if (kind != WebKind::Segmented) {
-                        const bool known = UIWebText::ToLower(*widget) == SegmentedWidget;
-                        _report.AddOnce(HtmlSource, html.line,
-                                        known ? Format("data-widget=\"{}\" on a <{}> is left out: it belongs on a <div>", widget->c_str(), html.tag.c_str())
-                                              : Format("data-widget=\"{}\" is not supported (\"segmented\" is the only widget)", widget->c_str()));
+            /// The kind a `data-widget` value names (not case sensitive); nothing for a name that is not a widget
+            [[nodiscard]] static std::optional<WebKind> WidgetKindOf(const eastl::string& widget) {
+                const eastl::string lower = UIWebText::ToLower(widget);
+                for (const WidgetName& entry : WidgetNames) {
+                    if (lower == entry.name) {
+                        return entry.kind;
                     }
                 }
-                if (kind != WebKind::Segmented && html.HasAttribute("data-bind")) {
-                    _report.AddOnce(HtmlSource, html.line, "data-bind only applies to an element with data-widget=\"segmented\"");
+                return std::nullopt;
+            }
+
+            /// The widget an element is, when it says `data-widget` with a name we know and is not a button or an image (those keep their own kind and the attribute is reported)
+            [[nodiscard]] static std::optional<WebKind> WidgetOf(const UIHtmlNode& html) {
+                const eastl::string* widget = html.FindAttribute(WidgetAttribute);
+                if (widget == nullptr || html.tag == "button" || html.tag == "img") {
+                    return std::nullopt;
+                }
+                return WidgetKindOf(*widget);
+            }
+
+            /// A number in an attribute: nothing when there is no attribute or it is not a number that is at least @p minimum
+            [[nodiscard]] static std::optional<float> ReadNumber(const UIHtmlNode& html, eastl::string_view attribute, float minimum = -FLT_MAX) {
+                const eastl::string* text = html.FindAttribute(attribute);
+                if (text == nullptr) {
+                    return std::nullopt;
+                }
+                const auto number = UIText::ParseFiniteFloat(*text);
+                return number && *number >= minimum ? number : std::nullopt;
+            }
+
+            /// `data-widget` and the `data-*` attributes of the widgets outside the places that understand them are reported, never dropped in silence
+            void CheckWidgetAttributes(int htmlIndex, WebKind kind) {
+                const UIHtmlNode& html = _document.nodes[htmlIndex];
+                const auto report = [&](eastl::string message) { _report.AddOnce(HtmlSource, html.line, std::move(message)); };
+                const bool widget = IsWidgetKind(kind);
+                if (const eastl::string* name = html.FindAttribute(WidgetAttribute)) {
+                    if (!widget) {
+                        report(WidgetKindOf(*name) ? Format("data-widget=\"{}\" on a <{}> is left out: it belongs on a <div>", name->c_str(), html.tag.c_str())
+                                                   : Format("data-widget=\"{}\" is not supported (the widgets are \"segmented\", \"toggle\", \"slider\" and \"progress\")", name->c_str()));
+                    }
+                }
+                if (!widget && html.HasAttribute("data-bind")) {
+                    report("data-bind only applies to an element with data-widget=\"segmented\", \"toggle\", \"slider\" or \"progress\"");
                 }
                 if (kind != WebKind::Button && html.HasAttribute("data-value")) {
-                    _report.AddOnce(HtmlSource, html.line, "data-value only applies to a <button>");
+                    report("data-value only applies to a <button>");
+                }
+                if (html.HasAttribute("data-action") && kind != WebKind::Button && kind != WebKind::Toggle && kind != WebKind::Slider) {
+                    report("data-action only applies to a <button> or an element with data-widget=\"toggle\" or \"slider\"");
+                }
+                if (kind != WebKind::Toggle) {
+                    for (const char* attribute : {"data-on", "data-off"}) {
+                        if (html.HasAttribute(attribute)) {
+                            report(Format("{} only applies to an element with data-widget=\"toggle\"", attribute));
+                        }
+                    }
+                }
+                const bool ranged = kind == WebKind::Slider || kind == WebKind::Progress;
+                for (const char* attribute : {"data-min", "data-max"}) {
+                    if (!html.HasAttribute(attribute)) {
+                        continue;
+                    }
+                    if (!ranged) {
+                        report(Format("{} only applies to an element with data-widget=\"slider\" or \"progress\"", attribute));
+                    } else if (!ReadNumber(html, attribute)) {
+                        report(Format("{}=\"{}\" is not a number: the default is kept", attribute, html.FindAttribute(attribute)->c_str()));
+                    }
+                }
+                if (html.HasAttribute("data-step")) {
+                    if (kind != WebKind::Slider) {
+                        report("data-step only applies to an element with data-widget=\"slider\"");
+                    } else if (!ReadNumber(html, "data-step", 0.0f)) {
+                        report(Format("data-step=\"{}\" is not a number of 0 or more: the default (a continuous slider) is kept", html.FindAttribute("data-step")->c_str()));
+                    }
+                }
+                if (kind == WebKind::Progress && html.HasAttribute("disabled")) {
+                    report("disabled does not apply to a progress bar: it takes no input");
+                }
+                if ((kind == WebKind::Slider || kind == WebKind::Progress) && !IsEmptyContent(htmlIndex)) {
+                    report("a slider or progress bar shows no content: what is inside it is left out");
                 }
             }
 
@@ -1024,10 +1132,10 @@ namespace BECore {
 
                 bool hasText = false;
                 const bool onlyText = HoldsOnlyText(htmlIndex, hasText);
-                const bool segmented = IsSegmented(html);
-                if (segmented) {
-                    node.kind = WebKind::Segmented;
-                    if (!Resolve(base[htmlIndex]).flex) {
+                const std::optional<WebKind> widget = WidgetOf(html);
+                if (widget) {
+                    node.kind = *widget;
+                    if (node.kind == WebKind::Segmented && !Resolve(base[htmlIndex]).flex) {
                         _report.AddOnce(HtmlSource, html.line, "a data-widget=\"segmented\" group needs display: flex (it lays its buttons out as a row or a column)");
                     }
                 } else if (html.tag == "button") {
@@ -1042,7 +1150,7 @@ namespace BECore {
                         _report.AddOnce(HtmlSource, html.line, Format("<{}> is not supported, it is read as a <div>", html.tag.c_str()));
                     }
                 }
-                CheckWidgetAttributes(html, node.kind);
+                CheckWidgetAttributes(htmlIndex, node.kind);
                 if (IsTextKind(node.kind)) {
                     GatherText(htmlIndex, node.text);
                     node.text = CollapseWhitespace(node.text);
@@ -1059,7 +1167,7 @@ namespace BECore {
                 if (parent != -1) {
                     _nodes[parent].children.push_back(index);
                 }
-                if (!IsTextKind(_nodes[index].kind) && _nodes[index].kind != WebKind::Image) {
+                if (ReadsChildren(_nodes[index].kind)) {
                     BuildTree(htmlIndex, index, base);
                 }
             }
@@ -1096,11 +1204,15 @@ namespace BECore {
                     attrs.Set("color", UIText::FormatColor(*r.background));
                 }
                 // A panel takes clicks by itself; any other element does when it is a visible plate, and `pointer-events` decides when it is said.
-                // A button is interactive already, which is hit-testable, so it is left alone
+                // A button, a toggle and a slider are interactive already, which is hit-testable, and a progress bar takes no input at all, so they are left alone
                 const bool defaultBlocks = node.kind == WebKind::Panel;
                 const bool blocks = r.pointerEvents.value_or(defaultBlocks || hasFill);
-                if (node.kind != WebKind::Button && blocks != defaultBlocks) {
+                const bool ownsInput = node.kind == WebKind::Button || node.kind == WebKind::Toggle || node.kind == WebKind::Slider || node.kind == WebKind::Progress;
+                if (!ownsInput && blocks != defaultBlocks) {
                     attrs.Set("blocksInput", blocks ? "true" : "false");
+                }
+                if (r.pointerEvents && (node.kind == WebKind::Toggle || node.kind == WebKind::Slider || node.kind == WebKind::Progress)) {
+                    Note(report, "pointer-events does not apply to a toggle, slider or progress bar: a toggle and a slider take input and a progress bar never does");
                 }
 
                 switch (node.kind) {
@@ -1121,17 +1233,96 @@ namespace BECore {
                         AddText(attrs, r, node, html);
                         break;
                     case WebKind::Segmented:
-                        if (const eastl::string* bind = html.FindAttribute("data-bind")) {
-                            attrs.Set("bind", *bind);
+                        AddBind(attrs, html);
+                        AddDisabled(attrs, html);
+                        break;
+                    case WebKind::Toggle:
+                        AddText(attrs, r, node, html);
+                        AddBind(attrs, html);
+                        AddAction(attrs, html);
+                        if (const eastl::string* on = html.FindAttribute("data-on")) {
+                            attrs.Set("onValue", *on);
                         }
-                        if (html.HasAttribute("disabled")) {
-                            attrs.Set("disabled", "true");
+                        if (const eastl::string* off = html.FindAttribute("data-off")) {
+                            attrs.Set("offValue", *off);
                         }
+                        AddDisabled(attrs, html);
+                        break;
+                    case WebKind::Slider:
+                        AddBind(attrs, html);
+                        AddAction(attrs, html);
+                        AddNumber(attrs, html, "data-min", "minValue");
+                        AddNumber(attrs, html, "data-max", "maxValue");
+                        AddNumber(attrs, html, "data-step", "step", 0.0f);
+                        AddDisabled(attrs, html);
+                        break;
+                    case WebKind::Progress:
+                        AddBind(attrs, html);
+                        AddNumber(attrs, html, "data-min", "minValue");
+                        AddNumber(attrs, html, "data-max", "maxValue");
                         break;
                     case WebKind::Group:
                         break;
                 }
+                AddWidgetColors(attrs, r, node.kind, report);
                 return attrs;
+            }
+
+            static void AddBind(Attrs& attrs, const UIHtmlNode& html) {
+                if (const eastl::string* bind = html.FindAttribute("data-bind")) {
+                    attrs.Set("bind", *bind);
+                }
+            }
+
+            /// `data-action`, or `action` as on a button
+            static void AddAction(Attrs& attrs, const UIHtmlNode& html) {
+                const eastl::string* action = html.FindAttribute("data-action");
+                if (action == nullptr) {
+                    action = html.FindAttribute("action");
+                }
+                if (action != nullptr) {
+                    attrs.Set("action", *action);
+                }
+            }
+
+            static void AddDisabled(Attrs& attrs, const UIHtmlNode& html) {
+                if (html.HasAttribute("disabled")) {
+                    attrs.Set("disabled", "true");
+                }
+            }
+
+            /// A number attribute written as a number (`1.0` and `1` both give `1`); one that is not a number (or is below @p minimum) is left out and was reported when the node was added
+            static void AddNumber(Attrs& attrs, const UIHtmlNode& html, eastl::string_view attribute, eastl::string_view key, float minimum = -FLT_MAX) {
+                if (const auto number = ReadNumber(html, attribute, minimum)) {
+                    attrs.Set(key, Number(*number));
+                }
+            }
+
+            /// The three engine-only colors of the widgets; on any other element they are reported
+            static void AddWidgetColors(Attrs& attrs, const Resolved& r, WebKind kind, UIWebReport* report) {
+                const bool track = kind == WebKind::Toggle || kind == WebKind::Slider || kind == WebKind::Progress;
+                const bool thumb = kind == WebKind::Toggle || kind == WebKind::Slider;
+                if (r.trackColor) {
+                    if (track) {
+                        attrs.Set("trackColor", UIText::FormatColor(*r.trackColor));
+                    } else {
+                        Note(report, "-be-track-color applies to a toggle, slider or progress bar only");
+                    }
+                }
+                if (r.fillColor) {
+                    if (track) {
+                        attrs.Set("fillColor", UIText::FormatColor(*r.fillColor));
+                    } else {
+                        Note(report, "-be-fill-color applies to a toggle, slider or progress bar only");
+                    }
+                }
+                if (r.thumbColor) {
+                    if (thumb) {
+                        attrs.Set("thumbColor", UIText::FormatColor(*r.thumbColor));
+                    } else {
+                        Note(report, "-be-thumb-color applies to a toggle or slider only (a progress bar has no thumb)");
+                    }
+                }
             }
 
             static void AddSprite(Attrs& attrs, const Resolved& r, eastl::string_view key) {
@@ -1277,19 +1468,11 @@ namespace BECore {
                     attrs.Set("lineSpacing", Number(*r.lineHeightPixels / r.fontSize.value_or(DefaultFontSizeForLineHeight)));
                 }
                 if (node.kind == WebKind::Button) {
-                    const eastl::string* action = html.FindAttribute("data-action");
-                    if (action == nullptr) {
-                        action = html.FindAttribute("action");
-                    }
-                    if (action != nullptr) {
-                        attrs.Set("action", *action);
-                    }
+                    AddAction(attrs, html);
                     if (const eastl::string* value = html.FindAttribute("data-value")) {
                         attrs.Set("value", *value);
                     }
-                    if (html.HasAttribute("disabled")) {
-                        attrs.Set("disabled", "true");
-                    }
+                    AddDisabled(attrs, html);
                 }
             }
 
@@ -1374,8 +1557,13 @@ namespace BECore {
                             if (before != nullptr && *before == value) {
                                 continue;
                             }
-                            if (_nodes[i].kind == WebKind::Button && key == "color") {
+                            const WebKind kind = _nodes[i].kind;
+                            if (kind == WebKind::Button && key == "color") {
                                 base.Set(colorKey, value);
+                            } else if (kind == WebKind::Toggle || kind == WebKind::Slider || kind == WebKind::Progress) {
+                                _report.AddOnce(CssSource, 0,
+                                                Format("a state rule does not apply to a toggle, slider or progress bar: its states are derived from its colors ('{}' of a <{}> is left out)",
+                                                       key.c_str(), _document.nodes[_nodes[i].html].tag.c_str()));
                             } else {
                                 _report.AddOnce(CssSource, 0,
                                                 Format("a state rule can change only the background of a <button>, not '{}' of a <{}>", key.c_str(), _document.nodes[_nodes[i].html].tag.c_str()));
