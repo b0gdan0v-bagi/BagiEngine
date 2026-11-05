@@ -1,5 +1,4 @@
 ---
-status: review 2026-11-05 branch todo/no-in-game-ui-ui-exists-only-as-imgui-editor-panels-2: UIToggle, UIProgressBar, UISlider (pointer hooks of the canvas), the string table UIStrings ({#key} in any text), ui_tree/ui_click at, HTML+CSS forms, a settings panel screen test per language on the size matrix; engine ctest 1255/1255 (was 1094), game 528/528 against this branch, pytest 64, slice 2 of 2, after the merge set the status back to open
 stage: 3
 plan: magical-leaping-blossom.md
 id: no-in-game-ui-ui-exists-only-as-imgui-editor-panels
