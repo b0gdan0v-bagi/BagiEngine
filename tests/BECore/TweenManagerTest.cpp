@@ -1,7 +1,6 @@
 #include <BECore/Animation/ScopedTween.h>
 #include <BECore/Animation/TweenManager.h>
 #include <BECore/Time/Time.h>
-#include <cmath>
 #include <gtest/gtest.h>
 #include <limits>
 
@@ -293,11 +292,9 @@ namespace BECore::Tests {
         TweenManager tweens;
         Recorder first;
         Recorder second;
-        const auto firstHandle = tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [&](const float& value) { first.values.push_back(value); }, [&] { ++first.completed; });
+        tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [&](const float& value) { first.values.push_back(value); }, [&] { ++first.completed; });
         const auto secondHandle = second.Start(tweens, Settings(kOneSecond));
-        const auto third = tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [](const float&) {}, [&] { secondHandle->Cancel(); });
-        (void)firstHandle;
-        (void)third;
+        tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [](const float&) {}, [&] { secondHandle->Cancel(); });
 
         tweens.Advance(kQuarterSecond);
 
@@ -461,19 +458,105 @@ namespace BECore::Tests {
         TweenManager tweens;
         Recorder other;
         int calls = 0;
-        other.Start(tweens, Settings(kOneSecond));
-        tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&](const float&) {
+        const auto before = other.Start(tweens, Settings(kOneSecond));
+        const auto clearing = tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&](const float&) {
             ++calls;
             tweens.Clear();
         });
-        other.Start(tweens, Settings(kOneSecond));
+        const auto after = other.Start(tweens, Settings(kOneSecond));
 
         tweens.Advance(kQuarterSecond);
 
         EXPECT_EQ(calls, 1);
         EXPECT_EQ(tweens.GetActiveCount(), 0u);
         EXPECT_EQ(other.cancelled, 0);
-        EXPECT_LE(other.values.size(), 2u);
+        EXPECT_EQ(other.values.size(), 1u);  // the one before the clearing tween stepped, the one after got no setter call
+        EXPECT_TRUE(before->IsCancelled());
+        EXPECT_TRUE(clearing->IsCancelled());
+        EXPECT_TRUE(after->IsCancelled());
+    }
+
+    TEST(TweenManagerTest, TheRunningSetterSurvivesACancelOfItsOwnTween) {
+        TweenManager tweens;
+        IntrusivePtr<TweenHandle> handle;
+        const auto token = eastl::make_shared<int>(0);  // the setter holds a copy: its use count says whether the setter is alive
+        bool aliveInsideAfterCancel = false;
+        handle = tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&, guard = token](const float&) {
+            handle->Cancel();
+            aliveInsideAfterCancel = token.use_count() == 2;
+        });
+        ASSERT_EQ(token.use_count(), 2);
+
+        tweens.Advance(kQuarterSecond);
+
+        EXPECT_TRUE(aliveInsideAfterCancel);
+        EXPECT_EQ(token.use_count(), 1);  // released after the setter returned
+        EXPECT_TRUE(handle->IsCancelled());
+    }
+
+    TEST(TweenManagerTest, TheRunningSetterSurvivesAClearInsideIt) {
+        TweenManager tweens;
+        const auto token = eastl::make_shared<int>(0);
+        bool aliveInsideAfterClear = false;
+        tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&, guard = token](const float&) {
+            tweens.Clear();
+            aliveInsideAfterClear = token.use_count() == 2;
+        });
+        ASSERT_EQ(token.use_count(), 2);
+
+        tweens.Advance(kQuarterSecond);
+
+        EXPECT_TRUE(aliveInsideAfterClear);
+        EXPECT_EQ(token.use_count(), 1);
+    }
+
+    TEST(TweenManagerTest, CancelAllFromACompletionCallbackCancelsTheRestOfTheWalkAndThePending) {
+        TweenManager tweens;
+        eastl::vector<int> cancelOrder;
+        int laterSetterCalls = 0;
+        Recorder started;  // started by the callback before it calls CancelAll: it sits in the pending list
+        IntrusivePtr<TweenHandle> startedHandle;
+        const auto completing = tweens.Start<float>(
+            0.0f, kTo, Settings(kQuarterSecond), [](const float&) {},
+            [&] {
+                startedHandle = started.Start(tweens, Settings(kQuarterSecond));
+                tweens.CancelAll();
+            });
+        eastl::vector<IntrusivePtr<TweenHandle>> later;
+        for (int id = 1; id <= 2; ++id) {
+            later.push_back(tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&](const float&) { ++laterSetterCalls; }, {}, [&cancelOrder, id] { cancelOrder.push_back(id); }));
+        }
+
+        tweens.Advance(kQuarterSecond);
+
+        const eastl::vector<int> expected{1, 2};
+        EXPECT_EQ(cancelOrder, expected);  // in start order
+        EXPECT_EQ(laterSetterCalls, 0);
+        EXPECT_EQ(completing->GetState(), TweenState::Completed);  // it finished before CancelAll, which leaves it alone
+        EXPECT_TRUE(later[0]->IsCancelled());
+        EXPECT_TRUE(later[1]->IsCancelled());
+        ASSERT_TRUE(startedHandle);
+        EXPECT_TRUE(startedHandle->IsCancelled());
+        EXPECT_EQ(started.cancelled, 1);
+        EXPECT_TRUE(started.values.empty());
+        EXPECT_EQ(tweens.GetActiveCount(), 0u);
+
+        tweens.Advance(kOneSecond);  // nothing is left to run
+        EXPECT_EQ(laterSetterCalls, 0);
+        EXPECT_TRUE(started.values.empty());
+    }
+
+    TEST(TweenManagerTest, AdvanceFromInsideACallbackIsIgnored) {
+        TweenManager tweens;
+        Recorder next;
+        tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [](const float&) {}, [&] { tweens.Advance(kOneSecond); });
+        next.Start(tweens, Settings(kOneSecond));
+
+        tweens.Advance(kQuarterSecond);
+
+        ASSERT_EQ(next.values.size(), 1u);  // one step of the outer Advance; the inner one would have finished it
+        EXPECT_EQ(next.values[0], 25.0f);
+        EXPECT_EQ(next.completed, 0);
     }
 
     TEST(TweenManagerTest, ADestroyedManagerCancelsItsHandlesWithoutCallbacks) {

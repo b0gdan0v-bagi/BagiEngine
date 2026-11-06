@@ -1,7 +1,5 @@
 #include "TweenManager.h"
 
-#include <cmath>
-
 namespace BECore {
 
     void TweenHandle::Cancel() {
