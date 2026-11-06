@@ -30,20 +30,27 @@ Change a value over time: easing curves, interpolation and a manager that runs t
 ```cpp
 // a component that slides its node
 class SlideComponent : public IComponent {
+    BE_CLASS(SlideComponent)
+public:
     void Slide(float toX) {
-        auto& transform = GetNode().GetComponent<TransformComponent>();
-        _slide.Reset(CoreManager::GetTweens().Start<float>(
-            transform._x, toX, {.duration = 0.2f, .ease = EaseType::QuadOut},
-            [this](const float& x) { GetNode().GetComponent<TransformComponent>()._x = x; }));
+        // GetComponent returns an IntrusivePtr by value, and it is null when the node has no such component
+        if (auto transform = GetNode().GetComponent<TransformComponent>()) {
+            const float fromX = transform->_x;
+            // The setter holds the transform by IntrusivePtr (a copy in the capture), so it cannot dangle and needs no lookup per frame
+            _slide.Reset(CoreManager::GetTweens().Start<float>(
+                fromX, toX, {.duration = 0.2f, .ease = EaseType::QuadOut}, [transform](const float& x) { transform->_x = x; }));
+        }
     }
-    ScopedTween _slide;  // the destructor cancels it before `this` dies
+
+private:
+    ScopedTween _slide;  // the destructor cancels it, so nothing keeps writing once the component is gone (rule 8)
 };
 ```
 
 - Keep a `ScopedTween` (or an `IntrusivePtr<TweenHandle>` you cancel by hand) as a member of the object the setter points at. `IComponent` has no detach hook: the destructor of the component is where it is cancelled. A new `Reset` cancels the previous tween, so a second `Slide` replaces the first.
 - Cancel does not set the value: when the object must end at the target, set it yourself, or let the tween finish.
 - A chain (`onComplete` starts the next tween) costs one frame per link; a timeline would do better (not there yet).
-- Tests: make a `TweenManager` of your own and drive it with `Advance(dt)`, or `CoreManager::GetTime().Advance(1.0 / 30)` and `Advance(GetTime().GetDeltaTime())`. Use frame times and durations that are powers of two so the sums are exact (`tests/BECore/TimeTest.cpp`). The tests of the maths (`EasingTest`, `LerpTest`) need no engine services.
+- Tests: make a `TweenManager` of your own and drive it with `Advance(dt)`, or `CoreManager::GetTime().Advance(1.0 / 32)` and `Advance(GetTime().GetDeltaTime())`. Use frame times and durations that are powers of two so the sums are exact (`tests/BECore/TimeTest.cpp`). The tests of the maths (`EasingTest`, `LerpTest`) need no engine services.
 
 ## Not there yet
 

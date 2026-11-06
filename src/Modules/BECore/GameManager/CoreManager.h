@@ -174,7 +174,9 @@ namespace BECore {
         TextureLibrary _textureLibrary;
         FontAtlasLibrary _fontAtlasLibrary;
         Time _time;
-        TweenManager _tweenManager;  // a setter may point into a scene: OnApplicationDeinit and OnTestEnvironmentDeinit Clear() it first
+        // A setter may point into a scene: OnApplicationDeinit and OnTestEnvironmentDeinit Clear() it first. Declared after _sceneManager on purpose: the
+        // destructor then drops the tweens before the scenes go, a second guarantee besides Clear(); moving it above _sceneManager could break that silently
+        TweenManager _tweenManager;
         ControlService _controlService;
     };
 
