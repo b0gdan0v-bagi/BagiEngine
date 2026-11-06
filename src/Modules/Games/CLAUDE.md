@@ -50,7 +50,7 @@ Writing the adapter of a game:
 
 ## Adding a game
 
-A game is a directory `games/<Name>/` that works both inside this repository and as the root of its own repository (the engine then sits next to it as the git submodule `engine/`). Model it on `games/Match3/`, or on the repository BagiEngine-Chess (the engine as the submodule `engine/`, `CMakePresets.json` that includes the engine's):
+A game is a directory `games/<Name>/` that works both inside this repository and as the root of its own repository (the engine then sits next to it as the git submodule `engine/`). Model it on `games/Match3/`, or on the repository BagiEngine-Chess (the engine as the submodule `engine/`, `CMakePresets.json` that includes the engine's). The repository around a game of its own (the git identity of the commits, the submodule on `games/<area>`, the linked skills, the rules files, the todo area) is set up by [NEW_GAME.md](../../../NEW_GAME.md) in the engine root:
 
 ```
 games/<Name>/
