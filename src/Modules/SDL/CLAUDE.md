@@ -66,7 +66,7 @@ Game run mode has no ImGui context, so nothing is kept back there. Mouse positio
 
 `ViewportWidget` (Editor mode) feeds the same door with viewport-local positions: down only while the image is hovered, up and motion also after the pointer leaves the image, as long as the press began there; wheel while hovered.
 
-**Window metrics** (`IMainWindow`): `GetWidth()` / `GetHeight()` and `GetSafeArea()` are in window units, `GetPixelDensity()` is output pixels per window unit (2 on a Retina display, if the window asks for the high-density mode; the engine does not yet, and the Vulkan swapchain is not recreated on resize either, see `todo/render-output-size.md`), `GetDisplayScale()` is the user's display scale. Layout takes all three as inputs. The headless dummy driver answers 1, 1 and the whole window. A notch or a rotation cannot be produced on a desktop, so those paths are covered by injected events only.
+**Window metrics** (`IMainWindow`): `GetWidth()` / `GetHeight()` and `GetSafeArea()` are in window units, `GetPixelDensity()` is output pixels per window unit (2 on a Retina display, if the window asks for the high-density mode; the engine does not yet, and the Vulkan swapchain is not recreated on resize either, see the entry `render-output-size` of the todo store), `GetDisplayScale()` is the user's display scale. Layout takes all three as inputs. The headless dummy driver answers 1, 1 and the whole window. A notch or a rotation cannot be produced on a desktop, so those paths are covered by injected events only.
 
 Tests: `tests/BECore/SDLEventsProviderTest.cpp` (conversions and both capture rules, with the real SDL queue), `UIInputTest.cpp` (order, consume, deferred changes), `WindowMetricsTest.cpp`.
 

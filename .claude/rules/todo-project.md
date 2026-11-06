@@ -1,14 +1,14 @@
 # The todo areas of this repository
 
-Read by the skills `todo-loop`, `todo-merge`, `todo-add`, `todo-sync` and by the agents `todo-*` (`.claude/skills/todo-loop/SKILL.md`, "Areas and the repository rules" explains the terms). A game that carries this repository as the submodule `engine/` has a file of the same name with its own table; the skills are the same text in both.
+Read by the skills `todo-loop`, `todo-merge`, `todo-add`, `todo-db` and by the agents `todo-*` (`.claude/skills/todo-loop/SKILL.md`, "Areas and the repository rules" explains the terms). A game that carries this repository as the submodule `engine/` has a file of the same name with its own table; the skills are the same text in both.
 
 ## Areas
 
-| Area | `<todo>` | `<R>` (git repository) | `<base>` | `<tracker>` (Vikunja project) | Env file |
-|------|----------|------------------------|----------|-------------------------------|----------|
-| engine | `todo/` | `.` | `main` | `BagiEngine` | `.env` (the tool's default) |
+| Area | `<area>` (todo store) | `<R>` (git repository) | `<base>` | Vikunja project (the service's) |
+|------|-----------------------|------------------------|----------|---------------------------------|
+| engine | `engine` | `.` | `main` | `BagiEngine` |
 
-`<engine>` is `.`.
+`<engine>` is `.`. The CLI is `python3 tools/todo/todo.py`; `TODO_API_URL` and `TODO_API_TOKEN` come from the git-ignored `.env` (`.env.example`). The Vikunja project of an area is a setting of the store (`todo.py area set`), not of the CLI: the service mirrors by itself.
 
 ## Build and test (baseline and reviewer)
 

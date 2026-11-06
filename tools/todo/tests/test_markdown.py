@@ -109,3 +109,19 @@ def test_html_from_the_vikunja_editor_becomes_markdown():
     html = "<p>One <strong>bold</strong> line</p><ul><li><p>a</p></li><li><p>b</p></li></ul><p>end</p>"
     assert html_to_markdown(html) == "One **bold** line\n\n- a\n- b\n\nend"
     assert html_to_markdown("plain text") == "plain text"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("deferred 2026-10-31 free text", ("deferred", "2026-10-31", "free text")),
+        ("deferred, 2026-11-01. Revisit later", ("deferred", "2026-11-01", "Revisit later")),
+        ("in progress since 2026-11-01. Stage 2", ("in progress", "2026-11-01", "Stage 2")),
+        ("deferred by the owner on 2026-10-31. Skip it", ("deferred", "2026-10-31", "by the owner on 2026-10-31. Skip it")),
+        ("open", ("open", None, "")),
+    ],
+)
+def test_the_status_date_is_found_anywhere_and_not_repeated_in_the_note(text, expected):
+    from todo_markdown import parse_status
+
+    assert parse_status(text, "x.md") == expected

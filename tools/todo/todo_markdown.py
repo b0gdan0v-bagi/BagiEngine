@@ -166,21 +166,30 @@ def _split_title(lines: list[str], where: str) -> tuple[str, list[str]]:
     raise ParseError(f"{where}: the entry must start with a '# Title' line")
 
 
+_LEADING_DATE_RE = re.compile(r"^[,;]?\s*(?:since\s+|on\s+)?(\d{4}-\d{2}-\d{2})[.,:;]?\s*")
+
+
 def parse_status(text: str, where: str) -> tuple[str, str | None, str]:
-    """(keyword, date or None, the free text after the keyword and the date)."""
+    """
+    (keyword, date or None, the free text). The date is the first YYYY-MM-DD anywhere in the text, as the
+    old parser read it; a leading `<date>`, `since <date>` or `, <date>.` is not repeated in the free text.
+    """
     match = _STATUS_KEYWORD_RE.match(text)
     if not match:
         raise ParseError(f"{where}: status must start with one of {', '.join(FILE_STATUSES)}, got '{text}'")
     status = match.group(1).lower()
     rest = text[match.end() :].strip()
-    found = _DATE_RE.match(rest)
+    found = _DATE_RE.search(rest)
     if not found:
         return status, None, rest
     try:
         status_date = date.fromisoformat(found.group(0)).isoformat()
     except ValueError:
         raise ParseError(f"{where}: '{found.group(0)}' in status is not a date") from None
-    return status, status_date, rest[found.end() :].strip()
+    leading = _LEADING_DATE_RE.match(rest)
+    if leading and leading.group(1) == found.group(0):
+        rest = rest[leading.end() :].strip()
+    return status, status_date, rest
 
 
 _BRANCH_RE = re.compile(r"^branch (todo/[\w./-]+?)(?=[:,]|\s|$)[:,]?\s*")

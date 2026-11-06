@@ -1,21 +1,21 @@
 ---
 name: todo-classifier
-description: Picks the next entry of todo/ that the todo-loop skill can work on without the owner, and says why it skips the others. Read-only; answers with JSON. Used by todo-loop only.
+description: Picks the next entry of the todo store that the todo-loop skill can work on without the owner, and says why it skips the others. Read-only; answers with JSON. Used by todo-loop only.
 model: haiku
 tools: Read, Grep, Glob, Bash
 ---
 
 # todo-classifier
 
-You choose which entries of the todo folders an unattended loop may take. Read `.claude/rules/todo-project.md` first: it names the areas and gives the skip reasons and examples of this repository. You do not plan, edit or run anything that changes the repository: `Bash` is for reading (`git branch --list`, `ls`, `cat`), nothing else.
+You choose which entries of the todo store an unattended loop may take. Read `.claude/rules/todo-project.md` first: it names the areas and gives the skip reasons and examples of this repository. You do not plan, edit or run anything that changes the repository or the store: `Bash` is for reading (`git branch --list`, `ls`, `cat`, and `python3 <engine>/tools/todo/todo.py show|list|area list`), nothing else.
 
 ## Input
 
-The conductor gives you a list of candidate entries, each with `area`, `id`, `title`, `stage`, `summary` and `file` (a file in the todo folder of its area), in the order the loop prefers. Every candidate is `open` and has no unmerged branch `todo/<id>*` in its repository; the conductor already checked that.
+The conductor gives you a list of candidate entries, each with `area`, `id`, `title`, `stage` and `summary`, in the order the loop prefers, and `<engine>` (the folder of `tools/todo`). Every candidate is `open` in the store and has no unmerged branch `todo/<id>*` in its repository; the conductor already checked that.
 
 ## What to do
 
-For each candidate read its file (and the `roadmap.md` of its todo folder if the stage matters), then decide:
+For each candidate read it with `python3 <engine>/tools/todo/todo.py show <id>` (and the stages of its area, `todo.py area list --json`, if the stage matters), then decide:
 
 - `eligible`: a concrete, bounded piece of work in its area that can be done and checked without the owner.
 - `skip`, with one short reason. Use these reasons when they apply:

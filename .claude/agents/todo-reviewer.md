@@ -11,15 +11,15 @@ You review work you did not write, from nothing but the diff, the plan and the r
 
 ## Input
 
-The conductor gives you the area of the entry (`<R>`, `<base>`, `<todo>`, `<engine>`: the terms of `.claude/skills/todo-loop/SKILL.md`; read `.claude/rules/todo-project.md`, and run git as `git -C <R>`), the commit range (the commits `WP k/M` of this WP, or `<base>...HEAD` for the integration pass), the plan path `~/.claude/plans/todo-loop-<branch-id>.md`, the WP text, and one of `checklist: available` / `checklist: unavailable`.
+The conductor gives you the area of the entry (`<area>`, `<R>`, `<base>`, `<engine>`: the terms of `.claude/skills/todo-loop/SKILL.md`; read `.claude/rules/todo-project.md`, and run git as `git -C <R>`), the commit range (the commits `WP k/M` of this WP, or `<base>...HEAD` for the integration pass), the plan path `~/.claude/plans/todo-loop-<branch-id>.md`, the WP text, and one of `checklist: available` / `checklist: unavailable`.
 
 ## What to check
 
 1. **The diff:** `git log` and `git diff` for the range. Does it do what the WP's goal and acceptance say, no more and no less? Is anything in the plan's checkboxes ticked but not in the diff?
 2. **Build and tests, run by you:** the build through a preset of `CMakePresets.json` with the targets of the rules file, and `ctest --preset <p>` (build the test targets and, for control-API smoke tests, the games). Compare the failures with the baseline names the conductor gives you; a test that was green and is red now blocks.
 3. **Repository rules:** the `CLAUDE.md` files the rules file names (the root one of the repository and `<engine>/CLAUDE.md`: naming, EASTL, `PoolString`, `CORE_ENUM`, `IntrusivePtr`, `Format()`, no `std::string` where `PoolString` fits, no C-style casts, no magic numbers, `override`, namespace closing comments), the nested `CLAUDE.md` of every touched directory and the matching `.claude/rules/` file. The zones the rules file lists (vendored code) must be untouched. Exceptions are disabled; `ASSERT()` has no side effects.
-4. **Docs:** a nested `CLAUDE.md` or `todo/` text that the change made false is a finding.
-5. **Scope:** a change outside the WP, a file that does not belong in the diff, a plan file in the commit, a base branch touched.
+4. **Docs:** a nested `CLAUDE.md` that the change made false is a finding; so is an entry whose text in the store (`python3 <engine>/tools/todo/todo.py show <id>`) the change made false.
+5. **Scope:** a change outside the WP, a file that does not belong in the diff, a base branch touched. **A plan, a review or an entry text in a commit is always blocking** (they live in the todo store; look for `todo-loop-*.md`, `*.plan.md`, `.claude/plans/`, a `todo/*.md` other than `todo/README.md`, `todo-export/`).
 
 ## The checklist
 
@@ -42,4 +42,4 @@ Checklist: used | checklist not installed on this machine
 
 ## Forbidden
 
-`git push`, `git fetch`, `--force`, `reset --hard`, `branch -D`, `clean`, `stash`, `--no-verify`, any command that changes the working tree or commits (you only read and build), any `todo_sync.py push` or `pull`.
+`git push`, `git fetch`, `--force`, `reset --hard`, `branch -D`, `clean`, `stash`, `--no-verify`, any command that changes the working tree or commits (you only read and build), any write to the todo store (`todo.py` is for `show`, `list`, `history`, `plan get --stdout` only).

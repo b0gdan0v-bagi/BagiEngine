@@ -46,3 +46,8 @@ games/*/config/imgui.ini
 ._*
 .Spotlight-V100
 .Trashes
+
+# The todo store keeps plans, reviews and entries; they never go into the repository
+.claude/plans/
+*.plan.md
+todo-export/

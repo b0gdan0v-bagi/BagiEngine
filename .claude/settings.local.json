@@ -12,8 +12,12 @@
       "Bash(git branch --list:*)",
       "Bash(cmake:*)",
       "Bash(ctest:*)",
-      "Bash(.venv/bin/python tools/todo_sync/todo_sync.py check:*)",
-      "Bash(.venv/bin/python tools/todo_sync/todo_sync.py parse:*)",
+      "Bash(python3 tools/todo/todo.py ping:*)",
+      "Bash(python3 tools/todo/todo.py list:*)",
+      "Bash(python3 tools/todo/todo.py show:*)",
+      "Bash(python3 tools/todo/todo.py history:*)",
+      "Bash(python3 tools/todo/todo.py plan list:*)",
+      "Bash(python3 tools/todo/todo.py plan url:*)",
       "Bash(.venv/bin/python -m pytest:*)"
     ],
     "deny": [
