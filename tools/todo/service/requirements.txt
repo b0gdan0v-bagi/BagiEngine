@@ -1,0 +1,5 @@
+# The todo service (Docker image; tools/todo/Dockerfile). The CLI todo.py needs none of these.
+fastapi==0.162.0
+uvicorn==0.54.0
+psycopg[binary]==3.3.8
+psycopg-pool==3.3.3

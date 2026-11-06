@@ -1,10 +1,12 @@
 """
-A small in-process stand-in for the parts of the Vikunja REST API that vikunja.py uses.
+A small in-process stand-in for the parts of the Vikunja REST API that the mirror (service/vikunja.py, service/mirror.py) uses.
 
 It copies the behaviour seen on Vikunja 2.7.1 that the adapter depends on:
   - GET /tasks lists done tasks too, with their labels, and pages with X-Pagination-Total-Pages;
   - POST /tasks/{id} replaces the whole task (a field left out falls back to its zero value), but not the labels;
-  - labels are set through POST /tasks/{id}/labels/bulk.
+  - labels are set through POST /tasks/{id}/labels/bulk;
+  - GET /tasks/{id} answers 404 for a deleted task; project webhooks are listed and created per project.
+`fail_next` makes the next N requests answer 500 (the retries of the outbox).
 Every request is logged so that a test can assert "no writes".
 """
 
@@ -24,6 +26,8 @@ class FakeVikunja:
         self.projects: list[dict] = []
         self.labels: dict[int, dict] = {}
         self.tasks: dict[int, dict] = {}
+        self.webhooks: dict[int, list[dict]] = {}
+        self.fail_next = 0
         self.requests: list[tuple[str, str]] = []
         self._next_id = 1
         fake = self
@@ -40,6 +44,9 @@ class FakeVikunja:
 
             def do_POST(self):
                 fake._handle(self, "POST")
+
+            def do_DELETE(self):
+                fake._handle(self, "DELETE")
 
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         # a short poll interval keeps shutdown() from waiting half a second per test
@@ -91,6 +98,9 @@ class FakeVikunja:
         body = json.loads(handler.rfile.read(length)) if length else None
         if handler.headers.get("Authorization") != f"Bearer {self.token}":
             return self._reply(handler, 401, {"code": 11, "message": "missing or invalid token"})
+        if self.fail_next > 0:
+            self.fail_next -= 1
+            return self._reply(handler, 500, {"message": "internal error (fake)"})
         route = parsed.path.removeprefix("/api/v1")
         query = {key: values[0] for key, values in parse_qs(parsed.query).items()}
 
@@ -119,10 +129,27 @@ class FakeVikunja:
             task["labels"] = [self.labels[item["id"]] for item in body["labels"]]
             return self._reply(handler, 201, {"labels": body["labels"]})
 
+        match = re.fullmatch(r"/projects/(\d+)/webhooks", route)
+        if match:
+            hooks = self.webhooks.setdefault(int(match.group(1)), [])
+            if method == "GET":
+                return self._reply(handler, 200, hooks)
+            if method == "PUT":
+                hook = {"id": self.new_id(), "project_id": int(match.group(1)), **body}
+                hooks.append(hook)
+                return self._reply(handler, 201, hook)
+
         match = re.fullmatch(r"/tasks/(\d+)", route)
+        if match and int(match.group(1)) not in self.tasks:
+            return self._reply(handler, 404, {"code": 4002, "message": "The task does not exist."})
+        if method == "GET" and match:
+            return self._reply(handler, 200, self.tasks[int(match.group(1))])
+        if method == "DELETE" and match:
+            del self.tasks[int(match.group(1))]
+            return self._reply(handler, 200, {"message": "Successfully deleted."})
         if method == "POST" and match:
             task = self.tasks[int(match.group(1))]
-            replaced = {"id": task["id"], "project_id": task["project_id"], "labels": task["labels"]}
+            replaced = {"id": task["id"], "project_id": body.get("project_id") or task["project_id"], "labels": task["labels"]}
             replaced.update(TASK_DEFAULTS)  # a field left out of the body is reset, as on the real server
             replaced.update({key: value for key, value in body.items() if key not in ("id", "labels", "project_id")})
             self.tasks[task["id"]] = replaced

@@ -1,0 +1,4 @@
+# The tests of tools/todo (pytest tools/todo/tests): the service's dependencies plus the test client.
+-r service/requirements.txt
+httpx==0.28.1
+pytest>=7.0.0

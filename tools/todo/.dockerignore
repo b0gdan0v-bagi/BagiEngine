@@ -1,0 +1,6 @@
+tests/
+**/__pycache__/
+*.pyc
+todo.py
+requirements-dev.txt
+CLAUDE.md
