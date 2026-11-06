@@ -319,7 +319,7 @@ class Mirror:
             return "changed" if self.apply_task(conn, entry, task) else "same"
         marked = marker_of(task)
         if marked:
-            entry = store.get_entry(conn, marked, lock=True)
+            entry = store.entry_by_marker(conn, marked)
             if entry is None:
                 return "marker of no entry"
             if entry["vikunja_task_id"] not in (None, task["id"]):

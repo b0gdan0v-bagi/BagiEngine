@@ -144,5 +144,5 @@ def test_the_migrations_run_once(clean_database):
 
     with psycopg.connect(clean_database) as conn:
         conn.row_factory = psycopg.rows.dict_row
-        assert db.migrate(conn) == ["001_init.sql"]
+        assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql"]
         assert db.migrate(conn) == []

@@ -140,6 +140,7 @@ def to_json(entry: dict, plan: dict | None = None, with_body: bool = True) -> di
         "updatedAt": entry["updated_at"].isoformat(),
         "closedAt": entry["closed_at"].isoformat() if entry["closed_at"] else None,
         "vikunjaTaskId": entry["vikunja_task_id"],
+        "aliases": entry["aliases"],
     }
     if with_body:
         data["body"] = entry["body"]
@@ -149,6 +150,11 @@ def to_json(entry: dict, plan: dict | None = None, with_body: bool = True) -> di
 def get_entry(conn: Connection, entry_id: str, lock: bool = False) -> dict | None:
     query = "SELECT * FROM entries WHERE id = %s" + (" FOR UPDATE" if lock else "")
     return conn.execute(query, (entry_id,)).fetchone()
+
+
+def entry_by_marker(conn: Connection, marker: str) -> dict | None:
+    """The entry whose id or old id (alias) a Vikunja marker names, locked."""
+    return conn.execute("SELECT * FROM entries WHERE id = %s OR %s = ANY(aliases) ORDER BY id = %s DESC LIMIT 1 FOR UPDATE", (marker, marker, marker)).fetchone()
 
 
 def require_entry(conn: Connection, entry_id: str, lock: bool = False) -> dict:
@@ -197,6 +203,11 @@ def create_entry(conn: Connection, data: dict, actor: str) -> dict:
     _require_area(conn, data["area"])
     fields = {key: data[key] for key in ENTRY_FIELDS if key in data and data[key] is not None}
     fields.setdefault("status", "open")
+    aliases = [alias for alias in data.get("aliases") or [] if alias != entry_id]
+    if any(not ID_RE.match(alias) for alias in aliases):
+        raise StoreError(422, "an alias may hold only letters, digits, '_' and '-'")
+    if aliases:
+        fields["aliases"] = aliases
     _check_fields(fields)
     if get_entry(conn, entry_id) is not None:
         raise StoreError(409, f"entry '{entry_id}' exists")

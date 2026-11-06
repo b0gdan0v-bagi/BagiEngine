@@ -366,10 +366,15 @@ def cmd_import(api: Api, args) -> None:
         if path.name in (README_FILE, ROADMAP_FILE):
             continue
         try:
-            records.append(parse_entry_text(path.read_text(encoding="utf-8"), path.name))
+            record = parse_entry_text(path.read_text(encoding="utf-8"), path.name)
         except ParseError as error:
             raise TodoError(str(error)) from None
+        # the file name is the id; an old `id:` kept for the tracker becomes an alias (its Vikunja marker still links)
+        record["aliases"] = [record["id"]] if record["id"] != path.stem else []
+        record["id"] = path.stem
+        records.append(record)
     ids = {record["id"] for record in records}
+    alias_of = {alias: record["id"] for record in records for alias in record["aliases"]}
     for record in records:
         if record["id"] in existing:
             print(f"skip    {record['id']} (in the store)")
@@ -385,8 +390,10 @@ def cmd_import(api: Api, args) -> None:
             "branch": record["branch"],
             "stage": record["stage"],
             "plan": record["plan"],
+            "aliases": record["aliases"],
         }
-        print(f"{'would add' if args.dry_run else 'add':<7} {record['id']} ({record['status']})")
+        alias = f", was {record['aliases'][0]}" if record["aliases"] else ""
+        print(f"{'would add' if args.dry_run else 'add':<7} {record['id']} ({record['status']}{alias})")
         if not args.dry_run:
             api.call("POST", "/entries", body)
     plans: list[tuple[str, str | None, str]] = []
@@ -394,9 +401,9 @@ def cmd_import(api: Api, args) -> None:
         plans.append((name, None, "owner"))
     if plans_dir.is_dir():
         for path in sorted(plans_dir.glob("todo-loop-*.md")):
-            found = loop_plan_entry(path.name, ids)
+            found = loop_plan_entry(path.name, ids | set(alias_of))
             if found:
-                plans.append((path.name, *found))
+                plans.append((path.name, alias_of.get(found[0], found[0]), found[1]))
     for name, entry_id, kind in plans:
         source = plans_dir / name
         if not source.is_file():

@@ -261,3 +261,15 @@ def test_the_worker_thread_writes_a_new_entry_by_itself(mirrored):
         assert task_of(api, fake)["title"] == "No CI"
     finally:
         mirror.stop()
+
+
+def test_a_task_marked_with_an_old_id_links_to_the_entry_that_has_it_as_alias(mirrored):
+    api, mirror, fake = mirrored
+    mirror.reconcile()
+    engine = project(fake, "BagiEngine")
+    old = fake.add_task(engine["id"], "No CI", description="<p>todo-sync:id=no-ci-builds-and-tests-run-only-on-a-developer-machine</p>")
+    api.post("/api/v1/entries", json={**ENTRY, "aliases": ["no-ci-builds-and-tests-run-only-on-a-developer-machine"]}).raise_for_status()
+    assert mirror.reconcile() == {"linked": 1}
+    mirror.process_outbox()
+    assert len(fake.tasks_of(engine["id"])) == 1
+    assert fake.tasks[old["id"]]["description"].startswith("<p>todo-sync:id=no-ci</p>")

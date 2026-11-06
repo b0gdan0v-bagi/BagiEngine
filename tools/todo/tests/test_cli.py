@@ -160,6 +160,8 @@ def test_import_takes_the_old_files_and_their_plans(cli, plans_dir):
     assert '"status": "review"' in out and '"branch": "todo/in-review"' in out
     out, _ = cli("import", "--area", "engine", "--todo", str(FIXTURES / "todo"), "--plans-dir", str(plans_dir))
     assert "skip    in-review (in the store)" in out
+    out, _ = cli("show", "renamed-file", "--json")
+    assert '"aliases": [\n    "the-old-id"\n  ]' in out  # the file name is the id, the old id: an alias
 
 
 def test_export_writes_entries_and_plans_outside_git(cli, plans_dir, tmp_path):

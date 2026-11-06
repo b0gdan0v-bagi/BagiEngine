@@ -79,6 +79,7 @@ class EntryIn(BaseModel):
     branch: str | None = None
     stage: int | None = None
     plan: str | None = None
+    aliases: list[str] = []
 
 
 class EntryPatch(BaseModel):
