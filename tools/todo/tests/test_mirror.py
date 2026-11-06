@@ -273,3 +273,51 @@ def test_a_task_marked_with_an_old_id_links_to_the_entry_that_has_it_as_alias(mi
     mirror.process_outbox()
     assert len(fake.tasks_of(engine["id"])) == 1
     assert fake.tasks[old["id"]]["description"].startswith("<p>todo-sync:id=no-ci</p>")
+
+
+def test_an_area_that_gets_its_project_links_the_old_tasks_instead_of_making_new_ones(clean_database, fake_vikunja):
+    """The import of 2026-11-06: entries made while the area had no project, then the project set."""
+    with make_client(clean_database, fake_vikunja) as api:
+        mirror = api.app.state.todo["mirror"]
+        engine = fake_vikunja.add_project("BagiEngine")
+        old = fake_vikunja.add_task(engine["id"], "No CI", description="<p>todo-sync:id=no-ci-builds-and-tests</p>")
+        api.put("/api/v1/areas/engine", json={"title": "Engine", "stages": [{"number": 1, "title": "Core"}]}).raise_for_status()
+        api.post("/api/v1/entries", json={**ENTRY, "aliases": ["no-ci-builds-and-tests"]}).raise_for_status()
+        assert mirror.process_outbox() == 1  # no project yet: nothing written
+        assert fake_vikunja.tasks_of(engine["id"]) == [old]
+        api.put(
+            "/api/v1/areas/engine", json={"title": "Engine", "vikunjaProject": "BagiEngine", "stages": [{"number": 1, "title": "Core"}]}
+        ).raise_for_status()
+        mirror.process_outbox()  # the worker runs before any reconcile
+        assert [task["id"] for task in fake_vikunja.tasks_of(engine["id"])] == [old["id"]]
+        assert api.get("/api/v1/entries/no-ci").json()["vikunjaTaskId"] == old["id"]
+        assert fake_vikunja.tasks[old["id"]]["description"].startswith("<p>todo-sync:id=no-ci</p>")
+
+
+def test_dedupe_keeps_the_oldest_open_task_and_deletes_the_newer(mirrored):
+    api, mirror, fake = mirrored
+    mirror.reconcile()
+    engine = project(fake, "BagiEngine")
+    old = fake.add_task(engine["id"], "No CI", description="<p>todo-sync:id=no-ci-old</p>")
+    done = fake.add_task(engine["id"], "No CI", description="<p>todo-sync:id=no-ci</p>", done=True)
+    api.post("/api/v1/entries", json=ENTRY).raise_for_status()
+    api.post("/api/v1/entries", json={**ENTRY, "id": "other", "title": "Other"}).raise_for_status()
+    new = fake.add_task(engine["id"], "No CI", description="<p>todo-sync:id=no-ci</p>")
+    with psycopg_connect(api) as conn:  # the state the bug left: the entry linked to the newer task
+        conn.execute("UPDATE entries SET vikunja_task_id = %s WHERE id = 'no-ci'", (new["id"],))
+    with psycopg_connect(api) as conn:
+        conn.execute("UPDATE entries SET aliases = '{no-ci-old}' WHERE id = 'no-ci'")
+    assert api.post("/api/v1/admin/vikunja/dedupe").json() == {"lines": [f"no-ci: keep task {old['id']}, delete {new['id']}"]}
+    assert new["id"] in fake.tasks  # the report changes nothing
+    api.post("/api/v1/admin/vikunja/dedupe", params={"apply": "true"}).raise_for_status()
+    assert new["id"] not in fake.tasks and old["id"] in fake.tasks and done["id"] in fake.tasks
+    mirror.process_outbox()
+    assert api.get("/api/v1/entries/no-ci").json()["vikunjaTaskId"] == old["id"]
+    assert fake.tasks[old["id"]]["description"].startswith("<p>todo-sync:id=no-ci</p>")
+    assert api.post("/api/v1/admin/vikunja/dedupe").json() == {"lines": ["no duplicates"]}
+
+
+def psycopg_connect(api):
+    import psycopg
+
+    return psycopg.connect(api.app.state.todo["pool"].conninfo, autocommit=True)

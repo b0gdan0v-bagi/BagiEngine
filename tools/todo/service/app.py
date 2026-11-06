@@ -323,6 +323,13 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
         written = mirror.process_outbox()
         return {"tasks": report, "written": written}
 
+    @app.post(f"{API}/admin/vikunja/dedupe")
+    def dedupe(apply: bool = False, actor: str = Depends(check_token)):
+        mirror: Mirror = state["mirror"]
+        if not mirror.enabled:
+            raise HTTPException(409, "the mirror is off: VIKUNJA_URL and VIKUNJA_TOKEN are not set")
+        return {"lines": mirror.dedupe(apply)}
+
     @app.post(f"{API}/admin/vikunja/webhooks")
     def webhooks(actor: str = Depends(check_token)):
         return {"lines": state["mirror"].install_webhooks()}

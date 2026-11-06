@@ -82,6 +82,7 @@ class Mirror:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_reconcile = 0.0
+        self._marked: dict[int, dict[str, list[dict]]] = {}  # per outbox pass: project -> marker -> its tasks
         self.last_error: str | None = None
 
     @property
@@ -162,12 +163,37 @@ class Mirror:
         ids = self._labels(wanted)
         self.client.request("POST", f"/tasks/{task['id']}/labels/bulk", {"labels": [{"id": i} for i in foreign + [ids[t] for t in wanted]]})
 
+    def _tasks_by_marker(self, project_id: int) -> dict[str, list[dict]]:
+        """marker -> the project's tasks that carry it, oldest first (listed once per outbox pass)."""
+        if project_id not in self._marked:
+            index: dict[str, list[dict]] = {}
+            for task in sorted(self.client.project_tasks(project_id), key=lambda task: task["id"]):
+                marker = marker_of(task)
+                if marker:
+                    index.setdefault(marker, []).append(task)
+            self._marked[project_id] = index
+        return self._marked[project_id]
+
+    def find_marked_task(self, conn: Connection, entry: dict, project_id: int) -> dict | None:
+        """
+        An unlinked task of the project whose marker names this entry (its id or an old id): the task
+        the old export made, or one whose link was lost. An open one wins over a done one, the oldest first.
+        """
+        index = self._tasks_by_marker(project_id)
+        tasks = [task for marker in (entry["id"], *entry["aliases"]) for task in index.get(marker, [])]
+        tasks.sort(key=lambda task: (bool(task.get("done")), task["id"]))
+        for task in tasks:
+            if conn.execute("SELECT 1 FROM entries WHERE vikunja_task_id = %s", (task["id"],)).fetchone() is None:
+                return task
+        return None
+
     # --- store -> Vikunja ---
 
     def process_outbox(self) -> int:
         """Write the tasks of every due entry. Returns how many were written."""
         if not self.enabled:
             return 0
+        self._marked = {}
         written = 0
         with self.pool.connection() as conn:
             due = conn.execute(
@@ -210,6 +236,10 @@ class Mirror:
             return "no mirror"
 
         task = self.client.get_task(entry["vikunja_task_id"]) if entry["vikunja_task_id"] else None
+        if task is None:
+            task = self.find_marked_task(conn, entry, project_id)  # never a second task for an entry that has one
+            if task is not None:
+                entry = {**entry, "vikunja_snapshot": None}
         if task is not None and entry["vikunja_snapshot"] is not None and self.apply_task(conn, entry, task):
             entry = store.get_entry(conn, entry_id, lock=True)  # a person's edit came first; show it, do not overwrite it
 
@@ -225,6 +255,7 @@ class Mirror:
                 "PUT", f"/projects/{project_id}/tasks", {"title": desired["title"], "description": desired["description"], "done": desired["done"]}
             )
             task["labels"] = []
+            self._tasks_by_marker(project_id).setdefault(entry_id, []).append(task)
             action = "create"
         else:
             current = snapshot_of(task)
@@ -400,6 +431,43 @@ class Mirror:
                         count("queued")
         self.wake()
         return report
+
+    def dedupe(self, apply: bool = False) -> list[str]:
+        """
+        Entries with more than one open task carrying their marker (id or old id): the entry keeps the
+        oldest one (relinked and rewritten) and the newer ones are deleted. Without apply: only the report.
+        """
+        lines: list[str] = []
+        doomed: list[int] = []
+        with self.pool.connection() as conn:
+            with conn.transaction():
+                areas = self._resolve_projects(conn)
+            for area in areas:
+                tasks = sorted(self.client.project_tasks(area["vikunja_project_id"]), key=lambda task: task["id"])
+                for entry in conn.execute("SELECT * FROM entries WHERE area = %s ORDER BY id", (area["id"],)).fetchall():
+                    names = {entry["id"], *entry["aliases"]}
+                    open_tasks = [task for task in tasks if not task.get("done") and marker_of(task) in names]
+                    if len(open_tasks) < 2:
+                        continue
+                    keep, extra = open_tasks[0], open_tasks[1:]
+                    lines.append(f"{entry['id']}: keep task {keep['id']}, delete {', '.join(str(task['id']) for task in extra)}")
+                    if not apply:
+                        continue
+                    with conn.transaction():
+                        conn.execute(
+                            "UPDATE entries SET vikunja_task_id = NULL WHERE vikunja_task_id = %s AND id <> %s", (keep["id"], entry["id"])
+                        )
+                        conn.execute("UPDATE entries SET vikunja_task_id = %s, vikunja_snapshot = NULL WHERE id = %s", (keep["id"], entry["id"]))
+                        store.enqueue(conn, entry["id"])
+                        store.add_event(conn, ACTOR, "dedupe", entry["id"], data={"kept": keep["id"], "deleted": [task["id"] for task in extra]})
+                    doomed.extend(task["id"] for task in extra)
+        for task_id in doomed:  # after the commit: no entry is linked to them any more, so a webhook changes nothing
+            try:
+                self.client.request("DELETE", f"/tasks/{task_id}")
+            except VikunjaError as error:
+                lines.append(f"task {task_id} not deleted: {error}")
+        self.wake()
+        return lines or ["no duplicates"]
 
     def install_webhooks(self) -> list[str]:
         """A webhook on every area's project pointing at this service (once; an existing one is kept)."""

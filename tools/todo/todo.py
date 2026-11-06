@@ -333,6 +333,9 @@ def cmd_admin(api: Api, args) -> None:
     elif args.admin_command == "webhooks":
         for line in api.call("POST", "/admin/vikunja/webhooks")["lines"]:
             print(line)
+    elif args.admin_command == "dedupe":
+        for line in api.call("POST", "/admin/vikunja/dedupe", query={"apply": "true" if args.apply else "false"})["lines"]:
+            print(line)
     elif args.admin_command == "outbox":
         emit(api.get("/admin/outbox"), True)
 
@@ -533,6 +536,8 @@ def build_parser() -> argparse.ArgumentParser:
     admin_sub.add_parser("reconcile", parents=[common], help="compare every Vikunja project with the store now")
     admin_sub.add_parser("webhooks", parents=[common], help="install the Vikunja webhooks")
     admin_sub.add_parser("outbox", parents=[common], help="the tasks waiting to be written")
+    q = admin_sub.add_parser("dedupe", parents=[common], help="entries with several open tasks: keep the oldest, delete the rest")
+    q.add_argument("--apply", action="store_true", help="do it (without: only the report)")
 
     p = sub.add_parser("import", parents=[common], help="old entry files of one area (and their plans) into the store")
     p.add_argument("--area", required=True)
