@@ -40,6 +40,7 @@ namespace BECore {
     }
 
     void CoreManager::OnTestEnvironmentDeinit(PassKey<Tests::EngineEnvironment>) {
+        _tweenManager.Clear();  // no callbacks: what they point at may be gone
         _controlService.Shutdown();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }
@@ -89,6 +90,9 @@ namespace BECore {
         _eventsProviderManager.ProcessEvents();
         _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
         TaskManager::GetInstance().Update(PassKey<CoreManager>{});
+        // Values are set before the logic of the frame reads them. The frame time is clamped to Time::kMaxFrameTime, so a pause does not finish every tween at once;
+        // the manual clock gives the same ticks, and OnIdleCycle runs no frame and advances nothing
+        _tweenManager.Advance(_time.GetDeltaTime());
         _sceneManager->UpdateAll();  // game logic before UI
         _widgetManager.UpdateAll();  // clear, build the ImGui frame (Editor: ViewportWidget draws the scene)
         EventsQueueRegistry::UpdateAll();
@@ -105,6 +109,7 @@ namespace BECore {
     }
 
     void CoreManager::OnApplicationDeinit(PassKey<Application>) {
+        _tweenManager.Clear();  // no callbacks: the scenes and what the setters point at may be going away
         _controlService.Shutdown();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});
     }

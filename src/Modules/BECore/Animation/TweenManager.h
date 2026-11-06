@@ -53,7 +53,8 @@ namespace BECore {
             return StartErased(settings, std::move(apply), std::move(onComplete), std::move(onCancel));
         }
 
-        /// Advances every tween by @p dt seconds (the frame time). A @p dt of zero, negative or NaN does nothing, and so does a call from inside a callback of this manager.
+        /// Advances every tween by @p dt seconds (the frame time). A @p dt of zero, negative or NaN does nothing, and so does a call from a callback that runs during `Advance` or `CancelAll` (the
+        /// walk is on). A cancel callback run by a direct `TweenHandle::Cancel()` outside a walk may call it, and it advances.
         void Advance(float dt);
 
         /// Cancels every tween, running the cancel callbacks in start order. A tween that a callback starts after the call (a cancel callback of this very call, or a callback of the walk in progress

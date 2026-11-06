@@ -38,6 +38,8 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 | `Update()` | `CoreManager::OnGameCycle` once per frame; this is where main-thread tasks run |
 | `Shutdown()` | `OnApplicationDeinit` and `OnTestEnvironmentDeinit`; stops the scheduler, joins the pool, then abandons the tasks that are left (cancelled, self-reference dropped) |
 
+Tweens (`BECore/Animation/`, `CoreManager::GetTweens()`) are not tasks: they are ticked once per frame from the frame time and are not scheduled here. `co_await` of a tween is a later slice, so do not look for it yet.
+
 ## Best Practices
 
 ### DO

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <numbers>
+
 namespace BECore {
 
     /**
@@ -11,13 +13,13 @@ namespace BECore {
     CORE_ENUM(EaseType, uint8_t, Linear, QuadIn, QuadOut, QuadInOut, CubicIn, CubicOut, CubicInOut, SineIn, SineOut, SineInOut, BackIn, BackOut, BackInOut, BounceOut, ElasticOut)
 
     namespace EasingConstants {
-        inline constexpr float kBackOvershoot = 1.70158f;    ///< `c1` of easings.net: about 10 % overshoot
-        inline constexpr float kBackInOutScale = 1.525f;     ///< `c2 = c1 * 1.525` of easings.net
-        inline constexpr float kBounceStrength = 7.5625f;    ///< `n1` of easings.net: the parabola of one bounce
-        inline constexpr float kBounceDivisor = 2.75f;       ///< `d1` of easings.net: the length of the first bounce
-        inline constexpr float kElasticPeriod = 2.0943951f;  ///< `c4 = 2 * pi / 3` of easings.net
-        inline constexpr float kElasticFrequency = 10.0f;    ///< how fast the ring dies out
-        inline constexpr float kElasticPhase = 0.75f;        ///< the phase that makes the curve start at 0
+        inline constexpr float kBackOvershoot = 1.70158f;                                 ///< `c1` of easings.net: about 10 % overshoot
+        inline constexpr float kBackInOutScale = 1.525f;                                  ///< `c2 = c1 * 1.525` of easings.net
+        inline constexpr float kBounceStrength = 7.5625f;                                 ///< `n1` of easings.net: the parabola of one bounce
+        inline constexpr float kBounceDivisor = 2.75f;                                    ///< `d1` of easings.net: the length of the first bounce
+        inline constexpr float kElasticPeriod = 2.0f * std::numbers::pi_v<float> / 3.0f;  ///< `c4 = 2 * pi / 3` of easings.net
+        inline constexpr float kElasticFrequency = 10.0f;                                 ///< `10` of easings.net: the speed of the oscillation, and so how fast the ring dies out
+        inline constexpr float kElasticPhase = 0.75f;                                     ///< the phase that makes the curve start at 0
     }  // namespace EasingConstants
 
     /**
