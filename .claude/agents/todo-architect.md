@@ -69,4 +69,4 @@ Area `<area>` (repository `<R>`, base `<base>`), branch `todo/<branch-id>`, entr
 
 ## Answer
 
-Short, for the conductor: the plan path, the number of WPs with one line each, `slice K of M`, anything that did not fit the slice. Or one line `BLOCKED: <reason>`: the entry is vague, the owner has to decide, the code it names does not exist, or the work cannot be checked on this machine.
+Short, for the conductor: the plan path (**absolute, the home directory expanded**, e.g. `/Users/<name>/.claude/plans/todo-loop-<branch-id>.md`, never `~`: the conductor turns it into a link in the chat; get the home with `echo "$HOME"`), the number of WPs with one line each, `slice K of M`, anything that did not fit the slice. Or one line `BLOCKED: <reason>`: the entry is vague, the owner has to decide, the code it names does not exist, or the work cannot be checked on this machine.
