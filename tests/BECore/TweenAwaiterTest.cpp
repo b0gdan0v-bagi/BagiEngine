@@ -4,12 +4,13 @@
 #include <TaskSystem/Task.h>
 #include <chrono>
 #include <gtest/gtest.h>
-#include <memory>
 #include <thread>
 
 namespace BECore::Tests {
 
     static_assert(!std::is_copy_constructible_v<TweenAwaiter> && !std::is_move_constructible_v<TweenAwaiter>, "the handle keeps the address of the awaiter while the coroutine waits");
+
+    TEST(TweenAwaiterTest, CompileTimeChecks) {}
 
     namespace {
 
@@ -20,6 +21,7 @@ namespace BECore::Tests {
         constexpr float kQuarterSecond = 0.25f;
         constexpr float kTo = 100.0f;
         constexpr int kFramesInASecond = 32;
+        constexpr int kFramesBeforeTheLast = static_cast<int>(kOneSecond / kQuarterSecond) - 1;  // the tween of a second ends in the Advance after these
         constexpr int kChainLength = 3;
         constexpr int kWaiterCount = 3;
         constexpr auto kRealTimePause = std::chrono::milliseconds(20);
@@ -46,7 +48,7 @@ namespace BECore::Tests {
         }
 
         /// The coroutine frame holds @p guard: a use count of 1 on the test side means the frame is gone
-        Task<void> AwaitHandleWithGuard([[maybe_unused]] std::shared_ptr<int> guard, IntrusivePtr<TweenHandle> handle, Log& log, int id) {
+        Task<void> AwaitHandleWithGuard([[maybe_unused]] eastl::shared_ptr<int> guard, IntrusivePtr<TweenHandle> handle, Log& log, int id) {
             const TweenResult result = co_await AwaitTween(std::move(handle));
             log.order.push_back(id);
             log.results.push_back(result);
@@ -108,7 +110,7 @@ namespace BECore::Tests {
 
         task.Resume();
         EXPECT_TRUE(log.order.empty());  // suspended on the tween
-        for (int frame = 0; frame < 3; ++frame) {
+        for (int frame = 0; frame < kFramesBeforeTheLast; ++frame) {
             tweens.Advance(kQuarterSecond);
             EXPECT_TRUE(log.order.empty()) << frame;
         }
@@ -120,7 +122,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(task.IsDone());
     }
 
-    TEST(TweenAwaiterTest, TheSameNumberOfAdvancesReachesTheSameFinalValueAtEveryFrameRate) {
+    TEST(TweenAwaiterTest, OneSecondOfAdvanceEndsAtTheTargetAndResumesOnceAtEveryFrameRate) {
         for (const int framesPerSecond : kFrameRates) {
             TweenManager tweens;
             Log log;
@@ -283,7 +285,7 @@ namespace BECore::Tests {
     TEST(TweenAwaiterTest, ClearNeverResumesAWaiterAndTheFrameIsFreedByDroppingTheTask) {
         TweenManager tweens;
         Log log;
-        auto guard = std::make_shared<int>(0);
+        auto guard = eastl::make_shared<int>(0);
         {
             Task<void> task = AwaitHandleWithGuard(guard, StartSilent(tweens, kOneSecond), log, 1);
             task.Resume();
@@ -302,7 +304,7 @@ namespace BECore::Tests {
 
     TEST(TweenAwaiterTest, TheDestructorOfTheManagerNeverResumesAWaiter) {
         Log log;
-        auto guard = std::make_shared<int>(0);
+        auto guard = eastl::make_shared<int>(0);
         IntrusivePtr<TweenHandle> handle;
         Task<void> task;
         {
@@ -323,7 +325,7 @@ namespace BECore::Tests {
     TEST(TweenAwaiterTest, ATaskDroppedWhileItWaitsIsNeverResumed) {
         TweenManager tweens;
         Log log;
-        auto guard = std::make_shared<int>(0);
+        auto guard = eastl::make_shared<int>(0);
         const auto handle = StartSilent(tweens, kOneSecond);
         {
             Task<void> task = AwaitHandleWithGuard(guard, handle, log, 1);

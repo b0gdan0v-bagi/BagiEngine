@@ -51,13 +51,13 @@ With the manual clock (`--manual-clock`, `Control/CLAUDE.md`) `Application::Run`
 
 **Time** (`CoreManager::GetTime()`, `Time/Time.h`): `GetDeltaTime()` is the seconds the last frame took, `GetTotalTime()` the game time since the first frame, `GetFrameCount()` counts frames from 1. The frame time is clamped to `Time::kMaxFrameTime` (0.25 s), so a pause in the debugger is one long frame, not a jump. Scale movement and animation by `SceneUpdateEvent::deltaTime`, never by "per frame" constants. Logic that must give the same result at any frame rate (physics-like integration, replays) goes into `SceneFixedUpdateEvent`: its `deltaTime` is always `Time::GetFixedDeltaTime()` (1/60 s by default), and the leftover time carries over to the next frame, so the number of steps per second is constant.
 
-`Time::Advance(seconds)` takes the frame time as a number, so a test drives a component with a fake clock at any frame rate: `CoreManager::GetTime().Advance(1.0 / 30)`, then `SceneManager::UpdateAll()`. Reset the clock in `TearDown` (`Time::Reset()`, and `SetFixedDeltaTime` back if the test changed it). Example: `tests/BECore/TimeTest.cpp`.
+`Time::Advance(seconds)` takes the frame time as a number, so a test drives a component with a fake clock at any frame rate: `CoreManager::GetTime().Advance(1.0 / 32)` (a power of two keeps the sums exact; `Animation/CLAUDE.md`), then `SceneManager::UpdateAll()`. Reset the clock in `TearDown` (`Time::Reset()`, and `SetFixedDeltaTime` back if the test changed it). Example: `tests/BECore/TimeTest.cpp`.
 
 The GoogleTest executable (`tests/`) brings up the same services through `OnTestEnvironmentInit(PassKey<Tests::EngineEnvironment>)`. That path skips `TestManager` and disables `DebugBreakHandler`, so a failed assert is reported by gtest instead of trapping the process. See `.claude/rules/tests-module.md`.
 
 ## Subsystem guides
 
-Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManager`), `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `Control/` (external control API core, JSON rules), `FileSystem/` (virtual paths and mount points), `Scene/` (scene graph and components), `Logger/`, `Resource/`, `Text/` (fonts, layout, glyph atlases, `TextComponent`), `UI/` (in-game UI: canvases, adaptive layout, validator). Always read configs through `ConfigManager`, never by creating loaders by hand.
+Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManager`, `Timeline`, `co_await` of a tween), `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `Control/` (external control API core, JSON rules), `FileSystem/` (virtual paths and mount points), `Scene/` (scene graph and components), `Logger/`, `Resource/`, `Text/` (fonts, layout, glyph atlases, `TextComponent`), `UI/` (in-game UI: canvases, adaptive layout, validator). Always read configs through `ConfigManager`, never by creating loaders by hand.
 
 ## Assert (CRTDebugHook, StackTrace)
 

@@ -49,19 +49,24 @@ namespace BECore {
         return AwaitTween(Delay(seconds));
     }
 
+    IntrusivePtr<TweenHandle> TweenManager::Play(Timeline timeline, float delay, eastl::function<void()> onComplete, eastl::function<void()> onCancel) {
+        const float duration = timeline.GetDuration();
+        // `eastl::function` needs a copyable callable and a Timeline is move-only: the tween owns it through a shared pointer
+        auto owned = eastl::make_shared<Timeline>(std::move(timeline));
+        // The progress of the last step is exactly 1, so the last call is exactly the duration; the tween itself is linear
+        auto apply = [owned = std::move(owned), duration](float progress) { owned->Evaluate(progress * duration); };
+        return StartErased({.duration = duration, .delay = delay, .ease = EaseType::Linear}, std::move(apply), std::move(onComplete), std::move(onCancel));
+    }
+
     void TweenManager::ResumeWaiters(TweenHandle& tween) {
         if (tween._waiters.empty()) {
             return;
         }
         // A waiter may drop the last reference to the handle (it holds one in its awaiter), so keep it alive for the loop
         const IntrusivePtr<TweenHandle> keepAlive(&tween);
-        const size_t clearsAtStart = _clearCount;
-        // One at a time, taken out of the list before it runs: a waiter that is destroyed by an earlier one unregisters itself and is not resumed
+        // One at a time, taken out of the list before it runs: a waiter that is destroyed by an earlier one unregisters itself and is not resumed.
+        // A waiter that calls Clear() empties this list too (the tween is still in the lists of the manager), so the rest are dropped, not resumed
         while (!tween._waiters.empty()) {
-            if (_clearCount != clearsAtStart) {
-                tween._waiters.clear();  // a waiter called Clear(): the rest are dropped, not resumed
-                return;
-            }
             const std::coroutine_handle<> continuation = tween._waiters.front().continuation;
             tween._waiters.erase(tween._waiters.begin());
             continuation.resume();
@@ -128,8 +133,9 @@ namespace BECore {
         EndWalk();
     }
 
-    void TweenManager::CancelFirst(const eastl::vector<IntrusivePtr<TweenHandle>>& list, size_t count) {
-        // By index and to a fixed size: a callback may start a tween, which goes to the end of _pending and never moves _tweens
+    void TweenManager::CancelAllIn(const eastl::vector<IntrusivePtr<TweenHandle>>& list) {
+        // By index and to the size at the start: a callback may start a tween, which goes to the end of _pending and never moves _tweens
+        const size_t count = list.size();
         for (size_t i = 0; i < count; ++i) {
             const IntrusivePtr<TweenHandle> tween = list[i];
             tween->Cancel();
@@ -139,12 +145,12 @@ namespace BECore {
     void TweenManager::CancelAll() {
         if (_walking) {
             // Inside a callback of this manager: cancel what runs now, the walk that called us compacts
-            CancelFirst(_tweens, _tweens.size());
-            CancelFirst(_pending, _pending.size());
+            CancelAllIn(_tweens);
+            CancelAllIn(_pending);
             return;
         }
         _walking = true;
-        CancelFirst(_tweens, _tweens.size());
+        CancelAllIn(_tweens);
         EndWalk();
     }
 
@@ -161,7 +167,6 @@ namespace BECore {
     }
 
     void TweenManager::Clear() {
-        ++_clearCount;
         const auto drop = [this](const IntrusivePtr<TweenHandle>& tween) {
             if (!tween->IsFinished()) {
                 tween->_state = TweenState::Cancelled;

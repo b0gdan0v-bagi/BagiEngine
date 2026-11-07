@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Animation/Lerp.h>
+#include <BECore/Animation/Timeline.h>
 #include <BECore/Animation/Tween.h>
 #include <BECore/Animation/TweenAwaiter.h>
 
@@ -67,6 +68,17 @@ namespace BECore {
         /// `DelaySec` of the task system is a scheduler job on `steady_clock` that ignores the frame clamp and the manual clock
         [[nodiscard]] TweenAwaiter Wait(float seconds);
 
+        /**
+         * @brief Runs @p timeline as one tween and returns its handle: cancel, progress, `ScopedTween` and `AwaitTween` work on it as on any tween.
+         *
+         * The tween lasts `timeline.GetDuration()` (repeats included), linear, and every step evaluates the timeline at `progress * duration`, so
+         * the time between clips is exact and the last step is exactly the duration (every clip and callback is finished by then). The timeline is
+         * consumed (moved into the tween). The rules 1 to 10 hold: @p delay passes with no call, a timeline with no length completes on the first
+         * `Advance` after the delay, cancelling stops the timeline where it is (no value is set, the clips have no cancel callbacks of their own),
+         * @p onCancel is the one callback of a cancelled run. A duration that is not finite counts as zero.
+         */
+        IntrusivePtr<TweenHandle> Play(Timeline timeline, float delay = 0.0f, eastl::function<void()> onComplete = {}, eastl::function<void()> onCancel = {});
+
         /// Advances every tween by @p dt seconds (the frame time). A @p dt of zero, negative or NaN does nothing, and so does a call from a callback that runs during `Advance` or `CancelAll` (the
         /// walk is on). A cancel callback run by a direct `TweenHandle::Cancel()` outside a walk may call it, and it advances.
         void Advance(float dt);
@@ -89,13 +101,12 @@ namespace BECore {
         void Step(TweenHandle& tween, float dt);
         void ReleaseCallbacks(TweenHandle& tween);
         void ResumeWaiters(TweenHandle& tween);
-        void CancelFirst(const eastl::vector<IntrusivePtr<TweenHandle>>& list, size_t count);
+        void CancelAllIn(const eastl::vector<IntrusivePtr<TweenHandle>>& list);
         void EndWalk();
 
         eastl::vector<IntrusivePtr<TweenHandle>> _tweens;   // in start order; a finished one stays until the walk ends
         eastl::vector<IntrusivePtr<TweenHandle>> _pending;  // started while a walk is on: merged when it ends
         TweenHandle* _stepping = nullptr;                   // the tween whose setter runs now: its callback must not be destroyed under it
-        size_t _clearCount = 0;                             // grows with every Clear: a waiter resumed after one is dropped instead
         bool _walking = false;                              // Advance or CancelAll runs: the lists must not move
     };
 

@@ -86,7 +86,7 @@ tools/                  # developer tools: natvis, todo (the todo store: a servi
 |-----------|---------|
 | `GameManager/CoreManager` | Central service locator — owns FileSystem, ConfigManager, Logger, SceneManager, ResourceManager, etc. |
 | `Control/` | External control API core: a thread-safe command queue run on the main thread at frame stage 1b (`ControlService`, JSON through nlohmann with exceptions off) and the start-up flags (`ControlSettings`). The WebSocket transport is the `RemoteControl` module; start a game with `--control` to use it (`--manual-clock`, `--headless`, `step` and `screenshot`: `Control/CLAUDE.md`) |
-| `Animation/` | Easing curves, `Lerp` (float, `Vec2`, `Color`) and `TweenManager` (`CoreManager::GetTweens()`, ticked once per frame): change a value over time through a setter callback (`Animation/CLAUDE.md`) |
+| `Animation/` | Easing curves, `Lerp` (float, `Vec2`, `Color`), `TweenManager` (`CoreManager::GetTweens()`, ticked once per frame: change a value over time through a setter callback), `Timeline` (clips in sequence and parallel, exact time between them, `TweenManager::Play`) and `co_await` of a tween on game time (`AwaitTween`, `Wait`) (`Animation/CLAUDE.md`) |
 | `Scene/` | Scene graph (SceneNode → IComponent), serialization |
 | `Reflection/` | IPropertyVisitor, ISerializer/IDeserializer, BE_CLASS codegen markers |
 | `Resource/` | TextureLibrary, resource pooling |

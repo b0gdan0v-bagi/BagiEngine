@@ -25,7 +25,7 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 |-----------|---------|
 | `SwitchToMainThread()` | Continue on the main thread |
 | `SwitchToBackground(priority)` | Continue on a pool thread |
-| `DelayMs(ms)` / `DelaySec(s)` | Resume after a delay |
+| `DelayMs(ms)` / `DelaySec(s)` | Resume after a delay of WALL-CLOCK time (a `steady_clock` job of the scheduler, so it ignores the frame clamp and the manual clock and does not resume on the main thread by itself). Not for animation: wait on game time with `TweenManager::Wait` (see below) |
 | `Yield()` | Yield to the scheduler |
 
 ## Lifecycle
@@ -38,7 +38,7 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 | `Update()` | `CoreManager::OnGameCycle` once per frame; this is where main-thread tasks run |
 | `Shutdown()` | `OnApplicationDeinit` and `OnTestEnvironmentDeinit`; stops the scheduler, joins the pool, then abandons the tasks that are left (cancelled, self-reference dropped) |
 
-Tweens (`BECore/Animation/`, `CoreManager::GetTweens()`) are not tasks: they are ticked once per frame from the frame time and are not scheduled here. `co_await` of a tween is a later slice, so do not look for it yet.
+Tweens (`BECore/Animation/`, `CoreManager::GetTweens()`) are not tasks: they are ticked once per frame from the frame time and are not scheduled here. `co_await` of a tween is not an awaitable of this module either: `AwaitTween(handle)` and `TweenManager::Wait(seconds)` (`BECore/Animation/TweenAwaiter.h`) resume the coroutine from `TweenManager::Advance`, inline on the main thread and on game time (the frame time, so the manual clock and the clamp apply). A coroutine that awaits them must already run on the main thread (`RunOnMainThread`, or `co_await SwitchToMainThread()` first); `DelaySec` / `DelayMs` are for wall-clock waits, not for animation. `Clear()` of the tween manager (shutdown) never resumes a waiter, the frame is abandoned with the other tasks.
 
 ## Best Practices
 
