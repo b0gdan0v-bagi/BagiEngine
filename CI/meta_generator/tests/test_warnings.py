@@ -1,6 +1,5 @@
 """A reflection marker the parser cannot turn into metadata is reported, never dropped silently."""
 
-import importlib.util
 import json
 import textwrap
 from pathlib import Path
@@ -11,7 +10,6 @@ from core.cache import MetadataCache
 from core.models import FileMetadata, ParseWarning
 from core.parser import create_parser
 
-TOOL_DIR = Path(__file__).resolve().parents[1]
 
 
 def kinds_and_lines(warnings):
@@ -166,30 +164,29 @@ def test_field_in_the_unparsed_class_gets_its_own_warning(parse):
 # (c) method markers
 # ---------------------------------------------------------------------------
 
-def test_inline_body_swallowing_the_next_marker_is_reported_once(parse):
+def test_missing_semicolon_swallowing_the_next_marker_is_reported_once(parse):
     classes, warnings = parse("""
         struct IWidget {
             BE_CLASS(IWidget)
-            BE_FUNCTION virtual void Update() = 0;
-            BE_FUNCTION virtual void DrawScreen() {}
+            BE_FUNCTION virtual void Update()
             BE_FUNCTION virtual void Draw() = 0;
         };
     """)
-    assert kinds_and_lines(warnings) == [("method", 4)]
+    assert kinds_and_lines(warnings) == [("method", 3)]
     assert "next marker" in warnings[0].message
-    # The merge itself is still there (one method for two markers); the warning is what this test pins.
-    assert len(classes[0].methods) == 2
+    # The merge itself is still there (one marker swallowed by the other); the warning is what this test pins.
+    assert classes[0].methods == []
 
 
-def test_inline_body_alone_is_reported(parse):
+def test_inline_body_is_a_method_of_its_own(parse):
     classes, warnings = parse("""
         struct Foo {
             BE_CLASS(Foo)
             BE_FUNCTION void Run() { Step(); }
         };
     """)
-    assert kinds_and_lines(warnings) == [("method", 3)]
-    assert "inline body" in warnings[0].message
+    assert [m.name for m in classes[0].methods] == ["Run"]
+    assert warnings == []
 
 
 def test_braced_default_argument_is_not_an_inline_body(parse):
@@ -314,6 +311,45 @@ def test_line_numbers_survive_comments_and_strings(parse):
     assert kinds_and_lines(warnings) == [("field", 8)]
 
 
+def test_line_numbers_survive_a_backslash_newline_inside_a_string(parse):
+    classes, warnings = parse("""
+        const char* kText = "one \\
+        two";
+        struct Foo {
+            BE_CLASS(Foo)
+            BE_REFLECT_FIELD float _m[4];
+        };
+    """)
+    assert kinds_and_lines(warnings) == [("field", 5)]
+
+
+def test_line_comment_ending_in_a_backslash_continues_on_the_next_line(parse):
+    classes, warnings = parse("""
+        struct Foo {
+            BE_CLASS(Foo)
+            // a long comment \\
+            BE_REFLECT_FIELD int hidden = 0;
+            BE_REFLECT_FIELD float _m[4];
+        };
+    """)
+    assert classes[0].fields == []
+    assert kinds_and_lines(warnings) == [("field", 5)]
+
+
+def test_character_literals_and_digit_separators_do_not_open_strings(parse):
+    classes, warnings = parse("""
+        struct Foo {
+            BE_CLASS(Foo)
+            BE_REFLECT_FIELD char quote = '"';
+            BE_REFLECT_FIELD int big = 1'000'000;
+            BE_REFLECT_FIELD char brace = '}';
+            BE_REFLECT_FIELD int after = 0;
+        };
+    """)
+    assert [f.name for f in classes[0].fields] == ["quote", "big", "brace", "after"]
+    assert warnings == []
+
+
 # ---------------------------------------------------------------------------
 # cache
 # ---------------------------------------------------------------------------
@@ -361,26 +397,6 @@ def test_an_old_cache_version_is_discarded(tmp_path):
 # the command line
 # ---------------------------------------------------------------------------
 
-def run_main(monkeypatch, capsys, source_dir, tmp_path, *extra):
-    pytest.importorskip("jinja2")
-    # `meta_generator` alone names the package directory when pytest puts CI/ on sys.path
-    spec = importlib.util.spec_from_file_location("meta_generator_cli", TOOL_DIR / "meta_generator.py")
-    meta_generator = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(meta_generator)
-
-    argv = [
-        "meta_generator.py",
-        "--source-dir", str(source_dir),
-        "--output-dir", str(tmp_path / "out"),
-        "--cache-dir", str(tmp_path / "cache"),
-        *extra,
-    ]
-    monkeypatch.setattr("sys.argv", argv)
-    code = meta_generator.main()
-    captured = capsys.readouterr()
-    return code, captured.err
-
-
 @pytest.fixture
 def broken_source(tmp_path):
     source = tmp_path / "src"
@@ -394,28 +410,28 @@ def broken_source(tmp_path):
     return source
 
 
-def test_warnings_do_not_change_the_exit_code(monkeypatch, capsys, tmp_path, broken_source):
-    code, err = run_main(monkeypatch, capsys, broken_source, tmp_path)
+def test_warnings_do_not_change_the_exit_code(run_cli, broken_source):
+    code, _, err = run_cli(broken_source)
     assert code == 0
     assert "Foo.h:2: warning: reflection: BE_CLASS(Foo)" in err
 
 
-def test_warnings_as_errors_exits_with_one(monkeypatch, capsys, tmp_path, broken_source):
-    code, err = run_main(monkeypatch, capsys, broken_source, tmp_path, "--warnings-as-errors")
+def test_warnings_as_errors_exits_with_one(run_cli, broken_source):
+    code, _, err = run_cli(broken_source, "--warnings-as-errors")
     assert code == 1
     assert "warning: reflection:" in err
 
 
-def test_warnings_are_printed_again_from_the_cache(monkeypatch, capsys, tmp_path, broken_source):
-    _, first = run_main(monkeypatch, capsys, broken_source, tmp_path)
-    _, second = run_main(monkeypatch, capsys, broken_source, tmp_path)
+def test_warnings_are_printed_again_from_the_cache(run_cli, broken_source):
+    _, _, first = run_cli(broken_source)
+    _, _, second = run_cli(broken_source)
     assert first and second == first
 
 
-def test_clean_source_exits_with_zero_even_as_errors(monkeypatch, capsys, tmp_path):
+def test_clean_source_exits_with_zero_even_as_errors(run_cli, tmp_path):
     source = tmp_path / "src"
     source.mkdir()
     (source / "Ok.h").write_text("struct Ok {\n BE_CLASS(Ok)\n BE_REFLECT_FIELD int a = 0;\n};\n", encoding="utf-8")
-    code, err = run_main(monkeypatch, capsys, source, tmp_path, "--warnings-as-errors")
+    code, _, err = run_cli(source, "--warnings-as-errors")
     assert code == 0
     assert err == ""

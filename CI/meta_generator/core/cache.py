@@ -22,7 +22,7 @@ class MetadataCache:
     to detect when files need to be re-parsed.
     """
     
-    CACHE_VERSION = "2.2"  # 2.1: ClassData.is_abstract; 2.2: FileMetadata.warnings
+    CACHE_VERSION = "2.3"  # 2.1: ClassData.is_abstract; 2.2: FileMetadata.warnings; 2.3: parser fixes (inline bodies, namespace A::B, real lines)
     
     def __init__(self, cache_path: Path):
         """

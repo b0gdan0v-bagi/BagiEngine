@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from core.cache import MetadataCache
 from core.parser import create_parser
-from core.generator import CodeGenerator
+from core.generator import CodeGenerator, compute_enum_type_name
 
 _RE_CORE_ENUM = re.compile(r'\bCORE_ENUM\s*\(\s*(\w+)')
 
@@ -91,13 +91,25 @@ def is_under(path: Path, directory: Path) -> bool:
         return False
 
 
-def collect_warning_lines(cache: MetadataCache, owned_dirs: List[Path]) -> List[str]:
-    """`path:line: warning: reflection: ...` for the cached files under *owned_dirs*, sorted by path and line."""
+def collect_warning_lines(cache: MetadataCache, owned_dirs: List[Path], known_enums: Set[str]) -> List[str]:
+    """`path:line: warning: reflection: ...` for the cached files under *owned_dirs*, sorted by path and line.
+
+    Besides the warnings the parser stored, a `FACTORY_BASE` whose generated enum
+    (`compute_enum_type_name`) has the name of an enum found in the sources by the pre-scan is
+    reported: the generated and the handwritten declaration would disagree.
+    """
     entries = []
     for cached_path, meta in cache.files.items():
-        if meta.warnings and any(is_under(Path(cached_path), d) for d in owned_dirs):
-            for w in meta.warnings:
-                entries.append((cached_path, w.line, w.message))
+        if not any(is_under(Path(cached_path), d) for d in owned_dirs):
+            continue
+        for w in meta.warnings:
+            entries.append((cached_path, w.line, w.message))
+        for cls in meta.classes:
+            enum_name = compute_enum_type_name(cls.name)
+            if cls.is_factory_base and enum_name in known_enums:
+                entries.append((cached_path, cls.line, (
+                    f"FACTORY_BASE '{cls.name}' generates the enum '{enum_name}', which a CORE_ENUM "
+                    f"in the sources already declares")))
     entries.sort()
     return [f"{path}:{line}: warning: reflection: {message}" for path, line, message in entries]
 
@@ -405,7 +417,7 @@ Examples:
 
     # Warnings: every marker the parser skipped, from the cache too (an unchanged file is not
     # parsed again, but its warnings stay). Reference dirs belong to another target's run.
-    warning_lines = collect_warning_lines(cache, source_dirs + scan_dirs)
+    warning_lines = collect_warning_lines(cache, source_dirs + scan_dirs, known_enums)
     if not args.quiet:
         for line in warning_lines:
             print(line, file=sys.stderr)

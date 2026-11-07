@@ -1,3 +1,4 @@
+import importlib.util
 import sys
 import textwrap
 from pathlib import Path
@@ -25,5 +26,34 @@ def parse(tmp_path):
         parser = create_parser([], set())
         classes, _ = parser.parse_file(path)
         return classes, parser.last_warnings
+
+    return run
+
+
+@pytest.fixture
+def run_cli(monkeypatch, capsys, tmp_path):
+    """Run `meta_generator.main()` on a source directory: returns (exit code, stdout, stderr).
+
+    The output and the cache directories live in tmp_path, so two calls with the same
+    source directory share a cache (the second one is an incremental run).
+    """
+    pytest.importorskip("jinja2")
+    # `meta_generator` alone names the package directory when pytest puts CI/ on sys.path
+    spec = importlib.util.spec_from_file_location("meta_generator_cli", TOOL_DIR / "meta_generator.py")
+    meta_generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(meta_generator)
+
+    def run(source_dir, *extra: str):
+        argv = [
+            "meta_generator.py",
+            "--source-dir", str(source_dir),
+            "--output-dir", str(tmp_path / "out"),
+            "--cache-dir", str(tmp_path / "cache"),
+            *extra,
+        ]
+        monkeypatch.setattr("sys.argv", argv)
+        code = meta_generator.main()
+        captured = capsys.readouterr()
+        return code, captured.out, captured.err
 
     return run
