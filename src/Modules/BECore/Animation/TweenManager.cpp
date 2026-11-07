@@ -54,8 +54,12 @@ namespace BECore {
         // `eastl::function` needs a copyable callable and a Timeline is move-only: the tween owns it through a shared pointer
         auto owned = eastl::make_shared<Timeline>(std::move(timeline));
         // The progress of the last step is exactly 1, so the last call is exactly the duration; the tween itself is linear
-        auto apply = [owned = std::move(owned), duration](float progress) { owned->Evaluate(progress * duration); };
-        return StartErased({.duration = duration, .delay = delay, .ease = EaseType::Linear}, std::move(apply), std::move(onComplete), std::move(onCancel));
+        auto apply = [owned, duration](float progress) { owned->Evaluate(progress * duration); };
+        auto handle = StartErased({.duration = duration, .delay = delay, .ease = EaseType::Linear}, std::move(apply), std::move(onComplete), std::move(onCancel));
+        // A clip callback may cancel its own run (Cancel, CancelAll, a ScopedTween, Clear): the timeline then stops at the clip boundary, so no setter or
+        // callback runs after it. The raw pointer is safe: the timeline belongs to the setter, which belongs to the handle and is released with it
+        owned->SetStopCheck([tween = handle.Get()] { return tween->IsFinished(); });
+        return handle;
     }
 
     void TweenManager::ResumeWaiters(TweenHandle& tween) {

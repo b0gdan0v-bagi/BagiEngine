@@ -15,10 +15,16 @@ namespace BECore::Tests {
         constexpr float kThreeQuartersSecond = 0.75f;
         constexpr float kThreeEighthsSecond = 0.375f;  // 1.5 clips of kQuarterSecond: a frame that ends in the middle of a clip
         constexpr float kTo = 100.0f;
+        constexpr float kHalfOfTo = kTo / 2;
         constexpr int kClipCount = 4;
         constexpr int kFramesForTheSequence = 3;  // 4 clips of 0.25 s at 0.375 s a frame
         constexpr int kFramesForTheChain = 4;     // the same four tweens chained by onComplete: one frame per link
         constexpr int kFramesInASecond = 32;
+        constexpr int kSlowFramesInASecond = 8;
+        constexpr int kBeforeTheCancel = 0;  // ids of the clips of MakeCancelling
+        constexpr int kAfterTheCancel = 1;
+        constexpr int kCallbackAfterTheCancel = 2;
+        constexpr int kParentAfterTheCancel = 3;
         constexpr int kManyTimelines = 1000;
         constexpr int kTwoRepeats = 2;
         constexpr int kNeverCalled = -1;
@@ -56,6 +62,35 @@ namespace BECore::Tests {
             }
             return ids;
         }
+
+        /// Two tweens, with a callback that runs @p cancel between them, then a callback: the clips after @p cancel must never be called.
+        /// The ids of the clips are the constants above; the first tween writes `{kBeforeTheCancel, kTo}` when the step covers it
+        Timeline MakeCancelling(Calls& calls, eastl::function<void()> cancel) {
+            Timeline timeline;
+            timeline.Append<float>(0.0f, kTo, Settings(kQuarterSecond), [&calls](const float& value) { calls.push_back({kBeforeTheCancel, value}); });
+            timeline.AppendCallback(std::move(cancel));
+            timeline.Append<float>(0.0f, kTo, Settings(kQuarterSecond), [&calls](const float& value) { calls.push_back({kAfterTheCancel, value}); });
+            timeline.AppendCallback([&calls] { calls.push_back({kCallbackAfterTheCancel, 0.0f}); });
+            return timeline;
+        }
+
+        /// What `MakeCancelling` leaves when the timeline stops at the cancel: the first tween on its target, nothing else
+        Calls OnlyTheFirstTween() {
+            return {{kBeforeTheCancel, kTo}};
+        }
+
+        /// An owner that dies while its timeline runs: its setter counts a call made after the destructor
+        struct DyingOwner {
+            explicit DyingOwner(bool& dead) : _dead(dead) {}
+            ~DyingOwner() {
+                _dead = true;
+            }
+            DyingOwner(const DyingOwner&) = delete;
+            DyingOwner& operator=(const DyingOwner&) = delete;
+
+            ScopedTween _tween;
+            bool& _dead;
+        };
 
         /// Starts one tween of @p link seconds after another through `onComplete`, as many as @p remaining
         void ChainTweens(TweenManager& tweens, int remaining, int& finished) {
@@ -111,14 +146,13 @@ namespace BECore::Tests {
         int finished = 0;
         ChainTweens(tweens, kClipCount, finished);
 
-        for (int frame = 0; frame < kFramesForTheSequence; ++frame) {
+        for (int frame = 0; frame < kFramesForTheChain - 1; ++frame) {
             tweens.Advance(kThreeEighthsSecond);
         }
-        EXPECT_LT(finished, kClipCount);  // the timeline of the test above is done in these frames
+        EXPECT_LT(finished, kClipCount);  // the timeline of the test above is done in kFramesForTheSequence frames, the chain is not
 
         tweens.Advance(kThreeEighthsSecond);
         EXPECT_EQ(finished, kClipCount);
-        EXPECT_EQ(kFramesForTheChain, kFramesForTheSequence + 1);
     }
 
     TEST(TimelinePlayTest, NoCallDuringTheDelay) {
@@ -309,7 +343,7 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(handle->IsFinished());
         // The first iteration ends on kTo at half a second, the second one starts again from `from` and ends on kTo
-        EXPECT_EQ(values, (eastl::vector<float>{kTo, 0.0f, kTo / 2, kTo}));
+        EXPECT_EQ(values, (eastl::vector<float>{kTo, 0.0f, kHalfOfTo, kTo}));
     }
 
     TEST(TimelinePlayTest, ATimelineWithNoLengthCompletesOnTheFirstAdvanceAfterTheDelay) {
@@ -327,7 +361,7 @@ namespace BECore::Tests {
     }
 
     TEST(TimelinePlayTest, TwoFrameRatesOfATimeObjectEndWithTheSameValues) {
-        constexpr int kFrameRatesToCompare[] = {kFramesInASecond, kFramesInASecond / 4};
+        constexpr int kFrameRatesToCompare[] = {kFramesInASecond, kSlowFramesInASecond};
         eastl::vector<eastl::vector<int>> finishedByRate;
         for (const int framesPerSecond : kFrameRatesToCompare) {
             TweenManager tweens;
@@ -351,9 +385,8 @@ namespace BECore::Tests {
         eastl::vector<int> order;
         for (int index = 0; index < kManyTimelines; ++index) {
             Timeline timeline;
-            timeline.AppendCallback([&order, index] { order.push_back(index); });
             timeline.AppendDelay(kQuarterSecond);
-            tweens.Play(std::move(timeline));
+            tweens.Play(std::move(timeline), 0.0f, [&order, index] { order.push_back(index); });
         }
 
         tweens.Advance(kOneSecond);
@@ -362,6 +395,132 @@ namespace BECore::Tests {
         for (int index = 0; index < kManyTimelines; ++index) {
             EXPECT_EQ(order[index], index);
         }
+        EXPECT_EQ(tweens.GetActiveCount(), 0u);
+    }
+
+    TEST(TimelinePlayTest, ACallbackThatCancelsItsOwnRunStopsTheStep) {
+        TweenManager tweens;
+        Calls calls;
+        int completed = 0;
+        int cancelled = 0;
+        Log log;
+        IntrusivePtr<TweenHandle> handle;
+        handle = tweens.Play(MakeCancelling(calls, [&handle] { handle->Cancel(); }), 0.0f, [&completed] { ++completed; }, [&cancelled] { ++cancelled; });
+        Task<void> task = AwaitTimeline(handle, log);
+        task.Resume();
+
+        tweens.Advance(kOneSecond);  // one step covers every clip
+        tweens.Advance(kOneSecond);
+
+        EXPECT_EQ(calls, OnlyTheFirstTween());
+        EXPECT_EQ(cancelled, 1);
+        EXPECT_EQ(completed, 0);
+        EXPECT_EQ(handle->GetState(), TweenState::Cancelled);
+        EXPECT_EQ(log.results, (eastl::vector<TweenResult>{TweenResult::Cancelled}));
+        EXPECT_EQ(tweens.GetActiveCount(), 0u);
+    }
+
+    TEST(TimelinePlayTest, CancelAllFromAClipStopsTheStep) {
+        TweenManager tweens;
+        Calls calls;
+        int cancelled = 0;
+        Log log;
+        const auto handle = tweens.Play(MakeCancelling(calls, [&tweens] { tweens.CancelAll(); }), 0.0f, {}, [&cancelled] { ++cancelled; });
+        Task<void> task = AwaitTimeline(handle, log);
+        task.Resume();
+
+        tweens.Advance(kOneSecond);
+
+        EXPECT_EQ(calls, OnlyTheFirstTween());
+        EXPECT_EQ(cancelled, 1);
+        EXPECT_TRUE(handle->IsCancelled());
+        EXPECT_EQ(log.results, (eastl::vector<TweenResult>{TweenResult::Cancelled}));
+    }
+
+    TEST(TimelinePlayTest, AScopedTweenDestroyedInAClipStopsTheStep) {
+        TweenManager tweens;
+        Calls calls;
+        int cancelled = 0;
+        auto scoped = eastl::make_unique<ScopedTween>();
+        scoped->Reset(tweens.Play(MakeCancelling(calls, [&scoped] { scoped.reset(); }), 0.0f, {}, [&cancelled] { ++cancelled; }));
+
+        tweens.Advance(kOneSecond);
+
+        EXPECT_EQ(calls, OnlyTheFirstTween());
+        EXPECT_EQ(cancelled, 1);
+        EXPECT_EQ(tweens.GetActiveCount(), 0u);
+    }
+
+    TEST(TimelinePlayTest, AnOwnerThatDestroysItselfInAClipGetsNoSetterCallAfterwards) {
+        TweenManager tweens;
+        bool dead = false;
+        int callsAfterTheDeath = 0;
+        int callsBeforeTheDeath = 0;
+        auto owner = eastl::make_unique<DyingOwner>(dead);
+        const auto count = [&](const float&) { ++(dead ? callsAfterTheDeath : callsBeforeTheDeath); };
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTo, Settings(kQuarterSecond), count);
+        timeline.AppendCallback([&owner] { owner.reset(); });
+        timeline.Append<float>(0.0f, kTo, Settings(kQuarterSecond), count);
+        timeline.AppendCallback([&] { ++callsAfterTheDeath; });
+        owner->_tween.Reset(tweens.Play(std::move(timeline)));
+
+        tweens.Advance(kOneSecond);
+
+        EXPECT_TRUE(dead);
+        EXPECT_EQ(callsBeforeTheDeath, 1);
+        EXPECT_EQ(callsAfterTheDeath, 0);
+    }
+
+    TEST(TimelinePlayTest, ACancelInsideASubTimelineStopsTheWholeRun) {
+        TweenManager tweens;
+        Calls calls;
+        int cancelled = 0;
+        IntrusivePtr<TweenHandle> handle;
+        Timeline parent;
+        parent.Append(MakeCancelling(calls, [&handle] { handle->Cancel(); }));
+        parent.Append<float>(0.0f, kTo, Settings(kQuarterSecond), [&calls](const float& value) { calls.push_back({kParentAfterTheCancel, value}); });
+        handle = tweens.Play(std::move(parent), 0.0f, {}, [&cancelled] { ++cancelled; });
+
+        tweens.Advance(kOneSecond);
+
+        EXPECT_EQ(calls, OnlyTheFirstTween());  // neither the rest of the sub-timeline nor the clip after it
+        EXPECT_EQ(cancelled, 1);
+        EXPECT_TRUE(handle->IsCancelled());
+    }
+
+    TEST(TimelinePlayTest, ACancelAtTheEndOfAnIterationStartsNoNextIteration) {
+        TweenManager tweens;
+        Calls calls;
+        int cancelled = 0;
+        IntrusivePtr<TweenHandle> handle;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTo, Settings(kQuarterSecond), [&calls](const float& value) { calls.push_back({kBeforeTheCancel, value}); });
+        timeline.AppendCallback([&handle] { handle->Cancel(); });
+        timeline.Repeat(kClipCount);
+        handle = tweens.Play(std::move(timeline), 0.0f, {}, [&cancelled] { ++cancelled; });
+
+        tweens.Advance(kOneSecond);  // covers all four iterations
+
+        EXPECT_EQ(calls, OnlyTheFirstTween());  // the first iteration only: the cancel came before the restart
+        EXPECT_EQ(cancelled, 1);
+    }
+
+    TEST(TimelinePlayTest, ClearFromAClipStopsTheStepWithoutCallbacks) {
+        TweenManager tweens;
+        Calls calls;
+        int cancelled = 0;
+        Log log;
+        const auto handle = tweens.Play(MakeCancelling(calls, [&tweens] { tweens.Clear(); }), 0.0f, {}, [&cancelled] { ++cancelled; });
+        Task<void> task = AwaitTimeline(handle, log);
+        task.Resume();
+
+        tweens.Advance(kOneSecond);
+
+        EXPECT_EQ(calls, OnlyTheFirstTween());
+        EXPECT_EQ(cancelled, 0);  // Clear runs no callback and resumes no waiter
+        EXPECT_TRUE(log.results.empty());
+        EXPECT_TRUE(handle->IsCancelled());
         EXPECT_EQ(tweens.GetActiveCount(), 0u);
     }
 

@@ -76,6 +76,11 @@ namespace BECore {
          * consumed (moved into the tween). The rules 1 to 10 hold: @p delay passes with no call, a timeline with no length completes on the first
          * `Advance` after the delay, cancelling stops the timeline where it is (no value is set, the clips have no cancel callbacks of their own),
          * @p onCancel is the one callback of a cancelled run. A duration that is not finite counts as zero.
+         *
+         * A clip callback (or a setter) may cancel its own run: `Cancel`, `CancelAll`, `Clear`, a `ScopedTween` reset or destroyed, the owner
+         * destroying itself. The cancel callback and the waiters run inside that call, as for any tween; when the clip returns, the timeline
+         * stops (`Timeline::SetStopCheck`): no later clip of the same step, of a sub-timeline or of the next repeat gets a setter or callback call,
+         * so a setter that captures its owner is safe under rule 8. The clip that did the cancelling finishes its own call.
          */
         IntrusivePtr<TweenHandle> Play(Timeline timeline, float delay = 0.0f, eastl::function<void()> onComplete = {}, eastl::function<void()> onCancel = {});
 

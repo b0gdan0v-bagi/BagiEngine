@@ -30,6 +30,9 @@ namespace BECore {
      * A repeat finishes the iteration, then starts the next one (every clip runs from its `from` again) and goes on with the left-over
      * time. A timeline whose iteration has no length is done by the first call and does not loop.
      *
+     * With a stop check (`SetStopCheck`) `Evaluate` ends at the first clip boundary after the check answers true: the clip that was running
+     * finishes its call, no later clip (nor a later iteration, nor the rest of a sub-timeline) is visited.
+     *
      * There are no cancel callbacks per clip: cancelling a timeline stops it where it is, like a tween (the cancel callback of the whole
      * run is the one of the handle). Move-only: a copy of the callbacks and of a sub-timeline could not share state.
      */
@@ -90,6 +93,16 @@ namespace BECore {
          */
         void Evaluate(float time);
 
+        /**
+         * @brief Gives the timeline (and every sub-timeline it holds now) a predicate that says "stop": `Evaluate` asks it after every clip
+         * it visits, and when it answers true it returns at once, with no further setter or callback call in that call (nor in the later ones
+         * while it stays true). `TweenManager::Play` binds it to the handle, so a callback clip that cancels its own run ends the step right there.
+         *
+         * Set it after the last clip is added (a sub-timeline added later does not get it). The predicate is copied into every sub-timeline once,
+         * so keep it cheap and let it capture nothing that dies before the timeline does. An empty function (the default) never stops.
+         */
+        void SetStopCheck(eastl::function<bool()> shouldStop);
+
         /// The duration of one iteration times the repeats; zero for an empty timeline
         [[nodiscard]] float GetDuration() const;
 
@@ -130,11 +143,15 @@ namespace BECore {
         void VisitClips(float time);
         void VisitClip(Clip& clip, float time);
         void RestartClips();
+        [[nodiscard]] bool IsStopped() const {
+            return _shouldStop && _shouldStop();
+        }
 
-        eastl::vector<Clip> _clips;  // in order of start, equal starts in insertion order
-        size_t _cursor = 0;          // clips before it are done in this iteration
-        float _end = 0.0f;           // the end of the latest clip: the duration of one iteration
-        float _lastStart = 0.0f;     // the start of the last clip added: where `Join` puts the next one
+        eastl::function<bool()> _shouldStop;  // asked after every clip; true ends the `Evaluate` in progress
+        eastl::vector<Clip> _clips;           // in order of start, equal starts in insertion order
+        size_t _cursor = 0;                   // clips before it are done in this iteration
+        float _end = 0.0f;                    // the end of the latest clip: the duration of one iteration
+        float _lastStart = 0.0f;              // the start of the last clip added: where `Join` puts the next one
         int _repeat = 1;
         int _iteration = 0;
         bool _finished = false;

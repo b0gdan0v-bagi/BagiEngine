@@ -78,8 +78,17 @@ namespace BECore {
         return *this;
     }
 
+    void Timeline::SetStopCheck(eastl::function<bool()> shouldStop) {
+        for (Clip& clip : _clips) {
+            if (clip.sub) {
+                clip.sub->SetStopCheck(shouldStop);
+            }
+        }
+        _shouldStop = std::move(shouldStop);
+    }
+
     void Timeline::Evaluate(float time) {
-        if (_finished || std::isnan(time)) {
+        if (_finished || std::isnan(time) || IsStopped()) {
             return;
         }
         time = std::max(time, 0.0f);
@@ -87,7 +96,7 @@ namespace BECore {
         // No length: done by the first call, and nothing to loop over
         if (_end <= 0.0f) {
             VisitClips(0.0f);
-            _finished = true;
+            _finished = !IsStopped();
             return;
         }
 
@@ -98,7 +107,7 @@ namespace BECore {
             const float local = time - static_cast<float>(_iteration) * _end;
             if (_iteration + 1 >= _repeat) {
                 VisitClips(finishing ? _end : local);
-                _finished = finishing || local >= _end;
+                _finished = !IsStopped() && (finishing || local >= _end);
                 return;
             }
             if (!finishing && local < _end) {
@@ -107,6 +116,9 @@ namespace BECore {
             }
             // The iteration is over and another follows: finish it, start the next one and go on with the left-over time
             VisitClips(_end);
+            if (IsStopped()) {
+                return;
+            }
             RestartClips();
             ++_iteration;
         }
@@ -123,6 +135,9 @@ namespace BECore {
         for (size_t index = _cursor; index < _clips.size() && _clips[index].start <= time; ++index) {
             if (!_clips[index].done) {
                 VisitClip(_clips[index], time);
+                if (IsStopped()) {
+                    break;  // a clip cancelled the run: nothing after it is called
+                }
             }
         }
         while (_cursor < _clips.size() && _clips[_cursor].done) {
