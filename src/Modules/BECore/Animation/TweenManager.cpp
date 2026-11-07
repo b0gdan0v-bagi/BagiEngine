@@ -1,5 +1,7 @@
 #include "TweenManager.h"
 
+#include <cmath>
+
 namespace BECore {
 
     void TweenHandle::Cancel() {
@@ -16,6 +18,13 @@ namespace BECore {
         auto tween = New<TweenHandle>();
         tween->_manager = this;
         tween->_settings = settings;
+        // A NaN or infinite time would never finish the tween (NaN) or never reach its end: both count as zero
+        if (!std::isfinite(tween->_settings.duration)) {
+            tween->_settings.duration = 0.0f;
+        }
+        if (!std::isfinite(tween->_settings.delay)) {
+            tween->_settings.delay = 0.0f;
+        }
         tween->_apply = std::move(apply);
         tween->_onComplete = std::move(onComplete);
         tween->_onCancel = std::move(onCancel);
@@ -31,6 +40,43 @@ namespace BECore {
         tween._onCancel = nullptr;
     }
 
+    IntrusivePtr<TweenHandle> TweenManager::Delay(float seconds, eastl::function<void()> onComplete, eastl::function<void()> onCancel) {
+        // No setter: the same path as any tween (the loop calls `_apply` always, so it is a function that does nothing)
+        return StartErased({.duration = seconds}, [](float) {}, std::move(onComplete), std::move(onCancel));
+    }
+
+    TweenAwaiter TweenManager::Wait(float seconds) {
+        return AwaitTween(Delay(seconds));
+    }
+
+    IntrusivePtr<TweenHandle> TweenManager::Play(Timeline timeline, float delay, eastl::function<void()> onComplete, eastl::function<void()> onCancel) {
+        const float duration = timeline.GetDuration();
+        // `eastl::function` needs a copyable callable and a Timeline is move-only: the tween owns it through a shared pointer
+        auto owned = eastl::make_shared<Timeline>(std::move(timeline));
+        // The progress of the last step is exactly 1, so the last call is exactly the duration; the tween itself is linear
+        auto apply = [owned, duration](float progress) { owned->Evaluate(progress * duration); };
+        auto handle = StartErased({.duration = duration, .delay = delay, .ease = EaseType::Linear}, std::move(apply), std::move(onComplete), std::move(onCancel));
+        // A clip callback may cancel its own run (Cancel, CancelAll, a ScopedTween, Clear): the timeline then stops at the clip boundary, so no setter or
+        // callback runs after it. The raw pointer is safe: the timeline belongs to the setter, which belongs to the handle and is released with it
+        owned->SetStopCheck([tween = handle.Get()] { return tween->IsFinished(); });
+        return handle;
+    }
+
+    void TweenManager::ResumeWaiters(TweenHandle& tween) {
+        if (tween._waiters.empty()) {
+            return;
+        }
+        // A waiter may drop the last reference to the handle (it holds one in its awaiter), so keep it alive for the loop
+        const IntrusivePtr<TweenHandle> keepAlive(&tween);
+        // One at a time, taken out of the list before it runs: a waiter that is destroyed by an earlier one unregisters itself and is not resumed.
+        // A waiter that calls Clear() empties this list too (the tween is still in the lists of the manager), so the rest are dropped, not resumed
+        while (!tween._waiters.empty()) {
+            const std::coroutine_handle<> continuation = tween._waiters.front().continuation;
+            tween._waiters.erase(tween._waiters.begin());
+            continuation.resume();
+        }
+    }
+
     void TweenManager::CancelTween(TweenHandle& tween) {
         tween._state = TweenState::Cancelled;
         tween._manager = nullptr;
@@ -40,6 +86,7 @@ namespace BECore {
         if (onCancel) {
             onCancel();
         }
+        ResumeWaiters(tween);
     }
 
     void TweenManager::Step(TweenHandle& tween, float dt) {
@@ -71,6 +118,7 @@ namespace BECore {
         if (onComplete) {
             onComplete();
         }
+        ResumeWaiters(tween);
     }
 
     void TweenManager::Advance(float dt) {
@@ -89,28 +137,24 @@ namespace BECore {
         EndWalk();
     }
 
+    void TweenManager::CancelAllIn(const eastl::vector<IntrusivePtr<TweenHandle>>& list) {
+        // By index and to the size at the start: a callback may start a tween, which goes to the end of _pending and never moves _tweens
+        const size_t count = list.size();
+        for (size_t i = 0; i < count; ++i) {
+            const IntrusivePtr<TweenHandle> tween = list[i];
+            tween->Cancel();
+        }
+    }
+
     void TweenManager::CancelAll() {
         if (_walking) {
             // Inside a callback of this manager: cancel what runs now, the walk that called us compacts
-            // By index and to a fixed size: a callback may start a tween, which goes to the end of _pending
-            const size_t tweenCount = _tweens.size();
-            for (size_t i = 0; i < tweenCount; ++i) {
-                const IntrusivePtr<TweenHandle> tween = _tweens[i];
-                tween->Cancel();
-            }
-            const size_t pendingCount = _pending.size();
-            for (size_t i = 0; i < pendingCount; ++i) {
-                const IntrusivePtr<TweenHandle> tween = _pending[i];
-                tween->Cancel();
-            }
+            CancelAllIn(_tweens);
+            CancelAllIn(_pending);
             return;
         }
         _walking = true;
-        const size_t count = _tweens.size();
-        for (size_t i = 0; i < count; ++i) {
-            const IntrusivePtr<TweenHandle> tween = _tweens[i];
-            tween->Cancel();
-        }
+        CancelAllIn(_tweens);
         EndWalk();
     }
 
@@ -133,6 +177,7 @@ namespace BECore {
             }
             tween->_manager = nullptr;
             ReleaseCallbacks(*tween);
+            tween->_waiters.clear();  // never resumed: the coroutine may use what is gone already
         };
         for (const auto& tween : _tweens) {
             drop(tween);
