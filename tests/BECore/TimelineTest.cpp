@@ -1,7 +1,6 @@
 #include <BECore/Animation/Timeline.h>
 #include <cmath>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -26,6 +25,11 @@ namespace BECore::Tests {
         constexpr float kThirty = 30.0f;
         constexpr float kQuadInAtHalf = 0.25f;  // Ease(QuadIn, 0.5)
         constexpr int kThree = 3;
+        constexpr int kFive = 5;
+        constexpr int kHundred = 100;
+        constexpr float kTenth = 0.1f;  // not a power of two: the sums round
+        constexpr float kThirtyFiveHundredths = 0.35f;
+        constexpr Color kTargetColor{200, 100, 50, 255};
 
         TweenSettings Settings(float duration, float delay = 0.0f, EaseType ease = EaseType::Linear) {
             return {duration, delay, ease};
@@ -241,17 +245,17 @@ namespace BECore::Tests {
         Color color;
         Timeline timeline;
         timeline.Append<Vec2>({0.0f, 0.0f}, {kTen, kTwenty}, Settings(kQuarter), [&](const Vec2& value) { position = value; });
-        timeline.Join<Color>({0, 0, 0, 0}, {200, 100, 50, 255}, Settings(kQuarter), [&](const Color& value) { color = value; });
+        timeline.Join<Color>({0, 0, 0, 0}, kTargetColor, Settings(kQuarter), [&](const Color& value) { color = value; });
 
         timeline.Evaluate(kEighth);
         EXPECT_EQ(position, Vec2(kTen / 2, kTwenty / 2));
-        EXPECT_EQ(color.r, 100);
-        EXPECT_EQ(color.g, 50);
+        EXPECT_EQ(color.r, kTargetColor.r / 2);
+        EXPECT_EQ(color.g, kTargetColor.g / 2);
 
         timeline.Evaluate(kQuarter);
         EXPECT_EQ(position, Vec2(kTen, kTwenty));
-        EXPECT_EQ(color.r, 200);
-        EXPECT_EQ(color.a, 255);
+        EXPECT_EQ(color.r, kTargetColor.r);
+        EXPECT_EQ(color.a, kTargetColor.a);
     }
 
     TEST(TimelineTest, AClipDelayLengthensItsSlot) {
@@ -348,7 +352,7 @@ namespace BECore::Tests {
     }
 
     TEST(TimelineTest, ARepeatBelowOneIsOne) {
-        for (const int count : {0, -1, -100}) {
+        for (const int count : {0, -1, -kHundred}) {
             Calls calls;
             Timeline timeline;
             timeline.AppendDelay(kQuarter).AppendCallback(calls.Callback(1)).Repeat(count);
@@ -369,7 +373,7 @@ namespace BECore::Tests {
 
         Calls looped;
         Timeline repeated;
-        repeated.AppendCallback(looped.Callback(1)).Repeat(5);
+        repeated.AppendCallback(looped.Callback(1)).Repeat(kFive);
         repeated.Evaluate(kOne);
         EXPECT_TRUE(repeated.IsFinished());
         EXPECT_EQ(looped.ids.size(), 1u);
@@ -456,6 +460,59 @@ namespace BECore::Tests {
         EXPECT_EQ(moved.GetDuration(), kQuarter);
         moved.Evaluate(kQuarter);
         EXPECT_EQ(a.value, kTen);
+    }
+
+    TEST(TimelineTest, ARepeatedTimelineThatIsNotAPowerOfTwoEndsExactlyAtItsDuration) {
+        // 0.35 * 3 rounds: the last iteration's local time falls a hair under the iteration length
+        Property a;
+        Timeline timeline;
+        timeline.Append<float>(0.0f, kTen, Settings(kThirtyFiveHundredths), a.Setter()).Repeat(kThree);
+        timeline.Evaluate(timeline.GetDuration());
+        EXPECT_EQ(a.value, kTen);
+        EXPECT_TRUE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, ARepeatedTimelineFiresEveryCallbackAtItsDuration) {
+        Calls calls;
+        Timeline timeline;
+        timeline.AppendDelay(kTenth).AppendCallback(calls.Callback(1)).Repeat(kFive);
+        timeline.Evaluate(timeline.GetDuration());
+        EXPECT_EQ(calls.ids.size(), static_cast<size_t>(kFive));
+        EXPECT_TRUE(timeline.IsFinished());
+    }
+
+    TEST(TimelineTest, ARepeatedSubTimelineThatIsNotAPowerOfTwoFinishesItsParent) {
+        Calls calls;
+        Property a;
+        Timeline sub;
+        sub.Append<float>(0.0f, kTen, Settings(kThirtyFiveHundredths), a.Setter()).AppendCallback(calls.Callback(1)).Repeat(kThree);
+        Timeline timeline;
+        timeline.AppendDelay(kTenth).Append(std::move(sub));
+        timeline.Evaluate(timeline.GetDuration());
+        EXPECT_EQ(calls.ids.size(), static_cast<size_t>(kThree));
+        EXPECT_EQ(a.value, kTen);
+        EXPECT_TRUE(timeline.IsFinished());
+
+        Calls fives;
+        Timeline sub2;
+        sub2.AppendDelay(kTenth).AppendCallback(fives.Callback(1)).Repeat(kFive);
+        Timeline other;
+        other.Append(std::move(sub2));
+        other.Evaluate(other.GetDuration());
+        EXPECT_EQ(fives.ids.size(), static_cast<size_t>(kFive));
+        EXPECT_TRUE(other.IsFinished());
+    }
+
+    TEST(TimelineTest, AJoinAfterASpacerStartsWhereTheSpacerStarts) {
+        Property a;
+        Timeline timeline;
+        timeline.AppendDelay(kHalf).Join<float>(0.0f, kTen, Settings(kHalf), a.Setter());
+        EXPECT_EQ(timeline.GetDuration(), kHalf);
+        timeline.Evaluate(kQuarter);
+        EXPECT_EQ(a.value, kTen / 2);
+        timeline.Evaluate(kHalf);
+        EXPECT_EQ(a.value, kTen);
+        EXPECT_TRUE(timeline.IsFinished());
     }
 
 }  // namespace BECore::Tests

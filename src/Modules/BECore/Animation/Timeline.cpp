@@ -91,14 +91,17 @@ namespace BECore {
             return;
         }
 
+        // Decided once, from the duration the owner knows: the subtraction below can round a hair under `_end` in the last iteration,
+        // and a call at `GetDuration()` must still finish every clip with its exact final value
+        const bool finishing = time >= GetDuration();
         while (true) {
             const float local = time - static_cast<float>(_iteration) * _end;
             if (_iteration + 1 >= _repeat) {
-                VisitClips(local);
-                _finished = local >= _end;
+                VisitClips(finishing ? _end : local);
+                _finished = finishing || local >= _end;
                 return;
             }
-            if (local < _end) {
+            if (!finishing && local < _end) {
                 VisitClips(local);
                 return;
             }
