@@ -2,7 +2,6 @@
 #include <BECore/Animation/TweenManager.h>
 #include <BECore/Time/Time.h>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -14,6 +13,13 @@ namespace BECore::Tests {
         constexpr float kHalfSecond = 0.5f;
         constexpr float kQuarterSecond = 0.25f;
         constexpr float kTo = 100.0f;
+        constexpr float kHalfTo = 50.0f;     // a linear tween of kTo at half of its time
+        constexpr float kQuarterTo = 25.0f;  // ... at a quarter of its time
+        constexpr float kSixteenthSecond = 0.0625f;
+        constexpr float kSixtyFourthSecond = 0.015625f;
+        constexpr float kHugeFrame = 1000.0f;
+        constexpr int kLaterTweenCount = 2;
+        constexpr int kFramesInASecond = 32;
 
         TweenSettings Settings(float duration, float delay = 0.0f, EaseType ease = EaseType::Linear) {
             return {duration, delay, ease};
@@ -61,7 +67,7 @@ namespace BECore::Tests {
         tweens.Advance(kHalfSecond);
 
         ASSERT_EQ(recorder.values.size(), 1u);
-        EXPECT_EQ(recorder.values[0], 50.0f);
+        EXPECT_EQ(recorder.values[0], kHalfTo);
         EXPECT_EQ(handle->GetState(), TweenState::Running);
         EXPECT_EQ(handle->GetProgress(), 0.5f);
         EXPECT_EQ(recorder.completed, 0);
@@ -118,12 +124,12 @@ namespace BECore::Tests {
         const auto handle = recorder.Start(tweens, Settings(kOneSecond, kHalfSecond));
 
         tweens.Advance(kQuarterSecond);
-        tweens.Advance(kQuarterSecond - 0.0625f);
+        tweens.Advance(kQuarterSecond - kSixteenthSecond);
         EXPECT_TRUE(recorder.values.empty());
         EXPECT_EQ(handle->GetState(), TweenState::Waiting);
         EXPECT_EQ(handle->GetProgress(), 0.0f);
 
-        tweens.Advance(0.0625f);  // exactly at the end of the delay: progress 0, the value is `from`
+        tweens.Advance(kSixteenthSecond);  // exactly at the end of the delay: progress 0, the value is `from`
         ASSERT_EQ(recorder.values.size(), 1u);
         EXPECT_EQ(recorder.values[0], 0.0f);
         EXPECT_EQ(handle->GetState(), TweenState::Running);
@@ -137,7 +143,7 @@ namespace BECore::Tests {
         tweens.Advance(kHalfSecond + kQuarterSecond);  // 0.25 s of delay, then 0.5 s of the tween
 
         ASSERT_EQ(recorder.values.size(), 1u);
-        EXPECT_EQ(recorder.values[0], 50.0f);
+        EXPECT_EQ(recorder.values[0], kHalfTo);
     }
 
     TEST(TweenManagerTest, ZeroAndNegativeDurationCompleteOnTheFirstAdvance) {
@@ -147,7 +153,7 @@ namespace BECore::Tests {
             recorder.Start(tweens, Settings(duration));
             EXPECT_TRUE(recorder.values.empty());
 
-            tweens.Advance(0.015625f);
+            tweens.Advance(kSixtyFourthSecond);
 
             ASSERT_EQ(recorder.values.size(), 1u);
             EXPECT_EQ(recorder.values[0], kTo);
@@ -182,7 +188,7 @@ namespace BECore::Tests {
         EXPECT_EQ(handle->GetState(), TweenState::Waiting);
 
         tweens.Advance(kHalfSecond);
-        EXPECT_EQ(recorder.values.back(), 50.0f);
+        EXPECT_EQ(recorder.values.back(), kHalfTo);
     }
 
     TEST(TweenManagerTest, CompletionRunsOnceAfterTheLastValueAndNothingMoreAfterIt) {
@@ -395,11 +401,11 @@ namespace BECore::Tests {
         };
         tweens.Start<float>(0.0f, kTo, Settings(kQuarterSecond), [&values](const float&) { ++values; }, chain);
 
-        tweens.Advance(1000.0f);
+        tweens.Advance(kHugeFrame);
 
         EXPECT_EQ(started, 1);  // one link per Advance
         EXPECT_EQ(values, 1);
-        tweens.Advance(1000.0f);
+        tweens.Advance(kHugeFrame);
         EXPECT_EQ(started, 2);
         EXPECT_EQ(values, 2);
     }
@@ -523,7 +529,7 @@ namespace BECore::Tests {
                 tweens.CancelAll();
             });
         eastl::vector<IntrusivePtr<TweenHandle>> later;
-        for (int id = 1; id <= 2; ++id) {
+        for (int id = 1; id <= kLaterTweenCount; ++id) {
             later.push_back(tweens.Start<float>(0.0f, kTo, Settings(kOneSecond), [&](const float&) { ++laterSetterCalls; }, {}, [&cancelOrder, id] { cancelOrder.push_back(id); }));
         }
 
@@ -555,7 +561,7 @@ namespace BECore::Tests {
         tweens.Advance(kQuarterSecond);
 
         ASSERT_EQ(next.values.size(), 1u);  // one step of the outer Advance; the inner one would have finished it
-        EXPECT_EQ(next.values[0], 25.0f);
+        EXPECT_EQ(next.values[0], kQuarterTo);
         EXPECT_EQ(next.completed, 0);
     }
 
@@ -642,12 +648,12 @@ namespace BECore::Tests {
         Recorder recorder;
         recorder.Start(tweens, Settings(kOneSecond));
 
-        for (int frame = 0; frame < 32; ++frame) {
-            time.Advance(1.0 / 32.0);
+        for (int frame = 0; frame < kFramesInASecond; ++frame) {
+            time.Advance(1.0 / kFramesInASecond);
             tweens.Advance(time.GetDeltaTime());
         }
 
-        EXPECT_EQ(recorder.values.size(), 32u);
+        EXPECT_EQ(recorder.values.size(), static_cast<size_t>(kFramesInASecond));
         EXPECT_EQ(recorder.values.back(), kTo);
         EXPECT_EQ(recorder.completed, 1);
     }
@@ -679,6 +685,37 @@ namespace BECore::Tests {
         tweens.Advance(kOneSecond);
 
         EXPECT_EQ(completed, 1);
+    }
+
+    TEST(TweenManagerTest, ANotFiniteDurationCountsAsZero) {
+        for (const float duration : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
+            TweenManager tweens;
+            Recorder recorder;
+            const auto handle = recorder.Start(tweens, Settings(duration));
+
+            tweens.Advance(kSixtyFourthSecond);
+
+            ASSERT_EQ(recorder.values.size(), 1u) << duration;
+            EXPECT_EQ(recorder.values[0], kTo);
+            EXPECT_EQ(recorder.completed, 1);
+            EXPECT_EQ(handle->GetState(), TweenState::Completed);
+            EXPECT_EQ(tweens.GetActiveCount(), 0u);
+        }
+    }
+
+    TEST(TweenManagerTest, ANotFiniteDelayCountsAsZero) {
+        for (const float delay : {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()}) {
+            TweenManager tweens;
+            Recorder recorder;
+            const auto handle = recorder.Start(tweens, Settings(kQuarterSecond, delay));
+
+            tweens.Advance(kQuarterSecond);
+
+            ASSERT_EQ(recorder.values.size(), 1u) << delay;
+            EXPECT_EQ(recorder.values[0], kTo);
+            EXPECT_EQ(handle->GetState(), TweenState::Completed);
+            EXPECT_EQ(recorder.completed, 1);
+        }
     }
 
 }  // namespace BECore::Tests

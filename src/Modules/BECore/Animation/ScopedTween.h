@@ -5,10 +5,12 @@
 namespace BECore {
 
     /**
-     * @brief Owns one tween and cancels it when it goes out of scope: the member of the object whose fields the setter writes.
+     * @brief Owns one tween and cancels it when it goes out of scope: a member of the object that owns the tween (and of the object the setter
+     * points at, when it captures a raw pointer).
      *
      * The destructor, `Reset` and a move-assignment CANCEL the tween they held, and the cancel callback of that tween runs (like
-     * `TweenHandle::Cancel`); a tween that has finished already is not touched. Not copyable. Main thread only.
+     * `TweenHandle::Cancel`); a tween that has finished already is not touched. A coroutine that awaits the tween is resumed with `Cancelled`
+     * INSIDE that cancel, so inside the destructor (see `TweenAwaiter`). Not copyable. Main thread only.
      */
     class ScopedTween {
     public:

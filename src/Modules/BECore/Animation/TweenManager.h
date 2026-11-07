@@ -2,6 +2,7 @@
 
 #include <BECore/Animation/Lerp.h>
 #include <BECore/Animation/Tween.h>
+#include <BECore/Animation/TweenAwaiter.h>
 
 namespace BECore {
 
@@ -24,6 +25,10 @@ namespace BECore {
      *    callbacks point at may be gone.
      * 8. A setter that captures a pointer to an object must be cancelled before that object dies (hold a `ScopedTween` in the owner).
      *    Dropping a handle does not stop its tween.
+     * 9. A coroutine that awaits a tween (`AwaitTween`, `Wait`) is resumed inline, in the order the waiters registered, right after the
+     *    `onComplete` / `onCancel` of the tween, so it has all the rules of a callback (a tween it starts first runs on the NEXT `Advance`).
+     *    It is resumed from `Advance`, so on the thread of `Advance` and on game time, never from the wall-clock scheduler of the task system.
+     * 10. `Clear` and the destructor never resume a waiter.
      *
      * The destructor drops the tweens like `Clear`: no callbacks, the surviving handles read Cancelled. Destroying the manager from
      * inside one of its callbacks is not supported.
@@ -40,8 +45,10 @@ namespace BECore {
          * @brief Starts a tween of a value of type @p T from @p from to @p to; @p onValue gets the interpolated value on every step.
          *
          * @p onComplete runs once after the last setter call (which is exactly @p to), @p onCancel once when the tween is cancelled.
-         * The first step comes from the next `Advance`, also when the tween is started inside a callback.
+         * The first step comes from the next `Advance`, also when the tween is started inside a callback. A @p duration or a delay that is
+         * not finite counts as zero.
          */
+        // `type_identity_t` keeps T out of the deduction from the setter: T comes from `from` and `to` alone
         template <Tweenable T>
         IntrusivePtr<TweenHandle> Start(T from, T to, TweenSettings settings, eastl::function<void(const std::type_identity_t<T>&)> onValue, eastl::function<void()> onComplete = {},
                                         eastl::function<void()> onCancel = {}) {
@@ -52,6 +59,13 @@ namespace BECore {
             };
             return StartErased(settings, std::move(apply), std::move(onComplete), std::move(onCancel));
         }
+
+        /// A tween with no setter that only lasts @p seconds of game time (the frame time given to `Advance`): @p onComplete runs at the end, @p onCancel when it is cancelled
+        IntrusivePtr<TweenHandle> Delay(float seconds, eastl::function<void()> onComplete = {}, eastl::function<void()> onCancel = {});
+
+        /// `AwaitTween(Delay(seconds))`: `co_await tweens.Wait(0.5f)` suspends the coroutine for 0.5 s of game time. Game time, not wall-clock:
+        /// `DelaySec` of the task system is a scheduler job on `steady_clock` that ignores the frame clamp and the manual clock
+        [[nodiscard]] TweenAwaiter Wait(float seconds);
 
         /// Advances every tween by @p dt seconds (the frame time). A @p dt of zero, negative or NaN does nothing, and so does a call from a callback that runs during `Advance` or `CancelAll` (the
         /// walk is on). A cancel callback run by a direct `TweenHandle::Cancel()` outside a walk may call it, and it advances.
@@ -74,11 +88,14 @@ namespace BECore {
         void CancelTween(TweenHandle& tween);
         void Step(TweenHandle& tween, float dt);
         void ReleaseCallbacks(TweenHandle& tween);
+        void ResumeWaiters(TweenHandle& tween);
+        void CancelFirst(const eastl::vector<IntrusivePtr<TweenHandle>>& list, size_t count);
         void EndWalk();
 
         eastl::vector<IntrusivePtr<TweenHandle>> _tweens;   // in start order; a finished one stays until the walk ends
         eastl::vector<IntrusivePtr<TweenHandle>> _pending;  // started while a walk is on: merged when it ends
         TweenHandle* _stepping = nullptr;                   // the tween whose setter runs now: its callback must not be destroyed under it
+        size_t _clearCount = 0;                             // grows with every Clear: a waiter resumed after one is dropped instead
         bool _walking = false;                              // Advance or CancelAll runs: the lists must not move
     };
 

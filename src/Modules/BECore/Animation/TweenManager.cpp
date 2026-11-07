@@ -1,5 +1,7 @@
 #include "TweenManager.h"
 
+#include <cmath>
+
 namespace BECore {
 
     void TweenHandle::Cancel() {
@@ -16,6 +18,13 @@ namespace BECore {
         auto tween = New<TweenHandle>();
         tween->_manager = this;
         tween->_settings = settings;
+        // A NaN or infinite time would never finish the tween (NaN) or never reach its end: both count as zero
+        if (!std::isfinite(tween->_settings.duration)) {
+            tween->_settings.duration = 0.0f;
+        }
+        if (!std::isfinite(tween->_settings.delay)) {
+            tween->_settings.delay = 0.0f;
+        }
         tween->_apply = std::move(apply);
         tween->_onComplete = std::move(onComplete);
         tween->_onCancel = std::move(onCancel);
@@ -31,6 +40,34 @@ namespace BECore {
         tween._onCancel = nullptr;
     }
 
+    IntrusivePtr<TweenHandle> TweenManager::Delay(float seconds, eastl::function<void()> onComplete, eastl::function<void()> onCancel) {
+        // No setter: the same path as any tween (the loop calls `_apply` always, so it is a function that does nothing)
+        return StartErased({.duration = seconds}, [](float) {}, std::move(onComplete), std::move(onCancel));
+    }
+
+    TweenAwaiter TweenManager::Wait(float seconds) {
+        return AwaitTween(Delay(seconds));
+    }
+
+    void TweenManager::ResumeWaiters(TweenHandle& tween) {
+        if (tween._waiters.empty()) {
+            return;
+        }
+        // A waiter may drop the last reference to the handle (it holds one in its awaiter), so keep it alive for the loop
+        const IntrusivePtr<TweenHandle> keepAlive(&tween);
+        const size_t clearsAtStart = _clearCount;
+        // One at a time, taken out of the list before it runs: a waiter that is destroyed by an earlier one unregisters itself and is not resumed
+        while (!tween._waiters.empty()) {
+            if (_clearCount != clearsAtStart) {
+                tween._waiters.clear();  // a waiter called Clear(): the rest are dropped, not resumed
+                return;
+            }
+            const std::coroutine_handle<> continuation = tween._waiters.front().continuation;
+            tween._waiters.erase(tween._waiters.begin());
+            continuation.resume();
+        }
+    }
+
     void TweenManager::CancelTween(TweenHandle& tween) {
         tween._state = TweenState::Cancelled;
         tween._manager = nullptr;
@@ -40,6 +77,7 @@ namespace BECore {
         if (onCancel) {
             onCancel();
         }
+        ResumeWaiters(tween);
     }
 
     void TweenManager::Step(TweenHandle& tween, float dt) {
@@ -71,6 +109,7 @@ namespace BECore {
         if (onComplete) {
             onComplete();
         }
+        ResumeWaiters(tween);
     }
 
     void TweenManager::Advance(float dt) {
@@ -89,28 +128,23 @@ namespace BECore {
         EndWalk();
     }
 
+    void TweenManager::CancelFirst(const eastl::vector<IntrusivePtr<TweenHandle>>& list, size_t count) {
+        // By index and to a fixed size: a callback may start a tween, which goes to the end of _pending and never moves _tweens
+        for (size_t i = 0; i < count; ++i) {
+            const IntrusivePtr<TweenHandle> tween = list[i];
+            tween->Cancel();
+        }
+    }
+
     void TweenManager::CancelAll() {
         if (_walking) {
             // Inside a callback of this manager: cancel what runs now, the walk that called us compacts
-            // By index and to a fixed size: a callback may start a tween, which goes to the end of _pending
-            const size_t tweenCount = _tweens.size();
-            for (size_t i = 0; i < tweenCount; ++i) {
-                const IntrusivePtr<TweenHandle> tween = _tweens[i];
-                tween->Cancel();
-            }
-            const size_t pendingCount = _pending.size();
-            for (size_t i = 0; i < pendingCount; ++i) {
-                const IntrusivePtr<TweenHandle> tween = _pending[i];
-                tween->Cancel();
-            }
+            CancelFirst(_tweens, _tweens.size());
+            CancelFirst(_pending, _pending.size());
             return;
         }
         _walking = true;
-        const size_t count = _tweens.size();
-        for (size_t i = 0; i < count; ++i) {
-            const IntrusivePtr<TweenHandle> tween = _tweens[i];
-            tween->Cancel();
-        }
+        CancelFirst(_tweens, _tweens.size());
         EndWalk();
     }
 
@@ -127,12 +161,14 @@ namespace BECore {
     }
 
     void TweenManager::Clear() {
+        ++_clearCount;
         const auto drop = [this](const IntrusivePtr<TweenHandle>& tween) {
             if (!tween->IsFinished()) {
                 tween->_state = TweenState::Cancelled;
             }
             tween->_manager = nullptr;
             ReleaseCallbacks(*tween);
+            tween->_waiters.clear();  // never resumed: the coroutine may use what is gone already
         };
         for (const auto& tween : _tweens) {
             drop(tween);
