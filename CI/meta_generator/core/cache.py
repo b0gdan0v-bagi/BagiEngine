@@ -11,7 +11,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Set
 
-from .models import FileMetadata, ClassData, EnumData
+from .models import FileMetadata, ClassData, EnumData, ParseWarning
 
 
 class MetadataCache:
@@ -22,7 +22,7 @@ class MetadataCache:
     to detect when files need to be re-parsed.
     """
     
-    CACHE_VERSION = "2.1"  # 2.1: ClassData.is_abstract
+    CACHE_VERSION = "2.3"  # 2.1: ClassData.is_abstract; 2.2: FileMetadata.warnings; 2.3: parser fixes (inline bodies, namespace A::B, real lines)
     
     def __init__(self, cache_path: Path):
         """
@@ -129,7 +129,8 @@ class MetadataCache:
         
         return current_hash != cached_hash
     
-    def update_file(self, path: Path, classes: List[ClassData], enums: List[EnumData]) -> None:
+    def update_file(self, path: Path, classes: List[ClassData], enums: List[EnumData],
+                    warnings: Optional[List[ParseWarning]] = None) -> None:
         """
         Update cache with new file metadata.
         
@@ -137,6 +138,7 @@ class MetadataCache:
             path: Path to source file
             classes: List of classes found in file
             enums: List of enums found in file
+            warnings: Reflection markers the parser skipped (replayed on every run)
         """
         path_str = str(path.resolve())
         
@@ -145,7 +147,8 @@ class MetadataCache:
             content_hash=self.get_file_hash(path),
             last_scanned=datetime.now().isoformat(),
             classes=classes,
-            enums=enums
+            enums=enums,
+            warnings=list(warnings or []),
         )
         
         self.files[path_str] = metadata
