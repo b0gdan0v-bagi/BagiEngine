@@ -1,13 +1,11 @@
 #pragma once
 
-#include <BECore/Math/Color.h>
-#include <BECore/Math/Rect.h>
-#include <BECore/Renderer/ITexture.h>
 #include <BECore/Scene/Components/SpriteFit.h>
 
 namespace BECore {
 
     class IComponent;
+    class ITexture;
 
     /**
      * The render data of a node in the scene's registry: components of the node's entity, written by SceneDrawSystem::Run() and
@@ -21,13 +19,13 @@ namespace BECore {
     struct TransformData {
         float x = 0.0f;
         float y = 0.0f;
-        float width = 1.0f;
-        float height = 1.0f;
+        float width = 0.0f;
+        float height = 0.0f;
     };
 
     /// Mirror of QuadRendererComponent: the fill color of the node's rect. @c owner is the component it was copied from.
     struct QuadDrawData {
-        Color color{255, 0, 0, 255};
+        Color color{};
         const IComponent* owner = nullptr;
     };
 
