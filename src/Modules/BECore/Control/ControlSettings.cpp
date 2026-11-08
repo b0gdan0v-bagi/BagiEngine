@@ -8,7 +8,8 @@ namespace BECore {
 
         /// The paths of the ApplicationConfig fields that are control settings (the names of the attributes)
         bool IsControlField(eastl::string_view path) {
-            return path == "control" || path == "controlPort" || path == "manualClock" || path == "headless";
+            using namespace ApplicationConfigFields;
+            return path == kControl || path == kControlPort || path == kManualClock || path == kHeadless;
         }
 
         /// The whole of @p text (the value of --control-port=N) as a port; nullopt for an empty text, a sign, a trailing character or a number above 65535

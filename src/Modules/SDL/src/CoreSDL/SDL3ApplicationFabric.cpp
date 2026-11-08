@@ -1,5 +1,6 @@
 #include "SDL3ApplicationFabric.h"
 
+#include <BECore/Application/ApplicationConfig.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Renderer/IRenderer.h>
@@ -16,21 +17,22 @@ namespace BECore {
 
     }  // namespace
 
-    bool SDL3ApplicationFabric::Create(const XmlNode& configNode, const ApplicationOptions& options) {
-        auto configPath = configNode.ParseAttribute<eastl::string_view>("path");
-        if (!configPath || configPath->empty()) {
+    bool SDL3ApplicationFabric::Create(const ApplicationConfig& config, const ApplicationOptions& options) {
+        if (config._path.empty()) {
+            LOG_ERROR("ApplicationConfig: no path (the window config of SDL3ApplicationFabric)");
             return false;
         }
 
         auto window = BECore::New<SDLMainWindow>();
         window->SetHeadless(options.headless);
-        if (!window->Initialize(*configPath)) {
+        if (!window->Initialize(eastl::string_view(config._path.data(), config._path.size()))) {
             return false;
         }
         CoreManager::GetInstance().GetMainWindowManager().SetMainWindow(window);
 
         // Headless drawing is the SDL software renderer: the Vulkan backend needs a real surface
-        const auto rendererTypeName = options.headless ? eastl::string_view(kSdlRendererName) : configNode.ParseAttribute<eastl::string_view>("renderer").value_or(kSdlRendererName);
+        const bool defaultRenderer = options.headless || config._renderer.empty();
+        const eastl::string_view rendererTypeName = defaultRenderer ? kSdlRendererName : eastl::string_view(config._renderer.data(), config._renderer.size());
         if (options.headless) {
             LOG_INFO("Headless: no window, drawing with {}"_format(rendererTypeName));
         }

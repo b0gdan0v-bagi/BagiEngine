@@ -14,12 +14,16 @@ namespace BECore {
         return load;
     }
 
-    ApplicationConfigLoad LoadApplicationConfig() {
-        const auto deserializer = CoreManager::GetConfigManager().CreateDeserializer("ApplicationConfig"_intern);
+    ApplicationConfigLoad LoadApplicationConfig(PoolString configName) {
+        const auto deserializer = CoreManager::GetConfigManager().CreateDeserializer(configName);
         if (!deserializer) {
             return {};
         }
         return LoadApplicationConfig(*deserializer);
+    }
+
+    ApplicationConfigLoad LoadApplicationConfig() {
+        return LoadApplicationConfig("ApplicationConfig"_intern);
     }
 
 }  // namespace BECore

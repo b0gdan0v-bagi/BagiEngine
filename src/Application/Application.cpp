@@ -47,7 +47,7 @@ namespace BECore {
             return false;
         }
 
-        // What is left are the errors of `mode` and `type` (the control ones stopped the start-up above)
+        // The control fields stopped the start-up above; what is left is every other field (`mode`, `type`, `renderer`, `path`)
         LogDeserializeErrors("ApplicationConfig", load.errors);
 
         // Before the first frame: the loop reads it from the start
@@ -65,7 +65,7 @@ namespace BECore {
 
         ApplicationOptions options;
         options.headless = controlSettings->headless;
-        if (!ApplicationFabric::GetInstance().Create(options)) {
+        if (!ApplicationFabric::GetInstance().Create(load.config, options)) {
             return false;
         }
 
