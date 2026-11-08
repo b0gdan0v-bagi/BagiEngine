@@ -1,10 +1,17 @@
 #include "ControlSettings.h"
 
+#include <BECore/Application/ApplicationConfig.h>
+
 namespace BECore {
 
     namespace {
 
-        /// The whole of @p text as a port; nullopt for an empty text, a sign, a trailing character or a number above 65535
+        /// The paths of the ApplicationConfig fields that are control settings (the names of the attributes)
+        bool IsControlField(eastl::string_view path) {
+            return path == "control" || path == "controlPort" || path == "manualClock" || path == "headless";
+        }
+
+        /// The whole of @p text (the value of --control-port=N) as a port; nullopt for an empty text, a sign, a trailing character or a number above 65535
         std::optional<uint16_t> ParsePort(eastl::string_view text) {
             uint16_t port = 0;
             const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), port);
@@ -20,39 +27,21 @@ namespace BECore {
 
     }  // namespace
 
-    std::expected<ControlSettings, ControlError> ResolveControlSettings(eastl::span<const eastl::string> args, const XmlNode& applicationConfig) {
+    std::expected<ControlSettings, ControlError> ResolveControlSettings(eastl::span<const eastl::string> args, const ApplicationConfigLoad& file) {
+        // The file first, so that the command line overrides it. A bad value is an error even when the API is off or a flag would override it
+        for (const DeserializeError& error : file.errors) {
+            if (IsControlField(error.path.ToStringView())) {
+                return std::unexpected(InvalidSetting(Format("ApplicationConfig: {}: {}", error.path.ToStringView(), error.errorMessage.ToStringView())));
+            }
+        }
+
         ControlSettings settings;
+        settings.enabled = file.config._control;
+        settings.port = file.config._controlPort;
+        settings.manualClock = file.config._manualClock;
+        settings.headless = file.config._headless;
 
-        // Attributes first, so that the command line overrides them
-        if (const auto text = applicationConfig.GetAttribute(ControlAttributes::kControl)) {
-            const auto enabled = applicationConfig.ParseAttribute<bool>(ControlAttributes::kControl);
-            if (!enabled) {
-                return std::unexpected(InvalidSetting(Format("ApplicationConfig: {}=\"{}\" is not a boolean (true, false, 1 or 0)", ControlAttributes::kControl, *text)));
-            }
-            settings.enabled = *enabled;
-        }
-        if (const auto text = applicationConfig.GetAttribute(ControlAttributes::kControlPort)) {
-            const auto port = ParsePort(*text);
-            if (!port) {
-                return std::unexpected(InvalidSetting(Format("ApplicationConfig: {}=\"{}\" is not a port (0 to 65535)", ControlAttributes::kControlPort, *text)));
-            }
-            settings.port = *port;
-        }
-        if (const auto text = applicationConfig.GetAttribute(ControlAttributes::kManualClock)) {
-            const auto manualClock = applicationConfig.ParseAttribute<bool>(ControlAttributes::kManualClock);
-            if (!manualClock) {
-                return std::unexpected(InvalidSetting(Format("ApplicationConfig: {}=\"{}\" is not a boolean (true, false, 1 or 0)", ControlAttributes::kManualClock, *text)));
-            }
-            settings.manualClock = *manualClock;
-        }
-        if (const auto text = applicationConfig.GetAttribute(ControlAttributes::kHeadless)) {
-            const auto headless = applicationConfig.ParseAttribute<bool>(ControlAttributes::kHeadless);
-            if (!headless) {
-                return std::unexpected(InvalidSetting(Format("ApplicationConfig: {}=\"{}\" is not a boolean (true, false, 1 or 0)", ControlAttributes::kHeadless, *text)));
-            }
-            settings.headless = *headless;
-        }
-
+        // The flags are parsed by hand; a later stage replaces this loop with a name to value source
         bool portOnCommandLine = false;
         for (const eastl::string& arg : args) {
             const eastl::string_view argument(arg.data(), arg.size());

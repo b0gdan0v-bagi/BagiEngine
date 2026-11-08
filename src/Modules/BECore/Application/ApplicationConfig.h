@@ -1,0 +1,48 @@
+#pragma once
+
+#include <BECore/Application/RunMode.h>
+#include <BECore/Control/ControlSettings.h>
+#include <BECore/Reflection/IDeserializer.h>
+
+namespace BECore {
+
+    /**
+     * @brief The root attributes of config/ApplicationConfig.xml, read through the reflection.
+     *
+     * `type`, `renderer` and `path` say which ApplicationFabric starts, which renderer it creates and where its window config is;
+     * `mode` asks for the run mode (RunMode.h); `control`, `controlPort`, `manualClock` and `headless` are the settings of the control
+     * API (ControlSettings.h, the command line is applied over them). Every field has the default of a missing attribute.
+     */
+    struct ApplicationConfig {
+        BE_CLASS(ApplicationConfig)
+
+        BE_REFLECT_FIELD eastl::string _type;
+        BE_REFLECT_FIELD eastl::string _renderer;
+        BE_REFLECT_FIELD eastl::string _path;
+        BE_REFLECT_FIELD RunMode _mode = RunMode::Editor;
+        BE_REFLECT_FIELD bool _control = false;
+        BE_REFLECT_FIELD uint16_t _controlPort = kDefaultControlPort;
+        BE_REFLECT_FIELD bool _manualClock = false;
+        BE_REFLECT_FIELD bool _headless = false;
+    };
+
+    /// An ApplicationConfig and what went wrong while reading it. A field with an error keeps its default.
+    struct ApplicationConfigLoad {
+        ApplicationConfig config;
+        eastl::vector<DeserializeError> errors;
+        bool found = false;  // false when there is no config named ApplicationConfig; config then holds the defaults
+    };
+
+    /**
+     * @brief Reads the ApplicationConfig from @p deserializer (positioned at the root of the config).
+     *
+     * Switches the deserializer to strict values (IDeserializer::SetStrictValues): a boolean that is not true / false / 1 / 0 and a
+     * port that is not a number from 0 to 65535 are errors, not zero. Writes no log; the caller decides what to do with the errors.
+     * `found` of the result is true.
+     */
+    ApplicationConfigLoad LoadApplicationConfig(IDeserializer& deserializer);
+
+    /// The named config `ApplicationConfig` of the ConfigManager. A missing config gives the defaults and `found == false`. Writes no log.
+    ApplicationConfigLoad LoadApplicationConfig();
+
+}  // namespace BECore

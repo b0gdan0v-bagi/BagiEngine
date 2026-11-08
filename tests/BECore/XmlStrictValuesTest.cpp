@@ -135,6 +135,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(StrictReads<int32_t>("+5", 5));
         EXPECT_TRUE(StrictReads<bool>(" true ", true));
         EXPECT_TRUE(StrictRejects<int32_t>("1 2"));
+        EXPECT_TRUE(StrictRejects<int32_t>("0x10"));
         EXPECT_TRUE(StrictRejects<int32_t>("   "));
     }
 

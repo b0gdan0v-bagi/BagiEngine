@@ -53,7 +53,12 @@ namespace BECore {
     }
 
     void LogDeserializeErrors(eastl::string_view configName, const IDeserializer& deserializer) {
-        for (const DeserializeError& error : deserializer.GetErrors()) {
+        const auto& errors = deserializer.GetErrors();
+        LogDeserializeErrors(configName, eastl::span<const DeserializeError>(errors.data(), errors.size()));
+    }
+
+    void LogDeserializeErrors(eastl::string_view configName, eastl::span<const DeserializeError> errors) {
+        for (const DeserializeError& error : errors) {
             // A document that fails to parse has no path, and the line is 0 where the format has none (binary)
             const eastl::string path = error.path.ToStringView().empty() ? eastl::string{} : Format("{}: ", error.path.ToStringView());
             const eastl::string line = error.line != 0 ? Format(" (line {})", error.line) : eastl::string{};
