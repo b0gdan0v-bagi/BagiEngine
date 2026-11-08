@@ -45,6 +45,14 @@
             }
         },
         {
+            "name": "editor",
+            "hidden": true,
+            "description": "Builds the editor panels (BE_WITH_EDITOR=ON), also in a Release build",
+            "cacheVariables": {
+                "BE_WITH_EDITOR": "ON"
+            }
+        },
+        {
             "name": "clang",
             "hidden": true,
             "cacheVariables": {
@@ -122,6 +130,11 @@
             "inherits": ["ninja", "host-macos", "clang", "release", "rmlui"]
         },
         {
+            "name": "macos-release-editor",
+            "displayName": "macOS Clang Release with the editor",
+            "inherits": ["ninja", "host-macos", "clang", "release", "editor"]
+        },
+        {
             "name": "windows-msvc-debug",
             "displayName": "Windows MSVC Ninja Debug",
             "inherits": ["ninja", "host-windows", "vs-env", "msvc", "debug"]
@@ -130,6 +143,11 @@
             "name": "windows-msvc-release",
             "displayName": "Windows MSVC Ninja Release",
             "inherits": ["ninja", "host-windows", "vs-env", "msvc", "release"]
+        },
+        {
+            "name": "windows-msvc-release-editor",
+            "displayName": "Windows MSVC Ninja Release with the editor",
+            "inherits": ["ninja", "host-windows", "vs-env", "msvc", "release", "editor"]
         },
         {
             "name": "windows-clang-debug",
@@ -194,6 +212,12 @@
             "configurePreset": "macos-release"
         },
         {
+            "name": "macos-release-editor",
+            "displayName": "macOS Clang Release with the editor",
+            "inherits": "build-macos",
+            "configurePreset": "macos-release-editor"
+        },
+        {
             "name": "macos-rmlui-debug",
             "displayName": "macOS Clang Debug with RmlUi",
             "inherits": "build-macos",
@@ -216,6 +240,12 @@
             "displayName": "Windows MSVC Ninja Release",
             "inherits": "build-windows",
             "configurePreset": "windows-msvc-release"
+        },
+        {
+            "name": "windows-msvc-release-editor",
+            "displayName": "Windows MSVC Ninja Release with the editor",
+            "inherits": "build-windows",
+            "configurePreset": "windows-msvc-release-editor"
         },
         {
             "name": "windows-clang-debug",
@@ -302,6 +332,12 @@
             "configurePreset": "macos-release"
         },
         {
+            "name": "macos-release-editor",
+            "displayName": "macOS Clang Release with the editor",
+            "inherits": "test-macos",
+            "configurePreset": "macos-release-editor"
+        },
+        {
             "name": "macos-rmlui-debug",
             "displayName": "macOS Clang Debug with RmlUi",
             "inherits": "test-macos",
@@ -324,6 +360,12 @@
             "displayName": "Windows MSVC Ninja Release",
             "inherits": "test-windows",
             "configurePreset": "windows-msvc-release"
+        },
+        {
+            "name": "windows-msvc-release-editor",
+            "displayName": "Windows MSVC Ninja Release with the editor",
+            "inherits": "test-windows",
+            "configurePreset": "windows-msvc-release-editor"
         },
         {
             "name": "windows-clang-debug",

@@ -5,6 +5,7 @@
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Games/GameManager.h>
@@ -26,6 +27,9 @@ namespace BECore {
 
         _isRunning = true;
         Subscribe<ApplicationEvents::QuitEvent, &Application::StopApplication>(this);
+#if BE_WITH_EDITOR
+        Subscribe<SDLEvents::SDLEventWrapper, &Application::OnSDLEvent>(this);
+#endif
 
         CoreManager::GetInstance().OnApplicationPreInit({});
 
@@ -45,11 +49,14 @@ namespace BECore {
 
         // The editor draws its viewport into an offscreen target, which the software renderer of a headless run does not have
         const auto& applicationConfig = CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern);
-        if (controlSettings->headless && ReadRunMode(applicationConfig) == RunMode::Editor) {
+        // The resolved mode (ResolveRunMode) without its warning: CreateWidgets resolves and warns once
+        if (controlSettings->headless && kEditorBuilt && ReadRunMode(applicationConfig) == RunMode::Editor) {
             LOG_ERROR("Headless: the Editor run mode cannot run without a window; set mode=\"Game\" in ApplicationConfig.xml");
             LogEvent::Flush();
             return false;
         }
+
+        _headless = controlSettings->headless;
 
         ApplicationOptions options;
         options.headless = controlSettings->headless;
@@ -90,11 +97,30 @@ namespace BECore {
             RenderEvents::NewFrameEvent::Emit();
             CoreManager::GetInstance().OnGameCycle({});
             RenderEvents::RenderPresentEvent::Emit();
+#if BE_WITH_EDITOR
+            // The only safe point to replace the widgets: the frame is over, so no widget is inside its own call and no ImGui frame is open.
+            // The manual-clock idle branch above never gets here, because no frame is open there either
+            CoreManager::GetWidgetManager().ApplyPendingMode();
+#endif
             LogEvent::Flush();
             control.EndFrame();
         }
         Cleanup();
     }
+
+#if BE_WITH_EDITOR
+    void Application::OnSDLEvent(const SDLEvents::SDLEventWrapper& event) const {
+        const SDL_KeyboardEvent& key = event.event.key;
+        if (event.event.type != SDL_EVENT_KEY_DOWN || !IsEditorToggle(key.key, key.mod, key.repeat)) {
+            return;
+        }
+        if (_headless) {
+            LOG_WARNING("Run mode: Ctrl+Shift+E ignored, a headless run has no window for the editor");
+            return;
+        }
+        CoreManager::GetWidgetManager().RequestToggle();
+    }
+#endif
 
     bool Application::StartControlServer(uint16_t port) {
         _controlServer = eastl::make_unique<WebSocketServer>(CoreManager::GetControlService());
@@ -115,8 +141,11 @@ namespace BECore {
             _controlServer.reset();
         }
         GameManager::GetInstance().Shutdown();
-        // The glyph pages are GPU textures: they go before the renderer's own cleanup destroys the device
+        // The glyph pages and the widgets own GPU objects (a texture, the viewport's target, ImGui's descriptors): they go before
+        // the renderer's own cleanup destroys the device. Direct calls, not handlers of ApplicationCleanUpEvent: EnTT calls the
+        // handlers in the reverse order of the subscription, so the renderer's Destroy would run first
         CoreManager::GetFontAtlasLibrary().Clear();
+        CoreManager::GetWidgetManager().DestroyAll();
         ApplicationEvents::ApplicationCleanUpEvent::Emit();
         CoreManager::GetInstance().OnApplicationDeinit({});
     }

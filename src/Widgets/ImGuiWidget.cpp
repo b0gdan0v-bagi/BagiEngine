@@ -12,6 +12,10 @@
 
 namespace BECore {
 
+    ImGuiWidget::~ImGuiWidget() {
+        Destroy();
+    }
+
     bool ImGuiWidget::Initialize(IDeserializer& /*deserializer*/) {
         if (_isInitialized) {
             return true;
@@ -64,8 +68,7 @@ namespace BECore {
         }
     }
 
-    void ImGuiWidget::Update() {
-    }
+    void ImGuiWidget::Update() {}
 
     SDL_Window* ImGuiWidget::GetSDLWindow() {
         const auto& window = CoreManager::GetMainWindow();
@@ -85,6 +88,10 @@ namespace BECore {
             return;
         }
 
+        // The Vulkan backend frees ImGui's descriptor pool and pipeline on ImGuiShutdownEvent: the GPU must be done with them
+        if (const auto& renderer = CoreManager::GetRenderer()) {
+            renderer->WaitIdle();
+        }
         RenderEvents::ImGuiShutdownEvent::Emit();
 
         ImGui_ImplSDL3_Shutdown();

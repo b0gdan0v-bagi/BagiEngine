@@ -23,7 +23,7 @@ Fields the `build` skill reads. A game fills every row.
 | Tests | the gtest targets; the argument `tests` builds exactly these (`--target <tests>`) | `BagiEngineTests Match3Tests` |
 | Default build | what `cmake --build --preset <p>` with no `--target` builds | every target: the product and the test executables |
 | Source paths | the paths of `git status --porcelain -- <paths>` (a configure trigger) and of the `BE_CLASS` / `BE_EVENT` / `BE_REFLECT_FIELD` search | `src tests games` |
-| Extra configure triggers | cases besides the common ones (below) that need `cmake --preset <p>` | none |
+| Extra configure triggers | cases besides the common ones (below) that need `cmake --preset <p>` | a change of `BE_WITH_EDITOR` (`-DBE_WITH_EDITOR=...`, or a switch between a preset with and without the editor): the set of runtime and test sources changes (see "Gotchas") |
 | Extra failure hints | cause and fix for a configure, compile or link failure that is specific to this repository | see "Failure hints" |
 | Extra gotchas | facts about the output, the tests or the run that hold only here | see "Gotchas" |
 | Test run | what `ctest --preset <p>` runs here and what it needs | see "Tests" |
@@ -44,6 +44,8 @@ Engine:
 
 - The engine setup is `cmake/BagiEngine.cmake`. The root `CMakeLists.txt` and the games' own repositories include it. A change there needs a configure, like any `*.cmake`.
 - `compile_commands.json` lives in `build/<p>/`. Pass it to `tidy-fix` explicitly when several presets are configured: `--build-dir build/<p>`.
+- The option `BE_WITH_EDITOR` (`AUTO` by default: the editor panels are built in Debug and left out of a single-config Release; `ON` / `OFF`; presets `macos-release-editor`, `windows-msvc-release-editor`; root `CLAUDE.md`, "Build Commands") is a cache variable, so changing it is a configure (`cmake --preset <p> -DBE_WITH_EDITOR=ON`) and then a rebuild of everything that carries the definition (every engine and game target): sources are chosen at configure time and the definition `BE_WITH_EDITOR` is on every target. A Debug build ignores `OFF` with a configure WARNING. A configure prints `Editor: ENABLED` or `DISABLED`; `grep -c ViewportWidget build/<p>/compile_commands.json` is 0 in a build without the editor. Run `cmake --preset <p>` again without the flag afterwards, or the cache keeps the value.
+- **Presets share `build/ClangmacOS/lib` (and the executables).** The output folder does not depend on the preset, so Debug, Release and release-editor overwrite each other's libraries, and `ninja` does not notice that a library was built with the other `BE_WITH_EDITOR`: the editor sources are in one and not in the other. When switching between them, delete every `build/ClangmacOS/lib/*.a` (on Windows `build/MSVCWindows/lib`) before building; a stale `libRuntimeModule.a` / `libBECoreModule.a` alone is not enough. Symptoms of a mix: link errors for editor classes, or crashes and dozens of failures in `BagiEngineTests`.
 - The game runs the runtime `ITest`s at startup (`CoreManager::OnApplicationPreInit`) and opens a window, so it is never started to check a build. The gtest executables open no window.
 
 ### Tests

@@ -105,6 +105,7 @@ Each engine module has its own `CMakeLists.txt`:
 | `ENGINE_ENABLE_EXPECTS` | `ON` | `EXPECT`; compiled out when `OFF` |
 | `ENGINE_BUILD_TESTS` | `ON` | GoogleTest, `BagiEngineTestSupport`, `BagiEngineTests` and the game test executables |
 | `ENGINE_UI_RMLUI` | `OFF` | Builds the vendored RmlUi (`rmlui_core`) and its host `RmlUiHostModule` (`be_add_module` + `be_add_game_reflection`, after `Games`); `be_link_engine` links the host `WHOLE_ARCHIVE` into every executable and test executable, and `tests/RmlUiHost/` joins `BagiEngineTests`. Presets: `macos-rmlui-debug` / `macos-rmlui-release`. A build with it writes the same `build/<Compiler><Platform>/` as one without: the presets have a build directory of their own, but delete the executables of one kind before building the other |
+| `BE_WITH_EDITOR` | `AUTO` | `AUTO` / `ON` / `OFF`; sets `BE_EDITOR_ENABLED` and the definition `BE_WITH_EDITOR=1\|0` on every target; when off, the editor panels and their tests stay out of `RuntimeModule` and the test executables (`src/CMakeLists.txt`, `tests/CMakeLists.txt`). `AUTO` is ON except in a single-config Release; Debug ignores `OFF` with a WARNING. Presets `macos-release-editor` / `windows-msvc-release-editor`. Libraries of the other setting stay in `build/<Compiler><Platform>/lib`: delete every `lib/*.a` when switching. Root `CLAUDE.md`, "Build Commands" |
 
 ## Module Dependencies Order
 
@@ -148,7 +149,7 @@ BECoreModule must be first (provides PCH):
 
 `CMakePresets.json` (project root) is the single source of build configurations; VS Code CMake Tools, the CLI and the `build` skill all use it.
 
-- Hidden bases are composed via `inherits`: generator (`ninja`, `vs2022`), build type (`debug`, `release`), the RmlUi switch (`rmlui`: `ENGINE_UI_RMLUI=ON`, for `macos-rmlui-debug` / `macos-rmlui-release`; no Windows ones until the host is built there), compiler (`clang`, `msvc`), host `condition` (`host-macos`, `host-windows`). Visible presets are named `<os>-<toolchain>-<type>`.
+- Hidden bases are composed via `inherits`: generator (`ninja`, `vs2022`), build type (`debug`, `release`), the RmlUi switch (`rmlui`: `ENGINE_UI_RMLUI=ON`, for `macos-rmlui-debug` / `macos-rmlui-release`; no Windows ones until the host is built there), the editor switch (`editor`: `BE_WITH_EDITOR=ON`, for `macos-release-editor` / `windows-msvc-release-editor`), compiler (`clang`, `msvc`), host `condition` (`host-macos`, `host-windows`). Visible presets are named `<os>-<toolchain>-<type>`.
 - Every `binaryDir` is `${sourceDir}/build/${presetName}`. Build presets carry the same host `condition`, so other OSes' presets stay hidden. They name no `targets` (the build is `all`): a game that carries the engine as a submodule includes this file in its own `CMakePresets.json` (`"include": ["engine/CMakePresets.json"]`), and a preset name cannot be defined twice, so a list of the engine's games would break its build.
 - `testPresets` mirror the build presets (same names, hidden `test-base` / `test-macos` / `test-windows`) and set `outputOnFailure`. Use `ctest --preset <preset>`.
 - Release presets set `ENGINE_ENABLE_ASSERTS=OFF` / `ENGINE_ENABLE_EXPECTS=OFF` explicitly (the logic in `cmake/BagiEngine.cmake` that should do this for `CMAKE_BUILD_TYPE=Release` never fires because `option()` has already defined the cache entries).

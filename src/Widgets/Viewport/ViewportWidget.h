@@ -20,7 +20,10 @@ namespace BECore {
         BE_CLASS(ViewportWidget)
     public:
         ViewportWidget() = default;
-        ~ViewportWidget() override = default;
+        /// Gives back what the viewport set globally (the simulated safe area) and releases the render target, so the widget can
+        /// die in the middle of the run when the mode switches. A mouse button pressed in the viewport and not yet released at
+        /// that moment is lost: no button-up reaches the scene.
+        ~ViewportWidget() override;
 
         BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
         BE_FUNCTION void Update() override;
