@@ -45,6 +45,12 @@ namespace BECore {
 
         void Initialize(PassKey<CoreManager>);
         void Update(PassKey<CoreManager>);
+
+        /**
+         * Advances the game clock of the delayed tasks (DelayClock::GameTime) by one frame delta.
+         * Called by CoreManager::OnGameCycle right before Update; does nothing before Initialize and after Shutdown.
+         */
+        void AdvanceGameTime(PassKey<CoreManager>, double seconds);
         void Shutdown(PassKey<CoreManager>);
 
         // =================================================================
@@ -75,6 +81,21 @@ namespace BECore {
             auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
 
             _scheduler.ScheduleDelayed(MakeStartTask(handle), delay, priority, threadType);
+
+            return handle;
+        }
+
+        /**
+         * Starts a delayed task on game time: the delay counts the frame deltas fed by CoreManager::OnGameCycle
+         * (the frame clamp and the manual clock apply). Released in the Update of the frame in which the game time
+         * reaches the delay; by default it runs on the main thread in that same frame. Call it from the main thread
+         * when the run must be deterministic.
+         */
+        template <typename T>
+        IntrusivePtr<TaskHandle<T>> RunDelayedGameTime(Task<T> task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::MainThread) {
+            auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
+
+            _scheduler.ScheduleDelayed(MakeStartTask(handle), delay, priority, threadType, DelayClock::GameTime);
 
             return handle;
         }
