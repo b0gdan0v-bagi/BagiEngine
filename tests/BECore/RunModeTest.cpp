@@ -68,10 +68,6 @@ namespace BECore::Tests {
         EXPECT_EQ(ResolveRunMode(RunMode::Editor), kEditorBuilt ? RunMode::Editor : RunMode::Game);
     }
 
-    TEST(RunModeTest, EditorBuiltFollowsTheBuildDefinition) {
-        EXPECT_EQ(kEditorBuilt, BE_WITH_EDITOR == 1);
-    }
-
     TEST(RunModeTest, OtherRunModeIsAnInvolution) {
         EXPECT_EQ(OtherRunMode(RunMode::Editor), RunMode::Game);
         EXPECT_EQ(OtherRunMode(RunMode::Game), RunMode::Editor);

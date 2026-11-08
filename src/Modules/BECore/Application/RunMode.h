@@ -38,7 +38,7 @@ namespace BECore {
     /// The chord that switches Game and Editor at run time: Ctrl+Shift+E (left or right Ctrl and Shift).
     /// A chord and not a bare F-key: F-keys are media keys on a Mac laptop and a game may bind them.
     /// SDL3 gives the keycode of the key with no modifier applied ('e' = SDLK_E, not 'E'); with the default hint
-    /// SDL_HINT_KEYCODE_OPTIONS ("latin_letters") the E key is SDLK_E on non-Latin layouts too.
+    /// SDL_HINT_KEYCODE_OPTIONS ("french_numbers,latin_letters") the E key is SDLK_E on non-Latin layouts too.
     inline constexpr SDL_Keycode kEditorToggleKey = SDLK_E;
     inline constexpr SDL_Keymod kEditorToggleRequiredMods[] = {SDL_KMOD_CTRL, SDL_KMOD_SHIFT};
     /// Alt or the GUI key (Cmd, Windows) held makes it another shortcut. Num Lock, Caps Lock and the like are ignored.
