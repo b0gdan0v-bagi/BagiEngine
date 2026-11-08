@@ -98,9 +98,7 @@ namespace BECore {
          * keeps its value (the read returns false). Only text formats have text to check:
          * the default does nothing, and BinaryDeserializer keeps it.
          */
-        virtual void SetStrictValues(bool strict) {
-            (void)strict;
-        }
+        virtual void SetStrictValues(bool /*strict*/) {}
 
         /**
          * @brief Whether strict values are on (always false when not supported)

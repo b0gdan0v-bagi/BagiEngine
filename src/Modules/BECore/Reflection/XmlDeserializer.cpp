@@ -80,6 +80,7 @@ namespace BECore {
     namespace {
 
         constexpr char kPlus = '+';
+        constexpr char kMinus = '-';
 
         bool IsAsciiSpace(char c) {
             return c == ' ' || c == '\t' || c == '\n' || c == '\r';
@@ -95,12 +96,12 @@ namespace BECore {
             return text;
         }
 
-        // A leading '+' is accepted (pugixml did); std::from_chars does not take one
+        // A leading '+' is accepted (pugixml takes one); std::from_chars does not take one
         eastl::string_view DropPlusSign(eastl::string_view text) {
             if (!text.empty() && text.front() == kPlus) {
                 text.remove_prefix(1);
                 // "+-1" and "++1" stay malformed
-                if (text.empty() || text.front() == kPlus || text.front() == '-') {
+                if (text.empty() || text.front() == kPlus || text.front() == kMinus) {
                     return {};
                 }
             }

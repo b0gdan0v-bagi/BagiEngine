@@ -1,4 +1,5 @@
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <Common/Printers.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -46,7 +47,7 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST(XmlStrictValues, DefaultsToOff) {
+    TEST(XmlStrictValuesTest, DefaultsToOff) {
         XmlDeserializer deserializer;
         EXPECT_FALSE(deserializer.IsStrictValues());
         deserializer.SetStrictValues(true);
@@ -55,7 +56,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(deserializer.IsStrictValues());
     }
 
-    TEST(XmlStrictValues, LenientByDefaultReadsGarbageAsZero) {
+    TEST(XmlStrictValuesTest, LenientByDefaultReadsGarbageAsZero) {
         AttributeCase number("abc", false);
         uint16_t port = 7;
         EXPECT_TRUE(number.Read(port));
@@ -76,14 +77,14 @@ namespace BECore::Tests {
         EXPECT_FALSE(tooBig.Get().HasErrors());
     }
 
-    TEST(XmlStrictValues, BoolAcceptsTheFourSpellings) {
+    TEST(XmlStrictValuesTest, BoolAcceptsTheFourSpellings) {
         EXPECT_TRUE(StrictReads<bool>("true", true));
         EXPECT_TRUE(StrictReads<bool>("1", true));
         EXPECT_TRUE(StrictReads<bool>("false", false));
         EXPECT_TRUE(StrictReads<bool>("0", false));
     }
 
-    TEST(XmlStrictValues, BoolRejectsEverythingElse) {
+    TEST(XmlStrictValuesTest, BoolRejectsEverythingElse) {
         EXPECT_TRUE(StrictRejects<bool>("yes"));
         EXPECT_TRUE(StrictRejects<bool>("True"));
         EXPECT_TRUE(StrictRejects<bool>("2"));
@@ -91,7 +92,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(StrictRejects<bool>("truee"));
     }
 
-    TEST(XmlStrictValues, ErrorTextNamesTheKindAndTheValue) {
+    TEST(XmlStrictValuesTest, ErrorTextNamesTheKindAndTheValue) {
         AttributeCase c("yes", true);
         bool flag = false;
         EXPECT_FALSE(c.Read(flag));
@@ -117,7 +118,7 @@ namespace BECore::Tests {
         EXPECT_EQ(real.Get().GetErrors()[0].errorMessage.ToStringView(), "Invalid number value 'x'");
     }
 
-    TEST(XmlStrictValues, Uint16TakesTheWholeRangeAndNothingElse) {
+    TEST(XmlStrictValuesTest, Uint16TakesTheWholeRangeAndNothingElse) {
         EXPECT_TRUE(StrictReads<uint16_t>("0", 0));
         EXPECT_TRUE(StrictReads<uint16_t>("65535", 65535));
         EXPECT_TRUE(StrictRejects<uint16_t>("65536"));
@@ -129,7 +130,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(StrictRejects<uint16_t>("+-1"));
     }
 
-    TEST(XmlStrictValues, SpacesAroundTheNumberAndALeadingPlusAreAccepted) {
+    TEST(XmlStrictValuesTest, SpacesAroundTheNumberAndALeadingPlusAreAccepted) {
         EXPECT_TRUE(StrictReads<uint16_t>(" 8080 ", 8080));
         EXPECT_TRUE(StrictReads<int32_t>("+5", 5));
         EXPECT_TRUE(StrictReads<bool>(" true ", true));
@@ -137,7 +138,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(StrictRejects<int32_t>("   "));
     }
 
-    TEST(XmlStrictValues, IntegerLimits) {
+    TEST(XmlStrictValuesTest, IntegerLimits) {
         EXPECT_TRUE(StrictReads<int8_t>("127", 127));
         EXPECT_TRUE(StrictReads<int8_t>("-128", -128));
         EXPECT_TRUE(StrictRejects<int8_t>("128"));
@@ -165,7 +166,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(StrictRejects<uint64_t>("-1"));
     }
 
-    TEST(XmlStrictValues, FloatAndDoubleTakeNumbersOnly) {
+    TEST(XmlStrictValuesTest, FloatAndDoubleTakeNumbersOnly) {
         EXPECT_TRUE(StrictReads<float>("1.5", 1.5f));
         EXPECT_TRUE(StrictReads<float>("-2", -2.0f));
         EXPECT_TRUE(StrictReads<float>("1e3", 1000.0f));
@@ -184,7 +185,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(StrictRejects<double>("1e999"));
     }
 
-    TEST(XmlStrictValues, ATargetKeepsItsValueOnAnError) {
+    TEST(XmlStrictValuesTest, ATargetKeepsItsValueOnAnError) {
         AttributeCase c("abc", true);
         int32_t value = 123;
         EXPECT_FALSE(c.Read(value));
@@ -192,7 +193,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(c.Get().HasErrors());
     }
 
-    TEST(XmlStrictValues, AMissingAttributeIsNoErrorInEitherMode) {
+    TEST(XmlStrictValuesTest, AMissingAttributeIsNoErrorInEitherMode) {
         for (const bool strict : {false, true}) {
             XmlDeserializer deserializer;
             deserializer.SetStrictValues(strict);
@@ -207,7 +208,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST(XmlStrictValues, ReadOfAChildElementIsStrictToo) {
+    TEST(XmlStrictValuesTest, ReadOfAChildElementIsStrictToo) {
         XmlDeserializer deserializer;
         deserializer.SetStrictValues(true);
         ASSERT_TRUE(deserializer.LoadFromString("<root><port>70000</port><ok>8080</ok><on>yes</on><off>0</off></root>"));
@@ -237,7 +238,7 @@ namespace BECore::Tests {
         EXPECT_EQ(deserializer.GetErrors().size(), 3u);
     }
 
-    TEST(XmlStrictValues, LenientReadOfAChildElementIsUnchanged) {
+    TEST(XmlStrictValuesTest, LenientReadOfAChildElementIsUnchanged) {
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString("<root><n>abc</n><b>yes</b></root>"));
         int32_t n = 9;
@@ -249,7 +250,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(deserializer.HasErrors());
     }
 
-    TEST(XmlStrictValues, TheFlagHoldsInsideNestedObjects) {
+    TEST(XmlStrictValuesTest, TheFlagHoldsInsideNestedObjects) {
         XmlDeserializer deserializer;
         deserializer.SetStrictValues(true);
         ASSERT_TRUE(deserializer.LoadFromString("<root><inner n=\"bad\"/></root>"));
@@ -265,14 +266,14 @@ namespace BECore::Tests {
         EXPECT_TRUE(deserializer.IsStrictValues());
     }
 
-    TEST(XmlStrictValues, TheFlagSurvivesAMove) {
+    TEST(XmlStrictValuesTest, TheFlagSurvivesAMove) {
         XmlDeserializer first;
         first.SetStrictValues(true);
         XmlDeserializer second(std::move(first));
         EXPECT_TRUE(second.IsStrictValues());
     }
 
-    TEST(XmlStrictValues, StringsAreNotChecked) {
+    TEST(XmlStrictValuesTest, StringsAreNotChecked) {
         XmlDeserializer deserializer;
         deserializer.SetStrictValues(true);
         ASSERT_TRUE(deserializer.LoadFromString("<root s=\"12abc\"/>"));
