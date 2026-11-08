@@ -626,6 +626,8 @@ def list_json(layout: Layout, args) -> dict:
 
 def cmd_list(layout: Layout, args) -> None:
     if args.json:
+        # A pipe on Windows gets the ANSI code page (cp1251), and the panel reads UTF-8: the JSON is always UTF-8
+        sys.stdout.reconfigure(encoding="utf-8")
         print(json.dumps(list_json(layout, args), ensure_ascii=False, indent=1))
         return
     workers = layout.workers()
