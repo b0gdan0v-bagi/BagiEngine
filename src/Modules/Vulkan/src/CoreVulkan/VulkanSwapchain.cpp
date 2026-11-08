@@ -176,7 +176,9 @@ namespace BECore {
         createInfo.clipped        = VK_TRUE;
         createInfo.oldSwapchain   = oldSwapchain;
 
-        if (vkCreateSwapchainKHR(device.GetDevice(), &createInfo, nullptr, &out.swapchain) != VK_SUCCESS) {
+        const VkResult created = vkCreateSwapchainKHR(device.GetDevice(), &createInfo, nullptr, &out.swapchain);
+        if (created != VK_SUCCESS) {
+            LOG_ERROR(Format("Vulkan: vkCreateSwapchainKHR failed (VkResult {})", static_cast<int>(created)).c_str());
             out.swapchain = VK_NULL_HANDLE;
             return false;
         }

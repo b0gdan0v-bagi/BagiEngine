@@ -39,8 +39,9 @@ namespace BECore {
         /// objects are destroyed only after the new ones exist. On Failed the new objects are released. The old
         /// swapchain stays in place, but once vkCreateSwapchainKHR has been called with it the spec retires it even if
         /// that call fails: the next acquire reports it out of date and the caller tries again. A Failed before that
-        /// call (no surface format, capabilities not readable) leaves it untouched. The caller must call vkDeviceWaitIdle first: the old framebuffers and image views
-        /// may still be in use by frames in flight. Sizes are in pixels.
+        /// call (no surface format, capabilities not readable) leaves it untouched. The caller must call
+        /// vkDeviceWaitIdle first: the old framebuffers and image views may still be in use by frames in flight. Sizes
+        /// are in pixels.
         SwapchainRecreateResult Recreate(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight);
 
         /// Acquire the next swapchain image index. OutOfDate: recreate; the semaphore is not signaled then.
