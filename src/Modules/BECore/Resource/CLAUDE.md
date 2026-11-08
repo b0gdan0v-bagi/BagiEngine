@@ -24,7 +24,16 @@ IResource (RefCounted, BE_CLASS(IResource, FACTORY_BASE))
 
 - `ResourceState` (`CORE_ENUM`): `Unloaded` → `Loading` → `Loaded` or `Failed`.
 - `ResourceHandle<T>` wraps `IntrusivePtr<T>`: implicit `bool` for validity, `->` / `*`, last-access time (kept for a future LRU, not used yet).
-- `TextureLibrary` (`CoreManager::GetTextureLibrary()`) maps sprite names to texture path + source rect. It is loaded from `TextureLibrary.xml` (the active game's `config/`, the engine ships none) after `ConfigManager`; a missing file leaves the library empty, and `SpriteRendererComponent` and the texture editor use it.
+- `TextureLibrary` (`CoreManager::GetTextureLibrary()`) maps sprite names to texture path + source rect. It is loaded from `TextureLibrary.xml` (the active game's `config/`, the engine ships none) after `ConfigManager`; a missing file leaves the library empty, and `SpriteRendererComponent` and the texture editor use it. See "TextureLibrary" below.
+
+## TextureLibrary
+
+`SpriteEntry` (`name`, `texturePath`, `srcRect`) is a reflected struct, so its fields are exactly the attributes of the file: `<root><sprites><sprite name texturePath><srcRect x y w h/></sprite>...</sprites></root>` (`PoolString` attributes, `Rect` the child object `srcRect`). The field names stay without an underscore because `UISprite`, `SpriteRendererComponent` and the texture editor use them. `BE_CLASS` gives the struct a vptr, so `SpriteEntry` is no longer an aggregate: make one by default construction and assign the fields.
+
+- **Pure halves:** `Load(IDeserializer&)` and `Write(ISerializer&) const` need no engine services and no file (tests: `tests/BECore/TextureLibraryTest.cpp`, on `XmlDeserializer::LoadFromString` and `XmlSerializer`). `Load` clears the library, skips an entry without a `name` (silently), lets a repeated name overwrite in place and reads numbers leniently (the default `IDeserializer`, a malformed number is 0; not strict values). `Write` always writes `sprites`, also when empty, in insertion order.
+- **Glue:** `Initialize()` = `ConfigManager::CreateDeserializer("TextureLibrary")` (null: the library stays empty, no message) + `Load` + `LogDeserializeErrors`. `Save()` = `Write` into an `XmlSerializer`, then it replaces the `sprites` child of the cached document root with a copy (`remove_child` + `append_copy`, so the other children and the comments of the file stay) and calls `SaveConfig`. That replace is the only `pugi` left; a `ConfigManager` helper for "replace a section of a config" is for the editors' slice.
+- **Hand-written array:** `Write` and `Load` call `BeginArray("sprites", "sprite", count)` themselves, because a reflected `eastl::vector<SpriteEntry>` is written with `<item>` elements and the file has `<sprite>`.
+- **Accepted differences from the old `XmlNode` loop:** `XmlDeserializer::BeginArray` hands out every child node of `<sprites>`, so an element not named `sprite` is read as a sprite (it was skipped), and a comment inside `<sprites>` is one element without a `name` (skipped like any entry without a name); the index in the path of a bad sprite counts such nodes.
 
 ## ResourceManager API
 

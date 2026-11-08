@@ -4,13 +4,14 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Reflection/ISerializer.h>
+#include <BECore/Reflection/OpenDeserializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
 #include <Generated/TextureLibrary.gen.hpp>
 
 namespace BECore {
 
     void TextureLibrary::Load(IDeserializer& deserializer) {
-        _entries.clear();
-        _index.clear();
+        Clear();
 
         size_t count = 0;
         if (!deserializer.BeginArray("sprites", "sprite", count)) {
@@ -45,52 +46,15 @@ namespace BECore {
     }
 
     void TextureLibrary::Initialize() {
-        _entries.clear();
-        _index.clear();
+        Clear();
 
-        auto& configManager = CoreManager::GetConfigManager();
-        if (!configManager.HasConfig("TextureLibrary"_intern)) {
+        auto deserializer = CoreManager::GetConfigManager().CreateDeserializer("TextureLibrary"_intern);
+        if (!deserializer) {
             return;
         }
 
-        auto xmlRoot = configManager.GetConfig("TextureLibrary"_intern);
-        if (!xmlRoot) {
-            return;
-        }
-
-        auto spritesNode = xmlRoot.GetChild("sprites");
-        if (!spritesNode) {
-            return;
-        }
-
-        for (const auto spriteNode : spritesNode.Children()) {
-            if (spriteNode.Name() != eastl::string_view("sprite")) {
-                continue;
-            }
-
-            SpriteEntry entry;
-
-            auto nameAttr = spriteNode.GetAttribute("name");
-            if (!nameAttr || nameAttr->empty()) {
-                continue;
-            }
-            entry.name = PoolString::Intern(*nameAttr);
-
-            auto pathAttr = spriteNode.GetAttribute("texturePath");
-            if (pathAttr) {
-                entry.texturePath = PoolString::Intern(*pathAttr);
-            }
-
-            auto srcNode = spriteNode.GetChild("srcRect");
-            if (srcNode) {
-                entry.srcRect.x = srcNode.ParseAttribute<float>("x").value_or(0.0f);
-                entry.srcRect.y = srcNode.ParseAttribute<float>("y").value_or(0.0f);
-                entry.srcRect.w = srcNode.ParseAttribute<float>("w").value_or(0.0f);
-                entry.srcRect.h = srcNode.ParseAttribute<float>("h").value_or(0.0f);
-            }
-
-            AddOrUpdate(eastl::move(entry));
-        }
+        Load(*deserializer);
+        LogDeserializeErrors("TextureLibrary", *deserializer);
     }
 
     const SpriteEntry* TextureLibrary::GetSprite(PoolString name) const {
@@ -129,24 +93,21 @@ namespace BECore {
             return false;
         }
 
+        XmlSerializer serializer;
+        Write(serializer);
+
+        // The one place that still touches pugi: replace the `sprites` section of the cached document and keep the rest of the file
+        // (other children, comments). A ConfigManager helper for "replace a section of a config" is for the editors' slice.
         pugi::xml_node pugiRoot = xmlRoot.GetPugiNode();
-
         pugiRoot.remove_child("sprites");
-        pugi::xml_node spritesEl = pugiRoot.append_child("sprites");
-
-        for (const auto& entry : _entries) {
-            pugi::xml_node spriteEl = spritesEl.append_child("sprite");
-            spriteEl.append_attribute("name").set_value(entry.name.CStr());
-            spriteEl.append_attribute("texturePath").set_value(entry.texturePath.CStr());
-
-            pugi::xml_node srcRectEl = spriteEl.append_child("srcRect");
-            srcRectEl.append_attribute("x").set_value(entry.srcRect.x);
-            srcRectEl.append_attribute("y").set_value(entry.srcRect.y);
-            srcRectEl.append_attribute("w").set_value(entry.srcRect.w);
-            srcRectEl.append_attribute("h").set_value(entry.srcRect.h);
-        }
+        pugiRoot.append_copy(serializer.GetRootNode().child("sprites"));
 
         return configManager.SaveConfig("TextureLibrary"_intern);
+    }
+
+    void TextureLibrary::Clear() {
+        _entries.clear();
+        _index.clear();
     }
 
     void TextureLibrary::RebuildIndex() {

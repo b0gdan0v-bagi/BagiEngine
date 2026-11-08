@@ -7,6 +7,8 @@ namespace BECore {
 
     /// One named sprite: a texture and the rectangle of it. Reflected, so the fields are exactly the attributes of a `<sprite>` in
     /// TextureLibrary.xml (`name`, `texturePath`) and the attributes `x y w h` of its child `<srcRect>`.
+    /// `BE_CLASS` gives the struct virtual functions, so it has a vptr and is not an aggregate: build an entry by default
+    /// construction and assign the fields.
     struct SpriteEntry {
         BE_CLASS(SpriteEntry)
 
@@ -34,8 +36,8 @@ namespace BECore {
         /**
          * @brief Load sprite definitions from config/TextureLibrary.xml
          *
-         * Must be called after ConfigManager::Initialize().
-         * Safe to call if the config file doesn't exist — library will be empty.
+         * Must be called after ConfigManager::Initialize(). Reads through ConfigManager::CreateDeserializer and Load, and logs the
+         * errors the deserializer collected. Safe to call if the config file doesn't exist: the library will be empty.
          */
         void Initialize();
 
@@ -82,11 +84,14 @@ namespace BECore {
 
         /**
          * @brief Persist current state back to config/TextureLibrary.xml
-         * @return True if saved successfully
+         *
+         * Replaces the `sprites` section of the cached document with Write and saves the config; the rest of the file stays.
+         * @return True if saved successfully, false when the config is not loaded or the file cannot be written
          */
         bool Save();
 
     private:
+        void Clear();
         void RebuildIndex();
 
         eastl::vector<SpriteEntry> _entries;

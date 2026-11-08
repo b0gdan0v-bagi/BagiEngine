@@ -1,6 +1,8 @@
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Resource/TextureLibrary.h>
+#include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
 
@@ -185,13 +187,19 @@ namespace BECore::Tests {
         ASSERT_TRUE(srcRect);
         EXPECT_STREQ(srcRect.name(), "srcRect");
         EXPECT_FALSE(srcRect.next_sibling());
-        EXPECT_STREQ(srcRect.first_attribute().name(), "x");
+        // the whole attribute order of srcRect: x y w h and nothing else
+        const pugi::xml_attribute xAttr = srcRect.first_attribute();
+        EXPECT_STREQ(xAttr.name(), "x");
+        EXPECT_STREQ(xAttr.next_attribute().name(), "y");
+        EXPECT_STREQ(xAttr.next_attribute().next_attribute().name(), "w");
+        EXPECT_STREQ(xAttr.next_attribute().next_attribute().next_attribute().name(), "h");
+        EXPECT_FALSE(xAttr.next_attribute().next_attribute().next_attribute().next_attribute());
+        EXPECT_EQ(std::distance(srcRect.attributes_begin(), srcRect.attributes_end()), 4);
         EXPECT_STREQ(srcRect.attribute("x").value(), "0");
         EXPECT_STREQ(srcRect.attribute("y").value(), "190.5");
         EXPECT_NEAR(srcRect.attribute("w").as_float(), 116.67f, 1e-4f);
         EXPECT_FLOAT_EQ(srcRect.attribute("h").as_float(), 20.0f);
         EXPECT_FALSE(srcRect.attribute("h").next_attribute());
-        EXPECT_STREQ(srcRect.attribute("x").next_attribute().name(), "y");
 
         const pugi::xml_node second = first.next_sibling();
         ASSERT_TRUE(second);
@@ -271,6 +279,36 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(read.srcRect.y, 2.5f);
         EXPECT_FLOAT_EQ(read.srcRect.w, 3.5f);
         EXPECT_FLOAT_EQ(read.srcRect.h, 4.5f);
+    }
+
+    /// Initialize and Save go through the config manager, which needs the engine services. The engine ships no TextureLibrary.xml
+    /// in config/ (the active game does), so the library is empty here; if the engine ever ships one, drop the "empty" expectations.
+    class TextureLibraryConfigTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+    };
+
+    TEST_F(TextureLibraryConfigTest, InitializeWithoutAConfigLeavesTheLibraryEmptyAndClearsWhatWasThere) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeEntry("Old", "assets/old.png", Rect(1, 2, 3, 4)));
+        ASSERT_EQ(library.GetAll().size(), 1u);
+
+        library.Initialize();
+        EXPECT_TRUE(library.GetAll().empty());
+        EXPECT_EQ(library.GetSprite(PoolString::Intern("Old")), nullptr);
+
+        library.AddOrUpdate(MakeEntry("Added", "assets/a.png", Rect()));
+        library.Initialize();
+        EXPECT_TRUE(library.GetAll().empty());
+    }
+
+    TEST_F(TextureLibraryConfigTest, SaveWithoutTheConfigReturnsFalse) {
+        TextureLibrary library;
+        library.AddOrUpdate(MakeEntry("Solo", "assets/solo.png", Rect(1, 2, 3, 4)));
+        EXPECT_FALSE(library.Save());
+        EXPECT_EQ(library.GetAll().size(), 1u);
     }
 
 }  // namespace BECore::Tests
