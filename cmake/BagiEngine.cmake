@@ -231,6 +231,51 @@ else()
 endif()
 
 # =============================================================================
+# Editor Option
+# =============================================================================
+# BE_WITH_EDITOR decides whether the build contains the editor: the panels under src/Widgets
+# (ConfigEditor, EditorLayout, SceneEditor, TextureEditor, Viewport) and the tests of those panels.
+#   AUTO (default): ON, except in a single-config build of type Release, RelWithDebInfo or MinSizeRel, where it is OFF.
+#                   So a Debug build has the editor and a Release build does not.
+#   ON:             the editor is built (also in Release).
+#   OFF:            the editor is not built. A Debug build ignores it (WARNING, the editor is built anyway):
+#                   Debug builds always include the editor.
+# A multi-config generator (Visual Studio, Ninja Multi-Config) picks the configuration at build time, but the sources
+# are picked now, so there AUTO means ON; use -DBE_WITH_EDITOR=OFF for a build without the editor.
+# The result is the variable BE_EDITOR_ENABLED (used by src/CMakeLists.txt and tests/CMakeLists.txt) and the
+# compile definition BE_WITH_EDITOR=1|0 on every target. ImGui and ImGuiWidget stay in every build.
+set(BE_WITH_EDITOR "AUTO" CACHE STRING "Build the editor panels: AUTO (ON, except OFF in a single-config Release/RelWithDebInfo/MinSizeRel build), ON or OFF. Debug always has the editor")
+set_property(CACHE BE_WITH_EDITOR PROPERTY STRINGS AUTO ON OFF)
+
+string(TOUPPER "${BE_WITH_EDITOR}" BE_WITH_EDITOR_VALUE)
+get_property(BE_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+
+if(BE_WITH_EDITOR_VALUE STREQUAL "ON")
+    set(BE_EDITOR_ENABLED TRUE)
+elseif(BE_WITH_EDITOR_VALUE STREQUAL "OFF")
+    set(BE_EDITOR_ENABLED FALSE)
+    if(NOT BE_IS_MULTI_CONFIG AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+        message(WARNING "BE_WITH_EDITOR=OFF is ignored in a Debug build: Debug builds always include the editor")
+        set(BE_EDITOR_ENABLED TRUE)
+    endif()
+elseif(BE_WITH_EDITOR_VALUE STREQUAL "AUTO")
+    set(BE_EDITOR_ENABLED TRUE)
+    if(NOT BE_IS_MULTI_CONFIG AND CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$")
+        set(BE_EDITOR_ENABLED FALSE)
+    endif()
+else()
+    message(FATAL_ERROR "BE_WITH_EDITOR is '${BE_WITH_EDITOR}'; it must be AUTO, ON or OFF")
+endif()
+
+if(BE_EDITOR_ENABLED)
+    add_compile_definitions(BE_WITH_EDITOR=1)
+    message(STATUS "Editor: ENABLED (BE_WITH_EDITOR=${BE_WITH_EDITOR_VALUE})")
+else()
+    add_compile_definitions(BE_WITH_EDITOR=0)
+    message(STATUS "Editor: DISABLED (BE_WITH_EDITOR=${BE_WITH_EDITOR_VALUE})")
+endif()
+
+# =============================================================================
 # Python Virtual Environment Detection
 # =============================================================================
 # Use Python from .venv/ if it exists, otherwise system Python

@@ -8,6 +8,11 @@ file(GLOB_RECURSE TESTS_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/BECore/*.h"
 )
 
+# Tests of the editor panels exist only when the editor is built (BE_WITH_EDITOR, cmake/BagiEngine.cmake)
+if(NOT BE_EDITOR_ENABLED)
+    list(FILTER TESTS_SOURCES EXCLUDE REGEX "/BECore/(ConfigEditorSaveTest|SceneEditorSaveTest|ConfigFieldSchemaTest)\\.")
+endif()
+
 # Tests of the RmlUi host exist only when the host is built
 if(ENGINE_UI_RMLUI)
     file(GLOB_RECURSE RMLUI_TESTS_SOURCES
