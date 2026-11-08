@@ -14,17 +14,13 @@ namespace BECore {
      * Editor: ImGui, the editor panels and the scene shown in the viewport window (config/WidgetsConfig.xml).
      * Game: no ImGui; the scene is drawn straight into the back buffer (config/GameWidgetsConfig.xml).
      *
-     * The config only asks for a mode (ReadRunMode: the requested mode); the build decides which one runs
+     * The config only asks for a mode (ApplicationConfig::_mode: the requested mode); the build decides which one runs
      * (ResolveRunMode: the resolved mode). A build without the editor (BE_WITH_EDITOR=0) has only Game.
      */
     CORE_ENUM(RunMode, uint8_t, Editor, Game)
 
     /// True when this build contains the editor panels (BE_WITH_EDITOR, see cmake/BagiEngine.cmake).
     inline constexpr bool kEditorBuilt = BE_WITH_EDITOR != 0;
-
-    /// Reads the `mode` attribute of the ApplicationConfig root. A missing or unknown value gives RunMode::Editor.
-    /// This is the requested mode; pass it through ResolveRunMode before acting on it.
-    RunMode ReadRunMode(const XmlNode& applicationConfig);
 
     /// The mode that runs in this build: @p requested, except that Editor becomes Game (with one warning) when !kEditorBuilt.
     RunMode ResolveRunMode(RunMode requested);

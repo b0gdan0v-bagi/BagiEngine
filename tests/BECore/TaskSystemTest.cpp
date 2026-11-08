@@ -54,9 +54,10 @@ namespace BECore::Tests {
         }
 
         /// Polls @p predicate until it holds or @p timeout expires. Replaces a fixed sleep, which is
-        /// either flaky on a loaded machine or needlessly slow.
+        /// either flaky on a loaded machine or needlessly slow. The limit only costs time when a test fails, so it is generous
+        /// (ctest -j runs many test processes on the cores of one machine).
         template <typename Predicate>
-        bool WaitUntil(Predicate&& predicate, std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) {
+        bool WaitUntil(Predicate&& predicate, std::chrono::milliseconds timeout = std::chrono::milliseconds(20000)) {
             const auto deadline = std::chrono::steady_clock::now() + timeout;
             while (!predicate()) {
                 if (std::chrono::steady_clock::now() >= deadline) {

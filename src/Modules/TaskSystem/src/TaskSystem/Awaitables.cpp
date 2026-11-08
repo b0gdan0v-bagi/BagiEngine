@@ -37,7 +37,7 @@ namespace BECore {
     void DelayAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
         auto* scheduler = TaskManager::GetInstance().GetScheduler();
         if (scheduler) {
-            scheduler->ScheduleDelayed([handle]() mutable { handle.resume(); }, delay, TaskPriority::Normal, threadType);
+            scheduler->ScheduleDelayed([handle]() mutable { handle.resume(); }, delay, TaskPriority::Normal, threadType, clock);
         }
     }
 

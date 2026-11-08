@@ -20,7 +20,7 @@ namespace BECore {
         void DrawScreenAll() const;
         void DrawAll() const;
 
-        /// Creates the widgets of the resolved run mode of ApplicationConfig (ResolveRunMode(ReadRunMode(..))).
+        /// Creates the widgets of the resolved run mode of ApplicationConfig (ResolveRunMode(ApplicationConfig::_mode)).
         void CreateWidgets();
 
         /// Creates the widgets of @p mode and appends them; the mode is what GetMode() reports from now on.

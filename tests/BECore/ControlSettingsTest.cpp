@@ -1,4 +1,6 @@
+#include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Control/ControlSettings.h>
+#include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
 
@@ -8,18 +10,18 @@ namespace BECore::Tests {
 
         using Args = eastl::vector<eastl::string>;
 
-        /// The <root> element of @p xml, the shape ConfigManager::GetConfig() hands out. @p config keeps the document alive.
-        XmlNode ParseRoot(const XmlConfig& config, const char* xml) {
-            EXPECT_TRUE(config.LoadFromString(xml)) << xml;
-            return config.GetRoot();
+        /// The ApplicationConfig the engine reads from @p xml (the code path of the real start-up, strict values)
+        ApplicationConfigLoad LoadFrom(const char* xml) {
+            XmlDeserializer deserializer;
+            EXPECT_TRUE(deserializer.LoadFromString(xml)) << xml;
+            return LoadApplicationConfig(deserializer);
         }
 
         std::expected<ControlSettings, ControlError> Resolve(const Args& args, const char* configXml = nullptr) {
             if (configXml == nullptr) {
-                return ResolveControlSettings(args, XmlNode{pugi::xml_node{}});
+                return ResolveControlSettings(args, ApplicationConfigLoad{});
             }
-            const XmlConfig config = XmlConfig::Create();
-            return ResolveControlSettings(args, ParseRoot(config, configXml));
+            return ResolveControlSettings(args, LoadFrom(configXml));
         }
 
         void ExpectInvalid(const std::expected<ControlSettings, ControlError>& result) {
@@ -42,6 +44,25 @@ namespace BECore::Tests {
         ASSERT_TRUE(settings.has_value());
         EXPECT_FALSE(settings->enabled);
         EXPECT_EQ(settings->port, kDefaultControlPort);
+    }
+
+    TEST(ControlSettingsTest, ABadModeAloneIsNoControlError) {
+        // The mode is not this function's business: Application logs it once and falls back to Editor
+        const auto settings = Resolve({}, R"(<root mode="Window"/>)");
+        ASSERT_TRUE(settings.has_value());
+        EXPECT_FALSE(settings->enabled);
+        EXPECT_EQ(settings->port, kDefaultControlPort);
+
+        const auto withFlag = Resolve({"--control"}, R"(<root mode="Window" type="" control="false"/>)");
+        ASSERT_TRUE(withFlag.has_value());
+        EXPECT_TRUE(withFlag->enabled);
+    }
+
+    TEST(ControlSettingsTest, TheErrorNamesTheFieldOfTheConfig) {
+        const auto result = Resolve({}, R"(<root controlPort="70000"/>)");
+        ASSERT_FALSE(result.has_value());
+        EXPECT_EQ(result.error().code, ControlErrors::kInvalidParams);
+        EXPECT_NE(result.error().message.find("ApplicationConfig: controlPort:"), eastl::string::npos) << result.error().message.c_str();
     }
 
     TEST(ControlSettingsTest, CommandLineEnables) {

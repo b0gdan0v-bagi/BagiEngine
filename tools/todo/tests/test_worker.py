@@ -284,3 +284,189 @@ def test_list_json_usage_counts_each_answer_once_over_the_session_and_its_agents
     assert usage["recent"]["total"] == 71  # only the agent's answer is within the last minutes
     assert usage["context"] == 112 and usage["contextModel"] == "claude-sonnet"  # the session's last answer: 2 + 10 + 100
     assert state["usage"]["total"]["total"] == 294
+
+
+RULES = """# The todo areas
+
+## Areas
+
+| Area | `<area>` (todo store) | `<R>` (git repository) | `<base>` | Vikunja project (the service's) |
+|------|-----------------------|------------------------|----------|---------------------------------|
+| game | `mahjong` | `.` | `main` | `BagiEngine-Madjong` |
+| engine | `engine` | `engine` | `games/mahjong` | `BagiEngine` |
+
+`<engine>` is `engine`.
+
+## Workers
+
+| not | `areas` | here |
+"""
+
+
+def test_rule_areas_reads_the_areas_table(tmp_path: Path):
+    assert worker.rule_areas(tmp_path) is None
+    rules = tmp_path / worker.RULES_FILE
+    rules.parent.mkdir(parents=True)
+    rules.write_text(RULES)
+    assert worker.rule_areas(tmp_path) == ["mahjong", "engine"]
+    rules.write_text("# No table\n")
+    assert worker.rule_areas(tmp_path) is None
+
+
+def test_list_json_store_keeps_only_the_areas_of_the_rules_file(game: Path, fake_claude, monkeypatch, capsys):
+    script, _log, _sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    rules = game / worker.RULES_FILE
+    rules.parent.mkdir(parents=True)
+    rules.write_text(RULES)
+    store = [
+        {"id": "mahjong-x", "area": "mahjong", "status": "review", "branch": "todo/mahjong-x"},
+        {"id": "eng-y", "area": "engine", "status": "review", "branch": "todo/eng-y"},
+        {"id": "chess-z", "area": "chess", "status": "review", "branch": "todo/chess-z"},
+        {"id": "chess-w", "area": "chess", "status": "in progress", "branch": "todo/chess-w"},
+    ]
+    real_run = subprocess.run
+
+    def fake_run(command, *args, **kwargs):
+        if any(str(part).endswith("todo.py") for part in command):
+            return subprocess.CompletedProcess(command, 0, json.dumps(store), "")
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--store", "--claude", str(script)]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["areas"] == ["mahjong", "engine"]
+    assert [entry["id"] for entry in data["review"]] == ["mahjong-x", "eng-y"]
+
+
+# --- merge: the quick merge, against a fake todo.py ------------------------------------------------
+
+MERGE_RULES = """# The todo areas
+
+## Areas
+
+| Area | `<area>` (todo store) | `<R>` (git repository) | `<base>` | Vikunja project (the service's) |
+|------|-----------------------|------------------------|----------|---------------------------------|
+| game | `mahjong` | `.` | `main` | `G` |
+| engine | `engine` | `engine` | `games/chess` (the `branch` of `.gitmodules`) | `E` |
+"""
+
+
+@pytest.fixture
+def store(game: Path, monkeypatch):
+    """The entries of a fake todo store; the calls of todo.py are recorded in `calls`."""
+    rules = game / worker.RULES_FILE
+    rules.parent.mkdir(parents=True, exist_ok=True)
+    rules.write_text(MERGE_RULES)
+    run("add", ".claude/rules", cwd=game)
+    run("commit", "-q", "-m", "rules", cwd=game)
+    run("switch", "-q", "games/chess", cwd=game / "engine")
+    entries: dict[str, dict] = {}
+    calls: list[list[str]] = []
+    real_run = subprocess.run
+
+    def fake_run(command, *args, **kwargs):
+        if any(str(part).endswith("todo.py") for part in command):
+            rest = [str(part) for part in command[command.index("--actor") + 2 :]]
+            calls.append(rest)
+            if rest[0] == "show":
+                if rest[1] not in entries:
+                    return subprocess.CompletedProcess(command, 2, "", "404 not found")
+                return subprocess.CompletedProcess(command, 0, json.dumps(entries[rest[1]]), "")
+            return subprocess.CompletedProcess(command, 0, "", "")
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    return entries, calls
+
+
+def branch_with(repo: Path, branch: str, base: str, name: str, text: str) -> None:
+    run("switch", "-q", "-c", branch, base, cwd=repo)
+    (repo / name).write_text(text)
+    run("add", name, cwd=repo)
+    run("commit", "-q", "-m", f"{branch}: {name}", cwd=repo)
+    run("switch", "-q", base, cwd=repo)
+
+
+def review(entry_id: str, area: str, branch: str, note: str = "done") -> dict:
+    return {"id": entry_id, "area": area, "title": f"Title of {entry_id}", "status": "review", "statusNote": note, "branch": branch}
+
+
+def test_merge_dry_run_says_what_it_would_do(game: Path, store, capsys):
+    entries, _calls = store
+    branch_with(game, "todo/g-x", "main", "x.txt", "x\n")
+    entries["g-x"] = review("g-x", "mahjong", "todo/g-x")
+    capsys.readouterr()
+    assert worker.main(["merge", "g-x", "--dry-run", "--json"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert (plan["base"], plan["conflicts"], plan["problems"], plan["moved"], plan["pointer"], plan["reopen"]) == ("main", [], [], False, False, False)
+    assert plan["files"] == ["x.txt"] and len(plan["commits"]) == 1
+    assert "todo/g-x" in run("branch", "--list", "todo/g-x", cwd=game)
+
+
+def test_merge_of_a_game_branch_held_by_a_worker(game: Path, store, capsys):
+    entries, calls = store
+    worker.main(["create", "1", "--no-configure"])
+    w1 = game.parent / "game.workers" / "w1"
+    run("switch", "-q", "-c", "todo/g-x", cwd=w1)
+    (w1 / "x.txt").write_text("x\n")
+    run("add", "x.txt", cwd=w1)
+    run("commit", "-q", "-m", "x", cwd=w1)
+    entries["g-x"] = review("g-x", "mahjong", "todo/g-x")
+    capsys.readouterr()
+    assert worker.main(["merge", "g-x", "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "closed" and result["deleted"] and result["detached"] == str(w1)
+    assert ["close", "g-x"] in calls
+    assert (game / "x.txt").read_text() == "x\n"
+    assert run("log", "-1", "--format=%s", cwd=game).strip() == "Merge branch 'todo/g-x'"
+    assert run("branch", "--list", "todo/g-x", cwd=game) == ""
+    assert "todo/g-x" not in run("status", "--branch", "--porcelain", cwd=w1)
+
+
+def test_merge_of_an_engine_slice_reopens_it_and_moves_the_pointer(game: Path, store, capsys):
+    entries, calls = store
+    branch_with(game / "engine", "todo/e-y", "games/chess", "y.txt", "y\n")
+    entries["e-y"] = review("e-y", "engine", "todo/e-y", note=f"half of it, slice 1 of 2, {worker.SLICE_REOPEN}")
+    capsys.readouterr()
+    assert worker.main(["merge", "e-y", "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "open" and result["pointer"]
+    assert ["close", "e-y", "--reopen"] in calls
+    assert run("log", "-1", "--format=%s", cwd=game).strip() == "Update engine: Title of e-y"
+    assert run("status", "--porcelain", cwd=game) == ""
+    assert (game / "engine" / "y.txt").exists()
+
+
+def test_merge_refuses_conflicts_and_changes_nothing(game: Path, store, capsys):
+    entries, calls = store
+    branch_with(game, "todo/g-x", "main", "same.txt", "branch\n")
+    (game / "same.txt").write_text("main\n")
+    run("add", "same.txt", cwd=game)
+    run("commit", "-q", "-m", "main", cwd=game)
+    entries["g-x"] = review("g-x", "mahjong", "todo/g-x")
+    head = run("rev-parse", "HEAD", cwd=game)
+    capsys.readouterr()
+    assert worker.main(["merge", "g-x", "--dry-run", "--json"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["conflicts"] == ["same.txt"] and plan["moved"]
+    assert worker.main(["merge", "g-x"]) == 1
+    assert "conflicts" in capsys.readouterr().err
+    assert run("rev-parse", "HEAD", cwd=game) == head and not [c for c in calls if c[0] == "close"]
+
+
+def test_merge_refuses_another_area_a_dirty_checkout_and_an_entry_not_in_review(game: Path, store, capsys):
+    entries, _calls = store
+    branch_with(game, "todo/g-x", "main", "x.txt", "x\n")
+    entries["c-z"] = review("c-z", "chess", "todo/c-z")
+    entries["g-o"] = {**review("g-o", "mahjong", "todo/g-x"), "status": "in progress"}
+    entries["g-x"] = review("g-x", "mahjong", "todo/g-x")
+    assert worker.main(["merge", "c-z"]) == 1
+    assert "not of this checkout" in capsys.readouterr().err
+    assert worker.main(["merge", "g-o"]) == 1
+    assert "not in review" in capsys.readouterr().err
+    (game / "README.md").write_text("changed\n")
+    assert worker.main(["merge", "g-x"]) == 1
+    assert "uncommitted" in capsys.readouterr().err
+    assert "todo/g-x" in run("branch", "--list", "todo/g-x", cwd=game)

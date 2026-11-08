@@ -65,7 +65,7 @@ namespace BECore {
         IntrusivePtr<TweenHandle> Delay(float seconds, eastl::function<void()> onComplete = {}, eastl::function<void()> onCancel = {});
 
         /// `AwaitTween(Delay(seconds))`: `co_await tweens.Wait(0.5f)` suspends the coroutine for 0.5 s of game time. Game time, not wall-clock:
-        /// `DelaySec` of the task system is a scheduler job on `steady_clock` that ignores the frame clamp and the manual clock
+        /// `DelaySec` of the task system is a scheduler job on `steady_clock` that ignores the frame clamp and the manual clock (`DelayGameSec` is its game-time counterpart on the task system)
         [[nodiscard]] TweenAwaiter Wait(float seconds);
 
         /**

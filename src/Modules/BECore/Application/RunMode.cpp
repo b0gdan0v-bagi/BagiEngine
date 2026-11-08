@@ -2,20 +2,6 @@
 
 namespace BECore {
 
-    RunMode ReadRunMode(const XmlNode& applicationConfig) {
-        const auto modeName = applicationConfig.ParseAttribute<eastl::string_view>("mode");
-        if (!modeName) {
-            return RunMode::Editor;
-        }
-
-        const auto mode = EnumUtils<RunMode>::Cast(*modeName);
-        if (!mode) {
-            LOG_WARNING("ApplicationConfig: unknown mode '{}', starting in Editor mode"_format(*modeName));
-            return RunMode::Editor;
-        }
-        return *mode;
-    }
-
     RunMode ResolveRunMode(RunMode requested) {
         if (requested == RunMode::Editor && !kEditorBuilt) {
             LOG_WARNING("Run mode: Editor requested, but this build has no editor (BE_WITH_EDITOR=OFF), starting in Game mode");

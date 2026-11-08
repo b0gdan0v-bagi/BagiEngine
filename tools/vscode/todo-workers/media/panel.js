@@ -30,8 +30,9 @@
         return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
     }
 
-    function button(label, message, title, danger) {
-        const b = el("button", danger ? "danger" : "", label);
+    // kind: true or "danger" (a red label), "primary" (the main action of a card)
+    function button(label, message, title, kind) {
+        const b = el("button", kind === true ? "danger" : kind || "", label);
         if (title) b.title = title;
         b.addEventListener("click", () => vscode.postMessage(message));
         return b;
@@ -221,7 +222,12 @@
         if (entry.statusNote) card.appendChild(el("div", "note", entry.statusNote));
         card.appendChild(head("branch", { branch: entry.branch }));
         const actions = el("div", "actions");
-        actions.append(button("Copy /todo-merge", { cmd: "merge", entry: entry.id }, "paste it into Claude in the main checkout"), button("Plan", { cmd: "plan", entry: entry.id }));
+        actions.append(
+            button("Review", { cmd: "review", entry: entry.id }, "the changes of the branch against its base, in one diff editor"),
+            button("Quick merge", { cmd: "quickMerge", entry: entry.id }, "worker.py merge: a dialog with the commits, then merge --no-ff, close the entry, delete the branch (and the engine pointer); no build", "primary"),
+            button("Merge with Claude", { cmd: "merge", entry: entry.id }, "a terminal in the main checkout runs claude '/todo-merge <branch>': it reports, asks, and builds when the base moved"),
+            button("Plan", { cmd: "plan", entry: entry.id })
+        );
         card.appendChild(actions);
         return card;
     }
