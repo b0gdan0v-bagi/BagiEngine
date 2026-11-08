@@ -13,6 +13,7 @@ namespace BECore::Match3 {
         _rng.seed(seed);
         _score = 0;
         _selected.reset();
+        _lastSwap.reset();
         GenerateInitialBoard();
         ++_version;
     }
@@ -43,6 +44,7 @@ namespace BECore::Match3 {
     }
 
     bool Match3GameModel::TrySwap(Cell a, Cell b) {
+        _lastSwap.reset();
         if (!a.IsInside() || !b.IsInside() || !IsAdjacent(a, b)) {
             return false;
         }
@@ -53,8 +55,13 @@ namespace BECore::Match3 {
             return false;
         }
 
-        ResolveCascade();
+        SwapTrace trace;
+        trace.a = a;
+        trace.b = b;
+        ResolveCascade(&trace.steps);
         ++_version;
+        trace.version = _version;
+        _lastSwap = eastl::move(trace);
         return true;
     }
 
@@ -87,6 +94,10 @@ namespace BECore::Match3 {
     }
 
     int Match3GameModel::ResolveCascade() {
+        return ResolveCascade(nullptr);
+    }
+
+    int Match3GameModel::ResolveCascade(eastl::vector<CascadeStep>* steps) {
         int totalRemoved = 0;
         while (true) {
             const auto matched = MatchFinder::FindMatches(_board);
@@ -99,8 +110,13 @@ namespace BECore::Match3 {
             totalRemoved += static_cast<int>(matched.size());
             _score += static_cast<int>(matched.size());
 
-            ApplyGravity();
-            RefillTop();
+            CascadeStep* step = nullptr;
+            if (steps != nullptr) {
+                step = &steps->emplace_back();
+                step->removed = matched;
+            }
+            ApplyGravity(step);
+            RefillTop(step);
         }
         return totalRemoved;
     }
@@ -136,7 +152,7 @@ namespace BECore::Match3 {
         }
     }
 
-    void Match3GameModel::ApplyGravity() {
+    void Match3GameModel::ApplyGravity(CascadeStep* step) {
         // Convention: row 0 is the top of the board, gems fall toward higher row indices.
         for (int8_t col = 0; col < kBoardSize; ++col) {
             int8_t writeRow = kBoardSize - 1;
@@ -146,6 +162,9 @@ namespace BECore::Match3 {
                     if (writeRow != row) {
                         _board.Set(col, writeRow, g);
                         _board.Set(col, row, GemType::None);
+                        if (step != nullptr) {
+                            step->falls.push_back(GemFall{col, row, writeRow});
+                        }
                     }
                     --writeRow;
                 }
@@ -153,11 +172,20 @@ namespace BECore::Match3 {
         }
     }
 
-    void Match3GameModel::RefillTop() {
+    void Match3GameModel::RefillTop(CascadeStep* step) {
         for (int8_t col = 0; col < kBoardSize; ++col) {
+            // After gravity the holes of a column are its top rows 0..holes-1
+            int8_t holes = 0;
+            while (holes < kBoardSize && _board.Get(col, holes) == GemType::None) {
+                ++holes;
+            }
             for (int8_t row = 0; row < kBoardSize; ++row) {
                 if (_board.Get(col, row) == GemType::None) {
-                    _board.Set(col, row, RandomGem());
+                    const GemType gem = RandomGem();
+                    _board.Set(col, row, gem);
+                    if (step != nullptr) {
+                        step->refills.push_back(GemRefill{col, row, static_cast<int8_t>(row - holes), gem});
+                    }
                 }
             }
         }

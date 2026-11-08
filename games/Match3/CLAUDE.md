@@ -14,6 +14,7 @@ src/Match3/
 │   ├── Match3Types.h             Cell (col 0, row 0 = top-left), GemType, kGemTypeCount, kMinMatchLength
 │   ├── Match3Board.*             8x8 gem grid, storage only
 │   ├── MatchFinder.*             stateless detector of horizontal/vertical runs of >= kMinMatchLength
+│   ├── CascadeTrace.*            `SwapTrace` / `CascadeStep` / `GemFall` / `GemRefill`: what a committed swap did, as plain data; `ReplayTrace` applies it to the board before the swap
 │   └── Match3GameModel.*         board, score, selected cell, seed, version, deterministic RNG, legal swaps
 └── Components/
     ├── Match3BoardComponent      owns the model; draws board and gems, routes clicks, publishes `score` and `seed` to UIVars, answers Match3Reset and Match3Menu
@@ -33,7 +34,7 @@ src/Match3/
 - The control API works while the menu is up: the model belongs to the board component, which exists in every loaded scene.
 
 - Unlike Chess (BagiEngine-Chess), the model is owned by the scene component, not by the `IGame`.
-- `Match3GameModel` never animates: a successful swap resolves the whole cascade (remove → gravity → refill → repeat) before returning, so the board is stable after every public call. Keep animation, if added, in the component.
+- `Match3GameModel` never animates: a successful swap resolves the whole cascade (remove → gravity → refill → repeat) before returning, so the board is stable after every public call. It learns no time, tween or position, but it RECORDS what the cascade did as plain data: `GetLastSwap()` is a `SwapTrace` (the version it belongs to, the two swapped cells, and per round the removed cells, the falls `{col, fromRow, toRow}` and the refills `{col, toRow, fromRow, gem}` with a negative `fromRow`: above the board). It is cleared by `Reset` and at the start of every `TrySwap`, so it is null after a rejected swap (a stale trace is never a new one); `ResolveCascade()` alone records nothing. Recording touches neither the RNG, the score nor the version. Time, tweens and drawing stay in the component.
 - Public gameplay surface is `Reset(seed)`, `OnCellClicked` (two-step select/swap), `TrySwap`, and for a controller `WouldSwapMatch(a, b)` (tries the swap on a copy, changes nothing), `GetLegalSwaps()` (each neighbour pair once: a cell with its right and its lower neighbour, row by row), `GetSeed()` and `GetVersion()` (grows with every `Reset` and every committed swap).
 - **Determinism:** the same seed gives the same board, and the same seed with the same swaps gives the same board and score, on every platform. The gems come from `std::mt19937` through `1 + rng() % kGemTypeCount`, not from `std::uniform_int_distribution` (its output differs between standard libraries). `Match3LegalSwapsTest` pins the boards of three seeds against an independent MT19937. Do not change how `RandomGem()` draws without updating those boards: every saved seed changes.
 - Geometry and the RNG seed (`_originX`, `_originY`, `_cellSize`, `_seed`) are reflected for the scene editor.
@@ -54,6 +55,7 @@ Executable `Match3Tests`, no engine services needed:
 
 - `Match3GameModelTest.cpp`: board, matches, swaps, cascade.
 - `Match3LegalSwapsTest.cpp`: `GetLegalSwaps` against a brute force of `TrySwap` on copies, `WouldSwapMatch` changes nothing, seed determinism with golden boards, version.
+- `Match3CascadeTraceTest.cpp`: `SwapTrace` / `ReplayTrace`: replay equals `TrySwap` for every legal swap of six seeds, removed cells add up to the score, refills start above the board, a hand-made two-step cascade by value, the trace version, empty after `Reset` and after a rejected swap.
 - `Match3GameControlTest.cpp`: the adapter on a model the test owns.
 - `Match3UiTest.cpp`: the shipped `SceneConfig.xml` (read from the source tree) in a scene manager with a `RecordingRenderer`: the menu and the HUD through the size matrix with the longest values, the HUD outside the board in five window shapes, Play / Quit / Reset / Menu, actions of the other scene ignored, the score on screen, a click on the Reset button at its drawn place. Needs the engine services.
 
