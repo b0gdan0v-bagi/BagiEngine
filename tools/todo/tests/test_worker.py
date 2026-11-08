@@ -217,3 +217,37 @@ def test_list_json_names_each_worker_its_heads_and_its_session(game: Path, fake_
     assert (first["name"], first["session"], first["active"], first["dirty"]) == ("w1", None, False, False)
     assert first["head"]["branch"] is None and first["head"]["commit"]
     assert second["session"]["id"] == "b" and second["active"] and second["entry"] is None
+
+
+def test_list_json_activity_reads_the_session_and_its_agents_from_the_transcripts(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
+    script, _log, sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    w1 = game.parent / "game.workers" / "w1"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    record = session(w1, "working", "a")
+    record["sessionId"] = "sess-1"
+    sessions.write_text(json.dumps([record]))
+    folder = worker.transcript_of(str(w1), "sess-1")
+    folder.parent.mkdir(parents=True)
+
+    def say(*parts, stop=None):
+        return json.dumps({"type": "assistant", "timestamp": "2026-11-08T10:00:00Z", "message": {"stop_reason": stop, "content": list(parts)}})
+
+    folder.write_text("\n".join([
+        json.dumps({"type": "user", "message": {"content": "/todo-loop 1"}}),
+        say({"type": "tool_use", "name": "Agent", "input": {"description": "Review WP 1/2", "subagent_type": "todo-reviewer"}}),
+        say({"type": "text", "text": "The review   is\nrunning."}),
+    ]) + "\n")
+    agents = folder.with_suffix("") / "subagents"
+    agents.mkdir(parents=True)
+    (agents / "agent-x.meta.json").write_text(json.dumps({"agentType": "todo-reviewer", "description": "Review WP 1/2", "model": "opus"}))
+    (agents / "agent-x.jsonl").write_text(say({"type": "tool_use", "name": "Bash", "input": {"command": "ctest", "description": "Run the tests"}}) + "\n")
+    (agents / "agent-y.meta.json").write_text(json.dumps({"agentType": "todo-developer", "description": "WP 1/2"}))
+    (agents / "agent-y.jsonl").write_text(say({"type": "tool_use", "name": "SubagentHandback", "input": {"message": "WP 1/2 done"}}) + "\n")
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--activity", "--claude", str(script)]) == 0
+    activity = json.loads(capsys.readouterr().out)["workers"][0]["activity"]
+    assert [(e["kind"], e.get("tool"), e["text"]) for e in activity["events"]] == [("tool", "Agent", "Review WP 1/2"), ("say", None, "The review is running.")]
+    running, done = activity["agents"]
+    assert (running["type"], running["done"], running["last"][-1]["text"]) == ("todo-reviewer", False, "Run the tests")
+    assert (done["type"], done["done"], done["last"][-1]["text"]) == ("todo-developer", True, "WP 1/2 done")

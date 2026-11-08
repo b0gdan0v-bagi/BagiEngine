@@ -356,6 +356,131 @@ def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
     return [{key: entry.get(key) for key in keep} for entry in entries if isinstance(entry, dict)], None
 
 
+# --- activity: what a session does now, from its transcript ---------------------------------------
+#
+# Claude Code writes every session to ~/.claude/projects/<cwd with each non-alphanumeric char as '-'>/
+# <sessionId>.jsonl, and the agents it starts to <sessionId>/subagents/agent-<id>.jsonl with a .meta.json
+# (agentType, description, model). The panel shows the last steps of both; nothing here writes.
+
+ACTIVITY_EVENTS = 8
+ACTIVITY_AGENT_MINUTES = 15  # an agent whose transcript changed within this time counts as running
+TAIL_BYTES = 768 * 1024
+REPORT_TOOLS = ("SubagentHandback", "SendMessage")  # the tool an agent hands its final report back with
+
+
+def projects_dir() -> Path:
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+
+
+def transcript_of(cwd: str, session_id: str) -> Path:
+    return projects_dir() / re.sub(r"[^A-Za-z0-9]", "-", cwd) / f"{session_id}.jsonl"
+
+
+def tail_records(path: Path) -> list[dict]:
+    """The JSON records of the last TAIL_BYTES of a transcript (the first, cut line is dropped)."""
+    try:
+        with path.open("rb") as file:
+            size = file.seek(0, os.SEEK_END)
+            file.seek(max(0, size - TAIL_BYTES))
+            data = file.read()
+    except OSError:
+        return []
+    lines = data.split(b"\n")
+    if size > TAIL_BYTES:
+        lines = lines[1:]
+    records = []
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    return records
+
+
+def one_line(text: str, limit: int) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def tool_text(name: str, given: dict) -> str:
+    for key in ("description", "message", "file_path", "pattern", "command", "prompt", "query", "url"):
+        value = given.get(key)
+        if isinstance(value, str) and value.strip():
+            return one_line(value, 160)
+    return one_line(json.dumps(given, ensure_ascii=False), 160)
+
+
+def events_of(records: list[dict], limit: int) -> list[dict]:
+    """The last `limit` steps: what the session said (`say`) and which tools it called (`tool`)."""
+    events = []
+    for record in records:
+        if record.get("type") != "assistant":
+            continue
+        content = (record.get("message") or {}).get("content")
+        if isinstance(content, str):
+            content = [{"type": "text", "text": content}]
+        for part in content if isinstance(content, list) else []:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "text" and str(part.get("text", "")).strip():
+                events.append({"time": record.get("timestamp"), "kind": "say", "text": one_line(part["text"], 400)})
+            elif part.get("type") == "tool_use":
+                given = part.get("input") if isinstance(part.get("input"), dict) else {}
+                events.append({"time": record.get("timestamp"), "kind": "tool", "tool": part.get("name"), "text": tool_text(str(part.get("name")), given)})
+    return events[-limit:]
+
+
+def finished(records: list[dict]) -> bool:
+    """An agent is done when its last answer ended the turn or was its report (REPORT_TOOLS)."""
+    for record in reversed(records):
+        if record.get("type") != "assistant":
+            continue
+        message = record.get("message") or {}
+        content = message.get("content") if isinstance(message.get("content"), list) else []
+        if any(isinstance(part, dict) and part.get("type") == "tool_use" and part.get("name") in REPORT_TOOLS for part in content):
+            return True
+        return message.get("stop_reason") == "end_turn"
+    return False
+
+
+def session_activity(session: dict | None) -> dict | None:
+    """The last steps of a worker's session and of the agents it runs now, or None without a transcript."""
+    if not session or not session.get("cwd") or not session.get("sessionId"):
+        return None
+    main = transcript_of(session["cwd"], session["sessionId"])
+    if not main.is_file():
+        return None
+    agents = []
+    folder = main.with_suffix("") / "subagents"
+    now = time.time()
+    if folder.is_dir():
+        for path in folder.glob("agent-*.jsonl"):
+            try:
+                changed = path.stat().st_mtime
+            except OSError:
+                continue
+            if now - changed > ACTIVITY_AGENT_MINUTES * 60:
+                continue
+            try:
+                meta = json.loads(path.with_suffix(".meta.json").read_text())
+            except (OSError, json.JSONDecodeError):
+                meta = {}
+            records = tail_records(path)
+            last = events_of(records, 2)
+            agents.append({
+                "type": meta.get("agentType"),
+                "description": meta.get("description"),
+                "model": meta.get("model"),
+                "updated": int(changed * 1000),
+                "done": finished(records),
+                "last": last,
+            })
+    agents.sort(key=lambda agent: (not agent["done"], agent["updated"]), reverse=True)
+    return {"updated": int(main.stat().st_mtime * 1000), "events": events_of(tail_records(main), ACTIVITY_EVENTS), "agents": agents[:4]}
+
+
 def list_json(layout: Layout, args) -> dict:
     """What `list --json` prints: the workers, their sessions and entries, and the entries in review
     (the VS Code panel of tools/vscode/todo-workers reads it)."""
@@ -378,6 +503,7 @@ def list_json(layout: Layout, args) -> dict:
             "dirty": bool(changed),
             "session": None if session is None else {key: session.get(key) for key in ("id", "name", "state", "status", "startedAt")},
             "active": is_active(session),
+            "activity": session_activity(session) if args.activity else None,
             "entry": entry,
         })
     return {
@@ -559,6 +685,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
     p.add_argument("--store", action="store_true", help="with --json: also the entries in progress and in review of the todo store")
+    p.add_argument("--activity", action="store_true", help="with --json: also the last steps of each session and of its running agents (from the transcripts)")
     p = sub.add_parser("check", help="the shared config and every worker")
     p.add_argument("--fix", action="store_true", help="set a broken core.worktree of the shared submodule back")
     p = sub.add_parser("remove", help="delete a clean worker folder")

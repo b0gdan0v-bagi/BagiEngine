@@ -10,7 +10,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 HERE = Path(__file__).resolve().parent
-FILES = ["package.json", "extension.js", "README.md", "media/workers.svg"]
+FILES = ["package.json", "extension.js", "README.md", "media/workers.svg", "media/panel.js", "media/panel.css"]
 
 CONTENT_TYPES = """<?xml version="1.0" encoding="utf-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -18,6 +18,7 @@ CONTENT_TYPES = """<?xml version="1.0" encoding="utf-8"?>
 <Default Extension=".js" ContentType="application/javascript"/>
 <Default Extension=".md" ContentType="text/markdown"/>
 <Default Extension=".svg" ContentType="image/svg+xml"/>
+<Default Extension=".css" ContentType="text/css"/>
 <Default Extension=".vsixmanifest" ContentType="text/xml"/>
 </Types>
 """
