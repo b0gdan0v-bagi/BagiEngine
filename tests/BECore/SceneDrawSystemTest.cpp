@@ -80,6 +80,12 @@ namespace BECore::Tests {
             return DrawnIds(*_renderer);
         }
 
+        /// Gives @p sprite a white texture of kTextureSize x kTextureSize from the recording renderer.
+        void SetWhiteTexture(SpriteRendererComponent& sprite) {
+            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * 4, 255);
+            sprite.SetTexture(_renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize));
+        }
+
         IntrusivePtr<RecordingRenderer> _renderer;
         IntrusivePtr<Scene> _scene;
     };
@@ -233,8 +239,7 @@ namespace BECore::Tests {
     TEST_F(SceneDrawSystemTest, ASpriteWithoutATransformDrawsNothing) {
         auto node = _scene->CreateNode("NoTransform"_intern, nullptr);
         auto sprite = BECore::New<SpriteRendererComponent>();
-        const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * 4, 255);
-        sprite->SetTexture(_renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize));
+        SetWhiteTexture(*sprite);
         node->AddComponent(sprite);
 
         EXPECT_TRUE(Draw().empty());
@@ -246,8 +251,7 @@ namespace BECore::Tests {
         transform->_x = 1.0f;
         spriteNode->AddComponent(transform);
         auto sprite = BECore::New<SpriteRendererComponent>();
-        const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * 4, 255);
-        sprite->SetTexture(_renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize));
+        SetWhiteTexture(*sprite);
         spriteNode->AddComponent(sprite);
         AddQuad(*_scene, nullptr, "Back", 2.0f, -1);
 

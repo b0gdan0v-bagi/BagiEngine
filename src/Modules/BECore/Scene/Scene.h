@@ -28,9 +28,10 @@ namespace BECore {
          *
          * The pass is SceneDrawSystem: it writes a SceneDrawItem into the registry for every node, sorts them and walks
          * a view over them. It draws QuadRendererComponent and SpriteRendererComponent itself from their registry data
-         * and calls IComponent::OnDraw() of every other component. Draw order is the order of the nodes sorted by (SceneNode::GetLayer(), scene order): a lower
-         * layer first, and within a layer the depth-first order of the tree (a parent before its children, siblings as in
-         * the config), so a node later in the scene is drawn on top. It does not depend on any event handler order.
+         * and calls IComponent::OnDraw() of every other component. Draw order is the order of the nodes sorted by
+         * (SceneNode::GetLayer(), scene order): a lower layer first, and within a layer the depth-first order of the tree
+         * (a parent before its children, siblings as in the config), so a node later in the scene is drawn on top. It does
+         * not depend on any event handler order. A node has at most one quad and one sprite (the first of each counts).
          * Nothing may add or remove nodes while this runs.
          */
         void Draw();

@@ -45,7 +45,7 @@ namespace BECore {
             }
 
             if (sprite) {
-                // Dereferencing the handle updates its access time, as the draw of a sprite does
+                // Dereferencing the handle marks the texture as used (updates its access time)
                 const ResourceHandle<ITexture>& texture = sprite->GetTexture();
                 registry.emplace_or_replace<SpriteDrawData>(entity, texture ? &*texture : nullptr, sprite->_srcRect, sprite->_fit, sprite);
             } else {
