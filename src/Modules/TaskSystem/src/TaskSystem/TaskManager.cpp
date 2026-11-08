@@ -37,6 +37,14 @@ namespace BECore {
         _scheduler.ProcessMainThreadTasks();
     }
 
+    void TaskManager::AdvanceGameTime(PassKey<CoreManager>, double seconds) {
+        if (!_isInitialized) {
+            return;
+        }
+
+        _scheduler.AdvanceGameTime(seconds);
+    }
+
     void TaskManager::Shutdown(PassKey<CoreManager>) {
         if (!_isInitialized) {
             LOG_WARNING("[TaskManager] Not initialized, skipping shutdown");
