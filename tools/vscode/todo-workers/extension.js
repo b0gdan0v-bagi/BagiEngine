@@ -1,7 +1,9 @@
 // The panel of the parallel todo-loop workers (tools/todo/worker.py, "Workers" in tools/todo/CLAUDE.md).
 // It reads `worker.py list --json --store --activity` and shows one card per worker (its entry, the state
 // of its session, the plan, the branches, what the session and its agents do now) and the entries in
-// review. It only reads and opens terminals; the loops are started by /todo-loop-parallel.
+// review. It reads, opens terminals and diffs; the one write is a merge the owner confirms (Quick merge runs
+// worker.py merge, Merge with Claude a terminal with claude '/todo-merge <branch>'). The loops are started by
+// /todo-loop-parallel.
 "use strict";
 
 const vscode = require("vscode");
@@ -55,6 +57,15 @@ function runTool(tool, args, timeout) {
             } else {
                 resolve(stdout);
             }
+        });
+    });
+}
+
+function runGit(cwd, args, timeout) {
+    return new Promise((resolve, reject) => {
+        childProcess.execFile("git", args, { cwd, env: toolEnv(), timeout: timeout || 30000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+            if (error) reject(new Error((stderr || error.message).trim()));
+            else resolve(stdout);
         });
     });
 }
@@ -180,10 +191,101 @@ function activate(context) {
         vscode.window.showTextDocument(vscode.Uri.file(file), { preview: true });
     }
 
-    async function copyMerge(entry) {
-        if (!entry || !entry.branch) return;
-        await vscode.env.clipboard.writeText(`/todo-merge ${entry.branch}`);
-        vscode.window.showInformationMessage(`Copied: /todo-merge ${entry.branch} (paste it into Claude in the main checkout)`);
+    // Review: the branch against the point where it left its base, every file in one multi-diff editor
+    // (the git extension's URIs); a terminal with the diff when the editor cannot show it.
+    async function reviewBranch(entry) {
+        if (!entry || !entry.branch || !entry.repo || !entry.base) {
+            vscode.window.showWarningMessage("No repository or base for this entry (the Areas table of .claude/rules/todo-project.md)");
+            return;
+        }
+        const title = `${entry.id}: ${entry.base}...${entry.branch}`;
+        try {
+            const mergeBase = (await runGit(entry.repo, ["merge-base", entry.base, entry.branch])).trim();
+            const gitExtension = vscode.extensions.getExtension("vscode.git");
+            const gitApi = (gitExtension.isActive ? gitExtension.exports : await gitExtension.activate()).getAPI(1);
+            const lines = (await runGit(entry.repo, ["diff", "--name-status", "-M", mergeBase, entry.branch])).split("\n").filter(Boolean);
+            const resources = lines.map((line) => {
+                const parts = line.split("\t");
+                const kind = parts[0][0];
+                const before = vscode.Uri.file(path.join(entry.repo, parts[1]));
+                const after = vscode.Uri.file(path.join(entry.repo, parts[parts.length - 1]));
+                return [after, kind === "A" ? undefined : gitApi.toGitUri(before, mergeBase), kind === "D" ? undefined : gitApi.toGitUri(after, entry.branch)];
+            });
+            if (!resources.length) {
+                vscode.window.showInformationMessage(`${title}: no changes`);
+                return;
+            }
+            await vscode.commands.executeCommand("vscode.changes", title, resources);
+        } catch (error) {
+            const terminal = vscode.window.createTerminal({ name: `review ${entry.id}`, cwd: entry.repo });
+            terminal.show();
+            terminal.sendText(`git log --oneline ${shellQuote(entry.base)}..${shellQuote(entry.branch)}; git diff --stat ${shellQuote(entry.base)}...${shellQuote(entry.branch)}`);
+            vscode.window.showWarningMessage(`The diff editor did not open (${error.message}); the terminal shows the diff instead`);
+        }
+    }
+
+    // Quick merge: worker.py merge, without Claude. The dialog shows the dry run; a yes merges (--no-ff),
+    // closes the entry (or opens it again for the next slice), frees and deletes the branch and, for the
+    // engine in a game, commits the pointer. Conflicts and a dirty checkout are refused by worker.py.
+    const merging = new Set();
+    async function quickMerge(entry) {
+        const tool = findTool();
+        if (!entry || !tool || merging.has(entry.id)) return;
+        merging.add(entry.id);
+        try {
+            let plan;
+            try {
+                plan = JSON.parse(await runTool(tool, ["merge", entry.id, "--dry-run", "--json"], 90000));
+            } catch (error) {
+                vscode.window.showErrorMessage(`Quick merge of ${entry.id}: ${error.message}`);
+                return;
+            }
+            if (plan.conflicts.length || plan.problems.length) {
+                const why = plan.conflicts.length ? `conflicts with ${plan.base} in ${plan.conflicts.join(", ")}` : plan.problems.join("; ");
+                vscode.window.showErrorMessage(`Quick merge of ${plan.branch}: ${why}`, { modal: true, detail: "Nothing was changed. Conflicts are resolved by hand." });
+                return;
+            }
+            const detail = [`${plan.commits.length} commits into ${plan.base}: ${plan.stat}`, ...plan.commits.slice(0, 8).map((line) => `  ${line}`)];
+            if (plan.commits.length > 8) detail.push(`  ... and ${plan.commits.length - 8} more`);
+            detail.push("");
+            if (plan.moved) detail.push("The base moved since the branch was cut: the merged result is not built or tested here. Run the tests after it.");
+            detail.push(plan.reopen ? "The entry is a slice: it goes back to open for the next one." : "The entry is closed.");
+            if (plan.heldBy) detail.push(`${plan.heldBy} lets go of the branch (detached at ${plan.base}); the branch is deleted.`);
+            else detail.push("The branch is deleted.");
+            if (plan.pointer) detail.push(`Then one commit in the game: "Update engine: ${plan.title}".`);
+            detail.push("Nothing is pushed.");
+            const pick = await vscode.window.showWarningMessage(`Merge ${plan.branch} into ${plan.base}?`, { modal: true, detail: detail.join("\n") }, "Merge");
+            if (pick !== "Merge") return;
+            try {
+                const result = JSON.parse(await runTool(tool, ["merge", entry.id, "--json"], 120000));
+                const parts = [`Merged ${result.branch} into ${result.base} (${result.merge})`, `entry ${result.status || "still in review"}`];
+                if (result.pointer) parts.push(`engine pointer ${result.pointer}`);
+                const text = parts.join(", ");
+                if (result.notes.length) vscode.window.showWarningMessage(`${text}. ${result.notes.join("; ")}`);
+                else vscode.window.showInformationMessage(text);
+            } catch (error) {
+                vscode.window.showErrorMessage(`Quick merge of ${entry.id}: ${error.message}`);
+            }
+        } finally {
+            merging.delete(entry.id);
+            refresh();
+        }
+    }
+
+    // /todo-merge needs the owner's answer and the main checkout, so the button starts an interactive
+    // Claude there with the skill; the skill reports, asks and merges. The extension itself writes nothing.
+    function startMerge(entry) {
+        const tool = findTool();
+        if (!entry || !entry.branch || !tool) return;
+        const name = `todo-merge ${entry.id}`;
+        const open = vscode.window.terminals.find((t) => t.name === name && t.exitStatus === undefined);
+        if (open) {
+            open.show();
+            return;
+        }
+        const terminal = vscode.window.createTerminal({ name, cwd: tool.cwd, env: { PATH: toolEnv().PATH } });
+        terminal.show();
+        terminal.sendText(`${shellQuote(config().claude)} ${shellQuote(`/todo-merge ${entry.branch}`)}`);
     }
 
     function act(message) {
@@ -196,7 +298,9 @@ function activate(context) {
             case "terminal": return worker && vscode.window.createTerminal({ name: worker.name, cwd: worker.path }).show();
             case "stop": return stopWorker(worker);
             case "plan": return openPlan(entryOf(message.entry));
-            case "merge": return copyMerge(entryOf(message.entry));
+            case "merge": return startMerge(entryOf(message.entry));
+            case "quickMerge": return quickMerge(entryOf(message.entry));
+            case "review": return reviewBranch(entryOf(message.entry));
             case "settings": return vscode.commands.executeCommand("workbench.action.openSettings", "todoWorkers");
         }
     }
@@ -209,7 +313,11 @@ function activate(context) {
         if (previous && config().notify) {
             for (const entry of state.review) {
                 if (!previous.review.has(entry.id)) {
-                    vscode.window.showInformationMessage(`Todo: ${entry.id} is in review (${entry.branch})`, "Copy /todo-merge").then((pick) => pick && copyMerge(entry));
+                    vscode.window.showInformationMessage(`Todo: ${entry.id} is in review (${entry.branch})`, "Review", "Quick merge", "Merge with Claude").then((pick) => {
+                        if (pick === "Review") reviewBranch(entry);
+                        else if (pick === "Quick merge") quickMerge(entry);
+                        else if (pick === "Merge with Claude") startMerge(entry);
+                    });
                 }
             }
             for (const worker of state.workers) {
