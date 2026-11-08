@@ -18,7 +18,7 @@ Read by the skills `todo-loop`, `todo-merge`, `todo-add`, `todo-db` and by the a
 
 ## Workers
 
-Parallel loops run in worker folders (`.claude/skills/todo-loop/SKILL.md`, "Parallel workers"; `tools/todo/CLAUDE.md`, "Workers"): `python3 tools/todo/worker.py create 3` in the main checkout makes `../BagiEngine.workers/w1` ... `w3`, and `worker.py run <k>` starts a session in one. Three suit the owner's machine (14 cores; a full build takes about 17 s there, and `worker.py run` gives each session a share of the cores).
+Parallel loops run in worker folders (`.claude/skills/todo-loop/SKILL.md`, "Parallel workers"; `tools/todo/CLAUDE.md`, "Workers"): `python3 tools/todo/worker.py create 3` in the main checkout makes `../BagiEngine.workers/w1` ... `w3`, `worker.py start` runs `/todo-loop` in all of them as background sessions a minute apart (`worker.py list` shows them, `worker.py run <k>` opens one in a terminal). Three suit the owner's machine (14 cores; a full build takes about 17 s there, and `worker.py run` gives each session a share of the cores).
 
 - **Shared files**, which do not count alone when the loop compares busy files: `CLAUDE.md`, `README.md` (every entry touches them a little; the developer keeps its edits to its own lines).
 - Everything else counts as it is: two entries that change the same source, config or test file wait for each other.

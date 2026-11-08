@@ -21,17 +21,21 @@ Run it from anywhere inside the main checkout:
     python3 engine/tools/todo/worker.py create 3     # w1..w3, each with its first configure
     python3 engine/tools/todo/worker.py list
     python3 engine/tools/todo/worker.py check [--fix]
-    python3 engine/tools/todo/worker.py run 2        # a Claude session in w2
+    python3 engine/tools/todo/worker.py run 2        # a Claude session in w2, in this terminal
+    python3 engine/tools/todo/worker.py start        # /todo-loop in every worker, background sessions a minute apart
+    python3 engine/tools/todo/worker.py stop [k ...] # stop those background sessions
     python3 engine/tools/todo/worker.py remove 3
 
 Python 3.10+, standard library only.
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,6 +47,9 @@ DEFAULT_BASE = "main"
 # token, the permissions of Claude Code, the Python venv of the reflection generator.
 LINKED_FILES = (".env", ".claude/settings.local.json", ".venv", f"{SHARED_SUBMODULE}/.venv")
 DEFAULT_PRESETS = {"darwin": "macos-debug"}
+# The name of a worker's background session (`claude --bg --name`), how `claude attach` finds it.
+SESSION_PREFIX = "todo-w"
+DEFAULT_DELAY_S = 60
 
 
 class WorkerError(Exception):
@@ -244,6 +251,67 @@ def check_shared_config(layout: Layout, fix: bool) -> list[str]:
     return [f"core.worktree of {SHARED_SUBMODULE} is {actual}, expected {expected} (a `git submodule update` in a worker superproject? run `check --fix`)"]
 
 
+# --- background sessions -----------------------------------------------------------------------
+
+
+def build_env(layout: Layout) -> dict[str, str]:
+    """The environment of a worker's session: a share of the cores for each build, so the builds of
+    all the workers at once do not fight for the machine."""
+    count = max(1, len(layout.workers()))
+    env = dict(os.environ)
+    env.setdefault("CMAKE_BUILD_PARALLEL_LEVEL", str(max(2, (os.cpu_count() or 4) // count)))
+    return env
+
+
+def session_name(k: int) -> str:
+    return f"{SESSION_PREFIX}{k}"
+
+
+def list_sessions(claude: str) -> list[dict] | None:
+    """The sessions `claude agents --json` lists (running ones), or None when it cannot be asked."""
+    try:
+        result = subprocess.run([claude, "agents", "--json"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        sessions = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError:
+        return None
+    return sessions if isinstance(sessions, list) else None
+
+
+def session_in(sessions: list[dict], worker: Path) -> dict | None:
+    """The newest background session that runs in `worker` (its cwd is the folder or inside it)."""
+    found = []
+    for session in sessions:
+        cwd = session.get("cwd")
+        if session.get("kind") != "background" or not cwd:
+            continue
+        path = Path(cwd)
+        if path == worker or worker in path.parents:
+            found.append(session)
+    return max(found, key=lambda s: s.get("startedAt") or 0) if found else None
+
+
+def is_active(session: dict | None) -> bool:
+    """A session that has not finished its work: busy, or waiting for the person (a permission)."""
+    return session is not None and session.get("state") != "done"
+
+
+def describe(session: dict | None) -> str:
+    if session is None:
+        return "no session"
+    started = session.get("startedAt")
+    since = ""
+    if isinstance(started, (int, float)):
+        minutes = int((time.time() * 1000 - started) / 60000)
+        since = f", {minutes // 60} h {minutes % 60} min" if minutes >= 60 else f", {minutes} min"
+    state = session.get("state") or session.get("status") or "?"
+    return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}"
+
+
 # --- commands ----------------------------------------------------------------------------------
 
 
@@ -265,13 +333,18 @@ def cmd_list(layout: Layout, args) -> None:
     if not workers:
         print(f"no workers in {layout.root}")
         return
+    sessions = list_sessions(args.claude)
     for k, path in workers:
         line = f"w{k}  {head_of(path):40}"
         if layout.shared is not None and (path / SHARED_SUBMODULE / ".git").exists():
             line += f"  {SHARED_SUBMODULE}: {head_of(path / SHARED_SUBMODULE):32}"
         changed = dirty(path, ignore_submodules=True) or (layout.shared is not None and dirty(path / SHARED_SUBMODULE))
         line += "  dirty" if changed else "  clean"
+        if sessions is not None:
+            line += f"  {describe(session_in(sessions, path))}"
         print(line)
+    if sessions is not None and any(session_in(sessions, path) for _k, path in workers):
+        print(f"\nclaude agents (all of them), claude attach {SESSION_PREFIX}<k> (answer a session that waits), claude logs {SESSION_PREFIX}<k>")
 
 
 def cmd_check(layout: Layout, args) -> None:
@@ -307,15 +380,87 @@ def cmd_run(layout: Layout, args) -> None:
     worker = layout.worker(args.k)
     if not worker.is_dir():
         raise WorkerError(f"no worker {worker}; create it first")
-    count = max(1, len(layout.workers()))
-    env = dict(os.environ)
-    env.setdefault("CMAKE_BUILD_PARALLEL_LEVEL", str(max(2, (os.cpu_count() or 4) // count)))
+    env = build_env(layout)
     command = [args.claude, *args.rest]
     print(f"cd {worker} && CMAKE_BUILD_PARALLEL_LEVEL={env['CMAKE_BUILD_PARALLEL_LEVEL']} {' '.join(command)}")
     if args.print_only:
         return
     os.chdir(worker)
     os.execvpe(command[0], command, env)
+
+
+def chosen_workers(layout: Layout, numbers: list[int]) -> list[tuple[int, Path]]:
+    workers = layout.workers()
+    if not numbers:
+        if not workers:
+            raise WorkerError(f"no workers in {layout.root}; create them first")
+        return workers
+    known = dict(workers)
+    missing = [k for k in numbers if k not in known]
+    if missing:
+        raise WorkerError(f"no worker {', '.join(f'w{k}' for k in missing)} in {layout.root}")
+    return [(k, known[k]) for k in dict.fromkeys(numbers)]
+
+
+def cmd_start(layout: Layout, args) -> None:
+    """`/todo-loop` as a background Claude session (`claude --bg`) in each chosen worker, `--delay`
+    seconds apart: two loops that choose at the same moment could take entries that meet in their
+    files (todo-loop/SKILL.md, "Parallel workers"), the store's claim only keeps them off one entry."""
+    problems = check_shared_config(layout, fix=False)
+    if problems:
+        raise WorkerError(problems[0])
+    workers = chosen_workers(layout, args.workers)
+    sessions = list_sessions(args.claude)
+    if sessions is None and not args.print_only:
+        raise WorkerError(f"`{args.claude} agents --json` did not answer; is Claude Code installed and new enough for --bg?")
+    env = build_env(layout)
+    prompt = " ".join(part for part in ("/todo-loop", str(args.slices), args.loop_args) if part)
+    started = 0
+    failed = False
+    for k, path in workers:
+        session = session_in(sessions or [], path)
+        if is_active(session):
+            print(f"w{k}: already runs ({describe(session)}), left alone")
+            continue
+        command = [args.claude, "--bg", "--name", session_name(k), *args.rest, prompt]
+        if started and args.delay > 0:
+            print(f"  waiting {args.delay} s before w{k} (the loops must not choose at the same moment)")
+            if not args.print_only:
+                time.sleep(args.delay)
+        print(f"w{k}: cd {path} && CMAKE_BUILD_PARALLEL_LEVEL={env['CMAKE_BUILD_PARALLEL_LEVEL']} {' '.join(command[:-1])} '{prompt}'")
+        if args.print_only:
+            started += 1
+            continue
+        result = subprocess.run(command, cwd=path, env=env, capture_output=True, text=True)
+        output = (result.stdout + result.stderr).strip()
+        if result.returncode != 0 or "backgrounded" not in output:
+            failed = True
+            print(f"  failed: {output or f'exit code {result.returncode}'}")
+            if "trust" in output.lower():
+                print(f"  w{k} is not trusted by Claude Code yet: run `python3 <engine>/tools/todo/worker.py run {k}` once, accept the prompt, quit with /exit, then start again")
+            continue
+        started += 1
+        print(f"  {output.splitlines()[0]}")
+    if started and not args.print_only:
+        print(f"\nWatch: python3 <engine>/tools/todo/worker.py list; claude agents; claude attach {SESSION_PREFIX}<k> when one waits for you")
+    if failed:
+        raise WorkerError("some workers did not start (above)")
+
+
+def cmd_stop(layout: Layout, args) -> None:
+    workers = chosen_workers(layout, args.workers)
+    sessions = list_sessions(args.claude)
+    if sessions is None:
+        raise WorkerError(f"`{args.claude} agents --json` did not answer")
+    for k, path in workers:
+        session = session_in(sessions, path)
+        if session is None:
+            print(f"w{k}: no session")
+            continue
+        ident = session.get("id") or session.get("sessionId")
+        result = subprocess.run([args.claude, "stop", str(ident)], capture_output=True, text=True)
+        print(f"w{k}: {(result.stdout + result.stderr).strip() or f'exit code {result.returncode}'}")
+    print("A loop stopped in the middle leaves its entry `in progress` with its branch; the next /todo-loop in that worker continues it.")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -326,7 +471,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--base", default=DEFAULT_BASE, help=f"the commit a new worker starts on (default {DEFAULT_BASE})")
     p.add_argument("--preset", help="the configure preset (default: macos-debug on macOS)")
     p.add_argument("--no-configure", action="store_true", help="do not run the first configure")
-    sub.add_parser("list", help="the workers, their branches, clean or not")
+    p = sub.add_parser("list", help="the workers, their branches, clean or not, their background sessions")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
     p = sub.add_parser("check", help="the shared config and every worker")
     p.add_argument("--fix", action="store_true", help="set a broken core.worktree of the shared submodule back")
     p = sub.add_parser("remove", help="delete a clean worker folder")
@@ -335,6 +481,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("k", type=int)
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--print", dest="print_only", action="store_true", help="only print the command")
+    p = sub.add_parser("start", help="start /todo-loop as a background Claude session in the workers (arguments for claude after --)")
+    p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
+    p.add_argument("--slices", type=int, default=1, help="N of `/todo-loop N`: the slices each loop takes (default 1)")
+    p.add_argument("--loop-args", default="", help="more arguments of /todo-loop, e.g. 'models=reviewer:sonnet'")
+    p.add_argument("--delay", type=int, default=DEFAULT_DELAY_S, help=f"seconds between two starts (default {DEFAULT_DELAY_S})")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--print", dest="print_only", action="store_true", help="only print the commands")
+    p = sub.add_parser("stop", help="stop the background sessions of the workers")
+    p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
     return parser
 
 
@@ -346,7 +502,8 @@ def main(argv: list[str] | None = None) -> int:
     args.rest = rest
     try:
         layout = find_layout(Path.cwd())
-        {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run}[args.command](layout, args)
+        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop}
+        commands[args.command](layout, args)
     except WorkerError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
