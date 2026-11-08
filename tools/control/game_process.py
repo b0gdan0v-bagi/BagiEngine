@@ -63,7 +63,7 @@ class GameProcess:
         self.cwd = cwd
         self._process: subprocess.Popen | None = None
         self._exit_code: int | None = None
-        self._log_dir = tempfile.TemporaryDirectory()
+        self._log_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)  # Windows: a killed .bat leaves its child holding the log
         self.log_path = Path(self._log_dir.name) / "game.log"
 
     def __enter__(self) -> "GameProcess":

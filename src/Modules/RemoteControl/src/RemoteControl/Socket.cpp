@@ -81,6 +81,7 @@ namespace BECore {
 
         void EnsureSocketLibrary() {}
 
+        /// Nothing to do on POSIX: a connected socket stays blocking there and shutdown() wakes it (the name is the Windows need)
         bool MakeNonBlocking(NativeSocket) {
             return true;
         }

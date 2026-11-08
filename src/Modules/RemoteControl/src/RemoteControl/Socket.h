@@ -10,7 +10,7 @@ namespace BECore {
     /**
      * @brief A TCP socket on the loopback (127.0.0.1), POSIX or Winsock behind one interface.
      *
-     * Owns its handle and closes it on destruction; move-only. The calls block, so a thread that waits in
+     * Owns its handle and closes it on destruction; move-only. On POSIX the calls block, so a thread that waits in
      * Accept() or Receive() is woken by ShutdownBoth() from another thread (a connected socket) or by its timeout
      * (a listening socket, see Accept()). Only IPv4 loopback is supported: the control API is a local tool.
      *
