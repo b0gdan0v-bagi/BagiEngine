@@ -26,6 +26,14 @@ namespace BECore::VulkanSwapchainPolicy {
     /// was touched), Failed (a Vulkan call failed or the surface no longer offers the format of the render pass; logged)
     CORE_ENUM(SwapchainRecreateResult, uint8_t, Done, ZeroExtent, Failed)
 
+    /// Where a swapchain status comes from: the result of vkAcquireNextImageKHR or of vkQueuePresentKHR
+    CORE_ENUM(SwapchainStage, uint8_t, Acquire, Present)
+
+    /// What the frame does about a status (ActionAfter):
+    /// Proceed (nothing to do), ProceedAndRecreateLater (the frame goes on, the swapchain is rebuilt before the next
+    /// one), RecreateAndRetry (rebuild now and acquire again; the frame has not begun), Fail (log, skip the frame)
+    CORE_ENUM(SwapchainAction, uint8_t, Proceed, ProceedAndRecreateLater, RecreateAndRetry, Fail)
+
     /// The one place that turns a VkResult of acquire or present into a SwapchainStatus
     [[nodiscard]] constexpr SwapchainStatus ClassifyResult(VkResult result) {
         switch (result) {
@@ -45,14 +53,33 @@ namespace BECore::VulkanSwapchainPolicy {
         return pixelWidth <= 0 || pixelHeight <= 0;
     }
 
-    /// True when the swapchain must be rebuilt before the next frame: the window's pixel size differs from the
-    /// extent of the swapchain, or something (a window event, a suboptimal result) marked it dirty. Never while
-    /// minimized: there is nothing to build.
-    [[nodiscard]] constexpr bool NeedsRecreate(VkExtent2D current, int pixelWidth, int pixelHeight, bool dirty) {
+    /// What to do about the status of an acquire or a present. A suboptimal acquire still signaled its semaphore, so
+    /// the frame must go on and be submitted; an out-of-date acquire signaled nothing, so the frame has not begun and
+    /// the swapchain is rebuilt at once; a present that is out of date or suboptimal comes after the submit, so the
+    /// rebuild waits for the next frame.
+    [[nodiscard]] constexpr SwapchainAction ActionAfter(SwapchainStage stage, SwapchainStatus status) {
+        switch (status) {
+            case SwapchainStatus::Ok:
+                return SwapchainAction::Proceed;
+            case SwapchainStatus::Suboptimal:
+                return SwapchainAction::ProceedAndRecreateLater;
+            case SwapchainStatus::OutOfDate:
+                return stage == SwapchainStage::Acquire ? SwapchainAction::RecreateAndRetry : SwapchainAction::ProceedAndRecreateLater;
+            default:
+                return SwapchainAction::Fail;
+        }
+    }
+
+    /// True when the swapchain must be rebuilt before the next frame: the window's pixel size differs from
+    /// `requested`, or something (a window event, a suboptimal result) marked it dirty. Never while minimized:
+    /// there is nothing to build. `requested` is the pixel size the swapchain was last created for, not the extent the
+    /// surface gave back: a surface may report another fixed extent (a driver that lags behind a drag, a rounded
+    /// fractional scale), and comparing with that would rebuild the swapchain on every frame.
+    [[nodiscard]] constexpr bool NeedsRecreate(VkExtent2D requested, int pixelWidth, int pixelHeight, bool dirty) {
         if (IsMinimized(pixelWidth, pixelHeight)) {
             return false;
         }
-        return dirty || current.width != static_cast<uint32_t>(pixelWidth) || current.height != static_cast<uint32_t>(pixelHeight);
+        return dirty || requested.width != static_cast<uint32_t>(pixelWidth) || requested.height != static_cast<uint32_t>(pixelHeight);
     }
 
     /// The surface decides when it reports a fixed current extent; otherwise (UINT32_MAX) the pixel size of the

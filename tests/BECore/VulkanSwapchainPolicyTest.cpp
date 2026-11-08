@@ -36,6 +36,24 @@ namespace BECore::Tests {
         EXPECT_EQ(ClassifyResult(VK_NOT_READY), SwapchainStatus::Failed);
     }
 
+    TEST(VulkanSwapchainPolicyTest, ActionAfterAcquire) {
+        static_assert(ActionAfter(SwapchainStage::Acquire, SwapchainStatus::Ok) == SwapchainAction::Proceed);
+        EXPECT_EQ(ActionAfter(SwapchainStage::Acquire, SwapchainStatus::Ok), SwapchainAction::Proceed);
+        // Suboptimal signaled the semaphore: the frame goes on and is submitted
+        EXPECT_EQ(ActionAfter(SwapchainStage::Acquire, SwapchainStatus::Suboptimal), SwapchainAction::ProceedAndRecreateLater);
+        // Out of date signaled nothing: rebuild now and acquire again
+        EXPECT_EQ(ActionAfter(SwapchainStage::Acquire, SwapchainStatus::OutOfDate), SwapchainAction::RecreateAndRetry);
+        EXPECT_EQ(ActionAfter(SwapchainStage::Acquire, SwapchainStatus::Failed), SwapchainAction::Fail);
+    }
+
+    TEST(VulkanSwapchainPolicyTest, ActionAfterPresentNeverRetries) {
+        EXPECT_EQ(ActionAfter(SwapchainStage::Present, SwapchainStatus::Ok), SwapchainAction::Proceed);
+        // The frame is already submitted: the swapchain is rebuilt before the next one
+        EXPECT_EQ(ActionAfter(SwapchainStage::Present, SwapchainStatus::Suboptimal), SwapchainAction::ProceedAndRecreateLater);
+        EXPECT_EQ(ActionAfter(SwapchainStage::Present, SwapchainStatus::OutOfDate), SwapchainAction::ProceedAndRecreateLater);
+        EXPECT_EQ(ActionAfter(SwapchainStage::Present, SwapchainStatus::Failed), SwapchainAction::Fail);
+    }
+
     TEST(VulkanSwapchainPolicyTest, IsMinimizedWhenEitherSideIsZero) {
         static_assert(IsMinimized(0, 600) && !IsMinimized(800, 600));
         EXPECT_TRUE(IsMinimized(0, 0));
@@ -52,6 +70,14 @@ namespace BECore::Tests {
         EXPECT_TRUE(NeedsRecreate(current, 801, 600, false));
         EXPECT_TRUE(NeedsRecreate(current, 800, 599, false));
         EXPECT_TRUE(NeedsRecreate(current, 1600, 1200, false));
+    }
+
+    TEST(VulkanSwapchainPolicyTest, NeedsRecreateComparesWithTheSizeAskedForNotTheSizeGiven) {
+        // The swapchain was asked for 1000 x 700 and the surface gave 998 x 700: the window still has 1000 x 700,
+        // so nothing is rebuilt (comparing with the 998 would rebuild on every frame)
+        const VkExtent2D requested{1000, 700};
+        EXPECT_FALSE(NeedsRecreate(requested, 1000, 700, false));
+        EXPECT_TRUE(NeedsRecreate(requested, 1001, 700, false));
     }
 
     TEST(VulkanSwapchainPolicyTest, NeedsRecreateWhenDirtyEvenAtTheSameSize) {
