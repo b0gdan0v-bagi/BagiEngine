@@ -115,6 +115,50 @@ def test_ping_list_show_and_the_loop_commands(cli):
     assert out.splitlines()[0].split()[2] == "reopen"
 
 
+def test_claim_stores_the_base_and_the_origin(cli, tmp_path, monkeypatch):
+    cli("add", "sample", "--area", "engine", "--title", "A sample")
+    cli("add", "second", "--area", "engine", "--title", "Second")
+    cli("add", "third", "--area", "engine", "--title", "Third")
+    out, _ = cli("claim", "sample", "--branch", "todo/sample", "--base", "games/chess", "--origin", "Game@host")
+    assert out.startswith("sample: in progress") and "base" not in out
+    entry = json.loads(cli("show", "sample", "--json")[0])
+    assert entry["base"] == "games/chess" and entry["origin"] == "Game@host"
+    out, _ = cli("show", "sample")
+    assert "base: games/chess · origin: Game@host" in out
+    assert json.loads(cli("list", "--json")[0])[0]["origin"] == "Game@host"
+
+    repo = tmp_path / "Game"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    monkeypatch.chdir(repo)
+    cli("claim", "second", "--branch", "todo/second", "--base", "main")
+    second = json.loads(cli("show", "second", "--json")[0])
+    assert second["base"] == "main" and second["origin"] == "Game@" + socket.gethostname()
+
+    cli("claim", "third", "--branch", "todo/third")
+    third = json.loads(cli("show", "third", "--json")[0])
+    assert third["base"] is None and third["origin"] is None
+    assert "base:" not in cli("show", "third")[0]
+
+
+def test_default_origin_names_the_game_repository_and_the_host(tmp_path, monkeypatch):
+    host = socket.gethostname()
+    worker = tmp_path / "Game.workers" / "w1"
+    worker.mkdir(parents=True)
+    plain = tmp_path / "Repo"
+    plain.mkdir()
+    for folder in (worker, plain):
+        subprocess.run(["git", "init", "-q", str(folder)], check=True)
+    monkeypatch.chdir(worker)
+    assert todo.default_origin() == f"Game@{host}"
+    monkeypatch.chdir(plain)
+    assert todo.default_origin() == f"Repo@{host}"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+    assert todo.default_origin() == host
+
+
 def test_edit_clears_and_sets_fields(cli):
     cli("add", "sample", "--area", "engine", "--title", "A sample", "--stage", "2")
     cli("edit", "sample", "--stage", "none", "--title", "Renamed")

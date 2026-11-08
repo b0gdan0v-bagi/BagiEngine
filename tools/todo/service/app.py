@@ -98,6 +98,8 @@ class EntryPatch(BaseModel):
 
 class ClaimIn(BaseModel):
     branch: str
+    base: str | None = None
+    origin: str | None = None
 
 
 class ReviewIn(BaseModel):
@@ -247,11 +249,13 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
         if bad:
             raise HTTPException(422, f"cannot clear {', '.join(sorted(bad))}")
         changes.update({key: None for key in body.clear})
+        if "branch" in body.clear:  # a branch that is gone has no base and no origin
+            changes.update(base=None, origin=None)
         return write(lambda conn: store.entry_json(conn, store.update_entry(conn, entry_id, changes, actor, expected_version=body.expectedVersion)))
 
     @app.post(f"{API}/entries/{{entry_id}}/claim")
     def claim(entry_id: str, body: ClaimIn, actor: str = Depends(check_token)):
-        return write(lambda conn: store.entry_json(conn, store.claim(conn, entry_id, body.branch, actor)))
+        return write(lambda conn: store.entry_json(conn, store.claim(conn, entry_id, body.branch, actor, body.base, body.origin)))
 
     @app.post(f"{API}/entries/{{entry_id}}/review")
     def review(entry_id: str, body: ReviewIn, actor: str = Depends(check_token)):
