@@ -1,5 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <cmath>
 
 namespace BECore {
 
@@ -76,11 +77,139 @@ namespace BECore {
         _errors.push_back(error);
     }
 
+    namespace {
+
+        constexpr char kPlus = '+';
+
+        bool IsAsciiSpace(char c) {
+            return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+        }
+
+        eastl::string_view TrimAsciiSpaces(eastl::string_view text) {
+            while (!text.empty() && IsAsciiSpace(text.front())) {
+                text.remove_prefix(1);
+            }
+            while (!text.empty() && IsAsciiSpace(text.back())) {
+                text.remove_suffix(1);
+            }
+            return text;
+        }
+
+        // A leading '+' is accepted (pugixml did); std::from_chars does not take one
+        eastl::string_view DropPlusSign(eastl::string_view text) {
+            if (!text.empty() && text.front() == kPlus) {
+                text.remove_prefix(1);
+                // "+-1" and "++1" stay malformed
+                if (text.empty() || text.front() == kPlus || text.front() == '-') {
+                    return {};
+                }
+            }
+            return text;
+        }
+
+        enum class ParseStatus { Ok, Malformed, OutOfRange };
+
+        ParseStatus ParseBoolText(eastl::string_view text, bool& outValue) {
+            text = TrimAsciiSpaces(text);
+            if (text == "true" || text == "1") {
+                outValue = true;
+                return ParseStatus::Ok;
+            }
+            if (text == "false" || text == "0") {
+                outValue = false;
+                return ParseStatus::Ok;
+            }
+            return ParseStatus::Malformed;
+        }
+
+        template <typename T>
+        ParseStatus ParseNumberText(eastl::string_view text, T& outValue) {
+            text = DropPlusSign(TrimAsciiSpaces(text));
+            if (text.empty()) {
+                return ParseStatus::Malformed;
+            }
+
+            T parsed{};
+            const char* const end = text.data() + text.size();
+            const auto result = std::from_chars(text.data(), end, parsed);
+            if (result.ec == std::errc::invalid_argument || result.ptr != end) {
+                return ParseStatus::Malformed;
+            }
+            if (result.ec == std::errc::result_out_of_range) {
+                return ParseStatus::OutOfRange;
+            }
+            if constexpr (std::is_floating_point_v<T>) {
+                // "inf" and "nan" are text, not numbers of a config
+                if (!std::isfinite(parsed)) {
+                    return ParseStatus::Malformed;
+                }
+            }
+            outValue = parsed;
+            return ParseStatus::Ok;
+        }
+
+        template <typename T>
+        ParseStatus ParseText(eastl::string_view text, T& outValue) {
+            if constexpr (std::is_same_v<T, bool>) {
+                return ParseBoolText(text, outValue);
+            } else {
+                return ParseNumberText(text, outValue);
+            }
+        }
+
+        template <typename T>
+        constexpr const char* KindName() {
+            if constexpr (std::is_same_v<T, bool>) {
+                return "boolean";
+            } else if constexpr (std::is_integral_v<T>) {
+                return "integer";
+            } else {
+                return "number";
+            }
+        }
+
+    }  // namespace
+
+    template <typename T>
+    bool XmlDeserializer::ApplyStrictText(eastl::string_view name, eastl::string_view text, T& outValue) {
+        const ParseStatus status = ParseText(text, outValue);
+        if (status == ParseStatus::Ok) {
+            return true;
+        }
+        const char* const reason = status == ParseStatus::OutOfRange ? " (out of range)" : "";
+        ReportError(name, Format("Invalid {} value '{}'{}", KindName<T>(), text, reason));
+        return false;
+    }
+
+    template <typename T>
+    bool XmlDeserializer::ReadStrictAttribute(eastl::string_view name, T& outValue) {
+        pugi::xml_attribute attr = GetAttribute(name);
+        if (!attr) {
+            // As in the lenient read: a missing attribute is no error
+            return false;
+        }
+        return ApplyStrictText(name, attr.as_string(), outValue);
+    }
+
+    template <typename T>
+    bool XmlDeserializer::ReadStrictElement(eastl::string_view name, T& outValue) {
+        pugi::xml_node node = GetChild(name);
+        if (!node) {
+            ReportError(name, "Element not found");
+            return false;
+        }
+        return ApplyStrictText(name, node.text().as_string(), outValue);
+    }
+
     // =============================================================================
     // Read methods (child elements)
     // =============================================================================
 
     bool XmlDeserializer::Read(eastl::string_view name, bool& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -93,6 +222,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::Read(eastl::string_view name, int8_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -104,6 +237,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::Read(eastl::string_view name, uint8_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -115,6 +252,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::Read(eastl::string_view name, int16_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -126,6 +267,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::Read(eastl::string_view name, uint16_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -137,6 +282,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::Read(eastl::string_view name, int32_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -148,6 +297,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::Read(eastl::string_view name, uint32_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -159,6 +312,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::Read(eastl::string_view name, int64_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -170,6 +327,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::Read(eastl::string_view name, uint64_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -181,6 +342,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::Read(eastl::string_view name, float& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -192,6 +357,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::Read(eastl::string_view name, double& outValue) {
+        if (_strictValues) {
+            return ReadStrictElement(name, outValue);
+        }
+
         pugi::xml_node node = GetChild(name);
         if (!node) {
             ReportError(name, "Element not found");
@@ -231,6 +400,10 @@ namespace BECore {
     // =============================================================================
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, bool& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             // Don't add error for missing attributes (they might be optional)
@@ -243,6 +416,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, int8_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
@@ -253,6 +430,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, uint8_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
@@ -263,6 +444,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, int16_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
@@ -273,6 +458,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, uint16_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
@@ -283,6 +472,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, int32_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
@@ -293,6 +486,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, uint32_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
@@ -303,6 +500,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, int64_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
@@ -313,6 +514,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, uint64_t& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
@@ -323,6 +528,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, float& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
@@ -333,6 +542,10 @@ namespace BECore {
     }
 
     bool XmlDeserializer::ReadAttribute(eastl::string_view name, double& outValue) {
+        if (_strictValues) {
+            return ReadStrictAttribute(name, outValue);
+        }
+
         pugi::xml_attribute attr = GetAttribute(name);
         if (!attr) {
             return false;
