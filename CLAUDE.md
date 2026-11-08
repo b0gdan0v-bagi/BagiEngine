@@ -73,7 +73,7 @@ src/
 config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, Text, UI, default SceneConfig; assets/fonts/ has the default font)
 games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Match3; Chess is the repository BagiEngine-Chess, which carries this one as its submodule `engine/`)
 tests/                  # GoogleTest executable BagiEngineTests (BECore) + Common (BagiEngineTestSupport)
-tools/                  # developer tools: natvis, todo (the todo store: a service on Railway and its CLI `todo.py`; `tools/todo/CLAUDE.md`), control (Python: the control API client and smoke test, the MCP server; `tools/control/CLAUDE.md`)
+tools/                  # developer tools: natvis, todo (the todo store: a service on Railway and its CLI `todo.py`; `tools/todo/CLAUDE.md`), control (Python: the control API client and smoke test, the MCP server; `tools/control/CLAUDE.md`), vscode/todo-workers (a VS Code panel of the parallel todo-loop workers; its `README.md`)
 ```
 
 **Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.

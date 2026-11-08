@@ -330,7 +330,70 @@ def cmd_create(layout: Layout, args) -> None:
     print(f"\nStart them: /todo-loop-parallel, or {tool_command(layout)} start (one background session per worker, a minute apart)")
 
 
+def head_json(repo: Path) -> dict:
+    branch = git("symbolic-ref", "--quiet", "--short", "HEAD", cwd=repo, check=False)
+    return {"branch": branch or None, "commit": git("rev-parse", "--short", "HEAD", cwd=repo, check=False)}
+
+
+def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
+    """The entries `in progress` and in `review` (todo.py, run from the main checkout), or an error."""
+    todo = Path(__file__).resolve().parent / "todo.py"
+    try:
+        result = subprocess.run(
+            [sys.executable, str(todo), "list", "--status", "in progress,review", "--json"],
+            cwd=layout.main, capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return [], str(error)
+    if result.returncode != 0:
+        text = (result.stderr or result.stdout).strip()
+        return [], text.splitlines()[-1] if text else f"exit code {result.returncode}"
+    try:
+        entries = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError as error:
+        return [], f"todo.py list: {error}"
+    keep = ("id", "area", "title", "status", "statusNote", "branch", "planProgress")
+    return [{key: entry.get(key) for key in keep} for entry in entries if isinstance(entry, dict)], None
+
+
+def list_json(layout: Layout, args) -> dict:
+    """What `list --json` prints: the workers, their sessions and entries, and the entries in review
+    (the VS Code panel of tools/vscode/todo-workers reads it)."""
+    sessions = list_sessions(args.claude)
+    entries, store_error = store_entries(layout) if args.store else ([], None)
+    by_branch = {entry["branch"]: entry for entry in entries if entry.get("branch")}
+    workers = []
+    for k, path in layout.workers():
+        game = head_json(path)
+        engine = head_json(path / SHARED_SUBMODULE) if layout.shared is not None and (path / SHARED_SUBMODULE / ".git").exists() else None
+        changed = dirty(path, ignore_submodules=True) or (engine is not None and dirty(path / SHARED_SUBMODULE))
+        session = session_in(sessions or [], path)
+        entry = next((by_branch[h["branch"]] for h in (engine, game) if h and h["branch"] in by_branch), None)
+        workers.append({
+            "k": k,
+            "name": f"{WORKER_PREFIX}{k}",
+            "path": str(path),
+            "head": game,
+            "engine": engine,
+            "dirty": bool(changed),
+            "session": None if session is None else {key: session.get(key) for key in ("id", "name", "state", "status", "startedAt")},
+            "active": is_active(session),
+            "entry": entry,
+        })
+    return {
+        "main": str(layout.main),
+        "root": str(layout.root),
+        "sessionsKnown": sessions is not None,
+        "store": "off" if not args.store else (store_error or "ok"),
+        "workers": workers,
+        "review": [entry for entry in entries if entry.get("status") == "review"],
+    }
+
+
 def cmd_list(layout: Layout, args) -> None:
+    if args.json:
+        print(json.dumps(list_json(layout, args), ensure_ascii=False, indent=1))
+        return
     workers = layout.workers()
     if not workers:
         print(f"no workers in {layout.root}")
@@ -494,6 +557,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-configure", action="store_true", help="do not run the first configure")
     p = sub.add_parser("list", help="the workers, their branches, clean or not, their background sessions")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
+    p.add_argument("--store", action="store_true", help="with --json: also the entries in progress and in review of the todo store")
     p = sub.add_parser("check", help="the shared config and every worker")
     p.add_argument("--fix", action="store_true", help="set a broken core.worktree of the shared submodule back")
     p = sub.add_parser("remove", help="delete a clean worker folder")

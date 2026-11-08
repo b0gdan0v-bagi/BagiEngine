@@ -202,3 +202,18 @@ def test_start_refuses_a_report_to_that_is_not_a_session_name(game: Path, fake_c
     worker.main(["create", "1", "--no-configure"])
     assert worker.main(["start", "--delay", "0", "--report-to", "two words", "--claude", str(script)]) != 0
     assert not log.exists()
+
+
+def test_list_json_names_each_worker_its_heads_and_its_session(game: Path, fake_claude, capsys):
+    script, _log, sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    workers = game.parent / "game.workers"
+    sessions.write_text(json.dumps([session(workers / "w2", "working", "b")]))
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    state = json.loads(capsys.readouterr().out)
+    assert state["store"] == "off" and state["sessionsKnown"] and state["review"] == []
+    first, second = state["workers"]
+    assert (first["name"], first["session"], first["active"], first["dirty"]) == ("w1", None, False, False)
+    assert first["head"]["branch"] is None and first["head"]["commit"]
+    assert second["session"]["id"] == "b" and second["active"] and second["entry"] is None
