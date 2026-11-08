@@ -20,6 +20,7 @@ namespace BECore::Tests {
 
         constexpr float kMarkerId = 100.0f;
         constexpr uint32_t kTextureSize = 4;
+        constexpr size_t kBytesPerPixel = 4;
 
         /// Adds a node with a unit quad at x = @p id under @p parent (the root when null). The quad's rect in a recorded draw call tells which node it was.
         IntrusivePtr<SceneNode> AddQuad(Scene& scene, SceneNode* parent, const char* name, float id, int32_t layer = 0) {
@@ -82,7 +83,7 @@ namespace BECore::Tests {
 
         /// Gives @p sprite a white texture of kTextureSize x kTextureSize from the recording renderer.
         void SetWhiteTexture(SpriteRendererComponent& sprite) {
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * 4, 255);
+            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * kBytesPerPixel, 255);
             sprite.SetTexture(_renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize));
         }
 
