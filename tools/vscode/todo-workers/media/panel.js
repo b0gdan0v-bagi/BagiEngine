@@ -52,8 +52,13 @@
             word = "idle";
             kind = "idle";
         }
-        const badge = el("span", `badge ${kind}`, s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word);
+        // A finished session can stay in `claude agents` for hours: its age is no run time, so it shows when
+        // its last step was (the transcript), and a running one how long it has run.
+        const ended = kind === "done" && worker.activity ? ago(worker.activity.updated) : "";
+        const text = kind === "done" ? (ended ? `done · ended ${ended}` : "done") : s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word;
+        const badge = el("span", `badge ${kind}`, text);
         if (kind === "idle") badge.title = "Waiting: for an agent of its own, or for you (Attach to see)";
+        if (kind === "done") badge.title = "The session has finished; Log shows it, Update and Fast start begin anew";
         return badge;
     }
 
@@ -177,7 +182,7 @@
             const said = [...events].reverse().find((e) => e.kind === "say");
             if (said) {
                 const now = el("div", "now");
-                now.append(el("span", "label", "Now"), el("span", "time", ago(said.time)), el("div", "said", plain(said.text)));
+                now.append(el("span", "label", worker.active ? "Now" : "Last"), el("span", "time", ago(said.time)), el("div", "said", plain(said.text)));
                 card.appendChild(now);
             }
             const agents = activity.agents || [];
