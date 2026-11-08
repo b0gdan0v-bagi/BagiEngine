@@ -76,8 +76,9 @@ namespace BECore {
         int height = 0;
         SDL_GetWindowSizeInPixels(_window, &width, &height);
         if (IsMinimized(width, height)) {
-            width = window.GetWidth();
-            height = window.GetHeight();
+            const float density = window.GetPixelDensity();
+            width = static_cast<int>(std::lround(static_cast<float>(window.GetWidth()) * density));
+            height = static_cast<int>(std::lround(static_cast<float>(window.GetHeight()) * density));
         }
         _requestedPixelExtent = {static_cast<uint32_t>(std::max(width, 0)), static_cast<uint32_t>(std::max(height, 0))};
 
@@ -204,7 +205,7 @@ namespace BECore {
                 _swapchainDirty = true;
                 break;
             default:
-                LOG_ERROR("VulkanRendererBackend: {} failed"_format(stage == SwapchainStage::Acquire ? "acquiring a swapchain image, so the frame is skipped" : "presenting a swapchain image"));
+                LOG_ERROR("VulkanRendererBackend: {}"_format(stage == SwapchainStage::Acquire ? "acquiring a swapchain image failed, so the frame is skipped" : "presenting a swapchain image failed"));
                 break;
         }
         return action;
