@@ -188,3 +188,17 @@ def test_stop_and_list_find_the_session_of_a_worker(game: Path, fake_claude, cap
     assert "todo-w1: working/idle" in out and "no session" in out
     assert worker.main(["stop", "--claude", str(script)]) == 0
     assert log.read_text().splitlines() == ["stop abc"]
+
+
+def test_start_passes_the_session_that_gets_the_reports(game: Path, fake_claude):
+    script, log, _sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    assert worker.main(["start", "--delay", "0", "--report-to", "bagiengine-chess-51", "--loop-args", "plan-only", "--claude", str(script)]) == 0
+    assert log.read_text().strip().endswith("/todo-loop 1 plan-only report-to=bagiengine-chess-51")
+
+
+def test_start_refuses_a_report_to_that_is_not_a_session_name(game: Path, fake_claude):
+    script, log, _sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    assert worker.main(["start", "--delay", "0", "--report-to", "two words", "--claude", str(script)]) != 0
+    assert not log.exists()

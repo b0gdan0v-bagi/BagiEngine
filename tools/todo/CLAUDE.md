@@ -69,7 +69,7 @@ python3 tools/todo/worker.py create 3      # <parent>/<name>.workers/w1..w3, the
 python3 tools/todo/worker.py list          # the branch of each folder (and of its engine/), clean or not, its background session
 python3 tools/todo/worker.py check [--fix] # the shared config of the engine module and every worker
 python3 tools/todo/worker.py run 2         # cd w2 and start claude in this terminal (arguments after --; --print only prints)
-python3 tools/todo/worker.py start         # /todo-loop in every worker as a background session, a minute apart; [k ...], --slices N, --loop-args, --delay S, --print
+python3 tools/todo/worker.py start         # /todo-loop in every worker as a background session, a minute apart; [k ...], --slices N, --loop-args, --report-to <session> (the loops send their reports there), --delay S, --print
 python3 tools/todo/worker.py stop [k ...]  # stop the background sessions (the conversation is kept)
 python3 tools/todo/worker.py remove 3      # a clean folder; its branches stay (they are refs of the shared .git)
 ```
