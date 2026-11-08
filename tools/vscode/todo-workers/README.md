@@ -16,6 +16,8 @@ Below them the entries in `review` of the areas of `.claude/rules/todo-project.m
 - **Merge with Claude**: a terminal in the main checkout runs `claude '/todo-merge <branch>'`: the skill reports, asks, and builds and tests when the base moved (a second click shows the same terminal);
 - **Plan**.
 
+Above the cards, next to **Refresh** and **Settings**, **Todo list** opens a tab of the editor with the entries of the todo store (`todo.py list --all --json --body`): the areas of this checkout by default (or one area, or all), chips per status with counts (closed ones off at first), a search over id, title and text; newest first within a status. A click on an entry unfolds its text (paragraphs, bullets, bold and code; everything as text, no HTML) with **Markdown** (`todo.py show` in a markdown preview), **Plan** (the local copy in `~/.claude/plans`, else `todo.py plan get`) and **Copy id**. An open entry, and one in progress that no running worker holds, has **Attach to free worker**: a dialog names the free workers (no session running, no uncommitted changes; those that hold no entry first; for an entry whose branch an idle worker holds, only that worker) and the one picked runs `worker.py start <k> --delay 0 --slices 1 --loop-args '<id> <todoWorkers.loopArgs>'` (and `--report-to`), so its loop takes exactly that entry (or continues its branch); the button is greyed out while no worker is free, and an entry a running worker holds shows that worker. Otherwise it reads the store when it opens and on **Refresh** and writes nothing.
+
 The notification of a new entry in review offers **Review**, **Review with Claude**, **Quick merge** and **Merge with Claude**. A line in the status bar counts busy and idle workers and entries in review, and a notification comes when an entry reaches review or a session ends.
 
 It reads `worker.py list --json --store --activity --usage` every 15 s from the first workspace folder that has `tools/todo/worker.py` or `engine/tools/todo/worker.py` (the main checkout); the activity and the tokens come from the session transcripts in `~/.claude/projects/`. Everything shown is put in as text. It writes only a merge the owner confirms, and starts no loop: the loops are started by `/todo-loop-parallel`.
@@ -26,7 +28,7 @@ No npm: the packer uses the standard library.
 
 ```bash
 python3 tools/vscode/todo-workers/pack.py        # in a game: engine/tools/vscode/todo-workers/pack.py
-code --install-extension tools/vscode/todo-workers/build/todo-workers-0.7.1.vsix
+code --install-extension tools/vscode/todo-workers/build/todo-workers-0.9.0.vsix
 ```
 
 `code` is in `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/` on macOS when it is not on PATH. Then **Developer: Reload Window**. After a change bump `version` in `package.json`, pack and install again.

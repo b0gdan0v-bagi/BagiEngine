@@ -1,0 +1,32 @@
+body { background: var(--vscode-editor-background); }
+.todo-toolbar { flex-wrap: wrap; background: var(--vscode-editor-background); }
+.todo-toolbar select,
+.todo-toolbar input {
+    color: var(--vscode-input-foreground);
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
+    border-radius: 2px;
+    padding: 2px 6px;
+    font: inherit;
+}
+.todo-toolbar input.search { flex: 1 1 180px; min-width: 120px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+button.chip { opacity: 0.55; }
+button.chip.on { opacity: 1; border-color: currentColor; }
+.status-open { color: var(--vscode-charts-blue, #3794ff); }
+.status-in-progress { color: var(--vscode-charts-yellow, #cca700); }
+.status-review { color: var(--vscode-testing-iconPassed, #3fb950); }
+.status-deferred { color: var(--vscode-charts-purple, #b180d7); }
+.status-closed { color: var(--vscode-descriptionForeground); }
+.badge.status { margin-left: 0; }
+.todo-entry { cursor: pointer; }
+.todo-entry.open { cursor: default; }
+.todo-entry .card-top .time { margin-left: auto; }
+.todo-entry .summary { font-size: 12px; }
+.body { margin: 6px 0 0; padding-top: 6px; border-top: 1px dashed var(--vscode-widget-border, rgba(128, 128, 128, 0.3)); cursor: text; }
+.body p { margin: 0 0 6px; }
+.body ul { margin: 0 0 6px; padding-left: 20px; }
+.body li { margin: 2px 0; }
+.body h3 { margin: 8px 0 4px; font-size: 13px; }
+.todo-entry .badge.busy { margin-left: 0; color: var(--vscode-charts-blue, #3794ff); }
+button:disabled { opacity: 0.5; cursor: default; }

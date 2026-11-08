@@ -5,6 +5,8 @@
 // worker.py merge, Merge with Claude a terminal with claude '/todo-merge <branch>'). Review with Claude opens a
 // terminal with a read-only claude review of the branch. Update (worker.py update) moves an idle worker to the
 // tips of the bases, Fast start (worker.py start <k>) starts its loop at once; /todo-loop-parallel starts them all.
+// Todo list opens a tab with the entries of the todo store (todo.py list), filtered by area, status and text;
+// Attach to free worker there starts `/todo-loop 1 <id>` in a free worker (worker.py start <k>).
 "use strict";
 
 const vscode = require("vscode");
@@ -93,6 +95,30 @@ function sessionWord(worker) {
     return s.status === "busy" ? "busy" : "idle";
 }
 
+// A webview page: the script and the styles of media/ inline, under a nonce.
+function pageHtml(context, scriptName, styleNames, placeholder) {
+    const nonce = crypto.randomBytes(16).toString("hex");
+    const read = (name) => fs.readFileSync(path.join(context.extensionPath, "media", name), "utf8");
+    const style = styleNames.map(read).join("\n");
+    return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style nonce="${nonce}">${style}</style>
+</head>
+<body>
+<div id="root"><p class="muted">${placeholder}</p></div>
+<script nonce="${nonce}">${read(scriptName)}</script>
+</body>
+</html>`;
+}
+
+function todoTool(tool) {
+    return { cwd: tool.cwd, script: path.join(path.dirname(tool.script), "todo.py") };
+}
+
 class WorkersView {
     constructor(context, actions) {
         this.context = context;
@@ -128,23 +154,8 @@ class WorkersView {
         if (this.view) this.view.webview.postMessage(this.payload);
     }
 
-    html(webview) {
-        const nonce = crypto.randomBytes(16).toString("hex");
-        const script = fs.readFileSync(path.join(this.context.extensionPath, "media", "panel.js"), "utf8");
-        const style = fs.readFileSync(path.join(this.context.extensionPath, "media", "panel.css"), "utf8");
-        return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style nonce="${nonce}">${style}</style>
-</head>
-<body>
-<div id="root"><p class="muted">Asking worker.py ...</p></div>
-<script nonce="${nonce}">${script}</script>
-</body>
-</html>`;
+    html() {
+        return pageHtml(this.context, "panel.js", ["panel.css"], "Asking worker.py ...");
     }
 }
 
@@ -364,6 +375,151 @@ function activate(context) {
         terminal.sendText(`${shellQuote(config().claude)} ${shellQuote(prompt)}`);
     }
 
+    // The Todo list tab: the entries of the store (todo.py list --all --json --body), read again on Refresh.
+    let todoPanel = null;
+
+    async function loadTodoList() {
+        const tool = findTool();
+        if (!todoPanel) return;
+        if (!tool) {
+            todoPanel.webview.postMessage({ error: "No tools/todo/todo.py in the workspace folders." });
+            return;
+        }
+        todoPanel.webview.postMessage({ loading: true, error: null });
+        try {
+            const entries = JSON.parse(await runTool(todoTool(tool), ["list", "--all", "--json", "--body"], 30000));
+            if (todoPanel) todoPanel.webview.postMessage({ loading: false, entries, areas: state && state.areas ? state.areas : null, workers: workersForList(), at: Date.now() });
+        } catch (error) {
+            if (todoPanel) todoPanel.webview.postMessage({ loading: false, error: `todo.py list: ${error.message}` });
+        }
+    }
+
+    async function showTodoEntry(id) {
+        const tool = findTool();
+        if (!tool || !id) return;
+        try {
+            const text = await runTool(todoTool(tool), ["show", id], 30000);
+            const doc = await vscode.workspace.openTextDocument({ language: "markdown", content: text });
+            try {
+                await vscode.commands.executeCommand("markdown.showPreview", doc.uri);
+            } catch (error) {
+                await vscode.window.showTextDocument(doc, { preview: true });
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`todo.py show ${id}: ${error.message}`);
+        }
+    }
+
+    // A plan by its name: the local copy in ~/.claude/plans, else the text from the store.
+    async function openTodoPlan(name) {
+        const tool = findTool();
+        if (!tool || !name || !/^[A-Za-z0-9._-]+$/.test(name)) return;
+        const file = path.join(os.homedir(), ".claude", "plans", name);
+        if (fs.existsSync(file)) {
+            await vscode.window.showTextDocument(vscode.Uri.file(file), { preview: true });
+            return;
+        }
+        try {
+            const text = await runTool(todoTool(tool), ["plan", "get", name, "--stdout"], 30000);
+            const doc = await vscode.workspace.openTextDocument({ language: "markdown", content: text });
+            await vscode.window.showTextDocument(doc, { preview: true });
+        } catch (error) {
+            vscode.window.showErrorMessage(`todo.py plan get ${name}: ${error.message}`);
+        }
+    }
+
+    // What the Todo list tab needs of the workers: who is free, who works which entry.
+    function workersForList() {
+        if (!state) return null;
+        return state.workers.map((w) => ({ k: w.k, name: w.name, active: Boolean(w.active), dirty: Boolean(w.dirty), busy: busy.has(w.k), entry: w.entry ? w.entry.id : null }));
+    }
+
+    function postWorkersToList() {
+        if (todoPanel) todoPanel.webview.postMessage({ workers: workersForList() });
+    }
+
+    // A free worker: no session running, no uncommitted changes, no button of this panel at work on it.
+    // The ones that hold no entry come first.
+    function freeWorkers() {
+        if (!state) return [];
+        return state.workers
+            .filter((w) => !w.active && !w.dirty && !busy.has(w.k))
+            .sort((a, b) => (a.entry ? 1 : 0) - (b.entry ? 1 : 0) || a.k - b.k);
+    }
+
+    // Attach to free worker: `/todo-loop 1 <id>` (with the loop arguments and the report session of the
+    // settings) as the background session of a free worker, after the owner picks the worker.
+    async function startEntryInWorker(id) {
+        const tool = findTool();
+        if (!tool || !id || !/^[A-Za-z0-9_-]+$/.test(id)) return;
+        if (!state) await refresh();
+        const holder = state && state.workers.find((w) => w.active && w.entry && w.entry.id === id);
+        if (holder) {
+            vscode.window.showInformationMessage(`${id} is worked by ${holder.name} already.`);
+            return;
+        }
+        // A worker that holds the entry's branch (an idle loop left it there) is the only one that can switch
+        // to it: a branch is checked out in one worktree at a time.
+        const owner = state && state.workers.find((w) => w.entry && w.entry.id === id);
+        if (owner && (owner.dirty || busy.has(owner.k))) {
+            vscode.window.showWarningMessage(`${owner.name} holds the branch of ${id} and ${owner.dirty ? "has uncommitted changes" : "is busy"}; it cannot start now.`);
+            return;
+        }
+        const free = owner ? [owner] : freeWorkers();
+        if (!free.length) {
+            const why = state ? state.workers.map((w) => `${w.name}: ${w.active ? "session runs" : w.dirty ? "uncommitted changes" : busy.has(w.k) ? "busy" : "?"}`).join(", ") : "worker.py list did not answer";
+            vscode.window.showWarningMessage(`No free worker for ${id} (${why}).`);
+            return;
+        }
+        const c = config();
+        const loopArgs = [id, c.loopArgs].filter(Boolean).join(" ");
+        const label = (w) => (w.entry && w.entry.id !== id ? `${w.name} (leaves ${w.entry.id})` : w.entry ? `${w.name} (holds its branch)` : w.name);
+        const picked = await vscode.window.showInformationMessage(
+            `Start /todo-loop 1 ${loopArgs} in a free worker?`,
+            { modal: true, detail: "It runs as the background session todo-w<k> of that worker; the loop goes to the base itself. Attach opens it when it asks for a permission." },
+            ...free.map(label)
+        );
+        const worker = free.find((w) => label(w) === picked);
+        if (!worker || busy.has(worker.k)) return;
+        const args = ["start", String(worker.k), "--delay", "0", "--slices", "1", "--loop-args", loopArgs, "--claude", c.claude];
+        if (c.reportTo) args.push("--report-to", c.reportTo);
+        busy.add(worker.k);
+        postWorkersToList();
+        try {
+            const out = await runTool(tool, args, 90000);
+            const line = out.split("\n").map((l) => l.trim()).find((l) => l.startsWith("backgrounded") || l.includes("left alone")) || `${worker.name} started`;
+            vscode.window.showInformationMessage(`${worker.name} · ${id}: ${line}`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`${worker.name} · ${id}: ${error.message}`);
+        } finally {
+            busy.delete(worker.k);
+            await refresh();
+        }
+    }
+
+    function openTodoList() {
+        if (todoPanel) {
+            todoPanel.reveal();
+            return loadTodoList();
+        }
+        todoPanel = vscode.window.createWebviewPanel("todoWorkers.todoList", "Todo list", vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+        todoPanel.iconPath = vscode.Uri.file(path.join(context.extensionPath, "media", "workers.svg"));
+        todoPanel.webview.html = pageHtml(context, "todo.js", ["panel.css", "todo.css"], "Asking todo.py ...");
+        todoPanel.webview.onDidReceiveMessage((message) => {
+            switch (message.cmd) {
+                case "ready":
+                case "refresh": return loadTodoList();
+                case "show": return showTodoEntry(message.entry);
+                case "plan": return openTodoPlan(message.name);
+                case "copy": return vscode.env.clipboard.writeText(String(message.text || ""));
+                case "startInWorker": return startEntryInWorker(message.entry);
+            }
+        });
+        todoPanel.onDidDispose(() => {
+            todoPanel = null;
+        });
+    }
+
     function act(message) {
         const worker = workerOf(message.worker);
         switch (message.cmd) {
@@ -380,6 +536,7 @@ function activate(context) {
             case "quickMerge": return quickMerge(entryOf(message.entry));
             case "review": return reviewBranch(entryOf(message.entry));
             case "claudeReview": return startClaudeReview(entryOf(message.entry));
+            case "todoList": return openTodoList();
             case "settings": return vscode.commands.executeCommand("workbench.action.openSettings", "todoWorkers");
         }
     }
@@ -451,6 +608,7 @@ function activate(context) {
             const out = await runTool(tool, ["list", "--json", "--store", "--activity", "--usage", "--claude", config().claude], 90000);
             state = JSON.parse(out);
             view.show({ state, at: Date.now() });
+            postWorkersToList();
             updateStatus(null);
             notifyChanges();
         } catch (error) {

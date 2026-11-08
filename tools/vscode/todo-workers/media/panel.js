@@ -248,7 +248,7 @@
         root.replaceChildren();
         const bar = el("div", "toolbar");
         const info = el("span", "muted", payload.refreshing ? "refreshing ..." : payload.at ? `updated ${ago(payload.at)}` : "");
-        bar.append(info, button("Refresh", { cmd: "refresh" }), button("Settings", { cmd: "settings" }));
+        bar.append(info, button("Todo list", { cmd: "todoList" }, "the entries of the todo store in a tab of the editor"), button("Refresh", { cmd: "refresh" }), button("Settings", { cmd: "settings" }));
         root.appendChild(bar);
 
         if (payload.error) root.appendChild(el("div", "error", payload.error));
