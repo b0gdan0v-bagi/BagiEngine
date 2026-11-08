@@ -2,8 +2,47 @@
 
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Reflection/ISerializer.h>
+#include <Generated/TextureLibrary.gen.hpp>
 
 namespace BECore {
+
+    void TextureLibrary::Load(IDeserializer& deserializer) {
+        _entries.clear();
+        _index.clear();
+
+        size_t count = 0;
+        if (!deserializer.BeginArray("sprites", "sprite", count)) {
+            return;
+        }
+        for (size_t i = 0; i < count; ++i) {
+            if (!deserializer.BeginArrayElement()) {
+                break;
+            }
+            SpriteEntry entry;
+            entry.Deserialize(deserializer);
+            deserializer.EndArrayElement();
+            if (!entry.name.Empty()) {
+                AddOrUpdate(eastl::move(entry));
+            }
+        }
+        deserializer.EndArray();
+    }
+
+    void TextureLibrary::Write(ISerializer& serializer) const {
+        size_t count = _entries.size();
+        if (!serializer.BeginArray("sprites", "sprite", count)) {
+            return;
+        }
+        for (const auto& entry : _entries) {
+            if (serializer.BeginArrayElement()) {
+                entry.Serialize(serializer);
+                serializer.EndArrayElement();
+            }
+        }
+        serializer.EndArray();
+    }
 
     void TextureLibrary::Initialize() {
         _entries.clear();
