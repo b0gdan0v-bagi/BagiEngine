@@ -29,4 +29,7 @@ namespace BECore {
      */
     void LogDeserializeErrors(eastl::string_view configName, const IDeserializer& deserializer);
 
+    /// The same for errors that were copied out of a deserializer (a loaded settings struct keeps them), same message format.
+    void LogDeserializeErrors(eastl::string_view configName, eastl::span<const DeserializeError> errors);
+
 }  // namespace BECore

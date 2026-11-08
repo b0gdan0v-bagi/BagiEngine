@@ -11,19 +11,28 @@
 #include <EASTL/vector.h>
 #include <vulkan/vulkan.h>
 
+struct SDL_Window;
+
 namespace BECore {
 
     namespace RenderEvents {
         struct SetRenderDrawColorEvent;
     }
 
+    namespace SDLEvents {
+        struct WindowEvent;
+    }
+
     /**
      * Vulkan renderer backend implementing IRenderer.
      *
      * Frame lifecycle:
-     *   RenderClearEvent  -> BeginFrame(): acquire image, begin command buffer + render pass
-     *   [widget Draw()]   -> widgets record commands into the active render pass
-     *   RenderPresentEvent -> EndFrame(): end render pass + command buffer, submit, present
+     *   NewFrameEvent      -> AcquireFrame(): follow the window (rebuild the swapchain when its pixel size changed),
+     *                         acquire the image, open the command buffer; a minimized window skips the frame
+     *   RenderClearEvent   -> BeginFrame(): begin the swapchain render pass
+     *   [widget Draw()]    -> widgets record commands into the active render pass
+     *   RenderPresentEvent -> Present(): end render pass + command buffer, submit, present
+     * A skipped frame records nothing: every draw, SetRenderTarget and the ImGui render check that a frame is open.
      *
      * Max number of frames processed simultaneously (in-flight)
      */
@@ -109,14 +118,25 @@ namespace BECore {
         bool CreateCommandBuffers();
         bool CreateSyncObjects();
 
-        // Acquires the next swapchain image and opens the command buffer.
+        // Acquires the next swapchain image and opens the command buffer. Rebuilds the swapchain first when the
+        // window's pixel size is not the one it was made for; a minimized window skips the frame (and sleeps a
+        // little, so that the loop does not spin).
         // Called from OnNewFrame() — BEFORE the swapchain render pass begins so that
         // ViewportWidget can insert an offscreen render pass first.
         void AcquireFrame();
 
+        // Waits for the GPU and rebuilds the swapchain for the pixel size. True when the new swapchain is in place;
+        // false for a size of zero (minimized) or a failure, and then the swapchain is still marked dirty.
+        bool RecreateSwapchain(int pixelWidth, int pixelHeight);
+
+        // The one place that reads the status of an acquire or a present: marks the swapchain dirty when it must be
+        // rebuilt, logs a failure, and returns what the frame does next (VulkanSwapchainPolicy::ActionAfter)
+        VulkanSwapchainPolicy::SwapchainAction HandleSwapchainStatus(SwapchainStatus status, VulkanSwapchainPolicy::SwapchainStage stage);
+
         void OnNewFrame();
         void OnRenderClear();
         void OnRenderPresent();
+        void OnWindowEvent(const SDLEvents::WindowEvent& event);
         void OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event);
 
         void OnImGuiInit();
@@ -136,6 +156,14 @@ namespace BECore {
 
         VkSurfaceKHR _surface = VK_NULL_HANDLE;
 
+        // The window the surface belongs to (owned by SDLMainWindow, not destroyed here); its pixel size is read every frame
+        SDL_Window* _window = nullptr;
+        // The pixel size the swapchain was last created for: what the window is compared with, not the extent the
+        // surface gave back (they may differ, and the swapchain must not be rebuilt on every frame because of it)
+        VkExtent2D _requestedPixelExtent = {};
+        // The swapchain must be rebuilt before the next frame (a window event, a suboptimal or out-of-date result)
+        bool _swapchainDirty = false;
+
         VkCommandPool _commandPool = VK_NULL_HANDLE;
         eastl::vector<VkCommandBuffer> _commandBuffers;
 
@@ -149,6 +177,8 @@ namespace BECore {
 
         // true when the command buffer is open (frame acquired, not yet presented)
         bool _frameAcquired = false;
+        // true when the command buffer of the frame was submitted and the image waits to be presented
+        bool _frameSubmitted = false;
         // true when inside the swapchain render pass (between OnRenderClear and OnRenderPresent)
         bool _inSwapchainPass = false;
         // true when inside an offscreen render pass (between SetRenderTarget/UnsetRenderTarget)

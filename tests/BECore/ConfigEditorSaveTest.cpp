@@ -5,6 +5,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
 #include <Widgets/ConfigEditor/ConfigFieldSchema.h>
 #include <Widgets/ConfigEditor/StagedChanges.h>
 
@@ -68,7 +69,7 @@ namespace BECore::Tests {
 
         void SetUp() override {
             // One directory per test: ctest runs the tests in parallel processes, and SetUp clears the directory
-            _dir = std::filesystem::temp_directory_path() / Format("BagiEngineConfigEditorSaveTest_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()).c_str();
+            _dir = TestTempDirectory("BagiEngineConfigEditorSaveTest");
             std::filesystem::remove_all(_dir);
             std::filesystem::create_directories(_dir);
         }

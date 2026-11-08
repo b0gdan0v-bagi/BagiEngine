@@ -44,13 +44,16 @@ Unit and module tests are GoogleTest tests, built as separate executables (not p
 
 ```bash
 cmake --build --preset macos-debug --target BagiEngineTests Match3Tests   # only the test executables
-ctest --preset macos-debug                                       # every test in its own process
+ctest --preset macos-debug                                       # every test in its own process, 8 at a time
+ctest --preset macos-debug -j1                                   # one at a time
 build/ClangmacOS/BagiEngineTests --gtest_filter='Reflection*'    # run directly; cwd must be inside the repository
 ```
 
+**The tests run in parallel.** `test-base` in `CMakePresets.json` sets `execution.jobs` to 8, so `ctest --preset <p>` runs eight tests at once, in every game repository too (they include these presets). `-j1` on the command line switches it off, `-jN` changes the number; the environment variable `CTEST_PARALLEL_LEVEL` does **not** override a preset. Because of that every gtest case must be safe in a process beside others: temp folders and files get their names from `tests/Common/TempPath.h` (`TestTempDirectory(prefix)` makes `<prefix>_<test name>_<tag>`, `TestTempPath(stem)` makes `<stem>_<tag>`, the tag drawn once per process, so even two `ctest` runs at once, such as the parallel todo-loop workers, do not meet; only the RmlUi-only `RmlUiHostTest` still names its folder after the test alone), servers bind port 0, a wait is a poll with a time limit and not a fixed sleep, and nothing reads the `engine.log` of the working directory (every process that brings up the core services truncates it). The only entry with a lock is the control smoke test (`RESOURCE_LOCK bagi_control_smoke`: it runs beside the unit tests, not beside another smoke test); the rules for a new test are in `.claude/rules/tests-module.md`, the timings in `.claude/rules/build-project.md`, "Tests".
+
 Runtime tests that need the live engine are `ITest` classes (`src/Modules/BECore/Tests/`). `CoreManager::OnApplicationPreInit()` runs the ones enabled in `config/TestsConfig.xml` at game startup.
 
-`ctest` also runs `BagiMatch3ControlSmoke`: a Python script that starts the game `--headless` and plays it over the control API. It is skipped (exit code 77) when the executable is not built, and a `--target` list without the games (as above) builds none, so add `BagiMatch3` to run it. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests` (`tools/control/CLAUDE.md`), and so has the reflection generator: `.venv/bin/python -m pytest CI/meta_generator/tests` (`.claude/rules/reflection-module.md`, "Codegen"; `pytest` comes from `requirements.txt`, which `CI/setup_venv.*` installs).
+`ctest` also runs `BagiMatch3ControlSmoke`: a Python script that starts the game `--headless` and plays it over the control API. It is skipped (exit code 77) when the executable is not built, and a `--target` list without the games (as above) builds none, so add `BagiMatch3` to run it. It picks a free port itself and retries once on another when the game reports that the port was taken in between (`tools/control/CLAUDE.md`). The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests` (`tools/control/CLAUDE.md`), and so has the reflection generator: `.venv/bin/python -m pytest CI/meta_generator/tests` (`.claude/rules/reflection-module.md`, "Codegen"; `pytest` comes from `requirements.txt`, which `CI/setup_venv.*` installs).
 
 ## Architecture Overview
 

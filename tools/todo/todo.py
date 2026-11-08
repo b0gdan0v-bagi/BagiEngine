@@ -9,6 +9,10 @@ takes back what a person changes there), so there is no push and no pull.
 Settings: TODO_API_URL and TODO_API_TOKEN from the environment, then from --env-file, then from the
 first `.env` found from the current folder upwards. The token is never printed.
 
+Every write that the store accepts also rewrites a small signal file, TODO_CHANGED_FILE (default
+~/.claude/todo/changed.json: the time, the actor, the method and the path), so a tool that shows the
+store (tools/vscode/todo-workers) reads it again at once instead of on a timer.
+
 Plans and exports are written only OUTSIDE a git work tree (default: ~/.claude/plans/), so a plan
 cannot end up in a commit.
 
@@ -16,6 +20,7 @@ Python 3.10+, standard library only.
 """
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -33,6 +38,8 @@ from todo_markdown import README_FILE, ROADMAP_FILE, ParseError, parse_entry_tex
 ENV_URL = "TODO_API_URL"
 ENV_TOKEN = "TODO_API_TOKEN"
 ENV_ACTOR = "TODO_ACTOR"
+ENV_CHANGED_FILE = "TODO_CHANGED_FILE"
+DEFAULT_CHANGED_FILE = Path.home() / ".claude" / "todo" / "changed.json"
 DEFAULT_PLANS_DIR = Path.home() / ".claude" / "plans"
 REQUEST_TIMEOUT_SECONDS = 30
 _ENV_LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
@@ -87,6 +94,24 @@ def load_settings(env_file: Path | None) -> tuple[str, str]:
     return url, token
 
 
+def changed_file() -> Path:
+    return Path(os.environ.get(ENV_CHANGED_FILE) or DEFAULT_CHANGED_FILE).expanduser()
+
+
+def signal_change(actor: str, method: str, path: str) -> None:
+    """Rewrite the signal file after a write the store accepted (a temporary file, then a rename, so a
+    watcher never reads half of it). A signal that cannot be written never fails the command."""
+    target = changed_file()
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.{os.getpid()}")
+        stamp = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds")
+        temporary.write_text(json.dumps({"at": stamp, "actor": actor, "method": method, "path": path}) + "\n", encoding="utf-8")
+        os.replace(temporary, target)
+    except OSError:
+        pass
+
+
 class Api:
     def __init__(self, url: str, token: str, actor: str):
         self.url = url
@@ -107,7 +132,9 @@ class Api:
         try:
             with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
                 payload = response.read()
-                return json.loads(payload) if payload else None
+            if method != "GET":
+                signal_change(self.actor, method, path)
+            return json.loads(payload) if payload else None
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
             try:

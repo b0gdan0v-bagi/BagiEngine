@@ -85,6 +85,29 @@ namespace BECore {
         virtual bool ReadAttribute(eastl::string_view name, PoolString& outValue) = 0;
 
         // =================================================================
+        // Strict values
+        // =================================================================
+
+        /**
+         * @brief Opt in to strict reading of numbers and booleans from text
+         *
+         * Off by default: a text format reads leniently (a malformed number is 0, any
+         * text but "true" / "1" is false) and nothing is reported. On, a bool that is not
+         * true / false / 1 / 0 and an integer or float whose whole text is not a number
+         * of the target type (also out of range) is reported as an error and the target
+         * keeps its value (the read returns false). Only text formats have text to check:
+         * the default does nothing, and BinaryDeserializer keeps it.
+         */
+        virtual void SetStrictValues(bool /*strict*/) {}
+
+        /**
+         * @brief Whether strict values are on (always false when not supported)
+         */
+        virtual bool IsStrictValues() const {
+            return false;
+        }
+
+        // =================================================================
         // Error tracking
         // =================================================================
 

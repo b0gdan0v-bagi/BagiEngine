@@ -8,6 +8,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/map.h>
 #include <EASTL/optional.h>
@@ -1132,7 +1133,7 @@ namespace BECore::Tests {
             serializer.EndObject();
         }
 
-        const std::filesystem::path path = std::filesystem::temp_directory_path() / "BagiEngineTests_BinaryFileRoundTrip.bin";
+        const std::filesystem::path path = TestTempPath("BagiEngineTests_BinaryFileRoundTrip");
         ASSERT_TRUE(serializer.SaveToFile(path));
 
         TestData::GameState loaded;
@@ -1155,7 +1156,7 @@ namespace BECore::Tests {
     }
 
     TEST(ReflectionTest, BinaryFileErrors) {
-        const std::filesystem::path missing = std::filesystem::temp_directory_path() / "BagiEngineTests_DoesNotExist.bin";
+        const std::filesystem::path missing = TestTempPath("BagiEngineTests_DoesNotExist");
         std::error_code ignored;
         std::filesystem::remove(missing, ignored);
 
@@ -1167,7 +1168,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(serializer.SaveToFile(std::filesystem::temp_directory_path() / "BagiEngineTests_NoSuchDirectory" / "file.bin"));
 
         // A file that is not a binary stream is rejected like a corrupt buffer
-        const std::filesystem::path garbage = std::filesystem::temp_directory_path() / "BagiEngineTests_Garbage.bin";
+        const std::filesystem::path garbage = TestTempPath("BagiEngineTests_Garbage");
         {
             std::ofstream file(garbage, std::ios::binary | std::ios::trunc);
             file << "this is definitely not a BagiEngine binary stream";

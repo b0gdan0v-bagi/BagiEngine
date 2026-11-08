@@ -25,6 +25,14 @@ namespace BECore {
     );
 
     /**
+     * The clock that counts the delay of a delayed task.
+     */
+    CORE_ENUM(DelayClock, uint8_t,
+              WallClock,  ///< Real time (steady_clock): independent of pause, frame limiting and the manual clock
+              GameTime    ///< Game time: moves only through TaskScheduler::AdvanceGameTime (the frame delta from Time)
+    );
+
+    /**
      * Статус задачи.
      * Отслеживает текущее состояние выполнения задачи.
      */

@@ -88,7 +88,12 @@ namespace BECore {
          * Останавливает очередь и пробуждает все ожидающие потоки.
          */
         void Stop() {
-            _stopped.store(true, std::memory_order_release);
+            {
+                // The flag is part of the predicate of Pop's wait: it changes under the mutex, otherwise a
+                // worker between the predicate check and the block misses the wakeup and sleeps forever.
+                std::lock_guard lock(_mutex);
+                _stopped.store(true, std::memory_order_release);
+            }
             _condition.notify_all();
         }
 

@@ -40,10 +40,15 @@ DEFAULT_SCREENSHOT_SIZE = 1024
 SMALL_SCREENSHOT_SIZE = 200
 BOARD_COLORS = 5  # a Match3 board shows at least this many different colours (tiles, background, frame)
 CLOCK_TOLERANCE = 1e-6
+PORT_TAKEN_MARKER = "cannot listen on 127.0.0.1:"  # what the game logs when it cannot bind the control port (Application::StartControlServer)
 
 
 class SmokeFailure(Exception):
     pass
+
+
+class PortTaken(SmokeFailure):
+    """The game could not bind its control port: free_port() hands the number back before the game binds it, so another process may have taken it in between."""
 
 
 def check(condition: bool, message: str) -> None:
@@ -379,11 +384,27 @@ def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient, boo
                     raise SmokeFailure(f"the game did not exit in {shutdown_timeout} s after quit")
                 check(code == 0, f"the game exited with code {code} after quit")
             except (SmokeFailure, ControlError, ConnectionClosed, OSError) as error:
-                raise SmokeFailure(f"{error}\n--- game log (tail) ---\n{log_tail(log_path)}") from error
+                tail = log_tail(log_path)
+                failure = PortTaken if PORT_TAKEN_MARKER in tail else SmokeFailure  # the one failure that play_with_retry retries
+                raise failure(f"{error}\n--- game log (tail) ---\n{tail}") from error
             finally:
                 if process.poll() is None:
                     process.kill()
                     process.wait()
+
+
+def play_with_retry(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient, bool], None], headless: bool, startup_timeout: float, shutdown_timeout: float, port: int, name: str) -> None:
+    """play() on `port` (0: a free one). When the game reports that it could not bind a port that free_port() chose, tries once more on another one.
+
+    Any other failure is not retried, and neither is a port given on the command line.
+    """
+    try:
+        play(exe, flags, scenario, headless, startup_timeout, shutdown_timeout, port or free_port())
+    except PortTaken:
+        if port:
+            raise
+        print(f"{name}: the port was taken by another process before the game could bind it; retrying once on another port", flush=True)
+        play(exe, flags, scenario, headless, startup_timeout, shutdown_timeout, free_port())
 
 
 def run_smoke(description: str, scenarios: list[tuple[str, list[str], Callable[[BagiControlClient, bool], None]]]) -> int:
@@ -404,7 +425,7 @@ def run_smoke(description: str, scenarios: list[tuple[str, list[str], Callable[[
     for name, flags, scenario in scenarios:
         print(f"{name}: running", flush=True)
         try:
-            play(exe, flags, scenario, not args.window, args.startup_timeout, args.shutdown_timeout, args.port or free_port())
+            play_with_retry(exe, flags, scenario, not args.window, args.startup_timeout, args.shutdown_timeout, args.port, name)
         except SmokeFailure as error:
             print(f"FAILED ({name}): {error}")
             return EXIT_FAILED

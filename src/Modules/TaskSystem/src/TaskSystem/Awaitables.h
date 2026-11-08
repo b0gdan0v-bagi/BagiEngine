@@ -46,6 +46,7 @@ namespace BECore {
     struct DelayAwaiter {
         std::chrono::steady_clock::duration delay;
         ThreadType threadType = ThreadType::Background;
+        DelayClock clock = DelayClock::WallClock;
 
         bool await_ready() const noexcept {
             return delay.count() <= 0;
@@ -106,6 +107,42 @@ namespace BECore {
      */
     inline DelayAwaiter DelaySec(double seconds, ThreadType threadType = ThreadType::Background) {
         return Delay(std::chrono::duration<double>(seconds), threadType);
+    }
+
+    /**
+     * Delay on game time: counts the frame deltas fed by CoreManager::OnGameCycle (Time::GetDeltaTime(): the frame
+     * clamp and the manual clock apply), not the wall clock. Resumes on the main thread by default, in the Update
+     * of the frame in which the game time reaches the delay. A non-positive delay does not suspend.
+     * Call it from the main thread when the run must be deterministic.
+     */
+    template <typename Rep, typename Period>
+    DelayAwaiter DelayGame(std::chrono::duration<Rep, Period> duration, ThreadType threadType = ThreadType::MainThread) {
+        return {std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration), threadType, DelayClock::GameTime};
+    }
+
+    /**
+     * Game-time delay in milliseconds.
+     */
+    inline DelayAwaiter DelayGameMs(int64_t milliseconds, ThreadType threadType = ThreadType::MainThread) {
+        return DelayGame(std::chrono::milliseconds(milliseconds), threadType);
+    }
+
+    /**
+     * Game-time delay in seconds. Converted to nanoseconds with std::chrono::round, like TaskScheduler::AdvanceGameTime,
+     * so a delay equal to the sum of the frame deltas is released on that frame. A NaN or non-positive delay does not
+     * suspend; a huge one is clamped to the largest Duration. A decimal delay equal to a float frame delta
+     * (e.g. 0.7) may be released one frame later.
+     */
+    inline DelayAwaiter DelayGameSec(double seconds, ThreadType threadType = ThreadType::MainThread) {
+        using Duration = std::chrono::steady_clock::duration;
+        constexpr double kMaxSeconds = std::chrono::duration<double>(Duration::max()).count();
+
+        // !(seconds > 0) is true for NaN too
+        if (!(seconds > 0.0)) {
+            return {Duration::zero(), threadType, DelayClock::GameTime};
+        }
+        const Duration delay = seconds >= kMaxSeconds ? Duration::max() : std::chrono::round<Duration>(std::chrono::duration<double>(seconds));
+        return {delay, threadType, DelayClock::GameTime};
     }
 
     /**

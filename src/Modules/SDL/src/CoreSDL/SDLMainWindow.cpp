@@ -91,10 +91,19 @@ namespace BECore {
     }
 
     int SDLMainWindow::GetWidth() const {
+        // The live size in window units (the window is resizable and starts maximized), the config's while SDL cannot tell
+        int width = 0;
+        if (_window != nullptr && SDL_GetWindowSize(_window, &width, nullptr) && width > 0) {
+            return width;
+        }
         return _width;
     }
 
     int SDLMainWindow::GetHeight() const {
+        int height = 0;
+        if (_window != nullptr && SDL_GetWindowSize(_window, nullptr, &height) && height > 0) {
+            return height;
+        }
         return _height;
     }
 
