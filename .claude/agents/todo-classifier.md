@@ -21,6 +21,7 @@ For each candidate read it with `python3 <engine>/tools/todo/todo.py show <id>` 
 
 - `eligible`: a concrete, bounded piece of work in its area that can be done and checked without the owner.
 - `skip`, with one short reason. Use these reasons when they apply:
+  - `other area`: the candidate's `area` is not a row of the rules file (another game's entry in the shared store). Never `eligible`, whatever it says; the conductor should not have sent it, so say so in its `reason`.
   - `needs detail`: the entry is an idea without a clear place in the code or without an outcome you could check.
   - `owner decision`: the entry says the owner decides, or the choice between approaches is open (the rules file gives examples for this repository).
   - the extra skip reasons of the rules file (for example a game entry that waits for an engine entry), with the wording it gives
