@@ -16,11 +16,16 @@ namespace BECore {
      * @brief The draw pass of a scene as a system over the registry.
      *
      * Run() writes a SceneDrawItem for every node of the tree, sorts that storage by (layer, order) and walks a view over
-     * it, calling IComponent::OnDraw() of each node's components in component order. The order is the one documented at
-     * Scene::Draw(). The view is the only source of the order: nothing keeps a second list of the nodes.
+     * it. The order is the one documented at Scene::Draw(). The view is the only source of the order: nothing keeps a
+     * second list of the nodes.
      *
      * The same walk mirrors TransformComponent, QuadRendererComponent and SpriteRendererComponent into the registry as
      * TransformData, QuadDrawData and SpriteDrawData (SceneRenderData.h); the components stay the source of truth.
+     *
+     * For each node the view yields, Run() goes through its components in component order. The quad and the sprite are
+     * drawn by the system itself from that registry data (DrawFilledRect(), FitSpriteRect() and DrawTexture()), a quad or
+     * a sprite without a TransformData and a sprite without a texture draw nothing; every other component draws itself
+     * through IComponent::OnDraw().
      */
     class SceneDrawSystem {
     public:

@@ -19,7 +19,6 @@ namespace BECore {
         BE_REFLECT_FIELD SpriteFit _fit = SpriteFit::Stretch;
 
         void OnAttached() override;
-        void OnDraw() override;
 
         /**
          * @brief Reload the texture from the sprite id or _texturePath

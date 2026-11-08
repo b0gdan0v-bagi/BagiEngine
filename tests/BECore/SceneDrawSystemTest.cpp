@@ -1,14 +1,25 @@
+#include "SceneDrawSystemTest.h"
+
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
+#include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneDrawSystem.h>
 #include <Common/RecordingRenderer.h>
+#include <Generated/SceneDrawSystemTest.gen.hpp>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
+    void DrawMarkerComponent::OnDraw() {
+        CoreManager::GetRenderer()->DrawFilledRect(marker, 0.0f, 1.0f, 1.0f, Color{1, 2, 3, 4});
+    }
+
     namespace {
+
+        constexpr float kMarkerId = 100.0f;
+        constexpr uint32_t kTextureSize = 4;
 
         /// Adds a node with a unit quad at x = @p id under @p parent (the root when null). The quad's rect in a recorded draw call tells which node it was.
         IntrusivePtr<SceneNode> AddQuad(Scene& scene, SceneNode* parent, const char* name, float id, int32_t layer = 0) {
@@ -190,6 +201,80 @@ namespace BECore::Tests {
         _scene->Draw();
         const eastl::vector<PoolString> expected = {"B"_intern, "Root"_intern, "A"_intern, "AChild"_intern};
         EXPECT_EQ(ViewNames(*_scene), expected);
+    }
+
+    TEST_F(SceneDrawSystemTest, AQuadIsDrawnAtItsPlaceAmongTheComponentsOfItsNode) {
+        auto marker = BECore::New<DrawMarkerComponent>();
+        marker->marker = kMarkerId;
+        auto before = _scene->CreateNode("MarkerFirst"_intern, nullptr);
+        auto beforeTransform = BECore::New<TransformComponent>();
+        beforeTransform->_x = 1.0f;
+        before->AddComponent(beforeTransform);
+        before->AddComponent(marker);
+        before->AddComponent(BECore::New<QuadRendererComponent>());
+
+        auto afterMarker = BECore::New<DrawMarkerComponent>();
+        afterMarker->marker = kMarkerId + 1.0f;
+        auto after = AddQuad(*_scene, nullptr, "QuadFirst", 2.0f);
+        after->AddComponent(afterMarker);
+
+        // [Marker, Quad] draws the marker before the quad, [Quad, Marker] the quad before the marker
+        EXPECT_EQ(Draw(), (eastl::vector<float>{kMarkerId, 1.0f, 2.0f, kMarkerId + 1.0f}));
+    }
+
+    TEST_F(SceneDrawSystemTest, AQuadWithoutATransformDrawsNothing) {
+        auto node = _scene->CreateNode("NoTransform"_intern, nullptr);
+        node->AddComponent(BECore::New<QuadRendererComponent>());
+        AddQuad(*_scene, nullptr, "Plain", 1.0f);
+
+        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f}));
+    }
+
+    TEST_F(SceneDrawSystemTest, ASpriteWithoutATransformDrawsNothing) {
+        auto node = _scene->CreateNode("NoTransform"_intern, nullptr);
+        auto sprite = BECore::New<SpriteRendererComponent>();
+        const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * 4, 255);
+        sprite->SetTexture(_renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize));
+        node->AddComponent(sprite);
+
+        EXPECT_TRUE(Draw().empty());
+    }
+
+    TEST_F(SceneDrawSystemTest, AQuadAndASpriteAreOrderedTogetherByLayer) {
+        auto spriteNode = _scene->CreateNode("Sprite"_intern, nullptr);
+        auto transform = BECore::New<TransformComponent>();
+        transform->_x = 1.0f;
+        spriteNode->AddComponent(transform);
+        auto sprite = BECore::New<SpriteRendererComponent>();
+        const eastl::vector<uint8_t> pixels(static_cast<size_t>(kTextureSize) * kTextureSize * 4, 255);
+        sprite->SetTexture(_renderer->CreateTexture(pixels.data(), kTextureSize, kTextureSize));
+        spriteNode->AddComponent(sprite);
+        AddQuad(*_scene, nullptr, "Back", 2.0f, -1);
+
+        const eastl::vector<float> ids = Draw();
+
+        // The sprite is first in the scene, the quad on layer -1 is drawn before it
+        EXPECT_EQ(ids, (eastl::vector<float>{2.0f, 1.0f}));
+        ASSERT_EQ(_renderer->calls.size(), 2u);
+        EXPECT_EQ(_renderer->calls[0].kind, DrawKind::Rect);
+        EXPECT_EQ(_renderer->calls[1].kind, DrawKind::Texture);
+    }
+
+    TEST_F(SceneDrawSystemTest, AColorChangedBetweenTwoDrawsChangesTheSecondDraw) {
+        auto node = AddQuad(*_scene, nullptr, "A", 1.0f);
+        auto quad = node->GetComponent<QuadRendererComponent>();
+        quad->_color = Color{10, 20, 30, 255};
+
+        Draw();
+        ASSERT_EQ(_renderer->calls.size(), 1u);
+        EXPECT_EQ(_renderer->calls[0].color.r, 10);
+
+        quad->_color = Color{200, 100, 50, 255};
+        Draw();
+        ASSERT_EQ(_renderer->calls.size(), 1u);
+        EXPECT_EQ(_renderer->calls[0].color.r, 200);
+        EXPECT_EQ(_renderer->calls[0].color.g, 100);
+        EXPECT_EQ(_renderer->calls[0].color.b, 50);
     }
 
 }  // namespace BECore::Tests

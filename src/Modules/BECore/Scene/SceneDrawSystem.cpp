@@ -1,5 +1,7 @@
 #include "SceneDrawSystem.h"
 
+#include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
@@ -12,29 +14,63 @@ namespace BECore {
 
         // Copies the fields of the node's TransformComponent / QuadRendererComponent / SpriteRendererComponent into the registry, or
         // removes the registry component when the node has no such component (a no-op when it has none). emplace_or_replace does not
-        // allocate once the node has the component.
+        // allocate once the node has the component. One pass over the components; the first of each type counts, as GetComponent<T>().
         void SyncRenderData(entt::registry& registry, SceneNode& node) {
             const entt::entity entity = node.GetEntity();
 
-            if (const auto transform = node.GetComponent<TransformComponent>()) {
+            const TransformComponent* transform = nullptr;
+            const QuadRendererComponent* quad = nullptr;
+            const SpriteRendererComponent* sprite = nullptr;
+            for (const auto& component : node.GetComponents()) {
+                const eastl::string_view typeName = component->GetTypeMeta().typeName;
+                if (!transform && typeName == TransformComponent::GetStaticTypeName()) {
+                    transform = static_cast<const TransformComponent*>(component.Get());
+                } else if (!quad && typeName == QuadRendererComponent::GetStaticTypeName()) {
+                    quad = static_cast<const QuadRendererComponent*>(component.Get());
+                } else if (!sprite && typeName == SpriteRendererComponent::GetStaticTypeName()) {
+                    sprite = static_cast<const SpriteRendererComponent*>(component.Get());
+                }
+            }
+
+            if (transform) {
                 registry.emplace_or_replace<TransformData>(entity, transform->_x, transform->_y, transform->_width, transform->_height);
             } else {
                 registry.remove<TransformData>(entity);
             }
 
-            if (const auto quad = node.GetComponent<QuadRendererComponent>()) {
-                registry.emplace_or_replace<QuadDrawData>(entity, quad->_color, quad.Get());
+            if (quad) {
+                registry.emplace_or_replace<QuadDrawData>(entity, quad->_color, quad);
             } else {
                 registry.remove<QuadDrawData>(entity);
             }
 
-            if (const auto sprite = node.GetComponent<SpriteRendererComponent>()) {
-                // Dereferencing the handle updates its access time, as the draw of the sprite does
+            if (sprite) {
+                // Dereferencing the handle updates its access time, as the draw of a sprite does
                 const ResourceHandle<ITexture>& texture = sprite->GetTexture();
-                registry.emplace_or_replace<SpriteDrawData>(entity, texture ? &*texture : nullptr, sprite->_srcRect, sprite->_fit, sprite.Get());
+                registry.emplace_or_replace<SpriteDrawData>(entity, texture ? &*texture : nullptr, sprite->_srcRect, sprite->_fit, sprite);
             } else {
                 registry.remove<SpriteDrawData>(entity);
             }
+        }
+
+        // A quad without a transform draws nothing.
+        void DrawQuad(const QuadDrawData& quad, const TransformData* transform) {
+            if (!transform) {
+                return;
+            }
+            CoreManager::GetRenderer()->DrawFilledRect(transform->x, transform->y, transform->width, transform->height, quad.color);
+        }
+
+        // A sprite without a texture or a transform draws nothing. An empty source rect means the whole texture.
+        void DrawSprite(const SpriteDrawData& sprite, const TransformData* transform) {
+            if (!sprite.texture || !transform) {
+                return;
+            }
+            const Rect* src = sprite.srcRect.IsEmpty() ? nullptr : &sprite.srcRect;
+            const float srcWidth = src ? src->w : sprite.texture->GetWidth();
+            const float srcHeight = src ? src->h : sprite.texture->GetHeight();
+            const Rect dst = FitSpriteRect(srcWidth, srcHeight, Rect{transform->x, transform->y, transform->width, transform->height}, sprite.fit);
+            CoreManager::GetRenderer()->DrawTexture(*sprite.texture, src, dst.x, dst.y, dst.w, dst.h);
         }
 
         // Depth-first, a parent before its children: the traversal index is the scene order. emplace_or_replace makes a changed layer
@@ -59,9 +95,20 @@ namespace BECore {
         // EnTT sorts so that a view iterates in the order of the comparator: the first item of the view is the lowest (layer, order).
         registry.sort<SceneDrawItem>([](const SceneDrawItem& a, const SceneDrawItem& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
 
+        // The quad and the sprite are drawn from their registry data at the place of their component in the node; any other
+        // component draws itself.
         for (const auto [entity, item] : registry.view<SceneDrawItem>().each()) {
+            const TransformData* transform = registry.try_get<TransformData>(entity);
+            const QuadDrawData* quad = registry.try_get<QuadDrawData>(entity);
+            const SpriteDrawData* sprite = registry.try_get<SpriteDrawData>(entity);
             for (const auto& component : item.node->GetComponents()) {
-                component->OnDraw();
+                if (quad && component.Get() == quad->owner) {
+                    DrawQuad(*quad, transform);
+                } else if (sprite && component.Get() == sprite->owner) {
+                    DrawSprite(*sprite, transform);
+                } else {
+                    component->OnDraw();
+                }
             }
         }
     }

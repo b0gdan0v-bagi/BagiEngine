@@ -29,8 +29,10 @@ namespace BECore {
          *
          * Scene::Draw() calls it in draw order: nodes sorted by SceneNode::GetLayer(), equal layers in scene order
          * (depth-first, a parent before its children, siblings as in the config), the components of a node in their order.
-         * Override it to draw and do not subscribe to an event for drawing: the order of event handlers is not defined.
-         * Draw only, never change game state or add and remove nodes here.
+         * A component that draws itself overrides it and does not subscribe to an event for drawing: the order of event
+         * handlers is not defined. QuadRendererComponent and SpriteRendererComponent have no OnDraw(): SceneDrawSystem draws
+         * them from the registry, at the place of the component in the node. Draw only, never change game state or add and
+         * remove nodes here.
          */
         virtual void OnDraw() {}
 
