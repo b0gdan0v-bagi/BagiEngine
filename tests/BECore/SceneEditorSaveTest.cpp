@@ -6,6 +6,7 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
 
 namespace BECore::Tests {
@@ -118,7 +119,7 @@ namespace BECore::Tests {
     protected:
         void SetUp() override {
             // One directory per test: ctest runs the tests in parallel processes, and SetUp clears the directory
-            _dir = std::filesystem::temp_directory_path() / Format("BagiEngineSceneEditorSaveTest_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()).c_str();
+            _dir = TestTempDirectory("BagiEngineSceneEditorSaveTest");
             std::filesystem::remove_all(_dir);
             std::filesystem::create_directories(_dir);
         }

@@ -1,5 +1,6 @@
 #include <BECore/FileSystem/FileSystem.h>
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
 
 namespace BECore::Tests {
 
@@ -16,9 +17,8 @@ namespace BECore::Tests {
     class FileSystemTest : public ::testing::Test {
     protected:
         void SetUp() override {
-            const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
             // One directory per test: ctest runs every test in its own process
-            _base = std::filesystem::temp_directory_path() / Format("BagiFileSystemTest_{}", info->name()).c_str();
+            _base = TestTempDirectory("BagiFileSystemTest");
             std::filesystem::remove_all(_base);
             _engine = _base / "engine";
             _game = _base / "game";
