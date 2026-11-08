@@ -1,0 +1,102 @@
+{
+    "name": "todo-workers",
+    "displayName": "Todo Workers",
+    "description": "The parallel todo-loop workers of BagiEngine: their sessions, entries and branches, and the entries waiting for /todo-merge.",
+    "version": "0.1.0",
+    "publisher": "bagiengine",
+    "license": "UNLICENSED",
+    "private": true,
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "main": "./extension.js",
+    "activationEvents": [
+        "workspaceContains:tools/todo/worker.py",
+        "workspaceContains:engine/tools/todo/worker.py"
+    ],
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "todoWorkers",
+                    "title": "Todo Workers",
+                    "icon": "media/workers.svg"
+                }
+            ]
+        },
+        "views": {
+            "todoWorkers": [
+                {
+                    "id": "todoWorkers.view",
+                    "name": "Workers"
+                }
+            ]
+        },
+        "commands": [
+            { "command": "todoWorkers.refresh", "title": "Refresh", "icon": "$(refresh)", "category": "Todo Workers" },
+            { "command": "todoWorkers.attach", "title": "Attach to the session", "icon": "$(terminal)", "category": "Todo Workers" },
+            { "command": "todoWorkers.logs", "title": "Show the session's log", "icon": "$(output)", "category": "Todo Workers" },
+            { "command": "todoWorkers.openFolder", "title": "Open the worker folder in a new window", "icon": "$(folder-opened)", "category": "Todo Workers" },
+            { "command": "todoWorkers.terminal", "title": "Open a terminal in the worker", "category": "Todo Workers" },
+            { "command": "todoWorkers.stop", "title": "Stop the session", "icon": "$(debug-stop)", "category": "Todo Workers" },
+            { "command": "todoWorkers.copyMerge", "title": "Copy /todo-merge for this branch", "icon": "$(git-merge)", "category": "Todo Workers" },
+            { "command": "todoWorkers.openPlan", "title": "Open the plan", "icon": "$(book)", "category": "Todo Workers" }
+        ],
+        "menus": {
+            "view/title": [
+                { "command": "todoWorkers.refresh", "when": "view == todoWorkers.view", "group": "navigation" }
+            ],
+            "view/item/context": [
+                { "command": "todoWorkers.attach", "when": "view == todoWorkers.view && viewItem =~ /;session;/", "group": "inline@1" },
+                { "command": "todoWorkers.openFolder", "when": "view == todoWorkers.view && viewItem =~ /;worker;/", "group": "inline@2" },
+                { "command": "todoWorkers.stop", "when": "view == todoWorkers.view && viewItem =~ /;active;/", "group": "inline@3" },
+                { "command": "todoWorkers.attach", "when": "view == todoWorkers.view && viewItem =~ /;session;/", "group": "1_session@1" },
+                { "command": "todoWorkers.logs", "when": "view == todoWorkers.view && viewItem =~ /;session;/", "group": "1_session@2" },
+                { "command": "todoWorkers.stop", "when": "view == todoWorkers.view && viewItem =~ /;active;/", "group": "1_session@3" },
+                { "command": "todoWorkers.openFolder", "when": "view == todoWorkers.view && viewItem =~ /;worker;/", "group": "2_folder@1" },
+                { "command": "todoWorkers.terminal", "when": "view == todoWorkers.view && viewItem =~ /;worker;/", "group": "2_folder@2" },
+                { "command": "todoWorkers.openPlan", "when": "view == todoWorkers.view && viewItem =~ /;entry;/", "group": "3_entry@1" },
+                { "command": "todoWorkers.copyMerge", "when": "view == todoWorkers.view && viewItem =~ /;review;/", "group": "inline@1" },
+                { "command": "todoWorkers.copyMerge", "when": "view == todoWorkers.view && viewItem =~ /;review;/", "group": "3_entry@2" }
+            ],
+            "commandPalette": [
+                { "command": "todoWorkers.attach", "when": "false" },
+                { "command": "todoWorkers.logs", "when": "false" },
+                { "command": "todoWorkers.openFolder", "when": "false" },
+                { "command": "todoWorkers.terminal", "when": "false" },
+                { "command": "todoWorkers.stop", "when": "false" },
+                { "command": "todoWorkers.copyMerge", "when": "false" },
+                { "command": "todoWorkers.openPlan", "when": "false" }
+            ]
+        },
+        "configuration": {
+            "title": "Todo Workers",
+            "properties": {
+                "todoWorkers.python": {
+                    "type": "string",
+                    "default": "python3",
+                    "description": "The Python that runs tools/todo/worker.py."
+                },
+                "todoWorkers.claude": {
+                    "type": "string",
+                    "default": "claude",
+                    "description": "The Claude Code command (a full path when VS Code does not see it on PATH)."
+                },
+                "todoWorkers.refreshSeconds": {
+                    "type": "number",
+                    "default": 20,
+                    "minimum": 5,
+                    "description": "How often the panel asks worker.py (it also asks the todo store)."
+                },
+                "todoWorkers.notify": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show a notification when an entry reaches review or a worker's session ends."
+                }
+            }
+        }
+    }
+}
