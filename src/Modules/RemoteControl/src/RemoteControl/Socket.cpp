@@ -54,6 +54,12 @@ namespace BECore {
             closesocket(handle);
         }
 
+        /// A connected socket is non-blocking on Windows: shutdown() does not wake a blocked recv() or send() there
+        void MakeNonBlocking(NativeSocket handle) {
+            u_long enable = 1;
+            ioctlsocket(handle, FIONBIO, &enable);
+        }
+
         constexpr int kSendFlags = 0;
         constexpr int kShutdownBoth = SD_BOTH;
 #else
@@ -73,6 +79,8 @@ namespace BECore {
         }
 
         void EnsureSocketLibrary() {}
+
+        void MakeNonBlocking(NativeSocket) {}
 
         void CloseNative(NativeSocket handle) {
             close(handle);
@@ -115,11 +123,11 @@ namespace BECore {
             return handle;
         }
 
-        /// Waits until @p handle can be read (a connection to accept) for at most @p timeout; false on timeout or on an error
-        bool WaitReadable(NativeSocket handle, std::chrono::milliseconds timeout) {
+        /// Waits until @p handle has one of @p events (POLLIN, POLLOUT) for at most @p timeout; false on timeout or on an error
+        bool WaitFor(NativeSocket handle, short events, std::chrono::milliseconds timeout) {
             pollfd descriptor{};
             descriptor.fd = handle;
-            descriptor.events = POLLIN;
+            descriptor.events = events;
             const int milliseconds = static_cast<int>(timeout.count());
 #ifdef PLATFORM_WINDOWS
             return WSAPoll(&descriptor, 1, milliseconds) > 0;
@@ -128,18 +136,25 @@ namespace BECore {
 #endif
         }
 
+        /// Waits until @p handle can be read (a connection to accept) for at most @p timeout; false on timeout or on an error
+        bool WaitReadable(NativeSocket handle, std::chrono::milliseconds timeout) {
+            return WaitFor(handle, POLLIN, timeout);
+        }
+
     }  // namespace
 
     Socket::~Socket() {
         Close();
     }
 
-    Socket::Socket(Socket&& other) noexcept : _handle(std::exchange(other._handle, kInvalidHandle)) {}
+    Socket::Socket(Socket&& other) noexcept : _handle(std::exchange(other._handle, kInvalidHandle)), _receiveTimeout(other._receiveTimeout), _shutDown(other._shutDown.load()) {}
 
     Socket& Socket::operator=(Socket&& other) noexcept {
         if (this != &other) {
             Close();
             _handle = std::exchange(other._handle, kInvalidHandle);
+            _receiveTimeout = other._receiveTimeout;
+            _shutDown = other._shutDown.load();
         }
         return *this;
     }
@@ -181,6 +196,7 @@ namespace BECore {
         if (connect(handle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
             return std::unexpected(DescribeError(Format("connect() to 127.0.0.1:{}", port), LastError()));
         }
+        MakeNonBlocking(handle);
         return std::move(socketGuard);
     }
 
@@ -201,6 +217,7 @@ namespace BECore {
                 const int enable = 1;
                 setsockopt(accepted, SOL_SOCKET, SO_NOSIGPIPE, &enable, sizeof(enable));
 #endif
+                MakeNonBlocking(accepted);
                 return Socket(static_cast<intptr_t>(accepted));
             }
             if (!IsInterrupted(LastError())) {
@@ -215,13 +232,23 @@ namespace BECore {
         }
         size_t sent = 0;
         while (sent < data.size()) {
+            if (_shutDown) {
+                return false;
+            }
             // Winsock takes an int length, POSIX a size_t: stay inside int for both
             const auto chunk = static_cast<int>(std::min<size_t>(data.size() - sent, std::numeric_limits<int>::max()));
             const auto written = send(ToNative(_handle), reinterpret_cast<const char*>(data.data() + sent), chunk, kSendFlags);
             if (written < 0) {
-                if (IsInterrupted(LastError())) {
+                const int error = LastError();
+                if (IsInterrupted(error)) {
                     continue;
                 }
+#ifdef PLATFORM_WINDOWS
+                if (IsTimeout(error) && !_shutDown) {
+                    WaitFor(ToNative(_handle), POLLOUT, kWakeInterval);  // the send buffer is full: wait for the client to read
+                    continue;
+                }
+#endif
                 return false;
             }
             sent += static_cast<size_t>(written);
@@ -233,7 +260,11 @@ namespace BECore {
         if (!IsValid() || buffer.empty()) {
             return std::unexpected(SocketError::Failed);
         }
+        const auto started = std::chrono::steady_clock::now();
         for (;;) {
+            if (_shutDown) {
+                return std::unexpected(SocketError::Closed);
+            }
             const auto length = static_cast<int>(std::min<size_t>(buffer.size(), std::numeric_limits<int>::max()));
             const auto received = recv(ToNative(_handle), reinterpret_cast<char*>(buffer.data()), length, 0);
             if (received > 0) {
@@ -246,7 +277,21 @@ namespace BECore {
             if (IsInterrupted(error)) {
                 continue;
             }
-            return std::unexpected(IsTimeout(error) ? SocketError::TimedOut : SocketError::Failed);
+            if (!IsTimeout(error)) {
+                return std::unexpected(SocketError::Failed);
+            }
+#ifdef PLATFORM_WINDOWS
+            // Non-blocking: wait here, in slices, so that ShutdownBoth() from another thread is noticed
+            const auto waited = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started);
+            if (_receiveTimeout > std::chrono::milliseconds::zero() && waited >= _receiveTimeout) {
+                return std::unexpected(SocketError::TimedOut);
+            }
+            const auto slice = _receiveTimeout > std::chrono::milliseconds::zero() ? std::min(kWakeInterval, _receiveTimeout - waited) : kWakeInterval;
+            WaitFor(ToNative(_handle), POLLIN, slice);
+#else
+            (void)started;
+            return std::unexpected(SocketError::TimedOut);  // SO_RCVTIMEO ran out
+#endif
         }
     }
 
@@ -254,9 +299,10 @@ namespace BECore {
         if (!IsValid()) {
             return false;
         }
+        _receiveTimeout = timeout;
 #ifdef PLATFORM_WINDOWS
-        const DWORD milliseconds = static_cast<DWORD>(timeout.count());
-        return setsockopt(ToNative(_handle), SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&milliseconds), sizeof(milliseconds)) == 0;
+        // Receive() keeps the timeout itself on Windows (the socket is non-blocking)
+        return true;
 #else
         timeval value{};
         value.tv_sec = static_cast<decltype(value.tv_sec)>(timeout.count() / 1000);
@@ -267,6 +313,7 @@ namespace BECore {
 
     void Socket::ShutdownBoth() {
         if (IsValid()) {
+            _shutDown = true;
             shutdown(ToNative(_handle), kShutdownBoth);
         }
     }

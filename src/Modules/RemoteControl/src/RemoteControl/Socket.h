@@ -13,9 +13,15 @@ namespace BECore {
      * Owns its handle and closes it on destruction; move-only. The calls block, so a thread that waits in
      * Accept() or Receive() is woken by ShutdownBoth() from another thread (a connected socket) or by its timeout
      * (a listening socket, see Accept()). Only IPv4 loopback is supported: the control API is a local tool.
+     *
+     * Winsock does not wake a blocked recv() or send() on shutdown(), so there a connected socket is non-blocking
+     * and Receive() / SendAll() wait in slices of kWakeInterval that look for ShutdownBoth(); the interface is the same.
      */
     class Socket {
     public:
+        /// How often a waiting Receive() or SendAll() looks for ShutdownBoth() where the system does not wake it (Windows)
+        static constexpr std::chrono::milliseconds kWakeInterval{50};
+
         Socket() = default;
         ~Socket();
 
@@ -42,7 +48,7 @@ namespace BECore {
         /// Receive() gives up with TimedOut after @p timeout; zero waits for ever
         bool SetReceiveTimeout(std::chrono::milliseconds timeout);
 
-        /// Ends the connection in both directions and wakes the threads blocked in Receive() or SendAll() on it
+        /// Ends the connection in both directions and wakes the threads blocked in Receive() or SendAll() on it (on Windows within kWakeInterval)
         void ShutdownBoth();
 
         void Close();
@@ -60,6 +66,8 @@ namespace BECore {
         explicit Socket(intptr_t handle) : _handle(handle) {}
 
         intptr_t _handle = kInvalidHandle;
+        std::chrono::milliseconds _receiveTimeout = std::chrono::milliseconds::zero();  // zero: wait for ever
+        std::atomic<bool> _shutDown{false};                                             // set by ShutdownBoth() from any thread, read by the thread that waits
     };
 
 }  // namespace BECore
