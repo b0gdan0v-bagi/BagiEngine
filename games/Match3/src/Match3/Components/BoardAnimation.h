@@ -80,10 +80,6 @@ namespace BECore::Match3 {
             return _settings;
         }
 
-        void SetSettings(const BoardAnimationSettings& settings) {
-            _settings = settings;
-        }
-
     private:
         /// The sprite index on every cell of the board; -1 for no sprite. It follows the gems while the timeline is built
         using SpriteGrid = eastl::array<int, static_cast<size_t>(kBoardSize) * static_cast<size_t>(kBoardSize)>;
