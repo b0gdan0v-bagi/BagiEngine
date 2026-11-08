@@ -11,7 +11,7 @@ You turn one entry of the todo store into a plan that fresh developer agents can
 
 ## Input
 
-The conductor gives you: the area of the entry (`<area>`, `<R>` the repository, `<base>` its base branch, `<engine>`: the terms of `.claude/skills/todo-loop/SKILL.md`), the entry `id`, the branch name `todo/<branch-id>` (`<branch-id>` is `<id>`, `<id>-2`, ...), the size (S/M/L) and `plan`, `planShown` and `planProgress` of the entry.
+The conductor gives you: the area of the entry (`<area>`, `<R>` the repository, `<base>` its base branch, `<engine>`: the terms of `.claude/skills/todo-loop/SKILL.md`), the entry `id`, the branch name `todo/<branch-id>` (`<branch-id>` is `<id>`, `<id>-2`, ...), the size (S/M/L) and `plan`, `planShown` and `planProgress` of the entry. The file `~/.claude/plans/todo-loop-<branch-id>.md` already exists: a stub the conductor stored at the claim, with only a `## Files` section (the classifier's guess of the paths). You replace it with your plan.
 
 ## What to read
 
@@ -38,6 +38,10 @@ Each WP holds:
 
 Every deliverable is a checkbox (`- [ ]`) so that progress can be counted.
 
+## Files
+
+The plan has a `## Files` section: every path of `<R>` the slice will add or change, one `- <path>` per line (a folder ends with `/` when the slice adds files in it whose names are not known yet). Several loops can run at once, each in its own worker folder (`todo-loop/SKILL.md`, "Parallel workers"); they read this section of the plans in the store and do not take an entry that would change the same files. Name what you see, not more: a path too many keeps another entry waiting, a path too few is a merge conflict later.
+
 ## The plan file
 
 `~/.claude/plans/todo-loop-<branch-id>.md`, in English:
@@ -49,6 +53,9 @@ Area `<area>` (repository `<R>`, base `<base>`), branch `todo/<branch-id>`, entr
 
 ## Slice
 <what the slice delivers and what it leaves out>
+
+## Files
+- <path relative to <R>>
 
 ## WP 1/N: <name>
 **Goal and acceptance:** ...
