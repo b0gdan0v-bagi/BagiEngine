@@ -472,6 +472,52 @@ def test_merge_refuses_another_area_a_dirty_checkout_and_an_entry_not_in_review(
     assert "todo/g-x" in run("branch", "--list", "todo/g-x", cwd=game)
 
 
+def test_merge_refuses_a_branch_of_another_checkout_and_one_cut_from_another_base(game: Path, store, capsys):
+    entries, calls = store
+    eng = game / "engine"
+    branch_with(eng, "games/other", "games/chess", "other.txt", "other game\n")
+    branch_with(eng, "todo/e-f", "games/other", "f.txt", "f\n")
+    branch_with(eng, "todo/e-ok", "games/chess", "ok.txt", "ok\n")
+    entries["e-gone"] = review("e-gone", "engine", "todo/e-gone")
+    entries["e-f"] = review("e-f", "engine", "todo/e-f")
+    assert worker.main(["merge", "e-gone", "--dry-run"]) == 1
+    assert "another checkout or on another machine" in capsys.readouterr().err
+    assert worker.main(["merge", "e-f", "--dry-run", "--json"]) == 1
+    assert "games/other" in capsys.readouterr().err
+    assert worker.main(["merge", "e-f"]) == 1
+    assert not [c for c in calls if c[0] == "close"] and "todo/e-f" in run("branch", "--list", "todo/e-f", cwd=eng)
+    assert worker.branch_origin(eng, "todo/e-gone", "games/chess") == {"local": False, "foreignBase": None}
+    assert worker.branch_origin(eng, "todo/e-f", "games/chess") == {"local": True, "foreignBase": "games/other"}
+    assert worker.branch_origin(eng, "todo/e-ok", "games/chess") == {"local": True, "foreignBase": None}
+    # the other base merged into this one: its commits are no longer foreign
+    run("merge", "-q", "--no-edit", "games/other", cwd=eng)
+    assert worker.branch_origin(eng, "todo/e-f", "games/chess") == {"local": True, "foreignBase": None}
+
+
+def test_list_json_store_marks_the_entries_whose_branch_is_elsewhere(game: Path, store, fake_claude, monkeypatch, capsys):
+    script, _log, _sessions = fake_claude
+    eng = game / "engine"
+    branch_with(eng, "games/other", "games/chess", "other.txt", "other game\n")
+    branch_with(eng, "todo/e-f", "games/other", "f.txt", "f\n")
+    branch_with(game, "todo/g-x", "main", "x.txt", "x\n")
+    listed = [review("g-x", "mahjong", "todo/g-x"), review("e-f", "engine", "todo/e-f"), review("e-gone", "engine", "todo/e-gone"),
+              {**review("g-far", "mahjong", "todo/g-far"), "status": "in progress"}]
+    real_run = worker.subprocess.run
+
+    def fake_run(command, *args, **kwargs):
+        if any(str(part).endswith("todo.py") for part in command) and "list" in command:
+            return subprocess.CompletedProcess(command, 0, json.dumps(listed), "")
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--store", "--claude", str(script)]) == 0
+    data = json.loads(capsys.readouterr().out)
+    origin = {e["id"]: (e["local"], e["foreignBase"]) for e in data["review"]}
+    assert origin == {"g-x": (True, None), "e-f": (True, "games/other"), "e-gone": (False, None)}
+    assert data["elsewhere"] == ["e-f", "e-gone", "g-far"]
+
+
 def test_update_detaches_a_worker_at_the_tips_of_the_bases(game: Path, store, fake_claude, capsys):
     script, _log, _sessions = fake_claude
     worker.main(["create", "1", "--no-configure"])

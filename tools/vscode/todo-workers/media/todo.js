@@ -165,7 +165,10 @@
         if (entry.statusNote || entry.branch) item.appendChild(el("div", "note", [entry.branch, entry.statusNote].filter(Boolean).join(": ")));
         const holder = (payload.workers || []).find((w) => w.active && w.entry === entry.id);
         if (holder) top.insertBefore(el("span", "badge busy", holder.name), top.lastChild);
-        if (!holder && (entry.status === "open" || entry.status === "in progress")) item.appendChild(el("div", "actions")).appendChild(startButton(entry));
+        const away = (payload.elsewhere || []).includes(entry.id);
+        if (away) top.insertBefore(el("span", "badge away", "branch elsewhere"), top.lastChild);
+        if (away) item.appendChild(el("div", "note", "its branch lives in another checkout or on another machine (or was cut from another base): review, merge and continue it there"));
+        else if (!holder && (entry.status === "open" || entry.status === "in progress")) item.appendChild(el("div", "actions")).appendChild(startButton(entry));
 
         if (open.has(entry.id)) {
             item.appendChild(markdown(entry.body));

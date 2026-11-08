@@ -401,6 +401,7 @@ def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
         # where the panel finds the branch and what it is compared with (Review, Quick merge)
         row["repo"] = str((layout.main / area["repo"]).resolve()) if area else None
         row["base"] = area["base"] if area else None
+        row.update(branch_origin(Path(row["repo"]), row["branch"], row["base"]) if area and row["branch"] else {"local": None, "foreignBase": None})
         shown.append(row)
     return shown, None
 
@@ -435,6 +436,42 @@ def git_ok(*args: str, cwd: Path) -> bool:
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True).returncode == 0
 
 
+def base_candidates(repo: Path, base: str) -> list[str]:
+    """The other base branches `repo` knows: `main` and `games/*`, local or of a remote, but not `base` itself
+    nor a remote copy of it (`origin/games/mahjong` for `games/mahjong`)."""
+    names = git("for-each-ref", "--format=%(refname)", "refs/heads/main", "refs/heads/games/", "refs/remotes/", cwd=repo, check=False)
+    found = []
+    for ref in names.splitlines():
+        if ref.startswith("refs/heads/"):
+            short = plain = ref[len("refs/heads/") :]
+        else:
+            short = ref[len("refs/remotes/") :]
+            plain = short.partition("/")[2]
+        if plain != base and (plain == "main" or plain.startswith("games/")):
+            found.append(short)
+    return found
+
+
+def foreign_base(repo: Path, branch: str, base: str) -> str | None:
+    """The base branch other than `base` that `branch` was cut from, if it looks so: the branch holds commits
+    of that branch (local or fetched) that `base` has not. Such a branch is another checkout's (a loop of
+    another game took an entry of the engine area); merged here it would bring those commits along. None when
+    no other base branch is known or the branch shares nothing with one beyond `base`."""
+    for other in base_candidates(repo, base):
+        shared = git("merge-base", branch, other, cwd=repo, check=False)
+        if shared and not git_ok("merge-base", "--is-ancestor", shared, base, cwd=repo):
+            return other
+    return None
+
+
+def branch_origin(repo: Path, branch: str, base: str) -> dict:
+    """`local`: the branch exists in `repo` (an entry taken in another checkout or on another machine has its
+    branch there, never here); `foreignBase`: what `foreign_base` says, for a local branch."""
+    if not repo.is_dir() or not git_ok("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=repo):
+        return {"local": False, "foreignBase": None}
+    return {"local": True, "foreignBase": foreign_base(repo, branch, base)}
+
+
 def worktree_of(repo: Path, branch: str) -> Path | None:
     """The worktree of `repo` (a main worktree) that has `branch` checked out, if any. The first entry of the
     list is the main worktree, `repo` itself (a submodule lists it as its git dir, `.git/modules/<name>`)."""
@@ -462,9 +499,12 @@ def merge_plan(layout: Layout, entry_id: str) -> dict:
     repo = (layout.main / area["repo"]).resolve()
     base = area["base"]
     if not git_ok("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=repo):
-        raise WorkerError(f"no branch {branch} in {repo}")
+        raise WorkerError(f"no branch {branch} in {repo}: it was made in another checkout or on another machine, review and merge it there")
     if git_ok("merge-base", "--is-ancestor", branch, base, cwd=repo):
         raise WorkerError(f"{branch} is already merged into {base}")
+    foreign = foreign_base(repo, branch, base)
+    if foreign:
+        raise WorkerError(f"{branch} holds commits of {foreign} that {base} has not: it was cut from {foreign} in another checkout, merge it there")
     tree = subprocess.run(["git", "merge-tree", "--write-tree", "--name-only", base, branch], cwd=repo, capture_output=True, text=True)
     conflicts = []
     if tree.returncode != 0:
@@ -839,6 +879,8 @@ def list_json(layout: Layout, args) -> dict:
         "areas": rule_areas(layout.main) if args.store else None,
         "workers": workers,
         "review": [entry for entry in entries if entry.get("status") == "review"],
+        # entries whose branch is not this checkout's to review, merge or continue (`branch_origin`)
+        "elsewhere": [entry["id"] for entry in entries if entry.get("local") is False or entry.get("foreignBase")],
     }
 
 

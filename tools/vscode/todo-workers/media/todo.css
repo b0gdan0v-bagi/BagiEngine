@@ -30,3 +30,4 @@ button.chip.on { opacity: 1; border-color: currentColor; }
 .body h3 { margin: 8px 0 4px; font-size: 13px; }
 .todo-entry .badge.busy { margin-left: 0; color: var(--vscode-charts-blue, #3794ff); }
 button:disabled { opacity: 0.5; cursor: default; }
+.todo-entry .badge.away { margin-left: 0; color: var(--vscode-editorWarning-foreground, #cca700); }

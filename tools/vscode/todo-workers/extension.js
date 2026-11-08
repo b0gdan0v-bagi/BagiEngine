@@ -258,6 +258,7 @@ function activate(context) {
     // Review: the branch against the point where it left its base, every file in one multi-diff editor
     // (the git extension's URIs); a terminal with the diff when the editor cannot show it.
     async function reviewBranch(entry) {
+        if (notHere(entry)) return;
         if (!entry || !entry.branch || !entry.repo || !entry.base) {
             vscode.window.showWarningMessage("No repository or base for this entry (the Areas table of .claude/rules/todo-project.md)");
             return;
@@ -294,7 +295,7 @@ function activate(context) {
     const merging = new Set();
     async function quickMerge(entry) {
         const tool = findTool();
-        if (!entry || !tool || merging.has(entry.id)) return;
+        if (!entry || !tool || merging.has(entry.id) || notHere(entry)) return;
         merging.add(entry.id);
         try {
             let plan;
@@ -338,9 +339,23 @@ function activate(context) {
 
     // /todo-merge needs the owner's answer and the main checkout, so the button starts an interactive
     // Claude there with the skill; the skill reports, asks and merges. The extension itself writes nothing.
+    // An entry whose branch is not here (taken in another checkout or on another machine) or that was cut
+    // from another base (worker.py list --store: local, foreignBase): nothing to review or merge here.
+    function notHere(entry) {
+        if (!entry || (entry.local !== false && !entry.foreignBase)) return false;
+        vscode.window.showWarningMessage(`${entry.id}: ${whereNot(entry)}`);
+        return true;
+    }
+
+    function whereNot(entry) {
+        return entry.foreignBase
+            ? `${entry.branch} was cut from ${entry.foreignBase}, not from ${entry.base}: review and merge it in the checkout that made it`
+            : `no branch ${entry.branch} in this checkout: it was taken in another checkout or on another machine, review and merge it there`;
+    }
+
     function startMerge(entry) {
         const tool = findTool();
-        if (!entry || !entry.branch || !tool) return;
+        if (!entry || !entry.branch || !tool || notHere(entry)) return;
         const name = `todo-merge ${entry.id}`;
         const open = vscode.window.terminals.find((t) => t.name === name && t.exitStatus === undefined);
         if (open) {
@@ -356,7 +371,7 @@ function activate(context) {
     // branch against its base and reports findings. Read only: it is told not to check out, edit, commit or merge.
     function startClaudeReview(entry) {
         const tool = findTool();
-        if (!entry || !entry.branch || !entry.base || !tool) return;
+        if (!entry || !entry.branch || !entry.base || !tool || notHere(entry)) return;
         const name = `todo-review ${entry.id}`;
         const open = vscode.window.terminals.find((t) => t.name === name && t.exitStatus === undefined);
         if (open) {
@@ -399,7 +414,7 @@ function activate(context) {
         todoPanel.webview.postMessage({ loading: true, error: null });
         try {
             const entries = JSON.parse(await runTool(todoTool(tool), ["list", "--all", "--json", "--body"], 30000));
-            if (todoPanel) todoPanel.webview.postMessage({ loading: false, entries, areas: state && state.areas ? state.areas : null, workers: workersForList(), at: Date.now() });
+            if (todoPanel) todoPanel.webview.postMessage({ loading: false, entries, areas: state && state.areas ? state.areas : null, workers: workersForList(), elsewhere: elsewhereForList(), at: Date.now() });
         } catch (error) {
             if (todoPanel) todoPanel.webview.postMessage({ loading: false, error: `todo.py list: ${error.message}` });
         } finally {
@@ -451,8 +466,13 @@ function activate(context) {
         return state.workers.map((w) => ({ k: w.k, name: w.name, active: Boolean(w.active), dirty: Boolean(w.dirty), busy: busy.has(w.k), entry: w.entry ? w.entry.id : null }));
     }
 
+    // The ids of the entries whose branch lives in another checkout (worker.py list: elsewhere).
+    function elsewhereForList() {
+        return state && Array.isArray(state.elsewhere) ? state.elsewhere : [];
+    }
+
     function postWorkersToList() {
-        if (todoPanel) todoPanel.webview.postMessage({ workers: workersForList() });
+        if (todoPanel) todoPanel.webview.postMessage({ workers: workersForList(), elsewhere: elsewhereForList() });
     }
 
     // A free worker: no session running, no uncommitted changes, no button of this panel at work on it.
@@ -473,6 +493,10 @@ function activate(context) {
         const holder = state && state.workers.find((w) => w.active && w.entry && w.entry.id === id);
         if (holder) {
             vscode.window.showInformationMessage(`${id} is worked by ${holder.name} already.`);
+            return;
+        }
+        if (elsewhereForList().includes(id)) {
+            vscode.window.showWarningMessage(`${id}: its branch lives in another checkout or was cut from another base; continue it there.`);
             return;
         }
         // A worker that holds the entry's branch (an idle loop left it there) is the only one that can switch

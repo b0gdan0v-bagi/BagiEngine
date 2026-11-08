@@ -232,14 +232,23 @@
         card.append(top, el("div", "title", entry.title));
         if (entry.statusNote) card.appendChild(el("div", "note", entry.statusNote));
         card.appendChild(head("branch", { branch: entry.branch }));
+        // worker.py list --store: the branch is not here, or it was cut from another base (another game's)
+        const away = entry.local === false || Boolean(entry.foreignBase);
+        if (away) {
+            card.classList.add("away");
+            card.appendChild(el("div", "warn", entry.foreignBase
+                ? `Cut from ${entry.foreignBase}, not from ${entry.base}: it holds commits that ${entry.base} has not. Review and merge it in the checkout that made it.`
+                : `No branch ${entry.branch} here: it was taken in another checkout or on another machine. Review and merge it there.`));
+        }
         const actions = el("div", "actions");
-        actions.append(
+        const gated = [
             button("Review", { cmd: "review", entry: entry.id }, "the changes of the branch against its base, in one diff editor"),
             button("Review with Claude", { cmd: "claudeReview", entry: entry.id }, "a terminal in the main checkout runs claude with a read-only review of the branch against its base: findings with file:line and a verdict"),
-            button("Quick merge", { cmd: "quickMerge", entry: entry.id }, "worker.py merge: a dialog with the commits, then merge --no-ff, close the entry, delete the branch (and the engine pointer); no build", "primary"),
+            button("Quick merge", { cmd: "quickMerge", entry: entry.id }, "worker.py merge: a dialog with the commits, then merge --no-ff, close the entry, delete the branch (and the engine pointer); no build", away ? "" : "primary"),
             button("Merge with Claude", { cmd: "merge", entry: entry.id }, "a terminal in the main checkout runs claude '/todo-merge <branch>': it reports, asks, and builds when the base moved"),
-            button("Plan", { cmd: "plan", entry: entry.id })
-        );
+        ];
+        if (away) gated.forEach((b) => (b.disabled = true));
+        actions.append(...gated, button("Plan", { cmd: "plan", entry: entry.id }));
         card.appendChild(actions);
         return card;
     }
