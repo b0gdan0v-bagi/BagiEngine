@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <random>
@@ -15,16 +14,7 @@ namespace BECore::Tests {
      * cleared or overwritten by another process. The caller removes what it made (a crashed run leaves its folder).
      */
     inline std::filesystem::path TestTempPath(const std::string& stem) {
-        static const std::string tag = [] {
-            constexpr size_t kTagDigits = 8;
-            std::random_device device;
-            const uint32_t value = device();
-            std::string text;
-            for (size_t digit = 0; digit < kTagDigits; ++digit) {
-                text.insert(text.begin(), "0123456789abcdef"[(value >> (digit * 4)) & 0xF]);
-            }
-            return text;
-        }();
+        static const std::string tag = Format("{:08x}", std::random_device{}()).c_str();
         return std::filesystem::temp_directory_path() / (stem + "_" + tag);
     }
 

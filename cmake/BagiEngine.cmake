@@ -650,6 +650,13 @@ if(ENGINE_BUILD_TESTS)
     # global engine state cannot leak between tests). Tests run in the default working directory, which is
     # inside the repository: FileSystem finds config/ by walking up from it. Do not pass WORKING_DIRECTORY
     # to gtest_discover_tests: it also decides where cmake_test_discovery_*.json is written.
+    # The test presets run ctest in parallel (execution.jobs of test-base in CMakePresets.json), so a test case
+    # runs beside others, in other processes: it may share read-only inputs (config/, the
+    # source tree) and nothing it writes. Temp folders and files carry the test name and a per-process tag
+    # (tests/Common/TempPath.h), servers bind port 0, nothing is awaited by a fixed sleep, and no test reads the
+    # engine.log of the working directory (every process truncates it). A test that cannot keep to this gets
+    # RUN_SERIAL (alone in the run) or a RESOURCE_LOCK (not beside the tests with the same lock) in
+    # set_tests_properties; none of the engine's gtest cases needs either.
     function(be_add_game_tests NAME)
         cmake_parse_arguments(ARG "" "" "SOURCES;LINK;WHOLE_ARCHIVE" ${ARGN})
 
@@ -697,6 +704,11 @@ if(ENGINE_BUILD_TESTS)
     # script runs the game --headless (no window; a SCRIPT has to do the same if it does not want one). It exits with 77
     # for "skipped". The test environment has BAGI_ENGINE_DIR (the engine checkout), so that a game's SCRIPT can import
     # the helpers of tools/control/tests/smoke.py.
+    # The smoke test runs beside the unit tests of the parallel ctest run: it takes a free port by itself (a port
+    # that is taken in the moment between the probe and the bind makes smoke.py retry once on a new one) and
+    # touches no file the unit tests use. The RESOURCE_LOCK only keeps two smoke tests of one ctest run apart;
+    # it is not RUN_SERIAL, which would stop every other test while it runs. TIMEOUT 120 covers the two runs of
+    # the script with their own limits (30 s startup, 15 s shutdown) and one retry on a loaded machine.
     function(be_add_game_control_tests EXE_TARGET)
         cmake_parse_arguments(ARG "" "SCRIPT" "" ${ARGN})
         if(NOT ARG_SCRIPT)
@@ -712,7 +724,7 @@ if(ENGINE_BUILD_TESTS)
         set_tests_properties(${TEST_NAME} PROPERTIES
             SKIP_RETURN_CODE 77
             TIMEOUT 120
-            RUN_SERIAL TRUE
+            RESOURCE_LOCK bagi_control_smoke
             ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
         )
     endfunction()

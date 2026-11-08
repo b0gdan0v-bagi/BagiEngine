@@ -385,7 +385,7 @@ def play(exe: Path, flags: list[str], scenario: Callable[[BagiControlClient, boo
                 check(code == 0, f"the game exited with code {code} after quit")
             except (SmokeFailure, ControlError, ConnectionClosed, OSError) as error:
                 tail = log_tail(log_path)
-                failure = PortTaken if PORT_TAKEN_MARKER in tail else SmokeFailure  # the one failure that run_smoke retries
+                failure = PortTaken if PORT_TAKEN_MARKER in tail else SmokeFailure  # the one failure that play_with_retry retries
                 raise failure(f"{error}\n--- game log (tail) ---\n{tail}") from error
             finally:
                 if process.poll() is None:
