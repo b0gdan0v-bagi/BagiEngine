@@ -17,7 +17,7 @@ cmake --build --preset macos-debug         # build everything: the game executab
 | macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-release-editor`: Release with the editor (below); `macos-rmlui-debug`, `macos-rmlui-release`: the same with `ENGINE_UI_RMLUI=ON` (the RmlUi host and its tests; no system library is needed, the engine's own fonts draw the text) |
 | Windows | `windows-msvc-{debug,release}`, `windows-msvc-release-editor`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
 
-**The editor is built only in Debug.** The option `BE_WITH_EDITOR` (`cmake/BagiEngine.cmake`, section "Editor Option") decides whether the editor panels (`src/Widgets/{ConfigEditor,EditorLayout,SceneEditor,TextureEditor,Viewport}`) and their tests are built:
+**By default the editor is in Debug builds and not in a single-config Release; Debug always has it.** The option `BE_WITH_EDITOR` (`cmake/BagiEngine.cmake`, section "Editor Option") decides whether the editor panels (`src/Widgets/{ConfigEditor,EditorLayout,SceneEditor,TextureEditor,Viewport}`) and their tests are built:
 
 | `BE_WITH_EDITOR` | Result |
 |------------------|--------|

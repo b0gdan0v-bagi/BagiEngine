@@ -30,6 +30,7 @@ The presets are the engine's. A game includes them through its own `CMakePresets
 | `macos-debug`, `macos-release` | macOS | Clang + Ninja |
 | `macos-rmlui-debug`, `macos-rmlui-release` | macOS | Clang + Ninja, with `ENGINE_UI_RMLUI=ON` (RmlUi host and its tests, which are part of the engine's own test executable). The executables land in the same `build/ClangmacOS/` as the plain presets' |
 | `windows-msvc-debug`, `windows-msvc-release` | Windows | MSVC (`cl`) + Ninja |
+| `macos-release-editor`, `windows-msvc-release-editor` | macOS / Windows | The same toolchains as the plain Release presets, with `BE_WITH_EDITOR=ON` (the editor panels and their tests in a Release build; a plain Release build leaves them out) |
 | `windows-clang-debug`, `windows-clang-release` | Windows | Clang + Ninja |
 | `windows-vs2022-{debug,release}` | Windows | Visual Studio 2022, MSVC |
 | `windows-vs2022-clangcl-{debug,release}` | Windows | Visual Studio 2022, ClangCL |
@@ -65,7 +66,7 @@ Run everything from the root of `<R>`.
 
 ## Output location and gotchas
 
-- Executables: `build/{Clang|MSVC}{macOS|Windows}/<product>[.exe]` and the test executables (the engine's `cmake/BagiEngine.cmake` sets the output directory from compiler + platform, **not** from the preset). Debug and Release Ninja presets therefore **overwrite each other's executable**; the last build wins. Visual Studio generators add a `Debug/` or `Release/` subfolder.
+- Executables: `build/{Clang|MSVC}{macOS|Windows}/<product>[.exe]` and the test executables (the engine's `cmake/BagiEngine.cmake` sets the output directory from compiler + platform, **not** from the preset). Debug and Release Ninja presets therefore **overwrite each other's executable**; the last build wins. The libraries in `build/{Clang|MSVC}{macOS|Windows}/lib` clash the same way, and `ninja` does not see that one was built with another `BE_WITH_EDITOR`: when switching between Debug, Release and the `-editor` presets, delete every `lib/*.a` (on Windows the `lib` folder) before building (the rules file, "Gotchas", where it applies). Visual Studio generators add a `Debug/` or `Release/` subfolder.
 - Do not use `cmake -B build ...` (the old flat `build/` directory) and do not edit anything under `build/`.
 - Release presets turn `ENGINE_ENABLE_ASSERTS` and `ENGINE_ENABLE_EXPECTS` off; Debug keeps them on. The Visual Studio presets are multi-config and leave both on.
 - Exceptions are disabled (`ENGINE_NO_EXCEPTIONS`). C++23 is required.
