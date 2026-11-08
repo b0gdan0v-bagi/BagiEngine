@@ -206,8 +206,9 @@ def print_entry(entry: dict, out=None) -> None:
         facts.append(f"stage: {entry['stage']}")
     if progress_text(entry):
         facts.append(progress_text(entry))
-    if entry.get("base") or entry.get("origin"):
-        facts.append(" · ".join(part for part in (f"base: {entry['base']}" if entry.get("base") else "", f"origin: {entry['origin']}" if entry.get("origin") else "") if part))
+    where = [f"{name}: {entry[name]}" for name in ("base", "origin") if entry.get(name)]
+    if where:
+        facts.append(" · ".join(where))
     facts.append(f"version: {entry['version']}")
     out.write(f"# {entry['title']}\n\n{' · '.join(facts)}\n\n{entry['body'].rstrip()}\n")
 
