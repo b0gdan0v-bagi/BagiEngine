@@ -22,6 +22,7 @@
 #include <BECore/UI/UIWebText.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UITreeCompare.h>
 #include <fstream>
@@ -1545,7 +1546,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         class TempDirectory {
         public:
             // One directory per test: ctest runs them in parallel processes, and the constructor clears the directory
-            TempDirectory() : _path(std::filesystem::temp_directory_path() / Format("BagiEngineUIWebTest_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()).c_str()) {
+            TempDirectory() : _path(TestTempDirectory("BagiEngineUIWebTest")) {
                 std::filesystem::remove_all(_path);
                 std::filesystem::create_directories(_path);
             }
