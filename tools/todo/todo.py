@@ -599,6 +599,10 @@ COMMANDS = {
 
 
 def main(argv: list[str] | None = None) -> int:
+    # A pipe on Windows gets the ANSI code page (cp1251), which has no "→" and garbles what it has: the text is always UTF-8
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
     try:
         url, token = load_settings(args.env_file)
