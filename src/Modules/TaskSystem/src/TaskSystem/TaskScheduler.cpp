@@ -67,9 +67,11 @@ namespace BECore {
             return;
         }
 
-        // Одно преобразование в Duration: дальше суммы целочисленные. Слишком большой шаг насыщается.
+        // One conversion to Duration, rounded to the nearest nanosecond (a float frame delta such as
+        // float(0.7) sits just below its decimal value and must not lose a tick); the sums are integers.
+        // A step that is too large saturates.
         constexpr double kMaxSeconds = std::chrono::duration<double>(Duration::max()).count();
-        const Duration step = seconds >= kMaxSeconds ? Duration::max() : std::chrono::duration_cast<Duration>(std::chrono::duration<double>(seconds));
+        const Duration step = seconds >= kMaxSeconds ? Duration::max() : std::chrono::round<Duration>(std::chrono::duration<double>(seconds));
 
         std::lock_guard lock(_delayedMutex);
         _gameTime = SaturatingAdd(_gameTime, step);

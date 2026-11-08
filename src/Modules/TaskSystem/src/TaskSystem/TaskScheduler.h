@@ -50,24 +50,25 @@ namespace BECore {
          * @param delay Задержка перед выполнением
          * @param priority Приоритет задачи
          * @param threadType Тип потока для выполнения
-         * @param clock Часы задержки: реальное время (по умолчанию) или игровое время (AdvanceGameTime).
-         *              Игровая задержка отсчитывается от игрового времени на момент вызова; для
-         *              детерминированного запуска вызывать из главного потока. Неположительная
-         *              задержка готова на ближайшем ProcessDelayedTasks.
+         * @param clock Clock of the delay: real time (default) or game time (AdvanceGameTime).
+         *              A game delay counts from the game time at the moment of the call; call it from the
+         *              main thread for a deterministic release. A non-positive delay is ready at the
+         *              next ProcessDelayedTasks.
          */
         void ScheduleDelayed(TaskQueue::TaskFunc task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background,
                              DelayClock clock = DelayClock::WallClock);
 
         /**
-         * Продвигает игровые часы. Единственный способ сдвинуть DelayClock::GameTime.
-         * NaN, бесконечность и отрицательный шаг игнорируются; слишком большой шаг насыщается.
-         * Шаг один раз переводится в Duration, поэтому суммы точны и одинаковы на всех платформах.
-         * @param seconds Шаг в секундах (в кадре - Time::GetDeltaTime())
+         * Advances the game clock. The only way to move DelayClock::GameTime.
+         * NaN, infinity and a negative step are ignored; a step that is too large saturates.
+         * The step is converted to Duration once (rounded to the nearest nanosecond), so the sums are
+         * exact integers and equal on every platform.
+         * @param seconds Step in seconds (in a frame: Time::GetDeltaTime())
          */
         void AdvanceGameTime(double seconds);
 
         /**
-         * Возвращает игровое время планировщика (сумма принятых шагов AdvanceGameTime).
+         * Returns the scheduler's game time (the sum of the accepted AdvanceGameTime steps).
          */
         [[nodiscard]] Duration GetGameTime() const;
 
@@ -78,8 +79,8 @@ namespace BECore {
         void ProcessMainThreadTasks();
 
         /**
-         * Проверяет и запускает готовые отложенные задачи:
-         * по реальному времени - по Clock::now(), по игровому - по GetGameTime().
+         * Checks and starts the ready delayed tasks:
+         * real-time ones by Clock::now(), game-time ones by GetGameTime().
          * Должен вызываться регулярно (например, в Update).
          */
         void ProcessDelayedTasks();
@@ -95,14 +96,14 @@ namespace BECore {
         [[nodiscard]] size_t GetMainThreadQueueSize() const;
 
         /**
-         * Возвращает количество отложенных задач (обеих очередей).
+         * Returns the number of delayed tasks (both queues).
          */
         [[nodiscard]] size_t GetDelayedTaskCount() const;
 
     private:
         struct DelayedTask {
             TaskQueue::TaskFunc task;
-            TimePoint executeTime;  // для игровой очереди: TimePoint{} + игровое время
+            TimePoint executeTime;  // game queue: TimePoint{} + game time
             TaskPriority priority;
             ThreadType threadType;
 
@@ -130,9 +131,9 @@ namespace BECore {
         eastl::priority_queue<PrioritizedTask> _mainThreadQueue;
         mutable std::mutex _mainThreadMutex;
 
-        // Отложенные задачи по реальному времени
+        // Delayed tasks by real time
         eastl::priority_queue<DelayedTask> _delayedTasks;
-        // Отложенные задачи по игровому времени (_gameTime), под тем же мьютексом
+        // Delayed tasks by game time (_gameTime), under the same mutex
         eastl::priority_queue<DelayedTask> _gameDelayedTasks;
         Duration _gameTime{};
         mutable std::mutex _delayedMutex;

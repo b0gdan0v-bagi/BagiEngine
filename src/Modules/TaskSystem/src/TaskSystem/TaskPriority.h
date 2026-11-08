@@ -25,11 +25,11 @@ namespace BECore {
     );
 
     /**
-     * Часы, по которым отсчитывается задержка отложенной задачи.
+     * The clock that counts the delay of a delayed task.
      */
     CORE_ENUM(DelayClock, uint8_t,
-              WallClock,  ///< Реальное время (steady_clock): не зависит от паузы, ограничения кадра и ручных часов
-              GameTime    ///< Игровое время: идёт только через TaskScheduler::AdvanceGameTime (дельта кадра из Time)
+              WallClock,  ///< Real time (steady_clock): independent of pause, frame limiting and the manual clock
+              GameTime    ///< Game time: moves only through TaskScheduler::AdvanceGameTime (the frame delta from Time)
     );
 
     /**

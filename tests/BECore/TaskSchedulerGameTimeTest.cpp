@@ -37,22 +37,21 @@ namespace BECore::Tests {
                 return _ran - before;
             }
 
-            void ScheduleGame(TaskScheduler::Duration delay, int id = 0) {
+            void Schedule(TaskScheduler::Duration delay, int id = 0, DelayClock clock = DelayClock::GameTime) {
                 _scheduler.ScheduleDelayed(
                     [this, id] {
                         ++_ran;
                         _order.push_back(id);
                     },
-                    delay, TaskPriority::Normal, ThreadType::MainThread, DelayClock::GameTime);
+                    delay, TaskPriority::Normal, ThreadType::MainThread, clock);
+            }
+
+            void ScheduleGame(TaskScheduler::Duration delay, int id = 0) {
+                Schedule(delay, id, DelayClock::GameTime);
             }
 
             void ScheduleWall(TaskScheduler::Duration delay, int id = 0) {
-                _scheduler.ScheduleDelayed(
-                    [this, id] {
-                        ++_ran;
-                        _order.push_back(id);
-                    },
-                    delay, TaskPriority::Normal, ThreadType::MainThread, DelayClock::WallClock);
+                Schedule(delay, id, DelayClock::WallClock);
             }
 
             TaskScheduler _scheduler;
@@ -133,6 +132,21 @@ namespace BECore::Tests {
 
         EXPECT_EQ(_scheduler.GetGameTime(), TaskScheduler::Duration::zero());
         EXPECT_EQ(Pump(), 0);
+    }
+
+    TEST_F(TaskSchedulerGameTimeTest, StepIsRoundedToTheNearestNanosecond) {
+        using std::chrono::nanoseconds;
+
+        _scheduler.AdvanceGameTime(0.4e-9);  // below half a tick: nothing
+        EXPECT_EQ(_scheduler.GetGameTime(), nanoseconds(0));
+        _scheduler.AdvanceGameTime(1.6e-9);  // above half a tick: up, not truncated down
+        EXPECT_EQ(_scheduler.GetGameTime(), nanoseconds(2));
+
+        // The frame delta is a float: float(1/60) is 16666667.53... ns, float(0.7) is 699999988.07... ns.
+        _scheduler.AdvanceGameTime(static_cast<double>(1.0f / 60.0f));
+        EXPECT_EQ(_scheduler.GetGameTime(), nanoseconds(2 + 16666668));
+        _scheduler.AdvanceGameTime(static_cast<double>(0.7f));
+        EXPECT_EQ(_scheduler.GetGameTime(), nanoseconds(2 + 16666668 + 699999988));
     }
 
     TEST_F(TaskSchedulerGameTimeTest, HugeStepSaturatesAndLargeDelaysDoNotOverflow) {
