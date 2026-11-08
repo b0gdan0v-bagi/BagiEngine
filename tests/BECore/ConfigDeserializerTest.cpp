@@ -7,6 +7,7 @@
 #include <BECore/Resource/ResourceManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
 #include <Generated/ConfigDeserializerTest.gen.hpp>
 #include <fstream>
 
@@ -40,9 +41,8 @@ namespace BECore::Tests {
         }
 
         void SetUp() override {
-            const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
             // One directory per test: ctest runs every test in its own process
-            _dir = std::filesystem::temp_directory_path() / Format("BagiConfigDeserializerTest_{}", info->name()).c_str();
+            _dir = TestTempDirectory("BagiConfigDeserializerTest");
             std::filesystem::remove_all(_dir);
             std::filesystem::create_directories(_dir);
             ASSERT_TRUE(CoreManager::GetFileSystem().Mount(PoolString::Intern(kMountPoint), _dir));

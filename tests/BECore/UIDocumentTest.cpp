@@ -7,6 +7,7 @@
 #include <BECore/UI/UIDocument.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/TempPath.h>
 #include <Common/UITreeCompare.h>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -43,7 +44,7 @@ namespace BECore::Tests {
         class TempDirectory {
         public:
             // One directory per test: ctest runs them in parallel processes, and the constructor clears the directory
-            TempDirectory() : _path(std::filesystem::temp_directory_path() / Format("BagiEngineUIDocumentTest_{}", ::testing::UnitTest::GetInstance()->current_test_info()->name()).c_str()) {
+            TempDirectory() : _path(TestTempDirectory("BagiEngineUIDocumentTest")) {
                 std::filesystem::remove_all(_path);
                 std::filesystem::create_directories(_path);
             }

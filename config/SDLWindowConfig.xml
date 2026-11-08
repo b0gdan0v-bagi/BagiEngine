@@ -4,5 +4,5 @@
     title="My SDL3 Window from config!"
     width="1920"
     height="1080"
-    windowFlags="SDL_WINDOW_RESIZABLE|SDL_WINDOW_VULKAN|SDL_WINDOW_MAXIMIZED" />
+    windowFlags="SDL_WINDOW_RESIZABLE|SDL_WINDOW_VULKAN|SDL_WINDOW_MAXIMIZED|SDL_WINDOW_HIGH_PIXEL_DENSITY" />
 </root>

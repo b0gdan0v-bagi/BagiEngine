@@ -2,8 +2,10 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
+#include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Games/GameControl.h>
+#include <Games/GamesConfig.h>
 
 namespace BECore {
 
@@ -29,14 +31,11 @@ namespace BECore {
         }
 
         PoolString defaultName;
-        const auto rootNode = CoreManager::GetConfigManager().GetConfig("GamesConfig"_intern);
-        if (rootNode) {
-            const auto defaultNode = rootNode.GetChild("defaultGame");
-            if (defaultNode) {
-                if (auto attr = defaultNode.GetAttribute("name")) {
-                    defaultName = PoolString::Intern(*attr);
-                }
-            }
+        if (const auto deserializer = CoreManager::GetConfigManager().CreateDeserializer("GamesConfig"_intern)) {
+            GamesConfig config;
+            config.Deserialize(*deserializer);
+            LogDeserializeErrors("GamesConfig", *deserializer);
+            defaultName = config._defaultGame._name;
         }
 
         if (defaultName.Empty()) {

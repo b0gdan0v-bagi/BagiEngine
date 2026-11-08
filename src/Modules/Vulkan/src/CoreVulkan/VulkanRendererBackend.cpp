@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreVulkan/VulkanRenderTarget.h>
 #include <CoreVulkan/VulkanTexture.h>
@@ -20,6 +21,13 @@ namespace BECore {
     namespace {
 
         constexpr size_t kIndicesPerTriangle = 3;
+
+        // A minimized window skips its frames; this sleep keeps the loop from spinning at full speed meanwhile
+        constexpr uint32_t kMinimizedSleepMs = 16;
+        // The same after a swapchain that could not be rebuilt, so that a lasting failure does not log 60 times a second
+        constexpr uint32_t kRecreateFailedSleepMs = 100;
+
+        using namespace VulkanSwapchainPolicy;
 
     }  // namespace
 
@@ -60,8 +68,19 @@ namespace BECore {
             return false;
         }
 
-        const int width = window.GetWidth();
-        const int height = window.GetHeight();
+        _window = nativeWindow;
+
+        // The swapchain has the pixel size of the surface (more than the window's size in units on a high-density
+        // display); a window that starts minimized has none yet, so the configured size stands in until the first rebuild
+        int width = 0;
+        int height = 0;
+        SDL_GetWindowSizeInPixels(_window, &width, &height);
+        if (IsMinimized(width, height)) {
+            const float density = window.GetPixelDensity();
+            width = static_cast<int>(std::lround(static_cast<float>(window.GetWidth()) * density));
+            height = static_cast<int>(std::lround(static_cast<float>(window.GetHeight()) * density));
+        }
+        _requestedPixelExtent = {static_cast<uint32_t>(std::max(width, 0)), static_cast<uint32_t>(std::max(height, 0))};
 
         if (!_swapchain.Initialize(_device, _surface, width, height)) {
             return false;
@@ -97,6 +116,7 @@ namespace BECore {
         Subscribe<RenderEvents::SetRenderDrawColorEvent, &VulkanRendererBackend::OnSetRenderDrawColor>(this);
         Subscribe<RenderEvents::RenderClearEvent, &VulkanRendererBackend::OnRenderClear>(this);
         Subscribe<RenderEvents::RenderPresentEvent, &VulkanRendererBackend::OnRenderPresent>(this);
+        Subscribe<SDLEvents::WindowEvent, &VulkanRendererBackend::OnWindowEvent>(this);
         Subscribe<RenderEvents::ImGuiInitEvent, &VulkanRendererBackend::OnImGuiInit>(this);
         Subscribe<RenderEvents::ImGuiShutdownEvent, &VulkanRendererBackend::OnImGuiShutdown>(this);
         Subscribe<RenderEvents::ImGuiNewFrameEvent, &VulkanRendererBackend::OnImGuiNewFrame>(this);
@@ -153,8 +173,58 @@ namespace BECore {
         _device.Destroy();
     }
 
+    bool VulkanRendererBackend::RecreateSwapchain(int pixelWidth, int pixelHeight) {
+        // The old framebuffers and image views may still be in use by the frames in flight
+        vkDeviceWaitIdle(_device.GetDevice());
+
+        switch (_swapchain.Recreate(_device, _surface, pixelWidth, pixelHeight)) {
+            case SwapchainRecreateResult::Done:
+                _requestedPixelExtent = {static_cast<uint32_t>(pixelWidth), static_cast<uint32_t>(pixelHeight)};
+                _swapchainDirty = false;
+                _currentExtent = _swapchain.GetExtent();
+                return true;
+            case SwapchainRecreateResult::ZeroExtent:
+                SDL_Delay(kMinimizedSleepMs);
+                break;
+            default:
+                // Recreate logged the cause. The swapchain stays dirty, so the next frame tries again
+                SDL_Delay(kRecreateFailedSleepMs);
+                break;
+        }
+        _swapchainDirty = true;
+        return false;
+    }
+
+    SwapchainAction VulkanRendererBackend::HandleSwapchainStatus(SwapchainStatus status, SwapchainStage stage) {
+        const SwapchainAction action = ActionAfter(stage, status);
+        switch (action) {
+            case SwapchainAction::Proceed:
+                break;
+            case SwapchainAction::ProceedAndRecreateLater:
+            case SwapchainAction::RecreateAndRetry:
+                _swapchainDirty = true;
+                break;
+            default:
+                LOG_ERROR("VulkanRendererBackend: {}"_format(stage == SwapchainStage::Acquire ? "acquiring a swapchain image failed, so the frame is skipped" : "presenting a swapchain image failed"));
+                break;
+        }
+        return action;
+    }
+
     void VulkanRendererBackend::AcquireFrame() {
         if (_frameAcquired) {
+            return;
+        }
+
+        // Follow the window: SDL_GetWindowSizeInPixels is the size of the surface, whatever the driver reports
+        int pixelWidth = 0;
+        int pixelHeight = 0;
+        SDL_GetWindowSizeInPixels(_window, &pixelWidth, &pixelHeight);
+        if (IsMinimized(pixelWidth, pixelHeight)) {
+            SDL_Delay(kMinimizedSleepMs);
+            return;
+        }
+        if (NeedsRecreate(_requestedPixelExtent, pixelWidth, pixelHeight, _swapchainDirty) && !RecreateSwapchain(pixelWidth, pixelHeight)) {
             return;
         }
 
@@ -164,8 +234,17 @@ namespace BECore {
         // Wait until the GPU finishes the previous use of this frame slot
         vkWaitForFences(vkDevice, 1, &_inFlightFences[frameIdx], VK_TRUE, UINT64_MAX);
 
-        if (!_swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx], _currentImageIndex)) {
-            return;  // swapchain out-of-date (TODO: recreate on resize)
+        SwapchainAction action = HandleSwapchainStatus(_swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx], _currentImageIndex), SwapchainStage::Acquire);
+        if (action == SwapchainAction::RecreateAndRetry) {
+            // A failed acquire signaled nothing, so the semaphore is free for the second try. If that is out of date
+            // too, the swapchain stays dirty and the next frame tries again.
+            if (!RecreateSwapchain(pixelWidth, pixelHeight)) {
+                return;
+            }
+            action = HandleSwapchainStatus(_swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx], _currentImageIndex), SwapchainStage::Acquire);
+        }
+        if (action != SwapchainAction::Proceed && action != SwapchainAction::ProceedAndRecreateLater) {
+            return;
         }
 
         vkResetFences(vkDevice, 1, &_inFlightFences[frameIdx]);
@@ -235,6 +314,7 @@ namespace BECore {
 
         _inSwapchainPass = false;
         _frameAcquired   = false;
+        _frameSubmitted  = true;
     }
 
     void VulkanRendererBackend::Clear(const Color& color) {
@@ -245,10 +325,21 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::Present() {
+        // A frame that was acquired but never begun still owns a signaled semaphore: it is submitted with an empty pass
+        if (_frameAcquired && !_inSwapchainPass && !_inOffscreenPass) {
+            BeginFrame();
+        }
         EndFrame();
 
+        // A skipped frame (minimized, swapchain out of date) acquired no image and submitted nothing: there is
+        // nothing to present, and the frame slot stays as it is
+        if (!_frameSubmitted) {
+            return;
+        }
+        _frameSubmitted = false;
+
         const uint32_t frameIdx = _currentFrame;
-        _swapchain.Present(_device, _renderFinishedSemaphores[frameIdx], _currentImageIndex);
+        HandleSwapchainStatus(_swapchain.Present(_device, _renderFinishedSemaphores[frameIdx], _currentImageIndex), SwapchainStage::Present);
 
         _currentFrame = (_currentFrame + 1) % kMaxFramesInFlight;
     }
@@ -473,7 +564,11 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::SetRenderTarget(IRenderTarget* target) {
-        ASSERT(!_inOffscreenPass && !_inSwapchainPass && _frameAcquired);
+        // No open frame (minimized, swapchain out of date): the offscreen draws are skipped like everything else
+        if (!_frameAcquired) {
+            return;
+        }
+        ASSERT(!_inOffscreenPass && !_inSwapchainPass);
         auto* vkTarget = static_cast<VulkanRenderTarget*>(target);
 
         VkCommandBuffer cmd = _commandBuffers[_currentFrame];
@@ -559,6 +654,13 @@ namespace BECore {
         Present();
     }
 
+    void VulkanRendererBackend::OnWindowEvent(const SDLEvents::WindowEvent& event) {
+        // The per-frame comparison of the pixel size is the safety net for a driver that reports nothing
+        if (event.window.type == SDL_EVENT_WINDOW_RESIZED || event.window.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+            _swapchainDirty = true;
+        }
+    }
+
     void VulkanRendererBackend::OnImGuiInit() {
         const auto& window = CoreManager::GetMainWindow();
         if (!window) {
@@ -595,6 +697,10 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::OnImGuiRender() {
+        // Only into an open swapchain pass: a skipped frame has no command buffer to record into
+        if (!_inSwapchainPass) {
+            return;
+        }
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), GetCurrentCommandBuffer());
     }
 

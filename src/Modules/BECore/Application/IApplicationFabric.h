@@ -6,7 +6,7 @@
 
 namespace BECore {
 
-    class XmlNode;
+    struct ApplicationConfig;
 
     class IApplicationFabric : public RefCounted, public ApplicationMainAccess, public MainWindowAccessor {
         BE_CLASS(IApplicationFabric, FACTORY_BASE)
@@ -14,7 +14,7 @@ namespace BECore {
         IApplicationFabric() = default;
         ~IApplicationFabric() override = default;
 
-        BE_FUNCTION virtual bool Create(const XmlNode& configNode, const ApplicationOptions& options) = 0;
+        BE_FUNCTION virtual bool Create(const ApplicationConfig& config, const ApplicationOptions& options) = 0;
     };
 
 }  // namespace BECore

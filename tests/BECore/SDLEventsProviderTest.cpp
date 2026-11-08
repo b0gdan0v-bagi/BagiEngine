@@ -1,4 +1,5 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/MainWindow/IMainWindow.h>
 #include <Common/Printers.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLEventsProvider.h>
@@ -103,6 +104,41 @@ namespace BECore::Tests {
             int motions = 0;
         };
 
+        /// A window that only has a pixel density (2 is a Retina display)
+        class DensityWindow : public IMainWindow {
+        public:
+            explicit DensityWindow(float density) : _density(density) {}
+
+            bool Initialize(eastl::string_view /*configPath*/) override {
+                return true;
+            }
+
+            void Destroy() override {}
+
+            bool IsValid() const override {
+                return true;
+            }
+
+            int GetWidth() const override {
+                return 800;
+            }
+
+            int GetHeight() const override {
+                return 600;
+            }
+
+            float GetPixelDensity() const override {
+                return _density;
+            }
+
+            void SetDensity(float density) {
+                _density = density;
+            }
+
+        private:
+            float _density;
+        };
+
         void PushEvent(SDL_Event event) {
             ASSERT_TRUE(SDL_PushEvent(&event)) << SDL_GetError();
         }
@@ -172,11 +208,19 @@ namespace BECore::Tests {
         }
 
         void TearDown() override {
+            CoreManager::GetMainWindowManager().SetMainWindow(IntrusivePtr<IMainWindow>());
             if (ImGui::GetCurrentContext() != nullptr) {
                 ImGui::DestroyContext();
             }
             SDL_Quit();
         }
+
+        void InstallWindow(float density) {
+            _window = New<DensityWindow>(density);
+            CoreManager::GetMainWindowManager().SetMainWindow(_window);
+        }
+
+        IntrusivePtr<DensityWindow> _window;
 
         SDLEventsProvider _provider;
     };
@@ -269,6 +313,98 @@ namespace BECore::Tests {
 
         EXPECT_EQ(ui.motions, 1);
         EXPECT_TRUE(recorder.motions.empty());
+    }
+
+    TEST_F(SDLEventsProviderTest, OnAHighDensityWindowThePositionsAreOutputPixels) {
+        InstallWindow(2.0f);
+        MouseRecorder clicks;
+        InputRecorder recorder;
+
+        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 20.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_UP, 3.0f, 4.0f));
+        SDL_Event motion{};
+        motion.type = SDL_EVENT_MOUSE_MOTION;
+        motion.motion.x = 5.0f;
+        motion.motion.y = 6.0f;
+        motion.motion.xrel = 1.5f;
+        motion.motion.yrel = -2.0f;
+        ASSERT_NO_FATAL_FAILURE(PushEvent(motion));
+        SDL_Event wheel{};
+        wheel.type = SDL_EVENT_MOUSE_WHEEL;
+        wheel.wheel.x = 1.0f;
+        wheel.wheel.y = -3.0f;
+        wheel.wheel.mouse_x = 7.0f;
+        wheel.wheel.mouse_y = 8.0f;
+        ASSERT_NO_FATAL_FAILURE(PushEvent(wheel));
+        _provider.ProcessEvents();
+
+        ASSERT_EQ(clicks.clicks.size(), 1u);
+        EXPECT_FLOAT_EQ(clicks.clicks[0].x, 20.0f);
+        EXPECT_FLOAT_EQ(clicks.clicks[0].y, 40.0f);
+        ASSERT_EQ(recorder.ups.size(), 1u);
+        EXPECT_FLOAT_EQ(recorder.ups[0].x, 6.0f);
+        EXPECT_FLOAT_EQ(recorder.ups[0].y, 8.0f);
+        ASSERT_EQ(recorder.motions.size(), 1u);
+        EXPECT_FLOAT_EQ(recorder.motions[0].x, 10.0f);
+        EXPECT_FLOAT_EQ(recorder.motions[0].y, 12.0f);
+        EXPECT_FLOAT_EQ(recorder.motions[0].xrel, 3.0f);
+        EXPECT_FLOAT_EQ(recorder.motions[0].yrel, -4.0f);
+        ASSERT_EQ(recorder.wheels.size(), 1u);
+        EXPECT_FLOAT_EQ(recorder.wheels[0].mouse_x, 14.0f);
+        EXPECT_FLOAT_EQ(recorder.wheels[0].mouse_y, 16.0f);
+        // The scroll amount is not a position
+        EXPECT_FLOAT_EQ(recorder.wheels[0].x, 1.0f);
+        EXPECT_FLOAT_EQ(recorder.wheels[0].y, -3.0f);
+    }
+
+    TEST_F(SDLEventsProviderTest, AUIHandlerSeesTheScaledPosition) {
+        InstallWindow(2.0f);
+        class Recording : public ConsumingHandler {
+        public:
+            bool OnMouseButtonDown(const SDL_MouseButtonEvent& e) override {
+                x = e.x;
+                y = e.y;
+                return ConsumingHandler::OnMouseButtonDown(e);
+            }
+            float x = 0.0f;
+            float y = 0.0f;
+        } ui;
+        CoreManager::GetUIInput().Register(ui, 0);
+
+        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 20.0f));
+        _provider.ProcessEvents();
+        CoreManager::GetUIInput().Unregister(ui);
+
+        EXPECT_EQ(ui.downs, 1);
+        EXPECT_FLOAT_EQ(ui.x, 20.0f);
+        EXPECT_FLOAT_EQ(ui.y, 40.0f);
+    }
+
+    TEST_F(SDLEventsProviderTest, TheDensityIsReadForEveryEvent) {
+        InstallWindow(2.0f);
+        MouseRecorder recorder;
+
+        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 10.0f));
+        _provider.ProcessEvents();
+        _window->SetDensity(1.5f);  // the window moved to another display
+        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 10.0f));
+        _provider.ProcessEvents();
+
+        ASSERT_EQ(recorder.clicks.size(), 2u);
+        EXPECT_FLOAT_EQ(recorder.clicks[0].x, 20.0f);
+        EXPECT_FLOAT_EQ(recorder.clicks[1].x, 15.0f);
+    }
+
+    TEST_F(SDLEventsProviderTest, ADensityOfOneLeavesThePositionsAsTheyAre) {
+        InstallWindow(1.0f);
+        MouseRecorder recorder;
+
+        ASSERT_NO_FATAL_FAILURE(PushLeftClick(10.0f, 20.0f));
+        _provider.ProcessEvents();
+
+        ASSERT_EQ(recorder.clicks.size(), 1u);
+        EXPECT_FLOAT_EQ(recorder.clicks[0].x, 10.0f);
+        EXPECT_FLOAT_EQ(recorder.clicks[0].y, 20.0f);
     }
 
     TEST_F(SDLEventsProviderTest, ImGuiKeepsReleaseMotionAndWheelWhileItWantsTheMouse) {

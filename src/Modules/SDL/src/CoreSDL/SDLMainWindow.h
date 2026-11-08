@@ -41,6 +41,7 @@ namespace BECore {
         void RenderPresent() const;
 
         SDL_Window* _window = nullptr;
+        // The size of the config: the answer of GetWidth() / GetHeight() while there is no window or SDL cannot tell
         int _width = 0;
         int _height = 0;
         bool _headless = false;

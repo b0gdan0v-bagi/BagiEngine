@@ -1,11 +1,18 @@
 #pragma once
 
+#include "VulkanSwapchainPolicy.h"
+
 #include <vulkan/vulkan.h>
 #include <EASTL/vector.h>
+
+#include <optional>
 
 namespace BECore {
 
     class VulkanDevice;
+
+    using VulkanSwapchainPolicy::SwapchainRecreateResult;
+    using VulkanSwapchainPolicy::SwapchainStatus;
 
     /**
      * Manages swapchain, image views, render pass, and framebuffers.
@@ -14,47 +21,68 @@ namespace BECore {
      * Each swapchain image is wrapped with:
      *   - VkImageView    - how the GPU sees the image
      *   - VkFramebuffer  - ties the image view to a render pass
+     *
+     * The render pass is created once in Initialize() and kept by Recreate(): the pipelines (and ImGui's) were built
+     * against it, so a recreated swapchain must have the same image format. The decisions (result classification,
+     * extent, format) are pure functions in VulkanSwapchainPolicy.h.
      */
     class VulkanSwapchain {
     public:
         VulkanSwapchain() = default;
         ~VulkanSwapchain() = default;
 
-        bool Initialize(VulkanDevice& device, VkSurfaceKHR surface, int width, int height);
+        /// Sizes are in pixels of the window's surface (SDL_GetWindowSizeInPixels), not in window units.
+        bool Initialize(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight);
         void Destroy(VulkanDevice& device);
 
-        // Acquire the next swapchain image index. Returns false on out-of-date swapchain.
-        bool AcquireNextImage(VulkanDevice& device, VkSemaphore imageAvailableSemaphore,
-                              uint32_t& outImageIndex);
+        /// Rebuilds the swapchain for a new size from the old one (oldSwapchain), keeping the render pass. The old
+        /// objects are destroyed only after the new ones exist. On Failed the new objects are released. The old
+        /// swapchain stays in place, but once vkCreateSwapchainKHR has been called with it the spec retires it even if
+        /// that call fails: the next acquire reports it out of date and the caller tries again. A Failed before that
+        /// call (no surface format, capabilities not readable) leaves it untouched. The caller must call
+        /// vkDeviceWaitIdle first: the old framebuffers and image views may still be in use by frames in flight. Sizes
+        /// are in pixels.
+        SwapchainRecreateResult Recreate(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight);
 
-        // Present the rendered image. Returns false on out-of-date swapchain.
-        bool Present(VulkanDevice& device, VkSemaphore renderFinishedSemaphore,
-                     uint32_t imageIndex);
+        /// Acquire the next swapchain image index. OutOfDate: recreate; the semaphore is not signaled then.
+        /// Suboptimal: the image is valid and the semaphore signaled, so the frame must go on.
+        SwapchainStatus AcquireNextImage(VulkanDevice& device, VkSemaphore imageAvailableSemaphore,
+                                         uint32_t& outImageIndex);
 
-        VkSwapchainKHR          GetSwapchain()      const { return _swapchain; }
+        /// Present the rendered image
+        SwapchainStatus Present(VulkanDevice& device, VkSemaphore renderFinishedSemaphore, uint32_t imageIndex);
+
+        VkSwapchainKHR          GetSwapchain()      const { return _chain.swapchain; }
         VkRenderPass            GetRenderPass()     const { return _renderPass; }
-        VkFramebuffer           GetFramebuffer(uint32_t index) const { return _framebuffers[index]; }
-        VkExtent2D              GetExtent()         const { return _extent; }
-        VkFormat                GetImageFormat()    const { return _imageFormat; }
-        uint32_t                GetImageCount()     const { return static_cast<uint32_t>(_images.size()); }
+        VkFramebuffer           GetFramebuffer(uint32_t index) const { return _chain.framebuffers[index]; }
+        VkExtent2D              GetExtent()         const { return _chain.extent; }
+        VkFormat                GetImageFormat()    const { return _chain.format; }
+        uint32_t                GetImageCount()     const { return static_cast<uint32_t>(_chain.images.size()); }
 
     private:
-        bool CreateSwapchain(VulkanDevice& device, VkSurfaceKHR surface, int width, int height);
-        bool CreateImageViews(VulkanDevice& device);
+        /// What a swapchain owns apart from the render pass
+        struct Chain {
+            VkSwapchainKHR               swapchain = VK_NULL_HANDLE;
+            VkFormat                     format    = VK_FORMAT_UNDEFINED;
+            VkExtent2D                   extent    = {};
+            eastl::vector<VkImage>       images;
+            eastl::vector<VkImageView>   imageViews;
+            eastl::vector<VkFramebuffer> framebuffers;
+        };
+
+        bool CreateSwapchain(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight,
+                             std::optional<VkFormat> keepFormat, VkSwapchainKHR oldSwapchain, Chain& out) const;
+        bool CreateImageViews(VulkanDevice& device, Chain& chain) const;
         bool CreateRenderPass(VulkanDevice& device);
-        bool CreateFramebuffers(VulkanDevice& device);
+        bool CreateFramebuffers(VulkanDevice& device, Chain& chain) const;
+        static void DestroyChain(VulkanDevice& device, Chain& chain);
 
-        VkSurfaceFormatKHR ChooseSurfaceFormat(VulkanDevice& device, VkSurfaceKHR surface) const;
-        VkPresentModeKHR   ChoosePresentMode(VulkanDevice& device, VkSurfaceKHR surface) const;
-        VkExtent2D         ChooseExtent(const VkSurfaceCapabilitiesKHR& caps, int width, int height) const;
+        std::optional<VkSurfaceFormatKHR> ChooseSurfaceFormat(VulkanDevice& device, VkSurfaceKHR surface,
+                                                              std::optional<VkFormat> keepFormat) const;
+        VkPresentModeKHR                  ChoosePresentMode(VulkanDevice& device, VkSurfaceKHR surface) const;
 
-        VkSwapchainKHR             _swapchain   = VK_NULL_HANDLE;
-        VkRenderPass               _renderPass  = VK_NULL_HANDLE;
-        VkFormat                   _imageFormat = VK_FORMAT_UNDEFINED;
-        VkExtent2D                 _extent      = {};
-        eastl::vector<VkImage>     _images;
-        eastl::vector<VkImageView> _imageViews;
-        eastl::vector<VkFramebuffer> _framebuffers;
+        VkRenderPass _renderPass = VK_NULL_HANDLE;
+        Chain        _chain;
     };
 
 }  // namespace BECore

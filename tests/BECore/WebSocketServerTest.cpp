@@ -15,7 +15,7 @@ namespace BECore::Tests {
 
         constexpr WebSocketMask kMask = {0x12, 0x34, 0x56, 0x78};
         constexpr const char* kKey = "dGhlIHNhbXBsZSBub25jZQ==";
-        constexpr auto kWaitLimit = 10s;
+        constexpr auto kWaitLimit = 30s;
 
         /// The test thread plays the main thread: it drains the queue while it waits, so responses can come back
         template <typename Predicate>

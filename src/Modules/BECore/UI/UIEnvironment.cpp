@@ -27,11 +27,14 @@ namespace BECore {
             context.pixelDensity = window->GetPixelDensity();
             context.displayScale = window->GetDisplayScale();
         }
+        if (_pixelDensityOverride && *_pixelDensityOverride > 0.0f) {
+            context.pixelDensity = *_pixelDensityOverride;
+        }
 
         if (_safeAreaOverride) {
             context.safeArea = *_safeAreaOverride;
         } else if (window) {
-            // The window reports its safe area in window units
+            // The window reports its safe area in window units; the effective density (the override, if any) turns them into pixels
             const Rect safe = window->GetSafeArea();
             context.safeArea = {safe.x * context.pixelDensity, safe.y * context.pixelDensity, safe.w * context.pixelDensity, safe.h * context.pixelDensity};
         }

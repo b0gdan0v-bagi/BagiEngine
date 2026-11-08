@@ -3,6 +3,7 @@
 #include "Application/Application.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/MainWindow/IMainWindow.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>
 #include <imgui.h>
@@ -11,6 +12,8 @@ namespace BECore {
 
     namespace {
 
+        constexpr float kNeutralDensity = 1.0f;
+
         // The Game run mode has no ImGui context at all, and ImGui::GetIO() needs one.
         bool IsMouseCapturedByUI() {
             return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse;
@@ -18,6 +21,37 @@ namespace BECore {
 
         bool IsKeyboardCapturedByUI() {
             return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard;
+        }
+
+        /// Output pixels per window unit; read per event, since the window can move to a display of another density.
+        float PixelDensity() {
+            const IntrusivePtr<IMainWindow>& window = CoreManager::GetMainWindow();
+            return window ? window->GetPixelDensity() : kNeutralDensity;
+        }
+
+        // SDL reports the mouse in window units; the engine's input is in the pixels of the output.
+        SDL_MouseButtonEvent InOutputPixels(SDL_MouseButtonEvent e) {
+            const float density = PixelDensity();
+            e.x *= density;
+            e.y *= density;
+            return e;
+        }
+
+        SDL_MouseMotionEvent InOutputPixels(SDL_MouseMotionEvent e) {
+            const float density = PixelDensity();
+            e.x *= density;
+            e.y *= density;
+            e.xrel *= density;
+            e.yrel *= density;
+            return e;
+        }
+
+        // The scroll amount (x, y) is not a position and stays as it is.
+        SDL_MouseWheelEvent InOutputPixels(SDL_MouseWheelEvent e) {
+            const float density = PixelDensity();
+            e.mouse_x *= density;
+            e.mouse_y *= density;
+            return e;
         }
 
     }  // namespace
@@ -57,28 +91,28 @@ namespace BECore {
             // The mouse goes to the engine's own UI first (UIInput) and reaches game code only when no UI consumed it,
             // and only when ImGui is not consuming it either.
             // Editor: ViewportWidget re-emits with viewport-local coords when the image is hovered.
-            // Game: no ImGui, the window coordinates are the scene coordinates.
+            // Game: no ImGui, the positions are the output pixels (window units times the pixel density).
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (!IsMouseCapturedByUI()) {
-                    CoreManager::GetUIInput().DispatchMouseButtonDown(sdlEvent.button);
+                    CoreManager::GetUIInput().DispatchMouseButtonDown(InOutputPixels(sdlEvent.button));
                 }
                 break;
 
             case SDL_EVENT_MOUSE_BUTTON_UP:
                 if (!IsMouseCapturedByUI()) {
-                    CoreManager::GetUIInput().DispatchMouseButtonUp(sdlEvent.button);
+                    CoreManager::GetUIInput().DispatchMouseButtonUp(InOutputPixels(sdlEvent.button));
                 }
                 break;
 
             case SDL_EVENT_MOUSE_MOTION:
                 if (!IsMouseCapturedByUI()) {
-                    CoreManager::GetUIInput().DispatchMouseMotion(sdlEvent.motion);
+                    CoreManager::GetUIInput().DispatchMouseMotion(InOutputPixels(sdlEvent.motion));
                 }
                 break;
 
             case SDL_EVENT_MOUSE_WHEEL:
                 if (!IsMouseCapturedByUI()) {
-                    CoreManager::GetUIInput().DispatchMouseWheel(sdlEvent.wheel);
+                    CoreManager::GetUIInput().DispatchMouseWheel(InOutputPixels(sdlEvent.wheel));
                 }
                 break;
 

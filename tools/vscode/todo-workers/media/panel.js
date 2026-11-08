@@ -30,8 +30,9 @@
         return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
     }
 
-    function button(label, message, title, danger) {
-        const b = el("button", danger ? "danger" : "", label);
+    // kind: true or "danger" (a red label), "primary" (the main action of a card)
+    function button(label, message, title, kind) {
+        const b = el("button", kind === true ? "danger" : kind || "", label);
         if (title) b.title = title;
         b.addEventListener("click", () => vscode.postMessage(message));
         return b;
@@ -51,8 +52,13 @@
             word = "idle";
             kind = "idle";
         }
-        const badge = el("span", `badge ${kind}`, s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word);
+        // A finished session can stay in `claude agents` for hours: its age is no run time, so it shows when
+        // its last step was (the transcript), and a running one how long it has run.
+        const ended = kind === "done" && worker.activity ? ago(worker.activity.updated) : "";
+        const text = kind === "done" ? (ended ? `done · ended ${ended}` : "done") : s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word;
+        const badge = el("span", `badge ${kind}`, text);
         if (kind === "idle") badge.title = "Waiting: for an agent of its own, or for you (Attach to see)";
+        if (kind === "done") badge.title = "The session has finished; Log shows it, Update and Fast start begin anew";
         return badge;
     }
 
@@ -176,7 +182,7 @@
             const said = [...events].reverse().find((e) => e.kind === "say");
             if (said) {
                 const now = el("div", "now");
-                now.append(el("span", "label", "Now"), el("span", "time", ago(said.time)), el("div", "said", plain(said.text)));
+                now.append(el("span", "label", worker.active ? "Now" : "Last"), el("span", "time", ago(said.time)), el("div", "said", plain(said.text)));
                 card.appendChild(now);
             }
             const agents = activity.agents || [];
@@ -207,6 +213,12 @@
         actions.append(button("Folder", { cmd: "folder", worker: worker.k }, "open the worker in a new window"), button("Terminal", { cmd: "terminal", worker: worker.k }));
         if (entry) actions.append(button("Plan", { cmd: "plan", entry: entry.id }, "~/.claude/plans/todo-loop-<branch>.md"));
         if (worker.active) actions.append(button("Stop", { cmd: "stop", worker: worker.k }, "worker.py stop", true));
+        else {
+            actions.append(
+                button("Update", { cmd: "update", worker: worker.k }, "worker.py update: detach the game and engine/ at the tips of their base branches (main, games/...); the branch it held is kept; refused with uncommitted changes"),
+                button("Fast start", { cmd: "fastStart", worker: worker.k }, "worker.py start <k> now: /todo-loop with the slices, loop arguments and report session of the settings (todoWorkers.*)", "primary")
+            );
+        }
         card.appendChild(actions);
         return card;
     }
@@ -220,8 +232,23 @@
         card.append(top, el("div", "title", entry.title));
         if (entry.statusNote) card.appendChild(el("div", "note", entry.statusNote));
         card.appendChild(head("branch", { branch: entry.branch }));
+        // worker.py list --store: the branch is not here, or it was cut from another base (another game's)
+        const away = entry.local === false || Boolean(entry.foreignBase);
+        if (away) {
+            card.classList.add("away");
+            card.appendChild(el("div", "warn", entry.foreignBase
+                ? `Cut from ${entry.foreignBase}, not from ${entry.base}: it holds commits that ${entry.base} has not. Review and merge it in the checkout that made it.`
+                : `No branch ${entry.branch} here: it was taken in another checkout or on another machine. Review and merge it there.`));
+        }
         const actions = el("div", "actions");
-        actions.append(button("Copy /todo-merge", { cmd: "merge", entry: entry.id }, "paste it into Claude in the main checkout"), button("Plan", { cmd: "plan", entry: entry.id }));
+        const gated = [
+            button("Review", { cmd: "review", entry: entry.id }, "the changes of the branch against its base, in one diff editor"),
+            button("Review with Claude", { cmd: "claudeReview", entry: entry.id }, "a terminal in the main checkout runs claude with a read-only review of the branch against its base: findings with file:line and a verdict"),
+            button("Quick merge", { cmd: "quickMerge", entry: entry.id }, "worker.py merge: a dialog with the commits, then merge --no-ff, close the entry, delete the branch (and the engine pointer); no build", away ? "" : "primary"),
+            button("Merge with Claude", { cmd: "merge", entry: entry.id }, "a terminal in the main checkout runs claude '/todo-merge <branch>': it reports, asks, and builds when the base moved"),
+        ];
+        if (away) gated.forEach((b) => (b.disabled = true));
+        actions.append(...gated, button("Plan", { cmd: "plan", entry: entry.id }));
         card.appendChild(actions);
         return card;
     }
@@ -230,7 +257,7 @@
         root.replaceChildren();
         const bar = el("div", "toolbar");
         const info = el("span", "muted", payload.refreshing ? "refreshing ..." : payload.at ? `updated ${ago(payload.at)}` : "");
-        bar.append(info, button("Refresh", { cmd: "refresh" }), button("Settings", { cmd: "settings" }));
+        bar.append(info, button("Todo list", { cmd: "todoList" }, "the entries of the todo store in a tab of the editor"), button("Refresh", { cmd: "refresh" }), button("Settings", { cmd: "settings" }));
         root.appendChild(bar);
 
         if (payload.error) root.appendChild(el("div", "error", payload.error));

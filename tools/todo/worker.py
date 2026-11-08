@@ -24,6 +24,8 @@ Run it from anywhere inside the main checkout:
     python3 engine/tools/todo/worker.py run 2        # a Claude session in w2, in this terminal
     python3 engine/tools/todo/worker.py start        # /todo-loop in every worker, background sessions a minute apart
     python3 engine/tools/todo/worker.py stop [k ...] # stop those background sessions
+    python3 engine/tools/todo/worker.py merge <id> [--dry-run]  # the quick merge of an entry in review
+    python3 engine/tools/todo/worker.py update [k ...] # detach a finished, clean worker at the tips of the bases
     python3 engine/tools/todo/worker.py remove 3
 
 Python 3.10+, standard library only.
@@ -336,8 +338,43 @@ def head_json(repo: Path) -> dict:
     return {"branch": branch or None, "commit": git("rev-parse", "--short", "HEAD", cwd=repo, check=False)}
 
 
+RULES_FILE = Path(".claude") / "rules" / "todo-project.md"
+
+
+def rule_area_table(main: Path) -> list[dict]:
+    """The rows of the table under "## Areas" in .claude/rules/todo-project.md: `area` (the store's), `repo`
+    (the git repository, relative to the checkout) and `base` (its base branch), the first code span of each
+    cell. These are the only areas the loops of this checkout work (todo-loop/SKILL.md, "Only the areas of the
+    rules file"); the store also holds other games' entries. Empty when the file or the table is missing."""
+    try:
+        text = (main / RULES_FILE).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    section = re.search(r"^## Areas[ \t]*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+    if not section:
+        return []
+    rows = []
+    for line in section.group(1).splitlines():
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        area = re.fullmatch(r"`([A-Za-z0-9_-]+)`", cells[1]) if len(cells) > 3 else None
+        if not area:
+            continue
+        repo = re.match(r"`([^`]+)`", cells[2])
+        base = re.match(r"`([^`]+)`", cells[3])
+        rows.append({"area": area.group(1), "repo": repo.group(1) if repo else ".", "base": base.group(1) if base else DEFAULT_BASE})
+    return rows
+
+
+def rule_areas(main: Path) -> list[str] | None:
+    """The `area` of each row of `rule_area_table`; None when it has none (then every area counts)."""
+    return [row["area"] for row in rule_area_table(main)] or None
+
+
 def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
-    """The entries `in progress` and in `review` (todo.py, run from the main checkout), or an error."""
+    """The entries `in progress` and in `review` of the areas of this checkout (`rule_areas`; all of them
+    when it names none) from todo.py, run from the main checkout, or an error."""
     todo = Path(__file__).resolve().parent / "todo.py"
     try:
         result = subprocess.run(
@@ -354,7 +391,228 @@ def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
     except json.JSONDecodeError as error:
         return [], f"todo.py list: {error}"
     keep = ("id", "area", "title", "status", "statusNote", "branch", "planProgress")
-    return [{key: entry.get(key) for key in keep} for entry in entries if isinstance(entry, dict)], None
+    table = {row["area"]: row for row in rule_area_table(layout.main)}
+    shown = []
+    for entry in entries:
+        if not isinstance(entry, dict) or (table and entry.get("area") not in table):
+            continue
+        row = {key: entry.get(key) for key in keep}
+        area = table.get(entry.get("area"))
+        # where the panel finds the branch and what it is compared with (Review, Quick merge)
+        row["repo"] = str((layout.main / area["repo"]).resolve()) if area else None
+        row["base"] = area["base"] if area else None
+        row.update(branch_origin(Path(row["repo"]), row["branch"], row["base"]) if area and row["branch"] else {"local": None, "foreignBase": None})
+        shown.append(row)
+    return shown, None
+
+
+# --- merge: the quick merge of an entry in review -------------------------------------------------
+#
+# What /todo-merge does after the owner's yes (.claude/skills/todo-merge/SKILL.md, steps 6 to 9), without a
+# Claude session: the VS Code panel shows `merge <id> --dry-run --json` in a dialog and runs `merge <id>`
+# on a yes. It refuses what the skill refuses (conflicts, a dirty checkout, an entry not in review) and,
+# unlike the skill, never builds: a base that moved since the branch was cut is only reported.
+
+MERGE_ACTOR = "quick-merge"
+SLICE_REOPEN = "after the merge set the status back to open"
+
+
+def todo_cli(layout: Layout, *args: str) -> str:
+    """todo.py (next to this file) run from the main checkout; its error as a WorkerError."""
+    todo = Path(__file__).resolve().parent / "todo.py"
+    try:
+        result = subprocess.run(
+            [sys.executable, str(todo), "--actor", MERGE_ACTOR, *args], cwd=layout.main, capture_output=True, text=True, timeout=60
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise WorkerError(f"todo.py {args[0]}: {error}") from error
+    if result.returncode != 0:
+        text = (result.stderr or result.stdout).strip()
+        raise WorkerError(f"todo.py {' '.join(args[:2])}: {text.splitlines()[-1] if text else f'exit code {result.returncode}'}")
+    return result.stdout
+
+
+def git_ok(*args: str, cwd: Path) -> bool:
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True).returncode == 0
+
+
+def base_candidates(repo: Path, base: str) -> list[str]:
+    """The other base branches `repo` knows: `main` and `games/*`, local or of a remote, but not `base` itself
+    nor a remote copy of it (`origin/games/mahjong` for `games/mahjong`)."""
+    names = git("for-each-ref", "--format=%(refname)", "refs/heads/main", "refs/heads/games/", "refs/remotes/", cwd=repo, check=False)
+    found = []
+    for ref in names.splitlines():
+        if ref.startswith("refs/heads/"):
+            short = plain = ref[len("refs/heads/") :]
+        else:
+            short = ref[len("refs/remotes/") :]
+            plain = short.partition("/")[2]
+        if plain != base and (plain == "main" or plain.startswith("games/")):
+            found.append(short)
+    return found
+
+
+def foreign_base(repo: Path, branch: str, base: str) -> str | None:
+    """The base branch other than `base` that `branch` was cut from, if it looks so: the branch holds commits
+    of that branch (local or fetched) that `base` has not. Such a branch is another checkout's (a loop of
+    another game took an entry of the engine area); merged here it would bring those commits along. None when
+    no other base branch is known or the branch shares nothing with one beyond `base`."""
+    for other in base_candidates(repo, base):
+        shared = git("merge-base", branch, other, cwd=repo, check=False)
+        if shared and not git_ok("merge-base", "--is-ancestor", shared, base, cwd=repo):
+            return other
+    return None
+
+
+def branch_origin(repo: Path, branch: str, base: str) -> dict:
+    """`local`: the branch exists in `repo` (an entry taken in another checkout or on another machine has its
+    branch there, never here); `foreignBase`: what `foreign_base` says, for a local branch."""
+    if not repo.is_dir() or not git_ok("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=repo):
+        return {"local": False, "foreignBase": None}
+    return {"local": True, "foreignBase": foreign_base(repo, branch, base)}
+
+
+def worktree_of(repo: Path, branch: str) -> Path | None:
+    """The worktree of `repo` (a main worktree) that has `branch` checked out, if any. The first entry of the
+    list is the main worktree, `repo` itself (a submodule lists it as its git dir, `.git/modules/<name>`)."""
+    path = None
+    for line in git("worktree", "list", "--porcelain", cwd=repo).splitlines():
+        if line.startswith("worktree "):
+            path = Path(line[len("worktree ") :]) if path is not None else repo
+        elif line == f"branch refs/heads/{branch}" and path is not None:
+            return path
+    return None
+
+
+def merge_plan(layout: Layout, entry_id: str) -> dict:
+    """What merging the branch of `entry_id` would do, and what stops it (`conflicts`, `problems`)."""
+    table = rule_area_table(layout.main)
+    if not table:
+        raise WorkerError(f"no Areas table in {RULES_FILE}: the merge needs the repository and the base branch of each area")
+    entry = json.loads(todo_cli(layout, "show", entry_id, "--json"))
+    area = next((row for row in table if row["area"] == entry.get("area")), None)
+    if area is None:
+        raise WorkerError(f"{entry_id} is of the area {entry.get('area')}, not of this checkout ({', '.join(row['area'] for row in table)})")
+    branch = entry.get("branch")
+    if entry.get("status") != "review" or not branch:
+        raise WorkerError(f"{entry_id} is {entry.get('status')}, not in review with a branch")
+    repo = (layout.main / area["repo"]).resolve()
+    base = area["base"]
+    if not git_ok("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=repo):
+        raise WorkerError(f"no branch {branch} in {repo}: it was made in another checkout or on another machine, review and merge it there")
+    if git_ok("merge-base", "--is-ancestor", branch, base, cwd=repo):
+        raise WorkerError(f"{branch} is already merged into {base}")
+    foreign = foreign_base(repo, branch, base)
+    if foreign:
+        raise WorkerError(f"{branch} holds commits of {foreign} that {base} has not: it was cut from {foreign} in another checkout, merge it there")
+    tree = subprocess.run(["git", "merge-tree", "--write-tree", "--name-only", base, branch], cwd=repo, capture_output=True, text=True)
+    conflicts = []
+    if tree.returncode != 0:
+        for line in tree.stdout.splitlines()[1:]:
+            if not line.strip():
+                break
+            conflicts.append(line.strip())
+        conflicts = conflicts or [(tree.stderr or tree.stdout).strip() or "git merge-tree failed"]
+    problems = []
+    if dirty(layout.main, ignore_submodules=True):
+        problems.append(f"{layout.main} has uncommitted changes")
+    if repo != layout.main.resolve() and dirty(repo):
+        problems.append(f"{repo} has uncommitted changes")
+    held = worktree_of(repo, branch)
+    current = git("symbolic-ref", "--quiet", "--short", "HEAD", cwd=repo, check=False)
+    base_elsewhere = worktree_of(repo, base)
+    if base_elsewhere is not None and base_elsewhere.resolve() != repo:
+        problems.append(f"{base} is checked out in {base_elsewhere}, not in {repo}")
+    return {
+        "id": entry_id,
+        "area": entry.get("area"),
+        "title": entry.get("title"),
+        "note": entry.get("statusNote"),
+        "branch": branch,
+        "base": base,
+        "repo": str(repo),
+        "current": current or None,
+        "commits": git("log", "--oneline", f"{base}..{branch}", cwd=repo).splitlines(),
+        "stat": (git("diff", "--shortstat", f"{base}...{branch}", cwd=repo) or "").strip(),
+        "files": git("diff", "--name-only", f"{base}...{branch}", cwd=repo).splitlines(),
+        "conflicts": conflicts,
+        "moved": git("merge-base", base, branch, cwd=repo) != git("rev-parse", base, cwd=repo),
+        "reopen": SLICE_REOPEN in (entry.get("statusNote") or ""),
+        "pointer": layout.shared is not None and repo == layout.shared.resolve(),
+        "heldBy": str(held) if held is not None and held.resolve() != repo else None,
+        "problems": problems,
+    }
+
+
+def do_merge(layout: Layout, plan: dict) -> dict:
+    """Merge (--no-ff), close or reopen the entry, free and delete the branch, move the engine pointer."""
+    if plan["conflicts"]:
+        raise WorkerError(f"{plan['branch']} conflicts with {plan['base']}: {', '.join(plan['conflicts'])}")
+    if plan["problems"]:
+        raise WorkerError("; ".join(plan["problems"]))
+    repo, base, branch = Path(plan["repo"]), plan["base"], plan["branch"]
+    notes = []
+    if plan["current"] != base:
+        git("switch", base, cwd=repo)
+    merged = subprocess.run(["git", "merge", "--no-ff", "-m", f"Merge branch '{branch}'", branch], cwd=repo, capture_output=True, text=True)
+    if merged.returncode != 0:
+        git("merge", "--abort", cwd=repo, check=False)
+        if plan["current"] and plan["current"] != base:
+            git("switch", plan["current"], cwd=repo, check=False)
+        raise WorkerError(f"git merge {branch} failed: {(merged.stderr or merged.stdout).strip()}")
+    result = {"id": plan["id"], "branch": branch, "base": base, "merge": git("rev-parse", "--short", "HEAD", cwd=repo)}
+    try:
+        todo_cli(layout, "close", plan["id"], *(["--reopen"] if plan["reopen"] else []))
+        result["status"] = "open" if plan["reopen"] else "closed"
+    except WorkerError as error:
+        result["status"] = None
+        notes.append(f"the entry is still in review: {error}")
+    held = Path(plan["heldBy"]) if plan["heldBy"] else None
+    if held is not None:
+        if dirty(held):
+            notes.append(f"{held} has changes: the branch stays")
+        else:
+            git("switch", "--detach", base, cwd=held)
+            result["detached"] = str(held)
+    if held is None or "detached" in result:
+        deleted = subprocess.run(["git", "branch", "-d", branch], cwd=repo, capture_output=True, text=True)
+        result["deleted"] = deleted.returncode == 0
+        if not result["deleted"]:
+            notes.append(f"git branch -d {branch}: {(deleted.stderr or deleted.stdout).strip()}")
+    if plan["pointer"]:
+        git("add", SHARED_SUBMODULE, cwd=layout.main)
+        if not git_ok("diff", "--cached", "--quiet", "--", SHARED_SUBMODULE, cwd=layout.main):
+            git("commit", "-m", f"Update engine: {plan['title']}", "--", SHARED_SUBMODULE, cwd=layout.main)
+            result["pointer"] = git("rev-parse", "--short", "HEAD", cwd=layout.main)
+    result["notes"] = notes
+    return result
+
+
+def cmd_merge(layout: Layout, args) -> None:
+    plan = merge_plan(layout, args.id)
+    if args.dry_run:
+        if args.json:
+            print(json.dumps(plan, ensure_ascii=False, indent=1))
+            return
+        print(f"{plan['branch']} into {plan['base']} ({plan['repo']}): {len(plan['commits'])} commits, {plan['stat']}")
+        for line in plan["commits"]:
+            print(f"  {line}")
+        for what in plan["conflicts"]:
+            print(f"conflict: {what}")
+        for what in plan["problems"]:
+            print(f"problem: {what}")
+        if plan["moved"]:
+            print("the base moved since the branch was cut: the merge is not built or tested")
+        return
+    result = do_merge(layout, plan)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=1))
+        return
+    print(f"merged {result['branch']} into {result['base']}: {result['merge']}; the entry is {result['status'] or 'still in review'}")
+    if result.get("pointer"):
+        print(f"engine pointer: {result['pointer']}")
+    for note in result["notes"]:
+        print(f"note: {note}")
 
 
 # --- activity: what a session does now, from its transcript ---------------------------------------
@@ -618,8 +876,11 @@ def list_json(layout: Layout, args) -> dict:
         "root": str(layout.root),
         "sessionsKnown": sessions is not None,
         "store": "off" if not args.store else (store_error or "ok"),
+        "areas": rule_areas(layout.main) if args.store else None,
         "workers": workers,
         "review": [entry for entry in entries if entry.get("status") == "review"],
+        # entries whose branch is not this checkout's to review, merge or continue (`branch_origin`)
+        "elsewhere": [entry["id"] for entry in entries if entry.get("local") is False or entry.get("foreignBase")],
     }
 
 
@@ -780,6 +1041,72 @@ def cmd_stop(layout: Layout, args) -> None:
     print("A loop stopped in the middle leaves its entry `in progress` with its branch; the next /todo-loop in that worker continues it.")
 
 
+# --- update ------------------------------------------------------------------------------------
+
+
+def worker_repos(layout: Layout, path: Path) -> list[tuple[Path, str]]:
+    """The repositories of a worker and their base branches, from the "Areas" table of the rules file (the
+    game's first, so its pointer does not decide where the engine goes); the game alone at `main` without one."""
+    rows = rule_area_table(layout.main) or [{"area": None, "repo": ".", "base": DEFAULT_BASE}]
+    rows = sorted(rows, key=lambda row: row["repo"] != ".")
+    return [(path / row["repo"], row["base"]) for row in rows]
+
+
+def update_one(layout: Layout, k: int, path: Path, sessions: list[dict] | None) -> dict:
+    """Detach every repository of a worker at the tip of its base, what the loop calls "go to the base"; the
+    branch it held stays as it is. Refused for a session that has not finished and for uncommitted changes."""
+    session = session_in(sessions or [], path)
+    if is_active(session):
+        raise WorkerError(f"w{k}: its session runs ({describe(session)}); stop it first")
+    repos = worker_repos(layout, path)
+    for repo, _base in repos:
+        if not (repo / ".git").exists():
+            raise WorkerError(f"w{k}: no repository {repo}")
+        changed = dirty(repo, ignore_submodules=repo == path)
+        if changed:
+            files = [line[3:] for line in changed.splitlines()]
+            more = f" and {len(files) - 3} more" if len(files) > 3 else ""
+            raise WorkerError(f"w{k}: {repo} has uncommitted changes ({', '.join(files[:3])}{more})")
+    moved = []
+    for repo, base in repos:
+        before = head_json(repo)
+        git("switch", "--quiet", "--detach", base, cwd=repo)
+        after = head_json(repo)
+        moved.append({"repo": str(repo), "base": base, "from": before["branch"] or before["commit"], "to": after["commit"], "changed": before["commit"] != after["commit"] or before["branch"] is not None})
+    notes = []
+    if layout.shared is not None and (path / SHARED_SUBMODULE / ".git").exists() and any(repo == path / SHARED_SUBMODULE for repo, _ in repos):
+        pointer = git("rev-parse", f"HEAD:{SHARED_SUBMODULE}", cwd=path, check=False)
+        engine = git("rev-parse", "HEAD", cwd=path / SHARED_SUBMODULE, check=False)
+        if pointer and engine and pointer != engine:
+            notes.append(f"the game's pointer of {SHARED_SUBMODULE}/ is {pointer[:9]}, not the tip of its base ({engine[:9]}): the pointer commit is not made yet")
+    return {"k": k, "name": f"{WORKER_PREFIX}{k}", "repos": moved, "notes": notes}
+
+
+def cmd_update(layout: Layout, args) -> None:
+    workers = chosen_workers(layout, args.workers)
+    sessions = list_sessions(args.claude)
+    if sessions is None:
+        raise WorkerError(f"`{args.claude} agents --json` did not answer: cannot tell whether a session runs")
+    results, errors = [], []
+    for k, path in workers:
+        try:
+            results.append(update_one(layout, k, path, sessions))
+        except WorkerError as error:
+            errors.append(str(error))
+    if args.json:
+        print(json.dumps({"updated": results, "errors": errors}, indent=2))
+    else:
+        for result in results:
+            parts = [f"{Path(r['repo']).name if Path(r['repo']) != layout.worker(result['k']) else 'game'} {r['from']} -> {r['base']} ({r['to']})" for r in result["repos"]]
+            print(f"{result['name']}: {'; '.join(parts)}")
+            for note in result["notes"]:
+                print(f"  note: {note}")
+        for error in errors:
+            print(f"error: {error}", file=sys.stderr)
+    if errors:
+        raise WorkerError("; ".join(errors) if args.json else f"{len(errors)} worker(s) not updated")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="worker.py", description="The folders of the parallel todo-loop workers (git worktrees).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -810,6 +1137,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--delay", type=int, default=DEFAULT_DELAY_S, help=f"seconds between two starts (default {DEFAULT_DELAY_S})")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--print", dest="print_only", action="store_true", help="only print the commands")
+    p = sub.add_parser("merge", help="merge the branch of an entry in review into its base, close the entry, delete the branch (the quick merge of the VS Code panel)")
+    p.add_argument("id")
+    p.add_argument("--dry-run", action="store_true", help="only say what it would do and what stops it")
+    p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
+    p = sub.add_parser("update", help="detach the repositories of the workers at the tips of their base branches (a finished session, a clean folder)")
+    p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
     p = sub.add_parser("stop", help="stop the background sessions of the workers")
     p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
@@ -824,7 +1159,7 @@ def main(argv: list[str] | None = None) -> int:
     args.rest = rest
     try:
         layout = find_layout(Path.cwd())
-        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop}
+        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "merge": cmd_merge, "update": cmd_update}
         commands[args.command](layout, args)
     except WorkerError as error:
         print(f"error: {error}", file=sys.stderr)
