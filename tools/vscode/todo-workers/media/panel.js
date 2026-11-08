@@ -208,6 +208,12 @@
         actions.append(button("Folder", { cmd: "folder", worker: worker.k }, "open the worker in a new window"), button("Terminal", { cmd: "terminal", worker: worker.k }));
         if (entry) actions.append(button("Plan", { cmd: "plan", entry: entry.id }, "~/.claude/plans/todo-loop-<branch>.md"));
         if (worker.active) actions.append(button("Stop", { cmd: "stop", worker: worker.k }, "worker.py stop", true));
+        else {
+            actions.append(
+                button("Update", { cmd: "update", worker: worker.k }, "worker.py update: detach the game and engine/ at the tips of their base branches (main, games/...); the branch it held is kept; refused with uncommitted changes"),
+                button("Fast start", { cmd: "fastStart", worker: worker.k }, "worker.py start <k> now: /todo-loop with the slices, loop arguments and report session of the settings (todoWorkers.*)", "primary")
+            );
+        }
         card.appendChild(actions);
         return card;
     }
@@ -224,6 +230,7 @@
         const actions = el("div", "actions");
         actions.append(
             button("Review", { cmd: "review", entry: entry.id }, "the changes of the branch against its base, in one diff editor"),
+            button("Review with Claude", { cmd: "claudeReview", entry: entry.id }, "a terminal in the main checkout runs claude with a read-only review of the branch against its base: findings with file:line and a verdict"),
             button("Quick merge", { cmd: "quickMerge", entry: entry.id }, "worker.py merge: a dialog with the commits, then merge --no-ff, close the entry, delete the branch (and the engine pointer); no build", "primary"),
             button("Merge with Claude", { cmd: "merge", entry: entry.id }, "a terminal in the main checkout runs claude '/todo-merge <branch>': it reports, asks, and builds when the base moved"),
             button("Plan", { cmd: "plan", entry: entry.id })

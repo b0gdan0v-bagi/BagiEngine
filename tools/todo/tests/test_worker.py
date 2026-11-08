@@ -470,3 +470,41 @@ def test_merge_refuses_another_area_a_dirty_checkout_and_an_entry_not_in_review(
     assert worker.main(["merge", "g-x"]) == 1
     assert "uncommitted" in capsys.readouterr().err
     assert "todo/g-x" in run("branch", "--list", "todo/g-x", cwd=game)
+
+
+def test_update_detaches_a_worker_at_the_tips_of_the_bases(game: Path, store, fake_claude, capsys):
+    script, _log, _sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    w1 = game.parent / "game.workers" / "w1"
+    run("switch", "-q", "-c", "todo/e-y", cwd=w1 / "engine")
+    branch_with(game / "engine", "todo/e-z", "games/chess", "z.txt", "z\n")
+    run("merge", "-q", "--no-ff", "-m", "z", "todo/e-z", cwd=game / "engine")
+    run("add", "engine", cwd=game)
+    run("commit", "-q", "-m", "Update engine: z", cwd=game)
+    capsys.readouterr()
+    assert worker.main(["update", "1", "--json", "--claude", str(script)]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["errors"] == [] and result["updated"][0]["notes"] == []
+    assert [r["base"] for r in result["updated"][0]["repos"]] == ["main", "games/chess"]
+    assert run("rev-parse", "HEAD", cwd=w1) == run("rev-parse", "main", cwd=game)
+    assert run("rev-parse", "HEAD", cwd=w1 / "engine") == run("rev-parse", "games/chess", cwd=game / "engine")
+    assert (w1 / "engine" / "z.txt").exists()
+    assert "todo/e-y" in run("branch", "--list", "todo/e-y", cwd=game / "engine")
+    assert run("status", "--porcelain", cwd=w1) == ""
+
+
+def test_update_refuses_a_running_session_and_uncommitted_changes(game: Path, store, fake_claude, capsys):
+    script, _log, sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    workers = game.parent / "game.workers"
+    sessions.write_text(json.dumps([session(workers / "w1", "working")]))
+    (workers / "w2" / "engine" / "wip.txt").write_text("wip\n")
+    before = [run("rev-parse", "HEAD", cwd=workers / f"w{k}") for k in (1, 2)]
+    run("commit", "-q", "--allow-empty", "-m", "newer", cwd=game)
+    capsys.readouterr()
+    assert worker.main(["update", "--json", "--claude", str(script)]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["updated"] == []
+    assert any("w1" in e and "runs" in e for e in result["errors"])
+    assert any("w2" in e and "uncommitted" in e for e in result["errors"])
+    assert [run("rev-parse", "HEAD", cwd=workers / f"w{k}") for k in (1, 2)] == before

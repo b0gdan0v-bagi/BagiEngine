@@ -2,8 +2,9 @@
 // It reads `worker.py list --json --store --activity` and shows one card per worker (its entry, the state
 // of its session, the plan, the branches, what the session and its agents do now) and the entries in
 // review. It reads, opens terminals and diffs; the one write is a merge the owner confirms (Quick merge runs
-// worker.py merge, Merge with Claude a terminal with claude '/todo-merge <branch>'). The loops are started by
-// /todo-loop-parallel.
+// worker.py merge, Merge with Claude a terminal with claude '/todo-merge <branch>'). Review with Claude opens a
+// terminal with a read-only claude review of the branch. Update (worker.py update) moves an idle worker to the
+// tips of the bases, Fast start (worker.py start <k>) starts its loop at once; /todo-loop-parallel starts them all.
 "use strict";
 
 const vscode = require("vscode");
@@ -22,6 +23,9 @@ function config() {
         claude: c.get("claude", "claude"),
         refreshSeconds: Math.max(5, c.get("refreshSeconds", 15)),
         notify: c.get("notify", true),
+        startSlices: Math.max(1, Math.floor(c.get("startSlices", 1))),
+        loopArgs: c.get("loopArgs", ""),
+        reportTo: c.get("reportTo", ""),
     };
 }
 
@@ -182,6 +186,52 @@ function activate(context) {
         refresh();
     }
 
+    // Update: worker.py update <k>, the loop's "go to the base" for an idle worker (every repository detached
+    // at the tip of its base branch; the branch it held is kept). Refused for a running session or changes.
+    const busy = new Set();
+    async function updateWorker(worker) {
+        const tool = findTool();
+        if (!worker || !tool || busy.has(worker.k)) return;
+        busy.add(worker.k);
+        try {
+            // A refusal exits 1 and its reason is the last line of stderr.
+            const result = JSON.parse(await runTool(tool, ["update", String(worker.k), "--json", "--claude", config().claude], 60000).catch((error) => JSON.stringify({ updated: [], errors: [error.message.replace(/^error: /, "")] })));
+            if (result.errors.length) {
+                vscode.window.showErrorMessage(`Update of ${worker.name}: ${result.errors.join("; ")}`);
+                return;
+            }
+            const done = result.updated[0];
+            const text = done.repos.map((r) => `${path.basename(r.repo) === worker.name ? "game" : path.basename(r.repo)} at ${r.base} (${r.to})`).join(", ");
+            if (done.notes.length) vscode.window.showWarningMessage(`${worker.name}: ${text}. ${done.notes.join("; ")}`);
+            else vscode.window.showInformationMessage(`${worker.name}: ${text}`);
+        } finally {
+            busy.delete(worker.k);
+            refresh();
+        }
+    }
+
+    // Fast start: worker.py start <k> at once (no delay: one worker), /todo-loop with the slices, the loop
+    // arguments and the report session of the settings. A worker whose session runs is left alone by worker.py.
+    async function fastStart(worker) {
+        const tool = findTool();
+        if (!worker || !tool || busy.has(worker.k)) return;
+        const c = config();
+        const args = ["start", String(worker.k), "--delay", "0", "--slices", String(c.startSlices), "--claude", c.claude];
+        if (c.loopArgs) args.push("--loop-args", c.loopArgs);
+        if (c.reportTo) args.push("--report-to", c.reportTo);
+        busy.add(worker.k);
+        try {
+            const out = await runTool(tool, args, 90000);
+            const line = out.split("\n").map((l) => l.trim()).find((l) => l.startsWith("backgrounded") || l.includes("left alone")) || `${worker.name} started`;
+            vscode.window.showInformationMessage(`${worker.name}: /todo-loop ${c.startSlices}: ${line}`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Fast start of ${worker.name}: ${error.message}`);
+        } finally {
+            busy.delete(worker.k);
+            refresh();
+        }
+    }
+
     async function openPlan(entry) {
         const file = planFile(entry);
         if (!file || !fs.existsSync(file)) {
@@ -288,6 +338,32 @@ function activate(context) {
         terminal.sendText(`${shellQuote(config().claude)} ${shellQuote(`/todo-merge ${entry.branch}`)}`);
     }
 
+    // Review with Claude: an interactive claude in the main checkout that reads the entry and the diff of the
+    // branch against its base and reports findings. Read only: it is told not to check out, edit, commit or merge.
+    function startClaudeReview(entry) {
+        const tool = findTool();
+        if (!entry || !entry.branch || !entry.base || !tool) return;
+        const name = `todo-review ${entry.id}`;
+        const open = vscode.window.terminals.find((t) => t.name === name && t.exitStatus === undefined);
+        if (open) {
+            open.show();
+            return;
+        }
+        const repo = path.relative(tool.cwd, entry.repo || tool.cwd) || ".";
+        const todo = path.relative(tool.cwd, path.join(path.dirname(tool.script), "todo.py"));
+        const prompt = [
+            `Review the branch ${entry.branch} of the todo entry ${entry.id} (area ${entry.area}) before it is merged into ${entry.base}.`,
+            `The repository is ${repo}: the changes are \`git -C ${repo} diff ${entry.base}...${entry.branch}\`, the commits \`git -C ${repo} log ${entry.base}..${entry.branch}\`.`,
+            `Read the entry and its plan first: \`python3 ${todo} show ${entry.id}\` (and \`plan get\` when it links one).`,
+            "Check the changes against the entry and against the CLAUDE.md files and .claude/rules of the repository: correctness bugs, missing or weak tests, docs that no longer match, work the entry asks for that is missing.",
+            "Report the findings ranked by severity with file:line, then a verdict: merge as is, or what to fix first.",
+            "Read only: do not check out, edit, commit, merge or change the todo store.",
+        ].join(" ");
+        const terminal = vscode.window.createTerminal({ name, cwd: tool.cwd, env: { PATH: toolEnv().PATH } });
+        terminal.show();
+        terminal.sendText(`${shellQuote(config().claude)} ${shellQuote(prompt)}`);
+    }
+
     function act(message) {
         const worker = workerOf(message.worker);
         switch (message.cmd) {
@@ -297,10 +373,13 @@ function activate(context) {
             case "folder": return worker && vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(worker.path), { forceNewWindow: true });
             case "terminal": return worker && vscode.window.createTerminal({ name: worker.name, cwd: worker.path }).show();
             case "stop": return stopWorker(worker);
+            case "update": return updateWorker(worker);
+            case "fastStart": return fastStart(worker);
             case "plan": return openPlan(entryOf(message.entry));
             case "merge": return startMerge(entryOf(message.entry));
             case "quickMerge": return quickMerge(entryOf(message.entry));
             case "review": return reviewBranch(entryOf(message.entry));
+            case "claudeReview": return startClaudeReview(entryOf(message.entry));
             case "settings": return vscode.commands.executeCommand("workbench.action.openSettings", "todoWorkers");
         }
     }
@@ -313,8 +392,9 @@ function activate(context) {
         if (previous && config().notify) {
             for (const entry of state.review) {
                 if (!previous.review.has(entry.id)) {
-                    vscode.window.showInformationMessage(`Todo: ${entry.id} is in review (${entry.branch})`, "Review", "Quick merge", "Merge with Claude").then((pick) => {
+                    vscode.window.showInformationMessage(`Todo: ${entry.id} is in review (${entry.branch})`, "Review", "Review with Claude", "Quick merge", "Merge with Claude").then((pick) => {
                         if (pick === "Review") reviewBranch(entry);
+                        else if (pick === "Review with Claude") startClaudeReview(entry);
                         else if (pick === "Quick merge") quickMerge(entry);
                         else if (pick === "Merge with Claude") startMerge(entry);
                     });

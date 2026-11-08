@@ -2,7 +2,7 @@
     "name": "todo-workers",
     "displayName": "Todo Workers",
     "description": "The parallel todo-loop workers of BagiEngine: their sessions, entries and branches, and the entries waiting for /todo-merge.",
-    "version": "0.5.0",
+    "version": "0.7.0",
     "publisher": "bagiengine",
     "license": "UNLICENSED",
     "private": true,
@@ -71,6 +71,22 @@
                     "default": 15,
                     "minimum": 5,
                     "description": "How often the panel asks worker.py (it also asks the todo store and reads the session transcripts)."
+                },
+                "todoWorkers.startSlices": {
+                    "type": "number",
+                    "default": 1,
+                    "minimum": 1,
+                    "description": "Fast start: N of `/todo-loop N`, the slices the loop takes."
+                },
+                "todoWorkers.loopArgs": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Fast start: more arguments of /todo-loop (worker.py start --loop-args), e.g. 'models=reviewer:sonnet' or an entry id."
+                },
+                "todoWorkers.reportTo": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Fast start: the Claude session the loop sends its reports to (worker.py start --report-to); empty for none."
                 },
                 "todoWorkers.notify": {
                     "type": "boolean",

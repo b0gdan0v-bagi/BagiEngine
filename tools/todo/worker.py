@@ -25,6 +25,7 @@ Run it from anywhere inside the main checkout:
     python3 engine/tools/todo/worker.py start        # /todo-loop in every worker, background sessions a minute apart
     python3 engine/tools/todo/worker.py stop [k ...] # stop those background sessions
     python3 engine/tools/todo/worker.py merge <id> [--dry-run]  # the quick merge of an entry in review
+    python3 engine/tools/todo/worker.py update [k ...] # detach a finished, clean worker at the tips of the bases
     python3 engine/tools/todo/worker.py remove 3
 
 Python 3.10+, standard library only.
@@ -998,6 +999,72 @@ def cmd_stop(layout: Layout, args) -> None:
     print("A loop stopped in the middle leaves its entry `in progress` with its branch; the next /todo-loop in that worker continues it.")
 
 
+# --- update ------------------------------------------------------------------------------------
+
+
+def worker_repos(layout: Layout, path: Path) -> list[tuple[Path, str]]:
+    """The repositories of a worker and their base branches, from the "Areas" table of the rules file (the
+    game's first, so its pointer does not decide where the engine goes); the game alone at `main` without one."""
+    rows = rule_area_table(layout.main) or [{"area": None, "repo": ".", "base": DEFAULT_BASE}]
+    rows = sorted(rows, key=lambda row: row["repo"] != ".")
+    return [(path / row["repo"], row["base"]) for row in rows]
+
+
+def update_one(layout: Layout, k: int, path: Path, sessions: list[dict] | None) -> dict:
+    """Detach every repository of a worker at the tip of its base, what the loop calls "go to the base"; the
+    branch it held stays as it is. Refused for a session that has not finished and for uncommitted changes."""
+    session = session_in(sessions or [], path)
+    if is_active(session):
+        raise WorkerError(f"w{k}: its session runs ({describe(session)}); stop it first")
+    repos = worker_repos(layout, path)
+    for repo, _base in repos:
+        if not (repo / ".git").exists():
+            raise WorkerError(f"w{k}: no repository {repo}")
+        changed = dirty(repo, ignore_submodules=repo == path)
+        if changed:
+            files = [line[3:] for line in changed.splitlines()]
+            more = f" and {len(files) - 3} more" if len(files) > 3 else ""
+            raise WorkerError(f"w{k}: {repo} has uncommitted changes ({', '.join(files[:3])}{more})")
+    moved = []
+    for repo, base in repos:
+        before = head_json(repo)
+        git("switch", "--quiet", "--detach", base, cwd=repo)
+        after = head_json(repo)
+        moved.append({"repo": str(repo), "base": base, "from": before["branch"] or before["commit"], "to": after["commit"], "changed": before["commit"] != after["commit"] or before["branch"] is not None})
+    notes = []
+    if layout.shared is not None and (path / SHARED_SUBMODULE / ".git").exists() and any(repo == path / SHARED_SUBMODULE for repo, _ in repos):
+        pointer = git("rev-parse", f"HEAD:{SHARED_SUBMODULE}", cwd=path, check=False)
+        engine = git("rev-parse", "HEAD", cwd=path / SHARED_SUBMODULE, check=False)
+        if pointer and engine and pointer != engine:
+            notes.append(f"the game's pointer of {SHARED_SUBMODULE}/ is {pointer[:9]}, not the tip of its base ({engine[:9]}): the pointer commit is not made yet")
+    return {"k": k, "name": f"{WORKER_PREFIX}{k}", "repos": moved, "notes": notes}
+
+
+def cmd_update(layout: Layout, args) -> None:
+    workers = chosen_workers(layout, args.workers)
+    sessions = list_sessions(args.claude)
+    if sessions is None:
+        raise WorkerError(f"`{args.claude} agents --json` did not answer: cannot tell whether a session runs")
+    results, errors = [], []
+    for k, path in workers:
+        try:
+            results.append(update_one(layout, k, path, sessions))
+        except WorkerError as error:
+            errors.append(str(error))
+    if args.json:
+        print(json.dumps({"updated": results, "errors": errors}, indent=2))
+    else:
+        for result in results:
+            parts = [f"{Path(r['repo']).name if Path(r['repo']) != layout.worker(result['k']) else 'game'} {r['from']} -> {r['base']} ({r['to']})" for r in result["repos"]]
+            print(f"{result['name']}: {'; '.join(parts)}")
+            for note in result["notes"]:
+                print(f"  note: {note}")
+        for error in errors:
+            print(f"error: {error}", file=sys.stderr)
+    if errors:
+        raise WorkerError("; ".join(errors) if args.json else f"{len(errors)} worker(s) not updated")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="worker.py", description="The folders of the parallel todo-loop workers (git worktrees).")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1032,6 +1099,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id")
     p.add_argument("--dry-run", action="store_true", help="only say what it would do and what stops it")
     p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
+    p = sub.add_parser("update", help="detach the repositories of the workers at the tips of their base branches (a finished session, a clean folder)")
+    p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
     p = sub.add_parser("stop", help="stop the background sessions of the workers")
     p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
@@ -1046,7 +1117,7 @@ def main(argv: list[str] | None = None) -> int:
     args.rest = rest
     try:
         layout = find_layout(Path.cwd())
-        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "merge": cmd_merge}
+        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "merge": cmd_merge, "update": cmd_update}
         commands[args.command](layout, args)
     except WorkerError as error:
         print(f"error: {error}", file=sys.stderr)
