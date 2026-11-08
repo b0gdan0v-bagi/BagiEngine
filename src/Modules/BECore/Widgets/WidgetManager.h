@@ -23,13 +23,18 @@ namespace BECore {
         void CreateWidgets();
 
         /// Creates the widgets of @p mode and appends them; the mode is what GetMode() reports from now on.
-        /// An empty list (and a log line) when the config of the mode is missing.
+        /// With the default loader the list stays empty (and a log line is written) when the config of the mode is missing.
         void CreateWidgets(RunMode mode);
 
         /// The mode of the widgets created last (Game before any CreateWidgets).
         RunMode GetMode() const {
             return _mode;
         }
+
+        /// Waits until the GPU is idle (when there is a renderer: it may still read what the widgets own) and destroys every widget,
+        /// the last created first: a later widget may use what an earlier one owns (the viewport's render target needs the ImGui
+        /// context of ImGuiWidget). Their subscriptions go with them. Not for the middle of a frame (ApplyPendingMode).
+        void DestroyAll();
 
         /// Replaces how the widgets of a mode are built; an empty function restores the config reader.
         void SetWidgetLoader(WidgetLoader loader) {
@@ -55,7 +60,7 @@ namespace BECore {
          * Call it only at the end of a frame, after the present and outside UpdateAll / DrawScreenAll / DrawAll: ImGui's frame
          * is open while the widgets draw, and a widget cannot be destroyed in the middle of its own call. The order is fixed:
          *  1. wait until the GPU is idle (it may still read what the widgets own: ImGui's descriptors, the viewport's target),
-         *  2. destroy every widget (their subscriptions go with them),
+         *  2. destroy every widget, the last created first (DestroyAll; their subscriptions go with them),
          *  3. create the widgets of the new mode, as CreateWidgets(mode) does,
          *  4. log the new mode.
          * Works without a renderer (step 1 is skipped).
@@ -67,9 +72,8 @@ namespace BECore {
         eastl::vector<IntrusivePtr<IWidget>> _widgets;
         RunMode _mode = RunMode::Game;
         WidgetLoader _loader;
-#if BE_WITH_EDITOR
+        // Not under BE_WITH_EDITOR: the layout of a class must not depend on the define, or objects built in a mixed build crash
         std::optional<RunMode> _pendingMode;
-#endif
     };
 
 }  // namespace BECore

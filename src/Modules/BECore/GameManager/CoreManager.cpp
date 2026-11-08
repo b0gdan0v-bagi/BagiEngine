@@ -109,6 +109,8 @@ namespace BECore {
     }
 
     void CoreManager::OnApplicationDeinit(PassKey<Application>) {
+        // While the services the widgets reach in their destructors (UIEnvironment, the renderer) are still alive
+        _widgetManager.DestroyAll();
         _tweenManager.Clear();  // no callbacks: the scenes and what the setters point at may be going away
         _controlService.Shutdown();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});

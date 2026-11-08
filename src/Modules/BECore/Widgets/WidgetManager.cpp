@@ -71,6 +71,15 @@ namespace BECore {
         }
     }
 
+    void WidgetManager::DestroyAll() {
+        if (const auto& renderer = CoreManager::GetRenderer()) {
+            renderer->WaitIdle();
+        }
+        while (!_widgets.empty()) {
+            _widgets.pop_back();
+        }
+    }
+
 #if BE_WITH_EDITOR
     void WidgetManager::RequestMode(RunMode mode) {
         if (mode == _mode) {
@@ -91,10 +100,7 @@ namespace BECore {
         const RunMode mode = *_pendingMode;
         _pendingMode.reset();
 
-        if (const auto& renderer = CoreManager::GetRenderer()) {
-            renderer->WaitIdle();
-        }
-        _widgets.clear();
+        DestroyAll();
         CreateWidgets(mode);
         LOG_INFO("Run mode: {}"_format(EnumUtils<RunMode>::ToString(mode)));
         return true;

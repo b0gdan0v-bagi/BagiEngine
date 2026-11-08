@@ -27,6 +27,14 @@ namespace BECore {
 
     }  // namespace
 
+    ViewportWidget::~ViewportWidget() {
+        // Update() clears the override right after the scene pass; this is the guarantee that no canvas keeps a simulated safe
+        // area in Game mode whatever state the widget dies in
+        CoreManager::GetUIEnvironment().SetSafeAreaOverride(std::nullopt);
+        // The target's destructor waits for the GPU and gives back its ImGui texture; the manager waited already before the widgets died
+        _renderTarget = {};
+    }
+
     bool ViewportWidget::Initialize(IDeserializer& /*deserializer*/) {
         return true;
     }

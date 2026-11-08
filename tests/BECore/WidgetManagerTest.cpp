@@ -87,6 +87,16 @@ namespace BECore::Tests {
         EXPECT_EQ(LifecycleWidget::log, (Log{"create:2", "create:3", "destroy:2", "destroy:3"}));
     }
 
+    TEST_F(WidgetManagerTest, DestroyAllWaitsForTheGpuThenDestroysTheLastCreatedFirst) {
+        CoreManager::GetRendererManager().SetRenderer(New<IdleLoggingRenderer>());
+        _manager.CreateWidgets(RunMode::Editor);
+        LifecycleWidget::log.clear();
+
+        _manager.DestroyAll();
+
+        EXPECT_EQ(LifecycleWidget::log, (Log{"waitIdle", "destroy:3", "destroy:2"}));
+    }
+
 #if BE_WITH_EDITOR
     TEST_F(WidgetManagerTest, ARequestChangesNothingUntilItIsApplied) {
         _manager.CreateWidgets(RunMode::Game);
@@ -147,7 +157,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(_manager.ApplyPendingMode());
 
         EXPECT_EQ(_manager.GetMode(), RunMode::Game);
-        EXPECT_EQ(LifecycleWidget::log, (Log{"destroy:1", "create:2", "create:3", "destroy:2", "destroy:3", "create:1"}));
+        EXPECT_EQ(LifecycleWidget::log, (Log{"destroy:1", "create:2", "create:3", "destroy:3", "destroy:2", "create:1"}));
     }
 
     TEST_F(WidgetManagerTest, ARequestForTheCurrentModeAppliesNothing) {

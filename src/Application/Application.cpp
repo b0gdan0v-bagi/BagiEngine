@@ -5,6 +5,7 @@
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Games/GameManager.h>
@@ -26,6 +27,9 @@ namespace BECore {
 
         _isRunning = true;
         Subscribe<ApplicationEvents::QuitEvent, &Application::StopApplication>(this);
+#if BE_WITH_EDITOR
+        Subscribe<SDLEvents::SDLEventWrapper, &Application::OnSDLEvent>(this);
+#endif
 
         CoreManager::GetInstance().OnApplicationPreInit({});
 
@@ -51,6 +55,8 @@ namespace BECore {
             LogEvent::Flush();
             return false;
         }
+
+        _headless = controlSettings->headless;
 
         ApplicationOptions options;
         options.headless = controlSettings->headless;
@@ -91,11 +97,30 @@ namespace BECore {
             RenderEvents::NewFrameEvent::Emit();
             CoreManager::GetInstance().OnGameCycle({});
             RenderEvents::RenderPresentEvent::Emit();
+#if BE_WITH_EDITOR
+            // The only safe point to replace the widgets: the frame is over, so no widget is inside its own call and no ImGui frame is open.
+            // The manual-clock idle branch above never gets here, because no frame is open there either
+            CoreManager::GetWidgetManager().ApplyPendingMode();
+#endif
             LogEvent::Flush();
             control.EndFrame();
         }
         Cleanup();
     }
+
+#if BE_WITH_EDITOR
+    void Application::OnSDLEvent(const SDLEvents::SDLEventWrapper& event) const {
+        const SDL_KeyboardEvent& key = event.event.key;
+        if (event.event.type != SDL_EVENT_KEY_DOWN || !IsEditorToggle(key.key, key.mod, key.repeat)) {
+            return;
+        }
+        if (_headless) {
+            LOG_WARNING("Run mode: Ctrl+Shift+E ignored, a headless run has no window for the editor");
+            return;
+        }
+        CoreManager::GetWidgetManager().RequestToggle();
+    }
+#endif
 
     bool Application::StartControlServer(uint16_t port) {
         _controlServer = eastl::make_unique<WebSocketServer>(CoreManager::GetControlService());
