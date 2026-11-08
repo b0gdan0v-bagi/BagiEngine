@@ -28,9 +28,10 @@ namespace BECore {
     }  // namespace
 
     ViewportWidget::~ViewportWidget() {
-        // Update() clears the override right after the scene pass; this is the guarantee that no canvas keeps a simulated safe
-        // area in Game mode whatever state the widget dies in
+        // Update() clears the overrides right after the scene pass; this is the guarantee that no canvas keeps a simulated safe
+        // area or the density of the target in Game mode whatever state the widget dies in
         CoreManager::GetUIEnvironment().SetSafeAreaOverride(std::nullopt);
+        CoreManager::GetUIEnvironment().SetPixelDensityOverride(std::nullopt);
         // The target's destructor waits for the GPU and gives back its ImGui texture. It needs the device and the ImGui context
         // alive: the widgets die last-first (the viewport before ImGuiWidget) and before the renderer's cleanup
         _renderTarget = {};
@@ -78,8 +79,13 @@ namespace BECore {
             // The target is not the window, so its safe area is the simulated one (the whole target for "No safe area"), never the window's
             UIEnvironment& uiEnvironment = CoreManager::GetUIEnvironment();
             uiEnvironment.SetSafeAreaOverride(UIPreview::SimulatedSafeArea(_safeAreaSimulation, size.x, size.y));
+            // The target has one pixel per ImGui unit (the image is shown at that size), so its pixel density is 1 even when the
+            // window runs in the high-density mode, where canvases would otherwise lay out twice as big. A sharper viewport (a target
+            // of size times io.DisplayFramebufferScale, the mouse and the safe area scaled with it, the override set to that scale) is a follow-up.
+            uiEnvironment.SetPixelDensityOverride(1.0f);
             CoreManager::GetSceneManager().DrawAll();
             uiEnvironment.SetSafeAreaOverride(std::nullopt);
+            uiEnvironment.SetPixelDensityOverride(std::nullopt);
             renderer->UnsetRenderTarget();
 
             // Display the result as an ImGui image, centered when a preset leaves room on one side

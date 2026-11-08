@@ -139,6 +139,50 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(context.safeArea.w, 2000.0f);
     }
 
+    TEST(UIEnvironmentTest, ADensityOverrideReplacesTheWindowsAndClearsAgain) {
+        UIEnvironment environment;
+        const MetricsWindow window;  // density 2, safe area {0, 20, 1000, 480} in window units
+
+        environment.SetPixelDensityOverride(1.0f);
+        EXPECT_EQ(environment.GetPixelDensityOverride(), std::optional<float>(1.0f));
+        UILayoutContext context = environment.MakeContext(&window, 1000.0f, 500.0f);
+        EXPECT_FLOAT_EQ(context.pixelDensity, 1.0f);
+        EXPECT_FLOAT_EQ(context.displayScale, 1.5f);  // only the density is replaced
+        // The window's safe area is multiplied by the effective density, not by the window's
+        EXPECT_FLOAT_EQ(context.safeArea.y, 20.0f);
+        EXPECT_FLOAT_EQ(context.safeArea.w, 1000.0f);
+        EXPECT_FLOAT_EQ(context.safeArea.h, 480.0f);
+
+        environment.SetPixelDensityOverride(std::nullopt);
+        EXPECT_FALSE(environment.GetPixelDensityOverride().has_value());
+        context = environment.MakeContext(&window, 2000.0f, 1000.0f);
+        EXPECT_FLOAT_EQ(context.pixelDensity, 2.0f);
+        EXPECT_FLOAT_EQ(context.safeArea.y, 40.0f);
+    }
+
+    TEST(UIEnvironmentTest, ADensityOverrideThatIsNotPositiveIsIgnored) {
+        UIEnvironment environment;
+        const MetricsWindow window;
+
+        environment.SetPixelDensityOverride(0.0f);
+        EXPECT_FLOAT_EQ(environment.MakeContext(&window, 2000.0f, 1000.0f).pixelDensity, 2.0f);
+
+        environment.SetPixelDensityOverride(-1.0f);
+        EXPECT_FLOAT_EQ(environment.MakeContext(&window, 2000.0f, 1000.0f).pixelDensity, 2.0f);
+        EXPECT_FLOAT_EQ(environment.MakeContext(nullptr, 100.0f, 100.0f).pixelDensity, 1.0f);
+    }
+
+    TEST(UIEnvironmentTest, ADensityOverrideAndASafeAreaOverrideWorkTogether) {
+        UIEnvironment environment;
+        const MetricsWindow window;
+
+        environment.SetPixelDensityOverride(1.0f);
+        environment.SetSafeAreaOverride(Rect{10.0f, 20.0f, 300.0f, 200.0f});
+        const UILayoutContext context = environment.MakeContext(&window, 1000.0f, 500.0f);
+        EXPECT_FLOAT_EQ(context.pixelDensity, 1.0f);
+        EXPECT_FLOAT_EQ(context.safeArea.w, 300.0f);
+    }
+
     TEST(UIEnvironmentTest, TheUserScaleEntersTheContextAndIsClamped) {
         UIEnvironment environment;
 

@@ -3,17 +3,16 @@
 
 #include <BECore/Logger/LogEvent.h>
 
-#include <algorithm>
-#include <limits>
+#include <optional>
 
 namespace BECore {
 
-    bool VulkanSwapchain::Initialize(VulkanDevice& device, VkSurfaceKHR surface, int width, int height) {
-        if (!CreateSwapchain(device, surface, width, height)) {
+    bool VulkanSwapchain::Initialize(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight) {
+        if (!CreateSwapchain(device, surface, pixelWidth, pixelHeight, std::nullopt, VK_NULL_HANDLE, _chain)) {
             LOG_ERROR("Vulkan: Failed to create swapchain");
             return false;
         }
-        if (!CreateImageViews(device)) {
+        if (!CreateImageViews(device, _chain)) {
             LOG_ERROR("Vulkan: Failed to create swapchain image views");
             return false;
         }
@@ -21,7 +20,7 @@ namespace BECore {
             LOG_ERROR("Vulkan: Failed to create render pass");
             return false;
         }
-        if (!CreateFramebuffers(device)) {
+        if (!CreateFramebuffers(device, _chain)) {
             LOG_ERROR("Vulkan: Failed to create framebuffers");
             return false;
         }
@@ -29,68 +28,119 @@ namespace BECore {
     }
 
     void VulkanSwapchain::Destroy(VulkanDevice& device) {
-        VkDevice vkDevice = device.GetDevice();
+        const VkDevice vkDevice = device.GetDevice();
 
-        for (VkFramebuffer fb : _framebuffers) {
+        // Framebuffers first (they reference the render pass and the views), the swapchain last
+        for (VkFramebuffer fb : _chain.framebuffers) {
             vkDestroyFramebuffer(vkDevice, fb, nullptr);
         }
-        _framebuffers.clear();
+        _chain.framebuffers.clear();
 
         if (_renderPass != VK_NULL_HANDLE) {
             vkDestroyRenderPass(vkDevice, _renderPass, nullptr);
             _renderPass = VK_NULL_HANDLE;
         }
 
-        for (VkImageView view : _imageViews) {
-            vkDestroyImageView(vkDevice, view, nullptr);
-        }
-        _imageViews.clear();
-
-        if (_swapchain != VK_NULL_HANDLE) {
-            vkDestroySwapchainKHR(vkDevice, _swapchain, nullptr);
-            _swapchain = VK_NULL_HANDLE;
-        }
-
-        _images.clear();
+        DestroyChain(device, _chain);
     }
 
-    bool VulkanSwapchain::AcquireNextImage(VulkanDevice& device, VkSemaphore imageAvailableSemaphore,
-                                            uint32_t& outImageIndex) {
+    void VulkanSwapchain::DestroyChain(VulkanDevice& device, Chain& chain) {
+        const VkDevice vkDevice = device.GetDevice();
+
+        for (VkFramebuffer fb : chain.framebuffers) {
+            vkDestroyFramebuffer(vkDevice, fb, nullptr);
+        }
+        chain.framebuffers.clear();
+
+        for (VkImageView view : chain.imageViews) {
+            vkDestroyImageView(vkDevice, view, nullptr);
+        }
+        chain.imageViews.clear();
+
+        if (chain.swapchain != VK_NULL_HANDLE) {
+            vkDestroySwapchainKHR(vkDevice, chain.swapchain, nullptr);
+            chain.swapchain = VK_NULL_HANDLE;
+        }
+
+        chain.images.clear();
+    }
+
+    SwapchainRecreateResult VulkanSwapchain::Recreate(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth,
+                                                      int pixelHeight) {
+        if (VulkanSwapchainPolicy::IsMinimized(pixelWidth, pixelHeight)) {
+            return SwapchainRecreateResult::ZeroExtent;
+        }
+
+        // The surface may report a zero extent before the window's pixel size does (a window that is being minimized)
+        VkSurfaceCapabilitiesKHR caps{};
+        if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.GetPhysicalDevice(), surface, &caps) != VK_SUCCESS) {
+            LOG_ERROR("Vulkan: Failed to query the surface capabilities for the recreated swapchain");
+            return SwapchainRecreateResult::Failed;
+        }
+        const VkExtent2D extent = VulkanSwapchainPolicy::ChooseExtent(caps, pixelWidth, pixelHeight);
+        if (extent.width == 0 || extent.height == 0) {
+            return SwapchainRecreateResult::ZeroExtent;
+        }
+
+        Chain next;
+        if (!CreateSwapchain(device, surface, pixelWidth, pixelHeight, _chain.format, _chain.swapchain, next)) {
+            return SwapchainRecreateResult::Failed;
+        }
+        if (!CreateImageViews(device, next) || !CreateFramebuffers(device, next)) {
+            LOG_ERROR("Vulkan: Failed to create image views or framebuffers for the recreated swapchain");
+            DestroyChain(device, next);
+            return SwapchainRecreateResult::Failed;
+        }
+
+        // The new objects exist: now the old ones can go (the caller has waited for the device to be idle)
+        DestroyChain(device, _chain);
+        _chain = eastl::move(next);
+        return SwapchainRecreateResult::Done;
+    }
+
+    SwapchainStatus VulkanSwapchain::AcquireNextImage(VulkanDevice& device, VkSemaphore imageAvailableSemaphore,
+                                                      uint32_t& outImageIndex) {
         const VkResult result = vkAcquireNextImageKHR(
-            device.GetDevice(), _swapchain,
+            device.GetDevice(), _chain.swapchain,
             UINT64_MAX,               // no timeout
             imageAvailableSemaphore,
             VK_NULL_HANDLE,
             &outImageIndex);
 
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-            return false;  // swapchain needs recreation
-        }
-        return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
+        return VulkanSwapchainPolicy::ClassifyResult(result);
     }
 
-    bool VulkanSwapchain::Present(VulkanDevice& device, VkSemaphore renderFinishedSemaphore,
-                                   uint32_t imageIndex) {
+    SwapchainStatus VulkanSwapchain::Present(VulkanDevice& device, VkSemaphore renderFinishedSemaphore,
+                                             uint32_t imageIndex) {
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores    = &renderFinishedSemaphore;
         presentInfo.swapchainCount     = 1;
-        presentInfo.pSwapchains        = &_swapchain;
+        presentInfo.pSwapchains        = &_chain.swapchain;
         presentInfo.pImageIndices      = &imageIndex;
 
-        const VkResult result = vkQueuePresentKHR(device.GetPresentQueue(), &presentInfo);
-        return result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
+        return VulkanSwapchainPolicy::ClassifyResult(vkQueuePresentKHR(device.GetPresentQueue(), &presentInfo));
     }
 
-    bool VulkanSwapchain::CreateSwapchain(VulkanDevice& device, VkSurfaceKHR surface,
-                                           int width, int height) {
+    bool VulkanSwapchain::CreateSwapchain(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth,
+                                          int pixelHeight, std::optional<VkFormat> keepFormat,
+                                          VkSwapchainKHR oldSwapchain, Chain& out) const {
         VkSurfaceCapabilitiesKHR caps{};
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.GetPhysicalDevice(), surface, &caps);
 
-        const VkSurfaceFormatKHR surfaceFormat = ChooseSurfaceFormat(device, surface);
-        const VkPresentModeKHR   presentMode   = ChoosePresentMode(device, surface);
-        const VkExtent2D         extent        = ChooseExtent(caps, width, height);
+        const std::optional<VkSurfaceFormatKHR> surfaceFormat = ChooseSurfaceFormat(device, surface, keepFormat);
+        if (!surfaceFormat) {
+            LOG_ERROR("Vulkan: the surface offers no formats");
+            return false;
+        }
+        if (keepFormat && surfaceFormat->format != *keepFormat) {
+            // The render pass and the pipelines were built for the old format and are not rebuilt
+            LOG_ERROR("Vulkan: the surface no longer offers the swapchain format, cannot recreate the swapchain");
+            return false;
+        }
+        const VkPresentModeKHR presentMode = ChoosePresentMode(device, surface);
+        const VkExtent2D       extent      = VulkanSwapchainPolicy::ChooseExtent(caps, pixelWidth, pixelHeight);
 
         // Request one more image than the minimum to avoid waiting on the driver
         uint32_t imageCount = caps.minImageCount + 1;
@@ -102,8 +152,8 @@ namespace BECore {
         createInfo.sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
         createInfo.surface          = surface;
         createInfo.minImageCount    = imageCount;
-        createInfo.imageFormat      = surfaceFormat.format;
-        createInfo.imageColorSpace  = surfaceFormat.colorSpace;
+        createInfo.imageFormat      = surfaceFormat->format;
+        createInfo.imageColorSpace  = surfaceFormat->colorSpace;
         createInfo.imageExtent      = extent;
         createInfo.imageArrayLayers = 1;
         createInfo.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -124,31 +174,34 @@ namespace BECore {
         createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         createInfo.presentMode    = presentMode;
         createInfo.clipped        = VK_TRUE;
-        createInfo.oldSwapchain   = VK_NULL_HANDLE;
+        createInfo.oldSwapchain   = oldSwapchain;
 
-        if (vkCreateSwapchainKHR(device.GetDevice(), &createInfo, nullptr, &_swapchain) != VK_SUCCESS) {
+        const VkResult created = vkCreateSwapchainKHR(device.GetDevice(), &createInfo, nullptr, &out.swapchain);
+        if (created != VK_SUCCESS) {
+            LOG_ERROR(Format("Vulkan: vkCreateSwapchainKHR failed (VkResult {})", static_cast<int>(created)).c_str());
+            out.swapchain = VK_NULL_HANDLE;
             return false;
         }
 
         // Retrieve swapchain images (driver may allocate more than requested)
         uint32_t actualCount = 0;
-        vkGetSwapchainImagesKHR(device.GetDevice(), _swapchain, &actualCount, nullptr);
-        _images.resize(actualCount);
-        vkGetSwapchainImagesKHR(device.GetDevice(), _swapchain, &actualCount, _images.data());
+        vkGetSwapchainImagesKHR(device.GetDevice(), out.swapchain, &actualCount, nullptr);
+        out.images.resize(actualCount);
+        vkGetSwapchainImagesKHR(device.GetDevice(), out.swapchain, &actualCount, out.images.data());
 
-        _imageFormat = surfaceFormat.format;
-        _extent      = extent;
+        out.format = surfaceFormat->format;
+        out.extent = extent;
         return true;
     }
 
-    bool VulkanSwapchain::CreateImageViews(VulkanDevice& device) {
-        _imageViews.resize(_images.size());
-        for (size_t i = 0; i < _images.size(); ++i) {
+    bool VulkanSwapchain::CreateImageViews(VulkanDevice& device, Chain& chain) const {
+        chain.imageViews.assign(chain.images.size(), VK_NULL_HANDLE);
+        for (size_t i = 0; i < chain.images.size(); ++i) {
             VkImageViewCreateInfo viewInfo{};
             viewInfo.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            viewInfo.image    = _images[i];
+            viewInfo.image    = chain.images[i];
             viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            viewInfo.format   = _imageFormat;
+            viewInfo.format   = chain.format;
 
             viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
             viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -161,7 +214,7 @@ namespace BECore {
             viewInfo.subresourceRange.baseArrayLayer = 0;
             viewInfo.subresourceRange.layerCount     = 1;
 
-            if (vkCreateImageView(device.GetDevice(), &viewInfo, nullptr, &_imageViews[i]) != VK_SUCCESS) {
+            if (vkCreateImageView(device.GetDevice(), &viewInfo, nullptr, &chain.imageViews[i]) != VK_SUCCESS) {
                 return false;
             }
         }
@@ -171,7 +224,7 @@ namespace BECore {
     bool VulkanSwapchain::CreateRenderPass(VulkanDevice& device) {
         // Single color attachment, cleared at load, stored at end
         VkAttachmentDescription colorAttachment{};
-        colorAttachment.format         = _imageFormat;
+        colorAttachment.format         = _chain.format;
         colorAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;
         colorAttachment.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
@@ -210,41 +263,34 @@ namespace BECore {
         return vkCreateRenderPass(device.GetDevice(), &renderPassInfo, nullptr, &_renderPass) == VK_SUCCESS;
     }
 
-    bool VulkanSwapchain::CreateFramebuffers(VulkanDevice& device) {
-        _framebuffers.resize(_imageViews.size());
-        for (size_t i = 0; i < _imageViews.size(); ++i) {
+    bool VulkanSwapchain::CreateFramebuffers(VulkanDevice& device, Chain& chain) const {
+        chain.framebuffers.assign(chain.imageViews.size(), VK_NULL_HANDLE);
+        for (size_t i = 0; i < chain.imageViews.size(); ++i) {
             VkFramebufferCreateInfo fbInfo{};
             fbInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             fbInfo.renderPass      = _renderPass;
             fbInfo.attachmentCount = 1;
-            fbInfo.pAttachments    = &_imageViews[i];
-            fbInfo.width           = _extent.width;
-            fbInfo.height          = _extent.height;
+            fbInfo.pAttachments    = &chain.imageViews[i];
+            fbInfo.width           = chain.extent.width;
+            fbInfo.height          = chain.extent.height;
             fbInfo.layers          = 1;
 
-            if (vkCreateFramebuffer(device.GetDevice(), &fbInfo, nullptr, &_framebuffers[i]) != VK_SUCCESS) {
+            if (vkCreateFramebuffer(device.GetDevice(), &fbInfo, nullptr, &chain.framebuffers[i]) != VK_SUCCESS) {
                 return false;
             }
         }
         return true;
     }
 
-    VkSurfaceFormatKHR VulkanSwapchain::ChooseSurfaceFormat(
-        VulkanDevice& device, VkSurfaceKHR surface) const {
+    std::optional<VkSurfaceFormatKHR> VulkanSwapchain::ChooseSurfaceFormat(
+        VulkanDevice& device, VkSurfaceKHR surface, std::optional<VkFormat> keepFormat) const {
 
         uint32_t count = 0;
         vkGetPhysicalDeviceSurfaceFormatsKHR(device.GetPhysicalDevice(), surface, &count, nullptr);
         eastl::vector<VkSurfaceFormatKHR> formats(count);
         vkGetPhysicalDeviceSurfaceFormatsKHR(device.GetPhysicalDevice(), surface, &count, formats.data());
 
-        // Prefer standard SRGB with BGRA8 (most common on desktop)
-        for (const auto& f : formats) {
-            if (f.format == VK_FORMAT_B8G8R8A8_SRGB &&
-                f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-                return f;
-            }
-        }
-        return formats[0];
+        return VulkanSwapchainPolicy::ChooseSurfaceFormat({formats.data(), formats.size()}, keepFormat);
     }
 
     VkPresentModeKHR VulkanSwapchain::ChoosePresentMode(
@@ -263,22 +309,6 @@ namespace BECore {
         }
         // FIFO is always available (v-sync)
         return VK_PRESENT_MODE_FIFO_KHR;
-    }
-
-    VkExtent2D VulkanSwapchain::ChooseExtent(
-        const VkSurfaceCapabilitiesKHR& caps, int width, int height) const {
-
-        if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-            return caps.currentExtent;
-        }
-
-        VkExtent2D extent{
-            static_cast<uint32_t>(width),
-            static_cast<uint32_t>(height)
-        };
-        extent.width  = std::clamp(extent.width,  caps.minImageExtent.width,  caps.maxImageExtent.width);
-        extent.height = std::clamp(extent.height, caps.minImageExtent.height, caps.maxImageExtent.height);
-        return extent;
     }
 
 }  // namespace BECore

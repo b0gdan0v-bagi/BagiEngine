@@ -1,6 +1,9 @@
+#include <BECore/Config/XmlConfig.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <Common/EngineEnvironment.h>
 #include <CoreSDL/SDLMainWindow.h>
+#include <CoreSDL/SDLUtils.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -96,6 +99,51 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(safeArea.y, 0.0f);
         EXPECT_FLOAT_EQ(safeArea.w, static_cast<float>(window->GetWidth()));
         EXPECT_FLOAT_EQ(safeArea.h, static_cast<float>(window->GetHeight()));
+    }
+
+    TEST_F(SDLWindowMetricsTest, TheSizeIsTheLiveSizeOfTheWindow) {
+        int width = 0;
+        int height = 0;
+        ASSERT_TRUE(SDL_GetWindowSize(window->GetSDLWindow(), &width, &height));
+
+        EXPECT_EQ(window->GetWidth(), width);
+        EXPECT_EQ(window->GetHeight(), height);
+
+        // A resize shows at once, without a second Initialize
+        SDL_SetWindowSize(window->GetSDLWindow(), width + 40, height + 20);
+        SDL_SyncWindow(window->GetSDLWindow());
+        ASSERT_TRUE(SDL_GetWindowSize(window->GetSDLWindow(), &width, &height));
+        EXPECT_EQ(window->GetWidth(), width);
+        EXPECT_EQ(window->GetHeight(), height);
+    }
+
+    TEST_F(SDLWindowMetricsTest, TheHeadlessWindowStartsAtTheSizeOfTheConfig) {
+        auto config = XmlConfig::Create();
+        ASSERT_TRUE(config.LoadFromFile(CoreManager::GetFileSystem().ResolvePath(kWindowConfig)));
+        const XmlNode node = config.GetRoot().GetChild("window");
+
+        EXPECT_EQ(window->GetWidth(), node.ParseAttribute<int>("width").value());
+        EXPECT_EQ(window->GetHeight(), node.ParseAttribute<int>("height").value());
+    }
+
+    TEST_F(SDLWindowMetricsTest, AfterDestroyTheSizeIsNeutralAgain) {
+        window->Destroy();
+
+        EXPECT_EQ(window->GetWidth(), 0);
+        EXPECT_EQ(window->GetHeight(), 0);
+    }
+
+    TEST(WindowMetricsTest, TheShippedWindowConfigAsksForTheHighDensityMode) {
+        EngineEnvironment::EnsureCoreServices();
+        auto config = XmlConfig::Create();
+        ASSERT_TRUE(config.LoadFromFile(CoreManager::GetFileSystem().ResolvePath(kWindowConfig)));
+        const auto flagsText = config.GetRoot().GetChild("window").GetAttribute("windowFlags");
+        ASSERT_TRUE(flagsText.has_value());
+
+        const SDL_WindowFlags flags = SDLUtils::ParseWindowFlags(*flagsText);
+
+        EXPECT_NE(flags & SDL_WINDOW_HIGH_PIXEL_DENSITY, 0u);
+        EXPECT_NE(flags & SDL_WINDOW_RESIZABLE, 0u);
     }
 
     TEST_F(SDLWindowMetricsTest, AfterDestroyTheMetricsAreNeutralAgain) {
