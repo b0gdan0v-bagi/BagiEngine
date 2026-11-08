@@ -65,7 +65,8 @@ namespace BECore {
         }
 
         if (mask) {
-            frame.insert(frame.end(), mask->begin(), mask->end());
+            // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
+            frame.insert(frame.end(), mask->data(), mask->data() + mask->size());
         }
         for (size_t i = 0; i < payload.size(); ++i) {
             frame.push_back(mask ? static_cast<uint8_t>(payload[i] ^ (*mask)[i % kMaskSize]) : payload[i]);

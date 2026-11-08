@@ -70,6 +70,12 @@ target_include_directories(imgui PRIVATE ${BAGI_ENGINE_DIR}/external/SDL/include
 set_target_properties(SDL3-shared PROPERTIES FOLDER "External")
 set_target_properties(fmt PROPERTIES FOLDER "External")
 
+# MSVC: fmt rejects a non-UTF-8 execution charset (static_assert in fmt/base.h). The vendored libraries are
+# added before the global compile options below, so fmt gets /utf-8 here; PUBLIC carries it to every user.
+if(MSVC)
+    target_compile_options(fmt PUBLIC /utf-8)
+endif()
+
 # Export compile commands for IntelliSense and other tools
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -87,6 +93,11 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     message(STATUS "Compiler: MSVC ${CMAKE_CXX_COMPILER_VERSION}")
     add_compile_definitions(COMPILER_MSVC)
+    # Sources are UTF-8 (fmt needs it too, see the fmt target above)
+    add_compile_options(/utf-8)
+    # The conforming preprocessor: the traditional one passes __VA_ARGS__ on as ONE argument, so
+    # ASSERT(expr, "msg") picked the one-argument form and tested !(expr, "msg"), which never fires
+    add_compile_options(/Zc:preprocessor)
 else()
     message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 endif()
@@ -130,8 +141,21 @@ if(ENGINE_BUILD_TESTS)
     set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
     # MSVC: gtest defaults to the static CRT (/MT) while the engine uses /MD
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    # SDL_image turns the cache BUILD_SHARED_LIBS on; gtest would follow and become a gtest.dll that nobody copies
+    # next to the test executables (Windows: they do not start, 0xc0000135). A normal variable hides the cache
+    # one for gtest alone, unset() shows it again.
+    set(BUILD_SHARED_LIBS OFF)
     add_subdirectory(${BAGI_ENGINE_DIR}/external/googletest)
+    unset(BUILD_SHARED_LIBS)
     set_target_properties(gtest PROPERTIES FOLDER "External")
+    # MSVC: the global /EHs-c- above overrides gtest's own -EHsc, so its STL headers (with exceptions, as in
+    # every target here) warn C4530, which gtest's /WX turns into an error. The engine and the tests compile
+    # the same way with the warning; silence it for gtest only. (_HAS_EXCEPTIONS=0 everywhere is not the fix:
+    # EASTL then switches RTTI off, EASTL_RTTI_ENABLED 0, and eastl::dynamic_pointer_cast is gone.)
+    if(MSVC AND ENGINE_NO_EXCEPTIONS)
+        target_compile_options(gtest PRIVATE /wd4530)
+        target_compile_options(gtest_main PRIVATE /wd4530)
+    endif()
 endif()
 
 # =============================================================================

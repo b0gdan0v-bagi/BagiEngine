@@ -191,7 +191,8 @@ namespace BECore {
             if (!count) {
                 return false;  // the client is gone or too slow
             }
-            received.insert(received.end(), chunk.begin(), chunk.begin() + static_cast<ptrdiff_t>(*count));
+            // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
+            received.insert(received.end(), chunk.data(), chunk.data() + *count);
 
             const eastl::string_view text(reinterpret_cast<const char*>(received.data()), received.size());
             const size_t end = text.find(kHandshakeHeadEnd);

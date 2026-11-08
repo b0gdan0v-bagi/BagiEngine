@@ -119,7 +119,8 @@ def expected_core_worktree(layout: Layout) -> str | None:
     if layout.shared is None:
         return None
     gitdir = module_dir(layout.main, submodule_paths(layout.main)[SHARED_SUBMODULE])
-    return os.path.relpath(layout.shared, gitdir)
+    # git writes core.worktree with forward slashes on every platform; relpath gives backslashes on Windows
+    return Path(os.path.relpath(layout.shared, gitdir)).as_posix()
 
 
 def actual_core_worktree(layout: Layout) -> str | None:
