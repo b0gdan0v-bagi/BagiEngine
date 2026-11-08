@@ -23,3 +23,8 @@ if(ENGINE_UI_RMLUI)
 endif()
 
 be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule RuntimeModule)
+
+# VulkanSwapchainPolicy.h is header only (<vulkan/vulkan.h> and the standard library), so the test needs the headers and the
+# include path but not VulkanModule: its loader library is not deployed next to the test executable.
+target_link_libraries(BagiEngineTests PRIVATE Vulkan::Headers)
+target_include_directories(BagiEngineTests PRIVATE ${BAGI_ENGINE_DIR}/src/Modules/Vulkan/src)

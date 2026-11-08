@@ -164,7 +164,9 @@ namespace BECore {
         // Wait until the GPU finishes the previous use of this frame slot
         vkWaitForFences(vkDevice, 1, &_inFlightFences[frameIdx], VK_TRUE, UINT64_MAX);
 
-        if (!_swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx], _currentImageIndex)) {
+        const SwapchainStatus acquired =
+            _swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx], _currentImageIndex);
+        if (acquired == SwapchainStatus::OutOfDate || acquired == SwapchainStatus::Failed) {
             return;  // swapchain out-of-date (TODO: recreate on resize)
         }
 
