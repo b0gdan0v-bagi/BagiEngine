@@ -38,6 +38,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 SHARED_SUBMODULE = "engine"
@@ -481,6 +482,104 @@ def session_activity(session: dict | None) -> dict | None:
     return {"updated": int(main.stat().st_mtime * 1000), "events": events_of(tail_records(main), ACTIVITY_EVENTS), "agents": agents[:4]}
 
 
+USAGE_RECENT_MINUTES = 10  # the window of "now": tokens of the answers in the last minutes
+USAGE_KEYS = ("input", "cacheWrite", "cacheRead", "output")
+
+
+def usage_counts(usage: dict) -> dict:
+    return {
+        "input": int(usage.get("input_tokens") or 0),
+        "cacheWrite": int(usage.get("cache_creation_input_tokens") or 0),
+        "cacheRead": int(usage.get("cache_read_input_tokens") or 0),
+        "output": int(usage.get("output_tokens") or 0),
+    }
+
+
+def add_counts(into: dict, counts: dict) -> None:
+    for key in USAGE_KEYS:
+        into[key] = into.get(key, 0) + counts.get(key, 0)
+    into["total"] = sum(into.get(key, 0) for key in USAGE_KEYS)
+
+
+def context_of(counts: dict) -> int:
+    """The tokens an answer read: what the session holds in its context at that moment."""
+    return counts["input"] + counts["cacheWrite"] + counts["cacheRead"]
+
+
+def file_usage(path: Path) -> tuple[dict, dict, str | None]:
+    """The answers of one transcript: message id -> (time, model, counts), and the last one's counts and
+    model. Claude Code writes an answer once per content block with the same id and usage, so the id
+    counts once (with the largest output, which grows while it streams)."""
+    answers: dict[str, tuple[float, str, dict]] = {}
+    last: tuple[dict, str | None] = ({}, None)
+    try:
+        file = path.open(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}, {}, None
+    with file:
+        for line in file:
+            if '"usage"' not in line or '"assistant"' not in line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            message = record.get("message") if record.get("type") == "assistant" else None
+            if not isinstance(message, dict) or not isinstance(message.get("usage"), dict):
+                continue
+            counts = usage_counts(message["usage"])
+            model = str(message.get("model") or "?")
+            if model == "<synthetic>":
+                continue
+            ident = str(message.get("id") or record.get("uuid"))
+            try:
+                when = datetime.fromisoformat(str(record.get("timestamp")).replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                when = 0.0
+            known = answers.get(ident)
+            if known is None or counts["output"] >= known[2]["output"]:
+                answers[ident] = (when, model, counts)
+            last = (counts, model)
+    return answers, last[0], last[1]
+
+
+def session_usage(session: dict | None) -> dict | None:
+    """The tokens of a worker's session and of all its agents, by model, in the last minutes, and the
+    size of its context now (the last answer of the session itself)."""
+    if not session or not session.get("cwd") or not session.get("sessionId"):
+        return None
+    main = transcript_of(session["cwd"], session["sessionId"])
+    if not main.is_file():
+        return None
+    since = time.time() - USAGE_RECENT_MINUTES * 60
+    total: dict = {}
+    recent: dict = {}
+    models: dict[str, dict] = {}
+    parts = {"session": {}, "agents": {}}
+    answers, last, last_model = file_usage(main)
+    files = [("session", answers)]
+    folder = main.with_suffix("") / "subagents"
+    if folder.is_dir():
+        files += [("agents", file_usage(path)[0]) for path in sorted(folder.glob("agent-*.jsonl"))]
+    for part, found in files:
+        for when, model, counts in found.values():
+            add_counts(total, counts)
+            add_counts(parts[part], counts)
+            add_counts(models.setdefault(model, {}), counts)
+            if when >= since:
+                add_counts(recent, counts)
+    return {
+        "total": total,
+        "session": parts["session"],
+        "agents": parts["agents"],
+        "models": models,
+        "recent": recent,
+        "recentMinutes": USAGE_RECENT_MINUTES,
+        "context": context_of(last) if last else 0,
+        "contextModel": last_model,
+    }
+
+
 def list_json(layout: Layout, args) -> dict:
     """What `list --json` prints: the workers, their sessions and entries, and the entries in review
     (the VS Code panel of tools/vscode/todo-workers reads it)."""
@@ -504,9 +603,17 @@ def list_json(layout: Layout, args) -> dict:
             "session": None if session is None else {key: session.get(key) for key in ("id", "name", "state", "status", "startedAt")},
             "active": is_active(session),
             "activity": session_activity(session) if args.activity else None,
+            "usage": session_usage(session) if args.usage else None,
             "entry": entry,
         })
+    usage: dict = {}
+    recent: dict = {}
+    for row in workers:
+        if row["usage"]:
+            add_counts(usage, row["usage"]["total"])
+            add_counts(recent, row["usage"]["recent"])
     return {
+        "usage": {"total": usage, "recent": recent, "recentMinutes": USAGE_RECENT_MINUTES} if args.usage else None,
         "main": str(layout.main),
         "root": str(layout.root),
         "sessionsKnown": sessions is not None,
@@ -685,6 +792,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
     p.add_argument("--store", action="store_true", help="with --json: also the entries in progress and in review of the todo store")
+    p.add_argument("--usage", action="store_true", help="with --json: also the tokens of each session and its agents (from the transcripts)")
     p.add_argument("--activity", action="store_true", help="with --json: also the last steps of each session and of its running agents (from the transcripts)")
     p = sub.add_parser("check", help="the shared config and every worker")
     p.add_argument("--fix", action="store_true", help="set a broken core.worktree of the shared submodule back")

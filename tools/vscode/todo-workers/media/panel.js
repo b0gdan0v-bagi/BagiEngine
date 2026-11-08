@@ -103,6 +103,50 @@
         return line;
     }
 
+    function tokens(n) {
+        n = n || 0;
+        if (n >= 1e6) return `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M`;
+        if (n >= 1e3) return `${Math.round(n / 1e3)}k`;
+        return String(n);
+    }
+
+    function shortModel(model) {
+        return String(model || "?").replace(/^claude-/, "");
+    }
+
+    // Tokens: the whole run, the last minutes ("now"), the context of the session, by model.
+    function usageBlock(usage, withContext) {
+        if (!usage || !usage.total || !usage.total.total) return null;
+        const box = el("div", "usage");
+        const top = el("div", "usage-top");
+        top.append(el("span", "label", "Tokens"), el("span", "big", tokens(usage.total.total)));
+        const recent = usage.recent && usage.recent.total;
+        top.append(el("span", `rate${recent ? "" : " muted"}`, `${tokens(recent)} in the last ${usage.recentMinutes} min`));
+        box.appendChild(top);
+        const t = usage.total;
+        const split = el("div", "usage-split muted", `out ${tokens(t.output)} · in ${tokens(t.input)} · cache write ${tokens(t.cacheWrite)} · cache read ${tokens(t.cacheRead)}`);
+        split.title = "Cache reads are what the sessions re-read of their context on every answer; they cost a fraction of other input.";
+        box.appendChild(split);
+        if (withContext) {
+            const parts = [];
+            if (usage.session && usage.agents) parts.push(`loop ${tokens(usage.session.total)} · agents ${tokens(usage.agents.total)}`);
+            if (usage.context) parts.push(`context now ${tokens(usage.context)} (${shortModel(usage.contextModel)})`);
+            if (parts.length) box.appendChild(el("div", "usage-split muted", parts.join(" · ")));
+            const models = Object.entries(usage.models || {}).sort((a, b) => b[1].total - a[1].total);
+            if (models.length) {
+                const row = el("div", "models");
+                const sum = usage.total.total || 1;
+                models.forEach(([model, counts]) => {
+                    const chip = el("span", "model", `${shortModel(model)} ${tokens(counts.total)}`);
+                    chip.title = `${model}: ${Math.round((100 * counts.total) / sum)}% · out ${tokens(counts.output)}`;
+                    row.appendChild(chip);
+                });
+                box.appendChild(row);
+            }
+        }
+        return box;
+    }
+
     function workerCard(worker) {
         const entry = worker.entry;
         const card = el("section", "card");
@@ -122,6 +166,9 @@
         [head("game", worker.head), head("engine", worker.engine)].forEach((h) => h && heads.appendChild(h));
         if (worker.dirty) heads.appendChild(el("div", "warn", "uncommitted changes (a developer is at work)"));
         card.appendChild(heads);
+
+        const usage = usageBlock(worker.usage, true);
+        if (usage) card.appendChild(usage);
 
         const activity = worker.activity;
         if (activity) {
@@ -194,6 +241,13 @@
         }
         if (!state.sessionsKnown) root.appendChild(el("div", "warn", "claude agents did not answer: set todoWorkers.claude to the full path of claude."));
         if (state.store !== "ok" && state.store !== "off") root.appendChild(el("div", "warn", `todo store: ${state.store}`));
+
+        const all = usageBlock(state.usage, false);
+        if (all) {
+            root.appendChild(el("h2", "", "All workers"));
+            all.classList && all.classList.add("summary");
+            root.appendChild(all);
+        }
 
         root.appendChild(el("h2", "", `Workers (${state.workers.length})`));
         if (!state.workers.length) root.appendChild(el("p", "muted", "No worker folders. Make them with: python3 engine/tools/todo/worker.py create 3"));

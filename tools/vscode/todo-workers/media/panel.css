@@ -137,3 +137,23 @@ button {
 }
 button:hover { background: var(--vscode-button-secondaryHoverBackground); }
 button.danger { color: var(--vscode-errorForeground, #f14c4c); }
+.usage {
+    margin: 6px 0 4px;
+    padding: 4px 0;
+    font-size: 12px;
+    border-top: 1px dashed var(--vscode-widget-border, rgba(128, 128, 128, 0.3));
+}
+.usage.summary { border: none; padding: 0; }
+.usage-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.usage .label { font-weight: 600; }
+.usage .big { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.usage .rate { color: var(--vscode-charts-orange, #d18616); }
+.usage-split { margin-top: 2px; font-variant-numeric: tabular-nums; }
+.models { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.model {
+    padding: 0 6px;
+    border-radius: 9px;
+    font-size: 11px;
+    line-height: 18px;
+    background: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.15));
+}

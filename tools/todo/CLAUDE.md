@@ -66,7 +66,7 @@ Exit codes: 0, 1 (settings, network, a guard), 2 (the store refused: 404, 409, 4
 
 ```bash
 python3 tools/todo/worker.py create 3      # <parent>/<name>.workers/w1..w3, the missing ones; --base, --preset, --no-configure
-python3 tools/todo/worker.py list          # the branch of each folder (and of its engine/), clean or not, its background session; --json [--store] [--activity] for tools/vscode/todo-workers (the VS Code panel; --store adds the entries in progress and in review, --activity the last steps of each session and of its agents, read from the transcripts in ~/.claude/projects)
+python3 tools/todo/worker.py list          # the branch of each folder (and of its engine/), clean or not, its background session; --json [--store] [--activity] [--usage] for tools/vscode/todo-workers (the VS Code panel; --store adds the entries in progress and in review, --activity the last steps of each session and of its agents, --usage their tokens (in total, by model, in the last 10 min, the context now); both read from the transcripts in ~/.claude/projects)
 python3 tools/todo/worker.py check [--fix] # the shared config of the engine module and every worker
 python3 tools/todo/worker.py run 2         # cd w2 and start claude in this terminal (arguments after --; --print only prints)
 python3 tools/todo/worker.py start         # /todo-loop in every worker as a background session, a minute apart; [k ...], --slices N, --loop-args, --report-to <session> (the loops send their reports there), --delay S, --print
