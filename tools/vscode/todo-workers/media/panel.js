@@ -232,13 +232,24 @@
         card.append(top, el("div", "title", entry.title));
         if (entry.statusNote) card.appendChild(el("div", "note", entry.statusNote));
         card.appendChild(head("branch", { branch: entry.branch }));
+        // the claim stored where the branch was made (todo.py claim --base: takenBase, takenOrigin); older entries have neither
+        const taken = [entry.takenOrigin ? `taken in ${entry.takenOrigin}` : "", entry.takenBase ? `base ${entry.takenBase}` : ""].filter(Boolean).join(", ");
+        if (taken) card.appendChild(el("div", "muted", taken));
         // worker.py list --store: the branch is not here, or it was cut from another base (another game's)
         const away = entry.local === false || Boolean(entry.foreignBase);
         if (away) {
             card.classList.add("away");
-            card.appendChild(el("div", "warn", entry.foreignBase
-                ? `Cut from ${entry.foreignBase}, not from ${entry.base}: it holds commits that ${entry.base} has not. Review and merge it in the checkout that made it.`
-                : `No branch ${entry.branch} here: it was taken in another checkout or on another machine. Review and merge it there.`));
+            let warning;
+            if (entry.foreignBase && entry.takenBase) {
+                warning = `Taken in ${entry.takenOrigin || "another checkout"}, base ${entry.takenBase}, not ${entry.base}: review and merge it in the checkout that made it.`;
+            } else if (entry.foreignBase) {
+                warning = `Cut from ${entry.foreignBase}, not from ${entry.base}: it holds commits that ${entry.base} has not. Review and merge it in the checkout that made it.`;
+            } else if (entry.takenOrigin) {
+                warning = `No branch ${entry.branch} here: it was taken in ${entry.takenOrigin}. Review and merge it there.`;
+            } else {
+                warning = `No branch ${entry.branch} here: it was taken in another checkout or on another machine. Review and merge it there.`;
+            }
+            card.appendChild(el("div", "warn", warning));
         }
         const actions = el("div", "actions");
         const gated = [
