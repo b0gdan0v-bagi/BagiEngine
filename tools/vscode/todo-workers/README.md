@@ -20,6 +20,8 @@ Above the cards, next to **Refresh** and **Settings**, **Todo list** opens a tab
 
 The notification of a new entry in review offers **Review**, **Review with Claude**, **Quick merge** and **Merge with Claude**. A line in the status bar counts busy and idle workers and entries in review, and a notification comes when an entry reaches review or a session ends.
 
+**Updates.** `todo.py` rewrites `~/.claude/todo/changed.json` after every write the store accepts (a loop's claim, review or plan, a merge, a close, the owner's CLI), and the panel watches that folder: a change reads the workers and the Todo list tab again at once (writes within 0.7 s are one refresh). The timer below stays for what moves without a write (sessions, their steps and tokens); the Todo list tab also reads the store again when it is shown again, for edits made in Vikunja.
+
 It reads `worker.py list --json --store --activity --usage` every 15 s from the first workspace folder that has `tools/todo/worker.py` or `engine/tools/todo/worker.py` (the main checkout); the activity and the tokens come from the session transcripts in `~/.claude/projects/`. Everything shown is put in as text. It writes only a merge the owner confirms, and starts no loop: the loops are started by `/todo-loop-parallel`.
 
 ## Install
@@ -28,7 +30,7 @@ No npm: the packer uses the standard library.
 
 ```bash
 python3 tools/vscode/todo-workers/pack.py        # in a game: engine/tools/vscode/todo-workers/pack.py
-code --install-extension tools/vscode/todo-workers/build/todo-workers-0.9.0.vsix
+code --install-extension tools/vscode/todo-workers/build/todo-workers-0.10.0.vsix
 ```
 
 `code` is in `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/` on macOS when it is not on PATH. Then **Developer: Reload Window**. After a change bump `version` in `package.json`, pack and install again.

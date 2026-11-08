@@ -1,5 +1,7 @@
 """todo.py against the service running in a thread (uvicorn, a real port), and its guards."""
 
+import http.server
+import json
 import socket
 import subprocess
 import threading
@@ -172,3 +174,60 @@ def test_export_writes_entries_and_plans_outside_git(cli, plans_dir, tmp_path):
     assert "1 entries and 1 plans" in out
     assert (tmp_path / "backup" / "engine" / "sample.md").read_text().startswith("---\nstage: 1\n---\n# A sample")
     assert (tmp_path / "backup" / "plans" / "p.md").is_file()
+
+
+class _StubHandler(http.server.BaseHTTPRequestHandler):
+    """Answers every request with `{}`, and 409 for a path that ends with /conflict."""
+
+    def _answer(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        self.rfile.read(length)
+        code = 409 if self.path.endswith("/conflict") else 200
+        body = b'{"detail": "taken"}' if code == 409 else b"{}"
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = _answer
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture
+def stub_api():
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _StubHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield todo.Api(f"http://127.0.0.1:{server.server_address[1]}", "token", "tester")
+    server.shutdown()
+    server.server_close()
+
+
+def test_a_write_rewrites_the_signal_file_and_a_read_does_not(stub_api, changed_file):
+    stub_api.get("/entries")
+    assert not changed_file.exists()
+
+    stub_api.call("POST", "/entries/x/claim", {"branch": "todo/x"})
+    first = json.loads(changed_file.read_text())
+    assert (first["actor"], first["method"], first["path"]) == ("tester", "POST", "/entries/x/claim")
+    assert first["at"]
+
+    stub_api.call("PUT", "/plans/p.md", {"content": "x"})
+    assert json.loads(changed_file.read_text())["path"] == "/plans/p.md"
+    assert [p.name for p in changed_file.parent.iterdir()] == ["changed.json"]  # no temporary file left
+
+
+def test_a_refused_write_leaves_the_signal_alone(stub_api, changed_file):
+    with pytest.raises(todo.TodoError, match="HTTP 409"):
+        stub_api.call("POST", "/entries/x/conflict", {})
+    assert not changed_file.exists()
+
+
+def test_a_signal_that_cannot_be_written_does_not_fail_the_write(stub_api, changed_file, monkeypatch):
+    blocker = changed_file.parent
+    blocker.parent.mkdir(parents=True, exist_ok=True)
+    blocker.write_text("a file where the folder should be")
+    assert stub_api.call("PATCH", "/entries/x", {"title": "t"}) == {}

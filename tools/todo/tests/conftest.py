@@ -52,6 +52,14 @@ def _start_container() -> tuple[str | None, str | None]:
     return None, None
 
 
+@pytest.fixture(autouse=True)
+def changed_file(tmp_path, monkeypatch):
+    """The signal file of todo.py writes (TODO_CHANGED_FILE), kept out of the real ~/.claude."""
+    path = tmp_path / "todo-signal" / "changed.json"
+    monkeypatch.setenv("TODO_CHANGED_FILE", str(path))
+    return path
+
+
 @pytest.fixture(scope="session")
 def database_url():
     url = os.environ.get("TODO_TEST_DATABASE_URL")

@@ -6,7 +6,8 @@
 // terminal with a read-only claude review of the branch. Update (worker.py update) moves an idle worker to the
 // tips of the bases, Fast start (worker.py start <k>) starts its loop at once; /todo-loop-parallel starts them all.
 // Todo list opens a tab with the entries of the todo store (todo.py list), filtered by area, status and text;
-// Attach to free worker there starts `/todo-loop 1 <id>` in a free worker (worker.py start <k>).
+// Attach to free worker there starts `/todo-loop 1 <id>` in a free worker (worker.py start <k>). Both views read
+// again at once when todo.py signals a write (~/.claude/todo/changed.json), besides the timer.
 "use strict";
 
 const vscode = require("vscode");
@@ -15,6 +16,8 @@ const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+
+const STORE_CHANGE_DEBOUNCE_MS = 700; // a claim and its stub plan are two writes: one refresh
 
 const TOOL_PATHS = [path.join("engine", "tools", "todo", "worker.py"), path.join("tools", "todo", "worker.py")];
 
@@ -378,19 +381,33 @@ function activate(context) {
     // The Todo list tab: the entries of the store (todo.py list --all --json --body), read again on Refresh.
     let todoPanel = null;
 
+    let todoLoading = false;
+    let todoAgain = false;
+
     async function loadTodoList() {
         const tool = findTool();
         if (!todoPanel) return;
+        if (todoLoading) {
+            todoAgain = true;
+            return;
+        }
         if (!tool) {
             todoPanel.webview.postMessage({ error: "No tools/todo/todo.py in the workspace folders." });
             return;
         }
+        todoLoading = true;
         todoPanel.webview.postMessage({ loading: true, error: null });
         try {
             const entries = JSON.parse(await runTool(todoTool(tool), ["list", "--all", "--json", "--body"], 30000));
             if (todoPanel) todoPanel.webview.postMessage({ loading: false, entries, areas: state && state.areas ? state.areas : null, workers: workersForList(), at: Date.now() });
         } catch (error) {
             if (todoPanel) todoPanel.webview.postMessage({ loading: false, error: `todo.py list: ${error.message}` });
+        } finally {
+            todoLoading = false;
+            if (todoAgain) {
+                todoAgain = false;
+                loadTodoList();
+            }
         }
     }
 
@@ -515,6 +532,9 @@ function activate(context) {
                 case "startInWorker": return startEntryInWorker(message.entry);
             }
         });
+        todoPanel.onDidChangeViewState((event) => {
+            if (event.webviewPanel.visible) loadTodoList();
+        });
         todoPanel.onDidDispose(() => {
             todoPanel = null;
         });
@@ -593,8 +613,13 @@ function activate(context) {
         status.show();
     }
 
+    let refreshAgain = false;
+
     async function refresh() {
-        if (running) return;
+        if (running) {
+            refreshAgain = true;
+            return;
+        }
         const tool = findTool();
         if (!tool) {
             state = null;
@@ -616,6 +641,36 @@ function activate(context) {
             if (!state) updateStatus(error.message);
         } finally {
             running = false;
+            if (refreshAgain) {
+                refreshAgain = false;
+                refresh();
+            }
+        }
+    }
+
+    // The hook: todo.py rewrites ~/.claude/todo/changed.json (TODO_CHANGED_FILE) after every write the store
+    // accepts (a claim, a review, a close, a plan put, ...), from a worker's loop, a merge or the owner's CLI.
+    // A change reads the workers and the Todo list tab again at once; the timer stays for what moves without a
+    // write (the sessions, their last steps and tokens) and for edits a person makes in Vikunja.
+    function watchStoreChanges() {
+        const file = process.env.TODO_CHANGED_FILE || path.join(os.homedir(), ".claude", "todo", "changed.json");
+        const dir = path.dirname(file);
+        const name = path.basename(file);
+        let pending = null;
+        try {
+            fs.mkdirSync(dir, { recursive: true });
+            const watcher = fs.watch(dir, (event, filename) => {
+                if (filename && filename !== name) return; // the temporary file of the rename
+                clearTimeout(pending);
+                pending = setTimeout(() => {
+                    refresh();
+                    loadTodoList();
+                }, STORE_CHANGE_DEBOUNCE_MS);
+            });
+            watcher.on("error", () => watcher.close());
+            context.subscriptions.push({ dispose: () => { clearTimeout(pending); watcher.close(); } });
+        } catch (error) {
+            // no hook (no folder, no watcher): the timer still refreshes
         }
     }
 
@@ -638,6 +693,7 @@ function activate(context) {
         { dispose: () => timer && clearInterval(timer) }
     );
     schedule();
+    watchStoreChanges();
     refresh();
 }
 
