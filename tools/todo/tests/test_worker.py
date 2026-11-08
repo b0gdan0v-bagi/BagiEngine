@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -251,3 +252,35 @@ def test_list_json_activity_reads_the_session_and_its_agents_from_the_transcript
     running, done = activity["agents"]
     assert (running["type"], running["done"], running["last"][-1]["text"]) == ("todo-reviewer", False, "Run the tests")
     assert (done["type"], done["done"], done["last"][-1]["text"]) == ("todo-developer", True, "WP 1/2 done")
+
+
+def test_list_json_usage_counts_each_answer_once_over_the_session_and_its_agents(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
+    script, _log, sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    w1 = game.parent / "game.workers" / "w1"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    record = session(w1, "working", "a")
+    record["sessionId"] = "sess-1"
+    sessions.write_text(json.dumps([record]))
+    main = worker.transcript_of(str(w1), "sess-1")
+    main.parent.mkdir(parents=True)
+
+    def answer(ident, model, inp, write, read, out, when="2020-01-01T00:00:00Z"):
+        usage = {"input_tokens": inp, "cache_creation_input_tokens": write, "cache_read_input_tokens": read, "output_tokens": out}
+        return json.dumps({"type": "assistant", "timestamp": when, "message": {"id": ident, "model": model, "usage": usage, "content": []}})
+
+    # one answer written twice (two content blocks), the second with the final output
+    main.write_text("\n".join([answer("m1", "claude-sonnet", 1, 100, 0, 5), answer("m1", "claude-sonnet", 1, 100, 0, 7), answer("m2", "claude-sonnet", 2, 10, 100, 3)]) + "\n")
+    agents = main.with_suffix("") / "subagents"
+    agents.mkdir(parents=True)
+    (agents / "agent-x.jsonl").write_text(answer("a1", "claude-opus", 1, 50, 0, 20, when=datetime.now(timezone.utc).isoformat()) + "\n")
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--usage", "--claude", str(script)]) == 0
+    state = json.loads(capsys.readouterr().out)
+    usage = state["workers"][0]["usage"]
+    assert usage["total"] == {"input": 4, "cacheWrite": 160, "cacheRead": 100, "output": 30, "total": 294}
+    assert usage["session"]["total"] == 223 and usage["agents"]["total"] == 71
+    assert {model: counts["total"] for model, counts in usage["models"].items()} == {"claude-sonnet": 223, "claude-opus": 71}
+    assert usage["recent"]["total"] == 71  # only the agent's answer is within the last minutes
+    assert usage["context"] == 112 and usage["contextModel"] == "claude-sonnet"  # the session's last answer: 2 + 10 + 100
+    assert state["usage"]["total"]["total"] == 294

@@ -238,7 +238,12 @@ function activate(context) {
         if (count("idle")) parts.push(`${count("idle")} idle`);
         parts.push(`${state.review.length} review`);
         status.text = `$(server-process) todo ${parts.join(" · ")}`;
-        status.tooltip = state.workers.map((w) => `${w.name}: ${w.entry ? w.entry.id : "no entry"} (${sessionWord(w)})`).join("\n");
+        const lines = state.workers.map((w) => `${w.name}: ${w.entry ? w.entry.id : "no entry"} (${sessionWord(w)})`);
+        if (state.usage && state.usage.total.total) {
+            const m = (n) => `${((n || 0) / 1e6).toFixed(1)}M`;
+            lines.push(`tokens: ${m(state.usage.total.total)}, ${m(state.usage.recent.total)} in the last ${state.usage.recentMinutes} min`);
+        }
+        status.tooltip = lines.join("\n");
         status.backgroundColor = state.review.length ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
         status.show();
     }
@@ -255,7 +260,7 @@ function activate(context) {
         running = true;
         view.show({ ...(state ? { state } : { loading: true }), refreshing: true });
         try {
-            const out = await runTool(tool, ["list", "--json", "--store", "--activity", "--claude", config().claude], 90000);
+            const out = await runTool(tool, ["list", "--json", "--store", "--activity", "--usage", "--claude", config().claude], 90000);
             state = JSON.parse(out);
             view.show({ state, at: Date.now() });
             updateStatus(null);
