@@ -11,6 +11,7 @@ namespace BECore {
 
     class VulkanDevice;
 
+    using VulkanSwapchainPolicy::SwapchainRecreateResult;
     using VulkanSwapchainPolicy::SwapchainStatus;
 
     /**
@@ -34,18 +35,13 @@ namespace BECore {
         bool Initialize(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight);
         void Destroy(VulkanDevice& device);
 
-        enum class RecreateResult {
-            Done,        ///< the swapchain, image views and framebuffers are new, GetExtent() is the new extent
-            ZeroExtent,  ///< the size is zero (minimized): nothing was touched
-            Failed       ///< a Vulkan call failed or the surface no longer offers the format of the render pass; logged
-        };
-
         /// Rebuilds the swapchain for a new size from the old one (oldSwapchain), keeping the render pass. The old
-        /// objects are destroyed only after the new ones exist. On Failed the new objects are released; the old
-        /// swapchain is still there (a driver may have retired it, then the next acquire reports it out of date and
-        /// the caller tries again). The caller must call vkDeviceWaitIdle first: the old framebuffers and image views
+        /// objects are destroyed only after the new ones exist. On Failed the new objects are released. The old
+        /// swapchain stays in place, but once vkCreateSwapchainKHR has been called with it the spec retires it even if
+        /// that call fails: the next acquire reports it out of date and the caller tries again. A Failed before that
+        /// call (no surface format, capabilities not readable) leaves it untouched. The caller must call vkDeviceWaitIdle first: the old framebuffers and image views
         /// may still be in use by frames in flight. Sizes are in pixels.
-        RecreateResult Recreate(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight);
+        SwapchainRecreateResult Recreate(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth, int pixelHeight);
 
         /// Acquire the next swapchain image index. OutOfDate: recreate; the semaphore is not signaled then.
         /// Suboptimal: the image is valid and the semaphore signaled, so the frame must go on.

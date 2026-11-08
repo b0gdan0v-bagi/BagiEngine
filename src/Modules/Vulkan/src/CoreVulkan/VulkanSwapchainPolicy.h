@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Utils/EnumUtils.h>
 #include <algorithm>
 #include <cstdint>
 #include <limits>
@@ -14,13 +15,16 @@
  */
 namespace BECore::VulkanSwapchainPolicy {
 
-    /// What the result of vkAcquireNextImageKHR / vkQueuePresentKHR means for the frame
-    enum class SwapchainStatus {
-        Ok,          ///< success
-        Suboptimal,  ///< the call worked but the swapchain no longer matches the surface; recreate soon
-        OutOfDate,   ///< the swapchain cannot be used any more; recreate it now
-        Failed       ///< any other error (device lost, surface lost, out of memory, ...)
-    };
+    /// What the result of vkAcquireNextImageKHR / vkQueuePresentKHR means for the frame:
+    /// Ok (success), Suboptimal (the call worked but the swapchain no longer matches the surface; recreate soon),
+    /// OutOfDate (the swapchain cannot be used any more; recreate it now), Failed (any other error: device lost,
+    /// surface lost, out of memory, ...)
+    CORE_ENUM(SwapchainStatus, uint8_t, Ok, Suboptimal, OutOfDate, Failed)
+
+    /// What VulkanSwapchain::Recreate did:
+    /// Done (the swapchain, image views and framebuffers are new), ZeroExtent (the size is zero, minimized: nothing
+    /// was touched), Failed (a Vulkan call failed or the surface no longer offers the format of the render pass; logged)
+    CORE_ENUM(SwapchainRecreateResult, uint8_t, Done, ZeroExtent, Failed)
 
     /// The one place that turns a VkResult of acquire or present into a SwapchainStatus
     [[nodiscard]] constexpr SwapchainStatus ClassifyResult(VkResult result) {

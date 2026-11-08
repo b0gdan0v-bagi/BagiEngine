@@ -25,15 +25,8 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    static_assert(ClassifyResult(VK_SUCCESS) == SwapchainStatus::Ok);
-    static_assert(IsMinimized(0, 600) && !IsMinimized(800, 600));
-    static_assert(!NeedsRecreate({800, 600}, 800, 600, false));
-
-    TEST(VulkanSwapchainPolicyTest, CompileTimeChecks) {
-        SUCCEED();
-    }
-
     TEST(VulkanSwapchainPolicyTest, ClassifyResultMapsTheResultsOfAcquireAndPresent) {
+        static_assert(ClassifyResult(VK_SUCCESS) == SwapchainStatus::Ok);
         EXPECT_EQ(ClassifyResult(VK_SUCCESS), SwapchainStatus::Ok);
         EXPECT_EQ(ClassifyResult(VK_SUBOPTIMAL_KHR), SwapchainStatus::Suboptimal);
         EXPECT_EQ(ClassifyResult(VK_ERROR_OUT_OF_DATE_KHR), SwapchainStatus::OutOfDate);
@@ -44,6 +37,7 @@ namespace BECore::Tests {
     }
 
     TEST(VulkanSwapchainPolicyTest, IsMinimizedWhenEitherSideIsZero) {
+        static_assert(IsMinimized(0, 600) && !IsMinimized(800, 600));
         EXPECT_TRUE(IsMinimized(0, 0));
         EXPECT_TRUE(IsMinimized(0, 600));
         EXPECT_TRUE(IsMinimized(800, 0));
@@ -52,6 +46,7 @@ namespace BECore::Tests {
     }
 
     TEST(VulkanSwapchainPolicyTest, NeedsRecreateWhenTheSizeDiffers) {
+        static_assert(!NeedsRecreate({800, 600}, 800, 600, false));
         const VkExtent2D current{800, 600};
         EXPECT_FALSE(NeedsRecreate(current, 800, 600, false));
         EXPECT_TRUE(NeedsRecreate(current, 801, 600, false));

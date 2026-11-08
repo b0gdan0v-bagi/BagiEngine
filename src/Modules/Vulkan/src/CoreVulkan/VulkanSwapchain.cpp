@@ -65,34 +65,37 @@ namespace BECore {
         chain.images.clear();
     }
 
-    VulkanSwapchain::RecreateResult VulkanSwapchain::Recreate(VulkanDevice& device, VkSurfaceKHR surface,
-                                                              int pixelWidth, int pixelHeight) {
+    SwapchainRecreateResult VulkanSwapchain::Recreate(VulkanDevice& device, VkSurfaceKHR surface, int pixelWidth,
+                                                      int pixelHeight) {
         if (VulkanSwapchainPolicy::IsMinimized(pixelWidth, pixelHeight)) {
-            return RecreateResult::ZeroExtent;
+            return SwapchainRecreateResult::ZeroExtent;
         }
 
         // The surface may report a zero extent before the window's pixel size does (a window that is being minimized)
         VkSurfaceCapabilitiesKHR caps{};
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.GetPhysicalDevice(), surface, &caps);
+        if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.GetPhysicalDevice(), surface, &caps) != VK_SUCCESS) {
+            LOG_ERROR("Vulkan: Failed to query the surface capabilities for the recreated swapchain");
+            return SwapchainRecreateResult::Failed;
+        }
         const VkExtent2D extent = VulkanSwapchainPolicy::ChooseExtent(caps, pixelWidth, pixelHeight);
         if (extent.width == 0 || extent.height == 0) {
-            return RecreateResult::ZeroExtent;
+            return SwapchainRecreateResult::ZeroExtent;
         }
 
         Chain next;
         if (!CreateSwapchain(device, surface, pixelWidth, pixelHeight, _chain.format, _chain.swapchain, next)) {
-            return RecreateResult::Failed;
+            return SwapchainRecreateResult::Failed;
         }
         if (!CreateImageViews(device, next) || !CreateFramebuffers(device, next)) {
             LOG_ERROR("Vulkan: Failed to create image views or framebuffers for the recreated swapchain");
             DestroyChain(device, next);
-            return RecreateResult::Failed;
+            return SwapchainRecreateResult::Failed;
         }
 
         // The new objects exist: now the old ones can go (the caller has waited for the device to be idle)
         DestroyChain(device, _chain);
         _chain = eastl::move(next);
-        return RecreateResult::Done;
+        return SwapchainRecreateResult::Done;
     }
 
     SwapchainStatus VulkanSwapchain::AcquireNextImage(VulkanDevice& device, VkSemaphore imageAvailableSemaphore,
