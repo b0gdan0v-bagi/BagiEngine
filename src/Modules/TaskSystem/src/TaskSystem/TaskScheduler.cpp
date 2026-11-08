@@ -1,6 +1,26 @@
 #include <TaskSystem/TaskScheduler.h>
+#include <cmath>
 
 namespace BECore {
+
+    namespace {
+
+        using Rep = TaskScheduler::Duration::rep;
+
+        /// a + b without signed overflow: a sum that does not fit stays at the nearest end of the range.
+        TaskScheduler::Duration SaturatingAdd(TaskScheduler::Duration a, TaskScheduler::Duration b) {
+            const Rep x = a.count();
+            const Rep y = b.count();
+            if (y > 0 && x > std::numeric_limits<Rep>::max() - y) {
+                return TaskScheduler::Duration::max();
+            }
+            if (y < 0 && x < std::numeric_limits<Rep>::min() - y) {
+                return TaskScheduler::Duration::min();
+            }
+            return TaskScheduler::Duration(x + y);
+        }
+
+    }  // namespace
 
     void TaskScheduler::Initialize(ThreadPool* threadPool) {
         ASSERT(threadPool != nullptr, "ThreadPool must not be null");
@@ -23,9 +43,16 @@ namespace BECore {
         }
     }
 
-    void TaskScheduler::ScheduleDelayed(TaskQueue::TaskFunc task, Duration delay, TaskPriority priority, ThreadType threadType) {
+    void TaskScheduler::ScheduleDelayed(TaskQueue::TaskFunc task, Duration delay, TaskPriority priority, ThreadType threadType, DelayClock clock) {
         if (_stopped) {
             LOG_WARNING("[TaskScheduler] Scheduling delayed task on stopped scheduler");
+            return;
+        }
+
+        if (clock == DelayClock::GameTime) {
+            std::lock_guard lock(_delayedMutex);
+            const TimePoint executeTime = TimePoint{} + SaturatingAdd(_gameTime, delay);
+            _gameDelayedTasks.push({std::move(task), executeTime, priority, threadType});
             return;
         }
 
@@ -33,6 +60,24 @@ namespace BECore {
 
         std::lock_guard lock(_delayedMutex);
         _delayedTasks.push({std::move(task), executeTime, priority, threadType});
+    }
+
+    void TaskScheduler::AdvanceGameTime(double seconds) {
+        if (!std::isfinite(seconds) || seconds <= 0.0) {
+            return;
+        }
+
+        // Одно преобразование в Duration: дальше суммы целочисленные. Слишком большой шаг насыщается.
+        constexpr double kMaxSeconds = std::chrono::duration<double>(Duration::max()).count();
+        const Duration step = seconds >= kMaxSeconds ? Duration::max() : std::chrono::duration_cast<Duration>(std::chrono::duration<double>(seconds));
+
+        std::lock_guard lock(_delayedMutex);
+        _gameTime = SaturatingAdd(_gameTime, step);
+    }
+
+    TaskScheduler::Duration TaskScheduler::GetGameTime() const {
+        std::lock_guard lock(_delayedMutex);
+        return _gameTime;
     }
 
     void TaskScheduler::ProcessMainThreadTasks() {
@@ -66,6 +111,12 @@ namespace BECore {
                 readyTasks.push_back(std::move(const_cast<DelayedTask&>(_delayedTasks.top())));
                 _delayedTasks.pop();
             }
+
+            const TimePoint gameNow = TimePoint{} + _gameTime;
+            while (!_gameDelayedTasks.empty() && _gameDelayedTasks.top().executeTime <= gameNow) {
+                readyTasks.push_back(std::move(const_cast<DelayedTask&>(_gameDelayedTasks.top())));
+                _gameDelayedTasks.pop();
+            }
         }
 
         // Планируем готовые задачи
@@ -90,6 +141,9 @@ namespace BECore {
             while (!_delayedTasks.empty()) {
                 _delayedTasks.pop();
             }
+            while (!_gameDelayedTasks.empty()) {
+                _gameDelayedTasks.pop();
+            }
         }
 
         LOG_INFO("[TaskScheduler] Shutdown complete");
@@ -102,7 +156,7 @@ namespace BECore {
 
     size_t TaskScheduler::GetDelayedTaskCount() const {
         std::lock_guard lock(_delayedMutex);
-        return _delayedTasks.size();
+        return _delayedTasks.size() + _gameDelayedTasks.size();
     }
 
     void TaskScheduler::DispatchToThreadPool(TaskQueue::TaskFunc task, TaskPriority priority) {
