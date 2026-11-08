@@ -66,9 +66,11 @@ Exit codes: 0, 1 (settings, network, a guard), 2 (the store refused: 404, 409, 4
 
 ```bash
 python3 tools/todo/worker.py create 3      # <parent>/<name>.workers/w1..w3, the missing ones; --base, --preset, --no-configure
-python3 tools/todo/worker.py list          # the branch of each folder (and of its engine/), clean or not
+python3 tools/todo/worker.py list          # the branch of each folder (and of its engine/), clean or not, its background session
 python3 tools/todo/worker.py check [--fix] # the shared config of the engine module and every worker
-python3 tools/todo/worker.py run 2         # cd w2 and start claude (arguments after --; --print only prints)
+python3 tools/todo/worker.py run 2         # cd w2 and start claude in this terminal (arguments after --; --print only prints)
+python3 tools/todo/worker.py start         # /todo-loop in every worker as a background session, a minute apart; [k ...], --slices N, --loop-args, --delay S, --print
+python3 tools/todo/worker.py stop [k ...]  # stop the background sessions (the conversation is kept)
 python3 tools/todo/worker.py remove 3      # a clean folder; its branches stay (they are refs of the shared .git)
 ```
 
@@ -76,6 +78,7 @@ python3 tools/todo/worker.py remove 3      # a clean folder; its branches stay (
 - **In a game** (a submodule `engine/`): the worker's `engine/` is a worktree of the main checkout's engine module (`.git/modules/engine`), detached at the game's pointer, so engine branches are shared too. A `git submodule update` in a worker's game repository would write the worker's path into the module's shared `core.worktree` and break the main `engine/`, so `create` sets `extensions.worktreeConfig` on the main repository and `submodule.engine.update=none` for the worker only (the update then says "Skipping submodule 'engine'"); `check` compares `core.worktree` with the main `engine/` and `check --fix` sets it back. The nested submodules (`external/*`) are cloned from the main checkout's modules (no network, hard links) with the URL given on the command line, never written to the shared config.
 - **Shared with the main checkout** by symbolic links: `.env` (the store's token), `.claude/settings.local.json` (the permissions of Claude Code, so a yes in one session holds in all), `.venv` / `engine/.venv` (the reflection generator; a link is not matched by `.venv/`, so it goes into `info/exclude`). A new worker is checked clean before it is used.
 - **Builds:** each worker has its own `build/`, and `create` runs its first configure (with the main checkout's venv on `PATH`; a failure is printed, the build skill configures again). No ccache: measured on the owner's machine (14 cores, 2026-11-07) a full build of the game takes about 17 s, and between worktrees ccache hit only 32 % (the PCH and the generated reflection code have absolute paths). `run` sets `CMAKE_BUILD_PARALLEL_LEVEL` to the cores divided by the number of workers, so three builds at once share the machine.
+- **One command for all of them:** `start` runs `claude --bg --name todo-w<k> '/todo-loop N'` in each worker (a real session in the background, the permission mode of the settings, `CMAKE_BUILD_PARALLEL_LEVEL` as for `run`), `--delay` seconds apart (60: two loops that choose at the same moment can take entries whose files meet; the claim only keeps them off one entry). A worker whose session has not finished (`claude agents --json`: a background session in the folder whose `state` is not `done`) is left alone, so `start` again restarts only the finished ones. A session that waits for a permission stops its loop until someone answers: `list` shows the state, `claude attach todo-w<k>` opens it, `claude agents` shows every session. A folder that Claude Code does not trust yet cannot start in the background: `run <k>` once and accept the prompt. `stop` stops a session; its loop leaves the entry `in progress` on its branch and the next loop in that worker continues it.
 - **Removing:** `git worktree remove` refuses a worktree with submodules, so `remove` deletes a clean folder and runs `git worktree prune` in both repositories.
 
 ## Railway
