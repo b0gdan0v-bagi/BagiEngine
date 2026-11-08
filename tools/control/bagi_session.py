@@ -80,7 +80,8 @@ class GameSession:
             client.timeout = timeout
         try:
             return client.call(method, params)
-        except ConnectionClosed as error:
+        except (ConnectionClosed, ConnectionResetError, ConnectionAbortedError, BrokenPipeError) as error:
+            # A game that is gone reads as a close frame or the end of the stream, and as a reset (Windows: WinError 10053 / 10054) when requests were in flight
             self._drop_client()
             raise SessionError(f"the game closed the connection ({error}); {self._exit_note()}") from error
         except TimeoutError as error:

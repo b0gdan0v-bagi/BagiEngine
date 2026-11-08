@@ -39,7 +39,7 @@ SDL3 integration: window, input events and the SDL renderer backend. `Vulkan` is
 
 - `SDLMainWindow` sets the hint `SDL_HINT_VIDEO_DRIVER` to `dummy` before `SDL_Init` (the hint is reset on `Destroy()`, so a later window picks its driver again) and takes `SDL_WINDOW_VULKAN` out of the configured flags. The window keeps the configured size, which is also the size of the picture.
 - `SDL3ApplicationFabric` ignores the `renderer` attribute and creates `SDLRendererBackend`, which asks SDL for the `software` renderer when its window is headless (the Vulkan backend needs a real surface). The texture loader follows the renderer (`SDLTextureLoader::CanLoad`), so sprites load as usual.
-- Checked on macOS only: the `dummy` driver with the software renderer works, a hidden `cocoa` window with the software renderer does not (`software not available`), and the `offscreen` driver needs OpenGL. Windows is not checked.
+- Checked on macOS only: the `dummy` driver with the software renderer works, a hidden `cocoa` window with the software renderer does not (`software not available`), and the `offscreen` driver needs OpenGL. On Windows 11 (MSVC, Debug) the `dummy` driver with the software renderer works too: `SDLCaptureTest` and the control smoke (screenshots decoded and compared) pass there.
 - The Editor run mode cannot be headless (its viewport is an offscreen render target, which this backend does not implement): `Application` stops the start-up with a log line.
 - A headless game has no vsync, so on the real clock it draws frames as fast as it can. Use it with `--manual-clock`.
 

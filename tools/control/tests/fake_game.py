@@ -6,7 +6,8 @@
 The environment variable FAKE_GAME_EXIT makes it exit at once (code 3) like --exit-immediately.
 
 Methods: ping, status, list_games, get_state (echoes the flags), list_actions, perform_action (a refusal for {"type": "bad"}),
-step, screenshot (a 2x1 PNG), quit (exits the process). Runs until quit.
+step, screenshot (a 2x1 PNG), quit (exits the process). Runs until quit, or until WATCHDOG_SECONDS have passed: on Windows the
+tests start it through a .bat, and killing the .bat (GameProcess.stop) would leave this process listening.
 """
 
 import base64
@@ -21,6 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # bagi_control_cli
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # fake_control_server
 
 from fake_control_server import FakeControlServer, FakeError, QuitServer  # noqa: E402
+
+WATCHDOG_SECONDS = 60.0
 
 
 def png_2x1() -> bytes:
@@ -72,7 +75,8 @@ def main() -> int:
     server = FakeControlServer(handle)
     server.start(port)
     print(f"fake game: listening on {port}", flush=True)
-    while not server.quit_requested.is_set():
+    deadline = time.monotonic() + WATCHDOG_SECONDS
+    while not server.quit_requested.is_set() and time.monotonic() < deadline:
         time.sleep(0.02)
     time.sleep(0.05)
     server.stop()

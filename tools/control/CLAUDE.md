@@ -15,7 +15,7 @@ Python tools that drive a game through the control API (`src/Modules/RemoteContr
 
 ## Running
 
-Use the repository venv (`CI/setup_venv.*` makes `.venv`; on Windows `.venv\Scripts\python`), then once `.venv/bin/pip install -r tools/control/requirements.txt`.
+Use the repository venv (`CI/setup_venv.*` makes `.venv`; on Windows `.venv\Scripts\python`, made by `CI\setup_venv.bat`, which needs `uv`), then once `.venv/bin/pip install -r tools/control/requirements.txt` (Windows: `uv pip install --python .venv\Scripts\python.exe -r tools/control/requirements.txt`).
 
 ```bash
 .venv/bin/python -m pytest tools/control/tests                # the tests
@@ -36,4 +36,4 @@ Use the repository venv (`CI/setup_venv.*` makes `.venv`; on Windows `.venv\Scri
 
 ## Tests without the real things
 
-`tests/fake_control_server.py` (a WebSocket server answering from a Python function), `fake_game.py` (a game executable that serves it). Executables are made as scripts with a shebang, so tests that need them are skipped on Windows. New tool code gets a test against these before it is tried on the real game.
+`tests/fake_control_server.py` (a WebSocket server answering from a Python function), `fake_game.py` (a game executable that serves it). The `fake_game_exe` fixture of `test_dispatch.py` makes the executable: a script with a shebang, and on Windows a `FakeGame.bat` that runs `fake_game.py` with `%*`, so no test is skipped there. Killing the `.bat` (`GameProcess.stop`) ends `cmd.exe` and not the Python process behind it, so `fake_game.py` ends by itself after `WATCHDOG_SECONDS` (60 s) if nobody sent `quit`. A game that is gone can show as a reset connection (`WinError 10053` / `10054`) as well as a close frame; `GameSession.call` reports both as "the game closed the connection". New tool code gets a test against these before it is tried on the real game.
