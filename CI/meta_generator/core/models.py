@@ -338,6 +338,27 @@ class FactoryBaseData:
 
 
 @dataclass
+class ParseWarning:
+    """A reflection marker the parser saw but could not turn into metadata."""
+    line: int
+    kind: str  # "class", "field" or "method"
+    message: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {"line": self.line, "kind": self.kind, "message": self.message}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ParseWarning':
+        """Create from dictionary."""
+        return cls(
+            line=data.get("line", 0),
+            kind=data.get("kind", ""),
+            message=data.get("message", ""),
+        )
+
+
+@dataclass
 class FileMetadata:
     """Metadata for a single source file."""
     path: str
@@ -345,6 +366,7 @@ class FileMetadata:
     last_scanned: str  # ISO timestamp
     classes: List[ClassData] = field(default_factory=list)
     enums: List[EnumData] = field(default_factory=list)
+    warnings: List[ParseWarning] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -354,6 +376,7 @@ class FileMetadata:
             "last_scanned": self.last_scanned,
             "classes": [c.to_dict() for c in self.classes],
             "enums": [e.to_dict() for e in self.enums],
+            "warnings": [w.to_dict() for w in self.warnings],
         }
     
     @classmethod
@@ -361,10 +384,12 @@ class FileMetadata:
         """Create from dictionary."""
         classes = [ClassData.from_dict(c) for c in data.get("classes", [])]
         enums = [EnumData.from_dict(e) for e in data.get("enums", [])]
+        warnings = [ParseWarning.from_dict(w) for w in data.get("warnings", [])]
         return cls(
             path=data["path"],
             content_hash=data["content_hash"],
             last_scanned=data["last_scanned"],
             classes=classes,
             enums=enums,
+            warnings=warnings,
         )

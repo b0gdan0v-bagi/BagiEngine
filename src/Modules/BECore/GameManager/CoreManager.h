@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Animation/TweenManager.h>
 #include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Control/ControlService.h>
@@ -99,6 +100,11 @@ namespace BECore {
             return GetInstance()._time;
         }
 
+        /// The tweens of the game, ticked once per frame from the frame time (`Animation/CLAUDE.md`). Main thread only
+        static TweenManager& GetTweens() {
+            return GetInstance()._tweenManager;
+        }
+
         static ControlService& GetControlService() {
             return GetInstance()._controlService;
         }
@@ -168,6 +174,9 @@ namespace BECore {
         TextureLibrary _textureLibrary;
         FontAtlasLibrary _fontAtlasLibrary;
         Time _time;
+        // A setter may point into a scene: OnApplicationDeinit and OnTestEnvironmentDeinit Clear() it first. Declared after _sceneManager on purpose: the
+        // destructor then drops the tweens before the scenes go, a second guarantee besides Clear(); moving it above _sceneManager could break that silently
+        TweenManager _tweenManager;
         ControlService _controlService;
     };
 

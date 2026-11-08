@@ -11,7 +11,7 @@ You are the **conductor** and do everything yourself, no agents. The skill takes
 
 The terms `<area>`, `<R>` (repository of the area), `<base>`, `<engine>` and `todo` (`python3 <engine>/tools/todo/todo.py --actor todo-merge`) are the ones of `todo-loop/SKILL.md` ("Areas and the repository rules"), taken from `.claude/rules/todo-project.md`. Read that file first.
 
-Before the answer of step 5 you change nothing: only reads, `git -C <R> switch <base>` (the one change to the checkout; step 5 undoes it on `No`) and `git merge-tree`.
+Run it in the main checkout, the one that holds the base branches; a worker folder of the loop (`worker.py`) cannot switch to them. Before the answer of step 5 you change nothing: only reads, `git -C <R> switch <base>` (the one change to the checkout; step 5 undoes it on `No`) and `git merge-tree`.
 
 ## Steps
 
@@ -21,7 +21,7 @@ Before the answer of step 5 you change nothing: only reads, `git -C <R> switch <
    - Without an argument: one candidate is taken as is; several candidates go to the owner in one AskUserQuestion (area, title, branch, the note of the status); none: say "nothing to merge" and stop.
 3. **Dry check.** `git -C <R> merge-tree --write-tree <base> <branch>`: a non-zero exit code means conflicts, so report the files and stop (the skill never resolves conflicts). Compare `git -C <R> merge-base <base> <branch>` with the tip of `<base>`: if they differ, "the base moved since the branch was cut" is a flag for the report and for step 6.
 4. **Report.** In Russian, short, printed before the question:
-   - the title of the entry, the area and the branch;
+   - the title of the entry, the area and the branch, and where it can be tried live: the worker folder that has it checked out (`git -C <R> worktree list`; the loops run in worker folders, `todo-loop/SKILL.md`, "Parallel workers"), else the main checkout with `git -C <R> switch <branch>`;
    - if the `statusNote` has `slice K of M, after the merge set the status back to open`: a warning that the merge does not finish the entry (closing sets it back to `open` instead of closing it);
    - what was done and how it was checked: the `statusNote` of the entry;
    - `git -C <R> log --oneline <base>..<branch>` and `git -C <R> diff --stat <base>...<branch>`, plus two to four lines of your own on what changed, from the commit subjects and a look at the diff of the non-test files;
@@ -31,9 +31,9 @@ Before the answer of step 5 you change nothing: only reads, `git -C <R> switch <
 5. **Ask.** One AskUserQuestion: `Merge + close + delete branch` (for an engine branch in a game: `+ move the pointer of engine/`), `Merge only (no close, the branch stays)`, `No`. `No` ends the skill with nothing changed: switch every area repository back to its starting branch first, so the owner stays on the branch they were trying.
 6. **Merge.** `git -C <R> merge --no-ff -m "Merge branch '<branch>'"` on `<base>` with the Co-Authored-By line the conversation gives (the history uses this form). If the merge fails for any reason: `git -C <R> merge --abort`, switch back to the starting branches, report, stop. If the base had moved (step 3), also build with the preset of `build` and run `ctest --preset <p>` on the result (the targets of the rules file); red tests: stop before step 7, name the failing tests, leave the merge commit (it is local; no reset, the owner decides).
 7. **Close** (only for the full answer). Do step 3 of "Closing merged entries" in `todo-loop/SKILL.md` for the entry of this branch only: `todo close <id> --reopen` for a slice that does not finish the entry, else `todo close <id>`. Other entries that wait to be closed are named in the report and left alone. No commit: the store holds the status, and the service mirrors it into Vikunja.
-8. **Delete the branch** (only for the full answer, after step 7): `git -C <R> branch -d <branch>`. On failure report it and leave the branch.
+8. **Delete the branch** (only for the full answer, after step 7). A branch checked out in a worker folder cannot be deleted: find it in `git -C <R> worktree list --porcelain` (for an engine branch in a game, the worktree is the worker's `engine/`) and, when `git -C <worktree> status --porcelain` is empty, `git -C <worktree> switch --detach <base>`; when it is not empty, leave the branch and say which folder holds it. Then `git -C <R> branch -d <branch>`. On failure report it and leave the branch.
 9. **Move the pointer** (only for the full answer and only for an entry of the engine area in a game). `engine/` now stands on the merged `<base>`. In the game repository: `git add engine` and one commit `Update engine: <title>` with the Co-Authored-By line the conversation gives, on the branch the game repository stands on (it is the owner's own; if that is not its base branch, say so in the report and still commit only the pointer). Nothing else is staged. The pointer is never moved before the merge, and never to a commit that is not in `<base>`.
-10. **Report the result.** In Russian: the merge commit, the pointer commit, the new status of the entry (`closed`, or `open` for the next slice), whether the branch was deleted, whether build and tests ran, and where the checkout stands now (the base branch, since the work branch is gone). End by saying that `git push` is the owner's.
+10. **Report the result.** In Russian: the merge commit, the pointer commit, the new status of the entry (`closed`, or `open` for the next slice), whether the branch was deleted, whether build and tests ran, where the checkout stands now (the base branch, since the work branch is gone) and the worker folder moved off it, if any. Name the other branches in `review` of the same area: their base has moved now, and their own `merge-tree` check comes when they are merged. End by saying that `git push` is the owner's.
 
 ## Forbidden
 

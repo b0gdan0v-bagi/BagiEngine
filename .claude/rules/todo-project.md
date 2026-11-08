@@ -16,6 +16,13 @@ Read by the skills `todo-loop`, `todo-merge`, `todo-add`, `todo-db` and by the a
 - The build, format and include commands (product, test targets, configure triggers, the `format_sources.py` and `strip_pch_includes.py` calls) are in `build-project.md`; the targets above are the ones the loop uses.
 - Read first: `CLAUDE.md` (style, DO and DON'T), the nested `CLAUDE.md` of the touched directories and the matching `.claude/rules/` file.
 
+## Workers
+
+Parallel loops run in worker folders (`.claude/skills/todo-loop/SKILL.md`, "Parallel workers"; `tools/todo/CLAUDE.md`, "Workers"): `python3 tools/todo/worker.py create 3` in the main checkout makes `../BagiEngine.workers/w1` ... `w3`, `/todo-loop-parallel` (or `worker.py start`) runs `/todo-loop` in all of them as background sessions a minute apart (`worker.py list` shows them, `worker.py run <k>` opens one in a terminal). Three suit the owner's machine (14 cores; a full build takes about 17 s there, and `worker.py run` gives each session a share of the cores).
+
+- **Shared files**, which do not count alone when the loop compares busy files: `CLAUDE.md`, `README.md` (every entry touches them a little; the developer keeps its edits to its own lines).
+- Everything else counts as it is: two entries that change the same source, config or test file wait for each other.
+
 ## Zones nobody edits
 
 The vendored code: `src/Modules/EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`, `pugixml/`, `RmlUi/`, `stb/`, and `external/`.
