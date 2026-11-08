@@ -59,6 +59,59 @@ namespace BECore::Tests {
         EXPECT_EQ(ReadRunMode(ParseRoot(empty, R"(<root mode=""/>)")), RunMode::Editor);
     }
 
+    TEST(RunModeTest, ResolveKeepsGame) {
+        EXPECT_EQ(ResolveRunMode(RunMode::Game), RunMode::Game);
+    }
+
+    // Editor survives only in a build that has the editor; otherwise it becomes Game (and logs one warning)
+    TEST(RunModeTest, ResolveKeepsEditorOnlyInABuildWithTheEditor) {
+        EXPECT_EQ(ResolveRunMode(RunMode::Editor), kEditorBuilt ? RunMode::Editor : RunMode::Game);
+    }
+
+    TEST(RunModeTest, EditorBuiltFollowsTheBuildDefinition) {
+        EXPECT_EQ(kEditorBuilt, BE_WITH_EDITOR == 1);
+    }
+
+    TEST(RunModeTest, OtherRunModeIsAnInvolution) {
+        EXPECT_EQ(OtherRunMode(RunMode::Editor), RunMode::Game);
+        EXPECT_EQ(OtherRunMode(RunMode::Game), RunMode::Editor);
+        EXPECT_EQ(OtherRunMode(OtherRunMode(RunMode::Editor)), RunMode::Editor);
+        EXPECT_EQ(OtherRunMode(OtherRunMode(RunMode::Game)), RunMode::Game);
+    }
+
+    namespace {
+        constexpr SDL_Keymod kCtrlShift = SDL_KMOD_LCTRL | SDL_KMOD_LSHIFT;
+    }  // namespace
+
+    TEST(RunModeTest, CtrlShiftEIsTheToggle) {
+        EXPECT_TRUE(IsEditorToggle(SDLK_E, kCtrlShift, false));
+    }
+
+    TEST(RunModeTest, TheToggleTakesEitherCtrlAndEitherShift) {
+        EXPECT_TRUE(IsEditorToggle(SDLK_E, SDL_KMOD_RCTRL | SDL_KMOD_LSHIFT, false));
+        EXPECT_TRUE(IsEditorToggle(SDLK_E, SDL_KMOD_LCTRL | SDL_KMOD_RSHIFT, false));
+        EXPECT_TRUE(IsEditorToggle(SDLK_E, SDL_KMOD_RCTRL | SDL_KMOD_RSHIFT, false));
+    }
+
+    TEST(RunModeTest, TheToggleIgnoresLockKeys) {
+        EXPECT_TRUE(IsEditorToggle(SDLK_E, kCtrlShift | SDL_KMOD_CAPS | SDL_KMOD_NUM, false));
+    }
+
+    TEST(RunModeTest, ARepeatIsNotTheToggle) {
+        EXPECT_FALSE(IsEditorToggle(SDLK_E, kCtrlShift, true));
+    }
+
+    TEST(RunModeTest, OtherChordsAreNotTheToggle) {
+        EXPECT_FALSE(IsEditorToggle(SDLK_E, SDL_KMOD_NONE, false));
+        EXPECT_FALSE(IsEditorToggle(SDLK_E, SDL_KMOD_LCTRL, false));
+        EXPECT_FALSE(IsEditorToggle(SDLK_E, SDL_KMOD_LSHIFT, false));
+        EXPECT_FALSE(IsEditorToggle(SDLK_Q, kCtrlShift, false));
+        EXPECT_FALSE(IsEditorToggle(SDLK_E, kCtrlShift | SDL_KMOD_LALT, false));
+        EXPECT_FALSE(IsEditorToggle(SDLK_E, kCtrlShift | SDL_KMOD_RALT, false));
+        EXPECT_FALSE(IsEditorToggle(SDLK_E, SDL_KMOD_LGUI | SDL_KMOD_LSHIFT, false));
+        EXPECT_FALSE(IsEditorToggle(SDLK_E, kCtrlShift | SDL_KMOD_LGUI, false));
+    }
+
     TEST(RunModeTest, AMissingConfigIsEditor) {
         EXPECT_EQ(ReadRunMode(XmlNode{pugi::xml_node{}}), RunMode::Editor);
     }

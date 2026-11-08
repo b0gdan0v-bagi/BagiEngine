@@ -37,7 +37,7 @@ namespace BECore {
     }
 
     void WidgetManager::CreateWidgets() {
-        const RunMode mode = ReadRunMode(CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern));
+        const RunMode mode = ResolveRunMode(ReadRunMode(CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern)));
         LOG_INFO("Run mode: {}"_format(EnumUtils<RunMode>::ToString(mode)));
 
         const PoolString configName = GetWidgetsConfigName(mode);

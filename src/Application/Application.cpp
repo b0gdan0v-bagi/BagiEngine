@@ -45,7 +45,8 @@ namespace BECore {
 
         // The editor draws its viewport into an offscreen target, which the software renderer of a headless run does not have
         const auto& applicationConfig = CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern);
-        if (controlSettings->headless && ReadRunMode(applicationConfig) == RunMode::Editor) {
+        // The resolved mode (ResolveRunMode) without its warning: CreateWidgets resolves and warns once
+        if (controlSettings->headless && kEditorBuilt && ReadRunMode(applicationConfig) == RunMode::Editor) {
             LOG_ERROR("Headless: the Editor run mode cannot run without a window; set mode=\"Game\" in ApplicationConfig.xml");
             LogEvent::Flush();
             return false;
