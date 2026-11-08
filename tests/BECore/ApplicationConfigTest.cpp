@@ -71,12 +71,12 @@ namespace BECore::Tests {
             SCOPED_TRACE(xml.c_str());
             const auto load = Load(eastl::string_view(xml.data(), xml.size()));
             EXPECT_EQ(load.config._controlPort, kDefaultControlPort);
-            EXPECT_TRUE(HasOnlyErrorAt(load, "controlPort"));
+            EXPECT_TRUE(HasOnlyErrorAt(load, ApplicationConfigFields::kControlPort));
         }
     }
 
     TEST(ApplicationConfigTest, BadBooleanIsReportedUnderItsNameAndKeepsTheDefault) {
-        for (const char* name : {"control", "manualClock", "headless"}) {
+        for (const eastl::string_view name : {ApplicationConfigFields::kControl, ApplicationConfigFields::kManualClock, ApplicationConfigFields::kHeadless}) {
             for (const char* value : {"yes", "True", "2", ""}) {
                 const eastl::string xml = Format("<root {}=\"{}\"/>", name, value);
                 SCOPED_TRACE(xml.c_str());

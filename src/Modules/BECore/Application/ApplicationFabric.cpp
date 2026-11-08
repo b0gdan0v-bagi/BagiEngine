@@ -12,7 +12,7 @@ namespace BECore {
             return false;
         }
 
-        auto fabric = AbstractFactory<IApplicationFabric>::GetInstance().Create(eastl::string_view(config._type.data(), config._type.size()));
+        auto fabric = AbstractFactory<IApplicationFabric>::GetInstance().Create(config._type);
         if (!fabric) {
             LOG_ERROR("ApplicationConfig: unknown type '{}'"_format(config._type));
             return false;

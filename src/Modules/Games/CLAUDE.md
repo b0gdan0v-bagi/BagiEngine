@@ -44,7 +44,7 @@ Writing the adapter of a game:
 
 `Singleton<GameManager>`, driven by `Application`: `Initialize()` runs in `Application::Initialize()`, `Shutdown()` on exit.
 
-- `Initialize()` creates one instance of every registered `IGame`, reads an optional `GamesConfig.xml` (`<defaultGame name="Match3"/>`) and activates the default, or the first registered game when none is configured. A game executable has exactly one registered game, so no `GamesConfig.xml` is needed.
+- `Initialize()` creates one instance of every registered `IGame`, reads an optional `GamesConfig.xml` (`<defaultGame name="Match3"/>`) through the reflected `GamesConfig` (`Games/GamesConfig.h`; errors of the file are logged as `Config 'GamesConfig': ...`) and activates the default, or the first registered game when none is configured. A game executable has exactly one registered game, so no `GamesConfig.xml` is needed.
 - `SwitchTo(name)`: `Stop()` on the old game → `SceneManager::SetActiveScene(GetSceneName())` → `Start()` on the new one. Unknown or already-active names are a no-op.
 - `ResetActive()` calls `IGame::Reset()`; `GetActive()` / `GetAll()` for lookups.
 

@@ -25,7 +25,7 @@ namespace BECore {
 
         auto window = BECore::New<SDLMainWindow>();
         window->SetHeadless(options.headless);
-        if (!window->Initialize(eastl::string_view(config._path.data(), config._path.size()))) {
+        if (!window->Initialize(config._path)) {
             return false;
         }
         CoreManager::GetInstance().GetMainWindowManager().SetMainWindow(window);
