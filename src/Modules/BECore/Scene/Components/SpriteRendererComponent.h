@@ -36,6 +36,11 @@ namespace BECore {
          */
         void SetTexture(IntrusivePtr<ITexture> texture);
 
+        /// The texture handle (empty when the sprite has none), for SceneDrawSystem to mirror into SpriteDrawData.
+        const ResourceHandle<ITexture>& GetTexture() const {
+            return _texture;
+        }
+
     private:
         ResourceHandle<ITexture> _texture;
     };

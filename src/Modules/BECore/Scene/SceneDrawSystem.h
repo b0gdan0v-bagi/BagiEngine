@@ -18,6 +18,9 @@ namespace BECore {
      * Run() writes a SceneDrawItem for every node of the tree, sorts that storage by (layer, order) and walks a view over
      * it, calling IComponent::OnDraw() of each node's components in component order. The order is the one documented at
      * Scene::Draw(). The view is the only source of the order: nothing keeps a second list of the nodes.
+     *
+     * The same walk mirrors TransformComponent, QuadRendererComponent and SpriteRendererComponent into the registry as
+     * TransformData, QuadDrawData and SpriteDrawData (SceneRenderData.h); the components stay the source of truth.
      */
     class SceneDrawSystem {
     public:
