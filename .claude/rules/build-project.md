@@ -52,6 +52,17 @@ Engine:
 
 Engine: `ctest --preset <p>` runs every gtest in its own process (`BagiEngineTests`, `Match3Tests`) and `BagiMatch3ControlSmoke`, a Python script that starts the game `--headless` and plays it over the control API. The smoke test is skipped (exit code 77) when the executable is not built. A `--target` list without the product (what the argument `tests` builds) builds no game, so add the product to run the smoke test. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests`.
 
+**Parallel run.** `ctest --preset <p>` runs 8 tests at once (`execution.jobs` 8 in `test-base` of `CMakePresets.json`; the game repositories get it through the included presets). `-j1` runs them one at a time, `-jN` sets another number; `CTEST_PARALLEL_LEVEL` does **not** override a preset. The smoke test takes the `bagi_control_smoke` lock (no other smoke test beside it; unit tests run beside it). Do not start several `ctest`s in one build folder at the same moment right after a build (`gtest_discover_tests` rewrites `<Exe>[1]_tests.cmake` and two writers corrupt it: delete `build/<p>/**/<Exe>*_tests.cmake` and run `ctest -N` once). Rules for a test that runs beside others: `.claude/rules/tests-module.md`.
+
+Timings, `ctest --preset macos-debug` on a warm Debug build, 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs per row, interleaved:
+
+| Set | `-j1` | `-j4` | `-j8` (preset) | `-j14` |
+|-----|-------|-------|----------------|--------|
+| Engine: `BagiEngineTests` + `Match3Tests` + `BagiMatch3ControlSmoke` (1455 tests) | 86.0 / 86.0 / 80.9 s (min 80.9, median 86.0) | 21.6 / 20.2 / 20.4 s (median 20.4) | 12.2 / 10.3 / 10.3 s (median 10.3) | 8.5 / 7.7 / 7.8 s (median 7.8) |
+| Mahjong: `MahjongTests` + `BagiMahjongControlSmoke` (630 tests, a game repository) | 49.7 / 50.1 / 49.7 s (median 49.7) | | 8.1 / 8.4 / 7.7 s (median 8.1) | |
+
+About 8 times faster with 8 jobs. 14 jobs (all cores) is a further 25 % on this machine but leaves nothing for other work and does not suit a smaller one, so the preset keeps 8. Stability: `ctest --preset macos-debug --repeat until-fail:10` passed 10 times in a row on the engine set (14550 test runs, 106 s) and on the Mahjong set (6300 runs, 74 s); the serial reference `-j1 --repeat until-fail:3` passed 3 times (239 s).
+
 ### Local overrides
 
 Engine: `CMakeUserPresets.json` (git-ignored) holds per-machine settings. It may inherit from the shared presets, but it needs its own build preset to appear in CMake Tools:

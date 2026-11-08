@@ -652,11 +652,13 @@ if(ENGINE_BUILD_TESTS)
     # to gtest_discover_tests: it also decides where cmake_test_discovery_*.json is written.
     # The test presets run ctest in parallel (execution.jobs of test-base in CMakePresets.json), so a test case
     # runs beside others, in other processes: it may share read-only inputs (config/, the
-    # source tree) and nothing it writes. Temp folders and files carry the test name and a per-process tag
-    # (tests/Common/TempPath.h), servers bind port 0, nothing is awaited by a fixed sleep, and no test reads the
-    # engine.log of the working directory (every process truncates it). A test that cannot keep to this gets
-    # RUN_SERIAL (alone in the run) or a RESOURCE_LOCK (not beside the tests with the same lock) in
-    # set_tests_properties; none of the engine's gtest cases needs either.
+    # source tree) and nothing it writes. Temp folders and files get a per-process tag from
+    # tests/Common/TempPath.h (TestTempDirectory: test name and tag; TestTempPath: a stem and the tag; the
+    # RmlUi-only RmlUiHostTest still names its folder after the test alone), servers bind port 0, nothing is
+    # awaited by a fixed sleep, and no test reads the engine.log of the working directory (every process
+    # truncates it). A test that cannot keep to this gets RUN_SERIAL (alone in the run) or a RESOURCE_LOCK
+    # (not beside the tests with the same lock) in set_tests_properties; none of the engine's gtest cases
+    # needs either.
     function(be_add_game_tests NAME)
         cmake_parse_arguments(ARG "" "" "SOURCES;LINK;WHOLE_ARCHIVE" ${ARGN})
 
@@ -707,8 +709,9 @@ if(ENGINE_BUILD_TESTS)
     # The smoke test runs beside the unit tests of the parallel ctest run: it takes a free port by itself (a port
     # that is taken in the moment between the probe and the bind makes smoke.py retry once on a new one) and
     # touches no file the unit tests use. The RESOURCE_LOCK only keeps two smoke tests of one ctest run apart;
-    # it is not RUN_SERIAL, which would stop every other test while it runs. TIMEOUT 120 covers the two runs of
-    # the script with their own limits (30 s startup, 15 s shutdown) and one retry on a loaded machine.
+    # it is not RUN_SERIAL, which would stop every other test while it runs. TIMEOUT 120 covers the usual run (a few
+    # seconds) and one retry with a wide margin; a stuck game is cut off by the script's own limits (30 s
+    # startup, 15 s shutdown) or by this one.
     function(be_add_game_control_tests EXE_TARGET)
         cmake_parse_arguments(ARG "" "SCRIPT" "" ${ARGN})
         if(NOT ARG_SCRIPT)
