@@ -31,6 +31,7 @@ Python 3.10+, standard library only.
 
 import argparse
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -50,6 +51,7 @@ DEFAULT_PRESETS = {"darwin": "macos-debug"}
 # The name of a worker's background session (`claude --bg --name`), how `claude attach` finds it.
 SESSION_PREFIX = "todo-w"
 DEFAULT_DELAY_S = 60
+REPORT_TO_NAME = re.compile(r"[A-Za-z0-9._-]+")
 
 
 class WorkerError(Exception):
@@ -325,7 +327,7 @@ def cmd_create(layout: Layout, args) -> None:
     problems = check_shared_config(layout, fix=False)
     if problems:
         raise WorkerError(problems[0])
-    print("\nStart a session per worker: python3 <engine>/tools/todo/worker.py run <k> (one terminal each, a minute apart)")
+    print(f"\nStart them: /todo-loop-parallel, or {tool_command(layout)} start (one background session per worker, a minute apart)")
 
 
 def cmd_list(layout: Layout, args) -> None:
@@ -402,6 +404,25 @@ def chosen_workers(layout: Layout, numbers: list[int]) -> list[tuple[int, Path]]
     return [(k, known[k]) for k in dict.fromkeys(numbers)]
 
 
+def tool_command(layout: Layout) -> str:
+    """How the owner calls this script from the main checkout (`engine/tools/...` in a game)."""
+    here = Path(__file__).resolve()
+    try:
+        return f"python3 {here.relative_to(layout.main.resolve())}"
+    except ValueError:
+        return f"python3 {here}"
+
+
+def loop_prompt(args) -> str:
+    """The prompt of a worker's session: `/todo-loop N [loop args] [report-to=<session>]`."""
+    report = ""
+    if args.report_to:
+        if not REPORT_TO_NAME.fullmatch(args.report_to):
+            raise WorkerError(f"--report-to {args.report_to!r}: a session name (letters, digits, '.', '_', '-')")
+        report = f"report-to={args.report_to}"
+    return " ".join(part for part in ("/todo-loop", str(args.slices), args.loop_args, report) if part)
+
+
 def cmd_start(layout: Layout, args) -> None:
     """`/todo-loop` as a background Claude session (`claude --bg`) in each chosen worker, `--delay`
     seconds apart: two loops that choose at the same moment could take entries that meet in their
@@ -414,7 +435,7 @@ def cmd_start(layout: Layout, args) -> None:
     if sessions is None and not args.print_only:
         raise WorkerError(f"`{args.claude} agents --json` did not answer; is Claude Code installed and new enough for --bg?")
     env = build_env(layout)
-    prompt = " ".join(part for part in ("/todo-loop", str(args.slices), args.loop_args) if part)
+    prompt = loop_prompt(args)
     started = 0
     failed = False
     for k, path in workers:
@@ -437,12 +458,12 @@ def cmd_start(layout: Layout, args) -> None:
             failed = True
             print(f"  failed: {output or f'exit code {result.returncode}'}")
             if "trust" in output.lower():
-                print(f"  w{k} is not trusted by Claude Code yet: run `python3 <engine>/tools/todo/worker.py run {k}` once, accept the prompt, quit with /exit, then start again")
+                print(f"  w{k} is not trusted by Claude Code yet: run `{tool_command(layout)} run {k}` once, accept the prompt, quit with /exit, then start again")
             continue
         started += 1
         print(f"  {output.splitlines()[0]}")
     if started and not args.print_only:
-        print(f"\nWatch: python3 <engine>/tools/todo/worker.py list; claude agents; claude attach {SESSION_PREFIX}<k> when one waits for you")
+        print(f"\nWatch: {tool_command(layout)} list; claude agents; claude attach {SESSION_PREFIX}<k> when one waits for you")
     if failed:
         raise WorkerError("some workers did not start (above)")
 
@@ -485,6 +506,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
     p.add_argument("--slices", type=int, default=1, help="N of `/todo-loop N`: the slices each loop takes (default 1)")
     p.add_argument("--loop-args", default="", help="more arguments of /todo-loop, e.g. 'models=reviewer:sonnet'")
+    p.add_argument("--report-to", help="the session (a name of `claude agents`) every loop sends its reports to (`report-to=` of /todo-loop)")
     p.add_argument("--delay", type=int, default=DEFAULT_DELAY_S, help=f"seconds between two starts (default {DEFAULT_DELAY_S})")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--print", dest="print_only", action="store_true", help="only print the commands")
