@@ -7,7 +7,7 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 | Class | Role |
 |-------|------|
 | `SceneManager` | Built with `MakeFromConfig<SceneManager>("SceneConfig")` in `CoreManager::OnApplicationInit`. Holds `_scenes`; the first one is active after `Initialize()`. `SetActiveScene(name)`, `GetActiveScene()`, `GetSceneByName()`; `UpdateAll()` / `DrawAll()` drive the active scene. It is the only writer of `Scene::IsActive()` |
-| `Scene` | `FACTORY_BASE`. Owns the `entt::registry`, a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` (see "View size"). `Update()` emits `SceneEvents::SceneFixedUpdateEvent` once per fixed step due in the frame, then `SceneUpdateEvent` with the frame time (both read `CoreManager::GetTime()`); `Draw()` calls `IComponent::OnDraw()` of every component in draw order (see "Draw order"). `IsActive()` is true for the scene `SceneManager` currently drives. `PrepareForSave()` copies the live hierarchy back into `_nodes` (the scene editor save path calls it through `WriteSceneToConfig`, `src/Widgets/SceneEditor/SceneConfigWriter.h`) |
+| `Scene` | `FACTORY_BASE`. Owns the `entt::registry`, a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` (see "View size"). `Update()` emits `SceneEvents::SceneFixedUpdateEvent` once per fixed step due in the frame, then `SceneUpdateEvent` with the frame time (both read `CoreManager::GetTime()`); `Draw()` runs `SceneDrawSystem` over the registry, which calls `IComponent::OnDraw()` of every component in draw order (see "Draw order"). `IsActive()` is true for the scene `SceneManager` currently drives. `PrepareForSave()` copies the live hierarchy back into `_nodes` (the scene editor save path calls it through `WriteSceneToConfig`, `src/Widgets/SceneEditor/SceneConfigWriter.h`) |
 | `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_layer` (attribute `layer`, default 0), `_components`, children, an `entt::entity`. `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild`. The XML describes the top-level nodes and their components only; children exist at runtime (`AddChild`) |
 | `IComponent` | `FACTORY_BASE` and `SubscriptionHolder`; gets its `Scene&` / `SceneNode&` through `GetScene()` / `GetNode()` |
 
@@ -34,17 +34,24 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 
 ## Draw order
 
-Drawing is not an event. `Scene::Draw()` walks the node tree, sorts the nodes by (`SceneNode::GetLayer()`, traversal index) and calls `IComponent::OnDraw()` of each node's components, in component order. So:
+Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem` (`SceneDrawSystem.{h,cpp}`). At the start of every `Draw()` the system walks the node tree depth-first and writes a `SceneDrawItem {layer, order, node}` into the registry for each node (`emplace_or_replace`, so a changed layer is picked up; `order` is the traversal index), sorts that storage with `registry.sort<SceneDrawItem>` by (`SceneNode::GetLayer()`, `order`), then iterates `registry.view<SceneDrawItem>()` and calls `IComponent::OnDraw()` of each node's components, in component order. The view is the only source of the order; no second list of nodes is kept. So:
 
 - A lower layer is drawn first (further back); the default layer is 0, negative layers are backgrounds.
 - On the same layer the order is the scene order: depth-first, a parent before its children, siblings as in the config. A node later in `<nodes>` is drawn on top. The order never depends on event subscription, so a game does not have to arrange its nodes to make a background appear behind the pieces: give the background a lower `layer`.
 - A node's own layer counts, children do not inherit it. A child of a layer-1 node is on layer 0 unless it has its own.
-- The active scene only: an inactive scene's `Draw()` is not called, so `OnDraw()` needs no `IsSceneActive()` check. A removed component or node is not found by the next walk.
+- The active scene only: an inactive scene's `Draw()` is not called, so `OnDraw()` needs no `IsSceneActive()` check. A removed component or node is not found by the next walk. `SceneNode::RemoveChild()` also destroys the entity of the removed node and of its descendants (`Scene::DestroyNodeEntities`, behind a `PassKey<SceneNode>`) and `GetEntity()` of a removed node is `entt::null`, so the registry holds no `SceneDrawItem` that points into a removed subtree. `RemoveChild()` reaches the registry through the node's `_scene`; a node that is still held by an `IntrusivePtr` after its `Scene` is gone has a dangling `_scene`, so do not call `RemoveChild()` on it.
 - Override `OnDraw()` in a component and do not subscribe to an event to draw. `OnDraw()` only reads state and issues renderer calls; it must not add or remove nodes or components (the walk holds pointers into the tree).
 - `Scene::GetDrawRank(node)` is the position of a node in this order (how many nodes are drawn before it), computed from the tree as it is, with no draw before it. Input handlers that must ask the topmost first use it (`UICanvasComponent` registers with it, `UI/CLAUDE.md`).
 - The scene editor shows `Layer` in the node inspector and writes it back to `SceneConfig.xml` when it is not 0.
 
-Tests: `tests/BECore/SceneEventsTest.cpp` (`SceneEventCounter::drawIndex` is the position in the draw pass).
+Tests: `tests/BECore/SceneEventsTest.cpp` (`SceneEventCounter::drawIndex` is the position in the draw pass), `tests/BECore/SceneDrawSystemTest.cpp` (the `SceneDrawItem` of every node, the order of the view, `SetLayer` between draws, entities of a removed subtree, a node added between draws, the rects a `RecordingRenderer` sees in layer order).
+
+## Why EnTT
+
+Decided by the owner on 2026-11-07 (entry `ecs-nominal`): the object model stays `SceneNode` + `IComponent`, because reflection, the XML and the node inspector are built on it. The `entt::registry` of a `Scene` holds the data that **systems** work on, and a system works on a sorted view of it. Today that is `SceneDrawItem` and `SceneDrawSystem`; the transform and the data of the built-in renderers (the color of `QuadRendererComponent`, the texture and rects of `SpriteRendererComponent`) are planned to follow, so that the system issues the `IRenderer` calls itself.
+
+- It is **not** a pure ECS: the components (`IComponent`) are not stored in EnTT pools, and the registry holds one entity per node and the data of the systems only. Components still draw through `OnDraw()` and issue their own `IRenderer` calls.
+- The direction is rendering as a system that hands a batch to `IRenderer` and the backends. That work belongs to the entries `rendering-2d` and `renderer-backends`; do not describe it as done.
 
 ## View size
 
