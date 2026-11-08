@@ -166,6 +166,9 @@ namespace BECore::Match3 {
     }
 
     void Match3BoardComponent::ClickCell(Cell cell) {
+        if (!cell.IsInside()) {
+            return;
+        }
         _animation.Finish();  // the model is at its final board already: this snaps the picture, then the click is handled as usual
         if (!_animate) {
             _model.OnCellClicked(cell);

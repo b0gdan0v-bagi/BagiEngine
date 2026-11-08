@@ -306,6 +306,21 @@ namespace BECore::Match3::Tests {
         ExpectSpritesShow(animation.GetSprites(), second.model.GetBoard(), "at the end of the second run");
     }
 
+    TEST(Match3BoardAnimationTest, ARejectedSwapWithACellOutsideTheBoardStartsNothing) {
+        Match3GameModel model;
+        model.Reset(1);
+        const Match3Board board = model.GetBoard();
+
+        TweenManager tweens;
+        BoardAnimation animation;
+        animation.StartRejected(tweens, board, Cell{0, 0}, Cell{-1, 0});
+        animation.StartRejected(tweens, board, Cell{0, -1}, Cell{0, 0});
+        animation.StartRejected(tweens, board, Cell{kBoardSize - 1, kBoardSize - 1}, Cell{kBoardSize, kBoardSize - 1});
+
+        EXPECT_FALSE(animation.IsRunning());
+        EXPECT_EQ(tweens.GetActiveCount(), 0u);
+    }
+
     TEST(Match3BoardAnimationTest, ARejectedSwapSlidesAndSlidesBack) {
         Match3GameModel model;
         model.Reset(1);

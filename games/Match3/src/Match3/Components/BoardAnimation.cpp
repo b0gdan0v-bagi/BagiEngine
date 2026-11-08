@@ -63,6 +63,9 @@ namespace BECore::Match3 {
     }
 
     void BoardAnimation::AddSwap(Timeline& timeline, SpriteGrid& grid, Cell a, Cell b) {
+        if (!a.IsInside() || !b.IsInside()) {
+            return;
+        }
         const int spriteA = grid[a.Index()];
         const int spriteB = grid[b.Index()];
         const TweenSettings settings{.duration = _settings.swapDuration, .ease = EaseType::QuadInOut};
@@ -124,6 +127,9 @@ namespace BECore::Match3 {
     }
 
     void BoardAnimation::StartRejected(TweenManager& tweens, const Match3Board& board, Cell a, Cell b) {
+        if (!a.IsInside() || !b.IsInside()) {
+            return;  // nothing to slide
+        }
         SpriteGrid grid = BeginRun(board);
         Timeline timeline;
         AddSwap(timeline, grid, a, b);

@@ -58,7 +58,7 @@ namespace BECore::Match3 {
         /// Plays the swap and the cascade of @p trace; @p before is the board before the swap. Replaces a run in progress (no setter call from the old one afterwards)
         void Start(TweenManager& tweens, const Match3Board& before, const SwapTrace& trace);
 
-        /// Plays the two gems of @p a and @p b sliding to each other's cell and back (a swap that made no match). @p board is the board, which does not change
+        /// Plays the two gems of @p a and @p b sliding to each other's cell and back (a swap that made no match). @p board is the board, which does not change. A cell outside the board starts nothing
         void StartRejected(TweenManager& tweens, const Match3Board& board, Cell a, Cell b);
 
         /// Stops the run where it is (no value is set) and drops the sprites; the owner then draws the model board

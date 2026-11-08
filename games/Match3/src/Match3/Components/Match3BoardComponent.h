@@ -63,7 +63,7 @@ namespace BECore::Match3 {
         }
 
         /// The click of a person on a cell (what a click on the board does): finishes a running animation, hands the click to the model and, when it
-        /// swapped two gems (a match or not), plays the swap. A click anywhere else on the board goes through here too
+        /// swapped two gems (a match or not), plays the swap. Every click on the board goes through here; a cell outside the board does nothing
         void ClickCell(Cell cell);
 
         /// True while the board draws the sprites of a swap instead of the model board

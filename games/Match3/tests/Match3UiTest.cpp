@@ -56,7 +56,7 @@ namespace BECore::Match3::Tests {
                 const DrawCall& x = a[i];
                 const DrawCall& y = b[i];
                 if (x.kind != y.kind || x.rect.x != y.rect.x || x.rect.y != y.rect.y || x.rect.w != y.rect.w || x.rect.h != y.rect.h || x.color.r != y.color.r || x.color.g != y.color.g ||
-                    x.color.b != y.color.b) {
+                    x.color.b != y.color.b || x.color.a != y.color.a) {
                     return false;
                 }
             }
@@ -345,7 +345,7 @@ namespace BECore::Match3::Tests {
         }
 
         /// The click of a person on both cells of a swap that scores
-        std::pair<Cell, Cell> ClickALegalSwap() {
+        eastl::pair<Cell, Cell> ClickALegalSwap() {
             const auto swaps = Board().GetModel().GetLegalSwaps();
             EXPECT_FALSE(swaps.empty());
             Board().ClickCell(swaps.front().first);
@@ -353,8 +353,14 @@ namespace BECore::Match3::Tests {
             return {swaps.front().first, swaps.front().second};
         }
 
+        /// The centre of @p cell in the units of the scene, from the geometry of the board component
+        eastl::pair<float, float> CellCentre(Cell cell) const {
+            const Match3BoardComponent& board = Board();
+            return {board._originX + (static_cast<float>(cell.col) + 0.5f) * board._cellSize, board._originY + (static_cast<float>(cell.row) + 0.5f) * board._cellSize};
+        }
+
         /// A neighbour pair whose swap makes no match
-        std::pair<Cell, Cell> FindRejectedSwap() const {
+        eastl::pair<Cell, Cell> FindRejectedSwap() const {
             const Match3GameModel& model = Board().GetModel();
             for (int8_t row = 0; row < kBoardSize; ++row) {
                 for (int8_t col = 0; col + 1 < kBoardSize; ++col) {
@@ -390,7 +396,7 @@ namespace BECore::Match3::Tests {
         }
 
         /// The output pixel at which the scene coordinate is: the fit of the view is linear, so it is inverted from its values at 0 and 1
-        std::pair<float, float> PixelOfScene(float sceneX, float sceneY) {
+        eastl::pair<float, float> PixelOfScene(float sceneX, float sceneY) {
             const Scene& scene = GetScene("Match3Scene");
             const float x0 = scene.ScreenToSceneX(0.0f);
             const float y0 = scene.ScreenToSceneY(0.0f);
@@ -398,7 +404,7 @@ namespace BECore::Match3::Tests {
         }
 
         /// The same swap on a model of its own, to compare the final state with
-        static Match3GameModel PlayedElsewhere(uint32_t seed, std::pair<Cell, Cell> swap) {
+        static Match3GameModel PlayedElsewhere(uint32_t seed, eastl::pair<Cell, Cell> swap) {
             Match3GameModel model;
             model.Reset(seed);
             EXPECT_TRUE(model.TrySwap(swap.first, swap.second));
@@ -564,11 +570,30 @@ namespace BECore::Match3::Tests {
         EXPECT_EQ(Board().GetModel().GetVersion(), version);
     }
 
+    TEST_F(Match3AnimationTest, AClickOutsideTheBoardWithASelectionChangesNothingAndDoesNotAnimate) {
+        const Match3Board before = Board().GetModel().GetBoard();
+        const uint64_t version = Board().GetModel().GetVersion();
+        Board().ClickCell(Cell{0, 0});
+        ASSERT_TRUE(Board().GetModel().HasSelection());
+
+        for (const Cell outside : {Cell{-1, 0}, Cell{0, -1}, Cell{kBoardSize, 0}, Cell{0, kBoardSize}}) {
+            Board().ClickCell(outside);
+
+            EXPECT_FALSE(Board().IsAnimating());
+            EXPECT_EQ(CoreManager::GetTweens().GetActiveCount(), 0u);
+            EXPECT_EQ(Board().GetModel().GetVersion(), version);
+            ASSERT_TRUE(Board().GetModel().HasSelection());
+            EXPECT_EQ(*Board().GetModel().GetSelected(), (Cell{0, 0}));
+            EXPECT_TRUE(SameBoard(Board().GetModel().GetBoard(), before));
+        }
+    }
+
     TEST_F(Match3AnimationTest, AClickAtThePixelOfACellSelectsThatCell) {
         const Match3Board& board = Board().GetModel().GetBoard();
         for (const Cell cell : {Cell{0, 0}, Cell{7, 7}, Cell{3, 5}, Cell{6, 1}}) {
             ASSERT_NE(board.Get(cell), GemType::None);
-            const auto [x, y] = PixelOfScene(100.0f + (static_cast<float>(cell.col) + 0.5f) * 64.0f, 80.0f + (static_cast<float>(cell.row) + 0.5f) * 64.0f);
+            const auto [centreX, centreY] = CellCentre(cell);
+            const auto [x, y] = PixelOfScene(centreX, centreY);
 
             CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true));
 
@@ -583,7 +608,8 @@ namespace BECore::Match3::Tests {
         const auto swaps = Board().GetModel().GetLegalSwaps();
         ASSERT_FALSE(swaps.empty());
         for (const Cell cell : {swaps.front().first, swaps.front().second}) {
-            const auto [x, y] = PixelOfScene(100.0f + (static_cast<float>(cell.col) + 0.5f) * 64.0f, 80.0f + (static_cast<float>(cell.row) + 0.5f) * 64.0f);
+            const auto [centreX, centreY] = CellCentre(cell);
+            const auto [x, y] = PixelOfScene(centreX, centreY);
             CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true));
         }
 
