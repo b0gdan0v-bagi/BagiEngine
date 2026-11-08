@@ -141,8 +141,11 @@ namespace BECore {
             _controlServer.reset();
         }
         GameManager::GetInstance().Shutdown();
-        // The glyph pages are GPU textures: they go before the renderer's own cleanup destroys the device
+        // The glyph pages and the widgets own GPU objects (a texture, the viewport's target, ImGui's descriptors): they go before
+        // the renderer's own cleanup destroys the device. Direct calls, not handlers of ApplicationCleanUpEvent: EnTT calls the
+        // handlers in the reverse order of the subscription, so the renderer's Destroy would run first
         CoreManager::GetFontAtlasLibrary().Clear();
+        CoreManager::GetWidgetManager().DestroyAll();
         ApplicationEvents::ApplicationCleanUpEvent::Emit();
         CoreManager::GetInstance().OnApplicationDeinit({});
     }

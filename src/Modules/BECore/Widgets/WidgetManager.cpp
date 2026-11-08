@@ -6,6 +6,12 @@
 
 namespace BECore {
 
+    WidgetManager::~WidgetManager() {
+        while (!_widgets.empty()) {
+            _widgets.pop_back();
+        }
+    }
+
     void WidgetManager::RegisterWidget(IntrusivePtr<IWidget> widget) {
         if (widget) {
             _widgets.push_back(std::move(widget));

@@ -84,7 +84,7 @@ namespace BECore::Tests {
             manager.CreateWidgets(RunMode::Editor);
         }
 
-        EXPECT_EQ(LifecycleWidget::log, (Log{"create:2", "create:3", "destroy:2", "destroy:3"}));
+        EXPECT_EQ(LifecycleWidget::log, (Log{"create:2", "create:3", "destroy:3", "destroy:2"}));
     }
 
     TEST_F(WidgetManagerTest, DestroyAllWaitsForTheGpuThenDestroysTheLastCreatedFirst) {

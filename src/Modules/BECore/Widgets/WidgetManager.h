@@ -12,7 +12,8 @@ namespace BECore {
         using WidgetLoader = eastl::function<eastl::vector<IntrusivePtr<IWidget>>(RunMode)>;
 
         WidgetManager() = default;
-        ~WidgetManager() = default;
+        /// Destroys the widgets the way DestroyAll does (the last created first), without waiting for the GPU.
+        ~WidgetManager();
 
         void RegisterWidget(IntrusivePtr<IWidget> widget);
         void UpdateAll() const;

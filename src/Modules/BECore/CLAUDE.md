@@ -14,6 +14,8 @@ Central service locator (`GameManager/CoreManager.h`): one static getter per sub
 | `OnIdleCycle` | the manual clock between steps instead of `OnGameCycle`: events → `Drain` → wait for a request (up to 8 ms). No frame runs |
 | `OnApplicationDeinit` | `TweenManager::Clear` (no callbacks), `ControlService::Shutdown`, `TaskManager::Shutdown` |
 
+`Application::Cleanup` runs before `OnApplicationDeinit`: `GameManager::Shutdown`, `FontAtlasLibrary::Clear()`, `WidgetManager::DestroyAll()` (both own GPU objects, so they are direct calls: the handlers of `ApplicationCleanUpEvent` run in the reverse order of the subscription and the renderer's `Destroy` would come first), then `ApplicationCleanUpEvent` (renderer, window), then `OnApplicationDeinit`.
+
 **`InitializeCoreServices()` order:** CRT debug hooks → temporary `OutputSink` + `StackTraceHandler` → `FileSystem` → `TaskManager` → `ConfigManager` → `LoggerManager` → `AssertHandlerManager` → `ResourceManager` → `TextureLibrary` → `FontAtlasLibrary` → `UIEnvironment` → `UIStrings` (loads `config/UIStrings.xml` when a game ships one) → the builtin control methods (`RegisterControlBuiltins`, then `RegisterUIControl`).
 
 ## Run mode
