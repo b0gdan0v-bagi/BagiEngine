@@ -76,7 +76,7 @@ namespace BECore::Tests {
         std::atomic<bool> ended{false};
         std::atomic<bool> sent{true};
         std::thread writer([&] {
-            const std::vector<uint8_t> block(64 * 1024, 0x5A);
+            const eastl::vector<uint8_t> block(64 * 1024, 0x5A);
             for (int i = 0; i < 4096 && sent; ++i) {
                 sent = pair.accepted.SendAll(eastl::span<const uint8_t>(block.data(), block.size()));
             }

@@ -33,8 +33,9 @@ namespace BECore {
             return WSAGetLastError();
         }
 
+        /// The socket is non-blocking and has no SO_RCVTIMEO, so WSAETIMEDOUT would mean a dropped connection, not a wait
         bool IsTimeout(int error) {
-            return error == WSAETIMEDOUT || error == WSAEWOULDBLOCK;
+            return error == WSAEWOULDBLOCK;
         }
 
         bool IsInterrupted(int) {
@@ -55,9 +56,9 @@ namespace BECore {
         }
 
         /// A connected socket is non-blocking on Windows: shutdown() does not wake a blocked recv() or send() there
-        void MakeNonBlocking(NativeSocket handle) {
+        bool MakeNonBlocking(NativeSocket handle) {
             u_long enable = 1;
-            ioctlsocket(handle, FIONBIO, &enable);
+            return ioctlsocket(handle, FIONBIO, &enable) == 0;
         }
 
         constexpr int kSendFlags = 0;
@@ -80,7 +81,9 @@ namespace BECore {
 
         void EnsureSocketLibrary() {}
 
-        void MakeNonBlocking(NativeSocket) {}
+        bool MakeNonBlocking(NativeSocket) {
+            return true;
+        }
 
         void CloseNative(NativeSocket handle) {
             close(handle);
@@ -196,7 +199,9 @@ namespace BECore {
         if (connect(handle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
             return std::unexpected(DescribeError(Format("connect() to 127.0.0.1:{}", port), LastError()));
         }
-        MakeNonBlocking(handle);
+        if (!MakeNonBlocking(handle)) {
+            return std::unexpected(DescribeError("ioctlsocket()", LastError()));
+        }
         return std::move(socketGuard);
     }
 
@@ -217,8 +222,11 @@ namespace BECore {
                 const int enable = 1;
                 setsockopt(accepted, SOL_SOCKET, SO_NOSIGPIPE, &enable, sizeof(enable));
 #endif
-                MakeNonBlocking(accepted);
-                return Socket(static_cast<intptr_t>(accepted));
+                Socket connection(static_cast<intptr_t>(accepted));  // closes the handle if the next call fails
+                if (!MakeNonBlocking(accepted)) {
+                    return std::unexpected(SocketError::Failed);
+                }
+                return connection;
             }
             if (!IsInterrupted(LastError())) {
                 return std::unexpected(SocketError::Failed);
@@ -243,8 +251,11 @@ namespace BECore {
                 if (IsInterrupted(error)) {
                     continue;
                 }
+                if (_shutDown) {
+                    return false;  // ShutdownBoth() came between the check and send()
+                }
 #ifdef PLATFORM_WINDOWS
-                if (IsTimeout(error) && !_shutDown) {
+                if (IsTimeout(error)) {
                     WaitFor(ToNative(_handle), POLLOUT, kWakeInterval);  // the send buffer is full: wait for the client to read
                     continue;
                 }
@@ -260,7 +271,9 @@ namespace BECore {
         if (!IsValid() || buffer.empty()) {
             return std::unexpected(SocketError::Failed);
         }
+#ifdef PLATFORM_WINDOWS
         const auto started = std::chrono::steady_clock::now();
+#endif
         for (;;) {
             if (_shutDown) {
                 return std::unexpected(SocketError::Closed);
@@ -277,6 +290,9 @@ namespace BECore {
             if (IsInterrupted(error)) {
                 continue;
             }
+            if (_shutDown) {
+                return std::unexpected(SocketError::Closed);  // ShutdownBoth() came between the check and recv()
+            }
             if (!IsTimeout(error)) {
                 return std::unexpected(SocketError::Failed);
             }
@@ -289,7 +305,6 @@ namespace BECore {
             const auto slice = _receiveTimeout > std::chrono::milliseconds::zero() ? std::min(kWakeInterval, _receiveTimeout - waited) : kWakeInterval;
             WaitFor(ToNative(_handle), POLLIN, slice);
 #else
-            (void)started;
             return std::unexpected(SocketError::TimedOut);  // SO_RCVTIMEO ran out
 #endif
         }
