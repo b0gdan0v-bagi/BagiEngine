@@ -1,6 +1,7 @@
 #pragma once
 
 #include <EASTL/optional.h>
+#include <Match3/Game/CascadeTrace.h>
 #include <Match3/Game/Match3Board.h>
 #include <Match3/Game/Match3Types.h>
 #include <random>
@@ -20,7 +21,9 @@ namespace BECore::Match3 {
      *
      * The model never animates: a successful swap immediately resolves the
      * full cascade (remove -> gravity -> refill -> repeat) so callers see a
-     * stable board after every public call.
+     * stable board after every public call. It does record what the last swap did
+     * as plain data (GetLastSwap()), so a component can animate it; time, tweens
+     * and drawing never enter the model.
      */
     class Match3GameModel {
     public:
@@ -89,6 +92,18 @@ namespace BECore::Match3 {
         bool TrySwap(Cell a, Cell b);
 
         /**
+         * @brief What the last committed swap did (the swapped cells and every round of the cascade), or null.
+         *
+         * Valid until the next Reset() or TrySwap(): both clear it at their start, so after a rejected swap it is
+         * null too (a stale trace is never taken for a new one). `version` of the trace equals GetVersion() right
+         * after the swap. Recording touches neither the RNG, the score nor the version. ResolveCascade() called on
+         * its own records nothing.
+         */
+        [[nodiscard]] const SwapTrace* GetLastSwap() const noexcept {
+            return _lastSwap.has_value() ? &*_lastSwap : nullptr;
+        }
+
+        /**
          * @brief Would TrySwap(a, b) commit? Does not change the model (it tries the swap on a copy of the board).
          *
          * False for cells outside the board and for cells that are not 4-neighbour adjacent.
@@ -125,11 +140,13 @@ namespace BECore::Match3 {
     private:
         [[nodiscard]] GemType RandomGem();
         void GenerateInitialBoard();
-        void ApplyGravity();
-        void RefillTop();
+        int ResolveCascade(eastl::vector<CascadeStep>* steps);
+        void ApplyGravity(CascadeStep* step);
+        void RefillTop(CascadeStep* step);
 
         Match3Board _board;
         eastl::optional<Cell> _selected;
+        eastl::optional<SwapTrace> _lastSwap;
         int _score = 0;
         uint32_t _seed = 0;
         uint64_t _version = 0;
