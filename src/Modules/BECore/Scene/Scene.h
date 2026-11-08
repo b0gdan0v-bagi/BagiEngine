@@ -8,13 +8,6 @@ namespace BECore {
 
     class SceneManager;
 
-    /// One node in the draw pass of Scene::Draw(): sorted by (layer, order), both fixed for the frame.
-    struct SceneDrawEntry {
-        int32_t layer = 0;
-        uint32_t order = 0;
-        SceneNode* node = nullptr;
-    };
-
     class Scene : public RefCounted {
         BE_CLASS(Scene, FACTORY_BASE)
     public:
@@ -33,10 +26,11 @@ namespace BECore {
         /**
          * @brief Call IComponent::OnDraw() of every component in draw order.
          *
-         * Draw order is the order of the nodes sorted by (SceneNode::GetLayer(), scene order): a lower layer first, and
-         * within a layer the depth-first order of the tree (a parent before its children, siblings as in the config), so
-         * a node later in the scene is drawn on top. It does not depend on any event handler order. Nothing may add or
-         * remove nodes while this runs.
+         * The pass is SceneDrawSystem: it writes a SceneDrawItem into the registry for every node, sorts them and walks
+         * a view over them. Draw order is the order of the nodes sorted by (SceneNode::GetLayer(), scene order): a lower
+         * layer first, and within a layer the depth-first order of the tree (a parent before its children, siblings as in
+         * the config), so a node later in the scene is drawn on top. It does not depend on any event handler order.
+         * Nothing may add or remove nodes while this runs.
          */
         void Draw();
 
@@ -91,8 +85,11 @@ namespace BECore {
 
         IntrusivePtr<SceneNode> CreateNode(PoolString name, SceneNode* parent = nullptr);
 
+        /// Called by SceneNode::RemoveChild() only: destroys the entity of @p node and of its descendants and resets their GetEntity() to entt::null.
+        void DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>);
+
     private:
-        void CollectDrawEntries(SceneNode& node);
+        void DestroyEntities(SceneNode& node);
 
         BE_REFLECT_FIELD PoolString _name;
         BE_REFLECT_FIELD float _viewWidth = 0.0f;
@@ -100,8 +97,7 @@ namespace BECore {
         BE_REFLECT_FIELD eastl::vector<IntrusivePtr<SceneNode>> _nodes;
         entt::registry _registry;
         IntrusivePtr<SceneNode> _rootNode;
-        eastl::vector<SceneDrawEntry> _drawEntries;  // reused every frame, so Draw() allocates only while it grows
-        ViewTransform _viewTransform;                // fit of the view to the output, set by Draw(), read by ScreenToScene*
+        ViewTransform _viewTransform;  // fit of the view to the output, set by Draw(), read by ScreenToScene*
         bool _active = false;
     };
 

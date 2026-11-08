@@ -28,6 +28,10 @@ namespace BECore {
         auto it = eastl::find_if(_children.begin(), _children.end(), [child](const IntrusivePtr<SceneNode>& node) { return node.Get() == child; });
 
         if (it != _children.end()) {
+            // The registry must not keep a SceneDrawItem that points into the removed subtree
+            if (_scene) {
+                _scene->DestroyNodeEntities(**it, {});
+            }
             (*it)->_parent = nullptr;
             _children.erase(it);
         }

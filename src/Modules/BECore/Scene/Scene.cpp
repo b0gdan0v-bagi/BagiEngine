@@ -2,7 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
-#include <EASTL/sort.h>
+#include <BECore/Scene/SceneDrawSystem.h>
 #include <Events/SceneEvents.h>
 #include <Generated/Scene.gen.hpp>
 
@@ -33,12 +33,6 @@ namespace BECore {
             return;
         }
 
-        _drawEntries.clear();
-        CollectDrawEntries(*_rootNode);
-
-        // The keys are unique (order is the traversal index), so an unstable sort still gives one result.
-        eastl::sort(_drawEntries.begin(), _drawEntries.end(), [](const SceneDrawEntry& a, const SceneDrawEntry& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
-
         // The fit follows the output size of every frame, so a resized window or viewport needs no event.
         IRenderer* renderer = CoreManager::GetRenderer().Get();
         _viewTransform = renderer ? ViewTransform::Fit(_viewWidth, _viewHeight, renderer->GetOutputWidth(), renderer->GetOutputHeight()) : ViewTransform{};
@@ -46,11 +40,7 @@ namespace BECore {
             renderer->SetViewTransform(_viewTransform);
         }
 
-        for (const SceneDrawEntry& entry : _drawEntries) {
-            for (const auto& component : entry.node->GetComponents()) {
-                component->OnDraw();
-            }
-        }
+        SceneDrawSystem::Run(*this);
 
         // Widgets and ImGui draw in output pixels, so the scene's fit must not leak out of its pass.
         if (renderer) {
@@ -108,13 +98,6 @@ namespace BECore {
         return _viewTransform.ToViewY(outputY);
     }
 
-    void Scene::CollectDrawEntries(SceneNode& node) {
-        _drawEntries.push_back({node.GetLayer(), static_cast<uint32_t>(_drawEntries.size()), &node});
-        for (const auto& child : node.GetChildren()) {
-            CollectDrawEntries(*child);
-        }
-    }
-
     bool Scene::IsActive() const {
         return _active;
     }
@@ -154,6 +137,20 @@ namespace BECore {
         }
 
         return node;
+    }
+
+    void Scene::DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>) {
+        DestroyEntities(node);
+    }
+
+    void Scene::DestroyEntities(SceneNode& node) {
+        for (const auto& child : node.GetChildren()) {
+            DestroyEntities(*child);
+        }
+        if (_registry.valid(node._entity)) {
+            _registry.destroy(node._entity);
+        }
+        node._entity = entt::null;
     }
 
 }  // namespace BECore
