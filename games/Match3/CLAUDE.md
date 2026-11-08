@@ -17,6 +17,7 @@ src/Match3/
 │   ├── CascadeTrace.*            `SwapTrace` / `CascadeStep` / `GemFall` / `GemRefill`: what a committed swap did, as plain data; `ReplayTrace` applies it to the board before the swap
 │   └── Match3GameModel.*         board, score, selected cell, seed, version, deterministic RNG, legal swaps
 └── Components/
+    ├── BoardAnimation.*          `BoardAnimation`: the tweens of ONE swap as one `Timeline` on a `TweenManager` (swap slide, shrink of matched gems, fall, refill from above; a rejected swap slides back), the sprites it writes, `BoardAnimationSettings` (the durations), `ClipToBoard` (a rect against the board rect); no scene, no renderer, no `CoreManager`
     ├── Match3BoardComponent      owns the model; draws board and gems, routes clicks, publishes `score` and `seed` to UIVars, answers Match3Reset and Match3Menu
     └── Match3MenuComponent       answers Match3Play and Match3Quit in the menu scene
 ```
@@ -56,6 +57,7 @@ Executable `Match3Tests`, no engine services needed:
 - `Match3GameModelTest.cpp`: board, matches, swaps, cascade.
 - `Match3LegalSwapsTest.cpp`: `GetLegalSwaps` against a brute force of `TrySwap` on copies, `WouldSwapMatch` changes nothing, seed determinism with golden boards, version.
 - `Match3CascadeTraceTest.cpp`: `SwapTrace` / `ReplayTrace`: replay equals `TrySwap` for every legal swap of six seeds, removed cells add up to the score, refills start above the board, a hand-made two-step cascade by value, the trace version, empty after `Reset` and after a rejected swap.
+- `Match3BoardAnimationTest.cpp`: `BoardAnimation` on a `TweenManager` of the test (no engine services): sprites at t = 0 on the board before the swap, the swap slide mid-way and after, the shrink, every cell with one visible sprite of the right gem at the end (also for one huge `dt`), the settings change the length, `Finish`, destroying mid-way and a second `Start`, the rejected swap, `ClipToBoard`.
 - `Match3GameControlTest.cpp`: the adapter on a model the test owns.
 - `Match3UiTest.cpp`: the shipped `SceneConfig.xml` (read from the source tree) in a scene manager with a `RecordingRenderer`: the menu and the HUD through the size matrix with the longest values, the HUD outside the board in five window shapes, Play / Quit / Reset / Menu, actions of the other scene ignored, the score on screen, a click on the Reset button at its drawn place. Needs the engine services.
 

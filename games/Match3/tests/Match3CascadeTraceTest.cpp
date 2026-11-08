@@ -66,7 +66,7 @@ namespace BECore::Match3::Tests {
 
                 const SwapTrace* trace = model.GetLastSwap();
                 ASSERT_NE(trace, nullptr) << "seed " << seed;
-                EXPECT_TRUE(SameBoard(ReplayTrace(before, *trace), model.GetBoard())) << "seed " << seed << " swap " << int(a.col) << "," << int(a.row);
+                EXPECT_TRUE(SameBoard(ReplayTrace(before, *trace), model.GetBoard())) << "seed " << seed << " swap " << static_cast<int>(a.col) << "," << static_cast<int>(a.row);
                 ++swapsChecked;
             }
         }
@@ -175,7 +175,7 @@ namespace BECore::Match3::Tests {
         // The blue of (0,4) now sits in (0,7): the second round clears the row of blues (more only if a refill matched)
         const CascadeStep& second = trace->steps[1];
         for (const Cell blue : {Cell{0, 7}, Cell{1, 7}, Cell{2, 7}}) {
-            EXPECT_NE(eastl::find(second.removed.begin(), second.removed.end(), blue), second.removed.end()) << int(blue.col);
+            EXPECT_NE(eastl::find(second.removed.begin(), second.removed.end(), blue), second.removed.end()) << static_cast<int>(blue.col);
         }
 
         EXPECT_TRUE(SameBoard(ReplayTrace(before, *trace), model.GetBoard()));

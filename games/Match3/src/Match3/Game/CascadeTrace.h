@@ -26,7 +26,7 @@ namespace BECore::Match3 {
     /// One round of the cascade: the matched cells go, the gems above fall, the holes at the top are refilled
     struct CascadeStep {
         eastl::vector<Cell> removed;
-        eastl::vector<GemFall> falls;  ///< In the order gravity moved them: bottom row first, column by column
+        eastl::vector<GemFall> falls;  ///< In the order gravity moved them: column by column, in each column the lowest gem first
         eastl::vector<GemRefill> refills;
     };
 
