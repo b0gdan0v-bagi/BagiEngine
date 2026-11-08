@@ -15,13 +15,7 @@ namespace BECore {
         inline constexpr eastl::string_view kHeadless = "--headless";
     }  // namespace ControlArguments
 
-    /// Attributes of the ApplicationConfig root that ResolveControlSettings() reads
-    namespace ControlAttributes {
-        inline constexpr eastl::string_view kControl = "control";
-        inline constexpr eastl::string_view kControlPort = "controlPort";
-        inline constexpr eastl::string_view kManualClock = "manualClock";
-        inline constexpr eastl::string_view kHeadless = "headless";
-    }  // namespace ControlAttributes
+    struct ApplicationConfigLoad;  // Application/ApplicationConfig.h, which includes this file
 
     /// How the external control API is started: off by default, a development tool that has to be asked for
     struct ControlSettings {
@@ -32,7 +26,7 @@ namespace BECore {
     };
 
     /**
-     * @brief Merges the command line, the ApplicationConfig attributes and the defaults into the control settings.
+     * @brief Merges the command line, the ApplicationConfig fields and the defaults into the control settings.
      *
      * Priority: command line, then attribute, then default (off, port kDefaultControlPort).
      *
@@ -43,6 +37,10 @@ namespace BECore {
      * | --manual-clock | manualClock="true" / "false" (also 1 / 0) | the game clock moves only on a `step` (see ControlService) |
      * | --headless | headless="true" / "false" (also 1 / 0) | no window, drawing in memory; a screenshot is the way to see the game |
      *
+     * The file half is the reflected ApplicationConfig (LoadApplicationConfig, strict values), so an attribute that is not a boolean
+     * or not a port is an error of the load under its name; this function reports the ones of the four control attributes. The flags are
+     * still parsed by hand here (a later stage reads them through a name to value source).
+     *
      * Arguments it does not know are ignored (a game may have flags of its own). A value that cannot be read, a bare
      * `--control-port`, and `--control-port`, the manual clock or headless mode while the API stays off are errors: the
      * caller stops the start-up, because a person who asked for the API has to be told that it did not start (and a
@@ -50,8 +48,9 @@ namespace BECore {
      * would run unseen). Whether headless mode fits the run mode is for the caller to check (it knows the mode).
      *
      * @param args Command line without the program name
-     * @param applicationConfig Root of ApplicationConfig; an empty node is allowed
+     * @param file The loaded ApplicationConfig; a default one (no config, `found == false`) is allowed. Errors of other fields (`mode`,
+     *             `type`) are not this function's business
      */
-    [[nodiscard]] std::expected<ControlSettings, ControlError> ResolveControlSettings(eastl::span<const eastl::string> args, const XmlNode& applicationConfig);
+    [[nodiscard]] std::expected<ControlSettings, ControlError> ResolveControlSettings(eastl::span<const eastl::string> args, const ApplicationConfigLoad& file);
 
 }  // namespace BECore

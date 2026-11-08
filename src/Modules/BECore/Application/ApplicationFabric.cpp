@@ -1,29 +1,24 @@
 #include "ApplicationFabric.h"
 
+#include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Application/IApplicationFabric.h>
-#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 
 namespace BECore {
 
-    bool ApplicationFabric::Create(const ApplicationOptions& options) {
-        const auto configNode = CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern);
-
-        if (!configNode) {
+    bool ApplicationFabric::Create(const ApplicationConfig& config, const ApplicationOptions& options) {
+        if (config._type.empty()) {
+            LOG_ERROR("ApplicationConfig: no type");
             return false;
         }
 
-        const auto typeOpt = configNode.ParseAttribute<eastl::string_view>("type");
-        if (!typeOpt) {
-            return false;
-        }
-
-        auto fabric = AbstractFactory<IApplicationFabric>::GetInstance().Create(*typeOpt);
+        auto fabric = AbstractFactory<IApplicationFabric>::GetInstance().Create(config._type);
         if (!fabric) {
+            LOG_ERROR("ApplicationConfig: unknown type '{}'"_format(config._type));
             return false;
         }
 
-        return fabric->Create(configNode, options);
+        return fabric->Create(config, options);
     }
 
 }  // namespace BECore

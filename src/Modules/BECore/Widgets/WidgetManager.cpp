@@ -1,5 +1,6 @@
 #include "WidgetManager.h"
 
+#include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Application/RunMode.h>
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Widgets/WidgetList.h>
@@ -64,7 +65,7 @@ namespace BECore {
     }  // namespace
 
     void WidgetManager::CreateWidgets() {
-        const RunMode mode = ResolveRunMode(ReadRunMode(CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern)));
+        const RunMode mode = ResolveRunMode(LoadApplicationConfig().config._mode);
         LOG_INFO("Run mode: {}"_format(EnumUtils<RunMode>::ToString(mode)));
         CreateWidgets(mode);
     }

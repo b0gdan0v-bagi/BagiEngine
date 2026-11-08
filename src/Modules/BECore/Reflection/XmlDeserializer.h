@@ -121,6 +121,14 @@ namespace BECore {
         bool BeginArrayElement() override;
         void EndArrayElement() override;
 
+        // Strict values (see IDeserializer::SetStrictValues)
+        void SetStrictValues(bool strict) override {
+            _strictValues = strict;
+        }
+        bool IsStrictValues() const override {
+            return _strictValues;
+        }
+
         // Error tracking
         bool HasErrors() const override;
         const eastl::vector<DeserializeError>& GetErrors() const override;
@@ -140,6 +148,24 @@ namespace BECore {
          */
         pugi::xml_attribute GetAttribute(eastl::string_view name) const;
 
+        /**
+         * @brief Strict read of an attribute: the whole text must be a value of T
+         *
+         * A missing attribute is false with no error, as in the lenient read; a malformed
+         * text is reported under the name and the target keeps its value.
+         */
+        template <typename T>
+        bool ReadStrictAttribute(eastl::string_view name, T& outValue);
+
+        /**
+         * @brief Strict read of a child element (see ReadStrictAttribute)
+         */
+        template <typename T>
+        bool ReadStrictElement(eastl::string_view name, T& outValue);
+
+        template <typename T>
+        bool ApplyStrictText(eastl::string_view name, eastl::string_view text, T& outValue);
+
         pugi::xml_document _document;
         eastl::vector<pugi::xml_node> _nodeStack;
 
@@ -153,6 +179,8 @@ namespace BECore {
 
         // Error tracking
         eastl::vector<DeserializeError> _errors;
+
+        bool _strictValues = false;
     };
 
 }  // namespace BECore

@@ -1,10 +1,12 @@
 #include "Application.h"
 
+#include <BECore/Application/ApplicationConfig.h>
 #include <BECore/Application/ApplicationFabric.h>
 #include <BECore/Application/RunMode.h>
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Reflection/OpenDeserializer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
@@ -37,20 +39,23 @@ namespace BECore {
 
         // Before the window exists: a flag that cannot be read should not cost a window and a loaded scene.
         // Nothing flushes the log before the first frame, so an error that stops the start-up flushes it itself.
-        const auto controlSettings = ResolveControlSettings(_arguments, CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern));
+        const ApplicationConfigLoad load = LoadApplicationConfig();
+        const auto controlSettings = ResolveControlSettings(_arguments, load);
         if (!controlSettings) {
             LOG_ERROR("Control API: {}"_format(controlSettings.error().message));
             LogEvent::Flush();
             return false;
         }
 
+        // The control fields stopped the start-up above; what is left is every other field (`mode`, `type`, `renderer`, `path`)
+        LogDeserializeErrors("ApplicationConfig", load.errors);
+
         // Before the first frame: the loop reads it from the start
         CoreManager::GetControlService().SetManualClock(controlSettings->manualClock);
 
         // The editor draws its viewport into an offscreen target, which the software renderer of a headless run does not have
-        const auto& applicationConfig = CoreManager::GetConfigManager().GetConfig("ApplicationConfig"_intern);
         // The resolved mode (ResolveRunMode) without its warning: CreateWidgets resolves and warns once
-        if (controlSettings->headless && kEditorBuilt && ReadRunMode(applicationConfig) == RunMode::Editor) {
+        if (controlSettings->headless && kEditorBuilt && load.config._mode == RunMode::Editor) {
             LOG_ERROR("Headless: the Editor run mode cannot run without a window; set mode=\"Game\" in ApplicationConfig.xml");
             LogEvent::Flush();
             return false;
@@ -60,7 +65,7 @@ namespace BECore {
 
         ApplicationOptions options;
         options.headless = controlSettings->headless;
-        if (!ApplicationFabric::GetInstance().Create(options)) {
+        if (!ApplicationFabric::GetInstance().Create(load.config, options)) {
             return false;
         }
 
