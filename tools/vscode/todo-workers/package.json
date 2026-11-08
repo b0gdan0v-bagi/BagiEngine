@@ -1,0 +1,83 @@
+{
+    "name": "todo-workers",
+    "displayName": "Todo Workers",
+    "description": "The parallel todo-loop workers of BagiEngine: their sessions, entries and branches, and the entries waiting for /todo-merge.",
+    "version": "0.3.0",
+    "publisher": "bagiengine",
+    "license": "UNLICENSED",
+    "private": true,
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "main": "./extension.js",
+    "activationEvents": [
+        "workspaceContains:tools/todo/worker.py",
+        "workspaceContains:engine/tools/todo/worker.py"
+    ],
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "todoWorkers",
+                    "title": "Todo Workers",
+                    "icon": "media/workers.svg"
+                }
+            ]
+        },
+        "views": {
+            "todoWorkers": [
+                {
+                    "type": "webview",
+                    "id": "todoWorkers.view",
+                    "name": "Workers"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "todoWorkers.refresh",
+                "title": "Refresh",
+                "icon": "$(refresh)",
+                "category": "Todo Workers"
+            }
+        ],
+        "menus": {
+            "view/title": [
+                {
+                    "command": "todoWorkers.refresh",
+                    "when": "view == todoWorkers.view",
+                    "group": "navigation"
+                }
+            ]
+        },
+        "configuration": {
+            "title": "Todo Workers",
+            "properties": {
+                "todoWorkers.python": {
+                    "type": "string",
+                    "default": "python3",
+                    "description": "The Python that runs tools/todo/worker.py."
+                },
+                "todoWorkers.claude": {
+                    "type": "string",
+                    "default": "claude",
+                    "description": "The Claude Code command (a full path when VS Code does not see it on PATH)."
+                },
+                "todoWorkers.refreshSeconds": {
+                    "type": "number",
+                    "default": 15,
+                    "minimum": 5,
+                    "description": "How often the panel asks worker.py (it also asks the todo store and reads the session transcripts)."
+                },
+                "todoWorkers.notify": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show a notification when an entry reaches review or a worker's session ends."
+                }
+            }
+        }
+    }
+}

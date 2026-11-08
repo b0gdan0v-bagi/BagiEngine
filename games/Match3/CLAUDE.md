@@ -14,9 +14,11 @@ src/Match3/
 │   ├── Match3Types.h             Cell (col 0, row 0 = top-left), GemType, kGemTypeCount, kMinMatchLength
 │   ├── Match3Board.*             8x8 gem grid, storage only
 │   ├── MatchFinder.*             stateless detector of horizontal/vertical runs of >= kMinMatchLength
+│   ├── CascadeTrace.*            `SwapTrace` / `CascadeStep` / `GemFall` / `GemRefill`: what a committed swap did, as plain data; `ReplayTrace` applies it to the board before the swap
 │   └── Match3GameModel.*         board, score, selected cell, seed, version, deterministic RNG, legal swaps
 └── Components/
-    ├── Match3BoardComponent      owns the model; draws board and gems, routes clicks, publishes `score` and `seed` to UIVars, answers Match3Reset and Match3Menu
+    ├── BoardAnimation.*          `BoardAnimation`: the tweens of ONE swap as one `Timeline` on a `TweenManager` (swap slide, shrink of matched gems, fall, refill from above; a rejected swap slides back), the sprites it writes, `BoardAnimationSettings` (the durations), `ClipToBoard` (a rect against the board rect); no scene, no renderer, no `CoreManager`
+    ├── Match3BoardComponent      owns the model and a `BoardAnimation`; draws board and gems (or the sprites of a running swap), routes clicks (`ClickCell`), publishes `score` and `seed` to UIVars, answers Match3Reset and Match3Menu
     └── Match3MenuComponent       answers Match3Play and Match3Quit in the menu scene
 ```
 
@@ -33,10 +35,22 @@ src/Match3/
 - The control API works while the menu is up: the model belongs to the board component, which exists in every loaded scene.
 
 - Unlike Chess (BagiEngine-Chess), the model is owned by the scene component, not by the `IGame`.
-- `Match3GameModel` never animates: a successful swap resolves the whole cascade (remove → gravity → refill → repeat) before returning, so the board is stable after every public call. Keep animation, if added, in the component.
+- `Match3GameModel` never animates: a successful swap resolves the whole cascade (remove → gravity → refill → repeat) before returning, so the board is stable after every public call. It learns no time, tween or position, but it RECORDS what the cascade did as plain data: `GetLastSwap()` is a `SwapTrace` (the version it belongs to, the two swapped cells, and per round the removed cells, the falls `{col, fromRow, toRow}` and the refills `{col, toRow, fromRow, gem}` with a negative `fromRow`: above the board). It is cleared by `Reset` and at the start of every `TrySwap`, so it is null after a rejected swap (a stale trace is never a new one); `ResolveCascade()` alone records nothing. Recording touches neither the RNG, the score nor the version. Time, tweens and drawing stay in the component.
 - Public gameplay surface is `Reset(seed)`, `OnCellClicked` (two-step select/swap), `TrySwap`, and for a controller `WouldSwapMatch(a, b)` (tries the swap on a copy, changes nothing), `GetLegalSwaps()` (each neighbour pair once: a cell with its right and its lower neighbour, row by row), `GetSeed()` and `GetVersion()` (grows with every `Reset` and every committed swap).
 - **Determinism:** the same seed gives the same board, and the same seed with the same swaps gives the same board and score, on every platform. The gems come from `std::mt19937` through `1 + rng() % kGemTypeCount`, not from `std::uniform_int_distribution` (its output differs between standard libraries). `Match3LegalSwapsTest` pins the boards of three seeds against an independent MT19937. Do not change how `RandomGem()` draws without updating those boards: every saved seed changes.
-- Geometry and the RNG seed (`_originX`, `_originY`, `_cellSize`, `_seed`) are reflected for the scene editor.
+- Geometry, the RNG seed and the animation switch (`_originX`, `_originY`, `_cellSize`, `_seed`, `_animate`) are reflected for the scene editor.
+
+## Animation
+
+A swap that a person makes with the mouse slides, the matched gems shrink away, the gems above fall and the refilled gems drop in from above the board. It runs on `CoreManager::GetTweens()` (game time) as one `Timeline` per swap (`BoardAnimation`, built from the `SwapTrace` of the model); a rejected swap (two neighbours, no match) slides and slides back. Defaults, in `BoardAnimationSettings`: swap 0.125 s, clear 0.125 s, fall 0.0625 s plus 0.03125 s per row (powers of two, so a fake clock in a test gives exact sums); about 0.5 s for a swap with a cascade.
+
+- **Which changes animate:** only `Match3BoardComponent::ClickCell(Cell)`, the click of a person (`OnMouseDown` converts the pixel to a cell and calls it). Everything else (the control API `perform_action` / `reset`, the Reset button, a test's `TrySwap` or `Reset`) is drawn at once: the component keeps the model version of the running animation (`_animatedVersion`) and a draw that finds another version drops the sprites (`Finish()`) and shows the model board. The scene follows the model, which is what a `screenshot` after a control call relies on.
+- **The model does not wait:** while the sprites play, `GetModel()` already holds the final board and score, so `get_state`, `list_actions` and the score label never lag behind the picture. The score label shows the new score at once, not at the end of the animation.
+- **Manual clock and headless:** the animation is ordinary tween time and moves only when frames run with a `dt` (`step`). The control API cannot click the board, so no control-driven run starts one and every screenshot of the smoke test shows a settled board (`check_control_changes_are_shown_at_once` in `tools/control/tests/smoke.py` pins it: a screenshot after `perform_action` shows the new board, and 30 stepped frames change nothing). A frame time is clamped to 0.25 s (`Time::kMaxFrameTime`), so a pause does not skip the animation in one frame.
+- **Input during an animation:** a click finishes it at once (snap to the model board), then the click is handled normally and may start the next one. `Reset` and `Menu` finish it too.
+- **Drawing:** the component draws the sprites only while `IsAnimating()` (the run goes on for the current model version) and the model board otherwise. Every sprite rect goes through `ClipToBoard` against the board rect in scene units (the refilled gems start above the board; `IRenderer::PushClipRect` works in output pixels), and a shrinking gem shrinks around its cell centre.
+- **API of the component:** `ClickCell(Cell)`, `IsAnimating()`, `SkipAnimation()` (ends the run at once: how a test or a caller gets the end state without waiting). `_animate` (reflected, default true) switched off makes every swap show its result at once, as before the animation existed.
+- Nothing about the animation is in the model, the control adapter or the scene config.
 
 ## Control API
 
@@ -54,7 +68,9 @@ Executable `Match3Tests`, no engine services needed:
 
 - `Match3GameModelTest.cpp`: board, matches, swaps, cascade.
 - `Match3LegalSwapsTest.cpp`: `GetLegalSwaps` against a brute force of `TrySwap` on copies, `WouldSwapMatch` changes nothing, seed determinism with golden boards, version.
+- `Match3CascadeTraceTest.cpp`: `SwapTrace` / `ReplayTrace`: replay equals `TrySwap` for every legal swap of six seeds, removed cells add up to the score, refills start above the board, a hand-made two-step cascade by value, the trace version, empty after `Reset` and after a rejected swap.
+- `Match3BoardAnimationTest.cpp`: `BoardAnimation` on a `TweenManager` of the test (no engine services): sprites at t = 0 on the board before the swap, the swap slide mid-way and after, the shrink, every cell with one visible sprite of the right gem at the end (also for one huge `dt`), the settings change the length, `Finish`, destroying mid-way and a second `Start`, the rejected swap, `ClipToBoard`.
 - `Match3GameControlTest.cpp`: the adapter on a model the test owns.
-- `Match3UiTest.cpp`: the shipped `SceneConfig.xml` (read from the source tree) in a scene manager with a `RecordingRenderer`: the menu and the HUD through the size matrix with the longest values, the HUD outside the board in five window shapes, Play / Quit / Reset / Menu, actions of the other scene ignored, the score on screen, a click on the Reset button at its drawn place. Needs the engine services.
+- `Match3UiTest.cpp`: the shipped `SceneConfig.xml` (read from the source tree) in a scene manager with a `RecordingRenderer`: the menu and the HUD through the size matrix with the longest values, the HUD outside the board in five window shapes, Play / Quit / Reset / Menu, actions of the other scene ignored, the score on screen, a click on the Reset button at its drawn place. The fixture `Match3AnimationTest` (same file) covers the animation of the board component with `CoreManager::GetTweens().Advance(1/32)`: two clicks animate while the model is already final, a mid-way draw differs from the settled one and the end equals a board that never animated, `TrySwap` / reset / the control path never animate, a click during a run finishes it and is handled, a rejected swap by two clicks, a click at the pixel of a cell, `_animate` off, no tween left after the scene is destroyed mid-run. Needs the engine services.
 
 New rules go into `Game/` with a gtest case (`.claude/rules/tests-module.md`).

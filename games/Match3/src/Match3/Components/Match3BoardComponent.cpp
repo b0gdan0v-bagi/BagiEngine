@@ -37,6 +37,32 @@ namespace BECore::Match3 {
             }
         }
 
+        /// The rect scaled around its own centre; 1 gives the rect itself, exactly
+        Rect ShrinkAroundCentre(const Rect& rect, float scale) {
+            if (scale >= 1.0f) {
+                return rect;
+            }
+            return Rect{rect.x + rect.w * (1.0f - scale) * 0.5f, rect.y + rect.h * (1.0f - scale) * 0.5f, rect.w * scale, rect.h * scale};
+        }
+
+        /// The gem of a cell whose top-left corner is (px, py): the dark border and the fill. A sprite smaller than a gem shrinks around the cell
+        /// centre; a @p clip (the board rect) cuts both rects (what lies above the top edge is not drawn)
+        void DrawGem(IRenderer& renderer, float px, float py, float cellSize, float scale, GemType gem, const Rect* clip) {
+            const float pad = cellSize * 0.12f;
+            const float side = cellSize - pad * 2.0f;
+            const Rect border = ShrinkAroundCentre(Rect{px + pad - 2.0f, py + pad - 2.0f, side + 4.0f, side + 4.0f}, scale);
+            const Rect fill = ShrinkAroundCentre(Rect{px + pad, py + pad, side, side}, scale);
+            const auto draw = [&renderer, clip](const Rect& rect, const Color& color) {
+                if (clip == nullptr) {
+                    renderer.DrawFilledRect(rect.x, rect.y, rect.w, rect.h, color);
+                } else if (const auto visible = ClipToBoard(rect, *clip)) {
+                    renderer.DrawFilledRect(visible->x, visible->y, visible->w, visible->h, color);
+                }
+            };
+            draw(border, kGemBorder);
+            draw(fill, GemColor(gem));
+        }
+
     }  // namespace
 
     Match3BoardComponent* Match3BoardComponent::s_active = nullptr;
@@ -70,8 +96,10 @@ namespace BECore::Match3 {
         const PoolString resetAction = "Match3Reset"_intern;
         const PoolString menuAction = "Match3Menu"_intern;
         if (event.action == resetAction) {
+            _animation.Finish();
             _model.Reset(_seed);
         } else if (event.action == menuAction && !_menuScene.Empty()) {
+            _animation.Finish();
             CoreManager::GetSceneManager().SetActiveScene(_menuScene);
         }
     }
@@ -79,6 +107,12 @@ namespace BECore::Match3 {
     void Match3BoardComponent::OnDraw() {
         PublishUiVars();
         auto& renderer = *CoreManager::GetRenderer();
+
+        // The sprites are the picture only while their run goes on for the version it was started for; any other change of the model is drawn at once
+        if (!IsAnimating()) {
+            _animation.Finish();
+        }
+        const bool animating = _animation.IsRunning();
 
         const float boardSide = _cellSize * static_cast<float>(kBoardSize);
         renderer.DrawFilledRect(_originX - 4.0f, _originY - 4.0f, boardSide + 8.0f, boardSide + 8.0f, kBoardBackground);
@@ -91,11 +125,16 @@ namespace BECore::Match3 {
                 renderer.DrawFilledRect(px, py, _cellSize, _cellSize, isLight ? kCellLight : kCellDark);
 
                 const GemType g = _model.GetCellAt(Cell{col, row});
-                if (g != GemType::None) {
-                    const float pad = _cellSize * 0.12f;
-                    renderer.DrawFilledRect(px + pad - 2.0f, py + pad - 2.0f, _cellSize - pad * 2.0f + 4.0f, _cellSize - pad * 2.0f + 4.0f, kGemBorder);
-                    renderer.DrawFilledRect(px + pad, py + pad, _cellSize - pad * 2.0f, _cellSize - pad * 2.0f, GemColor(g));
+                if (!animating && g != GemType::None) {
+                    DrawGem(renderer, px, py, _cellSize, 1.0f, g, nullptr);
                 }
+            }
+        }
+
+        if (animating) {
+            const Rect board{_originX, _originY, boardSide, boardSide};
+            for (const GemSprite& sprite : _animation.GetSprites()) {
+                DrawGem(renderer, _originX + sprite.position.x * _cellSize, _originY + sprite.position.y * _cellSize, _cellSize, sprite.scale, sprite.gem, &board);
             }
         }
 
@@ -123,7 +162,41 @@ namespace BECore::Match3 {
         if (!Cell::IsInside(col, row)) {
             return;
         }
-        _model.OnCellClicked(Cell{static_cast<int8_t>(col), static_cast<int8_t>(row)});
+        ClickCell(Cell{static_cast<int8_t>(col), static_cast<int8_t>(row)});
+    }
+
+    void Match3BoardComponent::ClickCell(Cell cell) {
+        if (!cell.IsInside()) {
+            return;
+        }
+        _animation.Finish();  // the model is at its final board already: this snaps the picture, then the click is handled as usual
+        if (!_animate) {
+            _model.OnCellClicked(cell);
+            return;
+        }
+
+        const Match3Board before = _model.GetBoard();
+        const uint64_t versionBefore = _model.GetVersion();
+        const eastl::optional<Cell> selected = _model.GetSelected();
+        _model.OnCellClicked(cell);
+
+        const SwapTrace* trace = _model.GetLastSwap();
+        if (_model.GetVersion() == versionBefore + 1 && trace != nullptr && trace->version == _model.GetVersion()) {
+            _animatedVersion = _model.GetVersion();
+            _animation.Start(CoreManager::GetTweens(), before, *trace);
+        } else if (_model.GetVersion() == versionBefore && selected && Match3GameModel::IsAdjacent(*selected, cell)) {
+            // Two neighbours were picked and no match came of it: they slide to each other and back, on a board that stays as it was
+            _animatedVersion = _model.GetVersion();
+            _animation.StartRejected(CoreManager::GetTweens(), before, *selected, cell);
+        }
+    }
+
+    bool Match3BoardComponent::IsAnimating() const {
+        return _animation.IsRunning() && _animatedVersion == _model.GetVersion();
+    }
+
+    void Match3BoardComponent::SkipAnimation() {
+        _animation.Finish();
     }
 
 }  // namespace BECore::Match3

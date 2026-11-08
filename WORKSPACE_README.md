@@ -191,12 +191,27 @@ cmake --build --preset macos-debug    # сборка игры (BagiMatch3)
 
 | ОС | Пресеты |
 |----|---------|
-| macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-rmlui-debug`, `macos-rmlui-release` — то же с `ENGINE_UI_RMLUI=ON` (хост RmlUi и его тесты; сторонние библиотеки не нужны, шрифты читает движок) |
-| Windows | `windows-msvc-{debug,release}`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
+| macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-release-editor` — Release с редактором (см. ниже); `macos-rmlui-debug`, `macos-rmlui-release` — то же с `ENGINE_UI_RMLUI=ON` (хост RmlUi и его тесты; сторонние библиотеки не нужны, шрифты читает движок) |
+| Windows | `windows-msvc-{debug,release}`, `windows-msvc-release-editor`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
 
 Настройки конкретной машины (например `VULKAN_SDK`, ccache) кладите в `CMakeUserPresets.json` — он в `.gitignore`.
-Исполняемые файлы всегда лежат в `build/{Compiler}{Platform}/` (`BagiMatch3`), поэтому Debug и Release (Ninja) затирают друг друга.
+Исполняемые файлы и библиотеки всегда лежат в `build/{Compiler}{Platform}/` (`BagiMatch3`; библиотеки в `lib/`), поэтому Debug, Release и release-editor (Ninja) затирают друг друга. При переходе между ними удалите все `build/ClangmacOS/lib/*.a` (на Windows `build/MSVCWindows/lib`) перед сборкой — иначе подхватятся старые объекты другой конфигурации и тесты упадут.
 Reflection-код генерируется на этапе configure: после правок `BE_CLASS` / `BE_REFLECT_FIELD` повторите `cmake --preset ...`.
+
+#### Редактор в сборке
+
+Панели редактора (`src/Widgets/{ConfigEditor,EditorLayout,SceneEditor,TextureEditor,Viewport}`) и их тесты собираются не всегда. Это решает опция `BE_WITH_EDITOR` (`cmake/BagiEngine.cmake`):
+
+| Значение | Что значит |
+|----------|------------|
+| `AUTO` (по умолчанию) | редактор есть, кроме одноконфигурационной сборки `Release`, `RelWithDebInfo` или `MinSizeRel`: там его нет. Итог: `macos-debug` с редактором, `macos-release` без. У многоконфигурационных генераторов (Visual Studio, Ninja Multi-Config) конфигурацию выбирают при сборке, а исходники — при configure, поэтому там `AUTO` = с редактором; без него — `-DBE_WITH_EDITOR=OFF` |
+| `ON` | редактор собирается, в том числе в Release: `cmake --preset macos-release -DBE_WITH_EDITOR=ON` или пресеты `macos-release-editor`, `windows-msvc-release-editor` |
+| `OFF` | без редактора. В Debug игнорируется: configure печатает WARNING и собирает редактор (Debug всегда с редактором) |
+
+Configure печатает итог: `Editor: ENABLED (BE_WITH_EDITOR=AUTO)` или `DISABLED`. Смена опции — это новый configure и пересборка. ImGui и `ImGuiWidget` есть в любой сборке (игра может рисовать на них свой HUD).
+
+- Игра с `mode="Editor"` в `ApplicationConfig.xml` в сборке без редактора запускается в режиме **Game** с одним предупреждением в логе (это не ошибка, поэтому `--headless` работает).
+- В сборке с редактором **Ctrl+Shift+E** переключает Game и Editor во время работы. Переключение выполняется в конце кадра; несохранённые правки панелей редактора, форма предпросмотра во вьюпорте и зажатая в нём кнопка мыши теряются. С `--headless` сочетание игнорируется.
 
 ### CMake с Ninja (без пресетов, старый плоский `build/`)
 ```bash

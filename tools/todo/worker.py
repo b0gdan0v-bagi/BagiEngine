@@ -31,12 +31,14 @@ Python 3.10+, standard library only.
 
 import argparse
 import json
+import re
 import os
 import shutil
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 SHARED_SUBMODULE = "engine"
@@ -50,6 +52,7 @@ DEFAULT_PRESETS = {"darwin": "macos-debug"}
 # The name of a worker's background session (`claude --bg --name`), how `claude attach` finds it.
 SESSION_PREFIX = "todo-w"
 DEFAULT_DELAY_S = 60
+REPORT_TO_NAME = re.compile(r"[A-Za-z0-9._-]+")
 
 
 class WorkerError(Exception):
@@ -325,10 +328,305 @@ def cmd_create(layout: Layout, args) -> None:
     problems = check_shared_config(layout, fix=False)
     if problems:
         raise WorkerError(problems[0])
-    print("\nStart a session per worker: python3 <engine>/tools/todo/worker.py run <k> (one terminal each, a minute apart)")
+    print(f"\nStart them: /todo-loop-parallel, or {tool_command(layout)} start (one background session per worker, a minute apart)")
+
+
+def head_json(repo: Path) -> dict:
+    branch = git("symbolic-ref", "--quiet", "--short", "HEAD", cwd=repo, check=False)
+    return {"branch": branch or None, "commit": git("rev-parse", "--short", "HEAD", cwd=repo, check=False)}
+
+
+def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
+    """The entries `in progress` and in `review` (todo.py, run from the main checkout), or an error."""
+    todo = Path(__file__).resolve().parent / "todo.py"
+    try:
+        result = subprocess.run(
+            [sys.executable, str(todo), "list", "--status", "in progress,review", "--json"],
+            cwd=layout.main, capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return [], str(error)
+    if result.returncode != 0:
+        text = (result.stderr or result.stdout).strip()
+        return [], text.splitlines()[-1] if text else f"exit code {result.returncode}"
+    try:
+        entries = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError as error:
+        return [], f"todo.py list: {error}"
+    keep = ("id", "area", "title", "status", "statusNote", "branch", "planProgress")
+    return [{key: entry.get(key) for key in keep} for entry in entries if isinstance(entry, dict)], None
+
+
+# --- activity: what a session does now, from its transcript ---------------------------------------
+#
+# Claude Code writes every session to ~/.claude/projects/<cwd with each non-alphanumeric char as '-'>/
+# <sessionId>.jsonl, and the agents it starts to <sessionId>/subagents/agent-<id>.jsonl with a .meta.json
+# (agentType, description, model). The panel shows the last steps of both; nothing here writes.
+
+ACTIVITY_EVENTS = 8
+ACTIVITY_AGENT_MINUTES = 15  # an agent whose transcript changed within this time counts as running
+TAIL_BYTES = 768 * 1024
+REPORT_TOOLS = ("SubagentHandback", "SendMessage")  # the tool an agent hands its final report back with
+
+
+def projects_dir() -> Path:
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+
+
+def transcript_of(cwd: str, session_id: str) -> Path:
+    return projects_dir() / re.sub(r"[^A-Za-z0-9]", "-", cwd) / f"{session_id}.jsonl"
+
+
+def tail_records(path: Path) -> list[dict]:
+    """The JSON records of the last TAIL_BYTES of a transcript (the first, cut line is dropped)."""
+    try:
+        with path.open("rb") as file:
+            size = file.seek(0, os.SEEK_END)
+            file.seek(max(0, size - TAIL_BYTES))
+            data = file.read()
+    except OSError:
+        return []
+    lines = data.split(b"\n")
+    if size > TAIL_BYTES:
+        lines = lines[1:]
+    records = []
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+    return records
+
+
+def one_line(text: str, limit: int) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def tool_text(name: str, given: dict) -> str:
+    for key in ("description", "message", "file_path", "pattern", "command", "prompt", "query", "url"):
+        value = given.get(key)
+        if isinstance(value, str) and value.strip():
+            return one_line(value, 160)
+    return one_line(json.dumps(given, ensure_ascii=False), 160)
+
+
+def events_of(records: list[dict], limit: int) -> list[dict]:
+    """The last `limit` steps: what the session said (`say`) and which tools it called (`tool`)."""
+    events = []
+    for record in records:
+        if record.get("type") != "assistant":
+            continue
+        content = (record.get("message") or {}).get("content")
+        if isinstance(content, str):
+            content = [{"type": "text", "text": content}]
+        for part in content if isinstance(content, list) else []:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "text" and str(part.get("text", "")).strip():
+                events.append({"time": record.get("timestamp"), "kind": "say", "text": one_line(part["text"], 400)})
+            elif part.get("type") == "tool_use":
+                given = part.get("input") if isinstance(part.get("input"), dict) else {}
+                events.append({"time": record.get("timestamp"), "kind": "tool", "tool": part.get("name"), "text": tool_text(str(part.get("name")), given)})
+    return events[-limit:]
+
+
+def finished(records: list[dict]) -> bool:
+    """An agent is done when its last answer ended the turn or was its report (REPORT_TOOLS)."""
+    for record in reversed(records):
+        if record.get("type") != "assistant":
+            continue
+        message = record.get("message") or {}
+        content = message.get("content") if isinstance(message.get("content"), list) else []
+        if any(isinstance(part, dict) and part.get("type") == "tool_use" and part.get("name") in REPORT_TOOLS for part in content):
+            return True
+        return message.get("stop_reason") == "end_turn"
+    return False
+
+
+def session_activity(session: dict | None) -> dict | None:
+    """The last steps of a worker's session and of the agents it runs now, or None without a transcript."""
+    if not session or not session.get("cwd") or not session.get("sessionId"):
+        return None
+    main = transcript_of(session["cwd"], session["sessionId"])
+    if not main.is_file():
+        return None
+    agents = []
+    folder = main.with_suffix("") / "subagents"
+    now = time.time()
+    if folder.is_dir():
+        for path in folder.glob("agent-*.jsonl"):
+            try:
+                changed = path.stat().st_mtime
+            except OSError:
+                continue
+            if now - changed > ACTIVITY_AGENT_MINUTES * 60:
+                continue
+            try:
+                meta = json.loads(path.with_suffix(".meta.json").read_text())
+            except (OSError, json.JSONDecodeError):
+                meta = {}
+            records = tail_records(path)
+            last = events_of(records, 2)
+            agents.append({
+                "type": meta.get("agentType"),
+                "description": meta.get("description"),
+                "model": meta.get("model"),
+                "updated": int(changed * 1000),
+                "done": finished(records),
+                "last": last,
+            })
+    agents.sort(key=lambda agent: (not agent["done"], agent["updated"]), reverse=True)
+    return {"updated": int(main.stat().st_mtime * 1000), "events": events_of(tail_records(main), ACTIVITY_EVENTS), "agents": agents[:4]}
+
+
+USAGE_RECENT_MINUTES = 10  # the window of "now": tokens of the answers in the last minutes
+USAGE_KEYS = ("input", "cacheWrite", "cacheRead", "output")
+
+
+def usage_counts(usage: dict) -> dict:
+    return {
+        "input": int(usage.get("input_tokens") or 0),
+        "cacheWrite": int(usage.get("cache_creation_input_tokens") or 0),
+        "cacheRead": int(usage.get("cache_read_input_tokens") or 0),
+        "output": int(usage.get("output_tokens") or 0),
+    }
+
+
+def add_counts(into: dict, counts: dict) -> None:
+    for key in USAGE_KEYS:
+        into[key] = into.get(key, 0) + counts.get(key, 0)
+    into["total"] = sum(into.get(key, 0) for key in USAGE_KEYS)
+
+
+def context_of(counts: dict) -> int:
+    """The tokens an answer read: what the session holds in its context at that moment."""
+    return counts["input"] + counts["cacheWrite"] + counts["cacheRead"]
+
+
+def file_usage(path: Path) -> tuple[dict, dict, str | None]:
+    """The answers of one transcript: message id -> (time, model, counts), and the last one's counts and
+    model. Claude Code writes an answer once per content block with the same id and usage, so the id
+    counts once (with the largest output, which grows while it streams)."""
+    answers: dict[str, tuple[float, str, dict]] = {}
+    last: tuple[dict, str | None] = ({}, None)
+    try:
+        file = path.open(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}, {}, None
+    with file:
+        for line in file:
+            if '"usage"' not in line or '"assistant"' not in line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            message = record.get("message") if record.get("type") == "assistant" else None
+            if not isinstance(message, dict) or not isinstance(message.get("usage"), dict):
+                continue
+            counts = usage_counts(message["usage"])
+            model = str(message.get("model") or "?")
+            if model == "<synthetic>":
+                continue
+            ident = str(message.get("id") or record.get("uuid"))
+            try:
+                when = datetime.fromisoformat(str(record.get("timestamp")).replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                when = 0.0
+            known = answers.get(ident)
+            if known is None or counts["output"] >= known[2]["output"]:
+                answers[ident] = (when, model, counts)
+            last = (counts, model)
+    return answers, last[0], last[1]
+
+
+def session_usage(session: dict | None) -> dict | None:
+    """The tokens of a worker's session and of all its agents, by model, in the last minutes, and the
+    size of its context now (the last answer of the session itself)."""
+    if not session or not session.get("cwd") or not session.get("sessionId"):
+        return None
+    main = transcript_of(session["cwd"], session["sessionId"])
+    if not main.is_file():
+        return None
+    since = time.time() - USAGE_RECENT_MINUTES * 60
+    total: dict = {}
+    recent: dict = {}
+    models: dict[str, dict] = {}
+    parts = {"session": {}, "agents": {}}
+    answers, last, last_model = file_usage(main)
+    files = [("session", answers)]
+    folder = main.with_suffix("") / "subagents"
+    if folder.is_dir():
+        files += [("agents", file_usage(path)[0]) for path in sorted(folder.glob("agent-*.jsonl"))]
+    for part, found in files:
+        for when, model, counts in found.values():
+            add_counts(total, counts)
+            add_counts(parts[part], counts)
+            add_counts(models.setdefault(model, {}), counts)
+            if when >= since:
+                add_counts(recent, counts)
+    return {
+        "total": total,
+        "session": parts["session"],
+        "agents": parts["agents"],
+        "models": models,
+        "recent": recent,
+        "recentMinutes": USAGE_RECENT_MINUTES,
+        "context": context_of(last) if last else 0,
+        "contextModel": last_model,
+    }
+
+
+def list_json(layout: Layout, args) -> dict:
+    """What `list --json` prints: the workers, their sessions and entries, and the entries in review
+    (the VS Code panel of tools/vscode/todo-workers reads it)."""
+    sessions = list_sessions(args.claude)
+    entries, store_error = store_entries(layout) if args.store else ([], None)
+    by_branch = {entry["branch"]: entry for entry in entries if entry.get("branch")}
+    workers = []
+    for k, path in layout.workers():
+        game = head_json(path)
+        engine = head_json(path / SHARED_SUBMODULE) if layout.shared is not None and (path / SHARED_SUBMODULE / ".git").exists() else None
+        changed = dirty(path, ignore_submodules=True) or (engine is not None and dirty(path / SHARED_SUBMODULE))
+        session = session_in(sessions or [], path)
+        entry = next((by_branch[h["branch"]] for h in (engine, game) if h and h["branch"] in by_branch), None)
+        workers.append({
+            "k": k,
+            "name": f"{WORKER_PREFIX}{k}",
+            "path": str(path),
+            "head": game,
+            "engine": engine,
+            "dirty": bool(changed),
+            "session": None if session is None else {key: session.get(key) for key in ("id", "name", "state", "status", "startedAt")},
+            "active": is_active(session),
+            "activity": session_activity(session) if args.activity else None,
+            "usage": session_usage(session) if args.usage else None,
+            "entry": entry,
+        })
+    usage: dict = {}
+    recent: dict = {}
+    for row in workers:
+        if row["usage"]:
+            add_counts(usage, row["usage"]["total"])
+            add_counts(recent, row["usage"]["recent"])
+    return {
+        "usage": {"total": usage, "recent": recent, "recentMinutes": USAGE_RECENT_MINUTES} if args.usage else None,
+        "main": str(layout.main),
+        "root": str(layout.root),
+        "sessionsKnown": sessions is not None,
+        "store": "off" if not args.store else (store_error or "ok"),
+        "workers": workers,
+        "review": [entry for entry in entries if entry.get("status") == "review"],
+    }
 
 
 def cmd_list(layout: Layout, args) -> None:
+    if args.json:
+        print(json.dumps(list_json(layout, args), ensure_ascii=False, indent=1))
+        return
     workers = layout.workers()
     if not workers:
         print(f"no workers in {layout.root}")
@@ -402,6 +700,25 @@ def chosen_workers(layout: Layout, numbers: list[int]) -> list[tuple[int, Path]]
     return [(k, known[k]) for k in dict.fromkeys(numbers)]
 
 
+def tool_command(layout: Layout) -> str:
+    """How the owner calls this script from the main checkout (`engine/tools/...` in a game)."""
+    here = Path(__file__).resolve()
+    try:
+        return f"python3 {here.relative_to(layout.main.resolve())}"
+    except ValueError:
+        return f"python3 {here}"
+
+
+def loop_prompt(args) -> str:
+    """The prompt of a worker's session: `/todo-loop N [loop args] [report-to=<session>]`."""
+    report = ""
+    if args.report_to:
+        if not REPORT_TO_NAME.fullmatch(args.report_to):
+            raise WorkerError(f"--report-to {args.report_to!r}: a session name (letters, digits, '.', '_', '-')")
+        report = f"report-to={args.report_to}"
+    return " ".join(part for part in ("/todo-loop", str(args.slices), args.loop_args, report) if part)
+
+
 def cmd_start(layout: Layout, args) -> None:
     """`/todo-loop` as a background Claude session (`claude --bg`) in each chosen worker, `--delay`
     seconds apart: two loops that choose at the same moment could take entries that meet in their
@@ -414,7 +731,7 @@ def cmd_start(layout: Layout, args) -> None:
     if sessions is None and not args.print_only:
         raise WorkerError(f"`{args.claude} agents --json` did not answer; is Claude Code installed and new enough for --bg?")
     env = build_env(layout)
-    prompt = " ".join(part for part in ("/todo-loop", str(args.slices), args.loop_args) if part)
+    prompt = loop_prompt(args)
     started = 0
     failed = False
     for k, path in workers:
@@ -437,12 +754,12 @@ def cmd_start(layout: Layout, args) -> None:
             failed = True
             print(f"  failed: {output or f'exit code {result.returncode}'}")
             if "trust" in output.lower():
-                print(f"  w{k} is not trusted by Claude Code yet: run `python3 <engine>/tools/todo/worker.py run {k}` once, accept the prompt, quit with /exit, then start again")
+                print(f"  w{k} is not trusted by Claude Code yet: run `{tool_command(layout)} run {k}` once, accept the prompt, quit with /exit, then start again")
             continue
         started += 1
         print(f"  {output.splitlines()[0]}")
     if started and not args.print_only:
-        print(f"\nWatch: python3 <engine>/tools/todo/worker.py list; claude agents; claude attach {SESSION_PREFIX}<k> when one waits for you")
+        print(f"\nWatch: {tool_command(layout)} list; claude agents; claude attach {SESSION_PREFIX}<k> when one waits for you")
     if failed:
         raise WorkerError("some workers did not start (above)")
 
@@ -473,6 +790,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-configure", action="store_true", help="do not run the first configure")
     p = sub.add_parser("list", help="the workers, their branches, clean or not, their background sessions")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
+    p.add_argument("--store", action="store_true", help="with --json: also the entries in progress and in review of the todo store")
+    p.add_argument("--usage", action="store_true", help="with --json: also the tokens of each session and its agents (from the transcripts)")
+    p.add_argument("--activity", action="store_true", help="with --json: also the last steps of each session and of its running agents (from the transcripts)")
     p = sub.add_parser("check", help="the shared config and every worker")
     p.add_argument("--fix", action="store_true", help="set a broken core.worktree of the shared submodule back")
     p = sub.add_parser("remove", help="delete a clean worker folder")
@@ -485,6 +806,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
     p.add_argument("--slices", type=int, default=1, help="N of `/todo-loop N`: the slices each loop takes (default 1)")
     p.add_argument("--loop-args", default="", help="more arguments of /todo-loop, e.g. 'models=reviewer:sonnet'")
+    p.add_argument("--report-to", help="the session (a name of `claude agents`) every loop sends its reports to (`report-to=` of /todo-loop)")
     p.add_argument("--delay", type=int, default=DEFAULT_DELAY_S, help=f"seconds between two starts (default {DEFAULT_DELAY_S})")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--print", dest="print_only", action="store_true", help="only print the commands")

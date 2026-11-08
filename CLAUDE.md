@@ -14,8 +14,20 @@ cmake --build --preset macos-debug         # build everything: the game executab
 
 | OS | Presets |
 |----|---------|
-| macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-rmlui-debug`, `macos-rmlui-release`: the same with `ENGINE_UI_RMLUI=ON` (the RmlUi host and its tests; no system library is needed, the engine's own fonts draw the text) |
-| Windows | `windows-msvc-{debug,release}`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
+| macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-release-editor`: Release with the editor (below); `macos-rmlui-debug`, `macos-rmlui-release`: the same with `ENGINE_UI_RMLUI=ON` (the RmlUi host and its tests; no system library is needed, the engine's own fonts draw the text) |
+| Windows | `windows-msvc-{debug,release}`, `windows-msvc-release-editor`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
+
+**By default the editor is in Debug builds and not in a single-config Release; Debug always has it.** The option `BE_WITH_EDITOR` (`cmake/BagiEngine.cmake`, section "Editor Option") decides whether the editor panels (`src/Widgets/{ConfigEditor,EditorLayout,SceneEditor,TextureEditor,Viewport}`) and their tests are built:
+
+| `BE_WITH_EDITOR` | Result |
+|------------------|--------|
+| `AUTO` (default) | ON, except in a single-config build of type `Release`, `RelWithDebInfo` or `MinSizeRel`, where it is OFF. So `macos-debug` has the editor and `macos-release` does not. A multi-config generator (Visual Studio, Ninja Multi-Config) picks the configuration at build time but the sources are picked at configure time, so `AUTO` is ON there; pass `-DBE_WITH_EDITOR=OFF` for a build without the editor |
+| `ON` | the editor is built, also in Release: `cmake --preset macos-release -DBE_WITH_EDITOR=ON`, or the presets `macos-release-editor` and `windows-msvc-release-editor` |
+| `OFF` | no editor. In a Debug build this is not honoured: configure prints a `WARNING` and builds the editor anyway (Debug builds always include the editor). Any other value is an error |
+
+Configure prints the result (`Editor: ENABLED (BE_WITH_EDITOR=AUTO)` or `DISABLED`). The option adds the compile definition `BE_WITH_EDITOR=1|0` to every engine and game target (`kEditorBuilt` in `BECore/Application/RunMode.h` is its `constexpr` form); code that needs an editor header is guarded with `#if BE_WITH_EDITOR`. ImGui and `ImGuiWidget` are in every build (a game may use `ImGuiWidget` for its HUD). Changing the option is a configure and rebuilds the runtime and the tests.
+
+A game that asks for `mode="Editor"` in `ApplicationConfig.xml` in a build without the editor starts in **Game** mode with one log warning (not an error, so `--headless` and the engine's own `mode="Editor"` default still start). In a build with the editor, **Ctrl+Shift+E** switches Game and Editor while the program runs (applied at the end of a frame; staged editor changes are lost; not with `--headless`): `src/Modules/BECore/CLAUDE.md`, "Run mode".
 
 Per-machine settings go in `CMakeUserPresets.json` (git-ignored). Without presets (legacy flat `build/`):
 
@@ -24,7 +36,7 @@ cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 cmake --build build
 ```
 
-C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output lands in `build/{CompilerName}{PlatformName}/` regardless of preset, so Debug and Release Ninja presets overwrite each other's executables. Reflection code is generated at configure time: re-run `cmake --preset ...` after changing `BE_CLASS` / `BE_REFLECT_FIELD`.
+C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output lands in `build/{CompilerName}{PlatformName}/` regardless of preset, so Debug, Release and release-editor Ninja presets overwrite each other's executables and libraries: after switching between them delete every `build/ClangmacOS/lib/*.a` (the folder name is the compiler and platform), or the old objects of the other configuration are linked in and the tests crash. Reflection code is generated at configure time: re-run `cmake --preset ...` after changing `BE_CLASS` / `BE_REFLECT_FIELD`.
 
 ## Running Tests
 
@@ -42,11 +54,11 @@ Runtime tests that need the live engine are `ITest` classes (`src/Modules/BECore
 
 ## Architecture Overview
 
-BagiEngine is a C++23 game engine with modular ECS architecture (EnTT). The main entry is `src/main.cpp` → `Application::Initialize()/Run()`; each game executable compiles it.
+BagiEngine is a C++23 game engine built on a scene graph of `SceneNode` + `IComponent`; an EnTT registry holds the data of the systems (today the draw pass), see `src/Modules/BECore/Scene/CLAUDE.md`, "Why EnTT". The main entry is `src/main.cpp` → `Application::Initialize()/Run()`; each game executable compiles it.
 
 **Engine and games:** the engine knows nothing about concrete games. A game lives in `games/<Name>/` (module, executable, `config/`, `assets/`, `tests/`), reaches the engine only through `cmake/BagiEngine.cmake` (`be_add_module`, `be_add_game_reflection`, `be_add_game_executable`, `be_add_game_tests`) and registers an `IGame` in `AbstractFactory<IGame>`. One executable is one game. `games/` is built to move out into separate repositories that carry this repository as a submodule (`engine/`); no engine code, CMake or config outside `games/` refers to a concrete game. See `src/Modules/Games/CLAUDE.md`; a game in a repository of its own (git identity, submodule, shared skills, todo area) is set up by `NEW_GAME.md`.
 
-**Stack:** CMake 3.31+ with Ninja, SDL3 + SDL_image, ImGui, EnTT (ECS), EASTL, pugixml (XML), nlohmann/json (control API only), stb_truetype (text), fmt, magic_enum (reflection), GoogleTest (tests).
+**Stack:** CMake 3.31+ with Ninja, SDL3 + SDL_image, ImGui, EnTT (entity registry), EASTL, pugixml (XML), nlohmann/json (control API only), stb_truetype (text), fmt, magic_enum (reflection), GoogleTest (tests).
 
 **Module order (bottom → top; every module links `BECoreModule`, which provides the PCH):**
 ```
@@ -73,7 +85,7 @@ src/
 config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, Text, UI, default SceneConfig; assets/fonts/ has the default font)
 games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Match3; Chess is the repository BagiEngine-Chess, which carries this one as its submodule `engine/`)
 tests/                  # GoogleTest executable BagiEngineTests (BECore) + Common (BagiEngineTestSupport)
-tools/                  # developer tools: natvis, todo (the todo store: a service on Railway and its CLI `todo.py`; `tools/todo/CLAUDE.md`), control (Python: the control API client and smoke test, the MCP server; `tools/control/CLAUDE.md`)
+tools/                  # developer tools: natvis, todo (the todo store: a service on Railway and its CLI `todo.py`; `tools/todo/CLAUDE.md`), control (Python: the control API client and smoke test, the MCP server; `tools/control/CLAUDE.md`), vscode/todo-workers (a VS Code panel of the parallel todo-loop workers; its `README.md`)
 ```
 
 **Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.

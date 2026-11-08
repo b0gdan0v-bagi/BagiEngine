@@ -32,11 +32,12 @@ Several loops can run at once, one Claude session each, in **worker folders**: g
 - **Go to the base** means `git -C <R> switch <base>`, or `git -C <R> switch --detach <base>` when `<base>` is checked out in another worktree (`git -C <R> worktree list`): a branch can be checked out in one worktree only, and the main checkout holds the base branches. Wherever this skill says "go to the base", it means this.
 - **Busy files.** Two branches that change the same file conflict at the merge, and `todo-merge` does not resolve conflicts, so a loop does not take an entry that would change what another taken entry changes (steps 1 and 2). The busy files of a taken entry (`in progress` or `review`, with a branch) are what its branch changed, `git -C <R> diff --name-only <base>...<branch>`, plus the `## Files` section of its slice plan (`todo plan get todo-loop-<branch-id>.md --stdout`, when the store has it). Entries of different areas never meet (different repositories). Two paths meet when they are equal or one is a folder (ending with `/`) that holds the other. The shared files of the rules file (section "Workers") do not count alone.
 - In a worker, never run `git submodule update` in the game repository: the worker's `engine/` is a worktree of the main checkout's engine module, `worker.py` turned the update off for the worker, and `worker.py check` says whether the shared config is still right.
+- **Reports to the launcher.** With `report-to=<session>` the loop sends its news to that session with `SendMessage` (`to`: the name as given), so the owner reads every worker in one place. A message is plain text, in Russian, its first line `w<k> · <id>: <what happened>` (`w<k>` is the worker folder's name, or `main` outside a worker), at most about 15 lines, with the absolute links of the chat (plan, reviews, pages in the store). Send one when: a slice reaches `review` (step 6: branch, repository, commits, build/tests, reviewer verdict, the note), a task stops ("Stopping a task": the reason), the loop stops with nothing taken or on an error ("Stopping the whole loop"), a question waits for the owner (the AskUserQuestion of step 1: the message says the worker waits and how to answer, `claude attach todo-w<k>`), and at the end of the run (the report of section "Report", shortened to the first line, the table and the owner's queue). A send that fails (the session is gone, it refused) is a note in the own report; the loop does not stop or retry for it. Never send anything else: no progress messages per WP, no questions to the launcher, no instructions.
 - Start the sessions a minute or so apart: two loops that choose at the same moment can still take two entries that meet (the window is the time between the check of step 2 and the stub plan).
 
 ## Arguments (all optional)
 
-`/todo-loop [N] [<id>] [list] [plan-only] [close] [models=role:model,...]`
+`/todo-loop [N] [<id>] [list] [plan-only] [close] [models=role:model,...] [report-to=<session>]`
 
 | Argument | Effect |
 |----------|--------|
@@ -45,6 +46,7 @@ Several loops can run at once, one Claude session each, in **worker folders**: g
 | `list` | Only the classifier runs. No branches, no writes to the store. |
 | `plan-only` | Classifier and architect. The entry is claimed, the branch is cut (no commit), the plan is in the store. |
 | `close` | After the owner has merged branches: close their entries in the store (section "Closing merged entries"). Nothing else runs. |
+| `report-to=<session>` | Also send the reports to this Claude session (section "Reports to the launcher"). `worker.py start --report-to` passes it, so the session that started the workers hears from all of them. |
 | `models=classifier:haiku,reviewer:sonnet` | Override the model of a role for this run. `haiku`, `sonnet` and `opus` are allowed; `opus` is the default of the reviewer only, the other roles stay at or below `sonnet`. |
 
 ## Roles and models

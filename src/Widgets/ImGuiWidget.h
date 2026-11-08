@@ -16,7 +16,10 @@ namespace BECore {
         BE_CLASS(ImGuiWidget)
     public:
         ImGuiWidget() = default;
-        ~ImGuiWidget() override = default;
+        /// Shuts ImGui down when the widget dies: at a switch from Editor to Game mode and at program end (Application::Cleanup
+        /// destroys the widgets before ApplicationCleanUpEvent, while the renderer's device is alive). The subscription to
+        /// ApplicationCleanUpEvent goes with the widget, so Destroy() runs once.
+        ~ImGuiWidget() override;
 
         BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
         BE_FUNCTION void Draw() override;

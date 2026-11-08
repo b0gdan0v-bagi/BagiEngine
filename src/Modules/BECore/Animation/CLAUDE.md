@@ -91,4 +91,4 @@ CoreManager::GetTaskManager().RunOnMainThread([]() -> Task<void> {
 
 ## Not there yet
 
-Yoyo and an infinite repeat of a timeline (a finite `Repeat` is there; nothing needs a pulse yet), and the first consumer (Match3 swap, fall and refill, slice 3 of the entry `no-animation`; `games/Match3` still animates nothing). `Vec3` and any 3D type are not there (nothing in the engine is 3D). A clip has no cancel callback of its own (rule 14).
+Yoyo and an infinite repeat of a timeline (a finite `Repeat` is there; nothing needs a pulse yet). `Vec3` and any 3D type are not there (nothing in the engine is 3D). A clip has no cancel callback of its own (rule 14). The first consumer is there: the swap, fall and refill of `games/Match3` (`BoardAnimation` on `CoreManager::GetTweens()`; `games/Match3/CLAUDE.md`, "Animation").

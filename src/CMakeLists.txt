@@ -1,5 +1,5 @@
 # Runtime Module CMake Configuration
-# Application loop and the widgets (editor UI). Every game executable links it with WHOLE_ARCHIVE
+# Application loop and the widgets (editor UI, only when BE_WITH_EDITOR is on). Every game executable links it with WHOLE_ARCHIVE
 # (be_add_game_executable), because widgets register themselves in AbstractFactory<IWidget>
 # from static initializers. src/main.cpp is not part of the library: each game executable compiles it.
 
@@ -9,6 +9,11 @@ file(GLOB_RECURSE RUNTIME_MODULE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/Widgets/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/Widgets/*.h"
 )
+
+# The editor panels are built only with BE_WITH_EDITOR (cmake/BagiEngine.cmake). ImGuiWidget stays: a game may use it in its HUD.
+if(NOT BE_EDITOR_ENABLED)
+    list(FILTER RUNTIME_MODULE_SOURCES EXCLUDE REGEX "/Widgets/(ConfigEditor|EditorLayout|SceneEditor|TextureEditor|Viewport)/")
+endif()
 
 add_library(RuntimeModule STATIC ${RUNTIME_MODULE_SOURCES})
 

@@ -202,6 +202,19 @@ def check_screenshots_on_the_manual_clock(client: BagiControlClient) -> None:
     check(other.rows != first.rows, "another seed looked the same: the screenshot does not follow the game")
 
 
+def check_control_changes_are_shown_at_once(client: BagiControlClient) -> None:
+    """A move made through the control API is in the very next screenshot, and nothing moves afterwards: only a click animates the board."""
+    client.call("reset", {"seed": 1})
+    start = take_screenshot(client)
+    client.call("perform_action", client.call("list_actions")["actions"][0])
+    played = take_screenshot(client)
+    check(played.rows != start.rows, "the screenshot after perform_action still shows the old board")
+
+    client.call("step", {"frames": 30, "dt": 0.1})
+    later = take_screenshot(client)
+    check(later.rows == played.rows, "the board moved after a move made through the control API: it animated, and the picture lagged behind the game state")
+
+
 def find_ui_element(tree: dict, name: str) -> dict | None:
     """The first element called `name` in the canvases of a `ui_tree` answer."""
     def search(element: dict) -> dict | None:
@@ -326,6 +339,7 @@ def run_manual_clock_scenario(client: BagiControlClient, headless: bool) -> None
     if headless:
         check_screenshot_basics(client)
         check_screenshots_on_the_manual_clock(client)
+        check_control_changes_are_shown_at_once(client)
     else:
         expect_error("capture_failed", lambda: client.call("screenshot"), "a screenshot on a backend that cannot capture")
 
