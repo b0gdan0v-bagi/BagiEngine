@@ -57,7 +57,7 @@ Runtime tests that need the live engine are `ITest` classes (`src/Modules/BECore
 
 ## Architecture Overview
 
-BagiEngine is a C++23 game engine built on a scene graph of `SceneNode` + `IComponent`; an EnTT registry holds the data of the systems (today the draw pass), see `src/Modules/BECore/Scene/CLAUDE.md`, "Why EnTT". The main entry is `src/main.cpp` → `Application::Initialize()/Run()`; each game executable compiles it.
+BagiEngine is a C++23 game engine built on a scene graph of `SceneNode` + `IComponent`; an EnTT registry holds the data of the systems (today the draw pass and the transform and renderer data of the quad and the sprite), see `src/Modules/BECore/Scene/CLAUDE.md`, "Why EnTT". The main entry is `src/main.cpp` → `Application::Initialize()/Run()`; each game executable compiles it.
 
 **Engine and games:** the engine knows nothing about concrete games. A game lives in `games/<Name>/` (module, executable, `config/`, `assets/`, `tests/`), reaches the engine only through `cmake/BagiEngine.cmake` (`be_add_module`, `be_add_game_reflection`, `be_add_game_executable`, `be_add_game_tests`) and registers an `IGame` in `AbstractFactory<IGame>`. One executable is one game. `games/` is built to move out into separate repositories that carry this repository as a submodule (`engine/`); no engine code, CMake or config outside `games/` refers to a concrete game. See `src/Modules/Games/CLAUDE.md`; a game in a repository of its own (git identity, submodule, shared skills, todo area) is set up by `NEW_GAME.md`.
 
