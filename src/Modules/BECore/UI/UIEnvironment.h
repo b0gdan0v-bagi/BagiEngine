@@ -11,7 +11,8 @@ namespace BECore {
      * @brief What the UI reads from the outside world: the settings and the window metrics, as a layout context. `CoreManager::GetUIEnvironment()`.
      *
      * MakeContext() puts the window's pixel density, display scale and safe area together with the output size. The editor viewport is
-     * not the window, so it overrides the safe area (SetSafeAreaOverride) around the scene draw: the whole target, or a simulated notch.
+     * not the window, so it overrides the safe area (SetSafeAreaOverride) around the scene draw: the whole target, or a simulated notch;
+     * and the pixel density (SetPixelDensityOverride): its target has one pixel per ImGui unit whatever the window's density is.
      */
     class UIEnvironment {
     public:
@@ -34,6 +35,14 @@ namespace BECore {
             return _safeAreaOverride;
         }
 
+        /// The pixel density (output pixels per window unit) that replaces the window's, or nothing to ask the window again; a value that is not positive is ignored
+        void SetPixelDensityOverride(std::optional<float> density) {
+            _pixelDensityOverride = density;
+        }
+        [[nodiscard]] const std::optional<float>& GetPixelDensityOverride() const {
+            return _pixelDensityOverride;
+        }
+
         /**
          * @param window the window whose metrics apply, or null for the neutral ones (density 1, display scale 1, the whole output is safe)
          * @param outputWidth,outputHeight the size in pixels of what is being drawn into
@@ -44,6 +53,7 @@ namespace BECore {
     private:
         UISettings _settings;
         std::optional<Rect> _safeAreaOverride;
+        std::optional<float> _pixelDensityOverride;
     };
 
 }  // namespace BECore
