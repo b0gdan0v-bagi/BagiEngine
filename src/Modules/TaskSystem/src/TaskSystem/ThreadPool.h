@@ -105,6 +105,7 @@ namespace BECore {
         // Inline mode only. One thread uses the pool, so no lock.
         bool _isInline = false;
         bool _drainingInline = false;
+        std::thread::id _inlineThread;
         eastl::deque<TaskQueue::TaskFunc> _inlineQueue;
     };
 

@@ -25,7 +25,7 @@ namespace BECore {
         LOG_INFO("[ThreadPool] Created with {} threads"_format(numThreads));
     }
 
-    ThreadPool::ThreadPool(InlineTag) : _isInline(true) {
+    ThreadPool::ThreadPool(InlineTag) : _isInline(true), _inlineThread(std::this_thread::get_id()) {
         LOG_INFO("[ThreadPool] Created inline (no worker threads)");
     }
 
@@ -68,6 +68,8 @@ namespace BECore {
     }
 
     void ThreadPool::RunInline(TaskQueue::TaskFunc task) {
+        ASSERT(std::this_thread::get_id() == _inlineThread, "The inline ThreadPool is used from the thread that created it only");
+
         if (_drainingInline) {
             // A job is running on this stack: the outer call runs this one after it.
             _inlineQueue.push_back(std::move(task));

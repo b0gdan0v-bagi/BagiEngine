@@ -57,7 +57,7 @@ namespace BECore::Tests {
         class TaskSystemInlineTest : public ::testing::Test {
         protected:
             void SetUp() override {
-                _pool = std::make_unique<ThreadPool>(ThreadPool::InlineTag{});
+                _pool = eastl::make_unique<ThreadPool>(ThreadPool::InlineTag{});
                 _scheduler.Initialize(_pool.get());
             }
 
@@ -67,7 +67,7 @@ namespace BECore::Tests {
             }
 
             TaskScheduler _scheduler;
-            std::unique_ptr<ThreadPool> _pool;
+            eastl::unique_ptr<ThreadPool> _pool;
         };
 
     }  // namespace
@@ -220,6 +220,12 @@ namespace BECore::Tests {
             co_return value * 2;
         }
 
+        Task<int> HopToBackgroundAndBack(int value) {
+            co_await SwitchToBackground();
+            co_await SwitchToMainThread();
+            co_return value + 1;
+        }
+
     }  // namespace
 
     TEST_F(TaskManagerSingleThreadTest, HasNoWorkerThreads) {
@@ -231,6 +237,15 @@ namespace BECore::Tests {
 
     TEST_F(TaskManagerSingleThreadTest, RunWithBackgroundHopFinishesBeforeRunReturns) {
         auto handle = CoreManager::GetTaskManager().Run(HopAndAnswer(21));
+
+        EXPECT_TRUE(handle->IsDone());
+        auto result = handle->GetResult();
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, 42);
+    }
+
+    TEST_F(TaskManagerSingleThreadTest, BackgroundHopThenMainThreadHopFinishesBeforeRunReturns) {
+        auto handle = CoreManager::GetTaskManager().Run(HopToBackgroundAndBack(41));
 
         EXPECT_TRUE(handle->IsDone());
         auto result = handle->GetResult();
