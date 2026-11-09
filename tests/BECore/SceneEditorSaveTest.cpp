@@ -98,6 +98,12 @@ namespace BECore::Tests {
             return false;
         }
 
+        /// Puts `<node ref="nodes/Extra"/>` between the nodes of the `<scene>` element called @p sceneName
+        void AddNodeReference(pugi::xml_node configRoot, const char* sceneName) {
+            pugi::xml_node nodes = FindSceneElement(configRoot, sceneName).child("nodes");
+            nodes.insert_child_after("node", nodes.first_child()).append_attribute("ref").set_value("nodes/Extra");
+        }
+
         SceneNode* FindTopLevelNode(Scene& scene, PoolString name) {
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 if (node->GetName() == name) {
@@ -412,6 +418,49 @@ namespace BECore::Tests {
 
         EXPECT_EQ(Print(ConfigRoot()), once);
         EXPECT_EQ(CountScenes(ConfigRoot()), 3u);
+    }
+
+    TEST_F(SceneEditorSaveTest, ASceneWithANodeReferenceIsRefused) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes());
+        AddNodeReference(ConfigRoot(), "Game");
+        const eastl::string before = Print(ConfigRoot());
+
+        // The live tree is flat: saving it would inline the reference. Nothing is written, not even the other scenes
+        _manager->SetActiveScene("Game"_intern);
+        FindTopLevelNode(*_manager->GetActiveScene(), "Piece"_intern)->SetName("Pawn"_intern);
+        EXPECT_FALSE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
+        EXPECT_EQ(Print(ConfigRoot()), before);
+        EXPECT_EQ(SceneOrder(ConfigRoot()), "Menu,Game,Credits");
+        EXPECT_TRUE(FindSceneElement(ConfigRoot(), "Game").child("nodes").child("node").next_sibling("node").attribute("ref"));
+    }
+
+    TEST_F(SceneEditorSaveTest, ASceneWithoutReferencesIsStillWritten) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes());
+        AddNodeReference(ConfigRoot(), "Game");
+        const eastl::string gameBefore = Print(FindSceneElement(ConfigRoot(), "Game"));
+
+        _manager->SetActiveScene("Menu"_intern);
+        FindTopLevelNode(*_manager->GetActiveScene(), "Title"_intern)->SetName("Heading"_intern);
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
+
+        // Menu is written, the scene with the reference is left as it was
+        EXPECT_STREQ(FindSceneElement(ConfigRoot(), "Menu").child("nodes").first_child().attribute("name").as_string(), "Heading");
+        EXPECT_EQ(Print(FindSceneElement(ConfigRoot(), "Game")), gameBefore);
+        EXPECT_EQ(SceneOrder(ConfigRoot()), "Menu,Game,Credits");
+    }
+
+    TEST_F(SceneEditorSaveTest, AReferenceInAnotherSceneDoesNotBlock) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes());
+        AddNodeReference(ConfigRoot(), "Credits");
+
+        _manager->SetActiveScene("Game"_intern);
+        FindTopLevelNode(*_manager->GetActiveScene(), "Piece"_intern)->SetName("Pawn"_intern);
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
+
+        const pugi::xml_node game = FindSceneElement(ConfigRoot(), "Game");
+        EXPECT_STREQ(game.child("nodes").first_child().next_sibling().attribute("name").as_string(), "Pawn");
+        EXPECT_TRUE(FindSceneElement(ConfigRoot(), "Credits").child("nodes").first_child().next_sibling().attribute("ref"));
+        EXPECT_EQ(SceneOrder(ConfigRoot()), "Menu,Game,Credits");
     }
 
     TEST_F(SceneEditorSaveTest, AnInvalidRootIsRejected) {

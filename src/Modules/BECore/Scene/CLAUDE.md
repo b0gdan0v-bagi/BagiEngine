@@ -6,10 +6,11 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 
 | Class | Role |
 |-------|------|
-| `SceneManager` | Built with `MakeFromConfig<SceneManager>("SceneConfig")` in `CoreManager::OnApplicationInit`. Holds `_scenes`; the first one is active after `Initialize()`. `SetActiveScene(name)`, `GetActiveScene()`, `GetSceneByName()`; `UpdateAll()` / `DrawAll()` drive the active scene. It is the only writer of `Scene::IsActive()` |
+| `SceneManager` | Built by `LoadSceneManagerFromConfig()` (`SceneLoader.h`: `SceneConfig` with its node references expanded, see "Node files") in `CoreManager::OnApplicationInit`. Holds `_scenes`; the first one is active after `Initialize()`. `SetActiveScene(name)`, `GetActiveScene()`, `GetSceneByName()`; `UpdateAll()` / `DrawAll()` drive the active scene. It is the only writer of `Scene::IsActive()` |
 | `Scene` | `FACTORY_BASE`. Owns the `entt::registry`, a runtime root node (`"Root"`) and the serialized `_nodes`; optional view size `viewWidth` / `viewHeight` (see "View size"). `Update()` emits `SceneEvents::SceneFixedUpdateEvent` once per fixed step due in the frame, then `SceneUpdateEvent` with the frame time (both read `CoreManager::GetTime()`); `Draw()` runs `SceneDrawSystem` over the registry, which calls `IComponent::OnDraw()` of every component in draw order (see "Draw order"). `IsActive()` is true for the scene `SceneManager` currently drives. `PrepareForSave()` copies the live hierarchy back into `_nodes` (the scene editor save path calls it through `WriteSceneToConfig`, `src/Widgets/SceneEditor/SceneConfigWriter.h`) |
 | `SceneNode` | `FACTORY_BASE`, XML element `node`: `_name`, `_layer` (attribute `layer`, default 0), `_components`, children, an `entt::entity`. `AddComponent`, `RemoveComponent`, `GetComponent<T>()`, `AddChild`. The XML describes the top-level nodes and their components only; children exist at runtime (`AddChild`) |
 | `IComponent` | `FACTORY_BASE` and `SubscriptionHolder`; gets its `Scene&` / `SceneNode&` through `GetScene()` / `GetNode()` |
+| `SceneNodeFiles` / `SceneLoader` | `SceneNodeFiles.{h,cpp}`: the expansion of `<node ref>` into the flat `SceneConfig` document (`IsValidNodeRef`, `ExpandNodeReferences`, `MakeDirectoryNodeLoader`, `MakeFileSystemNodeLoader`, `LoadSceneDocument`), pure pugixml with no engine services. `SceneLoader.{h,cpp}`: `LoadSceneManager(configRoot, loader)` and `LoadSceneManagerFromConfig()` build the `SceneManager` from the expanded copy. See "Node files" |
 
 ## XML shape
 
@@ -24,7 +25,35 @@ Scene graph on top of EnTT: `SceneManager` → `Scene` → `SceneNode` → `ICom
 </scenes></SceneManager>
 ```
 
-`type` is the component class name; field names lose the leading underscore. A `scene` can carry `viewWidth` / `viewHeight` (see "View size") and a node can carry `layer="-1"` (see "Draw order"). Every `SceneConfig.xml` replaces the one below it in the content layers (see `FileSystem/CLAUDE.md`): the engine's own file holds a debug `MainScene`, and a game's file holds only that game's scenes, so a game executable never loads `MainScene`.
+`type` is the component class name; field names lose the leading underscore. A `scene` can carry `viewWidth` / `viewHeight` (see "View size") and a node can carry `layer="-1"` (see "Draw order"). Every `SceneConfig.xml` replaces the one below it in the content layers (see `FileSystem/CLAUDE.md`): the engine's own file holds a debug `MainScene`, and a game's file holds only that game's scenes, so a game executable never loads `MainScene`. A node can also live in a file of its own and be named by `<node ref="nodes/MyHud"/>` (see "Node files").
+
+## Node files
+
+A game can split its one `SceneConfig.xml`: a node kept in a file of its own is referenced by name from a scene.
+
+```xml
+<!-- config/SceneConfig.xml -->
+<scene type="Scene" name="MahjongScene"><nodes>
+  <node name="Table"> ... </node>
+  <node ref="nodes/MahjongHud"/>
+</nodes></scene>
+
+<!-- config/nodes/MahjongHud.xml -->
+<node name="Hud" layer="10"><components>
+  <component type="UICanvasComponent" .../>
+</components></node>
+```
+
+- **Reference:** `<node ref="..."/>` inside `<nodes>`. The value is a path relative to the `config` mount point, without `config/` and without `.xml`: segments of `[A-Za-z0-9_-]` separated by `/` (`IsValidNodeRef`; no empty segment, no `.` / `..`, no leading `/`, no `\`, no extension). A reference carries no other attribute and no child element (the per-instance overrides are a later slice, so another attribute is an error and not ignored).
+- **Node file:** its document element is one `<node name=".." layer="..">` with `<components>`, the same shape and the same reflection as a node inside `SceneConfig.xml`. It is no reference itself, so there is no nesting and no cycle. The reference element is replaced by a copy of it in the same place: the scene order, and with it the draw order and the input order, is the order of the references.
+- **Where the file is found:** at run time `FileSystem::ResolvePath("config/<ref>.xml")`, so the content layers apply as for every file: a game's `config/nodes/X.xml` replaces the engine's. A tool or a test that has only the path of a `SceneConfig.xml` resolves a reference next to that file (`<folder>/<ref>.xml`, `MakeDirectoryNodeLoader`).
+- **Errors never stop a game:** an invalid reference, a missing, unparsable or wrong file is one `LOG_ERROR` that names the scene and the reference; the reference element is dropped and the rest of the scene loads (as an unknown component `type` does).
+- **The expansion is done on a copy.** `LoadSceneManager` copies the `SceneConfig` document, expands the copy and deserializes it; the cached document of `ConfigManager` keeps its references. What reads the scene after loading (the canvases for the UI validator, `ui_tree`, `ui_click`, the scene editor, `GetDrawRank`) reads the live tree and sees exactly the tree of an inline scene. A test or a tool that reads the **file** (pugixml or `XmlDeserializer::LoadFromFile` on `SceneConfig.xml`) calls `LoadSceneDocument(path, document)` instead and gets the expanded document.
+- **`ConfigManager` also loads a node file as a config named by its stem** (`config/nodes/MahjongHud.xml` is the config `MahjongHud`). That is harmless, but the stem must not equal the name of a real config, so a game prefixes its node files with its name.
+- **The scene editor does not save a scene that has references:** the live tree is flat, so saving would inline every reference. `WriteSceneToConfig` returns false and writes nothing when the element of the scene has a `<node ref>`, and `SceneEditorWidget::SaveScene` logs a warning (the scene stays dirty). A game still runs in Game mode; the split files are edited by hand.
+- **Later slices (not built):** per-instance overrides on the reference (name, layer, component attributes), runtime instantiation of a node file by name, and the editor saving references without flattening.
+
+Tests: `tests/BECore/SceneNodeFilesTest.cpp` (the pure expansion), `SceneSplitTest.cpp` (a split scene is the same scene as the inline one: nodes, canvases, `ui_tree`, validator findings, draw ranks, layering), `SceneEditorSaveTest.cpp` (the refusal).
 
 ## Component lifecycle
 

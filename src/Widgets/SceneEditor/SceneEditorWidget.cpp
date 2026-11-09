@@ -319,6 +319,7 @@ namespace BECore {
         }
 
         if (!WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene)) {  // <SceneManager>
+            LOG_WARNING(Format("SceneEditor: scene '{}' not saved: the editor does not save scenes with node files (<node ref>) yet; edit the file by hand", scene->GetName().CStr()).c_str());
             return;
         }
 

@@ -4,6 +4,7 @@
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Logger/OutputSink.h>
+#include <BECore/Scene/SceneLoader.h>
 #include <BECore/UI/UIControl.h>
 #include <Events/EventsQueueRegistry.h>
 #include <TaskSystem/TaskManager.h>
@@ -82,7 +83,7 @@ namespace BECore {
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
         _widgetManager.CreateWidgets();
-        _sceneManager = MakeFromConfig<SceneManager>("SceneConfig");
+        _sceneManager = LoadSceneManagerFromConfig();  // SceneConfig, with its node files
         _sceneManager->Initialize();
     }
 
