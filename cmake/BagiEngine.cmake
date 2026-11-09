@@ -93,6 +93,14 @@ target_include_directories(imgui PRIVATE ${BAGI_ENGINE_DIR}/external/SDL/include
 set_target_properties(SDL3-shared PROPERTIES FOLDER "External")
 set_target_properties(fmt PROPERTIES FOLDER "External")
 
+# Clang 22 (emsdk 4.0.23) refuses the FMT_STRING() uses inside the vendored fmt 11.0.2 (src/os.cc, fmt/format-inl.h): a string literal
+# evaluated twice at compile time is two objects now, and fmt subtracts pointers into both ("call to consteval function ... is not a
+# constant expression"). Below C++20 fmt has no consteval checks, so the library (not its users) is compiled as C++17 on the web;
+# the compiled functions are the same, only the compile-time format check of fmt's own sources is off
+if(ENGINE_TARGET_WEB)
+    set_target_properties(fmt PROPERTIES CXX_STANDARD 17)
+endif()
+
 # MSVC: fmt rejects a non-UTF-8 execution charset (static_assert in fmt/base.h). The vendored libraries are
 # added before the global compile options below, so fmt gets /utf-8 here; PUBLIC carries it to every user.
 if(MSVC)

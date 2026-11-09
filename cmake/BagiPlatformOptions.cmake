@@ -32,6 +32,14 @@ if(ENGINE_TARGET_WEB)
     set(ENGINE_STATIC_SDL ON CACHE BOOL "Build SDL3 and SDL3_image as static libraries" FORCE)
     set(ENGINE_SINGLE_THREAD ON CACHE BOOL "Run the task system without worker threads" FORCE)
     add_compile_definitions(PLATFORM_WEB)
+    # EABase (vendored) knows no Emscripten: without help it stops with "Unknown platform / processor". Its only branch that takes the
+    # platform from a definition and probes no compiler macro is EA_PLATFORM_SAMSUNG_TV (Linux, POSIX, little endian, ARM32). ARM32 is
+    # the processor EASTL needs: its ARM atomics are written over the compiler builtins (__atomic_*), which wasm32 has, while the x86
+    # ones are not meant for wasm. The name is a label only: nothing in the engine reads EA_PLATFORM_*
+    add_compile_definitions(EA_PLATFORM_SAMSUNG_TV)
+    # EASTL's debug break for ARM is inline assembly ("BKPT 10") that wasm cannot assemble (assert.cpp: "invalid instruction"); a trap is
+    # what the web has (the same as ENGINE_DEBUG_BREAK in BECore/Assert/PlatformDebug.h)
+    add_compile_definitions(EASTL_DEBUG_BREAK_OVERRIDE=__builtin_trap)
     message(STATUS "Target: web (Emscripten), the four platform options are forced")
 endif()
 

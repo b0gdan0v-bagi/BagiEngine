@@ -128,7 +128,7 @@ function(be_web_configure_target TARGET_NAME)
         WEB_ROOT "${BE_WEB_DIR}")
     foreach(_entry IN LISTS _preload)
         # One "--preload-file <spec>" per entry: SHELL: keeps the pair together and stops CMake from dropping the repeated flag
-        # as a duplicate; the quotes keep a path with a space in one piece (unverified: needs emsdk)
+        # as a duplicate; the quotes keep a path with a space in one piece (the specs of this checkout build the .data package; a path with a space is not tried yet: unverified: needs emsdk)
         string(REPLACE "--preload-file " "" _spec "${_entry}")
         target_link_options(${TARGET_NAME} PRIVATE "SHELL:--preload-file \"${_spec}\"")
 
@@ -151,8 +151,14 @@ function(be_web_configure_target TARGET_NAME)
 endfunction()
 
 # Optimisation of the web configurations (see be_web_link_options). They are plain variables, set where this file is included, so
-# they only take effect when it is included before the targets are created. unverified: needs emsdk
+# they only take effect when it is included before the targets are created. Checked in the first build: -O2 -DNDEBUG is on every
+# compile line of web-release (compile_commands.json)
 if(EMSCRIPTEN)
     set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
     set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
+
+    # The toolchain file defines the WHOLE_ARCHIVE link feature without attributes (desktop CMake does define them). Without
+    # OVERRIDE=DEFAULT a module that is linked whole by an executable and also reached as a plain dependency of a game module
+    # (Match3Module links BECoreModule) is "Impossible to link target ... already occurred with the feature 'WHOLE_ARCHIVE'"
+    set(CMAKE_LINK_LIBRARY_WHOLE_ARCHIVE_ATTRIBUTES LIBRARY_TYPE=STATIC DEDUPLICATION=YES OVERRIDE=DEFAULT)
 endif()

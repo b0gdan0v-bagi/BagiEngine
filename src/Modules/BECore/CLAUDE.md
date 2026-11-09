@@ -77,6 +77,7 @@ Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManag
 
 - **CRTDebugHook** (`InstallCRTDebugHooks()`): captures CRT debug reports (heap corruption, invalid params) with a stack trace. Windows Debug builds only; installed first in `InitializeCoreServices()`.
 - **StackTrace** (`CaptureAndPrintStackTrace()`): cross-platform stack capture for assertion failures; uses DbgHelp/PDB on Windows.
+- **PlatformDebug.h** (`DebugBreak()`, `ENGINE_DEBUG_BREAK()`): the debug break per platform; on the web (`PLATFORM_WEB`) it is `__builtin_trap()` (the page stops with a wasm trap), the same as on Linux. `StackTrace.cpp` and `OutputSink.cpp` have no web branch of their own: their `#else` fallbacks (no trace, no output) are what the page gets.
 - Macros, handlers and `AssertEvent`: `.claude/rules/tests-module.md`.
 
 ## Logging before the sinks exist
