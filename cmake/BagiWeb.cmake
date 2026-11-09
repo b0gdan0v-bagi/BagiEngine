@@ -2,7 +2,7 @@
 # Web (Emscripten) build: link options, content package, the executable as an HTML page
 # =============================================================================
 # Included by cmake/BagiEngine.cmake. The functions below do not depend on the rest of the engine setup (the cmake -P test
-# tools/web/tests/test_cmake_web.cmake includes this file alone), so the pure ones can be checked on a desktop without an
+# tools/web/tests/check_bagi_web.cmake includes this file alone), so the pure ones can be checked on a desktop without an
 # Emscripten SDK. Only be_web_configure_target() touches a target.
 #
 # Everything about an Emscripten flag or behaviour is a first guess written without emcc at hand, marked
@@ -12,8 +12,9 @@
 #       The content as a preloaded package: one "--preload-file <dir>@<virtual dir>" entry per config/ and assets/ folder that exists,
 #       in the order of the layers (engine, game, web: lowest priority first, as AddContentRoot in src/main.cpp). The virtual roots are
 #       BE_WEB_ENGINE_ROOT, BE_WEB_GAME_ROOT and BE_WEB_WEB_ROOT, the values of BAGI_ENGINE_ROOT / BAGI_GAME_ROOT / BAGI_WEB_ROOT.
-#   be_web_link_options(OUT <var> CONFIG <build type>)
-#       The Emscripten link options (a list of "-s..." settings).
+#   be_web_link_options(OUT <var>)
+#       The Emscripten link options: the "-s..." settings, the HTML shell (web/shell.html), and the assertions in Debug only (as a
+#       generator expression, so the list is the same for every configuration).
 #   be_web_configure_target(<target> GAME_ROOT <dir>)
 #       Makes the executable an HTML page with its content package and the virtual content roots as definitions.
 include_guard(GLOBAL)
@@ -26,8 +27,11 @@ set(BE_WEB_ENGINE_ROOT "/bagi/engine")
 set(BE_WEB_GAME_ROOT "/bagi/game")
 set(BE_WEB_WEB_ROOT "/bagi/web")
 
-# The folder of this engine checkout that holds the web files (web/config/, later web/shell.html)
+# The folder of this engine checkout that holds the web files (web/config/, web/shell.html)
 get_filename_component(BE_WEB_DIR "${CMAKE_CURRENT_LIST_DIR}/../web" ABSOLUTE)
+
+# The page around the wasm: loading bar, WebGL test, error messages (web/shell.html)
+set(BE_WEB_SHELL_FILE "${BE_WEB_DIR}/shell.html")
 
 function(be_web_preload_args)
     cmake_parse_arguments(ARG "" "OUT;ENGINE_ROOT;GAME_ROOT;WEB_ROOT" "" ${ARGN})
@@ -52,7 +56,7 @@ function(be_web_preload_args)
 endfunction()
 
 function(be_web_link_options)
-    cmake_parse_arguments(ARG "" "OUT;CONFIG" "" ${ARGN})
+    cmake_parse_arguments(ARG "" "OUT" "" ${ARGN})
     if(NOT ARG_OUT)
         message(FATAL_ERROR "be_web_link_options: OUT is required")
     endif()
@@ -68,11 +72,11 @@ function(be_web_link_options)
         -sMAX_WEBGL_VERSION=2
         # main() never returns while the frame loop runs (src/main.cpp); at the end the runtime shuts down and static destructors run
         -sEXIT_RUNTIME=1
-    )
-    if(ARG_CONFIG STREQUAL "Debug")
+        # The page around the wasm (web/shell.html; unverified: needs emsdk); SHELL: keeps the flag and its value together, the quotes keep a path with a space in one piece
+        "SHELL:--shell-file \"${BE_WEB_SHELL_FILE}\""
         # Runtime checks of the glue code (memory growth, stack, wrong calls); they cost speed and size, so Debug only
-        list(APPEND _options -sASSERTIONS=1)
-    endif()
+        $<$<CONFIG:Debug>:-sASSERTIONS=1>
+    )
     # The optimisation level is not set here: CMake passes CMAKE_CXX_FLAGS_<CONFIG> to the link line as well, and emcc needs the
     # same -O level at link time to run wasm-opt. BagiEngine.cmake sets Release to -O2 on the web (smaller code than -O3 for
     # little speed) and Debug stays -O0 -g (unverified: needs emsdk).
@@ -87,8 +91,10 @@ function(be_web_configure_target TARGET_NAME)
 
     set_target_properties(${TARGET_NAME} PROPERTIES SUFFIX "${BE_WEB_OUTPUT_SUFFIX}")
 
-    be_web_link_options(OUT _link_options CONFIG "${CMAKE_BUILD_TYPE}")
+    be_web_link_options(OUT _link_options)
     target_link_options(${TARGET_NAME} PRIVATE ${_link_options})
+    # The shell is read at link time: a change of the page relinks
+    set_property(TARGET ${TARGET_NAME} APPEND PROPERTY LINK_DEPENDS "${BE_WEB_SHELL_FILE}")
 
     be_web_preload_args(OUT _preload
         ENGINE_ROOT "${BAGI_ENGINE_DIR}"
@@ -109,7 +115,8 @@ function(be_web_configure_target TARGET_NAME)
     )
 endfunction()
 
-# Optimisation of the web configurations (see be_web_link_options). unverified: needs emsdk
+# Optimisation of the web configurations (see be_web_link_options). They are plain variables, set where this file is included, so
+# they only take effect when it is included before the targets are created. unverified: needs emsdk
 if(EMSCRIPTEN)
     set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
     set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")

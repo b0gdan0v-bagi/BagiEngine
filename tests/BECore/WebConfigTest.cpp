@@ -6,8 +6,10 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <Common/Printers.h>
 #include <CoreSDL/SDLUtils.h>
+#include <CoreSDL/SDLWebCanvas.h>
 #include <filesystem>
 #include <gtest/gtest.h>
+#include <limits>
 
 namespace BECore::Tests {
 
@@ -111,6 +113,53 @@ namespace BECore::Tests {
             }
         }
         EXPECT_TRUE(consoleChecked);
+    }
+
+    TEST(WebCanvasTest, TheWindowTakesTheInnerSizeOfThePage) {
+        const WebCanvasSize size = FitWindowSize(1280.0, 720.0, 64, 64);
+        EXPECT_EQ(size.width, 1280);
+        EXPECT_EQ(size.height, 720);
+    }
+
+    TEST(WebCanvasTest, ASizeBetweenWholeUnitsIsRounded) {
+        // A page zoomed to 110 % reports fractions of a CSS pixel
+        const WebCanvasSize size = FitWindowSize(1023.6, 767.4, 64, 64);
+        EXPECT_EQ(size.width, 1024);
+        EXPECT_EQ(size.height, 767);
+    }
+
+    TEST(WebCanvasTest, NeverBelowTheMinimum) {
+        // A page that is not laid out yet (or minimised) reports 0
+        const WebCanvasSize nothing = FitWindowSize(0.0, 0.0, 64, 48);
+        EXPECT_EQ(nothing.width, 64);
+        EXPECT_EQ(nothing.height, 48);
+
+        const WebCanvasSize narrow = FitWindowSize(10.0, 700.0, 64, 48);
+        EXPECT_EQ(narrow.width, 64);
+        EXPECT_EQ(narrow.height, 700);
+    }
+
+    TEST(WebCanvasTest, AnAxisIsFittedOnItsOwn) {
+        const WebCanvasSize size = FitWindowSize(300.0, 20.0, 64, 48);
+        EXPECT_EQ(size.width, 300);
+        EXPECT_EQ(size.height, 48);
+    }
+
+    TEST(WebCanvasTest, ANumberThatIsNotASizeCountsAsZero) {
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        const double infinity = std::numeric_limits<double>::infinity();
+        for (const double bad : {nan, infinity, -infinity, -5.0}) {
+            SCOPED_TRACE(std::to_string(bad));
+            const WebCanvasSize size = FitWindowSize(bad, bad, 64, 48);
+            EXPECT_EQ(size.width, 64);
+            EXPECT_EQ(size.height, 48);
+        }
+    }
+
+    TEST(WebCanvasTest, AHugeValueDoesNotOverflow) {
+        const WebCanvasSize size = FitWindowSize(1.0e18, 1.0e18, 64, 64);
+        EXPECT_GT(size.width, 0);
+        EXPECT_GT(size.height, 0);
     }
 
 }  // namespace BECore::Tests
