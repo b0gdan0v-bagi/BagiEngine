@@ -120,6 +120,10 @@ def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_modu
         if source.is_file():
             sources.append((source, source.name))
 
+    # The output folder is cleaned of the files of earlier runs, so it must not be the build folder (it would delete the page) or hold it
+    build_resolved, out_resolved = build_dir.resolve(), out_dir.resolve()
+    if out_resolved == build_resolved or out_resolved in build_resolved.parents or build_resolved in out_resolved.parents:
+        raise PackageError(f"{out_dir} and the build folder {build_dir} are the same folder or one is inside the other: write the package to a folder of its own")
     out_dir.mkdir(parents=True, exist_ok=True)
     remove_stale_files(out_dir, {name for _, name in sources})
     files = {}

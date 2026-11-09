@@ -35,7 +35,8 @@ def no_tools(name: str) -> None:
 
 
 class FakeRunner:
-    """Records the commands instead of running them; `fail_on` is the first word of a command that exits with code 3."""
+    """Records the commands instead of running them; `fail_on` is the first word of a command that exits with code 3, `cannot_start`
+    the first word of a command that cannot be started (the runner raises FileNotFoundError, as subprocess does)."""
 
     def __init__(self, fail_on: str | None = None, cannot_start: str | None = None):
         self.calls: list[tuple[list[str], Path]] = []

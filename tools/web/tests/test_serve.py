@@ -238,6 +238,18 @@ class RoutingTest(ServerTestCase):
         server = self.request("/healthz").headers["server"]
         self.assertIn("BagiWebServe", server)
         self.assertNotIn("Python", server)
+        self.assertEqual(server, "BagiWebServe")
+
+    def test_a_405_closes_the_connection_so_an_unread_body_is_not_a_request(self):
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        try:
+            connection.request("POST", "/index.html", body=b"GET /healthz HTTP/1.1" + bytes([13, 10, 13, 10]))
+            response = connection.getresponse()
+            response.read()
+            self.assertEqual(response.status, 405)
+            self.assertEqual(response.getheader("Connection"), "close")
+        finally:
+            connection.close()
 
     def test_several_requests_on_one_connection_work(self):
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)

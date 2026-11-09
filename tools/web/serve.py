@@ -128,6 +128,9 @@ class StaticHandler(BaseHTTPRequestHandler):
     # The Server header names the program and not the Python version
     sys_version = ""
 
+    def version_string(self):
+        return self.server_version
+
     def log_message(self, format, *args):
         if not self.quiet:
             super().log_message(format, *args)
@@ -145,8 +148,11 @@ class StaticHandler(BaseHTTPRequestHandler):
         self.serve(send_body=False)
 
     def do_unsupported(self):
+        # The body of a POST is not read, so on a kept connection it would be parsed as the next request
         self.send_response(HTTPStatus.METHOD_NOT_ALLOWED)
         self.send_header("Allow", "GET, HEAD")
+        # send_header("Connection", "close") also sets close_connection
+        self.send_header("Connection", "close")
         self.send_header("Content-Length", "0")
         self.end_headers()
 

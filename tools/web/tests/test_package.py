@@ -140,6 +140,16 @@ class PackageTest(unittest.TestCase):
         with self.assertRaisesRegex(package.PackageError, "not a folder"):
             package.package(self.root / "missing", self.out, brotli_module=None)
 
+    def test_the_output_folder_must_not_be_the_build_folder_or_hold_it_or_sit_in_it(self):
+        inside = self.build / "dist"
+        for name, out in (("same", self.build), ("same by a path with ..", self.build / "sub" / ".."),
+                          ("inside the build folder", inside), ("holding the build folder", self.root)):
+            with self.subTest(name):
+                with self.assertRaisesRegex(package.PackageError, "folder of its own"):
+                    package.package(self.build, out, brotli_module=None)
+        self.assertTrue((self.build / f"{GAME}.html").is_file())
+        self.assertFalse(inside.exists())
+
     def test_the_command_line_returns_0_and_1(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
