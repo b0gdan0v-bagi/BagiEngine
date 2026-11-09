@@ -42,7 +42,10 @@
         const s = worker.session;
         let word = "no session";
         let kind = "none";
-        if (s && s.state === "done") {
+        if (worker.limited) {
+            word = "usage limit";
+            kind = "limited";
+        } else if (s && s.state === "done") {
             word = "done";
             kind = "done";
         } else if (worker.waiting) {
@@ -58,10 +61,11 @@
         // A finished session can stay in `claude agents` for hours: its age is no run time, so it shows when
         // its last step was (the transcript), and a running one how long it has run.
         const ended = kind === "done" && worker.activity ? ago(worker.activity.updated) : "";
-        const text = kind === "done" ? (ended ? `done · ended ${ended}` : "done") : s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word;
+        const text = kind === "limited" ? (worker.limited.resets ? `usage limit · resets ${worker.limited.resets}` : "usage limit") : kind === "done" ? (ended ? `done · ended ${ended}` : "done") : s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word;
         const badge = el("span", `badge ${kind}`, text);
         if (kind === "idle") badge.title = "Idle: waiting for an agent of its own (a reviewer, a build)";
         if (kind === "waiting") badge.title = `The loop waits for your answer (${(s && s.waitingFor) || "input needed"}): Answer opens it`;
+        if (kind === "limited") badge.title = `${worker.limited.text}. Relaunch continues the loop after the reset`;
         if (kind === "done") badge.title = "The session has finished; Log shows it, Update and Fast start begin anew";
         return badge;
     }
@@ -159,7 +163,7 @@
 
     function workerCard(worker) {
         const entry = worker.entry;
-        const card = el("section", worker.waiting ? "card waiting" : "card");
+        const card = el("section", worker.waiting ? "card waiting" : worker.limited ? "card limited" : "card");
         const top = el("div", "card-top");
         top.append(el("span", "name", worker.name), el("span", "entry", entry ? entry.id : "no entry"));
         if (entry) top.append(el("span", `area ${entry.area}`, entry.area));
@@ -172,6 +176,14 @@
             ask.append(
                 el("span", "", `Waits for your answer: ${(worker.session && worker.session.waitingFor) || "input needed"}`),
                 button("Answer", { cmd: "attach", worker: worker.k }, "claude attach: open the session and answer its question or permission", "primary")
+            );
+            card.appendChild(ask);
+        }
+        if (worker.limited) {
+            const ask = el("div", "ask limit");
+            ask.append(
+                el("span", "", `Stopped by the usage limit${worker.limited.resets ? `; resets ${worker.limited.resets}` : ""}`),
+                button("Relaunch", { cmd: "relaunch", worker: worker.k }, "worker.py relaunch <k>: claude --bg --resume of this session with \"go on where the loop stopped\" (press it after the reset)", "primary")
             );
             card.appendChild(ask);
         }
@@ -225,6 +237,8 @@
         }
         actions.append(button("Folder", { cmd: "folder", worker: worker.k }, "open the worker in a new window"), button("Terminal", { cmd: "terminal", worker: worker.k }));
         if (entry) actions.append(button("Plan", { cmd: "plan", entry: entry.id }, "~/.claude/plans/todo-loop-<branch>.md"));
+        if (worker.session && !worker.limited && worker.session.status !== "busy" && entry && entry.status !== "review")
+            actions.append(button("Relaunch", { cmd: "relaunch", worker: worker.k }, "worker.py relaunch <k>: continue this session's conversation in the background (a loop that ended before its entry reached review)"));
         if (worker.active) actions.append(button("Stop", { cmd: "stop", worker: worker.k }, "worker.py stop", true));
         else {
             actions.append(
@@ -270,6 +284,8 @@
         root.replaceChildren();
         const bar = el("div", "toolbar");
         const info = el("span", "muted", payload.refreshing ? "refreshing ..." : payload.at ? `updated ${ago(payload.at)}` : "");
+        const limited = payload.state ? payload.state.workers.filter((w) => w.limited).length : 0;
+        if (limited) bar.append(button(`Relaunch all (${limited})`, { cmd: "relaunchAll" }, "worker.py relaunch: continue every session the usage limit stopped (press it after the reset)", "primary"));
         bar.append(info, button("Todo list", { cmd: "todoList" }, "the entries of the todo store in a tab of the editor"), button("Refresh", { cmd: "refresh" }), button("Settings", { cmd: "settings" }));
         root.appendChild(bar);
 

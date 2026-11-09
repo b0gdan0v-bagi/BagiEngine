@@ -68,6 +68,12 @@ code {
     color: var(--vscode-errorForeground, #f14c4c);
     font-weight: 600;
 }
+.badge.limited {
+    color: var(--vscode-charts-orange, #d18616);
+    font-weight: 600;
+}
+.card.limited { border-left: 3px solid var(--vscode-charts-orange, #d18616); }
+.ask.limit { background: var(--vscode-inputValidation-warningBackground, rgba(209, 134, 22, 0.15)); }
 .card.waiting { border-left: 3px solid var(--vscode-errorForeground, #f14c4c); }
 .ask {
     display: flex;

@@ -24,6 +24,7 @@ Run it from anywhere inside the main checkout:
     python3 engine/tools/todo/worker.py run 2        # a Claude session in w2, in this terminal
     python3 engine/tools/todo/worker.py start        # /todo-loop in every worker, background sessions a minute apart
     python3 engine/tools/todo/worker.py stop [k ...] # stop those background sessions
+    python3 engine/tools/todo/worker.py relaunch [k ...]  # continue the sessions the usage limit stopped (after the reset)
     python3 engine/tools/todo/worker.py merge <id> [--dry-run]  # the quick merge of an entry in review
     python3 engine/tools/todo/worker.py update [k ...] # detach a finished, clean worker at the tips of the bases
     python3 engine/tools/todo/worker.py remove 3
@@ -55,6 +56,16 @@ DEFAULT_PRESETS = {"darwin": "macos-debug"}
 SESSION_PREFIX = "todo-w"
 DEFAULT_DELAY_S = 60
 REPORT_TO_NAME = re.compile(r"[A-Za-z0-9._-]+")
+# What a relaunched session is told (`relaunch`): the conversation is resumed, so the loop knows where it was.
+RELAUNCH_PROMPT = (
+    "The usage limit has reset. Go on with the /todo-loop exactly where it stopped: an agent that the limit cut off "
+    "before it reported is started again with the same task (look at the branch and the slice plan first: some of its "
+    "work may be committed already), then continue as the skill says."
+)
+# The usage limit in a transcript: an API error record (`You've hit your 5-hour limit · resets 10:30pm (Europe/...)`).
+LIMIT_ERROR = "rate_limit"
+LIMIT_STATUS = 429
+RESETS = re.compile(r"resets\s+([^·]+?)\s*(?:·|$)")
 
 
 class WorkerError(Exception):
@@ -300,6 +311,25 @@ def session_in(sessions: list[dict], worker: Path) -> dict | None:
     return max(found, key=lambda s: s.get("startedAt") or 0) if found else None
 
 
+def limit_hit(session: dict | None) -> dict | None:
+    """The usage limit that stopped a session: its last answer in the transcript is the API's rate-limit error.
+    `{"text", "resets", "time"}` (`resets` is the time the message names, e.g. `10:30pm (Europe/Belgrade)`, or None),
+    or None when the session answered after it or has no transcript."""
+    if not session or not session.get("cwd") or not session.get("sessionId"):
+        return None
+    for record in reversed(tail_records(transcript_of(session["cwd"], session["sessionId"]))):
+        if record.get("type") != "assistant":
+            continue
+        if record.get("error") != LIMIT_ERROR and record.get("apiErrorStatus") != LIMIT_STATUS:
+            return None
+        content = (record.get("message") or {}).get("content")
+        text = content if isinstance(content, str) else " ".join(str(p.get("text", "")) for p in content if isinstance(p, dict)) if isinstance(content, list) else ""
+        text = one_line(text, 200)
+        found = RESETS.search(text)
+        return {"text": text, "resets": found.group(1) if found else None, "time": record.get("timestamp")}
+    return None
+
+
 def is_waiting(session: dict | None) -> bool:
     """A session that waits for the person (`claude agents`): an interactive one says status `waiting`, a background one state
     `blocked` (a permission, a question, or a run that ended asking the owner something)."""
@@ -320,6 +350,10 @@ def describe(session: dict | None) -> str:
         minutes = int((time.time() * 1000 - started) / 60000)
         since = f", {minutes // 60} h {minutes % 60} min" if minutes >= 60 else f", {minutes} min"
     state = session.get("state") or session.get("status") or "?"
+    limit = limit_hit(session)
+    if limit:
+        resets = f", resets {limit['resets']}" if limit["resets"] else ""
+        return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}, stopped by the usage limit{resets}: worker.py relaunch after the reset"
     waiting = f", waits for you ({session.get('waitingFor') or 'input'}): claude attach {session.get('name') or session.get('id')}" if is_waiting(session) else ""
     return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}{waiting}"
 
@@ -858,6 +892,7 @@ def list_json(layout: Layout, args) -> dict:
         changed = dirty(path, ignore_submodules=True) or (engine is not None and dirty(path / SHARED_SUBMODULE))
         session = session_in(sessions or [], path)
         entry = next((by_branch[h["branch"]] for h in (engine, game) if h and h["branch"] in by_branch), None)
+        limited = limit_hit(session)
         workers.append({
             "k": k,
             "name": f"{WORKER_PREFIX}{k}",
@@ -867,7 +902,8 @@ def list_json(layout: Layout, args) -> dict:
             "dirty": bool(changed),
             "session": None if session is None else {key: session.get(key) for key in ("id", "name", "state", "status", "waitingFor", "startedAt")},
             "active": is_active(session),
-            "waiting": is_waiting(session),
+            "waiting": is_waiting(session) and limited is None,
+            "limited": limited,
             "activity": session_activity(session) if args.activity else None,
             "usage": session_usage(session) if args.usage else None,
             "entry": entry,
@@ -1049,6 +1085,61 @@ def cmd_stop(layout: Layout, args) -> None:
     print("A loop stopped in the middle leaves its entry `in progress` with its branch; the next /todo-loop in that worker continues it.")
 
 
+def cmd_relaunch(layout: Layout, args) -> None:
+    """Continue the sessions that the usage limit stopped, once it has reset: `claude --bg --resume <session>` with
+    RELAUNCH_PROMPT, so the loop keeps its conversation (a session still listed as running is stopped first; Claude
+    Code then starts a copy of the conversation under a new id, and `list` follows the newest session of the folder).
+    Without worker numbers only the workers whose session hit the limit; a named worker is relaunched whenever its
+    session is not busy (a loop that ended for another reason, e.g. a lost connection)."""
+    workers = chosen_workers(layout, args.workers)
+    sessions = list_sessions(args.claude)
+    if sessions is None:
+        raise WorkerError(f"`{args.claude} agents --json` did not answer")
+    env = build_env(layout)
+    prompt = args.prompt or RELAUNCH_PROMPT
+    result = {"relaunched": [], "skipped": [], "errors": []}
+    for k, path in workers:
+        session = session_in(sessions, path)
+        limited = limit_hit(session)
+        name = f"{WORKER_PREFIX}{k}"
+        if session is None or not session.get("sessionId"):
+            if args.workers:
+                result["errors"].append(f"{name}: no session to continue; start one with `worker.py start {k}`")
+            continue
+        if limited is None and not args.workers:
+            result["skipped"].append({"k": k, "reason": "not stopped by the usage limit"})
+            continue
+        if limited is None and session.get("state") != "done" and session.get("status") == "busy":
+            result["errors"].append(f"{name}: its session is busy; nothing to relaunch")
+            continue
+        command = [args.claude, "--bg", "--resume", str(session["sessionId"]), "--name", session_name(k), *args.rest, prompt]
+        if args.print_only:
+            result["relaunched"].append({"k": k, "name": name, "output": " ".join(command[:-1]) + f" '{prompt}'"})
+            continue
+        if is_active(session):
+            subprocess.run([args.claude, "stop", str(session.get("id") or session["sessionId"])], capture_output=True, text=True)
+        done = subprocess.run(command, cwd=path, env=env, capture_output=True, text=True)
+        output = (done.stdout + done.stderr).strip()
+        if done.returncode != 0 or "backgrounded" not in output:
+            result["errors"].append(f"{name}: {output or f'exit code {done.returncode}'}")
+            continue
+        line = next((l.strip() for l in output.splitlines() if l.strip().startswith("backgrounded")), output.splitlines()[0])
+        result["relaunched"].append({"k": k, "name": name, "output": line})
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        for row in result["relaunched"]:
+            print(f"{row['name']}: {row['output']}")
+        for row in result["skipped"]:
+            print(f"{WORKER_PREFIX}{row['k']}: {row['reason']}, left alone")
+        for error in result["errors"]:
+            print(f"error: {error}", file=sys.stderr)
+        if not result["relaunched"] and not result["errors"]:
+            print("no worker was stopped by the usage limit")
+    if result["errors"] and not args.json:
+        raise WorkerError(f"{len(result['errors'])} worker(s) not relaunched")
+
+
 # --- update ------------------------------------------------------------------------------------
 
 
@@ -1153,6 +1244,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
+    p = sub.add_parser("relaunch", help="continue the sessions the usage limit stopped (claude --bg --resume), after the reset (arguments for claude after --)")
+    p.add_argument("workers", nargs="*", type=int, help="the workers (default: those stopped by the limit; a named one also when its session ended otherwise)")
+    p.add_argument("--prompt", help="what the resumed session is told (default: go on where the loop stopped)")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--print", dest="print_only", action="store_true", help="only print the commands")
+    p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
     p = sub.add_parser("stop", help="stop the background sessions of the workers")
     p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
@@ -1167,7 +1264,7 @@ def main(argv: list[str] | None = None) -> int:
     args.rest = rest
     try:
         layout = find_layout(Path.cwd())
-        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "merge": cmd_merge, "update": cmd_update}
+        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update}
         commands[args.command](layout, args)
     except WorkerError as error:
         print(f"error: {error}", file=sys.stderr)

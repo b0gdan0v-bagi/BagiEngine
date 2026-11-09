@@ -94,6 +94,7 @@ function shellQuote(text) {
 function sessionWord(worker) {
     const s = worker.session;
     if (!s) return "no session";
+    if (worker.limited) return "limited";
     if (s.state === "done") return "done";
     if (worker.waiting) return "waiting";
     return s.status === "busy" ? "busy" : "idle";
@@ -243,6 +244,26 @@ function activate(context) {
             vscode.window.showErrorMessage(`Fast start of ${worker.name}: ${error.message}`);
         } finally {
             busy.delete(worker.k);
+            refresh();
+        }
+    }
+
+    // Relaunch: worker.py relaunch, `claude --bg --resume` of the sessions the usage limit stopped, once it has reset
+    // (the loop keeps its conversation). Without a worker every limited one; a named one also after another end.
+    async function relaunch(worker) {
+        const tool = findTool();
+        if (!tool || (worker && busy.has(worker.k))) return;
+        const c = config();
+        const args = ["relaunch", ...(worker ? [String(worker.k)] : []), "--json", "--claude", c.claude];
+        if (worker) busy.add(worker.k);
+        try {
+            const result = JSON.parse(await runTool(tool, args, 120000).catch((error) => JSON.stringify({ relaunched: [], skipped: [], errors: [error.message.replace(/^error: /, "")] })));
+            const done = result.relaunched.map((r) => `${r.name}: ${r.output}`);
+            if (result.errors.length) vscode.window.showErrorMessage(`Relaunch: ${[...done, ...result.errors].join("; ")}`);
+            else if (done.length) vscode.window.showInformationMessage(`Relaunched ${done.join("; ")}`);
+            else vscode.window.showInformationMessage("Relaunch: no worker was stopped by the usage limit");
+        } finally {
+            if (worker) busy.delete(worker.k);
             refresh();
         }
     }
@@ -576,6 +597,8 @@ function activate(context) {
             case "stop": return stopWorker(worker);
             case "update": return updateWorker(worker);
             case "fastStart": return fastStart(worker);
+            case "relaunch": return relaunch(worker);
+            case "relaunchAll": return relaunch(null);
             case "plan": return openPlan(entryOf(message.entry));
             case "merge": return startMerge(entryOf(message.entry));
             case "quickMerge": return quickMerge(entryOf(message.entry));
@@ -594,6 +617,7 @@ function activate(context) {
             review: new Set(state.review.map((e) => e.id)),
             active: new Map(state.workers.map((w) => [w.name, w.active])),
             waiting: new Set(state.workers.filter((w) => w.waiting).map((w) => w.name)),
+            limited: new Set(state.workers.filter((w) => w.limited).map((w) => w.name)),
         };
         if (previous && config().notify) {
             for (const entry of state.review) {
@@ -613,7 +637,12 @@ function activate(context) {
                     const about = worker.entry ? ` (${worker.entry.id})` : "";
                     vscode.window.showWarningMessage(`Todo: ${worker.name}${about} waits for you: ${what}`, "Answer").then((pick) => pick && openSessionTerminal(worker, "attach"));
                 }
-                if (previous.active.get(worker.name) && !worker.active) {
+                // The usage limit stops a loop until it resets: Relaunch continues it then (the button stays on the card).
+                if (worker.limited && !previous.limited.has(worker.name)) {
+                    const when = worker.limited.resets ? `, resets ${worker.limited.resets}` : "";
+                    vscode.window.showWarningMessage(`Todo: ${worker.name} was stopped by the usage limit${when}. Relaunch it after the reset.`, "Relaunch").then((pick) => pick && relaunch(workerOf(worker.k) || worker));
+                }
+                if (previous.active.get(worker.name) && !worker.active && !worker.limited) {
                     vscode.window.showInformationMessage(`Todo: the session of ${worker.name} has ended`, "Show log").then((pick) => pick && openSessionTerminal(worker, "logs"));
                 }
             }
@@ -636,6 +665,7 @@ function activate(context) {
         const count = (word) => state.workers.filter((w) => sessionWord(w) === word).length;
         const parts = [];
         if (count("waiting")) parts.push(`${count("waiting")} waits for you`);
+        if (count("limited")) parts.push(`${count("limited")} hit the limit`);
         parts.push(`${count("busy")} busy`);
         if (count("idle")) parts.push(`${count("idle")} idle`);
         parts.push(`${state.review.length} review`);
@@ -648,7 +678,7 @@ function activate(context) {
         status.tooltip = lines.join("\n");
         status.backgroundColor = count("waiting")
             ? new vscode.ThemeColor("statusBarItem.errorBackground")
-            : state.review.length
+            : state.review.length || count("limited")
               ? new vscode.ThemeColor("statusBarItem.warningBackground")
               : undefined;
         status.show();

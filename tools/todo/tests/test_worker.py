@@ -582,3 +582,68 @@ def test_update_refuses_a_running_session_and_uncommitted_changes(game: Path, st
     assert any("w1" in e and "runs" in e for e in result["errors"])
     assert any("w2" in e and "uncommitted" in e for e in result["errors"])
     assert [run("rev-parse", "HEAD", cwd=workers / f"w{k}") for k in (1, 2)] == before
+
+
+# --- the usage limit and relaunch ---------------------------------------------------------------------------
+
+
+def limited_session(w: Path, sessions: Path, state: str = "blocked", status: str = "idle", limited: bool = True) -> None:
+    record = session(w, state, "e3cc", status)
+    record["sessionId"] = "sess-limit"
+    sessions.write_text(json.dumps([record]))
+    path = worker.transcript_of(str(w), "sess-limit")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [json.dumps({"type": "assistant", "message": {"content": [{"type": "text", "text": "Starting the reviewer."}]}})]
+    if limited:
+        lines.append(json.dumps({"type": "assistant", "timestamp": "2026-11-09T19:40:00Z", "error": "rate_limit", "isApiErrorMessage": True, "apiErrorStatus": 429,
+                                 "message": {"content": [{"type": "text", "text": "You've hit your 5-hour limit · resets 10:30pm (Europe/Belgrade)"}]}}))
+    path.write_text("\n".join(lines) + "\n")
+
+
+def test_list_says_when_the_usage_limit_stopped_a_session(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
+    script, _log, sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    limited_session(game.parent / "game.workers" / "w1", sessions)
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    row = json.loads(capsys.readouterr().out)["workers"][0]
+    assert row["limited"]["resets"] == "10:30pm (Europe/Belgrade)" and "5-hour limit" in row["limited"]["text"]
+    assert not row["waiting"]  # blocked by the limit is no question for the person
+    assert worker.main(["list", "--claude", str(script)]) == 0
+    assert "stopped by the usage limit, resets 10:30pm (Europe/Belgrade): worker.py relaunch" in capsys.readouterr().out
+    limited_session(game.parent / "game.workers" / "w1", sessions, limited=False)
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    assert json.loads(capsys.readouterr().out)["workers"][0]["limited"] is None
+
+
+def test_relaunch_resumes_the_limited_session_and_leaves_the_others(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
+    script, log, sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    workers = game.parent / "game.workers"
+    limited_session(workers / "w1", sessions)
+    capsys.readouterr()
+    assert worker.main(["relaunch", "--json", "--claude", str(script)]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert [r["name"] for r in result["relaunched"]] == ["w1"] and result["errors"] == []
+    calls = log.read_text().splitlines()
+    assert calls[0] == "stop e3cc"  # still listed as running (blocked): stopped before the resume
+    assert f"/game.workers/w1 jobs=" in calls[1] and "args=--bg --resume sess-limit --name todo-w1 The usage limit has reset." in calls[1]
+    assert len(calls) == 2  # w2 has no session and was not named
+
+
+def test_relaunch_of_a_named_worker_refuses_a_busy_session_and_one_that_is_missing(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
+    script, log, sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    limited_session(game.parent / "game.workers" / "w1", sessions, state="working", status="busy", limited=False)
+    capsys.readouterr()
+    assert worker.main(["relaunch", "1", "2", "--json", "--claude", str(script)]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["relaunched"] == [] and any("busy" in e for e in result["errors"]) and any("w2: no session" in e for e in result["errors"])
+    assert not log.exists()
+    assert worker.main(["relaunch", "1", "--claude", str(script)]) == 1
+    limited_session(game.parent / "game.workers" / "w1", sessions, state="done", limited=False)
+    assert worker.main(["relaunch", "1", "--claude", str(script), "--prompt", "go on"]) == 0
+    assert log.read_text().splitlines()[-1].endswith("args=--bg --resume sess-limit --name todo-w1 go on")  # done: no stop
