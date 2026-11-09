@@ -241,6 +241,11 @@ def test_list_says_when_a_session_waits_for_the_person(game: Path, fake_claude, 
     out = capsys.readouterr().out
     assert "waits for you (input needed): claude attach todo-w1" in out
     assert out.count("waits for you") == 1
+    sessions.write_text(json.dumps([session(workers / "w1", "blocked", "a"), session(workers / "w2", "done", "b")]))
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    first, second = json.loads(capsys.readouterr().out)["workers"]
+    assert first["waiting"] and first["active"] and not second["waiting"]
 
 
 def test_list_json_activity_reads_the_session_and_its_agents_from_the_transcripts(game: Path, fake_claude, tmp_path, monkeypatch, capsys):

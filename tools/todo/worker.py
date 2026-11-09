@@ -301,8 +301,9 @@ def session_in(sessions: list[dict], worker: Path) -> dict | None:
 
 
 def is_waiting(session: dict | None) -> bool:
-    """A session that waits for the person: a permission or a question (`claude agents`: status `waiting`)."""
-    return session is not None and session.get("state") != "done" and session.get("status") == "waiting"
+    """A session that waits for the person (`claude agents`): an interactive one says status `waiting`, a background one state
+    `blocked` (a permission, a question, or a run that ended asking the owner something)."""
+    return session is not None and session.get("state") != "done" and (session.get("status") == "waiting" or session.get("state") == "blocked")
 
 
 def is_active(session: dict | None) -> bool:
