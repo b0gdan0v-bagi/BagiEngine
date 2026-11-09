@@ -11,6 +11,10 @@ namespace BECore::Match3 {
     /// Number of playable gem types (excludes GemType::None).
     inline constexpr int8_t kGemTypeCount = 6;
 
+    /// One letter per GemType, in enum order ('.' is an empty cell): the letters of the control API's `get_state` and of a save
+    inline constexpr char kGemLetters[] = ".ROYGBP";
+    static_assert(sizeof(kGemLetters) - 1 == static_cast<size_t>(kGemTypeCount) + 1, "one letter per gem type and one for None");
+
     /// Minimum number of identical-colored gems in a row/column to form a match.
     inline constexpr int8_t kMinMatchLength = 3;
 
