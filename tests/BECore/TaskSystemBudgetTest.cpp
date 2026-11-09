@@ -22,6 +22,7 @@ namespace BECore::Tests {
         constexpr Duration kUnit = std::chrono::milliseconds(1);    // the fake time one unit of work takes
         constexpr Duration kBudget = std::chrono::milliseconds(3);  // the budget of a drain in the tests
         constexpr size_t kDrainLimit = 50;                          // a safety stop for a loop that waits for a task
+        constexpr int kCancelledResult = -1;                        // what PoliteCancellable returns when its token fired
 
         // The clock of the budget in these tests: it moves only when a coroutine "works".
         TimePoint g_fakeNow{};
@@ -381,6 +382,22 @@ namespace BECore::Tests {
         EXPECT_TRUE(handle->GetStatus() == TaskStatus::Cancelled);
     }
 
+    TEST_F(TaskSystemBudgetTest, ShouldYieldIsFalseOnceTheSchedulerIsStopped) {
+        EndFirstFrame();
+        bool beforeShutdown = false;
+        bool afterShutdown = true;
+        _scheduler.Schedule(
+            [&]() {
+                beforeShutdown = _scheduler.ShouldYield();
+                _scheduler.Shutdown();
+                afterShutdown = _scheduler.ShouldYield();
+            },
+            TaskPriority::Normal, ThreadType::Background);
+
+        EXPECT_TRUE(beforeShutdown) << "The window is spent between drains";
+        EXPECT_FALSE(afterShutdown) << "A stopped scheduler (its pool may be gone) never asks for a yield";
+    }
+
     TEST_F(TaskSystemBudgetTest, AChildStartedInsideASliceRunsAfterItAndTheJobFlagIsRestored) {
         Trace childTrace;
         Trace trace;
@@ -502,7 +519,7 @@ namespace BECore::Tests {
         Task<int> PoliteCancellable(CancellationToken token, int units, int& steps) {
             for (int i = 0; i < units; ++i) {
                 if (token.IsCancelled()) {
-                    co_return - 1;
+                    co_return kCancelledResult;
                 }
                 co_await YieldIfNeeded();
                 DoWork();
@@ -643,12 +660,13 @@ namespace BECore::Tests {
     TEST_F(TaskManagerBudgetTest, ATaskThatNeverChecksStillRunsToItsEndInline) {
         EXPECT_EQ(Frame(), 0u);
 
-        auto handle = TaskManager::GetInstance().Run(GreedyWork(30));
+        constexpr int kUnits = 30;
+        auto handle = TaskManager::GetInstance().Run(GreedyWork(kUnits));
 
         EXPECT_TRUE(handle->IsDone());
         auto result = handle->GetResult();
         ASSERT_TRUE(result.has_value());
-        EXPECT_EQ(*result, 30 * 29 / 2);
+        EXPECT_EQ(*result, kUnits * (kUnits - 1) / 2);
         EXPECT_EQ(Scheduler().GetBackgroundSliceCount(), 0u);
     }
 
@@ -671,10 +689,11 @@ namespace BECore::Tests {
 
     TEST_F(TaskManagerBudgetTest, TwoPoliteTasksAndAMainThreadTaskDoNotStarveEachOther) {
         EXPECT_EQ(Frame(), 0u);
+        constexpr int kUnits = 9;
         int mainSteps = 0;
 
-        auto first = TaskManager::GetInstance().Run(PoliteWork(9));
-        auto second = TaskManager::GetInstance().Run(PoliteWork(9));
+        auto first = TaskManager::GetInstance().Run(PoliteWork(kUnits));
+        auto second = TaskManager::GetInstance().Run(PoliteWork(kUnits));
         auto onMain = TaskManager::GetInstance().RunOnMainThread(MainThreadStepper(mainSteps));
 
         size_t frames = 0;
@@ -691,8 +710,8 @@ namespace BECore::Tests {
         auto firstResult = first->GetResult();
         auto secondResult = second->GetResult();
         ASSERT_TRUE(firstResult.has_value() && secondResult.has_value());
-        EXPECT_EQ(*firstResult, 9 * 8 / 2);
-        EXPECT_EQ(*secondResult, 9 * 8 / 2);
+        EXPECT_EQ(*firstResult, kUnits * (kUnits - 1) / 2);
+        EXPECT_EQ(*secondResult, kUnits * (kUnits - 1) / 2);
     }
 
     TEST_F(TaskManagerBudgetTest, CancellationByTokenBetweenSlicesEndsTheTaskInTheNextFrame) {
@@ -714,7 +733,7 @@ namespace BECore::Tests {
         EXPECT_LE(steps, stepsAtCancel + 1);
         auto result = handle->GetResult();
         ASSERT_TRUE(result.has_value());
-        EXPECT_EQ(*result, -1);
+        EXPECT_EQ(*result, kCancelledResult);
         EXPECT_EQ(Scheduler().GetBackgroundSliceCount(), 0u);
     }
 #endif

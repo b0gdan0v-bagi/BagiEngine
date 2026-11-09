@@ -54,7 +54,7 @@ namespace BECore {
             auto* scheduler = taskManager.GetScheduler();
 
             if (scheduler) {
-                // Планируем продолжение в том же типе потока
+                // The thread type follows the caller: the main thread is the only one in a single-thread build
                 ThreadType threadType = taskManager.IsMainThread() ? ThreadType::MainThread : ThreadType::Background;
 
                 scheduler->ScheduleYielded([handle]() mutable { handle.resume(); }, threadType);

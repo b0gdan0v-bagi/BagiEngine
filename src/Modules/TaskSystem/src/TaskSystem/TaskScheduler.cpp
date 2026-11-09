@@ -177,7 +177,7 @@ namespace BECore {
     }
 
     bool TaskScheduler::ShouldYield() const {
-        if (!_threadPool || !_threadPool->IsInline() || !_inBackgroundJob) {
+        if (_stopped || !_threadPool || !_threadPool->IsInline() || !_inBackgroundJob) {
             return false;
         }
         return BudgetNow() >= _sliceDeadline;
