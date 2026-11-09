@@ -11,7 +11,7 @@ namespace BECore {
         float rotation = 0.0f;  ///< degrees, clockwise on the screen (y points down)
         float pivotX = 0.0f;    ///< the point the draw turns around: absolute, in the units of the draw call (not relative to the rect)
         float pivotY = 0.0f;
-        bool flipX = false;  ///< mirrors the picture about its own center, left to right (swaps the UVs; independent of the rotation)
+        bool flipX = false;  ///< mirrors the picture about its own center, left to right (the default draws swap the UVs, SDL uses `SDL_FLIP_*`; independent of the rotation)
         bool flipY = false;  ///< the same, top to bottom
 
         [[nodiscard]] constexpr bool IsIdentity() const {
