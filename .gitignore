@@ -1,5 +1,6 @@
 # CMake и папки сборки
 /build/
+/dist/
 /out/
 /.cmake/
 /_deps/
