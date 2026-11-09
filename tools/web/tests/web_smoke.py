@@ -10,21 +10,23 @@ The checks, in this order:
   1. the page loads: HTTP 200 for the page, no uncaught page error;
   2. the first frame renders: the canvas exists and a screenshot of it is not one flat color (polled until --timeout: a wasm takes
      a while to start);
-  3. a click on the canvas reaches the game: a second screenshot after the click differs from the first (--click X,Y in pixels from
-     the top left corner of the canvas, the middle of the canvas without it);
+  3. a click on the canvas reaches the game: a screenshot after the click differs from the one taken right before it (--click X,Y in
+     pixels from the top left corner of the canvas, the middle of the canvas without it). Before the click two shots are taken, one
+     after the other: if they differ, the canvas changes by itself, the click cannot be judged and the run FAILS with
+     "(3) cannot judge" (no click is made);
   4. the browser console has no error-level message outside the allow-list (DEFAULT_CONSOLE_ALLOW plus every --allow-console REGEX,
      searched in the text of the message and in the URL it names).
 
---selftest serves a page generated in a temp folder (a canvas that draws a changing pattern on every animation frame and another
-pattern after a click) instead of a build, so the logic of this script runs without a wasm build. --selftest-fault breaks that page
-on purpose (flat, console-error, page-error): the run has to exit 1, which shows the checks can fail (add --timeout 5 for flat, which
-waits for a frame that never comes).
+--selftest serves a page generated in a temp folder (a canvas that redraws the same still pattern on every animation frame and a
+moving one after a click) instead of a build, so the logic of this script runs without a wasm build. --selftest-fault breaks that
+page on purpose (flat, console-error, page-error, deaf): the run has to exit 1, which shows each of the four checks can fail (add
+--timeout 5 for flat, which waits for a frame that never comes).
 
 Exit code: 0 passed, 1 failed (the reason is printed), 77 skipped (Playwright or its browser is not installed:
 `pip install playwright` and `playwright install chromium`), 2 a wrong command line.
 
-Limits: check 3 cannot tell a deaf game from an animated one (a game that animates by itself looks different in any two shots), so
-point --click at a game that stands still until it is clicked, or read the log. The screenshots are decoded by tools/control/tests/png_reader.py
+Limits: check 3 needs a canvas that stands still until it is clicked (a game with an idle animation, a fade-in that has not ended
+after --settle seconds or a cursor that blinks fails with "cannot judge": raise --settle, or read the log). The screenshots are decoded by tools/control/tests/png_reader.py
 (imported from there, not copied), in plain Python: keep the viewport small.
 Nothing here has run against a real Emscripten build yet (slice 2 of the entry web-build); the Chromium flags are a first guess.
 """
@@ -65,7 +67,7 @@ POLL_INTERVAL_SECONDS = 0.5
 DEFAULT_CHROMIUM_ARGS = ("--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist")
 # Console errors that say nothing about the game: a browser asking for the icon of a page that has none
 DEFAULT_CONSOLE_ALLOW = (r"favicon\.ico",)
-SELFTEST_FAULTS = ("none", "flat", "console-error", "page-error")
+SELFTEST_FAULTS = ("none", "flat", "console-error", "page-error", "deaf")
 
 
 class SmokeFailure(Exception):
@@ -84,8 +86,10 @@ class BrowserRun:
     """What the browser showed, as plain data; evaluate() judges it without a browser."""
 
     status: int | None = None
-    first_png: bytes | None = None
-    second_png: bytes | None = None
+    first_png: bytes | None = None  # the first drawn frame (check 2)
+    idle_png: bytes | None = None  # two shots with no click between them: if they differ the canvas moves by itself
+    before_png: bytes | None = None  # the shot right before the click: what the one after it is compared with
+    second_png: bytes | None = None  # after the click
     console: list[ConsoleEntry] = field(default_factory=list)
     page_errors: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)  # found while running (no canvas, no click point inside it, ...)
@@ -205,11 +209,14 @@ def evaluate(run: BrowserRun, allow_console: list[str] | None = None) -> list[st
     except SmokeFailure as error:
         problems.append(str(error))
 
-    # The second shot is taken only after a drawn first frame and a click; when the run stopped before, problems say why
+    # The shot after the click is taken only after a drawn first frame, a still canvas and a click; when the run stopped before,
+    # problems say why. It is compared with the shot right before the click, not with the first frame: a game that is still
+    # fading in at the first frame would differ from it with no click at all
     if run.second_png is not None:
         try:
+            before = decode(run.before_png, "(3) before the click")
             second = decode(run.second_png, "(3) after the click")
-            if first is not None and not images_differ(first, second):
+            if not images_differ(before, second):
                 problems.append("(3) the canvas looks the same after the click: the click did not reach the game")
         except SmokeFailure as error:
             problems.append(str(error))
@@ -247,9 +254,11 @@ def png_is_drawn(png: bytes) -> bool:
 # ----- the fake page of --selftest -----
 
 def selftest_page(fault: str = "none") -> str:
-    """A page for the checks: a canvas that draws moving stripes on every animation frame and other stripes (another palette,
-    a different direction) after a click. `fault` breaks it on purpose: a flat canvas, an error in the console, an uncaught error."""
+    """A page for the checks: a canvas that redraws the same still stripes on every animation frame (so the picture before a click
+    does not depend on the frame) and other stripes (another palette, a different direction, moving) after a click. `fault` breaks
+    it on purpose: a flat canvas, an error in the console, an uncaught error, a canvas that does not hear the click."""
     flat = "true" if fault == "flat" else "false"
+    deaf = "true" if fault == "deaf" else "false"
     console_error = 'console.error("selftest: this error is on purpose");' if fault == "console-error" else ""
     page_error = 'setTimeout(function () { throw new Error("selftest: this error is on purpose"); }, 100);' if fault == "page-error" else ""
     return f"""<!doctype html>
@@ -267,6 +276,7 @@ def selftest_page(fault: str = "none") -> str:
 var canvas = document.getElementById("canvas");
 var context = canvas.getContext("2d");
 var flat = {flat};
+var deaf = {deaf};
 var frame = 0;
 var clicked = false;
 function draw() {{
@@ -282,14 +292,16 @@ function draw() {{
         }}
     }} else {{
         for (var x = 0; x < width; x += 20) {{
-            context.fillStyle = "hsl(" + (200 + ((x + frame * 4) % 60)) + ", 40%, 30%)";
+            context.fillStyle = "hsl(" + (200 + (x % 60)) + ", 40%, 30%)";
             context.fillRect(x, 0, 20, height);
         }}
     }}
     frame += 1;
     requestAnimationFrame(draw);
 }}
-canvas.addEventListener("mousedown", function () {{ clicked = true; }});
+if (!deaf) {{
+    canvas.addEventListener("mousedown", function () {{ clicked = true; }});
+}}
 console.log("selftest page started");
 {console_error}
 {page_error}
@@ -333,21 +345,21 @@ def load_playwright():
 
 
 class BrowserMissing(Exception):
-    """Playwright is there but Chromium is not (`playwright install chromium`)."""
+    """Playwright is there but its Chromium is not (`playwright install chromium`): the file named by executable_path is missing."""
 
 
 def run_browser(playwright_api, url: str, options: Options) -> BrowserRun:
     """Opens `url`, takes the two screenshots and collects the console; does not judge (evaluate() does).
 
-    Raises BrowserMissing when Chromium cannot be started."""
+    Raises BrowserMissing when the Chromium executable of Playwright is not there; any other failure to start it, like a failure
+    of the page, is an ordinary exception (the smoke FAILS)."""
     run = BrowserRun()
     timeout_ms = options.timeout * 1000
     with playwright_api.sync_playwright() as playwright:
-        try:
-            browser = playwright.chromium.launch(headless=True, args=[*DEFAULT_CHROMIUM_ARGS, *options.chromium_args])
-        except Exception as error:  # Playwright's own Error class is private; the message names the missing executable
-            first_line = str(error).strip().splitlines()[0] if str(error).strip() else type(error).__name__
-            raise BrowserMissing(first_line) from error
+        executable = Path(playwright.chromium.executable_path)
+        if not executable.is_file():
+            raise BrowserMissing(f"no Chromium at '{executable}'")
+        browser = playwright.chromium.launch(headless=True, args=[*DEFAULT_CHROMIUM_ARGS, *options.chromium_args])
         try:
             width, height = options.viewport
             context = browser.new_context(viewport={"width": width, "height": height})
@@ -366,27 +378,45 @@ def run_browser(playwright_api, url: str, options: Options) -> BrowserRun:
                 run.problems.append(f"(2) no visible {CANVAS_SELECTOR} within {options.timeout:g} s: {str(error).splitlines()[0]}")
                 return run
 
-            run.first_png, drawn = poll(canvas.screenshot, png_is_drawn, options.timeout)
+            # The polls wait with the page's own timer: the sync API handles the console and pageerror events only inside its calls
+            sleep = lambda seconds: page.wait_for_timeout(seconds * 1000)  # noqa: E731
+            run.first_png, drawn = poll(canvas.screenshot, png_is_drawn, options.timeout, sleep=sleep)
             if not drawn:
                 return run  # evaluate() reports the flat or unreadable first frame
             page.wait_for_timeout(options.settle * 1000)
+
+            # Two shots with no click: a canvas that moves by itself cannot show whether a click did anything
+            run.idle_png = canvas.screenshot()
+            run.before_png = canvas.screenshot()
+            if png_pictures_differ(run.idle_png, run.before_png):
+                run.problems.append("(3) cannot judge: the canvas changes by itself (two shots with no click differ); no click was made "
+                                    "(raise --settle if the game is still starting)")
+                return run
 
             box = canvas.bounding_box()
             if box is None:
                 run.problems.append("(3) the canvas has no box to click in")
                 return run
             x, y = options.click if options.click else (box["width"] / 2, box["height"] / 2)
-            if x > box["width"] or y > box["height"]:
+            if x >= box["width"] or y >= box["height"]:
                 run.problems.append(f"(3) the click point {x:g},{y:g} is outside the canvas ({box['width']:g}x{box['height']:g})")
                 return run
             page.mouse.click(box["x"] + x, box["y"] + y)
             page.wait_for_timeout(options.settle * 1000)
 
-            first = read_png(run.first_png)
-            run.second_png, _ = poll(canvas.screenshot, lambda png: png_differs_from(first, png), CLICK_TIMEOUT_SECONDS)
+            before = read_png(run.before_png)
+            run.second_png, _ = poll(canvas.screenshot, lambda png: png_differs_from(before, png), CLICK_TIMEOUT_SECONDS, sleep=sleep)
         finally:
             browser.close()
     return run
+
+
+def png_pictures_differ(first: bytes, second: bytes) -> bool:
+    """True when the two PNGs show different pictures; a PNG that cannot be read counts as different."""
+    try:
+        return images_differ(read_png(first), read_png(second))
+    except PngError:
+        return True
 
 
 def png_differs_from(first: PngImage, png: bytes) -> bool:

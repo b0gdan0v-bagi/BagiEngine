@@ -5,6 +5,7 @@ import ast
 import gzip
 import http.client
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -241,15 +242,18 @@ class RoutingTest(ServerTestCase):
         self.assertEqual(server, "BagiWebServe")
 
     def test_a_405_closes_the_connection_so_an_unread_body_is_not_a_request(self):
-        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
-        try:
-            connection.request("POST", "/index.html", body=b"GET /healthz HTTP/1.1" + bytes([13, 10, 13, 10]))
-            response = connection.getresponse()
-            response.read()
-            self.assertEqual(response.status, 405)
-            self.assertEqual(response.getheader("Connection"), "close")
-        finally:
-            connection.close()
+        body = b"GET /healthz HTTP/1.1\r\n\r\n"
+        head = b"POST /index.html HTTP/1.1\r\nHost: x\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n"
+        with socket.create_connection(("127.0.0.1", self.port), timeout=10) as connection:
+            connection.sendall(head + body)
+            received = b""
+            while True:  # to the end of the stream: a timeout here means the server kept the connection open
+                chunk = connection.recv(65536)
+                if not chunk:
+                    break
+                received += chunk
+        self.assertTrue(received.startswith(b"HTTP/1.1 405"), received)
+        self.assertEqual(received.count(b"HTTP/1."), 1, received)  # the body was not taken for a second request
 
     def test_several_requests_on_one_connection_work(self):
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)

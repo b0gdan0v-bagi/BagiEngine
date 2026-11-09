@@ -10,6 +10,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import time
 import unittest
 import zlib
 from pathlib import Path
@@ -47,7 +48,7 @@ ONE_PIXEL_OFF = make_png(8, 6, lambda x, y: (11, 20, 30) if (x, y) == (7, 5) els
 
 
 def good_run(**changes) -> BrowserRun:
-    values = dict(status=200, first_png=STRIPES, second_png=OTHER_STRIPES)
+    values = dict(status=200, first_png=STRIPES, idle_png=STRIPES, before_png=STRIPES, second_png=OTHER_STRIPES)
     values.update(changes)
     return BrowserRun(**values)
 
@@ -167,12 +168,24 @@ class EvaluateTest(unittest.TestCase):
         self.assertIn("(3)", problems[0])
 
     def test_a_click_that_changes_one_pixel_passes(self):
-        self.assertEqual(web_smoke.evaluate(good_run(first_png=ONE_PIXEL_OFF, second_png=FLAT)), [])
+        self.assertEqual(web_smoke.evaluate(good_run(before_png=ONE_PIXEL_OFF, second_png=FLAT)), [])
+
+    def test_the_shot_after_the_click_is_compared_with_the_one_before_it_and_not_with_the_first_frame(self):
+        # a game that was still fading in at the first frame: it differs from the first frame with no click at all
+        problems = web_smoke.evaluate(good_run(first_png=ONE_PIXEL_OFF, before_png=STRIPES, second_png=STRIPES))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("(3)", problems[0])
+        self.assertEqual(web_smoke.evaluate(good_run(first_png=STRIPES, before_png=ONE_PIXEL_OFF, second_png=STRIPES)), [])
 
     def test_a_broken_second_shot_is_check_3(self):
         problems = web_smoke.evaluate(good_run(second_png=b"garbage"))
         self.assertEqual(len(problems), 1)
         self.assertIn("(3)", problems[0])
+
+    def test_a_missing_shot_before_the_click_is_check_3(self):
+        problems = web_smoke.evaluate(good_run(before_png=None))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("(3) before the click", problems[0])
 
     def test_a_run_that_stopped_early_reports_its_own_reason_once(self):
         run = good_run(second_png=None, problems=["(3) the canvas has no box to click in"])
@@ -202,7 +215,7 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(len(web_smoke.evaluate(good_run(console=console), ["ALSA"])), 1)
 
     def test_several_problems_are_all_reported(self):
-        problems = web_smoke.evaluate(good_run(status=500, first_png=FLAT, second_png=FLAT, console=[ConsoleEntry("error", "boom")]))
+        problems = web_smoke.evaluate(good_run(status=500, first_png=FLAT, before_png=FLAT, second_png=FLAT, console=[ConsoleEntry("error", "boom")]))
         self.assertEqual(sorted(problem[:3] for problem in problems), ["(1)", "(2)", "(3)", "(4)"])
 
 
@@ -242,6 +255,12 @@ class PollTest(unittest.TestCase):
 
 
 class SelftestPageTest(unittest.TestCase):
+    def test_the_picture_before_a_click_does_not_depend_on_the_frame(self):
+        page = web_smoke.selftest_page()
+        still = page.split("} else {", 1)[1].split("}", 1)[0]  # the branch that draws before a click
+        self.assertNotIn("frame", still)
+        self.assertIn("frame", page.split("else if (clicked)", 1)[1].split("} else {", 1)[0])  # after the click it moves
+
     def test_the_page_has_the_canvas_the_animation_and_the_click_handler(self):
         page = web_smoke.selftest_page()
         self.assertIn('<canvas id="canvas"', page)
@@ -255,6 +274,8 @@ class SelftestPageTest(unittest.TestCase):
         self.assertNotIn("on purpose", pages["none"])
         self.assertIn("var flat = false", pages["none"])
         self.assertIn("var flat = true", pages["flat"])
+        self.assertIn("var deaf = false", pages["none"])
+        self.assertIn("var deaf = true", pages["deaf"])
         self.assertIn("console.error", pages["console-error"])
         self.assertIn("throw new Error", pages["page-error"])
 
@@ -336,19 +357,21 @@ class FakePage:
 
     def wait_for_timeout(self, milliseconds):
         self.waits.append(milliseconds)
+        time.sleep(milliseconds / 1000)  # the polls wait here, like in a real page, so they do not spin
 
 
 class FakePlaywright:
     """The part of playwright.sync_api that web_smoke uses, in the shape of the documented API."""
 
-    def __init__(self, page, launch_error=None):
+    def __init__(self, page, launch_error=None, executable=None):
         self.page = page
         self.launch_error = launch_error
         self.closed = False
         self.launch_args = None
         self.viewport = None
         fake = self
-        self.chromium = SimpleNamespace(launch=fake._launch)
+        # an executable that exists unless the test names another path
+        self.chromium = SimpleNamespace(launch=fake._launch, executable_path=str(executable or Path(__file__)))
 
     def _launch(self, headless, args):
         if self.launch_error:
@@ -391,7 +414,7 @@ class BrowserFlowTest(unittest.TestCase):
         return run, page, fake, canvas
 
     def test_a_good_page_gives_a_run_that_passes(self):
-        run, page, fake, canvas = self.run_browser([STRIPES, STRIPES, OTHER_STRIPES])
+        run, page, fake, canvas = self.run_browser([STRIPES, STRIPES, STRIPES, OTHER_STRIPES])
         self.assertEqual(run.status, 200)
         self.assertEqual(web_smoke.evaluate(run), [])
         self.assertEqual(page.selector, web_smoke.CANVAS_SELECTOR)
@@ -402,11 +425,11 @@ class BrowserFlowTest(unittest.TestCase):
         self.assertEqual(fake.launch_args[1][-1], "--extra")
 
     def test_the_default_click_is_the_middle_of_the_canvas(self):
-        _, page, _, _ = self.run_browser([STRIPES, OTHER_STRIPES])
+        _, page, _, _ = self.run_browser([STRIPES, STRIPES, STRIPES, OTHER_STRIPES])
         self.assertEqual(page.clicks, [(10.0 + 200.0, 20.0 + 150.0)])
 
     def test_a_click_point_is_from_the_top_left_of_the_canvas(self):
-        canvas = FakeCanvas([STRIPES, OTHER_STRIPES])
+        canvas = FakeCanvas([STRIPES, STRIPES, STRIPES, OTHER_STRIPES])
         page = FakePage(canvas)
         fake = FakePlaywright(page)
         web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(click=(30.0, 40.0)))
@@ -420,8 +443,18 @@ class BrowserFlowTest(unittest.TestCase):
         self.assertEqual(page.clicks, [])
         self.assertTrue(any("outside the canvas" in problem for problem in run.problems), run.problems)
 
+    def test_a_click_point_on_the_right_or_bottom_edge_is_outside_the_canvas(self):
+        for point in ((400.0, 10.0), (10.0, 300.0)):
+            with self.subTest(point):
+                canvas = FakeCanvas([STRIPES])
+                page = FakePage(canvas)
+                fake = FakePlaywright(page)
+                run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(click=point))
+                self.assertEqual(page.clicks, [])
+                self.assertTrue(any("outside the canvas" in problem for problem in run.problems), run.problems)
+
     def test_the_first_frame_is_waited_for_until_it_is_drawn(self):
-        run, _, _, _ = self.run_browser([FLAT, FLAT, STRIPES, OTHER_STRIPES], timeout=10.0)
+        run, _, _, _ = self.run_browser([FLAT, FLAT, STRIPES, STRIPES, STRIPES, OTHER_STRIPES], timeout=10.0)
         self.assertEqual(run.first_png, STRIPES)
         self.assertEqual(web_smoke.evaluate(run), [])
 
@@ -433,24 +466,64 @@ class BrowserFlowTest(unittest.TestCase):
         self.assertIn("(2)", problems[0])
 
     def test_console_and_page_errors_reach_the_run(self):
-        run, _, _, _ = self.run_browser([STRIPES, OTHER_STRIPES], console=[ConsoleEntry("error", "boom", "http://h/a.js")],
+        run, _, _, _ = self.run_browser([STRIPES, STRIPES, STRIPES, OTHER_STRIPES], console=[ConsoleEntry("error", "boom", "http://h/a.js")],
                                         page_errors=["TypeError: x"])
         self.assertEqual([(entry.kind, entry.text, entry.url) for entry in run.console], [("error", "boom", "http://h/a.js")])
         self.assertEqual(run.page_errors, ["TypeError: x"])
         self.assertEqual(len(web_smoke.evaluate(run)), 2)
 
-    def test_a_chromium_that_cannot_start_is_browser_missing_and_the_smoke_skips(self):
-        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES])), launch_error="Executable doesn't exist at C:/x\nrun playwright install")
+    def test_a_chromium_that_is_not_installed_is_browser_missing_and_the_smoke_skips(self):
+        missing = Path(tempfile.gettempdir()) / "web_smoke_no_such_chromium" / "chrome.exe"
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES])), executable=missing)
         api = SimpleNamespace(sync_playwright=fake.sync_playwright)
-        with self.assertRaisesRegex(web_smoke.BrowserMissing, "Executable doesn't exist"):
+        with self.assertRaisesRegex(web_smoke.BrowserMissing, "no Chromium at"):
             web_smoke.run_browser(api, "http://h/", options())
+        self.assertIsNone(fake.launch_args)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(web_smoke.run_smoke(options(), api), web_smoke.EXIT_SKIPPED)
         self.assertIn("SKIP:", out.getvalue())
 
+    def test_a_chromium_that_is_there_but_cannot_start_is_a_failure_and_not_a_skip(self):
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES])), launch_error="Browser closed unexpectedly\nsandbox")
+        api = SimpleNamespace(sync_playwright=fake.sync_playwright)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(web_smoke.run_smoke(options(), api), web_smoke.EXIT_FAILED)
+        self.assertIn("FAIL:", out.getvalue())
+        self.assertIn("Browser closed unexpectedly", out.getvalue())
+        self.assertNotIn("SKIP", out.getvalue())
+
+    def test_the_polls_wait_with_the_page_timer(self):
+        _, page, _, _ = self.run_browser([FLAT, FLAT, STRIPES, STRIPES, STRIPES, OTHER_STRIPES], timeout=10.0)
+        self.assertIn(web_smoke.POLL_INTERVAL_SECONDS * 1000, page.waits)
+
+    def test_a_deaf_page_gets_the_click_and_fails_check_3(self):
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES])))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = web_smoke.run_smoke(options(selftest_fault="deaf"), SimpleNamespace(sync_playwright=fake.sync_playwright))
+        self.assertEqual(code, 1)
+        self.assertEqual(len(fake.page.clicks), 1)
+        self.assertIn("FAIL: (3) the canvas looks the same after the click", out.getvalue())
+
+    def test_a_canvas_that_changes_by_itself_is_cannot_judge_and_gets_no_click(self):
+        run, page, _, _ = self.run_browser([STRIPES, STRIPES, OTHER_STRIPES])
+        self.assertEqual(page.clicks, [])
+        self.assertIsNone(run.second_png)
+        problems = web_smoke.evaluate(run)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("(3) cannot judge", problems[0])
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES, STRIPES, OTHER_STRIPES])))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = web_smoke.run_smoke(options(), SimpleNamespace(sync_playwright=fake.sync_playwright))
+        self.assertEqual(code, 1)
+        self.assertIn("FAIL: (3) cannot judge", out.getvalue())
+        self.assertNotIn("PASS", out.getvalue())
+
     def test_run_smoke_serves_the_page_prints_ok_lines_and_returns_0(self):
-        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES, OTHER_STRIPES])))
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES, STRIPES, STRIPES, OTHER_STRIPES])))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = web_smoke.run_smoke(options(), SimpleNamespace(sync_playwright=fake.sync_playwright))
@@ -524,7 +597,7 @@ class RealBrowserTest(unittest.TestCase):
         self.assertEqual(code, 0, output)
 
     def test_each_fault_is_found(self):
-        expected = {"flat": "(2)", "console-error": "(4)", "page-error": "(1)"}
+        expected = {"flat": "(2)", "console-error": "(4)", "page-error": "(1)", "deaf": "(3)"}
         for fault, check in expected.items():
             with self.subTest(fault):
                 code, output = self.run_selftest("--selftest-fault", fault, "--timeout", "3")
