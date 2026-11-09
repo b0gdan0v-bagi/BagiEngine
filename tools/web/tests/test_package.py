@@ -157,6 +157,22 @@ class PackageTest(unittest.TestCase):
         self.assertTrue((self.build / f"{GAME}.html").is_file())
         self.assertFalse(inside.exists())
 
+    def test_the_manifest_says_threads_true_by_default_and_false_for_a_single_thread_build(self):
+        self.assertIs(self.run_package()["threads"], True)
+        self.assertIs(json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))["threads"], True)
+        self.assertIs(self.run_package(threads=False)["threads"], False)
+        self.assertIs(json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))["threads"], False)
+
+    def test_the_single_thread_switch_of_the_command_line_writes_threads_false(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(package.main([str(self.build), str(self.out), "--single-thread"]), 0)
+        self.assertIs(json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))["threads"], False)
+        self.assertIn("single-thread", out.getvalue())
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(package.main([str(self.build), str(self.out)]), 0)
+        self.assertIs(json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))["threads"], True)
+        self.assertIn("threaded", out.getvalue())
+
     def test_the_command_line_returns_0_and_1(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):

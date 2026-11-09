@@ -2,9 +2,14 @@
 Run: python -m unittest discover tools/web/tests"""
 
 import ast
+import contextlib
 import gzip
 import http.client
+import io
+import json
 import os
+import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -294,6 +299,171 @@ class CrossOriginIsolationOnTest(ServerTestCase):
         self.assertEqual(response.headers["cross-origin-embedder-policy"], "require-corp")
 
 
+class IsolationDecisionTest(unittest.TestCase):
+    """Who decides on the two headers: a switch, then COOP_COEP, then manifest.json's `threads`, then on."""
+
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.root = Path(self._temp.name)
+
+    def write_manifest(self, text: str):
+        (self.root / "manifest.json").write_text(text, encoding="utf-8")
+
+    def decide(self, argv=(), environ=None):
+        args = serve.parse_args(list(argv), environ=environ or {})
+        return serve.decide_cross_origin_isolation(args.cross_origin_isolation, args.isolation_source, self.root)
+
+    def test_without_a_manifest_the_headers_are_on(self):
+        on, reason = self.decide()
+        self.assertTrue(on)
+        self.assertIn("by default", reason)
+
+    def test_the_manifest_decides_when_nothing_was_asked(self):
+        self.write_manifest('{"game": "G", "threads": true, "files": {}}')
+        on, reason = self.decide()
+        self.assertTrue(on)
+        self.assertIn("threads: true", reason)
+        self.write_manifest('{"game": "G", "threads": false, "files": {}}')
+        on, reason = self.decide()
+        self.assertFalse(on)
+        self.assertIn("threads: false", reason)
+
+    def test_a_manifest_without_a_usable_threads_member_counts_as_no_manifest(self):
+        for text in ("{}", '{"threads": "no"}', '{"threads": 0}', "[]", "not json", ""):
+            with self.subTest(text=text):
+                self.write_manifest(text)
+                self.assertTrue(self.decide()[0])
+
+    def test_the_switches_win_over_the_manifest(self):
+        self.write_manifest('{"threads": false}')
+        on, reason = self.decide(["--cross-origin-isolation"])
+        self.assertTrue(on)
+        self.assertIn("--cross-origin-isolation", reason)
+        self.write_manifest('{"threads": true}')
+        on, reason = self.decide(["--no-cross-origin-isolation"])
+        self.assertFalse(on)
+        self.assertIn("--no-cross-origin-isolation", reason)
+
+    def test_the_variable_wins_over_the_manifest_and_the_switch_over_the_variable(self):
+        self.write_manifest('{"threads": false}')
+        on, reason = self.decide(environ={"COOP_COEP": "1"})
+        self.assertTrue(on)
+        self.assertIn("COOP_COEP=1", reason)
+        self.write_manifest('{"threads": true}')
+        on, reason = self.decide(environ={"COOP_COEP": "0"})
+        self.assertFalse(on)
+        self.assertIn("COOP_COEP=0", reason)
+        self.assertTrue(self.decide(["--cross-origin-isolation"], environ={"COOP_COEP": "0"})[0])
+        self.assertFalse(self.decide(["--no-cross-origin-isolation"], environ={"COOP_COEP": "1"})[0])
+
+    def test_an_empty_or_unknown_variable_asks_nothing(self):
+        self.write_manifest('{"threads": false}')
+        for value in ("", "maybe", "  "):
+            with self.subTest(value=value):
+                self.assertFalse(self.decide(environ={"COOP_COEP": value})[0])
+
+    def test_the_two_switches_exclude_each_other(self):
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            serve.parse_args(["--cross-origin-isolation", "--no-cross-origin-isolation"], environ={})
+
+
+class ServedHeadersFollowTheManifestTest(unittest.TestCase):
+    """serve.py as a program, the way the image starts it (the CMD of the Dockerfile, no switch) and a person at the keyboard does."""
+
+    def start(self, cwd: Path, argv: list[str], environment: dict):
+        process = subprocess.Popen([sys.executable, str(cwd / "serve.py"), *argv], cwd=cwd, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, env=environment, text=True)
+        watchdog = threading.Timer(30, process.kill)
+        watchdog.start()
+
+        def stop():
+            watchdog.cancel()
+            process.kill()
+            process.wait(timeout=10)
+            process.stdout.close()
+        self.addCleanup(stop)
+        line = process.stdout.readline()
+        match = re.search(r"http://[\d.]+:(\d+) ", line)
+        self.assertIsNotNone(match, line)
+        return int(match.group(1)), line
+
+    def make_service(self, threads: bool | None) -> Path:
+        """What the Dockerfile copies: serve.py and the dist/ that package.py makes (`threads` None: a dist/ without a manifest)."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        service = Path(temp.name)
+        shutil.copyfile(Path(serve.__file__), service / "serve.py")
+        package.package(write_build_output(service / "build"), service / "dist", brotli_module=None, threads=threads is not False)
+        if threads is None:
+            (service / "dist" / "manifest.json").unlink()
+        return service
+
+    def request(self, port: int, path: str, headers: dict | None = None) -> Response:
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        try:
+            connection.request("GET", path, headers=headers or {})
+            return Response(connection.getresponse())
+        finally:
+            connection.close()
+
+    def environment(self, **extra) -> dict:
+        environment = {name: value for name, value in os.environ.items() if name != "COOP_COEP"}
+        environment["PORT"] = "0"
+        environment.update(extra)
+        return environment
+
+    def docker_arguments(self) -> list[str]:
+        """The arguments of the CMD of tools/web/Dockerfile after `python serve.py`."""
+        text = (Path(serve.__file__).parent / "Dockerfile").read_text(encoding="utf-8")
+        command = json.loads(re.search(r"^CMD (\[.*\])$", text, flags=re.MULTILINE).group(1))
+        self.assertEqual(command[:2], ["python", "serve.py"])
+        return command[2:]
+
+    def test_the_image_command_sends_both_headers_for_a_threaded_dist_on_every_kind_of_answer(self):
+        service = self.make_service(threads=True)
+        port, line = self.start(service, self.docker_arguments(), self.environment())
+        self.assertIn("cross-origin isolation on", line)
+        self.assertIn("threads: true", line)
+        etag = self.request(port, "/").headers["etag"]
+        for path, headers, status in (("/", None, 200), (f"/{GAME}.wasm", None, 200), ("/nothing.js", None, 404),
+                                      ("/", {"If-None-Match": etag}, 304), ("/healthz", None, 200)):
+            with self.subTest(path=path, status=status):
+                response = self.request(port, path, headers)
+                self.assertEqual(response.status, status)
+                self.assertEqual(response.headers["cross-origin-opener-policy"], "same-origin")
+                self.assertEqual(response.headers["cross-origin-embedder-policy"], "require-corp")
+
+    def test_the_image_command_sends_them_for_a_dist_without_a_manifest_too(self):
+        service = self.make_service(threads=None)
+        port, line = self.start(service, self.docker_arguments(), self.environment())
+        self.assertIn("cross-origin isolation on", line)
+        self.assertEqual(self.request(port, "/").headers["cross-origin-embedder-policy"], "require-corp")
+
+    def test_the_image_command_sends_none_for_a_single_thread_dist(self):
+        service = self.make_service(threads=False)
+        port, line = self.start(service, self.docker_arguments(), self.environment())
+        self.assertIn("cross-origin isolation off", line)
+        self.assertIn("threads: false", line)
+        for path in ("/", f"/{GAME}.wasm", "/nothing.js"):
+            with self.subTest(path=path):
+                headers = self.request(port, path).headers
+                self.assertNotIn("cross-origin-opener-policy", headers)
+                self.assertNotIn("cross-origin-embedder-policy", headers)
+
+    def test_a_switch_turns_the_headers_off_for_a_threaded_dist(self):
+        service = self.make_service(threads=True)
+        port, line = self.start(service, [*self.docker_arguments(), "--no-cross-origin-isolation"], self.environment())
+        self.assertIn("cross-origin isolation off", line)
+        self.assertNotIn("cross-origin-embedder-policy", self.request(port, "/").headers)
+
+    def test_the_variable_turns_them_off_too(self):
+        service = self.make_service(threads=True)
+        port, line = self.start(service, self.docker_arguments(), self.environment(COOP_COEP="0"))
+        self.assertIn("COOP_COEP=0", line)
+        self.assertNotIn("cross-origin-opener-policy", self.request(port, "/").headers)
+
+
 class ArgumentsTest(unittest.TestCase):
     def test_the_port_comes_from_the_environment_and_defaults_to_8080(self):
         self.assertEqual(serve.parse_args([], environ={}).port, 8080)
@@ -301,11 +471,13 @@ class ArgumentsTest(unittest.TestCase):
         self.assertEqual(serve.parse_args([], environ={"PORT": "4321"}).port, 4321)
         self.assertEqual(serve.parse_args(["--port", "99"], environ={"PORT": "4321"}).port, 99)
 
-    def test_cross_origin_isolation_is_a_switch_or_coop_coep_1(self):
-        self.assertFalse(serve.parse_args([], environ={}).cross_origin_isolation)
-        self.assertTrue(serve.parse_args(["--cross-origin-isolation"], environ={}).cross_origin_isolation)
-        self.assertTrue(serve.parse_args([], environ={"COOP_COEP": "1"}).cross_origin_isolation)
-        self.assertFalse(serve.parse_args([], environ={"COOP_COEP": "0"}).cross_origin_isolation)
+    def test_cross_origin_isolation_is_asked_by_a_switch_or_by_coop_coep_and_is_none_otherwise(self):
+        self.assertIsNone(serve.parse_args([], environ={}).cross_origin_isolation)
+        self.assertIs(serve.parse_args(["--cross-origin-isolation"], environ={}).cross_origin_isolation, True)
+        self.assertIs(serve.parse_args(["--no-cross-origin-isolation"], environ={}).cross_origin_isolation, False)
+        self.assertIs(serve.parse_args([], environ={"COOP_COEP": "1"}).cross_origin_isolation, True)
+        self.assertIs(serve.parse_args([], environ={"COOP_COEP": "0"}).cross_origin_isolation, False)
+        self.assertIsNone(serve.parse_args([], environ={"COOP_COEP": ""}).cross_origin_isolation)
 
     def test_the_root_defaults_to_dist_and_the_host_to_all_interfaces(self):
         args = serve.parse_args([], environ={})

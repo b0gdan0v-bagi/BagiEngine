@@ -14,12 +14,20 @@
 #       BE_WEB_ENGINE_ROOT, BE_WEB_GAME_ROOT and BE_WEB_WEB_ROOT, the values of BAGI_ENGINE_ROOT / BAGI_GAME_ROOT / BAGI_WEB_ROOT.
 #       An "@" in a source path is written "@@", which is how emcc's file packager takes a literal "@" (the single "@" splits the
 #       source from the virtual path).
+#   be_web_parse_preload_spec(SPEC <spec> FOLDER <var> VIRTUAL <var>)
+#       The inverse of one entry of be_web_preload_args ("<source>@<virtual>", without "--preload-file "): the source folder as it is on
+#       disk ("@@" back to "@") and the virtual path. The virtual paths are ours and have no "@", so the last "@" splits.
 #   be_web_content_inputs(OUT <var> FOLDER <dir> STAMP <file>)
 #       The link inputs that make the content package follow its folder: every file of <dir> plus <file>, a stamp that holds the sorted
 #       list of those files. An edit relinks because a file is newer than the .data package; an added or a deleted file relinks because
 #       the stamp is rewritten (only when the list changes) at the configure step that CONFIGURE_DEPENDS triggers.
-#   be_web_link_options(OUT <var> [SINGLE_THREAD])
-#       The Emscripten link options: the "-s..." settings, the HTML shell (web/shell.html), and the assertions in Debug only (as a
+#   be_web_generate_shell(OUTPUT <file> [SINGLE_THREAD])
+#       Writes a copy of web/shell.html to <file> with the placeholder @BAGI_WEB_THREADS@ replaced by 1 (threaded) or 0 (SINGLE_THREAD).
+#       The page that is not cross-origin isolated shows a message instead of starting only when the build is threaded, and the shell
+#       cannot know that by itself. configure_file(), so the copy is rewritten only when its text changes and a change of web/shell.html
+#       configures again.
+#   be_web_link_options(OUT <var> [SINGLE_THREAD] [SHELL_FILE <file>])
+#       The Emscripten link options: the "-s..." settings, the HTML shell (web/shell.html, or SHELL_FILE: the copy of be_web_generate_shell), and the assertions in Debug only (as a
 #       generator expression, so the list is the same for every configuration). Without SINGLE_THREAD it also has -pthread and the
 #       Web Worker pool (BE_WEB_THREAD_POOL_SIZE); with SINGLE_THREAD it has neither (no thread, no shared memory).
 #   be_web_configure_target(<target> GAME_ROOT <dir>)
@@ -77,6 +85,15 @@ function(be_web_preload_args)
     set(${ARG_OUT} "${_args}" PARENT_SCOPE)
 endfunction()
 
+function(be_web_parse_preload_spec)
+    cmake_parse_arguments(ARG "" "SPEC;FOLDER;VIRTUAL" "" ${ARGN})
+    string(REGEX REPLACE "@[^@]*$" "" _folder "${ARG_SPEC}")
+    string(REPLACE "@@" "@" _folder "${_folder}")
+    string(REGEX REPLACE "^.*@" "" _virtual "${ARG_SPEC}")
+    set(${ARG_FOLDER} "${_folder}" PARENT_SCOPE)
+    set(${ARG_VIRTUAL} "${_virtual}" PARENT_SCOPE)
+endfunction()
+
 function(be_web_content_inputs)
     cmake_parse_arguments(ARG "" "OUT;FOLDER;STAMP" "" ${ARGN})
     if(NOT ARG_OUT OR NOT ARG_FOLDER OR NOT ARG_STAMP)
@@ -99,10 +116,28 @@ function(be_web_content_inputs)
     set(${ARG_OUT} ${_files} "${ARG_STAMP}" PARENT_SCOPE)
 endfunction()
 
+function(be_web_generate_shell)
+    cmake_parse_arguments(ARG "SINGLE_THREAD" "OUTPUT" "" ${ARGN})
+    if(NOT ARG_OUTPUT)
+        message(FATAL_ERROR "be_web_generate_shell: OUTPUT is required")
+    endif()
+
+    # @ONLY: the file has CSS rules with "@supports", and no other @word@ pair than the placeholder (test_shell.py checks that)
+    if(ARG_SINGLE_THREAD)
+        set(BAGI_WEB_THREADS 0)
+    else()
+        set(BAGI_WEB_THREADS 1)
+    endif()
+    configure_file("${BE_WEB_SHELL_FILE}" "${ARG_OUTPUT}" @ONLY NEWLINE_STYLE UNIX)
+endfunction()
+
 function(be_web_link_options)
-    cmake_parse_arguments(ARG "SINGLE_THREAD" "OUT" "" ${ARGN})
+    cmake_parse_arguments(ARG "SINGLE_THREAD" "OUT;SHELL_FILE" "" ${ARGN})
     if(NOT ARG_OUT)
         message(FATAL_ERROR "be_web_link_options: OUT is required")
+    endif()
+    if(NOT ARG_SHELL_FILE)
+        set(ARG_SHELL_FILE "${BE_WEB_SHELL_FILE}")
     endif()
 
     # The names are those of settings.js of emsdk 4.0.23 (checked there: each exists, with its default in the comment). The defaults
@@ -120,7 +155,7 @@ function(be_web_link_options)
         # the loop is cancelled the runtime exits and the static destructors run
         -sEXIT_RUNTIME=1
         # The page around the wasm (web/shell.html); SHELL: keeps the flag and its value together, the quotes keep a path with a space in one piece
-        "SHELL:--shell-file \"${BE_WEB_SHELL_FILE}\""
+        "SHELL:--shell-file \"${ARG_SHELL_FILE}\""
         # Runtime checks of the glue code (memory growth, stack, wrong calls); they cost speed and size, so Debug only
         $<$<CONFIG:Debug>:-sASSERTIONS=1>
     )
@@ -156,14 +191,19 @@ function(be_web_configure_target TARGET_NAME)
 
     set_target_properties(${TARGET_NAME} PROPERTIES SUFFIX "${BE_WEB_OUTPUT_SUFFIX}")
 
+    # The shell is a generated copy of web/shell.html that knows whether the build is threaded (be_web_generate_shell)
+    set(_shell "${CMAKE_CURRENT_BINARY_DIR}/web/shell.html")
     if(ENGINE_SINGLE_THREAD)
-        be_web_link_options(OUT _link_options SINGLE_THREAD)
+        be_web_generate_shell(OUTPUT "${_shell}" SINGLE_THREAD)
+        be_web_link_options(OUT _link_options SINGLE_THREAD SHELL_FILE "${_shell}")
     else()
-        be_web_link_options(OUT _link_options)
+        be_web_generate_shell(OUTPUT "${_shell}")
+        be_web_link_options(OUT _link_options SHELL_FILE "${_shell}")
     endif()
     target_link_options(${TARGET_NAME} PRIVATE ${_link_options})
-    # The shell is read at link time: a change of the page relinks
-    set_property(TARGET ${TARGET_NAME} APPEND PROPERTY LINK_DEPENDS "${BE_WEB_SHELL_FILE}")
+    # The shell is read at link time: a change of the page relinks (the copy changes when the source does, at the next configure,
+    # which configure_file() triggers; the source is listed too)
+    set_property(TARGET ${TARGET_NAME} APPEND PROPERTY LINK_DEPENDS "${BE_WEB_SHELL_FILE}" "${_shell}")
 
     be_web_preload_args(OUT _preload
         ENGINE_ROOT "${BAGI_ENGINE_DIR}"
@@ -177,10 +217,7 @@ function(be_web_configure_target TARGET_NAME)
 
         # The .data package is written at link time: an edit, an added or a deleted file in the folder must relink. CONFIGURE_DEPENDS
         # makes the build re-glob, so a new file is seen without a manual configure (and each build pays for the glob)
-        # The spec is <source>@<virtual>: the virtual path (our constants) has no "@", so the last "@" splits, and "@@" in the source is an "@"
-        string(REGEX REPLACE "@[^@]*$" "" _folder "${_spec}")
-        string(REPLACE "@@" "@" _folder "${_folder}")
-        string(REGEX REPLACE "^.*@" "" _virtual "${_spec}")
+        be_web_parse_preload_spec(SPEC "${_spec}" FOLDER _folder VIRTUAL _virtual)
         string(MAKE_C_IDENTIFIER "${_virtual}" _id)
         be_web_content_inputs(OUT _content FOLDER "${_folder}"
             STAMP "${CMAKE_CURRENT_BINARY_DIR}/web-content/${TARGET_NAME}${_id}.txt")

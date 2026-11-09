@@ -8,11 +8,16 @@
     - The page first asks the browser for a WebGL context. Without one it shows a message and never starts the game: the
       script that emcc substitutes for the SCRIPT placeholder (below) sits in a <template>, which the browser does not run, and
       only the test below starts it.
+    - A threaded build (placeholder BAGI_WEB_THREADS below, set by cmake/BagiWeb.cmake when it copies this file next to the page)
+      needs a cross-origin isolated page: its worker threads share the wasm memory through a SharedArrayBuffer. Without that the
+      page shows a message and does not start the game, because a pthread wasm that finds no SharedArrayBuffer stops with a cryptic
+      error. The single-thread build needs nothing and starts anyway.
     - Module.setStatus and Module.monitorRunDependencies feed the loading bar (the .data package and the wasm download);
       Module.onAbort and the page's error event show a message when the game stops.
 
-    Checked by tools/web/tests/test_shell.py (text only). Built with emsdk 4.0.23: emcc replaces the SCRIPT placeholder and, at -O2,
-    minifies the page (the tag#id selectors survive); the run in a browser is checked by tools/web/tests/web_smoke.py.
+    Checked by tools/web/tests/test_shell.py (text only; check_bagi_web.cmake checks the copy CMake makes). Built with emsdk 4.0.23:
+    emcc replaces the SCRIPT placeholder and, at -O2, minifies the page (the tag#id selectors survive). Running it in a browser is the
+    job of tools/web/tests/web_smoke.py; until that has run against a build, the page is checked as text only.
 -->
 <html lang="en">
 <head>
@@ -214,6 +219,24 @@
                 showError(
                     "WebGL is not available",
                     "This game draws with WebGL, and this browser did not give it a WebGL context. Try another browser, turn on hardware acceleration in its settings, or update the browser or its graphics driver.");
+                return;
+            }
+
+            // 1 in a threaded build, 0 in a single-thread one: CMake writes the number in place of the placeholder in the copy of this
+            // file that emcc takes as the shell. The text itself stays a string, so this file is valid JavaScript before the copy
+            var threaded = "@BAGI_WEB_THREADS@" === "1";
+
+            // A page is cross-origin isolated when it came with Cross-Origin-Opener-Policy: same-origin and
+            // Cross-Origin-Embedder-Policy: require-corp, and only a secure context (https, or http on localhost) can be. Browsers
+            // that do not know the property say undefined, which counts as not isolated.
+            if (threaded && (window.crossOriginIsolated !== true || typeof SharedArrayBuffer === "undefined")) {
+                var secure = window.isSecureContext !== false;
+                showError(
+                    "This page needs cross-origin isolation",
+                    "This game runs its work on worker threads, which need the page to be cross-origin isolated: the server has to send " +
+                    "the headers Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: require-corp with the page. " +
+                    "This page did not get them, so it does not start. Serve it with tools/web/serve.py, or set those two headers on your server.",
+                    secure ? "" : "The page is not a secure context either: over plain HTTP only the host name localhost counts, so open the page by the name localhost, or serve it over HTTPS.");
                 return;
             }
 

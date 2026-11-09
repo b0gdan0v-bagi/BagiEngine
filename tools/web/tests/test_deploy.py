@@ -119,6 +119,16 @@ class DryRunTest(DeployTestCase):
         self.assertNotIn("single-thread", out)
         self.assertRegex(out.replace('"', "").replace("'", ""), r"package\.py .*[\\/]build[\\/]ClangWeb ")
 
+    def test_the_package_step_of_a_single_thread_build_says_so_so_the_manifest_has_threads_false(self):
+        _, out, _, _ = self.run_script("--dry-run", "--single-thread")
+        package_line = next(line for line in out.splitlines() if "package.py" in line)
+        self.assertTrue(package_line.rstrip().endswith("--single-thread"), package_line)
+        _, out, _, _ = self.run_script("--dry-run", "--preset", "web-debug-single-thread")
+        self.assertTrue(next(line for line in out.splitlines() if "package.py" in line).rstrip().endswith("--single-thread"))
+        # the default build is threaded: nothing in the package line names the single-thread page
+        _, out, _, _ = self.run_script("--dry-run")
+        self.assertEqual([line for line in out.splitlines() if "package.py" in line and "--single-thread" in line], [])
+
     def test_single_thread_picks_the_preset_and_the_folder_of_the_single_thread_page(self):
         for preset, expected in (("web-release", "web-release-single-thread"), ("web-debug", "web-debug-single-thread")):
             with self.subTest(preset=preset):
@@ -272,6 +282,8 @@ class DeployFilesTest(unittest.TestCase):
         self.assertEqual(copies, ["serve.py ./", "dist/ dist/"])
         self.assertRegex(text, re.compile(r"^FROM python:[\d.]+-slim", re.MULTILINE))
         self.assertIn('CMD ["python", "serve.py", "--root", "dist"]', text)
+        # No switch for the cross-origin isolation: serve.py sends the headers for a threaded page by itself (test_serve.py starts this command)
+        self.assertNotIn("cross-origin-isolation", text.split("\nCMD", 1)[1])
 
     def test_railway_json_builds_the_dockerfile_and_checks_healthz(self):
         config = json.loads((TOOLS_WEB / "railway.json").read_text(encoding="utf-8"))

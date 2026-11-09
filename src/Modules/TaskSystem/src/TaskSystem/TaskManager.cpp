@@ -17,7 +17,7 @@ namespace BECore {
         _mainThreadId = std::this_thread::get_id();
 
 #if BE_SINGLE_THREAD
-        // No thread at all (the browser build): background jobs run on the calling thread at submit time,
+        // No thread at all (the single-thread build, BE_SINGLE_THREAD): background jobs run on the calling thread at submit time,
         // so the start-up WaitAll over the config loads finds them done.
         _threadPool = eastl::make_unique<ThreadPool>(ThreadPool::InlineTag{});
 

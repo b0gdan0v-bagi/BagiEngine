@@ -9,7 +9,7 @@ Run it from the root of the project that has the web presets (the engine, or a g
 The steps, in order:
   1. cmake --preset <preset>                           (needs the Emscripten SDK of the engine: python CI/scripts/setup_emsdk.py)
   2. cmake --build --preset <preset> --target <game>
-  3. package.py <build dir> <dist> --game <game>
+  3. package.py <build dir> <dist> --game <game>       (with --single-thread when the page is the single-thread one)
   4. with --deploy: stage Dockerfile, railway.json, serve.py and dist/ in one folder and run
      `railway up <folder> --path-as-root --service <name> --detach` in it (the Railway CLI, logged in and the project linked with
      `railway link`, or RAILWAY_TOKEN of the project; the service must exist, tools/web/CLAUDE.md).
@@ -75,10 +75,14 @@ def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_
     """The steps to run, in order. The staging between step 3 and the deploy is done by stage()."""
     preset = resolve_preset(args)
     build_dir = args.build_dir or source_dir / output_folder(preset)
+    package_command = [sys.executable, str(PACKAGE_SCRIPT), str(build_dir), str(dist), "--game", args.game]
+    if preset.endswith(SINGLE_THREAD_SUFFIX):
+        # The manifest says threads: false, so serve.py (and the image) send no COOP / COEP for this page
+        package_command.append("--single-thread")
     steps = [
         Step(["cmake", "--preset", preset], source_dir),
         Step(["cmake", "--build", "--preset", preset, "--target", args.game], source_dir),
-        Step([sys.executable, str(PACKAGE_SCRIPT), str(build_dir), str(dist), "--game", args.game], source_dir),
+        Step(package_command, source_dir),
     ]
     if args.deploy:
         steps.append(Step(["railway", "up", str(stage_dir), "--path-as-root", "--service", args.service, "--detach"], stage_dir, True))
