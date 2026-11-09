@@ -1,5 +1,7 @@
 #include "SaveGame.h"
 
+#include <BECore/Reflection/BinaryDeserializer.h>
+#include <BECore/Reflection/BinarySerializer.h>
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -20,6 +22,40 @@ namespace BECore {
 
         std::unexpected<SaveError> InvalidSlotNameError(eastl::string_view slot) {
             return MakeError(SaveErrorKind::InvalidSlotName, Format("'{}' is not a slot name: use 1 to {} characters of A-Z, a-z, 0-9, '_' and '-'", slot, kMaxSlotNameLength));
+        }
+
+        // The names of the entries of the envelope (see SaveGameService::Save)
+        constexpr eastl::string_view kEnvelopeObject = "save";
+        constexpr eastl::string_view kEnvelopeGame = "game";
+        constexpr eastl::string_view kEnvelopeVersion = "version";
+        constexpr eastl::string_view kEnvelopeState = "state";
+
+        /// The first error the deserializer recorded as a sentence, or @p fallback when it recorded none
+        eastl::string FirstErrorOr(const IDeserializer& deserializer, eastl::string_view fallback) {
+            if (!deserializer.HasErrors()) {
+                return eastl::string(fallback);
+            }
+            const DeserializeError& error = deserializer.GetErrors().front();
+            return Format("{} (at '{}')", error.errorMessage.ToStringView(), error.path.ToStringView());
+        }
+
+        /// Open the bytes, check the shape of the envelope and read game and version; the deserializer stays inside `save`
+        std::expected<SaveInfo, SaveError> OpenEnvelope(BinaryDeserializer& deserializer, const eastl::vector<uint8_t>& bytes, eastl::string_view slot) {
+            if (!deserializer.LoadFromBuffer(bytes)) {
+                return MakeError(SaveErrorKind::Corrupt, Format("The save in slot '{}' is not a valid file: {}", slot, FirstErrorOr(deserializer, "unreadable data")));
+            }
+            if (!deserializer.BeginObject(kEnvelopeObject)) {
+                return MakeError(SaveErrorKind::Corrupt, Format("The file in slot '{}' is not a save: it has no '{}' object", slot, kEnvelopeObject));
+            }
+
+            SaveInfo info;
+            if (!deserializer.ReadAttribute(kEnvelopeGame, info.game)) {
+                return MakeError(SaveErrorKind::Corrupt, Format("The save in slot '{}' has no usable '{}': {}", slot, kEnvelopeGame, FirstErrorOr(deserializer, "the entry is missing")));
+            }
+            if (!deserializer.ReadAttribute(kEnvelopeVersion, info.version)) {
+                return MakeError(SaveErrorKind::Corrupt, Format("The save in slot '{}' has no usable '{}': {}", slot, kEnvelopeVersion, FirstErrorOr(deserializer, "the entry is missing")));
+            }
+            return info;
         }
 
         std::string ToStdString(eastl::string_view text) {
@@ -147,6 +183,67 @@ namespace BECore {
             return MakeError(SaveErrorKind::ReadFailed, Format("Cannot read '{}' to the end", path.string()));
         }
         return bytes;
+    }
+
+    std::expected<void, SaveError> SaveGameService::Save(eastl::string_view slot, const SaveSchema& schema, const eastl::function<void(ISerializer&)>& writeState) {
+        if (!_initialized) {
+            return NotInitializedError();
+        }
+        if (!IsValidSlotName(slot)) {
+            return InvalidSlotNameError(slot);
+        }
+
+        BinarySerializer serializer;
+        serializer.BeginObject(kEnvelopeObject);
+        serializer.WriteAttribute(kEnvelopeGame, schema.game);
+        serializer.WriteAttribute(kEnvelopeVersion, schema.version);
+        serializer.BeginObject(kEnvelopeState);
+        writeState(serializer);
+        serializer.EndObject();
+        serializer.EndObject();
+        return WriteSlot(slot, serializer.GetData());
+    }
+
+    std::expected<SaveInfo, SaveError> SaveGameService::Load(eastl::string_view slot, const SaveSchema& schema, const eastl::function<void(IDeserializer&)>& readState) const {
+        const auto bytes = ReadSlot(slot);
+        if (!bytes) {
+            return std::unexpected(bytes.error());
+        }
+
+        BinaryDeserializer deserializer;
+        auto info = OpenEnvelope(deserializer, *bytes, slot);
+        if (!info) {
+            return info;
+        }
+        if (info->game != schema.game) {
+            return MakeError(SaveErrorKind::WrongGame, Format("The save in slot '{}' belongs to the game '{}', not '{}'", slot, info->game, schema.game));
+        }
+        if (info->version > schema.version) {
+            return MakeError(SaveErrorKind::VersionTooNew, Format("The save in slot '{}' has version {}, this game reads up to {}", slot, info->version, schema.version));
+        }
+        if (info->version < schema.minVersion) {
+            return MakeError(SaveErrorKind::VersionTooOld, Format("The save in slot '{}' has version {}, this game reads from {}", slot, info->version, schema.minVersion));
+        }
+
+        if (!deserializer.BeginObject(kEnvelopeState)) {
+            return MakeError(SaveErrorKind::Corrupt, Format("The save in slot '{}' has no '{}' object", slot, kEnvelopeState));
+        }
+        readState(deserializer);
+        deserializer.EndObject();
+        deserializer.EndObject();
+        if (deserializer.HasErrors()) {
+            return MakeError(SaveErrorKind::Corrupt, Format("The state in slot '{}' cannot be read: {}", slot, FirstErrorOr(deserializer, "unknown error")));
+        }
+        return info;
+    }
+
+    std::expected<SaveInfo, SaveError> SaveGameService::Peek(eastl::string_view slot) const {
+        const auto bytes = ReadSlot(slot);
+        if (!bytes) {
+            return std::unexpected(bytes.error());
+        }
+        BinaryDeserializer deserializer;
+        return OpenEnvelope(deserializer, *bytes, slot);
     }
 
     bool SaveGameService::Exists(eastl::string_view slot) const {

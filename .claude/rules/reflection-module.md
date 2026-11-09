@@ -116,7 +116,7 @@ if (serializer.BeginArray("items", "item", count)) {
 
 ## Binary Format
 
-`BinarySerializer` / `BinaryDeserializer` take the same call sequence as the XML pair, so every type that serializes to XML serializes to binary without changes. Use it for saves and caches where size and speed matter more than readability.
+`BinarySerializer` / `BinaryDeserializer` take the same call sequence as the XML pair, so every type that serializes to XML serializes to binary without changes. Use it for saves and caches where size and speed matter more than readability. A save game goes through `SaveGameService` (slots, game id and version, atomic write; `src/Modules/BECore/Save/CLAUDE.md`), not by hand with `SaveToFile`.
 
 ```cpp
 BinarySerializer serializer;

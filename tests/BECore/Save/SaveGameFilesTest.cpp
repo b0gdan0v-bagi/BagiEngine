@@ -27,9 +27,11 @@ namespace BECore::Tests {
             return false;
         }
 
+        /// The kind of a failed result; a success is a test failure of its own (the value returned for it is only a placeholder)
         template <typename T>
         SaveErrorKind KindOf(const std::expected<T, SaveError>& result) {
-            return result.has_value() ? SaveErrorKind::Corrupt : result.error().kind;
+            EXPECT_FALSE(result.has_value()) << "a failure was expected";
+            return result.has_value() ? SaveErrorKind::NotInitialized : result.error().kind;
         }
 
     }  // namespace
@@ -177,6 +179,8 @@ namespace BECore::Tests {
         std::filesystem::create_directories(_base / "saves");
         std::ofstream(_base / "saves" / "stray.save") << "x";
 
+        // Changing the working directory is safe here: each test is its own process (ctest runs one per process), nothing
+        // else in this process uses a relative path meanwhile, and the old directory is restored before any check
         const std::filesystem::path previous = std::filesystem::current_path();
         std::filesystem::current_path(_base);
         const bool exists = service.Exists("stray");

@@ -1,5 +1,7 @@
 #pragma once
 #include <BECore/FileSystem/FileSystem.h>
+#include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Reflection/ISerializer.h>
 
 namespace BECore {
 
@@ -32,12 +34,29 @@ namespace BECore {
         eastl::string detail;
     };
 
+    /// What a game writes into a save and reads back: its id and the version of its state schema
+    struct SaveSchema {
+        /// The id of the game (a save of another game is refused as WrongGame)
+        eastl::string_view game;
+        /// The version of the state that is written now; a file with a higher version is refused as VersionTooNew
+        uint32_t version = 1;
+        /// The oldest version this game still reads; a file below it is refused as VersionTooOld
+        uint32_t minVersion = 1;
+    };
+
+    /// What a save file says about itself, without its state (SaveGameService::Peek, and the result of Load)
+    struct SaveInfo {
+        eastl::string game;
+        uint32_t version = 0;
+    };
+
     /**
      * @brief Save slots: one file `<slot>.save` per slot in a folder that the service mounts as `saves`.
      *
      * A plain class, not yet a CoreManager service: the folder is passed in (Initialize), so a test or a game decides
      * where saves live. Reads go through the virtual path `saves/<slot>.save` of the FileSystem; writes land in the
      * mounted folder, as a temporary file that is renamed over the save, so a crash while writing leaves the old save.
+     * The service owns the mount point `saves`: Initialize() replaces whatever was mounted under that name.
      * Before Initialize() every call answers NotInitialized (the calls that return a plain value: false or empty).
      *
      * Not thread safe: call it from the main thread, like FileSystem.
@@ -51,7 +70,8 @@ namespace BECore {
          * @brief Create the save folder (with the folders above it) and mount it as `saves`
          *
          * A second call with another folder replaces the mount, so later reads come from the new folder. A failed call
-         * changes nothing.
+         * changes nothing. The service owns the mount point `saves` (kSaveMountPoint): a mount of that name made by anyone
+         * else is dropped, so nothing else should mount it.
          *
          * @return false if the path is a file or the folder cannot be made
          */
@@ -86,6 +106,63 @@ namespace BECore {
          * @return InvalidSlotName, NotInitialized, NotFound (no such slot) or ReadFailed (it exists but cannot be read) on a failure
          */
         [[nodiscard]] std::expected<eastl::vector<uint8_t>, SaveError> ReadSlot(eastl::string_view slot) const;
+
+        /**
+         * @brief Write a game state as the slot: the envelope (game id, version) around the state
+         *
+         * The file is one binary object `save` with `game` and `version` and a child object `state`, which @p writeState
+         * fills. The file replaces an existing save as WriteSlot() does. @p writeState is not called when the slot name is
+         * bad or the service is not initialized.
+         *
+         * @return the errors of WriteSlot()
+         */
+        [[nodiscard]] std::expected<void, SaveError> Save(eastl::string_view slot, const SaveSchema& schema, const eastl::function<void(ISerializer&)>& writeState);
+
+        /**
+         * @brief Read the slot and hand its `state` object to @p readState
+         *
+         * The checks come in this order, and @p readState is called only when all of them pass: the file is a valid
+         * binary stream with an object `save` that has `game`, `version` and an object `state` (else Corrupt), `game` is
+         * the schema's (else WrongGame), `version` is not above schema.version (VersionTooNew) and not below
+         * schema.minVersion (VersionTooOld). After @p readState any error the deserializer recorded is Corrupt, and then
+         * the state may be partly filled: read into a temporary object, not into the live one.
+         *
+         * @return what the file says (its version lets the caller migrate an older state), or ReadSlot()'s errors and the
+         *         ones above
+         */
+        [[nodiscard]] std::expected<SaveInfo, SaveError> Load(eastl::string_view slot, const SaveSchema& schema, const eastl::function<void(IDeserializer&)>& readState) const;
+
+        /// Save a reflected state (`state.Serialize(ISerializer&)`) as the slot; see the non-template Save()
+        template <typename State>
+        requires requires(const State& state, ISerializer& serializer) {
+            state.Serialize(serializer);
+        }
+        [[nodiscard]] std::expected<void, SaveError> Save(eastl::string_view slot, const SaveSchema& schema, const State& state) {
+            return Save(slot, schema, eastl::function<void(ISerializer&)>([&state](ISerializer& serializer) { state.Serialize(serializer); }));
+        }
+
+        /**
+         * @brief Load a reflected state (`state.Deserialize(IDeserializer&)`) from the slot; see the non-template Load()
+         *
+         * @p state is untouched when the call fails before the state is read (every error but Corrupt from the state
+         * itself); a Corrupt after that may leave it partly filled.
+         */
+        template <typename State>
+        requires requires(State& state, IDeserializer& deserializer) {
+            state.Deserialize(deserializer);
+        }
+        [[nodiscard]] std::expected<SaveInfo, SaveError> Load(eastl::string_view slot, const SaveSchema& schema, State& state) const {
+            return Load(slot, schema, eastl::function<void(IDeserializer&)>([&state](IDeserializer& deserializer) { state.Deserialize(deserializer); }));
+        }
+
+        /**
+         * @brief Read only the envelope of the slot (game id and version), for a list of saves
+         *
+         * The state is not read and not checked, and no schema is compared: the caller decides what the info means.
+         *
+         * @return ReadSlot()'s errors, or Corrupt when the file is not a save file
+         */
+        [[nodiscard]] std::expected<SaveInfo, SaveError> Peek(eastl::string_view slot) const;
 
         /// True if the slot has a save file (false for a bad name or before Initialize())
         [[nodiscard]] bool Exists(eastl::string_view slot) const;
