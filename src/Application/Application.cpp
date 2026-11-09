@@ -131,6 +131,8 @@ namespace BECore {
     }
 
     void Application::Finish() {
+        ASSERT(!_finished, "Application::Finish() must run once");
+        _finished = true;
         Cleanup();
     }
 

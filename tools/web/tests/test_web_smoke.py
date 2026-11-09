@@ -276,6 +276,8 @@ class SelftestPageTest(unittest.TestCase):
         self.assertIn("var flat = true", pages["flat"])
         self.assertIn("var deaf = false", pages["none"])
         self.assertIn("var deaf = true", pages["deaf"])
+        self.assertIn("var moving = false", pages["none"])
+        self.assertIn("var moving = true", pages["moving"])
         self.assertIn("console.error", pages["console-error"])
         self.assertIn("throw new Error", pages["page-error"])
 
@@ -678,7 +680,7 @@ class RealBrowserTest(unittest.TestCase):
         self.assertEqual(code, 0, output)
 
     def test_each_fault_is_found(self):
-        expected = {"flat": "(2)", "console-error": "(4)", "page-error": "(1)", "deaf": "(3)"}
+        expected = {"flat": "(2)", "console-error": "(4)", "page-error": "(1)", "deaf": "(3)", "moving": "(3) cannot judge"}
         for fault, check in expected.items():
             with self.subTest(fault):
                 code, output = self.run_selftest("--selftest-fault", fault, "--timeout", "3")

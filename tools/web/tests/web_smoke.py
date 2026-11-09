@@ -20,15 +20,17 @@ The checks, in this order:
 
 --selftest serves a page generated in a temp folder (a canvas that redraws the same still pattern on every animation frame and a
 moving one after a click) instead of a build, so the logic of this script runs without a wasm build. --selftest-fault breaks that
-page on purpose (flat, console-error, page-error, deaf): the run has to exit 1, which shows each of the four checks can fail (add
---timeout 5 for flat, which waits for a frame that never comes).
+page on purpose (flat, console-error, page-error, deaf, moving): the run has to exit 1, which shows each of the four checks can fail and
+check 3 can fail in both ways (deaf: the click changes nothing; moving: the canvas changes by itself, "cannot judge"). Add --timeout 5
+for flat, which waits for a frame that never comes.
 
 Exit code: 0 passed, 1 failed (the reason is printed), 77 skipped (Playwright or its browser is not installed:
 `pip install playwright` and `playwright install chromium`), 2 a wrong command line.
 
 Limits: check 3 needs a canvas that stands still, with the pointer on the click point, for --settle + 5 s before the click (a game
-with an idle animation, a fade-in that is not over by then or a cursor that blinks faster than once in that time fails with "cannot
-judge"; raise --settle for a start that is slow). A change slower than that window is not seen and can pass for the click's. The
+with an idle animation, a fade-in that is not over by then or a cursor that blinks fails with "cannot judge", almost always: the idle shots
+are about 0.5 s apart, so a blink short enough to fall between two shots is not seen; raise --settle for a start that is slow). A
+change slower than that window is not seen and can pass for the click's. The
 screenshots are decoded by tools/control/tests/png_reader.py (imported from there, not copied), in plain Python: keep the viewport
 small.
 Nothing here has run against a real Emscripten build yet (slice 2 of the entry web-build); the Chromium flags are a first guess.
@@ -70,7 +72,7 @@ POLL_INTERVAL_SECONDS = 0.5
 DEFAULT_CHROMIUM_ARGS = ("--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist")
 # Console errors that say nothing about the game: a browser asking for the icon of a page that has none
 DEFAULT_CONSOLE_ALLOW = (r"favicon\.ico",)
-SELFTEST_FAULTS = ("none", "flat", "console-error", "page-error", "deaf")
+SELFTEST_FAULTS = ("none", "flat", "console-error", "page-error", "deaf", "moving")
 
 
 class SmokeFailure(Exception):
@@ -139,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS,
                         help=f"seconds to wait for the page and the first frame (default: {DEFAULT_TIMEOUT_SECONDS:g})")
     parser.add_argument("--settle", type=float, default=DEFAULT_SETTLE_SECONDS,
-                        help=f"seconds to wait after the first frame and after the click (default: {DEFAULT_SETTLE_SECONDS:g})")
+                        help=f"seconds to wait after the first frame, after the pointer move and after the click; it also lengthens the idle window of check 3 to this + {CLICK_TIMEOUT_SECONDS:g} s (default: {DEFAULT_SETTLE_SECONDS:g})")
     parser.add_argument("--allow-console", action="append", default=[], metavar="REGEX",
                         help="an error-level console message matching this is not a failure (repeatable)")
     parser.add_argument("--chromium-arg", action="append", default=[], metavar="ARG",
@@ -259,9 +261,11 @@ def png_is_drawn(png: bytes) -> bool:
 def selftest_page(fault: str = "none") -> str:
     """A page for the checks: a canvas that redraws the same still stripes on every animation frame (so the picture before a click
     does not depend on the frame) and other stripes (another palette, a different direction, moving) after a click. `fault` breaks
-    it on purpose: a flat canvas, an error in the console, an uncaught error, a canvas that does not hear the click."""
+    it on purpose: a flat canvas, an error in the console, an uncaught error, a canvas that does not hear the click, a canvas that
+    moves by itself before any click."""
     flat = "true" if fault == "flat" else "false"
     deaf = "true" if fault == "deaf" else "false"
+    moving = "true" if fault == "moving" else "false"
     console_error = 'console.error("selftest: this error is on purpose");' if fault == "console-error" else ""
     page_error = 'setTimeout(function () { throw new Error("selftest: this error is on purpose"); }, 100);' if fault == "page-error" else ""
     return f"""<!doctype html>
@@ -280,6 +284,7 @@ var canvas = document.getElementById("canvas");
 var context = canvas.getContext("2d");
 var flat = {flat};
 var deaf = {deaf};
+var moving = {moving};
 var frame = 0;
 var clicked = false;
 function draw() {{
@@ -292,6 +297,11 @@ function draw() {{
         for (var y = 0; y < height; y += 20) {{
             context.fillStyle = "hsl(" + ((y * 3 + frame * 2) % 360) + ", 90%, 50%)";
             context.fillRect(0, y, width, 20);
+        }}
+    }} else if (moving) {{
+        for (var x = 0; x < width; x += 20) {{
+            context.fillStyle = "hsl(" + (200 + ((x + frame * 7) % 60)) + ", 40%, 30%)";
+            context.fillRect(x, 0, 20, height);
         }}
     }} else {{
         for (var x = 0; x < width; x += 20) {{

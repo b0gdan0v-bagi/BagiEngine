@@ -104,7 +104,7 @@ function(be_web_link_options)
         $<$<CONFIG:Debug>:-sASSERTIONS=1>
     )
     # The optimisation level is not set here: CMake passes CMAKE_CXX_FLAGS_<CONFIG> to the link line as well, and emcc needs the
-    # same -O level at link time to run wasm-opt. BagiEngine.cmake sets Release to -O2 on the web (smaller code than -O3 for
+    # same -O level at link time to run wasm-opt. The end of this file sets Release to -O2 on the web (smaller code than -O3 for
     # little speed) and Debug stays -O0 -g (unverified: needs emsdk).
     set(${ARG_OUT} "${_options}" PARENT_SCOPE)
 endfunction()

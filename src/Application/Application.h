@@ -26,7 +26,7 @@ namespace BECore {
         /// One iteration of the main loop (the manual-clock idle pass included). False once the application has been asked to stop.
         /// A host that owns the loop (the browser's frame callback) calls it itself, then Finish()
         bool RunFrame();
-        /// Shuts everything down after the last frame (the work that Run() does after the loop). Call it once
+        /// Shuts everything down after the last frame (the work that Run() does after the loop). Call it once (checked by an ASSERT)
         void Finish();
 
     private:
@@ -45,6 +45,7 @@ namespace BECore {
 #endif
 
         bool _isRunning = false;
+        bool _finished = false;  // Finish() has run: it must run once
         bool _headless = false;  // there is no window to show an editor in: the switch chord is ignored
         eastl::vector<eastl::string> _arguments;
 #if BE_WITH_REMOTE_CONTROL
