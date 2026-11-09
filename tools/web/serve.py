@@ -286,7 +286,7 @@ def decide_cross_origin_isolation(explicit: bool | None, source: str | None, roo
     threads = manifest_threads(root)
     if threads is not None:
         return threads, f"{MANIFEST_NAME} says threads: {'true' if threads else 'false'}, a {'threaded' if threads else 'single-thread'} build"
-    return True, f"no threads member in a {MANIFEST_NAME} of {root}: on by default, the web build is threaded"
+    return True, f"no {MANIFEST_NAME} in {root} (or no boolean threads in it): on by default, the web build is threaded"
 
 
 def parse_args(argv: list[str] | None = None, environ=None) -> argparse.Namespace:

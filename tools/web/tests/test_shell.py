@@ -135,6 +135,28 @@ class ShellScriptTest(unittest.TestCase):
         self.assertLess(self.script.index("if (!hasWebGL())"), self.script.index("window.Module"))
         self.assertLess(self.script.index("if (!hasWebGL())"), self.script.index("document.body.appendChild(script)"))
 
+    def test_the_thread_flag_placeholder_is_there_once_and_is_the_only_pair_cmake_would_replace(self):
+        # configure_file(@ONLY) in be_web_generate_shell replaces every @name@; the CSS has "@supports" and must stay alone
+        self.assertEqual(self.html.count("@BAGI_WEB_THREADS@"), 1)
+        self.assertEqual(re.findall(r"@\w+@", self.html), ["@BAGI_WEB_THREADS@"])
+        self.assertRegex(self.script, r'var threaded = "@BAGI_WEB_THREADS@" === "1";')
+
+    def test_a_threaded_page_without_cross_origin_isolation_shows_a_message_and_does_not_start_the_module(self):
+        branch = re.search(r"if \(threaded && (.*?)\) \{\n(.*?)\n\s{12}\}", self.script, flags=re.DOTALL)
+        self.assertIsNotNone(branch, "no branch for a threaded page that is not isolated")
+        condition, body = branch.group(1), branch.group(2)
+        self.assertIn("crossOriginIsolated", condition)
+        self.assertIn("SharedArrayBuffer", condition)
+        self.assertIn("showError(", body)
+        self.assertIn("This page needs cross-origin isolation", body)
+        self.assertIn("Cross-Origin-Opener-Policy", body)
+        self.assertIn("Cross-Origin-Embedder-Policy", body)
+        self.assertRegex(body, r"\breturn;")
+        # The test comes before the code that sets Module up and before the one that starts the script of emcc
+        start = self.script.index("if (threaded &&")
+        self.assertLess(start, self.script.index("window.Module"))
+        self.assertLess(start, self.script.index("document.body.appendChild(script)"))
+
     def test_the_message_is_text_not_html(self):
         self.assertNotIn("innerHTML", self.script)
         self.assertNotIn("document.write", self.script)

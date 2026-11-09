@@ -27,9 +27,10 @@
 #       cannot know that by itself. configure_file(), so the copy is rewritten only when its text changes and a change of web/shell.html
 #       configures again.
 #   be_web_link_options(OUT <var> [SINGLE_THREAD] [SHELL_FILE <file>])
-#       The Emscripten link options: the "-s..." settings, the HTML shell (web/shell.html, or SHELL_FILE: the copy of be_web_generate_shell), and the assertions in Debug only (as a
-#       generator expression, so the list is the same for every configuration). Without SINGLE_THREAD it also has -pthread and the
-#       Web Worker pool (BE_WEB_THREAD_POOL_SIZE); with SINGLE_THREAD it has neither (no thread, no shared memory).
+#       The Emscripten link options: the "-s..." settings, the HTML shell (web/shell.html, or SHELL_FILE: the copy of
+#       be_web_generate_shell), and the assertions in Debug only (as a generator expression, so the list is the same for every
+#       configuration). Without SINGLE_THREAD it also has -pthread and the Web Worker pool (BE_WEB_THREAD_POOL_SIZE); with
+#       SINGLE_THREAD it has neither (no thread, no shared memory).
 #   be_web_configure_target(<target> GAME_ROOT <dir>)
 #       Makes the executable an HTML page with its content package and the virtual content roots as definitions.
 include_guard(GLOBAL)
@@ -87,6 +88,9 @@ endfunction()
 
 function(be_web_parse_preload_spec)
     cmake_parse_arguments(ARG "" "SPEC;FOLDER;VIRTUAL" "" ${ARGN})
+    if(NOT ARG_SPEC OR NOT ARG_FOLDER OR NOT ARG_VIRTUAL)
+        message(FATAL_ERROR "be_web_parse_preload_spec: SPEC, FOLDER and VIRTUAL are required")
+    endif()
     string(REGEX REPLACE "@[^@]*$" "" _folder "${ARG_SPEC}")
     string(REPLACE "@@" "@" _folder "${_folder}")
     string(REGEX REPLACE "^.*@" "" _virtual "${ARG_SPEC}")
@@ -193,13 +197,12 @@ function(be_web_configure_target TARGET_NAME)
 
     # The shell is a generated copy of web/shell.html that knows whether the build is threaded (be_web_generate_shell)
     set(_shell "${CMAKE_CURRENT_BINARY_DIR}/web/shell.html")
+    set(_single "")
     if(ENGINE_SINGLE_THREAD)
-        be_web_generate_shell(OUTPUT "${_shell}" SINGLE_THREAD)
-        be_web_link_options(OUT _link_options SINGLE_THREAD SHELL_FILE "${_shell}")
-    else()
-        be_web_generate_shell(OUTPUT "${_shell}")
-        be_web_link_options(OUT _link_options SHELL_FILE "${_shell}")
+        set(_single SINGLE_THREAD)
     endif()
+    be_web_generate_shell(OUTPUT "${_shell}" ${_single})
+    be_web_link_options(OUT _link_options SHELL_FILE "${_shell}" ${_single})
     target_link_options(${TARGET_NAME} PRIVATE ${_link_options})
     # The shell is read at link time: a change of the page relinks (the copy changes when the source does, at the next configure,
     # which configure_file() triggers; the source is listed too)
