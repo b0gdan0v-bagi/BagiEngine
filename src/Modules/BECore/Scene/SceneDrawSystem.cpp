@@ -2,6 +2,8 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
+#include <BECore/Renderer/DrawTransform.h>
+#include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
@@ -11,6 +13,8 @@
 namespace BECore {
 
     namespace {
+
+        constexpr Color kNoTint{255, 255, 255, 255};  // a sprite is drawn as it is: white leaves the texel as it is
 
         // Copies the fields of the node's TransformComponent / QuadRendererComponent / SpriteRendererComponent into the registry, or
         // removes the registry component when the node has no such component (a no-op when it has none). emplace_or_replace does not
@@ -33,13 +37,13 @@ namespace BECore {
             }
 
             if (transform) {
-                registry.emplace_or_replace<TransformData>(entity, transform->_x, transform->_y, transform->_width, transform->_height);
+                registry.emplace_or_replace<TransformData>(entity, transform->_x, transform->_y, transform->_width, transform->_height, transform->_rotation, transform->_pivotX, transform->_pivotY);
             } else {
                 registry.remove<TransformData>(entity);
             }
 
             if (quad) {
-                registry.emplace_or_replace<QuadDrawData>(entity, quad->_color, quad);
+                registry.emplace_or_replace<QuadDrawData>(entity, quad->_color, quad->_blend, quad);
             } else {
                 registry.remove<QuadDrawData>(entity);
             }
@@ -47,18 +51,31 @@ namespace BECore {
             if (sprite) {
                 // Dereferencing the handle marks the texture as used (updates its access time)
                 const ResourceHandle<ITexture>& texture = sprite->GetTexture();
-                registry.emplace_or_replace<SpriteDrawData>(entity, texture ? &*texture : nullptr, sprite->_srcRect, sprite->_fit, sprite);
+                registry.emplace_or_replace<SpriteDrawData>(entity, texture ? &*texture : nullptr, sprite->_srcRect, sprite->_fit, sprite->_blend, sprite->_flipX, sprite->_flipY, sprite);
             } else {
                 registry.remove<SpriteDrawData>(entity);
             }
         }
 
-        // A quad without a transform draws nothing.
+        // The turn of a node: about the pivot of the node's rect (not of the rect a Contain sprite is fitted into), as an absolute point
+        // in scene units, which is what DrawTransform wants. flipX / flipY are the sprite's.
+        DrawTransform MakeDrawTransform(const TransformData& transform, bool flipX, bool flipY) {
+            return DrawTransform{transform.rotation, transform.x + transform.pivotX * transform.width, transform.y + transform.pivotY * transform.height, flipX, flipY};
+        }
+
+        // A quad without a transform draws nothing. The blend mode is the quad's alone: the guard puts the previous one back.
         void DrawQuad(const QuadDrawData& quad, const TransformData* transform) {
             if (!transform) {
                 return;
             }
-            CoreManager::GetRenderer()->DrawFilledRect(transform->x, transform->y, transform->width, transform->height, quad.color);
+            IRenderer& renderer = *CoreManager::GetRenderer();
+            const ScopedBlendMode blend(renderer, quad.blend);
+            const DrawTransform drawTransform = MakeDrawTransform(*transform, false, false);
+            if (drawTransform.IsIdentity()) {
+                renderer.DrawFilledRect(transform->x, transform->y, transform->width, transform->height, quad.color);
+            } else {
+                renderer.DrawTransformedRect(transform->x, transform->y, transform->width, transform->height, quad.color, drawTransform);
+            }
         }
 
         // A sprite without a texture or a transform draws nothing. An empty source rect means the whole texture.
@@ -70,7 +87,14 @@ namespace BECore {
             const float srcWidth = src ? src->w : sprite.texture->GetWidth();
             const float srcHeight = src ? src->h : sprite.texture->GetHeight();
             const Rect dst = FitSpriteRect(srcWidth, srcHeight, Rect{transform->x, transform->y, transform->width, transform->height}, sprite.fit);
-            CoreManager::GetRenderer()->DrawTexture(*sprite.texture, src, dst.x, dst.y, dst.w, dst.h);
+            IRenderer& renderer = *CoreManager::GetRenderer();
+            const ScopedBlendMode blend(renderer, sprite.blend);
+            const DrawTransform drawTransform = MakeDrawTransform(*transform, sprite.flipX, sprite.flipY);
+            if (drawTransform.IsIdentity()) {
+                renderer.DrawTexture(*sprite.texture, src, dst.x, dst.y, dst.w, dst.h);
+            } else {
+                renderer.DrawTransformedTexture(*sprite.texture, src, dst.x, dst.y, dst.w, dst.h, kNoTint, drawTransform);
+            }
         }
 
         // Depth-first, a parent before its children: the traversal index is the scene order. emplace_or_replace makes a changed layer

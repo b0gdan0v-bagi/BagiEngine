@@ -26,6 +26,10 @@ namespace BECore {
      * drawn by the system itself from that registry data (DrawFilledRect(), FitSpriteRect() and DrawTexture()), a quad or
      * a sprite without a TransformData and a sprite without a texture draw nothing; every other component draws itself
      * through IComponent::OnDraw().
+     *
+     * A node with a rotation or a sprite flip is drawn with DrawTransformedRect() / DrawTransformedTexture() about the pivot of
+     * the node's rect; with neither it makes the plain calls above. The quad's or sprite's blend mode is set on the renderer
+     * around that one draw only (ScopedBlendMode), so the next node and every OnDraw() see Alpha again.
      */
     class SceneDrawSystem {
     public:

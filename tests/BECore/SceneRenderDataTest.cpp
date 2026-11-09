@@ -86,6 +86,69 @@ namespace BECore::Tests {
         EXPECT_EQ(registry.view<SpriteDrawData>().size(), 0u);
     }
 
+    TEST_F(SceneRenderDataTest, TheRotationAndThePivotAreMirroredWithTheirDefaults) {
+        auto node = AddNode(*_scene, "Quad", 5.0f, true);
+        _scene->Draw();
+
+        const TransformData& plain = Registry().get<TransformData>(node->GetEntity());
+        EXPECT_EQ(plain.rotation, 0.0f);
+        EXPECT_EQ(plain.pivotX, 0.5f);
+        EXPECT_EQ(plain.pivotY, 0.5f);
+        EXPECT_EQ(Registry().get<QuadDrawData>(node->GetEntity()).blend, BlendMode::Alpha);
+
+        auto transform = node->GetComponent<TransformComponent>();
+        transform->_rotation = 30.0f;
+        transform->_pivotX = 0.0f;
+        transform->_pivotY = 1.0f;
+        _scene->Draw();
+
+        const TransformData& turned = Registry().get<TransformData>(node->GetEntity());
+        EXPECT_EQ(turned.rotation, 30.0f);
+        EXPECT_EQ(turned.pivotX, 0.0f);
+        EXPECT_EQ(turned.pivotY, 1.0f);
+        // The rect is mirrored as before
+        EXPECT_EQ(turned.x, 5.0f);
+        EXPECT_EQ(turned.width, 7.0f);
+    }
+
+    TEST_F(SceneRenderDataTest, TheBlendModeOfAQuadIsMirroredAndShowsInTheNextDraw) {
+        auto node = AddNode(*_scene, "Quad", 1.0f, true);
+        _scene->Draw();
+        ASSERT_EQ(Registry().get<QuadDrawData>(node->GetEntity()).blend, BlendMode::Alpha);
+
+        node->GetComponent<QuadRendererComponent>()->_blend = BlendMode::Multiply;
+        EXPECT_EQ(Registry().get<QuadDrawData>(node->GetEntity()).blend, BlendMode::Alpha);
+        _scene->Draw();
+
+        EXPECT_EQ(Registry().get<QuadDrawData>(node->GetEntity()).blend, BlendMode::Multiply);
+    }
+
+    TEST_F(SceneRenderDataTest, ASpriteMirrorsItsBlendModeAndFlips) {
+        auto node = AddNode(*_scene, "Sprite", 1.0f, false);
+        auto sprite = BECore::New<SpriteRendererComponent>();
+        node->AddComponent(sprite);
+        _scene->Draw();
+
+        const SpriteDrawData& plain = Registry().get<SpriteDrawData>(node->GetEntity());
+        EXPECT_EQ(plain.blend, BlendMode::Alpha);
+        EXPECT_FALSE(plain.flipX);
+        EXPECT_FALSE(plain.flipY);
+
+        sprite->_blend = BlendMode::Add;
+        sprite->_flipX = true;
+        _scene->Draw();
+        const SpriteDrawData& flipped = Registry().get<SpriteDrawData>(node->GetEntity());
+        EXPECT_EQ(flipped.blend, BlendMode::Add);
+        EXPECT_TRUE(flipped.flipX);
+        EXPECT_FALSE(flipped.flipY);
+
+        sprite->_flipX = false;
+        sprite->_flipY = true;
+        _scene->Draw();
+        EXPECT_FALSE(Registry().get<SpriteDrawData>(node->GetEntity()).flipX);
+        EXPECT_TRUE(Registry().get<SpriteDrawData>(node->GetEntity()).flipY);
+    }
+
     TEST_F(SceneRenderDataTest, AFieldChangedBetweenTwoDrawsShowsInTheSecond) {
         auto node = AddNode(*_scene, "Quad", 1.0f, true);
         _scene->Draw();
