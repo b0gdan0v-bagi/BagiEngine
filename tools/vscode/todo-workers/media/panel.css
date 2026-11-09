@@ -64,6 +64,22 @@ code {
 .badge { margin-left: auto; border: 1px solid currentColor; }
 .badge.busy { color: var(--vscode-charts-blue, #3794ff); }
 .badge.idle { color: var(--vscode-charts-yellow, #cca700); }
+.badge.waiting {
+    color: var(--vscode-errorForeground, #f14c4c);
+    font-weight: 600;
+}
+.card.waiting { border-left: 3px solid var(--vscode-errorForeground, #f14c4c); }
+.ask {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: var(--vscode-inputValidation-errorBackground, rgba(241, 76, 76, 0.12));
+}
+.ask span { flex: 1; font-weight: 600; }
 .badge.done { color: var(--vscode-testing-iconPassed, #3fb950); }
 .badge.none { color: var(--vscode-descriptionForeground); }
 .progress {

@@ -300,6 +300,11 @@ def session_in(sessions: list[dict], worker: Path) -> dict | None:
     return max(found, key=lambda s: s.get("startedAt") or 0) if found else None
 
 
+def is_waiting(session: dict | None) -> bool:
+    """A session that waits for the person: a permission or a question (`claude agents`: status `waiting`)."""
+    return session is not None and session.get("state") != "done" and session.get("status") == "waiting"
+
+
 def is_active(session: dict | None) -> bool:
     """A session that has not finished its work: busy, or waiting for the person (a permission)."""
     return session is not None and session.get("state") != "done"
@@ -314,7 +319,8 @@ def describe(session: dict | None) -> str:
         minutes = int((time.time() * 1000 - started) / 60000)
         since = f", {minutes // 60} h {minutes % 60} min" if minutes >= 60 else f", {minutes} min"
     state = session.get("state") or session.get("status") or "?"
-    return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}"
+    waiting = f", waits for you ({session.get('waitingFor') or 'input'}): claude attach {session.get('name') or session.get('id')}" if is_waiting(session) else ""
+    return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}{waiting}"
 
 
 # --- commands ----------------------------------------------------------------------------------
@@ -858,8 +864,9 @@ def list_json(layout: Layout, args) -> dict:
             "head": game,
             "engine": engine,
             "dirty": bool(changed),
-            "session": None if session is None else {key: session.get(key) for key in ("id", "name", "state", "status", "startedAt")},
+            "session": None if session is None else {key: session.get(key) for key in ("id", "name", "state", "status", "waitingFor", "startedAt")},
             "active": is_active(session),
+            "waiting": is_waiting(session),
             "activity": session_activity(session) if args.activity else None,
             "usage": session_usage(session) if args.usage else None,
             "entry": entry,

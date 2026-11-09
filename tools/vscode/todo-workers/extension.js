@@ -95,6 +95,7 @@ function sessionWord(worker) {
     const s = worker.session;
     if (!s) return "no session";
     if (s.state === "done") return "done";
+    if (worker.waiting) return "waiting";
     return s.status === "busy" ? "busy" : "idle";
 }
 
@@ -170,7 +171,7 @@ function activate(context) {
     let state = null; // the last answer of worker.py
     let running = false;
     let timer = null;
-    let previous = null; // {review: Set, active: Map}
+    let previous = null; // {review: Set, active: Map, waiting: Set}
 
     const workerOf = (k) => state && state.workers.find((w) => w.k === k);
     const entryOf = (id) => state && [...state.review, ...state.workers.map((w) => w.entry)].find((e) => e && e.id === id);
@@ -589,7 +590,11 @@ function activate(context) {
     context.subscriptions.push(vscode.window.registerWebviewViewProvider("todoWorkers.view", view, { webviewOptions: { retainContextWhenHidden: true } }));
 
     function notifyChanges() {
-        const now = { review: new Set(state.review.map((e) => e.id)), active: new Map(state.workers.map((w) => [w.name, w.active])) };
+        const now = {
+            review: new Set(state.review.map((e) => e.id)),
+            active: new Map(state.workers.map((w) => [w.name, w.active])),
+            waiting: new Set(state.workers.filter((w) => w.waiting).map((w) => w.name)),
+        };
         if (previous && config().notify) {
             for (const entry of state.review) {
                 if (!previous.review.has(entry.id)) {
@@ -602,6 +607,12 @@ function activate(context) {
                 }
             }
             for (const worker of state.workers) {
+                // A loop that asks a question or a permission stops until someone answers: Answer opens it.
+                if (worker.waiting && !previous.waiting.has(worker.name)) {
+                    const what = (worker.session && worker.session.waitingFor) || "input needed";
+                    const about = worker.entry ? ` (${worker.entry.id})` : "";
+                    vscode.window.showWarningMessage(`Todo: ${worker.name}${about} waits for you: ${what}`, "Answer").then((pick) => pick && openSessionTerminal(worker, "attach"));
+                }
                 if (previous.active.get(worker.name) && !worker.active) {
                     vscode.window.showInformationMessage(`Todo: the session of ${worker.name} has ended`, "Show log").then((pick) => pick && openSessionTerminal(worker, "logs"));
                 }
@@ -623,7 +634,9 @@ function activate(context) {
             return;
         }
         const count = (word) => state.workers.filter((w) => sessionWord(w) === word).length;
-        const parts = [`${count("busy")} busy`];
+        const parts = [];
+        if (count("waiting")) parts.push(`${count("waiting")} waits for you`);
+        parts.push(`${count("busy")} busy`);
         if (count("idle")) parts.push(`${count("idle")} idle`);
         parts.push(`${state.review.length} review`);
         status.text = `$(server-process) todo ${parts.join(" · ")}`;
@@ -633,7 +646,11 @@ function activate(context) {
             lines.push(`tokens: ${m(state.usage.total.total)}, ${m(state.usage.recent.total)} in the last ${state.usage.recentMinutes} min`);
         }
         status.tooltip = lines.join("\n");
-        status.backgroundColor = state.review.length ? new vscode.ThemeColor("statusBarItem.warningBackground") : undefined;
+        status.backgroundColor = count("waiting")
+            ? new vscode.ThemeColor("statusBarItem.errorBackground")
+            : state.review.length
+              ? new vscode.ThemeColor("statusBarItem.warningBackground")
+              : undefined;
         status.show();
     }
 

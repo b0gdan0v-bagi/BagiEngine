@@ -45,6 +45,9 @@
         if (s && s.state === "done") {
             word = "done";
             kind = "done";
+        } else if (worker.waiting) {
+            word = "waits for you";
+            kind = "waiting";
         } else if (s && s.status === "busy") {
             word = "busy";
             kind = "busy";
@@ -57,7 +60,8 @@
         const ended = kind === "done" && worker.activity ? ago(worker.activity.updated) : "";
         const text = kind === "done" ? (ended ? `done · ended ${ended}` : "done") : s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word;
         const badge = el("span", `badge ${kind}`, text);
-        if (kind === "idle") badge.title = "Waiting: for an agent of its own, or for you (Attach to see)";
+        if (kind === "idle") badge.title = "Idle: waiting for an agent of its own (a reviewer, a build)";
+        if (kind === "waiting") badge.title = `The loop waits for your answer (${(s && s.waitingFor) || "input needed"}): Answer opens it`;
         if (kind === "done") badge.title = "The session has finished; Log shows it, Update and Fast start begin anew";
         return badge;
     }
@@ -155,15 +159,23 @@
 
     function workerCard(worker) {
         const entry = worker.entry;
-        const card = el("section", "card");
+        const card = el("section", worker.waiting ? "card waiting" : "card");
         const top = el("div", "card-top");
         top.append(el("span", "name", worker.name), el("span", "entry", entry ? entry.id : "no entry"));
         if (entry) top.append(el("span", `area ${entry.area}`, entry.area));
         top.append(sessionBadge(worker));
         card.appendChild(top);
 
+        if (entry) card.appendChild(el("div", "title", entry.title));
+        if (worker.waiting) {
+            const ask = el("div", "ask");
+            ask.append(
+                el("span", "", `Waits for your answer: ${(worker.session && worker.session.waitingFor) || "input needed"}`),
+                button("Answer", { cmd: "attach", worker: worker.k }, "claude attach: open the session and answer its question or permission", "primary")
+            );
+            card.appendChild(ask);
+        }
         if (entry) {
-            card.appendChild(el("div", "title", entry.title));
             if (entry.status === "review") card.appendChild(el("div", "note ok", "in review" + (entry.statusNote ? `: ${entry.statusNote}` : "")));
             const bar = progress(entry);
             if (bar) card.appendChild(bar);
@@ -208,7 +220,8 @@
 
         const actions = el("div", "actions");
         if (worker.session) {
-            actions.append(button("Attach", { cmd: "attach", worker: worker.k }, "claude attach: answer a session that waits"), button("Log", { cmd: "logs", worker: worker.k }, "claude logs"));
+            if (!worker.waiting) actions.append(button("Attach", { cmd: "attach", worker: worker.k }, "claude attach: open the session"));
+            actions.append(button("Log", { cmd: "logs", worker: worker.k }, "claude logs"));
         }
         actions.append(button("Folder", { cmd: "folder", worker: worker.k }, "open the worker in a new window"), button("Terminal", { cmd: "terminal", worker: worker.k }));
         if (entry) actions.append(button("Plan", { cmd: "plan", entry: entry.id }, "~/.claude/plans/todo-loop-<branch>.md"));

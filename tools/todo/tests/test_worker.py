@@ -137,8 +137,11 @@ def fake_claude(tmp_path: Path, monkeypatch) -> tuple[Path, Path, Path]:
     return script, log, sessions
 
 
-def session(cwd: Path, state: str, ident: str = "s1") -> dict:
-    return {"id": ident, "cwd": str(cwd), "kind": "background", "name": "todo-w1", "status": "idle", "state": state, "startedAt": 0}
+def session(cwd: Path, state: str, ident: str = "s1", status: str = "idle", waiting_for: str | None = None) -> dict:
+    found = {"id": ident, "cwd": str(cwd), "kind": "background", "name": "todo-w1", "status": status, "state": state, "startedAt": 0}
+    if waiting_for is not None:
+        found["waitingFor"] = waiting_for
+    return found
 
 
 def test_start_runs_the_loop_in_the_background_in_every_worker(game: Path, fake_claude):
@@ -218,6 +221,26 @@ def test_list_json_names_each_worker_its_heads_and_its_session(game: Path, fake_
     assert (first["name"], first["session"], first["active"], first["dirty"]) == ("w1", None, False, False)
     assert first["head"]["branch"] is None and first["head"]["commit"]
     assert second["session"]["id"] == "b" and second["active"] and second["entry"] is None
+    assert not first["waiting"] and not second["waiting"]
+
+
+def test_list_says_when_a_session_waits_for_the_person(game: Path, fake_claude, capsys):
+    script, _log, sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    workers = game.parent / "game.workers"
+    sessions.write_text(json.dumps([
+        session(workers / "w1", "working", "a", status="waiting", waiting_for="input needed"),
+        session(workers / "w2", "working", "b", status="idle"),
+    ]))
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    first, second = json.loads(capsys.readouterr().out)["workers"]
+    assert first["waiting"] and first["active"] and first["session"]["waitingFor"] == "input needed"
+    assert not second["waiting"] and second["active"] and second["session"]["waitingFor"] is None
+    assert worker.main(["list", "--claude", str(script)]) == 0
+    out = capsys.readouterr().out
+    assert "waits for you (input needed): claude attach todo-w1" in out
+    assert out.count("waits for you") == 1
 
 
 def test_list_json_activity_reads_the_session_and_its_agents_from_the_transcripts(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
