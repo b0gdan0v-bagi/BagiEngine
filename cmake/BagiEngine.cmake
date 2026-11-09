@@ -26,6 +26,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Vulkan, the control socket server, static SDL, single thread; forced for the web (Emscripten)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
+# The Emscripten link options, the content package and be_web_configure_target(); only used when ENGINE_TARGET_WEB
+include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)
 
 # =============================================================================
 # External Dependencies
@@ -64,6 +66,9 @@ set(SDLIMAGE_SAMPLES OFF CACHE BOOL "" FORCE)
 if(ENGINE_STATIC_SDL)
     # SDL_image follows BUILD_SHARED_LIBS (its own cmake_dependent_option keeps a cache value that is set)
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build the library as a shared library" FORCE)
+else()
+    # Back to SDL_image's own default, in case this build folder was configured with ENGINE_STATIC_SDL=ON before
+    set(BUILD_SHARED_LIBS ON CACHE BOOL "Build the library as a shared library" FORCE)
 endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL_image)
 
@@ -312,6 +317,12 @@ elseif(BE_WITH_EDITOR_VALUE STREQUAL "AUTO")
     endif()
 else()
     message(FATAL_ERROR "BE_WITH_EDITOR is '${BE_WITH_EDITOR}'; it must be AUTO, ON or OFF")
+endif()
+
+if(ENGINE_TARGET_WEB AND BE_EDITOR_ENABLED)
+    # The browser build has no editor panels; this also overrides the Debug rule above (Debug always builds them)
+    message(STATUS "Editor: the web build never has the editor panels, forced off")
+    set(BE_EDITOR_ENABLED FALSE)
 endif()
 
 if(BE_EDITOR_ENABLED)
@@ -649,9 +660,16 @@ function(be_add_game_executable NAME)
     target_compile_definitions(${NAME} PRIVATE
         IMGUI_VULKAN_AVAILABLE=1
         REFLECTION_GENERATED=1
-        "BAGI_ENGINE_ROOT=\"${BAGI_ENGINE_DIR}\""
-        "BAGI_GAME_ROOT=\"${ARG_GAME_ROOT}\""
     )
+    if(ENGINE_TARGET_WEB)
+        # An HTML page with the content as a preloaded package; the roots are virtual paths (cmake/BagiWeb.cmake)
+        be_web_configure_target(${NAME} GAME_ROOT ${ARG_GAME_ROOT})
+    else()
+        target_compile_definitions(${NAME} PRIVATE
+            "BAGI_ENGINE_ROOT=\"${BAGI_ENGINE_DIR}\""
+            "BAGI_GAME_ROOT=\"${ARG_GAME_ROOT}\""
+        )
+    endif()
 
     be_deploy_runtime_libs(${NAME})
 

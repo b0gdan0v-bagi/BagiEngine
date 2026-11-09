@@ -4,6 +4,8 @@
 
 SDL3 integration: window, input events and the SDL renderer backend. `Vulkan` is the alternative backend; both implement the interfaces in `BECore/Renderer` (see `.claude/rules/rendering-module.md` for texture pipeline, serialization and fallback rules).
 
+On the web (Emscripten) there is no Vulkan: the window config and the renderer come from the overlay `web/config/` (`ApplicationConfig.xml` with `SDLRendererBackend`, `SDLWindowConfig.xml` without `SDL_WINDOW_VULKAN`), the last content root of `src/main.cpp` (`BAGI_WEB_ROOT`), so it wins over the game's files of the same name. A renderer name that no backend registers (`VulkanRendererBackend` in a build without `ENGINE_WITH_VULKAN`) is a logged error of `SDL3ApplicationFabric::Create`. Tests: `tests/BECore/WebConfigTest.cpp`.
+
 ## Key Components
 
 | Component | Purpose |

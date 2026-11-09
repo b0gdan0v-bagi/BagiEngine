@@ -76,6 +76,8 @@ namespace BECore {
         ApplicationOptions options;
         options.headless = controlSettings->headless;
         if (!ApplicationFabric::GetInstance().Create(load.config, options)) {
+            // The reason is in the log buffer; there is no frame to deliver it to the sinks
+            LogEvent::Flush();
             return false;
         }
 

@@ -34,6 +34,7 @@ The presets are the engine's. A game includes them through its own `CMakePresets
 | `macos-release-editor`, `windows-msvc-release-editor` | macOS / Windows | The same toolchains as the plain Release presets, with `BE_WITH_EDITOR=ON` (the editor panels and their tests in a Release build; a plain Release build leaves them out) |
 | `windows-vs2022-{debug,release}` | Windows | Visual Studio 2022, MSVC: only by explicit name |
 | `windows-vs2022-clangcl-{debug,release}` | Windows | Visual Studio 2022, ClangCL |
+| `web-debug`, `web-release` | any, with `EMSDK` set | Emscripten + Ninja, the browser build (`BagiMatch3.html`): only by explicit name, hidden without `EMSDK`, build only (no test preset, no editor) |
 
 Presets for other hosts are hidden by `condition`, so `cmake --list-presets` shows only what works here.
 
