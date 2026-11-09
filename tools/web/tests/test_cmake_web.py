@@ -99,7 +99,7 @@ class WebPresetsTest(unittest.TestCase):
                 self.assertNotIn("condition", resolve_configure_preset(self.presets, name))
                 for build_preset in self.build_preset_ancestors(name):
                     self.assertNotIn("condition", build_preset, build_preset["name"])
-        self.assertNotIn("EMSDK", PRESETS_FILE.read_text(encoding="utf-8").replace("external/emsdk", "").replace("setup_emsdk", ""))
+        self.assertNotIn("EMSDK", PRESETS_FILE.read_text(encoding="utf-8"))
 
     def test_every_web_configure_preset_has_a_build_preset(self):
         web = [p["name"] for p in self.presets["configurePresets"] if not p.get("hidden") and inherits_from(self.presets, p["name"], "web")]
@@ -157,6 +157,21 @@ class BagiWebCmakeTest(unittest.TestCase):
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
         self.assertIn("OK", output)
+
+
+class WebFlagsTextTest(unittest.TestCase):
+    """What only a configure with Emscripten shows, read from the text of the files (the first real build confirmed them)."""
+
+    def test_the_release_level_is_o2_by_default_and_is_one_cache_variable(self):
+        text = (ENGINE_DIR / "cmake" / "BagiWeb.cmake").read_text(encoding="utf-8")
+        self.assertIn('set(BE_WEB_OPTIMIZATION "-O2" CACHE STRING', text)
+        self.assertIn('set(CMAKE_CXX_FLAGS_RELEASE "${BE_WEB_OPTIMIZATION} -DNDEBUG")', text)
+        self.assertIn('set(CMAKE_C_FLAGS_RELEASE "${BE_WEB_OPTIMIZATION} -DNDEBUG")', text)
+
+    def test_the_web_build_has_no_editor_and_no_warning_about_it_in_debug(self):
+        # web-debug sets BE_WITH_EDITOR=OFF; the "ignored in a Debug build" warning must not fire there
+        text = (ENGINE_DIR / "cmake" / "BagiEngine.cmake").read_text(encoding="utf-8")
+        self.assertRegex(text, r"if\(NOT BE_IS_MULTI_CONFIG AND NOT ENGINE_TARGET_WEB AND CMAKE_BUILD_TYPE STREQUAL \"Debug\"\)\s+message\(WARNING \"BE_WITH_EDITOR=OFF")
 
 
 if __name__ == "__main__":

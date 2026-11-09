@@ -52,7 +52,7 @@ namespace BECore {
     }  // namespace
 
     void InstallWebCanvasResize(SDL_Window* window) {
-        // unverified: needs emsdk. The page size at the start (the window of the config is only a start size), then on every resize
+        // The page size at the start (the window of the config is only a start size), then on every resize
         FitWindowToPage(window, EM_ASM_DOUBLE({ return window.innerWidth; }), EM_ASM_DOUBLE({ return window.innerHeight; }));
         emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, window, false, &OnPageResize);
     }

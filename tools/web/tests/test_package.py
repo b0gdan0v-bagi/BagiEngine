@@ -108,6 +108,13 @@ class PackageTest(unittest.TestCase):
         self.assertNotIn(f"{GAME}.data", manifest["files"])
         self.assertFalse((self.out / f"{GAME}.data").exists())
 
+    def test_a_script_that_loads_a_missing_package_is_an_error_that_names_the_file(self):
+        # emcc writes the package name into the script (REMOTE_PACKAGE_BASE="<game>.data")
+        (self.build / f"{GAME}.js").write_bytes(f'var REMOTE_PACKAGE_BASE="{GAME}.data";'.encode())
+        (self.build / f"{GAME}.data").unlink()
+        with self.assertRaisesRegex(package.PackageError, f"{GAME}.data not found"):
+            self.run_package()
+
     def test_a_missing_wasm_or_script_is_an_error_that_names_the_file(self):
         for suffix in (".wasm", ".js"):
             with self.subTest(suffix):

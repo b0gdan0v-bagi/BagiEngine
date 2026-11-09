@@ -5,13 +5,15 @@
 # tools/web/tests/check_bagi_web.cmake includes this file alone), so the pure ones can be checked on a desktop without an
 # Emscripten SDK. Only be_web_configure_target() touches a target.
 #
-# Everything about an Emscripten flag or behaviour is a first guess written without emcc at hand, marked
-# "unverified: needs emsdk"; the first build with emsdk 4.x (slice 2 of the entry web-build) is where it gets confirmed or fixed.
+# The settings below were checked against settings.js of emsdk 4.0.23 and linked with it (BagiMatch3 links, packages and the
+# module instantiates under node; the run in a browser is the entry web-build, slice 2, last work package).
 #
 #   be_web_preload_args(OUT <var> ENGINE_ROOT <dir> GAME_ROOT <dir> WEB_ROOT <dir>)
 #       The content as a preloaded package: one "--preload-file <dir>@<virtual dir>" entry per config/ and assets/ folder that exists,
 #       in the order of the layers (engine, game, web: lowest priority first, as AddContentRoot in src/main.cpp). The virtual roots are
 #       BE_WEB_ENGINE_ROOT, BE_WEB_GAME_ROOT and BE_WEB_WEB_ROOT, the values of BAGI_ENGINE_ROOT / BAGI_GAME_ROOT / BAGI_WEB_ROOT.
+#       An "@" in a source path is written "@@", which is how emcc's file packager takes a literal "@" (the single "@" splits the
+#       source from the virtual path).
 #   be_web_content_inputs(OUT <var> FOLDER <dir> STAMP <file>)
 #       The link inputs that make the content package follow its folder: every file of <dir> plus <file>, a stamp that holds the sorted
 #       list of those files. An edit relinks because a file is newer than the .data package; an added or a deleted file relinks because
@@ -52,7 +54,8 @@ function(be_web_preload_args)
         endif()
         foreach(_folder config assets)
             if(IS_DIRECTORY "${_root}/${_folder}")
-                list(APPEND _args "--preload-file ${_root}/${_folder}@${BE_WEB_${_layer}_ROOT}/${_folder}")
+                string(REPLACE "@" "@@" _source "${_root}/${_folder}")
+                list(APPEND _args "--preload-file ${_source}@${BE_WEB_${_layer}_ROOT}/${_folder}")
             endif()
         endforeach()
     endforeach()
@@ -87,25 +90,28 @@ function(be_web_link_options)
         message(FATAL_ERROR "be_web_link_options: OUT is required")
     endif()
 
-    # unverified: needs emsdk. The names are those of emsdk 4.x settings.js.
+    # The names are those of settings.js of emsdk 4.0.23 (checked there: each exists, with its default in the comment). The defaults
+    # that are right already (GL_ENABLE_GET_PROC_ADDRESS is on, so SDL's GLES2 renderer finds its functions; FILESYSTEM is on; at
+    # -O1 and above ASSERTIONS is off) are not repeated.
     set(_options
-        # The wasm heap grows on demand (textures and the scene do not fit a fixed size)
+        # The wasm heap grows on demand (textures and the scene do not fit a fixed size). The limit is the default MAXIMUM_MEMORY, 2 GB
         -sALLOW_MEMORY_GROWTH=1
-        # The default stack of emsdk 3.1.27 and later is 64 KB, too small for the engine (deep calls, large locals): 5 MB
+        # The default stack (STACK_SIZE) is 64 KB, too small for the engine (deep calls, large locals): 5 MB
         -sSTACK_SIZE=5242880
         # WebGL 2 where the browser has it, WebGL 1 as the fallback (the SDL renderer picks the GLES2 driver)
         -sMIN_WEBGL_VERSION=1
         -sMAX_WEBGL_VERSION=2
-        # main() never returns while the frame loop runs (src/main.cpp); at the end the runtime shuts down and static destructors run
+        # main() never returns while the frame loop runs (src/main.cpp, emscripten_set_main_loop_arg with simulate_infinite_loop); when
+        # the loop is cancelled the runtime exits and the static destructors run
         -sEXIT_RUNTIME=1
-        # The page around the wasm (web/shell.html; unverified: needs emsdk); SHELL: keeps the flag and its value together, the quotes keep a path with a space in one piece
+        # The page around the wasm (web/shell.html); SHELL: keeps the flag and its value together, the quotes keep a path with a space in one piece
         "SHELL:--shell-file \"${BE_WEB_SHELL_FILE}\""
         # Runtime checks of the glue code (memory growth, stack, wrong calls); they cost speed and size, so Debug only
         $<$<CONFIG:Debug>:-sASSERTIONS=1>
     )
     # The optimisation level is not set here: CMake passes CMAKE_CXX_FLAGS_<CONFIG> to the link line as well, and emcc needs the
     # same -O level at link time to run wasm-opt. The end of this file sets Release to -O2 on the web (smaller code than -O3 for
-    # little speed) and Debug stays -O0 -g (unverified: needs emsdk).
+    # little speed) and Debug stays -O0 -g.
     set(${ARG_OUT} "${_options}" PARENT_SCOPE)
 endfunction()
 
@@ -128,13 +134,15 @@ function(be_web_configure_target TARGET_NAME)
         WEB_ROOT "${BE_WEB_DIR}")
     foreach(_entry IN LISTS _preload)
         # One "--preload-file <spec>" per entry: SHELL: keeps the pair together and stops CMake from dropping the repeated flag
-        # as a duplicate; the quotes keep a path with a space in one piece (the specs of this checkout build the .data package; a path with a space is not tried yet: unverified: needs emsdk)
+        # as a duplicate; the quotes keep a path with a space in one piece
         string(REPLACE "--preload-file " "" _spec "${_entry}")
         target_link_options(${TARGET_NAME} PRIVATE "SHELL:--preload-file \"${_spec}\"")
 
         # The .data package is written at link time: an edit, an added or a deleted file in the folder must relink. CONFIGURE_DEPENDS
         # makes the build re-glob, so a new file is seen without a manual configure (and each build pays for the glob)
-        string(REGEX REPLACE "@.*$" "" _folder "${_spec}")
+        # The spec is <source>@<virtual>: the virtual path (our constants) has no "@", so the last "@" splits, and "@@" in the source is an "@"
+        string(REGEX REPLACE "@[^@]*$" "" _folder "${_spec}")
+        string(REPLACE "@@" "@" _folder "${_folder}")
         string(REGEX REPLACE "^.*@" "" _virtual "${_spec}")
         string(MAKE_C_IDENTIFIER "${_virtual}" _id)
         be_web_content_inputs(OUT _content FOLDER "${_folder}"
@@ -151,11 +159,14 @@ function(be_web_configure_target TARGET_NAME)
 endfunction()
 
 # Optimisation of the web configurations (see be_web_link_options). They are plain variables, set where this file is included, so
-# they only take effect when it is included before the targets are created. Checked in the first build: -O2 -DNDEBUG is on every
-# compile line of web-release (compile_commands.json)
+# they only take effect when it is included before the targets are created. Checked: -O2 -DNDEBUG is on every compile line of
+# web-release (compile_commands.json) and on its link line, and Debug is -O0 -g
 if(EMSCRIPTEN)
-    set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG")
-    set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG")
+    # The level of the Release build, compile and link (-Oz is smaller, see the size table in tools/web/CLAUDE.md). A cache variable only so
+    # that the two can be compared; the plain variables below win over CMAKE_*_FLAGS_RELEASE of the cache
+    set(BE_WEB_OPTIMIZATION "-O2" CACHE STRING "Optimisation level of the web Release build: -O2 (default), -Oz, -Os, -O3")
+    set(CMAKE_C_FLAGS_RELEASE "${BE_WEB_OPTIMIZATION} -DNDEBUG")
+    set(CMAKE_CXX_FLAGS_RELEASE "${BE_WEB_OPTIMIZATION} -DNDEBUG")
 
     # The toolchain file defines the WHOLE_ARCHIVE link feature without attributes (desktop CMake does define them). Without
     # OVERRIDE=DEFAULT a module that is linked whole by an executable and also reached as a plain dependency of a game module

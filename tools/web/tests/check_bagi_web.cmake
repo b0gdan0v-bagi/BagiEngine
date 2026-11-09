@@ -44,6 +44,11 @@ set(expected
     "--preload-file ${CHECK_DIR}/game/config@/bagi/game/config")
 check_equal("preload, no game assets, no web layer" "${preload}" "${expected}")
 
+# An "@" in a source path is written "@@" (emcc's file packager: a single "@" splits the source from the virtual path)
+file(MAKE_DIRECTORY "${CHECK_DIR}/at@dir/config")
+be_web_preload_args(OUT preload ENGINE_ROOT "${CHECK_DIR}/at@dir")
+check_equal("preload, an @ in the path" "${preload}" "--preload-file ${CHECK_DIR}/at@@dir/config@/bagi/engine/config")
+
 # --- be_web_content_inputs: the files of a folder plus a stamp with the sorted list of them, rewritten only when the list changes
 set(content "${CHECK_DIR}/content")
 set(stamp "${CHECK_DIR}/stamps/content.txt")

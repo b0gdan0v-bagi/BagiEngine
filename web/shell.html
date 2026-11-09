@@ -11,8 +11,8 @@
     - Module.setStatus and Module.monitorRunDependencies feed the loading bar (the .data package and the wasm download);
       Module.onAbort and the page's error event show a message when the game stops.
 
-    Checked by tools/web/tests/test_shell.py (text only). Whether it works in a browser is verified with emsdk (entry web-build,
-    slice 2).
+    Checked by tools/web/tests/test_shell.py (text only). Built with emsdk 4.0.23: emcc replaces the SCRIPT placeholder and, at -O2,
+    minifies the page (the tag#id selectors survive); the run in a browser is checked by tools/web/tests/web_smoke.py.
 -->
 <html lang="en">
 <head>
@@ -220,7 +220,7 @@
             var downloadSeen = false;
             var totalDependencies = 0;
 
-            // The object emcc's runtime reads (unverified: needs emsdk: the hooks are those of the default shell of emsdk 4.x)
+            // The object emcc's runtime reads (the hooks are those of the default shell of emsdk 4.x)
             window.Module = {
                 canvas: canvas,
 

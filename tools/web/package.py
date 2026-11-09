@@ -119,6 +119,10 @@ def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_modu
         source = build_dir / f"{stem}{suffix}"
         if source.is_file():
             sources.append((source, source.name))
+        elif source.name.encode() in (build_dir / f"{stem}.js").read_bytes():
+            # emcc writes the name of the package into the script that loads it: a script that names a package which is not
+            # there is a build that lost it, and the page would stop at the first request
+            raise PackageError(f"{source} not found, but {stem}.js loads it: the build output is incomplete")
 
     # The output folder is cleaned of the files of earlier runs, so it must not be the build folder (it would delete the page) or hold it
     build_resolved, out_resolved = build_dir.resolve(), out_dir.resolve()
