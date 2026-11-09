@@ -118,6 +118,8 @@ The elements and variants of a canvas are reflected fields of `UICanvasComponent
 </components></node>
 ```
 
+A screen can also live in a node file of its own (`<node ref="nodes/MyHud"/>` in the scene, `Scene/CLAUDE.md`, "Node files"). The reference is expanded before the scene is deserialized, so the canvas, `ui_tree`, `ui_click` and the validator see the same tree as for an inline node.
+
 - **An element** is `<element type="...">`, `type` is the class name from `AbstractFactory<UIElement>` (a control is one more derived class). An unknown type is reported as a deserialize error (and the element becomes a plain `UIElement`). Children go in a `<children>` array.
 - **The style is flat:** `visible`, `anchor`, `x`, `y`, `width`, `height`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, `aspectRatio`, `aspectMode`, `margin`, `flex`, `direction`, `spacing`, `padding`, `wrapChildren`, `crossAlign`, `fontSize` are attributes of the element, and only values that differ from the default are written. A length is `220`, `220px` or `90%`; `margin` and `padding` are one number or `left,top,right,bottom`; a color is `r,g,b,a` or `#RRGGBB[AA]`. A malformed value is reported with the attribute name and the default stays.
 - **A variant** is `when` (the set parts as `name:value` separated by `;`: `orientation` (`portrait`, `landscape`, `any`), `minAspect`, `maxAspect`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`) and a list of `<set element="Name" .../>` overrides with only the properties to change (`visible`, `anchor`, `x`, `y`, `width`, `height`, `direction`, `fontSize`). An override is written even when its value equals the type's default (`x="0"` is a decision).

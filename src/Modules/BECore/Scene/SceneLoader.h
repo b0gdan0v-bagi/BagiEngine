@@ -5,6 +5,9 @@
 
 namespace BECore {
 
+    /// The name of the config that holds the scenes of a game (`config/SceneConfig.xml`)
+    inline constexpr eastl::string_view kSceneConfigName = "SceneConfig";
+
     /**
      * @brief Builds the SceneManager of a `SceneConfig` whose scenes may reference node files (`<node ref="..."/>`)
      *
@@ -14,13 +17,11 @@ namespace BECore {
      * every deserializer error is one LOG_ERROR; what could be read is kept. An invalid @p configRoot gives a manager with
      * default values, as MakeFromConfig does for a missing config.
      *
-     * @note Include this header from .cpp files only: LoadSceneManagerFromConfig() pulls in CoreManager.
-     *
      * @param configRoot Document element of SceneConfig (`<SceneManager>`)
      * @param loader Reads the node file of a reference
      * @param configName Name used in the log messages
      */
-    IntrusivePtrAtomic<SceneManager> LoadSceneManager(const XmlNode& configRoot, const NodeFileLoader& loader, eastl::string_view configName = "SceneConfig");
+    IntrusivePtrAtomic<SceneManager> LoadSceneManager(const XmlNode& configRoot, const NodeFileLoader& loader, eastl::string_view configName = kSceneConfigName);
 
     /// LoadSceneManager of the config `SceneConfig` of ConfigManager, with the node files found through the layered FileSystem (`config/<ref>.xml`)
     IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromConfig();

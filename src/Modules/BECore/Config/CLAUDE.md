@@ -26,7 +26,7 @@ auto rootNode = CoreManager::GetConfigManager().GetConfig("LoggerConfig"_intern)
 **DON'T**: create loaders by hand or call `LoadFromVirtualPath()` directly for engine configs.
 
 - `Initialize()` scans every layer of the `config` mount point (engine first, game on top) recursively, loads every XML in parallel through `TaskManager` and blocks until done. A second call is a no-op.
-- The key is the **file stem** (without `.xml`). Two files with the same stem in different layers do not collide: the upper layer wins and the log says `Config 'X' from <path> overrides <path>`. A game's `SceneConfig.xml` therefore replaces the engine's entire file, it is not merged. Two files with the same stem inside one layer still collide (the one scanned later wins).
+- The key is the **file stem** (without `.xml`). Two files with the same stem in different layers do not collide: the upper layer wins and the log says `Config 'X' from <path> overrides <path>`. A game's `SceneConfig.xml` therefore replaces the engine's entire file, it is not merged. Two files with the same stem inside one layer still collide (the one scanned later wins). The scan is recursive, so the node files of a scene (`config/nodes/X.xml`, referenced by `<node ref="nodes/X"/>`, see `Scene/CLAUDE.md`, "Node files") are loaded as configs named by their stem too: prefix them with the game name so that no stem equals a real config.
 - `SaveConfig` writes to the file the config was loaded from, i.e. into the layer that won.
 - `GetConfig` takes a `PoolString` or an `eastl::string_view` (the latter avoids interning) and returns an invalid `XmlNode` when the name is unknown, so check it.
 - Documents live in `UnorderedPoolMap<ConfigEntry>`; writes are serialized by a mutex.

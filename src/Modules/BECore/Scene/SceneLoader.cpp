@@ -6,12 +6,6 @@
 
 namespace BECore {
 
-    namespace {
-
-        constexpr eastl::string_view kSceneConfigName = "SceneConfig";
-
-    }  // namespace
-
     IntrusivePtrAtomic<SceneManager> LoadSceneManager(const XmlNode& configRoot, const NodeFileLoader& loader, eastl::string_view configName) {
         auto manager = New<SceneManager>();
         if (!configRoot) {

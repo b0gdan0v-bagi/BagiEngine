@@ -34,7 +34,7 @@ namespace BECore {
         bool ReadNodeFile(const std::filesystem::path& file, pugi::xml_document& out, eastl::string& error) {
             std::error_code ec;
             if (file.empty() || !std::filesystem::is_regular_file(file, ec)) {
-                error = "the node file does not exist";
+                error = ec ? Format("the node file cannot be read: {}", ec.message()) : eastl::string{"the node file does not exist"};
                 return false;
             }
             const pugi::xml_parse_result parsed = out.load_file(file.c_str());
@@ -157,7 +157,7 @@ namespace BECore {
         out.reset();
         std::error_code ec;
         if (!std::filesystem::is_regular_file(sceneConfigFile, ec)) {
-            result.errors.push_back(Format("scene file '{}' does not exist", sceneConfigFile.string()));
+            result.errors.push_back(ec ? Format("scene file '{}' cannot be read: {}", sceneConfigFile.string(), ec.message()) : Format("scene file '{}' does not exist", sceneConfigFile.string()));
             return result;
         }
         const pugi::xml_parse_result parsed = out.load_file(sceneConfigFile.c_str());

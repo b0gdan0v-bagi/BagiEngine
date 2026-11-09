@@ -99,9 +99,9 @@ namespace BECore::Tests {
         }
 
         /// GetDrawRank of every child of the scene root, in scene order
-        eastl::vector<int32_t> DrawRanks(const BECore::Scene& scene) {
+        eastl::vector<int32_t> DrawRanks(BECore::Scene& scene) {
             eastl::vector<int32_t> ranks;
-            for (const auto& node : const_cast<BECore::Scene&>(scene).GetRootNode().GetChildren()) {
+            for (const auto& node : scene.GetRootNode().GetChildren()) {
                 ranks.push_back(scene.GetDrawRank(*node));
             }
             return ranks;

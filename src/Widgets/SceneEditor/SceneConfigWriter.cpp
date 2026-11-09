@@ -4,6 +4,7 @@
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneNodeFiles.h>
 
 namespace BECore {
 
@@ -47,10 +48,25 @@ namespace BECore {
             return {};
         }
 
+        /// True when the `<nodes>` of @p sceneEl has a `<node ref>`
+        bool HasNodeReference(pugi::xml_node sceneEl) {
+            for (pugi::xml_node el = sceneEl.child("nodes").child(kNodeElementName.data()); el; el = el.next_sibling(kNodeElementName.data())) {
+                if (el.attribute(kNodeRefAttribute.data())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
     }  // namespace
 
     bool WriteSceneToConfig(pugi::xml_node configRoot, Scene& scene) {
         if (!configRoot) {
+            return false;
+        }
+
+        // Looked at before anything is changed, PrepareForSave included
+        if (const pugi::xml_node existing = FindSceneElement(configRoot.child("scenes"), scene.GetName().CStr()); HasNodeReference(existing)) {
             return false;
         }
 
