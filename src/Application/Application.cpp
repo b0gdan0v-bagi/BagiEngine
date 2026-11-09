@@ -49,6 +49,14 @@ namespace BECore {
             return false;
         }
 
+#if !BE_WITH_REMOTE_CONTROL
+        if (controlSettings->enabled) {
+            LOG_ERROR("Control API: not available in this build");
+            LogEvent::Flush();
+            return false;
+        }
+#endif
+
         // The control fields stopped the start-up above; what is left is every other field (`mode`, `type`, `renderer`, `path`)
         LogDeserializeErrors("ApplicationConfig", load.errors);
 
@@ -81,45 +89,46 @@ namespace BECore {
         if (controlSettings->enabled && !StartControlServer(controlSettings->port)) {
             return false;
         }
-#else
-        if (controlSettings->enabled) {
-            LOG_ERROR("Control API: not available in this build");
-            LogEvent::Flush();
-            return false;
-        }
 #endif
 
         return _isRunning;
     }
 
     void Application::Run() {
+        while (RunFrame()) {
+        }
+        Finish();
+    }
+
+    bool Application::RunFrame() {
 
         ControlService& control = CoreManager::GetControlService();
 
-        while (_isRunning) {
-
-            if (control.IsManualClock()) {
-                // Game time moves only for the frames that a `step` asks for; in between the window and the requests stay alive
-                if (!control.IsStepDue()) {
-                    CoreManager::GetInstance().OnIdleCycle({});
-                    LogEvent::Flush();
-                    continue;
-                }
-                CoreManager::GetTime().Advance(control.GetStepSeconds());
-            } else {
-                CoreManager::GetTime().Tick({});
+        if (control.IsManualClock()) {
+            // Game time moves only for the frames that a `step` asks for; in between the window and the requests stay alive
+            if (!control.IsStepDue()) {
+                CoreManager::GetInstance().OnIdleCycle({});
+                LogEvent::Flush();
+                return _isRunning;
             }
-            RenderEvents::NewFrameEvent::Emit();
-            CoreManager::GetInstance().OnGameCycle({});
-            RenderEvents::RenderPresentEvent::Emit();
-#if BE_WITH_EDITOR
-            // The only safe point to replace the widgets: the frame is over, so no widget is inside its own call and no ImGui frame is open.
-            // The manual-clock idle branch above never gets here, because no frame is open there either
-            CoreManager::GetWidgetManager().ApplyPendingMode();
-#endif
-            LogEvent::Flush();
-            control.EndFrame();
+            CoreManager::GetTime().Advance(control.GetStepSeconds());
+        } else {
+            CoreManager::GetTime().Tick({});
         }
+        RenderEvents::NewFrameEvent::Emit();
+        CoreManager::GetInstance().OnGameCycle({});
+        RenderEvents::RenderPresentEvent::Emit();
+#if BE_WITH_EDITOR
+        // The only safe point to replace the widgets: the frame is over, so no widget is inside its own call and no ImGui frame is open.
+        // The manual-clock idle branch above never gets here, because no frame is open there either
+        CoreManager::GetWidgetManager().ApplyPendingMode();
+#endif
+        LogEvent::Flush();
+        control.EndFrame();
+        return _isRunning;
+    }
+
+    void Application::Finish() {
         Cleanup();
     }
 

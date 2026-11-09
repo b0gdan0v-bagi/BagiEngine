@@ -36,7 +36,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 **Switching at run time** (only in a build with the editor; `WidgetManager::RequestMode` / `RequestToggle` / `ApplyPendingMode` exist only under `#if BE_WITH_EDITOR`, `GetMode()` always):
 
 - **Ctrl+Shift+E** (`IsEditorToggle`: key `SDLK_E`, left or right Ctrl and Shift, no Alt or Cmd, no key repeat; constants in `RunMode.h`) switches Game and Editor. `Application` reads it from the raw `SDLEvents::SDLEventWrapper`, which is emitted before the ImGui capture check, so the chord also works while an ImGui text field has the keyboard. It only stores a request (`RequestToggle`; a later request wins, asking for the running mode clears the request, two toggles in a row cancel out).
-- The switch is applied at the end of the frame, after the present and before `LogEvent::Flush()` (`Application::Run`), never inside `UpdateAll` / `DrawScreenAll` / `DrawAll`: ImGui's frame is open there and a widget cannot be destroyed in the middle of its own call. The manual-clock idle branch has no frame, so it applies nothing.
+- The switch is applied at the end of the frame, after the present and before `LogEvent::Flush()` (`Application::RunFrame`), never inside `UpdateAll` / `DrawScreenAll` / `DrawAll`: ImGui's frame is open there and a widget cannot be destroyed in the middle of its own call. The manual-clock idle branch has no frame, so it applies nothing.
 - The order of `ApplyPendingMode`: (1) `IRenderer::WaitIdle()` (the GPU may still read what the widgets own; skipped without a renderer), (2) destroy every widget, last created first (their subscriptions go with them), (3) create the widgets of the new mode as `CreateWidgets` does, (4) log `Run mode: <name>`.
 - Two widgets own global state and give it back when destroyed: `ImGuiWidget` shuts ImGui down (waits for the GPU first), `ViewportWidget` clears the safe-area override of `UIEnvironment` and releases its render target.
 - **Lost at a switch:** unsaved edits of the editor panels (staged config changes), a mouse button pressed in the viewport and not yet released, the viewport's preview shape (aspect preset and safe-area simulation), the selection of the scene editor. Nothing remembers the last mode between runs; the mode at start is the config's.
@@ -45,7 +45,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 
 ## Frame order and time
 
-`Application::Run` repeats this once per frame:
+`Application::RunFrame` does this once per frame (`Run` repeats it until the application stops):
 
 | # | Stage | Where | Does |
 |---|-------|-------|------|
@@ -61,7 +61,7 @@ Logic reads input and writes state; render only reads state. Do not draw from `S
 
 After the present and `LogEvent::Flush()` the loop calls `ControlService::EndFrame()`: it runs the frame end hooks and counts down a control call that waits for frames (a `step`, a `screenshot`).
 
-With the manual clock (`--manual-clock`, `Control/CLAUDE.md`) `Application::Run` skips the whole frame unless a `step` or another deferred control call asks for one, and calls `CoreManager::OnIdleCycle` instead. The frame it does run is the same as above, so game logic cannot tell the clocks apart except that `deltaTime` is what the client asked for.
+With the manual clock (`--manual-clock`, `Control/CLAUDE.md`) `Application::RunFrame` skips the whole frame unless a `step` or another deferred control call asks for one, and calls `CoreManager::OnIdleCycle` instead. The frame it does run is the same as above, so game logic cannot tell the clocks apart except that `deltaTime` is what the client asked for.
 
 **Time** (`CoreManager::GetTime()`, `Time/Time.h`): `GetDeltaTime()` is the seconds the last frame took, `GetTotalTime()` the game time since the first frame, `GetFrameCount()` counts frames from 1. The frame time is clamped to `Time::kMaxFrameTime` (0.25 s), so a pause in the debugger is one long frame, not a jump. Scale movement and animation by `SceneUpdateEvent::deltaTime`, never by "per frame" constants. Logic that must give the same result at any frame rate (physics-like integration, replays) goes into `SceneFixedUpdateEvent`: its `deltaTime` is always `Time::GetFixedDeltaTime()` (1/60 s by default), and the leftover time carries over to the next frame, so the number of steps per second is constant.
 

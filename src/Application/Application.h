@@ -21,13 +21,19 @@ namespace BECore {
         void SetArguments(int argc, const char* const* argv);
 
         bool Initialize();
+        /// The whole run: RunFrame() until it returns false, then Finish(). What a desktop executable calls
         void Run();
+        /// One iteration of the main loop (the manual-clock idle pass included). False once the application has been asked to stop.
+        /// A host that owns the loop (the browser's frame callback) calls it itself, then Finish()
+        bool RunFrame();
+        /// Shuts everything down after the last frame (the work that Run() does after the loop). Call it once
+        void Finish();
 
     private:
         void StopApplication();
 
 #if BE_WITH_EDITOR
-        /// Ctrl+Shift+E (IsEditorToggle) asks for the other run mode; the switch itself waits for the end of the frame (Run).
+        /// Ctrl+Shift+E (IsEditorToggle) asks for the other run mode; the switch itself waits for the end of the frame (RunFrame).
         /// Read from the raw SDL event, which is emitted before the ImGui capture check, so the chord works over a text field too.
         void OnSDLEvent(const SDLEvents::SDLEventWrapper& event) const;
 #endif

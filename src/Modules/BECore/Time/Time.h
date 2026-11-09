@@ -9,7 +9,7 @@ namespace BECore {
     /**
      * @brief Frame clock: how long the last frame took, how long the game has run and which fixed steps are due.
      *
-     * One instance lives in CoreManager (CoreManager::GetTime()). Application::Run calls Tick() once at the start
+     * One instance lives in CoreManager (CoreManager::GetTime()). Application::RunFrame calls Tick() once at the start
      * of every frame, before any event of that frame, so the values do not change while a frame is processed.
      * Scene::Update turns them into SceneFixedUpdateEvent (GetFixedStepCount() times) and SceneUpdateEvent.
      *

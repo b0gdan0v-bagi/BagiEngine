@@ -15,7 +15,7 @@ Event-based logging. `Logger` pushes entries into a lock-free ring buffer, `LogE
 | `ILogSink` | Interface for output destinations (`FACTORY_BASE`) |
 | `LoggerManager` | Creates and sorts sinks from `LoggerConfig`, accessed via `CoreManager::GetLoggerManager()` |
 
-`LogEvent::Flush()` is called once per frame from `Application::Run()` and right after `Fatal`. A message logged from a worker thread appears at the next flush.
+`LogEvent::Flush()` is called once per frame from `Application::RunFrame()` and right after `Fatal`. A message logged from a worker thread appears at the next flush.
 
 ## Log Levels
 
