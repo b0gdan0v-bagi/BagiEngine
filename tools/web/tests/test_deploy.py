@@ -7,6 +7,7 @@ import json
 import re
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,6 +16,7 @@ import web_fixtures  # noqa: F401  (puts tools/web on sys.path)
 import build_and_deploy
 
 TOOLS_WEB = Path(build_and_deploy.__file__).resolve().parent
+ENGINE_DIR = TOOLS_WEB.parents[1]
 
 
 RAILWAY_PATH = "/usr/bin/railway"
@@ -54,15 +56,24 @@ class DeployTestCase(unittest.TestCase):
     def setUp(self):
         self._temp = tempfile.TemporaryDirectory()
         self.addCleanup(self._temp.cleanup)
-        self.source = Path(self._temp.name)
+        self.source = Path(self._temp.name) / "source"
+        self.source.mkdir()
+        # A fake emsdk folder with the files the SDK check looks for (the real SDK is not needed)
+        self.emsdk = Path(self._temp.name) / "emsdk"
+        self.install_sdk(self.emsdk)
 
-    def run_script(self, *argv, environ=None, which=no_tools, runner=None):
+    @staticmethod
+    def install_sdk(emsdk: Path):
+        for name in build_and_deploy.SDK_FILES:
+            (emsdk / name).parent.mkdir(parents=True, exist_ok=True)
+            (emsdk / name).write_text("", encoding="utf-8")
+
+    def run_script(self, *argv, emsdk=None, which=no_tools, runner=None):
         out, err = io.StringIO(), io.StringIO()
         runner = runner or FakeRunner()
         arguments = ["--source-dir", str(self.source), *argv]
-        environ = {"EMSDK": "C:/emsdk"} if environ is None else environ
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = build_and_deploy.run(arguments, environ=environ, which=which, runner=runner)
+            code = build_and_deploy.run(arguments, emsdk_dir=emsdk or self.emsdk, which=which, runner=runner)
         return code, out.getvalue(), err.getvalue(), runner
 
 
@@ -105,20 +116,38 @@ class DryRunTest(DeployTestCase):
 
 
 class PreconditionTest(DeployTestCase):
-    def test_without_emsdk_it_returns_non_zero_with_the_message(self):
-        for environ in ({}, {"EMSDK": ""}):
-            with self.subTest(environ=environ):
-                code, out, err, runner = self.run_script("--dry-run", environ=environ)
+    def test_without_the_sdk_it_returns_non_zero_with_the_message(self):
+        missing = Path(self._temp.name) / "no-sdk"
+        incomplete = Path(self._temp.name) / "half-sdk"
+        self.install_sdk(incomplete)
+        (incomplete / ".emscripten").unlink()  # the install was interrupted before `activate`
+        for emsdk in (missing, incomplete):
+            with self.subTest(emsdk=emsdk.name):
+                code, out, err, runner = self.run_script("--dry-run", emsdk=emsdk)
                 self.assertNotEqual(code, 0)
-                self.assertIn("EMSDK is not set", err)
+                self.assertIn("run: python CI/scripts/setup_emsdk.py", err)
                 self.assertEqual(out, "")
                 self.assertEqual(runner.calls, [])
 
-    def test_without_emsdk_a_real_run_does_not_start_anything_either(self):
-        code, _, err, runner = self.run_script(environ={})
+    def test_without_the_sdk_a_real_run_does_not_start_anything_either(self):
+        code, _, err, runner = self.run_script(emsdk=Path(self._temp.name) / "no-sdk")
         self.assertNotEqual(code, 0)
-        self.assertIn("EMSDK", err)
+        self.assertIn("setup_emsdk.py", err)
         self.assertEqual(runner.calls, [])
+
+    def test_the_environment_variable_emsdk_is_not_read(self):
+        # The presets find the SDK in external/emsdk; a variable neither helps nor is needed
+        with unittest.mock.patch.dict("os.environ", {"EMSDK": str(self.emsdk)}):
+            code, _, err, _ = self.run_script("--dry-run", emsdk=Path(self._temp.name) / "no-sdk")
+        self.assertNotEqual(code, 0)
+        self.assertIn("setup_emsdk.py", err)
+        with unittest.mock.patch.dict("os.environ", {}, clear=True):
+            code, _, err, _ = self.run_script("--dry-run")
+        self.assertEqual(code, 0, err)
+
+    def test_the_sdk_is_looked_for_in_the_submodule_of_the_engine_by_default(self):
+        self.assertEqual(build_and_deploy.EMSDK_DIR, ENGINE_DIR / "external" / "emsdk")
+        self.assertTrue((ENGINE_DIR / "CI" / "scripts" / "setup_emsdk.py").is_file())
 
     def test_deploy_without_the_railway_cli_returns_non_zero_with_the_message(self):
         for extra in ((), ("--dry-run",)):

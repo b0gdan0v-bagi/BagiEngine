@@ -59,12 +59,13 @@ class WebPresetsTest(unittest.TestCase):
     def setUp(self):
         self.presets = load_presets()
 
-    def build_preset_condition(self, name: str) -> dict:
+    def build_preset_ancestors(self, name: str) -> list:
+        """The build preset and all its ancestors, nearest first."""
         preset = find_preset(self.presets, "buildPresets", name)
-        while "condition" not in preset:
-            (parent,) = parents_of(preset)
-            preset = find_preset(self.presets, "buildPresets", parent)
-        return preset["condition"]
+        chain = [preset]
+        for parent in parents_of(preset):
+            chain += self.build_preset_ancestors(parent)
+        return chain
 
     def test_both_configure_presets_are_ninja_builds_of_the_right_type(self):
         debug = resolve_configure_preset(self.presets, "web-debug")
@@ -85,18 +86,20 @@ class WebPresetsTest(unittest.TestCase):
                 self.assertEqual(variables["ENGINE_BUILD_TESTS"], "OFF")
                 self.assertEqual(variables["BE_WITH_EDITOR"], "OFF")
 
-    def test_the_toolchain_file_is_the_emscripten_one_from_emsdk(self):
+    def test_the_toolchain_file_is_the_emscripten_one_from_the_emsdk_submodule(self):
+        # ${fileDir} is the folder of the CMakePresets.json that holds the preset: the engine root, also when a game includes the file
         for name in WEB_PRESETS:
             with self.subTest(name):
                 toolchain = resolve_configure_preset(self.presets, name)["toolchainFile"]
-                self.assertEqual(toolchain, "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")
+                self.assertEqual(toolchain, "${fileDir}/external/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")
 
-    def test_the_presets_are_hidden_by_a_condition_on_emsdk(self):
-        expected = {"type": "notEquals", "lhs": "$env{EMSDK}", "rhs": ""}
+    def test_the_presets_do_not_depend_on_the_environment_variable_emsdk(self):
         for name in WEB_PRESETS:
             with self.subTest(name):
-                self.assertEqual(resolve_configure_preset(self.presets, name)["condition"], expected)
-                self.assertEqual(self.build_preset_condition(name), expected)
+                self.assertNotIn("condition", resolve_configure_preset(self.presets, name))
+                for build_preset in self.build_preset_ancestors(name):
+                    self.assertNotIn("condition", build_preset, build_preset["name"])
+        self.assertNotIn("EMSDK", PRESETS_FILE.read_text(encoding="utf-8").replace("external/emsdk", "").replace("setup_emsdk", ""))
 
     def test_every_web_configure_preset_has_a_build_preset(self):
         web = [p["name"] for p in self.presets["configurePresets"] if not p.get("hidden") and inherits_from(self.presets, p["name"], "web")]
@@ -120,7 +123,7 @@ class WebPresetsTest(unittest.TestCase):
 
 @unittest.skipUnless(CMAKE, "cmake is not on PATH")
 class CmakeListPresetsTest(unittest.TestCase):
-    """cmake --list-presets reads and validates the JSON, and shows whether the condition works."""
+    """cmake --list-presets reads and validates the JSON, and shows that the web presets are listed with no EMSDK."""
 
     def list_presets(self, kind: str, emsdk) -> str:
         env = dict(os.environ)
@@ -132,19 +135,13 @@ class CmakeListPresetsTest(unittest.TestCase):
         self.assertNotIn("Error", result.stderr)
         return result.stdout
 
-    def test_without_emsdk_the_web_presets_are_hidden(self):
+    def test_the_web_presets_are_listed_with_emsdk_unset_and_set_alike(self):
         for kind in ("configure", "build"):
-            with self.subTest(kind):
-                output = self.list_presets(kind, None)
-                self.assertNotIn('"web-', output)
-                self.assertIn("Available", output)  # the other presets of this host are still listed
-
-    def test_with_emsdk_both_web_presets_are_listed(self):
-        for kind in ("configure", "build"):
-            with self.subTest(kind):
-                output = self.list_presets(kind, "C:/nonexistent")
-                for name in WEB_PRESETS:
-                    self.assertIn(f'"{name}"', output)
+            for emsdk in (None, "", "C:/nonexistent"):
+                with self.subTest(kind=kind, emsdk=emsdk):
+                    output = self.list_presets(kind, emsdk)
+                    for name in WEB_PRESETS:
+                        self.assertIn(f'"{name}"', output)
 
 
 @unittest.skipUnless(CMAKE, "cmake is not on PATH")

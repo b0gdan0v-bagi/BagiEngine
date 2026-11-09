@@ -6,7 +6,7 @@
 
 Run it from the root of the project that has the web presets (the engine, or a game that carries it); `--source-dir` names another.
 The steps, in order:
-  1. cmake --preset <preset>                           (needs the Emscripten SDK: the environment variable EMSDK)
+  1. cmake --preset <preset>                           (needs the Emscripten SDK of the engine: python CI/scripts/setup_emsdk.py)
   2. cmake --build --preset <preset> --target <game>
   3. package.py <build dir> <dist> --game <game>
   4. with --deploy: stage Dockerfile, railway.json, serve.py and dist/ in one folder and run
@@ -30,6 +30,13 @@ STAGED_FILES = ("Dockerfile", "railway.json", "serve.py")
 DEFAULT_GAME = "BagiMatch3"
 DEFAULT_PRESET = "web-release"
 DEFAULT_SERVICE = "bagi-web"
+# The Emscripten SDK is the submodule external/emsdk of the engine (CI/scripts/setup_emsdk.py installs it). The presets read the toolchain
+# file, and emcc reads .emscripten; setup_emsdk.py --check looks at nearly the same files (this script stays stand-alone and does not
+# import it; the version is that script's business)
+ENGINE_DIR = TOOLS_DIR.parents[1]
+EMSDK_DIR = ENGINE_DIR / "external" / "emsdk"
+SDK_FILES = (Path("upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"), Path("upstream/emscripten/emcc.py"), Path(".emscripten"))
+SDK_MISSING_MESSAGE = "the Emscripten SDK is not installed: run: python CI/scripts/setup_emsdk.py (in a game: python engine/CI/scripts/setup_emsdk.py)"
 # Where the web build writes its files: build/<Compiler>Web (cmake/BagiEngine.cmake, "Output Directories"; Emscripten's compiler is Clang)
 OUTPUT_FOLDER = Path("build") / "ClangWeb"
 STAGE_FOLDER = Path("build") / "web-deploy"
@@ -65,10 +72,13 @@ def format_command(command: list[str]) -> str:
     return subprocess.list2cmdline(command) if os.name == "nt" else shlex.join(command)
 
 
-def check_environment(args: argparse.Namespace, environ: dict, which) -> None:
-    if not environ.get("EMSDK"):
-        raise DeployError("EMSDK is not set: install the Emscripten SDK (emsdk install latest; emsdk activate latest) and run emsdk_env "
-                          "in this shell, then try again")
+def is_sdk_installed(emsdk_dir: Path) -> bool:
+    return all((emsdk_dir / name).is_file() for name in SDK_FILES)
+
+
+def check_environment(args: argparse.Namespace, emsdk_dir: Path, which) -> None:
+    if not is_sdk_installed(emsdk_dir):
+        raise DeployError(SDK_MISSING_MESSAGE)
     if args.deploy and not which("railway"):
         raise DeployError("--deploy needs the Railway CLI (`railway`) on PATH: https://docs.railway.com/guides/cli")
 
@@ -84,7 +94,7 @@ def stage(dist: Path, stage_dir: Path) -> None:
     shutil.copytree(dist, staged_dist)
 
 
-def run(argv: list[str] | None = None, environ: dict | None = None, which=shutil.which, runner=subprocess.run) -> int:
+def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil.which, runner=subprocess.run) -> int:
     parser = argparse.ArgumentParser(description="Build the game for the web, package it and deploy it to Railway.")
     parser.add_argument("--game", default=DEFAULT_GAME, help=f"the game target (default: {DEFAULT_GAME})")
     parser.add_argument("--preset", default=DEFAULT_PRESET, help=f"the web preset (default: {DEFAULT_PRESET})")
@@ -96,11 +106,10 @@ def run(argv: list[str] | None = None, environ: dict | None = None, which=shutil
     parser.add_argument("--service", default=DEFAULT_SERVICE, help=f"the Railway service for --deploy (default: {DEFAULT_SERVICE})")
     parser.add_argument("--dry-run", action="store_true", help="print the commands and run nothing")
     args = parser.parse_args(argv)
-    environ = os.environ if environ is None else environ
     source_dir = (args.source_dir or Path.cwd()).resolve()
 
     try:
-        check_environment(args, environ, which)
+        check_environment(args, emsdk_dir, which)
     except DeployError as error:
         print(f"build_and_deploy.py: {error}", file=sys.stderr)
         return 2

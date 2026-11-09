@@ -102,14 +102,9 @@
         {
             "name": "web",
             "hidden": true,
-            "description": "The browser build with the Emscripten SDK: set EMSDK to the emsdk folder (emsdk_env). Hidden without EMSDK. No tests (ctest does not run wasm), no editor panels",
+            "description": "The browser build with the Emscripten SDK of the submodule external/emsdk (install it once: python CI/scripts/setup_emsdk.py; no environment variable). No tests (ctest does not run wasm), no editor panels",
             "inherits": "ninja",
-            "condition": {
-                "type": "notEquals",
-                "lhs": "$env{EMSDK}",
-                "rhs": ""
-            },
-            "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "toolchainFile": "${fileDir}/external/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
             "cacheVariables": {
                 "ENGINE_BUILD_TESTS": "OFF",
                 "BE_WITH_EDITOR": "OFF"
@@ -236,12 +231,7 @@
         {
             "name": "build-web",
             "hidden": true,
-            "inherits": "build-base",
-            "condition": {
-                "type": "notEquals",
-                "lhs": "$env{EMSDK}",
-                "rhs": ""
-            }
+            "inherits": "build-base"
         },
         {
             "name": "macos-debug",

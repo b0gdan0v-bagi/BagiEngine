@@ -13,3 +13,7 @@
 	path = external/googletest
 	url = https://github.com/google/googletest.git
 	# Fixed at tag: v1.17.0
+[submodule "external/emsdk"]
+	path = external/emsdk
+	url = https://github.com/emscripten-core/emsdk.git
+	# Fixed at tag: 4.0.23 (the SDK version CI/scripts/setup_emsdk.py installs; the vendored SDL release-3.2.0 is written against emsdk 4.0.x)
