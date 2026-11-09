@@ -25,6 +25,10 @@ namespace BECore {
         LOG_INFO("[ThreadPool] Created with {} threads"_format(numThreads));
     }
 
+    ThreadPool::ThreadPool(InlineTag) : _isInline(true), _inlineThread(std::this_thread::get_id()) {
+        LOG_INFO("[ThreadPool] Created inline (no worker threads)");
+    }
+
     ThreadPool::~ThreadPool() {
         Shutdown();
     }
@@ -32,6 +36,11 @@ namespace BECore {
     void ThreadPool::Submit(TaskQueue::TaskFunc task) {
         if (_stopped.load(std::memory_order_acquire)) {
             LOG_WARNING("[ThreadPool] Submitting task to stopped pool");
+            return;
+        }
+
+        if (_isInline) {
+            RunInline(std::move(task));
             return;
         }
 
@@ -46,11 +55,35 @@ namespace BECore {
             return;
         }
 
+        if (_isInline) {
+            RunInline(std::move(task));
+            return;
+        }
+
         if (threadIndex >= _queues.size()) {
             threadIndex = threadIndex % _queues.size();
         }
 
         _queues[threadIndex]->Push(std::move(task));
+    }
+
+    void ThreadPool::RunInline(TaskQueue::TaskFunc task) {
+        ASSERT(std::this_thread::get_id() == _inlineThread, "The inline ThreadPool is used from the thread that created it only");
+
+        if (_drainingInline) {
+            // A job is running on this stack: the outer call runs this one after it.
+            _inlineQueue.push_back(std::move(task));
+            return;
+        }
+
+        _drainingInline = true;
+        task();
+        while (!_inlineQueue.empty()) {
+            TaskQueue::TaskFunc next = std::move(_inlineQueue.front());
+            _inlineQueue.pop_front();
+            next();
+        }
+        _drainingInline = false;
     }
 
     void ThreadPool::Shutdown() {
@@ -76,7 +109,7 @@ namespace BECore {
     }
 
     size_t ThreadPool::GetPendingTaskCount() const {
-        size_t count = 0;
+        size_t count = _inlineQueue.size();
         for (const auto& queue : _queues) {
             count += queue->Size();
         }

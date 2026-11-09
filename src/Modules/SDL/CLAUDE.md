@@ -4,6 +4,8 @@
 
 SDL3 integration: window, input events and the SDL renderer backend. `Vulkan` is the alternative backend; both implement the interfaces in `BECore/Renderer` (see `.claude/rules/rendering-module.md` for texture pipeline, serialization and fallback rules).
 
+On the web (Emscripten) there is no Vulkan: the window config and the renderer come from the overlay `web/config/` (`ApplicationConfig.xml` with `SDLRendererBackend`, `SDLWindowConfig.xml` without `SDL_WINDOW_VULKAN`), the last content root of `src/main.cpp` (`BAGI_WEB_ROOT`), so it wins over the game's files of the same name. A renderer name that no backend registers (`VulkanRendererBackend` in a build without `ENGINE_WITH_VULKAN`) is a logged error of `SDL3ApplicationFabric::Create`. Details, the canvas glue and tests: "Web build" below.
+
 ## Key Components
 
 | Component | Purpose |
@@ -15,6 +17,7 @@ SDL3 integration: window, input events and the SDL renderer backend. `Vulkan` is
 | `SDLScreenshot` | `EncodePng()` (scale down, PNG in memory) and `RegisterScreenshotControl()`: the `screenshot` method of the control API |
 | `SDLTexture` / `SDLTextureLoader` | `ITexture` implementation and its `IResourceLoader` |
 | `SDLWindowConfig` | Window settings (`config/SDLWindowConfig.xml`: title, size, `windowFlags`; the shipped file asks for `SDL_WINDOW_HIGH_PIXEL_DENSITY`, so a Retina display gets a window with two output pixels per unit; the headless dummy driver stays at 1) |
+| `SDLWebCanvas` | `FitWindowSize()` (pure, every platform: the window size for a browser window, rounded, never below a minimum) and, Emscripten only, `InstallWebCanvasResize()`; see "Web build" |
 | `SDLUtils` | Shared SDL helpers |
 
 `IMainWindow`, `MainWindowManager` and `MainWindowAccessor` (access to the window and renderer) live in `BECore/MainWindow/`, not here.
@@ -69,6 +72,17 @@ Game run mode has no ImGui context, so nothing is kept back there. Mouse positio
 **Window metrics** (`IMainWindow`): `GetWidth()` / `GetHeight()` and `GetSafeArea()` are in window units, `GetPixelDensity()` is output pixels per window unit (2 on a Retina display: the shipped window config asks for the high-density mode, and both renderer backends follow the window's pixel size, the Vulkan swapchain is recreated on resize, `Vulkan/CLAUDE.md`), `GetDisplayScale()` is the user's display scale. Layout takes all three as inputs. The headless dummy driver answers 1, 1 and the whole window. A notch or a rotation cannot be produced on a desktop, so those paths are covered by injected events only.
 
 Tests: `tests/BECore/SDLEventsProviderTest.cpp` (conversions and both capture rules, with the real SDL queue), `UIInputTest.cpp` (order, consume, deferred changes), `WindowMetricsTest.cpp`.
+
+## Web build
+
+The browser build (`ENGINE_TARGET_WEB`, presets `web-release` / `web-debug`, entry `web-build` of the todo store) uses this module with SDL3 built static (`ENGINE_STATIC_SDL`, the target `SDL3-shared` is an interface shim over `SDL3::SDL3-static`). Nothing of it has been built with Emscripten yet: what only emsdk can verify is listed at the end.
+
+- **Renderer.** `SDLRendererBackend` on SDL's `opengles2` driver over WebGL; there is no Vulkan. The overlay `web/config/` (the last content root, `BAGI_WEB_ROOT`) makes `SDLRendererBackend` the renderer and drops `SDL_WINDOW_VULKAN`; the window asks for `SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY` and a start size of 1280x720.
+- **The page.** `web/shell.html` (`--shell-file`) has the `<canvas id="canvas">`; SDL looks for `#canvas` (`SDL_HINT_EMSCRIPTEN_CANVAS_SELECTOR` stays at its default, nothing sets it). The canvas is `100vw` x `100vh` by CSS (`100dvh` where the browser knows it, so the address bar of a phone does not hide the lower edge; the resize glue below reads `window.innerHeight`). The shell also shows the loading bar, a message when WebGL is missing (the game is not started then) and when the module aborts.
+- **Canvas size.** `SDLMainWindow::Initialize` calls `InstallWebCanvasResize(window)` after the window is created. It sets the window to the inner size of the page (`window.innerWidth` / `innerHeight`, through `FitWindowSize`: rounded, at least 64 units) at once and on every resize of the page (`emscripten_set_resize_callback` on the window); `SDL_SetWindowSize` then sizes the canvas. SDL 3.2 has no "fill the document" property, and its own resize handler follows only a canvas whose CSS size it found at creation; the glue makes the size explicit and also works with a page of another shell. The window flag `SDL_WINDOW_HIGH_PIXEL_DENSITY` makes the backing store `devicePixelRatio` times larger than the window, which `SDLMainWindow::GetPixelDensity()` reports, so layout and the renderer see output pixels as on a Retina display (see "Input and window metrics"). A change of `devicePixelRatio` alone (the page moves to another display, zoom) is SDL's own handling.
+- **Input.** Mouse and touch need no code of ours: SDL 3.2 turns touches into mouse events (`SDL_HINT_TOUCH_MOUSE_EVENTS`, on by default), and mouse positions already go through `UIInput` in output pixels. The canvas has `touch-action: none`, so the page does not scroll or zoom under a finger.
+- **Tests.** `FitWindowSize` is covered on the desktop (`WebCanvasTest` in `tests/BECore/WebConfigTest.cpp`, together with the tests of the `web/config/` files); `tools/web/tests/test_shell.py` checks the shell by text. `SDLWebCanvas.cpp` has the Emscripten half under `#ifdef __EMSCRIPTEN__`, an empty part of the file on the desktop.
+- **Only emsdk can verify:** that the glue compiles and links; that the canvas follows the window and `devicePixelRatio` (and that SDL's own resize handler and the glue do not fight over the size); touches on a phone; that SDL's start size, which it takes from the CSS size of the canvas, matches the shell; the loading bar against the real `.data` download; the shell in a browser.
 
 ## ImGui + SDL3
 

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Web build overlay. The console sink writes to the browser console (stdout / stderr of the page); no file log
+    (the in-memory file system of the page is lost on reload) and no OutputSink (it has no web output). Colors would
+    show as escape codes in the console, so they are off.
+-->
+<root>
+    <sinks>
+        <sink type="OutputSink" enabled="false" priority="0" minLevel="Debug" />
+        <sink type="ConsoleSink" enabled="true" priority="0" minLevel="Info" colorEnabled="false" />
+        <sink type="FileSink" enabled="false" priority="100" minLevel="Info" filename="engine.log" append="false" />
+    </sinks>
+</root>

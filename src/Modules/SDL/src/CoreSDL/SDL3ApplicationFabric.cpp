@@ -39,6 +39,8 @@ namespace BECore {
 
         auto renderer = AbstractFactory<IRenderer>::GetInstance().Create(rendererTypeName);
         if (!renderer) {
+            // A name that is not registered, e.g. VulkanRendererBackend in a build without ENGINE_WITH_VULKAN
+            LOG_ERROR("ApplicationConfig: renderer '{}' is not available in this build"_format(rendererTypeName));
             return false;
         }
         if (!renderer->Initialize(*window)) {

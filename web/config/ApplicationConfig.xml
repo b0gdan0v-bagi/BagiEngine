@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!--
+    Web build overlay (the layer on top of the game's content, BAGI_WEB_ROOT; src/main.cpp).
+    The browser has no Vulkan: the SDL renderer draws (SDL3 opengles2 over WebGL). No editor, no control API.
+-->
+<root
+  type="SDL3ApplicationFabric"
+  renderer="SDLRendererBackend"
+  path="config/SDLWindowConfig.xml"
+  mode="Game" />

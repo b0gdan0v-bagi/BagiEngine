@@ -551,6 +551,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(TaskManagerLifetimeTest, DroppedHandleKeepsTaskAliveUntilItFinishes) {
+#if BE_SINGLE_THREAD
+        GTEST_SKIP() << "needs worker threads (BE_SINGLE_THREAD)";
+#endif
         LifetimeProbe probe;
 
         CoreManager::GetTaskManager().Run(ProbeTask(FrameGuard(probe), probe, false));  // handle dropped on the spot
@@ -565,6 +568,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(TaskManagerLifetimeTest, DroppedHandleKeepsTaskAliveAcrossThreadHop) {
+#if BE_SINGLE_THREAD
+        GTEST_SKIP() << "needs worker threads (BE_SINGLE_THREAD)";
+#endif
         LifetimeProbe probe;
 
         // Parks on SwitchToBackground first: the awaiter only keeps a coroutine_handle, nothing else owns the frame.
@@ -580,6 +586,9 @@ namespace BECore::Tests {
     }
 
     TEST_F(TaskManagerLifetimeTest, KeptHandleOwnsTaskAfterItFinishes) {
+#if BE_SINGLE_THREAD
+        GTEST_SKIP() << "needs worker threads (BE_SINGLE_THREAD)";
+#endif
         LifetimeProbe probe;
 
         auto handle = CoreManager::GetTaskManager().Run(ProbeTask(FrameGuard(probe), probe, false));

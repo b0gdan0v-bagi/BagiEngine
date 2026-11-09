@@ -1,6 +1,7 @@
 #include "SDLMainWindow.h"
 
 #include "BECore/Utils/ScopeGuard.h"
+#include "SDLWebCanvas.h"
 #include "SDLWindowConfig.h"
 
 #include <BECore/Reflection/OpenDeserializer.h>
@@ -68,6 +69,11 @@ namespace BECore {
 
         _width = windowConfig._width;
         _height = windowConfig._height;
+
+#ifdef __EMSCRIPTEN__
+        // The canvas fills the browser window: the size of the config is only the start size
+        InstallWebCanvasResize(_window);
+#endif
 
         Subscribe<ApplicationEvents::ApplicationCleanUpEvent, &SDLMainWindow::Destroy>(this);
 

@@ -10,6 +10,15 @@ namespace BECore {
 
         _mainThreadId = std::this_thread::get_id();
 
+#if BE_SINGLE_THREAD
+        // No thread at all (the browser build): background jobs run on the calling thread at submit time,
+        // so the start-up WaitAll over the config loads finds them done.
+        _threadPool = eastl::make_unique<ThreadPool>(ThreadPool::InlineTag{});
+
+        _scheduler.Initialize(_threadPool.get());
+
+        LOG_INFO("[TaskManager] Initialized in single-thread mode (inline pool, no worker threads)");
+#else
         // Создаем пул потоков
         size_t numThreads = std::min(std::thread::hardware_concurrency(), 4u);
         if (numThreads < 2) {
@@ -22,6 +31,7 @@ namespace BECore {
         _scheduler.Initialize(_threadPool.get());
 
         LOG_INFO("[TaskManager] Initialized with {} worker threads"_format(numThreads));
+#endif
         _isInitialized = true;
     }
 

@@ -4,6 +4,8 @@
 
 The WebSocket transport of the external control API (`BECore/Control/CLAUDE.md`): a server on `127.0.0.1` that turns every text message of a client into `ControlService::Post()` and sends the responses and the pushed events back. It knows nothing about JSON or games: the text goes through as it is, the checks of the request are the control service's. It is a development tool (a model or a program plays a game), not player networking. Off by default; `Application` starts it when the game is run with `--control` (flags and attributes: "Starting the API" in `Control/CLAUDE.md`).
 
+The module is built only with `ENGINE_WITH_REMOTE_CONTROL` (default ON; `OFF` in the web build): without it `Application` has no server and a game started with `--control` stops with `Control API: not available in this build`.
+
 Module order: after `TaskSystem`, before `SDL`. It links `BECoreModule` and `EventsModule` only (and `ws2_32` on Windows); `RuntimeModule` links it. No static initializers, so it needs no `WHOLE_ARCHIVE`.
 
 | File | Purpose |

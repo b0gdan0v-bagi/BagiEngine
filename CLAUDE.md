@@ -16,6 +16,7 @@ cmake --build --preset macos-debug         # build everything: the game executab
 |----|---------|
 | macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-release-editor`: Release with the editor (below); `macos-rmlui-debug`, `macos-rmlui-release`: the same with `ENGINE_UI_RMLUI=ON` (the RmlUi host and its tests; no system library is needed, the engine's own fonts draw the text) |
 | Windows | `windows-clang-{debug,release}` (Clang + Ninja, the default; configure and build through `python CI/scripts/vs_env.py cmake ...`, which loads the Visual Studio environment), `windows-msvc-{debug,release}`, `windows-msvc-release-editor` (MSVC + Ninja, same environment rule), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022). The MSVC builds are fallbacks: their PDBs break parallel builds now and then (`LNK1103`, `C1090`) |
+| Web | `web-release`, `web-debug` (Emscripten + Ninja, `BagiMatch3.html` with a preloaded content package): shown only when the environment variable `EMSDK` is set (the emsdk folder, after `emsdk_env`); build only (`cmake --build --preset web-release --target BagiMatch3`), no editor, no tests, no ctest. The browser build is the entry `web-build` of the todo store; the Emscripten side is written but not yet built with emsdk |
 
 **By default the editor is in Debug builds and not in a single-config Release; Debug always has it.** The option `BE_WITH_EDITOR` (`cmake/BagiEngine.cmake`, section "Editor Option") decides whether the editor panels (`src/Widgets/{ConfigEditor,EditorLayout,SceneEditor,TextureEditor,Viewport}`) and their tests are built:
 
@@ -35,6 +36,8 @@ Per-machine settings go in `CMakeUserPresets.json` (git-ignored). Without preset
 cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 cmake --build build
 ```
+
+**Web-like build on the desktop.** `cmake/BagiPlatformOptions.cmake` has four options (`.claude/rules/cmake-rules.md`, "Build Options"): `ENGINE_WITH_VULKAN`, `ENGINE_WITH_REMOTE_CONTROL` (both default ON), `ENGINE_STATIC_SDL`, `ENGINE_SINGLE_THREAD` (both default OFF); an Emscripten build forces them to the web values and sets `ENGINE_TARGET_WEB` and `PLATFORM_WEB`. To check the web configuration without an Emscripten SDK, configure a second build from the engine root (in a game checkout that is `engine/`): `cmake -S . -B build/webcheck -G "Visual Studio 17 2022" -A x64 -DENGINE_WITH_VULKAN=OFF -DENGINE_SINGLE_THREAD=ON`, then `cmake --build build/webcheck --config Release --target BagiMatch3 BagiEngineTests`. It writes into `build/MSVCWindows/` like every MSVC configuration, so delete that folder before and after.
 
 C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output lands in `build/{CompilerName}{PlatformName}/` regardless of preset, so Debug, Release and release-editor Ninja presets overwrite each other's executables and libraries: after switching between them delete every `build/ClangmacOS/lib/*.a` (the folder name is the compiler and platform), or the old objects of the other configuration are linked in and the tests crash. Reflection code is generated at configure time: re-run `cmake --preset ...` after changing `BE_CLASS` / `BE_REFLECT_FIELD`.
 
@@ -57,7 +60,7 @@ Runtime tests that need the live engine are `ITest` classes (`src/Modules/BECore
 
 ## Architecture Overview
 
-BagiEngine is a C++23 game engine built on a scene graph of `SceneNode` + `IComponent`; an EnTT registry holds the data of the systems (today the draw pass and the transform and renderer data of the quad and the sprite), see `src/Modules/BECore/Scene/CLAUDE.md`, "Why EnTT". The main entry is `src/main.cpp` → `Application::Initialize()/Run()`; each game executable compiles it.
+BagiEngine is a C++23 game engine built on a scene graph of `SceneNode` + `IComponent`; an EnTT registry holds the data of the systems (today the draw pass and the transform and renderer data of the quad and the sprite), see `src/Modules/BECore/Scene/CLAUDE.md`, "Why EnTT". The main entry is `src/main.cpp` → `Application::Initialize()/Run()` (`Run()` is `RunFrame()` in a loop, then `Finish()`; the browser build calls `RunFrame()` from its own frame callback); each game executable compiles it.
 
 **Engine and games:** the engine knows nothing about concrete games. A game lives in `games/<Name>/` (module, executable, `config/`, `assets/`, `tests/`), reaches the engine only through `cmake/BagiEngine.cmake` (`be_add_module`, `be_add_game_reflection`, `be_add_game_executable`, `be_add_game_tests`) and registers an `IGame` in `AbstractFactory<IGame>`. One executable is one game. `games/` is built to move out into separate repositories that carry this repository as a submodule (`engine/`); no engine code, CMake or config outside `games/` refers to a concrete game. See `src/Modules/Games/CLAUDE.md`; a game in a repository of its own (git identity, submodule, shared skills, todo area) is set up by `NEW_GAME.md`.
 
@@ -88,10 +91,10 @@ src/
 config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, Text, UI, default SceneConfig; assets/fonts/ has the default font)
 games/<Name>/           # a game: CMakeLists.txt, src/, config/, assets/, tests/, CLAUDE.md (Match3; Chess is the repository BagiEngine-Chess, which carries this one as its submodule `engine/`)
 tests/                  # GoogleTest executable BagiEngineTests (BECore) + Common (BagiEngineTestSupport)
-tools/                  # developer tools: natvis, todo (the todo store: a service on Railway and its CLI `todo.py`; `tools/todo/CLAUDE.md`), control (Python: the control API client and smoke test, the MCP server; `tools/control/CLAUDE.md`), vscode/todo-workers (a VS Code panel of the parallel todo-loop workers; its `README.md`)
+tools/                  # developer tools: natvis, todo (the todo store: a service on Railway and its CLI `todo.py`; `tools/todo/CLAUDE.md`), control (Python: the control API client and smoke test, the MCP server; `tools/control/CLAUDE.md`), vscode/todo-workers (a VS Code panel of the parallel todo-loop workers; its `README.md`), web (Python: package, static server and Railway deploy of the browser build; `tools/web/CLAUDE.md`)
 ```
 
-**Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.
+**Content is layered.** `FileSystem` and `ConfigManager` merge the engine's `config/` and `assets/` with the game's; the game is on top, so a game file of the same name replaces the engine's (a game's `SceneConfig.xml` replaces the engine's whole file). Roots come from `BAGI_ENGINE_ROOT` / `BAGI_GAME_ROOT` (defined by `be_add_game_executable`; the web build adds a third, `BAGI_WEB_ROOT`, the engine's `web/` overlay, on top, and all three are virtual paths inside the preloaded package); without them the project root is searched upwards from the working directory. Details: `src/Modules/BECore/FileSystem/CLAUDE.md`.
 
 **Vendored code** (`EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`, `pugixml/`, `RmlUi/`, `stb/`): do not edit it, and leave it out of broad searches. `RmlUi/` is built only with `-DENGINE_UI_RMLUI=ON`, together with its host module `RmlUiHost` (`src/Modules/RmlUiHost/CLAUDE.md`; the decision is in the entry `ui-authoring` of the todo store).
 
