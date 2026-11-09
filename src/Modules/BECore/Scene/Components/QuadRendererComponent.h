@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Renderer/BlendMode.h>
 #include <BECore/Scene/IComponent.h>
 
 namespace BECore {
@@ -12,6 +13,7 @@ namespace BECore {
         ~QuadRendererComponent() override = default;
 
         BE_REFLECT_FIELD Color _color{255, 0, 0, 255};
+        BE_REFLECT_FIELD BlendMode _blend = BlendMode::Alpha;  ///< how the quad blends with what is behind it; Alpha is straight alpha
     };
 
 }  // namespace BECore

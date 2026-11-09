@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Renderer/BlendMode.h>
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Scene/Components/SpriteFit.h>
@@ -17,6 +18,9 @@ namespace BECore {
         BE_REFLECT_FIELD PoolString _texturePath;
         BE_REFLECT_FIELD Rect _srcRect{};
         BE_REFLECT_FIELD SpriteFit _fit = SpriteFit::Stretch;
+        BE_REFLECT_FIELD BlendMode _blend = BlendMode::Alpha;  ///< how the sprite blends with what is behind it; Alpha is straight alpha
+        BE_REFLECT_FIELD bool _flipX = false;                  ///< mirrors the picture left to right about its own center
+        BE_REFLECT_FIELD bool _flipY = false;                  ///< mirrors the picture top to bottom
 
         void OnAttached() override;
 

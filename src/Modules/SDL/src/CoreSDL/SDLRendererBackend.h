@@ -26,6 +26,8 @@ namespace BECore {
         void DrawFilledRect(float x, float y, float w, float h, const Color& color) override;
         using IRenderer::DrawTexture;
         void DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) override;
+        /// A transformed texture is drawn with SDL_RenderTextureRotated; the rect keeps the geometry default of IRenderer
+        void DrawTransformedTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint, const DrawTransform& transform) override;
         IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override;
         void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) override;
 

@@ -415,10 +415,19 @@ namespace BECore {
         return true;
     }
 
+    void VulkanRendererBackend::WarnIfBlendModeIgnored() {
+        if (_blendWarned || GetBlendMode() == BlendMode::Alpha) {
+            return;
+        }
+        _blendWarned = true;
+        LOG_WARNING("VulkanRendererBackend: the blend mode {} is not implemented, so straight alpha is used"_format(EnumUtils<BlendMode>::ToString(GetBlendMode())));
+    }
+
     void VulkanRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
         if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
+        WarnIfBlendModeIgnored();
         VkRect2D scissor{};
         if (!ResolveScissor(scissor)) {
             return;
@@ -431,6 +440,7 @@ namespace BECore {
         if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
+        WarnIfBlendModeIgnored();
 
         auto* vkTexture = dynamic_cast<VulkanTexture*>(&texture);
         if (!vkTexture || vkTexture->GetDescriptorSet() == VK_NULL_HANDLE) {
@@ -489,6 +499,7 @@ namespace BECore {
         if (!_inSwapchainPass && !_inOffscreenPass) {
             return;
         }
+        WarnIfBlendModeIgnored();
         if (vertices.empty() || indices.size() < kIndicesPerTriangle) {
             return;
         }

@@ -153,6 +153,33 @@ namespace BECore {
                 ImGui::EndCombo();
             }
 
+            // -----------------------------------------------------------------
+            // Blend and flip — the choices of the node, editable with a sprite ID too (the rotation is on the TransformComponent)
+            // -----------------------------------------------------------------
+            const auto& blendNames = EnumUtils<BlendMode>::Names();
+            const auto& blendValues = EnumUtils<BlendMode>::Values();
+            if (ImGui::BeginCombo("Blend##sprite_blend", EnumUtils<BlendMode>::ToString(s._blend).data())) {
+                for (size_t i = 0; i < blendNames.size(); ++i) {
+                    const bool isSelected = (s._blend == blendValues[i]);
+                    if (ImGui::Selectable(blendNames[i].data(), isSelected)) {
+                        s._blend = blendValues[i];
+                        changed = true;
+                    }
+                    if (isSelected) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            if (ImGui::Checkbox("Flip X##sprite_flip_x", &s._flipX)) {
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Flip Y##sprite_flip_y", &s._flipY)) {
+                changed = true;
+            }
+
             return changed;
         }
 
@@ -166,8 +193,7 @@ namespace BECore {
         // noneLabel — displayed when current is empty ("(none)" / "(any)")
         // showAdd   — show text field + button to register a new action
         // -----------------------------------------------------------------
-        bool ActionCombo(const char* label, PoolString& current,
-                         const char* noneLabel, bool showAdd) {
+        bool ActionCombo(const char* label, PoolString& current, const char* noneLabel, bool showAdd) {
             const auto& entries = ActionsLibrary::GetInstance().GetAll();
             bool changed = false;
 
