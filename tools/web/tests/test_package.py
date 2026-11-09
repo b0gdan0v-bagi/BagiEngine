@@ -61,6 +61,29 @@ class PackageTest(unittest.TestCase):
         self.run_package(brotli_module=None)
         self.assertEqual(list(self.out.glob("*.br")), [])
 
+    def test_files_of_an_earlier_run_that_this_run_does_not_make_are_deleted(self):
+        self.run_package(brotli_module=FakeBrotli)
+        # The game has no content now; a leftover of another game and a file that is not ours
+        (self.build / f"{GAME}.data").unlink()
+        (self.out / "Other.wasm").write_bytes(b"other")
+        (self.out / "Other.wasm.gz").write_bytes(b"other")
+        (self.out / "notes.txt").write_bytes(b"not ours")
+        manifest = self.run_package(brotli_module=FakeBrotli)
+        self.assertEqual(sorted(path.name for path in self.out.iterdir() if "Fake" not in path.name),
+                         ["index.html", "index.html.br", "index.html.gz", "manifest.json", "notes.txt"])
+        self.assertFalse(any(path.name.startswith(f"{GAME}.data") for path in self.out.iterdir()))
+        self.assertNotIn(f"{GAME}.data", manifest["files"])
+
+    def test_every_file_of_the_folder_that_package_py_owns_is_in_the_manifest(self):
+        self.run_package(brotli_module=FakeBrotli)
+        (self.out / "Stale.js").write_bytes(b"x")
+        (self.out / "Stale.data.br").write_bytes(b"x")
+        manifest = self.run_package(brotli_module=FakeBrotli)
+        listed = set(manifest["files"])
+        for path in self.out.iterdir():
+            if path.suffix in (".html", ".js", ".wasm", ".data", ".gz", ".br"):
+                self.assertIn(path.name.removesuffix(".gz").removesuffix(".br"), listed, path.name)
+
     def test_the_real_brotli_module_round_trips_when_it_is_installed(self):
         brotli = package.load_brotli()
         if brotli is None:

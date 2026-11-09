@@ -9,8 +9,9 @@ The steps, in order:
   1. cmake --preset <preset>                           (needs the Emscripten SDK: the environment variable EMSDK)
   2. cmake --build --preset <preset> --target <game>
   3. package.py <build dir> <dist> --game <game>
-  4. with --deploy: stage Dockerfile, railway.json, serve.py and dist/ in one folder and run `railway up --service <name> --detach`
-     in it (the Railway CLI, logged in or with RAILWAY_TOKEN; the service must exist, tools/web/CLAUDE.md).
+  4. with --deploy: stage Dockerfile, railway.json, serve.py and dist/ in one folder and run
+     `railway up <folder> --path-as-root --service <name> --detach` in it (the Railway CLI, logged in and the project linked with
+     `railway link`, or RAILWAY_TOKEN of the project; the service must exist, tools/web/CLAUDE.md).
 Standard library only. Nothing here reads or writes a secret.
 """
 
@@ -21,6 +22,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 TOOLS_DIR = Path(__file__).resolve().parent
 PACKAGE_SCRIPT = TOOLS_DIR / "package.py"
@@ -38,18 +40,24 @@ class DeployError(Exception):
     """A precondition is missing; the message says what to do."""
 
 
-def plan_commands(args: argparse.Namespace, source_dir: Path) -> list[tuple[list[str], Path]]:
-    """The (command, working directory) pairs to run, in order. The staging between step 3 and the deploy is done by stage()."""
+class Step(NamedTuple):
+    command: list[str]
+    cwd: Path
+    # The deploy step: the files it needs are staged just before it
+    is_deploy: bool = False
+
+
+def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_dir: Path) -> list[Step]:
+    """The steps to run, in order. The staging between step 3 and the deploy is done by stage()."""
     build_dir = args.build_dir or source_dir / OUTPUT_FOLDER
-    dist = args.dist or source_dir / DIST_FOLDER
-    commands = [
-        (["cmake", "--preset", args.preset], source_dir),
-        (["cmake", "--build", "--preset", args.preset, "--target", args.game], source_dir),
-        ([sys.executable, str(PACKAGE_SCRIPT), str(build_dir), str(dist), "--game", args.game], source_dir),
+    steps = [
+        Step(["cmake", "--preset", args.preset], source_dir),
+        Step(["cmake", "--build", "--preset", args.preset, "--target", args.game], source_dir),
+        Step([sys.executable, str(PACKAGE_SCRIPT), str(build_dir), str(dist), "--game", args.game], source_dir),
     ]
     if args.deploy:
-        commands.append((["railway", "up", "--service", args.service, "--detach"], args.stage_dir or source_dir / STAGE_FOLDER))
-    return commands
+        steps.append(Step(["railway", "up", str(stage_dir), "--path-as-root", "--service", args.service, "--detach"], stage_dir, True))
+    return steps
 
 
 def format_command(command: list[str]) -> str:
@@ -97,20 +105,31 @@ def run(argv: list[str] | None = None, environ: dict | None = None, which=shutil
         print(f"build_and_deploy.py: {error}", file=sys.stderr)
         return 2
 
-    commands = plan_commands(args, source_dir)
     dist = args.dist or source_dir / DIST_FOLDER
     stage_dir = args.stage_dir or source_dir / STAGE_FOLDER
-    for command, cwd in commands:
-        if command[0] == "railway":
+    for step in plan_commands(args, source_dir, dist, stage_dir):
+        program = step.command[0]
+        if step.is_deploy:
             print(f"stage {dist} and {', '.join(STAGED_FILES)} into {stage_dir}", flush=True)
             if not args.dry_run:
-                stage(dist, stage_dir)
-        print(f"+ ({cwd}) {format_command(command)}", flush=True)
+                try:
+                    stage(dist, stage_dir)
+                except OSError as error:
+                    print(f"build_and_deploy.py: cannot stage {dist} into {stage_dir}: {error}", file=sys.stderr)
+                    return 2
+        print(f"+ ({step.cwd}) {format_command(step.command)}", flush=True)
         if args.dry_run:
             continue
-        completed = runner(command, cwd=cwd, check=False)
+        # The program the PATH search found, not its bare name: CreateProcess does not apply PATHEXT, so `railway` finds only
+        # railway.exe and not the railway.cmd that npm installs
+        command = [which(program) or program, *step.command[1:]]
+        try:
+            completed = runner(command, cwd=step.cwd, check=False)
+        except OSError as error:
+            print(f"build_and_deploy.py: cannot start `{command[0]}`: {error}", file=sys.stderr)
+            return 2
         if completed.returncode != 0:
-            print(f"build_and_deploy.py: `{command[0]}` failed with exit code {completed.returncode}", file=sys.stderr)
+            print(f"build_and_deploy.py: `{program}` failed with exit code {completed.returncode}", file=sys.stderr)
             return completed.returncode or 1
     return 0
 

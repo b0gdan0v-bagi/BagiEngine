@@ -6,7 +6,9 @@
 The build folder holds <game>.html, <game>.js, <game>.wasm and, when the game has content, <game>.data (cmake/BagiWeb.cmake). The
 output folder gets the page as index.html, the other files under their own names (the page and the script load them by those names),
 a gzip copy and, when the `brotli` module can be imported, a brotli copy of every .html, .js, .wasm and .data next to the original
-(name.gz, name.br; serve.py picks them by Accept-Encoding) and manifest.json with the size and the SHA-256 of every file.
+(name.gz, name.br; serve.py picks them by Accept-Encoding) and manifest.json with the size and the SHA-256 of every file. A file of
+an earlier run that this run does not make (another game's, a .data the game no longer has) is deleted from the output folder, so the
+folder holds what the manifest lists and nothing else of the kinds named here; other files in it are left alone.
 """
 
 import argparse
@@ -85,6 +87,16 @@ def write_compressed_copies(path: Path, brotli_module) -> dict:
     return sizes
 
 
+def remove_stale_files(out_dir: Path, kept: set) -> None:
+    """Deletes the files of `out_dir` that an earlier run could have made and this one does not: a page, script, module or package
+    (and their .gz / .br copies) whose name is not in `kept`. Anything else in the folder is not ours and stays."""
+    owned = {PAGE_SUFFIX, *REQUIRED_SUFFIXES, *OPTIONAL_SUFFIXES}
+    for path in out_dir.iterdir():
+        original = path.name.removesuffix(".gz").removesuffix(".br")
+        if path.is_file() and original not in kept and Path(original).suffix in owned:
+            path.unlink()
+
+
 def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_module="auto") -> dict:
     """Copies the build output into `out_dir` and returns the manifest (also written as manifest.json).
 
@@ -109,6 +121,7 @@ def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_modu
             sources.append((source, source.name))
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    remove_stale_files(out_dir, {name for _, name in sources})
     files = {}
     for source, name in sources:
         target = out_dir / name

@@ -12,6 +12,10 @@
 #       The content as a preloaded package: one "--preload-file <dir>@<virtual dir>" entry per config/ and assets/ folder that exists,
 #       in the order of the layers (engine, game, web: lowest priority first, as AddContentRoot in src/main.cpp). The virtual roots are
 #       BE_WEB_ENGINE_ROOT, BE_WEB_GAME_ROOT and BE_WEB_WEB_ROOT, the values of BAGI_ENGINE_ROOT / BAGI_GAME_ROOT / BAGI_WEB_ROOT.
+#   be_web_content_inputs(OUT <var> FOLDER <dir> STAMP <file>)
+#       The link inputs that make the content package follow its folder: every file of <dir> plus <file>, a stamp that holds the sorted
+#       list of those files. An edit relinks because a file is newer than the .data package; an added or a deleted file relinks because
+#       the stamp is rewritten (only when the list changes) at the configure step that CONFIGURE_DEPENDS triggers.
 #   be_web_link_options(OUT <var>)
 #       The Emscripten link options: the "-s..." settings, the HTML shell (web/shell.html), and the assertions in Debug only (as a
 #       generator expression, so the list is the same for every configuration).
@@ -53,6 +57,28 @@ function(be_web_preload_args)
         endforeach()
     endforeach()
     set(${ARG_OUT} "${_args}" PARENT_SCOPE)
+endfunction()
+
+function(be_web_content_inputs)
+    cmake_parse_arguments(ARG "" "OUT;FOLDER;STAMP" "" ${ARGN})
+    if(NOT ARG_OUT OR NOT ARG_FOLDER OR NOT ARG_STAMP)
+        message(FATAL_ERROR "be_web_content_inputs: OUT, FOLDER and STAMP are required")
+    endif()
+
+    # CONFIGURE_DEPENDS is refused in script mode (cmake -P, the pure check of this function), where nothing is built anyway
+    if(CMAKE_SCRIPT_MODE_FILE)
+        file(GLOB_RECURSE _files "${ARG_FOLDER}/*")
+    else()
+        file(GLOB_RECURSE _files CONFIGURE_DEPENDS "${ARG_FOLDER}/*")
+    endif()
+    list(SORT _files)
+    # Ninja reruns the link only when an input is newer than the output, so a deleted file leaves no trace in the inputs: the stamp
+    # carries the list. file(CONFIGURE) leaves the file alone when its content is the same. "@" is written as "%40" because the
+    # command substitutes @VAR@ in the text
+    string(JOIN "\n" _list ${_files})
+    string(REPLACE "@" "%40" _list "${_list}")
+    file(CONFIGURE OUTPUT "${ARG_STAMP}" CONTENT "${_list}\n" @ONLY NEWLINE_STYLE UNIX)
+    set(${ARG_OUT} ${_files} "${ARG_STAMP}" PARENT_SCOPE)
 endfunction()
 
 function(be_web_link_options)
@@ -106,10 +132,13 @@ function(be_web_configure_target TARGET_NAME)
         string(REPLACE "--preload-file " "" _spec "${_entry}")
         target_link_options(${TARGET_NAME} PRIVATE "SHELL:--preload-file \"${_spec}\"")
 
-        # The .data package is written at link time: a changed or added file in the folder must relink. CONFIGURE_DEPENDS makes the
-        # build re-glob, so a new file is seen without a manual configure
+        # The .data package is written at link time: an edit, an added or a deleted file in the folder must relink. CONFIGURE_DEPENDS
+        # makes the build re-glob, so a new file is seen without a manual configure (and each build pays for the glob)
         string(REGEX REPLACE "@.*$" "" _folder "${_spec}")
-        file(GLOB_RECURSE _content CONFIGURE_DEPENDS "${_folder}/*")
+        string(REGEX REPLACE "^.*@" "" _virtual "${_spec}")
+        string(MAKE_C_IDENTIFIER "${_virtual}" _id)
+        be_web_content_inputs(OUT _content FOLDER "${_folder}"
+            STAMP "${CMAKE_CURRENT_BINARY_DIR}/web-content/${TARGET_NAME}${_id}.txt")
         set_property(TARGET ${TARGET_NAME} APPEND PROPERTY LINK_DEPENDS ${_content})
     endforeach()
 

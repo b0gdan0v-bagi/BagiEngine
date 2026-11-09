@@ -17,8 +17,17 @@ import build_and_deploy
 TOOLS_WEB = Path(build_and_deploy.__file__).resolve().parent
 
 
+RAILWAY_PATH = "/usr/bin/railway"
+RAILWAY_CMD = r"C:\Users\me\AppData\Roaming\npm\railway.cmd"
+
+
 def have_railway(name: str) -> str | None:
-    return "/usr/bin/railway" if name == "railway" else None
+    return RAILWAY_PATH if name == "railway" else None
+
+
+def have_railway_cmd(name: str) -> str | None:
+    """`which` as it answers on Windows for a Railway CLI installed with npm: the .cmd file, found through PATHEXT."""
+    return RAILWAY_CMD if name == "railway" else None
 
 
 def no_tools(name: str) -> None:
@@ -28,12 +37,15 @@ def no_tools(name: str) -> None:
 class FakeRunner:
     """Records the commands instead of running them; `fail_on` is the first word of a command that exits with code 3."""
 
-    def __init__(self, fail_on: str | None = None):
+    def __init__(self, fail_on: str | None = None, cannot_start: str | None = None):
         self.calls: list[tuple[list[str], Path]] = []
         self.fail_on = fail_on
+        self.cannot_start = cannot_start
 
     def __call__(self, command, cwd, check):
         self.calls.append((list(command), Path(cwd)))
+        if command[0] == self.cannot_start:
+            raise FileNotFoundError(2, "The system cannot find the file specified")
         return SimpleNamespace(returncode=3 if command[0] == self.fail_on else 0)
 
 
@@ -74,7 +86,7 @@ class DryRunTest(DeployTestCase):
         lines = out.splitlines()
         up = [line for line in lines if "railway up" in line]
         self.assertEqual(len(up), 1)
-        self.assertIn("--service my-service --detach", up[0])
+        self.assertIn("--path-as-root --service my-service --detach", up[0])
         self.assertIn("web-deploy", up[0])
         self.assertLess(next(i for i, line in enumerate(lines) if line.startswith("stage ")), lines.index(up[0]))
 
@@ -121,6 +133,11 @@ class PreconditionTest(DeployTestCase):
 
 
 class RunTest(DeployTestCase):
+    def make_dist(self):
+        dist = self.source / "dist"
+        dist.mkdir()
+        (dist / "index.html").write_bytes(b"<html></html>")
+
     def test_a_run_without_deploy_runs_the_three_commands_in_the_source_folder(self):
         code, _, err, runner = self.run_script("--game", "BagiMatch3")
         self.assertEqual(code, 0, err)
@@ -137,8 +154,8 @@ class RunTest(DeployTestCase):
         code, _, err, runner = self.run_script("--deploy", "--service", "bagi-web", which=have_railway)
         self.assertEqual(code, 0, err)
         command, cwd = runner.calls[-1]
-        self.assertEqual(command, ["railway", "up", "--service", "bagi-web", "--detach"])
         self.assertEqual(cwd, self.source.resolve() / "build" / "web-deploy")
+        self.assertEqual(command, [RAILWAY_PATH, "up", str(cwd), "--path-as-root", "--service", "bagi-web", "--detach"])
         for name in ("Dockerfile", "railway.json", "serve.py"):
             self.assertEqual((cwd / name).read_bytes(), (TOOLS_WEB / name).read_bytes(), name)
         self.assertEqual((cwd / "dist" / "BagiMatch3.wasm").read_bytes(), b"wasm")
@@ -153,6 +170,35 @@ class RunTest(DeployTestCase):
         self.run_script("--deploy", which=have_railway)
         staged = self.source / "build" / "web-deploy" / "dist"
         self.assertEqual(sorted(path.name for path in staged.iterdir()), ["new.js"])
+
+    def test_the_program_found_on_the_path_is_the_one_that_runs(self):
+        # Windows: CreateProcess does not apply PATHEXT, so a bare `railway` would not find railway.cmd
+        self.make_dist()
+        code, out, err, runner = self.run_script("--deploy", which=have_railway_cmd)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(runner.calls[-1][0][0], RAILWAY_CMD)
+        self.assertEqual([call[0][0] for call in runner.calls[:2]], ["cmake", "cmake"])
+        self.assertIn("railway up", out)
+        self.assertNotIn("railway.cmd", out)
+
+    def test_the_deploy_step_is_staged_whatever_the_program_is_called(self):
+        self.make_dist()
+        self.run_script("--deploy", which=have_railway_cmd)
+        self.assertTrue((self.source / "build" / "web-deploy" / "serve.py").is_file())
+
+    def test_a_program_that_cannot_start_ends_the_run_with_a_message_not_a_traceback(self):
+        self.make_dist()
+        code, _, err, runner = self.run_script("--deploy", which=have_railway_cmd, runner=FakeRunner(cannot_start=RAILWAY_CMD))
+        self.assertEqual(code, 2)
+        self.assertIn("cannot start", err)
+        self.assertIn(RAILWAY_CMD, err)
+        self.assertEqual(len(runner.calls), 4)
+
+    def test_a_missing_dist_ends_the_deploy_with_a_message_not_a_traceback(self):
+        code, _, err, runner = self.run_script("--deploy", which=have_railway)
+        self.assertEqual(code, 2)
+        self.assertIn("cannot stage", err)
+        self.assertEqual(len(runner.calls), 3)
 
     def test_a_failing_step_stops_the_run_with_its_exit_code(self):
         code, _, err, runner = self.run_script("--deploy", which=have_railway, runner=FakeRunner(fail_on="cmake"))

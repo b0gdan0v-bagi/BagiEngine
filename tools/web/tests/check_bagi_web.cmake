@@ -44,6 +44,34 @@ set(expected
     "--preload-file ${CHECK_DIR}/game/config@/bagi/game/config")
 check_equal("preload, no game assets, no web layer" "${preload}" "${expected}")
 
+# --- be_web_content_inputs: the files of a folder plus a stamp with the sorted list of them, rewritten only when the list changes
+set(content "${CHECK_DIR}/content")
+set(stamp "${CHECK_DIR}/stamps/content.txt")
+file(WRITE "${content}/b.txt" "b")
+file(WRITE "${content}/sub/a@x@.txt" "a")
+be_web_content_inputs(OUT inputs FOLDER "${content}" STAMP "${stamp}")
+check_equal("content inputs" "${inputs}" "${content}/b.txt;${content}/sub/a@x@.txt;${stamp}")
+file(READ "${stamp}" stamp_text)
+check_equal("stamp text" "${stamp_text}" "${content}/b.txt\n${content}/sub/a%40x%40.txt\n")
+
+# The same list: the stamp is not touched (the time is read to the second, so wait longer than that)
+file(TIMESTAMP "${stamp}" stamp_time "%Y-%m-%d %H:%M:%S")
+execute_process(COMMAND ${CMAKE_COMMAND} -E sleep 1.5)
+be_web_content_inputs(OUT inputs FOLDER "${content}" STAMP "${stamp}")
+file(TIMESTAMP "${stamp}" stamp_time_again "%Y-%m-%d %H:%M:%S")
+check_equal("stamp untouched when the list is the same" "${stamp_time_again}" "${stamp_time}")
+
+# An added file and a deleted one both change the stamp (a deletion is the case that no input of the link shows)
+file(WRITE "${content}/c.txt" "c")
+be_web_content_inputs(OUT inputs FOLDER "${content}" STAMP "${stamp}")
+file(READ "${stamp}" stamp_added)
+check_equal("stamp, file added" "${stamp_added}" "${content}/b.txt\n${content}/c.txt\n${content}/sub/a%40x%40.txt\n")
+file(REMOVE "${content}/b.txt" "${content}/c.txt")
+be_web_content_inputs(OUT inputs FOLDER "${content}" STAMP "${stamp}")
+file(READ "${stamp}" stamp_removed)
+check_equal("stamp, files deleted" "${stamp_removed}" "${content}/sub/a%40x%40.txt\n")
+check_equal("content inputs after the deletion" "${inputs}" "${content}/sub/a@x@.txt;${stamp}")
+
 # --- be_web_link_options: the same list for every configuration, the assertions behind a generator expression
 be_web_link_options(OUT options)
 foreach(required -sALLOW_MEMORY_GROWTH=1 -sMIN_WEBGL_VERSION=1 -sMAX_WEBGL_VERSION=2 -sEXIT_RUNTIME=1)

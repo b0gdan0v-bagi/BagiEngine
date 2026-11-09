@@ -228,11 +228,16 @@ class RoutingTest(ServerTestCase):
         self.assertEqual(self.request("/link.txt").status, 404)
 
     def test_other_methods_are_405(self):
-        for method in ("POST", "PUT", "DELETE"):
+        for method in ("POST", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE", "FOO"):
             with self.subTest(method):
                 response = self.request("/index.html", method=method)
                 self.assertEqual(response.status, 405)
                 self.assertEqual(response.headers["allow"], "GET, HEAD")
+
+    def test_the_server_header_does_not_name_the_python_version(self):
+        server = self.request("/healthz").headers["server"]
+        self.assertIn("BagiWebServe", server)
+        self.assertNotIn("Python", server)
 
     def test_several_requests_on_one_connection_work(self):
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)

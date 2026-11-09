@@ -65,10 +65,10 @@ def content_type_of(name: str) -> str:
 
 
 def resolve_path(root: Path, url_path: str) -> Path | None:
-    """The file below `root` that the URL path names, or None for anything that leaves it (.., a backslash, a NUL, a symlink out).
+    """The file below `root` that the URL path names (the path of the request, query cut off already), or None for anything that leaves it (.., a backslash, a NUL, a symlink out).
 
     The path is cleaned segment by segment before it touches the file system; the final check also catches a link that points out."""
-    path = unquote(urlsplit(url_path).path)
+    path = unquote(url_path)
     if "\0" in path or "\\" in path:
         return None
     segments = [segment for segment in path.split("/") if segment not in ("", ".")]
@@ -125,6 +125,8 @@ class StaticHandler(BaseHTTPRequestHandler):
     quiet = False
     protocol_version = "HTTP/1.1"
     server_version = "BagiWebServe"
+    # The Server header names the program and not the Python version
+    sys_version = ""
 
     def log_message(self, format, *args):
         if not self.quiet:
@@ -148,7 +150,11 @@ class StaticHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    do_POST = do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_unsupported
+    def __getattr__(self, name):
+        # Every method other than GET and HEAD (TRACE and CONNECT included, and a made-up one) is 405, not the 501 page of the base class
+        if name.startswith("do_"):
+            return self.do_unsupported
+        raise AttributeError(name)
 
     def serve(self, send_body: bool):
         url_path = urlsplit(self.path).path
@@ -211,7 +217,7 @@ class StaticHandler(BaseHTTPRequestHandler):
             if send_body:
                 try:
                     shutil.copyfileobj(stream, self.wfile, COPY_CHUNK)
-                except (BrokenPipeError, ConnectionResetError):
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     self.close_connection = True
 
     def send_text(self, status: HTTPStatus, text: str, send_body: bool):
