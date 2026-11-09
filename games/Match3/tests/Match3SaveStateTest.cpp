@@ -26,6 +26,15 @@ namespace BECore::Match3::Tests {
             return a.seed == b.seed && a.score == b.score && a.board == b.board && a.rng == b.rng;
         }
 
+        /// The text of a generator whose 624 words are zero but the first, which is @p first: the state that gives only zeros when @p first is below 2^31
+        eastl::string ZeroGeneratorText(uint32_t first) {
+            eastl::string text = Format("{}", first);
+            for (size_t word = 1; word < std::mt19937::state_size; ++word) {
+                text.append(" 0");
+            }
+            return text;
+        }
+
         /// Reset to the seed and play two swaps, so that the score and the generator have moved
         void PlayTwoSwaps(Match3GameModel& model, uint32_t seed) {
             model.Reset(seed);
@@ -43,11 +52,10 @@ namespace BECore::Match3::Tests {
         EXPECT_EQ(state.seed, 11u);
         EXPECT_EQ(state.score, model.GetScore());
         ASSERT_EQ(state.board.size(), 64u);
-        constexpr char kLetters[] = ".ROYGBP";
         for (int row = 0; row < kBoardSize; ++row) {
             for (int col = 0; col < kBoardSize; ++col) {
                 const char letter = state.board[static_cast<size_t>(row * kBoardSize + col)];
-                EXPECT_EQ(letter, kLetters[static_cast<size_t>(model.GetCellAt(Cell{static_cast<int8_t>(col), static_cast<int8_t>(row)}))]);
+                EXPECT_EQ(letter, kGemLetters[static_cast<size_t>(model.GetCellAt(Cell{static_cast<int8_t>(col), static_cast<int8_t>(row)}))]);
                 EXPECT_NE(letter, '.');
             }
         }
@@ -139,6 +147,8 @@ namespace BECore::Match3::Tests {
             {"generator text with a tail", [](Match3SaveState& s) { s.rng.append(" 1"); }},
             {"generator number out of range", [](Match3SaveState& s) { s.rng.insert(0, "99999999999"); }},
             {"generator text cut short", [](Match3SaveState& s) { s.rng.resize(s.rng.size() / 2); }},
+            {"all-zero generator", [](Match3SaveState& s) { s.rng = ZeroGeneratorText(0); }},
+            {"generator of zeros after a small first word", [](Match3SaveState& s) { s.rng = ZeroGeneratorText(1); }},
         };
 
         for (const Case& c : cases) {

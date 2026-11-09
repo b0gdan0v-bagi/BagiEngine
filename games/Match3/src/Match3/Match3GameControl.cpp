@@ -4,10 +4,6 @@ namespace BECore::Match3 {
 
     namespace {
 
-        /// One letter per GemType, in enum order; '.' is an empty cell
-        constexpr char kGemLetters[] = ".ROYGBP";
-        static_assert(sizeof(kGemLetters) - 1 == static_cast<size_t>(kGemTypeCount) + 1, "one letter per gem type and one for None");
-
         constexpr eastl::string_view kStatusPlaying = "playing";
         constexpr eastl::string_view kStatusNoMoves = "no_moves";
 

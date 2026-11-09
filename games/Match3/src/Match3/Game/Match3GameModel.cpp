@@ -7,16 +7,12 @@ namespace BECore::Match3 {
 
     namespace {
 
-        /// One letter per GemType, in enum order, as in the control API's `get_state` (Match3GameControl.cpp); '.' is an empty cell, which a save never has
-        constexpr char kBoardLetters[] = ".ROYGBP";
-        static_assert(sizeof(kBoardLetters) - 1 == static_cast<size_t>(kGemTypeCount) + 1, "one letter per gem type and one for None");
-
         constexpr size_t kBoardCellCount = static_cast<size_t>(kBoardSize) * static_cast<size_t>(kBoardSize);
 
-        /// The gem of a board letter, or None for '.' and for any other character
+        /// The gem of a board letter, or None for '.' (an empty cell, which a save never has) and for any other character
         GemType GemOfLetter(char letter) noexcept {
-            for (size_t index = 1; index < sizeof(kBoardLetters) - 1; ++index) {
-                if (kBoardLetters[index] == letter) {
+            for (size_t index = 1; index < sizeof(kGemLetters) - 1; ++index) {
+                if (kGemLetters[index] == letter) {
                     return static_cast<GemType>(index);
                 }
             }
@@ -44,6 +40,17 @@ namespace BECore::Match3 {
                 }
             }
             return inNumber && (numbers == std::mt19937::state_size || numbers == std::mt19937::state_size + 1);
+        }
+
+        /// True for a state that gives only zeros for ever (all 19937 bits zero; the low 31 bits of the oldest word do not count). Every refill would then be the same gem and a cascade would never
+        /// end. Exact and independent of the library: tempering is a bijection, so state_size zeros in a row mean a zero state, which stays zero
+        bool IsDegenerateGenerator(std::mt19937 rng) noexcept {
+            for (size_t draw = 0; draw < std::mt19937::state_size; ++draw) {
+                if (rng() != 0) {
+                    return false;
+                }
+            }
+            return true;
         }
 
     }  // namespace
@@ -116,7 +123,7 @@ namespace BECore::Match3 {
         state.board.reserve(kBoardCellCount);
         for (int8_t row = 0; row < kBoardSize; ++row) {
             for (int8_t col = 0; col < kBoardSize; ++col) {
-                state.board.push_back(kBoardLetters[static_cast<size_t>(_board.Get(col, row))]);
+                state.board.push_back(kGemLetters[static_cast<size_t>(_board.Get(col, row))]);
             }
         }
 
@@ -155,13 +162,16 @@ namespace BECore::Match3 {
         std::istringstream in(rngText);
         std::mt19937 rng;
         in >> rng;
-        std::ostringstream written;
         if (!in) {
             return std::unexpected(eastl::string("the random generator text cannot be read"));
         }
+        std::ostringstream written;
         written << rng;
         if (written.str() != rngText) {
             return std::unexpected(eastl::string("the random generator text is not the state of a generator (not the one that operator<< writes)"));
+        }
+        if (IsDegenerateGenerator(rng)) {
+            return std::unexpected(eastl::string("the random generator is degenerate: it gives only zeros"));
         }
 
         _board = board;
