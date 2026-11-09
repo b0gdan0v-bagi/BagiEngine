@@ -331,6 +331,47 @@ def limit_hit(session: dict | None) -> dict | None:
     return None
 
 
+def stopped_file() -> Path:
+    """The sessions `stop` ended: `{session id: ms since the epoch}`, outside every repository."""
+    return claude_home() / "todo" / "stopped-sessions.json"
+
+
+def read_stopped() -> dict:
+    try:
+        marks = json.loads(stopped_file().read_text())
+    except (OSError, ValueError):
+        return {}
+    return marks if isinstance(marks, dict) else {}
+
+
+def mark_stopped(session: dict) -> None:
+    """Remember that `stop` ended this session, so `list` says stopped and not done (`claude agents` shows a stopped
+    session as finished). The newest STOPPED_KEEP are kept; a mark that cannot be written is skipped."""
+    ident = session.get("id") or session.get("sessionId")
+    if not ident:
+        return
+    marks = read_stopped()
+    marks[str(ident)] = int(time.time() * 1000)
+    newest = dict(sorted(((k, v) for k, v in marks.items() if isinstance(v, (int, float))), key=lambda kv: kv[1])[-STOPPED_KEEP:])
+    path = stopped_file()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(newest))
+        temporary.replace(path)
+    except OSError:
+        pass
+
+
+def stopped_at(session: dict | None) -> int | None:
+    """When `stop` ended this session (ms since the epoch), or None: it is running, or it ended by itself. A session
+    started or resumed afterwards has another id, so the mark does not follow it."""
+    if not session or session.get("state") != "done":
+        return None
+    when = read_stopped().get(str(session.get("id") or session.get("sessionId")))
+    return int(when) if isinstance(when, (int, float)) else None
+
+
 def is_waiting(session: dict | None) -> bool:
     """A session that waits for the person (`claude agents`): an interactive one says status `waiting`, a background one state
     `blocked` (a permission, a question, or a run that ended asking the owner something)."""
@@ -355,6 +396,11 @@ def describe(session: dict | None) -> str:
     if limit:
         resets = f", resets {limit['resets']}" if limit["resets"] else ""
         return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}, stopped by the usage limit{resets}: worker.py relaunch after the reset"
+    stopped = stopped_at(session)
+    if stopped is not None:
+        minutes = int((time.time() * 1000 - stopped) / 60000)
+        when = f"{minutes // 60} h {minutes % 60} min" if minutes >= 60 else f"{minutes} min"
+        return f"{session.get('name') or session.get('id')}: stopped by worker.py stop {when} ago (start or relaunch to go on)"
     waiting = f", waits for you ({session.get('waitingFor') or 'input'}): claude attach {session.get('name') or session.get('id')}" if is_waiting(session) else ""
     return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}{waiting}"
 
@@ -681,11 +727,16 @@ def cmd_merge(layout: Layout, args) -> None:
 ACTIVITY_EVENTS = 8
 ACTIVITY_AGENT_MINUTES = 15  # an agent whose transcript changed within this time counts as running
 TAIL_BYTES = 768 * 1024
+STOPPED_KEEP = 50  # the stop marks kept (stopped_file)
 REPORT_TOOLS = ("SubagentHandback", "SendMessage")  # the tool an agent hands its final report back with
 
 
+def claude_home() -> Path:
+    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+
+
 def projects_dir() -> Path:
-    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "projects"
+    return claude_home() / "projects"
 
 
 def transcript_of(cwd: str, session_id: str) -> Path:
@@ -920,6 +971,7 @@ def list_json(layout: Layout, args) -> dict:
             "active": is_active(session),
             "waiting": is_waiting(session) and limited is None,
             "limited": limited,
+            "stopped": stopped_at(session),
             "activity": session_activity(session) if args.activity else None,
             "usage": session_usage(session) if args.usage else None,
             "entry": entry,
@@ -1099,6 +1151,8 @@ def cmd_stop(layout: Layout, args) -> None:
             continue
         ident = session.get("id") or session.get("sessionId")
         result = subprocess.run([args.claude, "stop", str(ident)], capture_output=True, text=True)
+        if result.returncode == 0:
+            mark_stopped(session)
         print(f"w{k}: {(result.stdout + result.stderr).strip() or f'exit code {result.returncode}'}")
     print("A loop stopped in the middle leaves its entry `in progress` with its branch; the next /todo-loop in that worker continues it.")
 

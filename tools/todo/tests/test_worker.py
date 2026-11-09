@@ -133,6 +133,7 @@ def fake_claude(tmp_path: Path, monkeypatch) -> tuple[Path, Path, Path]:
     sessions = tmp_path / "sessions.json"
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(log))
     monkeypatch.setenv("FAKE_CLAUDE_SESSIONS", str(sessions))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))  # the transcripts and the stop marks
     monkeypatch.delenv("CMAKE_BUILD_PARALLEL_LEVEL", raising=False)
     return script, log, sessions
 
@@ -192,6 +193,37 @@ def test_stop_and_list_find_the_session_of_a_worker(game: Path, fake_claude, cap
     assert "todo-w1: working/idle" in out and "no session" in out
     assert worker.main(["stop", "--claude", str(script)]) == 0
     assert log.read_text().splitlines() == ["stop abc"]
+
+
+def test_list_says_stopped_for_a_session_that_stop_ended_and_done_for_one_that_ended_by_itself(game: Path, fake_claude, capsys):
+    script, _log, sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    workers = game.parent / "game.workers"
+    sessions.write_text(json.dumps([session(workers / "w1", "working", "abc", "busy"), session(workers / "w2", "done", "def")]))
+    assert worker.main(["stop", "1", "--claude", str(script)]) == 0
+    # claude agents lists a stopped session as finished, like one that ended by itself
+    sessions.write_text(json.dumps([session(workers / "w1", "done", "abc"), session(workers / "w2", "done", "def")]))
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    rows = json.loads(capsys.readouterr().out)["workers"]
+    assert isinstance(rows[0]["stopped"], int) and rows[1]["stopped"] is None
+    assert worker.main(["list", "--claude", str(script)]) == 0
+    lines = {line.split()[0]: line for line in capsys.readouterr().out.splitlines() if line.startswith("w")}
+    assert "stopped by worker.py stop 0 min ago" in lines["w1"] and ": done" not in lines["w1"]
+    assert ": done/" in lines["w2"]
+    # a session started afterwards has another id: the mark does not follow it
+    sessions.write_text(json.dumps([session(workers / "w1", "done", "new")]))
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    assert json.loads(capsys.readouterr().out)["workers"][0]["stopped"] is None
+
+
+def test_the_stop_marks_keep_only_the_newest(fake_claude, monkeypatch):
+    monkeypatch.setattr(worker, "STOPPED_KEEP", 3)
+    for k in range(5):
+        worker.mark_stopped({"id": f"s{k}"})
+    assert sorted(worker.read_stopped()) == ["s2", "s3", "s4"]
+    worker.stopped_file().write_text("not json")
+    assert worker.read_stopped() == {} and worker.stopped_at({"id": "s4", "state": "done"}) is None
 
 
 def test_start_passes_the_session_that_gets_the_reports(game: Path, fake_claude):

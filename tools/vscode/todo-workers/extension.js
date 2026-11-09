@@ -95,6 +95,7 @@ function sessionWord(worker) {
     const s = worker.session;
     if (!s) return "no session";
     if (worker.limited) return "limited";
+    if (worker.stopped) return "stopped"; // worker.py stop ended it (its entry stays in progress)
     if (s.state === "done") return "done";
     if (worker.waiting) return "waiting";
     return s.status === "busy" ? "busy" : "idle";
@@ -649,7 +650,7 @@ function activate(context) {
                     const when = worker.limited.resets ? `, resets ${worker.limited.resets}` : "";
                     vscode.window.showWarningMessage(`Todo: ${worker.name} was stopped by the usage limit${when}. Relaunch it after the reset.`, "Relaunch").then((pick) => pick && relaunch(workerOf(worker.k) || worker));
                 }
-                if (previous.active.get(worker.name) && !worker.active && !worker.limited) {
+                if (previous.active.get(worker.name) && !worker.active && !worker.limited && !worker.stopped) {
                     vscode.window.showInformationMessage(`Todo: the session of ${worker.name} has ended`, "Show log").then((pick) => pick && openSessionTerminal(worker, "logs"));
                 }
             }
@@ -675,6 +676,7 @@ function activate(context) {
         if (count("limited")) parts.push(`${count("limited")} hit the limit`);
         parts.push(`${count("busy")} busy`);
         if (count("idle")) parts.push(`${count("idle")} idle`);
+        if (count("stopped")) parts.push(`${count("stopped")} stopped`);
         parts.push(`${state.review.length} review`);
         status.text = `$(server-process) todo ${parts.join(" · ")}`;
         const lines = state.workers.map((w) => `${w.name}: ${w.entry ? w.entry.id : "no entry"} (${sessionWord(w)})`);

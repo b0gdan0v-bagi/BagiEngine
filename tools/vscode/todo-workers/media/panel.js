@@ -6,6 +6,11 @@
     let payload = { loading: true };
     const saved = vscode.getState() || {};
     const openSteps = new Set(saved.openSteps || []);
+    const collapsed = new Set(saved.collapsed || []); // worker cards folded to their status lines
+
+    function save() {
+        vscode.setState({ openSteps: [...openSteps], collapsed: [...collapsed] });
+    }
 
     function el(tag, className, text) {
         const node = document.createElement(tag);
@@ -45,6 +50,9 @@
         if (worker.limited) {
             word = "usage limit";
             kind = "limited";
+        } else if (worker.stopped) {
+            word = "stopped";
+            kind = "stopped";
         } else if (s && s.state === "done") {
             word = "done";
             kind = "done";
@@ -61,11 +69,12 @@
         // A finished session can stay in `claude agents` for hours: its age is no run time, so it shows when
         // its last step was (the transcript), and a running one how long it has run.
         const ended = kind === "done" && worker.activity ? ago(worker.activity.updated) : "";
-        const text = kind === "limited" ? (worker.limited.resets ? `usage limit · resets ${worker.limited.resets}` : "usage limit") : kind === "done" ? (ended ? `done · ended ${ended}` : "done") : s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word;
+        const text = kind === "stopped" ? `stopped · ${ago(worker.stopped)}` : kind === "limited" ? (worker.limited.resets ? `usage limit · resets ${worker.limited.resets}` : "usage limit") : kind === "done" ? (ended ? `done · ended ${ended}` : "done") : s && s.startedAt ? `${word} · ${duration(s.startedAt)}` : word;
         const badge = el("span", `badge ${kind}`, text);
         if (kind === "idle") badge.title = "Idle: waiting for an agent of its own (a reviewer, a build)";
         if (kind === "waiting") badge.title = `The loop waits for your answer (${(s && s.waitingFor) || "input needed"}): Answer opens it`;
         if (kind === "limited") badge.title = `${worker.limited.text}. Relaunch continues the loop after the reset`;
+        if (kind === "stopped") badge.title = "worker.py stop ended this session; its entry stays in progress on its branch: Relaunch or Fast start continues it";
         if (kind === "done") badge.title = "The session has finished; Log shows it, Update and Fast start begin anew";
         return badge;
     }
@@ -163,9 +172,17 @@
 
     function workerCard(worker) {
         const entry = worker.entry;
-        const card = el("section", worker.waiting ? "card waiting" : worker.limited ? "card limited" : "card");
+        const folded = collapsed.has(worker.name);
+        const card = el("section", (worker.waiting ? "card waiting" : worker.limited ? "card limited" : "card") + (folded ? " collapsed" : ""));
         const top = el("div", "card-top");
-        top.append(el("span", "name", worker.name), el("span", "entry", entry ? entry.id : "no entry"));
+        const fold = el("button", "fold", folded ? "\u25B8" : "\u25BE");
+        fold.title = folded ? "Expand: every detail of the worker" : "Collapse: only the status lines";
+        fold.addEventListener("click", () => {
+            folded ? collapsed.delete(worker.name) : collapsed.add(worker.name);
+            save();
+            render();
+        });
+        top.append(fold, el("span", "name", worker.name), el("span", "entry", entry ? entry.id : "no entry"));
         if (entry) top.append(el("span", `area ${entry.area}`, entry.area));
         top.append(sessionBadge(worker));
         card.appendChild(top);
@@ -186,6 +203,22 @@
                 button("Relaunch", { cmd: "relaunch", worker: worker.k }, "worker.py relaunch <k>: claude --bg --resume of this session with \"go on where the loop stopped\" (press it after the reset)", "primary")
             );
             card.appendChild(ask);
+        }
+        if (folded) {
+            // a few lines: the top, the title, the review note or the plan, what the loop said last
+            if (entry && entry.status === "review") card.appendChild(el("div", "note ok", "in review" + (entry.statusNote ? `: ${entry.statusNote}` : "")));
+            else if (entry) {
+                const bar = progress(entry);
+                if (bar) card.appendChild(bar);
+            }
+            const events = (worker.activity && worker.activity.events) || [];
+            const said = [...events].reverse().find((e) => e.kind === "say");
+            if (said) {
+                const now = el("div", "now");
+                now.append(el("span", "label", worker.active ? "Now" : "Last"), el("span", "time", ago(said.time)), el("div", "said", plain(said.text)));
+                card.appendChild(now);
+            }
+            return card;
         }
         if (entry) {
             if (entry.status === "review") card.appendChild(el("div", "note ok", "in review" + (entry.statusNote ? `: ${entry.statusNote}` : "")));
@@ -220,7 +253,7 @@
                 details.open = openSteps.has(worker.name);
                 details.addEventListener("toggle", () => {
                     details.open ? openSteps.add(worker.name) : openSteps.delete(worker.name);
-                    vscode.setState({ openSteps: [...openSteps] });
+                    save();
                 });
                 details.appendChild(el("summary", "", `Last steps (${events.length}) · updated ${ago(activity.updated)}`));
                 [...events].reverse().forEach((e) => details.appendChild(step(e)));
@@ -297,6 +330,18 @@
         const info = el("span", "muted", payload.refreshing ? "refreshing ..." : payload.at ? `updated ${ago(payload.at)}` : "");
         const limited = payload.state ? payload.state.workers.filter((w) => w.limited).length : 0;
         if (limited) bar.append(button(`Relaunch all (${limited})`, { cmd: "relaunchAll" }, "worker.py relaunch: continue every session the usage limit stopped (press it after the reset)", "primary"));
+        const names = payload.state ? payload.state.workers.map((w) => w.name) : [];
+        if (names.length) {
+            const all = names.every((n) => collapsed.has(n));
+            const toggle = el("button", "", all ? "Expand all" : "Collapse all");
+            toggle.title = all ? "every detail of every worker" : "every worker card folded to its status lines";
+            toggle.addEventListener("click", () => {
+                names.forEach((n) => (all ? collapsed.delete(n) : collapsed.add(n)));
+                save();
+                render();
+            });
+            bar.append(toggle);
+        }
         bar.append(info, button("Todo list", { cmd: "todoList" }, "the entries of the todo store in a tab of the editor"), button("Refresh", { cmd: "refresh" }), button("Settings", { cmd: "settings" }));
         root.appendChild(bar);
 
