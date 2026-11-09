@@ -16,6 +16,8 @@ namespace BECore {
      * - Отложенные задачи (delayed tasks)
      * - Задачи для главного потока
      * - Интеграцию с ThreadPool
+     * - Cooperative frame budget of a single-thread build (inline ThreadPool): a background coroutine that
+     *   yields is parked in a queue of its own and resumed by ProcessBackgroundSlices for a set time per frame
      */
     class TaskScheduler {
     public:
@@ -100,6 +102,49 @@ namespace BECore {
          */
         [[nodiscard]] size_t GetDelayedTaskCount() const;
 
+        /**
+         * Schedules the continuation of a coroutine that yielded (YieldAwaiter, YieldIfNeededAwaiter).
+         * With an inline pool, called from a background job: the continuation joins the cooperative queue and
+         * is resumed by ProcessBackgroundSlices. Otherwise exactly Schedule(task, TaskPriority::Low, threadType),
+         * so a main-thread yield resumes in the next main-thread drain and a yield on a worker pool goes back
+         * to the pool.
+         */
+        void ScheduleYielded(TaskQueue::TaskFunc task, ThreadType threadType);
+
+        /**
+         * Resumes the parked continuations of background jobs (FIFO) until the queue is empty or the budget is
+         * spent. A budget of zero or less still resumes one slice, so a parked task is never starved. A slice
+         * that yields again is resumed again in the same call while time remains (round robin). The call
+         * overruns the budget by at most one slice: a coroutine cannot be preempted, only the time between
+         * two of its own checks counts. While it runs, ShouldYield() compares the budget clock with the
+         * deadline of this call; after it the window counts as spent until the next call.
+         * A no-op (returns 0) unless the pool is inline and the scheduler is not stopped. Call it from the
+         * single thread, once per frame, after the main-thread tasks (TaskManager::Update does).
+         * @param budget Time for this call, by the budget clock
+         * @return Number of slices run
+         */
+        size_t ProcessBackgroundSlices(Duration budget);
+
+        /**
+         * True when the running background job should suspend (co_await YieldIfNeeded()): the pool is inline,
+         * the caller is a background job and the budget window is spent. False on a worker pool (no shared
+         * state is read, so it is safe from any thread), in a main-thread job, outside any job, and before the
+         * first frame (the window is open until the first ProcessBackgroundSlices).
+         */
+        [[nodiscard]] bool ShouldYield() const;
+
+        /**
+         * Replaces the clock of the budget (ProcessBackgroundSlices and ShouldYield only; delayed tasks keep
+         * Clock::now()). nullptr restores steady_clock::now. For tests: a fake clock makes them independent
+         * of the wall time.
+         */
+        void SetBudgetClock(TimePoint (*now)());
+
+        /**
+         * Returns the number of parked continuations in the cooperative queue.
+         */
+        [[nodiscard]] size_t GetBackgroundSliceCount() const;
+
     private:
         struct DelayedTask {
             TaskQueue::TaskFunc task;
@@ -125,6 +170,9 @@ namespace BECore {
 
         void DispatchToThreadPool(TaskQueue::TaskFunc task, TaskPriority priority);
 
+        /// Submits @p task to the inline pool wrapped so that it counts as a background job while it runs.
+        void SubmitInlineBackgroundJob(TaskQueue::TaskFunc task);
+
         ThreadPool* _threadPool = nullptr;
 
         // Очередь главного потока (с приоритетами)
@@ -137,6 +185,16 @@ namespace BECore {
         eastl::priority_queue<DelayedTask> _gameDelayedTasks;
         Duration _gameTime{};
         mutable std::mutex _delayedMutex;
+
+        // Cooperative queue (inline pool only): continuations of background jobs that yielded
+        eastl::deque<TaskQueue::TaskFunc> _backgroundSlices;
+        mutable std::mutex _backgroundMutex;
+
+        // Inline pool only, one thread: true while a background job runs on the stack
+        bool _inBackgroundJob = false;
+        // TimePoint max: no frame yet (never yield); now + budget: a drain runs; TimePoint min: spent
+        TimePoint _sliceDeadline = (TimePoint::max)();
+        TimePoint (*_budgetNow)() = &Clock::now;
 
         bool _stopped = false;
     };
