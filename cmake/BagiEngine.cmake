@@ -24,6 +24,11 @@ get_filename_component(BAGI_ENGINE_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Vulkan, the control socket server, static SDL, single thread; forced for the web (Emscripten)
+include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
+# The Emscripten link options, the content package and be_web_configure_target(); only used when ENGINE_TARGET_WEB
+include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)
+
 # =============================================================================
 # External Dependencies
 # =============================================================================
@@ -33,13 +38,24 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "Configuring EA Libraries (vendored)...")
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/EABase)
 
-# SDL3 - Shared library
+# SDL3 - shared library, static with ENGINE_STATIC_SDL (cmake/BagiPlatformOptions.cmake)
 message(STATUS "Configuring SDL3...")
-set(SDL_SHARED ON CACHE BOOL "Build SDL3 as shared library" FORCE)
-set(SDL_STATIC OFF CACHE BOOL "Build SDL3 as static library" FORCE)
+if(ENGINE_STATIC_SDL)
+    set(SDL_SHARED OFF CACHE BOOL "Build SDL3 as shared library" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "Build SDL3 as static library" FORCE)
+else()
+    set(SDL_SHARED ON CACHE BOOL "Build SDL3 as shared library" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "Build SDL3 as static library" FORCE)
+endif()
 set(SDL_TEST OFF CACHE BOOL "Build SDL3 tests" FORCE)
 set(SDL_TESTS OFF CACHE BOOL "Build SDL3 tests" FORCE)
 add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL)
+
+# The vendored imgui CMake file and our modules link the name SDL3-shared; a static SDL keeps it as a shim
+if(ENGINE_STATIC_SDL)
+    add_library(SDL3-shared INTERFACE)
+    target_link_libraries(SDL3-shared INTERFACE SDL3::SDL3-static)
+endif()
 
 # SDL3_image
 message(STATUS "Configuring SDL3_image...")
@@ -47,6 +63,13 @@ set(SDLIMAGE_AVIF OFF CACHE BOOL "" FORCE)
 set(SDLIMAGE_VENDORED ON CACHE BOOL "" FORCE)
 set(SDLIMAGE_TESTS OFF CACHE BOOL "" FORCE)
 set(SDLIMAGE_SAMPLES OFF CACHE BOOL "" FORCE)
+if(ENGINE_STATIC_SDL)
+    # SDL_image follows BUILD_SHARED_LIBS (its own cmake_dependent_option keeps a cache value that is set)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build the library as a shared library" FORCE)
+else()
+    # Back to SDL_image's own default, in case this build folder was configured with ENGINE_STATIC_SDL=ON before
+    set(BUILD_SHARED_LIBS ON CACHE BOOL "Build the library as a shared library" FORCE)
+endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL_image)
 
 # Vulkan-Headers (vendored, include-only - provides Vulkan::Headers target)
@@ -70,6 +93,12 @@ target_include_directories(imgui PRIVATE ${BAGI_ENGINE_DIR}/external/SDL/include
 set_target_properties(SDL3-shared PROPERTIES FOLDER "External")
 set_target_properties(fmt PROPERTIES FOLDER "External")
 
+# MSVC: fmt rejects a non-UTF-8 execution charset (static_assert in fmt/base.h). The vendored libraries are
+# added before the global compile options below, so fmt gets /utf-8 here; PUBLIC carries it to every user.
+if(MSVC)
+    target_compile_options(fmt PUBLIC /utf-8)
+endif()
+
 # Export compile commands for IntelliSense and other tools
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -87,6 +116,11 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     message(STATUS "Compiler: MSVC ${CMAKE_CXX_COMPILER_VERSION}")
     add_compile_definitions(COMPILER_MSVC)
+    # Sources are UTF-8 (fmt needs it too, see the fmt target above)
+    add_compile_options(/utf-8)
+    # The conforming preprocessor: the traditional one passes __VA_ARGS__ on as ONE argument, so
+    # ASSERT(expr, "msg") picked the one-argument form and tested !(expr, "msg"), which never fires
+    add_compile_options(/Zc:preprocessor)
 else()
     message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 endif()
@@ -130,8 +164,21 @@ if(ENGINE_BUILD_TESTS)
     set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
     # MSVC: gtest defaults to the static CRT (/MT) while the engine uses /MD
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    # SDL_image turns the cache BUILD_SHARED_LIBS on; gtest would follow and become a gtest.dll that nobody copies
+    # next to the test executables (Windows: they do not start, 0xc0000135). A normal variable hides the cache
+    # one for gtest alone, unset() shows it again.
+    set(BUILD_SHARED_LIBS OFF)
     add_subdirectory(${BAGI_ENGINE_DIR}/external/googletest)
+    unset(BUILD_SHARED_LIBS)
     set_target_properties(gtest PROPERTIES FOLDER "External")
+    # MSVC: the global /EHs-c- above overrides gtest's own -EHsc, so its STL headers (with exceptions, as in
+    # every target here) warn C4530, which gtest's /WX turns into an error. The engine and the tests compile
+    # the same way with the warning; silence it for gtest only. (_HAS_EXCEPTIONS=0 everywhere is not the fix:
+    # EASTL then switches RTTI off, EASTL_RTTI_ENABLED 0, and eastl::dynamic_pointer_cast is gone.)
+    if(MSVC AND ENGINE_NO_EXCEPTIONS)
+        target_compile_options(gtest PRIVATE /wd4530)
+        target_compile_options(gtest_main PRIVATE /wd4530)
+    endif()
 endif()
 
 # =============================================================================
@@ -150,7 +197,10 @@ endif()
 # =============================================================================
 # Platform Detection
 # =============================================================================
-if(WIN32)
+if(ENGINE_TARGET_WEB)
+    # PLATFORM_WEB is defined in cmake/BagiPlatformOptions.cmake; Emscripten is not Linux, so it comes before the chain
+    message(STATUS "Platform: Web")
+elseif(WIN32)
     add_compile_definitions(PLATFORM_WINDOWS)
     message(STATUS "Platform: Windows")
 elseif(APPLE)
@@ -176,7 +226,9 @@ else()
     set(COMPILER_NAME "Unknown")
 endif()
 
-if(WIN32)
+if(ENGINE_TARGET_WEB)
+    set(PLATFORM_NAME "Web")
+elseif(WIN32)
     set(PLATFORM_NAME "Windows")
 elseif(APPLE)
     set(PLATFORM_NAME "macOS")
@@ -239,7 +291,8 @@ endif()
 #                   So a Debug build has the editor and a Release build does not.
 #   ON:             the editor is built (also in Release).
 #   OFF:            the editor is not built. A Debug build ignores it (WARNING, the editor is built anyway):
-#                   Debug builds always include the editor.
+#                   Debug builds always include the editor. The web build is the exception: it has no editor in any
+#                   configuration.
 # A multi-config generator (Visual Studio, Ninja Multi-Config) picks the configuration at build time, but the sources
 # are picked now, so there AUTO means ON; use -DBE_WITH_EDITOR=OFF for a build without the editor.
 # The result is the variable BE_EDITOR_ENABLED (used by src/CMakeLists.txt and tests/CMakeLists.txt) and the
@@ -254,7 +307,7 @@ if(BE_WITH_EDITOR_VALUE STREQUAL "ON")
     set(BE_EDITOR_ENABLED TRUE)
 elseif(BE_WITH_EDITOR_VALUE STREQUAL "OFF")
     set(BE_EDITOR_ENABLED FALSE)
-    if(NOT BE_IS_MULTI_CONFIG AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if(NOT BE_IS_MULTI_CONFIG AND NOT ENGINE_TARGET_WEB AND CMAKE_BUILD_TYPE STREQUAL "Debug")
         message(WARNING "BE_WITH_EDITOR=OFF is ignored in a Debug build: Debug builds always include the editor")
         set(BE_EDITOR_ENABLED TRUE)
     endif()
@@ -265,6 +318,12 @@ elseif(BE_WITH_EDITOR_VALUE STREQUAL "AUTO")
     endif()
 else()
     message(FATAL_ERROR "BE_WITH_EDITOR is '${BE_WITH_EDITOR}'; it must be AUTO, ON or OFF")
+endif()
+
+if(ENGINE_TARGET_WEB AND BE_EDITOR_ENABLED)
+    # The browser build has no editor panels; this also overrides the Debug rule above (Debug always builds them)
+    message(STATUS "Editor: the web build never has the editor panels, forced off")
+    set(BE_EDITOR_ENABLED FALSE)
 endif()
 
 if(BE_EDITOR_ENABLED)
@@ -363,17 +422,20 @@ function(be_link_engine TARGET_NAME)
     if(ARG_WITH_RUNTIME)
         target_link_libraries(${TARGET_NAME} PRIVATE
             $<LINK_LIBRARY:WHOLE_ARCHIVE,SDLModule>
-            $<LINK_LIBRARY:WHOLE_ARCHIVE,VulkanModule>
             $<LINK_LIBRARY:WHOLE_ARCHIVE,GamesModule>
             $<LINK_LIBRARY:WHOLE_ARCHIVE,RuntimeModule>
         )
+        if(ENGINE_WITH_VULKAN)
+            target_link_libraries(${TARGET_NAME} PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,VulkanModule>)
+        endif()
     endif()
 endfunction()
 
 # Runtime DLLs/dylibs next to an executable, platform linker settings.
 # be_deploy_runtime_libs(<target>)
 function(be_deploy_runtime_libs TARGET_NAME)
-    if(WIN32)
+    # A static SDL has no DLL to copy
+    if(WIN32 AND NOT ENGINE_STATIC_SDL)
         foreach(_sdl_target SDL3-shared SDL3_image-shared)
             if(TARGET ${_sdl_target})
                 add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
@@ -513,12 +575,16 @@ endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/BECore)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Events)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/TaskSystem)
-add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RemoteControl)
+if(ENGINE_WITH_REMOTE_CONTROL)
+    add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RemoteControl)
+endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/SDL)
 
 # Optional: path to Vulkan SDK (Windows). If set and Lib/vulkan-1.lib exists, used for linking; else vendored external/Vulkan-Loader is used.
 set(VULKAN_SDK "C:/VulkanSDK/1.4.341.1" CACHE PATH "Path to Vulkan SDK (optional; used for loader on Windows)")
-add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Vulkan)
+if(ENGINE_WITH_VULKAN)
+    add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Vulkan)
+endif()
 
 # Game infrastructure (IGame, GameManager). Concrete games live outside the engine and register through it.
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
@@ -595,14 +661,21 @@ function(be_add_game_executable NAME)
     target_compile_definitions(${NAME} PRIVATE
         IMGUI_VULKAN_AVAILABLE=1
         REFLECTION_GENERATED=1
-        "BAGI_ENGINE_ROOT=\"${BAGI_ENGINE_DIR}\""
-        "BAGI_GAME_ROOT=\"${ARG_GAME_ROOT}\""
     )
+    if(ENGINE_TARGET_WEB)
+        # An HTML page with the content as a preloaded package; the roots are virtual paths (cmake/BagiWeb.cmake)
+        be_web_configure_target(${NAME} GAME_ROOT ${ARG_GAME_ROOT})
+    else()
+        target_compile_definitions(${NAME} PRIVATE
+            "BAGI_ENGINE_ROOT=\"${BAGI_ENGINE_DIR}\""
+            "BAGI_GAME_ROOT=\"${ARG_GAME_ROOT}\""
+        )
+    endif()
 
     be_deploy_runtime_libs(${NAME})
 
     # Vulkan Loader (vulkan-1.dll / libvulkan.1.dylib) next to the executable: VULKAN_SDK/Bin first, else the vendored folder
-    if(WIN32)
+    if(WIN32 AND ENGINE_WITH_VULKAN)
         set(_VULKAN_DLL "")
         if(VULKAN_SDK AND EXISTS "${VULKAN_SDK}/Bin/vulkan-1.dll")
             set(_VULKAN_DLL "${VULKAN_SDK}/Bin/vulkan-1.dll")
@@ -618,7 +691,7 @@ function(be_add_game_executable NAME)
         endif()
     elseif(APPLE)
         set(_VULKAN_RUNTIME "${VULKAN_LOADER_ROOT}/macOS/lib/libvulkan.1.dylib")
-        if(EXISTS "${_VULKAN_RUNTIME}")
+        if(ENGINE_WITH_VULKAN AND EXISTS "${_VULKAN_RUNTIME}")
             add_custom_command(TARGET ${NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${_VULKAN_RUNTIME}"

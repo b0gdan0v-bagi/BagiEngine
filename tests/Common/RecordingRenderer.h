@@ -53,6 +53,7 @@ namespace BECore::Tests {
         const ITexture* texture = nullptr;
         std::optional<Rect> source;              ///< the source rect of a texture draw, as it was passed
         std::optional<Rect> clip;                ///< the clip in effect for this call
+        BlendMode blend = BlendMode::Alpha;      ///< the blend mode in effect for this call
         eastl::vector<GeometryVertex> vertices;  ///< geometry: the vertices with their positions in output pixels (translation and view transform applied)
         eastl::vector<int> indices;              ///< geometry: the indices as they were passed
     };
@@ -83,6 +84,7 @@ namespace BECore::Tests {
             call.rect = GetViewTransform().ToOutput(x, y, w, h);
             call.color = color;
             call.clip = GetClipRect();
+            call.blend = GetBlendMode();
             calls.push_back(call);
         }
 
@@ -100,6 +102,7 @@ namespace BECore::Tests {
                 call.source = *srcRect;
             }
             call.clip = GetClipRect();
+            call.blend = GetBlendMode();
             calls.push_back(call);
         }
 
@@ -112,6 +115,7 @@ namespace BECore::Tests {
             call.texture = texture;
             call.color = vertices[0].color;
             call.clip = GetClipRect();
+            call.blend = GetBlendMode();
             const ViewTransform& view = GetViewTransform();
             float left = 0.0f;
             float top = 0.0f;

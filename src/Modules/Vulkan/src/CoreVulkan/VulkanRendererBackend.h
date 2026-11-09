@@ -144,6 +144,9 @@ namespace BECore {
         void OnImGuiNewFrame();
         void OnImGuiRender();
 
+        // Draws take only straight alpha: logs once, the first time a draw comes with another blend mode, then draws as usual
+        void WarnIfBlendModeIgnored();
+
         VulkanDevice _device;
         VulkanSwapchain _swapchain;
         VulkanRectPipeline _rectPipeline;
@@ -163,6 +166,8 @@ namespace BECore {
         VkExtent2D _requestedPixelExtent = {};
         // The swapchain must be rebuilt before the next frame (a window event, a suboptimal or out-of-date result)
         bool _swapchainDirty = false;
+        // The warning about a blend mode other than Alpha was logged
+        bool _blendWarned = false;
 
         VkCommandPool _commandPool = VK_NULL_HANDLE;
         eastl::vector<VkCommandBuffer> _commandBuffers;

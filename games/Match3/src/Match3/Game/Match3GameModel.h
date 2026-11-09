@@ -8,6 +8,8 @@
 
 namespace BECore::Match3 {
 
+    struct Match3SaveState;
+
     /**
      * @brief Stateful Bejeweled-style match game wrapper around Match3Board.
      *
@@ -48,7 +50,7 @@ namespace BECore::Match3 {
             return _seed;
         }
 
-        /// Counts the changes a controller has to see: every Reset() and every committed swap. Never goes back
+        /// Counts the changes a controller has to see: every Reset(), every committed swap and every RestoreState(). Never goes back
         [[nodiscard]] uint64_t GetVersion() const noexcept {
             return _version;
         }
@@ -102,6 +104,25 @@ namespace BECore::Match3 {
         [[nodiscard]] const SwapTrace* GetLastSwap() const noexcept {
             return _lastSwap.has_value() ? &*_lastSwap : nullptr;
         }
+
+        /**
+         * @brief Everything a save keeps: seed, score, board and the state of the random generator
+         *
+         * The selection and the trace of the last swap are not part of it. Include Match3/Game/Match3SaveState.h to use the result.
+         */
+        [[nodiscard]] Match3SaveState CaptureState() const;
+
+        /**
+         * @brief Replace the game with a captured one, so that play goes on exactly as it would have without the save
+         *
+         * Everything is checked first and nothing changes on a failure: the board is 64 letters of ROYGBP with no match
+         * on it (the board is always stable between calls), the score is not negative, and the generator text is what
+         * std::mt19937 writes (read back, it writes the same text). On success the selection and the last swap trace are
+         * cleared and GetVersion() grows by one, so a controller sees the change.
+         *
+         * @return the reason when the state is refused
+         */
+        [[nodiscard]] std::expected<void, eastl::string> RestoreState(const Match3SaveState& state);
 
         /**
          * @brief Would TrySwap(a, b) commit? Does not change the model (it tries the swap on a copy of the board).

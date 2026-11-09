@@ -192,10 +192,10 @@ cmake --build --preset macos-debug    # сборка игры (BagiMatch3)
 | ОС | Пресеты |
 |----|---------|
 | macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-release-editor` — Release с редактором (см. ниже); `macos-rmlui-debug`, `macos-rmlui-release` — то же с `ENGINE_UI_RMLUI=ON` (хост RmlUi и его тесты; сторонние библиотеки не нужны, шрифты читает движок) |
-| Windows | `windows-msvc-{debug,release}`, `windows-msvc-release-editor`, `windows-clang-{debug,release}` (Ninja), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022) |
+| Windows | `windows-clang-{debug,release}` (Clang + Ninja, по умолчанию; configure и сборка через `python CI/scripts/vs_env.py cmake ...`, он поднимает окружение Visual Studio), `windows-msvc-{debug,release}`, `windows-msvc-release-editor` (MSVC + Ninja, то же правило окружения), `windows-vs2022-{debug,release}`, `windows-vs2022-clangcl-{debug,release}` (Visual Studio 2022). MSVC — запасной вариант: его PDB время от времени ломают параллельную сборку (`LNK1103`, `C1090`) |
 
 Настройки конкретной машины (например `VULKAN_SDK`, ccache) кладите в `CMakeUserPresets.json` — он в `.gitignore`.
-Исполняемые файлы и библиотеки всегда лежат в `build/{Compiler}{Platform}/` (`BagiMatch3`; библиотеки в `lib/`), поэтому Debug, Release и release-editor (Ninja) затирают друг друга. При переходе между ними удалите все `build/ClangmacOS/lib/*.a` (на Windows `build/MSVCWindows/lib`) перед сборкой — иначе подхватятся старые объекты другой конфигурации и тесты упадут.
+Исполняемые файлы и библиотеки всегда лежат в `build/{Compiler}{Platform}/` (`BagiMatch3`; библиотеки в `lib/`), поэтому Debug, Release и release-editor (Ninja) затирают друг друга. При переходе между ними удалите все `build/ClangmacOS/lib/*.a` (на Windows все `build/ClangWindows/lib/*.lib`, для пресетов MSVC — `build/MSVCWindows/lib`) перед сборкой — иначе подхватятся старые объекты другой конфигурации и тесты упадут.
 Reflection-код генерируется на этапе configure: после правок `BE_CLASS` / `BE_REFLECT_FIELD` повторите `cmake --preset ...`.
 
 #### Редактор в сборке

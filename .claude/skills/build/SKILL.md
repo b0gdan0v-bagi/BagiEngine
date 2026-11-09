@@ -29,11 +29,12 @@ The presets are the engine's. A game includes them through its own `CMakePresets
 |----------------------------|------|-----------|
 | `macos-debug`, `macos-release` | macOS | Clang + Ninja |
 | `macos-rmlui-debug`, `macos-rmlui-release` | macOS | Clang + Ninja, with `ENGINE_UI_RMLUI=ON` (RmlUi host and its tests, which are part of the engine's own test executable). The executables land in the same `build/ClangmacOS/` as the plain presets' |
-| `windows-msvc-debug`, `windows-msvc-release` | Windows | MSVC (`cl`) + Ninja |
+| `windows-clang-debug`, `windows-clang-release` | Windows | Clang + Ninja: **the default on Windows** |
+| `windows-msvc-debug`, `windows-msvc-release` | Windows | MSVC (`cl`) + Ninja: only by explicit name |
 | `macos-release-editor`, `windows-msvc-release-editor` | macOS / Windows | The same toolchains as the plain Release presets, with `BE_WITH_EDITOR=ON` (the editor panels and their tests in a Release build; a plain Release build leaves them out) |
-| `windows-clang-debug`, `windows-clang-release` | Windows | Clang + Ninja |
-| `windows-vs2022-{debug,release}` | Windows | Visual Studio 2022, MSVC |
+| `windows-vs2022-{debug,release}` | Windows | Visual Studio 2022, MSVC: only by explicit name |
 | `windows-vs2022-clangcl-{debug,release}` | Windows | Visual Studio 2022, ClangCL |
+| `web-debug`, `web-release` | any, with `EMSDK` set | Emscripten + Ninja, the browser build (`BagiMatch3.html`): only by explicit name, hidden without `EMSDK`, build only (no test preset, no editor) |
 
 Presets for other hosts are hidden by `condition`, so `cmake --list-presets` shows only what works here.
 
@@ -43,8 +44,9 @@ Run everything from the root of `<R>`.
 
 1. **Pick the preset.**
    - An explicit preset name wins.
-   - Otherwise by host (`uname -s`): Darwin -> `macos-<type>`. Windows -> `windows-msvc-<type>` when `cl` is on PATH (Developer prompt), else `windows-vs2022-<type>`: Ninja + MSVC presets only get the Visual Studio environment inside CMake Tools, not from a plain shell.
+   - Otherwise by host (`uname -s`): Darwin -> `macos-<type>`. Windows (`MINGW*`, `MSYS*`, `CYGWIN*`, or PowerShell) -> `windows-clang-<type>`. The MSVC presets (`windows-msvc-*`, `windows-vs2022-*`) are fallbacks, taken only by explicit name: MSVC's debug information (`/Zi`, one `mspdbsrv` for every build on the machine, a PCH shared by all modules) breaks parallel builds now and then with `LNK1103` / `LNK4020 ... pdb is corrupted` / `C1090`, and a second run passes; clang has no `cl` PDB and no `mspdbsrv`.
    - Check it against `cmake --list-presets=build`. If it is missing (for example on Linux, where no presets exist yet), stop and show the list. Do not invent a preset or fall back to `cmake -B build`.
+   - **Windows Ninja presets (`windows-clang-*`, `windows-msvc-*`) need the x64 Visual Studio environment** for configure **and** build (the resource compiler `rc` and its SDK includes, the archiver `lib`, for MSVC `cl` and `link`). They do not load it (`vs-env` is the `external` strategy; CMake Tools loads it, a plain shell does not). Run every `cmake --preset` and `cmake --build --preset` of these presets through `<py> <engine>/CI/scripts/vs_env.py` (it finds Visual Studio with vswhere, runs `vcvarsall.bat x64`, extends `PATH` behind the caller's and runs the command; inside a developer prompt it just runs it): `python engine/CI/scripts/vs_env.py cmake --build --preset windows-clang-debug` in a game, `python CI/scripts/vs_env.py ...` in the engine. Without it configure stops with `No CMAKE_RC_COMPILER could be found` and the build with `CMAKE_AR-NOTFOUND`. `ctest` needs no environment. The `windows-vs2022-*` presets need none either.
 
 2. **Decide whether to configure** (`cmake --preset <p>`). Configure if any of these holds, or when unsure:
    - `build/<p>/CMakeCache.txt` does not exist, or the `configure` argument was given.
@@ -66,7 +68,7 @@ Run everything from the root of `<R>`.
 
 ## Output location and gotchas
 
-- Executables: `build/{Clang|MSVC}{macOS|Windows}/<product>[.exe]` and the test executables (the engine's `cmake/BagiEngine.cmake` sets the output directory from compiler + platform, **not** from the preset). Debug and Release Ninja presets therefore **overwrite each other's executable**; the last build wins. The libraries in `build/{Clang|MSVC}{macOS|Windows}/lib` clash the same way, and `ninja` does not see that one was built with another `BE_WITH_EDITOR`: when switching between Debug, Release and the `-editor` presets, delete every `lib/*.a` (on Windows the `lib` folder) before building (the rules file, "Gotchas", where it applies). Visual Studio generators add a `Debug/` or `Release/` subfolder.
+- Executables: `build/{Clang|MSVC}{macOS|Windows}/<product>[.exe]` and the test executables (the engine's `cmake/BagiEngine.cmake` sets the output directory from compiler + platform, **not** from the preset): `build/ClangWindows/` for the default Windows presets, `build/MSVCWindows/` for the MSVC ones. Debug and Release Ninja presets therefore **overwrite each other's executable**; the last build wins. The libraries in `build/{Clang|MSVC}{macOS|Windows}/lib` clash the same way, and `ninja` does not see that one was built with another `BE_WITH_EDITOR`: when switching between Debug, Release and the `-editor` presets, delete every `lib/*.a` (on Windows the `lib` folder) before building (the rules file, "Gotchas", where it applies). Visual Studio generators add a `Debug/` or `Release/` subfolder.
 - Do not use `cmake -B build ...` (the old flat `build/` directory) and do not edit anything under `build/`.
 - Release presets turn `ENGINE_ENABLE_ASSERTS` and `ENGINE_ENABLE_EXPECTS` off; Debug keeps them on. The Visual Studio presets are multi-config and leave both on.
 - Exceptions are disabled (`ENGINE_NO_EXCEPTIONS`). C++23 is required.

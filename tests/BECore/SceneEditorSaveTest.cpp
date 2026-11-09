@@ -3,6 +3,7 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
+#include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Common/Printers.h>
@@ -12,6 +13,10 @@
 namespace BECore::Tests {
 
     namespace {
+
+        constexpr float kSavedRotation = 37.5f;
+        constexpr float kSavedPivotX = 0.25f;
+        constexpr float kSavedPivotY = 0.75f;
 
         // Three scenes in the order Menu, Game, Credits. Menu has no view size, Game has two nodes (one on layer -1) and a
         // TransformComponent whose width is 0 (not the default 1), Credits has a node of its own.
@@ -265,6 +270,49 @@ namespace BECore::Tests {
         ASSERT_TRUE(namesQuad);
         EXPECT_EQ(namesQuad->_color.r, 200);
         EXPECT_EQ(namesQuad->_color.a, 128);
+    }
+
+    TEST_F(SceneEditorSaveTest, TheRotationTheBlendModeAndTheFlipsSurviveASave) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes());
+        _manager->SetActiveScene("Game"_intern);
+        Scene& game = *_manager->GetActiveScene();
+        SceneNode* board = FindTopLevelNode(game, "Board"_intern);
+        ASSERT_NE(board, nullptr);
+        auto transform = board->GetComponent<TransformComponent>();
+        ASSERT_TRUE(transform);
+        transform->_rotation = kSavedRotation;
+        transform->_pivotX = kSavedPivotX;
+        transform->_pivotY = kSavedPivotY;
+        board->GetComponent<QuadRendererComponent>()->_blend = BlendMode::Add;
+        auto sprite = New<SpriteRendererComponent>();
+        sprite->_blend = BlendMode::Multiply;
+        sprite->_flipX = true;
+        sprite->_flipY = true;
+        board->AddComponent(sprite);
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), game));
+        ASSERT_NO_FATAL_FAILURE(SaveAndReload());
+
+        SceneNode* saved = FindTopLevelNode(Reloaded("Game"), "Board"_intern);
+        ASSERT_NE(saved, nullptr);
+        auto savedTransform = saved->GetComponent<TransformComponent>();
+        ASSERT_TRUE(savedTransform);
+        EXPECT_FLOAT_EQ(savedTransform->_rotation, kSavedRotation);
+        EXPECT_FLOAT_EQ(savedTransform->_pivotX, kSavedPivotX);
+        EXPECT_FLOAT_EQ(savedTransform->_pivotY, kSavedPivotY);
+        EXPECT_EQ(saved->GetComponent<QuadRendererComponent>()->_blend, BlendMode::Add);
+        auto savedSprite = saved->GetComponent<SpriteRendererComponent>();
+        ASSERT_TRUE(savedSprite);
+        EXPECT_EQ(savedSprite->_blend, BlendMode::Multiply);
+        EXPECT_TRUE(savedSprite->_flipX);
+        EXPECT_TRUE(savedSprite->_flipY);
+
+        // A node that did not set them keeps the defaults that mean no effect
+        auto title = Reloaded("Menu").GetRootNode().GetChildren()[0]->GetComponent<TransformComponent>();
+        ASSERT_TRUE(title);
+        EXPECT_FLOAT_EQ(title->_rotation, 0.0f);
+        EXPECT_FLOAT_EQ(title->_pivotX, 0.5f);
+        EXPECT_FLOAT_EQ(title->_pivotY, 0.5f);
     }
 
     TEST_F(SceneEditorSaveTest, TheOtherScenesAreKeptVerbatim) {

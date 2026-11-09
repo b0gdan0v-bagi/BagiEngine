@@ -52,6 +52,10 @@ The window cannot be driven by a test. Run `BagiMatch3` (or a game) with `VK_INS
 
 `VulkanRendererBackend` does not implement `IRenderer::RequestCapture()`: the default answers with an error, and the `screenshot` method of the control API therefore answers `capture_failed` on this backend. A screenshot needs `--headless` (the SDL software renderer) until a Vulkan readback is written. The decision on the backends (the entry `renderer-backends` of the todo store) comes first.
 
+## No blend modes
+
+`IRenderer::SetBlendMode()` (`Alpha`, `Add`, `Multiply`) is not implemented here: `DrawFilledRect()`, `DrawTexture()` and `DrawGeometry()` draw with straight alpha whatever `GetBlendMode()` says, and `WarnIfBlendModeIgnored()` logs one warning per backend, naming the mode, the first time a draw arrives with another one. There is no pipeline, shader or descriptor for a blend mode. The rotated and flipped draws (`DrawTransformedRect()` / `DrawTransformedTexture()`) work, since they are `DrawGeometry()`. The decision on the backends (the entry `renderer-backends`: SDL is the main backend, Vulkan is frozen at its feature level) comes first; a blend pipeline per mode would be the way if this backend is ever brought up.
+
 ## Geometry
 
 `VulkanRendererBackend::DrawGeometry()` (indexed triangles with a color and a UV per vertex, the primitive of the RmlUi host, `src/Modules/RmlUiHost/CLAUDE.md`) writes the vertices into the frame slot's `VulkanGeometryBuffer` with the translation and the view transform applied on the CPU, so the shader gets output pixels like the others, and draws with the scissor of the clip stack. An untextured draw binds a 1 x 1 white texture made on first use (`GetWhiteTextureDescriptorSet()`, freed in `Destroy()` before the texture pipeline's descriptor pool). An index past the vertices is logged and nothing is drawn, as in the SDL backend; a trailing index or two that do not make a triangle are dropped. Checked in a real window with the Khronos validation layer and the LunarG screenshot layer (see "Looking at the pixels").

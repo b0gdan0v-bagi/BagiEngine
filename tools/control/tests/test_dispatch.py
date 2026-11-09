@@ -18,8 +18,6 @@ TESTS_DIR = Path(__file__).resolve().parent
 TOOL_DIR = TESTS_DIR.parent
 FAKE_GAME = TESTS_DIR / "fake_game.py"
 
-needs_shebang = pytest.mark.skipif(sys.platform == "win32", reason="the fake game executable is a script with a shebang")
-
 
 def echo_handler(method: str, params: dict | None):
     """Answers like a small game; a request is echoed so that a test can see what arrived."""
@@ -65,7 +63,11 @@ def session():
 
 @pytest.fixture
 def fake_game_exe(tmp_path):
-    """An executable that runs fake_game.py with the flags the session gives it."""
+    """An executable that runs fake_game.py with the flags the session gives it: a script with a shebang, a .bat on Windows."""
+    if sys.platform == "win32":
+        exe = tmp_path / "FakeGame.bat"
+        exe.write_text(f'@"{sys.executable}" "{FAKE_GAME}" %*\r\n@exit /b %ERRORLEVEL%\r\n')
+        return exe
     exe = tmp_path / "FakeGame"
     exe.write_text(f"#!{sys.executable}\nimport runpy\nrunpy.run_path({str(FAKE_GAME)!r}, run_name='__main__')\n")
     exe.chmod(0o755)
@@ -181,7 +183,6 @@ def test_a_game_that_was_only_connected_to_has_no_log(session, server):
         session.game_log()
 
 
-@needs_shebang
 def test_launch_runs_the_game_headless_on_the_manual_clock(session, fake_game_exe):
     description = session.launch(str(fake_game_exe))
     assert description["activeGame"] == "Fake"
@@ -190,14 +191,12 @@ def test_launch_runs_the_game_headless_on_the_manual_clock(session, fake_game_ex
     assert "listening on" in session.game_log()
 
 
-@needs_shebang
 def test_launch_can_ask_for_a_window_on_the_real_clock(session, fake_game_exe):
     session.launch(str(fake_game_exe), headless=False, manual_clock=False)
     assert session.call("get_state")["state"]["flags"] == ["--control"]
     assert session.call("status")["manualClock"] is False
 
 
-@needs_shebang
 def test_quit_stops_the_launched_game_and_reports_its_exit_code(session, fake_game_exe):
     session.launch(str(fake_game_exe))
     result = session.quit()
@@ -205,7 +204,6 @@ def test_quit_stops_the_launched_game_and_reports_its_exit_code(session, fake_ga
     assert not session.is_connected
 
 
-@needs_shebang
 def test_launching_again_replaces_the_game(session, fake_game_exe):
     first = session.launch(str(fake_game_exe))["port"]
     second = session.launch(str(fake_game_exe))["port"]
@@ -213,7 +211,6 @@ def test_launching_again_replaces_the_game(session, fake_game_exe):
     assert session.call("status")["manualClock"] is True
 
 
-@needs_shebang
 def test_a_game_that_exits_at_once_is_reported_with_its_log(session, fake_game_exe, monkeypatch):
     monkeypatch.setenv("FAKE_GAME_EXIT", "1")
     with pytest.raises(SessionError, match="exited with code 3") as failure:

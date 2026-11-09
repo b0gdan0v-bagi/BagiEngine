@@ -77,6 +77,64 @@ def test_the_loop_life_of_an_entry(api):
     assert kinds == ["close", "claim", "reopen", "review", "stop", "claim", "create"]
 
 
+def test_a_claim_records_the_base_and_the_origin(api):
+    add(api)
+    claim_path = "/api/v1/entries/no-ci/claim"
+    claimed = api.post(claim_path, json={"branch": "todo/no-ci", "base": "games/chess", "origin": "Chess@host"}).json()
+    assert claimed["base"] == "games/chess" and claimed["origin"] == "Chess@host" and claimed["version"] == 2
+    assert api.get("/api/v1/entries/no-ci").json()["base"] == "games/chess"
+    listed = api.get("/api/v1/entries").json()[0]
+    assert listed["base"] == "games/chess" and listed["origin"] == "Chess@host"
+    events = api.get("/api/v1/entries/no-ci/events").json()
+    assert events[0]["kind"] == "claim" and events[0]["data"]["new"]["base"] == "games/chess" and events[0]["data"]["new"]["origin"] == "Chess@host"
+
+    closed = api.post("/api/v1/entries/no-ci/close", json={"reopen": True}).json()
+    assert closed["branch"] is None and closed["base"] is None and closed["origin"] is None
+    again = api.post(claim_path, json={"branch": "todo/no-ci-2", "base": "main", "origin": "Engine@other"}).json()
+    assert again["base"] == "main" and again["origin"] == "Engine@other"
+    final = api.post("/api/v1/entries/no-ci/close", json={}).json()
+    assert final["base"] is None and final["origin"] is None
+
+
+def test_a_claim_without_a_base_stores_nothing_and_blanks_count_as_none(api):
+    add(api)
+    old = api.post("/api/v1/entries/no-ci/claim", json={"branch": "todo/no-ci"}).json()
+    assert old["base"] is None and old["origin"] is None
+    api.post("/api/v1/entries/no-ci/close", json={"reopen": True}).raise_for_status()
+    blank = api.post("/api/v1/entries/no-ci/claim", json={"branch": "todo/no-ci", "base": "  ", "origin": ""}).json()
+    assert blank["base"] is None and blank["origin"] is None
+    api.post("/api/v1/entries/no-ci/close", json={"reopen": True}).raise_for_status()
+    only_origin = api.post("/api/v1/entries/no-ci/claim", json={"branch": "todo/no-ci", "origin": "Chess@host"}).json()
+    assert only_origin["base"] is None and only_origin["origin"] == "Chess@host"
+
+
+def test_clearing_the_branch_clears_the_base_and_the_origin(api):
+    add(api)
+    api.post("/api/v1/entries/no-ci/claim", json={"branch": "todo/no-ci", "base": "main", "origin": "Engine@host"}).raise_for_status()
+    cleared = api.patch("/api/v1/entries/no-ci", json={"clear": ["branch"]}).json()
+    assert cleared["branch"] is None and cleared["base"] is None and cleared["origin"] is None
+
+
+def test_an_entry_from_before_migration_003_survives_it_with_no_base(clean_database, monkeypatch, tmp_path):
+    from service import db
+
+    old_schema = tmp_path / "schema"
+    old_schema.mkdir()
+    for name in ("001_init.sql", "002_aliases.sql"):
+        (old_schema / name).write_text((db.SCHEMA_DIR / name).read_text(encoding="utf-8"), encoding="utf-8")
+    with psycopg.connect(clean_database) as conn:
+        conn.row_factory = psycopg.rows.dict_row
+        with monkeypatch.context() as patch:
+            patch.setattr(db, "SCHEMA_DIR", old_schema)
+            assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql"]
+        conn.execute("INSERT INTO areas (id, title) VALUES ('engine', 'Engine')")
+        conn.execute("INSERT INTO entries (id, area, title, status, branch) VALUES ('old', 'engine', 'Old', 'in progress', 'todo/old')")
+        conn.commit()
+        assert db.migrate(conn) == ["003_branch_origin.sql"]
+        row = conn.execute("SELECT branch, base, origin FROM entries WHERE id = 'old'").fetchone()
+    assert row == {"branch": "todo/old", "base": None, "origin": None}
+
+
 def test_two_claims_at_once_give_one_winner(api, clean_database):
     add(api)
     results = []
@@ -144,5 +202,5 @@ def test_the_migrations_run_once(clean_database):
 
     with psycopg.connect(clean_database) as conn:
         conn.row_factory = psycopg.rows.dict_row
-        assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql"]
+        assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql", "003_branch_origin.sql"]
         assert db.migrate(conn) == []

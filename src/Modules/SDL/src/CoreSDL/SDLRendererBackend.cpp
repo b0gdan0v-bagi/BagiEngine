@@ -23,6 +23,26 @@ namespace BECore {
         constexpr size_t kIndicesPerTriangle = 3;
         constexpr int kFloatsPerColor = 4;
 
+        // The SDL blend mode of an IRenderer blend mode: straight alpha, additive, and `src * dst + dst * (1 - a)`
+        SDL_BlendMode ToSDLBlendMode(BlendMode mode) {
+            switch (mode) {
+                case BlendMode::Add:
+                    return SDL_BLENDMODE_ADD;
+                case BlendMode::Multiply:
+                    return SDL_BLENDMODE_MUL;
+                case BlendMode::Alpha:
+                    break;
+            }
+            return SDL_BLENDMODE_BLEND;
+        }
+
+        // The texture is shared, so its modulation and blend mode are set on every draw: an untinted or an alpha draw after a tinted or an additive one must not inherit them
+        void ApplyTextureState(SDL_Texture* handle, const Color& tint, BlendMode mode) {
+            SDL_SetTextureBlendMode(handle, ToSDLBlendMode(mode));
+            SDL_SetTextureColorMod(handle, tint.r, tint.g, tint.b);
+            SDL_SetTextureAlphaMod(handle, tint.a);
+        }
+
     }  // namespace
 
     bool SDLRendererBackend::Initialize(IMainWindow& window) {
@@ -75,7 +95,7 @@ namespace BECore {
 
     void SDLRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
         if (_renderer && !IsClipEmpty()) {
-            SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawBlendMode(_renderer, ToSDLBlendMode(GetBlendMode()));
             SDL_SetRenderDrawColor(_renderer, color.r, color.g, color.b, color.a);
             const Rect out = GetViewTransform().ToOutput(x, y, w, h);
             SDL_FRect rect{out.x, out.y, out.w, out.h};
@@ -92,10 +112,8 @@ namespace BECore {
             return;
         }
 
-        // The texture is shared, so its modulation is set on every draw: an untinted draw after a tinted one must not inherit it
         SDL_Texture* handle = sdlTexture->GetSDLTexture();
-        SDL_SetTextureColorMod(handle, tint.r, tint.g, tint.b);
-        SDL_SetTextureAlphaMod(handle, tint.a);
+        ApplyTextureState(handle, tint, GetBlendMode());
 
         const Rect out = GetViewTransform().ToOutput(dstX, dstY, dstW, dstH);
         SDL_FRect dst{out.x, out.y, out.w, out.h};
@@ -105,6 +123,46 @@ namespace BECore {
             SDL_RenderTexture(_renderer, handle, &src, &dst);
         } else {
             SDL_RenderTexture(_renderer, handle, nullptr, &dst);
+        }
+    }
+
+    void SDLRendererBackend::DrawTransformedTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint, const DrawTransform& transform) {
+        if (transform.IsIdentity()) {
+            DrawTexture(texture, srcRect, dstX, dstY, dstW, dstH, tint);
+            return;
+        }
+        if (!_renderer || IsClipEmpty() || texture.GetWidth() <= 0.0f || texture.GetHeight() <= 0.0f) {
+            return;
+        }
+        auto* sdlTexture = dynamic_cast<SDLTexture*>(&texture);
+        if (!sdlTexture || !sdlTexture->GetSDLTexture()) {
+            return;
+        }
+
+        // Not through DrawGeometry(): the software renderer takes two triangles that form an upright rectangle for a plain blit that only flips (so a quad turned by exactly 90 degrees comes out
+        // unturned), and its triangle path maps the UVs onto texels 0 to n-1. SDL_RenderTextureRotated is exact on every SDL renderer.
+        SDL_Texture* handle = sdlTexture->GetSDLTexture();
+        ApplyTextureState(handle, tint, GetBlendMode());
+
+        // The view transform is a uniform scale and an offset, so the angle stays and the pivot is the point of the draw units mapped like the rect
+        const ViewTransform& view = GetViewTransform();
+        const Rect out = view.ToOutput(dstX, dstY, dstW, dstH);
+        const SDL_FRect dst{out.x, out.y, out.w, out.h};
+        const SDL_FPoint center{(transform.pivotX - dstX) * view.scale, (transform.pivotY - dstY) * view.scale};
+        int flip = SDL_FLIP_NONE;
+        if (transform.flipX) {
+            flip |= SDL_FLIP_HORIZONTAL;
+        }
+        if (transform.flipY) {
+            flip |= SDL_FLIP_VERTICAL;
+        }
+        const auto flipMode = static_cast<SDL_FlipMode>(flip);
+
+        if (srcRect && !srcRect->IsEmpty()) {
+            const SDL_FRect src{srcRect->x, srcRect->y, srcRect->w, srcRect->h};
+            SDL_RenderTextureRotated(_renderer, handle, &src, &dst, static_cast<double>(transform.rotation), &center, flipMode);
+        } else {
+            SDL_RenderTextureRotated(_renderer, handle, nullptr, &dst, static_cast<double>(transform.rotation), &center, flipMode);
         }
     }
 
@@ -166,8 +224,13 @@ namespace BECore {
             _geometryTexCoords[i * 2 + 1] = vertex.v;
         }
 
-        // An untextured draw blends by the draw mode; a texture by its own (the colors multiply the texel, SDL ignores the modulation of the texture here)
-        SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
+        // An untextured draw blends by the draw mode; a texture by its own, set on every draw as in DrawTexture() (the colors multiply the texel, SDL ignores the modulation of the texture here)
+        const SDL_BlendMode blendMode = ToSDLBlendMode(GetBlendMode());
+        if (handle) {
+            SDL_SetTextureBlendMode(handle, blendMode);
+        } else {
+            SDL_SetRenderDrawBlendMode(_renderer, blendMode);
+        }
         const bool drawn =
             SDL_RenderGeometryRaw(_renderer, handle, _geometryPositions.data(), 2 * sizeof(float), reinterpret_cast<const SDL_FColor*>(_geometryColors.data()), kFloatsPerColor * sizeof(float),
                                   _geometryTexCoords.data(), 2 * sizeof(float), vertexCount, indices.data(), static_cast<int>(indices.size() - indices.size() % kIndicesPerTriangle), sizeof(int));

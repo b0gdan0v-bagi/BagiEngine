@@ -16,6 +16,7 @@ namespace BECore::Tests {
         constexpr WebSocketMask kMask = {0x12, 0x34, 0x56, 0x78};
         constexpr const char* kKey = "dGhlIHNhbXBsZSBub25jZQ==";
         constexpr auto kWaitLimit = 30s;
+        constexpr int kMaxChunksPerFill = 1024;
 
         /// The test thread plays the main thread: it drains the queue while it waits, so responses can come back
         template <typename Predicate>
@@ -136,13 +137,20 @@ namespace BECore::Tests {
         private:
             TestClient() = default;
 
+            /// Reads everything that has arrived (up to kMaxChunksPerFill chunks); a loop, because WaitUntil sleeps 1 ms
+            /// between its calls, which is 15 ms on Windows, and a megabyte in chunks of 4 KiB would take seconds
             void FillBuffer() {
                 std::array<uint8_t, 4096> chunk;
-                const auto received = _socket.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
-                if (received) {
-                    _buffer.insert(_buffer.end(), chunk.begin(), chunk.begin() + static_cast<ptrdiff_t>(*received));
-                } else if (received.error() != SocketError::TimedOut) {
-                    _ended = true;
+                for (int i = 0; i < kMaxChunksPerFill; ++i) {
+                    const auto received = _socket.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+                    if (!received) {
+                        if (received.error() != SocketError::TimedOut) {
+                            _ended = true;
+                        }
+                        return;
+                    }
+                    // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
+                    _buffer.insert(_buffer.end(), chunk.data(), chunk.data() + *received);
                 }
             }
 
@@ -477,7 +485,7 @@ namespace BECore::Tests {
         for (int shift = 56; shift >= 0; shift -= 8) {
             header.push_back(static_cast<uint8_t>(length >> shift));
         }
-        header.insert(header.end(), kMask.begin(), kMask.end());
+        header.insert(header.end(), kMask.data(), kMask.data() + kMask.size());
         client->Send(AsBytes(header));
 
         const auto frame = client->WaitForFrame(service);

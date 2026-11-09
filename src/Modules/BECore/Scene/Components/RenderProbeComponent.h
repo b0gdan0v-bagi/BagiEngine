@@ -11,8 +11,10 @@ namespace BECore {
      * From the node's transform origin, left to right, on a checkerboard: a texture made from pixels, the same texture
      * tinted red, the same texture at half alpha, two overlapping translucent rects, and a clipped cell (a red square
      * with a nested clip: a green square with the texture, both cut to their clip), a quad of DrawGeometry() with a
-     * color per corner (the last one faint), and a textured DrawGeometry() quad mirrored left to right and drawn
-     * through the translation. Put it on a node with a TransformComponent: `<component type="RenderProbeComponent"/>`.
+     * color per corner (the last one faint), a textured DrawGeometry() quad mirrored left to right and drawn
+     * through the translation, the texture turned 30 degrees about the cell's center (DrawTransformedTexture()), the same
+     * mirrored left to right, and two cells split in a straight-alpha half and a half with another blend mode: additive
+     * and multiply. Put it on a node with a TransformComponent: `<component type="RenderProbeComponent"/>`.
      */
     class RenderProbeComponent : public IComponent {
         BE_CLASS(RenderProbeComponent)

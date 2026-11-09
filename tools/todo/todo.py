@@ -24,6 +24,7 @@ import datetime
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import urllib.error
@@ -45,6 +46,7 @@ REQUEST_TIMEOUT_SECONDS = 30
 _ENV_LINE_RE = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
 LOOP_PLAN_PREFIX = "todo-loop-"
 REVIEW_INFIX = "-review-"
+WORKERS_SUFFIX = ".workers"  # the parent folder of the worker folders of worker.py: `<repository>.workers/w1`
 
 
 class TodoError(Exception):
@@ -164,6 +166,16 @@ def git_work_tree(path: Path) -> Path | None:
     return Path(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
 
 
+def default_origin() -> str:
+    """Where this checkout is: `<game repository>@<host>`, the repository name taken from a worker folder (`<name>.workers/w1`) or the git top; the host alone outside git."""
+    host = socket.gethostname()
+    tree = git_work_tree(Path.cwd())
+    if tree is None:
+        return host
+    name = tree.parent.name.removesuffix(WORKERS_SUFFIX) if tree.parent.name.endswith(WORKERS_SUFFIX) else tree.name
+    return f"{name}@{host}"
+
+
 def outside_git(path: Path, what: str) -> Path:
     path = path.expanduser().resolve()
     tree = git_work_tree(path)
@@ -194,6 +206,9 @@ def print_entry(entry: dict, out=None) -> None:
         facts.append(f"stage: {entry['stage']}")
     if progress_text(entry):
         facts.append(progress_text(entry))
+    where = [f"{name}: {entry[name]}" for name in ("base", "origin") if entry.get(name)]
+    if where:
+        facts.append(" · ".join(where))
     facts.append(f"version: {entry['version']}")
     out.write(f"# {entry['title']}\n\n{' · '.join(facts)}\n\n{entry['body'].rstrip()}\n")
 
@@ -283,7 +298,13 @@ def cmd_edit(api: Api, args) -> None:
 
 
 def cmd_claim(api: Api, args) -> None:
-    entry = api.call("POST", f"/entries/{args.id}/claim", {"branch": args.branch})
+    body = {"branch": args.branch}
+    if args.base:
+        body["base"] = args.base
+        body["origin"] = args.origin or default_origin()
+    elif args.origin:
+        body["origin"] = args.origin
+    entry = api.call("POST", f"/entries/{args.id}/claim", body)
     emit(entry, args.json, lambda e: print(f"{e['id']}: {e['statusLine']}"))
 
 
@@ -513,6 +534,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("claim", parents=[common], help="the loop takes an open entry (open -> in progress)")
     p.add_argument("id")
     p.add_argument("--branch", required=True)
+    p.add_argument("--base", help="the base branch the entry's branch is cut from (stored with the claim)")
+    p.add_argument("--origin", help="the checkout that made the branch, `<game repository>@<host>` (default: this one, when --base is given)")
 
     p = sub.add_parser("review", parents=[common], help="the slice waits for the owner (in progress -> review)")
     p.add_argument("id")
@@ -599,6 +622,10 @@ COMMANDS = {
 
 
 def main(argv: list[str] | None = None) -> int:
+    # A pipe on Windows gets the ANSI code page (cp1251), which has no "→" and garbles what it has: the text is always UTF-8
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
     try:
         url, token = load_settings(args.env_file)

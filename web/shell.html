@@ -1,0 +1,311 @@
+<!doctype html>
+<!--
+    The page around a BagiEngine game built with Emscripten (emcc --shell-file, set by cmake/BagiWeb.cmake). One self-contained file:
+    no external fonts, scripts or CDN.
+
+    - The canvas with the id "canvas" is the one SDL draws on (SDL_HINT_EMSCRIPTEN_CANVAS_SELECTOR defaults to "#canvas").
+      It fills the browser window by CSS; the engine follows the window size and devicePixelRatio (SDLWebCanvas.cpp).
+    - The page first asks the browser for a WebGL context. Without one it shows a message and never starts the game: the
+      script that emcc substitutes for the SCRIPT placeholder (below) sits in a <template>, which the browser does not run, and
+      only the test below starts it.
+    - Module.setStatus and Module.monitorRunDependencies feed the loading bar (the .data package and the wasm download);
+      Module.onAbort and the page's error event show a message when the game stops.
+
+    Checked by tools/web/tests/test_shell.py (text only). Whether it works in a browser is verified with emsdk (entry web-build,
+    slice 2).
+-->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <meta name="color-scheme" content="dark">
+    <title>BagiEngine</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #101114;
+            color: #d8dbe2;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        /* Selectors are written tag#id, not #id: a line that starts with # can be taken for a preprocessor directive by emcc's shell
+           handling in some versions. The canvas covers the whole window and nothing scrolls. 100dvh follows the visible height on a
+           phone, whose address bar makes 100vh taller than the screen. */
+        canvas#canvas {
+            display: block;
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100vw;
+            height: 100vh;
+            border: 0;
+            outline: none;
+            background: #000;
+            /* The game takes the touches: no scrolling, pinch zoom or text selection on the canvas */
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        @supports (height: 100dvh) {
+            canvas#canvas {
+                height: 100dvh;
+            }
+        }
+
+        .panel {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100vw;
+            height: 100vh;
+            box-sizing: border-box;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            background: #101114;
+        }
+
+        .panel[hidden] {
+            display: none;
+        }
+
+        .panel h1 {
+            margin: 0 0 16px;
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        progress#loading-bar {
+            width: min(420px, 80vw);
+            height: 10px;
+            border: 0;
+            border-radius: 5px;
+            overflow: hidden;
+            background: #2a2d36;
+            accent-color: #5aa0ff;
+        }
+
+        progress#loading-bar::-webkit-progress-bar {
+            background: #2a2d36;
+        }
+
+        progress#loading-bar::-webkit-progress-value {
+            background: #5aa0ff;
+        }
+
+        progress#loading-bar::-moz-progress-bar {
+            background: #5aa0ff;
+        }
+
+        div#loading-status {
+            margin-top: 12px;
+            min-height: 1.4em;
+            font-size: 0.9rem;
+            color: #98a0b0;
+        }
+
+        div#message {
+            max-width: 36rem;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+
+        div#message-detail {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            color: #98a0b0;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" tabindex="-1"></canvas>
+
+    <div id="loading" class="panel" hidden>
+        <h1>Loading</h1>
+        <progress id="loading-bar" max="1"></progress>
+        <div id="loading-status">Starting...</div>
+    </div>
+
+    <div id="error" class="panel" role="alert" hidden>
+        <h1 id="error-title"></h1>
+        <div id="message"></div>
+        <div id="message-detail"></div>
+    </div>
+
+    <noscript>
+        <div class="panel">
+            <h1>JavaScript is off</h1>
+            <div>This game needs JavaScript. Turn it on for this page and reload.</div>
+        </div>
+    </noscript>
+
+    <template id="module-script">{{{ SCRIPT }}}</template>
+
+    <script>
+        (function () {
+            "use strict";
+
+            var canvas = document.getElementById("canvas");
+            var loadingPanel = document.getElementById("loading");
+            var loadingBar = document.getElementById("loading-bar");
+            var loadingStatus = document.getElementById("loading-status");
+            var errorPanel = document.getElementById("error");
+            var errorTitle = document.getElementById("error-title");
+            var errorMessage = document.getElementById("message");
+            var errorDetail = document.getElementById("message-detail");
+
+            var failed = false;
+
+            // The two panels never show at once. Only textContent is used: a message from the game is not HTML.
+            function showError(title, message, detail) {
+                if (failed) {
+                    return;  // the first failure is the cause, the rest follow from it
+                }
+                failed = true;
+                loadingPanel.hidden = true;
+                errorTitle.textContent = title;
+                errorMessage.textContent = message;
+                errorDetail.textContent = detail || "";
+                errorPanel.hidden = false;
+            }
+
+            function setLoadingText(text) {
+                loadingStatus.textContent = text;
+            }
+
+            // fraction 0..1, or null for a bar that only moves back and forth (a progress element without a value)
+            function setProgress(fraction) {
+                if (fraction === null) {
+                    loadingBar.removeAttribute("value");
+                } else {
+                    loadingBar.value = Math.max(0, Math.min(1, fraction));
+                }
+            }
+
+            function hideLoading() {
+                loadingPanel.hidden = true;
+            }
+
+            function megabytes(bytes) {
+                return (bytes / (1024 * 1024)).toFixed(1);
+            }
+
+            // The WebGL test: a context of either version on a scratch canvas. The game's own canvas is left alone, because a
+            // canvas keeps the first kind of context it was asked for.
+            function hasWebGL() {
+                try {
+                    var scratch = document.createElement("canvas");
+                    return !!(scratch.getContext("webgl2") || scratch.getContext("webgl"));
+                } catch (error) {
+                    return false;
+                }
+            }
+
+            if (!hasWebGL()) {
+                showError(
+                    "WebGL is not available",
+                    "This game draws with WebGL, and this browser did not give it a WebGL context. Try another browser, turn on hardware acceleration in its settings, or update the browser or its graphics driver.");
+                return;
+            }
+
+            var downloadSeen = false;
+            var totalDependencies = 0;
+
+            // The object emcc's runtime reads (unverified: needs emsdk: the hooks are those of the default shell of emsdk 4.x)
+            window.Module = {
+                canvas: canvas,
+
+                // The game's log goes to the browser console: stdout as log, stderr as error
+                print: function () {
+                    console.log(Array.prototype.slice.call(arguments).join(" "));
+                },
+                printErr: function () {
+                    console.error(Array.prototype.slice.call(arguments).join(" "));
+                },
+
+                // Called with texts such as "Downloading data... (1048576/5242880)", "Running..." and, when the runtime is up, ""
+                setStatus: function (text) {
+                    if (failed) {
+                        return;
+                    }
+                    if (!text) {
+                        hideLoading();
+                        return;
+                    }
+                    var match = /^(.*?)\s*\((\d+(?:\.\d+)?)\/(\d+)\)\s*$/.exec(text);
+                    if (match) {
+                        var done = parseFloat(match[2]);
+                        var total = parseFloat(match[3]);
+                        downloadSeen = true;
+                        setProgress(total > 0 ? done / total : null);
+                        setLoadingText(match[1] + " " + megabytes(done) + " / " + megabytes(total) + " MB");
+                    } else {
+                        setLoadingText(text);
+                    }
+                },
+
+                // The count of what the runtime still waits for (the package, the wasm). Moves the bar while the download has no byte counts.
+                monitorRunDependencies: function (left) {
+                    totalDependencies = Math.max(totalDependencies, left);
+                    if (!downloadSeen && totalDependencies > 0) {
+                        setProgress((totalDependencies - left) / totalDependencies);
+                    }
+                },
+
+                // The module aborted: a failed assertion of the runtime, a trap of the wasm, a wasm or package that did not download
+                onAbort: function (what) {
+                    var text = what === undefined || what === null ? "" : String(what);
+                    console.error("The game aborted: " + text);
+                    showError("The game stopped", "It cannot go on. Reload the page to start again.", text);
+                }
+            };
+
+            // A lost WebGL context cannot be brought back by the game
+            canvas.addEventListener("webglcontextlost", function (event) {
+                event.preventDefault();
+                showError("The graphics context was lost", "Reload the page to start again.");
+            }, false);
+
+            canvas.addEventListener("contextmenu", function (event) {
+                event.preventDefault();
+            }, false);
+
+            // Anything the page did not catch itself, such as a script or a package that did not load
+            window.addEventListener("error", function (event) {
+                var text = event && event.message ? String(event.message) : "";
+                if (text.indexOf("ResizeObserver") !== -1) {
+                    return;  // browsers report this one for harmless layout loops
+                }
+                showError("The game hit an error", "See the browser console for details. Reload the page to start again.", text);
+            });
+
+            loadingPanel.hidden = false;
+            setProgress(null);
+
+            // Start the game (the page has a WebGL context): run the script that emcc put into the template
+            var template = document.getElementById("module-script");
+            var original = template.content.querySelector("script");
+            var script = document.createElement("script");
+            if (original && original.getAttribute("src")) {
+                script.src = original.getAttribute("src");
+            } else if (original) {
+                script.textContent = original.textContent;
+            }
+            script.async = true;
+            script.onerror = function () {
+                showError("The game could not be loaded", "The game code did not download. Check the connection and reload the page.", script.src);
+            };
+            document.body.appendChild(script);
+        })();
+    </script>
+</body>
+</html>

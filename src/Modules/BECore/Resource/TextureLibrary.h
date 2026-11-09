@@ -1,16 +1,20 @@
 #pragma once
 
-#include <BECore/Math/Rect.h>
-#include <BECore/PoolString/PoolString.h>
-#include <BECore/PoolString/PoolStringMap.h>
-#include <EASTL/vector.h>
-
 namespace BECore {
 
+    class IDeserializer;
+    class ISerializer;
+
+    /// One named sprite: a texture and the rectangle of it. Reflected, so the fields are exactly the attributes of a `<sprite>` in
+    /// TextureLibrary.xml (`name`, `texturePath`) and the attributes `x y w h` of its child `<srcRect>`.
+    /// `BE_CLASS` gives the struct virtual functions, so it has a vptr and is not an aggregate: build an entry by default
+    /// construction and assign the fields.
     struct SpriteEntry {
-        PoolString name;
-        PoolString texturePath;
-        Rect srcRect{};
+        BE_CLASS(SpriteEntry)
+
+        BE_REFLECT_FIELD PoolString name;
+        BE_REFLECT_FIELD PoolString texturePath;
+        BE_REFLECT_FIELD Rect srcRect{};
     };
 
     /**
@@ -32,10 +36,28 @@ namespace BECore {
         /**
          * @brief Load sprite definitions from config/TextureLibrary.xml
          *
-         * Must be called after ConfigManager::Initialize().
-         * Safe to call if the config file doesn't exist — library will be empty.
+         * Must be called after ConfigManager::Initialize(). Reads through ConfigManager::CreateDeserializer and Load, and logs the
+         * errors the deserializer collected. Safe to call if the config file doesn't exist: the library will be empty.
          */
         void Initialize();
+
+        /**
+         * @brief Replace the library with the sprites read from @p deserializer (positioned at the root of the config)
+         *
+         * Reads `<sprites><sprite name texturePath><srcRect x y w h/></sprite>...</sprites>`. A missing `sprites` leaves the library
+         * empty. An entry without a `name` (or with an empty one) is skipped silently, a repeated name overwrites the earlier entry in
+         * place, a missing `texturePath` or `srcRect` is the default (empty path, empty rect). Numbers are read leniently (the default
+         * IDeserializer, not strict values): a malformed number is 0. Every child node of `<sprites>` is read as a sprite, whatever its
+         * name; a comment there is an entry without a name and is skipped.
+         */
+        void Load(IDeserializer& deserializer);
+
+        /**
+         * @brief Write every entry, in insertion order, to @p serializer as `<sprites><sprite .../>...</sprites>`
+         *
+         * Always writes `sprites`, also when the library is empty. The shape is the one Load reads.
+         */
+        void Write(ISerializer& serializer) const;
 
         /**
          * @brief Look up a sprite entry by name
@@ -62,11 +84,14 @@ namespace BECore {
 
         /**
          * @brief Persist current state back to config/TextureLibrary.xml
-         * @return True if saved successfully
+         *
+         * Replaces the `sprites` section of the cached document with Write and saves the config; the rest of the file stays.
+         * @return True if saved successfully, false when the config is not loaded or the file cannot be written
          */
         bool Save();
 
     private:
+        void Clear();
         void RebuildIndex();
 
         eastl::vector<SpriteEntry> _entries;

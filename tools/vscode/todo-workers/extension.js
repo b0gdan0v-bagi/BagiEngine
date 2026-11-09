@@ -369,9 +369,16 @@ function activate(context) {
         return true;
     }
 
+    // The stored base and origin (todo.py claim --base) when the entry has them, else the commit guess.
     function whereNot(entry) {
-        return entry.foreignBase
-            ? `${entry.branch} was cut from ${entry.foreignBase}, not from ${entry.base}: review and merge it in the checkout that made it`
+        if (entry.foreignBase && entry.takenBase) {
+            return `${entry.branch} was taken in ${entry.takenOrigin || "another checkout"}, base ${entry.takenBase}, not ${entry.base}: review and merge it in the checkout that made it`;
+        }
+        if (entry.foreignBase) {
+            return `${entry.branch} was cut from ${entry.foreignBase}, not from ${entry.base}: review and merge it in the checkout that made it`;
+        }
+        return entry.takenOrigin
+            ? `no branch ${entry.branch} in this checkout: it was taken in ${entry.takenOrigin}, review and merge it there`
             : `no branch ${entry.branch} in this checkout: it was taken in another checkout or on another machine, review and merge it there`;
     }
 

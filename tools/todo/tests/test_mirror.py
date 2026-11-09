@@ -124,7 +124,7 @@ def test_a_failed_write_is_retried_later(mirrored):
 def linked(mirrored):
     api, mirror, fake = mirrored
     add(api)
-    api.post("/api/v1/entries/no-ci/claim", json={"branch": "todo/no-ci"}).raise_for_status()
+    api.post("/api/v1/entries/no-ci/claim", json={"branch": "todo/no-ci", "base": "main", "origin": "game@host"}).raise_for_status()
     mirror.process_outbox()
     return api, mirror, fake, task_of(api, fake)
 
@@ -135,6 +135,7 @@ def test_a_task_closed_in_vikunja_closes_the_entry(linked):
     assert send_webhook(api, "task.updated", task).json() == {"result": "changed"}
     entry = api.get("/api/v1/entries/no-ci").json()
     assert entry["status"] == "closed" and entry["branch"] is None
+    assert entry["base"] is None and entry["origin"] is None
     mirror.process_outbox()
     assert labels(task_of(api, fake)) == ["stage 1"]  # the status label goes with the closure
 
@@ -162,6 +163,7 @@ def test_labels_set_in_vikunja_change_status_and_stage_but_never_to_review(linke
     send_webhook(api, "task.updated", task)
     entry = api.get("/api/v1/entries/no-ci").json()
     assert entry["status"] == "open" and entry["stage"] is None
+    assert entry["branch"] is None and entry["base"] is None and entry["origin"] is None
 
 
 def test_the_echo_of_the_mirrors_own_write_changes_nothing(linked):
@@ -200,6 +202,7 @@ def test_a_deleted_task_closes_the_entry_and_is_not_recreated(linked):
     assert send_webhook(api, "task.deleted", {"id": task["id"]}).json() == {"result": "closed"}
     entry = api.get("/api/v1/entries/no-ci").json()
     assert entry["status"] == "closed" and entry["vikunjaTaskId"] is None
+    assert entry["branch"] is None and entry["base"] is None and entry["origin"] is None
     mirror.process_outbox()
     assert fake.tasks_of(task["project_id"]) == []
 

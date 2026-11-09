@@ -546,6 +546,90 @@ def test_list_json_store_marks_the_entries_whose_branch_is_elsewhere(game: Path,
     assert data["elsewhere"] == ["e-f", "e-gone", "g-far"]
 
 
+def stored(entry: dict, base: str | None, origin: str | None = None) -> dict:
+    """The entry as the store holds it after `claim --base` (`base` and `origin` of the todo store)."""
+    return {**entry, "base": base, "origin": origin}
+
+
+def test_branch_origin_trusts_the_stored_base_and_keeps_the_guess_for_old_entries(game: Path, store):
+    eng = game / "engine"
+    branch_with(eng, "games/other", "games/chess", "other.txt", "other game\n")
+    branch_with(eng, "todo/e-f", "games/other", "f.txt", "f\n")
+    branch_with(eng, "todo/e-n", "games/chess", "n.txt", "n\n")
+    # (a) stored base is the area's: sharing commits with another base is no reason to call it foreign
+    assert worker.branch_origin(eng, "todo/e-f", "games/chess", "games/chess") == {"local": True, "foreignBase": None}
+    # (b) stored base the repository does not know (never fetched): foreign all the same, with no guess
+    assert worker.branch_origin(eng, "todo/e-n", "games/chess", "games/never-fetched") == {"local": True, "foreignBase": "games/never-fetched"}
+    # (c) no stored base: the commit guess, as before
+    assert worker.branch_origin(eng, "todo/e-f", "games/chess") == {"local": True, "foreignBase": "games/other"}
+    assert worker.branch_origin(eng, "todo/e-f", "games/chess", None) == {"local": True, "foreignBase": "games/other"}
+    assert worker.branch_origin(eng, "todo/e-n", "games/chess") == {"local": True, "foreignBase": None}
+    # (d) not local: whatever is stored
+    assert worker.branch_origin(eng, "todo/e-gone", "games/chess", "games/other") == {"local": False, "foreignBase": None}
+    assert worker.branch_origin(eng, "todo/e-gone", "games/chess", "games/chess") == {"local": False, "foreignBase": None}
+
+
+def test_merge_plan_decides_from_the_stored_base(game: Path, store, capsys):
+    entries, calls = store
+    eng = game / "engine"
+    branch_with(eng, "games/other", "games/chess", "other.txt", "other game\n")
+    branch_with(eng, "todo/e-f", "games/other", "f.txt", "f\n")
+    branch_with(eng, "todo/e-n", "games/chess", "n.txt", "n\n")
+    # stored foreign base: refused with the base and the origin, though the repository knows nothing of it
+    entries["e-n"] = stored(review("e-n", "engine", "todo/e-n"), "games/never-fetched", "Other@host")
+    assert worker.main(["merge", "e-n", "--dry-run", "--json"]) == 1
+    error = capsys.readouterr().err
+    assert "todo/e-n was cut from games/never-fetched in Other@host, not from games/chess" in error
+    # no origin stored: the message still names the base
+    entries["e-n"] = stored(review("e-n", "engine", "todo/e-n"), "games/never-fetched")
+    assert worker.main(["merge", "e-n", "--dry-run"]) == 1
+    assert "cut from games/never-fetched in another checkout, not from games/chess" in capsys.readouterr().err
+    # stored base equal to the area's: planned, though the branch holds commits of games/other too
+    entries["e-f"] = stored(review("e-f", "engine", "todo/e-f"), "games/chess", "Game@host")
+    assert worker.main(["merge", "e-f", "--dry-run", "--json"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["branch"] == "todo/e-f" and plan["base"] == "games/chess" and plan["problems"] == []
+    # no stored base: the commit guess refuses it, as before
+    entries["e-f"] = review("e-f", "engine", "todo/e-f")
+    assert worker.main(["merge", "e-f", "--dry-run"]) == 1
+    assert "games/other" in capsys.readouterr().err
+    assert not [c for c in calls if c[0] == "close"]
+
+
+def test_list_json_store_rows_carry_the_stored_base_and_origin(game: Path, store, fake_claude, monkeypatch, capsys):
+    script, _log, _sessions = fake_claude
+    eng = game / "engine"
+    branch_with(eng, "games/other", "games/chess", "other.txt", "other game\n")
+    branch_with(eng, "todo/e-f", "games/other", "f.txt", "f\n")
+    branch_with(eng, "todo/e-n", "games/chess", "n.txt", "n\n")
+    branch_with(eng, "todo/e-ok", "games/chess", "ok.txt", "ok\n")
+    listed = [
+        stored(review("e-n", "engine", "todo/e-n"), "games/never-fetched", "Other@host"),
+        stored(review("e-ok", "engine", "todo/e-ok"), "games/chess", "Game@host"),
+        review("e-f", "engine", "todo/e-f"),
+        stored(review("e-gone", "engine", "todo/e-gone"), "games/other", "Other@host"),
+    ]
+    real_run = worker.subprocess.run
+
+    def fake_run(command, *args, **kwargs):
+        if any(str(part).endswith("todo.py") for part in command) and "list" in command:
+            return subprocess.CompletedProcess(command, 0, json.dumps(listed), "")
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(worker.subprocess, "run", fake_run)
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--store", "--claude", str(script)]) == 0
+    data = json.loads(capsys.readouterr().out)
+    rows = {e["id"]: (e["base"], e["takenBase"], e["takenOrigin"], e["local"], e["foreignBase"]) for e in data["review"]}
+    assert rows == {
+        "e-n": ("games/chess", "games/never-fetched", "Other@host", True, "games/never-fetched"),
+        "e-ok": ("games/chess", "games/chess", "Game@host", True, None),
+        "e-f": ("games/chess", None, None, True, "games/other"),
+        "e-gone": ("games/chess", "games/other", "Other@host", False, None),
+    }
+    assert data["elsewhere"] == ["e-n", "e-f", "e-gone"]
+
+
 def test_update_detaches_a_worker_at_the_tips_of_the_bases(game: Path, store, fake_claude, capsys):
     script, _log, _sessions = fake_claude
     worker.main(["create", "1", "--no-configure"])

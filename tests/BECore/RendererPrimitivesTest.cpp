@@ -361,7 +361,7 @@ namespace BECore::Tests {
                 geometry.push_back(&call);
             }
         }
-        ASSERT_EQ(geometry.size(), 2u);
+        ASSERT_EQ(geometry.size(), 4u);  // the two of cells 5 and 6, then the two turned textures of cells 7 and 8
 
         // The 1000 x 600 view fits an 800 x 600 output at scale 0.8 (offset y = 60). Cell 5 starts at x = 10 + 5 * 120 units and y = 20.
         const DrawCall& colors = *geometry[0];
@@ -381,6 +381,62 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(mirrored.vertices[0].x, 584.0f);
         EXPECT_FLOAT_EQ(mirrored.vertices[0].u, 1.0f);
         EXPECT_FLOAT_EQ(mirrored.vertices[1].u, 0.0f);
+    }
+
+    TEST_F(RenderProbeTest, TheBlendModeIsAlphaAfterADraw) {
+        _manager->DrawAll();
+
+        EXPECT_EQ(_renderer->GetBlendMode(), BlendMode::Alpha);
+    }
+
+    TEST_F(RenderProbeTest, ItDrawsTheTurnedAndTheFlippedTextureThroughGeometry) {
+        _manager->DrawAll();
+
+        eastl::vector<const DrawCall*> geometry;
+        for (const DrawCall& call : _renderer->calls) {
+            if (call.kind == DrawKind::Geometry && call.texture != nullptr && call.vertices[0].u == 0.0f && call.vertices[1].u == 1.0f) {
+                geometry.push_back(&call);
+            }
+        }
+        ASSERT_EQ(geometry.size(), 1u);  // cell 7; cell 8 runs u from 1 to 0, like the mirrored cell 6
+
+        // Cell 7 starts at x = 10 + 7 * 120 and the texture of 80 units is centered in it: its top-left corner, 40 units up and left of the
+        // center (900, 70), turned 30 degrees clockwise about the center is (885.36, 15.36); the view transform is scale 0.8, offset y = 60
+        const DrawCall& turned = *geometry[0];
+        ASSERT_EQ(turned.vertices.size(), 4u);
+        EXPECT_EQ(turned.indices.size(), 6u);
+        EXPECT_NEAR(turned.vertices[0].x, 708.29f, 0.01f);
+        EXPECT_NEAR(turned.vertices[0].y, 72.29f, 0.01f);
+        EXPECT_NE(turned.vertices[0].x, turned.vertices[2].x);  // not an axis-aligned rect any more
+
+        size_t flipped = 0;
+        for (const DrawCall& call : _renderer->calls) {
+            if (call.kind == DrawKind::Geometry && call.texture != nullptr && call.vertices.size() == 4 && call.vertices[0].u == 1.0f && call.vertices[0].x != call.vertices[2].x) {
+                ++flipped;
+                EXPECT_NEAR(call.vertices[0].x, 804.29f, 0.01f);  // the same corner position, one cell (96 pixels) further on
+            }
+        }
+        EXPECT_EQ(flipped, 1u);
+    }
+
+    TEST_F(RenderProbeTest, ItDrawsAnAdditiveAndAMultiplyHalfNextToAStraightOne) {
+        _manager->DrawAll();
+
+        size_t additive = 0;
+        size_t multiply = 0;
+        size_t straightGlass = 0;
+        for (const DrawCall& call : _renderer->calls) {
+            if (call.kind != DrawKind::Rect) {
+                EXPECT_EQ(call.blend, BlendMode::Alpha);
+                continue;
+            }
+            additive += call.blend == BlendMode::Add ? 1 : 0;
+            multiply += call.blend == BlendMode::Multiply ? 1 : 0;
+            straightGlass += (call.blend == BlendMode::Alpha && call.color.a == 160) ? 1 : 0;
+        }
+        EXPECT_EQ(additive, 1u);
+        EXPECT_EQ(multiply, 1u);
+        EXPECT_EQ(straightGlass, 2u);  // the reference half of each of the two cells
     }
 
     TEST_F(RenderProbeTest, ADrawAfterADrawDoesNotCreateAnotherTexture) {

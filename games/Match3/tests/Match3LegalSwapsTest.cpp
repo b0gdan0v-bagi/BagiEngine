@@ -12,8 +12,6 @@ namespace BECore::Match3::Tests {
 
     namespace {
 
-        constexpr char kGemLetters[] = ".ROYGBP";
-
         std::vector<std::string> BoardRows(const Match3GameModel& model) {
             std::vector<std::string> rows;
             for (int8_t row = 0; row < kBoardSize; ++row) {

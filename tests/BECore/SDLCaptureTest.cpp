@@ -11,7 +11,6 @@
 #include <CoreSDL/SDLScreenshot.h>
 #include <Events/RenderEvents.h>
 #include <SDL3_image/SDL_image.h>
-#include <array>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -45,6 +44,29 @@ namespace BECore::Tests {
                 image.rgba[i + 1] = fill.g;
                 image.rgba[i + 2] = fill.b;
                 image.rgba[i + 3] = fill.a;
+            }
+            return image;
+        }
+
+        constexpr uint32_t kQuadrantTextureSize = 8;  // texels per side of the test texture of MakeQuadrants()
+        constexpr uint32_t kQuadrantBlock = kQuadrantTextureSize / 2;
+        constexpr size_t kChannelCount = 4;
+
+        /// A texture image of four blocks of 4 by 4 texels, one color each: top-left, top-right, bottom-left, bottom-right. Asymmetric on both axes, so a turn and a flip show.
+        PixelBuffer MakeQuadrants(const std::array<Color, 4>& colors) {
+            PixelBuffer image;
+            image.width = kQuadrantTextureSize;
+            image.height = kQuadrantTextureSize;
+            image.rgba.resize(static_cast<size_t>(kQuadrantTextureSize) * kQuadrantTextureSize * kChannelCount);
+            for (uint32_t row = 0; row < kQuadrantTextureSize; ++row) {
+                for (uint32_t column = 0; column < kQuadrantTextureSize; ++column) {
+                    const Color& color = colors[(row / kQuadrantBlock) * 2 + column / kQuadrantBlock];
+                    const size_t offset = (static_cast<size_t>(row) * kQuadrantTextureSize + column) * kChannelCount;
+                    image.rgba[offset] = color.r;
+                    image.rgba[offset + 1] = color.g;
+                    image.rgba[offset + 2] = color.b;
+                    image.rgba[offset + 3] = color.a;
+                }
             }
             return image;
         }
@@ -142,6 +164,10 @@ namespace BECore::Tests {
             IntrusivePtr<ITexture> MakeSolidTexture(uint32_t width, uint32_t height, const Color& color) {
                 const PixelBuffer image = MakeImage(width, height, color);
                 return renderer->CreateTexture(image.rgba.data(), width, height);
+            }
+
+            IntrusivePtr<ITexture> MakeTexture(const PixelBuffer& image) {
+                return renderer->CreateTexture(image.rgba.data(), image.width, image.height);
             }
 
             IntrusivePtr<SDLMainWindow> window;
@@ -445,6 +471,304 @@ namespace BECore::Tests {
 
         ASSERT_FALSE(image.rgba.empty());
         EXPECT_EQ(PixelAt(image, 20, 20), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, AnAddRectBrightensTheBackgroundAndSaturates) {
+        renderer->Clear(kBackground);
+        renderer->SetBlendMode(BlendMode::Add);
+        renderer->DrawFilledRect(0.0f, 0.0f, 40.0f, 40.0f, Color{250, 100, 0, 255});
+        renderer->DrawFilledRect(100.0f, 0.0f, 40.0f, 40.0f, Color{250, 100, 0, 128});  // half of the color is added
+        renderer->SetBlendMode(BlendMode::Alpha);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {255, 120, 30, 255}, kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 20), {135, 70, 30, 255}, kBlendTolerance));
+        EXPECT_EQ(PixelAt(image, 60, 20), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, AMultiplyRectMultipliesTheBackground) {
+        renderer->Clear(kBackground);
+        renderer->SetBlendMode(BlendMode::Multiply);
+        renderer->DrawFilledRect(0.0f, 0.0f, 40.0f, 40.0f, Color{128, 255, 0, 255});
+        renderer->DrawFilledRect(100.0f, 0.0f, 40.0f, 40.0f, Color{255, 255, 255, 255});  // white leaves the target as it is
+        renderer->DrawFilledRect(200.0f, 0.0f, 40.0f, 40.0f, Color{0, 0, 0, 0});          // alpha 0 leaves it alone as well
+        renderer->SetBlendMode(BlendMode::Alpha);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {5, 20, 0, 255}, kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 20), AsPixel(kBackground), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 220, 20), AsPixel(kBackground), kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, AnAddTextureBrightensTheBackground) {
+        auto texture = MakeSolidTexture(4, 4, Color{100, 50, 200, 255});
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->SetBlendMode(BlendMode::Add);
+        renderer->DrawTexture(*texture, nullptr, 0.0f, 0.0f, 40.0f, 40.0f);
+        renderer->SetBlendMode(BlendMode::Alpha);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {110, 70, 230, 255}, kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, AMultiplyTextureMultipliesTheBackground) {
+        auto texture = MakeSolidTexture(4, 4, Color{128, 255, 0, 255});
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->SetBlendMode(BlendMode::Multiply);
+        renderer->DrawTexture(*texture, nullptr, 0.0f, 0.0f, 40.0f, 40.0f);
+        renderer->SetBlendMode(BlendMode::Alpha);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {5, 20, 0, 255}, kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, ATextureDoesNotKeepTheBlendModeOfAnEarlierDraw) {
+        auto texture = MakeSolidTexture(4, 4, Color{100, 50, 200, 255});
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->SetBlendMode(BlendMode::Add);
+        renderer->DrawTexture(*texture, nullptr, 0.0f, 0.0f, 40.0f, 40.0f);
+        renderer->SetBlendMode(BlendMode::Alpha);
+        renderer->DrawTexture(*texture, nullptr, 100.0f, 0.0f, 40.0f, 40.0f);  // the same texture, plain alpha again
+        renderer->DrawTexture(*texture, nullptr, 200.0f, 0.0f, 40.0f, 40.0f, Color{255, 255, 255, 128});
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {110, 70, 230, 255}, kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 20), {100, 50, 200, 255}, kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 220, 20), {55, 35, 115, 255}, kBlendTolerance));  // 128 / 255 of the texel over (10, 20, 30)
+    }
+
+    TEST_F(SDLCaptureTest, AnAddGeometryBrightensTheBackground) {
+        const Color color{250, 100, 0, 255};
+        const eastl::vector<GeometryVertex> quad = {
+            {0.0f, 0.0f, color, 0.0f, 0.0f},
+            {40.0f, 0.0f, color, 1.0f, 0.0f},
+            {40.0f, 40.0f, color, 1.0f, 1.0f},
+            {0.0f, 40.0f, color, 0.0f, 1.0f},
+        };
+        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        renderer->Clear(kBackground);
+
+        renderer->SetBlendMode(BlendMode::Add);
+        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        renderer->SetBlendMode(BlendMode::Alpha);
+        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 100.0f, 0.0f);  // after the add draw: opaque
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {255, 120, 30, 255}, kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 20), {250, 100, 0, 255}, kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, AnAddTexturedGeometryBrightensTheBackground) {
+        auto texture = MakeSolidTexture(4, 4, Color{100, 50, 200, 255});
+        ASSERT_TRUE(texture);
+        const Color white{255, 255, 255, 255};
+        const eastl::vector<GeometryVertex> quad = {
+            {0.0f, 0.0f, white, 0.0f, 0.0f},
+            {40.0f, 0.0f, white, 1.0f, 0.0f},
+            {40.0f, 40.0f, white, 1.0f, 1.0f},
+            {0.0f, 40.0f, white, 0.0f, 1.0f},
+        };
+        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        renderer->Clear(kBackground);
+
+        renderer->SetBlendMode(BlendMode::Add);
+        renderer->DrawGeometry(texture.Get(), {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        renderer->SetBlendMode(BlendMode::Alpha);
+        renderer->DrawGeometry(texture.Get(), {quad.data(), quad.size()}, {indices.data(), indices.size()}, 100.0f, 0.0f);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {110, 70, 230, 255}, kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 20), {100, 50, 200, 255}, kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, ARectTurnedBy90DegreesCoversTheTurnedArea) {
+        // 100 by 50 at (100, 50), turned about its center (150, 75): it becomes 50 wide and 100 high, x 125 to 175, y 25 to 125
+        renderer->Clear(kBackground);
+        renderer->DrawTransformedRect(100.0f, 50.0f, 100.0f, 50.0f, kRed, DrawTransform{90.0f, 150.0f, 75.0f});
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_EQ(PixelAt(image, 150, 35), AsPixel(kRed));         // above the old rect, inside the turned one
+        EXPECT_EQ(PixelAt(image, 150, 115), AsPixel(kRed));        // below it
+        EXPECT_EQ(PixelAt(image, 150, 75), AsPixel(kRed));         // the middle
+        EXPECT_EQ(PixelAt(image, 105, 55), AsPixel(kBackground));  // the old corner
+        EXPECT_EQ(PixelAt(image, 195, 95), AsPixel(kBackground));  // the opposite old corner
+    }
+
+    TEST_F(SDLCaptureTest, ARotatedRectBlendsByTheBlendMode) {
+        renderer->Clear(kBackground);
+        renderer->SetBlendMode(BlendMode::Add);
+        renderer->DrawTransformedRect(100.0f, 50.0f, 100.0f, 50.0f, Color{250, 100, 0, 255}, DrawTransform{90.0f, 150.0f, 75.0f});
+        renderer->SetBlendMode(BlendMode::Alpha);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 150, 35), {255, 120, 30, 255}, kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, AFlippedTextureShowsTheMirroredColors) {
+        // Four blocks of 4 by 4 texels: red, green on the top; blue, white below. Each draw is 40 by 40, so a block is 20 by 20 and its middle is 10 from the edges.
+        // The samples lie well inside the blocks. On the software triangle path (DrawGeometry) the UVs 0 to 1 are spread over the texels 0 to n-1 and rounded down
+        // (SDL_triangle.c), so a block edge moves and a 2 by 2 texture shows one texel; a transformed texture goes through SDL_RenderTextureRotated and has no such shift.
+        const Color white{255, 255, 255, 255};
+        const std::array<Color, 4> texels = {kRed, Color{0, 255, 0, 255}, Color{0, 0, 255, 255}, white};
+        auto texture = MakeTexture(MakeQuadrants(texels));
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->DrawTransformedTexture(*texture, nullptr, 0.0f, 0.0f, 40.0f, 40.0f, white, DrawTransform{0.0f, 0.0f, 0.0f, true, false});
+        renderer->DrawTransformedTexture(*texture, nullptr, 100.0f, 0.0f, 40.0f, 40.0f, white, DrawTransform{0.0f, 0.0f, 0.0f, false, true});
+        renderer->DrawTransformedTexture(*texture, nullptr, 200.0f, 0.0f, 40.0f, 40.0f, white, DrawTransform{0.0f, 0.0f, 0.0f, true, true});
+        renderer->DrawTransformedTexture(*texture, nullptr, 300.0f, 0.0f, 40.0f, 40.0f, white, DrawTransform{});  // identity: the plain draw
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        // flipX: green, red / white, blue
+        EXPECT_TRUE(IsNear(PixelAt(image, 10, 10), AsPixel(texels[1]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 30, 10), AsPixel(texels[0]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 10, 30), AsPixel(texels[3]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 30, 30), AsPixel(texels[2]), kBlendTolerance));
+        // flipY: blue, white / red, green
+        EXPECT_TRUE(IsNear(PixelAt(image, 110, 10), AsPixel(texels[2]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 130, 10), AsPixel(texels[3]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 110, 30), AsPixel(texels[0]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 130, 30), AsPixel(texels[1]), kBlendTolerance));
+        // both: white, blue / green, red
+        EXPECT_TRUE(IsNear(PixelAt(image, 210, 10), AsPixel(texels[3]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 230, 10), AsPixel(texels[2]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 210, 30), AsPixel(texels[1]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 230, 30), AsPixel(texels[0]), kBlendTolerance));
+        // no flip: red, green / blue, white
+        EXPECT_TRUE(IsNear(PixelAt(image, 310, 10), AsPixel(texels[0]), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 330, 30), AsPixel(texels[3]), kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, ATextureTurnedByExactly90And270DegreesIsTurnedAndNotFlipped) {
+        // 80 by 40, the left half red and the right half green, at (140, 140) turned about its center (180, 160): the turned box is x 160 to 200, y 120 to 200.
+        // Clockwise by 90 degrees the left half goes to the top; by 270 degrees to the bottom. (On the software renderer two triangles of an upright rectangle are
+        // a plain blit that only flips, so DrawGeometry() would draw this unturned.)
+        const Color green{0, 255, 0, 255};
+        auto texture = MakeTexture(MakeQuadrants({kRed, green, kRed, green}));
+        ASSERT_TRUE(texture);
+        const Color white{255, 255, 255, 255};
+
+        renderer->Clear(kBackground);
+        renderer->DrawTransformedTexture(*texture, nullptr, 140.0f, 140.0f, 80.0f, 40.0f, white, DrawTransform{90.0f, 180.0f, 160.0f});
+        renderer->DrawTransformedTexture(*texture, nullptr, 440.0f, 140.0f, 80.0f, 40.0f, white, DrawTransform{270.0f, 480.0f, 160.0f});
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        // 90 degrees: red above, green below, in both columns of the turned box
+        EXPECT_TRUE(IsNear(PixelAt(image, 170, 130), AsPixel(kRed), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 190, 130), AsPixel(kRed), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 170, 190), AsPixel(green), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 190, 190), AsPixel(green), kBlendTolerance));
+        EXPECT_EQ(PixelAt(image, 150, 160), AsPixel(kBackground));  // the old rect is left
+        EXPECT_EQ(PixelAt(image, 210, 160), AsPixel(kBackground));
+        // 270 degrees: green above, red below
+        EXPECT_TRUE(IsNear(PixelAt(image, 470, 130), AsPixel(green), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 490, 130), AsPixel(green), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 470, 190), AsPixel(kRed), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 490, 190), AsPixel(kRed), kBlendTolerance));
+        EXPECT_EQ(PixelAt(image, 450, 160), AsPixel(kBackground));
+        EXPECT_EQ(PixelAt(image, 510, 160), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, ATextureTurnedAboutACornerPivotLandsWhereTheTurnPutsIt) {
+        // The same 80 by 40 at (140, 140) turned by 90 degrees about its top-left corner: the box is x 100 to 140, y 140 to 220, the red left half on the top
+        const Color green{0, 255, 0, 255};
+        auto texture = MakeTexture(MakeQuadrants({kRed, green, kRed, green}));
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->DrawTransformedTexture(*texture, nullptr, 140.0f, 140.0f, 80.0f, 40.0f, Color{255, 255, 255, 255}, DrawTransform{90.0f, 140.0f, 140.0f});
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 150), AsPixel(kRed), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 210), AsPixel(green), kBlendTolerance));
+        EXPECT_EQ(PixelAt(image, 180, 160), AsPixel(kBackground));  // the old rect is left
+        EXPECT_EQ(PixelAt(image, 160, 160), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, AFlipIsAppliedBeforeTheRotation) {
+        // Red, green / blue, white at 80 by 40, turned by 90 degrees about the center, in a box of 40 by 80 whose quadrants are 20 by 40:
+        // a turn puts (top-left, top-right, bottom-left, bottom-right) at (top-right, bottom-right, top-left, bottom-left); a flip on X first swaps the columns of the picture
+        const Color green{0, 255, 0, 255};
+        const Color blue{0, 0, 255, 255};
+        const Color white{255, 255, 255, 255};
+        auto texture = MakeTexture(MakeQuadrants({kRed, green, blue, white}));
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->DrawTransformedTexture(*texture, nullptr, 140.0f, 140.0f, 80.0f, 40.0f, white, DrawTransform{90.0f, 180.0f, 160.0f});
+        renderer->DrawTransformedTexture(*texture, nullptr, 440.0f, 140.0f, 80.0f, 40.0f, white, DrawTransform{90.0f, 480.0f, 160.0f, true, false});
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        // turned only: blue, red / white, green (top row, bottom row)
+        EXPECT_TRUE(IsNear(PixelAt(image, 170, 140), AsPixel(blue), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 190, 140), AsPixel(kRed), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 170, 180), AsPixel(white), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 190, 180), AsPixel(green), kBlendTolerance));
+        // flipped on X, then turned: white, green / blue, red
+        EXPECT_TRUE(IsNear(PixelAt(image, 470, 140), AsPixel(white), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 490, 140), AsPixel(green), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 470, 180), AsPixel(blue), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 490, 180), AsPixel(kRed), kBlendTolerance));
+    }
+
+    TEST_F(SDLCaptureTest, ATurnedTextureUnderAViewTransformKeepsItsOrientation) {
+        // Left half red, right half green, 80 by 40 at (20, 20) turned by 90 degrees about its center (60, 40): units x 40 to 80, y 0 to 80, red on the top.
+        // The view maps (x, y) to (2x + 20, 2y + 10), so the box is x 100 to 180, y 10 to 170 in pixels and the old rect x 60 to 220, y 50 to 130.
+        const Color green{0, 255, 0, 255};
+        auto texture = MakeTexture(MakeQuadrants({kRed, green, kRed, green}));
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(kBackground);
+        renderer->SetViewTransform({2.0f, 20.0f, 10.0f});
+        renderer->DrawTransformedTexture(*texture, nullptr, 20.0f, 20.0f, 80.0f, 40.0f, Color{255, 255, 255, 255}, DrawTransform{90.0f, 60.0f, 40.0f});
+        renderer->SetViewTransform({});
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 30), AsPixel(kRed), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 160, 30), AsPixel(kRed), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 150), AsPixel(green), kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 160, 150), AsPixel(green), kBlendTolerance));
+        EXPECT_EQ(PixelAt(image, 80, 90), AsPixel(kBackground));  // the old rect, outside the turned box
+        EXPECT_EQ(PixelAt(image, 200, 90), AsPixel(kBackground));
+    }
+
+    TEST_F(SDLCaptureTest, ARotatedTextureUnderAViewTransformIsTurnedAndScaled) {
+        auto texture = MakeSolidTexture(4, 4, Color{0, 255, 0, 255});
+        ASSERT_TRUE(texture);
+
+        // 100 by 50 at (0, 0) turned by 90 degrees about (50, 25) covers x 25 to 75, y -25 to 75; the view maps (x, y) to (2x + 20, 2y + 10)
+        renderer->Clear(kBackground);
+        renderer->SetViewTransform({2.0f, 20.0f, 10.0f});
+        renderer->DrawTransformedTexture(*texture, nullptr, 0.0f, 0.0f, 100.0f, 50.0f, Color{255, 255, 255, 255}, DrawTransform{90.0f, 50.0f, 25.0f});
+        renderer->SetViewTransform({});
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 150), {0, 255, 0, 255}, kBlendTolerance));  // scene (50, 70): in the turned area, below the old rect
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 30), {0, 255, 0, 255}, kBlendTolerance));   // scene (50, 10)
+        EXPECT_EQ(PixelAt(image, 30, 20), AsPixel(kBackground));                           // scene (5, 5): in the old rect, outside the turned one
+        EXPECT_EQ(PixelAt(image, 200, 100), AsPixel(kBackground));                         // scene (90, 45): the same on the right
     }
 
     TEST_F(SDLCaptureTest, AClippedRectDrawsOnlyInsideTheClip) {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Renderer/BlendMode.h>
+#include <BECore/Renderer/DrawTransform.h>
 #include <BECore/Renderer/ViewTransform.h>
 
 namespace BECore {
@@ -69,6 +71,18 @@ namespace BECore {
         // .claude/rules/rendering-module.md).
         virtual void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY);
 
+        // Draws a rect rotated about @p transform's pivot (absolute, in the units of the call). An identity transform is DrawFilledRect() unchanged;
+        // otherwise the default builds the four rotated corners (MakeTransformedQuad()) and draws them through DrawGeometry(), which applies the view
+        // transform, the clip and the blend mode, so it works on every backend that has DrawGeometry() and no backend needs to override it.
+        // Not BE_FUNCTION, like DrawTexture() and DrawGeometry().
+        virtual void DrawTransformedRect(float x, float y, float w, float h, const Color& color, const DrawTransform& transform);
+
+        // Draws a texture like DrawTexture() but rotated about @p transform's pivot and mirrored by its flips (the UVs swap). An identity transform is
+        // DrawTexture() unchanged; otherwise the default draws a textured quad through DrawGeometry() with the UVs of @p srcRect over the texture size
+        // (the whole texture when @p srcRect is null or empty) and @p tint as the vertex color. A texture without size draws nothing. A backend can
+        // override it with a native draw (SDLRendererBackend does, with SDL_RenderTextureRotated).
+        virtual void DrawTransformedTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint, const DrawTransform& transform);
+
         // Makes a texture from pixels in memory: RGBA8 (red first), straight alpha, rows packed from the top, so
         // @p rgba holds `width * height * 4` bytes. The pixels are copied. Empty when the size is zero or the backend fails.
         // Main thread only, like every GPU call (a loader running on a pool thread must not call it).
@@ -91,6 +105,17 @@ namespace BECore {
         // replaces one that has not been served, whose callback then gets an error. A backend that cannot read its output
         // back keeps this default, which calls @p callback at once with an error (the Vulkan backend: .claude/rules/rendering-module.md).
         virtual void RequestCapture(CaptureCallback callback);
+
+        // How the draws combine with the target (Alpha by default). State of the interface, like the view transform: SDL applies it to every
+        // primitive (DrawFilledRect, DrawTexture, DrawGeometry and so the transformed draws); Vulkan draws straight alpha whatever it says and warns
+        // once (BlendMode.h). Whoever sets another mode puts the previous one back
+        // (ScopedBlendMode), so a draw further on never sees a mode that leaked.
+        void SetBlendMode(BlendMode mode) {
+            _blendMode = mode;
+        }
+        [[nodiscard]] BlendMode GetBlendMode() const {
+            return _blendMode;
+        }
 
         // Maps the coordinates of DrawFilledRect() and DrawTexture() to output pixels (the identity by default). The
         // scene sets it around its draw pass to fit its view to the output (Scene::Draw()). The backends apply it.
@@ -125,8 +150,27 @@ namespace BECore {
         uint64_t _id = 0;
         bool _geometryWarned = false;
         ViewTransform _viewTransform;
+        BlendMode _blendMode = BlendMode::Alpha;
         // Each entry is already intersected with the one below it
         eastl::vector<Rect> _clipStack;
+    };
+
+    /// Sets a blend mode on a renderer for the length of a scope and puts the previous one back
+    class ScopedBlendMode {
+    public:
+        ScopedBlendMode(IRenderer& renderer, BlendMode mode) : _renderer(renderer), _previous(renderer.GetBlendMode()) {
+            _renderer.SetBlendMode(mode);
+        }
+        ~ScopedBlendMode() {
+            _renderer.SetBlendMode(_previous);
+        }
+
+        ScopedBlendMode(const ScopedBlendMode&) = delete;
+        ScopedBlendMode& operator=(const ScopedBlendMode&) = delete;
+
+    private:
+        IRenderer& _renderer;
+        BlendMode _previous;
     };
 
 }  // namespace BECore

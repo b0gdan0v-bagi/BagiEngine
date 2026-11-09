@@ -313,7 +313,7 @@ class Mirror:
         if area is not None and area["id"] != entry["area"]:
             changes["area"] = area["id"]
         if changes.get("status") in ("open", "closed"):
-            changes.update(branch=None, status_note="")
+            changes.update(branch=None, base=None, origin=None, status_note="")
         conn.execute("UPDATE entries SET vikunja_snapshot = %s WHERE id = %s", (Jsonb(current), entry["id"]))
         if not changes:
             return False
@@ -370,7 +370,7 @@ class Mirror:
             return "ignored"
         conn.execute("UPDATE entries SET vikunja_task_id = NULL, vikunja_snapshot = NULL WHERE id = %s", (entry["id"],))
         if entry["status"] != "closed":
-            store.update_entry(conn, entry["id"], {"status": "closed", "branch": None, "status_note": "task deleted in Vikunja"}, ACTOR, "vikunja", mirror=False)
+            store.update_entry(conn, entry["id"], {"status": "closed", "branch": None, "base": None, "origin": None, "status_note": "task deleted in Vikunja"}, ACTOR, "vikunja", mirror=False)
         return "closed"
 
     def on_webhook(self, payload: dict) -> str:

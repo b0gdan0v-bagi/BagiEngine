@@ -2,7 +2,7 @@
 
 ## Overview
 
-The core of the external control API: a program or a model sends commands, the engine runs them on the main thread. This directory has no transport and no game knowledge. A transport (the WebSocket server of the `RemoteControl` module) feeds `ControlService::Post()`; modules above BECore register the methods (`ping`, `status`, `step`, `quit` live here; the game methods are registered by `Games`, the screenshot by `SDL`). What is left to do (Windows, a capture on Vulkan, delayed tasks on the manual clock) is in the entry `control-api-gaps` of the todo store; the tools that use the API are in `tools/control/CLAUDE.md`.
+The core of the external control API: a program or a model sends commands, the engine runs them on the main thread. This directory has no transport and no game knowledge. A transport (the WebSocket server of the `RemoteControl` module) feeds `ControlService::Post()`; modules above BECore register the methods (`ping`, `status`, `step`, `quit` live here; the game methods are registered by `Games`, the screenshot by `SDL`). What is left to do (a capture on Vulkan, the Stockfish games in ctest or CI, a person at the window) is in the entry `control-api-gaps` of the todo store; the tools that use the API are in `tools/control/CLAUDE.md`.
 
 | File | Purpose |
 |------|---------|
@@ -32,7 +32,7 @@ Error codes are strings and part of the protocol (`ControlErrors`): `parse_error
 ## Frame and threads
 
 - `Post()` is the only thread-safe call. It parses the text on the posting thread and queues the request; everything else (`RegisterHandler`, `Drain`, `EndFrame`, `Publish`, `Shutdown`, the handlers, the reply and the event sink) belongs to the main thread.
-- `CoreManager::OnGameCycle` calls `Drain()` as stage **1b**: after input, before `TaskManager::Update`. A command therefore sees this frame's input and what it changes is seen by this frame's logic and render. `Application::Run` calls `EndFrame()` after the present.
+- `CoreManager::OnGameCycle` calls `Drain()` as stage **1b**: after input, before `TaskManager::Update`. A command therefore sees this frame's input and what it changes is seen by this frame's logic and render. `Application::RunFrame` calls `EndFrame()` after the present.
 - Requests run in the order they were posted (per posting thread). Do not use `TaskManager` for commands: its main-thread queue is a priority queue and does not keep the order of equal priorities.
 - A handler ends in exactly one of `Reply()`, `Fail()`, `DeferFrames()`; one that does none gets `internal_error` and an error log line.
 - `DeferFrames(n, done)` answers later: `done` runs at the end of the frame in which the counter (starting at `n`, at least 1) reaches zero. `DeferFrames(n, secondsPerFrame, done)` also says how long each frame lasts, which only the manual clock uses (negative or not a number is zero; the default is `kDefaultStepSeconds`, 1/60). While a call is deferred it is a **barrier**: the requests behind it wait, so a client that pipelines `step` and `get_state` gets the state after the step. A method registered with `bypassBarrier` (`quit`) still runs, but cannot defer itself.
@@ -61,7 +61,7 @@ The two clocks differ in who runs the frames:
 |---|---|---|
 | Frames | run all the time; `Time::Tick` measures them | run only while `ControlService::IsStepDue()`; `Time::Advance(GetStepSeconds())` sets their length |
 | `step` | waits for `N` frames; `dt` is ignored | makes `N` frames of `dt` seconds, then answers |
-| Between steps | | `Application::Run` calls `CoreManager::OnIdleCycle`: input, `Drain()`, then `WaitForRequests` (up to 8 ms, woken by `Post`). The window stays alive and `quit` still works |
+| Between steps | | `Application::RunFrame` calls `CoreManager::OnIdleCycle`: input, `Drain()`, then `WaitForRequests` (up to 8 ms, woken by `Post`). The window stays alive and `quit` still works |
 
 While a step runs it is the barrier, so a pipelined `step` + `get_state` gives the state after the frames. `quit` bypasses the barrier and ends even a step of `kMaxStepFrames`. A call that defers frames for another reason (`screenshot` asks for one frame of `dt` 0) uses the same machinery: `IsStepDue()` is true while any deferred call is pending, so the next frame runs and its `EndFrame()` counts it down. All of this state lives in `ControlService`, so `ControlServiceTest` plays the application loop (`RunDueFrames`) without an application.
 

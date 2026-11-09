@@ -6,9 +6,9 @@
 
 ## Content roots and layers
 
-Content is layered. A **content root** is a directory with `config/` and/or `assets/` inside; roots are ordered from lowest to highest priority. Every game executable has two: the engine checkout (`BAGI_ENGINE_ROOT`) and the game (`BAGI_GAME_ROOT`) on top of it. A mount point (`config`, `assets`) has one **layer** per root that has such a folder, and a lookup goes through the layers from the top: a game file overrides an engine file of the same relative path. Files that exist in one layer only are seen as they are.
+Content is layered. A **content root** is a directory with `config/` and/or `assets/` inside; roots are ordered from lowest to highest priority. Every desktop game executable has two: the engine checkout (`BAGI_ENGINE_ROOT`) and the game (`BAGI_GAME_ROOT`) on top of it. The web build has a third, `BAGI_WEB_ROOT`: the engine's `web/` overlay (`web/config/`: window, renderer and log for the browser), on top of the game, so its files win over the game's of the same name (a layer replaces a whole file). A mount point (`config`, `assets`) has one **layer** per root that has such a folder, and a lookup goes through the layers from the top: a game file overrides an engine file of the same relative path. Files that exist in one layer only are seen as they are.
 
-`main.cpp` adds the two roots (`AddContentRoot`, engine first) before `Application::Initialize()`; `be_add_game_executable` defines the macros. The gtest environment adds the engine root only.
+`main.cpp` adds the roots (`AddContentRoot`, engine first, game, then `BAGI_WEB_ROOT` when it is defined) before `Application::Initialize()`; `be_add_game_executable` defines the macros. On the desktop they are the paths of the checkouts; on the web (`be_web_configure_target`, `cmake/BagiWeb.cmake`) all three are virtual paths inside the preloaded package (`/bagi/engine`, `/bagi/game`, `/bagi/web`), where the `config/` and `assets/` folders of each root are packed. The gtest environment adds the engine root only.
 
 ## Initialization
 
@@ -38,4 +38,5 @@ Without the macros (a target not built through `be_add_game_executable`) the gam
 - Never build asset or config paths by concatenating strings or `std::filesystem` calls in engine or game code; pass the virtual path to `FileSystem`, `ResourceManager` or `ConfigManager`.
 - Use `PoolString` for mount-point names and `"name"_intern` for literals.
 - Writing files (saves, config edits) goes through the resolved real path; do not assume the working directory is the root. An edited engine default is written back into the engine checkout (the layer where it was found), not copied into the game.
+- Saves are written into a mounted folder (`saves`) by `SaveGameService` (`Save/CLAUDE.md`), not by hand.
 - A new file for a game belongs in `games/<Name>/config/` or `games/<Name>/assets/`; a game file with the name of an engine file replaces it as a whole (configs are not merged).

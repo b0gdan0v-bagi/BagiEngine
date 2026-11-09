@@ -132,7 +132,8 @@ def expected_core_worktree(layout: Layout) -> str | None:
     if layout.shared is None:
         return None
     gitdir = module_dir(layout.main, submodule_paths(layout.main)[SHARED_SUBMODULE])
-    return os.path.relpath(layout.shared, gitdir)
+    # git writes core.worktree with forward slashes on every platform; relpath gives backslashes on Windows
+    return Path(os.path.relpath(layout.shared, gitdir)).as_posix()
 
 
 def actual_core_worktree(layout: Layout) -> str | None:
@@ -442,7 +443,12 @@ def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
         # where the panel finds the branch and what it is compared with (Review, Quick merge)
         row["repo"] = str((layout.main / area["repo"]).resolve()) if area else None
         row["base"] = area["base"] if area else None
-        row.update(branch_origin(Path(row["repo"]), row["branch"], row["base"]) if area and row["branch"] else {"local": None, "foreignBase": None})
+        # where the claim recorded the branch was cut from and made (null for an entry claimed before that); `base` above is the area's
+        row["takenBase"] = entry.get("base") or None
+        row["takenOrigin"] = entry.get("origin") or None
+        row.update(
+            branch_origin(Path(row["repo"]), row["branch"], row["base"], row["takenBase"]) if area and row["branch"] else {"local": None, "foreignBase": None}
+        )
         shown.append(row)
     return shown, None
 
@@ -494,7 +500,8 @@ def base_candidates(repo: Path, base: str) -> list[str]:
 
 
 def foreign_base(repo: Path, branch: str, base: str) -> str | None:
-    """The base branch other than `base` that `branch` was cut from, if it looks so: the branch holds commits
+    """Only for an entry claimed before the store recorded its base (`branch_origin` uses the stored one
+    otherwise). The base branch other than `base` that `branch` was cut from, if it looks so: the branch holds commits
     of that branch (local or fetched) that `base` has not. Such a branch is another checkout's (a loop of
     another game took an entry of the engine area); merged here it would bring those commits along. None when
     no other base branch is known or the branch shares nothing with one beyond `base`."""
@@ -505,11 +512,15 @@ def foreign_base(repo: Path, branch: str, base: str) -> str | None:
     return None
 
 
-def branch_origin(repo: Path, branch: str, base: str) -> dict:
+def branch_origin(repo: Path, branch: str, base: str, taken_base: str | None = None) -> dict:
     """`local`: the branch exists in `repo` (an entry taken in another checkout or on another machine has its
-    branch there, never here); `foreignBase`: what `foreign_base` says, for a local branch."""
+    branch there, never here); `foreignBase`, for a local branch: `taken_base` (the base the claim stored)
+    when it differs from `base`, else None; with no `taken_base` (an entry claimed before the store recorded
+    it) what the commit guess `foreign_base` says."""
     if not repo.is_dir() or not git_ok("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=repo):
         return {"local": False, "foreignBase": None}
+    if taken_base:
+        return {"local": True, "foreignBase": taken_base if taken_base != base else None}
     return {"local": True, "foreignBase": foreign_base(repo, branch, base)}
 
 
@@ -543,9 +554,14 @@ def merge_plan(layout: Layout, entry_id: str) -> dict:
         raise WorkerError(f"no branch {branch} in {repo}: it was made in another checkout or on another machine, review and merge it there")
     if git_ok("merge-base", "--is-ancestor", branch, base, cwd=repo):
         raise WorkerError(f"{branch} is already merged into {base}")
-    foreign = foreign_base(repo, branch, base)
-    if foreign:
-        raise WorkerError(f"{branch} holds commits of {foreign} that {base} has not: it was cut from {foreign} in another checkout, merge it there")
+    taken_base = entry.get("base") or None
+    if taken_base:
+        if taken_base != base:
+            raise WorkerError(f"{branch} was cut from {taken_base} in {entry.get('origin') or 'another checkout'}, not from {base}: merge it there")
+    else:
+        foreign = foreign_base(repo, branch, base)
+        if foreign:
+            raise WorkerError(f"{branch} holds commits of {foreign} that {base} has not: it was cut from {foreign} in another checkout, merge it there")
     tree = subprocess.run(["git", "merge-tree", "--write-tree", "--name-only", base, branch], cwd=repo, capture_output=True, text=True)
     conflicts = []
     if tree.returncode != 0:
@@ -930,6 +946,8 @@ def list_json(layout: Layout, args) -> dict:
 
 def cmd_list(layout: Layout, args) -> None:
     if args.json:
+        # A pipe on Windows gets the ANSI code page (cp1251), and the panel reads UTF-8: the JSON is always UTF-8
+        sys.stdout.reconfigure(encoding="utf-8")
         print(json.dumps(list_json(layout, args), ensure_ascii=False, indent=1))
         return
     workers = layout.workers()

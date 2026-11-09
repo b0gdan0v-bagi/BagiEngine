@@ -82,6 +82,14 @@
             }
         },
         {
+            "name": "no-module-scan",
+            "hidden": true,
+            "description": "The engine has no C++20 modules; scanning for them needs clang-scan-deps, which not every LLVM on Windows ships",
+            "cacheVariables": {
+                "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
+            }
+        },
+        {
             "name": "vs2022",
             "hidden": true,
             "inherits": "base",
@@ -89,6 +97,22 @@
             "architecture": {
                 "value": "x64",
                 "strategy": "set"
+            }
+        },
+        {
+            "name": "web",
+            "hidden": true,
+            "description": "The browser build with the Emscripten SDK: set EMSDK to the emsdk folder (emsdk_env). Hidden without EMSDK. No tests (ctest does not run wasm), no editor panels",
+            "inherits": "ninja",
+            "condition": {
+                "type": "notEquals",
+                "lhs": "$env{EMSDK}",
+                "rhs": ""
+            },
+            "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+            "cacheVariables": {
+                "ENGINE_BUILD_TESTS": "OFF",
+                "BE_WITH_EDITOR": "OFF"
             }
         },
         {
@@ -152,12 +176,12 @@
         {
             "name": "windows-clang-debug",
             "displayName": "Windows Clang Ninja Debug",
-            "inherits": ["ninja", "host-windows", "vs-env", "clang", "debug"]
+            "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "debug"]
         },
         {
             "name": "windows-clang-release",
             "displayName": "Windows Clang Ninja Release",
-            "inherits": ["ninja", "host-windows", "vs-env", "clang", "release"]
+            "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "release"]
         },
         {
             "name": "windows-vs2022",
@@ -172,6 +196,16 @@
                 "value": "ClangCL",
                 "strategy": "set"
             }
+        },
+        {
+            "name": "web-debug",
+            "displayName": "Web (Emscripten) Debug",
+            "inherits": ["web", "debug"]
+        },
+        {
+            "name": "web-release",
+            "displayName": "Web (Emscripten) Release",
+            "inherits": ["web", "release"]
         }
     ],
     "buildPresets": [
@@ -197,6 +231,16 @@
                 "type": "equals",
                 "lhs": "${hostSystemName}",
                 "rhs": "Windows"
+            }
+        },
+        {
+            "name": "build-web",
+            "hidden": true,
+            "inherits": "build-base",
+            "condition": {
+                "type": "notEquals",
+                "lhs": "$env{EMSDK}",
+                "rhs": ""
             }
         },
         {
@@ -286,6 +330,18 @@
             "inherits": "build-windows",
             "configurePreset": "windows-vs2022-clangcl",
             "configuration": "Release"
+        },
+        {
+            "name": "web-debug",
+            "displayName": "Web (Emscripten) Debug",
+            "inherits": "build-web",
+            "configurePreset": "web-debug"
+        },
+        {
+            "name": "web-release",
+            "displayName": "Web (Emscripten) Release",
+            "inherits": "build-web",
+            "configurePreset": "web-release"
         }
     ],
     "testPresets": [

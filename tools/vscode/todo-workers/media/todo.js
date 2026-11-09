@@ -166,11 +166,17 @@
         const holder = (payload.workers || []).find((w) => w.active && w.entry === entry.id);
         if (holder) top.insertBefore(el("span", "badge busy", holder.name), top.lastChild);
         const away = (payload.elsewhere || []).includes(entry.id);
-        if (away) top.insertBefore(el("span", "badge away", "branch elsewhere"), top.lastChild);
+        const taken = [entry.origin ? `taken in ${entry.origin}` : "", entry.base ? `base ${entry.base}` : ""].filter(Boolean).join(", ");
+        if (away) {
+            const badge = el("span", "badge away", "branch elsewhere");
+            if (taken) badge.title = taken;
+            top.insertBefore(badge, top.lastChild);
+        }
         if (away) item.appendChild(el("div", "note", "its branch lives in another checkout or on another machine (or was cut from another base): review, merge and continue it there"));
         else if (!holder && (entry.status === "open" || entry.status === "in progress")) item.appendChild(el("div", "actions")).appendChild(startButton(entry));
 
         if (open.has(entry.id)) {
+            if (taken && (entry.status === "in progress" || entry.status === "review")) item.appendChild(el("div", "muted", taken));
             item.appendChild(markdown(entry.body));
             const actions = el("div", "actions");
             actions.appendChild(button("Markdown", { cmd: "show", entry: entry.id }, "todo.py show in a markdown preview"));

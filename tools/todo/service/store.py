@@ -12,7 +12,7 @@ from psycopg.types.json import Jsonb
 from todo_markdown import ID_RE, PLAN_NAME_RE, STATUSES, checklist_progress, extract_summary, read_checklist
 
 PLAN_KINDS = ("owner", "slice", "review")
-ENTRY_FIELDS = ("title", "body", "status", "status_date", "status_note", "branch", "stage", "plan")
+ENTRY_FIELDS = ("title", "body", "status", "status_date", "status_note", "branch", "base", "origin", "stage", "plan")
 MIRRORED_FIELDS = ("title", "body", "status", "status_date", "status_note", "branch", "stage", "plan")
 
 
@@ -130,6 +130,8 @@ def to_json(entry: dict, plan: dict | None = None, with_body: bool = True) -> di
         "statusNote": entry["status_note"],
         "statusLine": status_line(entry),
         "branch": entry["branch"],
+        "base": entry["base"],
+        "origin": entry["origin"],
         "stage": entry["stage"],
         "plan": entry["plan"],
         "planShown": plan["name"] if plan else None,
@@ -267,11 +269,13 @@ def update_entry(
 # --- the life of an entry in the loop ----------------------------------------------------------
 
 
-def claim(conn: Connection, entry_id: str, branch: str, actor: str) -> dict:
+def claim(conn: Connection, entry_id: str, branch: str, actor: str, base: str | None = None, origin: str | None = None) -> dict:
+    """open -> in progress on `branch`; `base` (the branch it is cut from) and `origin` (the checkout) are stored with it, a blank one as None."""
     entry = require_entry(conn, entry_id, lock=True)
     if entry["status"] != "open":
         raise StoreError(409, f"entry '{entry_id}' is '{status_line(entry)}', not open")
-    return update_entry(conn, entry_id, {"status": "in progress", "branch": branch, "status_note": ""}, actor, "claim")
+    changes = {"status": "in progress", "branch": branch, "base": (base or "").strip() or None, "origin": (origin or "").strip() or None, "status_note": ""}
+    return update_entry(conn, entry_id, changes, actor, "claim")
 
 
 def review(conn: Connection, entry_id: str, branch: str, note: str, actor: str) -> dict:
@@ -289,12 +293,12 @@ def stop(conn: Connection, entry_id: str, reason: str, actor: str) -> dict:
 
 
 def close(conn: Connection, entry_id: str, reopen: bool, actor: str) -> dict:
-    """After the merge: closed, or open again (the next slice) with the branch cleared."""
+    """After the merge: closed, or open again (the next slice) with the branch, its base and its origin cleared."""
     entry = require_entry(conn, entry_id, lock=True)
     if entry["status"] == "closed":
         raise StoreError(409, f"entry '{entry_id}' is closed already")
     status = "open" if reopen else "closed"
-    return update_entry(conn, entry_id, {"status": status, "branch": None, "status_note": ""}, actor, "reopen" if reopen else "close")
+    return update_entry(conn, entry_id, {"status": status, "branch": None, "base": None, "origin": None, "status_note": ""}, actor, "reopen" if reopen else "close")
 
 
 # --- plans -------------------------------------------------------------------------------------
