@@ -150,11 +150,11 @@ BECoreModule must be first (provides PCH):
 
 `CMakePresets.json` (project root) is the single source of build configurations; VS Code CMake Tools, the CLI and the `build` skill all use it.
 
-- Hidden bases are composed via `inherits`: generator (`ninja`, `vs2022`), build type (`debug`, `release`), the RmlUi switch (`rmlui`: `ENGINE_UI_RMLUI=ON`, for `macos-rmlui-debug` / `macos-rmlui-release`; no Windows ones until the host is built there), the editor switch (`editor`: `BE_WITH_EDITOR=ON`, for `macos-release-editor` / `windows-msvc-release-editor`), compiler (`clang`, `msvc`), host `condition` (`host-macos`, `host-windows`). Visible presets are named `<os>-<toolchain>-<type>`.
+- Hidden bases are composed via `inherits`: generator (`ninja`, `vs2022`), build type (`debug`, `release`), the RmlUi switch (`rmlui`: `ENGINE_UI_RMLUI=ON`, for `macos-rmlui-debug` / `macos-rmlui-release`; no Windows ones until the host is built there), the editor switch (`editor`: `BE_WITH_EDITOR=ON`, for `macos-release-editor` / `windows-msvc-release-editor`), compiler (`clang`, `msvc`), `no-module-scan` (`CMAKE_CXX_SCAN_FOR_MODULES=OFF`, for `windows-clang-*`: the engine has no C++20 modules, and the scan needs `clang-scan-deps`, which not every LLVM on Windows ships), host `condition` (`host-macos`, `host-windows`). Visible presets are named `<os>-<toolchain>-<type>`.
 - Every `binaryDir` is `${sourceDir}/build/${presetName}`. Build presets carry the same host `condition`, so other OSes' presets stay hidden. They name no `targets` (the build is `all`): a game that carries the engine as a submodule includes this file in its own `CMakePresets.json` (`"include": ["engine/CMakePresets.json"]`), and a preset name cannot be defined twice, so a list of the engine's games would break its build.
 - `testPresets` mirror the build presets (same names, hidden `test-base` / `test-macos` / `test-windows`) and set `outputOnFailure`. Use `ctest --preset <preset>`.
 - Release presets set `ENGINE_ENABLE_ASSERTS=OFF` / `ENGINE_ENABLE_EXPECTS=OFF` explicitly (the logic in `cmake/BagiEngine.cmake` that should do this for `CMAKE_BUILD_TYPE=Release` never fires because `option()` has already defined the cache entries).
-- Ninja on Windows uses `architecture`/`toolset` with `strategy: external` so CMake Tools loads the Visual Studio environment. A plain shell does not get it; use the `windows-vs2022-*` presets there.
+- Ninja on Windows uses `architecture`/`toolset` with `strategy: external` so CMake Tools loads the Visual Studio environment. A plain shell does not get it: run `cmake --preset` and `cmake --build --preset` through `CI/scripts/vs_env.py` (vswhere + `vcvarsall.bat x64`, `PATH` extended behind the caller's). Without it Clang stops at configure (`No CMAKE_RC_COMPILER could be found`) and at the archive step (`CMAKE_AR-NOTFOUND`). `windows-clang-*` is the default Windows build (the `build` skill); the MSVC presets are fallbacks.
 - Do not put per-machine values (`VULKAN_SDK`, ccache, LLVM paths) in `CMakePresets.json`; use `CMakeUserPresets.json` (git-ignored).
 - When adding a preset, add the matching build preset **and test preset** and extend the preset list in `CLAUDE.md` and the `build` skill.
 - Do not pre-set a variable to `""` before `find_program()`/`find_path()`: the search is skipped (this broke the `glslc` PATH fallback in `src/Modules/Vulkan/CMakeLists.txt`).
@@ -169,4 +169,4 @@ build/{Compiler}{Platform}/
 └── lib/                 # Static libraries
 ```
 
-Example: `build/MSVCWindows/`, `build/ClangmacOS/`
+Example: `build/ClangWindows/`, `build/MSVCWindows/`, `build/ClangmacOS/`

@@ -82,6 +82,14 @@
             }
         },
         {
+            "name": "no-module-scan",
+            "hidden": true,
+            "description": "The engine has no C++20 modules; scanning for them needs clang-scan-deps, which not every LLVM on Windows ships",
+            "cacheVariables": {
+                "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
+            }
+        },
+        {
             "name": "vs2022",
             "hidden": true,
             "inherits": "base",
@@ -152,12 +160,12 @@
         {
             "name": "windows-clang-debug",
             "displayName": "Windows Clang Ninja Debug",
-            "inherits": ["ninja", "host-windows", "vs-env", "clang", "debug"]
+            "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "debug"]
         },
         {
             "name": "windows-clang-release",
             "displayName": "Windows Clang Ninja Release",
-            "inherits": ["ninja", "host-windows", "vs-env", "clang", "release"]
+            "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "release"]
         },
         {
             "name": "windows-vs2022",
