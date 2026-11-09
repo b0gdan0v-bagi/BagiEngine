@@ -127,8 +127,8 @@ namespace BECore {
 
         /**
          * True when the running background job should suspend (co_await YieldIfNeeded()): the pool is inline,
-         * the caller is a background job and the budget window is spent. False on a worker pool (no shared
-         * state is read, so it is safe from any thread), in a main-thread job, outside any job, before the
+         * the caller is a background job and the budget window is spent. False on a worker pool (only the stop flag and the kind of the
+         * pool are read, so it is safe from any thread), in a main-thread job, outside any job, before the
          * first frame (the window is open until the first ProcessBackgroundSlices), and once the scheduler is stopped
          * (its pool may be gone).
          */
@@ -200,7 +200,8 @@ namespace BECore {
         TimePoint _sliceDeadline = (TimePoint::max)();
         TimePoint (*_budgetNow)() = nullptr;  // nullptr: steady_clock::now
 
-        bool _stopped = false;
+        // Written by Initialize / Shutdown on the main thread, read by any thread (Schedule, ShouldYield)
+        std::atomic<bool> _stopped{false};
     };
 
 }  // namespace BECore

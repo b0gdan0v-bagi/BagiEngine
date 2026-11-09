@@ -390,6 +390,9 @@ namespace BECore::Tests {
             [&]() {
                 beforeShutdown = _scheduler.ShouldYield();
                 _scheduler.Shutdown();
+                // Shutdown also sets the deadline to max, which alone would make ShouldYield false.
+                // Put the fake clock past any deadline so that only the stopped flag can answer false.
+                g_fakeNow = (TimePoint::max)();
                 afterShutdown = _scheduler.ShouldYield();
             },
             TaskPriority::Normal, ThreadType::Background);

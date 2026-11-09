@@ -38,7 +38,7 @@ Coroutine-based asynchronous task execution (C++20 coroutines, no exceptions: re
 |--------|-------------|
 | `Initialize()` | `CoreManager::InitializeCoreServices()` (game PreInit and `OnTestEnvironmentInit`), before `ConfigManager` |
 | `AdvanceGameTime(seconds)` | `CoreManager::OnGameCycle` once per frame, right before `Update`, with `Time::GetDeltaTime()` (clamped to `Time::kMaxFrameTime`; the manual clock gives the same value). `OnIdleCycle` runs no frame and advances nothing. A no-op before `Initialize` and after `Shutdown` |
-| `Update()` | `CoreManager::OnGameCycle` once per frame; this is where delayed tasks are released and main-thread tasks run |
+| `Update()` | `CoreManager::OnGameCycle` once per frame; this is where delayed tasks are released and main-thread tasks run; in a single-thread build it then also drains the yielded background slices within the frame budget ("Frame budget" below) |
 | `Shutdown()` | `OnApplicationDeinit` and `OnTestEnvironmentDeinit`; stops the scheduler, joins the pool, then abandons the tasks that are left (cancelled, self-reference dropped) |
 
 Tweens (`BECore/Animation/`, `CoreManager::GetTweens()`) are not tasks: they are ticked once per frame from the frame time and are not scheduled here. `co_await` of a tween is not an awaitable of this module either: `AwaitTween(handle)` and `TweenManager::Wait(seconds)` (`BECore/Animation/TweenAwaiter.h`) resume the coroutine from `TweenManager::Advance`, inline on the main thread and on game time (the frame time, so the manual clock and the clamp apply). A coroutine that awaits them must already run on the main thread (`RunOnMainThread`, or `co_await SwitchToMainThread()` first); Which to use: `TweenManager::Wait` for an animation pause on the main thread; `DelayGame*` for a timer on the task system or a `RunDelayedGameTime` job (any thread type, game time); `Delay*` / `RunDelayed` for a wait that must ignore the clamp, pauses and the manual clock (a timeout), not for animation. `Clear()` of the tween manager (shutdown) never resumes a waiter, the frame is abandoned with the other tasks.
@@ -59,11 +59,11 @@ A coroutine cannot be preempted, so a long background task shares the only threa
 
 | Build | Background task | `YieldIfNeeded()` |
 |-------|-----------------|-------------------|
-| Threaded | on the pool, as always | never suspends (`ShouldYield()` returns false without reading shared state) |
+| Threaded | on the pool, as always | never suspends (`ShouldYield()` returns false; it reads only the stop flag and the kind of the pool) |
 | Single-thread | the first slice (up to its first suspension) runs inline in `Run()`; the rest in `Update`, at most the budget per frame and at least one slice per frame | suspends once the window of the frame is spent |
 
 - **Only background jobs are budgeted, and only where the coroutine itself suspends.** A task that never calls `YieldIfNeeded()` / `Yield()` still runs to its end in one go. A main-thread job is never budgeted: `ShouldYield()` is false in it and its `Yield()` keeps the main-thread route (next frame).
-- **The logic is in `TaskScheduler`** and is decided by `ThreadPool::IsInline()` at run time, not by `#if BE_SINGLE_THREAD`, so it is testable in every build with a scheduler over `ThreadPool(ThreadPool::InlineTag{})`. An inline `DispatchToThreadPool` wraps each job in a scope that sets `_inBackgroundJob` (restored on exit): this is how `Yield` and `ShouldYield` know the caller. Quirk: after `co_await SwitchToMainThread()` a single-thread coroutine continues inline, so it still counts as a background job.
+- **The logic is in `TaskScheduler`** and is decided by `ThreadPool::IsInline()` at run time, not by `#if BE_SINGLE_THREAD`, so it is testable in every build with a scheduler over `ThreadPool(ThreadPool::InlineTag{})`. An inline `DispatchToThreadPool` wraps each job so that it sets `_inBackgroundJob` while it runs (the previous value is saved and put back after the job): this is how `Yield` and `ShouldYield` know the caller. Quirk: after `co_await SwitchToMainThread()` a single-thread coroutine continues inline, so it still counts as a background job.
 - **The window.** `_sliceDeadline` is `TimePoint::max()` at start-up and after `Initialize` / `Shutdown` (no frame yet, `ShouldYield()` is false, so the `WaitAll` over the config loads in `ConfigManager::Initialize` is safe); `now + budget` while `ProcessBackgroundSlices` runs; `TimePoint::min()` (spent) between drains, so a task started between drains (a scene update, a control command, a delayed task released earlier in `Update`) yields at its first check and continues in the next drain.
 - **`Update` order:** delayed tasks, main-thread tasks, then `ProcessBackgroundSlices(GetFrameBudget())`. It pops the parked continuations FIFO, each through the inline pool (so a nested `Run` still queues behind the outer job), and stops when the queue is empty or the window is spent **after at least one slice ran** (a budget of 0 still gives one slice per frame: nothing starves). A slice that yields again is resumed again in the same drain while time remains (round robin). A frame overruns the budget by at most the time between two checks of one task.
 - **`Yield()` routing** (`TaskScheduler::ScheduleYielded`): inline pool and background job: the cooperative queue; anything else: the old route, `Schedule(task, Low, threadType)`. `TaskManager::GetPendingTaskCount()` counts the parked continuations. `SetBudgetClock` replaces the clock of the budget (tests only; delayed tasks keep their own).
@@ -78,7 +78,9 @@ A coroutine cannot be preempted, so a long background task shares the only threa
 - In a long background loop `co_await YieldIfNeeded()` after each unit of work, and check the `CancellationToken` before it. Free on a threaded build, it keeps a single-thread build (the browser) drawing:
   ```cpp
   for (const auto& item : items) {
-      if (token.IsCancelled()) co_return;
+      if (token.IsCancelled()) {
+          co_return;
+      }
       co_await YieldIfNeeded();
       ProcessItem(item);
   }
@@ -102,5 +104,5 @@ A coroutine cannot be preempted, so a long background task shares the only threa
 
 ## Thread Safety
 
-- `TaskManager`, `ThreadPool`, `TaskScheduler`, `TaskHandle<T>` and `CancellationToken` are thread-safe. The frame-budget state of `TaskScheduler` (`_inBackgroundJob`, `_sliceDeadline`, the budget clock) is plain data that only the one thread of an inline pool touches (`ShouldYield()` on a worker pool returns before reading it); the cooperative queue has its own mutex.
+- `TaskManager`, `ThreadPool`, `TaskScheduler`, `TaskHandle<T>` and `CancellationToken` are thread-safe. The frame-budget state of `TaskScheduler` (`_inBackgroundJob`, `_sliceDeadline`, the budget clock) is plain data that only the one thread of an inline pool touches (`ShouldYield()` on a worker pool returns before reading it; the stop flag `_stopped` is an atomic with relaxed loads, because `Schedule` and `ShouldYield` read it on worker threads); the cooperative queue has its own mutex.
 - `Task<T>` is move-only and not thread-safe.

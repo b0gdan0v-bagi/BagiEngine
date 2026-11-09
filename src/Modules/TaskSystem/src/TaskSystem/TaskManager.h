@@ -156,7 +156,7 @@ namespace BECore {
         /**
          * True when the running background job should suspend (single-thread build: its slice of the frame is spent).
          * Always false on a threaded build, in a main-thread job and outside any job. For a loop that checks by hand:
-         * if (TaskManager::GetInstance().ShouldYield()) co_await Yield();  (co_await YieldIfNeeded() does the same.)
+         * if (TaskManager::GetInstance().ShouldYield()) { co_await Yield(); }  (co_await YieldIfNeeded() does the same.)
          */
         [[nodiscard]] bool ShouldYield() const {
             return _scheduler.ShouldYield();

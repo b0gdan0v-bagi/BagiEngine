@@ -29,13 +29,13 @@ namespace BECore {
     void TaskScheduler::Initialize(ThreadPool* threadPool) {
         ASSERT(threadPool != nullptr, "ThreadPool must not be null");
         _threadPool = threadPool;
-        _stopped = false;
+        _stopped.store(false, std::memory_order_relaxed);
         _sliceDeadline = (TimePoint::max)();
         LOG_INFO("[TaskScheduler] Initialized");
     }
 
     void TaskScheduler::Schedule(TaskQueue::TaskFunc task, TaskPriority priority, ThreadType threadType) {
-        if (_stopped) {
+        if (_stopped.load(std::memory_order_relaxed)) {
             LOG_WARNING("[TaskScheduler] Scheduling task on stopped scheduler");
             return;
         }
@@ -49,7 +49,7 @@ namespace BECore {
     }
 
     void TaskScheduler::ScheduleDelayed(TaskQueue::TaskFunc task, Duration delay, TaskPriority priority, ThreadType threadType, DelayClock clock) {
-        if (_stopped) {
+        if (_stopped.load(std::memory_order_relaxed)) {
             LOG_WARNING("[TaskScheduler] Scheduling delayed task on stopped scheduler");
             return;
         }
@@ -133,7 +133,7 @@ namespace BECore {
     }
 
     void TaskScheduler::ScheduleYielded(TaskQueue::TaskFunc task, ThreadType threadType) {
-        if (!_stopped && _threadPool && _threadPool->IsInline() && _inBackgroundJob) {
+        if (!_stopped.load(std::memory_order_relaxed) && _threadPool && _threadPool->IsInline() && _inBackgroundJob) {
             std::lock_guard lock(_backgroundMutex);
             _backgroundSlices.push_back(std::move(task));
             return;
@@ -143,7 +143,7 @@ namespace BECore {
     }
 
     size_t TaskScheduler::ProcessBackgroundSlices(Duration budget) {
-        if (!_threadPool || !_threadPool->IsInline() || _stopped) {
+        if (!_threadPool || !_threadPool->IsInline() || _stopped.load(std::memory_order_relaxed)) {
             return 0;
         }
 
@@ -153,7 +153,7 @@ namespace BECore {
         _sliceDeadline = TimePoint(SaturatingAdd(start.time_since_epoch(), window));
 
         size_t sliceCount = 0;
-        while (!_stopped) {
+        while (!_stopped.load(std::memory_order_relaxed)) {
             if (sliceCount > 0 && BudgetNow() >= _sliceDeadline) {
                 break;
             }
@@ -177,7 +177,7 @@ namespace BECore {
     }
 
     bool TaskScheduler::ShouldYield() const {
-        if (_stopped || !_threadPool || !_threadPool->IsInline() || !_inBackgroundJob) {
+        if (_stopped.load(std::memory_order_relaxed) || !_threadPool || !_threadPool->IsInline() || !_inBackgroundJob) {
             return false;
         }
         return BudgetNow() >= _sliceDeadline;
@@ -197,7 +197,7 @@ namespace BECore {
     }
 
     void TaskScheduler::Shutdown() {
-        _stopped = true;
+        _stopped.store(true, std::memory_order_relaxed);
         _sliceDeadline = (TimePoint::max)();
 
         // Очищаем очереди
