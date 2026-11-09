@@ -23,6 +23,19 @@ namespace BECore {
         constexpr size_t kIndicesPerTriangle = 3;
         constexpr int kFloatsPerColor = 4;
 
+        // The SDL blend mode of an IRenderer blend mode: straight alpha, additive, and `src * dst + dst * (1 - a)`
+        SDL_BlendMode ToSDLBlendMode(BlendMode mode) {
+            switch (mode) {
+                case BlendMode::Add:
+                    return SDL_BLENDMODE_ADD;
+                case BlendMode::Multiply:
+                    return SDL_BLENDMODE_MUL;
+                case BlendMode::Alpha:
+                    break;
+            }
+            return SDL_BLENDMODE_BLEND;
+        }
+
     }  // namespace
 
     bool SDLRendererBackend::Initialize(IMainWindow& window) {
@@ -75,7 +88,7 @@ namespace BECore {
 
     void SDLRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
         if (_renderer && !IsClipEmpty()) {
-            SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawBlendMode(_renderer, ToSDLBlendMode(GetBlendMode()));
             SDL_SetRenderDrawColor(_renderer, color.r, color.g, color.b, color.a);
             const Rect out = GetViewTransform().ToOutput(x, y, w, h);
             SDL_FRect rect{out.x, out.y, out.w, out.h};
@@ -92,8 +105,9 @@ namespace BECore {
             return;
         }
 
-        // The texture is shared, so its modulation is set on every draw: an untinted draw after a tinted one must not inherit it
+        // The texture is shared, so its modulation and blend mode are set on every draw: an untinted or an alpha draw after a tinted or an additive one must not inherit them
         SDL_Texture* handle = sdlTexture->GetSDLTexture();
+        SDL_SetTextureBlendMode(handle, ToSDLBlendMode(GetBlendMode()));
         SDL_SetTextureColorMod(handle, tint.r, tint.g, tint.b);
         SDL_SetTextureAlphaMod(handle, tint.a);
 
@@ -166,8 +180,13 @@ namespace BECore {
             _geometryTexCoords[i * 2 + 1] = vertex.v;
         }
 
-        // An untextured draw blends by the draw mode; a texture by its own (the colors multiply the texel, SDL ignores the modulation of the texture here)
-        SDL_SetRenderDrawBlendMode(_renderer, SDL_BLENDMODE_BLEND);
+        // An untextured draw blends by the draw mode; a texture by its own, set on every draw as in DrawTexture() (the colors multiply the texel, SDL ignores the modulation of the texture here)
+        const SDL_BlendMode blendMode = ToSDLBlendMode(GetBlendMode());
+        if (handle) {
+            SDL_SetTextureBlendMode(handle, blendMode);
+        } else {
+            SDL_SetRenderDrawBlendMode(_renderer, blendMode);
+        }
         const bool drawn =
             SDL_RenderGeometryRaw(_renderer, handle, _geometryPositions.data(), 2 * sizeof(float), reinterpret_cast<const SDL_FColor*>(_geometryColors.data()), kFloatsPerColor * sizeof(float),
                                   _geometryTexCoords.data(), 2 * sizeof(float), vertexCount, indices.data(), static_cast<int>(indices.size() - indices.size() % kIndicesPerTriangle), sizeof(int));

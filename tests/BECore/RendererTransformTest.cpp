@@ -4,6 +4,10 @@
 
 namespace BECore::Tests {
 
+    static_assert(DrawTransform{}.IsIdentity());
+    static_assert(!DrawTransform{.flipX = true}.IsIdentity());
+    static_assert(sizeof(BlendMode) == 1);
+
     namespace {
 
         constexpr float kTolerance = 1e-4f;
@@ -296,10 +300,6 @@ namespace BECore::Tests {
         renderer.PopClipRect();
     }
 
-    TEST(RendererTransformTest, CompileTimeChecks) {
-        static_assert(DrawTransform{}.IsIdentity());
-        static_assert(!DrawTransform{.flipX = true}.IsIdentity());
-        static_assert(sizeof(BlendMode) == 1);
-    }
+    TEST(RendererTransformTest, CompileTimeChecks) {}
 
 }  // namespace BECore::Tests
