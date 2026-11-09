@@ -4,10 +4,11 @@ namespace BECore {
 
     namespace {
 
-        constexpr const char* kScenesElement = "scenes";
-        constexpr const char* kSceneElement = "scene";
-        constexpr const char* kNodesElement = "nodes";
-        constexpr const char* kSceneNameAttribute = "name";
+        // Same form as the names in the header: string_view over a literal, so `.data()` is null-terminated for pugixml
+        constexpr eastl::string_view kScenesElement = "scenes";
+        constexpr eastl::string_view kSceneElement = "scene";
+        constexpr eastl::string_view kNodesElement = "nodes";
+        constexpr eastl::string_view kSceneNameAttribute = "name";
         constexpr char kRefSeparator = '/';
 
         bool IsRefChar(char c) {
@@ -31,7 +32,8 @@ namespace BECore {
 
         /// Parses @p file into @p out and checks that its document element is a node that is not a reference itself
         bool ReadNodeFile(const std::filesystem::path& file, pugi::xml_document& out, eastl::string& error) {
-            if (file.empty() || !std::filesystem::is_regular_file(file)) {
+            std::error_code ec;
+            if (file.empty() || !std::filesystem::is_regular_file(file, ec)) {
                 error = "the node file does not exist";
                 return false;
             }
@@ -61,9 +63,9 @@ namespace BECore {
         }
 
         void ExpandScene(pugi::xml_node sceneEl, const NodeFileLoader& loader, NodeExpansion& result) {
-            const eastl::string_view sceneName = sceneEl.attribute(kSceneNameAttribute).as_string();
+            const eastl::string_view sceneName = sceneEl.attribute(kSceneNameAttribute.data()).as_string();
 
-            for (pugi::xml_node nodesEl = sceneEl.child(kNodesElement); nodesEl; nodesEl = nodesEl.next_sibling(kNodesElement)) {
+            for (pugi::xml_node nodesEl = sceneEl.child(kNodesElement.data()); nodesEl; nodesEl = nodesEl.next_sibling(kNodesElement.data())) {
                 pugi::xml_node next;
                 for (pugi::xml_node el = nodesEl.child(kNodeElementName.data()); el; el = next) {
                     next = el.next_sibling(kNodeElementName.data());
@@ -121,8 +123,8 @@ namespace BECore {
 
     NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, const NodeFileLoader& loader) {
         NodeExpansion result;
-        for (pugi::xml_node scenesEl = configRoot.child(kScenesElement); scenesEl; scenesEl = scenesEl.next_sibling(kScenesElement)) {
-            for (pugi::xml_node sceneEl = scenesEl.child(kSceneElement); sceneEl; sceneEl = sceneEl.next_sibling(kSceneElement)) {
+        for (pugi::xml_node scenesEl = configRoot.child(kScenesElement.data()); scenesEl; scenesEl = scenesEl.next_sibling(kScenesElement.data())) {
+            for (pugi::xml_node sceneEl = scenesEl.child(kSceneElement.data()); sceneEl; sceneEl = sceneEl.next_sibling(kSceneElement.data())) {
                 ExpandScene(sceneEl, loader, result);
             }
         }
@@ -153,7 +155,8 @@ namespace BECore {
     NodeExpansion LoadSceneDocument(const std::filesystem::path& sceneConfigFile, pugi::xml_document& out) {
         NodeExpansion result;
         out.reset();
-        if (!std::filesystem::is_regular_file(sceneConfigFile)) {
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(sceneConfigFile, ec)) {
             result.errors.push_back(Format("scene file '{}' does not exist", sceneConfigFile.string()));
             return result;
         }
