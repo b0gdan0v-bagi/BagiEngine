@@ -24,10 +24,11 @@ get_filename_component(BAGI_ENGINE_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Vulkan, the control socket server, static SDL, single thread; forced for the web (Emscripten)
-include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
-# The Emscripten link options, the content package and be_web_configure_target(); only used when ENGINE_TARGET_WEB
+# The Emscripten link options, the content package and be_web_configure_target(); only used when ENGINE_TARGET_WEB. First, because
+# BagiPlatformOptions.cmake reads BE_WEB_THREAD_POOL_SIZE from it
 include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)
+# Vulkan, the control socket server, static SDL, threads (the web build forces the first three off / on and takes -pthread)
+include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
 
 # =============================================================================
 # External Dependencies
@@ -49,6 +50,15 @@ else()
 endif()
 set(SDL_TEST OFF CACHE BOOL "Build SDL3 tests" FORCE)
 set(SDL_TESTS OFF CACHE BOOL "Build SDL3 tests" FORCE)
+if(ENGINE_TARGET_WEB)
+    # SDL's default for Emscripten is no pthreads (its "generic" thread stubs: SDL_CreateThread fails, which SDL's own timer and audio
+    # code would hit). A threaded page needs the real ones; the single-thread page is built without any (external/SDL/CMakeLists.txt)
+    if(ENGINE_SINGLE_THREAD)
+        set(SDL_PTHREADS OFF CACHE BOOL "Use POSIX threads for multi-threading" FORCE)
+    else()
+        set(SDL_PTHREADS ON CACHE BOOL "Use POSIX threads for multi-threading" FORCE)
+    endif()
+endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL)
 
 # The vendored imgui CMake file and our modules link the name SDL3-shared; a static SDL keeps it as a shim
@@ -234,7 +244,10 @@ else()
     set(COMPILER_NAME "Unknown")
 endif()
 
-if(ENGINE_TARGET_WEB)
+if(ENGINE_TARGET_WEB AND ENGINE_SINGLE_THREAD)
+    # The threaded and the single-thread page have different objects (-pthread everywhere): they must not share a folder of libraries
+    set(PLATFORM_NAME "WebSingleThread")
+elseif(ENGINE_TARGET_WEB)
     set(PLATFORM_NAME "Web")
 elseif(WIN32)
     set(PLATFORM_NAME "Windows")

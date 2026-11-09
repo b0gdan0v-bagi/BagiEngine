@@ -18,9 +18,10 @@
 #       The link inputs that make the content package follow its folder: every file of <dir> plus <file>, a stamp that holds the sorted
 #       list of those files. An edit relinks because a file is newer than the .data package; an added or a deleted file relinks because
 #       the stamp is rewritten (only when the list changes) at the configure step that CONFIGURE_DEPENDS triggers.
-#   be_web_link_options(OUT <var>)
+#   be_web_link_options(OUT <var> [SINGLE_THREAD])
 #       The Emscripten link options: the "-s..." settings, the HTML shell (web/shell.html), and the assertions in Debug only (as a
-#       generator expression, so the list is the same for every configuration).
+#       generator expression, so the list is the same for every configuration). Without SINGLE_THREAD it also has -pthread and the
+#       Web Worker pool (BE_WEB_THREAD_POOL_SIZE); with SINGLE_THREAD it has neither (no thread, no shared memory).
 #   be_web_configure_target(<target> GAME_ROOT <dir>)
 #       Makes the executable an HTML page with its content package and the virtual content roots as definitions.
 include_guard(GLOBAL)
@@ -32,6 +33,20 @@ set(BE_WEB_OUTPUT_SUFFIX ".html")
 set(BE_WEB_ENGINE_ROOT "/bagi/engine")
 set(BE_WEB_GAME_ROOT "/bagi/game")
 set(BE_WEB_WEB_ROOT "/bagi/web")
+
+# The Web Workers created before main() in a threaded page (-sPTHREAD_POOL_SIZE). The engine blocks the main thread at start-up
+# (ConfigManager::Initialize waits for the config loads on the TaskManager's workers), and a worker that only the main thread's event
+# loop could create would never start: the pool has to be ready before main(). So it must hold every thread that starts then:
+# kMaxWorkerThreads of the TaskSystem (src/Modules/TaskSystem/src/TaskSystem/TaskManager.h, 4: the ThreadPool of the TaskManager) plus
+# one of headroom (SDL starts no thread at start-up as far as its source shows; a timer thread of SDL_AddTimer would be one). TaskManager.cpp has a static_assert on
+# it (this value is passed there as the definition BE_WEB_THREAD_POOL_SIZE, cmake/BagiPlatformOptions.cmake). With
+# -sPTHREAD_POOL_SIZE_STRICT=2 a thread over the pool is an error at once, not a deadlock of the main thread
+set(BE_WEB_THREAD_POOL_SIZE 5)
+
+# The most the page may grow its heap to. ALLOW_MEMORY_GROWTH with shared memory (threads) needs the maximum to be fixed when the
+# memory is created: the browser reserves that much address space (not RAM). 2 GB is the default MAXIMUM_MEMORY of emsdk 4.0.23, named
+# here so that the limit is written down (a game that needs more can raise it, up to 4 GB for a 32-bit wasm)
+set(BE_WEB_MAXIMUM_MEMORY 2147483648)
 
 # The folder of this engine checkout that holds the web files (web/config/, web/shell.html)
 get_filename_component(BE_WEB_DIR "${CMAKE_CURRENT_LIST_DIR}/../web" ABSOLUTE)
@@ -85,7 +100,7 @@ function(be_web_content_inputs)
 endfunction()
 
 function(be_web_link_options)
-    cmake_parse_arguments(ARG "" "OUT" "" ${ARGN})
+    cmake_parse_arguments(ARG "SINGLE_THREAD" "OUT" "" ${ARGN})
     if(NOT ARG_OUT)
         message(FATAL_ERROR "be_web_link_options: OUT is required")
     endif()
@@ -112,6 +127,24 @@ function(be_web_link_options)
     # The optimisation level is not set here: CMake passes CMAKE_CXX_FLAGS_<CONFIG> to the link line as well, and emcc needs the
     # same -O level at link time to run wasm-opt. The end of this file sets Release to -O2 on the web (smaller code than -O3 for
     # little speed) and Debug stays -O0 -g.
+    if(NOT ARG_SINGLE_THREAD)
+        list(APPEND _options
+            # Threads are Web Workers sharing the wasm memory (SharedArrayBuffer: the page must be cross-origin isolated). Every object
+            # of the link is compiled with -pthread too (cmake/BagiPlatformOptions.cmake)
+            -pthread
+            # The workers are created and loaded before main(): see BE_WEB_THREAD_POOL_SIZE. Not PTHREAD_POOL_DELAY_LOAD (the start-up
+            # WaitAll would wait for workers that load after main() returns to the event loop, which never happens)
+            -sPTHREAD_POOL_SIZE=${BE_WEB_THREAD_POOL_SIZE}
+            # Creating a thread when the pool is empty is a hard error (EAGAIN) instead of a silent deadlock of a blocked main thread
+            -sPTHREAD_POOL_SIZE_STRICT=2
+            # Shared memory with growth needs a fixed maximum (BE_WEB_MAXIMUM_MEMORY)
+            -sMAXIMUM_MEMORY=${BE_WEB_MAXIMUM_MEMORY}
+            # emcc 4.0.23 warns "-pthread + ALLOW_MEMORY_GROWTH may run non-wasm code slowly" (-Wpthreads-mem-growth): it is about the JS glue
+            # that views the heap (each growth replaces the views), not about the wasm code, and a game that needs a heap that grows needs both
+            -Wno-pthreads-mem-growth
+            # No -sPROXY_TO_PTHREAD: main() and the SDL frame loop stay on the main thread, which owns the canvas
+        )
+    endif()
     set(${ARG_OUT} "${_options}" PARENT_SCOPE)
 endfunction()
 
@@ -123,7 +156,11 @@ function(be_web_configure_target TARGET_NAME)
 
     set_target_properties(${TARGET_NAME} PROPERTIES SUFFIX "${BE_WEB_OUTPUT_SUFFIX}")
 
-    be_web_link_options(OUT _link_options)
+    if(ENGINE_SINGLE_THREAD)
+        be_web_link_options(OUT _link_options SINGLE_THREAD)
+    else()
+        be_web_link_options(OUT _link_options)
+    endif()
     target_link_options(${TARGET_NAME} PRIVATE ${_link_options})
     # The shell is read at link time: a change of the page relinks
     set_property(TARGET ${TARGET_NAME} APPEND PROPERTY LINK_DEPENDS "${BE_WEB_SHELL_FILE}")

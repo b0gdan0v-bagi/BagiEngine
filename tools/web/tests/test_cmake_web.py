@@ -17,7 +17,9 @@ from pathlib import Path
 ENGINE_DIR = Path(__file__).resolve().parents[3]
 PRESETS_FILE = ENGINE_DIR / "CMakePresets.json"
 CHECK_SCRIPT = Path(__file__).resolve().parent / "check_bagi_web.cmake"
-WEB_PRESETS = ("web-debug", "web-release")
+THREADED_PRESETS = ("web-debug", "web-release")
+SINGLE_THREAD_PRESETS = ("web-debug-single-thread", "web-release-single-thread")
+WEB_PRESETS = THREADED_PRESETS + SINGLE_THREAD_PRESETS
 CMAKE = shutil.which("cmake")
 
 
@@ -38,10 +40,10 @@ def parents_of(preset: dict) -> list:
 
 
 def resolve_configure_preset(presets: dict, name: str) -> dict:
-    """The preset with the fields of its parents merged, as CMake does it (later parents win, the child wins over all)."""
+    """The preset with the fields of its parents merged, as CMake does it (the child wins over all, then the FIRST parent that has the field)."""
     preset = find_preset(presets, "configurePresets", name)
     merged: dict = {"cacheVariables": {}}
-    for parent in parents_of(preset):
+    for parent in reversed(parents_of(preset)):
         resolved = resolve_configure_preset(presets, parent)
         merged.update({key: value for key, value in resolved.items() if key != "cacheVariables"})
         merged["cacheVariables"].update(resolved["cacheVariables"])
@@ -67,17 +69,32 @@ class WebPresetsTest(unittest.TestCase):
             chain += self.build_preset_ancestors(parent)
         return chain
 
-    def test_both_configure_presets_are_ninja_builds_of_the_right_type(self):
-        debug = resolve_configure_preset(self.presets, "web-debug")
-        release = resolve_configure_preset(self.presets, "web-release")
-        self.assertEqual(debug["generator"], "Ninja")
-        self.assertEqual(release["generator"], "Ninja")
-        self.assertEqual(debug["cacheVariables"]["CMAKE_BUILD_TYPE"], "Debug")
-        self.assertEqual(release["cacheVariables"]["CMAKE_BUILD_TYPE"], "Release")
-        # The release presets of the other platforms switch the asserts off explicitly (cmake-rules.md, "Presets")
-        self.assertEqual(release["cacheVariables"]["ENGINE_ENABLE_ASSERTS"], "OFF")
-        self.assertEqual(release["cacheVariables"]["ENGINE_ENABLE_EXPECTS"], "OFF")
-        self.assertNotIn("ENGINE_ENABLE_ASSERTS", debug["cacheVariables"])
+    def test_every_configure_preset_is_a_ninja_build_of_the_right_type(self):
+        for name in WEB_PRESETS:
+            with self.subTest(name):
+                preset = resolve_configure_preset(self.presets, name)
+                self.assertEqual(preset["generator"], "Ninja")
+                if "debug" in name:
+                    self.assertEqual(preset["cacheVariables"]["CMAKE_BUILD_TYPE"], "Debug")
+                    self.assertNotIn("ENGINE_ENABLE_ASSERTS", preset["cacheVariables"])
+                else:
+                    self.assertEqual(preset["cacheVariables"]["CMAKE_BUILD_TYPE"], "Release")
+                    # The release presets of the other platforms switch the asserts off explicitly (cmake-rules.md, "Presets")
+                    self.assertEqual(preset["cacheVariables"]["ENGINE_ENABLE_ASSERTS"], "OFF")
+                    self.assertEqual(preset["cacheVariables"]["ENGINE_ENABLE_EXPECTS"], "OFF")
+
+    def test_the_default_presets_are_threaded_and_the_single_thread_ones_say_so(self):
+        # The threaded presets set the variable too (OFF), so an old build folder that had it ON is switched back at the next configure
+        for name in THREADED_PRESETS:
+            with self.subTest(name):
+                self.assertEqual(resolve_configure_preset(self.presets, name)["cacheVariables"]["ENGINE_SINGLE_THREAD"], "OFF")
+        for name in SINGLE_THREAD_PRESETS:
+            with self.subTest(name):
+                self.assertEqual(resolve_configure_preset(self.presets, name)["cacheVariables"]["ENGINE_SINGLE_THREAD"], "ON")
+
+    def test_each_preset_builds_in_a_folder_of_its_own(self):
+        folders = {resolve_configure_preset(self.presets, name)["binaryDir"].replace("${presetName}", name) for name in WEB_PRESETS}
+        self.assertEqual(len(folders), len(WEB_PRESETS))
 
     def test_no_tests_and_no_editor_in_either_preset(self):
         for name in WEB_PRESETS:
@@ -104,6 +121,8 @@ class WebPresetsTest(unittest.TestCase):
     def test_every_web_configure_preset_has_a_build_preset(self):
         web = [p["name"] for p in self.presets["configurePresets"] if not p.get("hidden") and inherits_from(self.presets, p["name"], "web")]
         self.assertEqual(sorted(web), sorted(WEB_PRESETS))
+        visible_web_named = [p["name"] for p in self.presets["configurePresets"] if not p.get("hidden") and p["name"].startswith("web-")]
+        self.assertEqual(sorted(web), sorted(visible_web_named))
         build_targets = {p["name"]: p["configurePreset"] for p in self.presets["buildPresets"] if "configurePreset" in p}
         for name in web:
             with self.subTest(name):
@@ -157,6 +176,39 @@ class BagiWebCmakeTest(unittest.TestCase):
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
         self.assertIn("OK", output)
+
+
+class WebThreadsTextTest(unittest.TestCase):
+    """What only a configure with Emscripten shows, read from the text of the files: the threads."""
+
+    def cmake_text(self, name: str) -> str:
+        return (ENGINE_DIR / "cmake" / name).read_text(encoding="utf-8")
+
+    def test_threads_are_not_forced_on_the_web(self):
+        text = self.cmake_text("BagiPlatformOptions.cmake")
+        self.assertNotRegex(text, r"set\(ENGINE_SINGLE_THREAD [^)]*FORCE\)")
+        self.assertIn('option(ENGINE_SINGLE_THREAD "Run the task system without worker threads" OFF)', text)
+
+    def test_pthread_reaches_every_compile_and_the_link_before_the_first_subdirectory(self):
+        text = self.cmake_text("BagiPlatformOptions.cmake")
+        for variable in ("CMAKE_C_FLAGS", "CMAKE_CXX_FLAGS", "CMAKE_EXE_LINKER_FLAGS"):
+            self.assertIn(f'string(APPEND {variable} " -pthread")', text)
+        # BagiEngine.cmake includes BagiWeb.cmake (the pool size), then this file, then adds the first subdirectory
+        engine = self.cmake_text("BagiEngine.cmake")
+        web = engine.index("include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)")
+        options = engine.index("include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)")
+        self.assertLess(web, options)
+        self.assertLess(options, engine.index("add_subdirectory(${BAGI_ENGINE_DIR}"))
+
+    def test_sdl_gets_real_threads_in_the_threaded_page_only(self):
+        text = self.cmake_text("BagiEngine.cmake")
+        self.assertIn("set(SDL_PTHREADS ON CACHE BOOL", text)
+        self.assertIn("set(SDL_PTHREADS OFF CACHE BOOL", text)
+
+    def test_the_output_folder_of_the_single_thread_page_is_its_own(self):
+        text = self.cmake_text("BagiEngine.cmake")
+        self.assertRegex(text, r'if\(ENGINE_TARGET_WEB AND ENGINE_SINGLE_THREAD\)[^\n]*\n(\s*#[^\n]*\n)*\s*set\(PLATFORM_NAME "WebSingleThread"\)')
+        self.assertIn('set(PLATFORM_NAME "Web")', text)
 
 
 class WebFlagsTextTest(unittest.TestCase):

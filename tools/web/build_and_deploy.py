@@ -2,6 +2,7 @@
 
     python tools/web/build_and_deploy.py --game BagiMatch3 --dry-run             # print the commands, run nothing
     python tools/web/build_and_deploy.py --game BagiMatch3                       # build and package into dist/
+    python tools/web/build_and_deploy.py --game BagiMatch3 --single-thread       # the page without threads (no COOP / COEP needed)
     python tools/web/build_and_deploy.py --game BagiMatch3 --deploy --service bagi-web
 
 Run it from the root of the project that has the web presets (the engine, or a game that carries it); `--source-dir` names another.
@@ -37,8 +38,12 @@ ENGINE_DIR = TOOLS_DIR.parents[1]
 EMSDK_DIR = ENGINE_DIR / "external" / "emsdk"
 SDK_FILES = (Path("upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"), Path("upstream/emscripten/emcc.py"), Path(".emscripten"))
 SDK_MISSING_MESSAGE = "the Emscripten SDK is not installed: run: python CI/scripts/setup_emsdk.py (in a game: python engine/CI/scripts/setup_emsdk.py)"
-# Where the web build writes its files: build/<Compiler>Web (cmake/BagiEngine.cmake, "Output Directories"; Emscripten's compiler is Clang)
+# The suffix of the presets of the single-thread page (CMakePresets.json: web-release-single-thread, web-debug-single-thread)
+SINGLE_THREAD_SUFFIX = "-single-thread"
+# Where the web build writes its files: build/<Compiler><Platform> (cmake/BagiEngine.cmake, "Output Directories"; Emscripten's compiler is
+# Clang). The threaded and the single-thread page have a folder each, because their libraries differ
 OUTPUT_FOLDER = Path("build") / "ClangWeb"
+SINGLE_THREAD_OUTPUT_FOLDER = Path("build") / "ClangWebSingleThread"
 STAGE_FOLDER = Path("build") / "web-deploy"
 DIST_FOLDER = Path("dist")
 
@@ -54,12 +59,25 @@ class Step(NamedTuple):
     is_deploy: bool = False
 
 
+def resolve_preset(args: argparse.Namespace) -> str:
+    """The preset to run: --preset, with the single-thread suffix when --single-thread says so (a preset that has it already stays)."""
+    if args.single_thread and not args.preset.endswith(SINGLE_THREAD_SUFFIX):
+        return args.preset + SINGLE_THREAD_SUFFIX
+    return args.preset
+
+
+def output_folder(preset: str) -> Path:
+    """The folder (relative to the source) the build of `preset` writes its page to."""
+    return SINGLE_THREAD_OUTPUT_FOLDER if preset.endswith(SINGLE_THREAD_SUFFIX) else OUTPUT_FOLDER
+
+
 def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_dir: Path) -> list[Step]:
     """The steps to run, in order. The staging between step 3 and the deploy is done by stage()."""
-    build_dir = args.build_dir or source_dir / OUTPUT_FOLDER
+    preset = resolve_preset(args)
+    build_dir = args.build_dir or source_dir / output_folder(preset)
     steps = [
-        Step(["cmake", "--preset", args.preset], source_dir),
-        Step(["cmake", "--build", "--preset", args.preset, "--target", args.game], source_dir),
+        Step(["cmake", "--preset", preset], source_dir),
+        Step(["cmake", "--build", "--preset", preset, "--target", args.game], source_dir),
         Step([sys.executable, str(PACKAGE_SCRIPT), str(build_dir), str(dist), "--game", args.game], source_dir),
     ]
     if args.deploy:
@@ -99,7 +117,8 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
     parser.add_argument("--game", default=DEFAULT_GAME, help=f"the game target (default: {DEFAULT_GAME})")
     parser.add_argument("--preset", default=DEFAULT_PRESET, help=f"the web preset (default: {DEFAULT_PRESET})")
     parser.add_argument("--source-dir", type=Path, help="the project with CMakePresets.json (default: the current folder)")
-    parser.add_argument("--build-dir", type=Path, help=f"the folder the build writes the page to (default: <source>/{OUTPUT_FOLDER.as_posix()})")
+    parser.add_argument("--single-thread", action="store_true", help=f"build the page without threads: the preset gets the suffix {SINGLE_THREAD_SUFFIX}, the output folder is {SINGLE_THREAD_OUTPUT_FOLDER.as_posix()}")
+    parser.add_argument("--build-dir", type=Path, help=f"the folder the build writes the page to (default: <source>/{OUTPUT_FOLDER.as_posix()}, or {SINGLE_THREAD_OUTPUT_FOLDER.as_posix()} for a single-thread preset)")
     parser.add_argument("--dist", type=Path, help=f"the packaged folder (default: <source>/{DIST_FOLDER.as_posix()})")
     parser.add_argument("--stage-dir", type=Path, help=f"the folder `railway up` runs in (default: <source>/{STAGE_FOLDER.as_posix()})")
     parser.add_argument("--deploy", action="store_true", help="after packaging, run `railway up`")

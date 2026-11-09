@@ -30,6 +30,13 @@ namespace BECore {
     public:
         using Duration = std::chrono::steady_clock::duration;
 
+        /**
+         * The most worker threads Initialize creates: min(hardware_concurrency, kMaxWorkerThreads), at least 2. The web build creates its
+         * Web Workers before main() (BE_WEB_THREAD_POOL_SIZE in cmake/BagiWeb.cmake, one more than this), so raising this number means
+         * raising that one: TaskManager.cpp checks it at compile time.
+         */
+        static constexpr size_t kMaxWorkerThreads = 4;
+
         TaskManager() = default;
         ~TaskManager() = default;
 

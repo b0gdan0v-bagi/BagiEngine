@@ -107,7 +107,16 @@
             "toolchainFile": "${fileDir}/external/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
             "cacheVariables": {
                 "ENGINE_BUILD_TESTS": "OFF",
-                "BE_WITH_EDITOR": "OFF"
+                "BE_WITH_EDITOR": "OFF",
+                "ENGINE_SINGLE_THREAD": "OFF"
+            }
+        },
+        {
+            "name": "web-single-thread",
+            "hidden": true,
+            "description": "The browser build without threads: no -pthread, no Web Workers, no SharedArrayBuffer, so the page needs no COOP / COEP headers. Its own output folder (build/ClangWebSingleThread)",
+            "cacheVariables": {
+                "ENGINE_SINGLE_THREAD": "ON"
             }
         },
         {
@@ -201,6 +210,16 @@
             "name": "web-release",
             "displayName": "Web (Emscripten) Release",
             "inherits": ["web", "release"]
+        },
+        {
+            "name": "web-debug-single-thread",
+            "displayName": "Web (Emscripten) Debug, single thread",
+            "inherits": ["web-single-thread", "web", "debug"]
+        },
+        {
+            "name": "web-release-single-thread",
+            "displayName": "Web (Emscripten) Release, single thread",
+            "inherits": ["web-single-thread", "web", "release"]
         }
     ],
     "buildPresets": [
@@ -332,6 +351,18 @@
             "displayName": "Web (Emscripten) Release",
             "inherits": "build-web",
             "configurePreset": "web-release"
+        },
+        {
+            "name": "web-debug-single-thread",
+            "displayName": "Web (Emscripten) Debug, single thread",
+            "inherits": "build-web",
+            "configurePreset": "web-debug-single-thread"
+        },
+        {
+            "name": "web-release-single-thread",
+            "displayName": "Web (Emscripten) Release, single thread",
+            "inherits": "build-web",
+            "configurePreset": "web-release-single-thread"
         }
     ],
     "testPresets": [

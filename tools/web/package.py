@@ -3,7 +3,8 @@
     python tools/web/package.py build/ClangWeb dist
     python tools/web/package.py build/ClangWeb dist --game BagiMatch3
 
-The build folder holds <game>.html, <game>.js, <game>.wasm and, when the game has content, <game>.data (cmake/BagiWeb.cmake). The
+The build folder holds <game>.html, <game>.js, <game>.wasm and, when the game has content, <game>.data (cmake/BagiWeb.cmake). A threaded
+build has no more files: emcc 4.0.23 starts its Web Workers from <game>.js itself (no <game>.worker.js). The
 output folder gets the page as index.html, the other files under their own names (the page and the script load them by those names),
 a gzip copy and, when the `brotli` module can be imported, a brotli copy of every .html, .js, .wasm and .data next to the original
 (name.gz, name.br; serve.py picks them by Accept-Encoding) and manifest.json with the size and the SHA-256 of every file. A file of

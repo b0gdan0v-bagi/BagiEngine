@@ -114,6 +114,34 @@ class DryRunTest(DeployTestCase):
         _, out, _, _ = self.run_script("--dry-run")
         self.assertIn("--target BagiMatch3", out)
 
+    def test_the_default_is_the_threaded_page_in_build_clangweb(self):
+        _, out, _, _ = self.run_script("--dry-run")
+        self.assertNotIn("single-thread", out)
+        self.assertRegex(out.replace('"', "").replace("'", ""), r"package\.py .*[\\/]build[\\/]ClangWeb ")
+
+    def test_single_thread_picks_the_preset_and_the_folder_of_the_single_thread_page(self):
+        for preset, expected in (("web-release", "web-release-single-thread"), ("web-debug", "web-debug-single-thread")):
+            with self.subTest(preset=preset):
+                code, out, err, runner = self.run_script("--dry-run", "--single-thread", "--preset", preset)
+                self.assertEqual(code, 0, err)
+                lines = [line for line in out.splitlines() if line.startswith("+ ")]
+                self.assertIn(f"cmake --preset {expected}", lines[0])
+                self.assertIn(f"cmake --build --preset {expected} --target BagiMatch3", lines[1])
+                self.assertRegex(lines[2].replace('"', "").replace("'", ""), r"package\.py .*[\\/]build[\\/]ClangWebSingleThread ")
+                self.assertEqual(runner.calls, [])
+
+    def test_a_single_thread_preset_named_by_hand_gets_the_single_thread_folder_too(self):
+        _, out, _, _ = self.run_script("--dry-run", "--preset", "web-release-single-thread")
+        self.assertIn("--preset web-release-single-thread --target", out)
+        self.assertNotIn("single-thread-single-thread", out)
+        self.assertIn("ClangWebSingleThread", out)
+
+    def test_an_explicit_build_dir_wins_over_the_folder_of_the_configuration(self):
+        build = self.source / "out"
+        _, out, _, _ = self.run_script("--dry-run", "--single-thread", "--build-dir", str(build))
+        self.assertIn(f"package.py {build} ", out.replace("'", ""))
+        self.assertNotIn("ClangWebSingleThread", out)
+
 
 class PreconditionTest(DeployTestCase):
     def test_without_the_sdk_it_returns_non_zero_with_the_message(self):
