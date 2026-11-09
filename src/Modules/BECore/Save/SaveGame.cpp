@@ -1,0 +1,194 @@
+#include "SaveGame.h"
+
+#include <EASTL/sort.h>
+
+namespace BECore {
+
+    namespace {
+
+        bool IsSlotNameCharacter(char c) {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+        }
+
+        std::unexpected<SaveError> MakeError(SaveErrorKind kind, eastl::string detail) {
+            return std::unexpected(SaveError{kind, std::move(detail)});
+        }
+
+        std::unexpected<SaveError> NotInitializedError() {
+            return MakeError(SaveErrorKind::NotInitialized, "The save folder is not set up: call SaveGameService::Initialize() first");
+        }
+
+        std::unexpected<SaveError> InvalidSlotNameError(eastl::string_view slot) {
+            return MakeError(SaveErrorKind::InvalidSlotName, Format("'{}' is not a slot name: use 1 to {} characters of A-Z, a-z, 0-9, '_' and '-'", slot, kMaxSlotNameLength));
+        }
+
+        std::string ToStdString(eastl::string_view text) {
+            return std::string(text.data(), text.size());
+        }
+
+    }  // namespace
+
+    SaveGameService::SaveGameService(FileSystem& fileSystem) : _fileSystem(fileSystem) {}
+
+    bool SaveGameService::Initialize(const std::filesystem::path& directory) {
+        if (directory.empty()) {
+            return false;
+        }
+
+        std::error_code ec;
+        std::filesystem::path absolute = std::filesystem::absolute(directory, ec).lexically_normal();
+        if (ec) {
+            return false;
+        }
+
+        std::filesystem::create_directories(absolute, ec);
+        if (ec || !std::filesystem::is_directory(absolute, ec)) {
+            LOG_ERROR(Format("SaveGameService: cannot use '{}' as the save folder", absolute.string()).c_str());
+            return false;
+        }
+
+        // A second call replaces the mount of the first, so reads never come from the old folder
+        const PoolString mountPoint = PoolString::Intern(kSaveMountPoint);
+        _fileSystem.Unmount(mountPoint);
+        _initialized = _fileSystem.Mount(mountPoint, absolute);
+        _directory = _initialized ? std::move(absolute) : std::filesystem::path{};
+        return _initialized;
+    }
+
+    bool SaveGameService::IsValidSlotName(eastl::string_view slot) {
+        return !slot.empty() && slot.size() <= kMaxSlotNameLength && eastl::all_of(slot.begin(), slot.end(), IsSlotNameCharacter);
+    }
+
+    std::filesystem::path SaveGameService::MakePath(eastl::string_view slot, eastl::string_view suffix) const {
+        std::string name = ToStdString(slot);
+        name.append(suffix.data(), suffix.size());
+        return _directory / name;
+    }
+
+    std::filesystem::path SaveGameService::ResolveSlot(eastl::string_view slot) const {
+        const eastl::string virtualPath = Format("{}/{}{}", kSaveMountPoint, slot, kSaveExtension);
+        std::filesystem::path resolved = _fileSystem.ResolvePath(virtualPath);
+
+        // ResolvePath falls back to the content roots and the working directory: a file of the same relative path there is not a save
+        std::error_code ec;
+        if (resolved.empty() || !std::filesystem::equivalent(resolved.parent_path(), _directory, ec)) {
+            return {};
+        }
+        return resolved;
+    }
+
+    std::expected<void, SaveError> SaveGameService::WriteSlot(eastl::string_view slot, const eastl::vector<uint8_t>& bytes) {
+        if (!_initialized) {
+            return NotInitializedError();
+        }
+        if (!IsValidSlotName(slot)) {
+            return InvalidSlotNameError(slot);
+        }
+
+        const std::filesystem::path target = MakePath(slot, kSaveExtension);
+        const std::filesystem::path temp = MakePath(slot, Format("{}{}", kSaveExtension, kSaveTempExtension));
+
+        auto fail = [&](eastl::string detail) {
+            std::error_code ignored;
+            std::filesystem::remove(temp, ignored);
+            return MakeError(SaveErrorKind::WriteFailed, std::move(detail));
+        };
+
+        {
+            std::ofstream file(temp, std::ios::binary | std::ios::trunc);
+            if (!file) {
+                return fail(Format("Cannot create '{}'", temp.string()));
+            }
+            file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            file.close();
+            if (file.fail()) {
+                return fail(Format("Cannot write '{}'", temp.string()));
+            }
+        }
+
+        std::error_code ec;
+        std::filesystem::rename(temp, target, ec);
+        if (ec) {
+            return fail(Format("Cannot replace '{}': {}", target.string(), ec.message()));
+        }
+        return {};
+    }
+
+    std::expected<eastl::vector<uint8_t>, SaveError> SaveGameService::ReadSlot(eastl::string_view slot) const {
+        if (!_initialized) {
+            return NotInitializedError();
+        }
+        if (!IsValidSlotName(slot)) {
+            return InvalidSlotNameError(slot);
+        }
+
+        const std::filesystem::path path = ResolveSlot(slot);
+        if (path.empty()) {
+            return MakeError(SaveErrorKind::NotFound, Format("No save in slot '{}'", slot));
+        }
+
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(path, ec)) {
+            return MakeError(SaveErrorKind::ReadFailed, Format("'{}' is not a file", path.string()));
+        }
+        const uintmax_t size = std::filesystem::file_size(path, ec);
+        if (ec) {
+            return MakeError(SaveErrorKind::ReadFailed, Format("Cannot get the size of '{}': {}", path.string(), ec.message()));
+        }
+
+        std::ifstream file(path, std::ios::binary);
+        if (!file) {
+            return MakeError(SaveErrorKind::ReadFailed, Format("Cannot open '{}'", path.string()));
+        }
+
+        eastl::vector<uint8_t> bytes(static_cast<size_t>(size));
+        file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        if (file.gcount() != static_cast<std::streamsize>(bytes.size())) {
+            return MakeError(SaveErrorKind::ReadFailed, Format("Cannot read '{}' to the end", path.string()));
+        }
+        return bytes;
+    }
+
+    bool SaveGameService::Exists(eastl::string_view slot) const {
+        if (!_initialized || !IsValidSlotName(slot)) {
+            return false;
+        }
+        std::error_code ec;
+        const std::filesystem::path path = ResolveSlot(slot);
+        return !path.empty() && std::filesystem::is_regular_file(path, ec);
+    }
+
+    bool SaveGameService::Delete(eastl::string_view slot) {
+        if (!Exists(slot)) {
+            return false;
+        }
+        std::error_code ec;
+        return std::filesystem::remove(ResolveSlot(slot), ec) && !ec;
+    }
+
+    eastl::vector<PoolString> SaveGameService::List() const {
+        eastl::vector<PoolString> slots;
+        if (!_initialized) {
+            return slots;
+        }
+
+        const eastl::string_view extensions[] = {kSaveExtension};
+        const eastl::string prefix = Format("{}/", kSaveMountPoint);
+        for (const PoolString& file : _fileSystem.EnumerateFiles(PoolString::Intern(kSaveMountPoint), extensions)) {
+            // "saves/<slot>.save": a file in a subfolder or with a name that is not a slot name is not a save of this service
+            eastl::string_view name = file.ToStringView();
+            if (!name.starts_with(prefix) || !name.ends_with(kSaveExtension)) {
+                continue;
+            }
+            name.remove_prefix(prefix.size());
+            name.remove_suffix(kSaveExtension.size());
+            if (IsValidSlotName(name)) {
+                slots.push_back(PoolString::Intern(name));
+            }
+        }
+
+        eastl::sort(slots.begin(), slots.end(), [](const PoolString& a, const PoolString& b) { return a.ToStringView() < b.ToStringView(); });
+        return slots;
+    }
+
+}  // namespace BECore
