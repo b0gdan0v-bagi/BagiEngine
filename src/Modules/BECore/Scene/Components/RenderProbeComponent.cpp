@@ -1,6 +1,7 @@
 #include "RenderProbeComponent.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Renderer/DrawTransform.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/SceneNode.h>
@@ -20,6 +21,9 @@ namespace BECore {
         constexpr uint32_t kGradientStep = 16;
         constexpr uint8_t kGradientBlue = 128;
         constexpr uint8_t kOpaque = 255;
+        constexpr float kTransformedSize = 80.0f;
+        constexpr float kProbeRotation = 30.0f;
+        constexpr float kHalf = 0.5f;
 
         const Color kCheckerDark{70, 70, 70, kOpaque};
         const Color kCheckerLight{150, 150, 150, kOpaque};
@@ -27,6 +31,8 @@ namespace BECore {
         const Color kHalfAlpha{kOpaque, kOpaque, kOpaque, 128};
         const Color kGlassRed{kOpaque, 0, 0, 128};
         const Color kGlassBlue{0, 0, kOpaque, 128};
+        const Color kBlendWarm{kOpaque, 160, 64, 160};
+        const Color kBlendGlow{96, 64, 32, 160};
         const Color kClipOuter{kOpaque, 0, 0, kOpaque};
         const Color kClipInner{0, kOpaque, 0, kOpaque};
 
@@ -74,6 +80,27 @@ namespace BECore {
                 {size, size, kWhite, 0.0f, 1.0f},
             }};
             renderer.DrawGeometry(&texture, {vertices.data(), vertices.size()}, {kQuadIndices.data(), kQuadIndices.size()}, x, y);
+        }
+
+        /// The gradient turned by kProbeRotation about the center of its cell (clockwise on the screen), mirrored left to right when @p flipX.
+        /// Smaller than the cell, so the turned corners stay inside it.
+        void DrawTurnedTexture(IRenderer& renderer, ITexture& texture, float cellX, float cellY, bool flipX) {
+            const float x = cellX + (kCell - kTransformedSize) * kHalf;
+            const float y = cellY + (kCell - kTransformedSize) * kHalf;
+            DrawTransform transform;
+            transform.rotation = kProbeRotation;
+            transform.pivotX = cellX + kCell * kHalf;
+            transform.pivotY = cellY + kCell * kHalf;
+            transform.flipX = flipX;
+            renderer.DrawTransformedTexture(texture, nullptr, x, y, kTransformedSize, kTransformedSize, kWhite, transform);
+        }
+
+        /// Two halves of a cell, the same translucent color in each: the left one blends straight (the reference), the right one with @p mode
+        void DrawBlendPair(IRenderer& renderer, float x, float y, const Color& color, BlendMode mode) {
+            const float w = kCell * kHalf;
+            renderer.DrawFilledRect(x, y, w, kCell, color);
+            const ScopedBlendMode blend(renderer, mode);
+            renderer.DrawFilledRect(x + w, y, w, kCell, color);
         }
 
         void DrawChecker(IRenderer& renderer, float x, float y, float size) {
@@ -124,8 +151,8 @@ namespace BECore {
         }
         const auto cellX = [originX](int index) { return originX + static_cast<float>(index) * (kCell + kGap); };
 
-        // Cells 0 to 3, and 5 and 6, sit on a checkerboard, so transparency is visible
-        for (const int cell : {0, 1, 2, 3, 5, 6}) {
+        // Every cell but 4 sits on a checkerboard, so transparency is visible
+        for (const int cell : {0, 1, 2, 3, 5, 6, 7, 8, 9, 10}) {
             DrawChecker(renderer, cellX(cell), originY, kCell);
         }
 
@@ -154,6 +181,16 @@ namespace BECore {
         if (_gradient) {
             DrawMirroredTexture(renderer, *_gradient, cellX(6), originY, kCell);
         }
+
+        // Cells 7 and 8: DrawTransformedTexture(), the gradient turned 30 degrees about the cell's center, then the same mirrored left to right (cell 0
+        // is the straight reference). Cells 9 and 10 split into a straight-alpha half on the left and the blended half on the right: additive
+        // (brighter than the straight half, saturating) and multiply (darker, the checker shows through its pattern).
+        if (_gradient) {
+            DrawTurnedTexture(renderer, *_gradient, cellX(7), originY, false);
+            DrawTurnedTexture(renderer, *_gradient, cellX(8), originY, true);
+        }
+        DrawBlendPair(renderer, cellX(9), originY, kBlendGlow, BlendMode::Add);
+        DrawBlendPair(renderer, cellX(10), originY, kBlendWarm, BlendMode::Multiply);
     }
 
 }  // namespace BECore

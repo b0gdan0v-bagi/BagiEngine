@@ -79,7 +79,8 @@ namespace BECore {
 
         // Draws a texture like DrawTexture() but rotated about @p transform's pivot and mirrored by its flips (the UVs swap). An identity transform is
         // DrawTexture() unchanged; otherwise the default draws a textured quad through DrawGeometry() with the UVs of @p srcRect over the texture size
-        // (the whole texture when @p srcRect is null or empty) and @p tint as the vertex color. A texture without size draws nothing.
+        // (the whole texture when @p srcRect is null or empty) and @p tint as the vertex color. A texture without size draws nothing. A backend can
+        // override it with a native draw (SDLRendererBackend does, with SDL_RenderTextureRotated).
         virtual void DrawTransformedTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint, const DrawTransform& transform);
 
         // Makes a texture from pixels in memory: RGBA8 (red first), straight alpha, rows packed from the top, so
@@ -105,8 +106,9 @@ namespace BECore {
         // back keeps this default, which calls @p callback at once with an error (the Vulkan backend: .claude/rules/rendering-module.md).
         virtual void RequestCapture(CaptureCallback callback);
 
-        // How the draws combine with the target (Alpha by default). State of the interface, like the view transform: the backends apply it to
-        // every primitive (DrawFilledRect, DrawTexture, DrawGeometry and so the transformed draws). Whoever sets another mode puts the previous one back
+        // How the draws combine with the target (Alpha by default). State of the interface, like the view transform: SDL applies it to every
+        // primitive (DrawFilledRect, DrawTexture, DrawGeometry and so the transformed draws); Vulkan draws straight alpha whatever it says and warns
+        // once (BlendMode.h). Whoever sets another mode puts the previous one back
         // (ScopedBlendMode), so a draw further on never sees a mode that leaked.
         void SetBlendMode(BlendMode mode) {
             _blendMode = mode;
