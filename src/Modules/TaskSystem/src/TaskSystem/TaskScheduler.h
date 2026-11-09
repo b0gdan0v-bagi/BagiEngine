@@ -170,6 +170,9 @@ namespace BECore {
 
         void DispatchToThreadPool(TaskQueue::TaskFunc task, TaskPriority priority);
 
+        /// The clock of the budget: the one set by SetBudgetClock, else steady_clock::now.
+        [[nodiscard]] TimePoint BudgetNow() const;
+
         /// Submits @p task to the inline pool wrapped so that it counts as a background job while it runs.
         void SubmitInlineBackgroundJob(TaskQueue::TaskFunc task);
 
@@ -194,7 +197,7 @@ namespace BECore {
         bool _inBackgroundJob = false;
         // TimePoint max: no frame yet (never yield); now + budget: a drain runs; TimePoint min: spent
         TimePoint _sliceDeadline = (TimePoint::max)();
-        TimePoint (*_budgetNow)() = &Clock::now;
+        TimePoint (*_budgetNow)() = nullptr;  // nullptr: steady_clock::now
 
         bool _stopped = false;
     };

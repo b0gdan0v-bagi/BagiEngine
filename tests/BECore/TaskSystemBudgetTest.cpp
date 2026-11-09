@@ -1,11 +1,12 @@
+#include <Common/EngineEnvironment.h>
 #include <TaskSystem/Awaitables.h>
 #include <TaskSystem/CancellationToken.h>
 #include <TaskSystem/LiveTasks.h>
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskHandle.h>
+#include <TaskSystem/TaskManager.h>
 #include <TaskSystem/TaskScheduler.h>
 #include <TaskSystem/ThreadPool.h>
-#include <atomic>
 #include <chrono>
 #include <gtest/gtest.h>
 #include <thread>
@@ -18,8 +19,9 @@ namespace BECore::Tests {
         using TimePoint = TaskScheduler::TimePoint;
         using Duration = TaskScheduler::Duration;
 
-        constexpr Duration kUnit = std::chrono::milliseconds(1);  // the fake time one unit of work takes
-        constexpr size_t kDrainLimit = 50;                        // a safety stop for a loop that waits for a task
+        constexpr Duration kUnit = std::chrono::milliseconds(1);    // the fake time one unit of work takes
+        constexpr Duration kBudget = std::chrono::milliseconds(3);  // the budget of a drain in the tests
+        constexpr size_t kDrainLimit = 50;                          // a safety stop for a loop that waits for a task
 
         // The clock of the budget in these tests: it moves only when a coroutine "works".
         TimePoint g_fakeNow{};
@@ -57,19 +59,10 @@ namespace BECore::Tests {
         };
 
         /// co_await YieldIfNeeded() bound to @p scheduler: suspends only when ShouldYield() says so.
-        struct YieldIfNeededOf {
-            TaskScheduler& scheduler;
-            ThreadType threadType = ThreadType::MainThread;
-
+        struct YieldIfNeededOf : YieldOf {
             [[nodiscard]] bool await_ready() const noexcept {
                 return !scheduler.ShouldYield();
             }
-
-            void await_suspend(std::coroutine_handle<> handle) noexcept {
-                scheduler.ScheduleYielded([handle]() mutable { handle.resume(); }, threadType);
-            }
-
-            void await_resume() const noexcept {}
         };
 
         /// A polite loop: asks first, then does a unit of work.
@@ -186,7 +179,7 @@ namespace BECore::Tests {
 
             /// A frame's drain with nothing parked: from now on the window counts as spent between drains.
             void EndFirstFrame() {
-                EXPECT_EQ(_scheduler.ProcessBackgroundSlices(std::chrono::milliseconds(3)), 0u);
+                EXPECT_EQ(_scheduler.ProcessBackgroundSlices(kBudget), 0u);
             }
 
             TaskScheduler _scheduler;
@@ -209,7 +202,6 @@ namespace BECore::Tests {
 
     TEST_F(TaskSystemBudgetTest, EachDrainSpendsAtMostTheBudgetPlusOneStep) {
         Trace trace;
-        const Duration budget = std::chrono::milliseconds(3);
         EndFirstFrame();
         auto handle = MakeHandle(CheckLastLoop(_scheduler, trace, 10));
 
@@ -221,8 +213,8 @@ namespace BECore::Tests {
         size_t drains = 0;
         while (_scheduler.GetBackgroundSliceCount() > 0 && drains < kDrainLimit) {
             const TimePoint before = g_fakeNow;
-            EXPECT_EQ(_scheduler.ProcessBackgroundSlices(budget), 1u);
-            EXPECT_LE(g_fakeNow - before, budget + kUnit);
+            EXPECT_EQ(_scheduler.ProcessBackgroundSlices(kBudget), 1u);
+            EXPECT_LE(g_fakeNow - before, kBudget + kUnit);
             ++drains;
         }
 
@@ -244,11 +236,11 @@ namespace BECore::Tests {
         EXPECT_FALSE(handle->IsDone());
         EXPECT_EQ(_scheduler.GetBackgroundSliceCount(), 1u);
 
-        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(std::chrono::milliseconds(3)), 1u);
+        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(kBudget), 1u);
         EXPECT_EQ(trace.steps, 3);
         EXPECT_FALSE(handle->IsDone());
 
-        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(std::chrono::milliseconds(3)), 1u);
+        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(kBudget), 1u);
         EXPECT_EQ(trace.steps, 6);
         EXPECT_TRUE(handle->IsDone());
         EXPECT_EQ(_scheduler.GetBackgroundSliceCount(), 0u);
@@ -341,7 +333,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_scheduler.GetBackgroundSliceCount(), 0u);
         EXPECT_EQ(_scheduler.GetMainThreadQueueSize(), 1u);
 
-        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(std::chrono::milliseconds(3)), 0u);
+        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(kBudget), 0u);
         EXPECT_EQ(trace.events.size(), 1u) << "The drain of the cooperative queue does not run the main-thread queue";
 
         _scheduler.ProcessMainThreadTasks();
@@ -356,14 +348,14 @@ namespace BECore::Tests {
         auto handle = MakeHandle(CancellableLoop(_scheduler, trace, token, 100));
 
         StartInBackground(handle);
-        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(std::chrono::milliseconds(3)), 1u);
+        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(kBudget), 1u);
         EXPECT_FALSE(handle->IsDone());
         const int stepsAtCancel = trace.steps;
         EXPECT_GT(stepsAtCancel, 0);
 
         token.Cancel();
         // The parked slice resumes after its check: at most one unit more, then the next token check ends it
-        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(std::chrono::milliseconds(3)), 1u);
+        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(kBudget), 1u);
 
         EXPECT_TRUE(handle->IsDone());
         EXPECT_TRUE(handle->GetStatus() == TaskStatus::Completed);
@@ -381,7 +373,7 @@ namespace BECore::Tests {
         _scheduler.Shutdown();
 
         EXPECT_EQ(_scheduler.GetBackgroundSliceCount(), 0u);
-        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(std::chrono::milliseconds(3)), 0u);
+        EXPECT_EQ(_scheduler.ProcessBackgroundSlices(kBudget), 0u);
         EXPECT_FALSE(handle->IsDone());
 
         // What TaskManager::Shutdown does next: the parked task is cancelled and its frame is freed with the handle
@@ -431,7 +423,7 @@ namespace BECore::Tests {
         scheduler.Initialize(&pool);
         scheduler.SetBudgetClock(&FakeNow);
 
-        EXPECT_EQ(scheduler.ProcessBackgroundSlices(std::chrono::milliseconds(3)), 0u);
+        EXPECT_EQ(scheduler.ProcessBackgroundSlices(kBudget), 0u);
         EXPECT_FALSE(scheduler.ShouldYield());
 
         // From a pool job ShouldYield is false too, and a yield of a background job goes back to the pool
@@ -451,7 +443,7 @@ namespace BECore::Tests {
         scheduler.ScheduleYielded([&]() { ++ranOnMain; }, ThreadType::MainThread);
         EXPECT_EQ(scheduler.GetMainThreadQueueSize(), 1u);
         EXPECT_EQ(scheduler.GetBackgroundSliceCount(), 0u);
-        EXPECT_EQ(scheduler.ProcessBackgroundSlices(std::chrono::milliseconds(3)), 0u);
+        EXPECT_EQ(scheduler.ProcessBackgroundSlices(kBudget), 0u);
         EXPECT_EQ(ranOnMain, 0);
         scheduler.ProcessMainThreadTasks();
         EXPECT_EQ(ranOnMain, 1);
@@ -459,5 +451,272 @@ namespace BECore::Tests {
         scheduler.Shutdown();
         pool.Shutdown();
     }
+
+    // =================================================================
+    // The singleton TaskManager: the budget API and the real awaitables
+    // =================================================================
+
+    namespace {
+
+#if !BE_SINGLE_THREAD
+        /// Counts to @p units with a real YieldIfNeeded() before each count; no fake work, so it is safe on a worker.
+        Task<int> PoliteCount(int units) {
+            int sum = 0;
+            for (int i = 0; i < units; ++i) {
+                co_await YieldIfNeeded();
+                sum += i;
+            }
+            co_return sum;
+        }
+
+        Task<int> ExplicitYieldCount(int yields) {
+            for (int i = 0; i < yields; ++i) {
+                co_await Yield();
+            }
+            co_return yields;
+        }
+#endif
+
+#if BE_SINGLE_THREAD
+        /// A unit of fake work per step, YieldIfNeeded() before each; the result is the sum of 0..units-1.
+        Task<int> PoliteWork(int units) {
+            int sum = 0;
+            for (int i = 0; i < units; ++i) {
+                co_await YieldIfNeeded();
+                DoWork();
+                sum += i;
+            }
+            co_return sum;
+        }
+
+        /// A long task that never checks: a coroutine cannot be preempted, so it runs to its end.
+        Task<int> GreedyWork(int units) {
+            int sum = 0;
+            for (int i = 0; i < units; ++i) {
+                DoWork();
+                sum += i;
+            }
+            co_return sum;
+        }
+
+        Task<int> PoliteCancellable(CancellationToken token, int units, int& steps) {
+            for (int i = 0; i < units; ++i) {
+                if (token.IsCancelled()) {
+                    co_return - 1;
+                }
+                co_await YieldIfNeeded();
+                DoWork();
+                ++steps;
+            }
+            co_return units;
+        }
+
+        Task<int> MainThreadStepper(int& steps) {
+            ++steps;
+            co_await Yield();
+            ++steps;
+            co_await Yield();
+            ++steps;
+            co_return steps;
+        }
+#endif
+
+        class TaskManagerBudgetTest : public ::testing::Test {
+        protected:
+            static void SetUpTestSuite() {
+                EngineEnvironment::EnsureCoreServices();
+            }
+
+            void SetUp() override {
+                ASSERT_TRUE(TaskManager::GetInstance().IsInitialized());
+                ASSERT_TRUE(TaskManager::GetInstance().IsMainThread());
+                g_fakeNow = TimePoint{};
+                _savedBudget = TaskManager::GetInstance().GetFrameBudget();
+                TaskManager::GetInstance().SetFrameBudget(kBudget);
+                Scheduler().SetBudgetClock(&FakeNow);
+            }
+
+            void TearDown() override {
+                // Let whatever a failed test left parked run to its end
+                for (size_t frame = 0; frame < kDrainLimit && Scheduler().GetBackgroundSliceCount() > 0; ++frame) {
+                    Frame();
+                }
+                Scheduler().SetBudgetClock(nullptr);
+                TaskManager::GetInstance().SetFrameBudget(_savedBudget);
+            }
+
+            static TaskScheduler& Scheduler() {
+                return *TaskManager::GetInstance().GetScheduler();
+            }
+
+            /// What TaskManager::Update does (it takes a PassKey, so a test cannot call it).
+            static size_t Frame() {
+                Scheduler().ProcessDelayedTasks();
+                Scheduler().ProcessMainThreadTasks();
+                return Scheduler().ProcessBackgroundSlices(TaskManager::GetInstance().GetFrameBudget());
+            }
+
+            Duration _savedBudget{};
+        };
+
+    }  // namespace
+
+    TEST_F(TaskManagerBudgetTest, TheFrameBudgetIsFourMillisecondsByDefaultAndANegativeValueIsStoredAsZero) {
+        EXPECT_EQ(TaskManager::kDefaultFrameBudget, std::chrono::milliseconds(4));
+
+        TaskManager::GetInstance().SetFrameBudget(std::chrono::milliseconds(7));
+        EXPECT_EQ(TaskManager::GetInstance().GetFrameBudget(), std::chrono::milliseconds(7));
+
+        TaskManager::GetInstance().SetFrameBudget(-std::chrono::milliseconds(2));
+        EXPECT_EQ(TaskManager::GetInstance().GetFrameBudget(), Duration::zero());
+
+        TaskManager::GetInstance().SetFrameBudget(Duration::zero());
+        EXPECT_EQ(TaskManager::GetInstance().GetFrameBudget(), Duration::zero());
+    }
+
+    TEST_F(TaskManagerBudgetTest, ShouldYieldIsFalseOutsideAnyJob) {
+        EXPECT_FALSE(TaskManager::GetInstance().ShouldYield());
+        Frame();
+        EXPECT_FALSE(TaskManager::GetInstance().ShouldYield()) << "The window counts as spent after a frame, but no job runs";
+    }
+
+#if !BE_SINGLE_THREAD
+    TEST_F(TaskManagerBudgetTest, OnAThreadedBuildYieldIfNeededNeverParksATask) {
+        constexpr int kUnits = 200;
+        auto handle = TaskManager::GetInstance().Run(PoliteCount(kUnits));
+
+        // Nothing but the pool runs the task; the cooperative queue stays empty the whole time
+        size_t parkedMax = 0;
+        EXPECT_TRUE(WaitFor([&]() {
+            parkedMax = std::max(parkedMax, Scheduler().GetBackgroundSliceCount());
+            return handle->IsDone();
+        }));
+        handle->Wait();
+
+        EXPECT_EQ(parkedMax, 0u);
+        EXPECT_EQ(Scheduler().GetBackgroundSliceCount(), 0u);
+        auto result = handle->GetResult();
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, kUnits * (kUnits - 1) / 2);
+    }
+
+    TEST_F(TaskManagerBudgetTest, OnAThreadedBuildAnExplicitYieldStillGoesBackToThePool) {
+        auto handle = TaskManager::GetInstance().Run(ExplicitYieldCount(3));
+
+        handle->Wait();  // resumed on a worker each time: nobody drains anything here
+
+        EXPECT_TRUE(handle->GetStatus() == TaskStatus::Completed);
+        auto result = handle->GetResult();
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, 3);
+        EXPECT_EQ(Scheduler().GetBackgroundSliceCount(), 0u);
+        EXPECT_EQ(Frame(), 0u) << "No cooperative queue in a threaded build";
+    }
+#endif
+
+#if BE_SINGLE_THREAD
+    TEST_F(TaskManagerBudgetTest, ARunAfterAFrameReturnsWithAPoliteTaskUnfinishedAndFinishesOverFrames) {
+        EXPECT_EQ(Frame(), 0u);
+        constexpr int kUnits = 10;
+
+        auto handle = TaskManager::GetInstance().Run(PoliteWork(kUnits));
+
+        EXPECT_FALSE(handle->IsDone()) << "The first slice ends at the first check";
+        EXPECT_EQ(Scheduler().GetBackgroundSliceCount(), 1u);
+
+        size_t frames = 0;
+        while (!handle->IsDone() && frames < kDrainLimit) {
+            const TimePoint before = g_fakeNow;
+            EXPECT_EQ(Frame(), 1u);
+            EXPECT_LE(g_fakeNow - before, kBudget + kUnit);
+            ++frames;
+        }
+
+        // 3 units per frame: 3, 6, 9, then the last unit
+        EXPECT_EQ(frames, 4u);
+        EXPECT_TRUE(handle->GetStatus() == TaskStatus::Completed);
+        auto result = handle->GetResult();
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, kUnits * (kUnits - 1) / 2);
+    }
+
+    TEST_F(TaskManagerBudgetTest, ATaskThatNeverChecksStillRunsToItsEndInline) {
+        EXPECT_EQ(Frame(), 0u);
+
+        auto handle = TaskManager::GetInstance().Run(GreedyWork(30));
+
+        EXPECT_TRUE(handle->IsDone());
+        auto result = handle->GetResult();
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, 30 * 29 / 2);
+        EXPECT_EQ(Scheduler().GetBackgroundSliceCount(), 0u);
+    }
+
+    TEST_F(TaskManagerBudgetTest, TheParkedTaskIsCountedAsPending) {
+        EXPECT_EQ(Frame(), 0u);
+        const size_t pendingBefore = TaskManager::GetInstance().GetPendingTaskCount();
+
+        auto handle = TaskManager::GetInstance().Run(PoliteWork(5));
+
+        ASSERT_FALSE(handle->IsDone());
+        EXPECT_EQ(TaskManager::GetInstance().GetPendingTaskCount(), pendingBefore + 1);
+
+        size_t frames = 0;
+        while (!handle->IsDone() && frames < kDrainLimit) {
+            Frame();
+            ++frames;
+        }
+        EXPECT_EQ(TaskManager::GetInstance().GetPendingTaskCount(), pendingBefore);
+    }
+
+    TEST_F(TaskManagerBudgetTest, TwoPoliteTasksAndAMainThreadTaskDoNotStarveEachOther) {
+        EXPECT_EQ(Frame(), 0u);
+        int mainSteps = 0;
+
+        auto first = TaskManager::GetInstance().Run(PoliteWork(9));
+        auto second = TaskManager::GetInstance().Run(PoliteWork(9));
+        auto onMain = TaskManager::GetInstance().RunOnMainThread(MainThreadStepper(mainSteps));
+
+        size_t frames = 0;
+        while (!(first->IsDone() && second->IsDone() && onMain->IsDone()) && frames < kDrainLimit) {
+            Frame();
+            ++frames;
+        }
+
+        EXPECT_TRUE(first->IsDone());
+        EXPECT_TRUE(second->IsDone());
+        EXPECT_TRUE(onMain->IsDone());
+        EXPECT_EQ(mainSteps, 3);
+        EXPECT_LT(frames, kDrainLimit);
+        auto firstResult = first->GetResult();
+        auto secondResult = second->GetResult();
+        ASSERT_TRUE(firstResult.has_value() && secondResult.has_value());
+        EXPECT_EQ(*firstResult, 9 * 8 / 2);
+        EXPECT_EQ(*secondResult, 9 * 8 / 2);
+    }
+
+    TEST_F(TaskManagerBudgetTest, CancellationByTokenBetweenSlicesEndsTheTaskInTheNextFrame) {
+        EXPECT_EQ(Frame(), 0u);
+        CancellationToken token = CancellationToken::Create();
+        int steps = 0;
+        auto handle = TaskManager::GetInstance().Run(PoliteCancellable(token, 100, steps));
+        ASSERT_FALSE(handle->IsDone());
+
+        EXPECT_EQ(Frame(), 1u);
+        ASSERT_FALSE(handle->IsDone());
+        const int stepsAtCancel = steps;
+        EXPECT_GT(stepsAtCancel, 0);
+
+        token.Cancel();
+        EXPECT_EQ(Frame(), 1u);
+
+        EXPECT_TRUE(handle->IsDone());
+        EXPECT_LE(steps, stepsAtCancel + 1);
+        auto result = handle->GetResult();
+        ASSERT_TRUE(result.has_value());
+        EXPECT_EQ(*result, -1);
+        EXPECT_EQ(Scheduler().GetBackgroundSliceCount(), 0u);
+    }
+#endif
 
 }  // namespace BECore::Tests

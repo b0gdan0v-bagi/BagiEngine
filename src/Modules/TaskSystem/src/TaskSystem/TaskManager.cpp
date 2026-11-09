@@ -45,6 +45,9 @@ namespace BECore {
 
         // Обрабатываем задачи главного потока
         _scheduler.ProcessMainThreadTasks();
+
+        // Single-thread build: the continuations of the background jobs that yielded, for at most the frame budget
+        _scheduler.ProcessBackgroundSlices(_frameBudget);
     }
 
     void TaskManager::AdvanceGameTime(PassKey<CoreManager>, double seconds) {
@@ -97,6 +100,7 @@ namespace BECore {
         }
         count += _scheduler.GetMainThreadQueueSize();
         count += _scheduler.GetDelayedTaskCount();
+        count += _scheduler.GetBackgroundSliceCount();
         return count;
     }
 

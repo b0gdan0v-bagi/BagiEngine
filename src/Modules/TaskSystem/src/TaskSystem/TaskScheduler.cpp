@@ -20,6 +20,10 @@ namespace BECore {
             return TaskScheduler::Duration(x + y);
         }
 
+        TaskScheduler::TimePoint SteadyNow() {
+            return TaskScheduler::Clock::now();
+        }
+
     }  // namespace
 
     void TaskScheduler::Initialize(ThreadPool* threadPool) {
@@ -145,12 +149,12 @@ namespace BECore {
 
         // A budget of zero or less gives a window that is spent at once: one slice per call
         const Duration window = budget < Duration::zero() ? Duration::zero() : budget;
-        const TimePoint start = _budgetNow();
+        const TimePoint start = BudgetNow();
         _sliceDeadline = TimePoint(SaturatingAdd(start.time_since_epoch(), window));
 
         size_t sliceCount = 0;
         while (!_stopped) {
-            if (sliceCount > 0 && _budgetNow() >= _sliceDeadline) {
+            if (sliceCount > 0 && BudgetNow() >= _sliceDeadline) {
                 break;
             }
 
@@ -176,11 +180,15 @@ namespace BECore {
         if (!_threadPool || !_threadPool->IsInline() || !_inBackgroundJob) {
             return false;
         }
-        return _budgetNow() >= _sliceDeadline;
+        return BudgetNow() >= _sliceDeadline;
+    }
+
+    TaskScheduler::TimePoint TaskScheduler::BudgetNow() const {
+        return _budgetNow ? _budgetNow() : SteadyNow();
     }
 
     void TaskScheduler::SetBudgetClock(TimePoint (*now)()) {
-        _budgetNow = now ? now : &Clock::now;
+        _budgetNow = now;
     }
 
     size_t TaskScheduler::GetBackgroundSliceCount() const {

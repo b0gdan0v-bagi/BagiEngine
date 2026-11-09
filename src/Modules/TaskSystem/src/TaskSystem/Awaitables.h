@@ -57,6 +57,9 @@ namespace BECore {
 
     /**
      * YieldAwaiter - уступает выполнение другим задачам.
+     * Always suspends. A background job of a single-thread build is parked in the cooperative queue and resumed by
+     * TaskManager::Update within the frame budget; a main-thread job resumes in the next main-thread drain; on a
+     * threaded build the continuation goes back to the pool.
      *
      * @example
      * co_await Yield();
@@ -65,6 +68,24 @@ namespace BECore {
         bool await_ready() const noexcept {
             return false;
         }
+        void await_suspend(std::coroutine_handle<> handle) noexcept;
+        void await_resume() const noexcept {}
+    };
+
+    /**
+     * YieldIfNeededAwaiter - yields only when the frame budget of the running background job is spent.
+     * The call for a long loop: on a threaded build await_ready is always true (a bool test, no suspension); in a
+     * single-thread build the task suspends once its slice of the frame is spent and continues in Update, and it
+     * never suspends before the first frame. Main-thread jobs are not budgeted.
+     *
+     * @example
+     * for (const auto& item : items) {
+     *     co_await YieldIfNeeded();
+     *     Process(item);
+     * }
+     */
+    struct YieldIfNeededAwaiter {
+        bool await_ready() const noexcept;
         void await_suspend(std::coroutine_handle<> handle) noexcept;
         void await_resume() const noexcept {}
     };
@@ -149,6 +170,13 @@ namespace BECore {
      * Уступает выполнение другим задачам.
      */
     inline YieldAwaiter Yield() {
+        return {};
+    }
+
+    /**
+     * Yields when the frame budget is spent (single-thread build), otherwise continues at once.
+     */
+    inline YieldIfNeededAwaiter YieldIfNeeded() {
         return {};
     }
 
