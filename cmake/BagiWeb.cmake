@@ -105,6 +105,12 @@ function(be_web_configure_target TARGET_NAME)
         # as a duplicate; the quotes keep a path with a space in one piece (unverified: needs emsdk)
         string(REPLACE "--preload-file " "" _spec "${_entry}")
         target_link_options(${TARGET_NAME} PRIVATE "SHELL:--preload-file \"${_spec}\"")
+
+        # The .data package is written at link time: a changed or added file in the folder must relink. CONFIGURE_DEPENDS makes the
+        # build re-glob, so a new file is seen without a manual configure
+        string(REGEX REPLACE "@.*$" "" _folder "${_spec}")
+        file(GLOB_RECURSE _content CONFIGURE_DEPENDS "${_folder}/*")
+        set_property(TARGET ${TARGET_NAME} APPEND PROPERTY LINK_DEPENDS ${_content})
     endforeach()
 
     # The content is in the virtual file system of the page, not at the paths of this checkout

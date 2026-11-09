@@ -291,7 +291,8 @@ endif()
 #                   So a Debug build has the editor and a Release build does not.
 #   ON:             the editor is built (also in Release).
 #   OFF:            the editor is not built. A Debug build ignores it (WARNING, the editor is built anyway):
-#                   Debug builds always include the editor.
+#                   Debug builds always include the editor. The web build is the exception: it has no editor in any
+#                   configuration.
 # A multi-config generator (Visual Studio, Ninja Multi-Config) picks the configuration at build time, but the sources
 # are picked now, so there AUTO means ON; use -DBE_WITH_EDITOR=OFF for a build without the editor.
 # The result is the variable BE_EDITOR_ENABLED (used by src/CMakeLists.txt and tests/CMakeLists.txt) and the

@@ -34,13 +34,19 @@ namespace BECore {
         constexpr int kMinWindowSize = 64;
 
         void FitWindowToPage(SDL_Window* window, double innerWidth, double innerHeight) {
+            // A fullscreen window is the size of the screen; SDL's own resize handler leaves it alone too
+            if ((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0) {
+                return;
+            }
             const WebCanvasSize size = FitWindowSize(innerWidth, innerHeight, kMinWindowSize, kMinWindowSize);
-            SDL_SetWindowSize(window, size.width, size.height);
+            if (!SDL_SetWindowSize(window, size.width, size.height)) {
+                LOG_WARNING(Format("[SDLWebCanvas] SDL_SetWindowSize({}, {}) failed: {}", size.width, size.height, SDL_GetError()).c_str());
+            }
         }
 
         EM_BOOL OnPageResize(int /*eventType*/, const EmscriptenUiEvent* event, void* userData) {
             FitWindowToPage(static_cast<SDL_Window*>(userData), event->windowInnerWidth, event->windowInnerHeight);
-            return false;  // not consumed: SDL's own resize handler sees the event too
+            return false;  // the result only decides preventDefault; SDL's own resize handler gets the event as well
         }
 
     }  // namespace

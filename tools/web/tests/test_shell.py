@@ -83,7 +83,7 @@ class ShellStyleTest(unittest.TestCase):
         return match.group(1)
 
     def test_the_canvas_fills_the_window(self):
-        canvas = self.rule("#canvas")
+        canvas = self.rule("canvas#canvas")
         self.assertRegex(canvas, r"width:\s*100vw")
         self.assertRegex(canvas, r"height:\s*100vh")
         self.assertRegex(canvas, r"position:\s*fixed")
@@ -95,7 +95,7 @@ class ShellStyleTest(unittest.TestCase):
         self.assertRegex(page, r"padding:\s*0")
 
     def test_the_canvas_gives_the_touches_to_the_game(self):
-        self.assertRegex(self.rule("#canvas"), r"touch-action:\s*none")
+        self.assertRegex(self.rule("canvas#canvas"), r"touch-action:\s*none")
 
 
 class ShellScriptTest(unittest.TestCase):

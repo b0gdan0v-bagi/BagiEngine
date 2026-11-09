@@ -32,9 +32,10 @@
             font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
 
-        /* The canvas covers the whole window and nothing scrolls. 100dvh follows the visible height on a phone, whose address bar
-           makes 100vh taller than the screen. */
-        #canvas {
+        /* Selectors are written tag#id, not #id: a line that starts with # can be taken for a preprocessor directive by emcc's shell
+           handling in some versions. The canvas covers the whole window and nothing scrolls. 100dvh follows the visible height on a
+           phone, whose address bar makes 100vh taller than the screen. */
+        canvas#canvas {
             display: block;
             position: fixed;
             left: 0;
@@ -52,7 +53,7 @@
         }
 
         @supports (height: 100dvh) {
-            #canvas {
+            canvas#canvas {
                 height: 100dvh;
             }
         }
@@ -83,7 +84,7 @@
             font-weight: 600;
         }
 
-        #loading-bar {
+        progress#loading-bar {
             width: min(420px, 80vw);
             height: 10px;
             border: 0;
@@ -93,32 +94,32 @@
             accent-color: #5aa0ff;
         }
 
-        #loading-bar::-webkit-progress-bar {
+        progress#loading-bar::-webkit-progress-bar {
             background: #2a2d36;
         }
 
-        #loading-bar::-webkit-progress-value {
+        progress#loading-bar::-webkit-progress-value {
             background: #5aa0ff;
         }
 
-        #loading-bar::-moz-progress-bar {
+        progress#loading-bar::-moz-progress-bar {
             background: #5aa0ff;
         }
 
-        #loading-status {
+        div#loading-status {
             margin-top: 12px;
             min-height: 1.4em;
             font-size: 0.9rem;
             color: #98a0b0;
         }
 
-        #message {
+        div#message {
             max-width: 36rem;
             line-height: 1.5;
             overflow-wrap: anywhere;
         }
 
-        #message-detail {
+        div#message-detail {
             margin-top: 8px;
             font-size: 0.85rem;
             color: #98a0b0;
