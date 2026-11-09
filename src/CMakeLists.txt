@@ -40,8 +40,15 @@ target_link_libraries(RuntimeModule PUBLIC
     BECoreModule
     EventsModule
     TaskSystemModule
-    RemoteControlModule
     GamesModule
     SDLModule
-    VulkanModule
 )
+
+# The socket server and the Vulkan backend are built only with ENGINE_WITH_REMOTE_CONTROL / ENGINE_WITH_VULKAN
+# (cmake/BagiPlatformOptions.cmake)
+if(TARGET RemoteControlModule)
+    target_link_libraries(RuntimeModule PUBLIC RemoteControlModule)
+endif()
+if(TARGET VulkanModule)
+    target_link_libraries(RuntimeModule PUBLIC VulkanModule)
+endif()

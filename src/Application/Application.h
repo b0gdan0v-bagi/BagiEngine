@@ -8,7 +8,9 @@ namespace BECore {
 
     // Forward declaration для класса-ключа доступа
     class ApplicationMainAccess;
+#if BE_WITH_REMOTE_CONTROL
     class WebSocketServer;
+#endif
 
     class Application : public Singleton<Application>, public SubscriptionHolder {
     public:
@@ -31,12 +33,16 @@ namespace BECore {
 #endif
         void Cleanup();
 
+#if BE_WITH_REMOTE_CONTROL
         /// Starts the WebSocket server of the control API on @p port. False, with the reason in the log, when it cannot listen
         bool StartControlServer(uint16_t port);
+#endif
 
         bool _isRunning = false;
         bool _headless = false;  // there is no window to show an editor in: the switch chord is ignored
         eastl::vector<eastl::string> _arguments;
+#if BE_WITH_REMOTE_CONTROL
         eastl::unique_ptr<WebSocketServer> _controlServer;
+#endif
     };
 }  // namespace BECore

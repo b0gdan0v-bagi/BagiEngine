@@ -11,7 +11,9 @@
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Games/GameManager.h>
+#if BE_WITH_REMOTE_CONTROL
 #include <RemoteControl/WebSocketServer.h>
+#endif
 
 namespace BECore {
 
@@ -75,9 +77,17 @@ namespace BECore {
         GameManager::GetInstance().Initialize();
 
         // Last, so that the methods of the game layer are registered before the first client can ask for them
+#if BE_WITH_REMOTE_CONTROL
         if (controlSettings->enabled && !StartControlServer(controlSettings->port)) {
             return false;
         }
+#else
+        if (controlSettings->enabled) {
+            LOG_ERROR("Control API: not available in this build");
+            LogEvent::Flush();
+            return false;
+        }
+#endif
 
         return _isRunning;
     }
@@ -127,6 +137,7 @@ namespace BECore {
     }
 #endif
 
+#if BE_WITH_REMOTE_CONTROL
     bool Application::StartControlServer(uint16_t port) {
         _controlServer = eastl::make_unique<WebSocketServer>(CoreManager::GetControlService());
         const auto started = _controlServer->Start(port);
@@ -138,13 +149,16 @@ namespace BECore {
         }
         return true;
     }
+#endif
 
     void Application::Cleanup() {
+#if BE_WITH_REMOTE_CONTROL
         // The transport stops before ControlService::Shutdown (OnApplicationDeinit), as Control/CLAUDE.md asks
         if (_controlServer) {
             _controlServer->Stop();
             _controlServer.reset();
         }
+#endif
         GameManager::GetInstance().Shutdown();
         // The glyph pages and the widgets own GPU objects (a texture, the viewport's target, ImGui's descriptors): they go before
         // the renderer's own cleanup destroys the device. Direct calls, not handlers of ApplicationCleanUpEvent: EnTT calls the

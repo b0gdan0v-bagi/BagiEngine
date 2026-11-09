@@ -24,6 +24,9 @@ get_filename_component(BAGI_ENGINE_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Vulkan, the control socket server, static SDL, single thread; forced for the web (Emscripten)
+include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
+
 # =============================================================================
 # External Dependencies
 # =============================================================================
@@ -33,13 +36,24 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message(STATUS "Configuring EA Libraries (vendored)...")
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/EABase)
 
-# SDL3 - Shared library
+# SDL3 - shared library, static with ENGINE_STATIC_SDL (cmake/BagiPlatformOptions.cmake)
 message(STATUS "Configuring SDL3...")
-set(SDL_SHARED ON CACHE BOOL "Build SDL3 as shared library" FORCE)
-set(SDL_STATIC OFF CACHE BOOL "Build SDL3 as static library" FORCE)
+if(ENGINE_STATIC_SDL)
+    set(SDL_SHARED OFF CACHE BOOL "Build SDL3 as shared library" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "Build SDL3 as static library" FORCE)
+else()
+    set(SDL_SHARED ON CACHE BOOL "Build SDL3 as shared library" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "Build SDL3 as static library" FORCE)
+endif()
 set(SDL_TEST OFF CACHE BOOL "Build SDL3 tests" FORCE)
 set(SDL_TESTS OFF CACHE BOOL "Build SDL3 tests" FORCE)
 add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL)
+
+# The vendored imgui CMake file and our modules link the name SDL3-shared; a static SDL keeps it as a shim
+if(ENGINE_STATIC_SDL)
+    add_library(SDL3-shared INTERFACE)
+    target_link_libraries(SDL3-shared INTERFACE SDL3::SDL3-static)
+endif()
 
 # SDL3_image
 message(STATUS "Configuring SDL3_image...")
@@ -47,6 +61,10 @@ set(SDLIMAGE_AVIF OFF CACHE BOOL "" FORCE)
 set(SDLIMAGE_VENDORED ON CACHE BOOL "" FORCE)
 set(SDLIMAGE_TESTS OFF CACHE BOOL "" FORCE)
 set(SDLIMAGE_SAMPLES OFF CACHE BOOL "" FORCE)
+if(ENGINE_STATIC_SDL)
+    # SDL_image follows BUILD_SHARED_LIBS (its own cmake_dependent_option keeps a cache value that is set)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build the library as a shared library" FORCE)
+endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL_image)
 
 # Vulkan-Headers (vendored, include-only - provides Vulkan::Headers target)
@@ -174,7 +192,10 @@ endif()
 # =============================================================================
 # Platform Detection
 # =============================================================================
-if(WIN32)
+if(ENGINE_TARGET_WEB)
+    # PLATFORM_WEB is defined in cmake/BagiPlatformOptions.cmake; Emscripten is not Linux, so it comes before the chain
+    message(STATUS "Platform: Web")
+elseif(WIN32)
     add_compile_definitions(PLATFORM_WINDOWS)
     message(STATUS "Platform: Windows")
 elseif(APPLE)
@@ -200,7 +221,9 @@ else()
     set(COMPILER_NAME "Unknown")
 endif()
 
-if(WIN32)
+if(ENGINE_TARGET_WEB)
+    set(PLATFORM_NAME "Web")
+elseif(WIN32)
     set(PLATFORM_NAME "Windows")
 elseif(APPLE)
     set(PLATFORM_NAME "macOS")
@@ -387,17 +410,20 @@ function(be_link_engine TARGET_NAME)
     if(ARG_WITH_RUNTIME)
         target_link_libraries(${TARGET_NAME} PRIVATE
             $<LINK_LIBRARY:WHOLE_ARCHIVE,SDLModule>
-            $<LINK_LIBRARY:WHOLE_ARCHIVE,VulkanModule>
             $<LINK_LIBRARY:WHOLE_ARCHIVE,GamesModule>
             $<LINK_LIBRARY:WHOLE_ARCHIVE,RuntimeModule>
         )
+        if(ENGINE_WITH_VULKAN)
+            target_link_libraries(${TARGET_NAME} PRIVATE $<LINK_LIBRARY:WHOLE_ARCHIVE,VulkanModule>)
+        endif()
     endif()
 endfunction()
 
 # Runtime DLLs/dylibs next to an executable, platform linker settings.
 # be_deploy_runtime_libs(<target>)
 function(be_deploy_runtime_libs TARGET_NAME)
-    if(WIN32)
+    # A static SDL has no DLL to copy
+    if(WIN32 AND NOT ENGINE_STATIC_SDL)
         foreach(_sdl_target SDL3-shared SDL3_image-shared)
             if(TARGET ${_sdl_target})
                 add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
@@ -537,12 +563,16 @@ endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/BECore)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Events)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/TaskSystem)
-add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RemoteControl)
+if(ENGINE_WITH_REMOTE_CONTROL)
+    add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RemoteControl)
+endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/SDL)
 
 # Optional: path to Vulkan SDK (Windows). If set and Lib/vulkan-1.lib exists, used for linking; else vendored external/Vulkan-Loader is used.
 set(VULKAN_SDK "C:/VulkanSDK/1.4.341.1" CACHE PATH "Path to Vulkan SDK (optional; used for loader on Windows)")
-add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Vulkan)
+if(ENGINE_WITH_VULKAN)
+    add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Vulkan)
+endif()
 
 # Game infrastructure (IGame, GameManager). Concrete games live outside the engine and register through it.
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
@@ -626,7 +656,7 @@ function(be_add_game_executable NAME)
     be_deploy_runtime_libs(${NAME})
 
     # Vulkan Loader (vulkan-1.dll / libvulkan.1.dylib) next to the executable: VULKAN_SDK/Bin first, else the vendored folder
-    if(WIN32)
+    if(WIN32 AND ENGINE_WITH_VULKAN)
         set(_VULKAN_DLL "")
         if(VULKAN_SDK AND EXISTS "${VULKAN_SDK}/Bin/vulkan-1.dll")
             set(_VULKAN_DLL "${VULKAN_SDK}/Bin/vulkan-1.dll")
@@ -642,7 +672,7 @@ function(be_add_game_executable NAME)
         endif()
     elseif(APPLE)
         set(_VULKAN_RUNTIME "${VULKAN_LOADER_ROOT}/macOS/lib/libvulkan.1.dylib")
-        if(EXISTS "${_VULKAN_RUNTIME}")
+        if(ENGINE_WITH_VULKAN AND EXISTS "${_VULKAN_RUNTIME}")
             add_custom_command(TARGET ${NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${_VULKAN_RUNTIME}"

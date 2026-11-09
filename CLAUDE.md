@@ -36,6 +36,8 @@ cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 cmake --build build
 ```
 
+**Web-like build on the desktop.** `cmake/BagiPlatformOptions.cmake` has four options (`.claude/rules/cmake-rules.md`, "Build Options"): `ENGINE_WITH_VULKAN`, `ENGINE_WITH_REMOTE_CONTROL` (both default ON), `ENGINE_STATIC_SDL`, `ENGINE_SINGLE_THREAD` (both default OFF); an Emscripten build forces them to the web values and sets `ENGINE_TARGET_WEB` and `PLATFORM_WEB`. To check the web configuration without an Emscripten SDK, configure a second build from `engine/` (`cmake -S . -B build/webcheck -G "Visual Studio 17 2022" -A x64 -DENGINE_WITH_VULKAN=OFF -DENGINE_SINGLE_THREAD=ON`, then `cmake --build build/webcheck --config Release --target BagiMatch3 BagiEngineTests`). It writes into `build/MSVCWindows/` like every Windows configuration, so delete that folder before and after.
+
 C++23 is required. Exceptions are disabled (`ENGINE_NO_EXCEPTIONS=ON`). Output lands in `build/{CompilerName}{PlatformName}/` regardless of preset, so Debug, Release and release-editor Ninja presets overwrite each other's executables and libraries: after switching between them delete every `build/ClangmacOS/lib/*.a` (the folder name is the compiler and platform), or the old objects of the other configuration are linked in and the tests crash. Reflection code is generated at configure time: re-run `cmake --preset ...` after changing `BE_CLASS` / `BE_REFLECT_FIELD`.
 
 ## Running Tests
