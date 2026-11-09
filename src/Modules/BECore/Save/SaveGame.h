@@ -122,10 +122,11 @@ namespace BECore {
          * @brief Read the slot and hand its `state` object to @p readState
          *
          * The checks come in this order, and @p readState is called only when all of them pass: the file is a valid
-         * binary stream with an object `save` that has `game`, `version` and an object `state` (else Corrupt), `game` is
-         * the schema's (else WrongGame), `version` is not above schema.version (VersionTooNew) and not below
-         * schema.minVersion (VersionTooOld). After @p readState any error the deserializer recorded is Corrupt, and then
-         * the state may be partly filled: read into a temporary object, not into the live one.
+         * binary stream with an object `save` that has `game` and `version` (else Corrupt), `game` is the schema's (else
+         * WrongGame), `version` is not above schema.version (VersionTooNew) and not below schema.minVersion
+         * (VersionTooOld), the object `state` exists (else Corrupt). After @p readState any error the deserializer
+         * recorded is Corrupt, and then the state may be partly filled: read into a temporary object, not into the live
+         * one.
          *
          * @return what the file says (its version lets the caller migrate an older state), or ReadSlot()'s errors and the
          *         ones above

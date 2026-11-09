@@ -1,8 +1,52 @@
 #include "Match3GameModel.h"
 
+#include <Match3/Game/Match3SaveState.h>
 #include <Match3/Game/MatchFinder.h>
 
 namespace BECore::Match3 {
+
+    namespace {
+
+        /// One letter per GemType, in enum order, as in the control API's `get_state` (Match3GameControl.cpp); '.' is an empty cell, which a save never has
+        constexpr char kBoardLetters[] = ".ROYGBP";
+        static_assert(sizeof(kBoardLetters) - 1 == static_cast<size_t>(kGemTypeCount) + 1, "one letter per gem type and one for None");
+
+        constexpr size_t kBoardCellCount = static_cast<size_t>(kBoardSize) * static_cast<size_t>(kBoardSize);
+
+        /// The gem of a board letter, or None for '.' and for any other character
+        GemType GemOfLetter(char letter) noexcept {
+            for (size_t index = 1; index < sizeof(kBoardLetters) - 1; ++index) {
+                if (kBoardLetters[index] == letter) {
+                    return static_cast<GemType>(index);
+                }
+            }
+            return GemType::None;
+        }
+
+        /// True for the shape that operator<< gives a std::mt19937: decimal numbers that fit 32 bits with one space between, the 624 of the state as the standard has them (MSVC, libc++) or one more,
+        /// the position, as libstdc++ writes. Checked before operator>> reads, which does not defend against other text or against a number out of range
+        bool LooksLikeGeneratorText(eastl::string_view text) noexcept {
+            size_t numbers = 0;
+            uint64_t value = 0;
+            bool inNumber = false;
+            for (const char c : text) {
+                if (c >= '0' && c <= '9') {
+                    numbers += inNumber ? 0 : 1;
+                    value = (inNumber ? value * 10 : 0) + static_cast<uint64_t>(c - '0');
+                    if (value > std::numeric_limits<uint32_t>::max()) {
+                        return false;
+                    }
+                    inNumber = true;
+                } else if (c == ' ' && inNumber) {
+                    inNumber = false;
+                } else {
+                    return false;
+                }
+            }
+            return inNumber && (numbers == std::mt19937::state_size || numbers == std::mt19937::state_size + 1);
+        }
+
+    }  // namespace
 
     Match3GameModel::Match3GameModel() {
         Reset(0);
@@ -63,6 +107,71 @@ namespace BECore::Match3 {
         trace.version = _version;
         _lastSwap = eastl::move(trace);
         return true;
+    }
+
+    Match3SaveState Match3GameModel::CaptureState() const {
+        Match3SaveState state;
+        state.seed = _seed;
+        state.score = _score;
+        state.board.reserve(kBoardCellCount);
+        for (int8_t row = 0; row < kBoardSize; ++row) {
+            for (int8_t col = 0; col < kBoardSize; ++col) {
+                state.board.push_back(kBoardLetters[static_cast<size_t>(_board.Get(col, row))]);
+            }
+        }
+
+        std::ostringstream rng;
+        rng << _rng;
+        const std::string text = rng.str();
+        state.rng.assign(text.data(), text.size());
+        return state;
+    }
+
+    std::expected<void, eastl::string> Match3GameModel::RestoreState(const Match3SaveState& state) {
+        // Everything is built on the side first, so a refused state changes nothing
+        if (state.board.size() != kBoardCellCount) {
+            return std::unexpected(Format("the board has {} characters, {} are needed", state.board.size(), kBoardCellCount));
+        }
+        Match3Board board;
+        for (size_t index = 0; index < kBoardCellCount; ++index) {
+            const GemType gem = GemOfLetter(state.board[index]);
+            if (gem == GemType::None) {
+                return std::unexpected(Format("the board has '{}' at position {}, which is not a gem letter (R, O, Y, G, B, P)", state.board[index], index));
+            }
+            board.Set(Cell::FromIndex(static_cast<int>(index)), gem);
+        }
+        if (MatchFinder::HasAnyMatch(board)) {
+            return std::unexpected(eastl::string("the board has a match on it, a saved board is always settled"));
+        }
+        if (state.score < 0) {
+            return std::unexpected(Format("the score {} is negative", state.score));
+        }
+
+        // The text has to be what operator<< writes for the generator it reads as: the round trip also refuses a leading zero or a position out of range
+        if (!LooksLikeGeneratorText(eastl::string_view(state.rng.data(), state.rng.size()))) {
+            return std::unexpected(eastl::string("the random generator text is not the text of a std::mt19937"));
+        }
+        const std::string rngText(state.rng.data(), state.rng.size());
+        std::istringstream in(rngText);
+        std::mt19937 rng;
+        in >> rng;
+        std::ostringstream written;
+        if (!in) {
+            return std::unexpected(eastl::string("the random generator text cannot be read"));
+        }
+        written << rng;
+        if (written.str() != rngText) {
+            return std::unexpected(eastl::string("the random generator text is not the state of a generator (not the one that operator<< writes)"));
+        }
+
+        _board = board;
+        _score = state.score;
+        _seed = state.seed;
+        _rng = rng;
+        _selected.reset();
+        _lastSwap.reset();
+        ++_version;
+        return {};
     }
 
     bool Match3GameModel::WouldSwapMatch(Cell a, Cell b) const {

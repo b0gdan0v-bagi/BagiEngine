@@ -179,8 +179,8 @@ namespace BECore::Tests {
         std::filesystem::create_directories(_base / "saves");
         std::ofstream(_base / "saves" / "stray.save") << "x";
 
-        // Changing the working directory is safe here: each test is its own process (ctest runs one per process), nothing
-        // else in this process uses a relative path meanwhile, and the old directory is restored before any check
+        // Changing the working directory is safe here: nothing else in this process uses a relative path meanwhile (the
+        // test is single threaded), and the old directory is restored before any check
         const std::filesystem::path previous = std::filesystem::current_path();
         std::filesystem::current_path(_base);
         const bool exists = service.Exists("stray");

@@ -77,4 +77,4 @@ if (auto info = service.Load("slot1", kSchema, loaded)) {
 }
 ```
 
-A state that is not a reflected class passes lambdas instead: `service.Save(slot, schema, [&](ISerializer& s) { ... })` and `service.Load(slot, schema, [&](IDeserializer& d) { ... })`; the lambdas see the object `state` as the current scope. A reflected vector of structs by value saves and loads, but the property visitor (the inspector) has no overload for it, so a state with one needs a `PropVisit::Visit` overload like `SaveGameTest.h`'s.
+A state that is not a reflected class passes lambdas instead: `service.Save(slot, schema, [&](ISerializer& s) { ... })` and `service.Load(slot, schema, [&](IDeserializer& d) { ... })`; the lambdas see the object `state` as the current scope. A reflected vector of structs by value saves and loads, but the property visitor (the inspector) has no overload for it, so a state with one needs a no-op `PropVisit::Visit` overload for its vector type, as `BECore/UI/UIVariant.h` does for `eastl::vector<UIVariant>` and `SaveGameTest.h` does for its items. A generic overload in `PropertyVisitorDispatch.h` would remove that need; it is the open follow-up.
