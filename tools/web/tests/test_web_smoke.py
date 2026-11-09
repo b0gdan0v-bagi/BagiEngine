@@ -308,8 +308,14 @@ class SelftestPageTest(unittest.TestCase):
 
 
 class FakeCanvas:
-    def __init__(self, shots, box=None):
+    """`shots` are the screenshots in order (the last one repeats); once the page has been clicked they are `after_click` instead,
+    when given: a canvas that changes only because of the click."""
+
+    def __init__(self, shots, box=None, after_click=None):
         self.shots = list(shots)
+        self.after_click = list(after_click) if after_click is not None else None
+        self.clicked = False
+        self.events = []
         self.box = box if box is not None else {"x": 10.0, "y": 20.0, "width": 400.0, "height": 300.0}
         self.taken = 0
 
@@ -322,7 +328,9 @@ class FakeCanvas:
 
     def screenshot(self):
         self.taken += 1
-        return self.shots.pop(0) if len(self.shots) > 1 else self.shots[0]
+        self.events.append(("shot",))
+        shots = self.after_click if self.clicked and self.after_click is not None else self.shots
+        return shots.pop(0) if len(shots) > 1 else shots[0]
 
     def bounding_box(self):
         return self.box
@@ -334,11 +342,22 @@ class FakePage:
         self.status = status
         self.handlers = {}
         self.clicks = []
+        self.moves = []
         self.urls = []
         self.waits = []
+        self.events = canvas.events  # the shots, the waits, the moves and the clicks in the order they came
         self._console = console
         self._page_errors = page_errors
-        self.mouse = SimpleNamespace(click=lambda x, y: self.clicks.append((x, y)))
+        self.mouse = SimpleNamespace(click=self._click, move=self._move)
+
+    def _click(self, x, y):
+        self.clicks.append((x, y))
+        self.events.append(("click", x, y))
+        self.canvas.clicked = True
+
+    def _move(self, x, y):
+        self.moves.append((x, y))
+        self.events.append(("move", x, y))
 
     def on(self, name, handler):
         self.handlers[name] = handler
@@ -357,6 +376,7 @@ class FakePage:
 
     def wait_for_timeout(self, milliseconds):
         self.waits.append(milliseconds)
+        self.events.append(("wait", milliseconds))
         time.sleep(milliseconds / 1000)  # the polls wait here, like in a real page, so they do not spin
 
 
@@ -406,15 +426,17 @@ class BrowserFlowTest(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def run_browser(self, shots, box=None, timeout=1.0, **page_args):
-        canvas = FakeCanvas(shots, box)
+    def run_browser(self, shots, box=None, timeout=1.0, after_click=(OTHER_STRIPES,), settle=0.0, **page_args):
+        """`shots` are the shots before the click; after it the canvas shows `after_click`."""
+        canvas = FakeCanvas(shots, box, after_click)
         page = FakePage(canvas, **page_args)
         fake = FakePlaywright(page)
-        run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://127.0.0.1:1/", options(timeout=timeout))
+        run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://127.0.0.1:1/",
+                                    options(timeout=timeout, settle=settle))
         return run, page, fake, canvas
 
     def test_a_good_page_gives_a_run_that_passes(self):
-        run, page, fake, canvas = self.run_browser([STRIPES, STRIPES, STRIPES, OTHER_STRIPES])
+        run, page, fake, canvas = self.run_browser([STRIPES])
         self.assertEqual(run.status, 200)
         self.assertEqual(web_smoke.evaluate(run), [])
         self.assertEqual(page.selector, web_smoke.CANVAS_SELECTOR)
@@ -425,11 +447,11 @@ class BrowserFlowTest(unittest.TestCase):
         self.assertEqual(fake.launch_args[1][-1], "--extra")
 
     def test_the_default_click_is_the_middle_of_the_canvas(self):
-        _, page, _, _ = self.run_browser([STRIPES, STRIPES, STRIPES, OTHER_STRIPES])
+        _, page, _, _ = self.run_browser([STRIPES])
         self.assertEqual(page.clicks, [(10.0 + 200.0, 20.0 + 150.0)])
 
     def test_a_click_point_is_from_the_top_left_of_the_canvas(self):
-        canvas = FakeCanvas([STRIPES, STRIPES, STRIPES, OTHER_STRIPES])
+        canvas = FakeCanvas([STRIPES])
         page = FakePage(canvas)
         fake = FakePlaywright(page)
         web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(click=(30.0, 40.0)))
@@ -441,6 +463,7 @@ class BrowserFlowTest(unittest.TestCase):
         fake = FakePlaywright(page)
         run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(click=(900.0, 10.0)))
         self.assertEqual(page.clicks, [])
+        self.assertEqual(page.moves, [])
         self.assertTrue(any("outside the canvas" in problem for problem in run.problems), run.problems)
 
     def test_a_click_point_on_the_right_or_bottom_edge_is_outside_the_canvas(self):
@@ -454,7 +477,7 @@ class BrowserFlowTest(unittest.TestCase):
                 self.assertTrue(any("outside the canvas" in problem for problem in run.problems), run.problems)
 
     def test_the_first_frame_is_waited_for_until_it_is_drawn(self):
-        run, _, _, _ = self.run_browser([FLAT, FLAT, STRIPES, STRIPES, STRIPES, OTHER_STRIPES], timeout=10.0)
+        run, _, _, _ = self.run_browser([FLAT, FLAT, STRIPES], timeout=10.0)
         self.assertEqual(run.first_png, STRIPES)
         self.assertEqual(web_smoke.evaluate(run), [])
 
@@ -466,7 +489,7 @@ class BrowserFlowTest(unittest.TestCase):
         self.assertIn("(2)", problems[0])
 
     def test_console_and_page_errors_reach_the_run(self):
-        run, _, _, _ = self.run_browser([STRIPES, STRIPES, STRIPES, OTHER_STRIPES], console=[ConsoleEntry("error", "boom", "http://h/a.js")],
+        run, _, _, _ = self.run_browser([STRIPES], console=[ConsoleEntry("error", "boom", "http://h/a.js")],
                                         page_errors=["TypeError: x"])
         self.assertEqual([(entry.kind, entry.text, entry.url) for entry in run.console], [("error", "boom", "http://h/a.js")])
         self.assertEqual(run.page_errors, ["TypeError: x"])
@@ -495,7 +518,7 @@ class BrowserFlowTest(unittest.TestCase):
         self.assertNotIn("SKIP", out.getvalue())
 
     def test_the_polls_wait_with_the_page_timer(self):
-        _, page, _, _ = self.run_browser([FLAT, FLAT, STRIPES, STRIPES, STRIPES, OTHER_STRIPES], timeout=10.0)
+        _, page, _, _ = self.run_browser([FLAT, FLAT, STRIPES], timeout=10.0)
         self.assertIn(web_smoke.POLL_INTERVAL_SECONDS * 1000, page.waits)
 
     def test_a_deaf_page_gets_the_click_and_fails_check_3(self):
@@ -507,6 +530,13 @@ class BrowserFlowTest(unittest.TestCase):
         self.assertEqual(len(fake.page.clicks), 1)
         self.assertIn("FAIL: (3) the canvas looks the same after the click", out.getvalue())
 
+    def smoke_output(self, canvas):
+        fake = FakePlaywright(FakePage(canvas))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = web_smoke.run_smoke(options(), SimpleNamespace(sync_playwright=fake.sync_playwright))
+        return code, out.getvalue(), fake.page
+
     def test_a_canvas_that_changes_by_itself_is_cannot_judge_and_gets_no_click(self):
         run, page, _, _ = self.run_browser([STRIPES, STRIPES, OTHER_STRIPES])
         self.assertEqual(page.clicks, [])
@@ -514,22 +544,73 @@ class BrowserFlowTest(unittest.TestCase):
         problems = web_smoke.evaluate(run)
         self.assertEqual(len(problems), 1)
         self.assertIn("(3) cannot judge", problems[0])
-        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES, STRIPES, OTHER_STRIPES])))
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            code = web_smoke.run_smoke(options(), SimpleNamespace(sync_playwright=fake.sync_playwright))
+        code, out, page = self.smoke_output(FakeCanvas([STRIPES, STRIPES, OTHER_STRIPES], after_click=[OTHER_STRIPES]))
         self.assertEqual(code, 1)
-        self.assertIn("FAIL: (3) cannot judge", out.getvalue())
-        self.assertNotIn("PASS", out.getvalue())
+        self.assertIn("FAIL: (3) cannot judge", out)
+        self.assertNotIn("PASS", out)
+        self.assertEqual(page.clicks, [])
+
+    def test_a_canvas_that_changes_only_on_a_later_idle_shot_is_cannot_judge(self):
+        # a change slower than one screenshot round trip: the first frame, the first idle shot and two more are equal
+        with mock.patch.object(web_smoke, "CLICK_TIMEOUT_SECONDS", 0.5):
+            run, page, _, canvas = self.run_browser([STRIPES, STRIPES, STRIPES, STRIPES, OTHER_STRIPES])
+            self.assertGreaterEqual(canvas.taken, 5)
+            self.assertEqual(page.clicks, [])
+            self.assertIsNone(run.second_png)
+            problems = web_smoke.evaluate(run)
+            self.assertEqual(len(problems), 1)
+            self.assertIn("(3) cannot judge: the canvas changes by itself", problems[0])
+            code, out, page = self.smoke_output(FakeCanvas([STRIPES, STRIPES, STRIPES, STRIPES, OTHER_STRIPES], after_click=[OTHER_STRIPES]))
+            self.assertEqual(code, 1)
+            self.assertIn("FAIL: (3) cannot judge", out)
+            self.assertEqual(page.clicks, [])
+
+    def test_a_still_canvas_over_the_whole_idle_window_is_clicked_once_and_passes(self):
+        with mock.patch.object(web_smoke, "CLICK_TIMEOUT_SECONDS", 0.2):
+            run, page, _, canvas = self.run_browser([STRIPES])
+            self.assertEqual(len(page.clicks), 1)
+            self.assertGreater(canvas.taken, 5)  # the first frame, the idle shots over the window, the shot after the click
+            self.assertEqual(run.before_png, STRIPES)
+            self.assertEqual(run.second_png, OTHER_STRIPES)
+            self.assertEqual(web_smoke.evaluate(run), [])
+
+    def test_the_idle_window_is_as_long_as_the_window_after_the_click(self):
+        with mock.patch.object(web_smoke, "poll", wraps=web_smoke.poll) as poll:
+            self.run_browser([STRIPES], settle=0.02)
+        timeouts = [call.args[2] for call in poll.call_args_list]
+        # the first frame; the idle shots after one settle wait; the shot after the click, which also comes after one settle wait
+        self.assertEqual(timeouts, [1.0, 0.02 + web_smoke.CLICK_TIMEOUT_SECONDS, web_smoke.CLICK_TIMEOUT_SECONDS])
+
+    def test_the_pointer_is_on_the_click_point_before_the_idle_shots(self):
+        _, page, _, _ = self.run_browser([STRIPES], settle=0.02)
+        events = page.events
+        move = events.index(("move", 210.0, 170.0))
+        click = events.index(("click", 210.0, 170.0))
+        before_move = [event[0] for event in events[:move]]
+        self.assertEqual(before_move, ["shot", "wait"])  # only the first frame and its settle wait
+        self.assertEqual(events[move + 1], ("wait", 20.0))  # the settle wait after the move, then the idle shots
+        self.assertEqual(events[move + 2], ("shot",))
+        between = {event[0] for event in events[move + 2:click]}
+        self.assertEqual(between, {"shot", "wait"})  # no second move, no click
+        self.assertEqual(events[click - 1], ("shot",))  # the last idle shot is right before the click
+        self.assertEqual(events[click + 1], ("wait", 20.0))
+        self.assertEqual(page.moves, [(210.0, 170.0)])
+
+    def test_an_unreadable_shot_before_the_click_is_reported_as_such_and_not_as_a_moving_canvas(self):
+        for shots in ([STRIPES, b"garbage"], [STRIPES, STRIPES, b"garbage"]):
+            with self.subTest(shots=len(shots)):
+                run, page, _, _ = self.run_browser(shots)
+                self.assertEqual(page.clicks, [])
+                problems = web_smoke.evaluate(run)
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn("(3) the shot before the click: the screenshot is not a readable PNG", problems[0])
+                self.assertNotIn("changes by itself", problems[0])
 
     def test_run_smoke_serves_the_page_prints_ok_lines_and_returns_0(self):
-        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES, STRIPES, STRIPES, OTHER_STRIPES])))
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            code = web_smoke.run_smoke(options(), SimpleNamespace(sync_playwright=fake.sync_playwright))
-        self.assertEqual(code, 0, out.getvalue())
-        self.assertIn("PASS", out.getvalue())
-        self.assertEqual(out.getvalue().count("ok: ("), 4)
+        code, out, _ = self.smoke_output(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES]))
+        self.assertEqual(code, 0, out)
+        self.assertIn("PASS", out)
+        self.assertEqual(out.count("ok: ("), 4)
 
     def test_run_smoke_prints_each_reason_and_returns_1(self):
         fake = FakePlaywright(FakePage(FakeCanvas([STRIPES]), console=[ConsoleEntry("error", "boom")]))

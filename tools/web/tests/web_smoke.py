@@ -11,9 +11,10 @@ The checks, in this order:
   2. the first frame renders: the canvas exists and a screenshot of it is not one flat color (polled until --timeout: a wasm takes
      a while to start);
   3. a click on the canvas reaches the game: a screenshot after the click differs from the one taken right before it (--click X,Y in
-     pixels from the top left corner of the canvas, the middle of the canvas without it). Before the click two shots are taken, one
-     after the other: if they differ, the canvas changes by itself, the click cannot be judged and the run FAILS with
-     "(3) cannot judge" (no click is made);
+     pixels from the top left corner of the canvas, the middle of the canvas without it). The pointer is moved to the click point
+     first (a hover effect is shown before the shots, so it cannot pass for the click's). Then the canvas is watched with no click
+     for as long as it is watched after one, --settle + CLICK_TIMEOUT_SECONDS (5 s): if any shot in that window differs from the
+     first one, the canvas changes by itself, the click cannot be judged and the run FAILS with "(3) cannot judge" (no click is made);
   4. the browser console has no error-level message outside the allow-list (DEFAULT_CONSOLE_ALLOW plus every --allow-console REGEX,
      searched in the text of the message and in the URL it names).
 
@@ -25,9 +26,11 @@ page on purpose (flat, console-error, page-error, deaf): the run has to exit 1, 
 Exit code: 0 passed, 1 failed (the reason is printed), 77 skipped (Playwright or its browser is not installed:
 `pip install playwright` and `playwright install chromium`), 2 a wrong command line.
 
-Limits: check 3 needs a canvas that stands still until it is clicked (a game with an idle animation, a fade-in that has not ended
-after --settle seconds or a cursor that blinks fails with "cannot judge": raise --settle, or read the log). The screenshots are decoded by tools/control/tests/png_reader.py
-(imported from there, not copied), in plain Python: keep the viewport small.
+Limits: check 3 needs a canvas that stands still, with the pointer on the click point, for --settle + 5 s before the click (a game
+with an idle animation, a fade-in that is not over by then or a cursor that blinks faster than once in that time fails with "cannot
+judge"; raise --settle for a start that is slow). A change slower than that window is not seen and can pass for the click's. The
+screenshots are decoded by tools/control/tests/png_reader.py (imported from there, not copied), in plain Python: keep the viewport
+small.
 Nothing here has run against a real Emscripten build yet (slice 2 of the entry web-build); the Chromium flags are a first guess.
 """
 
@@ -87,8 +90,8 @@ class BrowserRun:
 
     status: int | None = None
     first_png: bytes | None = None  # the first drawn frame (check 2)
-    idle_png: bytes | None = None  # two shots with no click between them: if they differ the canvas moves by itself
-    before_png: bytes | None = None  # the shot right before the click: what the one after it is compared with
+    idle_png: bytes | None = None  # the first shot with the pointer on the click point: no later shot before the click may differ
+    before_png: bytes | None = None  # the last shot before the click: what the one after it is compared with
     second_png: bytes | None = None  # after the click
     console: list[ConsoleEntry] = field(default_factory=list)
     page_errors: list[str] = field(default_factory=list)
@@ -349,7 +352,7 @@ class BrowserMissing(Exception):
 
 
 def run_browser(playwright_api, url: str, options: Options) -> BrowserRun:
-    """Opens `url`, takes the two screenshots and collects the console; does not judge (evaluate() does).
+    """Opens `url`, takes the screenshots and collects the console; does not judge (evaluate() does).
 
     Raises BrowserMissing when the Chromium executable of Playwright is not there; any other failure to start it, like a failure
     of the page, is an ordinary exception (the smoke FAILS)."""
@@ -385,14 +388,6 @@ def run_browser(playwright_api, url: str, options: Options) -> BrowserRun:
                 return run  # evaluate() reports the flat or unreadable first frame
             page.wait_for_timeout(options.settle * 1000)
 
-            # Two shots with no click: a canvas that moves by itself cannot show whether a click did anything
-            run.idle_png = canvas.screenshot()
-            run.before_png = canvas.screenshot()
-            if png_pictures_differ(run.idle_png, run.before_png):
-                run.problems.append("(3) cannot judge: the canvas changes by itself (two shots with no click differ); no click was made "
-                                    "(raise --settle if the game is still starting)")
-                return run
-
             box = canvas.bounding_box()
             if box is None:
                 run.problems.append("(3) the canvas has no box to click in")
@@ -401,20 +396,41 @@ def run_browser(playwright_api, url: str, options: Options) -> BrowserRun:
             if x >= box["width"] or y >= box["height"]:
                 run.problems.append(f"(3) the click point {x:g},{y:g} is outside the canvas ({box['width']:g}x{box['height']:g})")
                 return run
+
+            # The pointer goes to the click point before anything is compared, so a hover effect is in every shot and cannot pass
+            # for the effect of the click
+            page.mouse.move(box["x"] + x, box["y"] + y)
+            page.wait_for_timeout(options.settle * 1000)
+
+            # A canvas that moves by itself cannot show whether a click did anything. Watch it with no click for as long as it is
+            # watched after the click, and stop at the first shot that differs from the first one
+            run.idle_png = canvas.screenshot()
+            try:
+                idle = decode(run.idle_png, "(3) the shot before the click")
+                run.before_png, _ = poll(canvas.screenshot, lambda png: shot_ends_idle_wait(idle, png),
+                                         options.settle + CLICK_TIMEOUT_SECONDS, sleep=sleep)
+                last = decode(run.before_png, "(3) the shot before the click")
+            except SmokeFailure as error:
+                run.problems.append(str(error))
+                return run
+            if images_differ(idle, last):
+                run.problems.append(f"(3) cannot judge: the canvas changes by itself (the shots over {options.settle + CLICK_TIMEOUT_SECONDS:g} s "
+                                    "with no click differ); no click was made (raise --settle if the game is still starting)")
+                return run
+
             page.mouse.click(box["x"] + x, box["y"] + y)
             page.wait_for_timeout(options.settle * 1000)
 
-            before = read_png(run.before_png)
-            run.second_png, _ = poll(canvas.screenshot, lambda png: png_differs_from(before, png), CLICK_TIMEOUT_SECONDS, sleep=sleep)
+            run.second_png, _ = poll(canvas.screenshot, lambda png: png_differs_from(last, png), CLICK_TIMEOUT_SECONDS, sleep=sleep)
         finally:
             browser.close()
     return run
 
 
-def png_pictures_differ(first: bytes, second: bytes) -> bool:
-    """True when the two PNGs show different pictures; a PNG that cannot be read counts as different."""
+def shot_ends_idle_wait(idle: PngImage, png: bytes) -> bool:
+    """True for a shot that ends the wait with no click: a different picture, or one that cannot be read (the caller tells them apart)."""
     try:
-        return images_differ(read_png(first), read_png(second))
+        return images_differ(idle, read_png(png))
     except PngError:
         return True
 
