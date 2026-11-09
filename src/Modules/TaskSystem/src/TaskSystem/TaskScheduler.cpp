@@ -20,17 +20,22 @@ namespace BECore {
             return TaskScheduler::Duration(x + y);
         }
 
+        TaskScheduler::TimePoint SteadyNow() {
+            return TaskScheduler::Clock::now();
+        }
+
     }  // namespace
 
     void TaskScheduler::Initialize(ThreadPool* threadPool) {
         ASSERT(threadPool != nullptr, "ThreadPool must not be null");
         _threadPool = threadPool;
-        _stopped = false;
+        _stopped.store(false, std::memory_order_relaxed);
+        _sliceDeadline = (TimePoint::max)();
         LOG_INFO("[TaskScheduler] Initialized");
     }
 
     void TaskScheduler::Schedule(TaskQueue::TaskFunc task, TaskPriority priority, ThreadType threadType) {
-        if (_stopped) {
+        if (_stopped.load(std::memory_order_relaxed)) {
             LOG_WARNING("[TaskScheduler] Scheduling task on stopped scheduler");
             return;
         }
@@ -44,7 +49,7 @@ namespace BECore {
     }
 
     void TaskScheduler::ScheduleDelayed(TaskQueue::TaskFunc task, Duration delay, TaskPriority priority, ThreadType threadType, DelayClock clock) {
-        if (_stopped) {
+        if (_stopped.load(std::memory_order_relaxed)) {
             LOG_WARNING("[TaskScheduler] Scheduling delayed task on stopped scheduler");
             return;
         }
@@ -127,8 +132,73 @@ namespace BECore {
         }
     }
 
+    void TaskScheduler::ScheduleYielded(TaskQueue::TaskFunc task, ThreadType threadType) {
+        if (!_stopped.load(std::memory_order_relaxed) && _threadPool && _threadPool->IsInline() && _inBackgroundJob) {
+            std::lock_guard lock(_backgroundMutex);
+            _backgroundSlices.push_back(std::move(task));
+            return;
+        }
+
+        Schedule(std::move(task), TaskPriority::Low, threadType);
+    }
+
+    size_t TaskScheduler::ProcessBackgroundSlices(Duration budget) {
+        if (!_threadPool || !_threadPool->IsInline() || _stopped.load(std::memory_order_relaxed)) {
+            return 0;
+        }
+
+        // A budget of zero or less gives a window that is spent at once: one slice per call
+        const Duration window = budget < Duration::zero() ? Duration::zero() : budget;
+        const TimePoint start = BudgetNow();
+        _sliceDeadline = TimePoint(SaturatingAdd(start.time_since_epoch(), window));
+
+        size_t sliceCount = 0;
+        while (!_stopped.load(std::memory_order_relaxed)) {
+            if (sliceCount > 0 && BudgetNow() >= _sliceDeadline) {
+                break;
+            }
+
+            TaskQueue::TaskFunc slice;
+            {
+                std::lock_guard lock(_backgroundMutex);
+                if (_backgroundSlices.empty()) {
+                    break;
+                }
+                slice = std::move(_backgroundSlices.front());
+                _backgroundSlices.pop_front();
+            }
+
+            SubmitInlineBackgroundJob(std::move(slice));
+            ++sliceCount;
+        }
+
+        _sliceDeadline = (TimePoint::min)();
+        return sliceCount;
+    }
+
+    bool TaskScheduler::ShouldYield() const {
+        if (_stopped.load(std::memory_order_relaxed) || !_threadPool || !_threadPool->IsInline() || !_inBackgroundJob) {
+            return false;
+        }
+        return BudgetNow() >= _sliceDeadline;
+    }
+
+    TaskScheduler::TimePoint TaskScheduler::BudgetNow() const {
+        return _budgetNow ? _budgetNow() : SteadyNow();
+    }
+
+    void TaskScheduler::SetBudgetClock(TimePoint (*now)()) {
+        _budgetNow = now;
+    }
+
+    size_t TaskScheduler::GetBackgroundSliceCount() const {
+        std::lock_guard lock(_backgroundMutex);
+        return _backgroundSlices.size();
+    }
+
     void TaskScheduler::Shutdown() {
-        _stopped = true;
+        _stopped.store(true, std::memory_order_relaxed);
+        _sliceDeadline = (TimePoint::max)();
 
         // Очищаем очереди
         {
@@ -136,6 +206,11 @@ namespace BECore {
             while (!_mainThreadQueue.empty()) {
                 _mainThreadQueue.pop();
             }
+        }
+
+        {
+            std::lock_guard lock(_backgroundMutex);
+            _backgroundSlices.clear();
         }
 
         {
@@ -162,12 +237,24 @@ namespace BECore {
     }
 
     void TaskScheduler::DispatchToThreadPool(TaskQueue::TaskFunc task, TaskPriority priority) {
-        if (_threadPool) {
+        if (_threadPool && _threadPool->IsInline()) {
+            SubmitInlineBackgroundJob(std::move(task));
+        } else if (_threadPool) {
             // TODO: учитывать приоритет при выборе очереди
             _threadPool->Submit(std::move(task));
         } else {
             LOG_ERROR("[TaskScheduler] No thread pool available");
         }
+    }
+
+    void TaskScheduler::SubmitInlineBackgroundJob(TaskQueue::TaskFunc task) {
+        _threadPool->Submit([this, task = std::move(task)]() {
+            // Restores the previous value: a drain can run a job while another one is on the stack
+            const bool wasInBackgroundJob = _inBackgroundJob;
+            _inBackgroundJob = true;
+            task();
+            _inBackgroundJob = wasInBackgroundJob;
+        });
     }
 
 }  // namespace BECore

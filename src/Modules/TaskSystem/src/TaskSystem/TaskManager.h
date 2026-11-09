@@ -30,6 +30,9 @@ namespace BECore {
     public:
         using Duration = std::chrono::steady_clock::duration;
 
+        /// Default time per frame that Update gives to the continuations of the background jobs (single-thread build).
+        static constexpr Duration kDefaultFrameBudget = std::chrono::milliseconds(4);
+
         TaskManager() = default;
         ~TaskManager() = default;
 
@@ -135,6 +138,31 @@ namespace BECore {
         [[nodiscard]] size_t GetPendingTaskCount() const;
 
         /**
+         * Sets the time per frame that Update gives to the background jobs that yielded (single-thread build: the
+         * inline pool; a threaded build never reads it). A negative value is stored as zero, which still resumes one
+         * slice per frame. A setting: Shutdown keeps it.
+         */
+        void SetFrameBudget(Duration budget) {
+            _frameBudget = budget < Duration::zero() ? Duration::zero() : budget;
+        }
+
+        /**
+         * Returns the time per frame of the background jobs (kDefaultFrameBudget unless SetFrameBudget was called).
+         */
+        [[nodiscard]] Duration GetFrameBudget() const {
+            return _frameBudget;
+        }
+
+        /**
+         * True when the running background job should suspend (single-thread build: its slice of the frame is spent).
+         * Always false on a threaded build, in a main-thread job and outside any job. For a loop that checks by hand:
+         * if (TaskManager::GetInstance().ShouldYield()) { co_await Yield(); }  (co_await YieldIfNeeded() does the same.)
+         */
+        [[nodiscard]] bool ShouldYield() const {
+            return _scheduler.ShouldYield();
+        }
+
+        /**
          * Получает ThreadPool (для низкоуровневого доступа).
          */
         [[nodiscard]] ThreadPool* GetThreadPool() {
@@ -164,6 +192,7 @@ namespace BECore {
 
         bool _isInitialized = false;
         std::thread::id _mainThreadId;
+        Duration _frameBudget = kDefaultFrameBudget;
 
         eastl::unique_ptr<ThreadPool> _threadPool;
         TaskScheduler _scheduler;
