@@ -31,7 +31,7 @@ namespace BECore {
      * widgets are derived, so a state rule on them is reported. `:hover`, `:active`, `:disabled` and `:checked` on a button set its four fills (`hoverColor`, `pressedColor`, `disabledColor`,
      * `selectedColor`).
      *
-     * Everything outside the subset is an issue in the UIWebReport and is left out; the supported properties are listed in `UI/CLAUDE.md`.
+     * Everything outside the subset is an issue in the UIWebReport and is left out; the supported properties are listed in `.claude/rules/ui-web.md`.
      * The conversion is pure: no resource, window or renderer is touched, so it is tested with strings.
      */
     class UIWebCompiler {

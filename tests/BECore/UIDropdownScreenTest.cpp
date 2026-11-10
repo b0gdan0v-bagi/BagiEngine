@@ -20,7 +20,7 @@
 namespace BECore::Tests {
 
     /*
-     * The screen test of a panel with a UIDropdown, the template for a screen with a list of many values (UI/CLAUDE.md, "Validator and the size matrix").
+     * The screen test of a panel with a UIDropdown, the template for a screen with a list of many values (.claude/rules/ui-layout.md, "A screen test").
      * The shape is the one of UISettingsScreenTest: a HUD canvas with an `Open` button and a modal `Levels` canvas started hidden (a dim, a plate, a title, the dropdown `Level` with
      * five options, an OK button). The options are `{#key}` words; the variable `level` holds the longest of them, so the header is as wide as it gets.
      *
