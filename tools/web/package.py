@@ -2,11 +2,15 @@
 
     python tools/web/package.py build/ClangWeb dist
     python tools/web/package.py build/ClangWeb dist --game BagiMatch3
+    python tools/web/package.py build/ClangWebSingleThread dist-single --single-thread
 
-The build folder holds <game>.html, <game>.js, <game>.wasm and, when the game has content, <game>.data (cmake/BagiWeb.cmake). The
+The build folder holds <game>.html, <game>.js, <game>.wasm and, when the game has content, <game>.data (cmake/BagiWeb.cmake). A threaded
+build has no more files: emcc 4.0.23 starts its Web Workers from <game>.js itself (no <game>.worker.js). The
 output folder gets the page as index.html, the other files under their own names (the page and the script load them by those names),
 a gzip copy and, when the `brotli` module can be imported, a brotli copy of every .html, .js, .wasm and .data next to the original
-(name.gz, name.br; serve.py picks them by Accept-Encoding) and manifest.json with the size and the SHA-256 of every file. A file of
+(name.gz, name.br; serve.py picks them by Accept-Encoding) and manifest.json with `threads` (true for a threaded build, the default; false
+with --single-thread: serve.py sends the cross-origin isolation headers only to a threaded page) and the size and the SHA-256 of every
+file. A file of
 an earlier run that this run does not make (another game's, a .data the game no longer has) is deleted from the output folder, so the
 folder holds what the manifest lists and nothing else of the kinds named here; other files in it are left alone.
 """
@@ -97,10 +101,11 @@ def remove_stale_files(out_dir: Path, kept: set) -> None:
             path.unlink()
 
 
-def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_module="auto") -> dict:
+def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_module="auto", threads: bool = True) -> dict:
     """Copies the build output into `out_dir` and returns the manifest (also written as manifest.json).
 
-    `brotli_module` is the module used for the .br copies: "auto" imports `brotli` when it is installed, None leaves them out."""
+    `brotli_module` is the module used for the .br copies: "auto" imports `brotli` when it is installed, None leaves them out.
+    `threads` says whether the build is threaded (the manifest's `threads`, which serve.py reads to decide on the isolation headers)."""
     if not build_dir.is_dir():
         raise PackageError(f"{build_dir} is not a folder")
     if brotli_module == "auto":
@@ -119,6 +124,10 @@ def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_modu
         source = build_dir / f"{stem}{suffix}"
         if source.is_file():
             sources.append((source, source.name))
+        elif source.name.encode() in (build_dir / f"{stem}.js").read_bytes():
+            # emcc writes the name of the package into the script that loads it: a script that names a package which is not
+            # there is a build that lost it, and the page would stop at the first request
+            raise PackageError(f"{source} not found, but {stem}.js loads it: the build output is incomplete")
 
     # The output folder is cleaned of the files of earlier runs, so it must not be the build folder (it would delete the page) or hold it
     build_resolved, out_resolved = build_dir.resolve(), out_dir.resolve()
@@ -135,7 +144,7 @@ def package(build_dir: Path, out_dir: Path, game: str | None = None, brotli_modu
             entry.update(write_compressed_copies(target, brotli_module))
         files[name] = entry
 
-    manifest = {"game": stem, "files": files}
+    manifest = {"game": stem, "threads": threads, "files": files}
     (out_dir / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest
 
@@ -145,14 +154,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("build_dir", type=Path, help="folder with <game>.html, .js, .wasm and .data (build/ClangWeb)")
     parser.add_argument("out_dir", type=Path, help="folder to write (dist)")
     parser.add_argument("--game", help="name of the game (BagiMatch3); needed only when the build folder holds several pages")
+    parser.add_argument("--single-thread", action="store_true",
+                        help="the build is the single-thread page (web-*-single-thread): the manifest says threads: false and serve.py sends no COOP / COEP for it")
     args = parser.parse_args(argv)
     try:
-        manifest = package(args.build_dir, args.out_dir, args.game)
+        manifest = package(args.build_dir, args.out_dir, args.game, threads=not args.single_thread)
     except PackageError as error:
         print(f"package.py: {error}", file=sys.stderr)
         return 1
     total = sum(entry["size"] for entry in manifest["files"].values())
-    print(f"package.py: {manifest['game']}: {len(manifest['files'])} files, {total} bytes, written to {args.out_dir}")
+    kind = "threaded" if manifest["threads"] else "single-thread"
+    print(f"package.py: {manifest['game']} ({kind}): {len(manifest['files'])} files, {total} bytes, written to {args.out_dir}")
     return 0
 
 

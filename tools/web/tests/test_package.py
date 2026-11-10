@@ -108,6 +108,13 @@ class PackageTest(unittest.TestCase):
         self.assertNotIn(f"{GAME}.data", manifest["files"])
         self.assertFalse((self.out / f"{GAME}.data").exists())
 
+    def test_a_script_that_loads_a_missing_package_is_an_error_that_names_the_file(self):
+        # emcc writes the package name into the script (REMOTE_PACKAGE_BASE="<game>.data")
+        (self.build / f"{GAME}.js").write_bytes(f'var REMOTE_PACKAGE_BASE="{GAME}.data";'.encode())
+        (self.build / f"{GAME}.data").unlink()
+        with self.assertRaisesRegex(package.PackageError, f"{GAME}.data not found"):
+            self.run_package()
+
     def test_a_missing_wasm_or_script_is_an_error_that_names_the_file(self):
         for suffix in (".wasm", ".js"):
             with self.subTest(suffix):
@@ -149,6 +156,22 @@ class PackageTest(unittest.TestCase):
                     package.package(self.build, out, brotli_module=None)
         self.assertTrue((self.build / f"{GAME}.html").is_file())
         self.assertFalse(inside.exists())
+
+    def test_the_manifest_says_threads_true_by_default_and_false_for_a_single_thread_build(self):
+        self.assertIs(self.run_package()["threads"], True)
+        self.assertIs(json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))["threads"], True)
+        self.assertIs(self.run_package(threads=False)["threads"], False)
+        self.assertIs(json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))["threads"], False)
+
+    def test_the_single_thread_switch_of_the_command_line_writes_threads_false(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(package.main([str(self.build), str(self.out), "--single-thread"]), 0)
+        self.assertIs(json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))["threads"], False)
+        self.assertIn("single-thread", out.getvalue())
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(package.main([str(self.build), str(self.out)]), 0)
+        self.assertIs(json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))["threads"], True)
+        self.assertIn("threaded", out.getvalue())
 
     def test_the_command_line_returns_0_and_1(self):
         out = io.StringIO()

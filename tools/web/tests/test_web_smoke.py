@@ -1,11 +1,13 @@
 """Tests of tools/web/tests/web_smoke.py. Everything that needs no browser is tested here: the command line, the decisions on PNG
 bytes, the allow-list, the polling, the generated page, and the orchestration against a fake Playwright (which checks the order of
-the calls, not the real API). The class at the end runs the script in a real Chromium and is skipped where Playwright is missing.
+the calls, not the real API). The class at the end runs the script in a real Chromium and is skipped where Playwright is missing
+(tools/web/CLAUDE.md, "The browser smoke": the venv `build/web-venv`).
 Run: python -m unittest discover tools/web/tests"""
 
 import contextlib
 import http.client
 import io
+import json
 import shutil
 import struct
 import subprocess
@@ -20,7 +22,7 @@ from unittest import mock
 import web_fixtures  # noqa: F401  (puts tools/web on sys.path)
 
 import web_smoke
-from web_smoke import BrowserRun, ConsoleEntry
+from web_smoke import BrowserRun, ConsoleEntry, PageInfo
 
 NODE = shutil.which("node")
 
@@ -45,6 +47,18 @@ FLAT_RGBA = make_png(8, 6, lambda x, y: (10, 20, 30, 255), channels=4)
 STRIPES = make_png(8, 6, lambda x, y: (200, 0, 0) if x < 4 else (0, 0, 200))
 OTHER_STRIPES = make_png(8, 6, lambda x, y: (0, 200, 0) if y < 3 else (0, 0, 200))
 ONE_PIXEL_OFF = make_png(8, 6, lambda x, y: (11, 20, 30) if (x, y) == (7, 5) else (10, 20, 30))
+
+
+def http_get(url: str, path: str = "/"):
+    """GET `path` of the server at `url` (http://host:port/): the response (its headers stay readable) and the body as text."""
+    host, port = url[len("http://"):].rstrip("/").split(":")
+    connection = http.client.HTTPConnection(host, int(port), timeout=10)
+    try:
+        connection.request("GET", path)
+        response = connection.getresponse()
+        return response, response.read().decode("utf-8")
+    finally:
+        connection.close()
 
 
 def good_run(**changes) -> BrowserRun:
@@ -101,6 +115,34 @@ class ArgumentsTest(unittest.TestCase):
     def test_the_timeouts_must_make_sense(self):
         self.fails("--dist", "d", "--timeout", "0")
         self.fails("--dist", "d", "--settle", "-1")
+
+    def test_the_new_options_default_to_the_old_behaviour(self):
+        options = self.parse("--dist", "d")
+        self.assertIsNone(options.browser_channel)
+        self.assertIsNone(options.executable_path)
+        self.assertEqual(options.device_scale_factor, 1.0)
+        self.assertFalse(options.touch)
+        self.assertEqual(options.expect_console, [])
+
+    def test_the_browser_and_input_options_are_read(self):
+        options = self.parse("--selftest", "--browser-channel", "msedge", "--device-scale-factor", "2", "--touch")
+        self.assertEqual(options.browser_channel, "msedge")
+        self.assertEqual(options.device_scale_factor, 2.0)
+        self.assertTrue(options.touch)
+        self.assertEqual(self.parse("--selftest", "--executable-path", "x/chrome.exe").executable_path, Path("x/chrome.exe"))
+
+    def test_a_channel_and_an_executable_are_exclusive(self):
+        self.fails("--selftest", "--browser-channel", "msedge", "--executable-path", "x")
+
+    def test_the_scale_factor_must_be_positive_and_a_number(self):
+        for bad in ("0", "-1", "two"):
+            with self.subTest(bad):
+                self.fails("--selftest", "--device-scale-factor", bad)
+
+    def test_the_expected_console_patterns_are_repeatable_and_checked(self):
+        self.fails("--selftest", "--expect-console", "(")
+        self.assertEqual(self.parse("--selftest", "--expect-console", r"worker threads", "--expect-console", "b").expect_console,
+                         ["worker threads", "b"])
 
 
 class PictureDecisionsTest(unittest.TestCase):
@@ -219,6 +261,101 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(sorted(problem[:3] for problem in problems), ["(1)", "(2)", "(3)", "(4)"])
 
 
+def page_info(**changes) -> PageInfo:
+    values = dict(cross_origin_isolated=True, shared_array_buffer="function", device_pixel_ratio=1.0, css_width=640.0, css_height=480.0,
+                  canvas_width=640, canvas_height=480)
+    values.update(changes)
+    return PageInfo(**values)
+
+
+class CanvasSizeTest(unittest.TestCase):
+    def test_the_backing_store_of_the_css_size_times_the_ratio_is_right(self):
+        self.assertIsNone(web_smoke.canvas_size_problem(page_info()))
+        self.assertIsNone(web_smoke.canvas_size_problem(page_info(device_pixel_ratio=2.0, canvas_width=1280, canvas_height=960)))
+
+    def test_one_pixel_of_rounding_is_allowed_two_are_not(self):
+        info = page_info(device_pixel_ratio=1.5, css_width=641.0, canvas_width=961, canvas_height=720)  # 961.5 rounds to 962, 961 is within a pixel
+        self.assertIsNone(web_smoke.canvas_size_problem(info))
+        self.assertIsNone(web_smoke.canvas_size_problem(page_info(canvas_width=641)))
+        problem = web_smoke.canvas_size_problem(page_info(canvas_width=642))
+        self.assertIn("(5) canvas width", problem)
+        self.assertIn("642", problem)
+
+    def test_a_backing_store_that_ignores_the_ratio_is_the_failure_it_is_meant_to_find(self):
+        problem = web_smoke.canvas_size_problem(page_info(device_pixel_ratio=2.0))
+        self.assertIn("(5) canvas width", problem)
+        self.assertIn("1280", problem)
+
+    def test_the_height_is_checked_too(self):
+        problem = web_smoke.canvas_size_problem(page_info(device_pixel_ratio=2.0, canvas_width=1280, canvas_height=480))
+        self.assertIn("(5) canvas height", problem)
+
+    def test_the_check_applies_to_a_real_run_and_not_to_the_selftest_page(self):
+        wrong = page_info(device_pixel_ratio=2.0)
+        self.assertEqual(len(web_smoke.evaluate(good_run(page_info=wrong, check_canvas_size=True))), 1)
+        self.assertEqual(web_smoke.evaluate(good_run(page_info=wrong, check_canvas_size=False)), [])
+
+    def test_a_real_run_whose_page_could_not_be_read_fails_check_5_and_the_selftest_page_does_not(self):
+        problems = web_smoke.evaluate(good_run(page_info=None, check_canvas_size=True))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("(5)", problems[0])
+        self.assertEqual(web_smoke.evaluate(good_run(page_info=None, check_canvas_size=False)), [])
+        # No frame was drawn: (2) says so, and the canvas size of a game that never started is not judged on top of it
+        problems = web_smoke.evaluate(good_run(first_png=FLAT, second_png=None, page_info=None, check_canvas_size=True))
+        self.assertEqual([problem[:3] for problem in problems], ["(2)"])
+
+    def test_the_page_info_is_read_from_the_dictionary_the_page_returns(self):
+        info = PageInfo.from_page({"crossOriginIsolated": True, "sharedArrayBuffer": "function", "devicePixelRatio": 2, "cssWidth": 10.5,
+                                   "cssHeight": 20, "canvasWidth": 21, "canvasHeight": 40})
+        self.assertEqual(info, PageInfo(True, "function", 2.0, 10.5, 20.0, 21, 40))
+
+    def test_the_report_has_the_isolation_of_a_page_that_never_drew(self):
+        early = page_info(cross_origin_isolated=False, shared_array_buffer="undefined", canvas_width=300, canvas_height=150)
+        lines = web_smoke.describe_page(BrowserRun(early_info=early))
+        self.assertIn("before the first frame: crossOriginIsolated=false, typeof SharedArrayBuffer=undefined", lines[1])
+        self.assertIn("not read after the first frame", lines[2])
+        self.assertIn("not read", web_smoke.describe_page(BrowserRun())[1])
+
+    def test_the_report_lines(self):
+        lines = web_smoke.describe_page(good_run(page_info=page_info(device_pixel_ratio=2.0, canvas_width=1280, canvas_height=960), touch=True))
+        self.assertEqual(lines[0], "input: touch (a tap)")
+        self.assertIn("crossOriginIsolated=true, typeof SharedArrayBuffer=function", lines[1])
+        self.assertIn("devicePixelRatio=2, CSS size 640x480, backing store 1280x960", lines[2])
+        self.assertIn("mouse (a click)", web_smoke.describe_page(good_run())[0])
+        self.assertIn("not read", web_smoke.describe_page(good_run())[1])
+
+
+class ExpectConsoleTest(unittest.TestCase):
+    CONSOLE = [ConsoleEntry("log", "[TaskManager] Initialized with 4 worker threads"), ConsoleEntry("warning", "slow")]
+
+    def test_the_unmatched_patterns_are_listed(self):
+        self.assertEqual(web_smoke.unmatched_patterns(self.CONSOLE, [r"Initialized with \d+ worker threads"]), [])
+        self.assertEqual(web_smoke.unmatched_patterns(self.CONSOLE, [r"single-thread mode", "slow", "x"]), ["single-thread mode", "x"])
+        self.assertEqual(web_smoke.unmatched_patterns([], ["a"]), ["a"])
+        self.assertEqual(web_smoke.unmatched_patterns(self.CONSOLE, []), [])
+
+    def test_a_missing_expected_message_fails_check_4_and_a_seen_one_passes(self):
+        run = good_run(console=self.CONSOLE)
+        self.assertEqual(web_smoke.evaluate(run, None, [r"worker threads"]), [])
+        problems = web_smoke.evaluate(run, None, [r"worker threads", "never"])
+        self.assertEqual(len(problems), 1)
+        self.assertIn("(4)", problems[0])
+        self.assertIn("never", problems[0])
+
+    def test_the_wait_ends_when_the_message_has_come_and_gives_up_at_the_timeout(self):
+        times = iter(float(n) for n in range(100))
+        page = SimpleNamespace(wait_for_timeout=lambda milliseconds: waits.append(milliseconds))
+        waits = []
+        run = BrowserRun()
+        web_smoke.wait_for_expected_console(page, run, ["a"], 3.0, now=lambda: next(times))
+        self.assertGreaterEqual(len(waits), 2)  # gave up
+        self.assertEqual(waits[0], web_smoke.POLL_INTERVAL_SECONDS * 1000)
+        waits.clear()
+        run.console.append(ConsoleEntry("log", "a"))
+        web_smoke.wait_for_expected_console(page, run, ["a"], 3.0, now=lambda: next(times))
+        self.assertEqual(waits, [])
+
+
 class PollTest(unittest.TestCase):
     def setUp(self):
         self.time = 0.0
@@ -292,17 +429,36 @@ class SelftestPageTest(unittest.TestCase):
                 result = subprocess.run([NODE, "--check", str(script)], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_the_site_has_a_manifest_that_says_single_thread_and_is_served_without_the_isolation_headers(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = web_smoke.write_selftest_site(Path(temp) / "site")
+            self.assertEqual(json.loads((root / "manifest.json").read_text(encoding="utf-8"))["threads"], False)
+            self.assertEqual(web_smoke.serve.decide_cross_origin_isolation(None, None, root)[0], False)
+            with contextlib.redirect_stdout(io.StringIO()), web_smoke.served(root) as url:
+                response, _ = http_get(url)
+                self.assertIsNone(response.getheader("Cross-Origin-Opener-Policy"))
+
+    def test_a_threaded_dist_or_one_without_a_manifest_is_served_with_both_headers(self):
+        for manifest in ('{"game": "g", "threads": true, "files": {}}', None):
+            with self.subTest(manifest), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                (root / "index.html").write_text("<!doctype html>", encoding="utf-8")
+                if manifest:
+                    (root / "manifest.json").write_text(manifest, encoding="utf-8")
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out), web_smoke.served(root) as url:
+                    response, _ = http_get(url)
+                self.assertEqual(response.getheader("Cross-Origin-Opener-Policy"), "same-origin")
+                self.assertEqual(response.getheader("Cross-Origin-Embedder-Policy"), "require-corp")
+                self.assertIn("isolation on", out.getvalue())
+
     def test_the_site_is_served_by_serve_py_on_a_free_port_that_is_closed_afterwards(self):
         with tempfile.TemporaryDirectory() as temp:
             root = web_smoke.write_selftest_site(Path(temp) / "site")
-            with web_smoke.served(root) as url:
+            with contextlib.redirect_stdout(io.StringIO()), web_smoke.served(root) as url:
                 self.assertTrue(url.startswith("http://127.0.0.1:"))
                 host, port = url[len("http://"):].rstrip("/").split(":")
-                connection = http.client.HTTPConnection(host, int(port), timeout=10)
-                connection.request("GET", "/")
-                response = connection.getresponse()
-                body = response.read().decode("utf-8")
-                connection.close()
+                response, body = http_get(url)
                 self.assertEqual(response.status, 200)
                 self.assertIn("<canvas", body)
             with self.assertRaises(OSError):
@@ -339,8 +495,11 @@ class FakeCanvas:
 
 
 class FakePage:
-    def __init__(self, canvas, status=200, console=(), page_errors=()):
+    def __init__(self, canvas, status=200, console=(), page_errors=(), info=None):
         self.canvas = canvas
+        self.info = info if info is not None else {"crossOriginIsolated": False, "sharedArrayBuffer": "undefined", "devicePixelRatio": 1,
+                                                   "cssWidth": 400, "cssHeight": 300, "canvasWidth": 400, "canvasHeight": 300}
+        self.taps = []
         self.status = status
         self.handlers = {}
         self.clicks = []
@@ -351,6 +510,15 @@ class FakePage:
         self._console = console
         self._page_errors = page_errors
         self.mouse = SimpleNamespace(click=self._click, move=self._move)
+        self.touchscreen = SimpleNamespace(tap=self._tap)
+
+    def evaluate(self, script):
+        return dict(self.info)
+
+    def _tap(self, x, y):
+        self.taps.append((x, y))
+        self.events.append(("tap", x, y))
+        self.canvas.clicked = True
 
     def _click(self, x, y):
         self.clicks.append((x, y))
@@ -390,19 +558,27 @@ class FakePlaywright:
         self.launch_error = launch_error
         self.closed = False
         self.launch_args = None
+        self.launch_kwargs = None
         self.viewport = None
+        self.context_kwargs = None
         fake = self
         # an executable that exists unless the test names another path
         self.chromium = SimpleNamespace(launch=fake._launch, executable_path=str(executable or Path(__file__)))
 
-    def _launch(self, headless, args):
+    def _launch(self, headless, args, **kwargs):
         if self.launch_error:
             raise RuntimeError(self.launch_error)
         self.launch_args = (headless, args)
+        self.launch_kwargs = kwargs
         fake = self
         context = SimpleNamespace(new_page=lambda: fake.page)
-        return SimpleNamespace(new_context=lambda viewport: (setattr(fake, "viewport", viewport), context)[1],
-                               close=lambda: setattr(fake, "closed", True))
+
+        def new_context(viewport, **context_kwargs):
+            fake.viewport = viewport
+            fake.context_kwargs = context_kwargs
+            return context
+
+        return SimpleNamespace(new_context=new_context, close=lambda: setattr(fake, "closed", True))
 
     def sync_playwright(self):
         @contextlib.contextmanager
@@ -447,6 +623,94 @@ class BrowserFlowTest(unittest.TestCase):
         self.assertEqual(fake.viewport, {"width": 640, "height": 480})
         self.assertEqual(fake.launch_args[0], True)
         self.assertEqual(fake.launch_args[1][-1], "--extra")
+
+    def test_the_context_gets_the_pixel_ratio_and_touch_and_the_launch_gets_the_named_browser(self):
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES])))
+        web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options())
+        self.assertEqual(fake.context_kwargs, {"device_scale_factor": 1.0, "has_touch": False})
+        self.assertEqual(fake.launch_kwargs, {})
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES])))
+        web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/",
+                              options(device_scale_factor=2.0, touch=True, browser_channel="msedge"))
+        self.assertEqual(fake.context_kwargs, {"device_scale_factor": 2.0, "has_touch": True})
+        self.assertEqual(fake.launch_kwargs, {"channel": "msedge"})
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES])))
+        web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(executable_path=Path(__file__)))
+        self.assertEqual(fake.launch_kwargs, {"executable_path": str(Path(__file__))})
+
+    def test_a_channel_that_is_not_installed_is_browser_missing_and_another_launch_error_is_not(self):
+        missing = "BrowserType.launch: Chromium distribution 'msedge' is not found at C:\\x\\msedge.exe\nRun playwright install msedge"
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES])), launch_error=missing)
+        api = SimpleNamespace(sync_playwright=fake.sync_playwright)
+        with self.assertRaisesRegex(web_smoke.BrowserMissing, "channel 'msedge'"):
+            web_smoke.run_browser(api, "http://h/", options(browser_channel="msedge"))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(web_smoke.run_smoke(options(browser_channel="msedge"), api), web_smoke.EXIT_SKIPPED)
+        self.assertIn("SKIP:", out.getvalue())
+        crash = FakePlaywright(FakePage(FakeCanvas([STRIPES])), launch_error="Browser closed unexpectedly")
+        with self.assertRaises(RuntimeError):
+            web_smoke.run_browser(SimpleNamespace(sync_playwright=crash.sync_playwright), "http://h/", options(browser_channel="msedge"))
+
+    def test_an_executable_that_does_not_exist_is_browser_missing(self):
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES])))
+        missing = Path(tempfile.gettempdir()) / "web_smoke_no_such_browser" / "chrome.exe"
+        with self.assertRaisesRegex(web_smoke.BrowserMissing, "no browser at"):
+            web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(executable_path=missing))
+        self.assertIsNone(fake.launch_args)
+
+    def test_with_touch_the_click_is_a_tap_and_the_pointer_is_not_moved(self):
+        canvas = FakeCanvas([STRIPES], after_click=[OTHER_STRIPES])
+        page = FakePage(canvas)
+        fake = FakePlaywright(page)
+        run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(touch=True))
+        self.assertEqual(page.taps, [(210.0, 170.0)])
+        self.assertEqual(page.clicks, [])
+        self.assertEqual(page.moves, [])
+        self.assertTrue(run.touch)
+        self.assertEqual(web_smoke.evaluate(run), [])
+
+    def test_a_tap_that_changes_nothing_fails_check_3_like_a_click(self):
+        page = FakePage(FakeCanvas([STRIPES], after_click=[STRIPES]))
+        fake = FakePlaywright(page)
+        run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(touch=True))
+        problems = web_smoke.evaluate(run)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("(3)", problems[0])
+
+    def test_the_isolation_of_the_page_is_read_when_the_canvas_shows_even_if_nothing_is_ever_drawn(self):
+        info = {"crossOriginIsolated": False, "sharedArrayBuffer": "undefined", "devicePixelRatio": 1, "cssWidth": 640, "cssHeight": 480,
+                "canvasWidth": 300, "canvasHeight": 150}
+        page = FakePage(FakeCanvas([FLAT]), info=info)
+        fake = FakePlaywright(page)
+        run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(timeout=0.05))
+        self.assertIsNotNone(run.early_info)
+        self.assertFalse(run.early_info.cross_origin_isolated)
+        self.assertEqual(run.early_info.shared_array_buffer, "undefined")
+        problems = web_smoke.evaluate(run)
+        self.assertTrue(any(problem.startswith("(2)") for problem in problems))
+        self.assertFalse(any(problem.startswith("(5)") for problem in problems))
+
+    def test_the_page_info_is_read_after_the_first_frame_and_checked_for_a_real_dist_only(self):
+        wrong = {"crossOriginIsolated": True, "sharedArrayBuffer": "function", "devicePixelRatio": 2, "cssWidth": 400, "cssHeight": 300,
+                 "canvasWidth": 400, "canvasHeight": 300}
+        for selftest, expected in ((True, 0), (False, 1)):
+            with self.subTest(selftest=selftest):
+                page = FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES]), info=wrong)
+                fake = FakePlaywright(page)
+                run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(selftest=selftest))
+                self.assertEqual(run.page_info, PageInfo(True, "function", 2.0, 400.0, 300.0, 400, 300))
+                self.assertEqual(len(web_smoke.evaluate(run)), expected)
+
+    def test_an_expected_console_message_is_waited_for_and_reported_when_it_never_comes(self):
+        page = FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES]), console=[ConsoleEntry("log", "[TaskManager] Initialized with 4 worker threads")])
+        fake = FakePlaywright(page)
+        run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/",
+                                    options(expect_console=[r"Initialized with \d+ worker threads"]))
+        self.assertEqual(web_smoke.evaluate(run, None, [r"Initialized with \d+ worker threads"]), [])
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES])))
+        run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(expect_console=["never"], timeout=0.05))
+        self.assertEqual(len(web_smoke.evaluate(run, None, ["never"])), 1)
 
     def test_the_default_click_is_the_middle_of_the_canvas(self):
         _, page, _, _ = self.run_browser([STRIPES])
@@ -613,6 +877,25 @@ class BrowserFlowTest(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("PASS", out)
         self.assertEqual(out.count("ok: ("), 4)
+        self.assertIn("skip: (5)", out)
+        self.assertIn("input: mouse (a click)", out)
+        self.assertIn("page: crossOriginIsolated=false, typeof SharedArrayBuffer=undefined", out)
+
+    def test_run_smoke_of_a_dist_checks_the_canvas_size_and_prints_the_ratio(self):
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / "index.html").write_text("<!doctype html>", encoding="utf-8")
+            good = {"crossOriginIsolated": True, "sharedArrayBuffer": "function", "devicePixelRatio": 2, "cssWidth": 400, "cssHeight": 300,
+                    "canvasWidth": 800, "canvasHeight": 600}
+            for info, code in ((good, 0), (dict(good, canvasWidth=400), 1)):
+                with self.subTest(width=info["canvasWidth"]):
+                    fake = FakePlaywright(FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES]), info=info))
+                    out = io.StringIO()
+                    with contextlib.redirect_stdout(out):
+                        result = web_smoke.run_smoke(options(selftest=False, dist=Path(temp), device_scale_factor=2.0),
+                                                     SimpleNamespace(sync_playwright=fake.sync_playwright))
+                    self.assertEqual(result, code, out.getvalue())
+                    self.assertIn("devicePixelRatio=2, CSS size 400x300", out.getvalue())
+                    self.assertIn("FAIL: (5)" if code else "ok: (5)", out.getvalue())
 
     def test_run_smoke_prints_each_reason_and_returns_1(self):
         fake = FakePlaywright(FakePage(FakeCanvas([STRIPES]), console=[ConsoleEntry("error", "boom")]))
@@ -678,6 +961,19 @@ class RealBrowserTest(unittest.TestCase):
     def test_the_good_page_passes(self):
         code, output = self.run_selftest()
         self.assertEqual(code, 0, output)
+
+    def test_a_tap_and_a_pixel_ratio_of_two_are_accepted(self):
+        code, output = self.run_selftest("--touch", "--device-scale-factor", "2")
+        self.assertEqual(code, 0, output)
+        self.assertIn("input: touch (a tap)", output)
+        self.assertIn("devicePixelRatio=2", output)
+
+    def test_an_expected_console_message_is_found_and_a_missing_one_fails(self):
+        code, output = self.run_selftest("--expect-console", "selftest page started")
+        self.assertEqual(code, 0, output)
+        code, output = self.run_selftest("--expect-console", "no such message", "--timeout", "2")
+        self.assertEqual(code, 1, output)
+        self.assertIn("FAIL: (4) no console message matched", output)
 
     def test_each_fault_is_found(self):
         expected = {"flat": "(2)", "console-error": "(4)", "page-error": "(1)", "deaf": "(3)", "moving": "(3) cannot judge"}

@@ -2,7 +2,6 @@
 
 #include <Generated/FileSink.gen.hpp>
 #include <chrono>
-#include <fmt/chrono.h>
 #include <fmt/core.h>
 
 namespace BECore {
@@ -61,8 +60,9 @@ namespace BECore {
 
         std::scoped_lock lock(_mutex);
 
-        // Format and output (no colors in file)
-        _file << fmt::format("[{}] [{:%Y-%m-%d %H:%M:%S}.{:03d}] {}\n", level, tm_buf, ms.count(), message.data());
+        // Format and output (no colors in file; the time is written out, not {:%Y-%m-%d %H:%M:%S}: the Emscripten build cannot use fmt/chrono.h)
+        _file << fmt::format("[{}] [{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03d}] {}\n", level, tm_buf.tm_year + 1900, tm_buf.tm_mon + 1, tm_buf.tm_mday, tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec,
+                             ms.count(), message.data());
     }
 
     void FileSink::SetFilename(eastl::string_view filename) {

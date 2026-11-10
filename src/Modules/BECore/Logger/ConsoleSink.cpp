@@ -3,7 +3,6 @@
 #include <Generated/ConsoleSink.gen.hpp>
 #include <chrono>
 #include <cstdio>
-#include <fmt/chrono.h>
 #include <fmt/core.h>
 
 namespace BECore {
@@ -43,14 +42,14 @@ namespace BECore {
         // Choose output stream
         FILE* stream = (level >= LogLevel::Error) ? stderr : stdout;
 
-        // Format and output
+        // Format and output (the time is written out, not {:%H:%M:%S}: the Emscripten build cannot use fmt/chrono.h)
         if (_colorEnabled) {
             const char* color = LogLevelColor(level);
             const char* reset = LogColorReset;
 
-            fmt::print(stream, "{}[{}]{} [{:%H:%M:%S}.{:03d}] {}\n", color, level, reset, tm_buf, ms.count(), message);
+            fmt::print(stream, "{}[{}]{} [{:02}:{:02}:{:02}.{:03d}] {}\n", color, level, reset, tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec, ms.count(), message);
         } else {
-            fmt::print(stream, "[{}] [{:%H:%M:%S}.{:03d}] {}\n", level, tm_buf, ms.count(), message);
+            fmt::print(stream, "[{}] [{:02}:{:02}:{:02}.{:03d}] {}\n", level, tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec, ms.count(), message);
         }
     }
 

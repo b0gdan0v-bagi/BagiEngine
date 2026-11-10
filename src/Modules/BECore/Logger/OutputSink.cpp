@@ -3,7 +3,6 @@
 #include <Generated/OutputSink.gen.hpp>
 #include <chrono>
 #include <cstdio>
-#include <fmt/chrono.h>
 #include <fmt/core.h>
 
 namespace BECore {
@@ -39,8 +38,8 @@ namespace BECore {
         localtime_r(&time, &tm_buf);
 #endif
 
-        // Format message similar to console/file sinks
-        std::string formatted = fmt::format("[{}] [{:%H:%M:%S}.{:03d}] {}\n", level, tm_buf, ms.count(), message);
+        // Format message similar to console/file sinks (the time is written out, not {:%H:%M:%S}: the Emscripten build cannot use fmt/chrono.h)
+        std::string formatted = fmt::format("[{}] [{:02}:{:02}:{:02}.{:03d}] {}\n", level, tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec, ms.count(), message);
 
 #if defined(PLATFORM_WINDOWS)
         // Output to Visual Studio Output window
