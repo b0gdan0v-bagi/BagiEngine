@@ -210,7 +210,21 @@ def print_entry(entry: dict, out=None) -> None:
     if where:
         facts.append(" · ".join(where))
     facts.append(f"version: {entry['version']}")
-    out.write(f"# {entry['title']}\n\n{' · '.join(facts)}\n\n{entry['body'].rstrip()}\n")
+    links = [
+        f"{word}: {', '.join(link_text(link) for link in entry.get(key) or [])}"
+        for key, word in (("blockedBy", "blocked by"), ("blocks", "blocks"))
+        if entry.get(key)
+    ]
+    head = "\n".join([" · ".join(facts), *links])
+    out.write(f"# {entry['title']}\n\n{head}\n\n{entry['body'].rstrip()}\n")
+
+
+def link_text(link: dict) -> str:
+    return f"{link['id']} ({link['status']}{': ' + link['note'] if link.get('note') else ''})"
+
+
+def open_blockers(entry: dict) -> list[str]:
+    return [link["id"] for link in entry.get("blockedBy") or [] if link["status"] != "closed"]
 
 
 def print_table(entries: list[dict], out=None) -> None:
@@ -222,8 +236,8 @@ def print_table(entries: list[dict], out=None) -> None:
     for entry in entries:
         stage = f"stage {entry['stage']}" if entry["stage"] is not None else "-"
         line = f"{entry['id']:<{width}}  {entry['area']:<7} {entry['status']:<11} {stage:<8} {entry['title']}"
-        extra = progress_text(entry)
-        out.write(line + (f"  [{extra}]" if extra else "") + "\n")
+        extra = [text for text in (progress_text(entry), "blocked by " + ", ".join(open_blockers(entry)) if open_blockers(entry) else "") if text]
+        out.write(line + "".join(f"  [{text}]" for text in extra) + "\n")
 
 
 def emit(value, as_json: bool, printer=None) -> None:
@@ -240,12 +254,14 @@ def cmd_ping(api: Api, args) -> None:
     health = json.loads(urllib.request.urlopen(f"{api.url}/healthz", timeout=REQUEST_TIMEOUT_SECONDS).read())
     areas = api.get("/areas")
     print(f"ok: {api.url}, areas {', '.join(area['id'] for area in areas) or 'none'}, mirror {'on' if health['mirror'] else 'off'}, "
-          f"outbox {health['outbox']} ({health['outboxFailing']} failing)" + (f", mirror error: {health['mirrorError']}" if health["mirrorError"] else ""))
+          f"outbox {health['outbox']} ({health['outboxFailing']} failing)" + (f", mirror error: {health['mirrorError']}" if health["mirrorError"] else "")
+          + (f", relations error: {health['relationsError']}" if health.get("relationsError") else ""))
 
 
 def cmd_list(api: Api, args) -> None:
     statuses = args.status or ("open,in progress,review,deferred" if not args.all else None)
-    entries = api.get("/entries", area=args.area, status=statuses, body="true" if args.body else None)
+    blocked = "true" if args.blocked else "false" if args.ready else None
+    entries = api.get("/entries", area=args.area, status=statuses, body="true" if args.body else None, blocked=blocked)
     emit(entries, args.json, print_table)
 
 
@@ -321,6 +337,45 @@ def cmd_stop(api: Api, args) -> None:
 def cmd_close(api: Api, args) -> None:
     entry = api.call("POST", f"/entries/{args.id}/close", {"reopen": args.reopen})
     emit(entry, args.json, lambda e: print(f"{e['id']}: {e['statusLine']}"))
+
+
+def cmd_dep(api: Api, args) -> None:
+    if args.dep_command == "add":
+        entry = None
+        for blocker in args.blockers:
+            entry = api.call("PUT", f"/entries/{args.id}/blockers/{blocker}", {"note": args.note or ""})
+        emit(entry, args.json, lambda e: print(f"{e['id']}: blocked by {', '.join(link_text(link) for link in e['blockedBy'])}"))
+        return
+    if args.dep_command == "rm":
+        entry = None
+        for blocker in args.blockers:
+            entry = api.call("DELETE", f"/entries/{args.id}/blockers/{blocker}")
+        emit(entry, args.json, lambda e: print(f"{e['id']}: blocked by {', '.join(link_text(link) for link in e['blockedBy']) or 'nothing'}"))
+        return
+    if args.dep_command == "graph":
+        query = f"?area={urllib.parse.quote(args.area)}" if args.area else ""
+        print(f"{api.url}/dashboard/graph{query}  (log in with any user name and the API token as the password)")
+        return
+    if args.id:  # list for one entry
+        entry = api.get(f"/entries/{args.id}")
+        if args.json:
+            emit({"id": entry["id"], "blocked": entry["blocked"], "blockedBy": entry["blockedBy"], "blocks": entry["blocks"]}, True)
+            return
+        print(f"{entry['id']} ({entry['status']}){': blocked' if entry['blocked'] else ''}")
+        for key, word in (("blockedBy", "blocked by"), ("blocks", "blocks")):
+            for link in entry[key]:
+                print(f"  {word:<10} {link_text(link)}  {link['title']}")
+        return
+    links = api.get("/dependencies")
+    if args.json:
+        emit(links, True)
+        return
+    if not links:
+        print("no links")
+        return
+    width = max(len(link["entry"]) for link in links)
+    for link in links:
+        print(f"{link['entry']:<{width}}  blocked by  {link['blocker']}" + (f"  ({link['note']})" if link["note"] else ""))
 
 
 def cmd_plan(api: Api, args) -> None:
@@ -506,6 +561,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--status", help="comma separated: open,in progress,review,deferred,closed")
     p.add_argument("--all", action="store_true", help="closed ones too")
     p.add_argument("--body", action="store_true", help="with the body (JSON)")
+    group = p.add_mutually_exclusive_group()
+    group.add_argument("--ready", action="store_true", help="only entries whose blockers are all closed")
+    group.add_argument("--blocked", action="store_true", help="only entries with a blocker that is not closed")
 
     p = sub.add_parser("show", parents=[common], help="one entry as markdown")
     p.add_argument("id")
@@ -549,6 +607,20 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("close", parents=[common], help="after the merge: closed, or open again for the next slice (--reopen)")
     p.add_argument("id")
     p.add_argument("--reopen", action="store_true")
+
+    p = sub.add_parser("dep", parents=[common], help="dependencies: what an entry waits for (is blocked by) and what it blocks")
+    dep_sub = p.add_subparsers(dest="dep_command", required=True)
+    q = dep_sub.add_parser("add", parents=[common], help="<id> is blocked by each <blocker> (until it is closed)")
+    q.add_argument("id")
+    q.add_argument("blockers", nargs="+")
+    q.add_argument("--note", help="why, in a few words")
+    q = dep_sub.add_parser("rm", parents=[common], help="<id> no longer waits for each <blocker>")
+    q.add_argument("id")
+    q.add_argument("blockers", nargs="+")
+    q = dep_sub.add_parser("list", parents=[common], help="every link, or the links of one entry")
+    q.add_argument("id", nargs="?")
+    q = dep_sub.add_parser("graph", parents=[common], help="print the address of the graph page")
+    q.add_argument("--area")
 
     p = sub.add_parser("plan", parents=[common], help="plans and reviews")
     plan_sub = p.add_subparsers(dest="plan_command", required=True)
@@ -612,6 +684,7 @@ COMMANDS = {
     "review": cmd_review,
     "stop": cmd_stop,
     "close": cmd_close,
+    "dep": cmd_dep,
     "plan": cmd_plan,
     "area": cmd_area,
     "dashboard": cmd_dashboard,

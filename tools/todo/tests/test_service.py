@@ -130,7 +130,7 @@ def test_an_entry_from_before_migration_003_survives_it_with_no_base(clean_datab
         conn.execute("INSERT INTO areas (id, title) VALUES ('engine', 'Engine')")
         conn.execute("INSERT INTO entries (id, area, title, status, branch) VALUES ('old', 'engine', 'Old', 'in progress', 'todo/old')")
         conn.commit()
-        assert db.migrate(conn) == ["003_branch_origin.sql"]
+        assert db.migrate(conn) == ["003_branch_origin.sql", "004_dependencies.sql"]
         row = conn.execute("SELECT branch, base, origin FROM entries WHERE id = 'old'").fetchone()
     assert row == {"branch": "todo/old", "base": None, "origin": None}
 
@@ -202,5 +202,5 @@ def test_the_migrations_run_once(clean_database):
 
     with psycopg.connect(clean_database) as conn:
         conn.row_factory = psycopg.rows.dict_row
-        assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql", "003_branch_origin.sql"]
+        assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql", "003_branch_origin.sql", "004_dependencies.sql"]
         assert db.migrate(conn) == []

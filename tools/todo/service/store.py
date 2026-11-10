@@ -120,7 +120,8 @@ def plan_progress(conn: Connection, entries: list[dict]) -> dict[str, dict]:
     return result
 
 
-def to_json(entry: dict, plan: dict | None = None, with_body: bool = True) -> dict:
+def to_json(entry: dict, plan: dict | None = None, with_body: bool = True, links: dict | None = None) -> dict:
+    links = links or {"blockedBy": [], "blocks": []}
     data = {
         "id": entry["id"],
         "area": entry["area"],
@@ -143,6 +144,9 @@ def to_json(entry: dict, plan: dict | None = None, with_body: bool = True) -> di
         "closedAt": entry["closed_at"].isoformat() if entry["closed_at"] else None,
         "vikunjaTaskId": entry["vikunja_task_id"],
         "aliases": entry["aliases"],
+        "blockedBy": links["blockedBy"],
+        "blocks": links["blocks"],
+        "blocked": any(link["status"] != "closed" for link in links["blockedBy"]),
     }
     if with_body:
         data["body"] = entry["body"]
@@ -180,7 +184,8 @@ def list_entries(conn: Connection, area: str | None = None, statuses: list[str] 
 
 def entries_json(conn: Connection, entries: list[dict], with_body: bool = False) -> list[dict]:
     plans = plan_progress(conn, entries)
-    return [to_json(entry, plans.get(entry["id"]), with_body) for entry in entries]
+    links = links_of(conn, [entry["id"] for entry in entries])
+    return [to_json(entry, plans.get(entry["id"]), with_body, links.get(entry["id"])) for entry in entries]
 
 
 def entry_json(conn: Connection, entry: dict) -> dict:
@@ -264,6 +269,86 @@ def update_entry(
     if mirror and any(key in changes for key in (*MIRRORED_FIELDS, "area")):
         enqueue(conn, entry_id)
     return updated
+
+
+# --- dependencies: "an entry is blocked by another" --------------------------------------------
+
+
+def links_of(conn: Connection, ids: list[str]) -> dict[str, dict]:
+    """entry id -> {blockedBy: [{id, status, title, note}], blocks: [{id, status, title, note}]} for the given entries."""
+    result = {entry_id: {"blockedBy": [], "blocks": []} for entry_id in ids}
+    if not ids:
+        return result
+    rows = conn.execute(
+        """SELECT d.entry_id, d.blocker_id, d.note, b.status AS blocker_status, b.title AS blocker_title,
+                  e.status AS entry_status, e.title AS entry_title
+           FROM dependencies d JOIN entries b ON b.id = d.blocker_id JOIN entries e ON e.id = d.entry_id
+           WHERE d.entry_id = ANY(%s) OR d.blocker_id = ANY(%s) ORDER BY d.entry_id, d.blocker_id""",
+        (ids, ids),
+    ).fetchall()
+    for row in rows:
+        if row["entry_id"] in result:
+            result[row["entry_id"]]["blockedBy"].append(
+                {"id": row["blocker_id"], "status": row["blocker_status"], "title": row["blocker_title"], "note": row["note"]}
+            )
+        if row["blocker_id"] in result:
+            result[row["blocker_id"]]["blocks"].append(
+                {"id": row["entry_id"], "status": row["entry_status"], "title": row["entry_title"], "note": row["note"]}
+            )
+    return result
+
+
+def list_dependencies(conn: Connection) -> list[dict]:
+    """Every link: {entry, blocker, note}."""
+    rows = conn.execute("SELECT entry_id, blocker_id, note FROM dependencies ORDER BY entry_id, blocker_id").fetchall()
+    return [{"entry": row["entry_id"], "blocker": row["blocker_id"], "note": row["note"]} for row in rows]
+
+
+def _blocker_path(conn: Connection, start: str, target: str) -> list[str] | None:
+    """The chain start -> ... -> target along "is blocked by", or None when target is not reached."""
+    row = conn.execute(
+        """WITH RECURSIVE chain(id, path) AS (
+               SELECT %s::text, ARRAY[%s::text]
+               UNION
+               SELECT d.blocker_id, chain.path || d.blocker_id FROM dependencies d JOIN chain ON d.entry_id = chain.id
+               WHERE NOT d.blocker_id = ANY(chain.path)
+           )
+           SELECT path FROM chain WHERE id = %s LIMIT 1""",
+        (start, start, target),
+    ).fetchone()
+    return row["path"] if row else None
+
+
+def add_dependency(conn: Connection, entry_id: str, blocker_id: str, note: str, actor: str) -> dict:
+    """`entry_id` is blocked by `blocker_id` (again: the note is replaced). Refuses itself, an unknown id and a cycle."""
+    entry = require_entry(conn, entry_id, lock=True)
+    require_entry(conn, blocker_id)
+    if entry_id == blocker_id:
+        raise StoreError(422, f"entry '{entry_id}' cannot block itself")
+    cycle = _blocker_path(conn, blocker_id, entry_id)
+    if cycle:
+        raise StoreError(409, f"a cycle: {' -> '.join([entry_id, *cycle])} (each is blocked by the next)")
+    note = (note or "").strip()
+    existing = conn.execute("SELECT note FROM dependencies WHERE entry_id = %s AND blocker_id = %s", (entry_id, blocker_id)).fetchone()
+    if existing is not None and existing["note"] == note:
+        return entry
+    conn.execute(
+        """INSERT INTO dependencies (entry_id, blocker_id, note) VALUES (%s, %s, %s)
+           ON CONFLICT (entry_id, blocker_id) DO UPDATE SET note = EXCLUDED.note""",
+        (entry_id, blocker_id, note),
+    )
+    add_event(conn, actor, "blocked by", entry_id, data={"blocker": blocker_id, "note": note})
+    enqueue(conn, entry_id)  # the task's relations
+    return entry
+
+
+def remove_dependency(conn: Connection, entry_id: str, blocker_id: str, actor: str) -> dict:
+    entry = require_entry(conn, entry_id, lock=True)
+    if conn.execute("DELETE FROM dependencies WHERE entry_id = %s AND blocker_id = %s RETURNING 1", (entry_id, blocker_id)).fetchone() is None:
+        raise StoreError(404, f"entry '{entry_id}' is not blocked by '{blocker_id}'")
+    add_event(conn, actor, "unblocked", entry_id, data={"blocker": blocker_id})
+    enqueue(conn, entry_id)
+    return entry
 
 
 # --- the life of an entry in the loop ----------------------------------------------------------
