@@ -18,7 +18,8 @@ namespace BECore::Tests {
 
         constexpr float kTolerance = 0.6f;  // RmlUi lays out in whole pixels at the context's scale
 
-        // "Main": a document on the screen at one pixel per unit. "Fit": a scene with a view size and a document in it. "Scaled": the screen scaled with the output.
+        // "Main": a document on the screen at one pixel per unit. "Fit": a scene with a view size and a document in it, "FitViews" the same with a portrait view. "Scaled": the screen scaled with the
+        // output.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -34,6 +35,14 @@ namespace BECore::Tests {
       <component type="RmlUiDocumentComponent" space="SceneView"/>
     </components></node>
   </nodes></scene>
+  <scene type="Scene" name="FitViews" viewWidth="400" viewHeight="300">
+    <viewVariants><view name="Portrait" when="orientation:portrait" width="300" height="400"/></viewVariants>
+    <nodes>
+      <node name="Doc"><components>
+        <component type="RmlUiDocumentComponent" space="SceneView"/>
+      </components></node>
+    </nodes>
+  </scene>
   <scene type="Scene" name="Scaled"><nodes>
     <node name="Doc"><components>
       <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5"/>
@@ -352,6 +361,23 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         EXPECT_NEAR(box.x, 200.0f, kTolerance);
         EXPECT_NEAR(box.w, 800.0f, kTolerance);
         EXPECT_NEAR(box.h, 600.0f, kTolerance);
+    }
+
+    TEST_F(RmlUiHostTest, ASceneViewDocumentFollowsTheViewTheSceneSwitchesTo) {
+        auto doc = Doc("FitViews");
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<div id="box"></div>)", "#box { position: absolute; left: 0dp; top: 0dp; width: 100%; height: 100%; }")));
+
+        _renderer->width = 800.0f;  // the 400 x 300 view at scale 2
+        _renderer->height = 600.0f;
+        Draw("FitViews");
+        EXPECT_NEAR(BoxOf(*doc, "box").w, 800.0f, kTolerance);
+        EXPECT_NEAR(BoxOf(*doc, "box").h, 600.0f, kTolerance);
+
+        _renderer->width = 600.0f;  // the portrait view of 300 x 400 at scale 2
+        _renderer->height = 800.0f;
+        Draw("FitViews");
+        EXPECT_NEAR(BoxOf(*doc, "box").w, 600.0f, kTolerance);
+        EXPECT_NEAR(BoxOf(*doc, "box").h, 800.0f, kTolerance);
     }
 
     TEST_F(RmlUiHostTest, AClipOfTheDocumentIsBalancedAfterTheDraw) {
@@ -733,7 +759,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         {
             auto doc = Doc("Main");
             ASSERT_TRUE(doc->SetMarkup(Document("<p>x</p>")));
-            EXPECT_EQ(RmlUiRuntime::GetInstance().GetHolderCount(), 4) << "each of the four components of the scenes holds the runtime";
+            EXPECT_EQ(RmlUiRuntime::GetInstance().GetHolderCount(), 5) << "each of the five components of the scenes holds the runtime";
         }
         _manager.Reset();
 

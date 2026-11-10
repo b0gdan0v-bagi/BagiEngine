@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Scene/SceneView.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIPreview.h>
 
@@ -15,6 +16,13 @@ namespace BECore::Tests {
     struct UIMatrixFailure {
         eastl::string label;
         eastl::vector<UILayoutIssue> issues;
+    };
+
+    /// The view declaration of a scene (`viewWidth`, `viewHeight`, `<viewVariants>`): ValidateOnMatrix() picks from it the view the scene would draw with in each case
+    struct UIMatrixViews {
+        float defaultWidth = 0.0f;
+        float defaultHeight = 0.0f;
+        eastl::span<const SceneViewVariant> variants;
     };
 
     namespace UIMatrixDetail {
@@ -82,8 +90,13 @@ namespace BECore::Tests {
      * The canvas keeps its own params afterwards. For a World canvas set `context.worldBox` through @p baseContext. A screen test is one line:
      * `EXPECT_TRUE(ValidateOnMatrix(canvas).empty())`.
      * @param baseContext the fields that the matrix does not set (the scene view size, the world box, the density)
+     * @param views the scene's view declaration, for a SceneView canvas of a scene with `viewVariants`: every case sets `sceneViewWidth` / `sceneViewHeight` to the view
+     *        that SceneViewSelector::Pick() gives for the output of the case (what Scene::Draw() would pick) and the label ends with `view <name>` (`view default` for the
+     *        default, `view #<index>` for an unnamed variant). Left empty (the default), the matrix keeps the view size of @p baseContext in every case, as before.
      */
-    inline eastl::vector<UIMatrixFailure> ValidateOnMatrix(UICanvasLayout& canvas, const UILayoutValidatorOptions& options = {}, const UILayoutContext& baseContext = {}) {
+    inline eastl::vector<UIMatrixFailure> ValidateOnMatrix(UICanvasLayout& canvas, const UILayoutValidatorOptions& options = {}, const UILayoutContext& baseContext = {},
+                                                           const UIMatrixViews& views = {}) {
+        const bool pickView = views.defaultWidth > 0.0f && views.defaultHeight > 0.0f;
         const UICanvasScaleParams saved = canvas.params;
         const bool screen = saved.space == CanvasSpace::Screen;
         const CanvasScaleMode modes[] = {CanvasScaleMode::ConstantPixelSize, CanvasScaleMode::ScaleWithScreen, CanvasScaleMode::ConstantPhysicalSize};
@@ -105,6 +118,19 @@ namespace BECore::Tests {
                     context.outputHeight = matrixCase.context.outputHeight;
                     context.safeArea = matrixCase.context.safeArea;
                     context.userScale = userScale;
+                    eastl::string viewName;
+                    if (pickView) {
+                        const ActiveSceneView view = SceneViewSelector::Pick(views.defaultWidth, views.defaultHeight, views.variants, context.outputWidth, context.outputHeight);
+                        context.sceneViewWidth = view.width;
+                        context.sceneViewHeight = view.height;
+                        if (view.index < 0) {
+                            viewName = " view default";
+                        } else if (view.name.ToStringView().empty()) {
+                            viewName = Format(" view #{}", view.index);
+                        } else {
+                            viewName = Format(" view {}", view.name.ToStringView());
+                        }
+                    }
                     canvas.Update(context);
 
                     UILayoutValidatorOptions caseOptions = options;
@@ -112,7 +138,7 @@ namespace BECore::Tests {
                     auto issues = canvas.Validate(caseOptions);
                     if (!issues.empty()) {
                         const eastl::string_view modeName = screen ? EnumUtils<CanvasScaleMode>::ToString(mode) : eastl::string_view("-");
-                        failures.push_back({Format("{} {} x{}", matrixCase.label, modeName, userScale), std::move(issues)});
+                        failures.push_back({Format("{} {} x{}{}", matrixCase.label, modeName, userScale, viewName), std::move(issues)});
                     }
                 }
             }

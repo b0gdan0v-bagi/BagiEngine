@@ -80,6 +80,23 @@ namespace BECore::Tests {
       </component>
     </components></node>
   </nodes></scene>
+  <scene type="Scene" name="Views" viewWidth="400" viewHeight="300">
+    <viewVariants><view name="Portrait" when="orientation:portrait" width="300" height="400"/></viewVariants>
+    <nodes>
+      <node name="View"><components>
+        <component type="UICanvasComponent" space="SceneView">
+          <elements>
+            <element type="UIButton" name="Go" x="10" y="10" width="50" height="40" text="Go" action="UIControlApiViewGo" color="40,90,60,255"/>
+          </elements>
+          <variants>
+            <variant when="orientation:portrait">
+              <overrides><set element="Go" anchor="Bottom" x="0" y="-10"/></overrides>
+            </variant>
+          </variants>
+        </component>
+      </components></node>
+    </nodes>
+  </scene>
   <scene type="Scene" name="Choice"><nodes>
     <node name="Panel"><components>
       <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
@@ -1196,6 +1213,83 @@ namespace BECore::Tests {
         EXPECT_NEAR(NumberMember(result, "x"), 170.0, kTolerance);  // (10 + 25) * 2 + 100
         EXPECT_NEAR(NumberMember(result, "y"), 60.0, kTolerance);   // (10 + 20) * 2
         EXPECT_EQ(recorder.Count("UIControlApiGo"), 1);
+    }
+
+    TEST_F(UIControlApiTest, TheClickAndTheOutputRectFollowTheViewTheSceneSwitchedTo) {
+        Show("Views", 800.0f, 600.0f);
+        const Json landscape = Call("ui_tree");
+        Show("Views", 600.0f, 800.0f);
+        const Json portrait = Call("ui_tree");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("Go"));
+
+        ASSERT_TRUE(IsOk(landscape) && IsOk(portrait) && IsOk(clicked));
+        const Json* before = FindElement(*FindCanvas(*Member(landscape, "result"), "View"), "Go");
+        const Json* after = FindElement(*FindCanvas(*Member(portrait, "result"), "View"), "Go");
+        ASSERT_TRUE(before != nullptr && after != nullptr);
+        ExpectRect(Member(*before, "outputRect"), 20.0f, 20.0f, 100.0f, 80.0f);
+        ExpectRect(Member(*after, "rect"), 125.0f, 350.0f, 50.0f, 40.0f);
+        ExpectRect(Member(*after, "outputRect"), 250.0f, 700.0f, 100.0f, 80.0f);
+        const Json& result = *Member(clicked, "result");
+        EXPECT_NEAR(NumberMember(result, "x"), 300.0, kTolerance);
+        EXPECT_NEAR(NumberMember(result, "y"), 740.0, kTolerance);
+        EXPECT_EQ(recorder.Count("UIControlApiViewGo"), 1);
+    }
+
+    TEST_F(UIControlApiTest, ASceneViewCanvasReportsTheActiveViewAndOtherCanvasesReportNone) {
+        Show("Views", 800.0f, 600.0f);
+        const Json landscape = Call("ui_tree");
+        Show("Views", 600.0f, 800.0f);
+        const Json portrait = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(landscape) && IsOk(portrait));
+        const Json* before = Member(*FindCanvas(*Member(landscape, "result"), "View"), "view");
+        const Json* after = Member(*FindCanvas(*Member(portrait, "result"), "View"), "view");
+        ASSERT_TRUE(before != nullptr && after != nullptr);
+        EXPECT_EQ(StringMember(*before, "name"), "");
+        EXPECT_NEAR(NumberMember(*before, "width"), 400.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*before, "height"), 300.0, kTolerance);
+        EXPECT_EQ(StringMember(*after, "name"), "Portrait");
+        EXPECT_NEAR(NumberMember(*after, "width"), 300.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*after, "height"), 400.0, kTolerance);
+
+        Show("Main");
+        const Json main = Call("ui_tree");
+        ASSERT_TRUE(IsOk(main));
+        EXPECT_EQ(Member(*FindCanvas(*Member(main, "result"), "Hud"), "view"), nullptr);
+    }
+
+    TEST_F(UIControlApiTest, ASceneWithoutViewVariantsReportsItsOneView) {
+        Show("Fit", 1000.0f, 600.0f);
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response));
+        const Json* view = Member(*FindCanvas(*Member(response, "result"), "View"), "view");
+        ASSERT_NE(view, nullptr);
+        EXPECT_EQ(StringMember(*view, "name"), "");
+        EXPECT_NEAR(NumberMember(*view, "width"), 400.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*view, "height"), 300.0, kTolerance);
+    }
+
+    TEST_F(UIControlApiTest, TheDrawnButtonIsWhereTheTreeSaysInTheActiveView) {
+        Show("Views", 600.0f, 800.0f);
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response));
+        const Json* go = FindElement(*FindCanvas(*Member(response, "result"), "View"), "Go");
+        ASSERT_NE(go, nullptr);
+        const Json& output = *Member(*go, "outputRect");
+        bool found = false;
+        for (const DrawCall& call : _renderer->calls) {
+            if (call.kind == DrawKind::Rect && std::abs(call.rect.x - static_cast<float>(NumberMember(output, "x"))) < kTolerance &&
+                std::abs(call.rect.y - static_cast<float>(NumberMember(output, "y"))) < kTolerance && std::abs(call.rect.w - static_cast<float>(NumberMember(output, "w"))) < kTolerance) {
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found) << "no draw call at the outputRect of Go";
     }
 
     TEST_F(UIControlApiTest, TheCanvasParameterChoosesTheElementWhenNamesRepeat) {

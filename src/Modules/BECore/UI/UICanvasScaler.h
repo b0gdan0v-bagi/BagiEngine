@@ -22,6 +22,7 @@ namespace BECore {
         float minScale = 0.25f;  ///< 0 or less: no lower limit
         float maxScale = 8.0f;   ///< 0 or less: no upper limit
         bool useSafeArea = false;
+        bool extendToOutput = false;  ///< SceneView only: bounds are the whole output in scene units (the bars too), `viewBounds` the view; ignored for Screen and World
 
         [[nodiscard]] bool operator==(const UICanvasScaleParams&) const = default;
     };
@@ -29,7 +30,8 @@ namespace BECore {
     /// Where a canvas is, in the units it works in
     struct UICanvasResolved {
         float scale = 1.0f;       ///< output pixels per UI unit
-        Rect bounds;              ///< the whole canvas, in UI units, origin at 0, 0
+        Rect bounds;              ///< the whole canvas, in UI units; its origin is 0, 0 except for an extended SceneView canvas (negative where the fitted view leaves bars)
+        Rect viewBounds;          ///< SceneView: the scene's view {0, 0, viewW, viewH} inside bounds; equal to bounds for every other canvas (not extended, no view, Screen, World)
         Rect safeBounds;          ///< the safe area in UI units, inside bounds
         Rect contentBounds;       ///< safeBounds when the canvas uses the safe area, else bounds: where the layout puts its elements
         ViewTransform transform;  ///< UI units to output pixels; the canvas sets it around its draw
@@ -42,7 +44,8 @@ namespace BECore {
      * SceneView and World: UI units are scene units and the scale is the fit of the scene's view to the output (the same
      * ViewTransform::Fit that Scene::Draw() uses); scaleMode, the user scale and the limits do not apply, because the board the UI belongs to
      * is scaled by that fit. A scene without a view size has the identity fit, so a SceneView canvas is the output then. SceneView bounds
-     * are the view; World bounds are the node's box and its origin is the node's position. The safe area applies to Screen and SceneView only.
+     * are the view, or with `extendToOutput` the whole output in scene units (the transform stays the fit, so a scene point is still where it was; `viewBounds` tells where the view lies);
+     * World bounds are the node's box and its origin is the node's position. The safe area applies to Screen and SceneView only.
      */
     class UICanvasScaler {
     public:

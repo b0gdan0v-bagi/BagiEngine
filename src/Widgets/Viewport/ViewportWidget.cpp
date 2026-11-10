@@ -3,6 +3,8 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/Scene/Scene.h>
+#include <BECore/Scene/SceneManager.h>
 #include <Generated/ViewportWidget.gen.hpp>
 #include <SDL3/SDL.h>
 #include <imgui.h>
@@ -118,6 +120,14 @@ namespace BECore {
         ImGui::SetNextItemWidth(kSafeAreaComboWidth);
         if (ImGui::Combo("##ViewportSafeArea", &safeArea, kSafeAreaLabels, static_cast<int>(std::size(kSafeAreaLabels)))) {
             _safeAreaSimulation = static_cast<SafeAreaSimulation>(safeArea);
+        }
+
+        // The view the scene drew with last, picked by the size of this image (read only)
+        if (const Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
+            const ActiveSceneView view = scene->GetActiveView();
+            ImGui::SameLine();
+            const eastl::string_view name = view.index < 0 ? eastl::string_view("default") : view.name.ToStringView();
+            ImGui::TextDisabled("View: %.*s %.0f x %.0f", static_cast<int>(name.size()), name.data(), view.width, view.height);
         }
     }
 

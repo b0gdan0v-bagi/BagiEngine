@@ -132,6 +132,119 @@ namespace BECore::Tests {
         EXPECT_TRUE(canvas.Validate({}).empty());
     }
 
+    TEST(UILayoutValidatorTest, IgnoreSafeAreaCoversTheDescendantsOfTheElement) {
+        UILayoutContext context = Output(1000.0f, 500.0f);
+        context.safeArea = {50.0f, 40.0f, 900.0f, 420.0f};  // a notch of 40 at the top, 50 at the sides
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.params.useSafeArea = true;
+        auto bar = AddBox(*canvas.root, "Bar", 0.0f, 0.0f, 1000.0f, 100.0f);  // from the corner of the whole canvas
+        bar->ignoreSafeArea = true;
+        auto child = AddBox(*bar, "Child", 10.0f, 5.0f, 300.0f, 30.0f);  // y 5..35: in the notch
+        AddBox(*child, "Grandchild", 5.0f, 5.0f, 100.0f, 20.0f);
+        auto row = AddBox(*bar, "Row", 400.0f, 5.0f, 300.0f, 30.0f);
+        row->layout = UILayoutKind::Stack;
+        row->style.stack.direction = UIStackDirection::Horizontal;
+        AddBox(*row, "Cell1", 0.0f, 0.0f, 100.0f, 30.0f);
+        AddBox(*row, "Cell2", 0.0f, 0.0f, 100.0f, 30.0f);
+        canvas.Update(context);
+
+        EXPECT_TRUE(canvas.Validate({}).empty());
+
+        // The same tree without the flag, put on the same absolute place (offsets count from the safe area then): the safe area applies to the root child and everything under it
+        bar->ignoreSafeArea = false;
+        bar->style.rect.x = -50.0f;
+        bar->style.rect.y = -40.0f;
+        canvas.Invalidate();
+        canvas.Update(context);
+        const auto issues = canvas.Validate({});
+        EXPECT_EQ(CountOf(issues, UILayoutIssueKind::OutsideSafeArea), 6u);
+    }
+
+    TEST(UILayoutValidatorTest, ADescendantOfAnIgnoringElementIsStillCheckedAgainstTheCanvas) {
+        UILayoutContext context = Output(1000.0f, 500.0f);
+        context.safeArea = {50.0f, 40.0f, 900.0f, 420.0f};
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.params.useSafeArea = true;
+        auto bar = AddBox(*canvas.root, "Bar", 0.0f, 0.0f, 1000.0f, 100.0f);
+        bar->ignoreSafeArea = true;
+        auto child = AddBox(*bar, "Child", 10.0f, 5.0f, 300.0f, 30.0f);
+        AddBox(*child, "Grandchild", 5.0f, -20.0f, 100.0f, 20.0f);  // y -15..5: above the canvas
+        canvas.Update(context);
+
+        const auto issues = canvas.Validate({});
+
+        ASSERT_EQ(issues.size(), 1u);
+        EXPECT_EQ(issues[0].kind, UILayoutIssueKind::OutsideCanvas);
+        EXPECT_EQ(issues[0].element, "Grandchild"_intern);
+    }
+
+    TEST(UILayoutValidatorTest, TheFlagOfADeeperElementMeansNothingAndItsSiblingsKeepTheSafeArea) {
+        UILayoutContext context = Output(1000.0f, 500.0f);
+        context.safeArea = {50.0f, 40.0f, 900.0f, 420.0f};
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.params.useSafeArea = true;
+        auto panel = AddBox(*canvas.root, "Panel", 0.0f, 0.0f, 500.0f, 200.0f);  // from the corner of the safe area
+        auto flagged = AddBox(*panel, "Flagged", 0.0f, -20.0f, 100.0f, 20.0f);   // y 20..40: leaves the safe area (40..)
+        flagged->ignoreSafeArea = true;
+        AddBox(*panel, "Plain", 200.0f, -20.0f, 100.0f, 20.0f);
+        canvas.Update(context);
+
+        const auto issues = canvas.Validate({});
+
+        EXPECT_EQ(CountOf(issues, UILayoutIssueKind::OutsideSafeArea), 2u);
+        EXPECT_EQ(CountOf(issues, UILayoutIssueKind::OutsideCanvas), 0u);
+    }
+
+    TEST(UILayoutValidatorTest, AnElementInTheBarOfAnExtendedCanvasIsInsideItButOnePastTheOutputIsNot) {
+        UILayoutContext context = Output(400.0f, 600.0f);  // a 400 x 300 view: bars of 150 above and below
+        context.sceneViewWidth = 400.0f;
+        context.sceneViewHeight = 300.0f;
+        UICanvasLayout canvas;
+        canvas.params.space = CanvasSpace::SceneView;
+        canvas.params.extendToOutput = true;
+        AddBox(*canvas.root, "InTheBar", 10.0f, 10.0f, 100.0f, 40.0f);       // offsets are from the corner of the bounds: scene y -140, above the view
+        AddBox(*canvas.root, "BelowTheView", 10.0f, 550.0f, 100.0f, 40.0f);  // scene y 400..440
+        canvas.Update(context);
+        EXPECT_TRUE(canvas.Validate({}).empty());
+
+        AddBox(*canvas.root, "PastTheOutput", 10.0f, 580.0f, 100.0f, 40.0f);  // ends at scene y 470, the canvas at 450
+        canvas.Invalidate();
+        canvas.Update(context);
+        const auto issues = canvas.Validate({});
+        ASSERT_EQ(issues.size(), 1u);
+        EXPECT_EQ(issues[0].kind, UILayoutIssueKind::OutsideCanvas);
+        EXPECT_EQ(issues[0].element, "PastTheOutput"_intern);
+
+        // The same element is outside a canvas that is not extended: its bounds are the view
+        UICanvasLayout plain;
+        plain.params.space = CanvasSpace::SceneView;
+        AddBox(*plain.root, "BelowTheView", 10.0f, 400.0f, 100.0f, 40.0f);
+        plain.Update(context);
+        EXPECT_EQ(CountOf(plain.Validate({}), UILayoutIssueKind::OutsideCanvas), 1u);
+    }
+
+    TEST(UILayoutValidatorTest, TheSafeAreaOfAnExtendedCanvasStillReports) {
+        UILayoutContext context = Output(400.0f, 600.0f);
+        context.sceneViewWidth = 400.0f;
+        context.sceneViewHeight = 300.0f;
+        context.safeArea = {0.0f, 50.0f, 400.0f, 550.0f};  // a notch of 50 at the top of the output: scene y from -100
+        UICanvasLayout canvas;
+        canvas.params.space = CanvasSpace::SceneView;
+        canvas.params.extendToOutput = true;
+        canvas.params.useSafeArea = true;
+        auto inNotch = AddBox(*canvas.root, "InNotch", 10.0f, -20.0f, 100.0f, 40.0f);  // 20 above the content, which starts at -100: scene y -120
+        inNotch->style.rect.anchor = UIAnchor::TopLeft;
+        auto fine = AddBox(*canvas.root, "Fine", 10.0f, 10.0f, 100.0f, 40.0f);
+        fine->style.rect.anchor = UIAnchor::TopLeft;
+        canvas.Update(context);
+
+        const auto issues = canvas.Validate({});
+
+        ASSERT_EQ(issues.size(), 1u);
+        EXPECT_EQ(issues[0].kind, UILayoutIssueKind::OutsideSafeArea);
+        EXPECT_EQ(issues[0].element, "InNotch"_intern);
+    }
+
     TEST(UILayoutValidatorTest, SiblingsOfAStackThatOverlapAreReported) {
         UICanvasLayout canvas = MakeCanvas();
         canvas.root->layout = UILayoutKind::Stack;

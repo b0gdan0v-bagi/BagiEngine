@@ -21,6 +21,10 @@ namespace BECore {
     }
 
     void Scene::Update() {
+        if (_viewVersion != _announcedViewVersion) {
+            _announcedViewVersion = _viewVersion;
+            SceneEvents::SceneViewChangedEvent::Emit(this, GetActiveView());
+        }
         const Time& time = CoreManager::GetTime();
         for (uint32_t step = 0; step < time.GetFixedStepCount(); ++step) {
             SceneEvents::SceneFixedUpdateEvent::Emit(time.GetFixedDeltaTime());
@@ -33,9 +37,12 @@ namespace BECore {
             return;
         }
 
-        // The fit follows the output size of every frame, so a resized window or viewport needs no event.
+        // The view and its fit follow the output size of every frame, so a resized window or viewport needs no event. The pick comes first:
+        // everything drawn below (and every canvas that lays out) reads the active view.
         IRenderer* renderer = CoreManager::GetRenderer().Get();
-        _viewTransform = renderer ? ViewTransform::Fit(_viewWidth, _viewHeight, renderer->GetOutputWidth(), renderer->GetOutputHeight()) : ViewTransform{};
+        PickView(renderer ? renderer->GetOutputWidth() : 0.0f, renderer ? renderer->GetOutputHeight() : 0.0f);
+        const ActiveSceneView view = GetActiveView();
+        _viewTransform = renderer ? ViewTransform::Fit(view.width, view.height, renderer->GetOutputWidth(), renderer->GetOutputHeight()) : ViewTransform{};
         if (renderer) {
             renderer->SetViewTransform(_viewTransform);
         }
@@ -82,12 +89,32 @@ namespace BECore {
         return walk.found ? walk.rank : 0;
     }
 
+    void Scene::PickView(float outputWidth, float outputHeight) {
+        const int32_t index = SceneViewSelector::Pick(_viewWidth, _viewHeight, _viewVariants, outputWidth, outputHeight).index;
+        if (index != _activeViewIndex) {
+            _activeViewIndex = index;
+            ++_viewVersion;
+        }
+    }
+
+    ActiveSceneView Scene::GetActiveView() const {
+        if (_activeViewIndex >= 0 && static_cast<size_t>(_activeViewIndex) < _viewVariants.size()) {
+            const SceneViewVariant& variant = _viewVariants[static_cast<size_t>(_activeViewIndex)];
+            return {variant.name, variant.width, variant.height, _activeViewIndex};
+        }
+        return {PoolString{}, _viewWidth, _viewHeight, -1};
+    }
+
+    uint32_t Scene::GetViewVersion() const {
+        return _viewVersion;
+    }
+
     float Scene::GetViewWidth() const {
-        return _viewWidth;
+        return GetActiveView().width;
     }
 
     float Scene::GetViewHeight() const {
-        return _viewHeight;
+        return GetActiveView().height;
     }
 
     float Scene::ScreenToSceneX(float outputX) const {

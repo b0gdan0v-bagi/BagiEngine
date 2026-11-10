@@ -23,7 +23,7 @@ namespace BECore {
             void VisitRoot(const UIElement& root) {
                 CheckStackSiblings(root);
                 for (const auto& child : root.children) {
-                    Visit(*child, true);
+                    Visit(*child, child->ignoreSafeArea);
                 }
             }
 
@@ -32,16 +32,16 @@ namespace BECore {
                 _issues.push_back({kind, element.name, other, element.rect});
             }
 
-            void Visit(const UIElement& element, bool childOfRoot) {
+            // @p ignoresSafeArea: a child of the root asked for the whole canvas (`ignoreSafeArea`), and so does everything under it; the flag of a deeper element means nothing
+            void Visit(const UIElement& element, bool ignoresSafeArea) {
                 if (!element.active.visible) {
                     return;
                 }
 
                 if (!element.rect.IsEmpty()) {
-                    const bool keepsInSafeArea = !(element.ignoreSafeArea && childOfRoot);
                     if (!IsInside(element.rect, _resolved.bounds)) {
                         Report(UILayoutIssueKind::OutsideCanvas, element);
-                    } else if (keepsInSafeArea && !IsInside(element.rect, _resolved.contentBounds)) {
+                    } else if (!ignoresSafeArea && !IsInside(element.rect, _resolved.contentBounds)) {
                         Report(UILayoutIssueKind::OutsideSafeArea, element);
                     }
                 }
@@ -66,7 +66,7 @@ namespace BECore {
                     CheckStackSiblings(element);
                 }
                 for (const auto& child : element.children) {
-                    Visit(*child, false);
+                    Visit(*child, ignoresSafeArea);
                 }
             }
 

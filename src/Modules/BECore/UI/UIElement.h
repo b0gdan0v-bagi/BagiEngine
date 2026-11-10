@@ -39,11 +39,12 @@ namespace BECore {
         BE_REFLECT_FIELD UILayoutKind layout = UILayoutKind::Anchor;
         BE_REFLECT_FIELD UIElementStyle style;
         UIElementStyle active;
-        BE_REFLECT_FIELD UIColor color;                                             ///< the fill the canvas draws for this element; a transparent color draws nothing
-        BE_REFLECT_FIELD bool blocksInput = false;                                  ///< a hit test finds it: a click on it does not reach what is below
-        BE_REFLECT_FIELD bool interactive = false;                                  ///< it takes clicks (a button): hit-testable, and the validator checks its touch size
-        BE_REFLECT_FIELD bool ignoreSafeArea = false;                               ///< a child of the canvas root only: laid out against the whole canvas, not the safe area (a background)
-        Rect rect;                                                                  ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
+        BE_REFLECT_FIELD UIColor color;             ///< the fill the canvas draws for this element; a transparent color draws nothing
+        BE_REFLECT_FIELD bool blocksInput = false;  ///< a hit test finds it: a click on it does not reach what is below
+        BE_REFLECT_FIELD bool interactive = false;  ///< it takes clicks (a button): hit-testable, and the validator checks its touch size
+        BE_REFLECT_FIELD bool ignoreSafeArea =
+            false;  ///< a child of the canvas root only: laid out against the whole canvas, not the safe area (a background); the validator spares it and its descendants
+        Rect rect;  ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
         BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> children;  // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
 
         /// Pointer state, set by the canvas that owns the tree: the pointer is over the element; a press that began on the element is still held

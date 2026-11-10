@@ -20,6 +20,10 @@ namespace BECore::Tests {
         // "Main": no view size, so scene units are pixels. Hud is the lower canvas, Menu a modal one above it (hidden at first), Board a quad at layer 5.
         // "Fit": 400 x 300 units shown in an 800 x 600 output (scale 2): a SceneView canvas, a World canvas on a node at (100, 60) 80 x 20, a Screen canvas
         // that stays in pixels, and a quad on a layer above all of them.
+        // "Views": the same 400 x 300 view with a 300 x 400 portrait one (a SceneView canvas with the button Go and a variant that moves it to the bottom, and a World canvas on a node
+        // at (100, 60)).
+        // "Extended": the 400 x 300 view again, a SceneView canvas with extendToOutput and a button at its bottom (wider when the canvas is portrait), and a Screen canvas that
+        // asks for the flag too and must ignore it.
         // "Other": a scene that is never active in these tests, with a canvas at the same place as Hud's.
         constexpr const char* kCanvasScenesXml = R"(
 <SceneManager><scenes>
@@ -49,6 +53,43 @@ namespace BECore::Tests {
     <node name="Quad" layer="1"><components>
       <component type="TransformComponent" x="10" y="10" width="20" height="20"/>
       <component type="QuadRendererComponent"><color r="0" g="255" b="0" a="255"/></component>
+    </components></node>
+  </nodes></scene>
+  <scene type="Scene" name="Views" viewWidth="400" viewHeight="300">
+    <viewVariants><view name="Portrait" when="orientation:portrait" width="300" height="400"/></viewVariants>
+    <nodes>
+      <node name="ViewCanvas"><components>
+        <component type="UICanvasComponent" space="SceneView">
+          <elements>
+            <element type="UIPanel" name="Fill" anchor="Stretch" color="9,9,9,255" blocksInput="false"/>
+            <element type="UIButton" name="Go" x="10" y="10" width="50" height="40" blocksInput="true" color="40,90,60,255"/>
+          </elements>
+          <variants>
+            <variant when="orientation:portrait">
+              <overrides><set element="Go" anchor="Bottom" x="0" y="-10"/></overrides>
+            </variant>
+          </variants>
+        </component>
+      </components></node>
+      <node name="WorldCanvas"><components>
+        <component type="TransformComponent" x="100" y="60" width="80" height="20"/>
+        <component type="UICanvasComponent" space="World"/>
+      </components></node>
+    </nodes>
+  </scene>
+  <scene type="Scene" name="Extended" viewWidth="400" viewHeight="300"><nodes>
+    <node name="BarCanvas"><components>
+      <component type="UICanvasComponent" space="SceneView" extendToOutput="true">
+        <elements>
+          <element type="UIButton" name="Bar" anchor="Bottom" x="0" y="-10" width="100" height="40" blocksInput="true" color="40,90,60,255"/>
+        </elements>
+        <variants>
+          <variant when="orientation:portrait"><overrides><set element="Bar" width="200"/></overrides></variant>
+        </variants>
+      </component>
+    </components></node>
+    <node name="FlatCanvas"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize" extendToOutput="true"/>
     </components></node>
   </nodes></scene>
   <scene type="Scene" name="Other"><nodes>
@@ -315,6 +356,154 @@ namespace BECore::Tests {
         transform->_x = 150.0f;  // the node moved
         Draw("Fit");
         ExpectRect(find()->rect, 300.0f, 120.0f, 20.0f, 20.0f);
+    }
+
+    // ---- a scene with view variants ---------------------------------------------------------------------------------------
+
+    TEST_F(UICanvasComponentTest, ASceneViewCanvasIsAsBigAsTheActiveView) {
+        auto view = Canvas("Views", "ViewCanvas");
+
+        _renderer->width = 800.0f;
+        _renderer->height = 600.0f;
+        Draw("Views");
+        ExpectRect(view->GetLayout().GetResolved().bounds, 0.0f, 0.0f, 400.0f, 300.0f);
+        EXPECT_NEAR(view->GetLayout().GetResolved().scale, 2.0f, kTolerance);
+
+        _renderer->width = 600.0f;  // portrait: the 300 x 400 view
+        _renderer->height = 800.0f;
+        Draw("Views");
+        ExpectRect(view->GetLayout().GetResolved().bounds, 0.0f, 0.0f, 300.0f, 400.0f);
+        EXPECT_NEAR(view->GetLayout().GetResolved().scale, 2.0f, kTolerance);
+        EXPECT_EQ(GetScene("Views").GetActiveView().index, 0);
+
+        _renderer->width = 800.0f;  // and back
+        _renderer->height = 600.0f;
+        Draw("Views");
+        ExpectRect(view->GetLayout().GetResolved().bounds, 0.0f, 0.0f, 400.0f, 300.0f);
+    }
+
+    TEST_F(UICanvasComponentTest, ACanvasVariantFollowsTheViewTheSceneSwitchesTo) {
+        auto view = Canvas("Views", "ViewCanvas");
+        auto go = [&]() { return view->GetRoot().FindByName("Go"_intern)->rect; };
+
+        Draw("Views");
+        ExpectRect(go(), 10.0f, 10.0f, 50.0f, 40.0f);
+
+        _renderer->width = 600.0f;
+        _renderer->height = 800.0f;
+        Draw("Views");
+        ExpectRect(go(), 125.0f, 350.0f, 50.0f, 40.0f);  // the portrait variant: centered at the bottom of the 300 x 400 view
+        const auto drawn = std::find_if(_renderer->calls.begin(), _renderer->calls.end(), [](const DrawCall& call) { return call.color.r == 40; });
+        ASSERT_NE(drawn, _renderer->calls.end());
+        ExpectRect(drawn->rect, 250.0f, 700.0f, 100.0f, 80.0f);
+
+        _renderer->width = 800.0f;
+        _renderer->height = 600.0f;
+        Draw("Views");
+        ExpectRect(go(), 10.0f, 10.0f, 50.0f, 40.0f);
+    }
+
+    TEST_F(UICanvasComponentTest, TheHitTestUsesTheLayoutOfTheViewThatWasSwitchedTo) {
+        UIInput& input = CoreManager::GetUIInput();
+        GameMouseRecorder game;
+        Draw("Views");
+        // The button is at (10, 10) in the 400 x 300 view: output pixels 20..120 x 20..100
+        ASSERT_TRUE(input.DispatchMouseButtonDown(Button(60.0f, 60.0f, true)));
+        input.DispatchMouseButtonUp(Button(60.0f, 60.0f, false));
+
+        _renderer->width = 600.0f;
+        _renderer->height = 800.0f;
+        Draw("Views");
+        // The same pixel is empty now (the Fill panel is a decoration) and the button is in the bottom: output pixels 250..350 x 700..780
+        game.downs = 0;
+        EXPECT_FALSE(input.DispatchMouseButtonDown(Button(60.0f, 60.0f, true)));
+        input.DispatchMouseButtonUp(Button(60.0f, 60.0f, false));
+        EXPECT_EQ(game.downs, 1);
+        EXPECT_TRUE(input.DispatchMouseButtonDown(Button(300.0f, 740.0f, true)));
+        input.DispatchMouseButtonUp(Button(300.0f, 740.0f, false));
+    }
+
+    TEST_F(UICanvasComponentTest, AWorldCanvasStillFollowsItsNodeWhenTheViewSwitches) {
+        auto world = Canvas("Views", "WorldCanvas");
+        AddSquare(*world, "Mark", 0.0f, 0.0f, 10.0f, Color{7, 7, 7, 255});
+        auto find = [&] {
+            const auto& calls = _renderer->calls;
+            return std::find_if(calls.begin(), calls.end(), [](const DrawCall& call) { return call.color.r == 7; });
+        };
+
+        Draw("Views");
+        ASSERT_NE(find(), _renderer->calls.end());
+        ExpectRect(find()->rect, 200.0f, 120.0f, 20.0f, 20.0f);
+
+        _renderer->width = 700.0f;  // the 300 x 400 view at scale 2 is 600 wide: bars of 50 at the sides
+        _renderer->height = 800.0f;
+        Draw("Views");
+        ASSERT_NE(find(), _renderer->calls.end());
+        ExpectRect(find()->rect, 250.0f, 120.0f, 20.0f, 20.0f);
+    }
+
+    // ---- an extended SceneView canvas -------------------------------------------------------------------------------------
+
+    TEST_F(UICanvasComponentTest, AnExtendedCanvasReachesTheBarsAndKeepsTheScenesFit) {
+        auto canvas = Canvas("Extended", "BarCanvas");
+        ASSERT_TRUE(canvas->_extendToOutput);
+        _renderer->width = 800.0f;  // 400 x 300 at scale 2 fills the output: no bars
+        _renderer->height = 600.0f;
+        Draw("Extended");
+        const auto bar = [&] { return std::find_if(_renderer->calls.begin(), _renderer->calls.end(), [](const DrawCall& call) { return call.color.r == 40; }); };
+        ASSERT_NE(bar(), _renderer->calls.end());
+        ExpectRect(canvas->GetLayout().GetResolved().bounds, 0.0f, 0.0f, 400.0f, 300.0f);
+        ExpectRect(bar()->rect, 300.0f, 500.0f, 200.0f, 80.0f);
+
+        _renderer->width = 800.0f;  // taller: the same view at scale 2 with bars of 300 pixels (150 units) above and below
+        _renderer->height = 1200.0f;
+        Draw("Extended");
+        ASSERT_NE(bar(), _renderer->calls.end());
+        const UICanvasResolved& resolved = canvas->GetLayout().GetResolved();
+        ExpectRect(resolved.bounds, 0.0f, -150.0f, 400.0f, 600.0f);
+        ExpectRect(resolved.viewBounds, 0.0f, 0.0f, 400.0f, 300.0f);
+        EXPECT_NEAR(resolved.transform.scale, 2.0f, kTolerance);
+        EXPECT_NEAR(resolved.transform.offsetY, 300.0f, kTolerance);
+        // The canvas is portrait (400 x 600), so the variant widened the button; it lies on the bar below the view: scene y 400..440, pixels 1100..1180
+        ExpectRect(canvas->GetRoot().FindByName("Bar"_intern)->rect, 100.0f, 400.0f, 200.0f, 40.0f);
+        ExpectRect(bar()->rect, 200.0f, 1100.0f, 400.0f, 80.0f);
+    }
+
+    TEST_F(UICanvasComponentTest, AClickInTheBarReachesTheElementThere) {
+        _renderer->width = 800.0f;
+        _renderer->height = 1200.0f;
+        Draw("Extended");
+        UIInput& input = CoreManager::GetUIInput();
+        GameMouseRecorder game;
+
+        EXPECT_TRUE(input.DispatchMouseButtonDown(Button(400.0f, 1140.0f, true)));  // on the button, below the view
+        input.DispatchMouseButtonUp(Button(400.0f, 1140.0f, false));
+        EXPECT_FALSE(input.DispatchMouseButtonDown(Button(400.0f, 1190.0f, true)));  // the bar below the button is empty
+        input.DispatchMouseButtonUp(Button(400.0f, 1190.0f, false));
+        EXPECT_EQ(game.downs, 1);
+    }
+
+    TEST_F(UICanvasComponentTest, ExtendToOutputOfAScreenCanvasIsIgnored) {
+        auto flat = Canvas("Extended", "FlatCanvas");
+        ASSERT_TRUE(flat->_extendToOutput);
+        _renderer->width = 800.0f;
+        _renderer->height = 1200.0f;
+
+        Draw("Extended");
+        Draw("Extended");  // the warning is logged once, not per draw
+
+        ExpectRect(flat->GetLayout().GetResolved().bounds, 0.0f, 0.0f, 800.0f, 1200.0f);  // the output at scale 1, as for any Screen canvas
+    }
+
+    TEST_F(UICanvasComponentTest, ASceneWithoutViewVariantsLaysOutAsBefore) {
+        auto view = Canvas("Fit", "ViewCanvas");
+        _renderer->width = 600.0f;  // a tall output does not change the only view
+        _renderer->height = 800.0f;
+
+        Draw("Fit");
+
+        ExpectRect(view->GetLayout().GetResolved().bounds, 0.0f, 0.0f, 400.0f, 300.0f);
+        EXPECT_EQ(GetScene("Fit").GetActiveView().index, -1);
     }
 
     TEST_F(UICanvasComponentTest, AWorldCanvasIsAsBigAsTheBoxOfItsNode) {

@@ -40,10 +40,15 @@ namespace BECore {
                 resolved.transform = {fit.scale, fit.offsetX + box.x * fit.scale, fit.offsetY + box.y * fit.scale};
                 resolved.bounds = {0.0f, 0.0f, std::max(box.w, 0.0f), std::max(box.h, 0.0f)};
                 resolved.safeBounds = resolved.bounds;
+                resolved.viewBounds = resolved.bounds;
             } else {
                 resolved.transform = fit;
                 const bool hasView = context.sceneViewWidth > 0.0f && context.sceneViewHeight > 0.0f;
-                resolved.bounds = hasView ? Rect{0.0f, 0.0f, context.sceneViewWidth, context.sceneViewHeight} : Rect{0.0f, 0.0f, context.outputWidth, context.outputHeight};
+                // Without a view the fit is the identity, so the output in units is the output itself at the origin
+                const Rect outputUnits = ToUnits({0.0f, 0.0f, context.outputWidth, context.outputHeight}, fit);
+                const Rect view = hasView ? Rect{0.0f, 0.0f, context.sceneViewWidth, context.sceneViewHeight} : outputUnits;
+                resolved.bounds = params.extendToOutput ? outputUnits : view;
+                resolved.viewBounds = params.extendToOutput ? view : resolved.bounds;
                 resolved.safeBounds = Intersect(ToUnits(SafeAreaInOutput(context), fit), resolved.bounds);
             }
             Finish(resolved, params);
@@ -91,6 +96,7 @@ namespace BECore {
         resolved.scale = scale;
         resolved.transform = {scale, 0.0f, 0.0f};
         resolved.bounds = {0.0f, 0.0f, context.outputWidth / scale, context.outputHeight / scale};
+        resolved.viewBounds = resolved.bounds;
         resolved.safeBounds = Intersect(ToUnits(SafeAreaInOutput(context), resolved.transform), resolved.bounds);
         Finish(resolved, params);
         return resolved;
