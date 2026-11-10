@@ -11,9 +11,10 @@ The steps, in order:
   2. cmake --build --preset <preset> --target <game>
   3. package.py build/<preset>/bin <dist> --game <game> (with --single-thread when the page is the single-thread one, and with
      --app <source>/web/app.json when the game has that file: its web app manifest and icons; --app FILE names another)
-  4. with --deploy: stage Dockerfile, railway.json, serve.py and dist/ in one folder and run
+  4. with --deploy: stage Dockerfile, serve.py and dist/ in one folder and run
      `railway up <folder> --path-as-root --service <name> --detach` in it (the Railway CLI, logged in and the project linked with
-     `railway link`, or RAILWAY_TOKEN of the project; the service must exist, tools/web/CLAUDE.md).
+     `railway link`, or RAILWAY_TOKEN of the project; the service must exist and its settings (builder Dockerfile, health check
+     /healthz) come from the game's Railway IaC file, not from the upload: tools/web/CLAUDE.md).
 Standard library only. Nothing here reads or writes a secret.
 """
 
@@ -28,7 +29,7 @@ from typing import NamedTuple
 
 TOOLS_DIR = Path(__file__).resolve().parent
 PACKAGE_SCRIPT = TOOLS_DIR / "package.py"
-STAGED_FILES = ("Dockerfile", "railway.json", "serve.py")
+STAGED_FILES = ("Dockerfile", "serve.py")
 DEFAULT_GAME = "BagiMatch3"
 DEFAULT_PRESET = "web-release"
 DEFAULT_SERVICE = "bagi-web"

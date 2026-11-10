@@ -1,9 +1,8 @@
-"""Tests of tools/web/build_and_deploy.py and of the deploy files (Dockerfile, railway.json). Nothing is built or deployed: the
+"""Tests of tools/web/build_and_deploy.py and of the deploy files (Dockerfile). Nothing is built or deployed: the
 commands are printed (--dry-run) or handed to a fake runner. Run: python -m unittest discover tools/web/tests"""
 
 import contextlib
 import io
-import json
 import re
 import tempfile
 import unittest
@@ -246,7 +245,7 @@ class RunTest(DeployTestCase):
         command, cwd = runner.calls[-1]
         self.assertEqual(cwd, self.source.resolve() / "build" / "web-deploy")
         self.assertEqual(command, [RAILWAY_PATH, "up", str(cwd), "--path-as-root", "--service", "bagi-web", "--detach"])
-        for name in ("Dockerfile", "railway.json", "serve.py"):
+        for name in ("Dockerfile", "serve.py"):
             self.assertEqual((cwd / name).read_bytes(), (TOOLS_WEB / name).read_bytes(), name)
         self.assertEqual((cwd / "dist" / "BagiMatch3.wasm").read_bytes(), b"wasm")
 
@@ -307,19 +306,19 @@ class DeployFilesTest(unittest.TestCase):
         # No switch for the cross-origin isolation: serve.py sends the headers for a threaded page by itself (test_serve.py starts this command)
         self.assertNotIn("cross-origin-isolation", text.split("\nCMD", 1)[1])
 
-    def test_railway_json_builds_the_dockerfile_and_checks_healthz(self):
-        config = json.loads((TOOLS_WEB / "railway.json").read_text(encoding="utf-8"))
-        self.assertEqual(config["build"]["builder"], "DOCKERFILE")
-        self.assertEqual(config["build"]["dockerfilePath"], "Dockerfile")
-        self.assertEqual(config["deploy"]["healthcheckPath"], "/healthz")
+    def test_no_config_as_code_file_is_staged(self):
+        # Railway stops reading railway.json / railway.toml on 2026-12-01: the service settings live in the game's IaC file
+        for name in ("railway.json", "railway.toml"):
+            self.assertNotIn(name, build_and_deploy.STAGED_FILES)
+            self.assertFalse((TOOLS_WEB / name).exists(), name)
 
     def test_the_staged_files_are_the_ones_the_dockerfile_needs(self):
-        self.assertEqual(set(build_and_deploy.STAGED_FILES), {"Dockerfile", "railway.json", "serve.py"})
+        self.assertEqual(set(build_and_deploy.STAGED_FILES), {"Dockerfile", "serve.py"})
         for name in build_and_deploy.STAGED_FILES:
             self.assertTrue((TOOLS_WEB / name).is_file(), name)
 
     def test_no_secret_is_written_in_the_deploy_files(self):
-        for name in ("build_and_deploy.py", "Dockerfile", "railway.json"):
+        for name in ("build_and_deploy.py", "Dockerfile"):
             text = (TOOLS_WEB / name).read_text(encoding="utf-8")
             self.assertNotRegex(text, r"(?i)(token|password)\s*[=:]\s*[\"'][^\"']+[\"']", name)
 

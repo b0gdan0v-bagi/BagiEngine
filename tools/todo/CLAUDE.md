@@ -8,7 +8,8 @@ todo_markdown.py   shared (stdlib): the old entry-file format (import), checklis
 worker.py          the worker folders of parallel todo-loop runs (stdlib; git worktrees, below)
 service/           the service: app.py (API and pages), store.py (reads and writes), db.py (pool, migrations),
                    schema/NNN_*.sql, mirror.py (Vikunja mirror), vikunja.py (client, task rendering), dashboard.py (pages)
-Dockerfile, railway.json, service/requirements.txt   the image on Railway (build context: this folder)
+Dockerfile, service/requirements.txt   the image on Railway (build context: this folder)
+.railway/railway.ts, package.json   the settings of the service on Railway (IaC; package.json only pins the SDK)
 tests/             pytest: the API, the mirror (fake_vikunja.py), the CLI (uvicorn in a thread), the markdown
 ```
 
@@ -96,6 +97,8 @@ python3 tools/todo/worker.py remove 3      # a clean folder; its branches stay
 ## Railway
 
 One Railway project holds Vikunja (Docker image `vikunja/vikunja:2.7.1`, SQLite on a volume), **Postgres** (the Railway template) and **todo-api** (this folder, `railway up tools/todo --path-as-root --service todo-api` from the engine root). Variables of todo-api: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `TODO_API_TOKEN` (`openssl rand -hex 32`), `VIKUNJA_URL` (the public Vikunja domain), `VIKUNJA_TOKEN` (a scoped token: `projects` create/read_all, `tasks` create/read_all/update/delete, `labels` create/read_all, `tasks_labels` update_bulk, `tasks_relations` create/delete, `projects_webhooks` create/read_all), `VIKUNJA_WEBHOOK_SECRET` (`openssl rand -hex 32`). A public domain on port 8080 (`PORT` is set by Railway). One replica: the worker runs in the web process. Postgres backups are the Railway volume's; `todo.py export` is a backup by hand.
+
+**The settings of todo-api** (builder `DOCKERFILE`, health check `/healthz` with 60 s, restart `ON_FAILURE`, one replica in `sfo`) are Railway Infrastructure as Code: `.railway/railway.ts` here, the partial `todo`, which owns only todo-api, so `apply` never touches Vikunja, Postgres or a game's web service; variables stay unmanaged (`railway variables`). A change: `cd tools/todo && npm install && railway config plan`, then `railway config apply` (a linked project, `railway link`). `railway.json` is gone: Railway reads it only until 2026-12-01.
 
 ## Tests
 
