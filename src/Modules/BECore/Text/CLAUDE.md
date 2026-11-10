@@ -19,7 +19,7 @@ Font (.ttf/.otf bytes, CPU)  ->  TextLayout (pure: lines, glyph positions)  ->  
 | `ShelfPacker` | Pure rectangle packer used by the atlas |
 | `FontAtlas` | The glyphs of one font at one whole pixel size, in page textures made by `IRenderer::CreateTexture()`. White glyphs with the coverage in alpha, a 1 px transparent border around each. `Prepare()` adds missing glyphs as **new pages**; a page is never written again, so a frame in flight never reads a page that changes |
 | `FontAtlasLibrary` (`CoreManager::GetFontAtlasLibrary()`) | One atlas per (font, pixel size), made on first use and preloaded with the ranges of `TextConfig.xml`. Drops everything when the renderer changes (`IRenderer::GetId()`); `Application::Cleanup()` calls `Clear()` before the renderer is destroyed |
-| `TextSettings` | `config/TextConfig.xml`: `defaultFont`, `pageSize`, the `preload` code point ranges (Basic Latin, Latin-1, Cyrillic, the general punctuation by default) |
+| `TextSettings` | `config/TextConfig.xml`: `defaultFont`, `defaultFamily`, `pageSize`, the `families` table (family, faces of weight and path) with `ResolveFontPath(family, weight)` (the CSS nearest-weight rule, in the header), the `preload` code point ranges (Basic Latin, Latin-1, Cyrillic, the general punctuation by default) |
 | `TextRenderer::Draw` | Prepares the glyphs, then draws one quad each at a whole output pixel |
 | `TextLayoutCache` | Keeps the last layout of one text and makes a new one only when the font, the text or an option changed; `TextComponent` and `UILabel` each hold one |
 | `TextComponent` | A scene component: text in the box of the node's `TransformComponent` |
