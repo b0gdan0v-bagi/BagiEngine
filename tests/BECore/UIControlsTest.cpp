@@ -829,6 +829,44 @@ namespace BECore::Tests {
         EXPECT_TRUE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
     }
 
+    // The shipped PT Sans has a bold face: a box that holds a text in weight 400 is too tight for it in weight 700
+    TEST_F(UIControlsTest, ARealBoldFaceDoesNotFitTheBoxThatTheRegularFaceFits) {
+        auto& title = Get<UILabel>("Title");
+        title.text = "Weighty text";
+        title.fontFamily = "PT Sans"_intern;
+        title.wrap = false;
+        title.overflow = TextOverflow::Clip;
+        title.style.rect.height = UILength::Px(40.0f);
+        const auto widthAt = [this, &title](uint16_t weight) {
+            title.fontWeight = weight;
+            _canvas->Invalidate();
+            Draw();
+            return title.GetLastLayout().width;
+        };
+        const float regularWidth = widthAt(400);
+        const float boldWidth = widthAt(700);
+        ASSERT_GT(boldWidth, regularWidth);
+        const float box = (regularWidth + boldWidth) * 0.5f;
+        title.style.rect.width = UILength::Px(box);
+        const auto textIssues = [this]() {
+            _canvas->Invalidate();
+            Draw();
+            size_t count = 0;
+            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
+                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
+            }
+            return count;
+        };
+
+        title.fontWeight = 400;
+        EXPECT_EQ(textIssues(), 0u);
+        EXPECT_TRUE(title.CheckContent(box, 40.0f, 1.0f).fits);
+        title.fontWeight = 700;
+        EXPECT_EQ(textIssues(), 1u);
+        EXPECT_FALSE(title.CheckContent(box, 40.0f, 1.0f).fits);
+        EXPECT_EQ(title.GetResolvedFontPath(), "assets/fonts/PT_Sans-Web-Bold.ttf"_intern);
+    }
+
     // ---- the outline and the shadow of a text ---------------------------------------------------------------------------------
 
     namespace {

@@ -184,6 +184,12 @@ namespace BECore::Tests {
         EXPECT_EQ(shipped.defaultFont, defaults.defaultFont);
         EXPECT_EQ(shipped.pageSize, defaults.pageSize);
         EXPECT_EQ(shipped.defaultFamily, defaults.defaultFamily);
+        ASSERT_EQ(shipped.families.size(), 2u);
+        EXPECT_EQ(shipped.ResolveFontPath("PT Sans"_intern, 400), "assets/fonts/PT_Sans-Web-Regular.ttf"_intern);
+        EXPECT_EQ(shipped.ResolveFontPath("PT Sans"_intern, 700), "assets/fonts/PT_Sans-Web-Bold.ttf"_intern);
+        EXPECT_EQ(shipped.ResolveFontPath("Russo One"_intern, 400), "assets/fonts/RussoOne-Regular.ttf"_intern);
+        EXPECT_EQ(shipped.ResolveFontPath("Russo One"_intern, 700), "assets/fonts/RussoOne-Regular.ttf"_intern);  // the nearest face
+        EXPECT_EQ(shipped.ResolveFontPath(PoolString{}, 400), shipped.defaultFont);
         ASSERT_EQ(shipped.preload.size(), defaults.preload.size());
         for (size_t i = 0; i < defaults.preload.size(); ++i) {
             EXPECT_EQ(shipped.preload[i].first, defaults.preload[i].first);
