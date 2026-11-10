@@ -385,6 +385,15 @@ namespace BECore::Tests {
         EXPECT_EQ(CountOf(issues, UILayoutIssueKind::SiblingsOverlap), 0u);
     }
 
+    TEST_F(UIPopupTest, TheOptionsOfAPopupWithAStackLayoutAreNotReportedAsOverlappingSiblings) {
+        _pop->layout = UILayoutKind::Stack;
+        _pop->open = true;
+        Draw();
+        _second->rect = _first->rect;  // laid on top of each other: siblings of a stack would be reported
+
+        EXPECT_EQ(CountOf(_canvas->GetLayout().Validate({}), UILayoutIssueKind::SiblingsOverlap), 0u);
+    }
+
     TEST_F(UIPopupTest, AnOpenListThatLeavesTheCanvasIsReported) {
         _pop->style.rect.y = 500.0f;
         _canvas->Invalidate();
@@ -392,10 +401,6 @@ namespace BECore::Tests {
         Draw();
 
         EXPECT_GE(CountOf(_canvas->GetLayout().Validate({}), UILayoutIssueKind::OutsideCanvas), 1u);
-    }
-
-    TEST_F(UIPopupTest, CompileTimeChecks) {
-        static_assert(!std::is_abstract_v<TestPopup>);
     }
 
 }  // namespace BECore::Tests

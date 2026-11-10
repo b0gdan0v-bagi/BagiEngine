@@ -40,7 +40,7 @@ UIElement tree (root = the canvas)
 - **Edit the tree, then `Invalidate()`.** The cache notices context and canvas-setting changes itself, not element edits. A reflected field changed in the inspector is noticed on the next draw.
 - **Draw only in `OnDraw()`**, input only through `UIInput`; `OnDraw()` adds or removes no nodes or components.
 - `CoreManager` declares `_uiInput` and `_uiEnvironment` before `_sceneManager`: a canvas unregisters from `UIInput` in its destructor.
-- **Widgets own no state.** A choice group, a toggle and a slider only emit `ActionEvent(action, value)`; the game applies it and sets the bound `UIVars` variable (game → `UIVars` → widget), so the screen cannot disagree with the game. Publish **ids** in variables, **words** in the string table.
+- **Widgets own no game state.** A choice group, a dropdown, a toggle and a slider only emit `ActionEvent(action, value)`; the game applies it and sets the bound `UIVars` variable (game → `UIVars` → widget), so the screen cannot disagree with the game; what a widget keeps is UI state only (hover, press, a dropdown's open list), never the choice. Publish **ids** in variables, **words** in the string table.
 - `UIVars` and `UIStrings` are global: a test clears them in `TearDown`.
 
 ## Canvases
@@ -74,7 +74,7 @@ Issues: `OutsideCanvas`, `OutsideSafeArea`, `SiblingsOverlap` (in a stack), `Tou
 
 `tests/Common/UILayoutMatrix.h` runs a canvas over ten aspects at 480..2160 px short sides, with no insets / a notch / side insets, each scale mode and user scales 1.0 and 1.5. A canvas from a scene needs one `UpdateLayout(w, h)` first. One line: `EXPECT_TRUE(ValidateOnMatrix(canvas).empty()) << DescribeMatrixFailures(failures)`.
 
-**A screen test** builds the screen through the reflected path a game uses, sets the variables to their longest values, runs the matrix **once per language**, and also asks `CheckContent(width, height, scale).fits` of every shown label, button and toggle — **an ellipsis label "can shrink", so the validator alone misses a cut word**. It holds a deliberately broken copy for each check. Templates: `tests/BECore/UIScreenTest.cpp` (a HUD), `UISelectorScreenTest.cpp` (a modal panel of choice groups, `kSelectorXml`), `UISettingsScreenTest.cpp` (toggle, slider, progress bar, language group, a deliberately long test language).
+**A screen test** builds the screen through the reflected path a game uses, sets the variables to their longest values, runs the matrix **once per language**, and also asks `CheckContent(width, height, scale).fits` of every shown label, button and toggle — **an ellipsis label "can shrink", so the validator alone misses a cut word**. It holds a deliberately broken copy for each check. Templates: `tests/BECore/UIScreenTest.cpp` (a HUD), `UISelectorScreenTest.cpp` (a modal panel of choice groups, `kSelectorXml`), `UISettingsScreenTest.cpp` (toggle, slider, progress bar, language group, a deliberately long test language), `UIDropdownScreenTest.cpp` (a dropdown panel, the matrix closed and open).
 
 **Design rules:** anchors and percents, not absolute positions; interactive elements ≥ 48 units at the reference size with a `minScale` that keeps them touch targets (56 in an 840-unit view); a variant for the shapes that do not fit (usually portrait); text that wraps, cuts with an ellipsis or shrinks.
 
@@ -126,7 +126,7 @@ Each derives from `UIElement`, draws itself in `DrawSelf` in canvas units; `colo
 | `UISlider` | `bind`, `action`, `minValue`, `maxValue`, `step`, `disabled`, colors | horizontal; press and drag emit the value text under the pointer (only when the text changes); snapped to `step`; text `FormatValue` (≤ 6 significant digits, no trailing zeros). Thumb as high as the element, so height decides the touch check |
 
 - Sprites come from `TextureLibrary` by name (code: `GetSprite().SetTexture(...)`).
-- **A choice panel** (pick one of a few options): one `UISegmented` per choice in a modal canvas started hidden (`visible="false" modal="true"`): a dim, a plate, a row per choice, an OK button; a HUD button opens it with `SetVisibleByName`. A hidden canvas is not drawn, so its groups read the variables on the first draw after it is shown.
+- **A choice panel** (pick one of a few options): one `UISegmented` per choice in a modal canvas started hidden (`visible="false" modal="true"`): a dim, a plate, a row per choice, an OK button; a HUD button opens it with `SetVisibleByName`. A hidden canvas is not drawn, so its groups read the variables on the first draw after it is shown. More values than fit in a row of segments (five and up, or long words): a `UIDropdown` instead of the `UISegmented`.
 - **Adding a control:** derive from `UIElement` (or `UILabel`), `BE_CLASS` with `BE_REFLECT_FIELD`s, override `DrawSelf`, include the `.gen.hpp`; add it to `UIControlsTest`'s round trip.
 
 ## Variables and strings
@@ -150,8 +150,8 @@ No shipped scene of the engine uses the toggle, slider, progress bar or strings.
 
 ## Not done
 
-Button sounds, a dropdown, focus and gamepad / keyboard navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload of `.ui.xml` / `.ui.html`, the debug overlay, the scene editor's tree of canvases (stage 7). The look of the controls on the Vulkan backend (the colors are first guesses) is the owner's.
+Button sounds, focus and gamepad / keyboard navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload of `.ui.xml` / `.ui.html`, the debug overlay, the scene editor's tree of canvases (stage 7). The look of the controls on the Vulkan backend (the colors are first guesses) is the owner's.
 
 ## Tests
 
-`tests/BECore/UI*Test.cpp`: one file per class (`UILayout`, `UICanvasScaler`, `UIVariant`, `UICanvasLayout`, `UILayoutValidator`, `UICanvasComponent` (drawing per space, input order, pointer hooks), `UIControlApi`, `UIReflection`, `UIDocument`, `UIWeb`, `UIVars`, `UIStrings`, `UIControls` (every property round trip), `UISlider`, `UIProgressBar`, `UIToggle`, `UISegmented`, `UINineSlice`, `UIPreview`, `UISettings`) and the three screen templates above.
+`tests/BECore/UI*Test.cpp`: one file per class (`UILayout`, `UICanvasScaler`, `UIVariant`, `UICanvasLayout`, `UILayoutValidator`, `UICanvasComponent` (drawing per space, input order, pointer hooks), `UIControlApi`, `UIReflection`, `UIDocument`, `UIWeb`, `UIVars`, `UIStrings`, `UIControls` (every property round trip), `UISlider`, `UIProgressBar`, `UIToggle`, `UIDropdown`, `UIPopup` (the popup protocol, with a test element), `UISegmented`, `UINineSlice`, `UIPreview`, `UISettings`) and the four screen templates above.

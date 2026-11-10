@@ -280,7 +280,9 @@ namespace BECore {
     }
 
     void UICanvasComponent::ClearPointerState() {
-        CloseAllPopups();  // a canvas that cannot take input keeps no open list
+        if (_popup) {
+            CloseAllPopups();  // a canvas that cannot take input keeps no open list; one that has seen none (SyncPopups) has nothing to close, so no walk of the tree
+        }
         if (_hovered) {
             _hovered->hovered = false;
             _hovered.Reset();
