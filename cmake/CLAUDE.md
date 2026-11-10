@@ -12,7 +12,7 @@
 
 Per-machine settings go in `CMakeUserPresets.json` (git-ignored). Without presets: `cmake -B build -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++`.
 
-**Output lands in `build/{Compiler}{Platform}/` whatever the preset**, so Debug, Release and release-editor overwrite each other's executables and libraries: after switching, delete every `build/ClangmacOS/lib/*.a`, or the other configuration's objects get linked and the tests crash.
+**Output goes under the binary dir of the build**: executables and shared libraries in `build/<preset>/bin`, static libraries in `build/<preset>/lib`, so Debug, Release and every other preset sit side by side and nothing needs deleting when you switch presets. A build without a preset gets `<-B dir>/bin`. A multi-config generator (the `windows-vs2022-*` presets) adds the configuration, `build/<preset>/bin/<Config>/`. The old `build/{Compiler}{Platform}/` folders are not written any more and not removed by the build; delete them by hand. Switching `BE_WITH_EDITOR` inside one preset still needs the rebuild of "The editor option".
 
 ## The editor option
 

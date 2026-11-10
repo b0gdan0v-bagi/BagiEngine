@@ -114,7 +114,7 @@
         {
             "name": "web-single-thread",
             "hidden": true,
-            "description": "The browser build without threads: no -pthread, no Web Workers, no SharedArrayBuffer, so the page needs no COOP / COEP headers. Its own output folder (build/ClangWebSingleThread)",
+            "description": "The browser build without threads: no -pthread, no Web Workers, no SharedArrayBuffer, so the page needs no COOP / COEP headers. Its own output folder (build/<preset>/bin)",
             "cacheVariables": {
                 "ENGINE_SINGLE_THREAD": "ON"
             }

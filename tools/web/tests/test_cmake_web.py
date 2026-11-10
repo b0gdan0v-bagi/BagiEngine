@@ -206,10 +206,15 @@ class WebThreadsTextTest(unittest.TestCase):
         self.assertIn("set(SDL_PTHREADS ON CACHE BOOL", text)
         self.assertIn("set(SDL_PTHREADS OFF CACHE BOOL", text)
 
-    def test_the_output_folder_of_the_single_thread_page_is_its_own(self):
+    def test_the_output_folder_comes_from_the_binary_dir_so_each_page_has_its_own(self):
         text = self.cmake_text("BagiEngine.cmake")
-        self.assertRegex(text, r'if\(ENGINE_TARGET_WEB AND ENGINE_SINGLE_THREAD\)[^\n]*\n(\s*#[^\n]*\n)*\s*set\(PLATFORM_NAME "WebSingleThread"\)')
-        self.assertIn('set(PLATFORM_NAME "Web")', text)
+        self.assertIn('set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")', text)
+        self.assertIn('set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")', text)
+        self.assertIn('set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")', text)
+        self.assertNotIn("OUTPUT_BASE_DIR", text)
+        # the binary dir is one folder per preset, so the threaded and the single-thread objects never meet
+        folders = {resolve_configure_preset(load_presets(), name)["binaryDir"].replace("${presetName}", name) for name in WEB_PRESETS}
+        self.assertEqual(len(folders), len(WEB_PRESETS))
 
 
 class WebFlagsTextTest(unittest.TestCase):

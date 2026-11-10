@@ -238,43 +238,17 @@ endif()
 # =============================================================================
 # Output Directories Configuration
 # =============================================================================
-# Формируем имя output директории: {Compiler}{Platform}
-# CMake сам создаёт подпапки Debug/Release внутри
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    set(COMPILER_NAME "Clang")
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set(COMPILER_NAME "GCC")
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    set(COMPILER_NAME "MSVC")
-else()
-    set(COMPILER_NAME "Unknown")
-endif()
+# Everything a target writes goes under the binary dir of the build: build/<preset> for a preset (CMakePresets.json),
+# whatever -B names without one. Debug and Release presets therefore never share files, and a game that carries the
+# engine as a submodule gets the folders in its own build/. A multi-config generator (Visual Studio) appends <Config>
+# to each of these paths, which is CMake's own rule.
+# The shared libraries stay with the executables (CMAKE_LIBRARY_OUTPUT_DIRECTORY is bin too): the Windows DLLs are copied
+# next to the exe and the Vulkan loader is found through @executable_path.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 
-if(ENGINE_TARGET_WEB AND ENGINE_SINGLE_THREAD)
-    # The threaded and the single-thread page have different objects (-pthread everywhere): they must not share a folder of libraries
-    set(PLATFORM_NAME "WebSingleThread")
-elseif(ENGINE_TARGET_WEB)
-    set(PLATFORM_NAME "Web")
-elseif(WIN32)
-    set(PLATFORM_NAME "Windows")
-elseif(APPLE)
-    set(PLATFORM_NAME "macOS")
-else()
-    set(PLATFORM_NAME "Linux")
-endif()
-
-set(OUTPUT_DIR_NAME "${COMPILER_NAME}${PLATFORM_NAME}")
-# Relative to the top-level project, so a game that carries the engine builds into its own build/
-set(OUTPUT_BASE_DIR "${CMAKE_SOURCE_DIR}/build/${OUTPUT_DIR_NAME}")
-
-# Executables (.exe)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${OUTPUT_BASE_DIR}")
-# Shared libraries (.dll on Windows, .so on Linux)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${OUTPUT_BASE_DIR}")
-# Static libraries (.lib) - keep in output directory
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${OUTPUT_BASE_DIR}/lib")
-
-message(STATUS "Output directory: ${OUTPUT_BASE_DIR}")
+message(STATUS "Output directory: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 
 # =============================================================================
 # Assert System Options
