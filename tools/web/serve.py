@@ -6,8 +6,8 @@ others of tools/web: the Docker image copies only it.
 
 It serves the folder made by package.py. For a file `x` it answers with `x.br` or `x.gz` when one exists and the request accepts that
 encoding (Content-Encoding, Vary: Accept-Encoding, the Content-Length of the encoded body). The names are not hashed (BagiMatch3.wasm
-is the same name in every build), so nothing is `immutable`: index.html and manifest.json are `no-cache` (the browser asks every time,
-and an ETag makes the answer a 304), everything else may be reused for an hour and is revalidated with its ETag after that.
+is the same name in every build), so nothing is `immutable`: index.html, manifest.json and manifest.webmanifest (the web app manifest,
+`application/manifest+json`) are `no-cache` (the browser asks every time, and an ETag makes the answer a 304), everything else may be reused for an hour and is revalidated with its ETag after that.
 GET /healthz answers 200 `ok` for the health check of the platform.
 
 Cross-origin isolation adds Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: require-corp to every answer.
@@ -44,12 +44,13 @@ DEFAULT_PORT = 8080
 DEFAULT_HOST = "0.0.0.0"
 INDEX_NAME = "index.html"
 MANIFEST_NAME = "manifest.json"
+WEB_MANIFEST_NAME = "manifest.webmanifest"
 COOP_COEP_VARIABLE = "COOP_COEP"
 BASIC_AUTH_USER_VARIABLE = "BASIC_AUTH_USER"
 BASIC_AUTH_PASSWORD_VARIABLE = "BASIC_AUTH_PASSWORD"
 BASIC_AUTH_REALM = "BagiWeb"
 HEALTH_PATH = "/healthz"
-NO_CACHE_FILES = (INDEX_NAME, MANIFEST_NAME)
+NO_CACHE_FILES = (INDEX_NAME, MANIFEST_NAME, WEB_MANIFEST_NAME)
 NO_CACHE = "no-cache"
 SHORT_CACHE = "public, max-age=3600"
 COPY_CHUNK = 1 << 20
@@ -65,6 +66,7 @@ CONTENT_TYPES = {
     ".wasm": "application/wasm",
     ".data": "application/octet-stream",
     ".json": "application/json",
+    ".webmanifest": "application/manifest+json",
     ".css": "text/css; charset=utf-8",
     ".txt": "text/plain; charset=utf-8",
     ".png": "image/png",

@@ -81,6 +81,16 @@ class ContentTypeTest(ServerTestCase):
         response = self.request(f"/{GAME}.wasm", headers={"Accept-Encoding": "gzip"})
         self.assertEqual(response.headers["content-type"], "application/wasm")
 
+    def test_the_web_app_manifest_and_the_icons_have_their_types(self):
+        for path, expected in (("/manifest.webmanifest", "application/manifest+json"), ("/icons/icon-192.png", "image/png"),
+                               ("/icons/apple-touch-icon.png", "image/png")):
+            with self.subTest(path):
+                response = self.request(path)
+                self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers["content-type"], expected)
+        self.assertEqual(json.loads(self.request("/manifest.webmanifest").body)["display"], "fullscreen")
+        self.assertEqual(self.request("/icons/icon-192.png").body[:8], b"\x89PNG\r\n\x1a\n")
+
     def test_a_file_of_an_unknown_type_is_octet_stream(self):
         (self.dist / "thing.xyz").write_bytes(b"1")
         self.assertEqual(self.request("/thing.xyz").headers["content-type"], "application/octet-stream")
@@ -153,6 +163,21 @@ class CachingTest(ServerTestCase):
         for path in ("/", "/index.html", "/manifest.json"):
             with self.subTest(path):
                 self.assertEqual(self.request(path).headers["cache-control"], "no-cache")
+
+    def test_the_web_app_manifest_is_no_cache_with_an_etag_and_answers_304(self):
+        first = self.request("/manifest.webmanifest")
+        self.assertEqual(first.headers["cache-control"], "no-cache")
+        second = self.request("/manifest.webmanifest", headers={"If-None-Match": first.headers["etag"]})
+        self.assertEqual((second.status, second.body), (304, b""))
+        self.assertEqual(second.headers["cache-control"], "no-cache")
+
+    def test_a_manifest_webmanifest_in_a_subfolder_is_cached_like_any_file(self):
+        (self.dist / "sub").mkdir()
+        (self.dist / "sub" / "manifest.webmanifest").write_bytes(b"{}")
+        self.assertEqual(self.request("/sub/manifest.webmanifest").headers["cache-control"], "public, max-age=3600")
+
+    def test_the_icons_are_cached_for_an_hour(self):
+        self.assertEqual(self.request("/icons/icon-512.png").headers["cache-control"], "public, max-age=3600")
 
     def test_the_other_files_are_cached_for_an_hour_and_never_immutable(self):
         for path in (f"/{GAME}.js", f"/{GAME}.wasm", f"/{GAME}.data"):
@@ -331,6 +356,16 @@ class BasicAuthTest(ServerTestCase):
         self.assertEqual(self.request("/nothing", headers=headers).status, 404)
         etag = self.request("/index.html", headers=headers).headers["etag"]
         self.assertEqual(self.request("/index.html", headers={**headers, "If-None-Match": etag}).status, 304)
+
+    def test_the_web_app_manifest_and_the_icons_are_served_to_the_credentials_and_refused_without(self):
+        # the page links the manifest with crossorigin="use-credentials": the browser then sends the Basic header with that request
+        headers = basic(*self.basic_auth)
+        for path, content_type in (("/manifest.webmanifest", "application/manifest+json"), ("/icons/apple-touch-icon.png", "image/png")):
+            with self.subTest(path):
+                response = self.request(path, headers=headers)
+                self.assertEqual((response.status, response.headers["content-type"]), (200, content_type))
+                self.assertEqual(self.request(path).status, 401)
+        self.assertEqual(self.request("/manifest.webmanifest", headers=headers).headers["cache-control"], "no-cache")
 
     def test_the_scheme_is_case_insensitive(self):
         headers = {"Authorization": basic(*self.basic_auth)["Authorization"].replace("Basic", "basic")}

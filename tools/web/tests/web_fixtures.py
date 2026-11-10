@@ -1,5 +1,7 @@
 """Shared by the tests of tools/web: a fake build output made in a temp folder (no binary file is committed)."""
 
+import json
+import struct
 import sys
 from pathlib import Path
 
@@ -31,3 +33,22 @@ def write_build_output(folder: Path, names=tuple(CONTENT)) -> Path:
     for name in names:
         (folder / name).write_bytes(CONTENT[name])
     return folder
+
+
+def png_header_size(data: bytes) -> tuple[int, int]:
+    """(width, height) read from the IHDR of a PNG by the test itself (not by package.py), after checking the signature."""
+    assert data[:8] == b"\x89PNG\r\n\x1a\n" and data[12:16] == b"IHDR", "not a PNG"
+    return struct.unpack(">II", data[16:24])
+
+
+def write_app_file(folder: Path, app: dict, icons: dict | None = None) -> Path:
+    """`folder`/app.json with the keys of `app`, and a square PNG of the given side for each path of `icons` ({relative path: side})."""
+    import package  # tools/web is on sys.path since the top of this file
+    folder.mkdir(parents=True, exist_ok=True)
+    for relative, side in (icons or {}).items():
+        target = folder / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(package.flat_color_png(side, "#204060"))
+    path = folder / "app.json"
+    path.write_text(json.dumps(app), encoding="utf-8")
+    return path
