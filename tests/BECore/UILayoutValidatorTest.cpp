@@ -44,6 +44,34 @@ namespace BECore::Tests {
             return static_cast<size_t>(std::count_if(issues.begin(), issues.end(), [kind](const UILayoutIssue& issue) { return issue.kind == kind; }));
         }
 
+        /// The tall output of the bar tests: 400 x 600 around a 400 x 300 view, so bars of 150 above and below (scene y -150..0 and 300..450)
+        UILayoutContext TallOutputWithBars() {
+            UILayoutContext context = Output(400.0f, 600.0f);
+            context.sceneViewWidth = 400.0f;
+            context.sceneViewHeight = 300.0f;
+            return context;
+        }
+
+        UICanvasLayout MakeExtendedCanvas() {
+            UICanvasLayout canvas;
+            canvas.params.space = CanvasSpace::SceneView;
+            canvas.params.extendToOutput = true;
+            return canvas;
+        }
+
+        /// A 200 x 60 row at the bottom of the canvas, @p lift units above its edge (the bar below the view is 150 high)
+        IntrusivePtr<UIElement> AddBottomRow(UIElement& parent, const char* name, float lift) {
+            auto row = AddBox(parent, name, 0.0f, -lift, 200.0f, 60.0f);
+            row->style.rect.anchor = UIAnchor::Bottom;
+            return row;
+        }
+
+        UILayoutValidatorOptions KeepOff(const char* name) {
+            UILayoutValidatorOptions options;
+            options.keepOffView.push_back(PoolString::Intern(name));
+            return options;
+        }
+
     }  // namespace
 
     TEST(UILayoutValidatorTest, ACleanLayoutHasNoIssues) {
@@ -243,6 +271,95 @@ namespace BECore::Tests {
         ASSERT_EQ(issues.size(), 1u);
         EXPECT_EQ(issues[0].kind, UILayoutIssueKind::OutsideSafeArea);
         EXPECT_EQ(issues[0].element, "InNotch"_intern);
+    }
+
+    TEST(UILayoutValidatorTest, ARowOnTheBarOfAnExtendedCanvasPassesAndOneReachingIntoTheViewIsReported) {
+        UICanvasLayout canvas = MakeExtendedCanvas();
+        AddBottomRow(*canvas.root, "Bar", 10.0f);  // scene y 380..440
+        canvas.Update(TallOutputWithBars());
+        EXPECT_TRUE(canvas.Validate(KeepOff("Bar")).empty());
+
+        UICanvasLayout reaching = MakeExtendedCanvas();
+        AddBottomRow(*reaching.root, "Bar", 100.0f);  // scene y 290..350: 10 units over the view, which ends at 300
+        reaching.Update(TallOutputWithBars());
+        const auto issues = reaching.Validate(KeepOff("Bar"));
+
+        ASSERT_EQ(issues.size(), 1u);
+        EXPECT_EQ(issues[0].kind, UILayoutIssueKind::OverlapsSceneView);
+        EXPECT_EQ(issues[0].element, "Bar"_intern);
+        EXPECT_FLOAT_EQ(issues[0].rect.x, 100.0f);
+        EXPECT_FLOAT_EQ(issues[0].rect.y, 290.0f);
+        EXPECT_FLOAT_EQ(issues[0].rect.w, 200.0f);
+        EXPECT_FLOAT_EQ(issues[0].rect.h, 60.0f);
+    }
+
+    TEST(UILayoutValidatorTest, ARowThatOnlyTouchesTheViewIsNotOverlappingIt) {
+        UICanvasLayout canvas = MakeExtendedCanvas();
+        AddBottomRow(*canvas.root, "Bar", 90.0f);  // scene y 300..360
+        canvas.Update(TallOutputWithBars());
+
+        EXPECT_TRUE(canvas.Validate(KeepOff("Bar")).empty());
+    }
+
+    TEST(UILayoutValidatorTest, ADescendantOfANamedRootChildIsFoundAndAnUnnamedSiblingIsNotChecked) {
+        UICanvasLayout canvas = MakeExtendedCanvas();
+        AddBox(*canvas.root, "Board", 0.0f, 150.0f, 400.0f, 300.0f);  // the view itself: not named, not checked
+        auto bar = AddBottomRow(*canvas.root, "Bar", 0.0f);           // a plate filling the bar below the view: scene y 300..450
+        bar->style.rect.height = UILength::Px(150.0f);
+        bar->style.rect.width = UILength::Px(400.0f);
+        auto reach = AddBox(*bar, "Reach", 10.0f, -30.0f, 50.0f, 20.0f);  // 30 above the plate: scene y 270..290, in the view
+        AddBox(*reach, "Deeper", 0.0f, 0.0f, 10.0f, 10.0f);               // also in the view, but the first one on its path is the one reported
+        canvas.Update(TallOutputWithBars());
+
+        const auto issues = canvas.Validate(KeepOff("Bar"));
+
+        ASSERT_EQ(issues.size(), 1u);
+        EXPECT_EQ(issues[0].kind, UILayoutIssueKind::OverlapsSceneView);
+        EXPECT_EQ(issues[0].element, "Reach"_intern);
+    }
+
+    TEST(UILayoutValidatorTest, ARowHiddenByItsStyleIsNotReportedAsOverlappingTheView) {
+        UICanvasLayout canvas = MakeExtendedCanvas();
+        auto row = AddBottomRow(*canvas.root, "Bar", 100.0f);
+        row->style.visible = false;
+        canvas.Update(TallOutputWithBars());
+
+        EXPECT_TRUE(canvas.Validate(KeepOff("Bar")).empty());
+    }
+
+    TEST(UILayoutValidatorTest, ARowOnACanvasWithNoBarOverlapsTheViewUnlessAVariantHidesIt) {
+        const UILayoutContext landscape = [] {
+            UILayoutContext context = Output(600.0f, 300.0f);  // the output is the view: no bar, `viewBounds` is `bounds`
+            context.sceneViewWidth = 600.0f;
+            context.sceneViewHeight = 300.0f;
+            return context;
+        }();
+        UICanvasLayout canvas = MakeExtendedCanvas();
+        AddBottomRow(*canvas.root, "Bar", 10.0f);
+        canvas.Update(landscape);
+        const auto issues = canvas.Validate(KeepOff("Bar"));
+        ASSERT_EQ(issues.size(), 1u);
+        EXPECT_EQ(issues[0].kind, UILayoutIssueKind::OverlapsSceneView);
+
+        UIVariant noBar;
+        noBar.when.orientation = UIOrientation::Landscape;
+        UIElementOverride hide;
+        hide.element = "Bar"_intern;
+        hide.visible = false;
+        noBar.overrides.push_back(hide);
+        canvas.variants.push_back(noBar);
+        canvas.Invalidate();
+        canvas.Update(landscape);
+        EXPECT_TRUE(canvas.Validate(KeepOff("Bar")).empty());
+    }
+
+    TEST(UILayoutValidatorTest, WithoutNamesInKeepOffViewNothingIsReportedForTheView) {
+        UICanvasLayout canvas = MakeExtendedCanvas();
+        AddBottomRow(*canvas.root, "Bar", 100.0f);
+        canvas.Update(TallOutputWithBars());
+
+        EXPECT_TRUE(canvas.Validate({}).empty());
+        EXPECT_TRUE(canvas.Validate(KeepOff("Other")).empty()) << "a name that is not a child of the root keeps nothing off the view";
     }
 
     TEST(UILayoutValidatorTest, SiblingsOfAStackThatOverlapAreReported) {
