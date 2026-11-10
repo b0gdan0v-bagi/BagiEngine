@@ -208,7 +208,7 @@ namespace BECore {
         input.Register(*this, _inputOrder);
     }
 
-    UICanvasScaleParams RmlUiDocumentComponent::MakeParams() const {
+    UICanvasScaleParams RmlUiDocumentComponent::MakeParams() {
         UICanvasScaleParams params;
         params.space = _space;
         params.scaleMode = _scaleMode;
@@ -218,6 +218,13 @@ namespace BECore {
         params.minScale = _minScale;
         params.maxScale = _maxScale;
         params.useSafeArea = _useSafeArea;
+        params.extendToOutput = _extendToOutput && _space == CanvasSpace::SceneView;
+
+        const bool ignored = _extendToOutput && _space != CanvasSpace::SceneView;
+        if (ignored && !_extendWarned) {
+            LOG_WARNING("RmlUiDocumentComponent: extendToOutput applies to a SceneView document only; ignored on a {} document"_format(EnumUtils<CanvasSpace>::ToString(_space)));
+        }
+        _extendWarned = ignored;
         return params;
     }
 
