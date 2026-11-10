@@ -5,6 +5,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/TextLayoutCache.h>
 #include <BECore/UI/UIElement.h>
+#include <BECore/UI/UITextEffects.h>
 
 namespace BECore {
 
@@ -19,7 +20,8 @@ namespace BECore {
      * with "…", `AutoFit` shrinks it down to `minFontSize`, `Clip` cuts the drawing at the rect (and the layout validator reports it, UIContentFit). `color` is a fill behind the text,
      * `textColor` is the text. The face is `font` (a file path), else the nearest face of `fontFamily` at `fontWeight` in the table of `TextConfig.xml`; the validator measures with it. The text may
      * name variables, `text="Score: {score}"`, which follow `CoreManager::GetUIVars()`, and strings, `text="{#menu.start}"`, which follow `CoreManager::GetUIStrings()` and its language. Vertical
-     * alignment is the label's (TextLayout has none).
+     * alignment is the label's (TextLayout has none). `textOutline` and `textShadow` (UITextEffects) paint an outline and a hard shadow round the text of the label and of every control that draws its
+     * text through it; they are not measured, and a `Clip` label cuts them at its rect like the text.
      */
     class UILabel : public UIElement {
         BE_CLASS(UILabel)
@@ -39,7 +41,8 @@ namespace BECore {
         BE_REFLECT_FIELD TextOverflow overflow = TextOverflow::Ellipsis;
         BE_REFLECT_FIELD bool wrap = true;
         BE_REFLECT_FIELD float lineSpacing = 1.0f;
-        BE_REFLECT_FIELD float minFontSize = 8.0f;  ///< in UI units; the smallest size of AutoFit
+        BE_REFLECT_FIELD float minFontSize = 8.0f;   ///< in UI units; the smallest size of AutoFit
+        BE_REFLECT_FIELD UITextEffects textEffects;  ///< the outline and the shadow of the text, the attributes `textOutline` and `textShadow`: paint, never part of the layout or the check
 
         void DrawSelf(IRenderer& renderer) override;
         /// The text against a box of @p width x @p height units. The validator passes the rect; a subclass that draws its text in a smaller area (`DrawText(renderer, area, color)`)

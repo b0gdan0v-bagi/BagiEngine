@@ -17,6 +17,8 @@ namespace BECore {
      *
      * Overflow: Clip clips the drawing to the box when the text does not fit, Ellipsis ends the text with "…", AutoFit
      * shrinks the font down to `_minFontSize` (TextLayout).
+     *
+     * The outline and the hard shadow (`_outlineWidth` / `_outlineColor`, `_shadowOffsetX/Y` / `_shadowColor`, scene units) are paint: the layout never counts them, and a Clip box cuts them.
      */
     class TextComponent : public IComponent {
         BE_CLASS(TextComponent)
@@ -35,6 +37,11 @@ namespace BECore {
         BE_REFLECT_FIELD bool _wrap = true;
         BE_REFLECT_FIELD float _lineSpacing = 1.0f;
         BE_REFLECT_FIELD float _minFontSize = 8.0f;
+        BE_REFLECT_FIELD float _outlineWidth = 0.0f;  ///< scene units; 0 or a transparent `_outlineColor`: no outline
+        BE_REFLECT_FIELD Color _outlineColor{0, 0, 0, 0};
+        BE_REFLECT_FIELD float _shadowOffsetX = 0.0f;  ///< scene units, to the right; a transparent `_shadowColor` or a zero offset: no shadow
+        BE_REFLECT_FIELD float _shadowOffsetY = 0.0f;  ///< scene units, down
+        BE_REFLECT_FIELD Color _shadowColor{0, 0, 0, 0};
 
         void OnAttached() override;
         void OnDraw() override;

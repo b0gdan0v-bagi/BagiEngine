@@ -78,16 +78,30 @@ namespace BECore {
             return;
         }
 
-        auto atlas = CoreManager::GetFontAtlasLibrary().Get(*renderer, IntrusivePtr<Font>(_font.operator->()), FontAtlasLibrary::QuantizeSize(layout.fontSize));
+        const int pixelSize = FontAtlasLibrary::QuantizeSize(layout.fontSize);
+        auto atlas = CoreManager::GetFontAtlasLibrary().Get(*renderer, IntrusivePtr<Font>(_font.operator->()), pixelSize);
         if (!atlas) {
             return;
+        }
+
+        TextEffects effects;
+        effects.outlineColor = _outlineColor;
+        effects.shadowColor = _shadowColor;
+        if (_outlineWidth > 0.0f && _outlineColor.a > 0) {
+            effects.outlineWidth = static_cast<float>(FontAtlasLibrary::QuantizeOutline(_outlineWidth * scale));
+        }
+        effects.shadowOffsetX = std::round(_shadowOffsetX * scale);
+        effects.shadowOffsetY = std::round(_shadowOffsetY * scale);
+        IntrusivePtr<FontAtlas> outlineAtlas;
+        if (effects.HasOutline()) {
+            outlineAtlas = CoreManager::GetFontAtlasLibrary().Get(*renderer, IntrusivePtr<Font>(_font.operator->()), pixelSize, static_cast<int>(effects.outlineWidth));
         }
 
         const bool clip = layout.overflowed && _overflow == TextOverflow::Clip;
         if (clip) {
             renderer->PushClipRect(renderer->GetViewTransform().ToOutput(boxX, boxY, boxWidth, boxHeight));
         }
-        TextRenderer::Draw(*renderer, *atlas, layout, boxX, boxY, _color);
+        TextRenderer::Draw(*renderer, *atlas, outlineAtlas.Get(), layout, boxX, boxY, _color, effects);
         if (clip) {
             renderer->PopClipRect();
         }

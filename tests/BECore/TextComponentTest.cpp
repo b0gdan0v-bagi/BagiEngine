@@ -287,6 +287,51 @@ namespace BECore::Tests {
         EXPECT_EQ(_renderer->calls.size(), kInkedGlyphsInHello);
     }
 
+    TEST_F(TextComponentTest, AnOutlineAndAShadowAreDrawnInThreePassesInSceneUnitsTimesTheScale) {
+        auto label = Label("Fit");  // a scale of 2
+        label->_outlineWidth = 1.5f;
+        label->_outlineColor = Color{1, 2, 3, 200};
+        label->_shadowOffsetX = 2.0f;
+        label->_shadowOffsetY = 1.0f;
+        label->_shadowColor = Color{4, 5, 6, 100};
+        Draw("Fit");
+
+        ASSERT_EQ(_renderer->calls.size(), 3 * kInkedGlyphsInHello);
+        constexpr float kOutlineOutputPixels = 3.0f;
+        for (size_t i = 0; i < kInkedGlyphsInHello; ++i) {
+            const DrawCall& shadow = _renderer->calls[i];
+            const DrawCall& outline = _renderer->calls[kInkedGlyphsInHello + i];
+            const DrawCall& fill = _renderer->calls[2 * kInkedGlyphsInHello + i];
+            EXPECT_EQ(shadow.color.r, 4);
+            EXPECT_EQ(outline.color.r, 1);
+            EXPECT_EQ(fill.color.r, 255);
+            EXPECT_FLOAT_EQ(outline.rect.w, fill.rect.w + 2.0f * kOutlineOutputPixels);
+            EXPECT_FLOAT_EQ(outline.rect.x, fill.rect.x - kOutlineOutputPixels);
+            EXPECT_FLOAT_EQ(shadow.rect.x, outline.rect.x + 4.0f);
+            EXPECT_FLOAT_EQ(shadow.rect.y, outline.rect.y + 2.0f);
+        }
+        EXPECT_EQ(CoreManager::GetFontAtlasLibrary().GetAtlasCount(), 2u) << "the plain atlas and the outline atlas";
+    }
+
+    TEST_F(TextComponentTest, EffectsAreNotLayoutAndAnInvisibleOnePaintsNothing) {
+        auto label = Label("Plain");
+        Draw("Plain");
+        const TextLayoutResult plain = label->GetLastLayout();
+
+        label->_outlineWidth = 4.0f;                // no colour: no outline
+        label->_shadowColor = Color{0, 0, 0, 255};  // no offset: a shadow right under the text is not drawn
+        Draw("Plain");
+        EXPECT_EQ(_renderer->calls.size(), kInkedGlyphsInHello);
+        EXPECT_EQ(CoreManager::GetFontAtlasLibrary().GetAtlasCount(), 1u);
+
+        label->_outlineColor = Color{0, 0, 0, 255};
+        label->_shadowOffsetY = 3.0f;
+        Draw("Plain");
+        EXPECT_EQ(_renderer->calls.size(), 3 * kInkedGlyphsInHello);
+        EXPECT_FLOAT_EQ(label->GetLastLayout().width, plain.width) << "the layout is the same with and without effects";
+        EXPECT_FLOAT_EQ(label->GetLastLayout().height, plain.height);
+    }
+
     TEST_F(TextComponentTest, TheTextOfAnInactiveSceneIsNotDrawn) {
         _manager->SetActiveScene("Plain"_intern);
         _renderer->ClearCalls();

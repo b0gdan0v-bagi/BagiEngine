@@ -107,9 +107,18 @@ namespace BECore {
         if (layout.glyphs.empty()) {
             return;
         }
-        auto atlas = CoreManager::GetFontAtlasLibrary().Get(renderer, IntrusivePtr<Font>(resolved), FontAtlasLibrary::QuantizeSize(layout.fontSize));
+        const int pixelSize = FontAtlasLibrary::QuantizeSize(layout.fontSize);
+        auto atlas = CoreManager::GetFontAtlasLibrary().Get(renderer, IntrusivePtr<Font>(resolved), pixelSize);
         if (!atlas) {
             return;
+        }
+
+        // A control that fades its text (a disabled toggle) passes the faded colour: the effects fade by the same share, so no strong outline stays round faded text
+        const float fade = textColor.a > 0 ? std::min(1.0f, static_cast<float>(color.a) / static_cast<float>(textColor.a)) : 1.0f;
+        const TextEffects effects = textEffects.ToPixels(scale, fade);
+        IntrusivePtr<FontAtlas> outlineAtlas;
+        if (effects.HasOutline()) {
+            outlineAtlas = CoreManager::GetFontAtlasLibrary().Get(renderer, IntrusivePtr<Font>(resolved), pixelSize, static_cast<int>(effects.outlineWidth));
         }
 
         // The layout is in output pixels, the origin in the units of the canvas
@@ -125,7 +134,7 @@ namespace BECore {
         if (clip) {
             renderer.PushClipRect(renderer.GetViewTransform().ToOutput(area.x, area.y, area.w, area.h));
         }
-        TextRenderer::Draw(renderer, *atlas, layout, area.x, area.y + offset / scale, color);
+        TextRenderer::Draw(renderer, *atlas, outlineAtlas.Get(), layout, area.x, area.y + offset / scale, color, effects);
         if (clip) {
             renderer.PopClipRect();
         }

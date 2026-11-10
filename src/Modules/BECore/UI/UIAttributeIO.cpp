@@ -95,6 +95,48 @@ namespace BECore::UIAttr {
         return true;
     }
 
+    void WriteTextOutline(ISerializer& s, eastl::string_view key, float width, const Color& color) {
+        WriteText(s, key, UIText::FormatTextOutline(width, color));
+    }
+
+    bool ReadTextOutline(IDeserializer& d, eastl::string_view key, float& width, Color& color) {
+        eastl::string text;
+        if (!ReadText(d, key, text)) {
+            return false;
+        }
+        float parsedWidth = 0.0f;
+        Color parsedColor;
+        if (!UIText::ParseTextOutline(eastl::string_view(text.data(), text.size()), parsedWidth, parsedColor)) {
+            ReportMalformed(d, key, text);
+            return false;
+        }
+        width = parsedWidth;
+        color = parsedColor;
+        return true;
+    }
+
+    void WriteTextShadow(ISerializer& s, eastl::string_view key, float offsetX, float offsetY, const Color& color) {
+        WriteText(s, key, UIText::FormatTextShadow(offsetX, offsetY, color));
+    }
+
+    bool ReadTextShadow(IDeserializer& d, eastl::string_view key, float& offsetX, float& offsetY, Color& color) {
+        eastl::string text;
+        if (!ReadText(d, key, text)) {
+            return false;
+        }
+        float parsedX = 0.0f;
+        float parsedY = 0.0f;
+        Color parsedColor;
+        if (!UIText::ParseTextShadow(eastl::string_view(text.data(), text.size()), parsedX, parsedY, parsedColor)) {
+            ReportMalformed(d, key, text);
+            return false;
+        }
+        offsetX = parsedX;
+        offsetY = parsedY;
+        color = parsedColor;
+        return true;
+    }
+
     void WriteOptionalLength(ISerializer& s, eastl::string_view key, const std::optional<UILength>& length) {
         if (length) {
             WriteLength(s, key, *length);

@@ -12,6 +12,7 @@ namespace BECore::UIText {
         constexpr size_t CornerCount = 4;
         constexpr size_t ShadowNumberCount = 4;  // offsetX, offsetY, blur, spread: the colour follows
         constexpr size_t ShadowBlurIndex = 2;
+        constexpr size_t TextShadowNumberCount = 2;  // offsetX, offsetY: the colour follows
         constexpr size_t HexRgbLength = 6;
         constexpr size_t HexRgbaLength = 8;
         constexpr int HexBase = 16;
@@ -180,6 +181,55 @@ namespace BECore::UIText {
             return std::nullopt;
         }
         return UIShadowSpec{numbers[0], numbers[1], numbers[ShadowBlurIndex], numbers[3], *color};
+    }
+
+    eastl::string FormatTextOutline(float width, const Color& color) {
+        return Format("{},#{:02X}{:02X}{:02X}{:02X}", width, static_cast<int>(color.r), static_cast<int>(color.g), static_cast<int>(color.b), static_cast<int>(color.a));
+    }
+
+    bool ParseTextOutline(eastl::string_view text, float& width, Color& color) {
+        text = Trim(text);
+        const size_t comma = text.find(',');
+        if (comma == eastl::string_view::npos) {
+            return false;
+        }
+        const auto parsedWidth = ParseFiniteFloat(text.substr(0, comma));
+        const auto parsedColor = ParseColor(text.substr(comma + 1));
+        if (!parsedWidth || !parsedColor || *parsedWidth < 0.0f) {
+            return false;
+        }
+        width = *parsedWidth;
+        color = *parsedColor;
+        return true;
+    }
+
+    eastl::string FormatTextShadow(float offsetX, float offsetY, const Color& color) {
+        return Format("{},{},#{:02X}{:02X}{:02X}{:02X}", offsetX, offsetY, static_cast<int>(color.r), static_cast<int>(color.g), static_cast<int>(color.b), static_cast<int>(color.a));
+    }
+
+    bool ParseTextShadow(eastl::string_view text, float& offsetX, float& offsetY, Color& color) {
+        text = Trim(text);
+        float numbers[TextShadowNumberCount] = {};
+        for (float& number : numbers) {
+            const size_t comma = text.find(',');
+            if (comma == eastl::string_view::npos) {
+                return false;
+            }
+            const auto parsed = ParseFiniteFloat(text.substr(0, comma));
+            if (!parsed) {
+                return false;
+            }
+            number = *parsed;
+            text.remove_prefix(comma + 1);
+        }
+        const auto parsedColor = ParseColor(text);
+        if (!parsedColor) {
+            return false;
+        }
+        offsetX = numbers[0];
+        offsetY = numbers[1];
+        color = *parsedColor;
+        return true;
     }
 
     eastl::string FormatColor(const Color& color) {

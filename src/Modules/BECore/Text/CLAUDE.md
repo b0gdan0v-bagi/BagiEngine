@@ -45,6 +45,8 @@ Font (.ttf/.otf bytes, CPU)  ->  TextLayout (pure: lines, glyph positions)  ->  
 </components></node>
 ```
 
+Outline and hard shadow: `_outlineWidth` + `_outlineColor` and `_shadowOffsetX/Y` + `_shadowColor`, in scene units (times the view scale, like the size). The width is rounded to whole output pixels for the outline atlas and the offsets are rounded, so a shadow lands on a pixel. They are paint: the layout and its cache never see them, and a `Clip` box cuts them with the text. A `UILabel` has the same through `textOutline="width,color"` and `textShadow="offsetX,offsetY,color"` (`UITextEffects`), faded with the text of a disabled control.
+
 A width or height of 0 means no limit. `fontPath` empty is the face of `fontFamily` (empty: the default family) at `fontWeight` (400 or 700, the nearest face of the table); a path wins over both. A changed path, family or weight is loaded by the next draw. A family that the table does not know is logged once per change and the default font is used. Change the text at run time with `SetText()` (or write `_text`; the next draw lays it out again). `overflow="Clip"` clips the drawing to the box when the text does not fit; the clip is pushed and popped around the glyphs.
 
 ## Rules
