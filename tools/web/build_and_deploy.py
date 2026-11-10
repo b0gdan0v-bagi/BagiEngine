@@ -9,7 +9,8 @@ Run it from the root of the project that has the web presets (the engine, or a g
 The steps, in order:
   1. cmake --preset <preset>                           (needs the Emscripten SDK of the engine: python CI/scripts/setup_emsdk.py)
   2. cmake --build --preset <preset> --target <game>
-  3. package.py build/<preset>/bin <dist> --game <game> (with --single-thread when the page is the single-thread one)
+  3. package.py build/<preset>/bin <dist> --game <game> (with --single-thread when the page is the single-thread one, and with
+     --app <source>/web/app.json when the game has that file: its web app manifest and icons; --app FILE names another)
   4. with --deploy: stage Dockerfile, railway.json, serve.py and dist/ in one folder and run
      `railway up <folder> --path-as-root --service <name> --detach` in it (the Railway CLI, logged in and the project linked with
      `railway link`, or RAILWAY_TOKEN of the project; the service must exist, tools/web/CLAUDE.md).
@@ -45,6 +46,8 @@ SINGLE_THREAD_SUFFIX = "-single-thread"
 BIN_FOLDER = "bin"
 STAGE_FOLDER = Path("build") / "web-deploy"
 DIST_FOLDER = Path("dist")
+# The game's own web app settings (package.py --app); the file is optional
+APP_FILE = Path("web") / "app.json"
 
 
 class DeployError(Exception):
@@ -75,6 +78,9 @@ def plan_commands(args: argparse.Namespace, source_dir: Path, dist: Path, stage_
     preset = resolve_preset(args)
     build_dir = args.build_dir or source_dir / output_folder(preset)
     package_command = [sys.executable, str(PACKAGE_SCRIPT), str(build_dir), str(dist), "--game", args.game]
+    app_file = args.app or (source_dir / APP_FILE if (source_dir / APP_FILE).is_file() else None)
+    if app_file:
+        package_command += ["--app", str(app_file)]
     if preset.endswith(SINGLE_THREAD_SUFFIX):
         # The manifest says threads: false, so serve.py (and the image) send no COOP / COEP for this page
         package_command.append("--single-thread")
@@ -122,6 +128,7 @@ def run(argv: list[str] | None = None, emsdk_dir: Path = EMSDK_DIR, which=shutil
     parser.add_argument("--source-dir", type=Path, help="the project with CMakePresets.json (default: the current folder)")
     parser.add_argument("--single-thread", action="store_true", help=f"build the page without threads: the preset gets the suffix {SINGLE_THREAD_SUFFIX}, the page is built into build/<preset>/bin")
     parser.add_argument("--build-dir", type=Path, help="the folder the build writes the page to (default: <source>/build/<preset>/bin, e.g. build/web-release/bin)")
+    parser.add_argument("--app", type=Path, help=f"the game's web app settings for package.py (default: <source>/{APP_FILE.as_posix()} when it exists)")
     parser.add_argument("--dist", type=Path, help=f"the packaged folder (default: <source>/{DIST_FOLDER.as_posix()})")
     parser.add_argument("--stage-dir", type=Path, help=f"the folder `railway up` runs in (default: <source>/{STAGE_FOLDER.as_posix()})")
     parser.add_argument("--deploy", action="store_true", help="after packaging, run `railway up`")

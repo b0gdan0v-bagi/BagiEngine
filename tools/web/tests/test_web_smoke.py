@@ -19,8 +19,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-import web_fixtures  # noqa: F401  (puts tools/web on sys.path)
+import web_fixtures  # puts tools/web on sys.path
 
+import package
 import web_smoke
 from web_smoke import BrowserRun, ConsoleEntry, PageInfo
 
@@ -59,6 +60,13 @@ def http_get(url: str, path: str = "/"):
         return response, response.read().decode("utf-8")
     finally:
         connection.close()
+
+
+def package_fake_dist(folder: Path) -> Path:
+    """A dist/ of the fake build, written by package.py (the page, the package manifest, the web app manifest and its icons)."""
+    out = folder / "dist"
+    package.package(web_fixtures.write_build_output(folder / "build"), out, brotli_module=None)
+    return out
 
 
 def good_run(**changes) -> BrowserRun:
@@ -465,6 +473,115 @@ class SelftestPageTest(unittest.TestCase):
                 http.client.HTTPConnection(host, int(port), timeout=2).request("GET", "/")
 
 
+class WebManifestCheckTest(unittest.TestCase):
+    """Check 6 on a fetch function (no server), and on a dist that package.py wrote, served by serve.py."""
+
+    PNG = package.flat_color_png(192, "#101114")
+
+    @classmethod
+    def fetcher(cls, files: dict):
+        """files: {path: (status, content type, body)}; a path that is not there is a 404."""
+        return lambda path: files.get(path, (404, "text/plain", b""))
+
+    @classmethod
+    def good_files(cls, **manifest_changes) -> dict:
+        manifest = {"name": "g", "display": "fullscreen", "icons": [{"src": "icons/a.png", "sizes": "192x192"}]}
+        manifest.update(manifest_changes)
+        return {"manifest.webmanifest": (200, "application/manifest+json", json.dumps(manifest).encode()),
+                "icons/a.png": (200, "image/png", cls.PNG)}
+
+    def test_a_good_manifest_has_no_problem(self):
+        self.assertEqual(web_smoke.check_web_manifest(self.fetcher(self.good_files())), [])
+
+    def test_a_charset_after_the_type_is_fine(self):
+        files = self.good_files()
+        files["manifest.webmanifest"] = (200, "Application/Manifest+JSON; charset=utf-8", files["manifest.webmanifest"][2])
+        self.assertEqual(web_smoke.check_web_manifest(self.fetcher(files)), [])
+
+    def test_a_missing_manifest_is_one_problem(self):
+        problems = web_smoke.check_web_manifest(self.fetcher({}))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("(6)", problems[0])
+        self.assertIn("HTTP 404", problems[0])
+
+    def test_the_wrong_type_is_found(self):
+        files = self.good_files()
+        files["manifest.webmanifest"] = (200, "application/json", files["manifest.webmanifest"][2])
+        problems = web_smoke.check_web_manifest(self.fetcher(files))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("application/manifest+json", problems[0])
+
+    def test_text_that_is_not_json_or_not_an_object_is_found(self):
+        for body in (b"{not json", b"\xff\xfe", b"[1]"):
+            with self.subTest(body=body):
+                files = self.good_files()
+                files["manifest.webmanifest"] = (200, "application/manifest+json", body)
+                problems = web_smoke.check_web_manifest(self.fetcher(files))
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn("(6)", problems[0])
+
+    def test_a_display_other_than_fullscreen_is_found(self):
+        for change in ({"display": "standalone"}, {"display": None}):
+            with self.subTest(change):
+                problems = web_smoke.check_web_manifest(self.fetcher(self.good_files(**change)))
+                self.assertEqual(len(problems), 1)
+                self.assertIn("not 'fullscreen'", problems[0])
+
+    def test_no_icons_is_found(self):
+        for change in ({"icons": []}, {"icons": None}, {"icons": "x.png"}):
+            with self.subTest(change):
+                problems = web_smoke.check_web_manifest(self.fetcher(self.good_files(**change)))
+                self.assertEqual(len(problems), 1)
+                self.assertIn("lists no icons", problems[0])
+
+    def test_an_icon_that_is_missing_or_not_a_png_or_has_the_wrong_type_is_found(self):
+        cases = {
+            "missing": (404, "text/plain", b""),
+            "wrong type": (200, "application/octet-stream", self.PNG),
+            "not a png": (200, "image/png", b"<html>"),
+        }
+        for name, answer in cases.items():
+            with self.subTest(name):
+                files = self.good_files()
+                files["icons/a.png"] = answer
+                problems = web_smoke.check_web_manifest(self.fetcher(files))
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn("icon icons/a.png", problems[0])
+
+    def test_an_icon_path_is_resolved_against_the_manifest_in_the_root(self):
+        files = self.good_files(icons=[{"src": "./icons/a.png"}, {"src": "/icons/a.png"}])
+        files["/icons/a.png"] = files["icons/a.png"]
+        self.assertEqual(web_smoke.check_web_manifest(self.fetcher(files)), [])
+
+    def test_an_icon_without_src_is_found(self):
+        problems = web_smoke.check_web_manifest(self.fetcher(self.good_files(icons=[{"sizes": "1x1"}, 5])))
+        self.assertEqual(len(problems), 2)
+
+    def test_the_problems_reach_the_verdict_of_a_run(self):
+        run = good_run(web_manifest_problems=["(6) boom"])
+        self.assertEqual(web_smoke.evaluate(run), ["(6) boom"])
+        self.assertEqual(web_smoke.evaluate(good_run(web_manifest_problems=[])), [])
+        self.assertEqual(web_smoke.evaluate(good_run()), [])
+
+    def test_a_dist_written_by_package_py_passes_over_http_and_the_same_dist_without_its_icons_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            build = web_fixtures.write_build_output(Path(temp) / "build")
+            out = Path(temp) / "dist"
+            package.package(build, out, brotli_module=None)  # no app file: two generated icons
+            with contextlib.redirect_stdout(io.StringIO()), web_smoke.served(out) as url:
+                self.assertEqual(web_smoke.check_web_manifest(web_smoke.fetch_from(url)), [])
+                shutil.rmtree(out / "icons")
+                problems = web_smoke.check_web_manifest(web_smoke.fetch_from(url))
+            self.assertEqual(len(problems), 2, problems)  # the 192 and the 512 icon
+            self.assertTrue(all("HTTP 404" in problem for problem in problems))
+
+    def test_the_selftest_site_passes_check_6_over_http(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = web_smoke.write_selftest_site(Path(temp) / "site")
+            with contextlib.redirect_stdout(io.StringIO()), web_smoke.served(root) as url:
+                self.assertEqual(web_smoke.check_web_manifest(web_smoke.fetch_from(url)), [])
+
+
 class FakeCanvas:
     """`shots` are the screenshots in order (the last one repeats); once the page has been clicked they are `after_click` instead,
     when given: a canvas that changes only because of the click."""
@@ -618,7 +735,7 @@ class BrowserFlowTest(unittest.TestCase):
         self.assertEqual(run.status, 200)
         self.assertEqual(web_smoke.evaluate(run), [])
         self.assertEqual(page.selector, web_smoke.CANVAS_SELECTOR)
-        self.assertEqual(page.urls, ["http://127.0.0.1:1/"])
+        self.assertEqual(page.urls, ["http://127.0.0.1:1/?fullscreen=0"])  # the shell is told not to ask for fullscreen on the first tap
         self.assertTrue(fake.closed)
         self.assertEqual(fake.viewport, {"width": 640, "height": 480})
         self.assertEqual(fake.launch_args[0], True)
@@ -876,14 +993,15 @@ class BrowserFlowTest(unittest.TestCase):
         code, out, _ = self.smoke_output(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES]))
         self.assertEqual(code, 0, out)
         self.assertIn("PASS", out)
-        self.assertEqual(out.count("ok: ("), 4)
+        self.assertEqual(out.count("ok: ("), 5)  # (1) to (4) and (6); (5) is skipped for the selftest page
+        self.assertIn("ok: (6) manifest.webmanifest", out)
         self.assertIn("skip: (5)", out)
         self.assertIn("input: mouse (a click)", out)
         self.assertIn("page: crossOriginIsolated=false, typeof SharedArrayBuffer=undefined", out)
 
     def test_run_smoke_of_a_dist_checks_the_canvas_size_and_prints_the_ratio(self):
         with tempfile.TemporaryDirectory() as temp:
-            (Path(temp) / "index.html").write_text("<!doctype html>", encoding="utf-8")
+            dist = package_fake_dist(Path(temp))
             good = {"crossOriginIsolated": True, "sharedArrayBuffer": "function", "devicePixelRatio": 2, "cssWidth": 400, "cssHeight": 300,
                     "canvasWidth": 800, "canvasHeight": 600}
             for info, code in ((good, 0), (dict(good, canvasWidth=400), 1)):
@@ -891,11 +1009,24 @@ class BrowserFlowTest(unittest.TestCase):
                     fake = FakePlaywright(FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES]), info=info))
                     out = io.StringIO()
                     with contextlib.redirect_stdout(out):
-                        result = web_smoke.run_smoke(options(selftest=False, dist=Path(temp), device_scale_factor=2.0),
+                        result = web_smoke.run_smoke(options(selftest=False, dist=dist, device_scale_factor=2.0),
                                                      SimpleNamespace(sync_playwright=fake.sync_playwright))
                     self.assertEqual(result, code, out.getvalue())
                     self.assertIn("devicePixelRatio=2, CSS size 400x300", out.getvalue())
                     self.assertIn("FAIL: (5)" if code else "ok: (5)", out.getvalue())
+
+    def test_run_smoke_of_a_dist_without_a_web_manifest_fails_check_6_only(self):
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / "index.html").write_text("<!doctype html>", encoding="utf-8")
+            good = {"crossOriginIsolated": True, "sharedArrayBuffer": "function", "devicePixelRatio": 1, "cssWidth": 400, "cssHeight": 300,
+                    "canvasWidth": 400, "canvasHeight": 300}
+            fake = FakePlaywright(FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES]), info=good))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                result = web_smoke.run_smoke(options(selftest=False, dist=Path(temp)), SimpleNamespace(sync_playwright=fake.sync_playwright))
+            self.assertEqual(result, 1, out.getvalue())
+            self.assertIn("FAIL: (6) manifest.webmanifest answered HTTP 404", out.getvalue())
+            self.assertEqual(out.getvalue().count("FAIL:"), 1)
 
     def test_run_smoke_prints_each_reason_and_returns_1(self):
         fake = FakePlaywright(FakePage(FakeCanvas([STRIPES]), console=[ConsoleEntry("error", "boom")]))

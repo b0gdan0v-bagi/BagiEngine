@@ -146,6 +146,27 @@ class DryRunTest(DeployTestCase):
         self.assertNotIn("single-thread-single-thread", out)
         self.assertRegex(out.replace('"', "").replace("'", ""), r"package\.py .*web-release-single-thread[\\/]bin ")
 
+    def test_the_package_step_gets_the_app_file_of_the_game_when_it_exists(self):
+        _, out, _, _ = self.run_script("--dry-run")
+        self.assertNotIn("--app", out)
+        app = self.source / "web" / "app.json"
+        app.parent.mkdir()
+        app.write_text("{}", encoding="utf-8")
+        _, out, _, _ = self.run_script("--dry-run", "--single-thread")
+        package_line = next(line for line in out.splitlines() if "package.py" in line).replace("'", "").replace('"', "")
+        self.assertIn(f"--game BagiMatch3 --app {app.resolve()}", package_line)
+        self.assertTrue(package_line.rstrip().endswith("--single-thread"), package_line)
+
+    def test_an_app_option_of_the_command_line_wins_over_the_file_of_the_game(self):
+        app = self.source / "web" / "app.json"
+        app.parent.mkdir()
+        app.write_text("{}", encoding="utf-8")
+        other = self.source / "other.json"
+        _, out, _, _ = self.run_script("--dry-run", "--app", str(other))
+        package_line = next(line for line in out.splitlines() if "package.py" in line).replace("'", "").replace('"', "")
+        self.assertIn(f"--app {other}", package_line)
+        self.assertNotIn(str(app), package_line)
+
     def test_an_explicit_build_dir_wins_over_the_folder_of_the_configuration(self):
         build = self.source / "out"
         _, out, _, _ = self.run_script("--dry-run", "--single-thread", "--build-dir", str(build))

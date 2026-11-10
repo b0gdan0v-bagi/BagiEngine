@@ -125,6 +125,13 @@ namespace BECore {
     }
 
     Rect SDLMainWindow::GetSafeArea() const {
+#ifdef __EMSCRIPTEN__
+        // SDL's driver answers the whole window; the insets of the page (a notch, the system bars) are the web's own
+        if (_window != nullptr) {
+            const WebSafeArea page = GetWebSafeArea(GetWidth(), GetHeight());
+            return Rect(static_cast<float>(page.x), static_cast<float>(page.y), static_cast<float>(page.width), static_cast<float>(page.height));
+        }
+#endif
         SDL_Rect area{};
         if (_window == nullptr || !SDL_GetWindowSafeArea(_window, &area) || area.w <= 0 || area.h <= 0) {
             return IMainWindow::GetSafeArea();

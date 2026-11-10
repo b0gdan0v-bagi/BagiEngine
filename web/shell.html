@@ -15,6 +15,11 @@
     - Module.setStatus and Module.monitorRunDependencies feed the loading bar (the .data package and the wasm download);
       Module.onAbort, Module.onExit, the page's error event and an unhandled promise rejection (a .data package that did not
       download) show a message when the game stops.
+    - Fullscreen: a small toggle button (top right) where document.fullscreenEnabled is true and the page is not already an installed
+      app, and, on a touch screen, one request for fullscreen on the first tap (not with ?fullscreen=0). After it the page asks
+      screen.orientation.lock for the orientation of manifest.webmanifest (written by tools/web/package.py from the game's web/app.json).
+      iOS Safari has no fullscreen API for a page, so there the button stays hidden and the home-screen app (apple meta tags below,
+      display: fullscreen of the manifest elsewhere) is the way. Every call can be refused: the page then starts and plays as before.
 
     Checked by tools/web/tests/test_shell.py (text only; check_bagi_web.cmake checks the copy CMake makes). Built with emsdk 4.0.23:
     emcc replaces the SCRIPT placeholder and, at -O2, minifies the page (the tag#id selectors survive). tools/web/tests/web_smoke.py
@@ -26,6 +31,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
     <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#101114">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <title>BagiEngine</title>
     <style>
         html, body {
@@ -63,6 +74,57 @@
             canvas#canvas {
                 height: 100dvh;
             }
+        }
+
+        /* The fullscreen toggle: small and dim, above the canvas and the panels, off the notch by the safe area. The plain top and
+           right come first for a browser that does not know env() */
+        button#fullscreen-toggle {
+            position: fixed;
+            top: 8px;
+            right: 8px;
+            top: calc(8px + env(safe-area-inset-top, 0px));
+            right: calc(8px + env(safe-area-inset-right, 0px));
+            z-index: 10;
+            width: 36px;
+            height: 36px;
+            box-sizing: border-box;
+            padding: 6px;
+            border: 0;
+            border-radius: 8px;
+            background: rgba(16, 17, 20, 0.55);
+            color: #ffffff;
+            opacity: 0.35;
+            cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        button#fullscreen-toggle[hidden] {
+            display: none;
+        }
+
+        button#fullscreen-toggle:hover {
+            opacity: 0.9;
+        }
+
+        button#fullscreen-toggle svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        button#fullscreen-toggle svg.leave,
+        button#fullscreen-toggle.active svg.enter {
+            display: none;
+        }
+
+        button#fullscreen-toggle.active svg.leave {
+            display: block;
         }
 
         .panel {
@@ -147,6 +209,11 @@
         <div id="message"></div>
         <div id="message-detail"></div>
     </div>
+
+    <button id="fullscreen-toggle" type="button" tabindex="-1" aria-label="Enter fullscreen" hidden>
+        <svg class="enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+        <svg class="leave" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg>
+    </button>
 
     <noscript>
         <div class="panel">
@@ -348,6 +415,156 @@
                 }
                 showError("The game could not be loaded", "Part of the game did not download or start. Check the connection and reload the page.", text);
             });
+
+            // The fullscreen toggle, the request on the first tap and the orientation lock. Everything here may be refused or missing
+            // (iOS Safari has no document.fullscreenEnabled, a browser may reject the request): then the page stays as it is. Every
+            // promise has a rejection handler, or the handler of "unhandledrejection" below would call it a failed start.
+            function matches(query) {
+                try {
+                    return !!(window.matchMedia && window.matchMedia(query).matches);
+                } catch (error) {
+                    return false;
+                }
+            }
+
+            function setUpFullscreen() {
+                var toggle = document.getElementById("fullscreen-toggle");
+                var root = document.documentElement;
+                var requestFn = root.requestFullscreen || root.webkitRequestFullscreen;
+                var exitFn = document.exitFullscreen || document.webkitExitFullscreen;
+                var enabled = (document.fullscreenEnabled === true || document.webkitFullscreenEnabled === true) && !!requestFn && !!exitFn;
+                // An installed app or a page the browser already shows without bars (read now: the display mode "fullscreen" also
+                // matches once this page has made itself fullscreen)
+                var installed = window.navigator.standalone === true || matches("(display-mode: standalone)") || matches("(display-mode: fullscreen)");
+                if (!toggle || !enabled || installed) {
+                    return;
+                }
+
+                var orientation = "any";
+                var manifestRead = Promise.resolve();
+                if (typeof fetch === "function") {
+                    manifestRead = fetch("manifest.webmanifest").then(function (response) {
+                        return response.ok ? response.json() : null;
+                    }).then(function (manifest) {
+                        if (manifest && typeof manifest.orientation === "string") {
+                            orientation = manifest.orientation;
+                        }
+                    }).catch(function () {});
+                }
+
+                function fullscreenElement() {
+                    return document.fullscreenElement || document.webkitFullscreenElement || null;
+                }
+
+                function logRefusal(error) {
+                    console.warn("Fullscreen was refused: " + (error && error.message ? error.message : String(error)));
+                }
+
+                function enterFullscreen() {
+                    try {
+                        var result = requestFn.call(root, { navigationUI: "hide" });
+                        if (result && typeof result.then === "function") {
+                            result.then(function () {}, logRefusal);
+                        }
+                    } catch (error) {
+                        logRefusal(error);
+                    }
+                }
+
+                function leaveFullscreen() {
+                    try {
+                        var result = exitFn.call(document);
+                        if (result && typeof result.then === "function") {
+                            result.then(function () {}, logRefusal);
+                        }
+                    } catch (error) {
+                        logRefusal(error);
+                    }
+                }
+
+                function lockOrientation() {
+                    manifestRead.then(function () {
+                        var screenOrientation = window.screen && window.screen.orientation;
+                        if (orientation === "any" || !screenOrientation || typeof screenOrientation.lock !== "function") {
+                            return;
+                        }
+                        var result = screenOrientation.lock(orientation);
+                        if (result && typeof result.catch === "function") {
+                            result.catch(function () {});
+                        }
+                    }).catch(function () {});
+                }
+
+                function unlockOrientation() {
+                    try {
+                        window.screen.orientation.unlock();
+                    } catch (error) {
+                        // no lock to release, or no API
+                    }
+                }
+
+                function showState(active) {
+                    toggle.classList.toggle("active", active);
+                    toggle.setAttribute("aria-label", active ? "Exit fullscreen" : "Enter fullscreen");
+                }
+
+                function onFullscreenChange() {
+                    var active = fullscreenElement() !== null;
+                    showState(active);
+                    if (active) {
+                        lockOrientation();
+                    } else {
+                        unlockOrientation();
+                    }
+                }
+
+                document.addEventListener("fullscreenchange", onFullscreenChange);
+                document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
+                // The first tap of a touch screen asks once; a user who leaves fullscreen is not asked again. ?fullscreen=0 turns it off
+                function stopAskingOnTap() {
+                    window.removeEventListener("pointerup", onFirstTap, true);
+                }
+
+                function onFirstTap(event) {
+                    if (event.pointerType !== "touch" || toggle.contains(event.target)) {
+                        return;
+                    }
+                    stopAskingOnTap();
+                    if (fullscreenElement() === null) {
+                        enterFullscreen();
+                    }
+                }
+
+                if (!/[?&]fullscreen=0(&|$)/.test(window.location.search) && matches("(pointer: coarse)")) {
+                    window.addEventListener("pointerup", onFirstTap, true);
+                }
+
+                toggle.addEventListener("click", function () {
+                    stopAskingOnTap();
+                    if (fullscreenElement() === null) {
+                        enterFullscreen();
+                    } else {
+                        leaveFullscreen();
+                    }
+                    toggle.blur();
+                });
+                // The button takes its touches and clicks itself: the game listens on the canvas and the document, and must not see them
+                ["pointerdown", "pointerup", "mousedown", "mouseup", "touchstart", "touchend", "touchmove"].forEach(function (name) {
+                    toggle.addEventListener(name, function (event) {
+                        event.stopPropagation();
+                    });
+                });
+
+                toggle.hidden = false;
+                showState(fullscreenElement() !== null);
+            }
+
+            try {
+                setUpFullscreen();
+            } catch (error) {
+                console.warn("The fullscreen button was not set up: " + error);
+            }
 
             loadingPanel.hidden = false;
             setProgress(null);
