@@ -23,7 +23,7 @@ ctest --preset macos-debug                 # every test in its own process, 8 at
 
 **Module order** (bottom → top; every module links `BECoreModule`, which provides the PCH):
 ```
-BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Runtime (src/Application, src/Widgets) → games/<Name> → executable
+BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Rooms → Runtime (src/Application, src/Widgets) → games/<Name> → executable
 ```
 
 **Stack:** CMake 3.31+ / Ninja, SDL3 + SDL_image, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb_truetype, fmt, magic_enum, GoogleTest.
@@ -32,7 +32,7 @@ BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games �
 cmake/            engine setup, be_* functions, build options (cmake/CLAUDE.md)
 src/Application/  the application loop (RuntimeModule)
 src/Widgets/      editor panels and frame widgets — no game UI (.claude/rules/widgets-module.md)
-src/Modules/      BECore, Events, TaskSystem, RemoteControl, SDL, Vulkan, Games, RmlUiHost (only with ENGINE_UI_RMLUI)
+src/Modules/      BECore, Events, TaskSystem, RemoteControl, SDL, Vulkan, Games, Rooms (online rooms by code; no sockets yet), RmlUiHost (only with ENGINE_UI_RMLUI)
                   vendored, never edited, left out of broad searches: EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, stb
 config/, assets/  engine content; a game's files of the same name replace the engine's (FileSystem/CLAUDE.md)
 games/Match3/     the engine's own game

@@ -2,6 +2,12 @@
 
 namespace BECore {
 
+#if defined(BE_WEB_THREAD_POOL_SIZE)
+    // The threaded web build starts its Web Workers before main(): a thread beyond the pool is an error, and the main thread blocks at
+    // start-up waiting for the workers. One more than the task system needs is the headroom (cmake/BagiWeb.cmake)
+    static_assert(BE_WEB_THREAD_POOL_SIZE >= TaskManager::kMaxWorkerThreads + 1, "BE_WEB_THREAD_POOL_SIZE (cmake/BagiWeb.cmake) must be at least TaskManager::kMaxWorkerThreads + 1");
+#endif
+
     void TaskManager::Initialize(PassKey<CoreManager>) {
         if (_isInitialized) {
             LOG_WARNING("[TaskManager] Already initialized");
@@ -11,7 +17,7 @@ namespace BECore {
         _mainThreadId = std::this_thread::get_id();
 
 #if BE_SINGLE_THREAD
-        // No thread at all (the browser build): background jobs run on the calling thread at submit time,
+        // No thread at all (the single-thread build, BE_SINGLE_THREAD): background jobs run on the calling thread at submit time,
         // so the start-up WaitAll over the config loads finds them done.
         _threadPool = eastl::make_unique<ThreadPool>(ThreadPool::InlineTag{});
 
@@ -20,7 +26,7 @@ namespace BECore {
         LOG_INFO("[TaskManager] Initialized in single-thread mode (inline pool, no worker threads)");
 #else
         // Создаем пул потоков
-        size_t numThreads = std::min(std::thread::hardware_concurrency(), 4u);
+        size_t numThreads = std::min<size_t>(std::thread::hardware_concurrency(), kMaxWorkerThreads);
         if (numThreads < 2) {
             numThreads = 2;
         }

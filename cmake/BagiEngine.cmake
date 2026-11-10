@@ -24,10 +24,11 @@ get_filename_component(BAGI_ENGINE_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Vulkan, the control socket server, static SDL, single thread; forced for the web (Emscripten)
-include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
-# The Emscripten link options, the content package and be_web_configure_target(); only used when ENGINE_TARGET_WEB
+# The Emscripten link options, the content package and be_web_configure_target(); only used when ENGINE_TARGET_WEB. First, because
+# BagiPlatformOptions.cmake reads BE_WEB_THREAD_POOL_SIZE from it
 include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)
+# Vulkan, the control socket server, static SDL, threads (the web build forces the first three off / on and takes -pthread)
+include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
 
 # =============================================================================
 # External Dependencies
@@ -49,6 +50,15 @@ else()
 endif()
 set(SDL_TEST OFF CACHE BOOL "Build SDL3 tests" FORCE)
 set(SDL_TESTS OFF CACHE BOOL "Build SDL3 tests" FORCE)
+if(ENGINE_TARGET_WEB)
+    # SDL's default for Emscripten is no pthreads (its "generic" thread stubs: SDL_CreateThread fails, which SDL's own timer and audio
+    # code would hit). A threaded page needs the real ones; the single-thread page is built without any (external/SDL/CMakeLists.txt)
+    if(ENGINE_SINGLE_THREAD)
+        set(SDL_PTHREADS OFF CACHE BOOL "Use POSIX threads for multi-threading" FORCE)
+    else()
+        set(SDL_PTHREADS ON CACHE BOOL "Use POSIX threads for multi-threading" FORCE)
+    endif()
+endif()
 add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL)
 
 # The vendored imgui CMake file and our modules link the name SDL3-shared; a static SDL keeps it as a shim
@@ -63,6 +73,12 @@ set(SDLIMAGE_AVIF OFF CACHE BOOL "" FORCE)
 set(SDLIMAGE_VENDORED ON CACHE BOOL "" FORCE)
 set(SDLIMAGE_TESTS OFF CACHE BOOL "" FORCE)
 set(SDLIMAGE_SAMPLES OFF CACHE BOOL "" FORCE)
+if(ENGINE_TARGET_WEB)
+    # The page downloads what it is built from, so the formats no game of ours ships stay out: PNG, JPEG, GIF, QOI and XPM are SDL_image's
+    # own small decoders (stb_image), while TIFF and WebP are vendored libraries (libtiff, libwebp) of a few hundred KB of wasm
+    set(SDLIMAGE_TIF OFF CACHE BOOL "" FORCE)
+    set(SDLIMAGE_WEBP OFF CACHE BOOL "" FORCE)
+endif()
 if(ENGINE_STATIC_SDL)
     # SDL_image follows BUILD_SHARED_LIBS (its own cmake_dependent_option keeps a cache value that is set)
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build the library as a shared library" FORCE)
@@ -92,6 +108,14 @@ target_include_directories(imgui PRIVATE ${BAGI_ENGINE_DIR}/external/SDL/include
 # Group external libraries in IDE
 set_target_properties(SDL3-shared PROPERTIES FOLDER "External")
 set_target_properties(fmt PROPERTIES FOLDER "External")
+
+# Clang 22 (emsdk 4.0.23) refuses the FMT_STRING() uses inside the vendored fmt 11.0.2 (src/os.cc, fmt/format-inl.h): a string literal
+# evaluated twice at compile time is two objects now, and fmt subtracts pointers into both ("call to consteval function ... is not a
+# constant expression"). Below C++20 fmt has no consteval checks, so the library (not its users) is compiled as C++17 on the web;
+# the compiled functions are the same, only the compile-time format check of fmt's own sources is off
+if(ENGINE_TARGET_WEB)
+    set_target_properties(fmt PROPERTIES CXX_STANDARD 17)
+endif()
 
 # MSVC: fmt rejects a non-UTF-8 execution charset (static_assert in fmt/base.h). The vendored libraries are
 # added before the global compile options below, so fmt gets /utf-8 here; PUBLIC carries it to every user.
@@ -226,7 +250,10 @@ else()
     set(COMPILER_NAME "Unknown")
 endif()
 
-if(ENGINE_TARGET_WEB)
+if(ENGINE_TARGET_WEB AND ENGINE_SINGLE_THREAD)
+    # The threaded and the single-thread page have different objects (-pthread everywhere): they must not share a folder of libraries
+    set(PLATFORM_NAME "WebSingleThread")
+elseif(ENGINE_TARGET_WEB)
     set(PLATFORM_NAME "Web")
 elseif(WIN32)
     set(PLATFORM_NAME "Windows")
@@ -588,6 +615,9 @@ endif()
 
 # Game infrastructure (IGame, GameManager). Concrete games live outside the engine and register through it.
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
+
+# Rooms of an online game by code: protocol, room logic, hub (pure code over Games' ISeatedGame; no sockets yet)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Rooms)
 
 # The host of the vendored RmlUi: the interfaces over the engine and the scene component (only with ENGINE_UI_RMLUI)
 if(ENGINE_UI_RMLUI)

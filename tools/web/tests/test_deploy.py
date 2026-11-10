@@ -7,6 +7,7 @@ import json
 import re
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,6 +16,7 @@ import web_fixtures  # noqa: F401  (puts tools/web on sys.path)
 import build_and_deploy
 
 TOOLS_WEB = Path(build_and_deploy.__file__).resolve().parent
+ENGINE_DIR = TOOLS_WEB.parents[1]
 
 
 RAILWAY_PATH = "/usr/bin/railway"
@@ -54,15 +56,24 @@ class DeployTestCase(unittest.TestCase):
     def setUp(self):
         self._temp = tempfile.TemporaryDirectory()
         self.addCleanup(self._temp.cleanup)
-        self.source = Path(self._temp.name)
+        self.source = Path(self._temp.name) / "source"
+        self.source.mkdir()
+        # A fake emsdk folder with the files the SDK check looks for (the real SDK is not needed)
+        self.emsdk = Path(self._temp.name) / "emsdk"
+        self.install_sdk(self.emsdk)
 
-    def run_script(self, *argv, environ=None, which=no_tools, runner=None):
+    @staticmethod
+    def install_sdk(emsdk: Path):
+        for name in build_and_deploy.SDK_FILES:
+            (emsdk / name).parent.mkdir(parents=True, exist_ok=True)
+            (emsdk / name).write_text("", encoding="utf-8")
+
+    def run_script(self, *argv, emsdk=None, which=no_tools, runner=None):
         out, err = io.StringIO(), io.StringIO()
         runner = runner or FakeRunner()
         arguments = ["--source-dir", str(self.source), *argv]
-        environ = {"EMSDK": "C:/emsdk"} if environ is None else environ
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = build_and_deploy.run(arguments, environ=environ, which=which, runner=runner)
+            code = build_and_deploy.run(arguments, emsdk_dir=emsdk or self.emsdk, which=which, runner=runner)
         return code, out.getvalue(), err.getvalue(), runner
 
 
@@ -103,22 +114,78 @@ class DryRunTest(DeployTestCase):
         _, out, _, _ = self.run_script("--dry-run")
         self.assertIn("--target BagiMatch3", out)
 
+    def test_the_default_is_the_threaded_page_in_build_clangweb(self):
+        _, out, _, _ = self.run_script("--dry-run")
+        self.assertNotIn("single-thread", out)
+        self.assertRegex(out.replace('"', "").replace("'", ""), r"package\.py .*[\\/]build[\\/]ClangWeb ")
+
+    def test_the_package_step_of_a_single_thread_build_says_so_so_the_manifest_has_threads_false(self):
+        _, out, _, _ = self.run_script("--dry-run", "--single-thread")
+        package_line = next(line for line in out.splitlines() if "package.py" in line)
+        self.assertTrue(package_line.rstrip().endswith("--single-thread"), package_line)
+        _, out, _, _ = self.run_script("--dry-run", "--preset", "web-debug-single-thread")
+        self.assertTrue(next(line for line in out.splitlines() if "package.py" in line).rstrip().endswith("--single-thread"))
+        # the default build is threaded: nothing in the package line names the single-thread page
+        _, out, _, _ = self.run_script("--dry-run")
+        self.assertEqual([line for line in out.splitlines() if "package.py" in line and "--single-thread" in line], [])
+
+    def test_single_thread_picks_the_preset_and_the_folder_of_the_single_thread_page(self):
+        for preset, expected in (("web-release", "web-release-single-thread"), ("web-debug", "web-debug-single-thread")):
+            with self.subTest(preset=preset):
+                code, out, err, runner = self.run_script("--dry-run", "--single-thread", "--preset", preset)
+                self.assertEqual(code, 0, err)
+                lines = [line for line in out.splitlines() if line.startswith("+ ")]
+                self.assertIn(f"cmake --preset {expected}", lines[0])
+                self.assertIn(f"cmake --build --preset {expected} --target BagiMatch3", lines[1])
+                self.assertRegex(lines[2].replace('"', "").replace("'", ""), r"package\.py .*[\\/]build[\\/]ClangWebSingleThread ")
+                self.assertEqual(runner.calls, [])
+
+    def test_a_single_thread_preset_named_by_hand_gets_the_single_thread_folder_too(self):
+        _, out, _, _ = self.run_script("--dry-run", "--preset", "web-release-single-thread")
+        self.assertIn("--preset web-release-single-thread --target", out)
+        self.assertNotIn("single-thread-single-thread", out)
+        self.assertIn("ClangWebSingleThread", out)
+
+    def test_an_explicit_build_dir_wins_over_the_folder_of_the_configuration(self):
+        build = self.source / "out"
+        _, out, _, _ = self.run_script("--dry-run", "--single-thread", "--build-dir", str(build))
+        self.assertIn(f"package.py {build} ", out.replace("'", ""))
+        self.assertNotIn("ClangWebSingleThread", out)
+
 
 class PreconditionTest(DeployTestCase):
-    def test_without_emsdk_it_returns_non_zero_with_the_message(self):
-        for environ in ({}, {"EMSDK": ""}):
-            with self.subTest(environ=environ):
-                code, out, err, runner = self.run_script("--dry-run", environ=environ)
+    def test_without_the_sdk_it_returns_non_zero_with_the_message(self):
+        missing = Path(self._temp.name) / "no-sdk"
+        incomplete = Path(self._temp.name) / "half-sdk"
+        self.install_sdk(incomplete)
+        (incomplete / ".emscripten").unlink()  # the install was interrupted before `activate`
+        for emsdk in (missing, incomplete):
+            with self.subTest(emsdk=emsdk.name):
+                code, out, err, runner = self.run_script("--dry-run", emsdk=emsdk)
                 self.assertNotEqual(code, 0)
-                self.assertIn("EMSDK is not set", err)
+                self.assertIn("run: python CI/scripts/setup_emsdk.py", err)
                 self.assertEqual(out, "")
                 self.assertEqual(runner.calls, [])
 
-    def test_without_emsdk_a_real_run_does_not_start_anything_either(self):
-        code, _, err, runner = self.run_script(environ={})
+    def test_without_the_sdk_a_real_run_does_not_start_anything_either(self):
+        code, _, err, runner = self.run_script(emsdk=Path(self._temp.name) / "no-sdk")
         self.assertNotEqual(code, 0)
-        self.assertIn("EMSDK", err)
+        self.assertIn("setup_emsdk.py", err)
         self.assertEqual(runner.calls, [])
+
+    def test_the_environment_variable_emsdk_is_not_read(self):
+        # The presets find the SDK in external/emsdk; a variable neither helps nor is needed
+        with unittest.mock.patch.dict("os.environ", {"EMSDK": str(self.emsdk)}):
+            code, _, err, _ = self.run_script("--dry-run", emsdk=Path(self._temp.name) / "no-sdk")
+        self.assertNotEqual(code, 0)
+        self.assertIn("setup_emsdk.py", err)
+        with unittest.mock.patch.dict("os.environ", {}, clear=True):
+            code, _, err, _ = self.run_script("--dry-run")
+        self.assertEqual(code, 0, err)
+
+    def test_the_sdk_is_looked_for_in_the_submodule_of_the_engine_by_default(self):
+        self.assertEqual(build_and_deploy.EMSDK_DIR, ENGINE_DIR / "external" / "emsdk")
+        self.assertTrue((ENGINE_DIR / "CI" / "scripts" / "setup_emsdk.py").is_file())
 
     def test_deploy_without_the_railway_cli_returns_non_zero_with_the_message(self):
         for extra in ((), ("--dry-run",)):
@@ -215,6 +282,8 @@ class DeployFilesTest(unittest.TestCase):
         self.assertEqual(copies, ["serve.py ./", "dist/ dist/"])
         self.assertRegex(text, re.compile(r"^FROM python:[\d.]+-slim", re.MULTILINE))
         self.assertIn('CMD ["python", "serve.py", "--root", "dist"]', text)
+        # No switch for the cross-origin isolation: serve.py sends the headers for a threaded page by itself (test_serve.py starts this command)
+        self.assertNotIn("cross-origin-isolation", text.split("\nCMD", 1)[1])
 
     def test_railway_json_builds_the_dockerfile_and_checks_healthz(self):
         config = json.loads((TOOLS_WEB / "railway.json").read_text(encoding="utf-8"))

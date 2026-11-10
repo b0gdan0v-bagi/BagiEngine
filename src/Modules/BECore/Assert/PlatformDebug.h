@@ -14,13 +14,14 @@ namespace BECore {
      *
      * On Windows: Uses __debugbreak() intrinsic
      * On macOS/Linux: Uses __builtin_debugtrap() or raise(SIGTRAP)
+     * On the web (Emscripten): __builtin_trap() (an `unreachable` instruction: the page stops with a trap, there is no debugger to signal)
      */
     inline void DebugBreak() {
 #if defined(PLATFORM_WINDOWS)
         __debugbreak();
 #elif defined(PLATFORM_MACOS)
         __builtin_debugtrap();
-#elif defined(PLATFORM_LINUX)
+#elif defined(PLATFORM_LINUX) || defined(PLATFORM_WEB)
         __builtin_trap();
 #else
 // Fallback: use SIGTRAP signal
@@ -36,7 +37,7 @@ namespace BECore {
 #define ENGINE_DEBUG_BREAK() __debugbreak()
 #elif defined(PLATFORM_MACOS)
 #define ENGINE_DEBUG_BREAK() __builtin_debugtrap()
-#elif defined(PLATFORM_LINUX)
+#elif defined(PLATFORM_LINUX) || defined(PLATFORM_WEB)
 #define ENGINE_DEBUG_BREAK() __builtin_trap()
 #else
 #define ENGINE_DEBUG_BREAK() ((void)0)
