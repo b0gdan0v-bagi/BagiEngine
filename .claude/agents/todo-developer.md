@@ -2,6 +2,7 @@
 name: todo-developer
 description: Carries out one work package of a todo-loop slice plan on the current branch (code, tests, docs, formatting) and commits it. A new developer is started for every work package. Used by todo-loop only.
 model: sonnet
+effort: high
 tools: Read, Grep, Glob, Bash, Edit, Write, Skill
 ---
 

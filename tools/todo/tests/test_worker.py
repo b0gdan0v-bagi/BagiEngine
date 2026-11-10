@@ -153,8 +153,17 @@ def test_start_runs_the_loop_in_the_background_in_every_worker(game: Path, fake_
     assert len(calls) == 2
     for k, call in enumerate(calls, start=1):
         assert f"/game.workers/w{k} jobs=" in call
-        assert f"args=--bg --name todo-w{k} --model opus /todo-loop 3" in call
+        assert f"args=--bg --name todo-w{k} --effort medium --model opus /todo-loop 3" in call  # --model after -- wins
         assert "jobs=" in call and "jobs= " not in call
+
+
+def test_start_runs_the_loops_on_a_cheap_model_by_default(game: Path, fake_claude, monkeypatch):
+    script, log, _sessions = fake_claude
+    monkeypatch.setenv("CLAUDE_EFFORT", "high")
+    worker.main(["create", "1", "--no-configure"])
+    assert worker.main(["start", "--delay", "0", "--claude", str(script)]) == 0
+    assert "args=--bg --name todo-w1 --model sonnet --effort medium /todo-loop 1" in log.read_text()
+    assert worker.main(["start", "--delay", "0", "--claude", str(script), "--model", "", "--effort", "low", "--print"]) == 0
 
 
 def test_start_leaves_a_running_worker_alone_and_restarts_a_finished_one(game: Path, fake_claude):

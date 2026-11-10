@@ -1,7 +1,8 @@
 ---
 name: todo-reviewer
 description: Reviews the commits of one work package (or the whole slice) of a todo-loop branch with a fresh context, builds and runs the tests itself, and answers APPROVE or CHANGES. Cannot edit files. Used by todo-loop only.
-model: opus
+model: sonnet
+effort: medium
 tools: Read, Grep, Glob, Bash, Skill
 ---
 
