@@ -7,7 +7,7 @@ Python tools that drive a game through the control API (`src/Modules/RemoteContr
 | File | Purpose |
 |------|---------|
 | `bagi_control_client.py` | WebSocket (RFC 6455) client with the standard library only: `BagiControlClient.call(method, params)`, pushed events in `events`, `ControlError` for an error response |
-| `game_process.py` | `GameProcess`: starts a game executable with `--control`, retries until it listens, keeps its log; `build_game_command`, `free_port` |
+| `game_process.py` | `GameProcess`: starts a game executable with `--control`, retries until it listens, keeps its log; `build_game_command`, `free_port`, `preset_executable` |
 | `bagi_session.py` | `GameSession`: one game, started (`launch`) or reached (`connect`), as plain Python calls. No MCP code, so it is tested without the `mcp` package. `SessionError` for what the session refuses; a refusal of the game stays a `ControlError` |
 | `bagi_mcp.py` | The MCP server (stdio). Each tool is one line over `GameSession`; the only file that needs `mcp` |
 | `requirements.txt` | `mcp` (2.x) and `pytest`; nothing else is needed |
@@ -20,6 +20,10 @@ Use the repository venv (`CI/setup_venv.*` makes `.venv`; on Windows `.venv\Scri
 ```bash
 .venv/bin/python -m pytest tools/control/tests                # the tests
 ```
+
+## Naming the game
+
+A caller gives the executable as a path, or as a preset and a game name: `preset_executable(preset, game, root)` is `<root>/build/<preset>/bin/<game>[.exe]` (a multi-config preset: the newest `bin/<Config>/`; `root` defaults to the repository holding these tools, so a game that carries the engine passes its own). `GameSession.launch` and `launch_game` take `exe` or `preset` + `game`, exactly one of the two; `smoke.py` takes `--exe` or `--preset` + `--game` (the ctest entries pass `--exe $<TARGET_FILE:...>`). The tools never hard-code a build folder: the layout belongs to `cmake/BagiEngine.cmake`, and a path in a docstring is a placeholder or goes through `preset_executable`.
 
 ## The smoke test and the free port
 

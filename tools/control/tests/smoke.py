@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Smoke test of the control API: starts a game executable with --control and plays a few moves over WebSocket.
 
-    python tools/control/tests/smoke.py --exe build/ClangmacOS/BagiMatch3
+    python tools/control/tests/smoke.py --exe <path of the built BagiMatch3>
+    python tools/control/tests/smoke.py --preset macos-debug --game BagiMatch3     # build/macos-debug/bin/BagiMatch3
 
 The game is started twice, once on the real clock and once with --manual-clock (game time moves only on `step`). The
 scenario is the one of Match3 (a swap on a seeded board); another game brings its own script that calls run_smoke() with its
@@ -24,7 +25,7 @@ from typing import Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bagi_control_client import BagiControlClient, ConnectionClosed, ControlError  # noqa: E402
-from game_process import free_port, log_tail  # noqa: E402
+from game_process import free_port, log_tail, preset_executable  # noqa: E402
 from png_reader import PngError, PngImage, read_png  # noqa: E402
 
 EXIT_PASSED = 0
@@ -410,12 +411,21 @@ def play_with_retry(exe: Path, flags: list[str], scenario: Callable[[BagiControl
 def run_smoke(description: str, scenarios: list[tuple[str, list[str], Callable[[BagiControlClient, bool], None]]]) -> int:
     """Parses the command line and plays every scenario (name, extra game flags, function(client, headless)) in a fresh game."""
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--exe", required=True, type=Path, help="the game executable")
+    parser.add_argument("--exe", type=Path, help="the game executable (or --preset and --game)")
+    parser.add_argument("--preset", help="the CMake preset that built the game: the executable is build/<preset>/bin/<game>")
+    parser.add_argument("--game", help="the executable name for --preset, e.g. BagiMatch3")
+    parser.add_argument("--root", type=Path, help="the repository whose build/ folder --preset means (default: the one holding these tools)")
     parser.add_argument("--port", type=int, default=0, help="control port (default: a free one for every run)")
     parser.add_argument("--window", action="store_true", help="run the game in a real window instead of --headless (needs a display; no screenshot checks)")
     parser.add_argument("--startup-timeout", type=float, default=30.0, help="seconds to wait for the control API")
     parser.add_argument("--shutdown-timeout", type=float, default=15.0, help="seconds to wait for the game to exit after quit")
     args = parser.parse_args()
+
+    by_preset = args.preset is not None or args.game is not None
+    if (args.exe is not None) == by_preset or (by_preset and (args.preset is None or args.game is None)):
+        parser.error("give the executable either as --exe, or as --preset together with --game")
+    if args.exe is None:
+        args.exe = preset_executable(args.preset, args.game, args.root)
 
     if not args.exe.is_file():
         print(f"SKIPPED: {args.exe} does not exist")

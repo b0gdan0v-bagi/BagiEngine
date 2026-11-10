@@ -4,7 +4,7 @@ No MCP code in here (bagi_mcp.py maps these methods onto tools), so it runs and 
 Standard library only.
 
     session = GameSession()
-    session.launch("build/ClangmacOS/BagiMatch3")
+    session.launch(preset="macos-debug", game="BagiMatch3")  # or launch("<path of a built game>")
     session.call("perform_action", {"type": "swap", "from": {"col": 0, "row": 0}, "to": {"col": 1, "row": 0}})
     png, size = session.screenshot()
     session.quit()
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from bagi_control_client import DEFAULT_HOST, DEFAULT_PORT, BagiControlClient, ConnectionClosed, ControlError
-from game_process import DEFAULT_SHUTDOWN_TIMEOUT, DEFAULT_STARTUP_TIMEOUT, GameLaunchError, GameProcess, build_game_command, free_port
+from game_process import DEFAULT_SHUTDOWN_TIMEOUT, DEFAULT_STARTUP_TIMEOUT, GameLaunchError, GameProcess, build_game_command, free_port, preset_executable
 
 CALL_TIMEOUT_SECONDS = 60.0
 STEP_SECONDS_PER_FRAME = 0.05  # a generous bound for a frame: a step of N frames may take N times this before the call gives up
@@ -40,12 +40,28 @@ class GameSession:
     def is_connected(self) -> bool:
         return self._client is not None
 
-    def launch(self, exe: str, headless: bool = True, manual_clock: bool = True, startup_timeout: float = DEFAULT_STARTUP_TIMEOUT) -> dict[str, Any]:
-        """Starts `exe` with the control API on a free port and connects to it. A game that this session started earlier is stopped."""
+    def launch(
+        self,
+        exe: str | None = None,
+        headless: bool = True,
+        manual_clock: bool = True,
+        startup_timeout: float = DEFAULT_STARTUP_TIMEOUT,
+        preset: str | None = None,
+        game: str | None = None,
+    ) -> dict[str, Any]:
+        """Starts a game with the control API on a free port and connects to it. A game that this session started earlier is stopped.
+
+        The game is given either as `exe` (a path) or as `preset` + `game` (build/<preset>/bin/<game>, see preset_executable); exactly one of the two.
+        """
+        by_path = bool(exe)
+        by_preset = bool(preset) or bool(game)
+        if by_path == by_preset or (by_preset and not (preset and game)):
+            raise SessionError("name the game either by `exe` (the path of the built executable) or by `preset` and `game` together (build/<preset>/bin/<game>), not both and not neither")
         self.close()
-        exe_path = Path(exe).expanduser().resolve()
+        exe_path = Path(exe).expanduser().resolve() if exe else preset_executable(preset, game).resolve()
         if not exe_path.is_file():
-            raise SessionError(f"there is no game executable at {exe_path}")
+            hint = f"; build the preset '{preset}' first" if preset else ""
+            raise SessionError(f"there is no game executable at {exe_path}{hint}")
 
         port = free_port()
         game = GameProcess(build_game_command(exe_path, port, headless, manual_clock), cwd=exe_path.parent)
