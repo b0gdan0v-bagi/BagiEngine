@@ -58,9 +58,17 @@ namespace BECore {
     }
 
     Font* UILabel::ResolveFont() const {
-        const PoolString path = font.Empty() ? CoreManager::GetFontAtlasLibrary().GetSettings().defaultFont : font;
+        const FontRequest request{font, fontFamily, fontWeight};
+        bool known = true;
+        const PoolString path = CoreManager::GetFontAtlasLibrary().ResolveFontPath(request, &known);
+        if (request != _fontRequest) {
+            _fontRequest = request;
+            if (!known) {
+                LOG_WARNING("UILabel: no font family '{}' in TextConfig.xml, using the default font"_format(fontFamily.ToStringView()));
+            }
+        }
         if (path != _fontPath) {
-            // First use, or the field was changed. A path that does not load is logged once and tried again only when it changes
+            // First use, or a field was changed. A path that does not load is logged once and tried again only when it changes
             _fontPath = path;
             _fontHandle = CoreManager::GetResourceManager().Load<Font>(path.ToStringView());
             if (!_fontHandle || _fontHandle->GetState() != ResourceState::Loaded) {
@@ -69,6 +77,10 @@ namespace BECore {
             }
         }
         return _fontHandle ? _fontHandle.Get() : nullptr;
+    }
+
+    PoolString UILabel::GetResolvedFontPath() const {
+        return ResolveFont() ? _fontPath : PoolString{};
     }
 
     void UILabel::DrawSelf(IRenderer& renderer) {

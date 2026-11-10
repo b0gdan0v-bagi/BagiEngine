@@ -19,7 +19,12 @@ namespace BECore {
         _font.Reset();
         _layoutCache.Reset();  // the cached layout belongs to the old font
 
-        const PoolString path = _fontPath.Empty() ? CoreManager::GetFontAtlasLibrary().GetSettings().defaultFont : _fontPath;
+        _fontRequest = FontRequest{_fontPath, _fontFamily, _fontWeight};
+        bool known = true;
+        const PoolString path = CoreManager::GetFontAtlasLibrary().ResolveFontPath(_fontRequest, &known);
+        if (!known) {
+            LOG_WARNING("TextComponent: no font family '{}' in TextConfig.xml, using the default font"_format(_fontFamily.ToStringView()));
+        }
         _font = CoreManager::GetResourceManager().Load<Font>(path.ToStringView());
         if (!_font || _font->GetState() != ResourceState::Loaded) {
             LOG_ERROR("TextComponent: cannot load the font '{}'"_format(path.ToStringView()));
@@ -36,8 +41,8 @@ namespace BECore {
         if (!renderer || _text.empty()) {
             return;
         }
-        if (!_font && !_fontTried) {
-            ReloadFont();
+        if (!_fontTried || _fontRequest != FontRequest{_fontPath, _fontFamily, _fontWeight}) {
+            ReloadFont();  // first draw, or the path, family or weight changed
         }
         if (!_font) {
             return;

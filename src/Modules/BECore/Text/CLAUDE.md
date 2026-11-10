@@ -43,7 +43,7 @@ Font (.ttf/.otf bytes, CPU)  ->  TextLayout (pure: lines, glyph positions)  ->  
 </components></node>
 ```
 
-A width or height of 0 means no limit. `fontPath` empty is the default font. Change the text at run time with `SetText()` (or write `_text`; the next draw lays it out again). `overflow="Clip"` clips the drawing to the box when the text does not fit; the clip is pushed and popped around the glyphs.
+A width or height of 0 means no limit. `fontPath` empty is the face of `fontFamily` (empty: the default family) at `fontWeight` (400 or 700, the nearest face of the table); a path wins over both. A changed path, family or weight is loaded by the next draw. A family that the table does not know is logged once per change and the default font is used. Change the text at run time with `SetText()` (or write `_text`; the next draw lays it out again). `overflow="Clip"` clips the drawing to the box when the text does not fit; the clip is pushed and popped around the glyphs.
 
 ## Rules
 
@@ -51,12 +51,13 @@ A width or height of 0 means no limit. `fontPath` empty is the default font. Cha
 - **Only your own fonts.** `stb_truetype` does no range checking of offsets in the file (its header says so), so a font file is a trusted asset of the engine or the game, never user input.
 - **No GPU object outlives its renderer.** Hold glyph pages only through `FontAtlas` / the library. Anything that caches atlases itself must clear them before the renderer is destroyed (`IRenderer::WaitIdle()` first, then free).
 - Code points the font lacks are drawn with its fallback glyph; do not substitute strings in game code.
+- **One choice of the face:** `FontAtlasLibrary::ResolveFontPath(FontRequest)` (path, else family and weight), used by `UILabel` and `TextComponent`; the layout check of a label measures through the same font it draws with.
 - The default font is `assets/fonts/PT_Sans-Web-Regular.ttf` (ParaType, SIL Open Font License 1.1, license text next to it; the name "PT Sans" is a reserved font name, so ship it unmodified). It covers Basic Latin, Latin-1, Cyrillic including Ё and the general punctuation, which `tests/BECore/FontTest.cpp` checks. A game adds its own font to its `assets/` and sets `fontPath`, or replaces `TextConfig.xml` (a game's file replaces the engine's whole file).
 - The engine ships an `assets/` directory now (`assets/fonts/`); `FileSystem` mounts it as the lowest layer of `assets`, and a game's file of the same relative path replaces it.
 
 ## Not done
 
-Text shaping, ligatures, right-to-left and complex scripts, kerning from GPOS (PT Sans keeps its kerning there, so there is none), several fonts per text with fallback fonts, bold and italic as styles, rich text, vertical alignment inside the box, signed distance fields, color glyphs and emoji. A glyph that is larger than a page (very large sizes) is skipped with a log line.
+Text shaping, ligatures, right-to-left and complex scripts, kerning from GPOS (PT Sans keeps its kerning there, so there is none), several fonts per text with fallback fonts, italic and synthetic bold (a weight is a face of its own file; a missing weight takes the nearest face), rich text, vertical alignment inside the box, signed distance fields, color glyphs and emoji. A glyph that is larger than a page (very large sizes) is skipped with a log line.
 
 ## Tests
 

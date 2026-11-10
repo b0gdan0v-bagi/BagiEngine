@@ -9,6 +9,16 @@ namespace BECore {
         _settings = TextSettings::FromConfig(CoreManager::GetConfigManager().GetConfig("TextConfig"_intern));
     }
 
+    PoolString FontAtlasLibrary::ResolveFontPath(const FontRequest& request, bool* known) const {
+        if (!request.font.Empty()) {
+            if (known) {
+                *known = true;
+            }
+            return request.font;
+        }
+        return _settings.ResolveFontPath(request.family, request.weight, known);
+    }
+
     int FontAtlasLibrary::QuantizeSize(float effectivePixelSize) {
         if (!(effectivePixelSize > 1.0f)) {  // also catches NaN
             return 1;

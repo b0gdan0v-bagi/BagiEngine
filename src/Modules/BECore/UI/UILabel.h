@@ -2,6 +2,7 @@
 
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Text/Font.h>
+#include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/TextLayoutCache.h>
 #include <BECore/UI/UIElement.h>
 
@@ -16,8 +17,9 @@ namespace BECore {
      * The size is `fontSize` of the style in UI units (24 when it is 0, so a responsive variant can change it); the text is laid out and rasterized at that size times the
      * scale of the canvas, in whole output pixels (`Text/CLAUDE.md`). `overflow` says what happens to a text that does not fit the rect: `Ellipsis` (the default) ends it
      * with "…", `AutoFit` shrinks it down to `minFontSize`, `Clip` cuts the drawing at the rect (and the layout validator reports it, UIContentFit). `color` is a fill behind the text,
-     * `textColor` is the text. The text may name variables, `text="Score: {score}"`, which follow `CoreManager::GetUIVars()`, and strings, `text="{#menu.start}"`, which follow
-     * `CoreManager::GetUIStrings()` and its language. Vertical alignment is the label's (TextLayout has none).
+     * `textColor` is the text. The face is `font` (a file path), else the nearest face of `fontFamily` at `fontWeight` in the table of `TextConfig.xml`; the validator measures with it. The text may
+     * name variables, `text="Score: {score}"`, which follow `CoreManager::GetUIVars()`, and strings, `text="{#menu.start}"`, which follow `CoreManager::GetUIStrings()` and its language. Vertical
+     * alignment is the label's (TextLayout has none).
      */
     class UILabel : public UIElement {
         BE_CLASS(UILabel)
@@ -28,7 +30,9 @@ namespace BECore {
         ~UILabel() override = default;
 
         BE_REFLECT_FIELD eastl::string text;
-        BE_REFLECT_FIELD PoolString font;  ///< a font path; empty is the default font of TextConfig.xml
+        BE_REFLECT_FIELD PoolString font;            ///< a font path; empty: the face of `fontFamily` and `fontWeight`. A path wins over them
+        BE_REFLECT_FIELD PoolString fontFamily;      ///< a family of the `families` table of TextConfig.xml; empty is its default family
+        BE_REFLECT_FIELD uint16_t fontWeight = 400;  ///< the CSS weight (400 regular, 700 bold); the nearest face of the family is used
         BE_REFLECT_FIELD UIColor textColor{255, 255, 255, 255};
         BE_REFLECT_FIELD TextAlign align = TextAlign::Left;
         BE_REFLECT_FIELD UIVerticalAlign verticalAlign = UIVerticalAlign::Top;
@@ -49,6 +53,9 @@ namespace BECore {
 
         /// The font size in effect, in UI units: `active.fontSize` (after variants), else DefaultFontSize
         [[nodiscard]] float GetFontSize() const;
+
+        /// The font file the text is measured and drawn with (the path of `font`, else the face of family and weight), empty when it did not load
+        [[nodiscard]] PoolString GetResolvedFontPath() const;
 
         /// The layout of the last draw (empty before the first one)
         [[nodiscard]] const TextLayoutResult& GetLastLayout() const {
@@ -79,7 +86,8 @@ namespace BECore {
         [[nodiscard]] Font* ResolveFont() const;
 
         mutable ResourceHandle<Font> _fontHandle;
-        mutable PoolString _fontPath;  // the path _fontHandle was loaded from, to notice a changed `font`
+        mutable PoolString _fontPath;      // the path _fontHandle was loaded from, to notice a changed font, family or weight
+        mutable FontRequest _fontRequest;  // the request of the last resolve: an unknown family is logged when it changes, not on every frame
         mutable TextLayoutCache _layoutCache;
         mutable eastl::string _expandedSource;  // the `text` that _expanded was made from
         mutable eastl::string _expanded;

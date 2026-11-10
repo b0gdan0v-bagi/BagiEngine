@@ -7,6 +7,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/TextTestSupport.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -134,6 +135,41 @@ namespace BECore::Tests {
         for (size_t i = 1; i < _renderer->calls.size(); ++i) {
             EXPECT_GT(_renderer->calls[i].rect.x, _renderer->calls[i - 1].rect.x);
         }
+    }
+
+    TEST_F(TextComponentTest, AChangedFamilyOrWeightLoadsTheOtherFaceByItself) {
+        const ScopedTextSettings settings(MakeTestFamilySettings());
+        auto label = Label("Plain");
+        label->_fontFamily = "Test"_intern;
+        label->_fontWeight = 400;
+
+        Draw("Plain");
+        EXPECT_EQ(CoreManager::GetFontAtlasLibrary().GetAtlasCount(), 1u);
+        label->_fontWeight = 700;
+        Draw("Plain");
+        EXPECT_EQ(CoreManager::GetFontAtlasLibrary().GetAtlasCount(), 2u);  // the bold face is its own font, so its own atlas
+        EXPECT_EQ(_renderer->calls.size(), kInkedGlyphsInHello);
+        label->_fontWeight = 600;  // the same face again: nothing new
+        Draw("Plain");
+        EXPECT_EQ(CoreManager::GetFontAtlasLibrary().GetAtlasCount(), 2u);
+    }
+
+    TEST_F(TextComponentTest, APathInFontPathWinsOverFamilyAndAnUnknownFamilyIsLoggedOnce) {
+        const ScopedTextSettings settings(MakeTestFamilySettings());
+        const WarningCounter warnings("font family");
+        auto label = Label("Plain");
+        label->_fontFamily = "Nope"_intern;
+        for (int frame = 0; frame < 3; ++frame) {
+            Draw("Plain");
+        }
+        EXPECT_EQ(warnings.Count(), 1u);
+        EXPECT_EQ(_renderer->calls.size(), kInkedGlyphsInHello);  // drawn with the default font
+
+        label->_fontPath = PoolString::Intern(kTestBoldPath);
+        label->_fontFamily = "Other"_intern;
+        Draw("Plain");
+        EXPECT_EQ(warnings.Count(), 1u);
+        EXPECT_EQ(CoreManager::GetFontAtlasLibrary().GetAtlasCount(), 2u);
     }
 
     TEST_F(TextComponentTest, TheAtlasMatchesTheSizeTimesTheViewScale) {

@@ -18,6 +18,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/TextTestSupport.h>
 #include <Common/UITreeCompare.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -418,6 +419,8 @@ namespace BECore::Tests {
                                                         : static_cast<UILabel*>(element.Cast<UIDropdown>());
                 text->text = "Some text";
                 text->font = PoolString::Intern("assets/fonts/Other.ttf");
+                text->fontFamily = PoolString::Intern("Test");
+                text->fontWeight = 700;
                 text->textColor = Color{21, 22, 23, 24};
                 text->align = TextAlign::Right;
                 text->verticalAlign = UIVerticalAlign::Bottom;
@@ -748,6 +751,81 @@ namespace BECore::Tests {
         strings.SetLanguage("de"_intern);
         EXPECT_EQ(textIssues(), 1u);
         EXPECT_FALSE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
+    }
+
+    TEST_F(UIControlsTest, TheFamilyAndTheWeightChooseTheFaceOfALabel) {
+        const ScopedTextSettings settings(MakeTestFamilySettings());
+        auto& title = Get<UILabel>("Title");
+        title.fontFamily = "Test"_intern;
+
+        title.fontWeight = 400;
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+        title.fontWeight = 700;
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));
+        Draw();
+        EXPECT_FALSE(GlyphsIn(title).empty());  // the other face is loaded and drawn
+        title.fontWeight = 600;
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));  // the nearest face, over 500 the one above
+        title.fontWeight = 400;
+        title.fontFamily = PoolString{};  // the default family of the settings is PT Sans, which this table does not have
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+    }
+
+    TEST_F(UIControlsTest, APathInFontWinsOverFamilyAndWeight) {
+        const ScopedTextSettings settings(MakeTestFamilySettings());
+        auto& title = Get<UILabel>("Title");
+        title.font = PoolString::Intern(kTestRegularPath);
+        title.fontFamily = "Test"_intern;
+        title.fontWeight = 700;
+        const WarningCounter warnings("font family");
+
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+        title.fontFamily = "Nope"_intern;  // not looked at either: no warning
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+        EXPECT_EQ(warnings.Count(), 0u);
+    }
+
+    TEST_F(UIControlsTest, AnUnknownFamilyIsLoggedOnceAndTheDefaultFontIsUsed) {
+        const ScopedTextSettings settings(MakeTestFamilySettings());
+        const PoolString defaultFont = CoreManager::GetFontAtlasLibrary().GetSettings().defaultFont;
+        auto& title = Get<UILabel>("Title");
+        title.fontFamily = "Nope"_intern;
+        const WarningCounter warnings("font family 'Nope'");
+
+        for (int frame = 0; frame < 3; ++frame) {
+            Draw();
+        }
+        EXPECT_EQ(title.GetResolvedFontPath(), defaultFont);
+        EXPECT_EQ(warnings.Count(), 1u);
+        EXPECT_FALSE(GlyphsIn(title).empty());  // the text is drawn with the default font
+
+        title.fontFamily = "Test"_intern;
+        Draw();
+        EXPECT_EQ(warnings.Count(), 1u);  // a known family says nothing
+    }
+
+    TEST_F(UIControlsTest, TheValidatorMeasuresWithTheFaceOfTheFamilyAndTheWeight) {
+        const ScopedTextSettings settings(MakeTestFamilySettings());
+        auto& title = Get<UILabel>("Title");
+        title.text = "A value that is much too long for a label of this width";
+        title.fontFamily = "Test"_intern;
+        title.fontWeight = 700;
+        title.wrap = false;
+        title.overflow = TextOverflow::Clip;
+        title.style.rect.height = UILength::Px(40.0f);
+        _canvas->Invalidate();
+        Draw();
+
+        size_t count = 0;
+        for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
+            count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
+        }
+
+        EXPECT_EQ(count, 1u);
+        EXPECT_FALSE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));  // the face the check measured with
+        title.text = "Short";
+        EXPECT_TRUE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
     }
 
     TEST_F(UIControlsTest, ABracedTextWithoutAVariableIsShownWithoutBraces) {

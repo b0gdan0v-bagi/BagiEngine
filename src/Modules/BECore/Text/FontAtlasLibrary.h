@@ -7,6 +7,15 @@ namespace BECore {
 
     class IRenderer;
 
+    /// Which font a text asks for: a file path (wins when not empty), else the face of a family at a weight
+    struct FontRequest {
+        PoolString font;
+        PoolString family;  ///< empty: the default family of TextConfig.xml
+        int weight = 400;
+
+        bool operator==(const FontRequest&) const = default;
+    };
+
     /**
      * @brief The glyph atlases that exist, one per (font, pixel size): `CoreManager::GetFontAtlasLibrary()`.
      *
@@ -39,6 +48,10 @@ namespace BECore {
         void SetSettings(TextSettings settings) {
             _settings = std::move(settings);
         }
+
+        /// The font file of @p request: its `font` when set, else `TextSettings::ResolveFontPath` of its family and weight. The one rule of
+        /// every text, so a label and a scene text choose the same face. @p known is as in TextSettings::ResolveFontPath (always true when `font` is set)
+        [[nodiscard]] PoolString ResolveFontPath(const FontRequest& request, bool* known = nullptr) const;
 
         /// The effective size in pixels as a whole number from 1 to kMaxPixelSize
         [[nodiscard]] static int QuantizeSize(float effectivePixelSize);
