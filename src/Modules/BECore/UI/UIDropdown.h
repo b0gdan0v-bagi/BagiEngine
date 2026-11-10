@@ -86,6 +86,9 @@ namespace BECore {
         /// The value of the bound variable; empty when `bind` is empty or the variable is not set
         [[nodiscard]] eastl::string_view GetSelectedValue() const;
 
+        /// Whether a click on @p option emits `ActionEvent(action, option value)`: not when the dropdown or the option is `disabled`, or `action` is empty
+        [[nodiscard]] bool EmitsOnChoice(const UIButton& option) const;
+
         /// The option whose `value` equals the variable; null when there is none
         [[nodiscard]] UIButton* FindChosenOption() const;
 

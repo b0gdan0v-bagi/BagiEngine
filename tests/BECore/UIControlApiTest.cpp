@@ -8,6 +8,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
+#include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISlider.h>
@@ -35,6 +36,8 @@ namespace BECore::Tests {
         //   and 150 x 56 at x = 100, 252, y = 100), and Plain (100, 300, 80 x 40) is a button without a value.
         // "Values": 800 x 600 in window pixels. Sound is a UIToggle (100, 100, 300 x 56, `uiApiSound`, custom values "on" / "off"), Volume a UISlider (100, 200, 400 x 56, `uiApiVolume`, range 0..1
         //   in steps of 0.1), Quiet a disabled UISlider (100, 400, 400 x 56), Loading a UIProgressBar (100, 300, 400 x 24, `uiApiLoad`, range 0..100).
+        // "Pick": 800 x 600 in window pixels. Level is a UIDropdown (100, 100, 240 x 56, `uiApiLevel`, action UIControlApiLevel, options 56 high: Easy, Normal, Hard and Locked, a
+        //   disabled option), Below (500, 200, 80 x 40) is a button the open list does not cover, Frozen (100, 450, 240 x 56) a disabled dropdown with one option.
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -100,6 +103,28 @@ namespace BECore::Tests {
           <element type="UISlider" name="Volume" bind="uiApiVolume" action="UIControlApiVolume" minValue="0" maxValue="1" step="0.1" x="100" y="200" width="400" height="56"/>
           <element type="UIProgressBar" name="Loading" bind="uiApiLoad" minValue="0" maxValue="100" x="100" y="300" width="400" height="24"/>
           <element type="UISlider" name="Quiet" bind="uiApiQuiet" action="UIControlApiQuiet" disabled="true" x="100" y="400" width="400" height="56"/>
+        </elements>
+      </component>
+    </components></node>
+  </nodes></scene>
+  <scene type="Scene" name="Pick"><nodes>
+    <node name="Panel"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+        <elements>
+          <element type="UIDropdown" name="Level" bind="uiApiLevel" action="UIControlApiLevel" text="Pick" x="100" y="100" width="240" height="56" optionHeight="56" color="30,30,30,255">
+            <children>
+              <element type="UIButton" name="Easy" text="Easy" value="easy" color="70,70,100,255"/>
+              <element type="UIButton" name="Normal" text="Normal" value="normal" color="70,70,100,255"/>
+              <element type="UIButton" name="Hard" text="Hard" value="hard" color="70,70,100,255"/>
+              <element type="UIButton" name="Locked" text="Locked" value="locked" color="70,70,100,255" disabled="true"/>
+            </children>
+          </element>
+          <element type="UIButton" name="Below" x="500" y="200" width="80" height="40" text="Below" action="UIControlApiBelow" color="40,90,60,255"/>
+          <element type="UIDropdown" name="Frozen" bind="uiApiFrozen" action="UIControlApiFrozen" disabled="true" x="100" y="450" width="240" height="56" optionHeight="56" color="30,30,30,255">
+            <children>
+              <element type="UIButton" name="Only" text="Only" value="only" color="70,70,100,255"/>
+            </children>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -672,6 +697,212 @@ namespace BECore::Tests {
         ASSERT_NE(note, nullptr);
         EXPECT_EQ(Member(*note, "value"), nullptr);
         EXPECT_EQ(Member(*note, "selected"), nullptr);
+    }
+
+    // ---- the dropdown -----------------------------------------------------------------------------------------------------
+
+    TEST_F(UIControlApiTest, ATreeShowsAClosedDropdownAndItsOptionsAsHidden) {
+        CoreManager::GetUIVars().Set("uiApiLevel"_intern, "normal");
+        Show("Pick");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* panel = FindCanvas(*Member(response, "result"), "Panel");
+        ASSERT_NE(panel, nullptr);
+        const Json* level = FindElement(*panel, "Level");
+        ASSERT_NE(level, nullptr);
+        EXPECT_EQ(StringMember(*level, "type"), "UIDropdown");
+        EXPECT_EQ(StringMember(*level, "bind"), "uiApiLevel");
+        EXPECT_EQ(StringMember(*level, "selectedValue"), "normal");
+        EXPECT_EQ(StringMember(*level, "action"), "UIControlApiLevel");
+        EXPECT_EQ(StringMember(*level, "text"), "Normal") << "the header shows the chosen option";
+        EXPECT_FALSE(BoolMember(*level, "open"));
+        EXPECT_FALSE(BoolMember(*level, "disabled"));
+        EXPECT_TRUE(BoolMember(*level, "interactive"));
+        EXPECT_TRUE(BoolMember(*level, "visible"));
+        ExpectRect(Member(*level, "rect"), 100.0f, 100.0f, 240.0f, 56.0f);
+        for (const char* option : {"Easy", "Normal", "Hard", "Locked"}) {
+            const Json* item = FindElement(*level, option);
+            ASSERT_NE(item, nullptr) << option;
+            EXPECT_FALSE(BoolMember(*item, "visible")) << option << " is hidden while the list is closed";
+        }
+        EXPECT_TRUE(BoolMember(*FindElement(*level, "Normal"), "selected"));
+        EXPECT_FALSE(BoolMember(*FindElement(*level, "Easy"), "selected"));
+        EXPECT_TRUE(BoolMember(*FindElement(*level, "Locked"), "disabled"));
+        EXPECT_EQ(StringMember(*FindElement(*level, "Hard"), "value"), "hard");
+        EXPECT_EQ(StringMember(*FindElement(*level, "Hard"), "action"), "") << "the options keep no action of their own";
+        EXPECT_EQ(Member(*FindElement(*panel, "Below"), "open"), nullptr) << "only a dropdown has open";
+    }
+
+    TEST_F(UIControlApiTest, TheSelectionOfADropdownFollowsTheVariableWithNoDraw) {
+        CoreManager::GetUIVars().Set("uiApiLevel"_intern, "easy");
+        Show("Pick");
+        CoreManager::GetUIVars().Set("uiApiLevel"_intern, "hard");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response));
+        const Json* level = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Level");
+        ASSERT_NE(level, nullptr);
+        EXPECT_EQ(StringMember(*level, "selectedValue"), "hard");
+        EXPECT_TRUE(BoolMember(*FindElement(*level, "Hard"), "selected"));
+        EXPECT_FALSE(BoolMember(*FindElement(*level, "Easy"), "selected"));
+    }
+
+    TEST_F(UIControlApiTest, AnUnsetDropdownShowsThePlaceholderAndSelectsNothing) {
+        Show("Pick");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response));
+        const Json* level = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "Level");
+        ASSERT_NE(level, nullptr);
+        EXPECT_EQ(StringMember(*level, "selectedValue"), "");
+        EXPECT_EQ(StringMember(*level, "text"), "Pick");
+        EXPECT_FALSE(BoolMember(*FindElement(*level, "Easy"), "selected"));
+    }
+
+    TEST_F(UIControlApiTest, AClickOnTheHeaderOpensTheListAndEmitsNothing) {
+        Show("Pick");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("Level"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        const Json& result = *Member(clicked, "result");
+        EXPECT_TRUE(BoolMember(result, "consumed"));
+        EXPECT_EQ(Member(result, "action"), nullptr);
+        EXPECT_EQ(Member(result, "value"), nullptr);
+        EXPECT_EQ(recorder.Total(), 0u);
+
+        // The open list gets its rects at the next draw
+        const Json stale = Call("ui_tree");
+        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(stale, "result"), "Panel"), "Level"), "open"));
+        Show("Pick");
+        const Json tree = Call("ui_tree");
+        ASSERT_TRUE(IsOk(tree));
+        const Json* level = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Level");
+        ASSERT_NE(level, nullptr);
+        EXPECT_TRUE(BoolMember(*level, "open"));
+        for (const char* option : {"Easy", "Normal", "Hard", "Locked"}) {
+            EXPECT_TRUE(BoolMember(*FindElement(*level, option), "visible")) << option;
+        }
+        ExpectRect(Member(*FindElement(*level, "Easy"), "rect"), 100.0f, 156.0f, 240.0f, 56.0f);
+        ExpectRect(Member(*FindElement(*level, "Locked"), "rect"), 100.0f, 324.0f, 240.0f, 56.0f);
+    }
+
+    TEST_F(UIControlApiTest, AClickOnAnOptionAnswersWithTheActionAndTheValueAndTheListClosesAtTheNextFrame) {
+        CoreManager::GetUIVars().Set("uiApiLevel"_intern, "easy");
+        Show("Pick");
+        ASSERT_TRUE(IsOk(Call("ui_click", Click("Level"))));
+        Show("Pick");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("Hard"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        const Json& result = *Member(clicked, "result");
+        EXPECT_TRUE(BoolMember(result, "consumed"));
+        EXPECT_EQ(StringMember(result, "action"), "UIControlApiLevel");
+        EXPECT_EQ(StringMember(result, "value"), "hard");
+        EXPECT_EQ(recorder.Count("UIControlApiLevel"), 1);
+        EXPECT_EQ(recorder.LastValue(), "hard");
+
+        Show("Pick");
+        const Json tree = Call("ui_tree");
+        const Json* level = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Level");
+        ASSERT_NE(level, nullptr);
+        EXPECT_FALSE(BoolMember(*level, "open"));
+        EXPECT_FALSE(BoolMember(*FindElement(*level, "Hard"), "visible"));
+        EXPECT_EQ(StringMember(*level, "selectedValue"), "easy") << "the choice is the game's: a click sets no variable";
+        EXPECT_EQ(StringMember(*level, "text"), "Easy");
+
+        CoreManager::GetUIVars().Set("uiApiLevel"_intern, "hard");  // the game answers
+        const Json after = Call("ui_tree");
+        EXPECT_EQ(StringMember(*FindElement(*FindCanvas(*Member(after, "result"), "Panel"), "Level"), "text"), "Hard");
+        const Json again = Call("ui_click", Click("Hard"));
+        EXPECT_EQ(ErrorCode(again), "not_clickable") << "the list is closed again";
+    }
+
+    TEST_F(UIControlApiTest, AnOptionIsNotClickableWhileTheListIsClosed) {
+        Show("Pick");
+
+        const Json response = Call("ui_click", Click("Easy"));
+
+        EXPECT_FALSE(IsOk(response));
+        EXPECT_EQ(ErrorCode(response), "not_clickable");
+        EXPECT_NE(ErrorMessage(response).find("hidden"), std::string::npos) << ErrorMessage(response);
+    }
+
+    TEST_F(UIControlApiTest, ADisabledOptionTakesTheClickAndTheListStaysOpen) {
+        Show("Pick");
+        ASSERT_TRUE(IsOk(Call("ui_click", Click("Level"))));
+        Show("Pick");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("Locked"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        const Json& result = *Member(clicked, "result");
+        EXPECT_TRUE(BoolMember(result, "consumed"));
+        EXPECT_EQ(StringMember(result, "action"), "") << "nothing was emitted";
+        EXPECT_EQ(StringMember(result, "value"), "");
+        EXPECT_EQ(recorder.Total(), 0u);
+        Show("Pick");
+        const Json tree = Call("ui_tree");
+        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Level"), "open"));
+    }
+
+    TEST_F(UIControlApiTest, AClickElsewhereWhileTheListIsOpenClosesItAndIsConsumed) {
+        Show("Pick");
+        ASSERT_TRUE(IsOk(Call("ui_click", Click("Level"))));
+        Show("Pick");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("Below"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
+        EXPECT_EQ(recorder.Count("UIControlApiBelow"), 0) << "the press only closed the list";
+        EXPECT_EQ(recorder.Total(), 0u);
+        Show("Pick");
+        const Json tree = Call("ui_tree");
+        EXPECT_FALSE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Level"), "open"));
+    }
+
+    TEST_F(UIControlApiTest, ADisabledDropdownTakesTheClickAndNeverOpens) {
+        Show("Pick");
+
+        const Json clicked = Call("ui_click", Click("Frozen"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        EXPECT_EQ(Member(*Member(clicked, "result"), "action"), nullptr);
+        Show("Pick");
+        const Json tree = Call("ui_tree");
+        const Json* frozen = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Frozen");
+        ASSERT_NE(frozen, nullptr);
+        EXPECT_TRUE(BoolMember(*frozen, "disabled"));
+        EXPECT_FALSE(BoolMember(*frozen, "open"));
+        EXPECT_FALSE(BoolMember(*FindElement(*frozen, "Only"), "visible"));
+    }
+
+    TEST_F(UIControlApiTest, ADropdownCanBeDrivenEndToEnd) {
+        Show("Pick");
+        Recorder recorder;
+
+        ASSERT_TRUE(IsOk(Call("ui_click", Click("Level"))));
+        Show("Pick");  // the "step"
+        const Json open = Call("ui_tree");
+        ASSERT_TRUE(IsOk(open));
+        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(open, "result"), "Panel"), "Normal"), "visible"));
+        const Json picked = Call("ui_click", Click("Normal"));
+        ASSERT_TRUE(IsOk(picked)) << ErrorMessage(picked);
+        EXPECT_EQ(StringMember(*Member(picked, "result"), "value"), "normal");
+        Show("Pick");
+
+        EXPECT_EQ(recorder.Count("UIControlApiLevel"), 1);
+        EXPECT_EQ(recorder.LastValue(), "normal");
     }
 
     // ---- the toggle, the progress bar and the slider ----------------------------------------------------------------------

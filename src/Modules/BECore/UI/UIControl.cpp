@@ -8,6 +8,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISlider.h>
@@ -71,6 +72,15 @@ namespace BECore {
                 json["bind"] = MakeJsonString(group->bind.ToStringView());
                 json["selectedValue"] = MakeJsonString(group->GetSelectedValue());
                 json["disabled"] = group->disabled;
+            }
+            if (auto* dropdown = element.Cast<UIDropdown>()) {
+                // Like the group: the options take `selected` now, and the children below are described after this, so they show the variable as it is
+                dropdown->SyncChildren();
+                json["bind"] = MakeJsonString(dropdown->bind.ToStringView());
+                json["selectedValue"] = MakeJsonString(dropdown->GetSelectedValue());
+                json["open"] = dropdown->IsPopupOpen();
+                json["action"] = MakeJsonString(dropdown->action.ToStringView());
+                json["disabled"] = dropdown->disabled;
             }
             // The three value controls read the variable now, not as of the last draw
             if (const auto* toggle = element.Cast<UIToggle>()) {
@@ -191,6 +201,23 @@ namespace BECore {
             for (const auto& child : root.children) {
                 CollectNamed(*child, searched, out);
             }
+        }
+
+        /// The dropdown that has @p option among its children, searched in @p root; null when @p option is not an option of any
+        UIDropdown* FindDropdownOf(UIElement& root, const UIElement* option) {
+            if (auto* dropdown = root.Cast<UIDropdown>()) {
+                for (const auto& child : dropdown->children) {
+                    if (child.Get() == option) {
+                        return dropdown;
+                    }
+                }
+            }
+            for (const auto& child : root.children) {
+                if (UIDropdown* found = FindDropdownOf(*child, option)) {
+                    return found;
+                }
+            }
+            return nullptr;
         }
 
         constexpr float kHalf = 0.5f;
@@ -330,6 +357,11 @@ namespace BECore {
                 const PoolString toggleAction = isToggle ? toggle->action : PoolString{};
                 const PoolString toggleValue = isToggle ? (toggle->IsOn() ? toggle->offValue : toggle->onValue) : PoolString{};
                 const auto* slider = target.element->Cast<UISlider>();
+                // An option of a dropdown emits the dropdown's action with its own value (the option's `action` is empty), nothing when the choice is refused; the header emits nothing
+                const UIDropdown* owner = isButton ? FindDropdownOf(*target.canvas->GetLayout().root, target.element.Get()) : nullptr;
+                const bool optionEmits = owner != nullptr && owner->EmitsOnChoice(*button);
+                const PoolString optionAction = optionEmits ? owner->action : PoolString{};
+                const PoolString optionValue = optionEmits ? value : PoolString{};
 
                 UIInput& input = CoreManager::GetUIInput();
                 SDL_MouseMotionEvent motion{};
@@ -346,7 +378,10 @@ namespace BECore {
                 result["x"] = outputX;
                 result["y"] = outputY;
                 result["consumed"] = consumed;
-                if (isButton) {
+                if (owner != nullptr) {
+                    result["action"] = MakeJsonString(optionAction.ToStringView());
+                    result["value"] = MakeJsonString(optionValue.ToStringView());
+                } else if (isButton) {
                     result["action"] = MakeJsonString(action.ToStringView());
                     result["value"] = MakeJsonString(value.ToStringView());
                 } else if (isToggle) {

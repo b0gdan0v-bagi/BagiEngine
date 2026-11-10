@@ -197,6 +197,10 @@ namespace BECore {
         }
     }
 
+    bool UIDropdown::EmitsOnChoice(const UIButton& option) const {
+        return !disabled && !action.Empty() && !option.disabled && !option.groupDisabled;
+    }
+
     void UIDropdown::OnPopupChoice(UIElement& child) {
         auto* option = child.Cast<UIButton>();
         if (!option) {
@@ -205,7 +209,7 @@ namespace BECore {
         if (option->disabled || option->groupDisabled) {
             return;  // takes the click and does nothing; the list stays open
         }
-        const bool emit = !disabled && !action.Empty();
+        const bool emit = EmitsOnChoice(*option);
         const PoolString value = option->value;
         Close();
         if (emit) {

@@ -32,9 +32,11 @@ namespace BECore {
      * "selected" (a segment of a choice group that the bound variable names) for a button, and "bind" (the variable), "selectedValue" (its value: "" when
      * unset) and "disabled" for a `UISegmented`. The value controls add: for a `UIToggle` (also a label, so it has "text", the caption) "bind", "onValue",
      * "offValue", "checked" (the variable equals `onValue`), "action" and "disabled"; for a `UIProgressBar` "bind", "minValue", "maxValue" and "fraction"
-     * (0..1, how much is filled); for a `UISlider` "bind", "minValue", "maxValue", "step", "value" (a number: the variable as the slider reads it, clamped,
-     * the minimum when unset), "fraction" (0..1, where the thumb stands), "action" and "disabled". (A slider's "value" is a number here and the text that a click
-     * emits in the `ui_click` answer; a button's "value" is its text in both.) A rect is {"x","y","w","h"}. An element is visible when its rect is not empty.
+     * (0..1, how much is filled); for a `UIDropdown` (also a label: "text" is the header as shown, the chosen option or the placeholder) "bind", "selectedValue", "open" (the
+     * list is open), "action" and "disabled", and its options are its children (`UIButton`s with "value" and "selected", hidden, with no rect, while the list is closed); for a `UISlider` "bind",
+     * "minValue", "maxValue", "step", "value" (a number: the variable as the slider reads it, clamped, the minimum when unset), "fraction" (0..1, where the thumb stands), "action" and "disabled". (A
+     * slider's "value" is a number here and the text that a click emits in the `ui_click` answer; a button's "value" is its text in both.) A rect is {"x","y","w","h"}. An element is visible when its
+     * rect is not empty.
      *
      * `selected` and `selectedValue` are those of **this moment**: `ui_tree` calls `UISegmented::SyncChildren()` on every group before it describes the
      * segments, so a variable that the game set since the last draw is already in the answer (the rects are still those of the last draw). So are `checked`,
@@ -46,7 +48,10 @@ namespace BECore {
      * (the message says why) when the ones that do are hidden, not interactive, covered by another element of their canvas, or in a canvas that takes no
      * input. "consumed" says whether a canvas took the press. "action" and "value" (empty for a plain button) are what the button emits with the click,
      * the same pair as the `ActionEvent`; a choice group does not change by it, the game answers by setting the
-     * variable. The same holds for a toggle (its "action" and the value it asks for: `offValue` while it is on, `onValue` while it is off, read before the click)
+     * variable. A click on a dropdown's header toggles the list and answers with no "action" and no "value" (it emits nothing); one on an option of an open list answers the dropdown's
+     * "action" and the option's "value" (what was emitted: both "" for a disabled option or dropdown, which take the click and leave the list open), and the list closes at the next
+     * frame, so a client does `ui_click` the header, `step`, `ui_tree`, `ui_click` the option, `step`. A press elsewhere while the list is open closes it and is consumed (no click
+     * for what lies below). The same holds for a toggle (its "action" and the value it asks for: `offValue` while it is on, `onValue` while it is off, read before the click)
      * and a slider (its "action" and the text of the value the press emitted, "" when nothing was emitted: a disabled slider or one without an action). A progress
      * bar is not interactive, so it is `not_clickable`.
      *
