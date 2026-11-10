@@ -64,15 +64,15 @@ class GameSession:
             raise SessionError(f"there is no game executable at {exe_path}{hint}")
 
         port = free_port()
-        game = GameProcess(build_game_command(exe_path, port, headless, manual_clock), cwd=exe_path.parent)
+        process = GameProcess(build_game_command(exe_path, port, headless, manual_clock), cwd=exe_path.parent)
         try:
-            game.start()
-            client = game.connect(port, startup_timeout)
+            process.start()
+            client = process.connect(port, startup_timeout)
         except GameLaunchError as error:
-            game.stop(0)
+            process.stop(0)
             raise SessionError(str(error)) from error
         client.timeout = CALL_TIMEOUT_SECONDS
-        self._game, self._client = game, client
+        self._game, self._client = process, client
         return self._describe(port)
 
     def connect(self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> dict[str, Any]:

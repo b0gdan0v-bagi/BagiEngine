@@ -463,7 +463,7 @@ if(Python3_FOUND)
 
     # Directory for generated reflection files
     # Use CMAKE_BINARY_DIR so generated files go into the actual build directory
-    # (e.g., build/ClangWindowsSolution/Generated instead of build/ClangWindows/Generated)
+    # (e.g., build/<preset>/Generated, or <-B dir>/Generated without a preset)
     # Use "Generated" with capital G so include path is <Generated/File.gen.hpp>
     set(REFLECTION_GENERATED_DIR "${CMAKE_BINARY_DIR}/Generated" CACHE PATH "Directory for generated reflection files")
     file(MAKE_DIRECTORY ${REFLECTION_GENERATED_DIR})
@@ -763,7 +763,8 @@ if(ENGINE_BUILD_TESTS)
         endforeach()
 
         if(APPLE)
-            # libSDL3 is written next to the executables (CMAKE_LIBRARY_OUTPUT_DIRECTORY)
+            # libvulkan is copied next to the executables; libSDL3 is not: the executable reaches it through the rpath
+            # into the SDL build folder (build/<preset>/external/SDL)
             set_target_properties(${NAME} PROPERTIES
                 BUILD_RPATH "@executable_path"
                 INSTALL_RPATH "@executable_path"
