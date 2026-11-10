@@ -22,6 +22,7 @@
 #include <BECore/UI/UIWebText.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
+#include <Common/RecordingRenderer.h>
 #include <Common/TempPath.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UITreeCompare.h>
@@ -563,6 +564,175 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(*UIWebText::ParsePixels("12px"), 12.0f);
         EXPECT_EQ(*UIWebText::ParsePixels(" -3 "), -3.0f);
         EXPECT_FALSE(UIWebText::ParsePixels("2em"));
+    }
+
+    // ---- the values of the box properties --------------------------------------------------------------------------------------
+
+    TEST_F(UIWebTest, CornerRadiiFollowTheCssOrder) {
+        using UIWebText::ParseCornerRadii;
+        EXPECT_EQ(*ParseCornerRadii("8px"), UICorners::Uniform(8.0f));
+        EXPECT_EQ(*ParseCornerRadii("  12  "), UICorners::Uniform(12.0f));
+        EXPECT_EQ(*ParseCornerRadii("0"), UICorners{});
+        EXPECT_EQ(*ParseCornerRadii("1px 2px"), (UICorners{1.0f, 2.0f, 1.0f, 2.0f}));
+        EXPECT_EQ(*ParseCornerRadii("1px 2px 3px"), (UICorners{1.0f, 2.0f, 3.0f, 2.0f}));
+        EXPECT_EQ(*ParseCornerRadii("1px\t2px   3px 4px"), (UICorners{1.0f, 2.0f, 3.0f, 4.0f}));
+        EXPECT_EQ(*ParseCornerRadii("999px"), UICorners::Uniform(999.0f));
+        EXPECT_FALSE(ParseCornerRadii(""));
+        EXPECT_FALSE(ParseCornerRadii("50%"));
+        EXPECT_FALSE(ParseCornerRadii("10px / 5px"));
+        EXPECT_FALSE(ParseCornerRadii("10px/5px"));
+        EXPECT_FALSE(ParseCornerRadii("-1px"));
+        EXPECT_FALSE(ParseCornerRadii("1px 2px 3px 4px 5px"));
+        EXPECT_FALSE(ParseCornerRadii("2em"));
+        EXPECT_FALSE(ParseCornerRadii("round"));
+    }
+
+    TEST_F(UIWebTest, BordersTakeAWidthAColorAndAStyleInAnyOrder) {
+        using UIWebText::ParseBorder;
+        const auto plain = ParseBorder("1px solid #fff");
+        ASSERT_TRUE(plain);
+        EXPECT_FALSE(plain->none);
+        EXPECT_EQ(plain->width, 1.0f);
+        EXPECT_EQ(plain->color.r, 255);
+        const auto reordered = ParseBorder("  RED   SOLID  3 ");
+        ASSERT_TRUE(reordered);
+        EXPECT_EQ(reordered->width, 3.0f);
+        EXPECT_EQ(reordered->color.r, 255);
+        EXPECT_EQ(reordered->color.g, 0);
+        const auto noStyle = ParseBorder("rgba(0, 0, 0, .5) 2px");
+        ASSERT_TRUE(noStyle);
+        EXPECT_EQ(noStyle->width, 2.0f);
+        EXPECT_EQ(noStyle->color.a, 128);
+        EXPECT_TRUE(ParseBorder("none")->none);
+        EXPECT_TRUE(ParseBorder("0")->none);
+        EXPECT_TRUE(ParseBorder("0px solid red")->none);
+        EXPECT_TRUE(ParseBorder("2px none red")->none);
+        EXPECT_FALSE(ParseBorder(""));
+        EXPECT_FALSE(ParseBorder("2px dashed red"));
+        EXPECT_FALSE(ParseBorder("2px dotted red"));
+        EXPECT_FALSE(ParseBorder("-1px solid red"));
+        EXPECT_FALSE(ParseBorder("2px solid"));
+        EXPECT_FALSE(ParseBorder("solid red"));
+        EXPECT_FALSE(ParseBorder("1px 2px red"));
+        EXPECT_FALSE(ParseBorder("1px red blue"));
+        EXPECT_FALSE(ParseBorder("1px solid solid red"));
+        EXPECT_FALSE(ParseBorder("thin solid red"));
+    }
+
+    TEST_F(UIWebTest, LinearGradientsHaveTwoStopsAndAnAxis) {
+        using UIWebText::ParseLinearGradient;
+        const auto plain = ParseLinearGradient("linear-gradient(#112233, #445566)");
+        ASSERT_TRUE(plain);
+        EXPECT_EQ(plain->direction, UIGradientDirection::Vertical);
+        EXPECT_EQ(plain->start.r, 0x11);
+        EXPECT_EQ(plain->end.b, 0x66);
+        const auto bottom = ParseLinearGradient("linear-gradient(to bottom, red, blue)");
+        ASSERT_TRUE(bottom);
+        EXPECT_EQ(bottom->direction, UIGradientDirection::Vertical);
+        EXPECT_EQ(bottom->start.r, 255);
+        EXPECT_EQ(bottom->end.b, 255);
+        EXPECT_EQ(ParseLinearGradient("linear-gradient(180deg, red, blue)")->direction, UIGradientDirection::Vertical);
+        const auto right = ParseLinearGradient("linear-gradient(to right, red, blue)");
+        ASSERT_TRUE(right);
+        EXPECT_EQ(right->direction, UIGradientDirection::Horizontal);
+        EXPECT_EQ(right->start.r, 255);
+        const auto ninety = ParseLinearGradient("linear-gradient(90deg, red, blue)");
+        ASSERT_TRUE(ninety);
+        EXPECT_EQ(ninety->direction, UIGradientDirection::Horizontal);
+        EXPECT_EQ(ninety->start.r, 255);
+
+        // To top and to left run against the axis of the attribute: the colors swap
+        for (const char* text : {"linear-gradient(to top, red, blue)", "linear-gradient(0deg, red, blue)"}) {
+            const auto top = ParseLinearGradient(text);
+            ASSERT_TRUE(top) << text;
+            EXPECT_EQ(top->direction, UIGradientDirection::Vertical) << text;
+            EXPECT_EQ(top->start.b, 255) << text;
+            EXPECT_EQ(top->end.r, 255) << text;
+        }
+        for (const char* text : {"linear-gradient(to left, red, blue)", "linear-gradient(270deg, red, blue)"}) {
+            const auto left = ParseLinearGradient(text);
+            ASSERT_TRUE(left) << text;
+            EXPECT_EQ(left->direction, UIGradientDirection::Horizontal) << text;
+            EXPECT_EQ(left->start.b, 255) << text;
+            EXPECT_EQ(left->end.r, 255) << text;
+        }
+
+        // Stops with commas and spaces inside, white space and case
+        const auto stops = ParseLinearGradient("  LINEAR-GRADIENT( To   Right ,  rgba(1, 2, 3, .5) ,rgb(4 5 6) )  ");
+        ASSERT_TRUE(stops);
+        EXPECT_EQ(stops->direction, UIGradientDirection::Horizontal);
+        EXPECT_EQ(stops->start.g, 2);
+        EXPECT_EQ(stops->start.a, 128);
+        EXPECT_EQ(stops->end.b, 6);
+
+        EXPECT_FALSE(ParseLinearGradient(""));
+        EXPECT_FALSE(ParseLinearGradient("red"));
+        EXPECT_FALSE(ParseLinearGradient("radial-gradient(red, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red, green, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(to right, red, green, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(to right, red)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(45deg, red, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(to top right, red, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red 20%, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red, blue 80%)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red, nonsense)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red, blue"));
+    }
+
+    TEST_F(UIWebTest, BoxShadowsHaveOneOrTwoLayersAndAColor) {
+        using UIWebText::ParseBoxShadows;
+        const auto simple = ParseBoxShadows("2px 4px #000");
+        ASSERT_TRUE(simple);
+        ASSERT_EQ(simple->count, 1u);
+        EXPECT_EQ(simple->layers[0].offsetX, 2.0f);
+        EXPECT_EQ(simple->layers[0].offsetY, 4.0f);
+        EXPECT_EQ(simple->layers[0].blur, 0.0f);
+        EXPECT_EQ(simple->layers[0].spread, 0.0f);
+        EXPECT_EQ(simple->layers[0].color.a, 255);
+        const auto blurred = ParseBoxShadows("0 2px 8px rgba(0, 0, 0, .5)");
+        ASSERT_TRUE(blurred);
+        EXPECT_EQ(blurred->layers[0].blur, 8.0f);
+        EXPECT_EQ(blurred->layers[0].color.a, 128);
+        const auto spread = ParseBoxShadows("0 0 6px -2px #fff");
+        ASSERT_TRUE(spread);
+        EXPECT_EQ(spread->layers[0].spread, -2.0f);
+        const auto colorFirst = ParseBoxShadows("red 1px 2px 3px 4px");
+        ASSERT_TRUE(colorFirst);
+        EXPECT_EQ(colorFirst->layers[0].color.r, 255);
+        EXPECT_EQ(colorFirst->layers[0].offsetY, 2.0f);
+        EXPECT_EQ(colorFirst->layers[0].spread, 4.0f);
+
+        // Two layers, in the order of the text; the comma inside rgba() does not split
+        const auto two = ParseBoxShadows(" 0 0 12px rgba(255, 200, 0, .5) ,  0 3px 0 #000 ");
+        ASSERT_TRUE(two);
+        ASSERT_EQ(two->count, 2u);
+        EXPECT_EQ(two->layers[0].blur, 12.0f);
+        EXPECT_EQ(two->layers[0].color.g, 200);
+        EXPECT_EQ(two->layers[1].offsetY, 3.0f);
+        EXPECT_EQ(two->layers[1].color.a, 255);
+
+        // A layer past the limit is counted and not stored
+        const auto three = ParseBoxShadows("0 0 1px red, 0 0 2px green, 0 0 3px blue");
+        ASSERT_TRUE(three);
+        EXPECT_EQ(three->count, 3u);
+        EXPECT_EQ(three->layers[1].blur, 2.0f);
+
+        const auto none = ParseBoxShadows("  NONE ");
+        ASSERT_TRUE(none);
+        EXPECT_EQ(none->count, 0u);
+
+        EXPECT_FALSE(ParseBoxShadows(""));
+        EXPECT_FALSE(ParseBoxShadows("inset 0 0 4px red"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 4px red inset"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 4px"));
+        EXPECT_FALSE(ParseBoxShadows("4px"));
+        EXPECT_FALSE(ParseBoxShadows("1px 2px 3px 4px 5px red"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 -4px red"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 4% red"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 4px red blue"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 4px red,"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 1px red, 0 0 2px green, inset 0 0 3px blue"));
     }
 
     // ---- the HTML reader -----------------------------------------------------------------------------------------------------
@@ -1508,6 +1678,263 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("b", "disabled"), "true");
         EXPECT_EQ(compiled->Attr("b", "action"), "Go") << "action works as well as data-action";
         EXPECT_TRUE(compiled->report.issues.empty());
+    }
+
+    // ---- the box: corners, border, gradient, shadow, glow ---------------------------------------------------------------------
+
+    namespace {
+
+        /// The box of an element of a compile, compared with the one the XML of the same attributes makes
+        UIBoxStyle BoxOf(const Compiled& compiled, const char* name) {
+            const UIElement* element = compiled.Element(name);
+            EXPECT_NE(element, nullptr) << name;
+            return element != nullptr ? element->box : UIBoxStyle{};
+        }
+
+        UIBoxStyle BoxFromXml(const char* attributes) {
+            const std::string xml = std::string("<ui><elements><element type=\"UIElement\" name=\"x\" ") + attributes + "/></elements></ui>";
+            const UIScreenContent content = ReadXml(xml);
+            EXPECT_EQ(content.elements.size(), 1u);
+            return content.elements.empty() ? UIBoxStyle{} : content.elements[0]->box;
+        }
+
+        bool HasBoxAttribute(const Compiled& compiled, const char* name) {
+            for (const char* key : {"cornerRadius", "borderWidth", "borderColor", "gradientDirection", "gradientColor", "shadow", "glow", "highlight", "partShape"}) {
+                if (compiled.Has(name, key)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+    }  // namespace
+
+    TEST_F(UIWebTest, EachBoxPropertyAloneGivesItsAttributeAndTheBoxOfTheXml) {
+        const auto compiled = Compile(R"(<div id="radius"></div><div id="border"></div><div id="gradient"></div><div id="shadow"></div><div id="highlight"></div><div id="plain"></div>)", R"(
+#radius    { border-radius: 8px 4px; }
+#border    { border: 2px solid #ffcc00; }
+#gradient  { background: linear-gradient(to right, #112233, #445566); }
+#shadow    { box-shadow: 0 2px 6px 1px rgba(0, 0, 0, .5); }
+#highlight { -be-highlight: #ffffff40; }
+)");
+        EXPECT_TRUE(compiled->report.issues.empty()) << compiled->report.issues[0].message.c_str();
+        EXPECT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+
+        EXPECT_EQ(compiled->Attr("radius", "cornerRadius"), "8,4,8,4");
+        EXPECT_EQ(BoxOf(*compiled, "radius"), BoxFromXml("cornerRadius=\"8,4,8,4\""));
+
+        EXPECT_EQ(compiled->Attr("border", "borderWidth"), "2");
+        EXPECT_EQ(compiled->Attr("border", "borderColor"), "255,204,0,255");
+        EXPECT_EQ(BoxOf(*compiled, "border"), BoxFromXml("borderWidth=\"2\" borderColor=\"255,204,0,255\""));
+
+        EXPECT_EQ(compiled->Attr("gradient", "color"), "17,34,51,255");
+        EXPECT_EQ(compiled->Attr("gradient", "gradientColor"), "68,85,102,255");
+        EXPECT_EQ(compiled->Attr("gradient", "gradientDirection"), "Horizontal");
+        EXPECT_EQ(BoxOf(*compiled, "gradient"), BoxFromXml("gradientDirection=\"Horizontal\" gradientColor=\"68,85,102,255\""));
+        EXPECT_EQ(compiled->Element("gradient")->color.r, 17);
+
+        EXPECT_EQ(compiled->Attr("shadow", "shadow"), "0,2,6,1,#00000080");
+        EXPECT_FALSE(compiled->Has("shadow", "glow"));
+        EXPECT_EQ(BoxOf(*compiled, "shadow"), BoxFromXml("shadow=\"0,2,6,1,#00000080\""));
+
+        EXPECT_EQ(compiled->Attr("highlight", "highlight"), "255,255,255,64");
+        EXPECT_EQ(BoxOf(*compiled, "highlight"), BoxFromXml("highlight=\"255,255,255,64\""));
+
+        EXPECT_FALSE(HasBoxAttribute(*compiled, "plain")) << "no box property, no box attribute";
+        EXPECT_TRUE(BoxOf(*compiled, "plain") == UIBoxStyle{});
+    }
+
+    TEST_F(UIWebTest, ACardWithRadiusBorderGradientAndTwoShadowLayers) {
+        const auto compiled = Compile(R"(<div id="card" class="card"></div>)", R"(
+.card { left: 10px; top: 10px; width: 120px; height: 60px; border-radius: 12px; border: 1px solid #ffffff80;
+        background: linear-gradient(180deg, #304050, #102030); box-shadow: 0 0 10px 2px #ffd700a0, 0 4px 8px #000000c0; }
+)");
+        EXPECT_TRUE(compiled->report.issues.empty());
+        EXPECT_EQ(compiled->Attr("card", "cornerRadius"), "12");
+        EXPECT_EQ(compiled->Attr("card", "gradientDirection"), "Vertical");
+        // CSS paints the first layer on top; the engine paints the glow over the shadow
+        EXPECT_EQ(compiled->Attr("card", "glow"), "0,0,10,2,#FFD700A0");
+        EXPECT_EQ(compiled->Attr("card", "shadow"), "0,4,8,0,#000000C0");
+        const UIBoxStyle expected = BoxFromXml(
+            R"(cornerRadius="12" borderWidth="1" borderColor="255,255,255,128" gradientDirection="Vertical" gradientColor="16,32,48,255" glow="0,0,10,2,#FFD700A0" shadow="0,4,8,0,#000000C0")");
+        EXPECT_EQ(BoxOf(*compiled, "card"), expected);
+        EXPECT_EQ(compiled->Attr("card", "color"), "48,64,80,255");
+
+        LaidOut web(compiled->content);
+        web.At(1280.0f, 720.0f);
+        EXPECT_NEAR(web.Find("card")->rect.w, 120.0f, kTolerance) << "the box paint is not layout";
+    }
+
+    TEST_F(UIWebTest, APillIsARadiusOfAThousandPixels) {
+        const auto compiled = Compile(R"(<button id="b" data-action="Go">Go</button>)", "#b { width: 120px; height: 40px; border-radius: 999px; background: #336699 }");
+        EXPECT_EQ(compiled->Attr("b", "cornerRadius"), "999");
+        EXPECT_EQ(compiled->Element("b")->box.cornerRadius, UICorners::Uniform(999.0f));
+        EXPECT_TRUE(compiled->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, LonghandsAndShorthandsOfTheBoxAreOneCascadeByOrder) {
+        const auto compiled = Compile(R"(<div id="a"></div><div id="b"></div><div id="c"></div>)", R"(
+#a { border-top-left-radius: 20px; border-radius: 4px; }
+#b { border-radius: 4px; border-top-left-radius: 20px; border-bottom-right-radius: 9px; }
+#c { border: 3px solid red; border-width: 5px; border-color: blue; }
+)");
+        EXPECT_TRUE(compiled->report.issues.empty());
+        EXPECT_EQ(compiled->Attr("a", "cornerRadius"), "4") << "the shorthand after the longhand wins";
+        EXPECT_EQ(compiled->Attr("b", "cornerRadius"), "20,4,9,4") << "a longhand after the shorthand changes one corner";
+        EXPECT_EQ(compiled->Attr("c", "borderWidth"), "5");
+        EXPECT_EQ(compiled->Attr("c", "borderColor"), "0,0,255,255");
+
+        const auto style = Compile(R"(<div id="a"></div><div id="b"></div><div id="c"></div>)", R"(
+#a { border: 3px solid red; border-style: none; }
+#b { border: 3px solid red; border: none; }
+#c { border: 3px solid red; border-width: 0; }
+)");
+        EXPECT_FALSE(HasBoxAttribute(*style, "a"));
+        EXPECT_FALSE(HasBoxAttribute(*style, "b"));
+        EXPECT_FALSE(HasBoxAttribute(*style, "c"));
+        EXPECT_TRUE(style->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, ABackgroundAfterAGradientResetsIt) {
+        const auto compiled = Compile(R"(<div id="a"></div><div id="b"></div><div id="c"></div>)", R"(
+#a { background: linear-gradient(red, blue); background: #123456; }
+#b { background-image: linear-gradient(red, blue); background-color: #123456; }
+#c { background: linear-gradient(red, blue); background-image: none; }
+)");
+        EXPECT_TRUE(compiled->report.issues.empty());
+        EXPECT_FALSE(compiled->Has("a", "gradientColor"));
+        EXPECT_EQ(compiled->Attr("a", "color"), "18,52,86,255");
+        // The gradient is the image over the color: the color has no effect while the gradient is set
+        EXPECT_EQ(compiled->Attr("b", "color"), "255,0,0,255");
+        EXPECT_EQ(compiled->Attr("b", "gradientColor"), "0,0,255,255");
+        EXPECT_FALSE(compiled->Has("c", "gradientColor"));
+    }
+
+    TEST_F(UIWebTest, AGradientBesideASpriteGivesBoth) {
+        const auto compiled = Compile(R"(<div id="a"></div>)", "#a { width: 50px; height: 50px; background: linear-gradient(red, blue) url(Panel9) }");
+        EXPECT_TRUE(compiled->report.issues.empty());
+        EXPECT_EQ(compiled->Find("a").attribute("type").as_string(), std::string("UIPanel"));
+        EXPECT_EQ(compiled->Attr("a", "sprite"), "Panel9");
+        EXPECT_EQ(compiled->Attr("a", "gradientColor"), "0,0,255,255");
+        EXPECT_EQ(compiled->Attr("a", "color"), "255,0,0,255");
+    }
+
+    TEST_F(UIWebTest, TheShapeOfThePartsIsForTheWidgetsOnly) {
+        const auto compiled = Compile(
+            R"(<div id="t" data-widget="toggle">T</div><div id="s" data-widget="slider"></div><div id="p" data-widget="progress"></div><div id="d"></div><div id="sq" data-widget="toggle">T</div>)",
+            "#t, #s, #p, #d { -be-shape: round } #sq { -be-shape: Square }");
+        for (const char* name : {"t", "s", "p"}) {
+            EXPECT_EQ(compiled->Attr(name, "partShape"), "Round") << name;
+        }
+        EXPECT_FALSE(compiled->Has("d", "partShape"));
+        EXPECT_FALSE(compiled->Has("sq", "partShape")) << "Square is the default";
+        EXPECT_EQ(compiled->IssuesMentioning("-be-shape applies to a toggle, slider or progress bar only"), 1u);
+        EXPECT_EQ(compiled->report.issues.size(), 1u);
+        EXPECT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->Element("t")->Cast<UIToggle>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(compiled->Element("s")->Cast<UISlider>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(compiled->Element("p")->Cast<UIProgressBar>()->partShape, UIPartShape::Round);
+    }
+
+    TEST_F(UIWebTest, AButtonStateRuleWithAGradientSetsTheStateColorAndReportsTheEnd) {
+        const auto compiled =
+            Compile(R"(<button id="b" data-action="Go">Go</button>)", "button { background: linear-gradient(#202020, #101010) } button:hover { background: linear-gradient(#303030, #202020) } "
+                                                                      "button:active { background: linear-gradient(#050505, #000000) }");
+        EXPECT_EQ(compiled->Attr("b", "color"), "32,32,32,255");
+        EXPECT_EQ(compiled->Attr("b", "gradientColor"), "16,16,16,255");
+        EXPECT_EQ(compiled->Attr("b", "hoverColor"), "48,48,48,255");
+        EXPECT_EQ(compiled->Attr("b", "pressedColor"), "5,5,5,255");
+        EXPECT_EQ(compiled->IssuesMentioning("the far end of a state gradient is derived from its start color"), 1u) << "once, for both states";
+        EXPECT_EQ(compiled->report.issues.size(), 1u);
+        EXPECT_EQ(compiled->Element("b")->Cast<UIButton>()->box.gradientColor.r, 16) << "the box of the base look, the state shifts come from the start color";
+    }
+
+    TEST_F(UIWebTest, ABoxPropertyInAStateRuleIsReported) {
+        const auto compiled =
+            Compile(R"(<button id="b" data-action="Go">Go</button>)",
+                    "button { border: 2px solid red; box-shadow: 0 0 4px red; border-radius: 6px } button:hover { border-color: blue; box-shadow: 0 0 8px blue; border-radius: 12px }");
+        EXPECT_EQ(compiled->IssuesMentioning("'borderColor' of a <button>"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'shadow' of a <button>"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'cornerRadius' of a <button>"), 1u);
+        EXPECT_FALSE(compiled->Has("b", "hoverColor"));
+        EXPECT_EQ(compiled->Attr("b", "borderColor"), "255,0,0,255") << "the base look is kept";
+        EXPECT_EQ(compiled->Attr("b", "cornerRadius"), "6");
+    }
+
+    TEST_F(UIWebTest, ABadBoxValueIsReportedOnceWithItsLineAndLeavesTheDefault) {
+        const auto compiled = Compile(
+            R"(<div id="a" class="x"></div><div id="b" class="x"></div>)",
+            ".x { border: 2px dashed red;\n  box-shadow: inset 0 0 4px red;\n  border-radius: 50%;\n  background: linear-gradient(red, green, blue);\n  -be-shape: oval;\n  -be-highlight: nope }\n");
+        EXPECT_EQ(compiled->IssuesMentioning("'border: 2px dashed red'"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'box-shadow: inset 0 0 4px red'"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'border-radius: 50%'"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'background: linear-gradient(red, green, blue)'"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'-be-shape: oval'"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'-be-highlight: nope'"), 1u);
+        EXPECT_EQ(compiled->report.declarationsUnsupported, 6u);
+        for (const UIWebIssue& issue : compiled->report.issues) {
+            if (issue.message.find("'box-shadow") != eastl::string::npos) {
+                EXPECT_EQ(issue.line, 2u);
+            } else if (issue.message.find("'border-radius") != eastl::string::npos) {
+                EXPECT_EQ(issue.line, 3u);
+            }
+        }
+        EXPECT_FALSE(HasBoxAttribute(*compiled, "a"));
+        EXPECT_FALSE(compiled->Has("a", "color"));
+        EXPECT_TRUE(BoxOf(*compiled, "b") == UIBoxStyle{});
+    }
+
+    TEST_F(UIWebTest, AThirdShadowLayerAndABorderWithoutAColorAreReported) {
+        const auto compiled = Compile(R"(<div id="a"></div><div id="b"></div>)", "#a { box-shadow: 0 0 1px red, 0 1px 2px green, 0 2px 3px blue } #b { border-width: 2px }");
+        EXPECT_EQ(compiled->IssuesMentioning("box-shadow holds at most 2 layers"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("a border needs a color"), 1u);
+        EXPECT_EQ(compiled->Attr("a", "glow"), "0,0,1,0,#FF0000FF");
+        EXPECT_EQ(compiled->Attr("a", "shadow"), "0,1,2,0,#008000FF");
+        EXPECT_FALSE(HasBoxAttribute(*compiled, "b"));
+    }
+
+    TEST_F(UIWebTest, ABoxEffectAloneDoesNotTakeClicksAndAGradientPlateDoes) {
+        const auto compiled = Compile(R"(<div id="shadow"></div><div id="border"></div><div id="radius"></div><div id="gradient"></div><div id="clear"></div><div id="faint"></div>)", R"(
+#shadow   { box-shadow: 0 0 4px red }
+#border   { border: 1px solid red }
+#radius   { border-radius: 8px }
+#gradient { background: linear-gradient(red, blue) }
+#clear    { background: linear-gradient(transparent, blue) }
+#faint    { background: linear-gradient(red, transparent) }
+)");
+        for (const char* name : {"shadow", "border", "radius"}) {
+            EXPECT_FALSE(compiled->Has(name, "blocksInput")) << name;
+        }
+        EXPECT_EQ(compiled->Attr("gradient", "blocksInput"), "true");
+        EXPECT_EQ(compiled->Attr("faint", "blocksInput"), "true");
+        EXPECT_FALSE(compiled->Has("clear", "blocksInput")) << "only a visible start color makes a plate";
+        EXPECT_EQ(compiled->Attr("clear", "gradientColor"), "0,0,255,255");
+    }
+
+    TEST_F(UIWebTest, AMediaBlockCannotChangeTheBox) {
+        const auto compiled = Compile(R"(<div id="a"></div>)", "#a { width: 10px; border-radius: 4px } @media (max-width: 500px) { #a { border-radius: 12px; width: 5px } }");
+        EXPECT_EQ(compiled->content.variants.size(), 1u) << "the width still becomes a variant";
+        EXPECT_EQ(compiled->IssuesMentioning("@media changes 'cornerRadius'"), 1u);
+    }
+
+    TEST_F(UIWebTest, ARoundedGradientCardIsDrawnAsOneGeometryCall) {
+        const auto compiled = Compile(R"(<div id="card"></div>)", "#card { left: 0px; top: 0px; width: 100px; height: 40px; border-radius: 10px; background: linear-gradient(#ff0000, #0000ff) }");
+        ASSERT_FALSE(compiled->deserializeErrors);
+        UIElement* card = compiled->Element("card");
+        ASSERT_NE(card, nullptr);
+        card->rect = {0.0f, 0.0f, 100.0f, 40.0f};
+        RecordingRenderer renderer;
+        card->DrawSelf(renderer);
+        ASSERT_EQ(renderer.calls.size(), 1u);
+        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Geometry);
+
+        const auto flat = Compile(R"(<div id="card"></div>)", "#card { width: 100px; height: 40px; background: #ff0000 }");
+        UIElement* plain = flat->Element("card");
+        plain->rect = {0.0f, 0.0f, 100.0f, 40.0f};
+        renderer.ClearCalls();
+        plain->DrawSelf(renderer);
+        ASSERT_EQ(renderer.calls.size(), 1u);
+        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Rect) << "no box property, the plain rect as before";
     }
 
     // ---- variants from @media ------------------------------------------------------------------------------------------------

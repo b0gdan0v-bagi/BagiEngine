@@ -10,6 +10,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIPartShapeChecks.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -588,6 +589,154 @@ namespace BECore::Tests {
             small += issue.kind == UILayoutIssueKind::TouchTargetTooSmall ? 1u : 0u;
         }
         EXPECT_GE(small, 2u);
+    }
+
+    // ---- the header is a box --------------------------------------------------------------------------------------------------
+
+    namespace {
+
+        bool SameRgba(const Color& a, const Color& b) {
+            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+        }
+
+        bool NearRect(const Rect& a, const Rect& b) {
+            return std::abs(a.x - b.x) < 1e-2f && std::abs(a.y - b.y) < 1e-2f && std::abs(a.w - b.w) < 1e-2f && std::abs(a.h - b.h) < 1e-2f;
+        }
+
+        enum class HeaderState { Idle, Hover, Press, Disabled };
+
+        void SetState(UIDropdown& dropdown, HeaderState state) {
+            dropdown.disabled = state == HeaderState::Disabled;
+            dropdown.hovered = state == HeaderState::Hover || state == HeaderState::Press;
+            dropdown.pressed = state == HeaderState::Press;
+        }
+
+        constexpr HeaderState kStates[] = {HeaderState::Idle, HeaderState::Hover, HeaderState::Press, HeaderState::Disabled};
+
+        Color Shifted(const Color& base, HeaderState state) {
+            switch (state) {
+                case HeaderState::Hover:
+                    return ShiftColor(base, kHoverBrighten);
+                case HeaderState::Press:
+                    return ShiftColor(base, -kPressDarken);
+                case HeaderState::Disabled:
+                    return WithAlpha(base, kDisabledAlpha);
+                case HeaderState::Idle:
+                    break;
+            }
+            return base;
+        }
+
+    }  // namespace
+
+    TEST_F(UIDropdownTest, ADefaultHeaderIsOneRectOfTheStateColorInEveryState) {
+        auto& level = Get<UIDropdown>("Level");
+        for (const HeaderState state : kStates) {
+            SetState(level, state);
+            Draw();
+            size_t headerRects = 0;
+            for (const DrawCall& call : _renderer->calls) {
+                if (call.kind == DrawKind::Rect && NearRect(call.rect, level.rect)) {
+                    ++headerRects;
+                    EXPECT_TRUE(SameRgba(call.color, Shifted(Color{40, 40, 70, 255}, state))) << static_cast<int>(state);
+                    EXPECT_TRUE(SameRgba(call.color, level.GetCurrentFill())) << static_cast<int>(state);
+                }
+            }
+            EXPECT_EQ(headerRects, 1u) << static_cast<int>(state);
+            EXPECT_TRUE(CallsIn(*_renderer, DrawKind::Geometry, level.rect).empty()) << static_cast<int>(state);
+        }
+    }
+
+    TEST_F(UIDropdownTest, AStyledHeaderIsOneGeometryCallAndNoHeaderRect) {
+        auto& level = Get<UIDropdown>("Level");
+        level.box.cornerRadius = UICorners::Uniform(12.0f);
+        level.box.borderWidth = 2.0f;
+        level.box.borderColor = Color{200, 200, 255, 255};
+        Draw();
+        for (const DrawCall& call : _renderer->calls) {
+            EXPECT_FALSE(call.kind == DrawKind::Rect && NearRect(call.rect, level.rect)) << "the plain rect is gone";
+        }
+        const auto geometry = CallsIn(*_renderer, DrawKind::Geometry, level.rect);
+        ASSERT_EQ(geometry.size(), 1u);
+        EXPECT_GE(geometry[0].rect.w, level.rect.w - UIBoxMesh::kFeatherPixels);
+        EXPECT_GE(geometry[0].rect.h, level.rect.h - UIBoxMesh::kFeatherPixels);
+    }
+
+    TEST_F(UIDropdownTest, TheArrowIsStillDrawnAsStripsUnderAStyledHeader) {
+        auto& level = Get<UIDropdown>("Level");
+        level.box.cornerRadius = UICorners::Uniform(12.0f);
+        level.box.shadow = {0.0f, 4.0f, 6.0f, 0.0f, Color{0, 0, 0, 120}};
+        Draw();
+        const Rect arrow = UIDropdown::GetHeaderParts(level.rect).arrow;
+        EXPECT_EQ(CallsIn(*_renderer, DrawKind::Rect, arrow).size(), static_cast<size_t>(UIDropdown::kArrowRows));
+    }
+
+    TEST_F(UIDropdownTest, AGradientHeaderKeepsTwoDistinctEndsInEveryState) {
+        auto& level = Get<UIDropdown>("Level");
+        level.box.gradientDirection = UIGradientDirection::Vertical;
+        level.box.gradientColor = Color{120, 90, 160, 255};
+        for (const HeaderState state : kStates) {
+            SetState(level, state);
+            const UIButton::Look look = level.GetCurrentBox();
+            EXPECT_TRUE(SameRgba(look.fill, Shifted(Color{40, 40, 70, 255}, state))) << static_cast<int>(state);
+            EXPECT_TRUE(SameRgba(look.gradientEnd, Shifted(Color{120, 90, 160, 255}, state))) << static_cast<int>(state);
+            EXPECT_FALSE(SameRgba(look.fill, look.gradientEnd)) << static_cast<int>(state);
+            EXPECT_TRUE(SameRgba(look.box.gradientColor, look.gradientEnd)) << "the look says the far end twice";
+            EXPECT_TRUE(SameRgba(level.GetCurrentFill(), look.fill));
+        }
+
+        SetState(level, HeaderState::Hover);
+        Draw();
+        const auto geometry = CallsIn(*_renderer, DrawKind::Geometry, level.rect);
+        ASSERT_EQ(geometry.size(), 1u);
+        uint8_t highestRed = 0;
+        uint8_t lowestRed = 255;
+        for (const GeometryVertex& vertex : geometry[0].vertices) {
+            highestRed = std::max(highestRed, vertex.color.r);
+            lowestRed = std::min(lowestRed, vertex.color.r);
+        }
+        EXPECT_EQ(highestRed, Shifted(Color{120, 90, 160, 255}, HeaderState::Hover).r) << "the bottom of the hovered header";
+        EXPECT_EQ(lowestRed, Shifted(Color{40, 40, 70, 255}, HeaderState::Hover).r) << "its top";
+    }
+
+    TEST_F(UIDropdownTest, ADisabledHeaderDropsShadowAndGlowAndFadesBorderAndHighlight) {
+        auto& level = Get<UIDropdown>("Level");
+        level.box.cornerRadius = UICorners::Uniform(8.0f);
+        level.box.borderWidth = 2.0f;
+        level.box.borderColor = Color{200, 100, 50, 200};
+        level.box.highlight = Color{255, 255, 255, 100};
+        level.box.shadow = {0.0f, 6.0f, 12.0f, 0.0f, Color{0, 0, 0, 160}};
+        level.box.glow = {0.0f, 0.0f, 10.0f, 2.0f, Color{255, 200, 0, 128}};
+
+        SetState(level, HeaderState::Disabled);
+        const UIButton::Look off = level.GetCurrentBox();
+        EXPECT_EQ(off.box.shadow.color.a, 0);
+        EXPECT_EQ(off.box.glow.color.a, 0);
+        EXPECT_EQ(off.box.borderColor.a, WithAlpha(Color{200, 100, 50, 200}, kDisabledAlpha).a);
+        EXPECT_EQ(off.box.highlight.a, WithAlpha(Color{255, 255, 255, 100}, kDisabledAlpha).a);
+        Draw();
+        const auto geometry = CallsIn(*_renderer, DrawKind::Geometry, level.rect);
+        ASSERT_EQ(geometry.size(), 1u);
+        EXPECT_LE(geometry[0].rect.x + geometry[0].rect.w, level.rect.x + level.rect.w + UIBoxMesh::kFeatherPixels) << "nothing is drawn beyond the header: no shadow, no glow";
+        EXPECT_LE(geometry[0].rect.y + geometry[0].rect.h, level.rect.y + level.rect.h + UIBoxMesh::kFeatherPixels);
+
+        for (const HeaderState state : {HeaderState::Idle, HeaderState::Hover, HeaderState::Press}) {
+            SetState(level, state);
+            const UIBoxStyle& box = level.GetCurrentBox().box;
+            EXPECT_TRUE(box.shadow == level.box.shadow) << static_cast<int>(state);
+            EXPECT_TRUE(box.glow == level.box.glow) << static_cast<int>(state);
+            EXPECT_TRUE(SameRgba(box.borderColor, level.box.borderColor)) << "hover and press keep the border as authored";
+            EXPECT_TRUE(SameRgba(box.highlight, level.box.highlight)) << "and the highlight";
+        }
+    }
+
+    TEST_F(UIDropdownTest, TheOptionsKeepTheBoxOfTheirOwnButtons) {
+        auto& easy = Get<UIButton>("Easy");
+        easy.box.cornerRadius = UICorners::Uniform(10.0f);
+        Get<UIDropdown>("Level").Open();
+        Draw();
+        EXPECT_EQ(CallsIn(*_renderer, DrawKind::Geometry, easy.rect).size(), 1u);
+        EXPECT_EQ(Get<UIDropdown>("Level").box, UIBoxStyle{}) << "the header's own box is untouched";
     }
 
 }  // namespace BECore::Tests

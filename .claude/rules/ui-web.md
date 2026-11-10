@@ -56,13 +56,20 @@ CSS's cascade: `!important`, `style=""`, specificity, source order. Selectors: t
 | `anchor` (engine-only): `top-left` ... `stretch` | `anchor` (centering needs it) |
 | `width`, `height`, `min-*`, `max-*`, `aspect-ratio`, `object-fit: cover` | lengths, `aspectRatio`, `aspectMode="Fill"` |
 | `background`, `background-image: url(Name)`, `border-image-slice` | `color`, `sprite`, `sliceBorder` |
+| `border-radius` (1 to 4 px values, CSS order) and the four `border-*-radius` | `cornerRadius` (`999px` is a pill; the builder clamps) |
+| `border: <width> [solid\|none] <color>`, `border-width`, `border-color`, `border-style` | `borderWidth`, `borderColor` |
+| `linear-gradient([dir,] c1, c2)` in `background` or `background-image` | `color` = c1, `gradientColor` = c2, `gradientDirection` |
+| `box-shadow: x y [blur [spread]] color` (one or two layers), `none` | `shadow`; two layers: the first `glow`, the second `shadow` |
+| `-be-highlight` (engine-only color), `-be-shape: square\|round` | `highlight`; `partShape` (toggle, slider, progress only) |
 | `color`, `font-size`, `font-family` (a font path, else a family name, the first of a list), `font-weight`, `text-align`, `vertical-align`, `text-overflow`, `white-space`, `line-height` | `textColor`, `fontSize`, `font` or `fontFamily`, `fontWeight`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing`. `font-weight`: `normal`, `bold` or 100..900 in steps of 100. A family name is not checked here (the table of `TextConfig.xml` is run-time data): an unknown one is the label's one warning at run time; generic names (`sans-serif`...) mean the default font |
 | `text-shadow: <x> <y> [blur] <color>`, `-be-text-outline: <width> <color>` (`none` clears both) | `textShadow`, `textOutline`: a hard shadow and an outline, paint only. A blur and every shadow after the first are reported (drawn hard / left out). Like `color`, they reach only the elements that become a label, button or toggle |
 | `-be-text-fit: shrink`, `-be-min-font-size` | `overflow="AutoFit"`, `minFontSize` |
 | `-be-track-color`, `-be-fill-color`, `-be-thumb-color` | of a toggle, slider, progress bar only |
 | `:hover`, `:active`, `:disabled`, `:checked` with `background` | `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`. Not on toggle / slider / progress (their states are derived; reported) |
 
-Lengths px and %; colors `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()`, a few names. Reported, not understood: `em`, `rem`, `vw`, `vh`, `calc()`, `var()`, `opacity`, `border`, `border-radius`, `box-shadow`, `transform`, `transition`, `animation`, `z-index`, `overflow`, `letter-spacing`, `font-weight: bolder` / `lighter` / `450`, `margin` on a non-filling element, `justify-content`, `grid`, attribute selectors, `+`, `~`, other pseudo-classes and elements, `@import`, `@font-face`, `@keyframes`.
+**The box** (`.claude/rules/ui-shapes.md`): px only. A border is drawn inside the rect, so it is not layout (as with `box-sizing: border-box`); the same for shadows. The gradient takes two colors with no stop positions and the directions `to bottom|right|top|left` or `180|90|0|270deg` (`to top` and `to left` swap the colors); it replaces `background-color`, a `url()` beside it is the sprite drawn over it, and a `background` shorthand after it resets it. `box-shadow` has no `inset`, a colour is required, a third layer is reported. A box effect alone does not make a group take clicks, a visible gradient start does. The shifts of a button's states are automatic from its fill: a state rule changes the background only (the far end of a gradient is derived from its start; a state rule that changes another box property, and a `@media` block that changes the box, are reported).
+
+Lengths px and %; colors `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()`, a few names. Reported, not understood: `em`, `rem`, `vw`, `vh`, `calc()`, `var()`, `%` or `/` radii, `inset` shadows, per-side borders, a border style other than `solid` / `none`, `opacity`, `transform`, `transition`, `animation`, `z-index`, `overflow`, `letter-spacing`, `font-weight: bolder` / `lighter` / `450`, `margin` on a non-filling element, `justify-content`, `grid`, attribute selectors, `+`, `~`, other pseudo-classes and elements, `@import`, `@font-face`, `@keyframes`.
 
 ## `@media`
 

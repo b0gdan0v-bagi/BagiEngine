@@ -11,6 +11,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIPartShapeChecks.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -647,6 +648,78 @@ namespace BECore::Tests {
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
         }
+    }
+
+    // ---- the shape of the parts ----------------------------------------------------------------------------------------------
+
+    TEST_F(UISliderTest, ThePartsAreRectanglesByDefault) {
+        SetVar("free", "0.5");
+        Draw();
+        const auto& free = Slider("Free");
+        EXPECT_EQ(free.partShape, UIPartShape::Square);
+        const auto parts = UISlider::GetParts(free.rect, free.GetFraction());
+        EXPECT_NE(FindRect(parts.track), nullptr);
+        EXPECT_NE(FindRect(parts.filled), nullptr);
+        EXPECT_NE(FindRect(parts.thumb), nullptr);
+        EXPECT_TRUE(CallsIn(*_renderer, DrawKind::Geometry, free.rect).empty());
+    }
+
+    TEST_F(UISliderTest, ARoundSliderDrawsPillsAndACircleInsteadOfRectangles) {
+        SetVar("free", "0.5");
+        auto& free = Slider("Free");
+        free.partShape = UIPartShape::Round;
+        Draw();
+        const auto parts = UISlider::GetParts(free.rect, free.GetFraction());
+        EXPECT_EQ(FindRect(parts.track), nullptr);
+        EXPECT_EQ(FindRect(parts.filled), nullptr);
+        EXPECT_EQ(FindRect(parts.thumb), nullptr);
+        EXPECT_TRUE(CallsIn(*_renderer, DrawKind::Rect, free.rect).empty()) << "nothing of the slider is a rect any more";
+
+        const auto drawn = CallsIn(*_renderer, DrawKind::Geometry, free.rect);
+        ASSERT_EQ(drawn.size(), 3u) << "the track, the filled part, the thumb, in this order";
+        ExpectRoundPart(drawn[0], parts.track);
+        ExpectRoundPart(drawn[1], parts.filled);
+        ExpectRoundPart(drawn[2], parts.thumb);
+        EXPECT_EQ(drawn[2].color.r, free.thumbColor.r) << "the colors are the ones the square parts have";
+    }
+
+    TEST_F(UISliderTest, ThePartShapeChangesNeitherTheTouchAreaNorTheValue) {
+        auto& free = Slider("Free");
+        const float before = free.ValueAt(XAt("Free", 0.5f));
+        free.partShape = UIPartShape::Round;
+        Draw();
+        EXPECT_FLOAT_EQ(free.ValueAt(XAt("Free", 0.5f)), before);
+        EXPECT_TRUE(free.interactive);
+    }
+
+    TEST_F(UISliderTest, ThePartShapeSurvivesAnXmlRoundTripAndTheDefaultIsSkippedWhenAsked) {
+        const auto written = [](const UISlider& slider) {
+            XmlSerializer serializer;
+            serializer.SetSkipDefaults(true);
+            EXPECT_TRUE(serializer.BeginObject("element"));
+            slider.Serialize(serializer);
+            serializer.EndObject();
+            return serializer.SaveToString();
+        };
+        EXPECT_EQ(written(Slider("Free")).find("partShape"), eastl::string::npos);
+        Slider("Free").partShape = UIPartShape::Round;
+        EXPECT_NE(written(Slider("Free")).find("partShape=\"Round\""), eastl::string::npos);
+
+        XmlSerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("component"));
+        _canvas->Serialize(serializer);
+        serializer.EndObject();
+        const eastl::string xml = serializer.SaveToString();
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        auto loaded = New<UICanvasComponent>();
+        ASSERT_TRUE(deserializer.BeginObject("component"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+        loaded->Initialize();
+        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Free"))->Cast<UISlider>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Volume"))->Cast<UISlider>()->partShape, UIPartShape::Square);
     }
 
 }  // namespace BECore::Tests
