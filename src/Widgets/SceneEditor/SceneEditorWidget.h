@@ -2,6 +2,7 @@
 
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/Widgets/IWidget.h>
+#include <Widgets/EditorLayout/EditorCommands.h>
 
 namespace pugi {
     class xml_node;
@@ -29,6 +30,11 @@ namespace BECore {
         BE_FUNCTION void Draw() override;
 
     private:
+        /**
+         * @brief Runs `scene.save` like the Save button (only with unsaved changes)
+         */
+        void OnCommand(const EditorCommandEvent& event);
+
         /**
          * @brief Recursively render the hierarchy tree starting from a node.
          *        Uses the node pointer as the ImGui tree node ID.

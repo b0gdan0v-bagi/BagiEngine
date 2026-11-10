@@ -7,6 +7,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <Generated/ViewportWidget.gen.hpp>
 #include <SDL3/SDL.h>
+#include <Widgets/EditorLayout/EditorCommands.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -24,6 +25,7 @@ namespace BECore {
         constexpr int kViewComboAuto = 0;
         constexpr int kViewComboDefault = 1;
         constexpr int kViewComboFirstVariant = 2;
+        constexpr ImU32 kGridColor = IM_COL32(255, 255, 255, 40);
         constexpr ImU32 kSafeAreaOutlineColor = IM_COL32(255, 200, 0, 200);
 
         // In the order of the enums (ViewportAspect, SafeAreaSimulation)
@@ -45,7 +47,13 @@ namespace BECore {
     }
 
     bool ViewportWidget::Initialize(IDeserializer& /*deserializer*/) {
+        Subscribe<EditorPreferencesChangedEvent, &ViewportWidget::OnPreferencesChanged>(this);
         return true;
+    }
+
+    void ViewportWidget::OnPreferencesChanged(const EditorPreferencesChangedEvent& event) {
+        _gridEnabled = event.viewportGrid;
+        _gridStep = event.viewportGridStep;
     }
 
     void ViewportWidget::Update() {
@@ -114,6 +122,7 @@ namespace BECore {
             const ImVec2 imageMin = ImGui::GetItemRectMin();
             ForwardMouse(imageMin.x, imageMin.y, ImGui::IsItemHovered());
             const ImVec2 imageMax = ImGui::GetItemRectMax();
+            DrawGrid(imageMin.x, imageMin.y, imageMax.x, imageMax.y);
             DrawSafeAreaOutline(imageMin.x, imageMin.y, imageMax.x, imageMax.y);
         }
 
@@ -197,6 +206,23 @@ namespace BECore {
             }
             ImGui::EndCombo();
         }
+    }
+
+    void ViewportWidget::DrawGrid(float minX, float minY, float maxX, float maxY) const {
+        if (!_gridEnabled || _gridStep <= 0) {
+            return;
+        }
+        // A line every _gridStep image pixels from the top-left corner; the image is shown at one pixel per ImGui unit
+        const float step = static_cast<float>(_gridStep);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->PushClipRect({minX, minY}, {maxX, maxY}, true);
+        for (float x = minX + step; x < maxX; x += step) {
+            drawList->AddLine({x, minY}, {x, maxY}, kGridColor);
+        }
+        for (float y = minY + step; y < maxY; y += step) {
+            drawList->AddLine({minX, y}, {maxX, y}, kGridColor);
+        }
+        drawList->PopClipRect();
     }
 
     void ViewportWidget::DrawSafeAreaOutline(float minX, float minY, float maxX, float maxY) const {

@@ -3,6 +3,7 @@
 #include <BECore/Renderer/IRenderTarget.h>
 #include <BECore/UI/UIPreview.h>
 #include <BECore/Widgets/IWidget.h>
+#include <Widgets/EditorLayout/EditorCommands.h>
 
 namespace BECore {
 
@@ -32,6 +33,12 @@ namespace BECore {
         BE_FUNCTION void Draw() override;
 
     private:
+        // The grid preference of the editor (EditorLayoutWidget sends it on its first frame and on every change)
+        void OnPreferencesChanged(const EditorPreferencesChangedEvent& event);
+
+        // The grid over the image: a line every _gridStep image pixels, clipped to the image
+        void DrawGrid(float minX, float minY, float maxX, float maxY) const;
+
         // The aspect, safe-area and view combos above the image
         void DrawPreviewToolbar();
 
@@ -53,8 +60,10 @@ namespace BECore {
         uint32_t _lastHeight = 0;
         ViewportAspect _aspect = ViewportAspect::Free;
         SafeAreaSimulation _safeAreaSimulation = SafeAreaSimulation::None;
-        std::optional<int32_t> _forcedView;                  // the index of the forced view variant, -1 the default, nullopt Auto
-        PoolString _forcedViewScene;                         // the scene the choice was made for
+        std::optional<int32_t> _forcedView;  // the index of the forced view variant, -1 the default, nullopt Auto
+        PoolString _forcedViewScene;         // the scene the choice was made for
+        bool _gridEnabled = false;
+        int32_t _gridStep = 0;
         bool _pressedInViewport[3] = {false, false, false};  // left, right, middle: pressed over the image and not yet released
     };
 

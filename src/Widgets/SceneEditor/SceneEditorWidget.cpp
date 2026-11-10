@@ -11,6 +11,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
+#include <Widgets/EditorLayout/EditorCommands.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -20,7 +21,15 @@ namespace BECore {
     // =========================================================================
 
     bool SceneEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
+        Subscribe<EditorCommandEvent, &SceneEditorWidget::OnCommand>(this);
         return true;
+    }
+
+    void SceneEditorWidget::OnCommand(const EditorCommandEvent& event) {
+        // The same rule as the Save button: nothing to save while there are no unsaved changes
+        if (event.commandId == EditorCommandIds::kSceneSave && _isDirty) {
+            SaveScene();
+        }
     }
 
     void SceneEditorWidget::Update() {
