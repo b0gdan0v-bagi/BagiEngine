@@ -6,8 +6,8 @@ others of tools/web: the Docker image copies only it.
 
 It serves the folder made by package.py. For a file `x` it answers with `x.br` or `x.gz` when one exists and the request accepts that
 encoding (Content-Encoding, Vary: Accept-Encoding, the Content-Length of the encoded body). The names are not hashed (BagiMatch3.wasm
-is the same name in every build), so nothing is `immutable`: index.html, manifest.json and manifest.webmanifest (the web app manifest,
-`application/manifest+json`) are `no-cache` (the browser asks every time, and an ETag makes the answer a 304), everything else may be reused for an hour and is revalidated with its ETag after that.
+is the same name in every build), so nothing is `immutable` and nothing is reused without asking: every file is `no-cache` (the browser
+asks every time, and an ETag makes the answer a 304), so a new deploy reaches the next load, page, .js, .wasm and .data together.
 GET /healthz answers 200 `ok` for the health check of the platform.
 
 Cross-origin isolation adds Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: require-corp to every answer.
@@ -44,15 +44,12 @@ DEFAULT_PORT = 8080
 DEFAULT_HOST = "0.0.0.0"
 INDEX_NAME = "index.html"
 MANIFEST_NAME = "manifest.json"
-WEB_MANIFEST_NAME = "manifest.webmanifest"
 COOP_COEP_VARIABLE = "COOP_COEP"
 BASIC_AUTH_USER_VARIABLE = "BASIC_AUTH_USER"
 BASIC_AUTH_PASSWORD_VARIABLE = "BASIC_AUTH_PASSWORD"
 BASIC_AUTH_REALM = "BagiWeb"
 HEALTH_PATH = "/healthz"
-NO_CACHE_FILES = (INDEX_NAME, MANIFEST_NAME, WEB_MANIFEST_NAME)
 NO_CACHE = "no-cache"
-SHORT_CACHE = "public, max-age=3600"
 COPY_CHUNK = 1 << 20
 # Encodings in the order the server prefers them: brotli is smaller than gzip
 ENCODINGS = (("br", ".br"), ("gzip", ".gz"))
@@ -258,8 +255,7 @@ class StaticHandler(BaseHTTPRequestHandler):
             info = os.fstat(stream.fileno())
             # The tag changes with the content and with the encoding chosen, so a cache never mixes the two
             etag = f'"{info.st_mtime_ns:x}-{info.st_size:x}-{coding or "identity"}"'
-            cache = NO_CACHE if path.name in NO_CACHE_FILES and path.parent == self.root else SHORT_CACHE
-            headers = [("ETag", etag), ("Cache-Control", cache), ("Last-Modified", formatdate(info.st_mtime, usegmt=True))]
+            headers = [("ETag", etag), ("Cache-Control", NO_CACHE), ("Last-Modified", formatdate(info.st_mtime, usegmt=True))]
             if has_variants:
                 headers.append(("Vary", "Accept-Encoding"))
             if etag_matches(self.headers.get("If-None-Match"), etag):
