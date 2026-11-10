@@ -5,7 +5,10 @@ It copies the behaviour seen on Vikunja 2.7.1 that the adapter depends on:
   - GET /tasks lists done tasks too, with their labels, and pages with X-Pagination-Total-Pages;
   - POST /tasks/{id} replaces the whole task (a field left out falls back to its zero value), but not the labels;
   - labels are set through POST /tasks/{id}/labels/bulk;
-  - GET /tasks/{id} answers 404 for a deleted task; project webhooks are listed and created per project.
+  - GET /tasks/{id} answers 404 for a deleted task; project webhooks are listed and created per project;
+  - relations: PUT /tasks/{id}/relations adds one and its other side (blocked <-> blocking), 409 when it exists,
+    DELETE /tasks/{id}/relations/{kind}/{other} removes both sides; GET /tasks/{id} shows them in
+    `related_tasks`; the listing here leaves them out, so the mirror must read a task before changing them.
 `fail_next` makes the next N requests answer 500 (the retries of the outbox).
 Every request is logged so that a test can assert "no writes".
 """
@@ -17,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 NO_DATE = "0001-01-01T00:00:00Z"
+INVERSE_KINDS = {"blocked": "blocking", "blocking": "blocked"}
 TASK_DEFAULTS = {"description": "", "done": False, "priority": 0, "due_date": NO_DATE}
 
 
@@ -27,6 +31,7 @@ class FakeVikunja:
         self.labels: dict[int, dict] = {}
         self.tasks: dict[int, dict] = {}
         self.webhooks: dict[int, list[dict]] = {}
+        self.relations: set[tuple[int, str, int]] = set()  # (task, kind, other task)
         self.fail_next = 0
         self.requests: list[tuple[str, str]] = []
         self._next_id = 1
@@ -86,6 +91,16 @@ class FakeVikunja:
         self.tasks[task["id"]] = task
         return task
 
+    def related(self, task_id: int, kind: str) -> list[int]:
+        return sorted(other for task, k, other in self.relations if task == task_id and k == kind)
+
+    def _with_relations(self, task: dict) -> dict:
+        related: dict[str, list[dict]] = {}
+        for task_id, kind, other in sorted(self.relations):
+            if task_id == task["id"] and other in self.tasks:
+                related.setdefault(kind, []).append({"id": other, "title": self.tasks[other]["title"]})
+        return {**task, "related_tasks": related}
+
     def tasks_of(self, project_id: int) -> list[dict]:
         return [task for task in self.tasks.values() if task["project_id"] == project_id]
 
@@ -129,6 +144,23 @@ class FakeVikunja:
             task["labels"] = [self.labels[item["id"]] for item in body["labels"]]
             return self._reply(handler, 201, {"labels": body["labels"]})
 
+        match = re.fullmatch(r"/tasks/(\d+)/relations", route)
+        if method == "PUT" and match:
+            task_id, other, kind = int(match.group(1)), body["other_task_id"], body["relation_kind"]
+            if task_id not in self.tasks or other not in self.tasks:
+                return self._reply(handler, 404, {"code": 4002, "message": "The task does not exist."})
+            if (task_id, kind, other) in self.relations:
+                return self._reply(handler, 409, {"code": 4007, "message": "The task relation already exists."})
+            self.relations |= {(task_id, kind, other), (other, INVERSE_KINDS.get(kind, kind), task_id)}
+            return self._reply(handler, 201, {"task_id": task_id, "other_task_id": other, "relation_kind": kind})
+        match = re.fullmatch(r"/tasks/(\d+)/relations/(\w+)/(\d+)", route)
+        if method == "DELETE" and match:
+            task_id, kind, other = int(match.group(1)), match.group(2), int(match.group(3))
+            if (task_id, kind, other) not in self.relations:
+                return self._reply(handler, 404, {"code": 4008, "message": "The task relation does not exist."})
+            self.relations -= {(task_id, kind, other), (other, INVERSE_KINDS.get(kind, kind), task_id)}
+            return self._reply(handler, 200, {"message": "The task relation was successfully deleted."})
+
         match = re.fullmatch(r"/projects/(\d+)/webhooks", route)
         if match:
             hooks = self.webhooks.setdefault(int(match.group(1)), [])
@@ -143,15 +175,17 @@ class FakeVikunja:
         if match and int(match.group(1)) not in self.tasks:
             return self._reply(handler, 404, {"code": 4002, "message": "The task does not exist."})
         if method == "GET" and match:
-            return self._reply(handler, 200, self.tasks[int(match.group(1))])
+            return self._reply(handler, 200, self._with_relations(self.tasks[int(match.group(1))]))
         if method == "DELETE" and match:
-            del self.tasks[int(match.group(1))]
+            task_id = int(match.group(1))
+            del self.tasks[task_id]
+            self.relations = {relation for relation in self.relations if task_id not in (relation[0], relation[2])}
             return self._reply(handler, 200, {"message": "Successfully deleted."})
         if method == "POST" and match:
             task = self.tasks[int(match.group(1))]
             replaced = {"id": task["id"], "project_id": body.get("project_id") or task["project_id"], "labels": task["labels"]}
             replaced.update(TASK_DEFAULTS)  # a field left out of the body is reset, as on the real server
-            replaced.update({key: value for key, value in body.items() if key not in ("id", "labels", "project_id")})
+            replaced.update({key: value for key, value in body.items() if key not in ("id", "labels", "project_id", "related_tasks")})
             self.tasks[task["id"]] = replaced
             return self._reply(handler, 200, replaced)
 

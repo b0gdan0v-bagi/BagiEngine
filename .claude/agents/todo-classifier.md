@@ -27,6 +27,7 @@ For each candidate read it with `python3 <engine>/tools/todo/todo.py show <id>` 
   - `owner decision`: the entry says the owner decides, or the choice between approaches is open (the rules file gives examples for this repository).
   - the extra skip reasons of the rules file (for example a game entry that waits for an engine entry), with the wording it gives
   - `needs platform`: the work can be checked only on Windows, on Vulkan, with a GPU, a device or a browser.
+  - `blocked by <id>`: `todo.py show` prints a line `blocked by: <id> (<status>)` with a blocker that is not `closed` (the conductor leaves such entries out; this is the safety net).
   - `depends on unmerged`: it needs code that exists only in a branch `todo/*` not merged into its base branch (`git -C <R> branch --no-merged <base> --list 'todo/*'`, `<R>` and `<base>` from the area row).
   - `too large`: it is a whole subsystem with no first slice you can name (a large entry with a plan of the owner is not this: the architect cuts the slice).
 

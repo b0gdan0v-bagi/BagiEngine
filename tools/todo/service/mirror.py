@@ -9,6 +9,8 @@ The automatic mirror between the store and Vikunja. Nobody runs a push or a pull
   a person and is applied to the entry: done (closed / open), the title, the body, the labels
   `in progress` / `deferred` / `stage N`. A task made in Vikunja without the marker becomes a new entry.
   `review` never comes from Vikunja: only the loop sets it.
+- Dependencies go one way, store -> Vikunja: an entry's blockers are its task's `blocked` relations
+  (Vikunja adds the `blocking` side). A relation changed in Vikunja is put back at the next write.
 
 The entry row is locked (SELECT ... FOR UPDATE) while its task is written and while a webhook is
 applied, so the echo of the mirror's own write always meets the new snapshot and changes nothing.
@@ -84,6 +86,7 @@ class Mirror:
         self._last_reconcile = 0.0
         self._marked: dict[int, dict[str, list[dict]]] = {}  # per outbox pass: project -> marker -> its tasks
         self.last_error: str | None = None
+        self.relations_error: str | None = None  # the last relation that could not be written (the task itself was)
 
     @property
     def enabled(self) -> bool:
@@ -247,6 +250,7 @@ class Mirror:
         stage = conn.execute("SELECT title FROM stages WHERE area = %s AND number = %s", (entry["area"], entry["stage"])).fetchone()
         desired = render_task(entry, store.status_line(entry), stage["title"] if stage else None, plan)
 
+        related = task.get("related_tasks") if task is not None else {}  # as read, before the task is written
         if task is None:
             if entry["status"] == "closed":
                 conn.execute("UPDATE entries SET vikunja_task_id = NULL, vikunja_snapshot = NULL WHERE id = %s", (entry_id,))
@@ -277,7 +281,55 @@ class Mirror:
             action = "update" if action == "unchanged" else action
         snapshot = {**snapshot_of(task), "labels": desired["labels"]}
         conn.execute("UPDATE entries SET vikunja_task_id = %s, vikunja_snapshot = %s WHERE id = %s", (task["id"], Jsonb(snapshot), entry_id))
+        if task["id"] != entry["vikunja_task_id"]:
+            # a new task: the entries it blocks can link to it now
+            for row in conn.execute("SELECT entry_id FROM dependencies WHERE blocker_id = %s", (entry_id,)).fetchall():
+                store.enqueue(conn, row["entry_id"])
+        if self.write_relations(conn, entry_id, task["id"], related) and action == "unchanged":
+            action = "update"
         return action
+
+    def write_relations(self, conn: Connection, entry_id: str, task_id: int, related: dict | None) -> bool:
+        """
+        Make the task's `blocked` relations name the tasks of the entry's blockers. Only relations to tasks of
+        entries are managed; one to a task outside the store is kept. A refusal (a token without the right) is
+        kept in `relations_error` and never fails the task. True when a relation was written.
+        """
+        wanted = {
+            row["vikunja_task_id"]
+            for row in conn.execute(
+                """SELECT e.vikunja_task_id FROM dependencies d JOIN entries e ON e.id = d.blocker_id
+                   WHERE d.entry_id = %s AND e.vikunja_task_id IS NOT NULL""",
+                (entry_id,),
+            ).fetchall()
+        }
+        try:
+            if related is None:  # a task from a listing: read it whole
+                related = (self.client.get_task(task_id) or {}).get("related_tasks")
+            current = {other["id"] for other in (related or {}).get("blocked") or []}
+            if not wanted and not current:
+                return False
+            managed = {
+                row["vikunja_task_id"]
+                for row in conn.execute("SELECT vikunja_task_id FROM entries WHERE vikunja_task_id = ANY(%s)", (list(current),)).fetchall()
+            }
+            changed = False
+            for other in sorted(wanted - current):
+                try:
+                    self.client.request("PUT", f"/tasks/{task_id}/relations", {"other_task_id": other, "relation_kind": "blocked"})
+                except VikunjaError as error:
+                    if error.status != 409:  # 409: it exists already
+                        raise
+                changed = True
+            for other in sorted((current & managed) - wanted):
+                self.client.request("DELETE", f"/tasks/{task_id}/relations/blocked/{other}")
+                changed = True
+            self.relations_error = None
+            return changed
+        except VikunjaError as error:
+            self.relations_error = f"relations of {entry_id}: {error}"
+            log.warning("relations of %s not written: %s", entry_id, error)
+            return False
 
     # --- Vikunja -> store ---
 

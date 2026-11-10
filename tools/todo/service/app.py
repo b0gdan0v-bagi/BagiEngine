@@ -115,6 +115,10 @@ class CloseIn(BaseModel):
     reopen: bool = False
 
 
+class BlockerIn(BaseModel):
+    note: str = ""
+
+
 class PlanIn(BaseModel):
     content: str
     entry: str | None = None
@@ -213,7 +217,14 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
 
         outbox = read(check)
         mirror = state["mirror"]
-        return {"ok": True, "mirror": mirror.enabled, "mirrorError": mirror.last_error, "outbox": outbox["n"], "outboxFailing": outbox["failing"]}
+        return {
+            "ok": True,
+            "mirror": mirror.enabled,
+            "mirrorError": mirror.last_error,
+            "relationsError": mirror.relations_error,
+            "outbox": outbox["n"],
+            "outboxFailing": outbox["failing"],
+        }
 
     # --- areas ---
 
@@ -228,9 +239,13 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
     # --- entries ---
 
     @app.get(f"{API}/entries")
-    def get_entries(area: str | None = None, status: str | None = None, body: bool = False, actor: str = Depends(check_token)):
+    def get_entries(
+        area: str | None = None, status: str | None = None, body: bool = False, blocked: bool | None = None, actor: str = Depends(check_token)
+    ):
+        """`blocked=true`: only entries with a blocker that is not closed; `blocked=false`: only the others (ready)."""
         statuses = [part.strip() for part in status.split(",")] if status else None
-        return read(lambda conn: store.entries_json(conn, store.list_entries(conn, area, statuses), with_body=body))
+        entries = read(lambda conn: store.entries_json(conn, store.list_entries(conn, area, statuses), with_body=body))
+        return entries if blocked is None else [entry for entry in entries if entry["blocked"] == blocked]
 
     @app.get(f"{API}/entries/{{entry_id}}")
     def get_entry(entry_id: str, actor: str = Depends(check_token)):
@@ -268,6 +283,26 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
     @app.post(f"{API}/entries/{{entry_id}}/close")
     def close(entry_id: str, body: CloseIn, actor: str = Depends(check_token)):
         return write(lambda conn: store.entry_json(conn, store.close(conn, entry_id, body.reopen, actor)))
+
+    @app.put(f"{API}/entries/{{entry_id}}/blockers/{{blocker_id}}")
+    def put_blocker(entry_id: str, blocker_id: str, body: BlockerIn, actor: str = Depends(check_token)):
+        def run(conn):
+            store.add_dependency(conn, entry_id, blocker_id, body.note, actor)
+            return store.entry_json(conn, store.require_entry(conn, entry_id))
+
+        return write(run)
+
+    @app.delete(f"{API}/entries/{{entry_id}}/blockers/{{blocker_id}}")
+    def delete_blocker(entry_id: str, blocker_id: str, actor: str = Depends(check_token)):
+        def run(conn):
+            store.remove_dependency(conn, entry_id, blocker_id, actor)
+            return store.entry_json(conn, store.require_entry(conn, entry_id))
+
+        return write(run)
+
+    @app.get(f"{API}/dependencies")
+    def get_dependencies(actor: str = Depends(check_token)):
+        return read(store.list_dependencies)
 
     @app.get(f"{API}/entries/{{entry_id}}/events")
     def events(entry_id: str, actor: str = Depends(check_token)):
@@ -356,6 +391,17 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
             stages = next((a["stages"] for a in areas if a["id"] == current), [])
             entries = store.entries_json(conn, store.list_entries(conn, current, ["open", "in progress", "review", "deferred"]))
             return dashboard.render_dashboard({"areas": areas, "area": current, "stages": stages, "entries": entries}, date.today())
+
+        return read(run)
+
+    @app.get("/dashboard/graph", response_class=HTMLResponse)
+    def graph_page(area: str | None = None, closed: bool = False, _: None = Depends(check_page)):
+        def run(conn):
+            areas = store.list_areas(conn)
+            linked = {link[key] for link in store.list_dependencies(conn) for key in ("entry", "blocker")}
+            rows = [entry for entry in store.list_entries(conn) if entry["id"] in linked]
+            entries = store.entries_json(conn, rows)
+            return dashboard.render_graph({"areas": areas, "area": area, "closed": closed, "entries": entries}, date.today())
 
         return read(run)
 
