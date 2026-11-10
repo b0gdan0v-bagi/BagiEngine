@@ -1,6 +1,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Text/FontAtlas.h>
 #include <BECore/Text/FontAtlasLibrary.h>
+#include <BECore/Text/GlyphOutline.h>
 #include <BECore/Text/TextRenderer.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -365,6 +366,52 @@ namespace BECore::Tests {
 
         EXPECT_EQ(huge->GetPixelSize(), FontAtlasLibrary::kMaxPixelSize);
         EXPECT_EQ(zero->GetPixelSize(), 1);
+    }
+
+    TEST_F(FontAtlasLibraryTest, QuantizeOutlineKeepsAnOutlineAtLeastOnePixel) {
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(0.0f), 0);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(-2.0f), 0);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(std::numeric_limits<float>::quiet_NaN()), 0);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(0.1f), 1);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(2.4f), 2);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(2.5f), 3);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(1000.0f), kMaxOutlinePixels);
+    }
+
+    TEST_F(FontAtlasLibraryTest, AnOutlineAtlasHasLargerPicturesAndNoPreload) {
+        auto plain = Library().Get(*renderer, font, 24);
+        auto outlined = Library().Get(*renderer, font, 24, 2);
+        const uint32_t glyphs[] = {font->FindGlyph(U'H')};
+
+        EXPECT_EQ(outlined->GetOutlinePixels(), 2);
+        EXPECT_EQ(outlined->GetGlyphCount(), 0u);
+        EXPECT_EQ(outlined->GetPageCount(), 0u);
+        EXPECT_TRUE(outlined->Prepare(*renderer, glyphs));
+
+        const AtlasGlyph* fill = plain->Find(glyphs[0]);
+        const AtlasGlyph* grown = outlined->Find(glyphs[0]);
+        ASSERT_NE(fill, nullptr);
+        ASSERT_NE(grown, nullptr);
+        EXPECT_FLOAT_EQ(grown->source.w, fill->source.w + 4.0f);
+        EXPECT_FLOAT_EQ(grown->source.h, fill->source.h + 4.0f);
+        EXPECT_FLOAT_EQ(grown->offsetX, fill->offsetX - 2.0f);
+        EXPECT_FLOAT_EQ(grown->offsetY, fill->offsetY - 2.0f);
+    }
+
+    TEST_F(FontAtlasLibraryTest, TheOutlineWidthIsPartOfTheKey) {
+        auto plain = Library().Get(*renderer, font, 24);
+        auto thin = Library().Get(*renderer, font, 24, 1);
+        auto thick = Library().Get(*renderer, font, 24, 2);
+
+        EXPECT_NE(thin.Get(), thick.Get());
+        EXPECT_NE(plain.Get(), thin.Get());
+        EXPECT_EQ(Library().Get(*renderer, font, 24, 2).Get(), thick.Get());
+        EXPECT_EQ(Library().GetAtlasCount(), 3u);
+    }
+
+    TEST_F(FontAtlasLibraryTest, TheOutlineIsKeptInRange) {
+        EXPECT_EQ(Library().Get(*renderer, font, 12, 1000)->GetOutlinePixels(), kMaxOutlinePixels);
+        EXPECT_EQ(Library().Get(*renderer, font, 12, -3)->GetOutlinePixels(), 0);
     }
 
     // -- TextRenderer --------------------------------------------------------------------------------------------------

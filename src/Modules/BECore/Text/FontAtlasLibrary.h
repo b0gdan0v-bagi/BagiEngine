@@ -17,9 +17,10 @@ namespace BECore {
     };
 
     /**
-     * @brief The glyph atlases that exist, one per (font, pixel size): `CoreManager::GetFontAtlasLibrary()`.
+     * @brief The glyph atlases that exist, one per (font, pixel size, outline pixels): `CoreManager::GetFontAtlasLibrary()`.
      *
-     * Atlases are made on first use. A new atlas draws the `preload` ranges of the TextSettings up front. The size is a
+     * Atlases are made on first use. A new plain atlas draws the `preload` ranges of the TextSettings up front; an
+     * outline atlas (outline pixels above 0) is not preloaded, its glyphs come on first use. The size is a
      * whole number of pixels (QuantizeSize()): the effective size of a text is its font size times the scale of its
      * canvas times the pixel density, rounded, so a text is rasterized at the size it is shown at, and the atlas stays
      * small however the scale moves.
@@ -56,8 +57,12 @@ namespace BECore {
         /// The effective size in pixels as a whole number from 1 to kMaxPixelSize
         [[nodiscard]] static int QuantizeSize(float effectivePixelSize);
 
-        /// The atlas of @p font at @p pixelSize, made (and preloaded) now when it does not exist
-        [[nodiscard]] IntrusivePtr<FontAtlas> Get(IRenderer& renderer, const IntrusivePtr<Font>& font, int pixelSize);
+        /// An outline width in output pixels as a whole number: 0 stays 0, anything above 0 is at least 1, at most kMaxOutlinePixels
+        [[nodiscard]] static int QuantizeOutline(float widthInPixels);
+
+        /// The atlas of @p font at @p pixelSize with the pictures grown by @p outlinePixels (0: the plain glyphs), made now when it
+        /// does not exist; only a plain one is preloaded
+        [[nodiscard]] IntrusivePtr<FontAtlas> Get(IRenderer& renderer, const IntrusivePtr<Font>& font, int pixelSize, int outlinePixels = 0);
 
         /// Waits for the GPU of the current renderer, then drops every atlas
         void Clear();
@@ -70,6 +75,7 @@ namespace BECore {
         struct Entry {
             IntrusivePtr<Font> font;
             int pixelSize = 0;
+            int outlinePixels = 0;
             IntrusivePtr<FontAtlas> atlas;
         };
 

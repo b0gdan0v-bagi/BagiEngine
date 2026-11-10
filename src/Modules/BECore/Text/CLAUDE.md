@@ -5,7 +5,7 @@
 Text drawn by the engine through `IRenderer`, in both backends and both run modes (ImGui is not involved; it stays the tool UI). The font file is parsed with `stb_truetype` (`src/Modules/stb/`), glyphs are drawn into page textures, and a text is one textured quad per glyph. Nothing here needs a window to be measured or laid out, so layout is tested without a GPU.
 
 ```
-Font (.ttf/.otf bytes, CPU)  ->  TextLayout (pure: lines, glyph positions)  ->  FontAtlas (pages of glyph pictures)  ->  TextRenderer (DrawTexture per glyph)
+Font (.ttf/.otf bytes, CPU)  ->  TextLayout (pure: lines, glyph positions)  ->  FontAtlas (pages of glyph pictures; GlyphOutline grows them)  ->  TextRenderer (DrawTexture per glyph)
         ^ FontLoader                                                              ^ FontAtlasLibrary (one atlas per font and pixel size)
                                                             TextComponent (a scene component that does all of it) 
 ```
@@ -17,8 +17,9 @@ Font (.ttf/.otf bytes, CPU)  ->  TextLayout (pure: lines, glyph positions)  ->  
 | `Utf8` | `DecodeNext` (a malformed byte gives U+FFFD and consumes one byte, so a loop always ends), `Append`, `CountCodePoints` |
 | `TextLayout::Layout(font, utf8, options)` | Pure. Lines, wrapping, alignment, line spacing, overflow (`Clip`, `Ellipsis`, `AutoFit`) to `PositionedGlyph`s: pen position of each glyph on its baseline, relative to the top-left of the text box. Rules are in the header comment |
 | `ShelfPacker` | Pure rectangle packer used by the atlas |
-| `FontAtlas` | The glyphs of one font at one whole pixel size, in page textures made by `IRenderer::CreateTexture()`. White glyphs with the coverage in alpha, a 1 px transparent border around each. `Prepare()` adds missing glyphs as **new pages**; a page is never written again, so a frame in flight never reads a page that changes |
-| `FontAtlasLibrary` (`CoreManager::GetFontAtlasLibrary()`) | One atlas per (font, pixel size), made on first use and preloaded with the ranges of `TextConfig.xml`. Drops everything when the renderer changes (`IRenderer::GetId()`); `Application::Cleanup()` calls `Clear()` before the renderer is destroyed |
+| `GlyphOutline::Dilate` | Pure. A glyph bitmap grown by a radius of pixels on every side (the max of coverage times a one-pixel soft edge); the picture of an outline contains the fill. The radius is cut to `kMaxOutlinePixels` |
+| `FontAtlas` | The glyphs of one font at one whole pixel size, in page textures made by `IRenderer::CreateTexture()`. White glyphs with the coverage in alpha, a 1 px transparent border around each. With `outlinePixels` above 0 the pictures are the dilated glyphs (offsets follow). `Prepare()` adds missing glyphs as **new pages**; a page is never written again, so a frame in flight never reads a page that changes |
+| `FontAtlasLibrary` (`CoreManager::GetFontAtlasLibrary()`) | One atlas per (font, pixel size, outline pixels), made on first use; a plain one is preloaded with the ranges of `TextConfig.xml`, an outline one is not (its glyphs come on first use: dilating is the costly part). `QuantizeOutline` makes a width whole (0 stays 0, anything above is at least 1). Drops everything when the renderer changes (`IRenderer::GetId()`); `Application::Cleanup()` calls `Clear()` before the renderer is destroyed |
 | `TextSettings` | `config/TextConfig.xml`: `defaultFont`, `defaultFamily`, `pageSize`, the `families` table (family, faces of weight and path) with `ResolveFontPath(family, weight)` (the CSS nearest-weight rule, in the header), the `preload` code point ranges (Basic Latin, Latin-1, Cyrillic, the general punctuation by default) |
 | `TextRenderer::Draw` | Prepares the glyphs, then draws one quad each at a whole output pixel |
 | `TextLayoutCache` | Keeps the last layout of one text and makes a new one only when the font, the text or an option changed; `TextComponent` and `UILabel` each hold one |
@@ -30,6 +31,7 @@ Font (.ttf/.otf bytes, CPU)  ->  TextLayout (pure: lines, glyph positions)  ->  
 - A font size is the **em square in pixels** (CSS `font-size`), not the ascent plus descent. At 16 the line is a little taller than 16 (`Font::GetVerticalMetrics(16).LineHeight()`).
 - A text is laid out and rasterized in **output pixels**. `TextComponent` takes its size in scene units, multiplies by the scale of `IRenderer::GetViewTransform()` and rounds to a whole pixel (`FontAtlasLibrary::QuantizeSize`): a scene that is fitted to a bigger output gets sharp text, not a stretched picture. `TextRenderer::Draw()` converts back to the units of the view and snaps each glyph to a whole output pixel, so the atlas picture is drawn 1:1.
 - The UI canvases (`UILabel`, the UI plan in the local plan store) use the same path: the effective size is the UI size times the canvas scale times the pixel density, and a canvas sets its own view transform around its draw.
+- An outline width is in output pixels too and whole (`QuantizeOutline`); the outline atlas is keyed by it, so every width is an atlas of its own.
 - `AutoFit` steps in whole pixels, which also keeps the number of atlases small. One atlas costs about 40 ms the first time (the preload), then nothing.
 
 ## Using text in a scene

@@ -2,6 +2,7 @@
 
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/ITexture.h>
+#include <BECore/Text/GlyphOutline.h>
 #include <BECore/Text/ShelfPacker.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
@@ -32,7 +33,8 @@ namespace BECore {
 
     }  // namespace
 
-    FontAtlas::FontAtlas(IntrusivePtr<Font> font, int pixelSize, uint32_t pageSize) : _font(std::move(font)), _pixelSize(pixelSize), _pageSize(std::max(pageSize, kMinPageSize)) {}
+    FontAtlas::FontAtlas(IntrusivePtr<Font> font, int pixelSize, uint32_t pageSize, int outlinePixels)
+        : _font(std::move(font)), _pixelSize(pixelSize), _outlinePixels(std::clamp(outlinePixels, 0, kMaxOutlinePixels)), _pageSize(std::max(pageSize, kMinPageSize)) {}
 
     const AtlasGlyph* FontAtlas::Find(uint32_t glyph) const {
         const auto it = _glyphs.find(glyph);
@@ -75,6 +77,9 @@ namespace BECore {
         eastl::vector<Pending> pending;
         for (const uint32_t glyph : missing) {
             GlyphBitmap bitmap = _font->RasterizeGlyph(glyph, static_cast<float>(_pixelSize));
+            if (_outlinePixels > 0) {
+                bitmap = GlyphOutline::Dilate(bitmap, _outlinePixels);
+            }
             if (bitmap.width == 0 || bitmap.height == 0) {
                 _glyphs[glyph] = AtlasGlyph{};  // no ink: remembered, so it is not drawn again
             } else if (PaddedWidth(bitmap) > _pageSize || PaddedHeight(bitmap) > _pageSize) {
