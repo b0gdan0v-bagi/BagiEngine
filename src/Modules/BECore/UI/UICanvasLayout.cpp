@@ -14,14 +14,32 @@ namespace BECore {
             if (!element.active.visible) {
                 return nullptr;
             }
-            for (auto it = element.children.rbegin(); it != element.children.rend(); ++it) {
-                if (UIElement* hit = HitTestIn(**it, x, y)) {
-                    return hit;
+            // The children of a popup element are found through the overlay pass of HitTest(), not here
+            if (!element.HasPopupChildren()) {
+                for (auto it = element.children.rbegin(); it != element.children.rend(); ++it) {
+                    if (UIElement* hit = HitTestIn(**it, x, y)) {
+                        return hit;
+                    }
                 }
             }
             const Rect& rect = element.rect;
             const bool inside = x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
             return element.IsHitTestable() && inside ? &element : nullptr;
+        }
+
+        void CollectOpenPopups(UIElement& element, eastl::vector<UIElement*>& popups) {
+            if (!element.active.visible) {
+                return;
+            }
+            if (element.HasPopupChildren()) {
+                if (element.IsPopupOpen()) {
+                    popups.push_back(&element);
+                }
+                return;
+            }
+            for (const auto& child : element.children) {
+                CollectOpenPopups(*child, popups);
+            }
         }
 
     }  // namespace
@@ -54,8 +72,28 @@ namespace BECore {
         return {_resolved.transform.ToViewX(outputX), _resolved.transform.ToViewY(outputY)};
     }
 
+    eastl::vector<UIElement*> UICanvasLayout::OpenPopups() const {
+        eastl::vector<UIElement*> popups;
+        if (root) {
+            CollectOpenPopups(*root, popups);
+        }
+        return popups;
+    }
+
     UIElement* UICanvasLayout::HitTest(float canvasX, float canvasY) const {
-        return _hasContext && root ? HitTestIn(*root, canvasX, canvasY) : nullptr;
+        if (!_hasContext || !root) {
+            return nullptr;
+        }
+        // The open popups are drawn above the whole tree, so they are tested first: the later one, then the later child
+        const eastl::vector<UIElement*> popups = OpenPopups();
+        for (auto popup = popups.rbegin(); popup != popups.rend(); ++popup) {
+            for (auto child = (*popup)->children.rbegin(); child != (*popup)->children.rend(); ++child) {
+                if (UIElement* hit = HitTestIn(**child, canvasX, canvasY)) {
+                    return hit;
+                }
+            }
+        }
+        return HitTestIn(*root, canvasX, canvasY);
     }
 
     eastl::vector<UILayoutIssue> UICanvasLayout::Validate(const UILayoutValidatorOptions& options) const {

@@ -70,6 +70,34 @@ namespace BECore {
             static_cast<void>(y);
         }
 
+        /// **Popup protocol.** An element whose children are a popup (a dropdown's list) says so with `HasPopupChildren()`: the canvas takes those children out of the flow. Closed, their
+        /// rects are empty (not drawn, not hit, not validated, not in `ui_tree` as visible). Open, `LayoutPopup` places them against the content bounds of the canvas, they are drawn
+        /// after the whole tree, hit-tested before it, and a left press anywhere else closes the popup (`ClosePopup`) and is consumed. The defaults are no popup, so no other control changes.
+        /// The open state is runtime UI state: it is not reflected and not saved
+        [[nodiscard]] virtual bool HasPopupChildren() const {
+            return false;
+        }
+
+        /// The popup is open: only asked when `HasPopupChildren()`
+        [[nodiscard]] virtual bool IsPopupOpen() const {
+            return false;
+        }
+
+        /// Sets `rect` of the children (the layout then lays out their own children) while the popup is open. @p contentBounds is the safe area of the canvas, in canvas units;
+        /// this element's own `rect` is already laid out. A child that is not `active.visible` gets an empty rect afterwards
+        virtual void LayoutPopup(const Rect& contentBounds) {
+            static_cast<void>(contentBounds);
+        }
+
+        /// The canvas closes the popup: a press landed outside it, or the canvas can no longer take input, or another popup was opened
+        virtual void ClosePopup() {}
+
+        /// A click ended on @p child, a direct child of this popup, or on something inside it: called instead of the child's `OnClick`. The element decides what follows, also
+        /// whether the popup closes
+        virtual void OnPopupChoice(UIElement& child) {
+            static_cast<void>(child);
+        }
+
         /// Adds a plain child with this name and returns it
         IntrusivePtr<UIElement> AddChild(PoolString childName);
 

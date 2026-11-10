@@ -58,7 +58,13 @@ namespace BECore {
                     Report(UILayoutIssueKind::TextDoesNotFit, element);
                 }
 
-                CheckStackSiblings(element);
+                // The children of a popup are out of flow: a closed one has none to look at, an open one is checked like anything else, and its options are not siblings in a stack
+                if (element.HasPopupChildren() && !element.IsPopupOpen()) {
+                    return;
+                }
+                if (!element.HasPopupChildren()) {
+                    CheckStackSiblings(element);
+                }
                 for (const auto& child : element.children) {
                     Visit(*child, false);
                 }

@@ -24,6 +24,11 @@ namespace BECore {
      * uses the layout of its last draw, and follows a press that it consumed to the release. The press of an `interactive` element and the motion while it is held reach the element through
      * `UIElement::OnPress` / `OnDrag` (a slider acts on them); the click on the release is still `OnClick`. A canvas of an inactive scene, a hidden one (`visible`) and one with `inputEnabled` off
      * never consume anything.
+     *
+     * **Popups** (`UIElement::HasPopupChildren`, a dropdown's list). The children of an open popup are drawn after the whole tree and hit-tested before it. A left press that lands on neither an open
+     * popup element nor inside it closes the popup and is consumed (the release too; no click on what is below, no pressed element). A click that ends inside an open popup goes to
+     * `UIElement::OnPopupChoice` of the popup instead of the child's `OnClick`. Opening one popup closes another; a canvas that cannot take input closes its popups. The canvas
+     * invalidates its layout when the set of open popups changed (the layout cache does not see element edits), at the latest on the next draw.
      */
     class UICanvasComponent : public IComponent, public IUIInputHandler {
         BE_CLASS(UICanvasComponent)
@@ -105,6 +110,7 @@ namespace BECore {
         void SyncParams();
         void AdoptDocument();
         void DrawElement(IRenderer& renderer, UIElement& element) const;
+        void DrawPopups(IRenderer& renderer) const;
         void RefreshInputOrder();
 
         /// The element under a point in output pixels, by the layout of the last draw
@@ -112,6 +118,14 @@ namespace BECore {
         // Pointer state of the interactive elements (UIElement::hovered, pressed, OnClick)
         void SetHovered(UIElement* element);
         void ClearPointerState();
+
+        /// The open popups changed since the last look (opened, closed, a second one opened): keeps the newest, closes the others, invalidates the layout. @return true on a change
+        bool SyncPopups();
+        void CloseAllPopups();
+        /// The open popup whose children contain @p element (the element itself or something under it) and, in @p child, that child of the popup; null when there is none
+        [[nodiscard]] UIElement* FindPopupOf(const UIElement& element, UIElement*& child) const;
+        /// @p element is an open popup or lies inside one
+        [[nodiscard]] bool IsInOpenPopup(const UIElement* element) const;
         /// Ends the press of the left button: the element it began on when the release is on it too, else null
         [[nodiscard]] IntrusivePtr<UIElement> TakeClick(const SDL_MouseButtonEvent& event);
         [[nodiscard]] bool ConsumeButtonUp(const SDL_MouseButtonEvent& event);
@@ -122,6 +136,7 @@ namespace BECore {
         uint32_t _consumedButtons = 0;     // bit per SDL button that went down on this canvas and is not up yet
         IntrusivePtr<UIElement> _hovered;  // the element under the pointer; kept alive here so that a tree edit cannot leave a dangling flag
         IntrusivePtr<UIElement> _pressed;  // the interactive element the left button went down on and is not up yet
+        IntrusivePtr<UIElement> _popup;    // the open popup the last SyncPopups() saw
         bool _authoredAdopted = false;     // Initialize() has handed `_elements` and `_variants` to the layout
     };
 

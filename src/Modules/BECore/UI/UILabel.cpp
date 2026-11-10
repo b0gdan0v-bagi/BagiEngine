@@ -9,20 +9,21 @@
 namespace BECore {
 
     eastl::string_view UILabel::GetDisplayText() const {
-        if (!UIVars::HasPlaceholders(text)) {
-            return eastl::string_view(text.data(), text.size());
+        const eastl::string& source = GetSourceText();
+        if (!UIVars::HasPlaceholders(source)) {
+            return eastl::string_view(source.data(), source.size());
         }
         const UIVars& variables = CoreManager::GetUIVars();
         UIStrings& strings = CoreManager::GetUIStrings();
         // A text that names no string does not depend on the string table, so a language switch leaves it alone
-        const bool stale = _expandedSource != text || _expandedVersion != variables.GetVersion() || (_expandedUsesStrings && _expandedStringsVersion != strings.GetVersion());
+        const bool stale = _expandedSource != source || _expandedVersion != variables.GetVersion() || (_expandedUsesStrings && _expandedStringsVersion != strings.GetVersion());
         if (stale) {
-            const eastl::string_view source(text.data(), text.size());
-            _expandedUsesStrings = UIStrings::HasReferences(source);
+            const eastl::string_view sourceView(source.data(), source.size());
+            _expandedUsesStrings = UIStrings::HasReferences(sourceView);
             if (_expandedUsesStrings) {
                 // Strings first, variables second: a translation may hold `{score}`, and a string is not resolved again
                 const size_t missingBefore = strings.GetMissing().size();
-                const eastl::string resolved = strings.Resolve(source);
+                const eastl::string resolved = strings.Resolve(sourceView);
                 const auto& missing = strings.GetMissing();
                 for (size_t i = missingBefore; i < missing.size(); ++i) {
                     LOG_WARNING("UILabel: no string '{}' in the language '{}' or the default one"_format(missing[i].key.c_str(), missing[i].language.ToStringView()));
@@ -30,9 +31,9 @@ namespace BECore {
                 _expanded = variables.Expand(eastl::string_view(resolved.data(), resolved.size()));
                 _expandedStringsVersion = strings.GetVersion();
             } else {
-                _expanded = variables.Expand(source);
+                _expanded = variables.Expand(sourceView);
             }
-            _expandedSource = text;
+            _expandedSource = source;
             _expandedVersion = variables.GetVersion();
         }
         return eastl::string_view(_expanded.data(), _expanded.size());

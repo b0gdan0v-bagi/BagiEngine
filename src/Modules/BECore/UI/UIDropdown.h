@@ -1,0 +1,127 @@
+#pragma once
+
+#include <BECore/UI/UIButton.h>
+#include <BECore/UI/UILabel.h>
+#include <EASTL/array.h>
+
+namespace BECore {
+
+    /**
+     * @brief A choice of many values behind one row: the header shows the chosen option and an arrow, a click opens a list of the options above everything of the canvas.
+     *
+     * `<element type="UIDropdown" name="Level" bind="level" action="SetLevel" text="Pick one" x="20" y="20" width="240" height="56" optionHeight="56">` with `<children>` of
+     * `<element type="UIButton" value="easy" text="{#level.easy}" .../>`. `bind` names a `UIVars` variable, like `UISegmented`: the option (a direct child that is a `UIButton`) whose
+     * `value` equals the variable is the chosen one. The header shows that option's `text` (any `{#key}` or `{name}` in it is expanded as in the option itself, so a language switch
+     * rewords the header); with no option chosen it shows the dropdown's own `text`, a placeholder or empty. Only the options are children of interest, anything else is ignored.
+     *
+     * **The dropdown owns no choice.** A click on an option emits `ActionEvent(action, value)` with the option's `value` and changes nothing else; the game answers by setting the
+     * variable (game -> `UIVars` -> widget). That the list is open is runtime UI state (like `hovered`), neither reflected nor saved.
+     *
+     * The list is a popup (`UIElement::HasPopupChildren`): closed, the options have no rect (not drawn, not hit, not validated, not visible to `ui_tree`); open, `GetPopupGeometry` puts
+     * them in a column under the header, at least as wide as it, flipped above the header when they do not fit below, otherwise shifted into the safe area of the canvas. There is no
+     * scrolling: a list taller than the canvas is reported by the validator. **Every option needs a height**: its own authored `height`, else `optionHeight`, else the height of the
+     * header (an option the same size as the header is the usual case, and 48 units at least keeps it a touch target). A click on the header toggles the list (`disabled` never opens
+     * it); a `disabled` option takes the click and does nothing, the list stays open; a press anywhere else closes the list and is consumed (`UICanvasComponent`).
+     *
+     * The header is the touch target (`interactive`). Its fill is `color` with the state shifts of a button; the text is laid out left of the arrow, and `CheckContent()` measures it
+     * there. `arrowColor` is derived from `textColor` when left transparent; the arrow points down closed and up open, so the state does not rest on color alone.
+     */
+    class UIDropdown : public UILabel {
+        BE_CLASS(UIDropdown)
+    public:
+        UIDropdown();
+        ~UIDropdown() override = default;
+
+        BE_REFLECT_FIELD PoolString bind;    ///< the variable that holds the `value` of the chosen option
+        BE_REFLECT_FIELD PoolString action;  ///< emitted on a choice, with the `value` of the option
+        BE_REFLECT_FIELD bool disabled = false;
+        BE_REFLECT_FIELD UIColor arrowColor;         ///< the arrow; transparent is `textColor`
+        BE_REFLECT_FIELD float optionHeight = 0.0f;  ///< the height of an option that has none of its own; 0 is the height of the header
+
+        static constexpr float kTextInset = 12.0f;    ///< the air left of the header text
+        static constexpr float kArrowMargin = 14.0f;  ///< the air right of the arrow
+        static constexpr float kArrowGap = 8.0f;      ///< the air between the text and the arrow
+        static constexpr float kArrowWidth = 16.0f;   ///< the arrow's width in canvas units
+        static constexpr float kArrowAspect = 0.5f;   ///< its height, as a share of its width
+        static constexpr int kArrowRows = 6;          ///< the arrow is this many strips of `DrawFilledRect`
+
+        /// Where the parts of the header are: the area of the text and the box of the arrow. Pure geometry, shared by the draw and `CheckContent()`
+        struct HeaderParts {
+            Rect text;
+            Rect arrow;
+        };
+        [[nodiscard]] static HeaderParts GetHeaderParts(const Rect& header);
+
+        /// The strips of the arrow in @p box: the widest at the top for a down arrow, at the bottom for an up arrow
+        [[nodiscard]] static eastl::array<Rect, kArrowRows> GetArrowStrips(const Rect& box, bool pointsUp);
+
+        /// The size one option asks for in the list
+        struct OptionSize {
+            float width = 0.0f;  ///< 0 asks for nothing: the column is as wide as the header
+            float height = 0.0f;
+        };
+
+        /// Where the list is: one rect per option in order, and the column that holds them
+        struct PopupGeometry {
+            eastl::vector<Rect> options;
+            Rect list;
+            bool above = false;  ///< the list sits over the header, not under it
+        };
+
+        /// The pure rules of the list. A column as wide as the widest of the header and the options (never wider than @p bounds), directly under @p header, left edges aligned; when it does not
+        /// fit below and fits above it goes above the header; when it fits on neither side it is shifted to stay inside @p bounds (a list taller than @p bounds starts at its top edge)
+        [[nodiscard]] static PopupGeometry GetPopupGeometry(const Rect& header, const eastl::vector<OptionSize>& options, const Rect& bounds);
+
+        [[nodiscard]] bool IsOpen() const {
+            return _open;
+        }
+        /// Opens the list; a `disabled` dropdown stays closed
+        void Open();
+        void Close();
+        void Toggle();
+
+        /// Sets `selected` and `groupDisabled` of the options from the variable and `disabled`
+        void SyncChildren();
+
+        /// The value of the bound variable; empty when `bind` is empty or the variable is not set
+        [[nodiscard]] eastl::string_view GetSelectedValue() const;
+
+        /// Whether a click on @p option emits `ActionEvent(action, option value)`: not when the dropdown or the option is `disabled`, or `action` is empty
+        [[nodiscard]] bool EmitsOnChoice(const UIButton& option) const;
+
+        /// The option whose `value` equals the variable; null when there is none
+        [[nodiscard]] UIButton* FindChosenOption() const;
+
+        /// The header fill for the state now: `color`, shifted by hover and press, half alpha when `disabled`
+        [[nodiscard]] Color GetCurrentFill() const;
+
+        /// The arrow color: `arrowColor` or `textColor`, half alpha when `disabled`
+        [[nodiscard]] Color GetCurrentArrow() const;
+
+        void DrawSelf(IRenderer& renderer) override;
+        void OnClick() override;
+
+        [[nodiscard]] bool HasPopupChildren() const override {
+            return true;
+        }
+        [[nodiscard]] bool IsPopupOpen() const override {
+            return _open && !disabled;
+        }
+        void LayoutPopup(const Rect& contentBounds) override;
+        void ClosePopup() override {
+            Close();
+        }
+        void OnPopupChoice(UIElement& child) override;
+
+        /// The header text against the area left of the arrow, not the whole rect
+        [[nodiscard]] UIContentFit CheckContent(float width, float height, float scale) const override;
+
+    protected:
+        /// The chosen option's text, or the dropdown's own when none is chosen
+        [[nodiscard]] const eastl::string& GetSourceText() const override;
+
+    private:
+        bool _open = false;  // runtime UI state, not reflected
+    };
+
+}  // namespace BECore

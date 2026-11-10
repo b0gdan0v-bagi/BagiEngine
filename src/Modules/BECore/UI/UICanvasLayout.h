@@ -59,9 +59,13 @@ namespace BECore {
          * @brief The topmost hit-testable element at a point of the canvas, or null.
          *
          * Topmost is the one drawn last: a child before its parent, a later sibling before an earlier one. Hidden elements are not found.
-         * The rects of children are not clipped by their parent.
+         * The rects of children are not clipped by their parent. The children of an open popup (`UIElement::HasPopupChildren`) are tested first, as they are drawn last; the normal pass
+         * never goes into the children of a popup element.
          */
         [[nodiscard]] UIElement* HitTest(float canvasX, float canvasY) const;
+
+        /// The elements with `HasPopupChildren()` that are open, in tree order; only visible ones, and a popup inside the children of another is not looked for
+        [[nodiscard]] eastl::vector<UIElement*> OpenPopups() const;
 
         [[nodiscard]] eastl::vector<UILayoutIssue> Validate(const UILayoutValidatorOptions& options) const;
 
