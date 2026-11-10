@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/UI/UIBoxMesh.h>
 #include <BECore/UI/UIRectSpec.h>
 
 namespace BECore {
@@ -25,6 +26,17 @@ namespace BECore {
         [[nodiscard]] eastl::string FormatColor(const Color& color);
         /// "r,g,b,a" (0 to 255 each), "#RRGGBB" or "#RRGGBBAA"
         [[nodiscard]] std::optional<Color> ParseColor(eastl::string_view text);
+
+        /// One radius when the four corners are equal, otherwise "topLeft,topRight,bottomRight,bottomLeft"
+        [[nodiscard]] eastl::string FormatCorners(const UICorners& corners);
+        /// One number (all corners) or "topLeft,topRight,bottomRight,bottomLeft"; every number finite
+        [[nodiscard]] std::optional<UICorners> ParseCorners(eastl::string_view text);
+
+        /// "offsetX,offsetY,blur,spread,#RRGGBBAA"
+        [[nodiscard]] eastl::string FormatShadow(const UIShadowSpec& shadow);
+        /// "offsetX,offsetY,blur,spread,color", the colour in any form of ParseColor (so also "r,g,b,a": the first four commas split the numbers, the rest is the colour). The numbers
+        /// are finite and the blur is not negative
+        [[nodiscard]] std::optional<UIShadowSpec> ParseShadow(eastl::string_view text);
 
         /// A number that fills the whole text (surrounding spaces are allowed)
         [[nodiscard]] std::optional<float> ParseFloat(eastl::string_view text);

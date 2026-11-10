@@ -7,6 +7,8 @@
 namespace BECore {
 
     void UIPanel::DrawSelf(IRenderer& renderer) {
+        // The box first (rounded, bordered, shadowed as authored), then the sprite over it. The sprite is a plain textured rect: it is not cut to the rounded corners, so a
+        // panel with rounded corners and a sprite wants a sprite with transparent corners
         UIElement::DrawSelf(renderer);
         if (rect.IsEmpty() || spriteTint.a == 0) {
             return;

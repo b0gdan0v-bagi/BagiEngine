@@ -340,6 +340,18 @@ namespace BECore::Tests {
             style.fontSize = 13.0f;
         }
 
+        /// Every property of the box set to something other than its default
+        void SetEveryBoxProperty(UIBoxStyle& box) {
+            box.cornerRadius = {4.0f, 8.0f, 12.0f, 0.0f};
+            box.borderWidth = 2.5f;
+            box.borderColor = Color{71, 72, 73, 74};
+            box.gradientColor = Color{75, 76, 77, 78};
+            box.gradientDirection = UIGradientDirection::Horizontal;
+            box.shadow = {1.0f, 2.0f, 3.0f, 4.0f, Color{79, 80, 81, 82}};
+            box.glow = {-1.0f, -2.0f, 5.0f, -0.5f, Color{83, 84, 85, 86}};
+            box.highlight = Color{87, 88, 89, 90};
+        }
+
         void SetEveryControlField(UIElement& element) {
             element.name = PoolString::Intern("Busy");
             element.layout = UILayoutKind::Stack;
@@ -423,6 +435,7 @@ namespace BECore::Tests {
             auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(original) << type;
             SetEveryStyleProperty(original->style);
+            SetEveryBoxProperty(original->box);
             SetEveryControlField(*original);
 
             auto canvas = New<UICanvasComponent>();
@@ -443,6 +456,7 @@ namespace BECore::Tests {
             ASSERT_EQ(loaded->_elements.size(), 1u) << type;
 
             EXPECT_TRUE(original->style == loaded->_elements[0]->style) << type << ": the style changed on the way";
+            EXPECT_TRUE(original->box == loaded->_elements[0]->box) << type << ": the box changed on the way";
             EXPECT_STREQ(ElementToXml(*original).c_str(), ElementToXml(*loaded->_elements[0]).c_str()) << type;
         }
     }

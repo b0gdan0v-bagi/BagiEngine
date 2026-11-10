@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/UI/UIBoxStyle.h>
 #include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIElementStyle.h>
 
@@ -26,8 +27,8 @@ namespace BECore {
      * one, call UICanvasComponent::Invalidate().
      *
      * **In a file.** An element is `<element type="UIPanel" name="Hud" ...>` and its authored state is reflected: `name`, `layout`, the style as flat
-     * attributes (UIElementStyle), `color`, `blocksInput`, `interactive`, `ignoreSafeArea` and a `<children>` array of elements. The type names come
-     * from AbstractFactory<UIElement>, so a control is one more derived class. `active` and `rect` are results and are not saved.
+     * attributes (UIElementStyle), `color`, the box as flat attributes too (UIBoxStyle: rounded corners, border, gradient, shadow, glow, highlight), `blocksInput`, `interactive`, `ignoreSafeArea` and
+     * a `<children>` array of elements. The type names come from AbstractFactory<UIElement>, so a control is one more derived class. `active` and `rect` are results and are not saved.
      */
     class UIElement : public RefCounted {
         BE_CLASS(UIElement, FACTORY_BASE, ELEMENT = element, REGISTER_SELF)
@@ -40,6 +41,7 @@ namespace BECore {
         BE_REFLECT_FIELD UIElementStyle style;
         UIElementStyle active;
         BE_REFLECT_FIELD UIColor color;             ///< the fill the canvas draws for this element; a transparent color draws nothing
+        BE_REFLECT_FIELD UIBoxStyle box;            ///< the shape of the fill and its paint around it; the default is the plain rect of `color`
         BE_REFLECT_FIELD bool blocksInput = false;  ///< a hit test finds it: a click on it does not reach what is below
         BE_REFLECT_FIELD bool interactive = false;  ///< it takes clicks (a button): hit-testable, and the validator checks its touch size
         BE_REFLECT_FIELD bool ignoreSafeArea =
@@ -51,7 +53,7 @@ namespace BECore {
         bool hovered = false;
         bool pressed = false;
 
-        /// Draws this element, not its children, with the view transform of the canvas in effect (units of the canvas). The base fills the rect with `color`
+        /// Draws this element, not its children, with the view transform of the canvas in effect (units of the canvas). The base draws the box (`DrawBox`) of `color` and `box`
         virtual void DrawSelf(IRenderer& renderer);
 
         /// A press and its release both landed on this element: the canvas calls it. A button emits its action here
@@ -111,6 +113,21 @@ namespace BECore {
 
         /// Called by the validator once the element has its rect. @p scale is output pixels per UI unit, for content that is measured in pixels (a text).
         [[nodiscard]] virtual UIContentFit CheckContent(float width, float height, float scale) const;
+
+    protected:
+        /**
+         * Draws the box in `rect`: shadow, glow, fill, border, highlight, in this order, as one DrawGeometry call (the order of the triangles is the order of the paint). A
+         * @p boxStyle with no effect (`UIBoxStyle::HasEffect`) is the plain `DrawFilledRect` of @p fill, the call every element made before the box existed. @p fill is the colour
+         * (the start of the gradient), @p gradientEnd the far colour; a control passes its state-shifted colours (a hover, a press) and leaves @p boxStyle to its authored value.
+         * Nothing for an empty rect. The shadow, glow and the feather of an edge are drawn outside `rect` (paint: not layout and not validated); the clip and the view
+         * transform apply to them like to every draw.
+         */
+        void DrawBox(IRenderer& renderer, const UIBoxStyle& boxStyle, const Color& fill, const Color& gradientEnd);
+
+    private:
+        // The triangles of DrawBox, kept so that a steady frame allocates nothing
+        eastl::vector<GeometryVertex> _boxVertices;
+        eastl::vector<int> _boxIndices;
     };
 
 }  // namespace BECore

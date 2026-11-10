@@ -263,10 +263,12 @@ namespace BECore::Tests {
     TEST(UIBoxMeshTest, AGradientPutsTheStartColourOnTheTopAndTheEndColourOnTheBottom) {
         const Rect rect{4, 6, 60, 40};
         const UICorners corners = UICorners::Uniform(8);
+        constexpr float kScale = 2.0f;
+        constexpr float kHalfFeather = UIBoxMesh::kFeatherPixels * 0.5f / kScale;  // the opaque core, where the gradient runs, is the rect inset by it
 
-        const Mesh vertical = Fill(rect, corners, kRed, 2.0f, {UIGradientDirection::Vertical, kBlue});
+        const Mesh vertical = Fill(rect, corners, kRed, kScale, {UIGradientDirection::Vertical, kBlue});
         const Extent v = ExtentOf(vertical);
-        float previousT = -1.0f;
+        float highestT = -1.0f;
         for (const GeometryVertex& vertex : vertical.vertices) {
             // The colour depends on the height only: the blue share grows with y, from none at the top to all at the bottom
             const float t = (vertex.y - v.minY) / (v.maxY - v.minY);
@@ -278,12 +280,12 @@ namespace BECore::Tests {
                 EXPECT_EQ(vertex.color.r, 0);
                 EXPECT_EQ(vertex.color.b, 255);
             }
-            EXPECT_NEAR(static_cast<float>(vertex.color.b) / 255.0f, std::clamp((vertex.y - (rect.y + 0.25f)) / (rect.h - 0.5f), 0.0f, 1.0f), 0.01f);
-            previousT = std::max(previousT, t);
+            EXPECT_NEAR(static_cast<float>(vertex.color.b) / 255.0f, std::clamp((vertex.y - (rect.y + kHalfFeather)) / (rect.h - 2.0f * kHalfFeather), 0.0f, 1.0f), 0.01f);
+            highestT = std::max(highestT, t);
         }
-        EXPECT_GT(previousT, 0.99f);
+        EXPECT_GT(highestT, 0.99f);
 
-        const Mesh horizontal = Fill(rect, corners, kRed, 2.0f, {UIGradientDirection::Horizontal, kBlue});
+        const Mesh horizontal = Fill(rect, corners, kRed, kScale, {UIGradientDirection::Horizontal, kBlue});
         const Extent h = ExtentOf(horizontal);
         for (const GeometryVertex& vertex : horizontal.vertices) {
             if (vertex.x <= h.minX + kTolerance) {
@@ -292,7 +294,7 @@ namespace BECore::Tests {
             if (vertex.x >= h.maxX - kTolerance) {
                 EXPECT_EQ(vertex.color.b, 255);
             }
-            EXPECT_NEAR(static_cast<float>(vertex.color.b) / 255.0f, std::clamp((vertex.x - (rect.x + 0.25f)) / (rect.w - 0.5f), 0.0f, 1.0f), 0.01f);
+            EXPECT_NEAR(static_cast<float>(vertex.color.b) / 255.0f, std::clamp((vertex.x - (rect.x + kHalfFeather)) / (rect.w - 2.0f * kHalfFeather), 0.0f, 1.0f), 0.01f);
         }
 
         // The ends may differ in alpha: a fade to nothing, and the feather alpha still multiplies it
@@ -311,7 +313,7 @@ namespace BECore::Tests {
             const float feather = 1.0f / ppu;
             // A square box: the outer ring sits one feather outside the opaque ring on every side
             const Mesh square = Fill(rect, {}, kWhite, ppu);
-            EXPECT_NEAR(ExtentOf(square).maxX - ExtentOf(square, kOpaque).maxX, feather * 0.5f + feather * 0.5f - 0.0f, kTolerance);
+            EXPECT_NEAR(ExtentOf(square).maxX - ExtentOf(square, kOpaque).maxX, feather, kTolerance);
             EXPECT_NEAR(ExtentOf(square, kOpaque).minX - ExtentOf(square).minX, feather, kTolerance);
             EXPECT_NEAR(ExtentOf(square).maxY - ExtentOf(square, kOpaque).maxY, feather, kTolerance);
 
