@@ -565,6 +565,175 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(UIWebText::ParsePixels("2em"));
     }
 
+    // ---- the values of the box properties --------------------------------------------------------------------------------------
+
+    TEST_F(UIWebTest, CornerRadiiFollowTheCssOrder) {
+        using UIWebText::ParseCornerRadii;
+        EXPECT_EQ(*ParseCornerRadii("8px"), UICorners::Uniform(8.0f));
+        EXPECT_EQ(*ParseCornerRadii("  12  "), UICorners::Uniform(12.0f));
+        EXPECT_EQ(*ParseCornerRadii("0"), UICorners{});
+        EXPECT_EQ(*ParseCornerRadii("1px 2px"), (UICorners{1.0f, 2.0f, 1.0f, 2.0f}));
+        EXPECT_EQ(*ParseCornerRadii("1px 2px 3px"), (UICorners{1.0f, 2.0f, 3.0f, 2.0f}));
+        EXPECT_EQ(*ParseCornerRadii("1px\t2px   3px 4px"), (UICorners{1.0f, 2.0f, 3.0f, 4.0f}));
+        EXPECT_EQ(*ParseCornerRadii("999px"), UICorners::Uniform(999.0f));
+        EXPECT_FALSE(ParseCornerRadii(""));
+        EXPECT_FALSE(ParseCornerRadii("50%"));
+        EXPECT_FALSE(ParseCornerRadii("10px / 5px"));
+        EXPECT_FALSE(ParseCornerRadii("10px/5px"));
+        EXPECT_FALSE(ParseCornerRadii("-1px"));
+        EXPECT_FALSE(ParseCornerRadii("1px 2px 3px 4px 5px"));
+        EXPECT_FALSE(ParseCornerRadii("2em"));
+        EXPECT_FALSE(ParseCornerRadii("round"));
+    }
+
+    TEST_F(UIWebTest, BordersTakeAWidthAColorAndAStyleInAnyOrder) {
+        using UIWebText::ParseBorder;
+        const auto plain = ParseBorder("1px solid #fff");
+        ASSERT_TRUE(plain);
+        EXPECT_FALSE(plain->none);
+        EXPECT_EQ(plain->width, 1.0f);
+        EXPECT_EQ(plain->color.r, 255);
+        const auto reordered = ParseBorder("  RED   SOLID  3 ");
+        ASSERT_TRUE(reordered);
+        EXPECT_EQ(reordered->width, 3.0f);
+        EXPECT_EQ(reordered->color.r, 255);
+        EXPECT_EQ(reordered->color.g, 0);
+        const auto noStyle = ParseBorder("rgba(0, 0, 0, .5) 2px");
+        ASSERT_TRUE(noStyle);
+        EXPECT_EQ(noStyle->width, 2.0f);
+        EXPECT_EQ(noStyle->color.a, 128);
+        EXPECT_TRUE(ParseBorder("none")->none);
+        EXPECT_TRUE(ParseBorder("0")->none);
+        EXPECT_TRUE(ParseBorder("0px solid red")->none);
+        EXPECT_TRUE(ParseBorder("2px none red")->none);
+        EXPECT_FALSE(ParseBorder(""));
+        EXPECT_FALSE(ParseBorder("2px dashed red"));
+        EXPECT_FALSE(ParseBorder("2px dotted red"));
+        EXPECT_FALSE(ParseBorder("-1px solid red"));
+        EXPECT_FALSE(ParseBorder("2px solid"));
+        EXPECT_FALSE(ParseBorder("solid red"));
+        EXPECT_FALSE(ParseBorder("1px 2px red"));
+        EXPECT_FALSE(ParseBorder("1px red blue"));
+        EXPECT_FALSE(ParseBorder("1px solid solid red"));
+        EXPECT_FALSE(ParseBorder("thin solid red"));
+    }
+
+    TEST_F(UIWebTest, LinearGradientsHaveTwoStopsAndAnAxis) {
+        using UIWebText::ParseLinearGradient;
+        const auto plain = ParseLinearGradient("linear-gradient(#112233, #445566)");
+        ASSERT_TRUE(plain);
+        EXPECT_EQ(plain->direction, UIGradientDirection::Vertical);
+        EXPECT_EQ(plain->start.r, 0x11);
+        EXPECT_EQ(plain->end.b, 0x66);
+        const auto bottom = ParseLinearGradient("linear-gradient(to bottom, red, blue)");
+        ASSERT_TRUE(bottom);
+        EXPECT_EQ(bottom->direction, UIGradientDirection::Vertical);
+        EXPECT_EQ(bottom->start.r, 255);
+        EXPECT_EQ(bottom->end.b, 255);
+        EXPECT_EQ(ParseLinearGradient("linear-gradient(180deg, red, blue)")->direction, UIGradientDirection::Vertical);
+        const auto right = ParseLinearGradient("linear-gradient(to right, red, blue)");
+        ASSERT_TRUE(right);
+        EXPECT_EQ(right->direction, UIGradientDirection::Horizontal);
+        EXPECT_EQ(right->start.r, 255);
+        const auto ninety = ParseLinearGradient("linear-gradient(90deg, red, blue)");
+        ASSERT_TRUE(ninety);
+        EXPECT_EQ(ninety->direction, UIGradientDirection::Horizontal);
+        EXPECT_EQ(ninety->start.r, 255);
+
+        // To top and to left run against the axis of the attribute: the colors swap
+        for (const char* text : {"linear-gradient(to top, red, blue)", "linear-gradient(0deg, red, blue)"}) {
+            const auto top = ParseLinearGradient(text);
+            ASSERT_TRUE(top) << text;
+            EXPECT_EQ(top->direction, UIGradientDirection::Vertical) << text;
+            EXPECT_EQ(top->start.b, 255) << text;
+            EXPECT_EQ(top->end.r, 255) << text;
+        }
+        for (const char* text : {"linear-gradient(to left, red, blue)", "linear-gradient(270deg, red, blue)"}) {
+            const auto left = ParseLinearGradient(text);
+            ASSERT_TRUE(left) << text;
+            EXPECT_EQ(left->direction, UIGradientDirection::Horizontal) << text;
+            EXPECT_EQ(left->start.b, 255) << text;
+            EXPECT_EQ(left->end.r, 255) << text;
+        }
+
+        // Stops with commas and spaces inside, white space and case
+        const auto stops = ParseLinearGradient("  LINEAR-GRADIENT( To   Right ,  rgba(1, 2, 3, .5) ,rgb(4 5 6) )  ");
+        ASSERT_TRUE(stops);
+        EXPECT_EQ(stops->direction, UIGradientDirection::Horizontal);
+        EXPECT_EQ(stops->start.g, 2);
+        EXPECT_EQ(stops->start.a, 128);
+        EXPECT_EQ(stops->end.b, 6);
+
+        EXPECT_FALSE(ParseLinearGradient(""));
+        EXPECT_FALSE(ParseLinearGradient("red"));
+        EXPECT_FALSE(ParseLinearGradient("radial-gradient(red, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red, green, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(to right, red, green, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(to right, red)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(45deg, red, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(to top right, red, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red 20%, blue)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red, blue 80%)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red, nonsense)"));
+        EXPECT_FALSE(ParseLinearGradient("linear-gradient(red, blue"));
+    }
+
+    TEST_F(UIWebTest, BoxShadowsHaveOneOrTwoLayersAndAColor) {
+        using UIWebText::ParseBoxShadows;
+        const auto simple = ParseBoxShadows("2px 4px #000");
+        ASSERT_TRUE(simple);
+        ASSERT_EQ(simple->count, 1u);
+        EXPECT_EQ(simple->layers[0].offsetX, 2.0f);
+        EXPECT_EQ(simple->layers[0].offsetY, 4.0f);
+        EXPECT_EQ(simple->layers[0].blur, 0.0f);
+        EXPECT_EQ(simple->layers[0].spread, 0.0f);
+        EXPECT_EQ(simple->layers[0].color.a, 255);
+        const auto blurred = ParseBoxShadows("0 2px 8px rgba(0, 0, 0, .5)");
+        ASSERT_TRUE(blurred);
+        EXPECT_EQ(blurred->layers[0].blur, 8.0f);
+        EXPECT_EQ(blurred->layers[0].color.a, 128);
+        const auto spread = ParseBoxShadows("0 0 6px -2px #fff");
+        ASSERT_TRUE(spread);
+        EXPECT_EQ(spread->layers[0].spread, -2.0f);
+        const auto colorFirst = ParseBoxShadows("red 1px 2px 3px 4px");
+        ASSERT_TRUE(colorFirst);
+        EXPECT_EQ(colorFirst->layers[0].color.r, 255);
+        EXPECT_EQ(colorFirst->layers[0].offsetY, 2.0f);
+        EXPECT_EQ(colorFirst->layers[0].spread, 4.0f);
+
+        // Two layers, in the order of the text; the comma inside rgba() does not split
+        const auto two = ParseBoxShadows(" 0 0 12px rgba(255, 200, 0, .5) ,  0 3px 0 #000 ");
+        ASSERT_TRUE(two);
+        ASSERT_EQ(two->count, 2u);
+        EXPECT_EQ(two->layers[0].blur, 12.0f);
+        EXPECT_EQ(two->layers[0].color.g, 200);
+        EXPECT_EQ(two->layers[1].offsetY, 3.0f);
+        EXPECT_EQ(two->layers[1].color.a, 255);
+
+        // A layer past the limit is counted and not stored
+        const auto three = ParseBoxShadows("0 0 1px red, 0 0 2px green, 0 0 3px blue");
+        ASSERT_TRUE(three);
+        EXPECT_EQ(three->count, 3u);
+        EXPECT_EQ(three->layers[1].blur, 2.0f);
+
+        const auto none = ParseBoxShadows("  NONE ");
+        ASSERT_TRUE(none);
+        EXPECT_EQ(none->count, 0u);
+
+        EXPECT_FALSE(ParseBoxShadows(""));
+        EXPECT_FALSE(ParseBoxShadows("inset 0 0 4px red"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 4px red inset"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 4px"));
+        EXPECT_FALSE(ParseBoxShadows("4px"));
+        EXPECT_FALSE(ParseBoxShadows("1px 2px 3px 4px 5px red"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 -4px red"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 4% red"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 4px red blue"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 4px red,"));
+        EXPECT_FALSE(ParseBoxShadows("0 0 1px red, 0 0 2px green, inset 0 0 3px blue"));
+    }
+
     // ---- the HTML reader -----------------------------------------------------------------------------------------------------
 
     TEST_F(UIWebTest, HtmlTagsAttributesAndText) {

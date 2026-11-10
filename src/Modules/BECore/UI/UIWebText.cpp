@@ -17,6 +17,19 @@ namespace BECore::UIWebText {
         constexpr eastl::string_view RgbName = "rgb";
         constexpr eastl::string_view RgbaName = "rgba";
         constexpr eastl::string_view UrlName = "url";
+        constexpr eastl::string_view GradientName = "linear-gradient";
+        constexpr eastl::string_view NoneKeyword = "none";
+        constexpr eastl::string_view SolidKeyword = "solid";
+        constexpr eastl::string_view InsetKeyword = "inset";
+        constexpr size_t MaxCornerValues = 4;
+        constexpr size_t MinShadowLengths = 2;
+        constexpr size_t MaxShadowLengths = 4;
+        constexpr size_t ShadowBlurIndex = 2;
+        constexpr size_t ShadowSpreadIndex = 3;
+        constexpr float AngleTop = 0.0f;
+        constexpr float AngleRight = 90.0f;
+        constexpr float AngleBottom = 180.0f;
+        constexpr float AngleLeft = 270.0f;
 
         struct NamedColor {
             eastl::string_view name;
@@ -125,6 +138,91 @@ namespace BECore::UIWebText {
                 return std::nullopt;
             }
             return Color{*r, *g, *b, *a};
+        }
+
+        /// A px length that is a finite number
+        std::optional<float> ParseLength(eastl::string_view text) {
+            const auto value = ParsePixels(text);
+            if (!value || !std::isfinite(*value)) {
+                return std::nullopt;
+            }
+            return value;
+        }
+
+        /// The direction word of a gradient, white space collapsed and lower case, as the direction and whether the two colors swap
+        struct GradientDirectionWord {
+            UIGradientDirection direction = UIGradientDirection::Vertical;
+            bool swap = false;
+        };
+
+        std::optional<GradientDirectionWord> ParseGradientDirection(eastl::string_view text) {
+            eastl::string normalized;
+            for (const eastl::string_view word : SplitWords(text)) {
+                if (!normalized.empty()) {
+                    normalized.push_back(' ');
+                }
+                normalized.append(ToLower(word));
+            }
+            if (normalized == "to bottom") {
+                return GradientDirectionWord{UIGradientDirection::Vertical, false};
+            }
+            if (normalized == "to top") {
+                return GradientDirectionWord{UIGradientDirection::Vertical, true};
+            }
+            if (normalized == "to right") {
+                return GradientDirectionWord{UIGradientDirection::Horizontal, false};
+            }
+            if (normalized == "to left") {
+                return GradientDirectionWord{UIGradientDirection::Horizontal, true};
+            }
+            constexpr eastl::string_view degrees = "deg";
+            if (normalized.size() > degrees.size() && eastl::string_view(normalized).substr(normalized.size() - degrees.size()) == degrees) {
+                const auto angle = UIText::ParseFloat(eastl::string_view(normalized).substr(0, normalized.size() - degrees.size()));
+                if (angle && *angle == AngleBottom) {
+                    return GradientDirectionWord{UIGradientDirection::Vertical, false};
+                }
+                if (angle && *angle == AngleTop) {
+                    return GradientDirectionWord{UIGradientDirection::Vertical, true};
+                }
+                if (angle && *angle == AngleRight) {
+                    return GradientDirectionWord{UIGradientDirection::Horizontal, false};
+                }
+                if (angle && *angle == AngleLeft) {
+                    return GradientDirectionWord{UIGradientDirection::Horizontal, true};
+                }
+            }
+            return std::nullopt;
+        }
+
+        /// One layer of a `box-shadow`
+        std::optional<UIShadowSpec> ParseShadowLayer(eastl::string_view text) {
+            eastl::vector<float> lengths;
+            std::optional<Color> color;
+            for (const eastl::string_view word : SplitWords(text)) {
+                if (ToLower(word) == InsetKeyword) {
+                    return std::nullopt;
+                }
+                if (const auto length = ParseLength(word)) {
+                    lengths.push_back(*length);
+                } else if (const auto parsed = ParseColor(word); parsed && !color) {
+                    color = parsed;
+                } else {
+                    return std::nullopt;
+                }
+            }
+            if (!color || lengths.size() < MinShadowLengths || lengths.size() > MaxShadowLengths) {
+                return std::nullopt;
+            }
+            UIShadowSpec shadow;
+            shadow.offsetX = lengths[0];
+            shadow.offsetY = lengths[1];
+            shadow.blur = lengths.size() > ShadowBlurIndex ? lengths[ShadowBlurIndex] : 0.0f;
+            shadow.spread = lengths.size() > ShadowSpreadIndex ? lengths[ShadowSpreadIndex] : 0.0f;
+            shadow.color = *color;
+            if (shadow.blur < 0.0f) {
+                return std::nullopt;
+            }
+            return shadow;
         }
 
     }  // namespace
@@ -261,6 +359,117 @@ namespace BECore::UIWebText {
             inner = inner.substr(1, inner.size() - 2);
         }
         return eastl::string(inner);
+    }
+
+    std::optional<UICorners> ParseCornerRadii(eastl::string_view text) {
+        const auto words = SplitWords(text);
+        if (words.empty() || words.size() > MaxCornerValues) {
+            return std::nullopt;
+        }
+        float radii[MaxCornerValues] = {};
+        for (size_t i = 0; i < words.size(); ++i) {
+            const auto radius = ParseLength(words[i]);
+            if (!radius || *radius < 0.0f) {
+                return std::nullopt;
+            }
+            radii[i] = *radius;
+        }
+        // The CSS order: one value for all, two for the diagonals, three with the bottom-left taken from the top-right
+        switch (words.size()) {
+            case 1:
+                return UICorners::Uniform(radii[0]);
+            case 2:
+                return UICorners{radii[0], radii[1], radii[0], radii[1]};
+            case 3:
+                return UICorners{radii[0], radii[1], radii[2], radii[1]};
+            default:
+                return UICorners{radii[0], radii[1], radii[2], radii[3]};
+        }
+    }
+
+    std::optional<BorderSpec> ParseBorder(eastl::string_view text) {
+        std::optional<float> width;
+        std::optional<Color> color;
+        std::optional<bool> solid;
+        for (const eastl::string_view word : SplitWords(text)) {
+            const eastl::string lower = ToLower(word);
+            if (lower == SolidKeyword || lower == NoneKeyword) {
+                if (solid) {
+                    return std::nullopt;
+                }
+                solid = lower == SolidKeyword;
+            } else if (const auto length = ParseLength(word)) {
+                if (width || *length < 0.0f) {
+                    return std::nullopt;
+                }
+                width = length;
+            } else if (const auto parsed = ParseColor(word); parsed && !color) {
+                color = parsed;
+            } else {
+                return std::nullopt;
+            }
+        }
+        BorderSpec border;
+        if ((solid && !*solid) || (width && *width == 0.0f)) {
+            border.none = true;
+            return border;
+        }
+        if (!width || !color) {
+            return std::nullopt;
+        }
+        border.width = *width;
+        border.color = *color;
+        return border;
+    }
+
+    std::optional<GradientSpec> ParseLinearGradient(eastl::string_view text) {
+        text = TrimSpace(text);
+        if (text.size() <= GradientName.size() + 2 || ToLower(text.substr(0, GradientName.size())) != GradientName || text[GradientName.size()] != '(' || text.back() != ')') {
+            return std::nullopt;
+        }
+        const auto parts = SplitTopLevel(text.substr(GradientName.size() + 1, text.size() - GradientName.size() - 2), ',');
+        constexpr size_t stopsOnly = 2;
+        constexpr size_t withDirection = 3;
+        if (parts.size() != stopsOnly && parts.size() != withDirection) {
+            return std::nullopt;
+        }
+        GradientDirectionWord direction;
+        if (parts.size() == withDirection) {
+            const auto parsed = ParseGradientDirection(parts[0]);
+            if (!parsed) {
+                return std::nullopt;
+            }
+            direction = *parsed;
+        }
+        const auto first = ParseColor(parts[parts.size() - stopsOnly]);
+        const auto second = ParseColor(parts[parts.size() - 1]);
+        if (!first || !second) {
+            return std::nullopt;
+        }
+        GradientSpec gradient;
+        gradient.direction = direction.direction;
+        gradient.start = direction.swap ? *second : *first;
+        gradient.end = direction.swap ? *first : *second;
+        return gradient;
+    }
+
+    std::optional<BoxShadows> ParseBoxShadows(eastl::string_view text) {
+        text = TrimSpace(text);
+        BoxShadows shadows;
+        if (ToLower(text) == NoneKeyword) {
+            return shadows;
+        }
+        for (const eastl::string_view layer : SplitTopLevel(text, ',')) {
+            const auto parsed = ParseShadowLayer(layer);
+            if (!parsed) {
+                return std::nullopt;
+            }
+            if (shadows.count < MaxShadowLayers) {
+                shadows.layers[shadows.count] = *parsed;
+            }
+            ++shadows.count;
+        }
+        return shadows;
     }
 
 }  // namespace BECore::UIWebText
