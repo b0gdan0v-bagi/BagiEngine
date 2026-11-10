@@ -1,3 +1,5 @@
+#include "TestRandom.h"
+
 #include <Common/Printers.h>
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomLimits.h>
@@ -7,20 +9,9 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// A deterministic stream of well-mixed words (splitmix64)
-        RandomFn MakeSequence(uint64_t seed) {
-            auto state = std::make_shared<uint64_t>(seed);
-            return [state]() -> uint64_t {
-                uint64_t z = (*state += 0x9E3779B97F4A7C15ULL);
-                z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-                z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
-                return z ^ (z >> 31);
-            };
-        }
-
         /// Always the same words, in order, then the last one again
         RandomFn MakeFixed(eastl::vector<uint64_t> words) {
-            auto index = std::make_shared<size_t>(0);
+            auto index = eastl::make_shared<size_t>(0);
             return [words = std::move(words), index]() -> uint64_t {
                 const size_t at = *index < words.size() ? (*index)++ : words.size() - 1;
                 return words[at];

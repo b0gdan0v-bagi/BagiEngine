@@ -1,3 +1,5 @@
+#include "TestRandom.h"
+
 #include <Common/Printers.h>
 #include <Rooms/Room.h>
 #include <Rooms/RoomErrors.h>
@@ -8,17 +10,6 @@ namespace BECore::Tests {
     namespace {
 
         const RoomTime kNow{std::chrono::seconds(1000)};
-
-        /// A deterministic stream of well-mixed words (splitmix64)
-        RandomFn MakeSequence(uint64_t seed) {
-            auto state = std::make_shared<uint64_t>(seed);
-            return [state]() -> uint64_t {
-                uint64_t z = (*state += 0x9E3779B97F4A7C15ULL);
-                z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-                z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
-                return z ^ (z >> 31);
-            };
-        }
 
         Room MakeRoom(int seatCount = 4) {
             return Room("ABCDE", SeatedGameInfo{"fake", seatCount}, MakeSequence(7));
@@ -100,8 +91,8 @@ namespace BECore::Tests {
         EXPECT_EQ(CodeOf(room.ChooseSeat(b.player, 0)), RoomErrors::kSeatTaken);
         EXPECT_EQ(CodeOf(room.ChooseSeat(b.player, 4)), RoomErrors::kInvalidSeat);
         EXPECT_EQ(CodeOf(room.ChooseSeat(b.player, -1)), RoomErrors::kInvalidSeat);
-        EXPECT_EQ(CodeOf(room.ChooseSeat(b.player, INT64_MIN)), RoomErrors::kInvalidSeat);
-        EXPECT_EQ(CodeOf(room.ChooseSeat(b.player, INT64_MAX)), RoomErrors::kInvalidSeat);
+        EXPECT_EQ(CodeOf(room.ChooseSeat(b.player, std::numeric_limits<int64_t>::min())), RoomErrors::kInvalidSeat);
+        EXPECT_EQ(CodeOf(room.ChooseSeat(b.player, std::numeric_limits<int64_t>::max())), RoomErrors::kInvalidSeat);
         EXPECT_EQ(CodeOf(room.ChooseSeat(99, 2)), RoomErrors::kNotInRoom);
         EXPECT_EQ(room.GetSeatOf(a.player), 0);
         EXPECT_EQ(room.GetSeatOf(b.player), 1);

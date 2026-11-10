@@ -11,9 +11,13 @@ namespace BECore {
             return ControlError{eastl::string(code), eastl::string(message)};
         }
 
+        /// How many tokens AddMember draws before it gives up (a collision of 128 bits never happens, a constant RandomFn does)
+        constexpr int kMaxTokenAttempts = 16;
+
     }  // namespace
 
-    Room::Room(eastl::string code, SeatedGameInfo info, RandomFn random) : _code(std::move(code)), _info(std::move(info)), _random(std::move(random)) {}
+    Room::Room(eastl::string code, SeatedGameInfo info, RandomFn random, SeatedGameFactory factory, RoomTimings timings)
+        : _code(std::move(code)), _info(std::move(info)), _random(std::move(random)), _factory(std::move(factory)), _timings(timings) {}
 
     const Room::Member* Room::FindMember(PlayerId player) const {
         for (const Member& member : _members) {
@@ -24,13 +28,22 @@ namespace BECore {
         return nullptr;
     }
 
-    int Room::FindLowestFreeSeat() const {
+    Room::Member* Room::FindMember(PlayerId player) {
+        for (Member& member : _members) {
+            if (member.id == player) {
+                return &member;
+            }
+        }
+        return nullptr;
+    }
+
+    std::optional<int> Room::FindLowestFreeSeat() const {
         for (int seat = 0; seat < _info.seatCount; ++seat) {
             if (!GetPlayerAt(seat)) {
                 return seat;
             }
         }
-        return -1;
+        return std::nullopt;
     }
 
     void Room::BumpLobbyRevision() {
@@ -45,13 +58,17 @@ namespace BECore {
         if (_phase != RoomPhase::Lobby) {
             return std::unexpected(MakeError(RoomErrors::kGameStarted, "The game has started: only a member can return, with the token"));
         }
-        const int seat = FindLowestFreeSeat();
-        if (seat < 0) {
+        const std::optional<int> freeSeat = FindLowestFreeSeat();
+        if (!freeSeat) {
             return std::unexpected(MakeError(RoomErrors::kRoomFull, "The room is full"));
         }
+        const int seat = *freeSeat;
 
         eastl::string token = GenerateToken(_random);
-        while (FindByToken(token)) {
+        for (int attempt = 1; FindByToken(token); ++attempt) {
+            if (attempt >= kMaxTokenAttempts) {
+                return std::unexpected(MakeError(RoomErrors::kInternalError, "No free token could be made"));
+            }
             token = GenerateToken(_random);
         }
 
@@ -70,20 +87,33 @@ namespace BECore {
     }
 
     bool Room::RemoveMember(PlayerId player) {
-        if (_phase != RoomPhase::Lobby) {
+        if (_phase != RoomPhase::Lobby || !HasMember(player)) {
             return false;
         }
+        EraseMember(player);
+        return true;
+    }
+
+    void Room::EraseMember(PlayerId player) {
         for (size_t i = 0; i < _members.size(); ++i) {
             if (_members[i].id == player) {
                 _members.erase(_members.begin() + static_cast<ptrdiff_t>(i));
-                if (_host == player) {
-                    PassHost();
-                }
-                BumpLobbyRevision();
-                return true;
+                break;
             }
         }
-        return false;
+        if (_host == player) {
+            PassHost();
+        }
+        BumpLobbyRevision();
+    }
+
+    bool Room::Leave(PlayerId player) {
+        if (!HasMember(player)) {
+            return false;
+        }
+        // In a game the seat has no member any more, so a computer plays it for good
+        EraseMember(player);
+        return true;
     }
 
     void Room::PassHost() {
@@ -95,6 +125,162 @@ namespace BECore {
                 _host = member.id;
             }
         }
+    }
+
+    std::expected<void, ControlError> Room::Start(PlayerId host, RoomTime now, const Json& options) {
+        if (!HasMember(host)) {
+            return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
+        }
+        if (!IsHost(host)) {
+            return std::unexpected(MakeError(RoomErrors::kNotHost, "Only the host can start the game"));
+        }
+        if (_phase != RoomPhase::Lobby) {
+            return std::unexpected(MakeError(RoomErrors::kGameStarted, "The game has already started"));
+        }
+        eastl::unique_ptr<ISeatedGame> game = _factory ? _factory() : nullptr;
+        if (!game || game->GetSeatCount() != _info.seatCount) {
+            return std::unexpected(MakeError(RoomErrors::kInternalError, "The game could not be created"));
+        }
+        if (auto started = game->Start(_random(), options); !started) {
+            return std::unexpected(std::move(started.error()));
+        }
+        _game = std::move(game);
+        _phase = RoomPhase::Playing;
+        _lastComputerMove = now;
+        BumpLobbyRevision();
+        FinishIfDone();
+        return {};
+    }
+
+    void Room::FinishIfDone() {
+        if (_phase == RoomPhase::Playing && _game && _game->IsFinished()) {
+            _phase = RoomPhase::Finished;
+            BumpLobbyRevision();
+        }
+    }
+
+    uint64_t Room::GetGameVersion() const {
+        return _game ? _game->GetStateVersion() : 0;
+    }
+
+    std::expected<Json, ControlError> Room::PerformAction(PlayerId player, uint64_t version, const Json& action) {
+        const Member* member = FindMember(player);
+        if (!member) {
+            return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
+        }
+        if (!_game) {
+            return std::unexpected(MakeError(RoomErrors::kNotStarted, "The game has not started"));
+        }
+        if (version != _game->GetStateVersion()) {
+            return std::unexpected(MakeError(RoomErrors::kStaleAction, "The game has moved on: look at the new view"));
+        }
+        if (!member->connected) {
+            return std::unexpected(MakeError(RoomErrors::kNotYourTurn, "The player is away"));
+        }
+        auto outcome = _game->PerformSeatAction(member->seat, action);
+        if (outcome) {
+            FinishIfDone();
+        }
+        return outcome;
+    }
+
+    std::expected<Json, ControlError> Room::GetSeatView(PlayerId player) const {
+        const Member* member = FindMember(player);
+        if (!member) {
+            return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
+        }
+        if (!_game) {
+            return std::unexpected(MakeError(RoomErrors::kNotStarted, "The game has not started"));
+        }
+        return _game->GetSeatView(member->seat);
+    }
+
+    std::expected<Json, ControlError> Room::GetSeatActions(PlayerId player) const {
+        const Member* member = FindMember(player);
+        if (!member) {
+            return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
+        }
+        if (!_game) {
+            return std::unexpected(MakeError(RoomErrors::kNotStarted, "The game has not started"));
+        }
+        return _game->GetSeatActions(member->seat);
+    }
+
+    bool Room::MarkAway(PlayerId player, RoomTime now) {
+        Member* member = FindMember(player);
+        if (!member || _phase == RoomPhase::Lobby) {
+            return false;
+        }
+        if (member->connected) {
+            member->connected = false;
+            member->awaySince = now;
+            BumpLobbyRevision();
+        }
+        return true;
+    }
+
+    std::expected<void, ControlError> Room::MarkReturned(PlayerId player, eastl::string_view token) {
+        Member* member = FindMember(player);
+        if (!member) {
+            return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
+        }
+        if (FindByToken(token) != player) {
+            return std::unexpected(MakeError(RoomErrors::kBadToken, "The token is not this player's"));
+        }
+        if (!member->connected) {
+            member->connected = true;
+            BumpLobbyRevision();
+        }
+        return {};
+    }
+
+    bool Room::IsSeatComputerControlled(int seat, RoomTime now) const {
+        if (_phase == RoomPhase::Lobby || seat < 0 || seat >= _info.seatCount) {
+            return false;
+        }
+        const std::optional<PlayerId> player = GetPlayerAt(seat);
+        if (!player) {
+            return true;
+        }
+        const Member* member = FindMember(*player);
+        return !member->connected && now - member->awaySince >= _timings.reconnectGrace;
+    }
+
+    bool Room::StepComputers(RoomTime now) {
+        if (_phase != RoomPhase::Playing || !_game || now - _lastComputerMove < _timings.computerDelay) {
+            return false;
+        }
+        for (int seat = 0; seat < _info.seatCount; ++seat) {
+            if (!IsSeatComputerControlled(seat, now)) {
+                continue;
+            }
+            const std::optional<Json> action = _game->ChooseComputerAction(seat);
+            if (!action) {
+                continue;
+            }
+            if (!_game->PerformSeatAction(seat, *action)) {
+                return false;
+            }
+            _lastComputerMove = now;
+            FinishIfDone();
+            return true;
+        }
+        return false;
+    }
+
+    bool Room::ShouldClose(RoomTime now) const {
+        if (_members.empty()) {
+            return true;
+        }
+        if (_phase == RoomPhase::Lobby) {
+            return false;
+        }
+        for (const Member& member : _members) {
+            if (member.connected || now - member.awaySince < _timings.abandonedTimeout) {
+                return false;
+            }
+        }
+        return true;
     }
 
     std::optional<PlayerId> Room::FindByToken(eastl::string_view token) const {
@@ -117,7 +303,7 @@ namespace BECore {
     }
 
     std::expected<void, ControlError> Room::ChooseSeat(PlayerId player, int64_t seat) {
-        const Member* found = FindMember(player);
+        Member* found = FindMember(player);
         if (!found) {
             return std::unexpected(MakeError(RoomErrors::kNotInRoom, "You are not in this room"));
         }
@@ -134,11 +320,7 @@ namespace BECore {
         if (GetPlayerAt(target)) {
             return std::unexpected(MakeError(RoomErrors::kSeatTaken, "The seat is taken"));
         }
-        for (Member& member : _members) {
-            if (member.id == player) {
-                member.seat = target;
-            }
-        }
+        found->seat = target;
         BumpLobbyRevision();
         return {};
     }
