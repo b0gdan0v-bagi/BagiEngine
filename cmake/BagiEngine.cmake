@@ -589,6 +589,9 @@ endif()
 # Game infrastructure (IGame, GameManager). Concrete games live outside the engine and register through it.
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
 
+# Rooms of an online game by code: protocol, room logic, hub (pure code over Games' ISeatedGame; no sockets yet)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Rooms)
+
 # The host of the vendored RmlUi: the interfaces over the engine and the scene component (only with ENGINE_UI_RMLUI)
 if(ENGINE_UI_RMLUI)
     add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RmlUiHost)

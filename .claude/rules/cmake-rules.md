@@ -67,6 +67,7 @@ add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RemoteControl)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/SDL)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Vulkan)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Rooms)
 add_subdirectory(${BAGI_ENGINE_DIR}/src)          # RuntimeModule: src/Application + src/Widgets
 # 7. Test support (BagiEngineTestSupport), if ENGINE_BUILD_TESTS
 ```
@@ -121,7 +122,7 @@ BECoreModule must be first (provides PCH):
 3. `TaskSystem`
 4. `RemoteControl` (`be_add_module`; links `ws2_32` on Windows; has no static initializers, so it is linked plainly: `RuntimeModule` links it for the executables and `BagiEngineTests` takes it through `LINK RemoteControlModule`)
 5. `SDL`
-6. `Vulkan`, `Games`, `RmlUiHost` (only with `ENGINE_UI_RMLUI`), `Runtime` (`src/`), then the games in `games/`
+6. `Vulkan`, `Games`, `Rooms` (`be_add_module`, links `GamesModule`; pure code, no static initializers, so it is linked plainly: `BagiEngineTests` takes it through `LINK RoomsModule`), `RmlUiHost` (only with `ENGINE_UI_RMLUI`), `Runtime` (`src/`), then the games in `games/`
 
 ## Tests (GoogleTest)
 

@@ -68,7 +68,7 @@ BagiEngine is a C++23 game engine built on a scene graph of `SceneNode` + `IComp
 
 **Module order (bottom → top; every module links `BECoreModule`, which provides the PCH):**
 ```
-BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Runtime (src/Application, src/Widgets) → games/<Name> → game executable (src/main.cpp)
+BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Rooms → Runtime (src/Application, src/Widgets) → games/<Name> → game executable (src/main.cpp)
 ```
 
 **Layout:**
@@ -86,6 +86,7 @@ src/
     ├── SDL/            # SDL3 integration
     ├── Vulkan/         # Vulkan renderer backend
     ├── Games/          # IGame / GameManager: the engine-game contract
+    ├── Rooms/          # online rooms by code: protocol, room logic, hub; pure code over Games' ISeatedGame, no sockets yet
     ├── RmlUiHost/      # host of the vendored RmlUi (only with -DENGINE_UI_RMLUI=ON)
     └── EABase/, EnTT/, fmt/, imgui/, nlohmann/, pugixml/, RmlUi/, stb/   # vendored
 config/, assets/        # engine content (Application, Logger, Assert, SDLWindow, Widgets, GameWidgets, Tests, Text, UI, default SceneConfig; assets/fonts/ has the default font)
@@ -182,7 +183,7 @@ Use split interfaces: `ISerializer` (write) and `IDeserializer` (read). Do not i
 
 ## Rules and Skills
 
-- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Animation/`, `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`, `Text/`, `UI/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, `RmlUiHost/`, and `games/Match3/` and `tools/control/`. Claude Code loads one when a file under that directory is read.
+- Module guidance sits next to the code in nested `CLAUDE.md` files: `src/Modules/BECore/` (plus `Animation/`, `Config/`, `Control/`, `FileSystem/`, `Logger/`, `Resource/`, `Scene/`, `Text/`, `UI/`), `Events/`, `TaskSystem/`, `RemoteControl/`, `SDL/`, `Vulkan/`, `Games/`, `Rooms/`, `RmlUiHost/`, and `games/Match3/` and `tools/control/`. Claude Code loads one when a file under that directory is read.
 - `.claude/rules/` holds guidance that spans several directories or matches by file name (`paths:` frontmatter): CMake, Reflection, Reflection events (`*Event.h`), Rendering, Widgets, Tests. Read the relevant file before changing that area.
   Two files have no `paths:` and are read by skills instead: `todo-project.md` (the todo areas, build and test targets of the loop, zones nobody edits; read by the `todo-*` skills and agents) and `build-project.md` (the product and test targets, configure triggers, format scope, ignore file, strip-pch example and the launcher; read by `build`, `clang-format` and `strip-pch-includes`).
 - `.claude/skills/` is shared: `build`, `clang-format`, `strip-pch-includes` and the `todo-*` skills are one text that a game carrying the engine as `engine/` reaches by symlink, so they say nothing that holds for one repository only. What differs between the repositories is in `.claude/rules/build-project.md` (build, format, includes) and `.claude/rules/todo-project.md` (todo areas); each skill reads its file first. The folder holds `build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `todo-db` (the todo store: list, show, history, the dashboard, the state of the Vikunja mirror; `tools/todo/CLAUDE.md`), `todo-loop` (works the entries of the store one by one, each in its own local branch `todo/<id>`, and stays on the last finished one, through the agents of `.claude/agents/`; several loops run at once in worker folders, git worktrees made by `tools/todo/worker.py`; `/todo-loop close` after the merge closes the entry in the store), `todo-loop-parallel` (starts `/todo-loop` in every worker folder as background sessions, shows and stops them), `todo-merge` (reports on a `review` branch, asks, then merges it into its base branch, closes the entry and deletes the branch), `todo-add` (records an idea as a new entry in the store) and `cpp-senior-programmer`.

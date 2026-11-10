@@ -40,6 +40,29 @@ Writing the adapter of a game:
 - `switch_game` looks the name up among the games; do not intern a client's string into `PoolString` (`GameControlTest` checks this with `PoolString::Find`).
 - Tests: the engine-level methods are covered with fake games in `tests/BECore/GameControlTest.*` (`FakeControllableGame`, `FakePlainGame`); the adapter of a game is tested in the game's own tests.
 
+## Seats (`ISeatedGame`)
+
+For a turn-based game with several people and hidden information (cards, tile racks) that a server runs for clients in rooms (the entry `network-rooms`; the room logic itself is the module `Rooms`). `Games/ISeatedGame.h` is the contract, `Games/SeatedGameRegistry.h` how a server creates a game by name. Not a `BE_CLASS` and no scene: the server owns the game object, every client is a seat. A game in its own repository writes an adapter over its rules (like the control adapter of `IControllableGame`).
+
+How it differs from `IControllableGame`:
+
+| `IControllableGame` | `ISeatedGame` |
+|---------------------|---------------|
+| one controller sees and does everything, in the process of the game | every call names a **seat**; the game checks the seat (`invalid_seat`) and whose turn it is (`not_your_turn`) |
+| `GetState()` is the whole state | `GetSeatView(seat)` is what that seat may see; **free of hidden information** of the other seats (the server sends it to the client as it is, so a count of the cards of the others is fine, the cards are not) |
+| `GetActions()` | `GetSeatActions(seat)`: what the seat may send now, empty when it cannot act |
+| `PerformAction()`, `Reset()` | `PerformSeatAction(seat, action)`, `Start(seed, options)`: the seed makes the deal reproducible |
+| nothing for a computer | `ChooseComputerAction(seat)`: the action a computer plays for an empty or abandoned seat; the server sends it through `PerformSeatAction` like a person's, so a computer cannot do what a seat may not |
+
+Rules of the adapter:
+
+- The seat number, `options` and `action` come from a client: untrusted. Read them with the checked helpers of `BECore/Control/Json.h`, range-check numbers as `int64_t` before narrowing, answer `invalid_params` for a malformed value, `illegal_action` (`GameControlErrors`) for a well-formed move the rules refuse, `not_your_turn` and `invalid_seat` (`SeatedGameErrors`) as above. An error changes nothing.
+- `GetStateVersion()` grows with every committed action and with `Start()` and never goes back; the server compares `action.version` with it to refuse a stale action.
+- The outcome of `PerformSeatAction` may be sent to every seat: public information only. The `message` of an error goes back to the one client that sent the action, but keep it free of hidden information too (it may quote what the client itself sent, as the fake game's "seat 0 does not hold 'c3_1'" does, never what the other seats hold).
+- The module that runs rooms of seated games is `Rooms` (`src/Modules/Rooms/CLAUDE.md`: protocol, room logic, hub).
+- `SeatedGameRegistry` is a plain class that the caller owns and fills (no singleton, no static initializer); names are looked up in a hash map of `eastl::string` and never interned into `PoolString`, because they come from a client.
+- Tests: `tests/BECore/Rooms/` (`FakeSeatedGame` is a four-seat card game with hidden hands, `LeakyFakeSeatedGame` its negative control, `ExpectNoLeak` the check that a text does not name a hidden card; `SeatedGameTest.cpp`); the scenario tests over the whole hub are `RoomsScenarioTest.cpp`.
+
 ## GameManager
 
 `Singleton<GameManager>`, driven by `Application`: `Initialize()` runs in `Application::Initialize()`, `Shutdown()` on exit.
