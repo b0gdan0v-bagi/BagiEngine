@@ -176,6 +176,9 @@ namespace BECore {
             keep = _popup.Get();
         }
         bool changed = keep != _popup.Get();
+        if (_popup && _popup->IsPopupOpen() && eastl::find(open.begin(), open.end(), _popup.Get()) == open.end()) {
+            _popup->ClosePopup();  // it left the list of open popups without being closed: it (or an ancestor) was hidden
+        }
         for (UIElement* popup : open) {
             if (popup != keep) {
                 popup->ClosePopup();

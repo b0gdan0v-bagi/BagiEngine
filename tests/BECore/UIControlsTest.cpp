@@ -6,6 +6,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIImage.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
@@ -51,6 +52,11 @@ namespace BECore::Tests {
           <element type="UIToggle" name="Switch" bind="switchOn" action="UIControlsTestSwitch" text="Switch" onValue="yes" offValue="no" x="500" y="200" width="204" height="56" disabled="true"/>
           <element type="UIProgressBar" name="Meter" bind="meter" minValue="10" maxValue="90" x="500" y="300" width="204" height="24"/>
           <element type="UISlider" name="Level" bind="level" action="UIControlsTestLevel" minValue="2" maxValue="12" step="0.5" x="500" y="400" width="204" height="56" disabled="true"/>
+          <element type="UIDropdown" name="Pick" bind="pickVar" action="UIControlsTestPick" text="Pick one" x="300" y="300" width="180" height="56" optionHeight="48" arrowColor="1,2,3,255" disabled="true">
+            <children>
+              <element type="UIButton" name="PickA" text="A" value="a" height="48"/>
+            </children>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -219,7 +225,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, EveryControlIsMadeByItsTypeName) {
         const UIElement& root = _canvas->GetRoot();
-        ASSERT_EQ(root.children.size(), 9u);
+        ASSERT_EQ(root.children.size(), 10u);
 
         EXPECT_TRUE(root.children[0]->Is<UIPanel>());
         EXPECT_TRUE(root.children[1]->Is<UIImage>());
@@ -230,6 +236,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(root.children[6]->Is<UIToggle>());
         EXPECT_TRUE(root.children[7]->Is<UIProgressBar>());
         EXPECT_TRUE(root.children[8]->Is<UISlider>());
+        EXPECT_TRUE(root.children[9]->Is<UIDropdown>());
         EXPECT_TRUE(root.children[0]->children[0]->Is<UILabel>());
         EXPECT_TRUE(root.children[0]->children[1]->Is<UIButton>());
     }
@@ -271,6 +278,16 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(Get<UISlider>("Level").step, 0.5f);
         EXPECT_TRUE(Get<UISlider>("Level").disabled);
         EXPECT_TRUE(Get<UISlider>("Level").interactive);
+        EXPECT_EQ(Get<UIDropdown>("Pick").bind, PoolString::Intern("pickVar"));
+        EXPECT_EQ(Get<UIDropdown>("Pick").action, PoolString::Intern("UIControlsTestPick"));
+        EXPECT_EQ(Get<UIDropdown>("Pick").text, "Pick one");
+        EXPECT_FLOAT_EQ(Get<UIDropdown>("Pick").optionHeight, 48.0f);
+        EXPECT_EQ(Get<UIDropdown>("Pick").arrowColor.g, 2);
+        EXPECT_EQ(Get<UIDropdown>("Pick").arrowColor.a, 255);
+        EXPECT_TRUE(Get<UIDropdown>("Pick").disabled);
+        EXPECT_TRUE(Get<UIDropdown>("Pick").interactive);
+        EXPECT_EQ(Get<UIDropdown>("Pick").children.size(), 1u);
+        EXPECT_FALSE(Get<UIDropdown>("Pick").IsOpen());
     }
 
     TEST_F(UIControlsTest, TheControlsSaveAndLoadBack) {
@@ -358,6 +375,13 @@ namespace BECore::Tests {
                 toggle->trackColor = Color{31, 32, 33, 34};
                 toggle->fillColor = Color{35, 36, 37, 38};
                 toggle->thumbColor = Color{39, 40, 41, 42};
+            } else if (auto* dropdown = element.Cast<UIDropdown>()) {
+                dropdown->bind = PoolString::Intern("busyPick");
+                dropdown->action = PoolString::Intern("BusyPickAction");
+                dropdown->Open();  // runtime state: the saved text of the original and of the copy must still agree
+                dropdown->disabled = true;
+                dropdown->arrowColor = Color{63, 64, 65, 66};
+                dropdown->optionHeight = 33.5f;
             } else if (auto* bar = element.Cast<UIProgressBar>()) {
                 bar->bind = PoolString::Intern("busyProgress");
                 bar->minValue = -2.5f;
@@ -375,8 +399,11 @@ namespace BECore::Tests {
                 slider->fillColor = Color{55, 56, 57, 58};
                 slider->thumbColor = Color{59, 60, 61, 62};
             }
-            if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>()) {
-                auto* text = label ? label : element.Cast<UIButton>() ? static_cast<UILabel*>(element.Cast<UIButton>()) : static_cast<UILabel*>(element.Cast<UIToggle>());
+            if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>() || element.Cast<UIDropdown>()) {
+                auto* text = label                      ? label
+                             : element.Cast<UIButton>() ? static_cast<UILabel*>(element.Cast<UIButton>())
+                             : element.Cast<UIToggle>() ? static_cast<UILabel*>(element.Cast<UIToggle>())
+                                                        : static_cast<UILabel*>(element.Cast<UIDropdown>());
                 text->text = "Some text";
                 text->font = PoolString::Intern("assets/fonts/Other.ttf");
                 text->textColor = Color{21, 22, 23, 24};
@@ -392,7 +419,7 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(UIControlsTest, EveryPropertyOfEveryControlSurvivesARoundTrip) {
-        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle", "UIProgressBar", "UISlider"}) {
+        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle", "UIDropdown", "UIProgressBar", "UISlider"}) {
             auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(original) << type;
             SetEveryStyleProperty(original->style);

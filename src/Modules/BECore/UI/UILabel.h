@@ -61,6 +61,12 @@ namespace BECore {
         }
 
     protected:
+        /// The text that `GetDisplayText()` expands: `text` here. A control that shows another text (a dropdown shows the chosen option's) returns that one, so the authored `text`
+        /// stays what a file holds and is never overwritten by what is shown
+        [[nodiscard]] virtual const eastl::string& GetSourceText() const {
+            return text;
+        }
+
         /// Draws the text only, in the rect, over whatever the subclass drew as the fill
         void DrawText(IRenderer& renderer);
 
