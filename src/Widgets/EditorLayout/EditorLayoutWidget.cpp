@@ -59,6 +59,8 @@ namespace BECore {
             _forceResetLayout = true;
         } else if (event.commandId == kViewSaveLayout) {
             _openSaveLayoutPopup = _layouts.has_value();
+        } else if (event.commandId == kViewCommandPalette) {
+            _palette.Open();
         }
     }
 
@@ -90,7 +92,11 @@ namespace BECore {
         ImGui::PopStyleVar(3);
 
         DrawMenuBar();
+        DispatchHotkeys();
         DrawSaveLayoutPopup();
+        if (const PoolString chosen = _palette.Draw(_settings->GetHotkeys()); !chosen.Empty()) {
+            EditorCommandEvent::Emit(chosen);
+        }
 
         // --- DockSpace ---
         const ImGuiID dockspaceId = ImGui::GetID("MainDockSpace");
@@ -168,6 +174,24 @@ namespace BECore {
         }
 
         CommandMenuItem(kViewResetLayout, "Reset to Defaults");
+    }
+
+    void EditorLayoutWidget::DispatchHotkeys() {
+        // A menu, the palette or a modal popup is open: the keys belong to it
+        if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
+            return;
+        }
+        const HotkeyMap& hotkeys = _settings->GetHotkeys();
+        for (const EditorCommand& command : GetEditorCommands()) {
+            // The fixed command (mode.toggle) is read by Application from the raw SDL event, before ImGui
+            if (!command.rebindable) {
+                continue;
+            }
+            const std::optional<KeyChord> chord = hotkeys.GetChord(command.id);
+            if (chord && ImGui::Shortcut(chord->ToImGui(), ImGuiInputFlags_RouteGlobal)) {
+                EditorCommandEvent::Emit(command.id);
+            }
+        }
     }
 
     void EditorLayoutWidget::DrawSaveLayoutPopup() {

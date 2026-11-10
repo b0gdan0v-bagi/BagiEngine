@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Widgets/IWidget.h>
+#include <Widgets/EditorLayout/CommandPalette.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
 #include <Widgets/EditorLayout/LayoutStore.h>
@@ -15,7 +16,8 @@ namespace BECore {
     // windows dock into this space.
     //
     // It also owns the per-user editor state (EditorSettings, LayoutStore) and runs the commands it is in charge of
-    // (EditorCommandEvent): quit, switch mode, reset and save the layout.
+    // (EditorCommandEvent): quit, switch mode, reset and save the layout, open the palette. It also turns the chords
+    // of the hotkey map into those events.
     class EditorLayoutWidget : public IWidget {
         BE_CLASS(EditorLayoutWidget)
     public:
@@ -39,6 +41,8 @@ namespace BECore {
         void DrawMenuBar();
         void DrawLayoutsMenu();
         void DrawSaveLayoutPopup();
+        /// Emits the command of every chord pressed this frame
+        void DispatchHotkeys();
         /// A menu item that emits the command @p id, with its chord shown right-aligned
         void CommandMenuItem(PoolString id, const char* label, bool enabled = true);
 
@@ -49,6 +53,8 @@ namespace BECore {
 
         std::optional<EditorSettings> _settings;
         std::optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
+
+        CommandPalette _palette;
 
         eastl::string _pendingLayoutText;  // a named layout waiting for the next frame start
         char _layoutNameBuffer[kMaxLayoutNameLength + 1] = {};

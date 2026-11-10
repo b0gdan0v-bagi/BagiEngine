@@ -98,4 +98,15 @@ namespace BECore::Tests {
         EXPECT_EQ(FilterCommands("", commands).size(), commands.size());
     }
 
+    TEST(CommandFilterTest, MoveSelectionWrapsAndHandlesEmptyList) {
+        EXPECT_EQ(MoveSelection(0, 1, 3), 1);
+        EXPECT_EQ(MoveSelection(2, 1, 3), 0);
+        EXPECT_EQ(MoveSelection(0, -1, 3), 2);
+        EXPECT_EQ(MoveSelection(1, -1, 3), 0);
+        EXPECT_EQ(MoveSelection(5, 1, 3), 0);
+        EXPECT_EQ(MoveSelection(-4, 0, 3), 0);
+        EXPECT_EQ(MoveSelection(0, 1, 0), 0);
+        EXPECT_EQ(MoveSelection(7, -1, 0), 0);
+    }
+
 }  // namespace BECore::Tests

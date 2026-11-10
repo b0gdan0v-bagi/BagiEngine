@@ -131,4 +131,12 @@ namespace BECore {
         return result;
     }
 
+    int MoveSelection(int selected, int delta, int count) {
+        if (count <= 0) {
+            return 0;
+        }
+        const int clamped = std::clamp(selected, 0, count - 1);
+        return ((clamped + delta) % count + count) % count;
+    }
+
 }  // namespace BECore
