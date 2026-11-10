@@ -52,7 +52,7 @@ DEFAULT_BASE = "main"
 # token, the permissions of Claude Code, the Python venv of the reflection generator.
 LINKED_FILES = (".env", ".claude/settings.local.json", ".venv", f"{SHARED_SUBMODULE}/.venv")
 DEFAULT_PRESETS = {"darwin": "macos-debug"}
-# The name of a worker's background session (`claude --bg --name`), how `claude attach` finds it.
+# The name of a worker's background session (`claude --bg --name`): shared by all its sessions, so attach / logs go by id (session_ref).
 SESSION_PREFIX = "todo-w"
 DEFAULT_DELAY_S = 60
 # The conductor of /todo-loop runs git, the store and agents, it writes no code: a cheaper model and less
@@ -1176,7 +1176,7 @@ def cmd_start(layout: Layout, args) -> None:
         started += 1
         print(f"  {output.splitlines()[0]}")
     if started and not args.print_only:
-        print(f"\nWatch: {tool_command(layout)} list; claude agents; claude attach {SESSION_PREFIX}<k> when one waits for you")
+        print(f"\nWatch: {tool_command(layout)} list; claude agents; {tool_command(layout)} attach <k> when one waits for you")
     if failed:
         raise WorkerError("some workers did not start (above)")
 
