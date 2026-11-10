@@ -203,7 +203,7 @@ namespace BECore::Tests {
         EXPECT_EQ(wild.height, 300.0);
     }
 
-    TEST(WebCanvasTest, AnInsetAsLargeAsTheWindowIsCutToIt) {
+    TEST(WebCanvasTest, OneInsetBeyondTheWindowGivesTheWholeWindow) {
         // The right inset alone covers the whole width: nothing is left, so the whole window answers
         const WebSafeArea area = SafeAreaFromInsets(400.0, 300.0, 20.0, 9999.0, 0.0, 0.0);
         EXPECT_EQ(area.width, 400.0);

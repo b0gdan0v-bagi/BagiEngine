@@ -48,52 +48,65 @@ namespace BECore {
         // The smallest window the renderer is asked for
         constexpr int kMinWindowSize = 64;
 
-        // The insets (top, right, bottom, left) of the page as of the last change; the safe area is derived from them on demand
-        double lastInsets[4] = {0.0, 0.0, 0.0, 0.0};
+        // The sides of env(safe-area-inset-*), in the order of the CSS shorthand
+        constexpr size_t kInsetSides = 4;
+        enum InsetSide : size_t { InsetTop, InsetRight, InsetBottom, InsetLeft };
+        using Insets = eastl::array<double, kInsetSides>;
+
+        // The insets of the page as of the last change; the safe area is derived from them on demand. One window per page.
+        Insets lastInsets{};
 
         // The page goes fullscreen through the shell (requestFullscreen on the document element), SDL's own fullscreen is the canvas
+        // The JavaScript of EM_ASM is stringized as it stands, so clang-format must not touch it (it splits === into == =)
+        // clang-format off
         bool IsCanvasFullscreen() {
             return EM_ASM_INT({
-                       var element = document.fullscreenElement || document.webkitFullscreenElement;
-                       return element && element.tagName == = 'CANVAS' ? 1 : 0;
-                   }) != 0;
+                var element = document.fullscreenElement || document.webkitFullscreenElement;
+                return element && element.tagName === 'CANVAS' ? 1 : 0;
+            }) != 0;
         }
 
-        // One side of env(safe-area-inset-*), in CSS pixels, read through the padding of a hidden fixed element (CSS has no
-        // other way to the value; 0 where the browser does not know env()). Sides: 0 top, 1 right, 2 bottom, 3 left.
-        double ReadInset(int side) {
-            return EM_ASM_DOUBLE(
-                {
-                    var probe = window.bagiSafeAreaProbe;
-                    if (!probe) {
-                        probe = document.createElement('div');
-                        probe.setAttribute('aria-hidden', 'true');
-                        probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;' +
-                                              'padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
-                        document.body.appendChild(probe);
-                        window.bagiSafeAreaProbe = probe;
-                    }
-                    var style = window.getComputedStyle(probe);
-                    return parseFloat(style[[ 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft' ][$0]]);
-                },
-                side);
+        // The four sides of env(safe-area-inset-*), in CSS pixels, read through the padding of a hidden fixed element (CSS has
+        // no other way to the value; 0 where the browser does not know env()). Written to the doubles at the given address.
+        void ReadInsets(double* out) {
+            EM_ASM({
+                var probe = window.bagiSafeAreaProbe;
+                if (!probe) {
+                    probe = document.createElement('div');
+                    probe.setAttribute('aria-hidden', 'true');
+                    probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;' +
+                        'padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+                    document.body.appendChild(probe);
+                    window.bagiSafeAreaProbe = probe;
+                }
+                var style = window.getComputedStyle(probe);
+                var sides = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'];
+                for (var i = 0; i < sides.length; ++i) {
+                    HEAPF64[($0 >> 3) + i] = parseFloat(style[sides[i]]);
+                }
+            }, out);
         }
+
+        double InnerWidth() {
+            return EM_ASM_DOUBLE({ return window.innerWidth; });
+        }
+
+        double InnerHeight() {
+            return EM_ASM_DOUBLE({ return window.innerHeight; });
+        }
+        // clang-format on
 
         // Reads the insets and, when they differ from the last read, tells the engine the way SDL's own change reaches it
         void RefreshInsets(SDL_Window* window, bool announce) {
-            double insets[4];
-            bool changed = false;
-            for (int side = 0; side < 4; ++side) {
-                const double inset = ReadInset(side);
-                insets[side] = std::isfinite(inset) && inset > 0.0 ? inset : 0.0;  // an unreadable value is no inset
-                changed = changed || insets[side] != lastInsets[side];
+            Insets insets{};
+            ReadInsets(insets.data());
+            for (double& inset : insets) {
+                inset = std::isfinite(inset) && inset > 0.0 ? inset : 0.0;  // an unreadable value is no inset
             }
-            if (!changed) {
+            if (insets == lastInsets) {
                 return;
             }
-            for (int side = 0; side < 4; ++side) {
-                lastInsets[side] = insets[side];
-            }
+            lastInsets = insets;
             if (announce) {
                 SDL_Event event{};
                 event.type = SDL_EVENT_WINDOW_SAFE_AREA_CHANGED;
@@ -115,9 +128,9 @@ namespace BECore {
             }
         }
 
-        void FitAndRefresh(SDL_Window* window) {
-            FitWindowToPage(window, EM_ASM_DOUBLE({ return window.innerWidth; }), EM_ASM_DOUBLE({ return window.innerHeight; }));
-            RefreshInsets(window, true);
+        void FitAndRefresh(SDL_Window* window, bool announce) {
+            FitWindowToPage(window, InnerWidth(), InnerHeight());
+            RefreshInsets(window, announce);
         }
 
         EM_BOOL OnPageResize(int /*eventType*/, const EmscriptenUiEvent* event, void* userData) {
@@ -127,15 +140,16 @@ namespace BECore {
             return false;  // the result only decides preventDefault; SDL's own resize handler gets the event as well
         }
 
-        // The browser's resize may come before the page is in fullscreen (or out of it) and SDL's handler of this event
-        // sets its flag, so the size is taken again here: this handler is registered after SDL's and runs after it
+        // For a fullscreen change SDL's handler sends SDL_EVENT_WINDOW_RESIZED with the size of the display's desktop mode
+        // and does not resize the canvas (SDL_UpdateFullscreenMode). This handler is registered after SDL's, so it runs
+        // after it and puts the size of the page back; the browser's own resize may come before the change or stale
         EM_BOOL OnFullscreenChange(int /*eventType*/, const EmscriptenFullscreenChangeEvent* /*event*/, void* userData) {
-            FitAndRefresh(static_cast<SDL_Window*>(userData));
+            FitAndRefresh(static_cast<SDL_Window*>(userData), true);
             return false;
         }
 
         EM_BOOL OnOrientationChange(int /*eventType*/, const EmscriptenOrientationChangeEvent* /*event*/, void* userData) {
-            FitAndRefresh(static_cast<SDL_Window*>(userData));
+            FitAndRefresh(static_cast<SDL_Window*>(userData), true);
             return false;
         }
 
@@ -143,15 +157,14 @@ namespace BECore {
 
     void InstallWebCanvasResize(SDL_Window* window) {
         // The page size at the start (the window of the config is only a start size), then on every change of the page
-        RefreshInsets(window, false);
-        FitWindowToPage(window, EM_ASM_DOUBLE({ return window.innerWidth; }), EM_ASM_DOUBLE({ return window.innerHeight; }));
+        FitAndRefresh(window, false);
         emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, window, false, &OnPageResize);
         emscripten_set_fullscreenchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, window, false, &OnFullscreenChange);
         emscripten_set_orientationchange_callback(window, false, &OnOrientationChange);
     }
 
     WebSafeArea GetWebSafeArea(double width, double height) {
-        return SafeAreaFromInsets(width, height, lastInsets[0], lastInsets[1], lastInsets[2], lastInsets[3]);
+        return SafeAreaFromInsets(width, height, lastInsets[InsetTop], lastInsets[InsetRight], lastInsets[InsetBottom], lastInsets[InsetLeft]);
     }
 #endif
 
