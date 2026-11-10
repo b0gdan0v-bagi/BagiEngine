@@ -34,7 +34,7 @@ Each WP holds:
 
 - **Goal and acceptance:** what is true when it is done, and the command that shows it (a test name, a build target, a control-API smoke script).
 - **Read first:** the exact files and the `CLAUDE.md` / `.claude/rules/` files the developer must read. The developer starts with nothing else.
-- **Checkboxes:** code, tests, docs (the nested `CLAUDE.md`, or the entry's body in the store, that the change makes false), `clang-format`, and `strip-pch-includes` when includes change.
+- **Checkboxes:** code, tests, docs (the nested `CLAUDE.md` of the folder the change is about, or the entry's body in the store, that the change makes false; within the budget of `CI/scripts/check_doc_budget.py`), `clang-format`, and `strip-pch-includes` when includes change.
 
 Every deliverable is a checkbox (`- [ ]`) so that progress can be counted.
 
