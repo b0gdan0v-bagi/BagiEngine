@@ -61,6 +61,8 @@ namespace BECore {
             _openSaveLayoutPopup = _layouts.has_value();
         } else if (event.commandId == kViewCommandPalette) {
             _palette.Open();
+        } else if (event.commandId == kViewPreferences) {
+            _preferencesWindow.Open();
         }
     }
 
@@ -116,6 +118,17 @@ namespace BECore {
         ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
         ImGui::End();
+
+        // The panels' Initialize ran before the first Update, so they hear the stored preferences now
+        bool preferencesChanged = !_preferencesAnnounced;
+        _preferencesAnnounced = true;
+        if (_preferencesWindow.Draw(*_settings)) {
+            ApplyPreferences(_settings->GetPreferences());
+            preferencesChanged = true;
+        }
+        if (preferencesChanged) {
+            AnnouncePreferences();
+        }
     }
 
     void EditorLayoutWidget::Draw() {}
@@ -174,6 +187,11 @@ namespace BECore {
         }
 
         CommandMenuItem(kViewResetLayout, "Reset to Defaults");
+    }
+
+    void EditorLayoutWidget::AnnouncePreferences() const {
+        const EditorPreferences& preferences = _settings->GetPreferences();
+        EditorPreferencesChangedEvent::Emit(preferences.viewportGrid, preferences.viewportGridStep);
     }
 
     void EditorLayoutWidget::DispatchHotkeys() {

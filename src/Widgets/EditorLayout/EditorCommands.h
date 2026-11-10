@@ -48,4 +48,16 @@ namespace BECore {
         explicit EditorCommandEvent(PoolString id) : commandId(id) {}
     };
 
+    /// The preferences that other panels read changed (or the editor just started): sent by EditorLayoutWidget, which owns the
+    /// settings, so a panel never reads the files itself. Emitted on the first frame of the widget, so a panel that subscribes in
+    /// Initialize gets the stored values too.
+    struct EditorPreferencesChangedEvent : public EventBase<EditorPreferencesChangedEvent> {
+        BE_EVENT(EditorPreferencesChangedEvent)
+        BE_REFLECT_FIELD bool viewportGrid = false;
+        BE_REFLECT_FIELD int32_t viewportGridStep = 0;
+
+        EditorPreferencesChangedEvent() = default;
+        EditorPreferencesChangedEvent(bool grid, int32_t step) : viewportGrid(grid), viewportGridStep(step) {}
+    };
+
 }  // namespace BECore
