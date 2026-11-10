@@ -21,7 +21,7 @@ Font (.ttf/.otf bytes, CPU)  ->  TextLayout (pure: lines, glyph positions)  ->  
 | `FontAtlas` | The glyphs of one font at one whole pixel size, in page textures made by `IRenderer::CreateTexture()`. White glyphs with the coverage in alpha, a 1 px transparent border around each. With `outlinePixels` above 0 the pictures are the dilated glyphs (offsets follow). `Prepare()` adds missing glyphs as **new pages**; a page is never written again, so a frame in flight never reads a page that changes |
 | `FontAtlasLibrary` (`CoreManager::GetFontAtlasLibrary()`) | One atlas per (font, pixel size, outline pixels), made on first use; a plain one is preloaded with the ranges of `TextConfig.xml`, an outline one is not (its glyphs come on first use: dilating is the costly part). `QuantizeOutline` makes a width whole (0 stays 0, anything above is at least 1). Drops everything when the renderer changes (`IRenderer::GetId()`); `Application::Cleanup()` calls `Clear()` before the renderer is destroyed |
 | `TextSettings` | `config/TextConfig.xml`: `defaultFont`, `defaultFamily`, `pageSize`, the `families` table (family, faces of weight and path) with `ResolveFontPath(family, weight)` (the CSS nearest-weight rule, in the header), the `preload` code point ranges (Basic Latin, Latin-1, Cyrillic, the general punctuation by default) |
-| `TextRenderer::Draw` | Prepares the glyphs, then draws one quad each at a whole output pixel |
+| `TextRenderer::Draw` | Prepares the glyphs, then draws one quad each at a whole output pixel. With `TextEffects` (outline colour and width, hard shadow colour and offset, all in output pixels; paint, never layout) the whole layout is drawn in three passes: shadow (the outline pictures when there is an outline), outline, fill, so neighbours never paint over each other's effects. The caller passes the outline atlas of `QuantizeOutline(width)`; clipping stays the caller's |
 | `TextLayoutCache` | Keeps the last layout of one text and makes a new one only when the font, the text or an option changed; `TextComponent` and `UILabel` each hold one |
 | `TextComponent` | A scene component: text in the box of the node's `TransformComponent` |
 | `UILabel` (`UI/CLAUDE.md`) | The same path in a UI canvas: the effective size is the UI size times the canvas scale, with a vertical alignment of its own |
@@ -59,7 +59,7 @@ A width or height of 0 means no limit. `fontPath` empty is the face of `fontFami
 
 ## Not done
 
-Text shaping, ligatures, right-to-left and complex scripts, kerning from GPOS (PT Sans keeps its kerning there, so there is none), several fonts per text with fallback fonts, italic and synthetic bold (a weight is a face of its own file; a missing weight takes the nearest face), rich text, vertical alignment inside the box, signed distance fields, color glyphs and emoji. A glyph that is larger than a page (very large sizes) is skipped with a log line.
+Text shaping, ligatures, right-to-left and complex scripts, kerning from GPOS (PT Sans keeps its kerning there, so there is none), several fonts per text with fallback fonts, italic and synthetic bold (a weight is a face of its own file; a missing weight takes the nearest face), rich text, vertical alignment inside the box, shadow blur, signed distance fields, color glyphs and emoji. A glyph that is larger than a page (very large sizes) is skipped with a log line.
 
 ## Tests
 
