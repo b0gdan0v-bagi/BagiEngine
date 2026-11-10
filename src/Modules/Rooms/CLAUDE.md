@@ -4,7 +4,7 @@
 
 Online play in rooms by code, with an authoritative server (the entry `network-rooms` of the todo store, slice 1 of 4). The server owns the game (`ISeatedGame`, `Games/CLAUDE.md`, "Seats"); every client is a seat and sees only what the game says that seat may see. This module is **pure code**: JSON text in, JSON text out, no sockets, no clock, no randomness of its own. A transport (a later slice) feeds it. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomsModule`; `BagiEngineTests` links it with `LINK RemoteControlModule RoomsModule RuntimeModule`).
 
-Built so far (slice 1, work package 2 of 6): the protocol, room codes and tokens, the limits and the rate limiter. `Room` (lobby, seats, host, start, computers, absence) and `RoomHub` (the connection-to-room dispatcher) come in the next work packages and are not written yet; this file grows with them.
+Built so far (slice 1, work package 3 of 6): the protocol, room codes and tokens, the limits and the rate limiter, and the lobby part of `Room` (members, seats, host). The rest of `Room` (start, computers, absence) and `RoomHub` (the connection-to-room dispatcher) come in the next work packages and are not written yet; this file grows with them.
 
 ## Files
 
@@ -16,6 +16,7 @@ Built so far (slice 1, work package 2 of 6): the protocol, room codes and tokens
 | `RoomProtocol.h/.cpp` | `ClientMessage` (a `std::variant` of the seven client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, the builders of the server messages, `LobbySnapshot` |
 | `RoomCode.h/.cpp` | `GenerateRoomCode`, `NormalizeRoomCode`, `GenerateToken`, `IsWellFormedToken` |
 | `RateLimiter.h/.cpp` | a token bucket over `RoomTime` |
+| `Room.h/.cpp` | `Room`: members, seats, host, lobby snapshot and revision, phase (the lobby part; see "Room lifecycle") |
 
 ## Protocol
 
@@ -63,7 +64,18 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 | `too_many_rooms` | the room limit (hub) |
 | `internal_error` | a bug on the server's side, never a client's fault |
 
-`SanitizePlayerName`: valid UTF-8 (no overlong forms, surrogates or values above U+10FFFF), no control character (C0, DEL, C1, the line and paragraph separators, zero-width and direction-control characters, the byte order mark), then spaces at both ends removed, 1 to 24 bytes left. Names may repeat; the seat tells people apart.
+`SanitizePlayerName`: valid UTF-8 (no overlong forms, surrogates or values above U+10FFFF), no control character (C0, DEL, C1, the line and paragraph separators, zero-width and direction-control characters, the byte order mark), then spaces at both ends removed, 1 to 24 bytes left. Names may repeat; the seat tells people apart. A name of only non-ASCII spaces (for example U+00A0 or U+3000) is not trimmed, so it is a valid name, not `bad_name`.
+
+## Room lifecycle
+
+`Room` is pure logic over `PlayerId` (numbered from 1, never reused in the room): no connection, no JSON, no clock of its own. Everybody who joins takes the lowest free seat at once, so every member has a seat and there are no spectators.
+
+| Phase | Who may do what |
+|-------|-----------------|
+| `Lobby` | `AddMember(name, now)` (`bad_name`, `room_full`; the first member is the host), `RemoveMember(player)` (the seat is free; if it was the host, the host passes to the connected human of the lowest seat; none left: no host), `ChooseSeat(player, seat)` (`not_in_room`, `invalid_seat` for any integer outside 0..N-1, `seat_taken`; the own seat is a success that changes nothing) |
+| `Playing`, `Finished` | `AddMember` is `game_started`, `ChooseSeat` is `game_started`, `RemoveMember` refuses (work package 4 adds the start, the play and the absence rules) |
+
+`FindByToken(token)` compares every member's token over the whole length with no early exit (the time does not tell how much is right). `GetLobbyRevision()` grows on every change `GetLobbySnapshot()` shows (join, removal, seat change) and on nothing else, so the hub sends a `lobby` message exactly when it moved. Strings from a client are checked again in the room.
 
 ## Room codes and tokens
 
@@ -91,4 +103,4 @@ Constants in `RoomLimits.h`; `RoomHubSettings` repeats them as defaults for the 
 
 ## Tests
 
-`tests/BECore/Rooms/`: `RoomProtocolTest.cpp` (every message parses and round-trips, a table of malformed input with the code each must give, names, the builders), `RoomCodeTest.cpp`, `RateLimiterTest.cpp`, and from WP 1 `FakeSeatedGame.*` and `SeatedGameTest.cpp` (`Games/CLAUDE.md`). Time and randomness are injected, so no test sleeps.
+`tests/BECore/Rooms/`: `RoomProtocolTest.cpp` (every message parses and round-trips, a table of malformed input with the code each must give, names, the builders), `RoomCodeTest.cpp`, `RateLimiterTest.cpp`, `RoomLobbyTest.cpp` (members, seats, host handover, revision, tokens), and from WP 1 `FakeSeatedGame.*` and `SeatedGameTest.cpp` (`Games/CLAUDE.md`). Time and randomness are injected, so no test sleeps.

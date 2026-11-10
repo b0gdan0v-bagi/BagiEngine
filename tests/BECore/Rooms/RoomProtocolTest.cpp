@@ -244,9 +244,9 @@ namespace BECore::Tests {
             {"create: name with a nul", Message("create_room", R"("game":"g","name":"a\u0000b")"), "bad_name"},
             {"create: name with DEL", Message("create_room", R"("game":"g","name":"a\u007fb")"), "bad_name"},
             {"create: name with a C1 control", Message("create_room", R"("game":"g","name":"a\u0085b")"), "bad_name"},
-            {"create: name with a direction override", Message("create_room", R"("game":"g","name":"a‮b")"), "bad_name"},
-            {"create: name with a line separator", Message("create_room", R"("game":"g","name":"a b")"), "bad_name"},
-            {"create: name with a zero-width space", Message("create_room", R"("game":"g","name":"a​b")"), "bad_name"},
+            {"create: name with a direction override", Message("create_room", R"("game":"g","name":"a\u202eb")"), "bad_name"},
+            {"create: name with a line separator", Message("create_room", R"("game":"g","name":"a\u2028b")"), "bad_name"},
+            {"create: name with a zero-width space", Message("create_room", R"("game":"g","name":"a\u200bb")"), "bad_name"},
             {"create: name with a lone surrogate", Message("create_room", R"("game":"g","name":"a\ud800b")"), "bad_message"},
             {"create: name as 13 two-byte characters",
              Message("create_room", Format(R"("game":"g","name":"{}")", "\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9")), "bad_name"},
@@ -306,7 +306,8 @@ namespace BECore::Tests {
             const eastl::string one(1, static_cast<char>(byte));
             EXPECT_FALSE(ParseClientMessage(one).has_value()) << byte;
             const eastl::string inside = Format("{{\"v\":1,\"type\":\"join_room\",\"code\":\"{}\",\"name\":\"{}\"}}", one, one);
-            (void)ParseClientMessage(inside);
+            const auto parsedInside = ParseClientMessage(inside);
+            EXPECT_TRUE(parsedInside.has_value() || !parsedInside.error().code.empty()) << byte;
         }
         SUCCEED();
     }

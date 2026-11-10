@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Games/ISeatedGame.h>
+
 namespace BECore {
 
     /// Error codes of the room protocol (the `code` of an `error` message). They are part of the protocol: clients match on them.
@@ -22,11 +24,11 @@ namespace BECore {
         inline constexpr eastl::string_view kGameStarted = "game_started";
         inline constexpr eastl::string_view kNotStarted = "not_started";
         inline constexpr eastl::string_view kSeatTaken = "seat_taken";
-        inline constexpr eastl::string_view kInvalidSeat = "invalid_seat";
+        inline constexpr eastl::string_view kInvalidSeat = SeatedGameErrors::kInvalidSeat;
         /// `action.version` is not the version of the game now; the current `view` is sent again
         inline constexpr eastl::string_view kStaleAction = "stale_action";
-        inline constexpr eastl::string_view kIllegalAction = "illegal_action";
-        inline constexpr eastl::string_view kNotYourTurn = "not_your_turn";
+        inline constexpr eastl::string_view kIllegalAction = GameControlErrors::kIllegalAction;
+        inline constexpr eastl::string_view kNotYourTurn = SeatedGameErrors::kNotYourTurn;
         inline constexpr eastl::string_view kBadName = "bad_name";
         /// The token is not one a room hands out, or no member of the room has it
         inline constexpr eastl::string_view kBadToken = "bad_token";
