@@ -169,6 +169,37 @@ namespace BECore::Tests {
         ExpectRect(canvas.root->FindByName("Hud"_intern)->rect, 16.0f, 16.0f, 220.0f, 96.0f);
     }
 
+    TEST(UICanvasLayoutTest, AChangedViewSizeInTheContextLaysOutAgainAndChoosesTheVariantsAgain) {
+        UICanvasLayout canvas;
+        canvas.params.space = CanvasSpace::SceneView;
+        BuildHud(canvas);
+        UIVariant portrait;
+        portrait.when.orientation = UIOrientation::Portrait;
+        UIElementOverride hud;
+        hud.element = "Hud"_intern;
+        hud.anchor = UIAnchor::Top;
+        hud.x = 0.0f;
+        hud.y = 16.0f;
+        portrait.overrides.push_back(hud);
+        canvas.variants.push_back(portrait);
+        auto inView = [](float viewWidth, float viewHeight) {
+            UILayoutContext context = Output(800.0f, 800.0f);  // the same output: only the view the scene picked differs
+            context.sceneViewWidth = viewWidth;
+            context.sceneViewHeight = viewHeight;
+            return context;
+        };
+
+        EXPECT_TRUE(canvas.Update(inView(400.0f, 300.0f)));
+        ExpectRect(canvas.GetResolved().bounds, 0.0f, 0.0f, 400.0f, 300.0f);
+        ExpectRect(canvas.root->FindByName("Hud"_intern)->rect, 16.0f, 16.0f, 220.0f, 96.0f);
+        EXPECT_FALSE(canvas.Update(inView(400.0f, 300.0f)));
+
+        EXPECT_TRUE(canvas.Update(inView(300.0f, 400.0f)));
+        ExpectRect(canvas.GetResolved().bounds, 0.0f, 0.0f, 300.0f, 400.0f);
+        ExpectRect(canvas.root->FindByName("Hud"_intern)->rect, 40.0f, 16.0f, 220.0f, 96.0f);  // the variant: centered at the top
+        EXPECT_EQ(canvas.GetVariantRuns(), 2u);
+    }
+
     TEST(UICanvasLayoutTest, OutputPixelsMapToCanvasUnitsThroughTheLastLayout) {
         UICanvasLayout canvas;
         canvas.params.scaleMode = CanvasScaleMode::ScaleWithScreen;

@@ -185,6 +185,27 @@ namespace BECore::Tests {
         ExpectRect(resolved.bounds, 0.0f, 0.0f, 840.0f, 760.0f);
     }
 
+    TEST(UICanvasScalerTest, SceneViewFollowsTheViewSizeOfTheContext) {
+        UICanvasScaleParams params;
+        params.space = CanvasSpace::SceneView;
+        UILayoutContext context = Output(720.0f, 1280.0f);
+
+        context.sceneViewWidth = 1280.0f;  // the default view of a scene: wide, so the tall output has bars above and below
+        context.sceneViewHeight = 720.0f;
+        const UICanvasResolved landscape = UICanvasScaler::Resolve(params, context);
+        context.sceneViewWidth = 720.0f;  // the portrait view the scene picked for this output
+        context.sceneViewHeight = 1280.0f;
+        const UICanvasResolved portrait = UICanvasScaler::Resolve(params, context);
+
+        ExpectRect(landscape.bounds, 0.0f, 0.0f, 1280.0f, 720.0f);
+        EXPECT_FLOAT_EQ(landscape.scale, 0.5625f);
+        EXPECT_NEAR(landscape.transform.offsetY, 437.5f, 1e-3f);
+        ExpectRect(portrait.bounds, 0.0f, 0.0f, 720.0f, 1280.0f);
+        EXPECT_FLOAT_EQ(portrait.scale, 1.0f);  // the portrait view fills the portrait output
+        EXPECT_FLOAT_EQ(portrait.transform.offsetX, 0.0f);
+        EXPECT_FLOAT_EQ(portrait.transform.offsetY, 0.0f);
+    }
+
     TEST(UICanvasScalerTest, SceneViewIgnoresTheScaleModeTheUserScaleAndTheLimits) {
         UICanvasScaleParams params;
         params.space = CanvasSpace::SceneView;
