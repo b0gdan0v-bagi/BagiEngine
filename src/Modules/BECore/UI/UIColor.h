@@ -22,6 +22,11 @@ namespace BECore {
         return {shift(color.r), shift(color.g), shift(color.b), color.a};
     }
 
+    /// Whether two colors have the same four channels (Color has no `operator==`)
+    [[nodiscard]] inline bool ColorsEqual(const Color& a, const Color& b) {
+        return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+    }
+
     /// @p color with its alpha multiplied by @p factor (0..1): the disabled look of a control
     [[nodiscard]] inline Color WithAlpha(const Color& color, float factor) {
         return {color.r, color.g, color.b, static_cast<unsigned char>(static_cast<float>(color.a) * factor)};

@@ -19,6 +19,17 @@ namespace BECore {
      * a choice group). `selected` is a runtime state, set by whoever owns the choice (not read from a file): a selected button is filled from `selectedColor` (lighter
      * than `color` when left transparent) and has a bar of `kSelectedBarHeight` units in `textColor` along its bottom edge, so the selection does not rest on color alone.
      * `groupDisabled` is the same for a whole group: it counts as `disabled`.
+     *
+     * The state shows in the shape too when the button has a box style (`UIElement::box`; a button with the default one is drawn exactly as above and nothing below applies).
+     * `GetCurrentBox` is the one place that decides it:
+     * - hover lightens the fill (both gradient ends) by `kHoverBrighten` and the border colour by the same shift;
+     * - pressed darkens the fill and the border by `kPressDarken`, moves the shadow down by `kPressShadowShift` of its offset, shrinks its blur to `kPressShadowBlurScale` and drops
+     *   the highlight;
+     * - selected brightens the fill as above, raises the border to `textColor` (at least `kSelectedBorderMin` units wide) and adds a glow of `textColor` when the style has none;
+     *   the bar stays, inset by the two bottom radii so it does not leave the rounded corners;
+     * - disabled drops the shadow and the glow and keeps `kDisabledAlpha` of the alpha of fill, border and highlight (a disabled button that is also selected keeps the raised
+     *   border, faded, and no selected fill).
+     * An explicit `hoverColor`, `pressedColor`, `disabledColor` or `selectedColor` replaces the start colour; the gradient end keeps its per-channel offset from the start.
      */
     class UIButton : public UILabel {
         BE_CLASS(UIButton)
@@ -37,14 +48,31 @@ namespace BECore {
         /// The height of the bar at the foot of a selected button, in canvas units
         static constexpr float kSelectedBarHeight = 4.0f;
 
+        /// The shifts of the box states (the colour shifts are `kHoverBrighten` and `kPressDarken`)
+        static constexpr float kPressShadowShift = 0.5f;             ///< a pressed button's shadow offset grows by this share of itself
+        static constexpr float kPressShadowBlurScale = 2.0f / 3.0f;  ///< a pressed button's shadow keeps this share of its blur
+        static constexpr float kSelectedBorderMin = 1.0f;            ///< the least width of the border of a selected button, in canvas units
+        static constexpr float kSelectedGlowBlur = 6.0f;             ///< the glow added to a selected button: blur in canvas units
+        static constexpr float kSelectedGlowAlpha = 0.4f;            ///< and the share of the alpha of `textColor` it takes
+
         bool selected = false;       ///< runtime, like `hovered`: drawn as the chosen one
         bool groupDisabled = false;  ///< runtime: the group this button is in is disabled
 
         void DrawSelf(IRenderer& renderer) override;
         void OnClick() override;
 
+        /// What the button draws its box with in the state it is in now
+        struct Look {
+            UIBoxStyle box;     ///< the authored box with the state's border, shadow, glow and highlight
+            Color fill;         ///< the fill, the start of the gradient
+            Color gradientEnd;  ///< the far end of the gradient
+        };
+
         /// The fill for the state the button is in now
         [[nodiscard]] Color GetCurrentFill() const;
+
+        /// The box, the fill and the gradient end for the state the button is in now (pure: it reads the state and changes nothing)
+        [[nodiscard]] Look GetCurrentBox() const;
     };
 
 }  // namespace BECore

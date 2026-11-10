@@ -7,16 +7,12 @@ namespace BECore {
 
     namespace {
 
-        bool SameColor(const Color& a, const Color& b) {
-            return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
-        }
-
         bool IsVisible(const Color& color) {
             return color.a > 0;
         }
 
         void SaveColorIfSet(ISerializer& s, const UIColor& color, eastl::string_view key) {
-            if (!SameColor(color, UIColor{})) {
+            if (!ColorsEqual(color, UIColor{})) {
                 Ser::DataAccessor<UIColor>::Save(s, color, key);
             }
         }
@@ -49,8 +45,8 @@ namespace BECore {
     }  // namespace
 
     bool UIBoxStyle::operator==(const UIBoxStyle& other) const {
-        return cornerRadius == other.cornerRadius && borderWidth == other.borderWidth && SameColor(borderColor, other.borderColor) && SameColor(gradientColor, other.gradientColor) &&
-               gradientDirection == other.gradientDirection && shadow == other.shadow && glow == other.glow && SameColor(highlight, other.highlight);
+        return cornerRadius == other.cornerRadius && borderWidth == other.borderWidth && ColorsEqual(borderColor, other.borderColor) && ColorsEqual(gradientColor, other.gradientColor) &&
+               gradientDirection == other.gradientDirection && shadow == other.shadow && glow == other.glow && ColorsEqual(highlight, other.highlight);
     }
 
     bool UIBoxStyle::HasEffect() const {
