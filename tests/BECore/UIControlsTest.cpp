@@ -908,7 +908,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, TheTextEffectsComeFromAFileAndAMalformedOneIsReported) {
         const auto load = [](const char* attributes, bool& hadErrors) {
-            const eastl::string xml = eastl::string("<root><element type=\"UILabel\" ") + attributes + "/></root>";
+            const eastl::string xml = Format("<root><element type=\"UILabel\" {}/></root>", attributes);
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
             auto element = AbstractFactory<UIElement>::GetInstance().Create("UILabel");
