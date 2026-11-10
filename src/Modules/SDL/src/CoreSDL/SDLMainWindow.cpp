@@ -61,6 +61,12 @@ namespace BECore {
         if (_headless) {
             flags &= ~SDL_WINDOW_VULKAN;  // the dummy driver has no Vulkan surface; the software renderer draws instead
         }
+#ifdef __EMSCRIPTEN__
+        // The browser renderer is SDL's GLES2 one, which recreates a window that lacks SDL_WINDOW_OPENGL. The recreation unregisters
+        // every page handler of resize, fullscreenchange and orientationchange (Emscripten removes them by type, not by owner),
+        // InstallWebCanvasResize's too, and the canvas would stop following the page in fullscreen and on rotation
+        flags = (flags & ~SDL_WINDOW_VULKAN) | SDL_WINDOW_OPENGL;
+#endif
 
         _window = SDL_CreateWindow(windowConfig._title.c_str(), windowConfig._width, windowConfig._height, flags);
         if (!_window) {
