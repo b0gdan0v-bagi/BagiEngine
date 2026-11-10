@@ -2,6 +2,7 @@
 name: todo-architect
 description: Reads one entry of the todo store (and its owner's plan) and cuts the next slice of work into work packages, writing the slice plan to the local plan store. Can answer BLOCKED. Used by todo-loop only.
 model: sonnet
+effort: high
 tools: Read, Grep, Glob, Bash, Write
 ---
 
@@ -38,6 +39,14 @@ Each WP holds:
 
 Every deliverable is a checkbox (`- [ ]`) so that progress can be counted.
 
+## Level of a WP
+
+Each WP gets a **Level**, and the conductor picks the model and the effort of its developer and its reviewer from it (`todo-loop/SKILL.md`, "Roles and models"). You decide where the work can go cheaper; when in doubt, `normal`.
+
+- `light`: mechanical and local, a mistake shows in the build or a test: docs, strings, config or scene XML, a rename, a test added to existing code, a value moved into a named constant.
+- `normal`: ordinary code in one area with its tests.
+- `deep`: a rule or an algorithm whose mistake a test may miss (scoring, the hand model, the computer player, the control protocol), an engine core change many modules rely on, concurrency, lifetimes, serialization formats.
+
 ## Files
 
 The plan has a `## Files` section: every path of `<R>` the slice will add or change, one `- <path>` per line (a folder ends with `/` when the slice adds files in it whose names are not known yet). Several loops can run at once, each in its own worker folder (`todo-loop/SKILL.md`, "Parallel workers"); they read this section of the plans in the store and do not take an entry that would change the same files. Name what you see, not more: a path too many keeps another entry waiting, a path too few is a merge conflict later.
@@ -58,6 +67,7 @@ Area `<area>` (repository `<R>`, base `<base>`), branch `todo/<branch-id>`, entr
 - <path relative to <R>>
 
 ## WP 1/N: <name>
+**Level:** light | normal | deep (<a few words why>)
 **Goal and acceptance:** ...
 **Read first:** ...
 - [ ] code: ...
@@ -76,4 +86,4 @@ Area `<area>` (repository `<R>`, base `<base>`), branch `todo/<branch-id>`, entr
 
 ## Answer
 
-Short, for the conductor: the plan path (**absolute, the home directory expanded**, e.g. `/Users/<name>/.claude/plans/todo-loop-<branch-id>.md`, never `~`: the conductor turns it into a link in the chat; get the home with `echo "$HOME"`), the number of WPs with one line each, `slice K of M`, anything that did not fit the slice. Or one line `BLOCKED: <reason>`: the entry is vague, the owner has to decide, the code it names does not exist, or the work cannot be checked on this machine.
+Short, for the conductor: the plan path (**absolute, the home directory expanded**, e.g. `/Users/<name>/.claude/plans/todo-loop-<branch-id>.md`, never `~`: the conductor turns it into a link in the chat; get the home with `echo "$HOME"`), the number of WPs with one line each and its level, `slice K of M`, anything that did not fit the slice. Or one line `BLOCKED: <reason>`: the entry is vague, the owner has to decide, the code it names does not exist, or the work cannot be checked on this machine.

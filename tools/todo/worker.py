@@ -55,6 +55,11 @@ DEFAULT_PRESETS = {"darwin": "macos-debug"}
 # The name of a worker's background session (`claude --bg --name`), how `claude attach` finds it.
 SESSION_PREFIX = "todo-w"
 DEFAULT_DELAY_S = 60
+# The conductor of /todo-loop runs git, the store and agents, it writes no code: a cheaper model and less
+# thinking than an interactive session (todo-loop/SKILL.md, "Roles and models"). `start --model/--effort`
+# or the same flags after `--` change it.
+DEFAULT_LOOP_MODEL = "sonnet"
+DEFAULT_LOOP_EFFORT = "medium"
 REPORT_TO_NAME = re.compile(r"[A-Za-z0-9._-]+")
 # What a relaunched session is told (`relaunch`): the conversation is resumed, so the loop knows where it was.
 RELAUNCH_PROMPT = (
@@ -278,6 +283,16 @@ def build_env(layout: Layout) -> dict[str, str]:
     env = dict(os.environ)
     env.setdefault("CMAKE_BUILD_PARALLEL_LEVEL", str(max(2, (os.cpu_count() or 4) // count)))
     return env
+
+
+def loop_session_flags(args) -> list[str]:
+    """`--model` / `--effort` of a loop session, unless the arguments after `--` name them."""
+    flags = []
+    if args.model and "--model" not in args.rest:
+        flags += ["--model", args.model]
+    if args.effort and "--effort" not in args.rest:
+        flags += ["--effort", args.effort]
+    return flags
 
 
 def session_name(k: int) -> str:
@@ -1106,7 +1121,9 @@ def cmd_start(layout: Layout, args) -> None:
     if sessions is None and not args.print_only:
         raise WorkerError(f"`{args.claude} agents --json` did not answer; is Claude Code installed and new enough for --bg?")
     env = build_env(layout)
+    env.pop("CLAUDE_EFFORT", None)  # the launcher's own effort must not leak into the loops
     prompt = loop_prompt(args)
+    flags = loop_session_flags(args)
     started = 0
     failed = False
     for k, path in workers:
@@ -1114,7 +1131,7 @@ def cmd_start(layout: Layout, args) -> None:
         if is_active(session):
             print(f"w{k}: already runs ({describe(session)}), left alone")
             continue
-        command = [args.claude, "--bg", "--name", session_name(k), *args.rest, prompt]
+        command = [args.claude, "--bg", "--name", session_name(k), *flags, *args.rest, prompt]
         if started and args.delay > 0:
             print(f"  waiting {args.delay} s before w{k} (the loops must not choose at the same moment)")
             if not args.print_only:
@@ -1306,6 +1323,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--loop-args", default="", help="more arguments of /todo-loop, e.g. 'models=reviewer:sonnet'")
     p.add_argument("--report-to", help="the session (a name of `claude agents`) every loop sends its reports to (`report-to=` of /todo-loop)")
     p.add_argument("--delay", type=int, default=DEFAULT_DELAY_S, help=f"seconds between two starts (default {DEFAULT_DELAY_S})")
+    p.add_argument("--model", default=DEFAULT_LOOP_MODEL, help=f"the model of the loop sessions (default {DEFAULT_LOOP_MODEL}; '' leaves Claude Code's default)")
+    p.add_argument("--effort", default=DEFAULT_LOOP_EFFORT, help=f"the effort of the loop sessions (default {DEFAULT_LOOP_EFFORT}; '' leaves Claude Code's default)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--print", dest="print_only", action="store_true", help="only print the commands")
     p = sub.add_parser("merge", help="merge the branch of an entry in review into its base, close the entry, delete the branch (the quick merge of the VS Code panel)")

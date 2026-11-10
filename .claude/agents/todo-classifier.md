@@ -2,6 +2,7 @@
 name: todo-classifier
 description: Picks the next entry of the todo store that the todo-loop skill can work on without the owner, and says why it skips the others. Read-only; answers with JSON. Used by todo-loop only.
 model: haiku
+effort: medium
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -37,6 +38,8 @@ Estimate a size for each eligible entry:
 - `M`: several files in one or two areas, tests and docs.
 - `L`: a stage of a plan, or several modules.
 
+Also a **`level`** for each eligible entry, by the same words as the architect's level of a WP (`todo-architect.md`, "Level of a WP"): `light` (docs, strings, config, a rename, a test), `normal` (ordinary code with its tests), `deep` (a rule or algorithm a test may miss, an engine core change, concurrency, a format). In doubt, `normal`. For size S it chooses the model of the developer and the reviewer.
+
 Do not guess when the entry is vague: `skip` with `needs detail`. Do not read source code beyond a quick `grep` to confirm that the place named in `**Where:**` exists.
 
 ## Answer
@@ -47,10 +50,10 @@ Only a JSON object, no text around it:
 {
   "next": "<id of the first eligible candidate, or null>",
   "entries": [
-    {"area": "<area>", "id": "no-ci", "verdict": "eligible", "size": "M", "touches": ["CMakeLists.txt", "cmake/BagiEngine.cmake"], "reason": "one line"},
+    {"area": "<area>", "id": "no-ci", "verdict": "eligible", "size": "M", "level": "normal", "touches": ["CMakeLists.txt", "cmake/BagiEngine.cmake"], "reason": "one line"},
     {"area": "<area>", "id": "renderer-backends", "verdict": "skip", "size": null, "reason": "owner decision: the entry waits for the choice of backends"}
   ]
 }
 ```
 
-`next` is the first `eligible` entry in the order you were given (a candidate is named by `area` and `id`). List every candidate. `touches` is there for every `eligible` entry (and only for those).
+`next` is the first `eligible` entry in the order you were given (a candidate is named by `area` and `id`). List every candidate. `touches` and `level` are there for every `eligible` entry (and only for those).
