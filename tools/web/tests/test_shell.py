@@ -174,6 +174,20 @@ class ShellScriptTest(unittest.TestCase):
         self.assertLess(self.script.index("if (!hasWebGL())"), self.script.index("window.Module"))
         self.assertLess(self.script.index("if (!hasWebGL())"), self.script.index("document.body.appendChild(script)"))
 
+    def test_the_webgl_test_frees_its_context_and_a_failure_reloads_a_bounded_number_of_times(self):
+        self.assertIn('getExtension("WEBGL_lose_context")', self.script)
+        self.assertIn("loseContext()", self.script)
+        failure = re.search(r"if \(!hasWebGL\(\)\) \{(.*?)\n\s{12}\}", self.script, flags=re.DOTALL)
+        self.assertIsNotNone(failure)
+        block = failure.group(1)
+        # a reload only while the per-tab budget lasts, then the message; the budget is reset on success and on the message
+        self.assertIn("reloads < kWebGLReloads", block)
+        self.assertIn("window.location.reload()", block)
+        self.assertLess(block.index("window.location.reload()"), block.index("showError("))
+        self.assertIn("setWebGLReloads(0);", block)
+        self.assertRegex(self.script, r"\n\s{12}\}\n\s{12}setWebGLReloads\(0\);")
+        self.assertRegex(self.script, r"var kWebGLReloads = [1-3];")
+
     def test_the_thread_flag_placeholder_is_there_once_and_is_the_only_pair_cmake_would_replace(self):
         # configure_file(@ONLY) in be_web_generate_shell replaces every @name@; the CSS has "@supports" and must stay alone
         self.assertEqual(self.html.count("@BAGI_WEB_THREADS@"), 1)

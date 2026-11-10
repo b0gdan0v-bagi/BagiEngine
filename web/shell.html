@@ -275,22 +275,68 @@
             }
 
             // The WebGL test: a context of either version on a scratch canvas. The game's own canvas is left alone, because a
-            // canvas keeps the first kind of context it was asked for.
+            // canvas keeps the first kind of context it was asked for. The scratch context is lost on purpose at once: a phone has
+            // few contexts and little GPU memory, and a live one would sit beside the game's for the life of the page.
             function hasWebGL() {
                 try {
                     var scratch = document.createElement("canvas");
-                    return !!(scratch.getContext("webgl2") || scratch.getContext("webgl"));
+                    var gl = scratch.getContext("webgl2") || scratch.getContext("webgl");
+                    if (!gl) {
+                        return false;
+                    }
+                    var lose = gl.getExtension("WEBGL_lose_context");
+                    if (lose) {
+                        lose.loseContext();
+                    }
+                    return true;
                 } catch (error) {
                     return false;
                 }
             }
 
+            // Right after a reload a phone's browser may still hold the contexts of the page it unloaded and refuse a new one, so a
+            // failed test reloads the page itself, at most kWebGLReloads times per tab (sessionStorage, which may be missing or throw).
+            var kWebGLReloads = 2;
+            var kWebGLReloadDelayMs = 1000;
+            var webglReloadKey = "bagi.webglReloads";
+            function webglReloads() {
+                try {
+                    return parseInt(window.sessionStorage.getItem(webglReloadKey) || "0", 10) || 0;
+                } catch (error) {
+                    return kWebGLReloads;
+                }
+            }
+            function setWebGLReloads(count) {
+                try {
+                    if (count > 0) {
+                        window.sessionStorage.setItem(webglReloadKey, String(count));
+                    } else {
+                        window.sessionStorage.removeItem(webglReloadKey);
+                    }
+                } catch (error) {
+                    // no storage: no reload either (webglReloads says the budget is spent)
+                }
+            }
+
             if (!hasWebGL()) {
+                var reloads = webglReloads();
+                if (reloads < kWebGLReloads) {
+                    setWebGLReloads(reloads + 1);
+                    loadingPanel.hidden = false;
+                    setLoadingText("Waiting for the graphics ...");
+                    console.warn("No WebGL context yet; reloading the page (" + (reloads + 1) + " of " + kWebGLReloads + ")");
+                    window.setTimeout(function () {
+                        window.location.reload();
+                    }, kWebGLReloadDelayMs);
+                    return;
+                }
+                setWebGLReloads(0);
                 showError(
                     "WebGL is not available",
-                    "This game draws with WebGL, and this browser did not give it a WebGL context. Try another browser, turn on hardware acceleration in its settings, or update the browser or its graphics driver.");
+                    "This game draws with WebGL, and this browser did not give it a WebGL context. If the game ran here before, the browser may have turned WebGL off for this site after a graphics error: close every tab of the game, or restart the browser, and open it again. Otherwise try another browser, turn on hardware acceleration in its settings, or update the browser or its graphics driver.");
                 return;
             }
+            setWebGLReloads(0);
 
             // 1 in a threaded build, 0 in a single-thread one: CMake writes the number in place of the placeholder in the copy of this
             // file that emcc takes as the shell. The text itself stays a string, so this file is valid JavaScript before the copy
