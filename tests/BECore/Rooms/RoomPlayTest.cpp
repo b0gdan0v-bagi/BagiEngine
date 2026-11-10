@@ -372,4 +372,52 @@ namespace BECore::Tests {
         EXPECT_EQ(room.GetMemberCount(), 1u);
     }
 
+    namespace {
+
+        /// A game whose computer proposes an action the game itself refuses (a bug of an adapter)
+        class StubbornGame : public FakeSeatedGame {
+        public:
+            std::optional<Json> ChooseComputerAction(int seat) const override {
+                ++proposals;
+                return PlayAction(Format("c{}_0", (seat + 1) % kSeatCount));
+            }
+
+            mutable int proposals = 0;
+        };
+
+    }  // namespace
+
+    TEST(RoomPlayTest, ARefusedComputerMoveIsNotRetriedAndChangesNothing) {
+        auto game = eastl::make_shared<StubbornGame*>(nullptr);
+        SeatedGameFactory factory = [game]() -> eastl::unique_ptr<ISeatedGame> {
+            auto made = eastl::make_unique<StubbornGame>();
+            *game = made.get();
+            return made;
+        };
+        Room room("ABCDE", SeatedGameInfo{"fake", 4}, MakeSequence(5), std::move(factory), RoomTimings{std::chrono::seconds(30), std::chrono::minutes(10), std::chrono::milliseconds(0)});
+        const auto joined = room.AddMember("Ann", kNow);
+        ASSERT_TRUE(joined.has_value());
+        ASSERT_TRUE(room.Start(joined->player, kNow, FirstSeatOptions(1)).has_value());
+        const uint64_t version = room.GetGameVersion();
+        // Seat 1 is a computer and has the turn; its proposal is refused: logged, no move, no loop
+        EXPECT_FALSE(room.StepComputers(kNow));
+        EXPECT_EQ((*game)->proposals, 1);
+        EXPECT_EQ(room.GetGameVersion(), version);
+        EXPECT_EQ(room.GetPhase(), RoomPhase::Playing);
+    }
+
+    TEST(RoomPlayTest, AReturningMemberBecomesHostWhenNoConnectedHumanWasLeft) {
+        TestRoom test = MakeTestRoom(2);
+        const PlayerId a = test.members[0].player;
+        const PlayerId b = test.members[1].player;
+        ASSERT_TRUE(test.room.Start(a, kNow, FirstSeatOptions(0)).has_value());
+        ASSERT_TRUE(test.room.MarkAway(b, kNow));
+        ASSERT_TRUE(test.room.Leave(a));
+        // The host left and nobody connected was there to take over
+        EXPECT_FALSE(test.room.IsHost(a));
+        EXPECT_FALSE(test.room.IsHost(b));
+        ASSERT_TRUE(test.room.MarkReturned(b, test.members[1].token).has_value());
+        EXPECT_TRUE(test.room.IsHost(b));
+    }
+
 }  // namespace BECore::Tests

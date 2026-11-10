@@ -4,19 +4,20 @@
 
 Online play in rooms by code, with an authoritative server (the entry `network-rooms` of the todo store, slice 1 of 4). The server owns the game (`ISeatedGame`, `Games/CLAUDE.md`, "Seats"); every client is a seat and sees only what the game says that seat may see. This module is **pure code**: JSON text in, JSON text out, no sockets, no clock, no randomness of its own. A transport (a later slice) feeds it. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomsModule`; `BagiEngineTests` links it with `LINK RemoteControlModule RoomsModule RuntimeModule`).
 
-Built so far (slice 1, work package 4 of 6): the protocol, room codes and tokens, the limits and the rate limiter, and the whole life of `Room` (lobby, start, play, computers, absence and return, leaving, closing). `RoomHub` (the connection-to-room dispatcher) comes in the next work package and is not written yet; this file grows with it.
+Built so far (slice 1, work package 5 of 6): the protocol, room codes and tokens, the limits and the rate limiter, the whole life of `Room` (lobby, start, play, computers, absence and return, leaving, closing) and `RoomHub`, the dispatcher from connections and texts to rooms (see "RoomHub"). Scenario tests over the whole hub come in the last work package.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `RoomTypes.h/.cpp` | `ConnectionId`, `PlayerId`, `RoomTime` (`steady_clock::time_point`, always passed in), `RandomFn` (`uint64_t()`, injected), `MakeSecureRandom()` (`std::random_device`), `RoomPhase` (`Lobby`, `Playing`, `Finished`), `SeatKind` (`Human`, `Computer`, `Empty`) and their wire names |
-| `RoomLimits.h` | `RoomLimits::k*` (the constants of the table below) and `RoomHubSettings` (the same values as defaults, so a test overrides them) |
+| `RoomLimits.h` | `RoomLimits::k*` (the constants of the table below), `RoomTimings` (grace, abandoned timeout, computer delay) and `RoomHubSettings` (the same values as defaults, so a test overrides them; the three times are its member `timings`, handed to every room) |
 | `RoomErrors.h` | `RoomErrors::k*`, the stable error codes |
 | `RoomProtocol.h/.cpp` | `ClientMessage` (a `std::variant` of the seven client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, the builders of the server messages, `LobbySnapshot` |
 | `RoomCode.h/.cpp` | `GenerateRoomCode`, `NormalizeRoomCode`, `GenerateToken`, `IsWellFormedToken` |
 | `RateLimiter.h/.cpp` | a token bucket over `RoomTime` |
-| `Room.h/.cpp` | `Room`: members, seats, host, lobby snapshot and revision, phase, the game (start, actions, views, computers), absence and return; `RoomTimings` (see "Room lifecycle") |
+| `Room.h/.cpp` | `Room`: members, seats, host, lobby snapshot and revision, phase, the game (start, actions, views, computers), absence and return (see "Room lifecycle") |
+| `RoomHub.h/.cpp` | `RoomHub`, `HubSink`: connections, rooms by code, the message handlers, the flush by revisions (see "RoomHub") |
 
 ## Protocol
 
@@ -87,12 +88,32 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 | `MarkReturned(player, token)` | the right token takes control back **at once** (a computer move is atomic, so there is no half-made move); `bad_token` otherwise, `not_in_room` for a player that left |
 | `Leave(player)` | in a game the member is erased: the seat has no human and a computer plays it for good, the token no longer works, the host passes to the connected human of the lowest seat |
 | empty seats | computer-controlled from the start |
-| `StepComputers(now)` | at most one move per call: the first computer-controlled seat for which the game gives a `ChooseComputerAction`, sent through `PerformSeatAction`. Waits `computerDelay` (800 ms) from the start and from the last computer move; a time that goes back acts on nothing. A move the game refuses is not retried (returns false) |
+| `StepComputers(now)` | at most one move per call: the first computer-controlled seat for which the game gives a `ChooseComputerAction`, sent through `PerformSeatAction`. Waits `computerDelay` (800 ms) from the start and from the last computer move; a time that goes back acts on nothing. A move the game refuses is logged (`LOG_ERROR`) and not retried (returns false, no other seat is tried in that call) |
 | `ShouldClose(now)` | a lobby with no member; after the start no member left, or every member away for `abandonedTimeout` (10 min) or longer; one connected human keeps it open. A finished game with people present is not closed by the room (the hub decides) |
 
-`AddMember` draws a new token while one is taken, at most 16 times, then `internal_error` (a broken `RandomFn` cannot hang the server). The hub does the same for room codes (work package 5).
+`AddMember` draws a new token while one is taken, at most 16 times, then `internal_error` (a broken `RandomFn` cannot hang the server). The hub does the same for room codes (16 draws, then `internal_error`).
 
-`FindByToken(token)` compares every member's token over the whole length with no early exit (the time does not tell how much is right). `GetLobbyRevision()` grows on every change `GetLobbySnapshot()` shows (join, removal, seat change) and on nothing else, so the hub sends a `lobby` message exactly when it moved. Strings from a client are checked again in the room.
+The host matters in the lobby (only the host starts). After the start it is only shown: `MarkAway` does not move it, `Leave` passes it to the connected human of the lowest seat, and when none is connected the host is empty until a member returns, who then becomes the host (`MarkReturned`).
+
+`FindByToken(token)` compares every member's token over the whole length with no early exit (the time does not tell how much is right). `GetLobbyRevision()` grows on every change `GetLobbySnapshot()` shows (join, removal, seat change, host change, the phase, an away or a return) and on nothing else, so the hub sends a `lobby` message exactly when it moved. Strings from a client are checked again in the room.
+
+## RoomHub
+
+`RoomHub(registry, RoomHubSettings, RandomFn, HubSink)`; `HubSink {send(ConnectionId, text), close(ConnectionId, reason)}` are `std::function`s the transport provides. The transport calls `OnConnected(id, now)`, `OnMessage(id, text, now)`, `OnDisconnected(id, now)` and, regularly, `Tick(now)`. The hub reads no clock and makes no thread: **it is single-threaded and the caller serializes every call** (slice 2 posts transport events to a queue that one thread drains, like `ControlService`). A sink must not call back into the hub. A handler never throws and never trusts its input: every failure is an `error` message with a stable code (`ref` is the type of the message it answers; a message that did not parse has none).
+
+| Message | What the hub does |
+|---------|-------------------|
+| `create_room` | `already_in_room`, `unknown_game`, `too_many_rooms`, `internal_error` (no free room code in 16 draws); else a room with a new code, the sender is host on the lowest seat; `joined`, then `lobby`. The `options` are kept and handed to the game at `start` |
+| `join_room` by code and name | `unknown_room` (a failed join), `room_full`, `game_started`, `bad_name`; else `joined`, then `lobby` to everybody |
+| `join_room` by token | `bad_token` (a failed join); else the member returns: a live connection of the same member is sent `left {replaced}` and closed with reason `replaced`, then `joined`, `lobby`, `view` to the new one |
+| `choose_seat`, `start`, `action`, `leave` | `not_in_room` without a room; else the room's errors (`seat_taken`, `not_host`, `stale_action`, ...). A `stale_action` is followed by the current `view`. `leave` answers `left {left}`; the seat is freed (lobby) or played by a computer for good (game) |
+| `ping` | `pong` |
+
+- **Flush.** After every handled message, disconnect and `Tick`, the hub compares for each connection of the affected room the lobby revision and the game version (and seat) with what that connection was last sent and sends `lobby` and/or `view` only when they moved. So a no-op changes nothing on the wire and the room logic never names who gets what. **The order a client sees:** `joined` (to its owner only; it is the only message that carries the token), then `lobby`, then `view` (only after the start); `left` is last. At the start every member gets `lobby` (phase `playing`) then `view`. The outcome of an `action` is not sent: the clients learn the result from the next `view`.
+- **Disconnect.** In a lobby the member is removed (the host passes on, the lobby message goes to the rest); in a game it is marked away (`connected: false` in the lobby) and keeps the seat for the grace. A room is closed (and its code free again) when `Room::ShouldClose` says so: checked after every leave and disconnect and in `Tick`.
+- **Tick.** Closes connections that are in no room and have sent nothing for the idle timeout (`idle`; a `ping` does not count as activity for this), lets each room's computers make at most one move (`computerDelay` is the room's), closes rooms that are abandoned, and closes a finished room (members get `left {room_finished}`, stay connected, in no room) once it has been finished for `abandonedTimeout`. A finished room with people in it is not closed sooner, so they can read the end.
+- **Limits** (`RoomHubSettings`): `rate_limited` is the answer to a message over the token bucket of the connection, and after `maxRateLimitedInRow` in a row the connection is closed (`rate_limited`); a code or token that cannot exist counts as a failed join like an unknown code or a wrong token, `maxFailedJoinsInRow` in a row close the connection (`too_many_failed_joins`; a successful join resets the count); a connection over `maxConnections` is closed on arrival (`server_full`); the size limit is checked by the parser first. A close is reported through `sink.close` and the connection is forgotten at once, so the later `OnDisconnected` is ignored.
+- **When a computer takes over an absent seat** (decision of the review of WP 4): the lobby revision does not move on time alone, and the hub sends nothing extra at the end of the grace. The clients already know the seat's player is gone (`connected: false` since the drop) and learn that a computer plays it from the next `view`, which the computer's move produces. A message of its own would need a new field of the protocol; it can be added with the Mahjong screens if they need it.
 
 ## Room codes and tokens
 
@@ -101,7 +122,7 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 
 ## Limits
 
-Constants in `RoomLimits.h`; `RoomHubSettings` repeats them as defaults for the hub (WP 5), so a test can use small ones.
+Constants in `RoomLimits.h`; `RoomHubSettings` repeats them as defaults for the hub, so a test can use small ones.
 
 | Limit | Value |
 |-------|-------|
@@ -120,4 +141,4 @@ Constants in `RoomLimits.h`; `RoomHubSettings` repeats them as defaults for the 
 
 ## Tests
 
-`tests/BECore/Rooms/`: `RoomProtocolTest.cpp` (every message parses and round-trips, a table of malformed input with the code each must give, names, the builders), `RoomCodeTest.cpp`, `RateLimiterTest.cpp`, `RoomLobbyTest.cpp` (members, seats, host handover, revision, tokens), `RoomPlayTest.cpp` (start, actions, absence and return, computers and their delay, leaving, closing; every view is checked with `ExpectNoLeak`), `TestRandom.h` (`MakeSequence`, the shared deterministic `RandomFn`), and from WP 1 `FakeSeatedGame.*` and `SeatedGameTest.cpp` (`Games/CLAUDE.md`). Time and randomness are injected, so no test sleeps.
+`tests/BECore/Rooms/`: `RoomProtocolTest.cpp` (every message parses and round-trips, a table of malformed input with the code each must give, names, the builders), `RoomCodeTest.cpp`, `RateLimiterTest.cpp`, `RoomLobbyTest.cpp` (members, seats, host handover, revision, tokens), `RoomPlayTest.cpp` (start, actions, absence and return, computers and their delay, leaving, closing; every view is checked with `ExpectNoLeak`), `RoomHubTest.cpp` (the hub over the fake game), `TestClient.h` (`HubHarness`: a hub with fake clients that record and parse every text, an injected clock, and the leak check done **inside the send callback against the live game of the client's room**, so a hidden hand is judged while it is still hidden; `SetFailOnLeak(false)` only counts, for the negative control), `TestRandom.h` (`MakeSequence`, the shared deterministic `RandomFn`), and from WP 1 `FakeSeatedGame.*` and `SeatedGameTest.cpp` (`Games/CLAUDE.md`). Time and randomness are injected, so no test sleeps.

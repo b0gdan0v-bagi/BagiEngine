@@ -49,6 +49,16 @@ namespace BECore {
         inline constexpr std::chrono::milliseconds kComputerDelay{800};
     }  // namespace RoomLimits
 
+    /// The times a room works with (RoomLimits by default)
+    struct RoomTimings {
+        /// A player whose connection dropped keeps the seat this long; then a computer plays it until the player returns
+        std::chrono::milliseconds reconnectGrace = RoomLimits::kReconnectGrace;
+        /// A room whose humans are all away for this long is closed
+        std::chrono::milliseconds abandonedTimeout = RoomLimits::kAbandonedTimeout;
+        /// The pause between two moves of computers
+        std::chrono::milliseconds computerDelay = RoomLimits::kComputerDelay;
+    };
+
     /// The limits one hub runs with (RoomLimits by default)
     struct RoomHubSettings {
         size_t maxMessageBytes = RoomLimits::kMaxMessageBytes;
@@ -59,9 +69,8 @@ namespace BECore {
         int maxRateLimitedInRow = RoomLimits::kMaxRateLimitedInRow;
         int maxFailedJoinsInRow = RoomLimits::kMaxFailedJoinsInRow;
         std::chrono::milliseconds idleTimeout = RoomLimits::kIdleTimeout;
-        std::chrono::milliseconds reconnectGrace = RoomLimits::kReconnectGrace;
-        std::chrono::milliseconds abandonedTimeout = RoomLimits::kAbandonedTimeout;
-        std::chrono::milliseconds computerDelay = RoomLimits::kComputerDelay;
+        /// The times of every room of the hub
+        RoomTimings timings;
     };
 
 }  // namespace BECore

@@ -229,6 +229,9 @@ namespace BECore {
         }
         if (!member->connected) {
             member->connected = true;
+            if (_host == 0) {
+                PassHost();
+            }
             BumpLobbyRevision();
         }
         return {};
@@ -258,7 +261,8 @@ namespace BECore {
             if (!action) {
                 continue;
             }
-            if (!_game->PerformSeatAction(seat, *action)) {
+            if (auto performed = _game->PerformSeatAction(seat, *action); !performed) {
+                LOG_ERROR(Format("Room {}: the game refused the computer's action for seat {}: {} ({})", _code.c_str(), seat, performed.error().code.c_str(), performed.error().message.c_str()));
                 return false;
             }
             _lastComputerMove = now;

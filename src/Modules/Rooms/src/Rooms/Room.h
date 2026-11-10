@@ -15,16 +15,6 @@ namespace BECore {
         int seat = 0;
     };
 
-    /// The times a room works with (the same three as in RoomHubSettings)
-    struct RoomTimings {
-        /// A player whose connection dropped keeps the seat this long; then a computer plays it until the player returns
-        std::chrono::milliseconds reconnectGrace = RoomLimits::kReconnectGrace;
-        /// A room whose humans are all away for this long is closed
-        std::chrono::milliseconds abandonedTimeout = RoomLimits::kAbandonedTimeout;
-        /// The pause between two moves of computers
-        std::chrono::milliseconds computerDelay = RoomLimits::kComputerDelay;
-    };
-
     /**
      * @brief One room: who sits where, who hosts, and where the room is in its life.
      *
@@ -91,7 +81,8 @@ namespace BECore {
         /// for an unknown player or in the lobby. The seat is kept for the grace, then a computer plays it.
         bool MarkAway(PlayerId player, RoomTime now);
 
-        /// The member returns with its token: control of the seat comes back at once. `not_in_room`, `bad_token`.
+        /// The member returns with its token: control of the seat comes back at once. When no connected human was left to host, the
+        /// returning member becomes the host. `not_in_room`, `bad_token`.
         [[nodiscard]] std::expected<void, ControlError> MarkReturned(PlayerId player, eastl::string_view token);
 
         /// True when a computer plays @p seat now: nobody holds it, or its player has been away for the grace or longer. Never in the lobby.
@@ -101,7 +92,8 @@ namespace BECore {
          * @brief Makes one move for a computer-controlled seat, if the game wants one and the delay has passed.
          *
          * The delay counts from the start and from the last computer move. The move goes through ISeatedGame::PerformSeatAction, like a
-         * person's, and is atomic. A computer choice that the game refuses is not retried (no move, false), so a bug cannot loop.
+         * person's, and is atomic. A computer choice that the game refuses is logged as an error and not retried in this call (the
+         * call gives false and tries no other seat), so a misbehaving game cannot loop.
          *
          * @return whether a move was made
          */
