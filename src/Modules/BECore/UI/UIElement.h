@@ -124,6 +124,16 @@ namespace BECore {
          */
         void DrawBox(IRenderer& renderer, const UIBoxStyle& boxStyle, const Color& fill, const Color& gradientEnd);
 
+        /// `DrawBox` for any rect: draws the box in @p area instead of `rect` (a part of a control). `DrawBox` is this call with `rect`
+        void DrawBoxIn(IRenderer& renderer, const Rect& area, const UIBoxStyle& boxStyle, const Color& fill, const Color& gradientEnd);
+
+        /**
+         * Draws one part of a control (a track, a fill, a thumb) in @p area with @p fill. `Square` is the plain `DrawFilledRect` of the part, the call the control always made.
+         * `Round` is a box whose only setting is a corner radius of half the shorter side: a pill for a track, a circle for a square thumb. A part shorter than the track is a
+         * smaller pill (the fill of a progress bar at 2 % is a short capsule, not a track-high slice), which is accepted. Nothing for an empty @p area in the round shape.
+         */
+        void DrawPart(IRenderer& renderer, const Rect& area, const Color& fill, UIPartShape shape);
+
     private:
         // The triangles of DrawBox, kept so that a steady frame allocates nothing
         eastl::vector<GeometryVertex> _boxVertices;

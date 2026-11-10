@@ -12,6 +12,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIPartShapeChecks.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <gtest/gtest.h>
@@ -647,6 +648,112 @@ namespace BECore::Tests {
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
         }
+    }
+
+    // ---- the shape of the parts and of the plate -----------------------------------------------------------------------------
+
+    TEST_F(UIToggleTest, ThePartsAndThePlateAreRectanglesByDefault) {
+        Draw();
+        auto& sound = Toggle("Sound");
+        EXPECT_EQ(sound.partShape, UIPartShape::Square);
+        const auto parts = UIToggle::GetParts(sound.rect);
+        EXPECT_NE(FindRect(parts.track), nullptr);
+        EXPECT_NE(FindRect(parts.thumbOff), nullptr);
+        const auto plate = CallsIn(*_renderer, DrawKind::Rect, sound.rect);
+        EXPECT_EQ(plate.size(), 3u) << "the plate, the track and the thumb";
+        EXPECT_NE(FindRect(sound.rect), nullptr) << "the plate is one rect of `color`";
+        EXPECT_TRUE(CallsIn(*_renderer, DrawKind::Geometry, sound.rect).empty());
+    }
+
+    TEST_F(UIToggleTest, ARoundToggleDrawsAPillTrackAndACircleThumb) {
+        auto& sound = Toggle("Sound");
+        sound.partShape = UIPartShape::Round;
+        Draw();
+        const auto parts = UIToggle::GetParts(sound.rect);
+        EXPECT_EQ(FindRect(parts.track), nullptr);
+        EXPECT_EQ(FindRect(parts.thumbOff), nullptr);
+        EXPECT_NE(FindRect(sound.rect), nullptr) << "the plate stays a rect";
+
+        const auto drawn = CallsIn(*_renderer, DrawKind::Geometry, sound.rect);
+        ASSERT_EQ(drawn.size(), 2u) << "the track and the thumb";
+        ExpectRoundPart(drawn[0], parts.track);
+        ExpectRoundPart(drawn[1], parts.thumbOff);
+
+        SetVar("soundOn", "true");
+        Draw();
+        const auto drawnOn = CallsIn(*_renderer, DrawKind::Geometry, sound.rect);
+        ASSERT_EQ(drawnOn.size(), 2u);
+        ExpectRoundPart(drawnOn[1], parts.thumbOn);
+    }
+
+    TEST_F(UIToggleTest, TheOwnPlateIsABoxLikeEveryOtherElement) {
+        auto& sound = Toggle("Sound");
+        sound.box.cornerRadius = UICorners::Uniform(12.0f);
+        Draw();
+        EXPECT_EQ(FindRect(sound.rect), nullptr) << "a rounded plate is not the plain rect";
+        const auto geometry = CallsIn(*_renderer, DrawKind::Geometry, sound.rect);
+        ASSERT_EQ(geometry.size(), 1u);
+        EXPECT_GE(geometry[0].rect.w, sound.rect.w - UIBoxMesh::kFeatherPixels);
+        EXPECT_GE(geometry[0].rect.h, sound.rect.h - UIBoxMesh::kFeatherPixels);
+        const auto parts = UIToggle::GetParts(sound.rect);
+        EXPECT_NE(FindRect(parts.track), nullptr) << "the switch is still drawn as it was";
+
+        sound.box = UIBoxStyle{};
+        sound.box.shadow = {0.0f, 4.0f, 6.0f, 0.0f, Color{0, 0, 0, 120}};
+        Draw();
+        const Rect withShadow{sound.rect.x - 20.0f, sound.rect.y - 20.0f, sound.rect.w + 40.0f, sound.rect.h + 40.0f};
+        EXPECT_EQ(CallsIn(*_renderer, DrawKind::Geometry, withShadow).size(), 1u) << "a shadow alone makes it a box too";
+    }
+
+    TEST_F(UIToggleTest, ADisabledPlateIsHalfAsOpaqueAndSoIsItsGradientEnd) {
+        auto& off = Toggle("Off");
+        off.color = Color{30, 30, 30, 200};
+        Draw();
+        const DrawCall* plate = FindRect(off.rect);
+        ASSERT_NE(plate, nullptr);
+        EXPECT_EQ(plate->color.a, WithAlpha(Color{30, 30, 30, 200}, kDisabledAlpha).a);
+
+        off.box.gradientDirection = UIGradientDirection::Vertical;
+        off.box.gradientColor = Color{90, 90, 90, 100};
+        Draw();
+        EXPECT_EQ(FindRect(off.rect), nullptr);
+        const auto geometry = CallsIn(*_renderer, DrawKind::Geometry, off.rect);
+        ASSERT_EQ(geometry.size(), 1u);
+        uint8_t highest = 0;
+        for (const GeometryVertex& vertex : geometry[0].vertices) {
+            highest = std::max(highest, vertex.color.a);
+        }
+        EXPECT_EQ(highest, WithAlpha(Color{30, 30, 30, 200}, kDisabledAlpha).a) << "the strongest end is the halved start";
+    }
+
+    TEST_F(UIToggleTest, ThePartShapeSurvivesAnXmlRoundTripAndTheDefaultIsSkippedWhenAsked) {
+        auto element = [](const UIToggle& toggle) {
+            XmlSerializer serializer;
+            serializer.SetSkipDefaults(true);
+            EXPECT_TRUE(serializer.BeginObject("element"));
+            toggle.Serialize(serializer);
+            serializer.EndObject();
+            return serializer.SaveToString();
+        };
+        EXPECT_EQ(element(Toggle("Sound")).find("partShape"), eastl::string::npos);
+        Toggle("Sound").partShape = UIPartShape::Round;
+        EXPECT_NE(element(Toggle("Sound")).find("partShape=\"Round\""), eastl::string::npos);
+
+        XmlSerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("component"));
+        _canvas->Serialize(serializer);
+        serializer.EndObject();
+        const eastl::string xml = serializer.SaveToString();
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        auto loaded = New<UICanvasComponent>();
+        ASSERT_TRUE(deserializer.BeginObject("component"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+        loaded->Initialize();
+        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Sound"))->Cast<UIToggle>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Custom"))->Cast<UIToggle>()->partShape, UIPartShape::Square);
     }
 
 }  // namespace BECore::Tests
