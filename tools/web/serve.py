@@ -18,9 +18,16 @@ So the server decides, first match wins (the start line says which):
   2. the environment variable COOP_COEP=1 / COOP_COEP=0
   3. `"threads": true|false` in manifest.json of the root (package.py writes it; --single-thread there makes false)
   4. no manifest, or no `threads` in it: on (threaded is the default build)
+
+Access control is optional HTTP Basic: with BASIC_AUTH_USER and BASIC_AUTH_PASSWORD both set in the environment every request but
+GET /healthz needs them (401 and `WWW-Authenticate` otherwise, the isolation headers included); with neither set the server is open;
+with one only, it does not start. The secret lives in the variables of the service, never in a file of the image.
 """
 
 import argparse
+import base64
+import binascii
+import hmac
 import json
 import os
 import posixpath
@@ -38,6 +45,9 @@ DEFAULT_HOST = "0.0.0.0"
 INDEX_NAME = "index.html"
 MANIFEST_NAME = "manifest.json"
 COOP_COEP_VARIABLE = "COOP_COEP"
+BASIC_AUTH_USER_VARIABLE = "BASIC_AUTH_USER"
+BASIC_AUTH_PASSWORD_VARIABLE = "BASIC_AUTH_PASSWORD"
+BASIC_AUTH_REALM = "BagiWeb"
 HEALTH_PATH = "/healthz"
 NO_CACHE_FILES = (INDEX_NAME, MANIFEST_NAME)
 NO_CACHE = "no-cache"
@@ -131,6 +141,8 @@ class StaticHandler(BaseHTTPRequestHandler):
     root: Path
     cross_origin_isolation = False
     quiet = False
+    # b"user:password" a request must present as Basic credentials; None leaves the server open
+    basic_credentials: bytes | None = None
     protocol_version = "HTTP/1.1"
     server_version = "BagiWebServe"
     # The Server header names the program and not the Python version
@@ -155,7 +167,38 @@ class StaticHandler(BaseHTTPRequestHandler):
     def do_HEAD(self):
         self.serve(send_body=False)
 
+    def authorized(self) -> bool:
+        """True when the server is open or the request carries the Basic credentials. The comparison takes the same time whatever
+        prefix is right."""
+        if self.basic_credentials is None:
+            return True
+        scheme, _, token = (self.headers.get("Authorization") or "").strip().partition(" ")
+        if scheme.lower() != "basic":
+            return False
+        try:
+            presented = base64.b64decode(token.strip(), validate=True)
+        except (binascii.Error, ValueError):
+            return False
+        return hmac.compare_digest(presented, self.basic_credentials)
+
+    def send_unauthorized(self, send_body: bool, close: bool = False):
+        body = b"authorization required"
+        self.send_response(HTTPStatus.UNAUTHORIZED)
+        self.send_header("WWW-Authenticate", f'Basic realm="{BASIC_AUTH_REALM}", charset="UTF-8"')
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        if close:
+            self.send_header("Connection", "close")
+        self.end_headers()
+        if send_body:
+            self.wfile.write(body)
+
     def do_unsupported(self):
+        if not self.authorized():
+            # The body of a POST is not read, as below
+            self.send_unauthorized(send_body=True, close=True)
+            return
         # The body of a POST is not read, so on a kept connection it would be parsed as the next request
         self.send_response(HTTPStatus.METHOD_NOT_ALLOWED)
         self.send_header("Allow", "GET, HEAD")
@@ -174,6 +217,9 @@ class StaticHandler(BaseHTTPRequestHandler):
         url_path = urlsplit(self.path).path
         if url_path == HEALTH_PATH:
             self.send_text(HTTPStatus.OK, "ok", send_body)
+            return
+        if not self.authorized():
+            self.send_unauthorized(send_body)
             return
         path = resolve_path(self.root, url_path)
         if path is not None and path.is_dir():
@@ -246,12 +292,14 @@ class StaticHandler(BaseHTTPRequestHandler):
 
 
 def make_server(root: Path, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, cross_origin_isolation: bool = False,
-                quiet: bool = False) -> ThreadingHTTPServer:
-    """A server for `root`; port 0 takes a free one (server.server_address[1]). The caller runs serve_forever() and shutdown()."""
+                quiet: bool = False, basic_auth: tuple[str, str] | None = None) -> ThreadingHTTPServer:
+    """A server for `root`; port 0 takes a free one (server.server_address[1]). `basic_auth` is (user, password) or None for an open
+    server. The caller runs serve_forever() and shutdown()."""
     handler = type("Handler", (StaticHandler,), {
         "root": root.resolve(),
         "cross_origin_isolation": cross_origin_isolation,
         "quiet": quiet,
+        "basic_credentials": f"{basic_auth[0]}:{basic_auth[1]}".encode("utf-8") if basic_auth else None,
     })
     server = ThreadingHTTPServer((host, port), handler)
     server.daemon_threads = True
@@ -266,6 +314,20 @@ def env_flag(environ, name: str) -> bool | None:
     if value in ("0", "false", "no", "off"):
         return False
     return None
+
+
+def basic_auth_from(environ, error) -> tuple[str, str] | None:
+    """(user, password) from BASIC_AUTH_USER and BASIC_AUTH_PASSWORD, None when neither is set. `error(message)` is called (and does not
+    return) for one without the other, an empty one, or a user with a colon, which a browser cannot send."""
+    user = environ.get(BASIC_AUTH_USER_VARIABLE, "")
+    password = environ.get(BASIC_AUTH_PASSWORD_VARIABLE, "")
+    if not user and not password:
+        return None
+    if not user or not password:
+        error(f"{BASIC_AUTH_USER_VARIABLE} and {BASIC_AUTH_PASSWORD_VARIABLE} must be set together and not empty")
+    if ":" in user:
+        error(f"{BASIC_AUTH_USER_VARIABLE} must not contain a colon")
+    return user, password
 
 
 def manifest_threads(root: Path) -> bool | None:
@@ -305,6 +367,7 @@ def parse_args(argv: list[str] | None = None, environ=None) -> argparse.Namespac
                            help="do not send them (also COOP_COEP=0): a threaded page then shows its message instead of starting")
     parser.add_argument("--quiet", action="store_true", help="no access log")
     args = parser.parse_args(argv)
+    args.basic_auth = basic_auth_from(environ, parser.error)
     args.isolation_source = None
     if args.cross_origin_isolation is not None:
         args.isolation_source = "--cross-origin-isolation" if args.cross_origin_isolation else "--no-cross-origin-isolation"
@@ -321,9 +384,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"serve.py: {args.root} is not a folder", file=sys.stderr)
         return 1
     isolation, reason = decide_cross_origin_isolation(args.cross_origin_isolation, args.isolation_source, args.root)
-    server = make_server(args.root, args.host, args.port, isolation, args.quiet)
+    server = make_server(args.root, args.host, args.port, isolation, args.quiet, args.basic_auth)
+    # The password is never printed
+    access = "password required" if args.basic_auth else "open"
     print(f"serve.py: {args.root} on http://{args.host}:{server.server_address[1]} "
-          f"(cross-origin isolation {'on' if isolation else 'off'}: {reason})", flush=True)
+          f"(cross-origin isolation {'on' if isolation else 'off'}: {reason}; access: {access})", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -2,6 +2,7 @@
 Run: python -m unittest discover tools/web/tests"""
 
 import ast
+import base64
 import contextlib
 import gzip
 import http.client
@@ -36,6 +37,7 @@ class ServerTestCase(unittest.TestCase):
 
     brotli = FakeBrotli
     cross_origin_isolation = False
+    basic_auth = None
 
     def setUp(self):
         self._temp = tempfile.TemporaryDirectory()
@@ -44,7 +46,8 @@ class ServerTestCase(unittest.TestCase):
         self.dist = root / "dist"
         package.package(write_build_output(root / "build"), self.dist, brotli_module=self.brotli)
         (root / "secret.txt").write_text("outside the served folder", encoding="utf-8")
-        self.server = serve.make_server(self.dist, "127.0.0.1", 0, self.cross_origin_isolation, quiet=True)
+        self.server = serve.make_server(self.dist, "127.0.0.1", 0, self.cross_origin_isolation, quiet=True,
+                                   basic_auth=self.basic_auth)
         self.port = self.server.server_address[1]
         thread = threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
@@ -299,6 +302,64 @@ class CrossOriginIsolationOnTest(ServerTestCase):
         self.assertEqual(response.headers["cross-origin-embedder-policy"], "require-corp")
 
 
+def basic(user: str, password: str) -> dict:
+    return {"Authorization": "Basic " + base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")}
+
+
+class BasicAuthTest(ServerTestCase):
+    cross_origin_isolation = True
+    basic_auth = ("tester", "s3cret: pa\u00dfword")
+
+    def test_a_request_without_credentials_is_401_with_a_challenge(self):
+        for path, method in (("/", "GET"), (f"/{GAME}.wasm", "GET"), ("/index.html", "HEAD"), ("/nothing", "GET"), ("/manifest.json", "GET")):
+            with self.subTest(path=path, method=method):
+                response = self.request(path, method=method)
+                self.assertEqual(response.status, 401)
+                self.assertTrue(response.headers["www-authenticate"].startswith("Basic realm="))
+                self.assertEqual(response.body, b"" if method == "HEAD" else b"authorization required")
+
+    def test_wrong_credentials_are_401(self):
+        for headers in (basic("tester", "wrong"), basic("other", self.basic_auth[1]), basic("tester", ""),
+                        {"Authorization": "Basic not base64!"}, {"Authorization": "Bearer abc"}, {"Authorization": "Basic"}):
+            with self.subTest(headers=headers):
+                self.assertEqual(self.request("/", headers=headers).status, 401)
+
+    def test_the_right_credentials_get_the_file_and_every_other_answer(self):
+        headers = basic(*self.basic_auth)
+        self.assertEqual(self.request("/", headers=headers).status, 200)
+        self.assertEqual(self.request(f"/{GAME}.wasm", headers=headers).status, 200)
+        self.assertEqual(self.request("/nothing", headers=headers).status, 404)
+        etag = self.request("/index.html", headers=headers).headers["etag"]
+        self.assertEqual(self.request("/index.html", headers={**headers, "If-None-Match": etag}).status, 304)
+
+    def test_the_scheme_is_case_insensitive(self):
+        headers = {"Authorization": basic(*self.basic_auth)["Authorization"].replace("Basic", "basic")}
+        self.assertEqual(self.request("/", headers=headers).status, 200)
+
+    def test_healthz_stays_open_for_the_health_check(self):
+        response = self.request("/healthz")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.body, b"ok")
+
+    def test_the_401_carries_the_isolation_headers_too(self):
+        headers = self.request("/").headers
+        self.assertEqual(headers["cross-origin-opener-policy"], "same-origin")
+        self.assertEqual(headers["cross-origin-embedder-policy"], "require-corp")
+
+    def test_other_methods_need_the_credentials_too_and_a_401_closes_the_connection(self):
+        response = self.request("/index.html", method="POST")
+        self.assertEqual(response.status, 401)
+        self.assertEqual(response.headers["connection"], "close")
+        self.assertEqual(self.request("/index.html", method="POST", headers=basic(*self.basic_auth)).status, 405)
+
+
+class BasicAuthOffTest(ServerTestCase):
+    def test_an_open_server_never_asks(self):
+        self.assertEqual(self.request("/").status, 200)
+        self.assertNotIn("www-authenticate", self.request("/").headers)
+        self.assertEqual(self.request("/", headers=basic("any", "thing")).status, 200)
+
+
 class IsolationDecisionTest(unittest.TestCase):
     """Who decides on the two headers: a switch, then COOP_COEP, then manifest.json's `threads`, then on."""
 
@@ -408,7 +469,8 @@ class ServedHeadersFollowTheManifestTest(unittest.TestCase):
             connection.close()
 
     def environment(self, **extra) -> dict:
-        environment = {name: value for name, value in os.environ.items() if name != "COOP_COEP"}
+        environment = {name: value for name, value in os.environ.items()
+                       if name not in ("COOP_COEP", serve.BASIC_AUTH_USER_VARIABLE, serve.BASIC_AUTH_PASSWORD_VARIABLE)}
         environment["PORT"] = "0"
         environment.update(extra)
         return environment
@@ -457,6 +519,21 @@ class ServedHeadersFollowTheManifestTest(unittest.TestCase):
         self.assertIn("cross-origin isolation off", line)
         self.assertNotIn("cross-origin-embedder-policy", self.request(port, "/").headers)
 
+    def test_the_image_command_asks_for_the_password_when_the_variables_are_set_and_never_prints_it(self):
+        service = self.make_service(threads=True)
+        environment = self.environment(BASIC_AUTH_USER="tester", BASIC_AUTH_PASSWORD="hunter22")
+        port, line = self.start(service, self.docker_arguments(), environment)
+        self.assertIn("password required", line)
+        self.assertNotIn("hunter22", line)
+        self.assertEqual(self.request(port, "/").status, 401)
+        self.assertEqual(self.request(port, "/", basic("tester", "hunter22")).status, 200)
+        self.assertEqual(self.request(port, "/healthz").status, 200)
+
+    def test_without_the_variables_the_start_line_says_open(self):
+        port, line = self.start(self.make_service(threads=True), self.docker_arguments(), self.environment())
+        self.assertIn("access: open", line)
+        self.assertEqual(self.request(port, "/").status, 200)
+
     def test_the_variable_turns_them_off_too(self):
         service = self.make_service(threads=True)
         port, line = self.start(service, self.docker_arguments(), self.environment(COOP_COEP="0"))
@@ -483,6 +560,16 @@ class ArgumentsTest(unittest.TestCase):
         args = serve.parse_args([], environ={})
         self.assertEqual(args.root, Path("dist"))
         self.assertEqual(args.host, "0.0.0.0")
+
+    def test_basic_auth_comes_from_the_two_variables_or_is_none(self):
+        self.assertIsNone(serve.parse_args([], environ={}).basic_auth)
+        self.assertIsNone(serve.parse_args([], environ={"BASIC_AUTH_USER": "", "BASIC_AUTH_PASSWORD": ""}).basic_auth)
+        self.assertEqual(serve.parse_args([], environ={"BASIC_AUTH_USER": "a", "BASIC_AUTH_PASSWORD": "b:c"}).basic_auth, ("a", "b:c"))
+
+    def test_one_variable_without_the_other_or_a_user_with_a_colon_does_not_start(self):
+        for environ in ({"BASIC_AUTH_USER": "a"}, {"BASIC_AUTH_PASSWORD": "b"}, {"BASIC_AUTH_USER": "a:b", "BASIC_AUTH_PASSWORD": "c"}):
+            with self.subTest(environ=environ), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                serve.parse_args([], environ=environ)
 
     def test_accept_encoding_parsing(self):
         self.assertEqual(serve.accepted_encodings(None), set())
