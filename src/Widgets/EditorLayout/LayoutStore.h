@@ -19,6 +19,10 @@ namespace BECore {
     /// name (CON, PRN, AUX, NUL, COM1..9, LPT1..9, in any case). No dot or slash: a name cannot leave the folder.
     [[nodiscard]] bool IsValidLayoutName(eastl::string_view name);
 
+    /// True when @p text has the section of the dock tree (`[Docking][Data]`) that SaveIniSettingsToMemory writes. ImGui never
+    /// reports a bad ini and clears the dock tree before it reads one, so the editor loads only a text that passes this.
+    [[nodiscard]] bool LooksLikeLayoutText(eastl::string_view text);
+
     /**
      * @brief Named dock layouts, one file `<user folder>/layouts/<name>.ini` each.
      *

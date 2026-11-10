@@ -59,6 +59,13 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsValidLayoutName(eastl::string(kMaxLayoutNameLength + 1, 'x')));
     }
 
+    TEST_F(LayoutStoreTest, LooksLikeLayoutTextNeedsTheDockTree) {
+        EXPECT_TRUE(LooksLikeLayoutText("[Window][Viewport]\nPos=1,2\n\n[Docking][Data]\nDockSpace ID=0x1\n"));
+        EXPECT_FALSE(LooksLikeLayoutText(""));
+        EXPECT_FALSE(LooksLikeLayoutText("garbage"));
+        EXPECT_FALSE(LooksLikeLayoutText("[Window][Viewport]\nPos=1,2\n"));
+    }
+
     TEST_F(LayoutStoreTest, SaveAndLoadRoundTrip) {
         LayoutStore store(_directory);
         const eastl::string text = "[Window][Viewport]\nPos=1,2\nSize=300,200\n\n[Docking][Data]\n";

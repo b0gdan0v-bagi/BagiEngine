@@ -51,6 +51,11 @@ namespace BECore {
         return std::ranges::all_of(name, IsNameChar) && !IsDeviceName(name);
     }
 
+    bool LooksLikeLayoutText(eastl::string_view text) {
+        constexpr eastl::string_view kDockingSection = "[Docking][";
+        return text.find(kDockingSection) != eastl::string_view::npos;
+    }
+
     LayoutStore::LayoutStore(std::filesystem::path userDirectory) : _folder(std::move(userDirectory) / ToPath(kLayoutsFolderName)) {}
 
     std::filesystem::path LayoutStore::PathOf(eastl::string_view name) const {
