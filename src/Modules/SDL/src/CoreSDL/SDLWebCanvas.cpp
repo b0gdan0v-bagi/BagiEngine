@@ -80,10 +80,11 @@ namespace BECore {
                     window.bagiSafeAreaProbe = probe;
                 }
                 var style = window.getComputedStyle(probe);
-                var sides = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'];
-                for (var i = 0; i < sides.length; ++i) {
-                    HEAPF64[($0 >> 3) + i] = parseFloat(style[sides[i]]);
-                }
+                var base = $0 >> 3;
+                HEAPF64[base] = parseFloat(style.paddingTop);
+                HEAPF64[base + 1] = parseFloat(style.paddingRight);
+                HEAPF64[base + 2] = parseFloat(style.paddingBottom);
+                HEAPF64[base + 3] = parseFloat(style.paddingLeft);
             }, out);
         }
 
