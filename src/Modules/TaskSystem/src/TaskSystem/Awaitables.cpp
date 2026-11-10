@@ -45,16 +45,38 @@ namespace BECore {
     // YieldAwaiter
     // =================================================================
 
-    void YieldAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
-        auto& taskManager = TaskManager::GetInstance();
-        auto* scheduler = taskManager.GetScheduler();
+    namespace {
 
-        if (scheduler) {
-            // Планируем продолжение в том же типе потока
-            ThreadType threadType = taskManager.IsMainThread() ? ThreadType::MainThread : ThreadType::Background;
+        /// The continuation of a yielded coroutine goes through TaskScheduler::ScheduleYielded: the cooperative
+        /// queue for a background job of a single-thread build, otherwise the queue of its own thread type.
+        void ScheduleYield(std::coroutine_handle<> handle) noexcept {
+            auto& taskManager = TaskManager::GetInstance();
+            auto* scheduler = taskManager.GetScheduler();
 
-            scheduler->Schedule([handle]() mutable { handle.resume(); }, TaskPriority::Low, threadType);
+            if (scheduler) {
+                // The thread type follows the caller: the main thread is the only one in a single-thread build
+                ThreadType threadType = taskManager.IsMainThread() ? ThreadType::MainThread : ThreadType::Background;
+
+                scheduler->ScheduleYielded([handle]() mutable { handle.resume(); }, threadType);
+            }
         }
+
+    }  // namespace
+
+    void YieldAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
+        ScheduleYield(handle);
+    }
+
+    // =================================================================
+    // YieldIfNeededAwaiter
+    // =================================================================
+
+    bool YieldIfNeededAwaiter::await_ready() const noexcept {
+        return !TaskManager::GetInstance().ShouldYield();
+    }
+
+    void YieldIfNeededAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
+        ScheduleYield(handle);
     }
 
 }  // namespace BECore
