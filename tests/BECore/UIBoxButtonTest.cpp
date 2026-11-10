@@ -109,7 +109,8 @@ namespace BECore::Tests {
         ExpectColor(look.fill, ShiftColor(kFill, -kPressDarken), "fill");
         ExpectColor(look.gradientEnd, ShiftColor(kEnd, -kPressDarken), "gradient end");
         ExpectColor(look.box.borderColor, ShiftColor(kBorder, -kPressDarken), "border");
-        EXPECT_FLOAT_EQ(look.box.shadow.offsetY, 4.0f * (1.0f + UIButton::kPressShadowShift));
+        EXPECT_FLOAT_EQ(look.box.shadow.offsetY, 4.0f * UIButton::kPressShadowOffsetScale);
+        EXPECT_FLOAT_EQ(look.box.shadow.offsetY, 2.0f) << "half the offset, so the shadow is nearer";
         EXPECT_FLOAT_EQ(look.box.shadow.blur, 12.0f * UIButton::kPressShadowBlurScale);
         EXPECT_FLOAT_EQ(look.box.shadow.blur, 8.0f) << "a third less blur";
         EXPECT_EQ(look.box.highlight.a, 0) << "the highlight is dropped";

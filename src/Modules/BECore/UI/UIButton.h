@@ -23,7 +23,7 @@ namespace BECore {
      * The state shows in the shape too when the button has a box style (`UIElement::box`; a button with the default one is drawn exactly as above and nothing below applies).
      * `GetCurrentBox` is the one place that decides it:
      * - hover lightens the fill (both gradient ends) by `kHoverBrighten` and the border colour by the same shift;
-     * - pressed darkens the fill and the border by `kPressDarken`, moves the shadow down by `kPressShadowShift` of its offset, shrinks its blur to `kPressShadowBlurScale` and drops
+     * - pressed darkens the fill and the border by `kPressDarken`, shrinks the shadow offset to `kPressShadowOffsetScale` and its blur to `kPressShadowBlurScale` and drops
      *   the highlight;
      * - selected brightens the fill as above, raises the border to `textColor` (at least `kSelectedBorderMin` units wide) and adds a glow of `textColor` when the style has none;
      *   the bar stays, inset by the two bottom radii so it does not leave the rounded corners;
@@ -49,7 +49,7 @@ namespace BECore {
         static constexpr float kSelectedBarHeight = 4.0f;
 
         /// The shifts of the box states (the colour shifts are `kHoverBrighten` and `kPressDarken`)
-        static constexpr float kPressShadowShift = 0.5f;             ///< a pressed button's shadow offset grows by this share of itself
+        static constexpr float kPressShadowOffsetScale = 0.5f;       ///< a pressed button's shadow keeps this share of its offset
         static constexpr float kPressShadowBlurScale = 2.0f / 3.0f;  ///< a pressed button's shadow keeps this share of its blur
         static constexpr float kSelectedBorderMin = 1.0f;            ///< the least width of the border of a selected button, in canvas units
         static constexpr float kSelectedGlowBlur = 6.0f;             ///< the glow added to a selected button: blur in canvas units

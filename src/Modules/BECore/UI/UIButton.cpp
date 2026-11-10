@@ -92,7 +92,7 @@ namespace BECore {
             }
             if (styled) {
                 look.box.borderColor = ShiftColor(look.box.borderColor, -kPressDarken);
-                look.box.shadow.offsetY += look.box.shadow.offsetY * kPressShadowShift;
+                look.box.shadow.offsetY *= kPressShadowOffsetScale;
                 look.box.shadow.blur *= kPressShadowBlurScale;
                 look.box.highlight = {};
             }
