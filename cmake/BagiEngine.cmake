@@ -73,6 +73,12 @@ set(SDLIMAGE_AVIF OFF CACHE BOOL "" FORCE)
 set(SDLIMAGE_VENDORED ON CACHE BOOL "" FORCE)
 set(SDLIMAGE_TESTS OFF CACHE BOOL "" FORCE)
 set(SDLIMAGE_SAMPLES OFF CACHE BOOL "" FORCE)
+if(ENGINE_TARGET_WEB)
+    # The page downloads what it is built from, so the formats no game of ours ships stay out: PNG, JPEG, GIF, QOI and XPM are SDL_image's
+    # own small decoders (stb_image), while TIFF and WebP are vendored libraries (libtiff, libwebp) of a few hundred KB of wasm
+    set(SDLIMAGE_TIF OFF CACHE BOOL "" FORCE)
+    set(SDLIMAGE_WEBP OFF CACHE BOOL "" FORCE)
+endif()
 if(ENGINE_STATIC_SDL)
     # SDL_image follows BUILD_SHARED_LIBS (its own cmake_dependent_option keeps a cache value that is set)
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build the library as a shared library" FORCE)

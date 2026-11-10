@@ -43,7 +43,7 @@ with an idle animation, a fade-in that is not over by then or a cursor that blin
 0.5 s apart, so a blink short enough to fall between two shots is not seen, and a change slower than the whole window is not seen
 and can pass for the click's; raise --settle for a start that is slow). The screenshots are decoded by
 tools/control/tests/png_reader.py (imported from there, not copied), in plain Python: keep the viewport small.
-Verified against a real Chromium and Edge with --selftest and every --selftest-fault (WP 6 of slice 2 of the entry web-build).
+Run against a real Chromium and Edge with --selftest and every --selftest-fault, and against the page of BagiMatch3 (tools/web/CLAUDE.md).
 """
 
 import argparse
@@ -148,6 +148,7 @@ class BrowserRun:
     page_errors: list[str] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)  # found while running (no canvas, no click point inside it, ...)
     page_info: PageInfo | None = None  # read after the first frame (check 5 and the report)
+    early_info: PageInfo | None = None  # read as soon as the canvas is visible: the report when the game never draws (sizes are not final)
     check_canvas_size: bool = False  # check 5 applies (not to the selftest page)
     touch: bool = False  # the click of check 3 was a tap
 
@@ -187,7 +188,7 @@ def parse_size(text: str) -> tuple[int, int]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Open a web build in headless Chromium and check that it starts and answers a click.")
+    parser = argparse.ArgumentParser(description="Open a web build in a headless Chromium-based browser (Chromium, Edge) and check that it starts and answers a click or a tap.")
     parser.add_argument("--dist", type=Path, help="folder made by tools/web/package.py (holds index.html)")
     parser.add_argument("--selftest", action="store_true", help="serve a generated page instead of a build, to test this script")
     parser.add_argument("--selftest-fault", choices=SELFTEST_FAULTS, default="none",
@@ -323,10 +324,16 @@ def evaluate(run: BrowserRun, allow_console: list[str] | None = None, expect_con
     for pattern in unmatched_patterns(run.console, expect_console or []):
         problems.append(f"(4) no console message matched --expect-console '{pattern}'")
 
-    if run.check_canvas_size and run.page_info is not None:
-        problem = canvas_size_problem(run.page_info)
-        if problem:
-            problems.append(problem)
+    # A first frame was drawn, so the page is there and its sizes are final: for a real build the page not being readable is a failure,
+    # because a pass would claim a canvas size nobody looked at
+    drawn = first is not None and not is_flat(first)
+    if run.check_canvas_size and drawn:
+        if run.page_info is None:
+            problems.append("(5) the page could not be read, so the canvas size was not checked")
+        else:
+            problem = canvas_size_problem(run.page_info)
+            if problem:
+                problems.append(problem)
     return problems
 
 
@@ -490,8 +497,8 @@ def launch_browser(playwright, options: Options):
     return playwright.chromium.launch(headless=True, args=args)
 
 
-def unmatched_expectations_wait(page, run: BrowserRun, patterns: list[str], timeout: float,
-                                now: Callable[[], float] = time.monotonic) -> None:
+def wait_for_expected_console(page, run: BrowserRun, patterns: list[str], timeout: float,
+                              now: Callable[[], float] = time.monotonic) -> None:
     """Waits (with the page's timer, which handles the console events) until every pattern has matched a console message or
     `timeout` seconds are gone."""
     deadline = now() + timeout
@@ -542,6 +549,10 @@ def run_browser(playwright_api, url: str, options: Options) -> BrowserRun:
                 run.problems.append(f"(2) no visible {CANVAS_SELECTOR} within {options.timeout:g} s: {str(error).splitlines()[0]}")
                 return run
 
+            # The isolation and SharedArrayBuffer of the page do not depend on the game starting: a threaded page served without the
+            # headers never draws, and this is the only reading that run gets
+            run.early_info = read_page_info(page)
+
             # The polls wait with the page's own timer: the sync API handles the console and pageerror events only inside its calls
             sleep = lambda seconds: page.wait_for_timeout(seconds * 1000)  # noqa: E731
             run.first_png, drawn = poll(canvas.screenshot, png_is_drawn, options.timeout, sleep=sleep)
@@ -549,7 +560,7 @@ def run_browser(playwright_api, url: str, options: Options) -> BrowserRun:
                 return run  # evaluate() reports the flat or unreadable first frame
             run.page_info = read_page_info(page)
             if options.expect_console:
-                unmatched_expectations_wait(page, run, options.expect_console, options.timeout)
+                wait_for_expected_console(page, run, options.expect_console, options.timeout)
             page.wait_for_timeout(options.settle * 1000)
 
             box = canvas.bounding_box()
@@ -611,8 +622,14 @@ def describe_page(run: BrowserRun) -> list[str]:
     """The report lines about the page: input kind, isolation, SharedArrayBuffer, pixel ratio and canvas sizes."""
     lines = [f"input: {'touch (a tap)' if run.touch else 'mouse (a click)'}"]
     info = run.page_info
+    if info is None and run.early_info is not None:
+        early = run.early_info
+        lines.append(f"page, before the first frame: crossOriginIsolated={str(early.cross_origin_isolated).lower()}, "
+                     f"typeof SharedArrayBuffer={early.shared_array_buffer}")
+        lines.append("canvas: not read after the first frame (the run stopped before it)")
+        return lines
     if info is None:
-        lines.append("page: not read (the run stopped before the first frame)")
+        lines.append("page: not read (the page was gone before it could be read)")
         return lines
     lines.append(f"page: crossOriginIsolated={str(info.cross_origin_isolated).lower()}, typeof SharedArrayBuffer={info.shared_array_buffer}")
     lines.append(f"canvas: devicePixelRatio={info.device_pixel_ratio:g}, CSS size {info.css_width:g}x{info.css_height:g}, "
@@ -652,8 +669,6 @@ def run_smoke(options: Options, playwright_api) -> int:
     print(f"ok: (4) no console error outside the allow-list ({errors} allowed, {len(run.console)} messages{expected})")
     if not run.check_canvas_size:
         print("skip: (5) canvas size: the selftest page is not the web shell (its canvas has a fixed size)")
-    elif run.page_info is None:
-        print("skip: (5) canvas size: the page could not be read")
     else:
         info = run.page_info
         print(f"ok: (5) the backing store {info.canvas_width}x{info.canvas_height} is the CSS size {info.css_width:g}x{info.css_height:g} "

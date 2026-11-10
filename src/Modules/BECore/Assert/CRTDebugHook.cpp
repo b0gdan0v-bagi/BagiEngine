@@ -77,13 +77,12 @@ namespace BECore {
 
     // No-op for Release builds or non-Windows platforms
     void InstallCRTDebugHooks() {
-// CRT debug hooks are only available in Windows Debug builds
+// CRT debug hooks are only available in Windows Debug builds. Other platforms say nothing: the line went to stderr, which the
+// browser console shows as an error, and there is nothing to report there (a Release build on Windows keeps its line)
 #if defined(PLATFORM_WINDOWS)
         fprintf(stderr, "[CRTDebugHook] Skipped (Release build)\n");
-#else
-        fprintf(stderr, "[CRTDebugHook] Skipped (non-Windows platform)\n");
-#endif
         fflush(stderr);
+#endif
     }
 
 #endif

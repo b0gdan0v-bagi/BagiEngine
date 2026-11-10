@@ -106,7 +106,7 @@ class ShellScriptTest(unittest.TestCase):
         self.script = scripts[0]
 
     def test_the_module_object_has_the_hooks_of_the_loading_bar_and_of_the_errors(self):
-        for hook in ("canvas:", "setStatus:", "monitorRunDependencies:", "onAbort:", "print:", "printErr:"):
+        for hook in ("canvas:", "setStatus:", "monitorRunDependencies:", "onAbort:", "onExit:", "print:", "printErr:"):
             with self.subTest(hook):
                 self.assertIn(hook, self.script)
         self.assertRegex(self.script, r"window\.Module\s*=")
@@ -138,7 +138,7 @@ class ShellScriptTest(unittest.TestCase):
     def test_the_thread_flag_placeholder_is_there_once_and_is_the_only_pair_cmake_would_replace(self):
         # configure_file(@ONLY) in be_web_generate_shell replaces every @name@; the CSS has "@supports" and must stay alone
         self.assertEqual(self.html.count("@BAGI_WEB_THREADS@"), 1)
-        self.assertEqual(re.findall(r"@\w+@", self.html), ["@BAGI_WEB_THREADS@"])
+        self.assertEqual(re.findall(r"@[A-Za-z0-9_.+/-]+@", self.html), ["@BAGI_WEB_THREADS@"])
         self.assertRegex(self.script, r'var threaded = "@BAGI_WEB_THREADS@" === "1";')
 
     def test_a_threaded_page_without_cross_origin_isolation_shows_a_message_and_does_not_start_the_module(self):
@@ -163,6 +163,19 @@ class ShellScriptTest(unittest.TestCase):
 
     def test_an_error_of_the_page_shows_a_message(self):
         self.assertRegex(self.script, r'addEventListener\("error"')
+
+    def test_a_package_that_does_not_download_shows_a_message(self):
+        # emcc's loader of the .data package is an async function nobody awaits: its failure is an unhandled rejection
+        match = re.search(r'addEventListener\("unhandledrejection".*?\n\s{12}\}\);', self.script, flags=re.DOTALL)
+        self.assertIsNotNone(match, "no handler for an unhandled rejection")
+        self.assertIn("showError(", match.group(0))
+
+    def test_a_download_total_that_the_count_has_passed_does_not_drive_the_bar(self):
+        # emcc divides the decoded bytes by the Content-Length, which is the compressed size when the server sends .br / .gz
+        match = re.search(r"setStatus:\s*function.*?\n\s{16}\},", self.script, flags=re.DOTALL)
+        self.assertIsNotNone(match)
+        self.assertRegex(match.group(0), r"done > total")
+        self.assertIn("totalIsEncoded", match.group(0))
 
     def test_a_game_script_that_does_not_download_shows_a_message(self):
         self.assertIn("script.onerror", self.script)

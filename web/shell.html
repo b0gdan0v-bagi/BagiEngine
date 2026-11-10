@@ -13,11 +13,13 @@
       page shows a message and does not start the game, because a pthread wasm that finds no SharedArrayBuffer stops with a cryptic
       error. The single-thread build needs nothing and starts anyway.
     - Module.setStatus and Module.monitorRunDependencies feed the loading bar (the .data package and the wasm download);
-      Module.onAbort and the page's error event show a message when the game stops.
+      Module.onAbort, Module.onExit, the page's error event and an unhandled promise rejection (a .data package that did not
+      download) show a message when the game stops.
 
     Checked by tools/web/tests/test_shell.py (text only; check_bagi_web.cmake checks the copy CMake makes). Built with emsdk 4.0.23:
-    emcc replaces the SCRIPT placeholder and, at -O2, minifies the page (the tag#id selectors survive). Running it in a browser is the
-    job of tools/web/tests/web_smoke.py; until that has run against a build, the page is checked as text only.
+    emcc replaces the SCRIPT placeholder and, at -O2, minifies the page (the tag#id selectors survive). tools/web/tests/web_smoke.py
+    runs the built page of BagiMatch3 in Chromium and Edge (tools/web/CLAUDE.md, "The browser smoke"); the two messages above and the
+    loading bar were also looked at by hand with WebGL off, without the headers and on a throttled network.
 -->
 <html lang="en">
 <head>
@@ -241,6 +243,7 @@
             }
 
             var downloadSeen = false;
+            var totalIsEncoded = false;
             var totalDependencies = 0;
 
             // The object emcc's runtime reads (the hooks are those of the default shell of emsdk 4.x)
@@ -269,8 +272,19 @@
                         var done = parseFloat(match[2]);
                         var total = parseFloat(match[3]);
                         downloadSeen = true;
-                        setProgress(total > 0 ? done / total : null);
-                        setLoadingText(match[1] + " " + megabytes(done) + " / " + megabytes(total) + " MB");
+                        // emcc divides the bytes it has decoded by the Content-Length, which is the size of the compressed file when
+                        // the server sends name.br / name.gz: the count then passes the total. Such a total says nothing, so once it
+                        // has been passed the bar only moves back and forth and the text shows the bytes alone.
+                        if (total <= 0 || done > total) {
+                            totalIsEncoded = true;
+                        }
+                        if (totalIsEncoded) {
+                            setProgress(null);
+                            setLoadingText(match[1] + " " + megabytes(done) + " MB");
+                        } else {
+                            setProgress(done / total);
+                            setLoadingText(match[1] + " " + megabytes(done) + " / " + megabytes(total) + " MB");
+                        }
                     } else {
                         setLoadingText(text);
                     }
@@ -282,6 +296,15 @@
                     if (!downloadSeen && totalDependencies > 0) {
                         setProgress((totalDependencies - left) / totalDependencies);
                     }
+                },
+
+                // The runtime has exited: the game ended by itself (the Quit button), the loop is gone and the canvas is blank. emcc 4.0.23
+                // calls this with no status in that case (seen in Chromium); a number other than 0 is a failed exit
+                onExit: function (status) {
+                    var failedExit = typeof status === "number" && status !== 0;
+                    console.log("The game ended" + (failedExit ? " (exit status " + status + ")" : ""));
+                    showError(failedExit ? "The game stopped" : "The game has ended", "Reload the page to start again.",
+                              failedExit ? "Exit status " + status : "");
                 },
 
                 // The module aborted: a failed assertion of the runtime, a trap of the wasm, a wasm or package that did not download
@@ -309,6 +332,14 @@
                     return;  // browsers report this one for harmless layout loops
                 }
                 showError("The game hit an error", "See the browser console for details. Reload the page to start again.", text);
+            });
+
+            // A promise nobody awaited that failed: emcc's loader of the .data package is one, so a package that did not download
+            // (a 404, a lost connection) ends here and not in the handler above
+            window.addEventListener("unhandledrejection", function (event) {
+                var reason = event && event.reason;
+                var text = reason && reason.message ? String(reason.message) : String(reason);
+                showError("The game could not be loaded", "Part of the game did not download or start. Check the connection and reload the page.", text);
             });
 
             loadingPanel.hidden = false;

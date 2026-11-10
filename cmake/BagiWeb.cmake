@@ -156,7 +156,8 @@ function(be_web_link_options)
         -sMIN_WEBGL_VERSION=1
         -sMAX_WEBGL_VERSION=2
         # main() never returns while the frame loop runs (src/main.cpp, emscripten_set_main_loop_arg with simulate_infinite_loop); when
-        # the loop is cancelled the runtime exits and the static destructors run
+        # the loop is cancelled the runtime exits and the static destructors run. Run in Chromium: the Quit button of BagiMatch3 ends
+        # the loop, Module.onExit is called (with no status in 4.0.23) and the page stays blank with no error
         -sEXIT_RUNTIME=1
         # The page around the wasm (web/shell.html); SHELL: keeps the flag and its value together, the quotes keep a path with a space in one piece
         "SHELL:--shell-file \"${ARG_SHELL_FILE}\""

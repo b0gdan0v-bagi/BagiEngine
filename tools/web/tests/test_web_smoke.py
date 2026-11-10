@@ -1,7 +1,7 @@
 """Tests of tools/web/tests/web_smoke.py. Everything that needs no browser is tested here: the command line, the decisions on PNG
 bytes, the allow-list, the polling, the generated page, and the orchestration against a fake Playwright (which checks the order of
 the calls, not the real API). The class at the end runs the script in a real Chromium and is skipped where Playwright is missing
-(WP 6 of slice 2 ran it in the venv `build/web-venv`, tools/web/CLAUDE.md, "The browser smoke").
+(tools/web/CLAUDE.md, "The browser smoke": the venv `build/web-venv`).
 Run: python -m unittest discover tools/web/tests"""
 
 import contextlib
@@ -47,6 +47,18 @@ FLAT_RGBA = make_png(8, 6, lambda x, y: (10, 20, 30, 255), channels=4)
 STRIPES = make_png(8, 6, lambda x, y: (200, 0, 0) if x < 4 else (0, 0, 200))
 OTHER_STRIPES = make_png(8, 6, lambda x, y: (0, 200, 0) if y < 3 else (0, 0, 200))
 ONE_PIXEL_OFF = make_png(8, 6, lambda x, y: (11, 20, 30) if (x, y) == (7, 5) else (10, 20, 30))
+
+
+def http_get(url: str, path: str = "/"):
+    """GET `path` of the server at `url` (http://host:port/): the response (its headers stay readable) and the body as text."""
+    host, port = url[len("http://"):].rstrip("/").split(":")
+    connection = http.client.HTTPConnection(host, int(port), timeout=10)
+    try:
+        connection.request("GET", path)
+        response = connection.getresponse()
+        return response, response.read().decode("utf-8")
+    finally:
+        connection.close()
 
 
 def good_run(**changes) -> BrowserRun:
@@ -282,12 +294,27 @@ class CanvasSizeTest(unittest.TestCase):
         wrong = page_info(device_pixel_ratio=2.0)
         self.assertEqual(len(web_smoke.evaluate(good_run(page_info=wrong, check_canvas_size=True))), 1)
         self.assertEqual(web_smoke.evaluate(good_run(page_info=wrong, check_canvas_size=False)), [])
-        self.assertEqual(web_smoke.evaluate(good_run(page_info=None, check_canvas_size=True)), [])
+
+    def test_a_real_run_whose_page_could_not_be_read_fails_check_5_and_the_selftest_page_does_not(self):
+        problems = web_smoke.evaluate(good_run(page_info=None, check_canvas_size=True))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("(5)", problems[0])
+        self.assertEqual(web_smoke.evaluate(good_run(page_info=None, check_canvas_size=False)), [])
+        # No frame was drawn: (2) says so, and the canvas size of a game that never started is not judged on top of it
+        problems = web_smoke.evaluate(good_run(first_png=FLAT, second_png=None, page_info=None, check_canvas_size=True))
+        self.assertEqual([problem[:3] for problem in problems], ["(2)"])
 
     def test_the_page_info_is_read_from_the_dictionary_the_page_returns(self):
         info = PageInfo.from_page({"crossOriginIsolated": True, "sharedArrayBuffer": "function", "devicePixelRatio": 2, "cssWidth": 10.5,
                                    "cssHeight": 20, "canvasWidth": 21, "canvasHeight": 40})
         self.assertEqual(info, PageInfo(True, "function", 2.0, 10.5, 20.0, 21, 40))
+
+    def test_the_report_has_the_isolation_of_a_page_that_never_drew(self):
+        early = page_info(cross_origin_isolated=False, shared_array_buffer="undefined", canvas_width=300, canvas_height=150)
+        lines = web_smoke.describe_page(BrowserRun(early_info=early))
+        self.assertIn("before the first frame: crossOriginIsolated=false, typeof SharedArrayBuffer=undefined", lines[1])
+        self.assertIn("not read after the first frame", lines[2])
+        self.assertIn("not read", web_smoke.describe_page(BrowserRun())[1])
 
     def test_the_report_lines(self):
         lines = web_smoke.describe_page(good_run(page_info=page_info(device_pixel_ratio=2.0, canvas_width=1280, canvas_height=960), touch=True))
@@ -320,12 +347,12 @@ class ExpectConsoleTest(unittest.TestCase):
         page = SimpleNamespace(wait_for_timeout=lambda milliseconds: waits.append(milliseconds))
         waits = []
         run = BrowserRun()
-        web_smoke.unmatched_expectations_wait(page, run, ["a"], 3.0, now=lambda: next(times))
+        web_smoke.wait_for_expected_console(page, run, ["a"], 3.0, now=lambda: next(times))
         self.assertGreaterEqual(len(waits), 2)  # gave up
         self.assertEqual(waits[0], web_smoke.POLL_INTERVAL_SECONDS * 1000)
         waits.clear()
         run.console.append(ConsoleEntry("log", "a"))
-        web_smoke.unmatched_expectations_wait(page, run, ["a"], 3.0, now=lambda: next(times))
+        web_smoke.wait_for_expected_console(page, run, ["a"], 3.0, now=lambda: next(times))
         self.assertEqual(waits, [])
 
 
@@ -408,12 +435,7 @@ class SelftestPageTest(unittest.TestCase):
             self.assertEqual(json.loads((root / "manifest.json").read_text(encoding="utf-8"))["threads"], False)
             self.assertEqual(web_smoke.serve.decide_cross_origin_isolation(None, None, root)[0], False)
             with contextlib.redirect_stdout(io.StringIO()), web_smoke.served(root) as url:
-                host, port = url[len("http://"):].rstrip("/").split(":")
-                connection = http.client.HTTPConnection(host, int(port), timeout=10)
-                connection.request("GET", "/")
-                response = connection.getresponse()
-                response.read()
-                connection.close()
+                response, _ = http_get(url)
                 self.assertIsNone(response.getheader("Cross-Origin-Opener-Policy"))
 
     def test_a_threaded_dist_or_one_without_a_manifest_is_served_with_both_headers(self):
@@ -425,12 +447,7 @@ class SelftestPageTest(unittest.TestCase):
                     (root / "manifest.json").write_text(manifest, encoding="utf-8")
                 out = io.StringIO()
                 with contextlib.redirect_stdout(out), web_smoke.served(root) as url:
-                    host, port = url[len("http://"):].rstrip("/").split(":")
-                    connection = http.client.HTTPConnection(host, int(port), timeout=10)
-                    connection.request("GET", "/")
-                    response = connection.getresponse()
-                    response.read()
-                    connection.close()
+                    response, _ = http_get(url)
                 self.assertEqual(response.getheader("Cross-Origin-Opener-Policy"), "same-origin")
                 self.assertEqual(response.getheader("Cross-Origin-Embedder-Policy"), "require-corp")
                 self.assertIn("isolation on", out.getvalue())
@@ -441,11 +458,7 @@ class SelftestPageTest(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()), web_smoke.served(root) as url:
                 self.assertTrue(url.startswith("http://127.0.0.1:"))
                 host, port = url[len("http://"):].rstrip("/").split(":")
-                connection = http.client.HTTPConnection(host, int(port), timeout=10)
-                connection.request("GET", "/")
-                response = connection.getresponse()
-                body = response.read().decode("utf-8")
-                connection.close()
+                response, body = http_get(url)
                 self.assertEqual(response.status, 200)
                 self.assertIn("<canvas", body)
             with self.assertRaises(OSError):
@@ -664,6 +677,19 @@ class BrowserFlowTest(unittest.TestCase):
         problems = web_smoke.evaluate(run)
         self.assertEqual(len(problems), 1)
         self.assertIn("(3)", problems[0])
+
+    def test_the_isolation_of_the_page_is_read_when_the_canvas_shows_even_if_nothing_is_ever_drawn(self):
+        info = {"crossOriginIsolated": False, "sharedArrayBuffer": "undefined", "devicePixelRatio": 1, "cssWidth": 640, "cssHeight": 480,
+                "canvasWidth": 300, "canvasHeight": 150}
+        page = FakePage(FakeCanvas([FLAT]), info=info)
+        fake = FakePlaywright(page)
+        run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(timeout=0.05))
+        self.assertIsNotNone(run.early_info)
+        self.assertFalse(run.early_info.cross_origin_isolated)
+        self.assertEqual(run.early_info.shared_array_buffer, "undefined")
+        problems = web_smoke.evaluate(run)
+        self.assertTrue(any(problem.startswith("(2)") for problem in problems))
+        self.assertFalse(any(problem.startswith("(5)") for problem in problems))
 
     def test_the_page_info_is_read_after_the_first_frame_and_checked_for_a_real_dist_only(self):
         wrong = {"crossOriginIsolated": True, "sharedArrayBuffer": "function", "devicePixelRatio": 2, "cssWidth": 400, "cssHeight": 300,

@@ -8,6 +8,7 @@ The tests that run cmake are skipped when cmake is not on PATH.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -225,6 +226,21 @@ class WebFlagsTextTest(unittest.TestCase):
         text = (ENGINE_DIR / "cmake" / "BagiEngine.cmake").read_text(encoding="utf-8")
         self.assertRegex(text, r"if\(NOT BE_IS_MULTI_CONFIG AND NOT ENGINE_TARGET_WEB AND CMAKE_BUILD_TYPE STREQUAL \"Debug\"\)\s+message\(WARNING \"BE_WITH_EDITOR=OFF")
 
+    def test_sdl_image_is_built_without_tiff_and_webp_on_the_web_only(self):
+        # 444 KB of .wasm (libtiff, libwebp); the forcing sits inside the web condition, in front of the SDL_image subdirectory
+        text = (ENGINE_DIR / "cmake" / "BagiEngine.cmake").read_text(encoding="utf-8")
+        forced = [line.strip() for line in text.splitlines() if line.strip().startswith(("set(SDLIMAGE_TIF OFF", "set(SDLIMAGE_WEBP OFF"))]
+        self.assertEqual(len(forced), 2)
+        start = text.index("set(SDLIMAGE_TIF OFF")
+        self.assertLess(text.rindex("if(ENGINE_TARGET_WEB)", 0, start), start)
+        self.assertLess(start, text.index("endif()", start))
+        self.assertLess(text.index("endif()", start), text.index("add_subdirectory(${BAGI_ENGINE_DIR}/external/SDL_image)"))
+
+    def test_the_sdl_renderer_asks_for_vsync_in_a_browser_so_the_loop_stays_on_request_animation_frame(self):
+        text = (ENGINE_DIR / "src" / "Modules" / "SDL" / "src" / "CoreSDL" / "SDLRendererBackend.cpp").read_text(encoding="utf-8")
+        call = text.index("SDL_SetRenderVSync(_renderer, 1)")
+        self.assertEqual(text.rindex("#ifdef __EMSCRIPTEN__", 0, call), text.rindex("#if", 0, call))
+        self.assertLess(call, text.index("#endif", call))
 
 if __name__ == "__main__":
     unittest.main()

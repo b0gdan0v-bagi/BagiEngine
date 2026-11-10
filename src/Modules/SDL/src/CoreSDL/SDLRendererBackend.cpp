@@ -58,6 +58,15 @@ namespace BECore {
             return false;
         }
 
+#ifdef __EMSCRIPTEN__
+        // In the browser a frame is a requestAnimationFrame. A renderer made without vsync makes SDL set the swap interval to 0 when
+        // the first frame has run, which turns the main loop into setTimeout(0) ticks: busy, and not in step with the display
+        // (emscripten warns "rendering without using requestAnimationFrame" in a Debug build). Interval 1 keeps the loop on rAF.
+        if (!SDL_SetRenderVSync(_renderer, 1)) {
+            LOG_WARNING("SDLRendererBackend: cannot turn vsync on: {}"_format(SDL_GetError()));
+        }
+#endif
+
         Subscribe<RenderEvents::RenderClearEvent, &SDLRendererBackend::OnRenderClear>(this);
         Subscribe<RenderEvents::RenderPresentEvent, &SDLRendererBackend::OnRenderPresent>(this);
         Subscribe<RenderEvents::SetRenderDrawColorEvent, &SDLRendererBackend::OnSetRenderDrawColor>(this);
