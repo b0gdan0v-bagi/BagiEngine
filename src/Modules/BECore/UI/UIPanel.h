@@ -8,9 +8,9 @@ namespace BECore {
     /**
      * @brief A filled rect, optionally with a sprite on it: a HUD plate, the back of a menu, a frame.
      *
-     * Draws `color` first, then the sprite (a TextureLibrary name) tinted with `spriteTint`. With a `sliceBorder` the sprite is cut into nine pieces so that its corners keep
-     * their size and its edges stretch (UINineSlice); the border is in pixels of the sprite and is drawn one unit per pixel. A panel takes clicks (`blocksInput`),
-     * so a click on it does not reach what is below; write `blocksInput="false"` for a plate that does not.
+     * Draws the box of `color` (rounded corners, border, gradient, shadow: UIBoxStyle) first, then the sprite (a TextureLibrary name) tinted with `spriteTint`. With a `sliceBorder` the sprite is cut
+     * into nine pieces so that its corners keep their size and its edges stretch (UINineSlice); the border is in pixels of the sprite and is drawn one unit per pixel. A panel takes clicks
+     * (`blocksInput`), so a click on it does not reach what is below; write `blocksInput="false"` for a plate that does not.
      */
     class UIPanel : public UIElement {
         BE_CLASS(UIPanel)

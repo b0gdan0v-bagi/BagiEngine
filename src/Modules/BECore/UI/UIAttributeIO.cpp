@@ -59,6 +59,42 @@ namespace BECore::UIAttr {
         return true;
     }
 
+    void WriteCorners(ISerializer& s, eastl::string_view key, const UICorners& corners) {
+        WriteText(s, key, UIText::FormatCorners(corners));
+    }
+
+    bool ReadCorners(IDeserializer& d, eastl::string_view key, UICorners& out) {
+        eastl::string text;
+        if (!ReadText(d, key, text)) {
+            return false;
+        }
+        const auto corners = UIText::ParseCorners(eastl::string_view(text.data(), text.size()));
+        if (!corners) {
+            ReportMalformed(d, key, text);
+            return false;
+        }
+        out = *corners;
+        return true;
+    }
+
+    void WriteShadow(ISerializer& s, eastl::string_view key, const UIShadowSpec& shadow) {
+        WriteText(s, key, UIText::FormatShadow(shadow));
+    }
+
+    bool ReadShadow(IDeserializer& d, eastl::string_view key, UIShadowSpec& out) {
+        eastl::string text;
+        if (!ReadText(d, key, text)) {
+            return false;
+        }
+        const auto shadow = UIText::ParseShadow(eastl::string_view(text.data(), text.size()));
+        if (!shadow) {
+            ReportMalformed(d, key, text);
+            return false;
+        }
+        out = *shadow;
+        return true;
+    }
+
     void WriteOptionalLength(ISerializer& s, eastl::string_view key, const std::optional<UILength>& length) {
         if (length) {
             WriteLength(s, key, *length);

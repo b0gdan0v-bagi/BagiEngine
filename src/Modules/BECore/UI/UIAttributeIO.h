@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/UI/UIBoxMesh.h>
 #include <BECore/UI/UIRectSpec.h>
 
 namespace BECore {
@@ -13,6 +14,12 @@ namespace BECore {
 
         void WriteEdges(ISerializer& s, eastl::string_view key, const UIEdges& edges);
         bool ReadEdges(IDeserializer& d, eastl::string_view key, UIEdges& out);
+
+        void WriteCorners(ISerializer& s, eastl::string_view key, const UICorners& corners);
+        bool ReadCorners(IDeserializer& d, eastl::string_view key, UICorners& out);
+
+        void WriteShadow(ISerializer& s, eastl::string_view key, const UIShadowSpec& shadow);
+        bool ReadShadow(IDeserializer& d, eastl::string_view key, UIShadowSpec& out);
 
         /// Writes the attribute only when the optional holds a length
         void WriteOptionalLength(ISerializer& s, eastl::string_view key, const std::optional<UILength>& length);

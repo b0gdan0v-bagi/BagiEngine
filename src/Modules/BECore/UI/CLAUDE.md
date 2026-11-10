@@ -1,6 +1,6 @@
 # UI Module Guidelines
 
-In-game UI drawn through `IRenderer`, in both backends and both run modes. ImGui is not involved (it is the tool UI: `.claude/rules/widgets-module.md`). Authoring decision: `AuthoringDecision.md`. HTML + CSS screens: `.claude/rules/ui-web.md`.
+In-game UI drawn through `IRenderer`, in both backends and both run modes. ImGui is not involved (it is the tool UI: `.claude/rules/widgets-module.md`). Authoring decision: `AuthoringDecision.md`. HTML + CSS screens: `.claude/rules/ui-web.md`. Box shapes: `.claude/rules/ui-shapes.md`.
 
 **Adaptivity is the foundation.** Window size, aspect, orientation, safe area, pixel density and user scale are inputs of every layout; **every screen must pass `ValidateOnMatrix` before it is done**.
 
@@ -58,7 +58,7 @@ UIElement tree (root = the canvas)
 - **Input:** a canvas consumes a mouse event on a hit-testable element (`blocksInput` or `interactive`) by the last draw's layout; hover over one is consumed except a drag that began elsewhere; a press it took is followed to its release; a `modal` canvas consumes everything while shown; hidden, `inputEnabled` off and inactive-scene canvases consume nothing. Hit testing: child before parent, later sibling first; children are not clipped.
 - **Popups** (`UIElement::HasPopupChildren`, a dropdown's list): the children are out of the flow, with no rect while closed (the validator, hit test, draw and `ui_tree` do not see them); open, `LayoutPopup` places them in `contentBounds`, they are drawn after the whole tree and hit-tested before it. A left press anywhere else closes the popup and is **consumed** with its release; a click ending inside the list goes to the popup's `OnPopupChoice`, not to the child's `OnClick`. One popup is open per canvas (the newest wins); a canvas that cannot take input closes it.
 - **Pointer hooks:** `OnClick` on release over the same element; `OnPress(x, y)` on the left press of an `interactive` element and `OnDrag(x, y)` on motion while held, in canvas units; they run last.
-- **Show / hide:** `UICanvasComponent::SetVisibleByName(scene, node, visible)`; one element: `SetElementVisible(name, ...)` or `SetElementVisibleByName(scene, name, ...)` (sets `style.visible`; a variant still wins).
+- **Show / hide:** `UICanvasComponent::SetVisibleByName`; one element: `SetElementVisible` / `SetElementVisibleByName` (sets `style.visible`; a variant still wins).
 - The reflected fields are `visible` and `inputEnabled`, not `enabled` (taken by factory vectors).
 
 ## Layout
@@ -75,7 +75,7 @@ Issues: `OutsideCanvas`, `OutsideSafeArea`, `SiblingsOverlap` (in a stack), `Tou
 
 `tests/Common/UILayoutMatrix.h` runs a canvas over ten aspects at 480..2160 px short sides, with no insets / a notch / side insets, each scale mode and user scales 1.0 and 1.5. A canvas from a scene needs one draw first (its parameters come from the component). One line: `EXPECT_TRUE(ValidateOnMatrix(canvas).empty()) << DescribeMatrixFailures(failures)`.
 
-**A `SceneView` canvas of a scene with `viewVariants`** passes the scene's view declaration as the fourth argument, `UIMatrixViews{viewWidth, viewHeight, variants}`: each case takes the view `SceneViewSelector::Pick` gives for its output (what `Scene::Draw` picks) as the view size, and the failure label ends with `view <name>`. Without it the view size of `baseContext` stays in every case.
+**A `SceneView` canvas of a scene with `viewVariants`** passes the scene's view declaration as the fourth argument, `UIMatrixViews{viewWidth, viewHeight, variants}`: each case takes the view `SceneViewSelector::Pick` gives for its output (what `Scene::Draw` picks) as the view size, and the failure label ends with `view <name>`.
 
 **`OverlapsSceneView`** (`UILayoutValidatorOptions::keepOffView`, for `extendToOutput` canvases): the caller names the root children (a bar row) whose subtrees must stay off `viewBounds`; the first overlapping element of a path is reported; an empty list checks nothing. The matrix has no bar at 9:16 and 1:1 under a portrait view: a variant hides the row there.
 
@@ -118,11 +118,11 @@ Each derives from `UIElement`, draws itself in `DrawSelf` in canvas units; `colo
 
 | Type | Fields | Behavior |
 |------|--------|----------|
-| `UIElement` | — | a box and children |
+| `UIElement` | `cornerRadius`, `border*`, `gradient*`, `shadow`, `glow`, `highlight` | a box (flat unless set: `ui-shapes.md`) and children |
 | `UIPanel` | `sprite`, `sliceBorder`, `spriteTint` | fill then sprite, nine-sliced with `sliceBorder`; `blocksInput` by default |
 | `UIImage` | `sprite`, `tint`, `stretch` | sprite fitted, centered, proportional |
 | `UILabel` | `text`, `font`, `textColor`, `align`, `verticalAlign`, `overflow` (`Ellipsis` default, `Clip`, `AutoFit`), `wrap`, `lineSpacing`, `minFontSize` | text at `fontSize` (24 when 0) x canvas scale in whole pixels |
-| `UIButton` | `action`, `value`, `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, `disabled` | a click emits `ActionEvent(action, value)`; state colors derived when transparent; `selected` adds a 4-unit bar; disabled still consumes the click |
+| `UIButton` | `action`, `value`, `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, `disabled` | a click emits `ActionEvent(action, value)`; state colors derived when transparent; `selected` adds a 4-unit bar; disabled still consumes the click; the states shift the box too |
 | `UIStack` | — | a stack container |
 | `UISegmented` | `bind`, `disabled` | radio group over direct `UIButton` children: the segment whose `value` equals the variable is `selected`. **Every segment needs an explicit `height`**, also with `flex` (else it is a 0-high rect: not drawn, not clickable, skipped by the validator) |
 | `UIToggle` | `bind`, `action`, `onValue`, `offValue`, `disabled`, track / fill / thumb colors | a caption with a switch at the right; on when the variable equals `onValue`; a click emits the opposite value. The caption is measured left of the switch (`GetParts`) |
@@ -142,7 +142,7 @@ Each derives from `UIElement`, draws itself in `DrawSelf` in canvas units; `colo
 
 ## Control API (`ui_tree`, `ui_click`)
 
-On the canvases of the **active scene**, by the layout of the last draw (`step` a frame first). `ui_tree` gives every canvas (node, space, visibility, modal, input, scale, bounds, validator `issues`, and for a `SceneView` canvas `view` `{name, width, height}`: the active view, empty `name`: the default) and its elements (`type`, `name`, `visible`, `interactive`, `rect` in canvas units, `outputRect` in screenshot pixels, `text` with variables, and the control fields: `action` / `value` / `selected` / `disabled`, `bind` / `selectedValue`, `open` and the options of a dropdown (children with no rect while closed), `checked`, `fraction`). Bound values are read when asked, so no draw follows `UIVars::Set`. `ui_click {name, canvas?, at?}` presses the middle (`at` 0..1 sets the horizontal point; the way to set a slider) of the first visible interactive element through `UIInput`, exactly as a user would, after checking it is topmost in its canvas; it answers the `action` / `value` of the click (a dropdown's header emits nothing; an option of an open list answers the dropdown's `action` and its own `value`: `ui_click` header, `step`, `ui_click` option, `step`), or `not_found`, `not_clickable` (why), `no_scene`. `ui_click`, `step`, `ui_tree` is the order. Names are looked up with `PoolString::Find`, never interned. The MCP server has both as tools (`tools/control/CLAUDE.md`).
+On the canvases of the **active scene**, by the layout of the last draw (`step` a frame first). `ui_tree` gives every canvas (node, space, visibility, modal, input, scale, bounds, validator `issues`, and for a `SceneView` canvas `view` `{name, width, height}`: the active view, empty `name`: the default) and its elements (`type`, `name`, `visible`, `interactive`, `rect` in canvas units, `outputRect` in screenshot pixels, `text` with variables, `box` when one is authored, and the control fields: `action` / `value` / `selected` / `disabled`, `bind` / `selectedValue`, `open` and the options of a dropdown (children with no rect while closed), `checked`, `fraction`). Bound values are read when asked, so no draw follows `UIVars::Set`. `ui_click {name, canvas?, at?}` presses the middle (`at` 0..1 sets the horizontal point; the way to set a slider) of the first visible interactive element through `UIInput`, exactly as a user would, after checking it is topmost in its canvas; it answers the `action` / `value` of the click (a dropdown's header emits nothing; an option of an open list answers the dropdown's `action` and its own `value`: `ui_click` header, `step`, `ui_click` option, `step`), or `not_found`, `not_clickable` (why), `no_scene`. `ui_click`, `step`, `ui_tree` is the order. Names are looked up with `PoolString::Find`, never interned. The MCP server has both as tools (`tools/control/CLAUDE.md`).
 
 ## Editor preview
 
@@ -154,7 +154,7 @@ No shipped scene uses the toggle, slider, progress bar or strings: copy `kSettin
 
 ## Not done
 
-Button sounds, focus and keyboard / gamepad navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload, the debug overlay. The look of the controls on Vulkan is the owner's.
+Button sounds, focus and keyboard / gamepad navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload, the debug overlay.
 
 ## Tests
 

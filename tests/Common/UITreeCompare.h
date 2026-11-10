@@ -6,11 +6,12 @@
 
 namespace BECore::Tests {
 
-    /// Expects two element trees to hold the same authored state: names, layout, style, color, flags and children, recursively. Layout results (`rect`, `active`) are not compared.
+    /// Expects two element trees to hold the same authored state: names, layout, style, box, color, flags and children, recursively. Layout results (`rect`, `active`) are not compared.
     inline void ExpectSameTree(const UIElement& expected, const UIElement& actual) {
         EXPECT_EQ(expected.name, actual.name);
         EXPECT_EQ(expected.layout, actual.layout);
         EXPECT_TRUE(expected.style == actual.style) << "style of " << expected.name.CStr();
+        EXPECT_TRUE(expected.box == actual.box) << "box of " << expected.name.CStr();
         EXPECT_EQ(expected.color.r, actual.color.r);
         EXPECT_EQ(expected.color.g, actual.color.g);
         EXPECT_EQ(expected.color.b, actual.color.b);

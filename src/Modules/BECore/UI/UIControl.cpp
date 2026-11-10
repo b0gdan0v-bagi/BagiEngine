@@ -13,6 +13,7 @@
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISlider.h>
 #include <BECore/UI/UIToggle.h>
+#include <BECore/UI/UIValueText.h>
 #include <SDL3/SDL_mouse.h>
 
 namespace BECore {
@@ -43,6 +44,47 @@ namespace BECore {
             return json;
         }
 
+        Json DescribeShadow(const UIShadowSpec& shadow) {
+            Json json = Json::object();
+            json["offsetX"] = shadow.offsetX;
+            json["offsetY"] = shadow.offsetY;
+            json["blur"] = shadow.blur;
+            json["spread"] = shadow.spread;
+            json["color"] = MakeJsonString(UIText::FormatColor(shadow.color));
+            return json;
+        }
+
+        /// The authored box style, each setting only when it differs from the default (the state shifts of a button are paint, not reported, like `color`)
+        Json DescribeBox(const UIBoxStyle& box) {
+            const UIBoxStyle defaults;
+            Json json = Json::object();
+            if (!(box.cornerRadius == defaults.cornerRadius)) {
+                json["cornerRadius"] = Json::array({box.cornerRadius.topLeft, box.cornerRadius.topRight, box.cornerRadius.bottomRight, box.cornerRadius.bottomLeft});
+            }
+            if (box.borderWidth != defaults.borderWidth) {
+                json["borderWidth"] = box.borderWidth;
+            }
+            if (!ColorsEqual(box.borderColor, defaults.borderColor)) {
+                json["borderColor"] = MakeJsonString(UIText::FormatColor(box.borderColor));
+            }
+            if (box.gradientDirection != defaults.gradientDirection || !ColorsEqual(box.gradientColor, defaults.gradientColor)) {
+                Json gradient = Json::object();
+                gradient["direction"] = MakeJsonString(EnumUtils<UIGradientDirection>::ToString(box.gradientDirection));
+                gradient["color"] = MakeJsonString(UIText::FormatColor(box.gradientColor));
+                json["gradient"] = std::move(gradient);
+            }
+            if (!(box.shadow == defaults.shadow)) {
+                json["shadow"] = DescribeShadow(box.shadow);
+            }
+            if (!(box.glow == defaults.glow)) {
+                json["glow"] = DescribeShadow(box.glow);
+            }
+            if (!ColorsEqual(box.highlight, defaults.highlight)) {
+                json["highlight"] = MakeJsonString(UIText::FormatColor(box.highlight));
+            }
+            return json;
+        }
+
         Json DescribeElement(UIElement& element, const UICanvasResolved* resolved) {
             Json json = Json::object();
             json["type"] = MakeJsonString(element.GetTypeMeta().typeName);
@@ -56,6 +98,9 @@ namespace BECore {
                 json["visible"] = !rect.IsEmpty();
                 json["rect"] = RectToJson(rect);
                 json["outputRect"] = RectToJson(resolved->transform.ToOutput(rect.x, rect.y, rect.w, rect.h));
+            }
+            if (!(element.box == UIBoxStyle{})) {
+                json["box"] = DescribeBox(element.box);
             }
             if (const auto* label = dynamic_cast<const UILabel*>(&element)) {
                 json["text"] = MakeJsonString(label->GetDisplayText());

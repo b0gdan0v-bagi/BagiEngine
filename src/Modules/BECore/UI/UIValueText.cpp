@@ -9,6 +9,9 @@ namespace BECore::UIText {
         constexpr char PercentSign = '%';
         constexpr eastl::string_view PixelsSuffix = "px";
         constexpr size_t RgbaPartCount = 4;
+        constexpr size_t CornerCount = 4;
+        constexpr size_t ShadowNumberCount = 4;  // offsetX, offsetY, blur, spread: the colour follows
+        constexpr size_t ShadowBlurIndex = 2;
         constexpr size_t HexRgbLength = 6;
         constexpr size_t HexRgbaLength = 8;
         constexpr int HexBase = 16;
@@ -127,6 +130,56 @@ namespace BECore::UIText {
             return std::nullopt;
         }
         return UIEdges{*left, *top, *right, *bottom};
+    }
+
+    eastl::string FormatCorners(const UICorners& corners) {
+        if (corners.topLeft == corners.topRight && corners.topRight == corners.bottomRight && corners.bottomRight == corners.bottomLeft) {
+            return Format("{}", corners.topLeft);
+        }
+        return Format("{},{},{},{}", corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft);
+    }
+
+    std::optional<UICorners> ParseCorners(eastl::string_view text) {
+        const auto parts = String::Split(Trim(text), ',');
+        if (parts.size() != 1 && parts.size() != CornerCount) {
+            return std::nullopt;
+        }
+        float radii[CornerCount] = {};
+        for (size_t i = 0; i < parts.size(); ++i) {
+            const auto radius = ParseFiniteFloat(parts[i]);
+            if (!radius) {
+                return std::nullopt;
+            }
+            radii[i] = *radius;
+        }
+        return parts.size() == 1 ? UICorners::Uniform(radii[0]) : UICorners{radii[0], radii[1], radii[2], radii[3]};
+    }
+
+    eastl::string FormatShadow(const UIShadowSpec& shadow) {
+        return Format("{},{},{},{},#{:02X}{:02X}{:02X}{:02X}", shadow.offsetX, shadow.offsetY, shadow.blur, shadow.spread, static_cast<int>(shadow.color.r), static_cast<int>(shadow.color.g),
+                      static_cast<int>(shadow.color.b), static_cast<int>(shadow.color.a));
+    }
+
+    std::optional<UIShadowSpec> ParseShadow(eastl::string_view text) {
+        text = Trim(text);
+        float numbers[ShadowNumberCount] = {};
+        for (float& number : numbers) {
+            const size_t comma = text.find(',');
+            if (comma == eastl::string_view::npos) {
+                return std::nullopt;
+            }
+            const auto parsed = ParseFiniteFloat(text.substr(0, comma));
+            if (!parsed) {
+                return std::nullopt;
+            }
+            number = *parsed;
+            text.remove_prefix(comma + 1);
+        }
+        const auto color = ParseColor(text);
+        if (!color || numbers[ShadowBlurIndex] < 0.0f) {
+            return std::nullopt;
+        }
+        return UIShadowSpec{numbers[0], numbers[1], numbers[ShadowBlurIndex], numbers[3], *color};
     }
 
     eastl::string FormatColor(const Color& color) {
