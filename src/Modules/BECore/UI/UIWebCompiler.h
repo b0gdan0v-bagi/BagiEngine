@@ -31,6 +31,12 @@ namespace BECore {
      * widgets are derived, so a state rule on them is reported. `:hover`, `:active`, `:disabled` and `:checked` on a button set its four fills (`hoverColor`, `pressedColor`, `disabledColor`,
      * `selectedColor`).
      *
+     * The box (`UIBoxStyle`): `border-radius` and its four longhands (px, one value per corner), `border` / `border-width` / `border-color` / `border-style` (`solid`, `none`; a border is
+     * drawn inside the rect and is not layout), `linear-gradient()` of two colors in `background` or `background-image` (it replaces `background-color`; a `url()` beside it is the sprite
+     * drawn over it), `box-shadow` of one layer (the shadow) or two (the first is the glow, the second the shadow) and the engine-only `-be-highlight` (the inner top line) and `-be-shape: round`
+     * (`partShape` of a toggle, slider or progress bar). The shifts of a button's states follow its fill by themselves, so a state rule changes the background only (the far end of a gradient
+     * is derived from its start); a variant cannot change the box.
+     *
      * Everything outside the subset is an issue in the UIWebReport and is left out; the supported properties are listed in `.claude/rules/ui-web.md`.
      * The conversion is pure: no resource, window or renderer is touched, so it is tested with strings.
      */
