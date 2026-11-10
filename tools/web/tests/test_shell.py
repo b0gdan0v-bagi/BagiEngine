@@ -65,9 +65,35 @@ class ShellMarkupTest(unittest.TestCase):
         self.assertRegex(self.markup, r'<html lang="[a-z-]+">')
 
     def test_nothing_is_loaded_from_outside(self):
+        # the two relative links of the home-screen app are the only references: the manifest and its icon, no URL of another origin
         urls = re.findall(r"""(?:src|href)=["']([^"']+)["']|url\(([^)]+)\)|@import""", self.markup)
-        self.assertEqual(urls, [])
+        self.assertEqual(sorted(urls), [("icons/apple-touch-icon.png", ""), ("manifest.webmanifest", "")])
         self.assertNotRegex(self.markup, r"https?://")
+        self.assertNotRegex(self.markup, r"""(?:src|href)=["'](?:/|[a-z]+:)""")
+
+    def test_the_manifest_is_linked_with_credentials_and_the_apple_icon_by_a_relative_path(self):
+        # a closed service uses Basic auth: a manifest request without credentials would get 401
+        self.assertRegex(self.markup, r'<link rel="manifest" href="manifest\.webmanifest" crossorigin="use-credentials">')
+        self.assertRegex(self.markup, r'<link rel="apple-touch-icon" href="icons/apple-touch-icon\.png">')
+        self.assertNotIn("manifest.json", self.markup)  # that name is the package manifest of package.py
+
+    def test_the_home_screen_meta_tags_are_there(self):
+        for name, content in (("apple-mobile-web-app-capable", "yes"), ("mobile-web-app-capable", "yes"),
+                              ("apple-mobile-web-app-status-bar-style", "black-translucent")):
+            with self.subTest(name):
+                self.assertRegex(self.markup, rf'<meta name="{name}" content="{content}">')
+        self.assertRegex(self.markup, r'<meta name="theme-color" content="#[0-9a-fA-F]{6}">')
+
+    def test_the_viewport_covers_the_notch(self):
+        self.assertRegex(self.markup, r'name="viewport"[^>]*viewport-fit=cover')
+
+    def test_the_toggle_button_is_hidden_until_the_script_shows_it_and_has_an_inline_glyph(self):
+        button = re.search(r'<button id="fullscreen-toggle"([^>]*)>(.*?)</button>', self.markup, flags=re.DOTALL)
+        self.assertIsNotNone(button, "no fullscreen toggle button")
+        self.assertRegex(button.group(1), r"\bhidden\b")
+        self.assertIn('type="button"', button.group(1))
+        self.assertIn("aria-label=", button.group(1))
+        self.assertIn("<svg", button.group(2))
 
 
 class ShellStyleTest(unittest.TestCase):
@@ -96,6 +122,19 @@ class ShellStyleTest(unittest.TestCase):
 
     def test_the_canvas_gives_the_touches_to_the_game(self):
         self.assertRegex(self.rule("canvas#canvas"), r"touch-action:\s*none")
+
+    def test_the_toggle_button_is_small_above_the_canvas_and_off_the_notch(self):
+        button = self.rule("button#fullscreen-toggle")
+        self.assertRegex(button, r"position:\s*fixed")
+        self.assertRegex(button, r"z-index:\s*\d+")
+        self.assertRegex(button, r"env\(safe-area-inset-top")
+        self.assertRegex(button, r"env\(safe-area-inset-right")
+        self.assertRegex(button, r"width:\s*36px")
+        self.assertRegex(self.rule("button#fullscreen-toggle[hidden]"), r"display:\s*none")
+
+    def test_no_selector_starts_with_a_hash(self):
+        # a line that starts with # can be taken for a preprocessor directive by emcc's shell handling
+        self.assertNotRegex(self.css, r"(?m)^\s*#")
 
 
 class ShellScriptTest(unittest.TestCase):
@@ -187,6 +226,65 @@ class ShellScriptTest(unittest.TestCase):
 
     def test_a_game_script_that_does_not_download_shows_a_message(self):
         self.assertIn("script.onerror", self.script)
+
+    def fullscreen_script(self) -> str:
+        start = self.script.index("function setUpFullscreen()")
+        return self.script[start:self.script.index("loadingPanel.hidden = false;", start)]
+
+    def test_fullscreen_is_set_up_after_the_webgl_test_and_before_the_game_starts_and_its_failure_is_swallowed(self):
+        self.assertIn("setUpFullscreen();", self.script)
+        call = self.script.index("setUpFullscreen();")
+        self.assertGreater(call, self.script.index("if (!hasWebGL())"))
+        self.assertLess(call, self.script.index("document.body.appendChild(script)"))
+        self.assertRegex(self.script, r"try \{\s*setUpFullscreen\(\);\s*\} catch \(error\)")
+
+    def test_the_fullscreen_api_is_asked_before_it_is_used_with_the_webkit_forms(self):
+        text = self.fullscreen_script()
+        for name in ("document.fullscreenEnabled", "webkitFullscreenEnabled", "root.requestFullscreen", "webkitRequestFullscreen",
+                     "document.exitFullscreen", "webkitExitFullscreen", "webkitFullscreenElement", '"webkitfullscreenchange"',
+                     '"fullscreenchange"'):
+            with self.subTest(name):
+                self.assertIn(name, text)
+        self.assertRegex(text, r"if \(!toggle \|\| !enabled \|\| installed\) \{\s*return;")
+
+    def test_an_installed_app_is_not_offered_fullscreen_and_the_display_mode_is_read_before_the_request(self):
+        text = self.fullscreen_script()
+        for name in ("navigator.standalone", "(display-mode: standalone)", "(display-mode: fullscreen)"):
+            with self.subTest(name):
+                self.assertIn(name, text)
+        self.assertLess(text.index("var installed"), text.index("requestFn.call"))
+
+    def test_the_first_touch_asks_once_and_only_where_the_pointer_is_coarse_and_the_switch_is_not_off(self):
+        text = self.fullscreen_script()
+        self.assertIn("fullscreen=0", text)
+        self.assertIn("(pointer: coarse)", text)
+        self.assertRegex(text, r'addEventListener\("pointerup", onFirstTap, true\)')
+        self.assertRegex(text, r'event\.pointerType !== "touch"')
+        self.assertRegex(text, r"stopAskingOnTap\(\);\s*if \(fullscreenElement\(\) === null\)")
+
+    def test_the_orientation_comes_from_the_manifest_and_is_locked_after_fullscreen_with_errors_ignored(self):
+        text = self.fullscreen_script()
+        self.assertIn('fetch("manifest.webmanifest")', text)
+        self.assertIn("manifest.orientation", text)
+        self.assertIn("screenOrientation.lock(orientation)", text)
+        self.assertRegex(text, r'orientation === "any"')
+        self.assertRegex(text, r"lock\(orientation\);\s*if \(result && typeof result\.catch === \"function\"\) \{\s*result\.catch")
+
+    def test_every_promise_of_the_fullscreen_code_has_a_rejection_handler(self):
+        # the page's handler of "unhandledrejection" would show "The game could not be loaded" for one without
+        text = self.fullscreen_script()
+        self.assertRegex(text, r"\}\)\.catch\(function \(\) \{\}\);")  # the manifest read
+        self.assertIn("result.then(function () {}, logRefusal)", text)
+        self.assertEqual(text.count("result.then(function () {}, logRefusal)"), 2)  # enter and leave
+        self.assertRegex(text, re.compile(r"manifestRead\.then\(function \(\) \{.*?\}\)\.catch\(function \(\) \{\}\);", re.DOTALL))
+
+    def test_the_toggle_button_takes_its_own_touches(self):
+        text = self.fullscreen_script()
+        for name in ("pointerdown", "touchstart", "mousedown", "click"):
+            with self.subTest(name):
+                self.assertIn(f'"{name}"', text)
+        self.assertIn("event.stopPropagation()", text)
+        self.assertIn("toggle.contains(event.target)", text)  # its own tap is not the "first tap" that asks for fullscreen
 
     @unittest.skipUnless(NODE, "node is not on PATH")
     def test_the_inline_script_is_valid_javascript(self):

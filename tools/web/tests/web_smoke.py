@@ -22,7 +22,14 @@ The checks, in this order:
      searched in the text of the message and in the URL it names), and every --expect-console REGEX matched a message (of any level)
      within --timeout;
   5. the canvas size: the backing store (`canvas.width` x `canvas.height`) is the CSS size times `devicePixelRatio`, to within a
-     pixel (--device-scale-factor N sets the ratio of the browser). Skipped, with the reason printed, for the --selftest page.
+     pixel (--device-scale-factor N sets the ratio of the browser). Skipped, with the reason printed, for the --selftest page;
+  6. the web app manifest: `manifest.webmanifest` is served as `application/manifest+json`, parses, says `display: fullscreen` and
+     lists icons, and every icon is served as `image/png` (plain HTTP requests to the same server, no browser; the generated
+     --selftest site has a manifest of its own, so the check runs there too).
+
+The page is opened with `?fullscreen=0` (the switch of the shell, web/shell.html): without it the first tap of --touch would ask for
+fullscreen and resize the canvas under checks 3 and 5. So the smoke does not exercise the first-tap request, the toggle button or the
+orientation lock (a real phone does).
 
 The report also prints `window.crossOriginIsolated`, `typeof SharedArrayBuffer`, `devicePixelRatio`, the CSS size and the backing
 store of the canvas, and whether the input was a click or a tap. The server is serve.py's own, with the isolation decision it
@@ -54,6 +61,9 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -64,6 +74,7 @@ TOOLS_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(TOOLS_DIR / "web"))
 sys.path.insert(0, str(TOOLS_DIR / "control" / "tests"))
 
+import package  # noqa: E402  (flat_color_png: the icon of the selftest site)
 import serve  # noqa: E402
 from png_reader import PngError, PngImage, read_png  # noqa: E402
 
@@ -73,6 +84,10 @@ EXIT_USAGE = 2
 EXIT_SKIPPED = 77
 
 PAGE_NAME = "index.html"
+PAGE_QUERY = "?fullscreen=0"  # the shell's switch: no automatic fullscreen request on the first tap (it would resize the canvas of checks 3 and 5)
+WEB_MANIFEST_NAME = package.WEB_MANIFEST_NAME
+WEB_MANIFEST_TYPE = "application/manifest+json"
+ICON_TYPE = "image/png"
 CANVAS_SELECTOR = "canvas#canvas"
 DEFAULT_VIEWPORT = (640, 480)
 DEFAULT_TIMEOUT_SECONDS = 60.0
@@ -151,6 +166,7 @@ class BrowserRun:
     early_info: PageInfo | None = None  # read as soon as the canvas is visible: the report when the game never draws (sizes are not final)
     check_canvas_size: bool = False  # check 5 applies (not to the selftest page)
     touch: bool = False  # the click of check 3 was a tap
+    web_manifest_problems: list[str] | None = None  # check 6, made by check_web_manifest (None: not made)
 
 
 @dataclass
@@ -334,7 +350,56 @@ def evaluate(run: BrowserRun, allow_console: list[str] | None = None, expect_con
             problem = canvas_size_problem(run.page_info)
             if problem:
                 problems.append(problem)
+    if run.web_manifest_problems:
+        problems.extend(run.web_manifest_problems)
     return problems
+
+
+def check_web_manifest(fetch: Callable[[str], tuple[int, str, bytes]]) -> list[str]:
+    """Check 6. `fetch(path)` answers (HTTP status, Content-Type, body) of a path of the served folder. Returns the reasons, empty when
+    the manifest is served with its type, parses, says `display: fullscreen`, lists icons, and every icon is served as a PNG."""
+    status, content_type, body = fetch(WEB_MANIFEST_NAME)
+    if status != 200:
+        return [f"(6) {WEB_MANIFEST_NAME} answered HTTP {status}, not 200: package the build with tools/web/package.py"]
+    problems = []
+    if content_type.split(";")[0].strip().lower() != WEB_MANIFEST_TYPE:
+        problems.append(f"(6) {WEB_MANIFEST_NAME} is served as '{content_type}', not {WEB_MANIFEST_TYPE}")
+    try:
+        manifest = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as error:
+        return [*problems, f"(6) {WEB_MANIFEST_NAME} is not JSON: {error}"]
+    if not isinstance(manifest, dict):
+        return [*problems, f"(6) {WEB_MANIFEST_NAME} is not a JSON object"]
+    if manifest.get("display") != "fullscreen":
+        problems.append(f"(6) {WEB_MANIFEST_NAME}: display is {manifest.get('display')!r}, not 'fullscreen'")
+    icons = manifest.get("icons")
+    if not isinstance(icons, list) or not icons:
+        return [*problems, f"(6) {WEB_MANIFEST_NAME} lists no icons: Chrome would not offer to install the page"]
+    for icon in icons:
+        source = icon.get("src") if isinstance(icon, dict) else None
+        if not isinstance(source, str) or not source:
+            problems.append(f"(6) an icon of {WEB_MANIFEST_NAME} has no 'src'")
+            continue
+        # relative to the manifest, which is in the root, as the browser resolves it
+        path = urllib.parse.urljoin(WEB_MANIFEST_NAME, source)
+        icon_status, icon_type, icon_body = fetch(path)
+        if icon_status != 200:
+            problems.append(f"(6) icon {source} answered HTTP {icon_status}, not 200")
+        elif icon_type.split(";")[0].strip().lower() != ICON_TYPE or not icon_body.startswith(package.PNG_SIGNATURE):
+            problems.append(f"(6) icon {source} is not served as a PNG (Content-Type '{icon_type}')")
+    return problems
+
+
+def fetch_from(base_url: str) -> Callable[[str], tuple[int, str, bytes]]:
+    """The `fetch` of check_web_manifest for the server at `base_url` (http://host:port/): plain GET requests, no browser."""
+    def fetch(path: str) -> tuple[int, str, bytes]:
+        try:
+            with urllib.request.urlopen(urllib.parse.urljoin(base_url, path), timeout=10) as response:
+                return response.status, response.headers.get("Content-Type", ""), response.read()
+        except urllib.error.HTTPError as error:
+            with error:  # it holds the connection open until closed
+                return error.code, error.headers.get("Content-Type", ""), b""
+    return fetch
 
 
 def poll(grab: Callable[[], bytes], accept: Callable[[bytes], bool], timeout: float, interval: float | None = None,
@@ -430,9 +495,15 @@ requestAnimationFrame(draw);
 
 
 def write_selftest_site(folder: Path, fault: str = "none") -> Path:
-    """index.html and a manifest.json that says `threads: false`: serve.py then decides on no isolation headers, as for a real build."""
+    """index.html, a manifest.json that says `threads: false` (serve.py then decides on no isolation headers, as for a real build) and
+    a web app manifest with one icon, for check 6."""
     folder.mkdir(parents=True, exist_ok=True)
     (folder / PAGE_NAME).write_text(selftest_page(fault), encoding="utf-8")
+    icon = f"{package.ICONS_FOLDER}/selftest.png"
+    (folder / package.ICONS_FOLDER).mkdir(exist_ok=True)
+    (folder / icon).write_bytes(package.flat_color_png(192, package.DEFAULT_COLOR))
+    web_manifest = {"name": "selftest", "display": "fullscreen", "icons": [{"src": icon, "sizes": "192x192", "type": ICON_TYPE}]}
+    (folder / WEB_MANIFEST_NAME).write_text(json.dumps(web_manifest), encoding="utf-8")
     manifest = {"game": "selftest", "threads": SELFTEST_THREADED, "files": {}}
     (folder / serve.MANIFEST_NAME).write_text(json.dumps(manifest), encoding="utf-8")
     return folder
@@ -540,7 +611,7 @@ def run_browser(playwright_api, url: str, options: Options) -> BrowserRun:
             page.on("pageerror", lambda error: run.page_errors.append(str(error)))
             page.on("crash", lambda *_: run.page_errors.append("the page crashed"))
 
-            response = page.goto(url, wait_until="load", timeout=timeout_ms)
+            response = page.goto(url + PAGE_QUERY, wait_until="load", timeout=timeout_ms)
             run.status = response.status if response else None
             canvas = page.locator(CANVAS_SELECTOR).first
             try:
@@ -647,6 +718,7 @@ def run_smoke(options: Options, playwright_api) -> int:
             print(f"web_smoke: {root} on {url}", flush=True)
             try:
                 run = run_browser(playwright_api, url, options)
+                run.web_manifest_problems = check_web_manifest(fetch_from(url))
             except BrowserMissing as error:
                 named = options.browser_channel or options.executable_path
                 print(f"SKIP: the browser is not installed ({'the one you named' if named else 'playwright install chromium'}): {error}")
@@ -673,6 +745,7 @@ def run_smoke(options: Options, playwright_api) -> int:
         info = run.page_info
         print(f"ok: (5) the backing store {info.canvas_width}x{info.canvas_height} is the CSS size {info.css_width:g}x{info.css_height:g} "
               f"x devicePixelRatio {info.device_pixel_ratio:g}")
+    print(f"ok: (6) {WEB_MANIFEST_NAME} is served with its type, says display fullscreen, and its icons are PNGs")
     print("PASS")
     return EXIT_PASSED
 
