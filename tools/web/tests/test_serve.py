@@ -159,37 +159,30 @@ class WithoutBrotliTest(ServerTestCase):
 
 
 class CachingTest(ServerTestCase):
-    def test_the_page_and_the_manifest_are_no_cache(self):
-        for path in ("/", "/index.html", "/manifest.json"):
+    def test_every_file_is_no_cache_and_never_immutable(self):
+        # the names are not hashed, so a cached .js / .wasm / .data would outlive a deploy; no-cache + ETag costs a 304 per file
+        (self.dist / "sub").mkdir()
+        (self.dist / "sub" / "index.html").write_bytes(b"x")
+        paths = ("/", "/index.html", "/manifest.json", "/manifest.webmanifest", "/icons/icon-512.png", "/sub/index.html",
+                 f"/{GAME}.js", f"/{GAME}.wasm", f"/{GAME}.data")
+        for path in paths:
             with self.subTest(path):
                 self.assertEqual(self.request(path).headers["cache-control"], "no-cache")
 
-    def test_the_web_app_manifest_is_no_cache_with_an_etag_and_answers_304(self):
+    def test_the_web_app_manifest_has_an_etag_and_answers_304(self):
         first = self.request("/manifest.webmanifest")
-        self.assertEqual(first.headers["cache-control"], "no-cache")
         second = self.request("/manifest.webmanifest", headers={"If-None-Match": first.headers["etag"]})
         self.assertEqual((second.status, second.body), (304, b""))
         self.assertEqual(second.headers["cache-control"], "no-cache")
 
-    def test_a_manifest_webmanifest_in_a_subfolder_is_cached_like_any_file(self):
-        (self.dist / "sub").mkdir()
-        (self.dist / "sub" / "manifest.webmanifest").write_bytes(b"{}")
-        self.assertEqual(self.request("/sub/manifest.webmanifest").headers["cache-control"], "public, max-age=3600")
-
-    def test_the_icons_are_cached_for_an_hour(self):
-        self.assertEqual(self.request("/icons/icon-512.png").headers["cache-control"], "public, max-age=3600")
-
-    def test_the_other_files_are_cached_for_an_hour_and_never_immutable(self):
-        for path in (f"/{GAME}.js", f"/{GAME}.wasm", f"/{GAME}.data"):
-            with self.subTest(path):
-                cache = self.request(path).headers["cache-control"]
-                self.assertEqual(cache, "public, max-age=3600")
-                self.assertNotIn("immutable", cache)
-
-    def test_a_file_named_like_the_page_in_a_subfolder_is_cached_like_any_file(self):
-        (self.dist / "sub").mkdir()
-        (self.dist / "sub" / "index.html").write_bytes(b"x")
-        self.assertEqual(self.request("/sub/index.html").headers["cache-control"], "public, max-age=3600")
+    def test_a_game_file_that_a_deploy_replaced_is_sent_again(self):
+        for name in (f"{GAME}.js", f"{GAME}.wasm", f"{GAME}.data"):
+            with self.subTest(name):
+                before = self.request(f"/{name}").headers["etag"]
+                (self.dist / name).write_bytes(b"a new build of the engine")
+                after = self.request(f"/{name}", headers={"If-None-Match": before})
+                self.assertEqual((after.status, after.body), (200, b"a new build of the engine"))
+                self.assertNotEqual(after.headers["etag"], before)
 
     def test_an_unchanged_file_answers_304_without_a_body(self):
         for path in ("/index.html", f"/{GAME}.wasm"):
