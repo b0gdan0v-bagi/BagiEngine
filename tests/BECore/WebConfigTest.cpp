@@ -7,9 +7,7 @@
 #include <Common/Printers.h>
 #include <CoreSDL/SDLUtils.h>
 #include <CoreSDL/SDLWebCanvas.h>
-#include <filesystem>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -160,6 +158,62 @@ namespace BECore::Tests {
         const WebCanvasSize size = FitWindowSize(1.0e18, 1.0e18, 64, 64);
         EXPECT_GT(size.width, 0);
         EXPECT_GT(size.height, 0);
+    }
+
+    TEST(WebCanvasTest, WithoutInsetsTheSafeAreaIsTheWholeWindow) {
+        const WebSafeArea area = SafeAreaFromInsets(1280.0, 720.0, 0.0, 0.0, 0.0, 0.0);
+        EXPECT_EQ(area.x, 0.0);
+        EXPECT_EQ(area.y, 0.0);
+        EXPECT_EQ(area.width, 1280.0);
+        EXPECT_EQ(area.height, 720.0);
+    }
+
+    TEST(WebCanvasTest, ANotchTakesItsSideOfTheSafeArea) {
+        // A phone in landscape: the notch on the left, the home bar below
+        const WebSafeArea area = SafeAreaFromInsets(844.0, 390.0, 0.0, 47.0, 21.0, 47.0);
+        EXPECT_EQ(area.x, 47.0);
+        EXPECT_EQ(area.y, 0.0);
+        EXPECT_EQ(area.width, 844.0 - 47.0 - 47.0);
+        EXPECT_EQ(area.height, 390.0 - 21.0);
+    }
+
+    TEST(WebCanvasTest, AnInsetThatIsNotANumberCountsAsNone) {
+        const double nan = std::numeric_limits<double>::quiet_NaN();
+        const double infinity = std::numeric_limits<double>::infinity();
+        for (const double bad : {nan, infinity, -infinity, -12.0}) {
+            SCOPED_TRACE(std::to_string(bad));
+            const WebSafeArea area = SafeAreaFromInsets(800.0, 600.0, bad, bad, bad, 10.0);
+            EXPECT_EQ(area.x, 10.0);
+            EXPECT_EQ(area.y, 0.0);
+            EXPECT_EQ(area.width, 790.0);
+            EXPECT_EQ(area.height, 600.0);
+        }
+    }
+
+    TEST(WebCanvasTest, InsetsLargerThanTheWindowLeaveTheWholeWindow) {
+        // Both sides together leave nothing: the area is never empty
+        const WebSafeArea area = SafeAreaFromInsets(400.0, 300.0, 0.0, 250.0, 0.0, 250.0);
+        EXPECT_EQ(area.x, 0.0);
+        EXPECT_EQ(area.y, 0.0);
+        EXPECT_EQ(area.width, 400.0);
+        EXPECT_EQ(area.height, 300.0);
+
+        const WebSafeArea wild = SafeAreaFromInsets(400.0, 300.0, 1.0e18, 1.0e18, 1.0e18, 1.0e18);
+        EXPECT_EQ(wild.width, 400.0);
+        EXPECT_EQ(wild.height, 300.0);
+    }
+
+    TEST(WebCanvasTest, AnInsetAsLargeAsTheWindowIsCutToIt) {
+        // The right inset alone covers the whole width: nothing is left, so the whole window answers
+        const WebSafeArea area = SafeAreaFromInsets(400.0, 300.0, 20.0, 9999.0, 0.0, 0.0);
+        EXPECT_EQ(area.width, 400.0);
+        EXPECT_EQ(area.height, 300.0);
+    }
+
+    TEST(WebCanvasTest, AWindowWithoutSizeHasNoSafeAreaToCut) {
+        const WebSafeArea area = SafeAreaFromInsets(0.0, 0.0, 10.0, 10.0, 10.0, 10.0);
+        EXPECT_EQ(area.width, 0.0);
+        EXPECT_EQ(area.height, 0.0);
     }
 
 }  // namespace BECore::Tests
