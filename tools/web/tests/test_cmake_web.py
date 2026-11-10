@@ -242,5 +242,6 @@ class WebFlagsTextTest(unittest.TestCase):
         self.assertEqual(text.rindex("#ifdef __EMSCRIPTEN__", 0, call), text.rindex("#if", 0, call))
         self.assertLess(call, text.index("#endif", call))
 
+
 if __name__ == "__main__":
     unittest.main()

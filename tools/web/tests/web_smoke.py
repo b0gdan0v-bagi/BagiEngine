@@ -629,7 +629,7 @@ def describe_page(run: BrowserRun) -> list[str]:
         lines.append("canvas: not read after the first frame (the run stopped before it)")
         return lines
     if info is None:
-        lines.append("page: not read (the page was gone before it could be read)")
+        lines.append("page: not read (no page information was collected: the page was closed, or the run failed, before it could be read)")
         return lines
     lines.append(f"page: crossOriginIsolated={str(info.cross_origin_isolated).lower()}, typeof SharedArrayBuffer={info.shared_array_buffer}")
     lines.append(f"canvas: devicePixelRatio={info.device_pixel_ratio:g}, CSS size {info.css_width:g}x{info.css_height:g}, "

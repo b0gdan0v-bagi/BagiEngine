@@ -171,6 +171,7 @@
             var errorDetail = document.getElementById("message-detail");
 
             var failed = false;
+            var running = false;  // the runtime is up (setStatus said so): from then on the loading panel has nothing left to report
 
             // The two panels never show at once. Only textContent is used: a message from the game is not HTML.
             function showError(title, message, detail) {
@@ -264,6 +265,7 @@
                         return;
                     }
                     if (!text) {
+                        running = true;
                         hideLoading();
                         return;
                     }
@@ -335,10 +337,15 @@
             });
 
             // A promise nobody awaited that failed: emcc's loader of the .data package is one, so a package that did not download
-            // (a 404, a lost connection) ends here and not in the handler above
+            // (a 404, a lost connection) ends here and not in the handler above. Once the game runs a rejected promise of its own
+            // is only logged: "could not be loaded" over a running game would be wrong
             window.addEventListener("unhandledrejection", function (event) {
                 var reason = event && event.reason;
                 var text = reason && reason.message ? String(reason.message) : String(reason);
+                if (running) {
+                    console.error("Unhandled promise rejection: " + text);
+                    return;
+                }
                 showError("The game could not be loaded", "Part of the game did not download or start. Check the connection and reload the page.", text);
             });
 

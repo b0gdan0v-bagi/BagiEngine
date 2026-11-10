@@ -170,6 +170,14 @@ class ShellScriptTest(unittest.TestCase):
         self.assertIsNotNone(match, "no handler for an unhandled rejection")
         self.assertIn("showError(", match.group(0))
 
+    def test_a_rejection_after_the_game_runs_is_only_logged(self):
+        match = re.search(r'addEventListener\("unhandledrejection".*?\n\s{12}\}\);', self.script, flags=re.DOTALL)
+        self.assertIsNotNone(match)
+        handler = match.group(0)
+        self.assertRegex(handler, re.compile(r"if \(running\) \{\s*console\.error\(.*?return;", re.DOTALL))
+        self.assertLess(handler.index("if (running)"), handler.index("showError("))
+        self.assertRegex(self.script, r"if \(!text\) \{\s*running = true;")
+
     def test_a_download_total_that_the_count_has_passed_does_not_drive_the_bar(self):
         # emcc divides the decoded bytes by the Content-Length, which is the compressed size when the server sends .br / .gz
         match = re.search(r"setStatus:\s*function.*?\n\s{16}\},", self.script, flags=re.DOTALL)

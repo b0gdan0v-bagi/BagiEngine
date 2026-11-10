@@ -5,8 +5,8 @@
 # tools/web/tests/check_bagi_web.cmake includes this file alone), so the pure ones can be checked on a desktop without an
 # Emscripten SDK. Only be_web_configure_target() touches a target.
 #
-# The settings below were checked against settings.js of emsdk 4.0.23 and linked with it (BagiMatch3 links, packages and the
-# module instantiates under node; the run in a browser is the entry web-build, slice 2, last work package).
+# The settings below were checked against settings.js of emsdk 4.0.23 and linked with it (BagiMatch3 links, packages, the module
+# instantiates under node, and the page ran in headless Chromium and Edge: tools/web/web_smoke.py, tools/web/CLAUDE.md).
 #
 #   be_web_preload_args(OUT <var> ENGINE_ROOT <dir> GAME_ROOT <dir> WEB_ROOT <dir>)
 #       The content as a preloaded package: one "--preload-file <dir>@<virtual dir>" entry per config/ and assets/ folder that exists,
