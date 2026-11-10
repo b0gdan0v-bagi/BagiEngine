@@ -146,6 +146,18 @@ namespace BECore::Tests {
       </component>
     </components></node>
   </nodes></scene>
+  <scene type="Scene" name="Boxes"><nodes>
+    <node name="Panel"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+        <elements>
+          <element type="UIPanel" name="Flat" x="10" y="10" width="100" height="50" color="10,20,30,255"/>
+          <element type="UIPanel" name="Fancy" x="10" y="100" width="200" height="100" color="10,20,30,255" cornerRadius="16" borderWidth="2" borderColor="255,255,255,255"
+                   gradientDirection="Vertical" gradientColor="50,60,70,255" shadow="0,4,8,0,#00000080" glow="0,0,12,2,#FFD70040" highlight="255,255,255,60"/>
+          <element type="UIButton" name="Round" x="10" y="300" width="80" height="40" text="Round" action="UIControlApiRound" color="40,90,60,255" cornerRadius="4,8,12,0"/>
+        </elements>
+      </component>
+    </components></node>
+  </nodes></scene>
   <scene type="Scene" name="Empty"><nodes/></scene>
 </scenes></SceneManager>)";
 
@@ -465,6 +477,85 @@ namespace BECore::Tests {
         EXPECT_TRUE(BoolMember(*menu, "modal"));
         EXPECT_FALSE(BoolMember(*menu, "visible"));
         EXPECT_FALSE(BoolMember(*menu, "takesInput"));
+    }
+
+    TEST_F(UIControlApiTest, AnElementWithNoBoxStyleHasNoBoxKey) {
+        Show("Boxes");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* canvas = FindCanvas(*Member(response, "result"), "Panel");
+        ASSERT_NE(canvas, nullptr);
+        const Json* flat = FindElement(*canvas, "Flat");
+        ASSERT_NE(flat, nullptr);
+        EXPECT_EQ(Member(*flat, "box"), nullptr);
+        // Every element of the other scenes has the default style too
+        Show("Main");
+        const Json main = Call("ui_tree");
+        EXPECT_EQ(Text(DumpJson(main)).find("\"box\""), std::string::npos);
+    }
+
+    TEST_F(UIControlApiTest, AnElementWithEveryBoxFieldReportsThemAll) {
+        Show("Boxes");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* canvas = FindCanvas(*Member(response, "result"), "Panel");
+        ASSERT_NE(canvas, nullptr);
+        const Json* fancy = FindElement(*canvas, "Fancy");
+        ASSERT_NE(fancy, nullptr);
+        const Json* box = Member(*fancy, "box");
+        ASSERT_NE(box, nullptr);
+        const Json* corners = Member(*box, "cornerRadius");
+        ASSERT_NE(corners, nullptr);
+        ASSERT_TRUE(corners->is_array());
+        ASSERT_EQ(corners->size(), 4u);
+        for (const Json& radius : *corners) {
+            EXPECT_NEAR(radius.get<double>(), 16.0, kTolerance);
+        }
+        EXPECT_NEAR(NumberMember(*box, "borderWidth"), 2.0, kTolerance);
+        EXPECT_EQ(StringMember(*box, "borderColor"), "255,255,255,255");
+        const Json* gradient = Member(*box, "gradient");
+        ASSERT_NE(gradient, nullptr);
+        EXPECT_EQ(StringMember(*gradient, "direction"), "Vertical");
+        EXPECT_EQ(StringMember(*gradient, "color"), "50,60,70,255");
+        const Json* shadow = Member(*box, "shadow");
+        ASSERT_NE(shadow, nullptr);
+        EXPECT_NEAR(NumberMember(*shadow, "offsetX"), 0.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*shadow, "offsetY"), 4.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*shadow, "blur"), 8.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*shadow, "spread"), 0.0, kTolerance);
+        EXPECT_EQ(StringMember(*shadow, "color"), "0,0,0,128");
+        const Json* glow = Member(*box, "glow");
+        ASSERT_NE(glow, nullptr);
+        EXPECT_NEAR(NumberMember(*glow, "blur"), 12.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*glow, "spread"), 2.0, kTolerance);
+        EXPECT_EQ(StringMember(*glow, "color"), "255,215,0,64");
+        EXPECT_EQ(StringMember(*box, "highlight"), "255,255,255,60");
+    }
+
+    TEST_F(UIControlApiTest, ABoxReportsOnlyWhatIsSetAndABoxOfAButtonIsTheAuthoredOne) {
+        Show("Boxes");
+        const Json response = Call("ui_tree");
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* canvas = FindCanvas(*Member(response, "result"), "Panel");
+        ASSERT_NE(canvas, nullptr);
+        const Json* round = FindElement(*canvas, "Round");
+        ASSERT_NE(round, nullptr);
+        const Json* box = Member(*round, "box");
+        ASSERT_NE(box, nullptr);
+        const Json* corners = Member(*box, "cornerRadius");
+        ASSERT_NE(corners, nullptr);
+        ASSERT_EQ(corners->size(), 4u);
+        EXPECT_NEAR((*corners)[0].get<double>(), 4.0, kTolerance);
+        EXPECT_NEAR((*corners)[1].get<double>(), 8.0, kTolerance);
+        EXPECT_NEAR((*corners)[2].get<double>(), 12.0, kTolerance);
+        EXPECT_NEAR((*corners)[3].get<double>(), 0.0, kTolerance);
+        for (const char* key : {"borderWidth", "borderColor", "gradient", "shadow", "glow", "highlight"}) {
+            EXPECT_EQ(Member(*box, key), nullptr) << key;
+        }
     }
 
     TEST_F(UIControlApiTest, ALabelShowsItsTextWithTheVariablesReplaced) {

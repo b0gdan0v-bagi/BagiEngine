@@ -1,6 +1,6 @@
 # UI Module Guidelines
 
-In-game UI drawn through `IRenderer`, in both backends and both run modes. ImGui is not involved (it is the tool UI: `.claude/rules/widgets-module.md`). The authoring decision and its data: `AuthoringDecision.md`. Screens in HTML + CSS: `.claude/rules/ui-web.md`.
+In-game UI drawn through `IRenderer`, in both backends and both run modes. ImGui is not involved (it is the tool UI: `.claude/rules/widgets-module.md`). The authoring decision and its data: `AuthoringDecision.md`. Screens in HTML + CSS: `.claude/rules/ui-web.md`. Rounded boxes, borders, gradients, shadows: `.claude/rules/ui-shapes.md`.
 
 **Adaptivity is the foundation.** Window size, aspect, orientation, safe area, pixel density and user scale are inputs of every layout, and **every screen must pass `ValidateOnMatrix` with no issues before it is done**.
 
@@ -56,9 +56,9 @@ UIElement tree (root = the canvas)
 - **`extendToOutput`** (`SceneView` only; one warning and ignored on the others): `bounds` are the whole output in scene units, with a negative origin where the fitted view leaves bars; `viewBounds` is the view `{0, 0, viewW, viewH}` inside them; `transform` stays the scene's fit, so scene points do not move. Anchors, `Stretch`, `x` / `y` (from the corner of `bounds`, not of the view), `contentBounds`, `OutsideCanvas` and the canvas variants (conditioned on the output's shape in scene units) all use `bounds`. One canvas lays out the board corner and a row on a bar (`Bottom`, `Top`). Without the flag `viewBounds == bounds`.
 - **Draw order** is the scene's (layer, then scene order); **input order** the reverse (refreshed every draw, also while hidden).
 - **Input:** a canvas consumes a mouse event on a hit-testable element (`blocksInput` or `interactive`) by the last draw's layout; hover over one is consumed except a drag that began elsewhere (the game's); a press it took is followed to its release; a `modal` canvas consumes everything while shown; hidden, `inputEnabled` off and inactive-scene canvases consume nothing. Hit testing: child before parent, later sibling first; children are not clipped.
-- **Popups** (`UIElement::HasPopupChildren`, a dropdown's list): the children are out of the flow, with no rect while closed (the validator, hit test, draw and `ui_tree` do not see them); open, `LayoutPopup` places them in `contentBounds`, they are drawn after the whole tree and hit-tested before it. A left press anywhere else closes the popup and is **consumed** with its release; a click ending inside the list goes to the popup's `OnPopupChoice`, not to the child's `OnClick`. One popup is open per canvas (the newest wins); a canvas that cannot take input closes it. The open state is runtime UI state; the canvas invalidates on a change.
+- **Popups** (`UIElement::HasPopupChildren`, a dropdown's list): the children are out of the flow, with no rect while closed (the validator, hit test, draw and `ui_tree` do not see them); open, `LayoutPopup` places them in `contentBounds`, they are drawn after the whole tree and hit-tested before it. A left press anywhere else closes the popup and is **consumed** with its release; a click ending inside the list goes to the popup's `OnPopupChoice`, not to the child's `OnClick`. One popup is open per canvas (the newest wins); a canvas that cannot take input closes it.
 - **Pointer hooks:** `OnClick` on release over the same element; `OnPress(x, y)` on the left press of an `interactive` element and `OnDrag(x, y)` on motion while held, in canvas units; they run last.
-- **Show / hide:** `UICanvasComponent::SetVisibleByName(scene, node, visible)`; one element: `SetElementVisible(name, ...)` or `SetElementVisibleByName(scene, name, ...)` (sets `style.visible`; a variant still wins).
+- **Show / hide:** `UICanvasComponent::SetVisibleByName`; one element: `SetElementVisible` / `SetElementVisibleByName` (sets `style.visible`; a variant still wins).
 - The reflected fields are `visible` and `inputEnabled`, not `enabled` (that attribute name is taken by factory vectors, `Reflection/DataAccessor.h`).
 
 ## Layout
@@ -75,9 +75,9 @@ Issues: `OutsideCanvas`, `OutsideSafeArea`, `SiblingsOverlap` (in a stack), `Tou
 
 `tests/Common/UILayoutMatrix.h` runs a canvas over ten aspects at 480..2160 px short sides, with no insets / a notch / side insets, each scale mode and user scales 1.0 and 1.5. A canvas from a scene needs one `UpdateLayout(w, h)` first. One line: `EXPECT_TRUE(ValidateOnMatrix(canvas).empty()) << DescribeMatrixFailures(failures)`.
 
-**A `SceneView` canvas of a scene with `viewVariants`** passes the scene's view declaration as the fourth argument, `UIMatrixViews{viewWidth, viewHeight, variants}`: each case takes the view `SceneViewSelector::Pick` gives for its output (what `Scene::Draw` picks) as the view size, and the failure label ends with `view <name>`. Without it the view size of `baseContext` stays in every case.
+**A `SceneView` canvas of a scene with `viewVariants`** passes the scene's view declaration as the fourth argument, `UIMatrixViews{viewWidth, viewHeight, variants}`: each case takes the view `SceneViewSelector::Pick` gives for its output (what `Scene::Draw` picks) as the view size, and the failure label ends with `view <name>`.
 
-**A screen test** builds the screen through the reflected path a game uses, sets the variables to their longest values, runs the matrix **once per language**, and also asks `CheckContent(width, height, scale).fits` of every shown label, button and toggle — **an ellipsis label "can shrink", so the validator alone misses a cut word**. It holds a deliberately broken copy for each check. Templates in `tests/BECore/`: `UIScreenTest.cpp` (a HUD), `UISelectorScreenTest.cpp` (a modal panel of choice groups), `UISettingsScreenTest.cpp` (toggle, slider, progress bar, language group, a deliberately long test language), `UIDropdownScreenTest.cpp` (a dropdown panel, the matrix closed and open).
+**A screen test** builds the screen through the reflected path a game uses, sets the variables to their longest values, runs the matrix **once per language**, and also asks `CheckContent(width, height, scale).fits` of every shown label, button and toggle — **an ellipsis label "can shrink", so the validator alone misses a cut word**. Templates in `tests/BECore/`: `UIScreenTest.cpp` (a HUD), `UISelectorScreenTest.cpp`, `UISettingsScreenTest.cpp` (with a deliberately long test language), `UIDropdownScreenTest.cpp` (the matrix closed and open).
 
 **Design rules:** anchors and percents, not absolute positions; interactive elements ≥ 48 units at the reference size with a `minScale` that keeps them touch targets (56 in an 840-unit view); a variant for the shapes that do not fit (usually portrait); text that wraps, cuts with an ellipsis or shrinks.
 
@@ -114,11 +114,11 @@ Each derives from `UIElement`, draws itself in `DrawSelf` in canvas units; `colo
 
 | Type | Fields | Behavior |
 |------|--------|----------|
-| `UIElement` | — | a box and children |
+| `UIElement` | `cornerRadius`, `borderWidth`, `borderColor`, `gradientColor`, `gradientDirection`, `shadow`, `glow`, `highlight` | a box (flat rect unless those are set: `ui-shapes.md`) and children |
 | `UIPanel` | `sprite`, `sliceBorder`, `spriteTint` | fill then sprite, nine-sliced with `sliceBorder`; `blocksInput` by default |
 | `UIImage` | `sprite`, `tint`, `stretch` | sprite fitted, centered, proportional |
 | `UILabel` | `text`, `font`, `textColor`, `align`, `verticalAlign`, `overflow` (`Ellipsis` default, `Clip`, `AutoFit`), `wrap`, `lineSpacing`, `minFontSize` | text at `fontSize` (24 when 0) x canvas scale in whole pixels |
-| `UIButton` | `action`, `value`, `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, `disabled` | a click emits `ActionEvent(action, value)`; state colors derived when transparent; `selected` adds a 4-unit bar so selection is not colour alone; disabled still consumes the click |
+| `UIButton` | `action`, `value`, `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, `disabled` | a click emits `ActionEvent(action, value)`; state colors derived when transparent; `selected` adds a 4-unit bar so selection is not colour alone; disabled still consumes the click; the states shift the box too (`ui-shapes.md`) |
 | `UIStack` | — | a stack container |
 | `UISegmented` | `bind`, `disabled` | radio group over direct `UIButton` children: the segment whose `value` equals the variable is `selected`. **Every segment needs an explicit `height`**, also with `flex` (else it is a 0-high rect: not drawn, not clickable, skipped by the validator) |
 | `UIToggle` | `bind`, `action`, `onValue`, `offValue`, `disabled`, track / fill / thumb colors | a caption with a switch at the right; on when the variable equals `onValue`; a click emits the opposite value. The caption is measured left of the switch (`GetParts`) |
@@ -138,7 +138,7 @@ Each derives from `UIElement`, draws itself in `DrawSelf` in canvas units; `colo
 
 ## Control API (`ui_tree`, `ui_click`)
 
-On the canvases of the **active scene**, by the layout of the last draw (`step` a frame first). `ui_tree` gives every canvas (node, space, visibility, modal, input, scale, bounds, validator `issues`, and for a `SceneView` canvas `view` `{name, width, height}`: the scene's active view, empty `name`: the default) and its elements (`type`, `name`, `visible`, `interactive`, `rect` in canvas units, `outputRect` in screenshot pixels, `text` with variables, and the control fields: `action` / `value` / `selected` / `disabled` of a button, `bind` / `selectedValue` of a group or dropdown (a dropdown also `open`; its options are its children, with no rect while closed), `checked` of a toggle, `fraction` and `value` of a bar or slider). Bound values are read when asked, so no draw follows `UIVars::Set`. `ui_click {name, canvas?, at?}` presses the middle (`at` 0..1 sets the horizontal point; the way to set a slider) of the first visible interactive element through `UIInput`, exactly as a user would, after checking it is topmost in its canvas; it answers the `action` / `value` of the click (a dropdown's header emits nothing; an option of an open list answers the dropdown's `action` and its own `value`: `ui_click` header, `step`, `ui_click` option, `step`), or `not_found`, `not_clickable` (why), `no_scene`. A widget changes nothing by a click: `ui_click`, `step`, `ui_tree`. Names are looked up with `PoolString::Find`, never interned. The MCP server has both as tools (`tools/control/CLAUDE.md`).
+On the canvases of the **active scene**, by the layout of the last draw (`step` a frame first). `ui_tree` gives every canvas (node, space, visibility, modal, input, scale, bounds, validator `issues`, and for a `SceneView` canvas `view` `{name, width, height}`: the scene's active view, empty `name`: the default) and its elements (`type`, `name`, `visible`, `interactive`, `rect` in canvas units, `outputRect` in screenshot pixels, `text` with variables, `box` when one is authored, and the control fields: `action` / `value` / `selected` / `disabled` of a button, `bind` / `selectedValue` of a group or dropdown (a dropdown also `open`; its options are its children, with no rect while closed), `checked` of a toggle, `fraction` and `value` of a bar or slider). Bound values are read when asked, so no draw follows `UIVars::Set`. `ui_click {name, canvas?, at?}` presses the middle (`at` 0..1 sets the horizontal point; the way to set a slider) of the first visible interactive element through `UIInput`, exactly as a user would, after checking it is topmost in its canvas; it answers the `action` / `value` of the click (a dropdown's header emits nothing; an option of an open list answers the dropdown's `action` and its own `value`: `ui_click` header, `step`, `ui_click` option, `step`), or `not_found`, `not_clickable` (why), `no_scene`. A widget changes nothing by a click: `ui_click`, `step`, `ui_tree`. Names are looked up with `PoolString::Find`, never interned. The MCP server has both as tools (`tools/control/CLAUDE.md`).
 
 ## Editor preview
 
@@ -146,7 +146,7 @@ On the canvases of the **active scene**, by the layout of the last draw (`step` 
 
 ## Trying the widgets live
 
-No shipped scene uses the toggle, slider, progress bar or strings: copy `kSettingsXml` and `kStringsXml` into scratch (uncommitted) `config/` files of a game, run `--control --headless --manual-clock`, drive with `ui_tree`, `ui_click`, `step`, `screenshot`.
+No shipped scene uses the toggle, slider, progress bar or strings: copy `kSettingsXml` and `kStringsXml` into scratch `config/` files of a game, run `--control --headless --manual-clock`, drive with `ui_tree`, `ui_click`, `step`, `screenshot`.
 
 ## Not done
 
