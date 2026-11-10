@@ -211,6 +211,80 @@ namespace BECore::Tests {
         EXPECT_NEAR(y, 50.0f, kTolerance);
     }
 
+    // ---- an extended SceneView canvas -------------------------------------------------------------------------------------
+
+    namespace {
+
+        /// A 400 x 300 view in a 400 x 600 output: scale 1, a bar of 150 above and below; the extended canvas is 400 x 600 units with its origin at (0, -150)
+        UILayoutContext ViewWithBars() {
+            UILayoutContext context = Output(400.0f, 600.0f);
+            context.sceneViewWidth = 400.0f;
+            context.sceneViewHeight = 300.0f;
+            return context;
+        }
+
+        UICanvasLayout ExtendedCanvas() {
+            UICanvasLayout canvas;
+            canvas.params.space = CanvasSpace::SceneView;
+            canvas.params.extendToOutput = true;
+            return canvas;
+        }
+
+    }  // namespace
+
+    TEST(UICanvasLayoutTest, AnchorsOfAnExtendedCanvasRefToTheWholeOutput) {
+        UICanvasLayout canvas = ExtendedCanvas();
+        auto top = AddBox(*canvas.root, "Top", 0.0f, 10.0f, 100.0f, 40.0f);
+        top->style.rect.anchor = UIAnchor::Top;
+        auto bottom = AddBox(*canvas.root, "Bottom", 0.0f, -10.0f, 100.0f, 40.0f);
+        bottom->style.rect.anchor = UIAnchor::Bottom;
+        auto fill = canvas.root->AddChild("Fill"_intern);
+        fill->style.rect.anchor = UIAnchor::Stretch;
+
+        canvas.Update(ViewWithBars());
+
+        ExpectRect(top->rect, 150.0f, -140.0f, 100.0f, 40.0f);    // in the bar above the view (y < 0)
+        ExpectRect(bottom->rect, 150.0f, 400.0f, 100.0f, 40.0f);  // in the bar below it (the view ends at y = 300; the canvas at 450)
+        ExpectRect(fill->rect, 0.0f, -150.0f, 400.0f, 600.0f);
+        ExpectRect(canvas.GetResolved().viewBounds, 0.0f, 0.0f, 400.0f, 300.0f);
+    }
+
+    TEST(UICanvasLayoutTest, AnElementInABarIsHitAndTheOutputPointMapsToTheCanvas) {
+        UICanvasLayout canvas = ExtendedCanvas();
+        auto button = AddBox(*canvas.root, "Button", 0.0f, -10.0f, 100.0f, 40.0f);
+        button->style.rect.anchor = UIAnchor::Bottom;
+        button->interactive = true;
+        canvas.Update(ViewWithBars());
+
+        // The button is at scene y 400..440 = output pixels 550..590
+        const auto [x, y] = canvas.OutputToCanvas(200.0f, 570.0f);
+        EXPECT_NEAR(x, 200.0f, kTolerance);
+        EXPECT_NEAR(y, 420.0f, kTolerance);
+        EXPECT_EQ(canvas.HitTest(x, y), button.Get());
+        EXPECT_EQ(canvas.HitTest(200.0f, 290.0f), nullptr);           // the view above it is empty
+        EXPECT_EQ(canvas.OutputToCanvas(0.0f, 150.0f).second, 0.0f);  // the first row of the view is scene y 0
+    }
+
+    TEST(UICanvasLayoutTest, TheFlagLaysOutAgainAndTheVariantsAreConditionedOnTheOutputShape) {
+        UICanvasLayout canvas;
+        canvas.params.space = CanvasSpace::SceneView;
+        UIVariant portrait;  // a landscape view in a tall output is portrait only as an extended canvas
+        portrait.when.orientation = UIOrientation::Portrait;
+        UIElementOverride wide;
+        wide.element = "Box"_intern;
+        wide.width = UILength::Px(300.0f);
+        portrait.overrides.push_back(wide);
+        canvas.variants.push_back(portrait);
+        AddBox(*canvas.root, "Box", 0.0f, 0.0f, 100.0f, 40.0f);
+
+        EXPECT_TRUE(canvas.Update(ViewWithBars()));
+        EXPECT_NEAR(canvas.root->FindByName("Box"_intern)->rect.w, 100.0f, kTolerance);  // bounds 400 x 300: landscape
+
+        canvas.params.extendToOutput = true;
+        EXPECT_TRUE(canvas.Update(ViewWithBars()));                                      // the cache sees the flag
+        EXPECT_NEAR(canvas.root->FindByName("Box"_intern)->rect.w, 300.0f, kTolerance);  // bounds 400 x 600: portrait
+    }
+
     // ---- hit testing ------------------------------------------------------------------------------------------------------
 
     TEST(UICanvasLayoutTest, ABeforeTheFirstUpdateNothingIsHit) {

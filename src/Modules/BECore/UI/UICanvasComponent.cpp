@@ -121,6 +121,13 @@ namespace BECore {
         params.minScale = _minScale;
         params.maxScale = _maxScale;
         params.useSafeArea = _useSafeArea;
+        params.extendToOutput = _extendToOutput;
+
+        const bool ignored = _extendToOutput && _space != CanvasSpace::SceneView;
+        if (ignored && !_extendWarned) {
+            LOG_WARNING("UICanvasComponent: extendToOutput applies to a SceneView canvas only; ignored on a {} canvas"_format(EnumUtils<CanvasSpace>::ToString(_space)));
+        }
+        _extendWarned = ignored;
     }
 
     UILayoutContext UICanvasComponent::MakeContext(float outputWidth, float outputHeight) const {

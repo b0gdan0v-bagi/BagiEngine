@@ -243,6 +243,117 @@ namespace BECore::Tests {
         ExpectRect(resolved.safeBounds, 0.0f, 100.0f, 1000.0f, 900.0f);  // the bars are outside the view, so only the top is cut
     }
 
+    // ---- SceneView with extendToOutput ------------------------------------------------------------------------------------
+
+    namespace {
+
+        UICanvasScaleParams SceneViewCanvas(bool extend) {
+            UICanvasScaleParams params;
+            params.space = CanvasSpace::SceneView;
+            params.extendToOutput = extend;
+            return params;
+        }
+
+        UILayoutContext ViewInOutput(float viewWidth, float viewHeight, float outputWidth, float outputHeight) {
+            UILayoutContext context = Output(outputWidth, outputHeight);
+            context.sceneViewWidth = viewWidth;
+            context.sceneViewHeight = viewHeight;
+            return context;
+        }
+
+    }  // namespace
+
+    TEST(UICanvasScalerTest, AnExtendedSceneViewCanvasIsTheWholeOutputInSceneUnitsAndTheViewStaysAtTheOrigin) {
+        // A 1000 x 1000 view fills the height of a 2000 x 1000 output: scale 1, a bar of 500 on each side
+        const UILayoutContext context = ViewInOutput(1000.0f, 1000.0f, 2000.0f, 1000.0f);
+
+        const UICanvasResolved resolved = UICanvasScaler::Resolve(SceneViewCanvas(true), context);
+        const ViewTransform fit = ViewTransform::Fit(1000.0f, 1000.0f, 2000.0f, 1000.0f);
+
+        ExpectRect(resolved.bounds, -500.0f, 0.0f, 2000.0f, 1000.0f);
+        ExpectRect(resolved.viewBounds, 0.0f, 0.0f, 1000.0f, 1000.0f);
+        EXPECT_FLOAT_EQ(resolved.scale, fit.scale);
+        EXPECT_FLOAT_EQ(resolved.transform.scale, fit.scale);
+        EXPECT_FLOAT_EQ(resolved.transform.offsetX, fit.offsetX);  // the scene point (0, 0) is still the corner of the view
+        EXPECT_FLOAT_EQ(resolved.transform.offsetY, fit.offsetY);
+        ExpectRect(resolved.contentBounds, -500.0f, 0.0f, 2000.0f, 1000.0f);
+    }
+
+    TEST(UICanvasScalerTest, AnExtendedCanvasOnAPortraitOutputReachesTheBarsAboveAndBelowTheView) {
+        const UILayoutContext context = ViewInOutput(1280.0f, 720.0f, 720.0f, 1280.0f);  // a wide view in a tall output: scale 0.5625, bars of 437.5 pixels
+
+        const UICanvasResolved resolved = UICanvasScaler::Resolve(SceneViewCanvas(true), context);
+
+        const float bar = 437.5f / 0.5625f;
+        ExpectRect(resolved.bounds, 0.0f, -bar, 1280.0f, 720.0f + 2.0f * bar);
+        ExpectRect(resolved.viewBounds, 0.0f, 0.0f, 1280.0f, 720.0f);
+        EXPECT_NEAR(resolved.bounds.y + resolved.bounds.h - resolved.viewBounds.h, bar, 1e-2f);  // the same bar below
+    }
+
+    TEST(UICanvasScalerTest, TheSafeAreaOfAnExtendedCanvasIsInTheUnitsOfItsBounds) {
+        UILayoutContext context = ViewInOutput(1000.0f, 1000.0f, 2000.0f, 1000.0f);
+        context.safeArea = {0.0f, 100.0f, 2000.0f, 900.0f};  // a notch at the top of the output
+        UICanvasScaleParams params = SceneViewCanvas(true);
+
+        UICanvasResolved resolved = UICanvasScaler::Resolve(params, context);
+        ExpectRect(resolved.safeBounds, -500.0f, 100.0f, 2000.0f, 900.0f);  // the bars are inside the safe area: only the notch is cut
+        ExpectRect(resolved.contentBounds, -500.0f, 0.0f, 2000.0f, 1000.0f);
+
+        params.useSafeArea = true;
+        resolved = UICanvasScaler::Resolve(params, context);
+        ExpectRect(resolved.contentBounds, -500.0f, 100.0f, 2000.0f, 900.0f);
+
+        context.safeArea = {120.0f, 0.0f, 1760.0f, 1000.0f};  // side insets of 120 pixels
+        resolved = UICanvasScaler::Resolve(params, context);
+        ExpectRect(resolved.contentBounds, -380.0f, 0.0f, 1760.0f, 1000.0f);
+    }
+
+    TEST(UICanvasScalerTest, WithoutTheFlagTheNumbersAreTheOldOnes) {
+        UILayoutContext context = ViewInOutput(1000.0f, 1000.0f, 2000.0f, 1000.0f);
+        context.safeArea = {0.0f, 100.0f, 2000.0f, 900.0f};
+
+        const UICanvasResolved resolved = UICanvasScaler::Resolve(SceneViewCanvas(false), context);
+
+        ExpectRect(resolved.bounds, 0.0f, 0.0f, 1000.0f, 1000.0f);
+        ExpectRect(resolved.viewBounds, 0.0f, 0.0f, 1000.0f, 1000.0f);
+        ExpectRect(resolved.safeBounds, 0.0f, 100.0f, 1000.0f, 900.0f);
+    }
+
+    TEST(UICanvasScalerTest, AnExtendedCanvasOfASceneWithoutAViewIsTheOutputAndItsOwnView) {
+        const UICanvasResolved resolved = UICanvasScaler::Resolve(SceneViewCanvas(true), Output(1280.0f, 720.0f));
+
+        ExpectRect(resolved.bounds, 0.0f, 0.0f, 1280.0f, 720.0f);
+        ExpectRect(resolved.viewBounds, 0.0f, 0.0f, 1280.0f, 720.0f);
+        EXPECT_FLOAT_EQ(resolved.scale, 1.0f);
+    }
+
+    TEST(UICanvasScalerTest, ExtendToOutputIsIgnoredForScreenAndWorldCanvases) {
+        UILayoutContext context = ViewInOutput(1000.0f, 1000.0f, 2000.0f, 1000.0f);
+        context.worldBox = {100.0f, 50.0f, 80.0f, 20.0f};
+        for (const CanvasSpace space : {CanvasSpace::Screen, CanvasSpace::World}) {
+            UICanvasScaleParams plain;
+            plain.space = space;
+            UICanvasScaleParams extended = plain;
+            extended.extendToOutput = true;
+
+            const UICanvasResolved expected = UICanvasScaler::Resolve(plain, context);
+            const UICanvasResolved actual = UICanvasScaler::Resolve(extended, context);
+
+            ExpectRect(actual.bounds, expected.bounds.x, expected.bounds.y, expected.bounds.w, expected.bounds.h);
+            ExpectRect(actual.viewBounds, expected.bounds.x, expected.bounds.y, expected.bounds.w, expected.bounds.h);
+            EXPECT_FLOAT_EQ(actual.scale, expected.scale);
+            EXPECT_FLOAT_EQ(actual.transform.offsetX, expected.transform.offsetX);
+        }
+    }
+
+    TEST(UICanvasScalerTest, TheParamsComparisonSeesTheFlag) {
+        UICanvasScaleParams params;
+        UICanvasScaleParams extended = params;
+        extended.extendToOutput = true;
+
+        EXPECT_FALSE(params == extended);
+    }
+
     TEST(UICanvasScalerTest, WorldIsTheBoxOfTheNodeAndFollowsIt) {
         UICanvasScaleParams params;
         params.space = CanvasSpace::World;

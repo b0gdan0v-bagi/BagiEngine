@@ -44,8 +44,9 @@ namespace BECore {
         BE_REFLECT_FIELD float _minScale = 0.25f;
         BE_REFLECT_FIELD float _maxScale = 8.0f;
         BE_REFLECT_FIELD bool _useSafeArea = false;
-        BE_REFLECT_FIELD bool _modal = false;   ///< while shown, no mouse event gets past this canvas
-        BE_REFLECT_FIELD bool _visible = true;  ///< drawn and, with `inputEnabled`, takes input
+        BE_REFLECT_FIELD bool _extendToOutput = false;  ///< SceneView only: bounds are the whole output in scene units, so the canvas also reaches the bars around the view (UICanvasScaler)
+        BE_REFLECT_FIELD bool _modal = false;           ///< while shown, no mouse event gets past this canvas
+        BE_REFLECT_FIELD bool _visible = true;          ///< drawn and, with `inputEnabled`, takes input
         BE_REFLECT_FIELD bool _inputEnabled = true;
 
         /// A screen in a file of its own, a UIDocument such as `assets/ui/hud.ui.xml`. Its elements and variants come first, the inline ones below come after them
@@ -137,6 +138,7 @@ namespace BECore {
         IntrusivePtr<UIElement> _hovered;  // the element under the pointer; kept alive here so that a tree edit cannot leave a dangling flag
         IntrusivePtr<UIElement> _pressed;  // the interactive element the left button went down on and is not up yet
         IntrusivePtr<UIElement> _popup;    // the open popup the last SyncPopups() saw
+        bool _extendWarned = false;        // the ignored `extendToOutput` of a Screen or World canvas was reported
         bool _authoredAdopted = false;     // Initialize() has handed `_elements` and `_variants` to the layout
     };
 

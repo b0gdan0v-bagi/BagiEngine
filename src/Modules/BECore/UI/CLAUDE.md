@@ -47,12 +47,13 @@ UIElement tree (root = the canvas)
 | `space` | Fills | Unit | Scale |
 |---------|-------|------|-------|
 | `Screen` | the render output | by `scaleMode` | mode x user scale, within `minScale` / `maxScale` |
-| `SceneView` | the scene's **active** view, fitted | a scene unit | the scene's fit |
+| `SceneView` | the scene's **active** view, fitted (`extendToOutput`: the whole output) | a scene unit | the scene's fit |
 | `World` | the node's `TransformComponent` box | a scene unit | the scene's fit; follows the node |
 
 `scaleMode` (Screen only): `ConstantPixelSize`, `ConstantPhysicalSize`, `ScaleWithScreen` (against `referenceWidth` x `referenceHeight`; `match` 0 width, 1 height, between them Unity's geometric blend). `useSafeArea`: `contentBounds` is the safe area, `bounds` stays the canvas (a root child with `ignoreSafeArea` uses `bounds`).
 
 - **A scene with view variants** (`Scene/CLAUDE.md`, "View size") picks its view in `Scene::Draw` before any canvas lays out; `MakeContext` reads the active size, so after a switch `bounds` are the new view and the canvas `variants` (conditioned on `bounds`) choose again, with no extra signal.
+- **`extendToOutput`** (`SceneView` only; one warning and ignored on the others): `bounds` are the whole output in scene units, with a negative origin where the fitted view leaves bars; `viewBounds` is the view `{0, 0, viewW, viewH}` inside them; `transform` stays the scene's fit, so scene points do not move. Anchors, `Stretch`, `x` / `y` (from the corner of `bounds`, not of the view), `contentBounds`, `OutsideCanvas` and the canvas variants (conditioned on the output's shape in scene units) all use `bounds`. One canvas lays out the board corner and a row on a bar (`Bottom`, `Top`). Without the flag `viewBounds == bounds`.
 - **Draw order** is the scene's (layer, then scene order); **input order** the reverse (refreshed every draw, also while hidden).
 - **Input:** a canvas consumes a mouse event on a hit-testable element (`blocksInput` or `interactive`) by the last draw's layout; hover over one is consumed except a drag that began elsewhere (the game's); a press it took is followed to its release; a `modal` canvas consumes everything while shown; hidden, `inputEnabled` off and inactive-scene canvases consume nothing. Hit testing: child before parent, later sibling first; children are not clipped.
 - **Popups** (`UIElement::HasPopupChildren`, a dropdown's list): the children are out of the flow, with no rect while closed (the validator, hit test, draw and `ui_tree` do not see them); open, `LayoutPopup` places them in `contentBounds`, they are drawn after the whole tree and hit-tested before it. A left press anywhere else closes the popup and is **consumed** with its release; a click ending inside the list goes to the popup's `OnPopupChoice`, not to the child's `OnClick`. One popup is open per canvas (the newest wins); a canvas that cannot take input closes it. The open state is runtime UI state; the canvas invalidates when it changes.
@@ -143,7 +144,7 @@ On the canvases of the **active scene**, by the layout of the last draw (`step` 
 
 ## Trying the widgets live
 
-No shipped scene uses the toggle, slider, progress bar or strings: copy `kSettingsXml` (view 840 x 800) and `kStringsXml` into scratch `config/SceneConfig.xml` / `UIStrings.xml` of a game, run with `--control --headless --manual-clock`, drive with `ui_tree`, `ui_click`, `step`, `screenshot` (the widgets only emit: set the variables by hand). Never commit the scratch files.
+No shipped scene uses the toggle, slider, progress bar or strings: copy `kSettingsXml` (view 840 x 800) and `kStringsXml` into scratch `config/` files of a game and run with `--control --headless --manual-clock`, driving with `ui_tree`, `ui_click`, `step`, `screenshot` (set the variables by hand). Never commit the scratch files.
 
 ## Not done
 

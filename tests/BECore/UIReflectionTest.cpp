@@ -387,6 +387,21 @@ namespace BECore::Tests {
         EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("CodeOnly")), nullptr);
     }
 
+    TEST(UIReflectionTest, ExtendToOutputSavesAndLoadsBackAndIsOffByDefault) {
+        auto canvas = MakeCanvas();
+        EXPECT_FALSE(canvas->_extendToOutput);
+        canvas->_extendToOutput = true;
+
+        for (const bool skipDefaults : {false, true}) {
+            const eastl::string xml = ToXml(*canvas, skipDefaults);
+            EXPECT_NE(xml.find("extendToOutput=\"true\""), eastl::string::npos);
+            EXPECT_TRUE(FromXml(xml)->_extendToOutput);
+        }
+
+        canvas->_extendToOutput = false;
+        EXPECT_FALSE(FromXml(ToXml(*canvas, false))->_extendToOutput);
+    }
+
     TEST(UIReflectionTest, CompileTimeChecks) {
         static_assert(std::is_base_of_v<Color, UIColor>);
         static_assert(std::is_convertible_v<Color, UIColor>);
