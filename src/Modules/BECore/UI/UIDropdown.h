@@ -23,8 +23,10 @@ namespace BECore {
      * header (an option the same size as the header is the usual case, and 48 units at least keeps it a touch target). A click on the header toggles the list (`disabled` never opens
      * it); a `disabled` option takes the click and does nothing, the list stays open; a press anywhere else closes the list and is consumed (`UICanvasComponent`).
      *
-     * The header is the touch target (`interactive`). Its fill is `color` with the state shifts of a button; the text is laid out left of the arrow, and `CheckContent()` measures it
-     * there. `arrowColor` is derived from `textColor` when left transparent; the arrow points down closed and up open, so the state does not rest on color alone.
+     * The header is the touch target (`interactive`). It is the box of any element (`box`: rounded corners, border, gradient, shadow; with the default style one rect of `color`), its
+     * fill and gradient end with the hover, press and disabled shifts of a button (`GetCurrentBox`); the options are `UIButton`s with a box of their own. The text is laid out left of
+     * the arrow, and `CheckContent()` measures it there. `arrowColor` is derived from `textColor` when left transparent; the arrow points down closed and up open, so the state does not rest on color
+     * alone.
      */
     class UIDropdown : public UILabel {
         BE_CLASS(UIDropdown)
@@ -94,6 +96,10 @@ namespace BECore {
 
         /// The header fill for the state now: `color`, shifted by hover and press, half alpha when `disabled`
         [[nodiscard]] Color GetCurrentFill() const;
+
+        /// The box, the fill and the gradient end of the header for the state now (pure): the fill and the gradient end shifted as `GetCurrentFill` does; `disabled` drops the shadow and
+        /// the glow and fades the border and the highlight; hover and press leave them as authored (the dropdown has no state colors of its own)
+        [[nodiscard]] UIButton::Look GetCurrentBox() const;
 
         /// The arrow color: `arrowColor` or `textColor`, half alpha when `disabled`
         [[nodiscard]] Color GetCurrentArrow() const;
