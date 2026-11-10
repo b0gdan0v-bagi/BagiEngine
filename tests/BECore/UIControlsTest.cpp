@@ -18,6 +18,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/TextTestSupport.h>
 #include <Common/UITreeCompare.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
@@ -421,6 +422,8 @@ namespace BECore::Tests {
                                                         : static_cast<UILabel*>(element.Cast<UIDropdown>());
                 text->text = "Some text";
                 text->font = PoolString::Intern("assets/fonts/Other.ttf");
+                text->fontFamily = PoolString::Intern("Test");
+                text->fontWeight = 700;
                 text->textColor = Color{21, 22, 23, 24};
                 text->align = TextAlign::Right;
                 text->verticalAlign = UIVerticalAlign::Bottom;
@@ -428,6 +431,7 @@ namespace BECore::Tests {
                 text->wrap = false;  // the text one: the stack one is style.stack.wrap, and the two must stay apart
                 text->lineSpacing = 1.5f;
                 text->minFontSize = 10.0f;
+                text->textEffects = {1.5f, Color{91, 92, 93, 94}, 2.0f, -3.0f, Color{95, 96, 97, 98}};
             }
         }
 
@@ -751,6 +755,290 @@ namespace BECore::Tests {
         strings.SetLanguage("de"_intern);
         EXPECT_EQ(textIssues(), 1u);
         EXPECT_FALSE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
+    }
+
+    TEST_F(UIControlsTest, TheFamilyAndTheWeightChooseTheFaceOfALabel) {
+        const ScopedTextSettings settings(MakeTestFamilySettings());
+        auto& title = Get<UILabel>("Title");
+        title.fontFamily = "Test"_intern;
+
+        title.fontWeight = 400;
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+        title.fontWeight = 700;
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));
+        Draw();
+        EXPECT_FALSE(GlyphsIn(title).empty());  // the other face is loaded and drawn
+        title.fontWeight = 600;
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));  // the nearest face, over 500 the one above
+        title.fontWeight = 400;
+        title.fontFamily = PoolString{};  // the default family of the settings is PT Sans, which this table does not have
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+    }
+
+    TEST_F(UIControlsTest, APathInFontWinsOverFamilyAndWeight) {
+        const ScopedTextSettings settings(MakeTestFamilySettings());
+        auto& title = Get<UILabel>("Title");
+        title.font = PoolString::Intern(kTestRegularPath);
+        title.fontFamily = "Test"_intern;
+        title.fontWeight = 700;
+        const WarningCounter warnings("font family");
+
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+        title.fontFamily = "Nope"_intern;  // not looked at either: no warning
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+        EXPECT_EQ(warnings.Count(), 0u);
+    }
+
+    TEST_F(UIControlsTest, AnUnknownFamilyIsLoggedOnceAndTheDefaultFontIsUsed) {
+        const ScopedTextSettings settings(MakeTestFamilySettings());
+        const PoolString defaultFont = CoreManager::GetFontAtlasLibrary().GetSettings().defaultFont;
+        auto& title = Get<UILabel>("Title");
+        title.fontFamily = "Nope"_intern;
+        const WarningCounter warnings("font family 'Nope'");
+
+        for (int frame = 0; frame < 3; ++frame) {
+            Draw();
+        }
+        EXPECT_EQ(title.GetResolvedFontPath(), defaultFont);
+        EXPECT_EQ(warnings.Count(), 1u);
+        EXPECT_FALSE(GlyphsIn(title).empty());  // the text is drawn with the default font
+
+        title.fontFamily = "Test"_intern;
+        Draw();
+        EXPECT_EQ(warnings.Count(), 1u);  // a known family says nothing
+    }
+
+    TEST_F(UIControlsTest, TheValidatorMeasuresWithTheFaceOfTheFamilyAndTheWeight) {
+        const ScopedTextSettings settings(MakeTestFamilySettings());
+        auto& title = Get<UILabel>("Title");
+        title.text = "A value that is much too long for a label of this width";
+        title.fontFamily = "Test"_intern;
+        title.fontWeight = 700;
+        title.wrap = false;
+        title.overflow = TextOverflow::Clip;
+        title.style.rect.height = UILength::Px(40.0f);
+        _canvas->Invalidate();
+        Draw();
+
+        size_t count = 0;
+        for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
+            count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
+        }
+
+        EXPECT_EQ(count, 1u);
+        EXPECT_FALSE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
+        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));  // the face the check measured with
+        title.text = "Short";
+        EXPECT_TRUE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
+    }
+
+    // The shipped PT Sans has a bold face: a box that holds a text in weight 400 is too tight for it in weight 700
+    TEST_F(UIControlsTest, ARealBoldFaceDoesNotFitTheBoxThatTheRegularFaceFits) {
+        auto& title = Get<UILabel>("Title");
+        title.text = "Weighty text";
+        title.fontFamily = "PT Sans"_intern;
+        title.wrap = false;
+        title.overflow = TextOverflow::Clip;
+        title.style.rect.height = UILength::Px(40.0f);
+        const auto widthAt = [this, &title](uint16_t weight) {
+            title.fontWeight = weight;
+            _canvas->Invalidate();
+            Draw();
+            return title.GetLastLayout().width;
+        };
+        const float regularWidth = widthAt(400);
+        const float boldWidth = widthAt(700);
+        ASSERT_GT(boldWidth, regularWidth);
+        const float box = (regularWidth + boldWidth) * 0.5f;
+        title.style.rect.width = UILength::Px(box);
+        const auto textIssues = [this]() {
+            _canvas->Invalidate();
+            Draw();
+            size_t count = 0;
+            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
+                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
+            }
+            return count;
+        };
+
+        title.fontWeight = 400;
+        EXPECT_EQ(textIssues(), 0u);
+        EXPECT_TRUE(title.CheckContent(box, 40.0f, 1.0f).fits);
+        title.fontWeight = 700;
+        EXPECT_EQ(textIssues(), 1u);
+        EXPECT_FALSE(title.CheckContent(box, 40.0f, 1.0f).fits);
+        EXPECT_EQ(title.GetResolvedFontPath(), "assets/fonts/PT_Sans-Web-Bold.ttf"_intern);
+    }
+
+    // ---- the outline and the shadow of a text ---------------------------------------------------------------------------------
+
+    namespace {
+
+        constexpr Color kOutlineColor{10, 20, 30, 200};
+        constexpr Color kShadowColor{40, 50, 60, 160};
+        constexpr size_t kInkedGlyphsInScore = 5;
+        constexpr float kOutlineUnits = 1.5f;
+        constexpr float kOutlineAtScale2 = 3.0f;  // pixels: 1.5 units at a scale of 2
+        constexpr float kShadowUnits = 2.0f;
+
+        UITextEffects MakeEffects() {
+            return {kOutlineUnits, kOutlineColor, kShadowUnits, kShadowUnits, kShadowColor};
+        }
+
+        eastl::vector<DrawCall> Textures(const RecordingRenderer& renderer) {
+            eastl::vector<DrawCall> textures;
+            for (const DrawCall& call : renderer.calls) {
+                if (call.kind == DrawKind::Texture) {
+                    textures.push_back(call);
+                }
+            }
+            return textures;
+        }
+
+    }  // namespace
+
+    TEST_F(UIControlsTest, TheTextEffectsAreTwoAttributesAndAreWrittenOnlyWhenSet) {
+        auto& title = Get<UILabel>("Title");
+        const eastl::string plain = ElementToXml(title);
+        EXPECT_EQ(plain.find("textOutline"), eastl::string::npos);
+        EXPECT_EQ(plain.find("textShadow"), eastl::string::npos);
+
+        title.textEffects = MakeEffects();
+        const eastl::string styled = ElementToXml(title);
+        EXPECT_NE(styled.find("textOutline=\"1.5,#0A141EC8\""), eastl::string::npos) << styled.c_str();
+        EXPECT_NE(styled.find("textShadow=\"2,2,#28323CA0\""), eastl::string::npos) << styled.c_str();
+    }
+
+    TEST_F(UIControlsTest, TheTextEffectsComeFromAFileAndAMalformedOneIsReported) {
+        const auto load = [](const char* attributes, bool& hadErrors) {
+            const eastl::string xml = Format("<root><element type=\"UILabel\" {}/></root>", attributes);
+            XmlDeserializer deserializer;
+            EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            auto element = AbstractFactory<UIElement>::GetInstance().Create("UILabel");
+            EXPECT_TRUE(deserializer.BeginObject("element"));
+            element->Deserialize(deserializer);
+            deserializer.EndObject();
+            hadErrors = deserializer.HasErrors();
+            return element;
+        };
+
+        bool errors = false;
+        auto good = load("textOutline=\"2,255,0,0,255\" textShadow=\"1,3,#000000A0\"", errors);
+        const auto* label = good->Cast<UILabel>();
+        ASSERT_NE(label, nullptr);
+        EXPECT_FALSE(errors);
+        EXPECT_FLOAT_EQ(label->textEffects.outlineWidth, 2.0f);
+        EXPECT_EQ(label->textEffects.outlineColor.r, 255);
+        EXPECT_FLOAT_EQ(label->textEffects.shadowOffsetX, 1.0f);
+        EXPECT_FLOAT_EQ(label->textEffects.shadowOffsetY, 3.0f);
+        EXPECT_EQ(label->textEffects.shadowColor.a, 160);
+
+        for (const char* bad : {"textOutline=\"2\"", "textOutline=\"-1,#000\"", "textShadow=\"1,#000000\"", "textShadow=\"a,b,#000000\""}) {
+            auto element = load(bad, errors);
+            EXPECT_TRUE(errors) << bad;
+            EXPECT_TRUE(element->Cast<UILabel>()->textEffects == UITextEffects{}) << bad << ": a malformed value leaves the default";
+        }
+    }
+
+    TEST_F(UIControlsTest, ALabelWithAnOutlineAndAShadowDrawsThreeQuadsPerGlyphInOrder) {
+        _canvas->_scaleMode = CanvasScaleMode::ScaleWithScreen;
+        _canvas->_referenceWidth = 800.0f;
+        _canvas->_referenceHeight = 600.0f;
+        _renderer->width = 1600.0f;
+        _renderer->height = 1200.0f;
+        Draw();
+        const size_t plainQuads = Textures(*_renderer).size();
+        const size_t plainAtlases = CoreManager::GetFontAtlasLibrary().GetAtlasCount();
+
+        auto& title = Get<UILabel>("Title");
+        title.textEffects = MakeEffects();
+        Draw();
+        const auto textures = Textures(*_renderer);
+        ASSERT_EQ(textures.size(), plainQuads + 2 * kInkedGlyphsInScore);
+        EXPECT_EQ(CoreManager::GetFontAtlasLibrary().GetAtlasCount(), plainAtlases + 1) << "one outline atlas, of the right width, beside the plain ones";
+
+        // The title is the first text of the screen: its passes are shadow, outline, fill
+        for (size_t i = 0; i < kInkedGlyphsInScore; ++i) {
+            const DrawCall& shadow = textures[i];
+            const DrawCall& outline = textures[kInkedGlyphsInScore + i];
+            const DrawCall& fill = textures[2 * kInkedGlyphsInScore + i];
+            EXPECT_TRUE(ColorsEqual(shadow.color, kShadowColor)) << i;
+            EXPECT_TRUE(ColorsEqual(outline.color, kOutlineColor)) << i;
+            EXPECT_TRUE(ColorsEqual(fill.color, title.textColor)) << i;
+            EXPECT_FLOAT_EQ(outline.rect.w, fill.rect.w + 2.0f * kOutlineAtScale2) << "the outline picture is the glyph grown by the width of the outline on every side";
+            EXPECT_FLOAT_EQ(outline.rect.h, fill.rect.h + 2.0f * kOutlineAtScale2);
+            EXPECT_FLOAT_EQ(outline.rect.x, fill.rect.x - kOutlineAtScale2) << "the centre of the outline is the centre of the fill";
+            EXPECT_FLOAT_EQ(shadow.rect.x, outline.rect.x + kShadowUnits * 2.0f) << "the offset is in UI units times the scale";
+            EXPECT_FLOAT_EQ(shadow.rect.y, outline.rect.y + kShadowUnits * 2.0f);
+            EXPECT_FLOAT_EQ(shadow.rect.w, outline.rect.w) << "the shadow of an outlined text is the outline picture";
+        }
+    }
+
+    TEST_F(UIControlsTest, AShadowAloneIsDrawnFromTheFillPicturesAndNeedsNoOutlineAtlas) {
+        auto& title = Get<UILabel>("Title");
+        title.textEffects.shadowColor = kShadowColor;
+        title.textEffects.shadowOffsetY = 1.0f;
+        Draw();
+        const size_t atlases = CoreManager::GetFontAtlasLibrary().GetAtlasCount();
+        const auto textures = Textures(*_renderer);
+
+        ASSERT_GE(textures.size(), 2 * kInkedGlyphsInScore);
+        EXPECT_TRUE(ColorsEqual(textures[0].color, kShadowColor));
+        EXPECT_TRUE(ColorsEqual(textures[kInkedGlyphsInScore].color, title.textColor));
+        EXPECT_FLOAT_EQ(textures[0].rect.w, textures[kInkedGlyphsInScore].rect.w);
+        EXPECT_FLOAT_EQ(textures[0].rect.y, textures[kInkedGlyphsInScore].rect.y + 1.0f);
+        title.textEffects.shadowColor = Color{};
+        Draw();
+        EXPECT_EQ(CoreManager::GetFontAtlasLibrary().GetAtlasCount(), atlases) << "no outline atlas was made";
+    }
+
+    TEST_F(UIControlsTest, AButtonWithAnOutlineAndAShadowDrawsThemToo) {
+        auto& ok = Get<UIButton>("Ok");
+        Draw();
+        const size_t glyphs = GlyphsIn(ok).size();
+        ASSERT_GT(glyphs, 0u);
+        const size_t plainQuads = Textures(*_renderer).size();
+
+        ok.textEffects = MakeEffects();
+        Draw();
+        EXPECT_EQ(Textures(*_renderer).size(), plainQuads + 2 * glyphs);
+    }
+
+    TEST_F(UIControlsTest, ADisabledControlFadesItsEffectsWithItsText) {
+        auto& toggle = Get<UIToggle>("Switch");  // disabled in the fixture: its caption is drawn at kDisabledAlpha
+        toggle.textEffects = MakeEffects();
+        Draw();
+        const size_t captionGlyphs = GlyphsIn(toggle).size();
+        const auto textures = Textures(*_renderer);
+
+        bool sawOutline = false;
+        for (const DrawCall& call : textures) {
+            if (call.color.r == kOutlineColor.r && call.color.g == kOutlineColor.g && call.color.b == kOutlineColor.b) {
+                sawOutline = true;
+                EXPECT_NEAR(call.color.a, static_cast<float>(kOutlineColor.a) * kDisabledAlpha, 1.0f) << "half of the alpha, as the caption has";
+            }
+        }
+        EXPECT_TRUE(sawOutline);
+        EXPECT_GT(captionGlyphs, 0u);
+    }
+
+    TEST_F(UIControlsTest, AnEffectNeverChangesTheLayoutOrTheValidatorResult) {
+        auto& title = Get<UILabel>("Title");
+        Draw();
+        const uint32_t layouts = title.GetLayoutCount();
+        const auto validate = [this]() { return _canvas->GetLayout().Validate({}).size(); };
+        const size_t issues = validate();
+        const bool fits = title.CheckContent(184.0f, 30.0f, 1.0f).fits;
+
+        title.textEffects = MakeEffects();
+        Draw();
+        title.textEffects.outlineWidth = 4.0f;
+        title.textEffects.shadowOffsetX = 9.0f;
+        Draw();
+
+        EXPECT_EQ(title.GetLayoutCount(), layouts) << "paint is not layout: no new layout";
+        EXPECT_EQ(validate(), issues);
+        EXPECT_EQ(title.CheckContent(184.0f, 30.0f, 1.0f).fits, fits);
     }
 
     TEST_F(UIControlsTest, ABracedTextWithoutAVariableIsShownWithoutBraces) {

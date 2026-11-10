@@ -23,6 +23,9 @@ namespace BECore {
      * flight can never be reading a page that is being written. Glyphs that are missing are added in new pages
      * (Prepare()), not in the old ones. Glyphs are white with the coverage in alpha: the color comes from the tint of the draw.
      *
+     * With `outlinePixels` above 0 the pictures are the glyphs grown by that many pixels (GlyphOutline::Dilate()), for the
+     * outline of a text; their offsets follow the grown picture, and the page padding stays 1 px.
+     *
      * Not thread safe and main thread only: it makes GPU objects.
      */
     class FontAtlas : public RefCounted {
@@ -30,13 +33,17 @@ namespace BECore {
         /// A transparent border around every glyph, so that linear filtering never picks up its neighbour
         static constexpr uint32_t kPadding = 1;
 
-        FontAtlas(IntrusivePtr<Font> font, int pixelSize, uint32_t pageSize);
+        FontAtlas(IntrusivePtr<Font> font, int pixelSize, uint32_t pageSize, int outlinePixels = 0);
 
         [[nodiscard]] const Font& GetFont() const {
             return *_font;
         }
         [[nodiscard]] int GetPixelSize() const {
             return _pixelSize;
+        }
+        /// 0 for the plain glyphs, else how many pixels the pictures are grown by on every side
+        [[nodiscard]] int GetOutlinePixels() const {
+            return _outlinePixels;
         }
 
         /**
@@ -74,6 +81,7 @@ namespace BECore {
 
         IntrusivePtr<Font> _font;
         int _pixelSize = 0;
+        int _outlinePixels = 0;
         uint32_t _pageSize = 0;
         eastl::hash_map<uint32_t, AtlasGlyph> _glyphs;
         eastl::vector<IntrusivePtr<ITexture>> _pages;

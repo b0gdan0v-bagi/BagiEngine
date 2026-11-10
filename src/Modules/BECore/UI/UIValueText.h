@@ -38,6 +38,16 @@ namespace BECore {
         /// are finite and the blur is not negative
         [[nodiscard]] std::optional<UIShadowSpec> ParseShadow(eastl::string_view text);
 
+        /// "width,#RRGGBBAA": the outline of a text in UI units
+        [[nodiscard]] eastl::string FormatTextOutline(float width, const Color& color);
+        /// "width,color", the colour in any form of ParseColor (the first comma splits the width, the rest is the colour); the width is finite and not negative
+        [[nodiscard]] bool ParseTextOutline(eastl::string_view text, float& width, Color& color);
+
+        /// "offsetX,offsetY,#RRGGBBAA": the hard shadow of a text in UI units
+        [[nodiscard]] eastl::string FormatTextShadow(float offsetX, float offsetY, const Color& color);
+        /// "offsetX,offsetY,color", the colour in any form of ParseColor (the first two commas split the numbers); the numbers are finite
+        [[nodiscard]] bool ParseTextShadow(eastl::string_view text, float& offsetX, float& offsetY, Color& color);
+
         /// A number that fills the whole text (surrounding spaces are allowed)
         [[nodiscard]] std::optional<float> ParseFloat(eastl::string_view text);
 

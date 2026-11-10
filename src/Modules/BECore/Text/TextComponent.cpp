@@ -19,7 +19,12 @@ namespace BECore {
         _font.Reset();
         _layoutCache.Reset();  // the cached layout belongs to the old font
 
-        const PoolString path = _fontPath.Empty() ? CoreManager::GetFontAtlasLibrary().GetSettings().defaultFont : _fontPath;
+        _fontRequest = FontRequest{_fontPath, _fontFamily, _fontWeight};
+        bool known = true;
+        const PoolString path = CoreManager::GetFontAtlasLibrary().ResolveFontPath(_fontRequest, &known);
+        if (!known) {
+            LOG_WARNING("TextComponent: no font family '{}' in TextConfig.xml, using the default font"_format(_fontFamily.ToStringView()));
+        }
         _font = CoreManager::GetResourceManager().Load<Font>(path.ToStringView());
         if (!_font || _font->GetState() != ResourceState::Loaded) {
             LOG_ERROR("TextComponent: cannot load the font '{}'"_format(path.ToStringView()));
@@ -36,8 +41,8 @@ namespace BECore {
         if (!renderer || _text.empty()) {
             return;
         }
-        if (!_font && !_fontTried) {
-            ReloadFont();
+        if (!_fontTried || _fontRequest != FontRequest{_fontPath, _fontFamily, _fontWeight}) {
+            ReloadFont();  // first draw, or the path, family or weight changed
         }
         if (!_font) {
             return;
@@ -73,16 +78,30 @@ namespace BECore {
             return;
         }
 
-        auto atlas = CoreManager::GetFontAtlasLibrary().Get(*renderer, IntrusivePtr<Font>(_font.operator->()), FontAtlasLibrary::QuantizeSize(layout.fontSize));
+        const int pixelSize = FontAtlasLibrary::QuantizeSize(layout.fontSize);
+        auto atlas = CoreManager::GetFontAtlasLibrary().Get(*renderer, IntrusivePtr<Font>(_font.operator->()), pixelSize);
         if (!atlas) {
             return;
+        }
+
+        TextEffects effects;
+        effects.outlineColor = _outlineColor;
+        effects.shadowColor = _shadowColor;
+        if (_outlineWidth > 0.0f && _outlineColor.a > 0) {
+            effects.outlineWidth = static_cast<float>(FontAtlasLibrary::QuantizeOutline(_outlineWidth * scale));
+        }
+        effects.shadowOffsetX = std::round(_shadowOffsetX * scale);
+        effects.shadowOffsetY = std::round(_shadowOffsetY * scale);
+        IntrusivePtr<FontAtlas> outlineAtlas;
+        if (effects.HasOutline()) {
+            outlineAtlas = CoreManager::GetFontAtlasLibrary().Get(*renderer, IntrusivePtr<Font>(_font.operator->()), pixelSize, static_cast<int>(effects.outlineWidth));
         }
 
         const bool clip = layout.overflowed && _overflow == TextOverflow::Clip;
         if (clip) {
             renderer->PushClipRect(renderer->GetViewTransform().ToOutput(boxX, boxY, boxWidth, boxHeight));
         }
-        TextRenderer::Draw(*renderer, *atlas, layout, boxX, boxY, _color);
+        TextRenderer::Draw(*renderer, *atlas, outlineAtlas.Get(), layout, boxX, boxY, _color, effects);
         if (clip) {
             renderer->PopClipRect();
         }

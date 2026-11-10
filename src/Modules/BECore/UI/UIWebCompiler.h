@@ -24,8 +24,8 @@ namespace BECore {
      * | `id` | `name` |
      *
      * Styles come from `<style>`, `<link rel="stylesheet" href>` (read through the loader function) and `style=""`, in the order of the document, and the cascade
-     * is the CSS one: specificity (ids, classes, tags), then source order, `!important` first and a `style=""` over a rule. `color`, `font-size`, `font-family`,
-     * `text-align` and `line-height` are inherited. `@media` blocks become responsive variants: for each block the cascade is run again with its rules
+     * is the CSS one: specificity (ids, classes, tags), then source order, `!important` first and a `style=""` over a rule. `color`, `font-size`, `font-family`, `font-weight`,
+     * `text-shadow`, `-be-text-outline`, `text-align` and `line-height` are inherited. `@media` blocks become responsive variants: for each block the cascade is run again with its rules
      * and what changed becomes the overrides of the variant, so a variant can change only what UIElementOverride can (visibility, anchor, offset, size, stack
      * direction, font size). The engine-only `-be-track-color`, `-be-fill-color` and `-be-thumb-color` set `trackColor`, `fillColor` and `thumbColor` of the three widgets; the states of the
      * widgets are derived, so a state rule on them is reported. `:hover`, `:active`, `:disabled` and `:checked` on a button set its four fills (`hoverColor`, `pressedColor`, `disabledColor`,

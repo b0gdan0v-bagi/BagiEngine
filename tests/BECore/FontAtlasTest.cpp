@@ -1,6 +1,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Text/FontAtlas.h>
 #include <BECore/Text/FontAtlasLibrary.h>
+#include <BECore/Text/GlyphOutline.h>
 #include <BECore/Text/TextRenderer.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -367,6 +368,52 @@ namespace BECore::Tests {
         EXPECT_EQ(zero->GetPixelSize(), 1);
     }
 
+    TEST_F(FontAtlasLibraryTest, QuantizeOutlineKeepsAnOutlineAtLeastOnePixel) {
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(0.0f), 0);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(-2.0f), 0);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(std::numeric_limits<float>::quiet_NaN()), 0);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(0.1f), 1);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(2.4f), 2);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(2.5f), 3);
+        EXPECT_EQ(FontAtlasLibrary::QuantizeOutline(1000.0f), kMaxOutlinePixels);
+    }
+
+    TEST_F(FontAtlasLibraryTest, AnOutlineAtlasHasLargerPicturesAndNoPreload) {
+        auto plain = Library().Get(*renderer, font, 24);
+        auto outlined = Library().Get(*renderer, font, 24, 2);
+        const uint32_t glyphs[] = {font->FindGlyph(U'H')};
+
+        EXPECT_EQ(outlined->GetOutlinePixels(), 2);
+        EXPECT_EQ(outlined->GetGlyphCount(), 0u);
+        EXPECT_EQ(outlined->GetPageCount(), 0u);
+        EXPECT_TRUE(outlined->Prepare(*renderer, glyphs));
+
+        const AtlasGlyph* fill = plain->Find(glyphs[0]);
+        const AtlasGlyph* grown = outlined->Find(glyphs[0]);
+        ASSERT_NE(fill, nullptr);
+        ASSERT_NE(grown, nullptr);
+        EXPECT_FLOAT_EQ(grown->source.w, fill->source.w + 4.0f);
+        EXPECT_FLOAT_EQ(grown->source.h, fill->source.h + 4.0f);
+        EXPECT_FLOAT_EQ(grown->offsetX, fill->offsetX - 2.0f);
+        EXPECT_FLOAT_EQ(grown->offsetY, fill->offsetY - 2.0f);
+    }
+
+    TEST_F(FontAtlasLibraryTest, TheOutlineWidthIsPartOfTheKey) {
+        auto plain = Library().Get(*renderer, font, 24);
+        auto thin = Library().Get(*renderer, font, 24, 1);
+        auto thick = Library().Get(*renderer, font, 24, 2);
+
+        EXPECT_NE(thin.Get(), thick.Get());
+        EXPECT_NE(plain.Get(), thin.Get());
+        EXPECT_EQ(Library().Get(*renderer, font, 24, 2).Get(), thick.Get());
+        EXPECT_EQ(Library().GetAtlasCount(), 3u);
+    }
+
+    TEST_F(FontAtlasLibraryTest, TheOutlineIsKeptInRange) {
+        EXPECT_EQ(Library().Get(*renderer, font, 12, 1000)->GetOutlinePixels(), kMaxOutlinePixels);
+        EXPECT_EQ(Library().Get(*renderer, font, 12, -3)->GetOutlinePixels(), 0);
+    }
+
     // -- TextRenderer --------------------------------------------------------------------------------------------------
 
     class TextRendererTest : public FontAtlasLibraryTest {
@@ -479,6 +526,169 @@ namespace BECore::Tests {
 
         EXPECT_EQ(TextRenderer::Draw(*renderer, *atlas, TextLayoutResult{}, 0.0f, 0.0f, Color{255, 255, 255, 255}), 0u);
         EXPECT_TRUE(renderer->calls.empty());
+    }
+
+    // -- TextRenderer with effects -------------------------------------------------------------------------------------
+
+    namespace {
+
+        constexpr int kOutlineRadius = 2;
+        const Color kFill{10, 20, 30, 255};
+        const Color kOutlineColor{200, 0, 0, 255};
+        const Color kShadowColor{0, 0, 0, 160};
+
+        TextEffects BothEffects() {
+            TextEffects effects;
+            effects.outlineColor = kOutlineColor;
+            effects.outlineWidth = static_cast<float>(kOutlineRadius);
+            effects.shadowColor = kShadowColor;
+            effects.shadowOffsetX = 3.0f;
+            effects.shadowOffsetY = 4.0f;
+            return effects;
+        }
+
+    }  // namespace
+
+    TEST(TextEffectsTest, AnEffectNeedsSomethingToShow) {
+        TextEffects effects;
+        EXPECT_FALSE(effects.HasOutline());
+        EXPECT_FALSE(effects.HasShadow());
+
+        effects.outlineWidth = 2.0f;  // a width with a transparent colour
+        effects.shadowOffsetX = 2.0f;
+        EXPECT_FALSE(effects.HasOutline());
+        EXPECT_FALSE(effects.HasShadow());
+
+        effects.outlineColor = kOutlineColor;
+        effects.shadowColor = kShadowColor;
+        EXPECT_TRUE(effects.HasOutline());
+        EXPECT_TRUE(effects.HasShadow());
+
+        effects.outlineWidth = 0.0f;   // a colour with no width
+        effects.shadowOffsetX = 0.0f;  // a shadow right under the text
+        EXPECT_FALSE(effects.HasOutline());
+        EXPECT_FALSE(effects.HasShadow());
+        effects.shadowOffsetY = -1.0f;
+        EXPECT_TRUE(effects.HasShadow());
+    }
+
+    TEST_F(TextRendererTest, ShadowOutlineAndFillAreThreePassesOverTheWholeText) {
+        const TextLayoutResult layout = Layout("Hi");
+        auto fill = Atlas();
+        auto outline = Library().Get(*renderer, font, 24, kOutlineRadius);
+
+        const size_t drawn = TextRenderer::Draw(*renderer, *fill, outline.Get(), layout, 0.0f, 0.0f, kFill, BothEffects());
+
+        EXPECT_EQ(drawn, 6u);
+        ASSERT_EQ(renderer->calls.size(), 6u);
+        const Color expected[] = {kShadowColor, kShadowColor, kOutlineColor, kOutlineColor, kFill, kFill};
+        for (size_t i = 0; i < 6; ++i) {
+            EXPECT_EQ(renderer->calls[i].color.r, expected[i].r) << i;
+            EXPECT_EQ(renderer->calls[i].color.a, expected[i].a) << i;
+            EXPECT_EQ(renderer->calls[i].texture, i < 4 ? outline->GetPage(0) : fill->GetPage(0)) << i;
+        }
+    }
+
+    TEST_F(TextRendererTest, TheOutlinePictureIsLargerAroundTheFillAndTheShadowIsTheOutlineMoved) {
+        const TextLayoutResult layout = Layout("Hi");
+        auto fill = Atlas();
+        auto outline = Library().Get(*renderer, font, 24, kOutlineRadius);
+
+        TextRenderer::Draw(*renderer, *fill, outline.Get(), layout, 10.0f, 20.0f, kFill, BothEffects());
+
+        for (size_t glyph = 0; glyph < 2; ++glyph) {
+            const DrawCall& shadow = renderer->calls[glyph];
+            const DrawCall& ring = renderer->calls[2 + glyph];
+            const DrawCall& body = renderer->calls[4 + glyph];
+            EXPECT_FLOAT_EQ(ring.rect.x, body.rect.x - kOutlineRadius);
+            EXPECT_FLOAT_EQ(ring.rect.y, body.rect.y - kOutlineRadius);
+            EXPECT_FLOAT_EQ(ring.rect.w, body.rect.w + 2 * kOutlineRadius);
+            EXPECT_FLOAT_EQ(ring.rect.h, body.rect.h + 2 * kOutlineRadius);
+            EXPECT_FLOAT_EQ(shadow.rect.x, ring.rect.x + 3.0f);
+            EXPECT_FLOAT_EQ(shadow.rect.y, ring.rect.y + 4.0f);
+            EXPECT_FLOAT_EQ(shadow.rect.w, ring.rect.w);
+        }
+    }
+
+    TEST_F(TextRendererTest, AShadowWithoutAnOutlineIsDrawnFromTheFillPictures) {
+        const TextLayoutResult layout = Layout("Hi");
+        auto fill = Atlas();
+        TextEffects effects = BothEffects();
+        effects.outlineWidth = 0.0f;
+
+        const size_t drawn = TextRenderer::Draw(*renderer, *fill, nullptr, layout, 0.0f, 0.0f, kFill, effects);
+
+        EXPECT_EQ(drawn, 4u);
+        ASSERT_EQ(renderer->calls.size(), 4u);
+        EXPECT_EQ(renderer->calls[0].color.a, kShadowColor.a);
+        EXPECT_EQ(renderer->calls[2].color.a, kFill.a);
+        EXPECT_FLOAT_EQ(renderer->calls[0].rect.x, renderer->calls[2].rect.x + 3.0f);
+        EXPECT_FLOAT_EQ(renderer->calls[0].rect.w, renderer->calls[2].rect.w);
+        EXPECT_EQ(Library().GetAtlasCount(), 1u);  // a text with no outline makes one atlas
+    }
+
+    TEST_F(TextRendererTest, AnOutlineWithoutAnOutlineAtlasIsNotDrawn) {
+        const TextLayoutResult layout = Layout("Hi");
+        auto fill = Atlas();
+        TextEffects effects = BothEffects();
+        effects.shadowColor = Color{};
+
+        EXPECT_EQ(TextRenderer::Draw(*renderer, *fill, nullptr, layout, 0.0f, 0.0f, kFill, effects), 2u);
+    }
+
+    TEST_F(TextRendererTest, NoEffectIsExactlyThePlainDraw) {
+        const TextLayoutResult layout = Layout("Hi");
+        auto fill = Atlas();
+        TextRenderer::Draw(*renderer, *fill, layout, 5.0f, 6.0f, kFill);
+        const eastl::vector<DrawCall> plain = renderer->calls;
+        renderer->calls.clear();
+        auto outline = Library().Get(*renderer, font, 24, kOutlineRadius);
+
+        TextRenderer::Draw(*renderer, *fill, outline.Get(), layout, 5.0f, 6.0f, kFill, TextEffects{});
+
+        ASSERT_EQ(renderer->calls.size(), plain.size());
+        for (size_t i = 0; i < plain.size(); ++i) {
+            EXPECT_FLOAT_EQ(renderer->calls[i].rect.x, plain[i].rect.x);
+            EXPECT_FLOAT_EQ(renderer->calls[i].rect.y, plain[i].rect.y);
+            EXPECT_EQ(renderer->calls[i].color.r, plain[i].color.r);
+        }
+        EXPECT_EQ(outline->GetGlyphCount(), 0u);  // not even prepared
+    }
+
+    TEST_F(TextRendererTest, ASpaceDrawsNothingInAnyPass) {
+        const TextLayoutResult layout = Layout(" ");
+        auto fill = Atlas();
+        auto outline = Library().Get(*renderer, font, 24, kOutlineRadius);
+
+        EXPECT_EQ(TextRenderer::Draw(*renderer, *fill, outline.Get(), layout, 0.0f, 0.0f, kFill, BothEffects()), 0u);
+        EXPECT_TRUE(renderer->calls.empty());
+    }
+
+    TEST_F(TextRendererTest, TheOutlineAtlasIsPreparedByTheDraw) {
+        const TextLayoutResult layout = Layout("A");
+        auto fill = Atlas();
+        auto outline = Library().Get(*renderer, font, 24, kOutlineRadius);
+        ASSERT_EQ(outline->GetGlyphCount(), 0u);
+
+        TextRenderer::Draw(*renderer, *fill, outline.Get(), layout, 0.0f, 0.0f, kFill, BothEffects());
+
+        EXPECT_NE(outline->Find(layout.glyphs[0].glyph), nullptr);
+    }
+
+    TEST_F(TextRendererTest, TheShadowOffsetIsInOutputPixelsAndSnapped) {
+        renderer->SetViewTransform({2.0f, 0.0f, 0.0f});
+        const TextLayoutResult layout = Layout("A");
+        auto fill = Atlas();
+        TextEffects effects;
+        effects.shadowColor = kShadowColor;
+        effects.shadowOffsetX = 2.6f;
+        effects.shadowOffsetY = 0.0f;
+
+        TextRenderer::Draw(*renderer, *fill, nullptr, layout, 0.0f, 0.0f, kFill, effects);
+
+        ASSERT_EQ(renderer->calls.size(), 2u);
+        EXPECT_FLOAT_EQ(renderer->calls[0].rect.x, std::round(layout.glyphs[0].x + fill->Find(layout.glyphs[0].glyph)->offsetX + 2.6f));
+        EXPECT_FLOAT_EQ(renderer->calls[0].rect.x, std::round(renderer->calls[0].rect.x));
     }
 
 }  // namespace BECore::Tests

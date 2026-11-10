@@ -1,7 +1,18 @@
 <?xml version="1.0"?>
 <TextConfig
   defaultFont="assets/fonts/PT_Sans-Web-Regular.ttf"
+  defaultFamily="PT Sans"
   pageSize="1024">
+  <!-- A label names a face by family and weight; a weight with no face takes the nearest one. PT Sans Bold is under the licence of PT_Sans-OFL.txt -->
+  <families>
+    <family name="PT Sans">
+      <face weight="400" path="assets/fonts/PT_Sans-Web-Regular.ttf" />
+      <face weight="700" path="assets/fonts/PT_Sans-Web-Bold.ttf" />
+    </family>
+    <family name="Russo One">
+      <face weight="400" path="assets/fonts/RussoOne-Regular.ttf" />
+    </family>
+  </families>
   <!-- Code points whose glyphs are drawn up front when a font is first used at a size. Any other glyph is drawn when a text first needs it. -->
   <preload>
     <range name="Basic Latin" from="32" to="126" />

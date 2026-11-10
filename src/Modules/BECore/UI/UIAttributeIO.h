@@ -21,6 +21,14 @@ namespace BECore {
         void WriteShadow(ISerializer& s, eastl::string_view key, const UIShadowSpec& shadow);
         bool ReadShadow(IDeserializer& d, eastl::string_view key, UIShadowSpec& out);
 
+        /// "width,color" (UI units); a Read leaves its outputs as they were when the attribute is missing or malformed (a malformed one is reported to @p d)
+        void WriteTextOutline(ISerializer& s, eastl::string_view key, float width, const Color& color);
+        bool ReadTextOutline(IDeserializer& d, eastl::string_view key, float& width, Color& color);
+
+        /// "offsetX,offsetY,color" (UI units)
+        void WriteTextShadow(ISerializer& s, eastl::string_view key, float offsetX, float offsetY, const Color& color);
+        bool ReadTextShadow(IDeserializer& d, eastl::string_view key, float& offsetX, float& offsetY, Color& color);
+
         /// Writes the attribute only when the optional holds a length
         void WriteOptionalLength(ISerializer& s, eastl::string_view key, const std::optional<UILength>& length);
         /// Sets @p out when the attribute is there and well formed; otherwise leaves it as it was

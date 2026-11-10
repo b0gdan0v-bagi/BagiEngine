@@ -3,6 +3,7 @@
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Text/Font.h>
+#include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/TextLayoutCache.h>
 
 namespace BECore {
@@ -16,6 +17,8 @@ namespace BECore {
      *
      * Overflow: Clip clips the drawing to the box when the text does not fit, Ellipsis ends the text with "…", AutoFit
      * shrinks the font down to `_minFontSize` (TextLayout).
+     *
+     * The outline and the hard shadow (`_outlineWidth` / `_outlineColor`, `_shadowOffsetX/Y` / `_shadowColor`, scene units) are paint: the layout never counts them, and a Clip box cuts them.
      */
     class TextComponent : public IComponent {
         BE_CLASS(TextComponent)
@@ -24,7 +27,9 @@ namespace BECore {
         ~TextComponent() override = default;
 
         BE_REFLECT_FIELD eastl::string _text;
-        BE_REFLECT_FIELD PoolString _fontPath;  ///< empty: the default font of TextConfig.xml
+        BE_REFLECT_FIELD PoolString _fontPath;        ///< a font path; empty: the face of `_fontFamily` and `_fontWeight`. A path wins over them
+        BE_REFLECT_FIELD PoolString _fontFamily;      ///< a family of the `families` table of TextConfig.xml; empty is its default family
+        BE_REFLECT_FIELD uint16_t _fontWeight = 400;  ///< the CSS weight (400 regular, 700 bold); the nearest face of the family is used
         BE_REFLECT_FIELD float _fontSize = 24.0f;
         BE_REFLECT_FIELD Color _color{255, 255, 255, 255};
         BE_REFLECT_FIELD TextAlign _align = TextAlign::Left;
@@ -32,13 +37,19 @@ namespace BECore {
         BE_REFLECT_FIELD bool _wrap = true;
         BE_REFLECT_FIELD float _lineSpacing = 1.0f;
         BE_REFLECT_FIELD float _minFontSize = 8.0f;
+        BE_REFLECT_FIELD float _outlineWidth = 0.0f;  ///< scene units; 0 or a transparent `_outlineColor`: no outline
+        BE_REFLECT_FIELD Color _outlineColor{0, 0, 0, 0};
+        BE_REFLECT_FIELD float _shadowOffsetX = 0.0f;  ///< scene units, to the right; a transparent `_shadowColor` or a zero offset: no shadow
+        BE_REFLECT_FIELD float _shadowOffsetY = 0.0f;  ///< scene units, down
+        BE_REFLECT_FIELD Color _shadowColor{0, 0, 0, 0};
 
         void OnAttached() override;
         void OnDraw() override;
 
         void SetText(eastl::string_view text);
 
-        /// Load the font again from `_fontPath`; call it after the path is changed in the editor
+        /// Load the font again from `_fontPath`, or `_fontFamily` and `_fontWeight`. A changed path, family or weight is noticed by the next draw by itself;
+        /// call it to read the file again
         void ReloadFont();
 
         /// The layout that the last draw used (empty before the first draw)
@@ -49,6 +60,7 @@ namespace BECore {
     private:
         ResourceHandle<Font> _font;
         bool _fontTried = false;
+        FontRequest _fontRequest;  // what the loaded font (or the failed try) was asked for
         TextLayoutCache _layoutCache;
     };
 

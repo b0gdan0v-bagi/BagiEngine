@@ -1545,6 +1545,89 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
+    TEST_F(UIWebTest, AHeadingTakesAFamilyAWeightAShadowAndAnOutline) {
+        const auto compiled = Compile(R"(<h1 id="h">Title</h1>)", R"(h1 { font-family: "Russo One", sans-serif; font-weight: 700; text-shadow: 2px 2px #000000A0; -be-text-outline: 2px #000; })");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->Attr("h", "fontFamily"), "Russo One");
+        EXPECT_FALSE(compiled->Has("h", "font"));
+        EXPECT_EQ(compiled->Attr("h", "fontWeight"), "700");
+        EXPECT_EQ(compiled->Attr("h", "textShadow"), "2,2,#000000A0");
+        EXPECT_EQ(compiled->Attr("h", "textOutline"), "2,#000000FF");
+        EXPECT_TRUE(compiled->report.issues.empty());
+
+        auto* label = compiled->Element("h")->Cast<UILabel>();
+        ASSERT_NE(label, nullptr);
+        EXPECT_EQ(label->fontFamily, PoolString::Intern("Russo One"));
+        EXPECT_EQ(label->fontWeight, 700);
+        EXPECT_FLOAT_EQ(label->textEffects.outlineWidth, 2.0f);
+        EXPECT_EQ(label->textEffects.shadowColor.a, 160);
+    }
+
+    TEST_F(UIWebTest, AButtonTakesThemTooAndAHoverThatLeavesThemAloneChangesColorsOnly) {
+        const auto compiled =
+            Compile(R"(<button id="b" data-action="Go">Go</button>)",
+                    "button { background: #202020; font-weight: bold; font-family: Roboto; text-shadow: #000 0 1px; -be-text-outline: #FFF 1px } button:hover { background: #303030 }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->Attr("b", "fontFamily"), "Roboto");
+        EXPECT_EQ(compiled->Attr("b", "fontWeight"), "700");
+        EXPECT_EQ(compiled->Attr("b", "textShadow"), "0,1,#000000FF") << "the colour may come first";
+        EXPECT_EQ(compiled->Attr("b", "textOutline"), "1,#FFFFFFFF");
+        EXPECT_EQ(compiled->Attr("b", "hoverColor"), "48,48,48,255");
+        EXPECT_TRUE(compiled->report.issues.empty());
+        auto* button = compiled->Element("b")->Cast<UIButton>();
+        ASSERT_NE(button, nullptr);
+        EXPECT_EQ(button->fontWeight, 700);
+        EXPECT_FLOAT_EQ(button->textEffects.shadowOffsetY, 1.0f);
+    }
+
+    TEST_F(UIWebTest, TheTextPropertiesAreInheritedFromAContainerAndAChildMayChangeThem) {
+        const auto compiled = Compile(R"(<div id="box"><span id="a">A</span><span id="b" class="plain">B</span><button id="c" data-action="X">C</button></div>)",
+                                      "#box { font-weight: 700; font-family: \"Russo One\"; text-shadow: 1px 1px #000; -be-text-outline: 2px #fff } "
+                                      ".plain { font-weight: normal; text-shadow: none; -be-text-outline: none; font-family: sans-serif }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_FALSE(compiled->Has("box", "fontWeight")) << "a group has no text";
+        EXPECT_FALSE(compiled->Has("box", "textShadow"));
+        EXPECT_EQ(compiled->Attr("a", "fontWeight"), "700");
+        EXPECT_EQ(compiled->Attr("a", "fontFamily"), "Russo One");
+        EXPECT_EQ(compiled->Attr("a", "textOutline"), "2,#FFFFFFFF");
+        EXPECT_EQ(compiled->Attr("c", "textShadow"), "1,1,#000000FF");
+        EXPECT_FALSE(compiled->Has("b", "fontWeight"));
+        EXPECT_FALSE(compiled->Has("b", "fontFamily"));
+        EXPECT_FALSE(compiled->Has("b", "textShadow"));
+        EXPECT_FALSE(compiled->Has("b", "textOutline"));
+        EXPECT_TRUE(compiled->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, ImportantAndAPathAndTheNumbersOfAWeight) {
+        const auto compiled =
+            Compile(R"(<span id="a" style="font-weight: 300">A</span><span id="b" class="x" style="font-weight: 400">B</span><span id="c" style="font-family: assets/fonts/Other.ttf">C</span>)",
+                    ".x { font-weight: 900 !important }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->Attr("a", "fontWeight"), "300");
+        EXPECT_EQ(compiled->Attr("b", "fontWeight"), "900") << "!important beats style=\"\"";
+        EXPECT_EQ(compiled->Attr("c", "font"), "assets/fonts/Other.ttf");
+        EXPECT_FALSE(compiled->Has("c", "fontFamily"));
+        EXPECT_TRUE(compiled->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, BolderALightWeightABlurAndSeveralShadowsAreReported) {
+        const auto compiled = Compile(R"(<span id="a" class="a">A</span><span id="b" class="b">B</span><span id="c" class="c">C</span><span id="d" class="d">D</span><span id="e" class="e">E</span>)",
+                                      ".a { font-weight: bolder } .b { text-shadow: 1px 1px 4px #000 } .c { text-shadow: 1px 1px #000, 2px 2px #fff } .d { font-weight: 450; }"
+                                      " .e { text-shadow: 1px 1px; -be-text-outline: -1px #000 }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->IssuesMentioning("font-weight: bolder"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("font-weight: 450"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("blur"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("several text shadows"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("text-shadow: 1px 1px'"), 1u) << "no colour is not understood";
+        EXPECT_EQ(compiled->IssuesMentioning("-be-text-outline: -1px"), 1u);
+        EXPECT_FALSE(compiled->Has("a", "fontWeight"));
+        EXPECT_EQ(compiled->Attr("b", "textShadow"), "1,1,#000000FF") << "a blurred shadow is drawn hard";
+        EXPECT_EQ(compiled->Attr("c", "textShadow"), "1,1,#000000FF") << "the first of several";
+        EXPECT_FALSE(compiled->Has("e", "textShadow"));
+        EXPECT_FALSE(compiled->Has("e", "textOutline"));
+    }
+
     TEST_F(UIWebTest, AStringReferenceIsTextLikeAVariableAndReachesTheXmlUntouched) {
         const auto compiled = Compile(R"(<button id="b" data-action="Start">{#menu.start}</button><span id="s">{#score.title}: {score}</span><p id="q">{{#menu.start}}</p>)");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
