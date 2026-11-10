@@ -30,8 +30,8 @@ UIElement tree (root = the canvas)
 | `UIVariant` | `when` + `overrides`; `UIVariants::Apply` |
 | `UICanvasLayout` | the pure pipeline with a cache, `HitTest`, `Validate`, counters for tests |
 | `UILayoutValidator` | `Validate(root, resolved, options)` → `UILayoutIssue`s |
-| `UIPreview` | the editor viewport's preview shapes and safe areas |
-| `UIControl` | control API `ui_tree` / `ui_click` |
+| `UIPreview` | the editor viewport's shapes and safe areas |
+| `UIControl` | control API |
 
 ## Rules
 
@@ -138,15 +138,15 @@ Each derives from `UIElement`, draws itself in `DrawSelf` in canvas units; `colo
 
 ## Control API (`ui_tree`, `ui_click`)
 
-On the canvases of the **active scene**, by the layout of the last draw (`step` a frame first). `ui_tree` gives every canvas (node, space, visibility, modal, input, scale, bounds, validator `issues`) and its elements (`type`, `name`, `visible`, `interactive`, `rect` in canvas units, `outputRect` in screenshot pixels, `text` with variables, and the control fields: `action` / `value` / `selected` / `disabled` of a button, `bind` / `selectedValue` of a group or dropdown (a dropdown also `open`; its options are its children, with no rect while closed), `checked` of a toggle, `fraction` and `value` of a bar or slider). Bound values are read when asked, so no draw is needed after `UIVars::Set`. `ui_click {name, canvas?, at?}` presses the middle (`at` 0..1 sets the horizontal point; the way to set a slider) of the first visible interactive element through `UIInput`, exactly as a user would, after checking it is topmost in its canvas; it answers the `action` / `value` of the click (a dropdown's header emits nothing; an option of an open list answers the dropdown's `action` and its own `value`: `ui_click` header, `step`, `ui_click` option, `step`), or `not_found`, `not_clickable` (why), `no_scene`. A widget changes nothing by a click: `ui_click`, `step`, `ui_tree`. Client names are looked up with `PoolString::Find`, never interned. The MCP server has both as tools (`tools/control/CLAUDE.md`).
+On the canvases of the **active scene**, by the layout of the last draw (`step` a frame first). `ui_tree` gives every canvas (node, space, visibility, modal, input, scale, bounds, validator `issues`, and for a `SceneView` canvas `view` `{name, width, height}`: the scene's active view, empty `name`: the default) and its elements (`type`, `name`, `visible`, `interactive`, `rect` in canvas units, `outputRect` in screenshot pixels, `text` with variables, and the control fields: `action` / `value` / `selected` / `disabled` of a button, `bind` / `selectedValue` of a group or dropdown (a dropdown also `open`; its options are its children, with no rect while closed), `checked` of a toggle, `fraction` and `value` of a bar or slider). Bound values are read when asked, so no draw follows `UIVars::Set`. `ui_click {name, canvas?, at?}` presses the middle (`at` 0..1 sets the horizontal point; the way to set a slider) of the first visible interactive element through `UIInput`, exactly as a user would, after checking it is topmost in its canvas; it answers the `action` / `value` of the click (a dropdown's header emits nothing; an option of an open list answers the dropdown's `action` and its own `value`: `ui_click` header, `step`, `ui_click` option, `step`), or `not_found`, `not_clickable` (why), `no_scene`. A widget changes nothing by a click: `ui_click`, `step`, `ui_tree`. Names are looked up with `PoolString::Find`, never interned. The MCP server has both as tools (`tools/control/CLAUDE.md`).
 
 ## Editor preview
 
-`ViewportWidget` has an aspect preset and a safe-area simulation; during its scene pass it holds `SetSafeAreaOverride` and `SetPixelDensityOverride(1)`, so canvases never see the window's metrics. Numbers: `UIPreview`.
+`ViewportWidget` has an aspect preset and a safe-area simulation; during its scene pass it holds `SetSafeAreaOverride` and `SetPixelDensityOverride(1)`, so canvases never see the window's metrics. The size of its target (the preset and the panel) picks the scene's view variant, and the toolbar shows the active view (read only). Numbers: `UIPreview`.
 
 ## Trying the widgets live
 
-No shipped scene uses the toggle, slider, progress bar or strings: copy `kSettingsXml` (view 840 x 800) and `kStringsXml` into scratch `config/` files of a game (never committed) and run with `--control --headless --manual-clock`, driving with `ui_tree`, `ui_click`, `step`, `screenshot`.
+No shipped scene uses the toggle, slider, progress bar or strings: copy `kSettingsXml` and `kStringsXml` into scratch (uncommitted) `config/` files of a game, run `--control --headless --manual-clock`, drive with `ui_tree`, `ui_click`, `step`, `screenshot`.
 
 ## Not done
 
@@ -154,4 +154,4 @@ Button sounds, focus and gamepad / keyboard navigation, text input, scrolling, c
 
 ## Tests
 
-`tests/BECore/UI*Test.cpp`: one file per class (`UICanvasComponent` covers drawing per space, input order, pointer hooks and scene view variants; `UIControls` every property round trip; `UIPopup` the popup protocol with a test element) and the four screen templates above.
+`tests/BECore/UI*Test.cpp`: one file per class (`UICanvasComponent`: drawing per space, input order, pointer hooks, scene view variants; `UIControls` property round trips; `UIPopup` the popup protocol) and the screen templates above.

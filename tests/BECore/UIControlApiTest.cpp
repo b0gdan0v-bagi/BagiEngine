@@ -1237,6 +1237,61 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.Count("UIControlApiViewGo"), 1);
     }
 
+    TEST_F(UIControlApiTest, ASceneViewCanvasReportsTheActiveViewAndOtherCanvasesReportNone) {
+        Show("Views", 800.0f, 600.0f);
+        const Json landscape = Call("ui_tree");
+        Show("Views", 600.0f, 800.0f);
+        const Json portrait = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(landscape) && IsOk(portrait));
+        const Json* before = Member(*FindCanvas(*Member(landscape, "result"), "View"), "view");
+        const Json* after = Member(*FindCanvas(*Member(portrait, "result"), "View"), "view");
+        ASSERT_TRUE(before != nullptr && after != nullptr);
+        EXPECT_EQ(StringMember(*before, "name"), "");
+        EXPECT_NEAR(NumberMember(*before, "width"), 400.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*before, "height"), 300.0, kTolerance);
+        EXPECT_EQ(StringMember(*after, "name"), "Portrait");
+        EXPECT_NEAR(NumberMember(*after, "width"), 300.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*after, "height"), 400.0, kTolerance);
+
+        Show("Main");
+        const Json main = Call("ui_tree");
+        ASSERT_TRUE(IsOk(main));
+        EXPECT_EQ(Member(*FindCanvas(*Member(main, "result"), "Hud"), "view"), nullptr);
+    }
+
+    TEST_F(UIControlApiTest, ASceneWithoutViewVariantsReportsItsOneView) {
+        Show("Fit", 1000.0f, 600.0f);
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response));
+        const Json* view = Member(*FindCanvas(*Member(response, "result"), "View"), "view");
+        ASSERT_NE(view, nullptr);
+        EXPECT_EQ(StringMember(*view, "name"), "");
+        EXPECT_NEAR(NumberMember(*view, "width"), 400.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*view, "height"), 300.0, kTolerance);
+    }
+
+    TEST_F(UIControlApiTest, TheDrawnButtonIsWhereTheTreeSaysInTheActiveView) {
+        Show("Views", 600.0f, 800.0f);
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response));
+        const Json* go = FindElement(*FindCanvas(*Member(response, "result"), "View"), "Go");
+        ASSERT_NE(go, nullptr);
+        const Json& output = *Member(*go, "outputRect");
+        bool found = false;
+        for (const DrawCall& call : _renderer->calls) {
+            if (call.kind == DrawKind::Rect && std::abs(call.rect.x - static_cast<float>(NumberMember(output, "x"))) < kTolerance &&
+                std::abs(call.rect.y - static_cast<float>(NumberMember(output, "y"))) < kTolerance && std::abs(call.rect.w - static_cast<float>(NumberMember(output, "w"))) < kTolerance) {
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found) << "no draw call at the outputRect of Go";
+    }
+
     TEST_F(UIControlApiTest, TheCanvasParameterChoosesTheElementWhenNamesRepeat) {
         Show("Main");
         Recorder recorder;

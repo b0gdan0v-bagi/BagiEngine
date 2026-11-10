@@ -124,7 +124,7 @@ namespace BECore {
             return json;
         }
 
-        Json DescribeCanvas(const CanvasEntry& entry) {
+        Json DescribeCanvas(const CanvasEntry& entry, const Scene& scene) {
             const UICanvasComponent& canvas = *entry.canvas;
             const UICanvasLayout& layout = canvas.GetLayout();
             Json json = Json::object();
@@ -136,6 +136,15 @@ namespace BECore {
             json["takesInput"] = canvas.TakesInput();
             json["inputOrder"] = canvas.GetInputOrder();
             json["laidOut"] = layout.HasLayout();
+            if (canvas._space == CanvasSpace::SceneView) {
+                // The view the scene drew with last: the canvas is laid out against it
+                const ActiveSceneView view = scene.GetActiveView();
+                Json viewJson = Json::object();
+                viewJson["name"] = MakeJsonString(view.name.ToStringView());
+                viewJson["width"] = view.width;
+                viewJson["height"] = view.height;
+                json["view"] = std::move(viewJson);
+            }
 
             const UICanvasResolved* resolved = layout.HasLayout() ? &layout.GetResolved() : nullptr;
             if (resolved != nullptr) {
@@ -174,7 +183,7 @@ namespace BECore {
 
             Json list = Json::array();
             for (const CanvasEntry& entry : canvases) {
-                list.push_back(DescribeCanvas(entry));
+                list.push_back(DescribeCanvas(entry, *scene));
             }
             Json result = Json::object();
             result["scene"] = MakeJsonString(scene->GetName().ToStringView());

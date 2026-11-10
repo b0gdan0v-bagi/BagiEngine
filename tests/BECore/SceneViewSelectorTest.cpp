@@ -1,9 +1,9 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/SceneView.h>
+#include <BECore/UI/UIPreview.h>
 #include <Common/Printers.h>
 #include <gtest/gtest.h>
-#include <limits>
 
 namespace BECore::Tests {
 
@@ -158,6 +158,26 @@ namespace BECore::Tests {
         EXPECT_EQ(deserializer.GetErrors().size(), 1u);
         ASSERT_EQ(loaded.size(), 1u);
         EXPECT_EQ(loaded[0].name, "Good"_intern);
+    }
+
+    // The editor viewport's offscreen pass is as big as UIPreview::FitSize says, and that size picks the view
+    TEST(SceneViewSelectorTest, TheViewportPresetsPickTheirViewBySize) {
+        const auto variants = PortraitAndWide();
+        struct Case {
+            ViewportAspect aspect;
+            float availableWidth;
+            float availableHeight;
+            int32_t index;
+        };
+        const Case cases[] = {
+            {ViewportAspect::Wide16x9, 1000.0f, 800.0f, -1},    {ViewportAspect::Standard4x3, 1000.0f, 800.0f, -1}, {ViewportAspect::UltraWide21x9, 1400.0f, 800.0f, 1},
+            {ViewportAspect::Portrait9x16, 1000.0f, 800.0f, 0}, {ViewportAspect::Free, 400.0f, 900.0f, 0},          {ViewportAspect::Free, 1000.0f, 800.0f, -1},
+        };
+        for (const Case& c : cases) {
+            const auto [w, h] = UIPreview::FitSize(c.aspect, c.availableWidth, c.availableHeight);
+            SCOPED_TRACE(Format("{} in {}x{} is {}x{}", EnumUtils<ViewportAspect>::ToString(c.aspect), c.availableWidth, c.availableHeight, w, h).c_str());
+            EXPECT_EQ(Pick(variants, static_cast<float>(w), static_cast<float>(h)).index, c.index);
+        }
     }
 
 }  // namespace BECore::Tests

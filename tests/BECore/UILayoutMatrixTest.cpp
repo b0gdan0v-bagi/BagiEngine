@@ -137,6 +137,4 @@ namespace BECore::Tests {
         EXPECT_TRUE(AnyLabelEndsWith(failures, "view #0"));
     }
 
-    TEST(UILayoutMatrixTest, CompileTimeChecks) {}
-
 }  // namespace BECore::Tests
