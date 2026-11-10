@@ -1,9 +1,11 @@
 #include "SceneEventsTest.h"
 
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Common/Printers.h>
+#include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Events/SceneEvents.h>
@@ -108,6 +110,34 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
+        // A scene with a portrait view variant over a default view, for the view change event
+        constexpr const char* kViewScenesXml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Responsive" viewWidth="1280" viewHeight="720">
+    <viewVariants><view name="Portrait" when="orientation:portrait" width="720" height="1280"/></viewVariants>
+    <nodes><node name="Probe"><components><component type="SceneEventCounter"/></components></node></nodes>
+  </scene>
+  <scene type="Scene" name="Other" viewWidth="1280" viewHeight="720">
+    <viewVariants><view name="Portrait" when="orientation:portrait" width="720" height="1280"/></viewVariants>
+    <nodes><node name="Probe"><components><component type="SceneEventCounter"/></components></node></nodes>
+  </scene>
+</scenes></SceneManager>)";
+
+        /// Collects every SceneViewChangedEvent that is emitted while it is alive.
+        class ViewChangeRecorder : public SubscriptionHolder {
+        public:
+            ViewChangeRecorder() {
+                Subscribe<SceneEvents::SceneViewChangedEvent, &ViewChangeRecorder::OnChanged>(this);
+            }
+
+            eastl::vector<SceneEvents::SceneViewChangedEvent> events;
+
+        private:
+            void OnChanged(const SceneEvents::SceneViewChangedEvent& e) {
+                events.push_back(e);
+            }
+        };
+
         SceneNode* FindNode(SceneNode& node, PoolString name) {
             if (node.GetName() == name) {
                 return &node;
@@ -162,6 +192,7 @@ namespace BECore::Tests {
         void TearDown() override {
             // Destroying the scenes drops the components' event connections
             _manager.Reset();
+            CoreManager::GetRendererManager().SetRenderer({});
         }
 
         /// Builds a SceneManager from @p xml the way MakeFromConfig<SceneManager> does: the document element is the
@@ -422,6 +453,110 @@ namespace BECore::Tests {
 
         EXPECT_NE(PackColor(quadA->_color), kInitialColor);
         EXPECT_EQ(PackColor(quadB->_color), kInitialColor);
+    }
+
+    // The view change event: decided in Draw(), announced in Update()
+
+    class SceneViewChangedEventTest : public SceneEventsTest {
+    protected:
+        void SetUp() override {
+            SceneEventsTest::SetUp();
+            _renderer = BECore::New<RecordingRenderer>();
+            CoreManager::GetRendererManager().SetRenderer(_renderer);
+            ASSERT_NO_FATAL_FAILURE(LoadScenes(kViewScenesXml));
+            _scene = &GetScene("Responsive"_intern);
+        }
+
+        void DrawAt(float width, float height) {
+            _renderer->width = width;
+            _renderer->height = height;
+            _manager->DrawAll();
+        }
+
+        IntrusivePtr<RecordingRenderer> _renderer;
+        Scene* _scene = nullptr;
+    };
+
+    TEST_F(SceneViewChangedEventTest, NothingIsAnnouncedWhileTheDefaultViewStays) {
+        ViewChangeRecorder recorder;
+
+        DrawAt(900.0f, 600.0f);
+        _manager->UpdateAll();
+        DrawAt(1000.0f, 500.0f);
+        _manager->UpdateAll();
+
+        EXPECT_TRUE(recorder.events.empty());
+    }
+
+    TEST_F(SceneViewChangedEventTest, ADrawDecidesAndTheNextUpdateAnnounces) {
+        ViewChangeRecorder recorder;
+
+        DrawAt(600.0f, 900.0f);
+        EXPECT_TRUE(recorder.events.empty()) << "Draw must not run handlers";
+        EXPECT_EQ(_scene->GetActiveView().index, 0);
+
+        _manager->UpdateAll();
+        ASSERT_EQ(recorder.events.size(), 1u);
+        EXPECT_EQ(recorder.events[0].scene, _scene);
+        EXPECT_EQ(recorder.events[0].view.name, "Portrait"_intern);
+        EXPECT_EQ(recorder.events[0].view.index, 0);
+        EXPECT_FLOAT_EQ(recorder.events[0].view.width, 720.0f);
+        EXPECT_FLOAT_EQ(recorder.events[0].view.height, 1280.0f);
+    }
+
+    TEST_F(SceneViewChangedEventTest, AChangeIsAnnouncedOnceHoweverManyUpdatesFollow) {
+        ViewChangeRecorder recorder;
+        DrawAt(600.0f, 900.0f);
+
+        _manager->UpdateAll();
+        _manager->UpdateAll();
+        DrawAt(500.0f, 800.0f);
+        _manager->UpdateAll();
+
+        EXPECT_EQ(recorder.events.size(), 1u);
+    }
+
+    TEST_F(SceneViewChangedEventTest, SeveralChangesBetweenUpdatesAreOneEventWithTheLatestView) {
+        ViewChangeRecorder recorder;
+
+        DrawAt(600.0f, 900.0f);
+        DrawAt(900.0f, 600.0f);
+        DrawAt(600.0f, 900.0f);
+        _manager->UpdateAll();
+        ASSERT_EQ(recorder.events.size(), 1u);
+        EXPECT_EQ(recorder.events[0].view.index, 0);
+
+        // A flip and a flip back between two updates is a change of the version, so it is announced with the view it ended on
+        DrawAt(900.0f, 600.0f);
+        DrawAt(600.0f, 900.0f);
+        _manager->UpdateAll();
+        EXPECT_EQ(recorder.events.size(), 2u);
+    }
+
+    TEST_F(SceneViewChangedEventTest, ChangingBackToTheDefaultIsAnnouncedWithTheDefaultView) {
+        ViewChangeRecorder recorder;
+        DrawAt(600.0f, 900.0f);
+        _manager->UpdateAll();
+
+        DrawAt(900.0f, 600.0f);
+        _manager->UpdateAll();
+
+        ASSERT_EQ(recorder.events.size(), 2u);
+        EXPECT_EQ(recorder.events[1].view.index, -1);
+        EXPECT_TRUE(recorder.events[1].view.name.Empty());
+        EXPECT_FLOAT_EQ(recorder.events[1].view.width, 1280.0f);
+    }
+
+    TEST_F(SceneViewChangedEventTest, OnlyTheSceneThatIsUpdatedAnnounces) {
+        ViewChangeRecorder recorder;
+        DrawAt(600.0f, 900.0f);
+
+        // "Other" was never drawn, so it has nothing to announce; "Responsive" is the active scene
+        _manager->UpdateAll();
+
+        ASSERT_EQ(recorder.events.size(), 1u);
+        EXPECT_EQ(recorder.events[0].scene, _scene);
+        EXPECT_EQ(GetScene("Other"_intern).GetViewVersion(), 0u);
     }
 
 }  // namespace BECore::Tests

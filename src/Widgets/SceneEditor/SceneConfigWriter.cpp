@@ -83,13 +83,18 @@ namespace BECore {
         pugi::xml_node sceneEl = oldEl ? scenesEl.insert_child_before("scene", oldEl) : scenesEl.append_child("scene");
         sceneEl.append_attribute("type").set_value(scene.GetTypeMeta().typeName.data());
 
-        // Only the attributes of the serialized scene are taken. Its <nodes> child is left behind on purpose: Serialize
-        // writes every node with `enabled` and `type` and every layer, and the file keeps its shorter shape (BuildNodeXml)
+        // The attributes of the serialized scene and its other children (`viewVariants`) are taken. Its <nodes> child is left behind
+        // on purpose: Serialize writes every node with `enabled` and `type` and every layer, and the file keeps its shorter shape (BuildNodeXml)
         XmlSerializer s;
         scene.Serialize(s);
         const auto& srcRoot = s.GetRootNode();
         for (auto attr = srcRoot.first_attribute(); attr; attr = attr.next_attribute()) {
             sceneEl.append_attribute(attr.name()).set_value(attr.value());
+        }
+        for (auto child = srcRoot.first_child(); child; child = child.next_sibling()) {
+            if (eastl::string_view{child.name()} != "nodes") {
+                sceneEl.append_copy(child);
+            }
         }
 
         pugi::xml_node nodesEl = sceneEl.append_child("nodes");

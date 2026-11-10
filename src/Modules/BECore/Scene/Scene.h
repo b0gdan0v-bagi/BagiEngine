@@ -2,6 +2,7 @@
 
 #include <BECore/Renderer/ViewTransform.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Scene/SceneView.h>
 #include <entt/entt.hpp>
 
 namespace BECore {
@@ -19,7 +20,8 @@ namespace BECore {
         /**
          * @brief Emit SceneFixedUpdateEvent once per fixed step due this frame, then SceneUpdateEvent.
          *
-         * Reads the frame from CoreManager::GetTime(), so call it once per frame, after Time advanced.
+         * Reads the frame from CoreManager::GetTime(), so call it once per frame, after Time advanced. First it sends
+         * SceneEvents::SceneViewChangedEvent when the active view changed since the last send (decided in Draw(), announced here).
          */
         void Update();
 
@@ -45,14 +47,26 @@ namespace BECore {
         int32_t GetDrawRank(const SceneNode& node) const;
 
         /**
-         * @brief Size of the scene's view in scene units (XML `viewWidth`, `viewHeight`), 0 when it has none.
+         * @brief Size of the scene's **active** view in scene units, 0 when it has none.
          *
-         * With a view size the scene is drawn scaled to fit the render output and centered, so it looks the same in a
-         * window of any size; without one a unit is a pixel. Everything in the scene (transforms, board origins) is
-         * in these units.
+         * The default view is the XML `viewWidth`, `viewHeight`; a scene may list `viewVariants` that replace it while the render output has
+         * their shape (see GetActiveView()). With a view size the scene is drawn scaled to fit the render output and centered, so it looks
+         * the same in a window of any size; without one a unit is a pixel. Everything in the scene (transforms, board origins) is in these
+         * units. Before the first draw this is the default view.
          */
         float GetViewWidth() const;
         float GetViewHeight() const;
+
+        /**
+         * @brief The view the scene draws with: the default one (`index` -1, empty name) or the first variant that holds for the output.
+         *
+         * Decided at the start of every Draw() from the output size of that pass (SceneViewSelector::Pick), so it is right already inside
+         * OnDraw(); before the first draw it is the default view. Nothing outside Draw() changes it.
+         */
+        ActiveSceneView GetActiveView() const;
+
+        /// Moves up exactly when the choice (its `index`) changes, never goes back; a change of the pick is the only thing it counts
+        uint32_t GetViewVersion() const;
 
         /**
          * @brief Map a mouse position in render output pixels (window or viewport-local) to scene units.
@@ -92,14 +106,19 @@ namespace BECore {
 
     private:
         void DestroyEntities(SceneNode& node);
+        void PickView(float outputWidth, float outputHeight);
 
         BE_REFLECT_FIELD PoolString _name;
         BE_REFLECT_FIELD float _viewWidth = 0.0f;
         BE_REFLECT_FIELD float _viewHeight = 0.0f;
+        BE_REFLECT_FIELD eastl::vector<SceneViewVariant> _viewVariants;
         BE_REFLECT_FIELD eastl::vector<IntrusivePtr<SceneNode>> _nodes;
         entt::registry _registry;
         IntrusivePtr<SceneNode> _rootNode;
-        ViewTransform _viewTransform;  // fit of the view to the output, set by Draw(), read by ScreenToScene*
+        ViewTransform _viewTransform;   // fit of the view to the output, set by Draw(), read by ScreenToScene*
+        int32_t _activeViewIndex = -1;  // index in _viewVariants, -1 the default view; set by Draw()
+        uint32_t _viewVersion = 0;
+        uint32_t _announcedViewVersion = 0;  // the version Update() last sent SceneViewChangedEvent for
         bool _active = false;
     };
 

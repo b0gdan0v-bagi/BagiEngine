@@ -1,6 +1,11 @@
 #pragma once
 
+#include <BECore/Scene/SceneView.h>
 #include <Events/EventBase.h>
+
+namespace BECore {
+    class Scene;
+}  // namespace BECore
 
 namespace BECore::SceneEvents {
 
@@ -20,6 +25,20 @@ namespace BECore::SceneEvents {
 
         SceneFixedUpdateEvent() = default;
         explicit SceneFixedUpdateEvent(float dt) : deltaTime(dt) {}
+    };
+
+    /**
+     * @brief The scene's active view (Scene::GetActiveView()) changed since this event was last sent.
+     *
+     * Emitted from Scene::Update() (never from Draw()), once per change however many frames the view changed in, so a handler may change the
+     * scene. `view` is the view in effect at that moment. Global like the other scene events: filter on `scene` or use SubscribeInScene.
+     */
+    struct SceneViewChangedEvent : public EventBase<SceneViewChangedEvent> {
+        const Scene* scene = nullptr;
+        ActiveSceneView view;
+
+        SceneViewChangedEvent() = default;
+        SceneViewChangedEvent(const Scene* s, const ActiveSceneView& v) : scene(s), view(v) {}
     };
 
 }  // namespace BECore::SceneEvents

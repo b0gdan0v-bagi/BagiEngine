@@ -1,4 +1,5 @@
 #include <BECore/Config/XmlDocument.h>
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/ClassMeta.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
@@ -7,6 +8,7 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/SceneManager.h>
 #include <Common/Printers.h>
+#include <Common/RecordingRenderer.h>
 #include <Common/TempPath.h>
 #include <Widgets/SceneEditor/SceneConfigWriter.h>
 
@@ -184,6 +186,18 @@ namespace BECore::Tests {
             _reloaded->Deserialize(deserializer);
             ASSERT_FALSE(deserializer.HasErrors());
             _reloaded->Initialize();
+        }
+
+        /// Like LoadScenes() for a document of the test's own (no comments are put in). Use through ASSERT_NO_FATAL_FAILURE.
+        void LoadOwnScenes(const char* xml) {
+            ASSERT_TRUE(_document.LoadFromString(xml));
+
+            XmlDeserializer deserializer;
+            ASSERT_TRUE(deserializer.LoadFromString(xml));
+            _manager = New<SceneManager>();
+            _manager->Deserialize(deserializer);
+            ASSERT_FALSE(deserializer.HasErrors());
+            _manager->Initialize();
         }
 
         /// A scene of the reloaded manager, which the test has checked is there
@@ -432,6 +446,66 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(Reloaded("Menu").GetViewWidth(), 0.0f);
         EXPECT_FLOAT_EQ(Reloaded("Menu").GetViewHeight(), 0.0f);
         EXPECT_FLOAT_EQ(Reloaded("Game").GetViewWidth(), kViewWidth);
+    }
+
+    TEST_F(SceneEditorSaveTest, ViewVariantsRoundTripAndASceneWithoutThemSavesNone) {
+        constexpr const char* xml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Responsive" viewWidth="1280" viewHeight="720">
+    <viewVariants>
+      <view name="Portrait" when="orientation:portrait" width="720" height="1280"/>
+      <view when="minAspect:2;maxHeight:600" width="1600" height="500"/>
+    </viewVariants>
+    <nodes><node name="Piece"><components><component type="TransformComponent" x="5" y="6" width="7" height="8"/></components></node></nodes>
+  </scene>
+  <scene type="Scene" name="Plain" viewWidth="400" viewHeight="300"><nodes>
+    <node name="Piece"><components><component type="TransformComponent" x="1" y="2" width="3" height="4"/></components></node>
+  </nodes></scene>
+</scenes></SceneManager>)";
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(xml));
+        _manager->SetActiveScene("Responsive"_intern);
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
+
+        const pugi::xml_node list = FindSceneElement(ConfigRoot(), "Responsive").child("viewVariants");
+        ASSERT_TRUE(list);
+        const pugi::xml_node portrait = list.first_child();
+        EXPECT_STREQ(portrait.name(), "view");
+        EXPECT_STREQ(portrait.attribute("name").as_string(), "Portrait");
+        EXPECT_STREQ(portrait.attribute("when").as_string(), "orientation:portrait");
+        EXPECT_FLOAT_EQ(portrait.attribute("width").as_float(), 720.0f);
+        EXPECT_FLOAT_EQ(portrait.attribute("height").as_float(), 1280.0f);
+        const pugi::xml_node wide = portrait.next_sibling();
+        ASSERT_TRUE(wide);
+        EXPECT_FALSE(wide.attribute("name"));
+        EXPECT_STREQ(wide.attribute("when").as_string(), "minAspect:2;maxHeight:600");
+
+        // The plain scene saves no list, not even an empty one
+        _manager->SetActiveScene("Plain"_intern);
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
+        EXPECT_FALSE(FindSceneElement(ConfigRoot(), "Plain").child("viewVariants"));
+
+        // Saving again gives the same document, and the file loads back with the same views
+        const eastl::string once = Print(ConfigRoot());
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), GetScene("Responsive")));
+        EXPECT_EQ(Print(ConfigRoot()), once);
+
+        ASSERT_NO_FATAL_FAILURE(SaveAndReload());
+        Scene& reloaded = Reloaded("Responsive");
+        EXPECT_FLOAT_EQ(reloaded.GetViewWidth(), 1280.0f);
+        auto renderer = BECore::New<RecordingRenderer>();
+        CoreManager::GetRendererManager().SetRenderer(renderer);
+        renderer->width = 600.0f;
+        renderer->height = 900.0f;
+        reloaded.Draw();
+        EXPECT_EQ(reloaded.GetActiveView().name, "Portrait"_intern);
+        EXPECT_FLOAT_EQ(reloaded.GetViewHeight(), 1280.0f);
+        renderer->width = 1600.0f;
+        renderer->height = 500.0f;
+        reloaded.Draw();
+        EXPECT_EQ(reloaded.GetActiveView().index, 1);
+        EXPECT_FLOAT_EQ(reloaded.GetViewWidth(), 1600.0f);
+        CoreManager::GetRendererManager().SetRenderer({});
+        EXPECT_EQ(Reloaded("Plain").GetActiveView().index, -1);
     }
 
     TEST_F(SceneEditorSaveTest, TheNodesKeepTheirShortShape) {
