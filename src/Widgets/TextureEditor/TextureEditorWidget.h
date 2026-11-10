@@ -3,7 +3,7 @@
 #include <BECore/Renderer/ITexture.h>
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Widgets/IWidget.h>
-#include <EASTL/vector.h>
+#include <Widgets/EditorLayout/EditorCommands.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -30,6 +30,11 @@ namespace BECore {
         BE_FUNCTION void Draw() override;
 
     private:
+        // Runs `texture.save` like the Save button (only with unsaved changes)
+        void OnCommand(const EditorCommandEvent& event);
+        // The one path of the button and the command
+        void SaveLibrary();
+
         void RenderLeftPanel();
         void RenderRightPanel();
         void RefreshAssetList();

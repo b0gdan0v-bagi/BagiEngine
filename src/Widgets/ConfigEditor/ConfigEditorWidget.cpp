@@ -8,6 +8,7 @@
 #include <BECore/Logger/ILogSink.h>
 #include <BECore/Reflection/IDeserializer.h>
 #include <Generated/ConfigEditorWidget.gen.hpp>
+#include <Widgets/EditorLayout/EditorCommands.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -34,7 +35,26 @@ namespace BECore {
                                                                                "SDL_WINDOW_VULKAN",        "SDL_WINDOW_METAL",
                                                                                "SDL_WINDOW_TRANSPARENT",   "SDL_WINDOW_NOT_FOCUSABLE"});
 
+        Subscribe<EditorCommandEvent, &ConfigEditorWidget::OnCommand>(this);
         return true;
+    }
+
+    void ConfigEditorWidget::OnCommand(const EditorCommandEvent& event) {
+        // The same rule as the Save button: a config is selected and has staged changes
+        if (event.commandId == EditorCommandIds::kConfigSave && !_selectedConfig.Empty() && !_staged.IsEmpty()) {
+            SaveSelectedConfig();
+        }
+    }
+
+    void ConfigEditorWidget::SaveSelectedConfig() {
+        auto& configManager = CoreManager::GetConfigManager();
+        const XmlNode rootNode = configManager.GetConfig(_selectedConfig);
+        if (rootNode) {
+            _staged.ApplyTo(rootNode.GetPugiNode());
+        }
+        if (configManager.SaveConfig(_selectedConfig)) {
+            ClearTransientState();
+        }
     }
 
     void ConfigEditorWidget::Update() {
@@ -109,13 +129,7 @@ namespace BECore {
             ImGui::BeginDisabled();
         }
         if (ImGui::Button("Save")) {
-            const XmlNode rootNode = configManager.GetConfig(_selectedConfig);
-            if (rootNode) {
-                _staged.ApplyTo(rootNode.GetPugiNode());
-            }
-            if (configManager.SaveConfig(_selectedConfig)) {
-                ClearTransientState();
-            }
+            SaveSelectedConfig();
         }
         if (!hasStagedChanges) {
             ImGui::EndDisabled();

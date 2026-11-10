@@ -3,6 +3,7 @@
 #include "StagedChanges.h"
 
 #include <BECore/Widgets/IWidget.h>
+#include <Widgets/EditorLayout/EditorCommands.h>
 
 // Forward declaration - avoid including pugixml in header
 namespace pugi {
@@ -34,6 +35,16 @@ namespace BECore {
         BE_FUNCTION void Draw() override;
 
     private:
+        /**
+         * @brief Runs `config.save` like the Save button (only with staged changes)
+         */
+        void OnCommand(const EditorCommandEvent& event);
+
+        /**
+         * @brief Applies the staged changes to the selected config and saves its file; the one path of the button and the command
+         */
+        void SaveSelectedConfig();
+
         /**
          * @brief Recursively render an XML node as an ImGui tree with typed field inspectors
          * @param node The pugixml node to render

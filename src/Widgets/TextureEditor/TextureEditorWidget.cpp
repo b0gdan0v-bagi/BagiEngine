@@ -6,13 +6,27 @@
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
 #include <Generated/TextureEditorWidget.gen.hpp>
-#include <cstdint>
+#include <Widgets/EditorLayout/EditorCommands.h>
 #include <imgui.h>
 
 namespace BECore {
 
     bool TextureEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
+        Subscribe<EditorCommandEvent, &TextureEditorWidget::OnCommand>(this);
         return true;
+    }
+
+    void TextureEditorWidget::OnCommand(const EditorCommandEvent& event) {
+        // The same rule as the Save button: nothing to save while there are no unsaved changes
+        if (event.commandId == EditorCommandIds::kTextureSave && _isDirty) {
+            SaveLibrary();
+        }
+    }
+
+    void TextureEditorWidget::SaveLibrary() {
+        if (CoreManager::GetTextureLibrary().Save()) {
+            _isDirty = false;
+        }
     }
 
     void TextureEditorWidget::Update() {
@@ -27,9 +41,7 @@ namespace BECore {
         // -----------------------------------------------------------------
         ImGui::BeginDisabled(!_isDirty);
         if (ImGui::Button("Save")) {
-            if (CoreManager::GetTextureLibrary().Save()) {
-                _isDirty = false;
-            }
+            SaveLibrary();
         }
         ImGui::EndDisabled();
 
