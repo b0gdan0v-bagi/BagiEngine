@@ -36,6 +36,8 @@ namespace BECore::Tests {
         eastl::string roomCode;
         int seat = -1;
         eastl::string token;
+        /// The last text the client sent: an `error` may repeat what the client itself named (a card it does not hold), which tells it nothing
+        eastl::string lastSent;
 
         [[nodiscard]] size_t Count(eastl::string_view type) const {
             size_t count = 0;
@@ -143,6 +145,7 @@ namespace BECore::Tests {
         /// Sends raw text as if it came from the connection
         void SendText(ConnectionId id, eastl::string_view text) {
             _startingRoom = Client(id).roomCode;
+            Client(id).lastSent = eastl::string(text);
             _hub.OnMessage(id, text, _now);
         }
 
@@ -277,7 +280,11 @@ namespace BECore::Tests {
             }
             // The game of the client's room as it is right now
             if (const FakeSeatedGame* game = GetGame(client.roomCode); game && client.seat >= 0) {
-                const eastl::vector<eastl::string> leaked = FindLeakedCards(text, client.seat, *game);
+                eastl::vector<eastl::string> leaked = FindLeakedCards(text, client.seat, *game);
+                if (message.type == RoomMessageTypes::kError) {
+                    // A refusal that quotes the card the client itself sent ("seat 0 does not hold 'c3_1'") gives away nothing
+                    leaked.erase(eastl::remove_if(leaked.begin(), leaked.end(), [&](const eastl::string& card) { return client.lastSent.find(card) != eastl::string::npos; }), leaked.end());
+                }
                 if (!leaked.empty()) {
                     ++_leaks;
                     if (_failOnLeak) {

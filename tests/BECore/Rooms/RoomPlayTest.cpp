@@ -292,9 +292,11 @@ namespace BECore::Tests {
                 if (!actions->empty()) {
                     const auto result = test.room.PerformAction(player, test.room.GetGameVersion(), (*actions)[0]);
                     EXPECT_TRUE(result.has_value());
+                    ExpectViewsDoNotLeak(test);
                 }
             }
             test.room.StepComputers(now);
+            ExpectViewsDoNotLeak(test);
         }
         EXPECT_EQ(test.room.GetPhase(), RoomPhase::Finished);
         EXPECT_EQ(test.Game().GetPlayCount(), FakeSeatedGame::kTotalPlays);

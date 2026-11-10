@@ -95,10 +95,11 @@ namespace BECore {
         void HandleAction(ConnectionId id, Connection& connection, const ActionMessage& message, RoomTime now);
         void HandleLeave(ConnectionId id, Connection& connection, RoomTime now);
 
-        /// Sends `error`; counts a failed join and closes the connection when the limit is reached
+        /// Sends `error`
         void SendError(ConnectionId id, const ControlError& error, eastl::string_view ref);
         void SendError(ConnectionId id, eastl::string_view code, eastl::string_view message, eastl::string_view ref);
         void SendText(ConnectionId id, eastl::string text);
+        /// Sends `error` for a failed join, counts it and closes the connection when the limit is reached
         void FailJoin(ConnectionId id, Connection& connection, const ControlError& error, RoomTime now);
 
         /// Sends `lobby` and `view` to every connection of the room whose copy is out of date

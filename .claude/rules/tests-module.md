@@ -25,6 +25,7 @@ tests/
 ├── CMakeLists.txt      # target BagiEngineTests via be_add_game_tests
 ├── Common/             # BagiEngineTestSupport (static lib): TestMain.cpp, EngineEnvironment, AssertBridge, Printers.h, RecordingRenderer.h
 └── BECore/             # engine tests (+ ReflectionTest.h / ReflectionEventTest.h / SceneEventsTest.h / TimeTest.h: reflected test data)
+    └── Rooms/          # the Rooms module and Games' ISeatedGame: FakeSeatedGame, HubHarness (TestClient.h), RoomsScenarioTest.cpp (src/Modules/Rooms/CLAUDE.md, "Tests")
 games/<Name>/tests/     # a game's tests, built as <Name>Tests by be_add_game_tests in games/<Name>/CMakeLists.txt
 ```
 
