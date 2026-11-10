@@ -1,360 +1,155 @@
 # UI Module Guidelines
 
-## Overview
+In-game UI drawn through `IRenderer`, in both backends and both run modes. ImGui is not involved (it is the tool UI: `.claude/rules/widgets-module.md`). The authoring decision and its data: `AuthoringDecision.md`. Screens in HTML + CSS: `.claude/rules/ui-web.md`.
 
-In-game UI that the engine draws through `IRenderer`, in both backends and both run modes. ImGui is not involved (it stays the tool UI: editor panels in `src/Widgets/`, `.claude/rules/widgets-module.md`). Plan and the stages still to come: the UI plan in the local plan store (the `todo/` entries link it); the authoring decision and its data: `AuthoringDecision.md` in this folder.
-
-**Adaptivity is the foundation.** Window size, aspect ratio, orientation, safe area, pixel density and a user scale are inputs of every layout, and every screen must pass `ValidateOnMatrix` (below) with no issues before it is considered done.
-
-What exists (plan stages 3 and 4, and of stage 6.4 the choice group, the toggle, the progress bar, the slider and the string table): canvases, the scaler, the layout rules, responsive variants, the validator, the host component, the reflection of the element tree and the variants, so a screen can be written in `SceneConfig.xml` or in a `.ui.xml` file of its own (see "Writing a screen in XML"), and the controls: `UIPanel`, `UIImage`, `UILabel`, `UIButton`, `UIStack`, `UISegmented`, `UIToggle`, `UIProgressBar`, `UISlider` (see "Controls") `UIVars` for text that follows the game (see "Variables"), `UIStrings` for text that follows the language (see "Strings"), the pattern of a panel that a button opens (see "Choice panels") and the pattern of a settings screen in several languages (see "Settings panels and translations"). Nothing in the engine's own scenes uses the toggle, the slider, the progress bar or the strings yet; "Trying the widgets live" says how to look at them. What does not exist yet: see "Not done".
+**Adaptivity is the foundation.** Window size, aspect, orientation, safe area, pixel density and user scale are inputs of every layout, and **every screen must pass `ValidateOnMatrix` with no issues before it is done**.
 
 ```
-UICanvasComponent (scene component, reflected fields: space, scaleMode, ...)
-  │  owns, and feeds with the context of each frame
+UICanvasComponent (scene component; reflected fields: space, scaleMode, ...)
+  ▼ owns and feeds with the frame's UILayoutContext
+UICanvasLayout (pure) ── UICanvasScaler::Resolve → scale, bounds, safeBounds, contentBounds, ViewTransform
+                      ── UIVariants::Apply       → `active` style of every element
+                      ── UITreeLayout::Run       → `rect` of every element (UILayout: the rules)
+                      ── HitTest, Validate (UILayoutValidator)
   ▼
-UICanvasLayout (pure) ── UICanvasScaler::Resolve(params, UILayoutContext) → scale, bounds, safeBounds, contentBounds, ViewTransform
-  │                    ── UIVariants::Apply(root, variants, bounds)      → `active` style of every element
-  │                    ── UITreeLayout::Run(root, contentBounds, bounds)  → `rect` of every element  (UILayout: the rules)
-  │                    ── HitTest, Validate (UILayoutValidator)
-  ▼
-UIElement tree (root = the canvas; children are the elements)
+UIElement tree (root = the canvas)
 ```
 
 | Class | Role |
 |-------|------|
-| `UILength`, `UIRectSpec`, `UIStackSpec` | Data: a size in units or percent; how an element finds its rect (anchor, offset, size, limits, aspect ratio, margins, flex); a stack container |
-| `UILayout` | Pure rules: `ResolveRect(parent, spec)` (anchor layout) and `LayoutStack(parent, stack, specs, rects)` |
-| `UILayoutContext` | Everything layout depends on besides the tree: output size, pixel density, display scale, safe area, user scale, the scene's view size, the node box of a World canvas. Has `operator==` |
-| `UICanvasScaler` | The one pure function `Resolve(params, context)` → `UICanvasResolved` |
-| `UIEnvironment` (`CoreManager::GetUIEnvironment()`) | `UISettings` from `config/UIConfig.xml` (`userScale`, `minTouchSize`, `hotReloadInterval` for the RmlUi host) and `MakeContext(window, outputW, outputH)`: puts the window's metrics into a context. `SetSafeAreaOverride()` and `SetPixelDensityOverride()` (a value that is not positive is ignored; the safe area of the window is multiplied by the effective density) are for the editor viewport, which sets density 1 and the simulated safe area around its scene draw and clears both after it and in its destructor: its target has one pixel per ImGui unit, so a window in the high-density mode must not double the canvases of the editor |
-| `UIElement` | A node, `FACTORY_BASE` with the XML element name `element`: `name`, `layout` (Anchor or Stack), `style` (authored) and `active` (after variants), `rect` (laid out), `children`, `blocksInput`, `interactive`, `ignoreSafeArea`, `color`; virtual `CheckContent()`. The fields except `active` and `rect` are reflected |
-| `UIElementStyle` | The authored properties that a variant can change (`visible`, `rect`, `stack`, `fontSize`); written as flat attributes of its element |
-| `UIColor` | A `Color` that a file writes in one attribute (`color="0,0,0,160"` or `"#000000A0"`); `UIColor.h` also holds the shifts every control derives its states from (`ShiftColor`, `WithAlpha`, `kHoverBrighten` 28, `kPressDarken` 36, `kDisabledAlpha` 0.5, `kFillFallback`), so a button, a toggle and the later controls agree |
-| `UIText` (`UIValueText.h`) | Pure text forms of `UILength` (`"90%"`), `UIEdges` (`"8"` or `"l,t,r,b"`), colors, numbers (`ParseFiniteFloat`, `FractionInRange`, `ValueInRange`: the range rules the progress bar and the slider share); `UIAttr` (`UIAttributeIO.h`) reads and writes them as attributes |
-| `UIPanel`, `UIImage`, `UILabel`, `UIButton`, `UIStack`, `UISegmented`, `UIToggle`, `UIProgressBar`, `UISlider` | The controls, derived from `UIElement`; one section below |
-| `UIVars` (`CoreManager::GetUIVars()`) | The variables that label text is bound to: name to text, with a version that grows on every change; `Expand()` replaces `{name}` |
-| `UIStrings` (`CoreManager::GetUIStrings()`) | The string table: languages, keys and texts, a default and a current language, a version; `Resolve()` replaces `{#key}`; loaded from `config/UIStrings.xml` (pure over an `XmlNode`: `LoadFromXml`). A label, button or toggle resolves `{#key}` in its `text` through it (see "Strings") |
-| `UISprite`, `UINineSlice` | The texture of a sprite name (TextureLibrary, or given by code); the pure cutting of a picture into nine pieces |
-| `UIScreenContent` | The reflected pair `elements` + `variants` that a screen is made of; what a document and any other front-end reads |
-| `UIDocument` (`IResource`), `UIDocumentLoader` | A screen in a `.ui.xml` file: the parsed XML, `Instantiate(content)` builds fresh elements from it for each canvas |
-| `UIWebCompiler`, `UIHtmlParser`, `UICssParser`, `UIWebDocumentLoader` | The web-style front-end: HTML + CSS in, the text of a `.ui.xml` out (see "Writing a screen in HTML and CSS"); the loader takes `.ui.html` |
-| `UIVariant` | `when` (`UIVariantCondition`, text form `orientation:portrait;minAspect:1.5`) + `overrides` per named element (`UIElementOverride`); `UIVariants::Apply` |
-| `UITreeLayout::Run` | Lays out a whole tree |
-| `UICanvasLayout` | The pure pipeline above with a cache, `HitTest`, `Validate`, the counters tests read. Public fields: `params`, `root`, `variants` |
+| `UILength`, `UIRectSpec`, `UIStackSpec` | a size in units or percent; how an element finds its rect; a stack |
+| `UILayout` | pure rules: `ResolveRect`, `LayoutStack` |
+| `UILayoutContext` | everything layout depends on besides the tree (output size, density, display scale, safe area, user scale, view size, World node box); `operator==` |
+| `UIEnvironment` (`CoreManager::GetUIEnvironment()`) | `UISettings` from `config/UIConfig.xml` (`userScale`, `minTouchSize`, `hotReloadInterval`), `MakeContext`; `SetSafeAreaOverride` / `SetPixelDensityOverride` for the editor viewport |
+| `UIElement` | `FACTORY_BASE` node: `name`, `layout`, `style` (authored) / `active` (after variants), `rect`, `children`, `blocksInput`, `interactive`, `ignoreSafeArea`, `color`, virtual `CheckContent()` |
+| `UIElementStyle` | what a variant can change: `visible`, `rect`, `stack`, `fontSize` |
+| `UIColor` | a color in one attribute; the shared state shifts (`ShiftColor`, `kHoverBrighten`, `kPressDarken`, `kDisabledAlpha`, `kFillFallback`) |
+| `UIText` / `UIAttr` | text forms of lengths, edges, colors, numbers (`ParseFiniteFloat`, `FractionInRange`, `ValueInRange`) |
+| `UIVars`, `UIStrings` | variables and the string table (below) |
+| `UISprite`, `UINineSlice` | sprite by name; nine-slice cutting |
+| `UIScreenContent`, `UIDocument`, `UIDocumentLoader` | `elements` + `variants` of a screen; a `.ui.xml` file, `Instantiate` per canvas |
+| `UIVariant` | `when` + `overrides`; `UIVariants::Apply` |
+| `UICanvasLayout` | the pure pipeline with a cache, `HitTest`, `Validate`, counters for tests |
 | `UILayoutValidator` | `Validate(root, resolved, options)` → `UILayoutIssue`s |
-| `UICanvasComponent` | The scene host: draw, `UIInput` handler, show / hide by name |
-| `UIPreview` | The numbers of the editor viewport preview: preset shapes and simulated safe areas |
-| `UIControl` (`RegisterUIControl`) | The control API methods `ui_tree` and `ui_click` over the canvases of the active scene; one section below |
-
-## Canvases
-
-A scene may hold any number of canvases (a `UICanvasComponent` on a node each). `space` picks what a canvas fills:
-
-| Space | Fills | UI unit | Scale |
-|-------|-------|---------|-------|
-| `Screen` | the render output, so its edges are the window's edges | by `scaleMode` | mode scale x user scale, kept between `minScale` and `maxScale` |
-| `SceneView` | the scene's fitted view (`viewWidth` x `viewHeight`) | a scene unit | the fit of `Scene::Draw()` (`ViewTransform::Fit`) |
-| `World` | the box of the node's `TransformComponent` | a scene unit | the same fit; the canvas origin is the node's position, so it follows the node |
-
-`scaleMode` (Screen only): `ConstantPixelSize` (a unit is a window unit, so the scale is the pixel density), `ConstantPhysicalSize` (that times the display scale), `ScaleWithScreen` (follows the output size against `referenceWidth` x `referenceHeight`; `match` 0 follows the width, 1 the height, between them the geometric blend like Unity's). `SceneView` and `World` ignore the mode, the user scale and the limits: the board they belong to is scaled by the scene's fit. A scene without a view size has the identity fit, so a SceneView canvas is then the output at scale 1. `useSafeArea` applies to Screen and SceneView: `contentBounds` is the safe area, and `bounds` stays the whole canvas for backgrounds (`UIElement::ignoreSafeArea` on a child of the root lays it out against `bounds`).
-
-- **Draw order** is the scene's: node `layer`, then scene order. `OnDraw()` sets the canvas's own `ViewTransform` for its elements and gives the scene's back.
-- **Input order** is the reverse. The component registers with `UIInput` with `Scene::GetDrawRank(node)` as the order and refreshes it on every draw (also while hidden), because a scene attaches its nodes one by one while it fills its tree.
-- **Input rules:** a canvas consumes a mouse event that lands on a hit-testable element (`blocksInput` or `interactive`), by the layout of its last draw; motion over one is a hover and is consumed, except a drag that began elsewhere (a button held whose press this canvas did not take) which is the game's; a press the canvas took is followed to its release wherever the pointer goes; a `modal` canvas consumes everything while shown. **Pointer hooks:** besides the click on the release (`UIElement::OnClick`), the canvas calls `UIElement::OnPress(x, y)` at once on the left press of an `interactive` element and `OnDrag(x, y)` on every mouse motion while that press is held and the state of the event still has the left button (wherever the pointer is, also off the element), both with the point in canvas units (`rect` units: the same in a Screen, a SceneView and a World canvas, whatever the scale and offset). No `OnDrag` for a hover, after the release, for a press of another button, for a press the canvas did not take (that drag is the game's) or after a hidden canvas cleared the press. The hooks run last in the handler, after the canvas's own bookkeeping, and on a copy of the element's pointer, so they may do anything; the defaults do nothing, so a button is unchanged. A hidden canvas, one with `inputEnabled` off and one of an inactive scene consume nothing. Hit testing finds the topmost element: a child before its parent, a later sibling before an earlier one; the rect of a child is not clipped by its parent.
-- **Visibility by name:** `UICanvasComponent::SetVisibleByName(scene, nodeName, visible)`.
-- The reflected fields are named `visible` and `inputEnabled`, not `enabled`: a vector of factory-made components writes an `enabled` attribute of its own on every element (`Reflection/DataAccessor.h`), which a field of that name would collide with.
-
-## Layout rules (`UILayout`)
-
-All rects are in the UI units of one canvas.
-
-- **Anchor layout.** `UIAnchor`: the nine points and `Stretch`. The element's pivot is the same point of itself, so `BottomRight` with `x = -12, y = -10` moves up and left into the parent. `Stretch` fills the parent minus `margin` and ignores offset and size.
-- **Order of the steps:** size (`UILength`: units, or a percent of the parent on the same axis) → `min*`/`max*` limits (the minimum wins when they disagree) → aspect ratio (`Fit`: the largest rect of the ratio inside the box, `Fill`: the smallest that covers it) → pin to the anchor and offset. A Stretch element that a limit made smaller is centered in its area.
-- **Stack.** `UIStackSpec`: `direction`, `spacing`, `padding`, `wrap`, `crossAlign` (`Start`, `Center`, `End`, `Stretch`). A child's main size is its spec size clamped by its limits; `flex` > 0 takes a share of what the fixed children and the spacing leave on its line (shares follow the weights; each is clamped by the child's limits and the clamp does not redistribute). With `wrap` a child starts a new line when its spec size does not fit the rest of the line (a flex child counts with its spec size there); without it the line is as wide as the content on the cross axis. A stack ignores its children's anchor, offset, margin and aspect ratio. **`crossAlign="Stretch"` gives a child the height of the row (or the width of the column) and overrides its own explicit `height`**: a slider written 30 units high in a stretching row is laid out 56 high and the validator never sees the broken copy. A row that holds a thin or short control (a slider, a progress bar) uses `crossAlign="Center"` (or `Start` / `End`), which keeps the size the file says.
-- **Hidden elements** (`style.visible` false, or an ancestor's) get an empty rect and take no room in a stack.
-
-## Responsive variants
-
-A canvas holds `variants` (`UICanvasLayout::variants`): `UIVariant { when, overrides }`. `when` is a condition on the canvas `bounds` in UI units: `orientation` (portrait is height >= width, a square is portrait, like CSS), an aspect range, width and height ranges (a limit of 0 is off, ends are included; every set part must hold). An override names an element and replaces some of: `visible`, `anchor`, `x`, `y`, `width`, `height`, stack `direction`, `fontSize`. Variants apply in list order, so a later one wins like CSS, and `Apply` always starts from `style`, so leaving a shape restores the authored values. The variants are chosen again only when the bounds change (or after `Invalidate()`): a new safe area or a new density that leaves the bounds alone only lays the tree out again (`UICanvasLayout::GetVariantRuns()` / `GetLayoutRuns()`).
-
-## Validator and the size matrix
-
-`UILayoutValidator::Validate` checks a laid-out canvas, visible elements only:
-
-| Issue | Meaning |
-|-------|---------|
-| `OutsideCanvas` | An element sticks out of the canvas (by more than 0.01 unit) |
-| `OutsideSafeArea` | Inside the canvas but outside `contentBounds` (not for `ignoreSafeArea` children of the root) |
-| `SiblingsOverlap` | Two children of a stack overlap |
-| `TouchTargetTooSmall` | An `interactive` element is smaller than `minTouchSize` **as the user sees it**: `min(w, h) * scale / pixelDensity` in window units |
-| `TextDoesNotFit` | `CheckContent()` says there is content that does not fit and cannot shrink (ellipsis or auto-fit) |
-
-`tests/Common/UILayoutMatrix.h` runs a canvas over the matrix: ten aspect ratios (16:9, 16:10, 3:2, 4:3, 1:1, 21:9, 32:9, 9:16, 9:19.5, 3:4) at short sides of 480 to 2160 px (long side up to 3840), with no insets, a top notch and side insets, with each scale mode and user scales 1.0 and 1.5 for a Screen canvas. A canvas that comes from a scene needs one `UpdateLayout(w, h)` first: the reflected fields reach the layout's `params` on its first update, and the matrix would otherwise run the default `Screen` params on it (a `SceneView` HUD would look like a full-window screen). A screen test is one line: `EXPECT_TRUE(ValidateOnMatrix(canvas).empty()) << DescribeMatrixFailures(failures)`. The matrix finds real defects. For example a 48-unit button on a `ScaleWithScreen` canvas (reference 1280 x 720) is only 24 px on a 480 x 480 window, below the 32 window units of `minTouchSize`; the fixes are a bigger button, or `minScale` (0.7 keeps 48 units above 32 px).
-
-**A screen test** builds the screen through the same reflected path a game uses (`UIScreenContent::Deserialize` on the XML of the screen, or a scene with an inline canvas), sets the variables to the longest values the game can show, and runs `ValidateOnMatrix`. `tests/BECore/UIScreenTest.cpp` is the template; copy it for each screen the repository ships. The first HUD written with 48-unit buttons, `minScale="0.7"` and `useSafeArea="true"` passed the matrix as it was; the same HUD with a 30-unit button and no `minScale` fails on `TouchTargetTooSmall`.
-
-**Design rules the matrix enforces:** use anchors and percents, not absolute positions; give interactive elements at least 48 units at the reference size and set `minScale` so they stay touch targets; give a screen a variant for the shapes where it does not fit (a portrait canvas is the usual one); let text wrap, cut with an ellipsis or shrink.
-
-## Writing a screen in XML
-
-The elements and variants of a canvas are reflected fields of `UICanvasComponent` (`_elements`, `_variants`), so a screen is data in `SceneConfig.xml`:
-
-```xml
-<node name="Hud" layer="10"><components>
-  <component type="UICanvasComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="0.7" useSafeArea="true">
-    <elements>
-      <element type="UIElement" name="Panel" anchor="TopLeft" x="16" y="16" width="220" height="96" color="0,0,0,160" blocksInput="true">
-        <children>
-          <element type="UIElement" name="Score" x="12" y="10" width="40%" height="28"/>
-        </children>
-      </element>
-    </elements>
-    <variants>
-      <variant when="orientation:portrait">
-        <overrides><set element="Panel" anchor="Top" x="0" y="16" width="90%"/></overrides>
-      </variant>
-    </variants>
-  </component>
-</components></node>
-```
-
-A screen can also live in a node file of its own (`<node ref="nodes/MyHud"/>` in the scene, `Scene/CLAUDE.md`, "Node files"). The reference is expanded before the scene is deserialized, so the canvas, `ui_tree`, `ui_click` and the validator see the same tree as for an inline node.
-
-- **An element** is `<element type="...">`, `type` is the class name from `AbstractFactory<UIElement>` (a control is one more derived class). An unknown type is reported as a deserialize error (and the element becomes a plain `UIElement`). Children go in a `<children>` array.
-- **The style is flat:** `visible`, `anchor`, `x`, `y`, `width`, `height`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, `aspectRatio`, `aspectMode`, `margin`, `flex`, `direction`, `spacing`, `padding`, `wrapChildren`, `crossAlign`, `fontSize` are attributes of the element, and only values that differ from the default are written. A length is `220`, `220px` or `90%`; `margin` and `padding` are one number or `left,top,right,bottom`; a color is `r,g,b,a` or `#RRGGBB[AA]`. A malformed value is reported with the attribute name and the default stays.
-- **A variant** is `when` (the set parts as `name:value` separated by `;`: `orientation` (`portrait`, `landscape`, `any`), `minAspect`, `maxAspect`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`) and a list of `<set element="Name" .../>` overrides with only the properties to change (`visible`, `anchor`, `x`, `y`, `width`, `height`, `direction`, `fontSize`). An override is written even when its value equals the type's default (`x="0"` is a decision).
-- **Saving:** `_elements` and `_variants` are the inline part of the screen; `Initialize()` hands them to the layout once (the same element objects, so edits through either are the same edits). Elements added in code with `GetRoot().AddChild()` are runtime-only and are not saved back.
-- **A screen in a file of its own:** `source="assets/ui/hud.ui.xml"` on the canvas loads a `UIDocument`; the file is `<ui><elements>...</elements><variants>...</variants></ui>`, the same two blocks as inline. The document's elements come first, the inline ones after them (drawn on top; a later variant wins). The elements of a file belong to the file: `_elements` stays the inline part, and only that is saved back. A missing or unreadable file is logged and the canvas keeps its inline screen; a bad value in a file is logged with its line and the rest is built. Every canvas gets elements of its own (`Instantiate`), because the layout results live in the elements. `ResourceManager` picks the loader by the longest suffix of the name, so `x.ui.xml` goes to `UIDocumentLoader` and a plain `x.xml` to `XmlResourceLoader`.
-- **A front-end with a tree of its own** is not this: RmlUi (`src/Modules/RmlUiHost/CLAUDE.md`, off by default) draws a document with its own DOM and layout from a scene component beside the canvases; the scene editor, the validator and `ui_tree` do not see into it.
-- **Another front-end** needs no new tree: it resolves its own syntax into the attributes above and hands them to `XmlDeserializer`. The web-style one writes the XML text (next section); `UIDocumentTest` also builds such a tree in memory with pugixml (`XmlDeserializer::LoadFromXmlNode(XmlNode(node))`, no file and no string) and gets the same elements as from the XML.
-- A binary save (`BinarySerializer`) carries the same tree.
-- Why `IntrusivePtrNonAtomic<UIElement>` and not `IntrusivePtr<UIElement>` in the field declarations: the generator looks for the long name to find the factory field (`.claude/rules/reflection-module.md`).
-
-## Writing a screen in HTML and CSS
-
-The second front-end is a source-to-source compiler: `UIWebCompiler::Compile(html, loadStylesheet, report)` turns HTML-like markup and CSS-like styles into the text of a `.ui.xml`, and everything after that is the XML front-end (the same factories, layout, variants, validator and tests). `UIWebDocumentLoader` takes `.ui.html` files (`source="ui/menu.ui.html"` on a canvas, like `.ui.xml`), reads the `<link rel="stylesheet" href>` files next to it, and logs what it left out as warnings with the file and line. It is a subset on purpose, not a browser: what falls outside is an issue in `UIWebReport` (also the numbers: elements, rules, declarations, declarations unsupported, variants), never silent.
-
-```html
-<link rel="stylesheet" href="hud.css">
-<div id="Hud" class="hud">
-  <span id="Score">Score: {score}</span>
-  <button id="Reset" data-action="Match3Reset">Reset</button>
-</div>
-```
-```css
-.hud    { anchor: top-left; left: 16px; top: 16px; width: 220px; height: 96px; background: #000000A0; }
-#Score  { left: 12px; top: 10px; width: 150px; height: 32px; font-size: 28px; }
-#Reset  { anchor: bottom-right; right: 12px; bottom: 10px; width: 96px; height: 48px; font-size: 24px; }
-button  { background: rgb(40, 90, 60); }
-button:hover { background: #3a6; }
-@media (orientation: portrait) { .hud { anchor: top; left: 0; width: 90%; } }
-```
-
-**Elements.** `id` is the `name`. `class` is for selectors only. `hidden` hides. `html` and `body` are transparent, `head`, `style`, `link`, `script`, `meta`, `title` are skipped.
-
-| HTML | Becomes |
-|------|---------|
-| `button` | `UIButton`: `data-action` (or `action`) is the action, `data-value` the `value` that goes out with it, `disabled` disables, the text is the label |
-| a `div` (any container) with `data-widget="segmented"` | `UISegmented`, a choice group: `data-bind` is `bind` (the `UIVars` variable), `disabled` disables the group, its `<button data-value=".." data-action="..">` children are the segments. It needs `display: flex` (a row or a column, `gap`); without it the group is still written, laid out as a column with no `gap`, and the front-end reports it |
-| a `div` (any container) with `data-widget="toggle"` | `UIToggle`: its text is the caption (inline elements allowed, like a button), `data-bind` is `bind`, `data-action` (or `action`) the action, `data-on` / `data-off` the `onValue` / `offValue` (the defaults `"true"` / `"false"` when left out), `disabled` disables |
-| a `div` with `data-widget="slider"` | `UISlider`: `data-bind`, `data-action` (or `action`), `data-min` / `data-max` / `data-step` as `minValue` / `maxValue` / `step` (a number is written as a number; one that is not, or a negative step, is reported and the default stays), `disabled`. Its content is left out (reported) |
-| a `div` with `data-widget="progress"` | `UIProgressBar`: `data-bind`, `data-min`, `data-max`. Takes no input whatever its background; `disabled` is reported |
-| `img` | `UIImage`: `src` is the sprite name, `object-fit: fill` is `stretch` |
-| an element with text of its own and only inline elements (`b`, `span`, `br`, ...) in it, or a `span`, `p`, `h1`-`h6`, `label`, `strong`... with only text in it, also an empty one | `UILabel`: the text with white space collapsed, `<br>` a line break; its `background` is the fill behind the text |
-| any other, with a `background-image` | `UIPanel` |
-| any other | `UIElement` (a group) |
-
-A group takes clicks only when it has a visible `background` (or `pointer-events: auto`): a full-screen wrapper must not swallow the clicks of the game under it. A panel and a label with a background do, as a plate does in a browser. `pointer-events: none` turns it off. Text beside block elements is reported and dropped (put it in a `<span>`); a tag outside the table is read as a `<div>` and reported; every element needs its end tag (`<p>` and `<li>` are not closed by the next sibling).
-
-**The cascade** is CSS's: `!important`, then a `style=""` attribute, then specificity (ids, classes and pseudo-classes, tags), then source order, across `<style>` and `<link>` in document order. Selectors: tag, `*`, `#id`, `.class`, compounds, a selector list, the descendant (space) and child (`>`) combinators, `:hover` / `:active` / `:disabled` / `:checked` on the last part. Inherited: `color`, `font-size`, `font-family`, `text-align`, `line-height`, `white-space` (a button keeps its own alignment and wrapping, like a browser's default style sheet). Shorthands and longhands are separate names in the cascade, so the later declaration of the two wins by order, not by CSS's expansion rules.
-
-**Properties.**
-
-| CSS | Engine |
-|-----|--------|
-| `display: none`, `visibility: hidden` | `visible="false"` |
-| `display: flex`, `flex-direction: row\|column`, `gap`, `padding`, `flex-wrap: wrap`, `align-items`, `flex` / `flex-grow` | `layout="Stack"`, `direction` (a row is the default of CSS, so `Horizontal` is written), `spacing`, `padding`, `wrapChildren`, `crossAlign`, `flex` (the first number). `justify-content` has no counterpart |
-| `left`, `top`, `right`, `bottom` (px) | The anchor is `TopLeft` unless only `right` / `bottom` is set; `x = left - right`, `y = top - bottom`. All four, or `inset`, is `Stretch` with the distances (plus `margin`) as the margin |
-| `anchor` (not CSS): `top-left`, `top`, `center`, ..., `stretch` | `anchor` (centering needs it: `left: 50%` is not an offset in units) |
-| `width`, `height`, `min-`, `max-` (px or %), `aspect-ratio`, `object-fit: cover` on a box with a ratio | the lengths, `aspectRatio`, `aspectMode="Fill"` |
-| `background`, `background-color`, `background-image: url(Name)`, `border-image-slice` | `color`, `sprite`, `sliceBorder` (sprite names are TextureLibrary names) |
-| `color`, `font-size` (px), `font-family` (a path to a font file; a generic family is the default font), `text-align`, `vertical-align: top\|middle\|bottom`, `text-overflow: ellipsis\|clip`, `white-space: normal\|nowrap`, `line-height` (a number, or px against the font size) | `textColor`, `fontSize`, `font`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing` |
-| `-be-text-fit: shrink`, `-be-min-font-size` (engine-only) | `overflow="AutoFit"`, `minFontSize` |
-| `-be-track-color`, `-be-fill-color`, `-be-thumb-color` (engine-only, a color) | `trackColor`, `fillColor`, `thumbColor` of a toggle, slider or progress bar (a progress bar has no thumb); on any other element they are reported, and a variant cannot change them |
-| `position: absolute\|relative\|static\|fixed`, `box-sizing`, `cursor`, `user-select` | accepted, mean nothing |
-| `button:hover`, `:active`, `:disabled`, `:checked` with `background` | `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor` (anything else in a state rule is reported). `:checked` is the look of a selected segment; whether a segment is selected is decided at run time by its group, not by the markup. A rule on a toggle, slider or progress bar is reported, not applied (their states are derived) |
-
-Lengths are px and %, a color is `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()` or a few names. Not understood and reported (the list the decision record counts): `em`, `rem`, `vw`, `vh`, `calc()`, `var()`, `opacity`, `border`, `border-radius`, `box-shadow`, `transform`, `transition`, `animation`, `z-index`, `overflow`, `font-weight`, `letter-spacing`, `margin` on an element that does not fill its parent (a stack has `gap`), `justify-content`, `grid`, attribute selectors, `+`, `~`, other pseudo-classes and pseudo-elements, `@import`, `@font-face`, `@keyframes`.
-
-**Widgets and choice groups.** `data-widget` (`segmented`, `toggle`, `slider` or `progress`; not case sensitive), `data-bind`, `data-value`, `data-action`, `data-on`, `data-off`, `data-min`, `data-max` and `data-step` are the only attributes of the markup the front-end reads beyond the standard ones (`data-action` also on a `<button>`, `data-value` only there). They are reported, never silent, when they stand where nothing reads them: a `data-widget` that is not one of the four (the message names them; the element is read as a plain one), a widget on a `<button>` or `<img>`, `data-bind` without a widget, `data-value` on anything but a `<button>`, `data-action` away from a button, toggle and slider, `data-on` / `data-off` away from a toggle, `data-min` / `data-max` away from a slider and progress bar, `data-step` away from a slider, a number that is not a number, a segmented group that is not `display: flex`, content inside a slider or progress bar, `disabled` and `pointer-events` where they mean nothing. **The states of a toggle, slider and progress bar are derived** (hover lightens, press darkens, disabled halves the alpha), so a `:hover` / `:active` / `:disabled` / `:checked` rule that would change one of them is reported and not applied; the widgets set their own `blocksInput` (a toggle and a slider are interactive, a progress bar never takes input), so a `background` on them is only a fill. A toggle is a text element like a button (give it `height`, `font-size` and `vertical-align: middle` as the XML does). A choice group with a background is a plate and takes clicks (the usual rule), so give it `pointer-events: none` if it should not. The `UISelectorScreenTest` panel in HTML + CSS (`UIWebTest`, `kPanelHtml` / `kPanelCss`) is the template: the same rects as the XML in landscape and portrait; the settings panel of `UISettingsScreenTest` (`kSettingsPanelHtml` / `kSettingsPanelCss`, which copy its plate: a toggle, a slider, a progress bar and a language group) is the one for the three newer widgets.
-
-**`@media`.** A query is `and`-joined `(feature: value)` terms (`orientation`, `min-` / `max-` `width`, `height` and `aspect-ratio`, `aspect-ratio`) with commas for "or"; it becomes a `UIVariantCondition`, so widths are in canvas units (the bounds after the scaler), not browser pixels. For each block the cascade runs again with its rules and what differs from the base becomes the overrides of the variant (`UIElementOverride`: visibility, anchor, offset, size, direction, font size), so `display: block` can undo a base `display: none`. A block that changes anything else (a background, a margin) reports it. An element a variant names but that has no `id` gets a name (`div-1`).
-
-**Checking a screen.** The compile is pure, so a test gives it strings: `tests/BECore/UIWebTest.cpp` compares the Match3 menu in HTML + CSS with the shipped XML (same rect for every element at five sizes) and runs it through `ValidateOnMatrix`. The report is the place to look when a screen does not look as written.
-
-## Controls
-
-A control is a `UIElement` subclass registered in `AbstractFactory<UIElement>`; the `type` of an `<element>` is its class name. Each draws itself in `DrawSelf(IRenderer&)` (the canvas calls it for a visible element, then draws the children over it) with the view transform of the canvas in effect, so it works in canvas units. `color` of every element is a fill behind its content.
-
-| Type | Fields (besides the common ones) | Behavior |
-|------|-----------------------------------|----------|
-| `UIElement` | none | A plain box: the fill, and children. Registers itself (`REGISTER_SELF`) so `type="UIElement"` is a group |
-| `UIPanel` | `sprite`, `sliceBorder`, `spriteTint` | Fill, then the sprite. With a `sliceBorder` (one number or `left,top,right,bottom`, in sprite pixels) the sprite is cut in nine (`UINineSlice`): corners keep their size, one unit per pixel. `blocksInput` is true by default |
-| `UIImage` | `sprite`, `tint`, `stretch` | The sprite as large as fits the rect, centered, keeping its proportions (`stretch="true"` fills the rect). The aspect option for art whose cell is not square (the Chess pieces in BagiEngine-Chess) |
-| `UILabel` | `text`, `font`, `textColor`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing`, `minFontSize` | Text in the rect. The size is `fontSize` of the style (24 when 0), so a variant can change it; laid out and rasterized at that size times the canvas scale in whole output pixels, the way `TextComponent` does (`Text/CLAUDE.md`). `overflow` defaults to `Ellipsis`; `Clip` cuts the drawing at the rect and the validator reports it (`TextDoesNotFit`); `AutoFit` shrinks down to `minFontSize` |
-| `UIButton` | `action`, `value`, `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, `disabled` | A label on a fill that follows the pointer. `interactive`, centered text, no wrap. A click emits `InputEvents::ActionEvent(action, value)` (`value` empty for a plain button). Runtime, not in a file: `selected`, `groupDisabled` |
-| `UIStack` | none | A container whose layout is Stack from the start; `direction`, `spacing`, `padding`, `wrapChildren`, `crossAlign` are the style attributes |
-| `UISegmented` | `bind`, `disabled` | A `UIStack` of `UIButton` segments that is a choice group (below). `bind` names a `UIVars` variable; the segment whose `value` equals it is `selected`. `disabled` greys the group. A stack from the start |
-| `UIToggle` | `bind`, `action`, `onValue` (`"true"`), `offValue` (`"false"`), `disabled`, `trackColor`, `fillColor`, `thumbColor` | A `UILabel` (the caption, left, vertically centered, one line) with a switch at its right end (below). On when the variable `bind` equals `onValue`. A click emits `ActionEvent(action, <the value to set>)` and changes nothing. `interactive` |
-| `UIProgressBar` | `bind`, `minValue` (0), `maxValue` (1), `trackColor`, `fillColor` | A read-only bar: the track over the whole rect and the fill over it, `fraction` of the width from the left (below). Not `interactive`, takes no click |
-| `UISlider` | `bind`, `action`, `minValue` (0), `maxValue` (1), `step` (0 = continuous), `disabled`, `trackColor`, `fillColor`, `thumbColor` | A horizontal slider: a thin track, the part of it before the thumb, and a square thumb as high as the element ("Sliders" below). A press anywhere on the rect and a drag after it emit `ActionEvent(action, valueText)` and change nothing. `interactive` |
-
-```xml
-<element type="UIPanel" name="Hud" x="16" y="16" width="240" height="120" color="0,0,0,160">
-  <children>
-    <element type="UILabel" name="Score" x="12" y="10" width="216" height="32" text="Score" fontSize="28"/>
-    <element type="UIButton" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" text="Reset" action="Match3Reset" color="40,90,60,255"/>
-  </children>
-</element>
-```
-
-- **Sprites** come from the `TextureLibrary` by name (`sprite="Panel9"`); the texture is loaded on the first draw and again when the name changes, and a name the library does not know is logged once. Code and tests give a texture directly: `panel->GetSprite().SetTexture(texture, srcRect)`.
-- **Button states.** The canvas sets `UIElement::hovered` and `pressed` from the mouse: the pointer over the topmost hit-testable element is hovered (not while a button is held that the canvas did not take: that is the game's drag), a left press on an `interactive` element presses it, and the release calls `OnClick()` only when it lands on the same element, so dragging off the button cancels the click. The fill is `color`, `hoverColor` under the pointer, `pressedColor` while held on the button (a press that moved off is shown as normal), `disabledColor` when `disabled`. A color left transparent is derived from `color`: lighter, darker, half transparent. A disabled button still consumes the click. A hidden canvas clears hover and press. A canvas below a canvas that consumes the motion is not asked, so its hover stays where it was. **Selected and the value.** `value` goes out with the action (`ActionEvent::value`, empty for a plain button), so buttons that share an action tell the listener which one was pressed. `selected` (runtime, set by whoever owns the choice) fills the button from `selectedColor`, derived from `color` when transparent and lighter than the hover shift, and draws a bar of `UIButton::kSelectedBarHeight` (4) units in `textColor` along the bottom edge, so the selection does not rest on color alone; hover and press shift from the selected fill and an explicit `hoverColor` / `pressedColor` still wins. `disabled` wins over `selected` for the fill (the bar stays, at half alpha, so a disabled choice still shows what is chosen). `groupDisabled` (runtime) counts as `disabled` in the fill and in the click.
-- **Choice groups.** `UISegmented` (`bind="side"`) is a radio group over its direct `UIButton` children: on every draw (`DrawSelf`, before the canvas draws the segments; `SyncChildren()` does the same without a draw) the segment whose `value` equals `CoreManager::GetUIVars().Get(bind)` gets `selected`, every other one does not, and `disabled` sets `groupDisabled` on all of them. An unset variable, an empty `bind` and a segment with an empty `value` select nothing; children that are not buttons are skipped and a nested group manages its own children. **The group owns no choice:** a click emits `ActionEvent(action, value)` and changes nothing in the group; the game answers by setting the variable, so the direction is the one of the labels (game -> `UIVars` -> widget) and the screen cannot disagree with the game. It keeps no state of its own, so an unchanged screen costs a comparison per segment and lays nothing out again. Two segments are the toggle of a binary choice, four are a level; a segment is a normal button (give it `flex="1"` to share the width). **In XML every segment needs an explicit `height` (56 in an 840-unit view; at least `minTouchSize` / scale of the narrowest window of the matrix, 32 / 0.571), also with `flex="1"`:** flex shares the main axis, so a segment without a height gets a rect of height 0, is not drawn, cannot be hit (`ui_click` answers "hidden") and the validator skips an empty rect without a word (a caption in a row that a variant turns vertical needs one too). A hidden canvas is not drawn, so its groups take the variables on the first draw once it is shown. `UISegmentedTest` is its test; `tests/BECore/UISelectorScreenTest.cpp` is the screen test of a panel of four groups (a hidden modal canvas, caption beside the group or above it in a portrait view, the words on the size matrix and in the narrowest window, show and hide, clicks, a deliberately broken copy for each check) and the template to copy.
-- **Toggles.** `UIToggle` (`bind="soundOn" action="SetSound" text="Sound" height="56"`) is one labeled switch. It is *on* when the `UIVars` variable `bind` equals `onValue` (default `"true"`); an unset variable, another value, an empty `bind` and an empty `onValue` are off. **It owns no state, like the choice group:** a click emits `ActionEvent(action, value)` where `value` is the state the person asks for, `offValue` (default `"false"`) while the toggle is on and `onValue` while it is off, and changes nothing; the game sets the variable (or refuses, and the screen keeps showing the truth). The whole rect, caption and switch, is the touch target (give it at least `minTouchSize` / scale of the narrowest window high, 56 in an 840-unit view); `disabled` still takes the click and does nothing with it. **The switch is the only look** (no checkbox): a track `kSwitchHeightRatio` (0.5) of the height high and `kSwitchAspect` (2) times as wide, centered at the right end with the air it has above and below, and a square thumb inside it (`kThumbInset` 3 units of air) at the right end when on and at the left end when off, so the state does not rest on color alone. `trackColor` (off), `fillColor` (on) and `thumbColor` are derived when transparent (a translucent `textColor`, a green, the `textColor`); hover lightens and press darkens the track; `disabled` halves the alpha of everything and keeps the thumb where the state puts it. **The caption is laid out in the rest of the width** (`UIToggle::GetParts(rect).text`: left of the track, `kCaptionGap` of air), and `CheckContent()` measures it there, not in the whole rect, so a caption that would run under the switch is a `TextDoesNotFit` (and an ellipsis caption that is cut is `fits == false` with `canShrink`, which the screen tests ask for with `CheckContent().fits`). This comes from `UILabel::DrawText(renderer, area, color)` and `CheckContent(width, ...)` being usable with a smaller area by a subclass. `UIToggleTest` is its test.
-- **Progress bars.** `UIProgressBar` (`bind="loadProgress" minValue="0" maxValue="100" height="24"`) shows a number from `UIVars`: the filled part is `fraction = clamp((value - minValue) / (maxValue - minValue), 0, 1)` of the width, from the left (`UIProgressBar::GetFraction()`, read from the variable when asked, so `ui_tree` sees this moment). **Everything that is not a number in a range is a fraction of 0**: an unset variable, an empty `bind`, text that is not a number (`"abc"`, `"50%"`), `"nan"` and `"inf"`, an empty or reversed range (`maxValue <= minValue`) and a non-finite `minValue` / `maxValue`; a value outside the range is clamped; no division by zero and no rect outside the bar. The rules are `UIText::ParseFiniteFloat` / `FractionInRange` (and `ValueInRange`, the clamped value of a text), the one place the slider uses too. It is drawn as the element fill `color`, then the track (`trackColor`, a translucent white when transparent) over the whole rect, then the fill (`fillColor`, the toggle's green `kFillFallback` when transparent) of `fraction * width`, nothing for an empty rect or a fraction of 0. It is not `interactive` and `blocksInput` is false, so a click on it goes to what is below; it has no text (a `UILabel` beside it with `{var}` says the number) and nothing for the validator to fit. `UIProgressBarTest` is its test.
-- **Sliders.** `UISlider` (`bind="volume" action="SetVolume" minValue="0" maxValue="1" step="0.1" height="56"`) is a horizontal slider for a number. **The game owns the value:** the thumb stands at `fraction` of the travel, read from the `UIVars` variable (`UIText::ValueInRange` / `FractionInRange`, the rules of the progress bar: unset or malformed is the minimum, outside the range is clamped, an empty or reversed range is a fraction of 0), and nothing the slider does changes the variable, so a game that does not answer leaves the thumb where it was. **A press emits, a drag emits again:** the slider uses the canvas's pointer hooks (`OnPress` / `OnDrag`, "Input rules"), so a press anywhere on the rect emits `ActionEvent(action, valueText)` with the value under the pointer and the canvas follows the press to its release, also outside the rect (above, below, past the ends: it clamps); a motion emits again only when the *text* of the value changed, so a drag inside one step is silent. The release emits nothing and the slider has no `OnClick`, so one gesture is never two actions; a new press always emits, even for the value the last gesture ended on. `disabled` and an empty `action` do nothing, and a disabled slider still takes the press (nothing falls through) and is drawn at half alpha. **Snapping:** the value under the pointer is clamped and, with `step > 0`, snapped to `minValue + n * step` (computed in double; the maximum is also a place to snap to, for a range that is not a whole number of steps). **The text** (`UISlider::FormatValue`) is short and exact: six significant digits at most, no trailing zeros, no `-0`: `0.3` (never `0.30000001`), `7` (never `7.0`), `35`; a value read back with `UIVars::Set` of that text lands on the same thumb position. **Geometry** (`UISlider::GetParts`): the thumb is a square of the element's height (the width when that is smaller, so it never leaves the rect), which is why a 56-unit slider holds the validator's touch check by its height alone (a shorter one is `TouchTargetTooSmall`); the track is `kTrackHeight` (6) units high, in the middle of the height, over the whole width; the travel of the thumb's centre is the rect narrowed by half a thumb at both ends, so the edges and everything within half a thumb of them ask for the minimum and the maximum. Horizontal only. `trackColor` (a translucent white), `fillColor` (the part before the thumb's centre; the shared green `kFillFallback`) and `thumbColor` (a near white) are derived when transparent; the thumb is lighter under the pointer and darker while the press is held (wherever the pointer went). `UISliderTest` is its test (and the pointer hooks are in `UICanvasComponentTest`).
-- **Vertical alignment** is the label's own (`TextLayout` has none): the line box is placed at the top, the middle or the bottom of the rect.
-- **The common attribute names are shared.** The style attributes of an element (`wrapChildren`, `direction`, `fontSize`, ...) and the fields of a control are attributes of one `<element>`, so they must not clash: the stack's `wrap` was renamed `wrapChildren` because a label has the text `wrap`. `UIControlsTest.EveryPropertyOfEveryControlSurvivesARoundTrip` sets every property of every control and fails on a clash.
-- **Skip-defaults.** A control field that defaults to something other than its type's zero (`wrap` true, `textColor` white) is dropped by a serializer that skips defaults, because the check is "equal to `T{}`". The editor does not use that mode; do not save UI with it.
-- Adding a control: derive from `UIElement` (or `UILabel`), `BE_CLASS(Name)` with `BE_REFLECT_FIELD`s, override `DrawSelf`, include the `.gen.hpp` in the `.cpp`. Names that are hard to guess go in the attribute list above, and the class registers itself, also when it derives from another control.
-
-## Choice panels
-
-A screen where the person picks one of a few options (the side, the engine, the strength of a game) is built from `UISegmented` groups, one per choice. The worked example is the shape of the Chess opponent panel, tested on the size matrix by `tests/BECore/UISelectorScreenTest.cpp` (its XML constant `kSelectorXml` is the template to copy; `UIWebTest` has the same panel in HTML + CSS, `kPanelHtml` / `kPanelCss`).
-
-- **The game publishes ids, not words.** Next to the words of its HUD it sets one `UIVars` variable per choice to the id of the current option (`opponentMode` = `two` | `computer`, `opponentColor` = `white` | `black`, `opponentEngine` = `stockfish` | `own`, `opponentLevel` = `easy` .. `max`: the ids of its control API). The words live in the `text` of the segments.
-- **The segments carry `action` + `value`.** All segments of a group share one action and differ in `value`; the game subscribes to `InputEvents::ActionEvent`, reads `value` and applies the choice to its own state.
-- **The answer sets the variable.** The group never selects by itself (game -> `UIVars` -> widget): the game sets the variable after it accepted the choice (or leaves it when it refused, and the screen keeps showing the truth). A client checks it with `ui_tree`, `ui_click`, `step`, `ui_tree`.
-
-```xml
-<element type="UISegmented" name="Mode" bind="opponentMode" height="56" direction="Horizontal" spacing="2" color="30,30,30,255">
-  <children>
-    <element type="UIButton" name="ModeTwo"      flex="1" height="56" text="Two players" value="two"      action="ChessSetMode" color="70,70,100,255"/>
-    <element type="UIButton" name="ModeComputer" flex="1" height="56" text="Computer"    value="computer" action="ChessSetMode" color="70,70,100,255"/>
-  </children>
-</element>
-```
-
-- **A panel opened by a button** is a modal canvas on a node of its own, started hidden (`visible="false"`, `modal="true"`): a dim element that blocks input, a plate (a `UIStack`, `anchor="Center"`, `width="94%"` with a `maxWidth`) with a title, a row per choice (a caption `UILabel` beside the group, or above it in a portrait variant) and an "OK" button. A button of the always-visible HUD canvas has an action; the game answers it with `UICanvasComponent::SetVisibleByName(scene, "Selector", true)` and the OK button's action with `false`. While hidden the canvas draws nothing and takes no click (the board under it does); while shown, modal, it takes every click. A hidden canvas is not drawn, so the groups take the variables on the first draw after it is shown.
-- **What the screen test holds** (copy it for a new panel): `ValidateOnMatrix` empty in the landscape and the portrait view; every word of every group asked with `CheckContent().fits` (an ellipsis label can shrink, so the validator alone misses a cut word; a button keeps 8 units of air), also in the narrowest window alone (480 px wide with side insets, safe width about 689 units); each segment at least 56 units high; show and hide; one segment of each group selected from the variables; every click emitting the right action and value; and a deliberately broken copy for each check, so the test can fail.
-- **Not built here:** the Chess HUD itself (the game's entry `chess-hud-opponent-panel` copies the shape above); the game decides whether the panel is a modal canvas or lives in the margins.
-
-## Variables
-
-A label shows game state without the game touching the label:
-
-```cpp
-CoreManager::GetUIVars().Set("score"_intern, 120);   // a number is written like Format() writes it; a string works too
-```
-
-```xml
-<element type="UILabel" name="Score" text="Score: {score}" .../>
-```
-
-- `UIVars` is a table of name to text and nothing more (no expressions). `Set` with the value that is already there changes nothing; `Remove` and `Clear` count as changes. The version never goes back, so a label that expanded its text at an older version knows to do it again.
-- **Placeholders.** `{name}` is replaced by the variable of that name; a variable nobody set is empty; `{{` and `}}` are literal braces; an unclosed `{` stays as written. A `{#key}` is a string of the string table, resolved before the variables (see "Strings").
-- **Cost.** A label expands its text again only when its `text` or the version of the variables changed (for a text that names a string, also the version of `UIStrings`: see "Strings"), and lays it out again only when the expanded text (or the size, the font, an option) changed, so an unchanged screen costs a comparison per label (`UILabel::GetLayoutCount()` in the tests). A variable the label does not show moves the version but not the shown text, so nothing is laid out.
-- `UILayoutValidator` checks the text that is shown (`CheckContent()` uses `GetDisplayText()`): a screen test sets the variables to their longest realistic values and runs the matrix.
-- The table is global, so a test clears it in `TearDown` (`CoreManager::GetUIVars().Clear()`).
-- **Show and hide by name.** A whole screen: `UICanvasComponent::SetVisibleByName(scene, nodeName, visible)`. One element: `canvas->SetElementVisible(name, visible)` or, in every canvas of a scene, `UICanvasComponent::SetElementVisibleByName(scene, name, visible)`. They set the authored `style.visible`, so a hidden element gets an empty rect, draws nothing, takes no clicks and takes no room in a stack; a variant that sets `visible` for the same element still wins.
-
-## Strings
-
-The words of a screen can live in a string table, not in code or in the scene file. A text refers to a string with `{#key}`:
-
-```xml
-<UIStrings default="en">
-  <language id="en"><string key="menu.start" text="Start"/><string key="score.title" text="Score"/></language>
-  <language id="ru"><string key="menu.start" text="Начать"/></language>
-</UIStrings>
-```
-
-```cpp
-CoreManager::GetUIStrings().SetLanguage("ru"_intern);   // the game picks the language in code; false (and unchanged) when the language has no strings
-```
-
-- **The file.** `config/UIStrings.xml`, layered like every config (a game's file replaces the engine's whole file; the engine ships none, and a missing config is an empty table with no log). `CoreManager::InitializeCoreServices()` calls `UIStrings::Initialize()` after `UIEnvironment`; the problems of `LoadFromXml` (a language without an id or without strings, a string without a key or a `text`, a key with a `}`, a duplicate key in a language (the first stays), a `default` that names no language, an unknown element) are logged as warnings and the rest is loaded. Without a `default` the first language is the default. A key is any non-empty text without `}` (write them `area.name`); attributes keep entities, so a line break is `&#10;`. Languages are named by any id (`en`, `ru`), the engine does not look at them.
-- **The order.** `Find(key)` looks in the current language, then in the default language, else nothing. Until `SetLanguage` is called the current language is the default one (and follows `SetDefaultLanguage`).
-- **`Resolve(text)`** replaces every `{#key}` by the string (strings first, variables second: the result then goes through `UIVars::Expand`, so a translation may hold `{score}`, `{{` and `}}`). A string is **not** resolved again, but the variable step still reads it: a `{#other}` left inside a string is taken by `UIVars::Expand` for the variable named `#other` and ends as nothing (or as that variable), so **a translation that wants the literal text `{#other}` writes `{{#other}}`**, which survives both steps (`Resolve` alone, as `UIStringsTest` calls it, still returns `{#other}` as it was). `{{` and `}}` are left untouched for the variable step, so `{{#key}}` in a text ends as the literal text `{#key}`. An unclosed `{#`, an empty `{#}` and a `{{#` (an escaped brace) stay as written. **A key nobody translated shows as the key** (`menu.options`, without the braces), never an empty label, and is recorded once per language and key in `GetMissing()` (`UIStrings` itself logs nothing, so it is testable without the log; the caller that resolves, the label, logs a newly added record). `HasReferences(text)` is the cheap pre-check.
-- **The version** (`GetVersion()`) grows when a string changes, the effective language or the default language changes, and on `Clear()`; it never goes back, and setting the same value again or picking the language that is already current changes nothing, as in `UIVars`. A label that resolved its text at an older version resolves it again.
-- **In a label** (`UILabel::GetDisplayText()`, so in a `UIButton` and a `UIToggle` caption too, and in what the validator, `CheckContent()` and `ui_tree` read): a text with a `{` goes through `UIStrings::Resolve` when it holds a reference (`HasReferences`), then `UIVars::Expand`. A language switch re-expands every label that names a string, once, at the next draw. A missing key is logged there as one warning per language and key (`UILabel: no string 'key' in the language 'ru' or the default one`) and the label shows the key. **Cost:** the result is cached by the `text` and the version of `UIVars`, and, for a text that names a string, the version of `UIStrings`; a text without `{#` never looks at the string table (a language switch leaves it alone), and an unchanged screen costs comparisons only. A switch lays a label out again only when its text came out different (`UILabel::GetLayoutCount()`), and any `Set` in the table moves the version, which re-resolves the labels that name a string but lays out only the ones whose text changed. A text with no `{` costs nothing at all, as before.
-- **HTML and CSS** need nothing for the key syntax: `{#key}` in the text of a `<button>`, `<span>` or `<p>` is text like `{score}` and reaches the `text` attribute unchanged (a test holds it); `{{#key}}` stays `{{#key}}`.
-- The table is global, like `UIVars`, so a test clears it in `TearDown` (`CoreManager::GetUIStrings().Clear()` drops the languages, the default, the current language and the missing keys). `UIStringsTest` is its test.
-
-## Settings panels and translations
-
-A screen with a toggle, a slider, a progress bar and a language choice is the shape of a settings panel, and `tests/BECore/UISettingsScreenTest.cpp` is its worked example and the template to copy (its XML constants `kSettingsXml` and `kStringsXml` are the screen and the string table; `UIWebTest` has the same panel in HTML + CSS, `kSettingsPanelHtml` / `kSettingsPanelCss`). The panel is a modal `SceneView` canvas on a node of its own, started hidden, with a dim, a plate and one row per setting: Sound (`UIToggle`), Music volume (a caption and a `UISlider`, step 0.1), Download (a caption, a `UIProgressBar` and a `UILabel` `{progress}%`), Language (a caption and a `UISegmented` bound to `language`), and an OK button. A small always-visible canvas holds the button that opens it.
-
-- **The game owns every value.** The widgets only emit: `SettingsSound` with `true` / `false`, `SettingsVolume` with the text of the number, `SettingsLanguage` with the language id. The game subscribes to `InputEvents::ActionEvent`, applies the change to its own state and sets the `UIVars` variable the widget is bound to (`soundOn`, `volume`, `progress`, `language`); a game that refuses leaves the variable and the screen keeps showing the truth. `SettingsGame` in the test is that game in twenty lines.
-- **Ids in the variables, words in the strings.** `language` holds the id (`en`), never the word; the segments carry `value="en"` and a text `{#lang.en}`. The game's answer to the language segment is `UIStrings::SetLanguage` plus the variable; every caption of every canvas follows at the next draw.
-- **Every text is a `{#key}`** (`area.name`, e.g. `settings.sound`), also the title and the buttons; a text that mixes both is fine (`{#download.title}: {progress}%`). Names that are the same in every language (each language written in itself) are still strings, one entry per language.
-- **One matrix run per language.** The validator reads the text that is shown, so the screen is checked once for each language of the table (`ForEachLanguage` walks `GetLanguages()`, so a language added to the table is covered without touching the test) and the failure text names the language (`[de] Sound cuts '...'`). Run it in a landscape and a portrait view and, alone, in the narrowest window (480 px wide with side insets, safe width about 689 units).
-- **A long test language.** The table holds a deliberately long language (`de`: its captions together are 40 % or more longer than the English ones, a test holds that), so a layout that only fits the short words is found. Which control is tightest is found by the test, not assumed (in this panel it is the music caption, not the toggle). A missing key shows as the key, which is usually the longest word of all, and the fit check measures it too.
-- **The fit check, because an ellipsis label can shrink.** `TextDoesNotFit` is never reported for a label with `overflow="Ellipsis"` (the default: it "can shrink"), so the screen test asks `CheckContent(width, height, scale).fits` of every visible `UILabel`, `UIButton` and `UIToggle` on the word that is shown, with the width the validator uses (a button keeps 8 units of air at each side). A `UIToggle` measures its caption in the area left of the switch, which is why the check must go through `CheckContent` and not through the rect.
-- **Rows with thin controls use `crossAlign="Center"`** (see "Layout rules"): a row with `Stretch` stretches a 30-unit slider to the height of the row. Every control that is a touch target is at least 56 units high in an 840-unit view.
-- **Broken copies.** The test also holds a deliberately broken copy for each check so that it can fail: a slider 30 units high (`TouchTargetTooSmall`), a toggle caption too long for its area (caught by the fit check, not by the validator), a word that is too long in one language only (caught in the narrowest window, naming the language), a missing key in the long language.
-- **Clean up.** The table and the variables are global: `TearDown` clears `UIVars`, `UIStrings` (and the language back to the default) and the scene manager.
-
-### Trying the widgets live
-
-No scene of the engine, of Match3 or of Chess uses the toggle, the slider, the progress bar or the strings, so they are looked at in a scratch scene that is never committed:
-
-1. Copy the XML of `kSettingsXml` (the `<scene>` with the `Hud` and `Settings` nodes; replace `@VIEW_W@` / `@VIEW_H@` by 840 and 800) into a scratch `config/SceneConfig.xml` of a game on your machine, as the first scene (the first scene is the active one) or into the scene the game opens on. Set `visible="true"` on the `Settings` canvas (the test starts it hidden and shows it from code).
-2. Copy `kStringsXml` into the game's `config/UIStrings.xml`.
-3. Run the game with `--control --headless --manual-clock` (or through the MCP server, `launch_game`) and drive it with `ui_tree`, `ui_click` (`at` 0..1 sets the slider: 0 is the minimum, 1 the maximum), `step` and `screenshot`.
-4. **Without game code the controls only emit actions and change nothing.** A click on the toggle, a press on the slider and a click on a segment are answered by `ui_click` with the action and the value, but the thumb, the switch and the selected segment stay where they are until something sets the variables: do it by hand, with `set_state` if the game offers it, or in a scratch component that subscribes to `ActionEvent` the way `SettingsGame` does. `ui_tree`, `ui_click at` and `screenshot` work without it.
-5. Delete the scratch files afterwards.
-
-## Building a screen in code
-
-```cpp
-void MyHud::OnAttached() {  // the node has a UICanvasComponent before this component in its list
-    auto canvas = GetNode().GetComponent<UICanvasComponent>();
-    auto hud = canvas->GetRoot().AddChild("Hud"_intern);
-    hud->style.rect.x = 16.0f;
-    hud->style.rect.y = 16.0f;
-    hud->style.rect.width = UILength::Px(220.0f);
-    hud->style.rect.height = UILength::Px(96.0f);
-    hud->color = Color{0, 0, 0, 160};
-    hud->blocksInput = true;
-    canvas->Invalidate();  // after editing the tree or the variants
-}
-```
-
-Code and a file can be mixed: the canvas of a node comes from the file, a component adds more elements in `OnAttached()`.
-
-## Control API (`ui_tree`, `ui_click`)
-
-`RegisterUIControl()` (`UIControl.h`, called by `CoreManager::InitializeCoreServices()` after the builtin methods) gives a client that drives a game over `--control` eyes and a finger on the UI. They work on the canvases of the **active scene** by the layout of the last draw, so `step` a frame before reading. `ui_tree` answers `{scene, canvases}`: each canvas has its node, space, `visible`, `modal`, `inputEnabled`, `takesInput`, `laidOut`, the `scale` and the bounds in UI units, the element tree and the validator's `issues`; each element has `type`, `name`, `visible`, `interactive`, `rect` (UI units of the canvas) and `outputRect` (render output pixels: the pixels of a `screenshot`), `text` for a label or button (variables replaced), for a button `action`, `disabled` (its own flag or its group's: whether a click does anything), `value` (what a click emits with the action, `""` for a plain button) and `selected`, for a `UISegmented` `bind`, `selectedValue` and `disabled`, for a `UIToggle` `bind`, `onValue`, `offValue`, `checked`, `action` and `disabled` (its caption is its `text`), for a `UIProgressBar` `bind`, `minValue`, `maxValue` and `fraction`, for a `UISlider` `bind`, `minValue`, `maxValue`, `step`, `value` (a number), `fraction`, `action` and `disabled`; the values of the three read the variable when asked, like `selected`, so no draw is needed between a `UIVars::Set` and the next `ui_tree`. `ui_tree` calls `SyncChildren()` on every group before it describes the segments, so `selected` and `selectedValue` are those of this moment (a variable the game set since the last draw is already in), while the rects are those of the last draw. A canvas never drawn has the structure and no rects. `ui_click {name, canvas?, at?}` presses the left button on the middle of the first visible, interactive element of that name through `CoreManager::GetUIInput()` (a move, a press, a release), so it is what a user would do: a modal canvas above takes the click, a click that no canvas takes reaches game code. **`at`** is a number from 0 to 1, the horizontal position of the press inside the rect (default 0.5; 0 and 1 are the edges, a hair inside; a string, null or a number outside 0..1 is `invalid_params`, checked before anything is pressed): it is the cheap way to set a slider (0 is its minimum, 1 its maximum; a drag in several steps is not offered) and it is the point the covered-by check uses. The answer carries the `action` and `value` (the pair of the `ActionEvent`): a button's own, a toggle's value to set (`offValue` while on, `onValue` while off), a slider's value of the press (`""` when nothing was emitted: disabled or no action). **`value` is the value of the click, not a promise that something was emitted:** a toggle (disabled or with an empty `action`) still answers with its `action` and the value it asks for although the click emits nothing, as a disabled button answers with its action; only a slider answers `""` when nothing was emitted, and a client that needs to know reads `disabled` in `ui_tree` first. A segment, a toggle and a slider change nothing by the click, so a client checks them with `ui_tree`, `ui_click`, `step`, `ui_tree`; a progress bar is not interactive (`not_clickable`). It checks first that the element is the topmost of its own canvas at that point and answers `not_found`, `not_clickable` (the message says: hidden, not interactive, covered by which element, canvas takes no input, not drawn yet) or `no_scene`. Names and node names from the client are looked up with `PoolString::Find`, never interned. Not seen: the DOM of an `RmlUiDocumentComponent`. The MCP server has both as tools (`tools/control/CLAUDE.md`), and the Match3 control smoke plays the menu through them. Protocol details: `UIControl.h`, `Control/CLAUDE.md`.
-
-## Editor preview
-
-`ViewportWidget` has a toolbar: an aspect preset (Free, 16:9, 4:3, 21:9, 9:16) that fits the image into the panel with that shape, and a safe-area simulation (None, Notch, Side insets) that is drawn as an outline. The viewport is not the window, so during the scene pass `UIEnvironment::SetSafeAreaOverride()` holds the simulated safe area (the whole target for None) and `SetPixelDensityOverride(1)` holds the density of the target (one pixel per ImGui unit), and canvases never see the window's. A sharper viewport (a target of size times `io.DisplayFramebufferScale`, the override set to that scale) is a follow-up. The numbers come from `UIPreview` (`UIPreviewTest`), and the matrix of the tests uses the same safe-area shapes. Editor input goes through `ViewportWidget::ForwardMouse` into `UIInput`.
+| `UIPreview` | the editor viewport's preview shapes and safe areas |
+| `UIControl` | control API `ui_tree` / `ui_click` |
 
 ## Rules
 
-- **UI code reads the context, never the window.** Everything layout needs is in `UILayoutContext`; a pure test sets it by hand.
-- **`UICanvasLayout`, `UILayout`, `UICanvasScaler`, `UIVariants` and the validator stay pure:** no scene, window or renderer, so they are tested without one.
-- **Edit the tree, then `Invalidate()`.** The cache notices a changed context and changed canvas settings by itself, not edits of elements.
-- **A change of a reflected field of the component** (inspector) is noticed on the next draw (the fields are copied into `params` and compared).
-- **Draw only in `OnDraw()`**, input only through `UIInput` (`BECore/Input/UIInput.h`); `OnDraw()` must not add or remove nodes or components.
-- `CoreManager` declares `_uiInput` and `_uiEnvironment` before `_sceneManager`, so they outlive the scenes: a canvas unregisters from `UIInput` in its destructor.
+- **UI code reads the context, never the window.** `UICanvasLayout`, `UILayout`, `UICanvasScaler`, `UIVariants` and the validator stay pure (no scene, window or renderer).
+- **Edit the tree, then `Invalidate()`.** The cache notices context and canvas-setting changes itself, not element edits. A reflected field changed in the inspector is noticed on the next draw.
+- **Draw only in `OnDraw()`**, input only through `UIInput`; `OnDraw()` adds or removes no nodes or components.
+- `CoreManager` declares `_uiInput` and `_uiEnvironment` before `_sceneManager`: a canvas unregisters from `UIInput` in its destructor.
+- **Widgets own no state.** A choice group, a toggle and a slider only emit `ActionEvent(action, value)`; the game applies it and sets the bound `UIVars` variable (game → `UIVars` → widget), so the screen cannot disagree with the game. Publish **ids** in variables, **words** in the string table.
+- `UIVars` and `UIStrings` are global: a test clears them in `TearDown`.
+
+## Canvases
+
+| `space` | Fills | Unit | Scale |
+|---------|-------|------|-------|
+| `Screen` | the render output | by `scaleMode` | mode x user scale, within `minScale` / `maxScale` |
+| `SceneView` | the scene's fitted view | a scene unit | the scene's fit |
+| `World` | the node's `TransformComponent` box | a scene unit | the scene's fit; follows the node |
+
+`scaleMode` (Screen only): `ConstantPixelSize`, `ConstantPhysicalSize`, `ScaleWithScreen` (against `referenceWidth` x `referenceHeight`; `match` 0 width, 1 height, between them Unity's geometric blend). `useSafeArea`: `contentBounds` is the safe area, `bounds` stays the canvas (a root child with `ignoreSafeArea` uses `bounds`).
+
+- **Draw order** is the scene's (layer, then scene order); **input order** the reverse (refreshed every draw, also while hidden).
+- **Input:** a canvas consumes a mouse event on a hit-testable element (`blocksInput` or `interactive`) by the last draw's layout; hover over one is consumed except a drag that began elsewhere (the game's); a press it took is followed to its release; a `modal` canvas consumes everything while shown; hidden / `inputEnabled` off / inactive-scene canvases consume nothing. Hit testing: child before parent, later sibling first; children are not clipped.
+- **Pointer hooks:** `OnClick` on release over the same element; `OnPress(x, y)` on the left press of an `interactive` element and `OnDrag(x, y)` on motion while held, in canvas units; they run last, on a copy of the pointer.
+- **Show / hide:** `UICanvasComponent::SetVisibleByName(scene, node, visible)`; one element: `SetElementVisible(name, ...)` or `SetElementVisibleByName(scene, name, ...)` (sets `style.visible`; a variant still wins).
+- The reflected fields are `visible` and `inputEnabled`, not `enabled` (that attribute name is taken by factory vectors, `Reflection/DataAccessor.h`).
+
+## Layout
+
+- **Anchor:** nine points and `Stretch`; the pivot is the same point of the element, so `BottomRight` with `x=-12` moves inwards. `Stretch` fills the parent minus `margin`.
+- **Order:** size (units or percent) → `min*` / `max*` (min wins) → aspect (`Fit` / `Fill`) → anchor and offset.
+- **Stack:** `direction`, `spacing`, `padding`, `wrap`, `crossAlign`; `flex` shares what is left on a line (clamped, not redistributed). A stack ignores children's anchor, offset, margin and aspect. **`crossAlign="Stretch"` overrides a child's explicit cross size**: a row holding a thin control (slider, progress bar) uses `Center`.
+- **Hidden elements** get an empty rect and take no room.
+- **Variants:** a condition on canvas `bounds` in units (`orientation` (a square is portrait), aspect, width, height ranges) and overrides of `visible`, `anchor`, `x`, `y`, `width`, `height`, `direction`, `fontSize`. Applied in order (later wins), always from `style`; re-chosen only when the bounds change.
+
+## Validator and the size matrix
+
+Issues: `OutsideCanvas`, `OutsideSafeArea`, `SiblingsOverlap` (in a stack), `TouchTargetTooSmall` (`min(w, h) * scale / pixelDensity` < `minTouchSize`), `TextDoesNotFit` (only content that cannot shrink).
+
+`tests/Common/UILayoutMatrix.h` runs a canvas over ten aspects at 480..2160 px short sides, with no insets / a notch / side insets, each scale mode and user scales 1.0 and 1.5. A canvas from a scene needs one `UpdateLayout(w, h)` first. One line: `EXPECT_TRUE(ValidateOnMatrix(canvas).empty()) << DescribeMatrixFailures(failures)`.
+
+**A screen test** builds the screen through the reflected path a game uses, sets the variables to their longest values, runs the matrix **once per language**, and also asks `CheckContent(width, height, scale).fits` of every shown label, button and toggle — **an ellipsis label "can shrink", so the validator alone misses a cut word**. It holds a deliberately broken copy for each check. Templates: `tests/BECore/UIScreenTest.cpp` (a HUD), `UISelectorScreenTest.cpp` (a modal panel of choice groups, `kSelectorXml`), `UISettingsScreenTest.cpp` (toggle, slider, progress bar, language group, a deliberately long test language).
+
+**Design rules:** anchors and percents, not absolute positions; interactive elements ≥ 48 units at the reference size with a `minScale` that keeps them touch targets (56 in an 840-unit view); a variant for the shapes that do not fit (usually portrait); text that wraps, cuts with an ellipsis or shrinks.
+
+## Writing a screen in XML
+
+The elements and variants are reflected fields of `UICanvasComponent`, so a screen is data in `SceneConfig.xml` (or a node file, `Scene/CLAUDE.md`, "Node files"):
+
+```xml
+<component type="UICanvasComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="0.7" useSafeArea="true">
+  <elements>
+    <element type="UIPanel" name="Hud" x="16" y="16" width="240" height="120" color="0,0,0,160">
+      <children>
+        <element type="UILabel" name="Score" x="12" y="10" width="216" height="32" text="{#hud.score}: {score}" fontSize="28"/>
+        <element type="UIButton" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" text="{#hud.reset}" action="Match3Reset"/>
+      </children>
+    </element>
+  </elements>
+  <variants>
+    <variant when="orientation:portrait"><overrides><set element="Hud" anchor="Top" x="0" width="90%"/></overrides></variant>
+  </variants>
+</component>
+```
+
+- `type` is the class name in `AbstractFactory<UIElement>`; unknown → deserialize error, a plain `UIElement`.
+- Style attributes are flat (`anchor`, `x`, `y`, `width`, `height`, `min*`, `max*`, `aspectRatio`, `aspectMode`, `margin`, `flex`, `direction`, `spacing`, `padding`, `wrapChildren`, `crossAlign`, `fontSize`, `visible`). A length is `220`, `220px` or `90%`; margins / padding one number or `l,t,r,b`; a color `r,g,b,a` or `#RRGGBB[AA]`. A malformed value is reported and the default stays.
+- A variant's `when` is `name:value;...` (`orientation`, `minAspect`, `maxAspect`, `minWidth`, ...). An override is written even when equal to the default.
+- `source="assets/ui/hud.ui.xml"` loads a `UIDocument` (`<ui><elements/><variants/></ui>`); its elements come first, the inline ones on top; only the inline part is saved back. Code-added elements (`GetRoot().AddChild`) are runtime-only.
+- Attribute names of style and control fields share one `<element>` and must not clash (`UIControlsTest.EveryPropertyOfEveryControlSurvivesARoundTrip`).
+- Do not save UI with a skip-defaults serializer (fields whose default is not `T{}` would be lost).
+- Fields are declared `IntrusivePtrNonAtomic<UIElement>`: the generator finds factory fields by that name.
+- RmlUi (`RmlUiHost`) is a separate front-end with its own DOM; the editor, the validator and `ui_tree` do not see into it.
+
+## Controls
+
+Each derives from `UIElement`, draws itself in `DrawSelf` in canvas units; `color` is a fill behind the content.
+
+| Type | Fields | Behavior |
+|------|--------|----------|
+| `UIElement` | — | a box and children |
+| `UIPanel` | `sprite`, `sliceBorder`, `spriteTint` | fill then sprite, nine-sliced with `sliceBorder`; `blocksInput` by default |
+| `UIImage` | `sprite`, `tint`, `stretch` | sprite fitted, centered, proportional |
+| `UILabel` | `text`, `font`, `textColor`, `align`, `verticalAlign`, `overflow` (`Ellipsis` default, `Clip`, `AutoFit`), `wrap`, `lineSpacing`, `minFontSize` | text at `fontSize` (24 when 0) x canvas scale in whole pixels |
+| `UIButton` | `action`, `value`, `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, `disabled` | a click emits `ActionEvent(action, value)`; state colors derived when transparent; `selected` adds a 4-unit bar so selection is not colour alone; disabled still consumes the click |
+| `UIStack` | — | a stack container |
+| `UISegmented` | `bind`, `disabled` | radio group over direct `UIButton` children: the segment whose `value` equals the variable is `selected`. **Every segment needs an explicit `height`**, also with `flex` (else it is a 0-high rect: not drawn, not clickable, skipped by the validator) |
+| `UIToggle` | `bind`, `action`, `onValue`, `offValue`, `disabled`, track / fill / thumb colors | a caption with a switch at the right; on when the variable equals `onValue`; a click emits the opposite value. The caption is measured left of the switch (`GetParts`) |
+| `UIProgressBar` | `bind`, `minValue`, `maxValue`, track / fill colors | read-only fraction of the width; anything that is not a number in range is 0; takes no input |
+| `UISlider` | `bind`, `action`, `minValue`, `maxValue`, `step`, `disabled`, colors | horizontal; press and drag emit the value text under the pointer (only when the text changes); snapped to `step`; text `FormatValue` (≤ 6 significant digits, no trailing zeros). Thumb as high as the element, so height decides the touch check |
+
+- Sprites come from `TextureLibrary` by name (code: `GetSprite().SetTexture(...)`).
+- **A choice panel** (pick one of a few options): one `UISegmented` per choice in a modal canvas started hidden (`visible="false" modal="true"`): a dim, a plate, a row per choice, an OK button; a HUD button opens it with `SetVisibleByName`. A hidden canvas is not drawn, so its groups read the variables on the first draw after it is shown.
+- **Adding a control:** derive from `UIElement` (or `UILabel`), `BE_CLASS` with `BE_REFLECT_FIELD`s, override `DrawSelf`, include the `.gen.hpp`; add it to `UIControlsTest`'s round trip.
+
+## Variables and strings
+
+- **`UIVars`** (`CoreManager::GetUIVars().Set("score"_intern, 120)`): name → text, a version that never goes back; `{name}` in a label is replaced, an unset one is empty, `{{` / `}}` are literal braces.
+- **`UIStrings`** (`config/UIStrings.xml`: `<UIStrings default="en"><language id="en"><string key="menu.start" text="Start"/>...`): `{#key}` resolves in the current language, then the default; **a missing key shows as the key** and is recorded once in `GetMissing()` (the label logs it). Strings resolve first, variables second, so a translation may hold `{score}`; a literal `{#x}` is written `{{#x}}`. `SetLanguage(id)` (false and unchanged for an unknown id); the version moves on any change. Problems of the file are warnings; the rest loads.
+- **Cost:** a label re-expands only when its `text`, the `UIVars` version or (for a text with `{#`) the `UIStrings` version moved, and lays out again only when the result changed. A text with no `{` costs nothing.
+- A language switch rewords every label at the next draw. The control API and ids stay language-free.
+
+## Control API (`ui_tree`, `ui_click`)
+
+On the canvases of the **active scene**, by the layout of the last draw (`step` a frame first). `ui_tree` gives every canvas (node, space, visibility, modal, input, scale, bounds, validator `issues`) and its elements (`type`, `name`, `visible`, `interactive`, `rect` in canvas units, `outputRect` in screenshot pixels, `text` with variables, and the control fields: a button's `action` / `value` / `selected` / `disabled`, a group's `bind` / `selectedValue`, a toggle's `checked`, a bar's / slider's `fraction` and `value`). Bound values are read when asked, so no draw is needed after `UIVars::Set`. `ui_click {name, canvas?, at?}` presses the middle (`at` 0..1 sets the horizontal point; the way to set a slider) of the first visible interactive element through `UIInput`, exactly as a user would, after checking it is topmost in its canvas; it answers the `action` / `value` of the click, or `not_found`, `not_clickable` (why), `no_scene`. A widget changes nothing by a click, so check with `ui_tree`, `ui_click`, `step`, `ui_tree`. Client names are looked up with `PoolString::Find`, never interned. The MCP server has both as tools (`tools/control/CLAUDE.md`).
+
+## Editor preview
+
+`ViewportWidget` has an aspect preset and a safe-area simulation; during its scene pass it holds `SetSafeAreaOverride` and `SetPixelDensityOverride(1)`, so canvases never see the window's metrics. Numbers: `UIPreview`.
+
+## Trying the widgets live
+
+No shipped scene of the engine uses the toggle, slider, progress bar or strings. Copy `kSettingsXml` (view 840 x 800, `Settings` made visible) into a scratch `config/SceneConfig.xml` and `kStringsXml` into `config/UIStrings.xml` of a game on your machine, run with `--control --headless --manual-clock` and drive it with `ui_tree`, `ui_click`, `step`, `screenshot`. Without game code the widgets only emit; set the variables by hand. Never commit the scratch files.
 
 ## Not done
 
-Of stage 6.4 what the choice group, the toggle, the progress bar, the slider and the string table did not cover: button sounds, a dropdown (four options fit one row; not judged needed), focus and gamepad navigation, keyboard and gamepad activation of a button or a toggle, a `UITextInput` and scrolling. Of the controls built: a checkbox look for the toggle (the switch is the only look), a vertical and a range slider, a text drawn on the bar or the slider (a `UILabel` beside it with `{var}` does it), a drag over the control API (`ui_click` is a press and a release; a slider is set with `at`). Of the strings: detecting the language of the operating system, remembering the language between runs, plural forms and the order of arguments beyond what `{var}` in a string gives, a pseudo-localization generator; the words of the HUDs of Match3 and Chess are still literals in game code (moving them is a game change). Also: hot reload of a `.ui.xml` / `.ui.html` document (the documents of the RmlUi host have it, `src/Modules/RmlUiHost/CLAUDE.md`), clipping of children to their parent, the debug overlay, an inspector for variants and the scene editor's tree view of canvases and elements (stage 7). Each control waits for a screen that asks for it (Mahjong is named as the first consumer of the rest). The widgets of the last slice are checked headless only (rects, fit, input, three languages, the size matrix); no scene of the engine uses them yet. The manual look on the Vulkan backend of the menu, the HUDs, the selected-segment style (fill plus a 4-unit bar, a first guess) and the toggle (track, thumb), the slider (a thumb as high as the element: 56 units is a big thumb) and the progress bar, with the colors derived from constants (all first guesses), is the owner's.
+Button sounds, a dropdown, focus and gamepad / keyboard navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload of `.ui.xml` / `.ui.html`, the debug overlay, the scene editor's tree of canvases (stage 7). The look of the controls on the Vulkan backend (the colors are first guesses) is the owner's.
 
 ## Tests
 
-`tests/BECore/`: `UILayoutTest` (anchors, stretch, limits, aspect, stack), `UICanvasScalerTest` (every space and mode, safe area, the context comparison), `UISettingsTest` (settings including `hotReloadInterval`, `UIEnvironment`), `UIVariantTest` (conditions, order, restoring, tree layout), `UICanvasLayoutTest` (cache, variant runs, hit testing, the matrix itself and shipped-style screens), `UILayoutValidatorTest`, `UICanvasComponentTest` (a scene from XML into a `RecordingRenderer`: drawing in each space, the view transform handed back, input order, press following, modal, inactive scenes, the `OnPress` / `OnDrag` hooks with canvas units in a scaled and an offset canvas), `UIControlApiTest` (`ui_tree` and `ui_click` through a `ControlService` of its own: rects in canvas units and output pixels, text with variables, the validator's findings, a click in a SceneView canvas, a modal above, every refusal, client names not interned; the toggle, progress bar and slider fields following the variable between two `ui_tree` calls, `ui_click` on a toggle (the value it asks for) and on a slider with `at` 0, 0.5 and 1 (the answer and the event match), a bad `at` refused with nothing pressed, a progress bar not clickable; a choice group: `value`, `selected`, `bind`, `selectedValue`, the selection following the variable between two `ui_tree` calls with no draw, a disabled group, the value of a click in the answer and in the `ActionEvent`, a plain button with an empty value), `UIPreviewTest`, `UIReflectionTest` (the text forms, the tree and variants through XML and binary, malformed values, an unknown type, a screen from a scene file laid out in both orientations), `UIWebTest` (the HTML reader, the CSS reader, the Match3 menu and a HUD in HTML + CSS against the XML, the choice panel of `UISelectorScreenTest` in HTML + CSS against its XML (the same attributes, the same rects at five sizes in a landscape and a portrait view, the selection following the variable, `:checked` with `:hover`, the reported misuses), the settings panel of `UISettingsScreenTest` (toggle, slider, progress bar, language group) the same way, the attributes and colors of the three widgets, every misuse reported (an unknown widget, `data-*` away from its widget, a bad number, the colors on another element, a state rule or `pointer-events` on a widget), the cascade, each property group, `@media`, the report, a `.ui.html` file through the resource manager), `UIDocumentTest` (a file, inline XML and a tree built in memory give the same elements; the loader choice; canvases of one file do not share layout; file and inline together; a missing, a broken and a partly bad file), `UINineSliceTest`, `UIScreenTest` (a HUD of controls through `ValidateOnMatrix`, the same HUD drawn in landscape and portrait, at twice the size, with a variant that hides an element and restores it, with a bound score; a deliberately broken one is caught), `UIVarsTest` (set, get, version, expand, escapes, unset names, Cyrillic), `UIStringsTest` (set and find, the current and the default language, the fallback, a missing key shown and recorded once, the version rules, `Resolve` with several references, escapes, unclosed and empty references, no recursion, Cyrillic, `LoadFromXml` with every kind of problem, `HasReferences`, the table in `CoreManager`), `UIControlsTest` (every control (toggle, progress bar and slider too) from a file and back, every property of every control, hit testing, draw calls of panel, nine-slice, image and label, scale and variants, overflow and the validator, variables and `{#key}` strings in labels, buttons and toggles and their layout cost (the language switch, a missing key, a text mixing both), show and hide by name, button states and clicks from synthetic mouse events, the value a click carries, the selected fill and bar, a group-disabled button), `UISliderTest` (the thumb at the fraction of the travel, a press at the edges and the middle, snapping and the exact texts, a range that is not a whole number of steps, a value read back landing on the same thumb, a drag emitting once per change, a drag leaving the slider, a release without a second action, two sliders, disabled, empty action, a reversed range, a slider narrower than its thumb, a short slider caught by the validator, round trips), `UIProgressBarTest` (the fraction in three ranges, clamping, what is not a number, an empty and a reversed range, the track and the fill in the recorded rects, no click, round trips; and the number helpers `UIText::FractionInRange` / `ValueInRange`), `UIToggleTest` (on and off from the variable, the click that asks for the opposite and changes nothing, custom values, an empty action, disabled, the thumb at the right or the left, the switch inside the rect at any size, the caption measured in the area left of the switch, hover and press, XML and binary round trips), `UISegmentedTest` (the selection follows the variable, empty bind / value / variable, direct buttons only, nested groups, a plain stack untouched, the bar, flex widths, disabled, a click reports and selects nothing, hiding, XML and binary round trips), `UISelectorScreenTest` (a panel of four choice groups in a hidden modal canvas on the size matrix, in a landscape and a portrait view and in the narrowest window; every word of every group; show and hide, clicks, a deliberately broken copy for each check), `UISettingsScreenTest` (the settings panel of "Settings panels and translations": toggle, slider, progress bar and a language group in a hidden modal canvas, the size matrix once per language of a three-language table with a deliberately long one, the narrowest window alone, every word asked with `CheckContent().fits`, clicks and a drag through `UIInput`, the language switch changing every caption at the next draw, a deliberately broken copy for each check).
+`tests/BECore/UI*Test.cpp`: one file per class (`UILayout`, `UICanvasScaler`, `UIVariant`, `UICanvasLayout`, `UILayoutValidator`, `UICanvasComponent` (drawing per space, input order, pointer hooks), `UIControlApi`, `UIReflection`, `UIDocument`, `UIWeb`, `UIVars`, `UIStrings`, `UIControls` (every property round trip), `UISlider`, `UIProgressBar`, `UIToggle`, `UISegmented`, `UINineSlice`, `UIPreview`, `UISettings`) and the three screen templates above.
