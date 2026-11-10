@@ -68,7 +68,7 @@ Run everything from the root of `<R>`.
 
 ## Output location and gotchas
 
-- Executables: `build/{Clang|MSVC}{macOS|Windows}/<product>[.exe]` and the test executables (the engine's `cmake/BagiEngine.cmake` sets the output directory from compiler + platform, **not** from the preset): `build/ClangWindows/` for the default Windows presets, `build/MSVCWindows/` for the MSVC ones. Debug and Release Ninja presets therefore **overwrite each other's executable**; the last build wins. The libraries in `build/{Clang|MSVC}{macOS|Windows}/lib` clash the same way, and `ninja` does not see that one was built with another `BE_WITH_EDITOR`: when switching between Debug, Release and the `-editor` presets, delete every `lib/*.a` (on Windows the `lib` folder) before building (the rules file, "Gotchas", where it applies). Visual Studio generators add a `Debug/` or `Release/` subfolder.
+- Executables: `build/<preset>/bin/<product>[.exe]`, the test executables beside it, static libraries in `build/<preset>/lib` (the engine's `cmake/BagiEngine.cmake` takes the output directory from the binary dir of the preset). Debug, Release and every other preset therefore sit side by side; nothing is deleted when switching. Visual Studio generators add a `Debug/` or `Release/` subfolder (`bin/Debug/`). Flipping `BE_WITH_EDITOR` inside one preset still needs the rebuild described in the rules file, "Gotchas".
 - Do not use `cmake -B build ...` (the old flat `build/` directory) and do not edit anything under `build/`.
 - Release presets turn `ENGINE_ENABLE_ASSERTS` and `ENGINE_ENABLE_EXPECTS` off; Debug keeps them on. The Visual Studio presets are multi-config and leave both on.
 - Exceptions are disabled (`ENGINE_NO_EXCEPTIONS`). C++23 is required.

@@ -52,7 +52,7 @@ One text message is one request, and one response is one text message, in JSON (
 ## Using it
 
 ```bash
-build/ClangmacOS/BagiMatch3 --control                  # ws://127.0.0.1:8765 (add --control-port=N)
+build/macos-debug/bin/BagiMatch3 --control                  # ws://127.0.0.1:8765 (add --control-port=N)
 .venv/bin/python -c "
 import sys; sys.path.insert(0, 'tools/control')
 from bagi_control_client import BagiControlClient

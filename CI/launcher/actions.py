@@ -124,6 +124,7 @@ def get_build_dir_name(compiler: str, platform: Optional[Platform] = None, with_
         
     Returns:
         Build directory name like "MSVCWindowsSolution" or "MSVCWindows"
+        (the executables of that build are in <build dir>/bin, bin/<Config>/ for Visual Studio)
     """
     if platform is None:
         platform = get_current_platform()
@@ -181,7 +182,7 @@ class ActionExecutor:
     def build_dir(self) -> Path:
         """Get build directory based on current compiler and build type.
         
-        Returns path like: build/MSVCDebugWindowsSolution
+        Returns path like: build/MSVCDebugWindowsSolution (the executables are in its bin/ folder, bin/<Config>/ for Visual Studio)
         """
         build_dir_name = get_build_dir_name(self._compiler, with_solution_suffix=True)
         return self.project_root / "build" / build_dir_name

@@ -21,7 +21,7 @@ from bagi_session import GameSession, SessionError
 INSTRUCTIONS = """\
 Plays and tests a BagiEngine game (Match3, and any game that implements the control API) through its control API.
 
-Start with launch_game (the path of a built game executable, e.g. build/ClangmacOS/BagiMatch3); it runs the game headless,
+Start with launch_game (the path of a built game executable, or a preset and a game name: build/<preset>/bin/<game>); it runs the game headless,
 with no window, on the manual clock. Then get_state, list_actions and perform_action. On the manual clock game time stands
 still until step: an action changes the state at once (get_state shows it), but the scene, an animation and a screenshot
 follow only after a step, so call step before screenshot when the picture should show the action.
@@ -53,15 +53,16 @@ def reports_errors(tool: Callable[..., Any]) -> Callable[..., Any]:
 
 @server.tool()
 @reports_errors
-def launch_game(exe: str, headless: bool = True, manual_clock: bool = True) -> dict[str, Any]:
+def launch_game(exe: str = "", headless: bool = True, manual_clock: bool = True, preset: str = "", game: str = "") -> dict[str, Any]:
     """Starts a game executable with the control API and connects to it (a game started earlier by this server is stopped).
 
     exe: path of the built game, relative to where this server runs (the repository root) or absolute.
+    preset, game: instead of exe, the CMake preset that built it and the name of the game (build/<preset>/bin/<game>). Give exe or both of these.
     headless: no window, drawn in memory by the software renderer; screenshots work only like this. False opens a real window.
     manual_clock: game time moves only on step (deterministic). False runs it on the real clock.
     Answers the port, the clock status and the games the executable has.
     """
-    return session.launch(exe, headless=headless, manual_clock=manual_clock)
+    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game)
 
 
 @server.tool()

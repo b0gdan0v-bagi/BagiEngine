@@ -33,7 +33,7 @@ games/<Name>/tests/     # a game's tests, built as <Name>Tests by be_add_game_te
 cmake --build --preset macos-debug --target BagiEngineTests Match3Tests
 ctest --preset macos-debug                                       # one process per test, 8 at a time
 ctest --preset macos-debug -j1                                   # one at a time
-build/ClangmacOS/BagiEngineTests --gtest_filter='Reflection*'    # cwd must be inside the repository (config/ is found by walking up)
+build/macos-debug/bin/BagiEngineTests --gtest_filter='Reflection*'    # cwd must be inside the repository (config/ is found by walking up)
 ```
 
 ### Adding a test

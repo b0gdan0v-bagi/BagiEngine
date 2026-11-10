@@ -42,7 +42,7 @@ uv run python CI/scripts/tidy_fix.py --changed
 Non-standard build directory:
 
 ```bash
-python CI/scripts/tidy_fix.py --changed --build-dir build/ClangWindowsSolution
+python CI/scripts/tidy_fix.py --changed --build-dir build/<preset>
 ```
 
 **After running**, apply Clang-Format to restore consistent style:

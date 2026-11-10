@@ -1,9 +1,10 @@
 """Starts a game executable with the control API and connects to it. Standard library only.
 
-    from game_process import GameProcess, build_game_command, free_port
+    from game_process import GameProcess, build_game_command, free_port, preset_executable
 
+    exe = preset_executable("macos-debug", "BagiMatch3")  # build/macos-debug/bin/BagiMatch3, or any path of a built game
     port = free_port()
-    with GameProcess(build_game_command(Path("build/ClangmacOS/BagiMatch3"), port), cwd=Path("build/ClangmacOS")) as game:
+    with GameProcess(build_game_command(exe, port), cwd=exe.parent) as game:
         client = game.connect()
         ...
         client.call("quit")
@@ -13,6 +14,7 @@ The game writes its output to a temporary file; log_tail() gives the end of it f
 
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -23,6 +25,7 @@ DEFAULT_STARTUP_TIMEOUT = 30.0
 DEFAULT_SHUTDOWN_TIMEOUT = 10.0
 CONNECT_RETRY_SECONDS = 0.1
 LOG_TAIL_LINES = 25
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]  # tools/control/game_process.py
 
 
 class GameLaunchError(Exception):
@@ -34,6 +37,21 @@ def free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.bind(("127.0.0.1", 0))
         return probe.getsockname()[1]
+
+
+def preset_executable(preset: str, game: str, root: Path | None = None) -> Path:
+    """Where the build of `preset` puts the executable of `game`: <root>/build/<preset>/bin/<game>[.exe] (cmake/CLAUDE.md, "Output").
+
+    A multi-config preset (Visual Studio) puts it in bin/<Config>/; then the newest one that exists is given. `root` is the
+    repository whose build/ folder is meant (default: the one holding these tools). The file may not exist: the caller reports it.
+    """
+    name = f"{game}.exe" if sys.platform == "win32" else game
+    bin_dir = (root or REPOSITORY_ROOT) / "build" / preset / "bin"
+    single_config = bin_dir / name
+    if single_config.is_file() or not bin_dir.is_dir():
+        return single_config
+    per_config = [path for path in (config / name for config in bin_dir.iterdir() if config.is_dir()) if path.is_file()]
+    return max(per_config, key=lambda path: path.stat().st_mtime) if per_config else single_config
 
 
 def log_tail(log_path: Path, lines: int = LOG_TAIL_LINES) -> str:
