@@ -324,6 +324,7 @@ def test_list_json_activity_reads_the_session_and_its_agents_from_the_transcript
         json.dumps({"type": "user", "message": {"content": "/todo-loop 1"}}),
         say({"type": "tool_use", "name": "Agent", "input": {"description": "Review WP 1/2", "subagent_type": "todo-reviewer"}}),
         say({"type": "text", "text": "The review   is\nrunning."}),
+        json.dumps({"type": "permission-mode", "permissionMode": "auto"}),
     ]) + "\n")
     agents = folder.with_suffix("") / "subagents"
     agents.mkdir(parents=True)
@@ -335,6 +336,7 @@ def test_list_json_activity_reads_the_session_and_its_agents_from_the_transcript
     assert worker.main(["list", "--json", "--activity", "--claude", str(script)]) == 0
     activity = json.loads(capsys.readouterr().out)["workers"][0]["activity"]
     assert [(e["kind"], e.get("tool"), e["text"]) for e in activity["events"]] == [("tool", "Agent", "Review WP 1/2"), ("say", None, "The review is running.")]
+    assert activity["updated"] == 1794132000000  # the last timestamped record, not the mtime the trailing record moved
     running, done = activity["agents"]
     assert (running["type"], running["done"], running["last"][-1]["text"]) == ("todo-reviewer", False, "Run the tests")
     assert (done["type"], done["done"], done["last"][-1]["text"]) == ("todo-developer", True, "WP 1/2 done")

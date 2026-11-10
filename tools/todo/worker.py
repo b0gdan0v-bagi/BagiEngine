@@ -866,7 +866,22 @@ def session_activity(session: dict | None) -> dict | None:
                 "last": last,
             })
     agents.sort(key=lambda agent: (not agent["done"], agent["updated"]), reverse=True)
-    return {"updated": int(main.stat().st_mtime * 1000), "events": events_of(tail_records(main), ACTIVITY_EVENTS), "agents": agents[:4]}
+    records = tail_records(main)
+    return {"updated": last_step_ms(records, main), "events": events_of(records, ACTIVITY_EVENTS), "agents": agents[:4]}
+
+
+def last_step_ms(records: list[dict], path: Path) -> int:
+    """When the session last did something: the newest `timestamp` of its records. Claude Code appends
+    records without one (`mode`, `permission-mode`, `session-owner`, ...) to a session that ended long ago,
+    so the file's mtime would say a finished worker "ended" minutes ago; the mtime is only the fallback."""
+    for record in reversed(records):
+        stamp = record.get("timestamp")
+        if isinstance(stamp, str):
+            try:
+                return int(datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp() * 1000)
+            except ValueError:
+                continue
+    return int(path.stat().st_mtime * 1000)
 
 
 USAGE_RECENT_MINUTES = 10  # the window of "now": tokens of the answers in the last minutes
