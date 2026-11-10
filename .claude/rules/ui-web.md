@@ -46,7 +46,7 @@ A group takes clicks only with a visible `background` or `pointer-events: auto` 
 
 ## Cascade and properties
 
-CSS's cascade: `!important`, `style=""`, specificity, source order. Selectors: tag, `*`, `#id`, `.class`, compounds, lists, descendant and `>`, `:hover` / `:active` / `:disabled` / `:checked` on the last part. Inherited: `color`, `font-size`, `font-family`, `text-align`, `line-height`, `white-space`. Shorthands and longhands are separate names: the later declaration wins by order.
+CSS's cascade: `!important`, `style=""`, specificity, source order. Selectors: tag, `*`, `#id`, `.class`, compounds, lists, descendant and `>`, `:hover` / `:active` / `:disabled` / `:checked` on the last part. Inherited: `color`, `font-size`, `font-family`, `font-weight`, `text-shadow`, `-be-text-outline`, `text-align`, `line-height`, `white-space`. Shorthands and longhands are separate names: the later declaration wins by order.
 
 | CSS | Engine |
 |-----|--------|
@@ -56,12 +56,13 @@ CSS's cascade: `!important`, `style=""`, specificity, source order. Selectors: t
 | `anchor` (engine-only): `top-left` ... `stretch` | `anchor` (centering needs it) |
 | `width`, `height`, `min-*`, `max-*`, `aspect-ratio`, `object-fit: cover` | lengths, `aspectRatio`, `aspectMode="Fill"` |
 | `background`, `background-image: url(Name)`, `border-image-slice` | `color`, `sprite`, `sliceBorder` |
-| `color`, `font-size`, `font-family` (a font path), `text-align`, `vertical-align`, `text-overflow`, `white-space`, `line-height` | `textColor`, `fontSize`, `font`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing` |
+| `color`, `font-size`, `font-family` (a font path, else a family name, the first of a list), `font-weight`, `text-align`, `vertical-align`, `text-overflow`, `white-space`, `line-height` | `textColor`, `fontSize`, `font` or `fontFamily`, `fontWeight`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing`. `font-weight`: `normal`, `bold` or 100..900 in steps of 100. A family name is not checked here (the table of `TextConfig.xml` is run-time data): an unknown one is the label's one warning at run time; generic names (`sans-serif`...) mean the default font |
+| `text-shadow: <x> <y> [blur] <color>`, `-be-text-outline: <width> <color>` (`none` clears both) | `textShadow`, `textOutline`: a hard shadow and an outline, paint only. A blur and every shadow after the first are reported (drawn hard / left out). Like `color`, they reach only the elements that become a label, button or toggle |
 | `-be-text-fit: shrink`, `-be-min-font-size` | `overflow="AutoFit"`, `minFontSize` |
 | `-be-track-color`, `-be-fill-color`, `-be-thumb-color` | of a toggle, slider, progress bar only |
 | `:hover`, `:active`, `:disabled`, `:checked` with `background` | `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`. Not on toggle / slider / progress (their states are derived; reported) |
 
-Lengths px and %; colors `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()`, a few names. Reported, not understood: `em`, `rem`, `vw`, `vh`, `calc()`, `var()`, `opacity`, `border`, `border-radius`, `box-shadow`, `transform`, `transition`, `animation`, `z-index`, `overflow`, `font-weight`, `letter-spacing`, `margin` on a non-filling element, `justify-content`, `grid`, attribute selectors, `+`, `~`, other pseudo-classes and elements, `@import`, `@font-face`, `@keyframes`.
+Lengths px and %; colors `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()`, a few names. Reported, not understood: `em`, `rem`, `vw`, `vh`, `calc()`, `var()`, `opacity`, `border`, `border-radius`, `box-shadow`, `transform`, `transition`, `animation`, `z-index`, `overflow`, `letter-spacing`, `font-weight: bolder` / `lighter` / `450`, `margin` on a non-filling element, `justify-content`, `grid`, attribute selectors, `+`, `~`, other pseudo-classes and elements, `@import`, `@font-face`, `@keyframes`.
 
 ## `@media`
 

@@ -16,6 +16,14 @@ namespace BECore {
         constexpr char LineBreakMarker = '\x01';  // a `<br>` while the text of a label is gathered; the white space of the source is never this
         constexpr float DefaultFontSizeForLineHeight = 24.0f;
         constexpr size_t BoxValueMax = 4;
+        constexpr int FontWeightNormal = 400;
+        constexpr int FontWeightBold = 700;
+        constexpr float FontWeightMin = 100.0f;
+        constexpr float FontWeightMax = 900.0f;
+        constexpr float FontWeightStep = 100.0f;
+        constexpr size_t TextShadowMinNumbers = 2;  // offsetX, offsetY
+        constexpr size_t TextShadowMaxNumbers = 3;  // ... and the blur
+        constexpr size_t TextShadowBlurIndex = 2;
 
         // The kinds of element the compile writes
         CORE_ENUM(WebKind, uint8_t, Group, Panel, Label, Button, Image, Segmented, Toggle, Slider, Progress)
@@ -92,10 +100,21 @@ namespace BECore {
 
         /// The properties CSS inherits that the compile follows
         bool IsInherited(eastl::string_view property) {
-            return IsOneOf(property, {"color", "font-size", "font-family", "text-align", "line-height", "white-space"});
+            return IsOneOf(property, {"color", "font-size", "font-family", "font-weight", "text-shadow", "-be-text-outline", "text-align", "line-height", "white-space"});
         }
 
         // ---- the values of the properties --------------------------------------------------------------------------------
+
+        /// `-be-text-outline` (width in pixels, colour) and `text-shadow` (offsets in pixels, colour) after parsing
+        struct TextOutlineValue {
+            float width = 0.0f;
+            Color color;
+        };
+        struct TextShadowValue {
+            float offsetX = 0.0f;
+            float offsetY = 0.0f;
+            Color color;
+        };
 
         /// What the declarations of one element come to, last one winning. Every field is "not set" until a declaration sets it
         struct Resolved {
@@ -129,6 +148,10 @@ namespace BECore {
             std::optional<Color> textColor;
             std::optional<float> fontSize;
             eastl::string fontPath;
+            eastl::string fontFamily;  ///< a name of the `families` table of TextConfig.xml, which the compiler does not know: a name nobody registered is the label's warning at run time
+            std::optional<int> fontWeight;
+            std::optional<TextOutlineValue> textOutline;
+            std::optional<TextShadowValue> textShadow;
             eastl::string textAlign;
             eastl::string verticalAlign;
             eastl::string textOverflow;
@@ -140,6 +163,8 @@ namespace BECore {
             std::optional<Color> trackColor;
             std::optional<Color> fillColor;
             std::optional<Color> thumbColor;
+            /// Set by a handler that applied a value with a caveat (a blurred shadow drawn hard): the check of the declarations reports it, the value still counts
+            eastl::string note;
         };
 
         bool ParseOffset(eastl::string_view value, std::optional<float>& out) {
@@ -497,7 +522,7 @@ namespace BECore {
              }},
             {"font-family",
              [](Resolved& r, eastl::string_view v) {
-                 // The engine has no family registry: a path to a font file is a font, a generic family is the default font, a name is not understood
+                 // A path to a font file is `font`, a generic family is the default font, any other name is a family of the table of TextConfig.xml
                  const auto families = UIWebText::SplitTopLevel(v, ',');
                  eastl::string_view first = families.empty() ? eastl::string_view() : families[0];
                  if (first.size() >= 2 && (first.front() == '"' || first.front() == '\'') && first.back() == first.front()) {
@@ -506,15 +531,89 @@ namespace BECore {
                  if (first.empty()) {
                      return false;
                  }
+                 r.fontPath.clear();
+                 r.fontFamily.clear();
                  if (first.find('/') != eastl::string_view::npos || first.find('.') != eastl::string_view::npos) {
                      r.fontPath = eastl::string(first);
+                 } else if (!IsOneOf(UIWebText::ToLower(first), {"sans-serif", "serif", "monospace", "system-ui", "cursive", "fantasy"})) {
+                     r.fontFamily = eastl::string(first);
+                 }
+                 return true;
+             }},
+            {"font-weight",
+             [](Resolved& r, eastl::string_view v) {
+                 const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
+                 if (lower == "normal") {
+                     r.fontWeight = FontWeightNormal;
+                 } else if (lower == "bold") {
+                     r.fontWeight = FontWeightBold;
+                 } else {
+                     // `bolder` and `lighter` depend on the parent's weight, which a label has no way to say
+                     const auto number = UIText::ParseFiniteFloat(lower);
+                     if (!number || *number < FontWeightMin || *number > FontWeightMax || std::fmod(*number, FontWeightStep) != 0.0f) {
+                         return false;
+                     }
+                     r.fontWeight = static_cast<int>(*number);
+                 }
+                 return true;
+             }},
+            {"text-shadow",
+             [](Resolved& r, eastl::string_view v) {
+                 if (UIWebText::ToLower(UIWebText::TrimSpace(v)) == "none") {
+                     r.textShadow.reset();
                      return true;
                  }
-                 if (IsOneOf(UIWebText::ToLower(first), {"sans-serif", "serif", "monospace", "system-ui", "cursive", "fantasy"})) {
-                     r.fontPath.clear();
+                 // `<x> <y> [blur] <color>`, the colour first or last; the engine draws one hard shadow
+                 const auto shadows = UIWebText::SplitTopLevel(v, ',');
+                 if (shadows.empty()) {
+                     return false;
+                 }
+                 float numbers[TextShadowMaxNumbers] = {};
+                 size_t numberCount = 0;
+                 std::optional<Color> color;
+                 for (const eastl::string_view word : UIWebText::SplitWords(shadows[0])) {
+                     if (const auto pixels = UIWebText::ParsePixels(word)) {
+                         if (numberCount == TextShadowMaxNumbers) {
+                             return false;
+                         }
+                         numbers[numberCount++] = *pixels;
+                     } else if (const auto parsed = UIWebText::ParseColor(word); parsed && !color) {
+                         color = *parsed;
+                     } else {
+                         return false;
+                     }
+                 }
+                 const bool hasBlur = numberCount == TextShadowMaxNumbers;
+                 if (!color || numberCount < TextShadowMinNumbers || (hasBlur && numbers[TextShadowBlurIndex] < 0.0f)) {
+                     return false;
+                 }
+                 r.textShadow = TextShadowValue{numbers[0], numbers[1], *color};
+                 if (hasBlur && numbers[TextShadowBlurIndex] != 0.0f) {
+                     r.note = "text-shadow blur is not drawn: the shadow is a hard copy of the text";
+                 } else if (shadows.size() > 1) {
+                     r.note = "only the first of several text shadows is used";
+                 }
+                 return true;
+             }},
+            {"-be-text-outline",
+             [](Resolved& r, eastl::string_view v) {
+                 if (UIWebText::ToLower(UIWebText::TrimSpace(v)) == "none") {
+                     r.textOutline.reset();
                      return true;
                  }
-                 return false;
+                 // `<width> <color>`, the colour first or last
+                 const auto words = UIWebText::SplitWords(v);
+                 if (words.size() != 2) {
+                     return false;
+                 }
+                 const bool widthFirst = UIWebText::ParsePixels(words[0]).has_value();
+                 const auto width = UIWebText::ParsePixels(words[widthFirst ? 0 : 1]);
+                 const auto color = UIWebText::ParseColor(words[widthFirst ? 1 : 0]);
+                 if (!width || !color || *width < 0.0f) {
+                     return false;
+                 }
+                 r.textOutline = TextOutlineValue{*width, *color};
+                 return true;
              }},
             {"text-align",
              [](Resolved& r, eastl::string_view v) {
@@ -830,6 +929,12 @@ namespace BECore {
             void CheckDeclaration(const UICssDeclaration& declaration) {
                 Resolved scratch;
                 const ApplyResult result = ApplyDeclaration(scratch, declaration);
+                if (result == ApplyResult::Applied && !scratch.note.empty()) {
+                    // Understood, with a caveat: the value counts and the declaration is still reported once
+                    if (_report.AddOnce(SourceOf(declaration), declaration.line, Format("'{}: {}': {}", declaration.property.c_str(), declaration.value.c_str(), scratch.note.c_str()))) {
+                        ++_report.declarationsUnsupported;
+                    }
+                }
                 if (result == ApplyResult::Applied || result == ApplyResult::Ignored) {
                     return;
                 }
@@ -1441,6 +1546,17 @@ namespace BECore {
                 attrs.Set("text", node.text);
                 if (!r.fontPath.empty()) {
                     attrs.Set("font", r.fontPath);
+                } else if (!r.fontFamily.empty()) {
+                    attrs.Set("fontFamily", r.fontFamily);
+                }
+                if (r.fontWeight && *r.fontWeight != FontWeightNormal) {
+                    attrs.Set("fontWeight", Number(static_cast<float>(*r.fontWeight)));
+                }
+                if (r.textOutline && r.textOutline->width > 0.0f) {
+                    attrs.Set("textOutline", UIText::FormatTextOutline(r.textOutline->width, r.textOutline->color));
+                }
+                if (r.textShadow) {
+                    attrs.Set("textShadow", UIText::FormatTextShadow(r.textShadow->offsetX, r.textShadow->offsetY, r.textShadow->color));
                 }
                 if (r.textColor) {
                     attrs.Set("textColor", UIText::FormatColor(*r.textColor));
