@@ -1,12 +1,13 @@
 <?xml version="1.0"?>
 <!--
-    Web build overlay. No SDL_WINDOW_VULKAN (the renderer is the SDL one). The size is only the start size: the canvas is
-    resized to the browser window at once and on every resize (SDL/CLAUDE.md, "Web build").
+    Web build overlay. No SDL_WINDOW_VULKAN (the renderer is the SDL one) and SDL_WINDOW_OPENGL (its GLES2 renderer would
+    otherwise recreate the window and drop the page handlers of SDLWebCanvas; SDLMainWindow adds it anyway). The size is only
+    the start size: the canvas is resized to the browser window at once and on every resize (SDL/CLAUDE.md, "Web build").
 -->
 <root>
   <window
     title="BagiEngine"
     width="1280"
     height="720"
-    windowFlags="SDL_WINDOW_RESIZABLE|SDL_WINDOW_HIGH_PIXEL_DENSITY" />
+    windowFlags="SDL_WINDOW_RESIZABLE|SDL_WINDOW_OPENGL|SDL_WINDOW_HIGH_PIXEL_DENSITY" />
 </root>
