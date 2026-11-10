@@ -1,0 +1,352 @@
+#include "UIBoxMesh.h"
+
+#include <cmath>
+#include <numbers>
+
+namespace BECore {
+
+    namespace {
+
+        constexpr float kPi = std::numbers::pi_v<float>;
+        constexpr float kHalfPi = kPi * 0.5f;
+        constexpr int kCornerCount = 4;
+        constexpr int kMaxRings = UIBoxMesh::kBlurRings + 1;
+
+        /// Where each corner's arc starts, in the order top-left, top-right, bottom-right, bottom-left: the outline runs clockwise on the screen (y down)
+        constexpr float kCornerStartAngle[kCornerCount] = {kPi, kPi + kHalfPi, 0.0f, kHalfPi};
+
+        /// One outline of the box and the alpha its vertices get: `offset` moves the outline outwards (negative: inwards) from the edge of the rect
+        struct Ring {
+            float offset = 0.0f;
+            float alpha = 0.0f;
+        };
+
+        struct Arc {
+            float centerX = 0.0f;
+            float centerY = 0.0f;
+            float radius = 0.0f;
+        };
+
+        /// One vertex of an outline: where it is, and which corner and step of it, so a colour function can tell a position on the arc
+        struct PointInfo {
+            float x = 0.0f;
+            float y = 0.0f;
+            int corner = 0;
+            int step = 0;
+            int segments = 0;
+        };
+
+        /// Which corners an outline visits and how much of each. A closed path is the whole box; the highlight is the top: the second half of the top-left
+        /// arc and the first half of the top-right one.
+        struct Path {
+            bool closed = true;
+            bool topHalves = false;
+        };
+
+        [[nodiscard]] bool IsValidBox(const Rect& rect, float pixelsPerUnit) {
+            return std::isfinite(rect.x) && std::isfinite(rect.y) && std::isfinite(rect.w) && std::isfinite(rect.h) && rect.w > 0.0f && rect.h > 0.0f && std::isfinite(pixelsPerUnit) &&
+                   pixelsPerUnit > 0.0f;
+        }
+
+        [[nodiscard]] unsigned char ScaleAlpha(unsigned char alpha, float factor) {
+            return static_cast<unsigned char>(std::clamp(std::lround(static_cast<float>(alpha) * factor), 0L, 255L));
+        }
+
+        [[nodiscard]] unsigned char LerpChannel(unsigned char from, unsigned char to, float t) {
+            const float value = static_cast<float>(from) + (static_cast<float>(to) - static_cast<float>(from)) * t;
+            return static_cast<unsigned char>(std::clamp(std::lround(value), 0L, 255L));
+        }
+
+        [[nodiscard]] float Smoothstep(float t) {
+            const float x = std::clamp(t, 0.0f, 1.0f);
+            return x * x * (3.0f - 2.0f * x);
+        }
+
+        /// The arcs of the outline of @p rect moved by @p offset. A corner that is rounded keeps its centre and grows or shrinks its radius (so the outline is a true
+        /// offset curve); a square corner stays square unless @p roundOutwards asks for the offset curve of a point (a shadow's soft corner)
+        [[nodiscard]] eastl::array<Arc, kCornerCount> MakeArcs(const Rect& rect, const UICorners& corners, float offset, bool roundOutwards) {
+            const float left = rect.x - offset;
+            const float top = rect.y - offset;
+            const float right = rect.x + rect.w + offset;
+            const float bottom = rect.y + rect.h + offset;
+
+            const auto grow = [&](float radius) { return radius > 0.0f || roundOutwards ? std::max(0.0f, radius + offset) : 0.0f; };
+            const UICorners radii = UICorners{grow(corners.topLeft), grow(corners.topRight), grow(corners.bottomRight), grow(corners.bottomLeft)}.Clamped(right - left, bottom - top);
+
+            return {{
+                {left + radii.topLeft, top + radii.topLeft, radii.topLeft},
+                {right - radii.topRight, top + radii.topRight, radii.topRight},
+                {right - radii.bottomRight, bottom - radii.bottomRight, radii.bottomRight},
+                {left + radii.bottomLeft, bottom - radii.bottomLeft, radii.bottomLeft},
+            }};
+        }
+
+        /// The steps of corner @p corner that a path visits: [first, last]
+        struct StepRange {
+            int first = 0;
+            int last = 0;
+        };
+
+        [[nodiscard]] StepRange VisitedSteps(const Path& path, int corner, int segments) {
+            if (!path.topHalves) {
+                return {0, segments};
+            }
+            const int half = segments - segments / 2;
+            return corner == 0 ? StepRange{segments / 2, segments} : StepRange{0, half};
+        }
+
+        /**
+         * Appends the vertices of every ring (each ring is one outline with the same number of points, so the corresponding points of two rings are
+         * neighbours), strips of triangles between each two rings and, with @p fillCore, a fan over the last ring. @p colorOf gives the colour of a point
+         * before the ring's alpha is applied.
+         */
+        template <typename ColorFn>
+        void AppendRings(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Ring* rings, int ringCount, const Path& path,
+                         bool roundOutwards, bool fillCore, float pixelsPerUnit, ColorFn&& colorOf) {
+            const UICorners baseCorners = corners.Clamped(rect.w, rect.h);
+            const float halfShortSide = std::min(rect.w, rect.h) * 0.5f;
+
+            // One number of segments per corner for every ring, from the largest radius of the corner, so the rings line up
+            float largestOffset = -halfShortSide;
+            for (int r = 0; r < ringCount; ++r) {
+                largestOffset = std::max(largestOffset, rings[r].offset);
+            }
+            const auto largestArcs = MakeArcs(rect, baseCorners, largestOffset, roundOutwards);
+            int segments[kCornerCount];
+            for (int c = 0; c < kCornerCount; ++c) {
+                segments[c] = UIBoxMesh::CornerSegments(largestArcs[c].radius * pixelsPerUnit);
+            }
+
+            const int firstCorner = 0;
+            const int lastCorner = path.topHalves ? 1 : kCornerCount - 1;
+            int pointsPerRing = 0;
+            for (int c = firstCorner; c <= lastCorner; ++c) {
+                const StepRange range = VisitedSteps(path, c, segments[c]);
+                pointsPerRing += range.last - range.first + 1;
+            }
+
+            const int firstVertex = static_cast<int>(vertices.size());
+            for (int r = 0; r < ringCount; ++r) {
+                // An outline cannot move in further than the middle of the shorter side
+                const float offset = std::max(rings[r].offset, -halfShortSide);
+                const auto arcs = MakeArcs(rect, baseCorners, offset, roundOutwards);
+                for (int c = firstCorner; c <= lastCorner; ++c) {
+                    const Arc& arc = arcs[c];
+                    const StepRange range = VisitedSteps(path, c, segments[c]);
+                    for (int step = range.first; step <= range.last; ++step) {
+                        const float angle = kCornerStartAngle[c] + (segments[c] > 0 ? kHalfPi * static_cast<float>(step) / static_cast<float>(segments[c]) : 0.0f);
+                        PointInfo point;
+                        point.x = arc.centerX + arc.radius * std::cos(angle);
+                        point.y = arc.centerY + arc.radius * std::sin(angle);
+                        point.corner = c;
+                        point.step = step;
+                        point.segments = segments[c];
+                        Color color = colorOf(point);
+                        color.a = ScaleAlpha(color.a, rings[r].alpha);
+                        vertices.push_back(GeometryVertex{point.x, point.y, color, 0.0f, 0.0f});
+                    }
+                }
+            }
+
+            const int stripLength = path.closed ? pointsPerRing : pointsPerRing - 1;
+            for (int r = 0; r + 1 < ringCount; ++r) {
+                const int outer = firstVertex + r * pointsPerRing;
+                const int inner = outer + pointsPerRing;
+                for (int i = 0; i < stripLength; ++i) {
+                    const int next = (i + 1) % pointsPerRing;
+                    indices.push_back(outer + i);
+                    indices.push_back(outer + next);
+                    indices.push_back(inner + next);
+                    indices.push_back(outer + i);
+                    indices.push_back(inner + next);
+                    indices.push_back(inner + i);
+                }
+            }
+
+            if (fillCore && path.closed) {
+                const int core = firstVertex + (ringCount - 1) * pointsPerRing;
+                for (int i = 1; i + 1 < pointsPerRing; ++i) {
+                    indices.push_back(core);
+                    indices.push_back(core + i);
+                    indices.push_back(core + i + 1);
+                }
+            }
+        }
+
+        /// The rings of a line from @p outerEdge to @p innerEdge (offsets of the outline, outer larger): a trapezoid of alpha whose slopes are one feather wide and
+        /// centred on the two edges. A line thinner than a feather is a tent of the same area. Returns the number of rings.
+        int MakeStrokeRings(float outerEdge, float innerEdge, float feather, Ring* out) {
+            const float width = outerEdge - innerEdge;
+            if (width >= feather) {
+                out[0] = {outerEdge + feather * 0.5f, 0.0f};
+                out[1] = {outerEdge - feather * 0.5f, 1.0f};
+                out[2] = {innerEdge + feather * 0.5f, 1.0f};
+                out[3] = {innerEdge - feather * 0.5f, 0.0f};
+                return 4;
+            }
+            const float center = (outerEdge + innerEdge) * 0.5f;
+            out[0] = {center + feather, 0.0f};
+            out[1] = {center, width / feather};
+            out[2] = {center - feather, 0.0f};
+            return 3;
+        }
+
+    }  // namespace
+
+    UICorners UICorners::Clamped(float width, float height) const {
+        if (!std::isfinite(width) || !std::isfinite(height) || width <= 0.0f || height <= 0.0f) {
+            return {};
+        }
+        const auto sane = [](float radius) { return std::isfinite(radius) && radius > 0.0f ? radius : 0.0f; };
+        UICorners result{sane(topLeft), sane(topRight), sane(bottomRight), sane(bottomLeft)};
+
+        float factor = 1.0f;
+        const auto limit = [&factor](float side, float sum) {
+            if (sum > side) {
+                factor = std::min(factor, side / sum);
+            }
+        };
+        limit(width, result.topLeft + result.topRight);
+        limit(width, result.bottomLeft + result.bottomRight);
+        limit(height, result.topLeft + result.bottomLeft);
+        limit(height, result.topRight + result.bottomRight);
+        if (factor < 1.0f) {
+            result.topLeft *= factor;
+            result.topRight *= factor;
+            result.bottomRight *= factor;
+            result.bottomLeft *= factor;
+        }
+        return result;
+    }
+
+    UICorners UICorners::Inset(float amount) const {
+        const auto shrink = [amount](float radius) { return std::max(0.0f, radius - amount); };
+        return {shrink(topLeft), shrink(topRight), shrink(bottomRight), shrink(bottomLeft)};
+    }
+
+    int UIBoxMesh::CornerSegments(float radiusPixels) {
+        if (!(radiusPixels > 0.0f) || !std::isfinite(radiusPixels)) {
+            return radiusPixels > 0.0f ? kMaxCornerSegments : 0;
+        }
+        // A chord of the arc that spans an angle `step` lies R * (1 - cos(step / 2)) inside it; the step is the one the tolerance allows if it is measured
+        // against the whole angle, which is a little stricter than needed, so n >= (pi / 2) / acos(1 - tolerance / R)
+        const float ratio = std::clamp(1.0f - kCornerSagittaPixels / radiusPixels, -1.0f, 1.0f);
+        const float step = std::acos(ratio);
+        const int segments = step > 0.0f ? static_cast<int>(std::ceil(kHalfPi / step)) : kMaxCornerSegments;
+        return std::clamp(segments, kMinCornerSegments, kMaxCornerSegments);
+    }
+
+    void UIBoxMesh::AppendFill(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient,
+                               float pixelsPerUnit) {
+        if (!IsValidBox(rect, pixelsPerUnit)) {
+            return;
+        }
+        const bool hasGradient = gradient.direction != UIGradientDirection::None;
+        if (color.a == 0 && (!hasGradient || gradient.end.a == 0)) {
+            return;
+        }
+
+        const float feather = kFeatherPixels / pixelsPerUnit;
+        const float coreInset = std::min(feather * 0.5f, std::min(rect.w, rect.h) * 0.5f);
+        const Ring rings[2] = {{feather * 0.5f, 0.0f}, {-coreInset, 1.0f}};
+
+        // The gradient runs over the core, so the outermost vertices of the top (or left) hold exactly the start colour and the last ones exactly the end
+        const bool vertical = gradient.direction == UIGradientDirection::Vertical;
+        const float axisStart = vertical ? rect.y + coreInset : rect.x + coreInset;
+        const float axisLength = (vertical ? rect.h : rect.w) - 2.0f * coreInset;
+
+        AppendRings(vertices, indices, rect, corners, rings, 2, Path{}, false, true, pixelsPerUnit, [&](const PointInfo& point) {
+            if (!hasGradient) {
+                return color;
+            }
+            const float t = axisLength > 0.0f ? std::clamp(((vertical ? point.y : point.x) - axisStart) / axisLength, 0.0f, 1.0f) : 0.0f;
+            return Color{LerpChannel(color.r, gradient.end.r, t), LerpChannel(color.g, gradient.end.g, t), LerpChannel(color.b, gradient.end.b, t), LerpChannel(color.a, gradient.end.a, t)};
+        });
+    }
+
+    void UIBoxMesh::AppendBorder(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, float width, const Color& color,
+                                 float pixelsPerUnit) {
+        if (!IsValidBox(rect, pixelsPerUnit) || !std::isfinite(width) || width <= 0.0f || color.a == 0) {
+            return;
+        }
+        const float feather = kFeatherPixels / pixelsPerUnit;
+        const float halfShortSide = std::min(rect.w, rect.h) * 0.5f;
+        if (width + feather * 0.5f >= halfShortSide) {
+            // Nothing is left inside: the border is the whole shape
+            AppendFill(vertices, indices, rect, corners, color, UIGradientSpec{}, pixelsPerUnit);
+            return;
+        }
+
+        Ring rings[kMaxRings];
+        const int ringCount = MakeStrokeRings(0.0f, -width, feather, rings);
+        AppendRings(vertices, indices, rect, corners, rings, ringCount, Path{}, false, false, pixelsPerUnit, [&](const PointInfo&) { return color; });
+    }
+
+    void UIBoxMesh::AppendShadow(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit) {
+        if (!IsValidBox(rect, pixelsPerUnit) || !std::isfinite(shadow.offsetX) || !std::isfinite(shadow.offsetY) || !std::isfinite(shadow.blur) || !std::isfinite(shadow.spread) ||
+            shadow.color.a == 0) {
+            return;
+        }
+
+        // The shape the blur is centred on: the box moved by the offset and grown by the spread. A rounded corner grows its radius by the spread, a square one stays square
+        const Rect base{rect.x + shadow.offsetX - shadow.spread, rect.y + shadow.offsetY - shadow.spread, rect.w + 2.0f * shadow.spread, rect.h + 2.0f * shadow.spread};
+        if (!IsValidBox(base, pixelsPerUnit)) {
+            return;
+        }
+        const UICorners source = corners.Clamped(rect.w, rect.h);
+        const auto grow = [&shadow](float radius) { return radius > 0.0f ? std::max(0.0f, radius + shadow.spread) : 0.0f; };
+        const UICorners baseCorners{grow(source.topLeft), grow(source.topRight), grow(source.bottomRight), grow(source.bottomLeft)};
+
+        const float feather = kFeatherPixels / pixelsPerUnit;
+        const float blur = std::max(shadow.blur, 0.0f);
+        const Color color = shadow.color;
+        const auto flat = [&color](const PointInfo&) { return color; };
+
+        if (blur < feather) {
+            const float inset = std::min(feather * 0.5f, std::min(base.w, base.h) * 0.5f);
+            const Ring rings[2] = {{feather * 0.5f, 0.0f}, {-inset, 1.0f}};
+            AppendRings(vertices, indices, base, baseCorners, rings, 2, Path{}, false, true, pixelsPerUnit, flat);
+            return;
+        }
+
+        // Rings from `blur` outside the edge (alpha 0) to `blur` inside it, the alpha following a smoothstep of the distance. An outline cannot move in
+        // further than the middle of the shorter side, so a small shape stops at the alpha it reaches there
+        const float halfShortSide = std::min(base.w, base.h) * 0.5f;
+        Ring rings[kMaxRings];
+        for (int i = 0; i <= kBlurRings; ++i) {
+            const float offset = std::max(blur * (1.0f - 2.0f * static_cast<float>(i) / static_cast<float>(kBlurRings)), -halfShortSide);
+            rings[i] = {offset, Smoothstep((blur - offset) / (2.0f * blur))};
+        }
+        AppendRings(vertices, indices, base, baseCorners, rings, kBlurRings + 1, Path{}, true, true, pixelsPerUnit, flat);
+    }
+
+    void UIBoxMesh::AppendHighlight(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, float pixelsPerUnit) {
+        if (!IsValidBox(rect, pixelsPerUnit) || color.a == 0) {
+            return;
+        }
+        const float feather = kFeatherPixels / pixelsPerUnit;
+        if (std::min(rect.w, rect.h) * 0.5f <= kHighlightWidth + feather) {
+            return;
+        }
+
+        // The line is moved in by half a feather so that its soft outer edge stays inside the shape
+        Ring rings[kMaxRings];
+        const int ringCount = MakeStrokeRings(-feather * 0.5f, -feather * 0.5f - kHighlightWidth, feather, rings);
+        Path path;
+        path.closed = false;
+        path.topHalves = true;
+
+        // The line fades out along the half arcs: full on the straight top, 0 at the far end of each arc
+        AppendRings(vertices, indices, rect, corners, rings, ringCount, path, false, false, pixelsPerUnit, [&](const PointInfo& point) {
+            Color faded = color;
+            const int half = point.segments - point.segments / 2;
+            if (half > 0) {
+                const float fraction =
+                    point.corner == 0 ? static_cast<float>(point.step - point.segments / 2) / static_cast<float>(half) : 1.0f - static_cast<float>(point.step) / static_cast<float>(half);
+                faded.a = ScaleAlpha(color.a, fraction);
+            }
+            return faded;
+        });
+    }
+
+}  // namespace BECore
