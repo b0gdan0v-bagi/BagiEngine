@@ -26,6 +26,8 @@ namespace BECore {
      *
      * The track (`trackColor`), the part before the thumb (`fillColor`) and the thumb (`thumbColor`) are derived when left transparent. A `disabled` slider is drawn at half alpha. The
      * thumb is drawn lighter under the pointer and darker while the press is held (wherever the pointer is).
+     * `partShape="Round"` makes the track and the filled part pills and the thumb a circle (`UIElement::DrawPart`); the filled part is a smaller pill while it is shorter than the track
+     * is high. The geometry (`GetParts`), the touch area and the hit test do not change.
      */
     class UISlider : public UIElement {
         BE_CLASS(UISlider)
@@ -39,9 +41,10 @@ namespace BECore {
         BE_REFLECT_FIELD float maxValue = 1.0f;
         BE_REFLECT_FIELD float step = 0.0f;  ///< 0 (or less) = continuous
         BE_REFLECT_FIELD bool disabled = false;
-        BE_REFLECT_FIELD UIColor trackColor;  ///< the whole track; transparent is a translucent white
-        BE_REFLECT_FIELD UIColor fillColor;   ///< the track before the thumb; transparent is a green
-        BE_REFLECT_FIELD UIColor thumbColor;  ///< the thumb; transparent is a near white
+        BE_REFLECT_FIELD UIColor trackColor;                           ///< the whole track; transparent is a translucent white
+        BE_REFLECT_FIELD UIColor fillColor;                            ///< the track before the thumb; transparent is a green
+        BE_REFLECT_FIELD UIColor thumbColor;                           ///< the thumb; transparent is a near white
+        BE_REFLECT_FIELD UIPartShape partShape = UIPartShape::Square;  ///< `Round`: a pill track and fill and a round thumb; `Square` (the default) the plain rectangles
 
         static constexpr float kTrackHeight = 6.0f;                 ///< the track is this high in canvas units (less for a slider lower than that), centered
         static constexpr Color kThumbFallback{240, 240, 240, 255};  ///< the thumb when `thumbColor` is left transparent

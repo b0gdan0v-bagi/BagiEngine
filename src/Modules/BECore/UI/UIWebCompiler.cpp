@@ -124,6 +124,14 @@ namespace BECore {
             eastl::string alignItems;
             std::optional<Color> background;
             eastl::string sprite;
+            std::optional<UIWebText::GradientSpec> gradient;
+            std::optional<UICorners> cornerRadius;
+            std::optional<float> borderWidth;
+            std::optional<Color> borderColor;
+            bool borderHidden = false;  ///< `border-style: none`
+            std::optional<UIWebText::BoxShadows> shadows;
+            std::optional<Color> highlight;
+            std::optional<UIPartShape> partShape;
             std::optional<UIEdges> slice;
             std::optional<bool> pointerEvents;
             std::optional<Color> textColor;
@@ -225,6 +233,43 @@ namespace BECore {
             }
             out = *grow;
             return true;
+        }
+
+        /// A radius of one corner (`border-top-left-radius`...): one px length, the other corners stay as they are
+        bool SetCorner(Resolved& r, eastl::string_view value, float UICorners::* corner) {
+            if (UIWebText::SplitWords(value).size() != 1) {
+                return false;
+            }
+            const auto radius = UIWebText::ParseCornerRadii(value);
+            if (!radius) {
+                return false;
+            }
+            UICorners corners = r.cornerRadius.value_or(UICorners{});
+            corners.*corner = radius->topLeft;
+            r.cornerRadius = corners;
+            return true;
+        }
+
+        /// A border width: one px length, not negative
+        std::optional<float> ParseBorderWidth(eastl::string_view value) {
+            const auto width = UIWebText::ParsePixels(value);
+            if (!width || !std::isfinite(*width) || *width < 0.0f) {
+                return std::nullopt;
+            }
+            return width;
+        }
+
+        /// One word of a `background` or `background-image`: a `url()` or a `linear-gradient()`, which go into @p parsed
+        bool ParseImageWord(eastl::string_view word, Resolved& parsed) {
+            if (const auto url = UIWebText::ParseUrl(word)) {
+                parsed.sprite = *url;
+                return true;
+            }
+            if (const auto gradient = UIWebText::ParseLinearGradient(word)) {
+                parsed.gradient = *gradient;
+                return true;
+            }
+            return false;
         }
 
         enum class ApplyResult { Applied, Ignored, BadValue, UnknownProperty };
@@ -416,28 +461,34 @@ namespace BECore {
              }},
             {"background-image",
              [](Resolved& r, eastl::string_view v) {
-                 if (UIWebText::ToLower(v) == "none") {
-                     r.sprite.clear();
-                     return true;
+                 // The image layers are replaced as a whole, as in CSS: a url, a linear-gradient or both (the sprite is drawn over the gradient), `none` for neither
+                 Resolved parsed;
+                 const auto words = UIWebText::SplitWords(v);
+                 if (words.empty()) {
+                     return false;
                  }
-                 const auto url = UIWebText::ParseUrl(v);
-                 if (url) {
-                     r.sprite = *url;
+                 for (const eastl::string_view word : words) {
+                     if (UIWebText::ToLower(word) != "none" && !ParseImageWord(word, parsed)) {
+                         return false;
+                     }
                  }
-                 return url.has_value();
+                 r.sprite = parsed.sprite;
+                 r.gradient = parsed.gradient;
+                 return true;
              }},
             {"background",
              [](Resolved& r, eastl::string_view v) {
-                 // A color and a url, in any order; the repeat and position words that mean nothing here are skipped
+                 // A color, a url and a linear-gradient, in any order; the repeat and position words that mean nothing here are skipped
                  Resolved parsed;
                  for (const eastl::string_view word : UIWebText::SplitWords(v)) {
                      const eastl::string lower = UIWebText::ToLower(word);
                      if (lower == "none" || lower == "no-repeat" || lower == "center") {
                          continue;
                      }
-                     if (const auto url = UIWebText::ParseUrl(word)) {
-                         parsed.sprite = *url;
-                     } else if (const auto color = UIWebText::ParseColor(word)) {
+                     if (ParseImageWord(word, parsed)) {
+                         continue;
+                     }
+                     if (const auto color = UIWebText::ParseColor(word)) {
                          parsed.background = *color;
                      } else {
                          return false;
@@ -446,7 +497,65 @@ namespace BECore {
                  // The shorthand resets what it does not name
                  r.background = parsed.background ? parsed.background : std::optional<Color>{Color{0, 0, 0, 0}};
                  r.sprite = parsed.sprite;
+                 r.gradient = parsed.gradient;
                  return true;
+             }},
+            {"border-radius",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto corners = UIWebText::ParseCornerRadii(v);
+                 if (corners) {
+                     r.cornerRadius = *corners;
+                 }
+                 return corners.has_value();
+             }},
+            {"border-top-left-radius", [](Resolved& r, eastl::string_view v) { return SetCorner(r, v, &UICorners::topLeft); }},
+            {"border-top-right-radius", [](Resolved& r, eastl::string_view v) { return SetCorner(r, v, &UICorners::topRight); }},
+            {"border-bottom-right-radius", [](Resolved& r, eastl::string_view v) { return SetCorner(r, v, &UICorners::bottomRight); }},
+            {"border-bottom-left-radius", [](Resolved& r, eastl::string_view v) { return SetCorner(r, v, &UICorners::bottomLeft); }},
+            {"border",
+             [](Resolved& r, eastl::string_view v) {
+                 // The shorthand sets all three parts: `none` is no border
+                 const auto border = UIWebText::ParseBorder(v);
+                 if (!border) {
+                     return false;
+                 }
+                 r.borderHidden = false;
+                 r.borderWidth = border->width;
+                 r.borderColor = border->none ? std::optional<Color>{} : std::optional<Color>{border->color};
+                 return true;
+             }},
+            {"border-width",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto width = ParseBorderWidth(v);
+                 if (width) {
+                     r.borderWidth = *width;
+                 }
+                 return width.has_value();
+             }},
+            {"border-color",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto color = UIWebText::ParseColor(v);
+                 if (color) {
+                     r.borderColor = *color;
+                 }
+                 return color.has_value();
+             }},
+            {"border-style",
+             [](Resolved& r, eastl::string_view v) {
+                 const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
+                 if (lower != "solid" && lower != "none") {
+                     return false;
+                 }
+                 r.borderHidden = lower == "none";
+                 return true;
+             }},
+            {"box-shadow",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto shadows = UIWebText::ParseBoxShadows(v);
+                 if (shadows) {
+                     r.shadows = *shadows;
+                 }
+                 return shadows.has_value();
              }},
             {"border-image-slice",
              [](Resolved& r, eastl::string_view v) {
@@ -572,6 +681,23 @@ namespace BECore {
                      return false;
                  }
                  r.minFontSize = *pixels;
+                 return true;
+             }},
+            {"-be-highlight",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto color = UIWebText::ParseColor(v);
+                 if (color) {
+                     r.highlight = *color;
+                 }
+                 return color.has_value();
+             }},
+            {"-be-shape",
+             [](Resolved& r, eastl::string_view v) {
+                 const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
+                 if (lower != "square" && lower != "round") {
+                     return false;
+                 }
+                 r.partShape = lower == "round" ? UIPartShape::Round : UIPartShape::Square;
                  return true;
              }},
             {"-be-track-color",
@@ -830,6 +956,14 @@ namespace BECore {
             void CheckDeclaration(const UICssDeclaration& declaration) {
                 Resolved scratch;
                 const ApplyResult result = ApplyDeclaration(scratch, declaration);
+                if (result == ApplyResult::Applied && declaration.property == "box-shadow") {
+                    const auto shadows = UIWebText::ParseBoxShadows(declaration.value);
+                    if (shadows && shadows->count > UIWebText::MaxShadowLayers &&
+                        _report.AddOnce(SourceOf(declaration), declaration.line,
+                                        Format("box-shadow holds at most {} layers (the shadow and the glow of a box): the rest is left out", UIWebText::MaxShadowLayers))) {
+                        ++_report.declarationsUnsupported;
+                    }
+                }
                 if (result == ApplyResult::Applied || result == ApplyResult::Ignored) {
                     return;
                 }
@@ -1199,10 +1333,14 @@ namespace BECore {
                 if (IsTextKind(node.kind) && r.fontSize) {
                     attrs.Set("fontSize", Number(*r.fontSize));
                 }
-                const bool hasFill = r.background && r.background->a != 0;
-                if (hasFill) {
+                // A gradient replaces the background color (CSS paints the image over the color); its start is the `color` of the element
+                const bool hasFill = r.gradient ? r.gradient->start.a != 0 : (r.background && r.background->a != 0);
+                if (r.gradient) {
+                    attrs.Set("color", UIText::FormatColor(r.gradient->start));
+                } else if (hasFill) {
                     attrs.Set("color", UIText::FormatColor(*r.background));
                 }
+                AddBox(attrs, r, node.kind, report);
                 // A panel takes clicks by itself; any other element does when it is a visible plate, and `pointer-events` decides when it is said.
                 // A button, a toggle and a slider are interactive already, which is hit-testable, and a progress bar takes no input at all, so they are left alone
                 const bool defaultBlocks = node.kind == WebKind::Panel;
@@ -1295,6 +1433,45 @@ namespace BECore {
             static void AddNumber(Attrs& attrs, const UIHtmlNode& html, eastl::string_view attribute, eastl::string_view key, float minimum = -FLT_MAX) {
                 if (const auto number = ReadNumber(html, attribute, minimum)) {
                     attrs.Set(key, Number(*number));
+                }
+            }
+
+            /// The box attributes: corners, border, gradient, shadow, glow, highlight and the shape of the parts; each only when set
+            static void AddBox(Attrs& attrs, const Resolved& r, WebKind kind, UIWebReport* report) {
+                if (r.cornerRadius && !r.cornerRadius->IsZero()) {
+                    attrs.Set("cornerRadius", UIText::FormatCorners(*r.cornerRadius));
+                }
+                const bool borderWanted = !r.borderHidden && r.borderWidth && *r.borderWidth > 0.0f;
+                if (borderWanted && r.borderColor) {
+                    attrs.Set("borderWidth", Number(*r.borderWidth));
+                    attrs.Set("borderColor", UIText::FormatColor(*r.borderColor));
+                } else if (borderWanted) {
+                    Note(report, "a border needs a color: `border: 1px solid <color>` or `border-color`");
+                }
+                if (r.gradient) {
+                    attrs.Set("gradientDirection", r.gradient->direction == UIGradientDirection::Horizontal ? "Horizontal" : "Vertical");
+                    attrs.Set("gradientColor", UIText::FormatColor(r.gradient->end));
+                }
+                if (r.shadows && r.shadows->count > 0) {
+                    // CSS paints the first layer on top, the engine paints the glow over the shadow
+                    if (r.shadows->count == 1) {
+                        attrs.Set("shadow", UIText::FormatShadow(r.shadows->layers[0]));
+                    } else {
+                        attrs.Set("glow", UIText::FormatShadow(r.shadows->layers[0]));
+                        attrs.Set("shadow", UIText::FormatShadow(r.shadows->layers[1]));
+                    }
+                }
+                if (r.highlight) {
+                    attrs.Set("highlight", UIText::FormatColor(*r.highlight));
+                }
+                if (r.partShape) {
+                    if (kind == WebKind::Toggle || kind == WebKind::Slider || kind == WebKind::Progress) {
+                        if (*r.partShape == UIPartShape::Round) {
+                            attrs.Set("partShape", "Round");
+                        }
+                    } else {
+                        Note(report, "-be-shape applies to a toggle, slider or progress bar only");
+                    }
                 }
             }
 
@@ -1560,6 +1737,8 @@ namespace BECore {
                             const WebKind kind = _nodes[i].kind;
                             if (kind == WebKind::Button && key == "color") {
                                 base.Set(colorKey, value);
+                            } else if (kind == WebKind::Button && key == "gradientColor") {
+                                _report.AddOnce(CssSource, 0, "the far end of a state gradient is derived from its start color, as the states of a <button> are: it is left out");
                             } else if (kind == WebKind::Toggle || kind == WebKind::Slider || kind == WebKind::Progress) {
                                 _report.AddOnce(CssSource, 0,
                                                 Format("a state rule does not apply to a toggle, slider or progress bar: its states are derived from its colors ('{}' of a <{}> is left out)",

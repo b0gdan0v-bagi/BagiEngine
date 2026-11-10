@@ -128,16 +128,31 @@ namespace BECore {
     }
 
     Color UIDropdown::GetCurrentFill() const {
+        return GetCurrentBox().fill;
+    }
+
+    UIButton::Look UIDropdown::GetCurrentBox() const {
+        UIButton::Look look{box, color, box.gradientColor};
         if (disabled) {
-            return WithAlpha(color, kDisabledAlpha);
+            look.fill = WithAlpha(look.fill, kDisabledAlpha);
+            look.gradientEnd = WithAlpha(look.gradientEnd, kDisabledAlpha);
+            if (box.HasEffect()) {
+                look.box.borderColor = WithAlpha(look.box.borderColor, kDisabledAlpha);
+                look.box.highlight = WithAlpha(look.box.highlight, kDisabledAlpha);
+                look.box.shadow = {};
+                look.box.glow = {};
+            }
+        } else if (pressed && hovered) {
+            look.fill = ShiftColor(look.fill, -kPressDarken);
+            look.gradientEnd = ShiftColor(look.gradientEnd, -kPressDarken);
+        } else if (hovered) {
+            look.fill = ShiftColor(look.fill, kHoverBrighten);
+            look.gradientEnd = ShiftColor(look.gradientEnd, kHoverBrighten);
         }
-        if (pressed && hovered) {
-            return ShiftColor(color, -kPressDarken);
+        if (look.box.gradientDirection != UIGradientDirection::None) {
+            look.box.gradientColor = look.gradientEnd;  // the look says the far end twice, as UIButton's does
         }
-        if (hovered) {
-            return ShiftColor(color, kHoverBrighten);
-        }
-        return color;
+        return look;
     }
 
     Color UIDropdown::GetCurrentArrow() const {
@@ -150,10 +165,8 @@ namespace BECore {
         if (rect.IsEmpty()) {
             return;
         }
-        const Color fill = GetCurrentFill();
-        if (fill.a > 0) {
-            renderer.DrawFilledRect(rect.x, rect.y, rect.w, rect.h, fill);
-        }
+        const UIButton::Look look = GetCurrentBox();
+        DrawBox(renderer, look.box, look.fill, look.gradientEnd);
 
         const HeaderParts parts = GetHeaderParts(rect);
         DrawText(renderer, parts.text, disabled ? WithAlpha(textColor, kDisabledAlpha) : Color(textColor));

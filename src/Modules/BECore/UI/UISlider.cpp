@@ -122,12 +122,12 @@ namespace BECore {
             return;
         }
         const Parts parts = GetParts(rect, GetFraction());
-        renderer.DrawFilledRect(parts.track.x, parts.track.y, parts.track.w, parts.track.h, GetCurrentTrack());
+        DrawPart(renderer, parts.track, GetCurrentTrack(), partShape);
         if (parts.filled.w > 0.0f) {
-            renderer.DrawFilledRect(parts.filled.x, parts.filled.y, parts.filled.w, parts.filled.h, GetCurrentFill());
+            DrawPart(renderer, parts.filled, GetCurrentFill(), partShape);
         }
         if (!parts.thumb.IsEmpty()) {
-            renderer.DrawFilledRect(parts.thumb.x, parts.thumb.y, parts.thumb.w, parts.thumb.h, GetCurrentThumb());
+            DrawPart(renderer, parts.thumb, GetCurrentThumb(), partShape);
         }
     }
 

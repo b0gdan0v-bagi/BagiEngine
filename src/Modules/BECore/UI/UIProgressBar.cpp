@@ -27,11 +27,11 @@ namespace BECore {
         if (rect.IsEmpty()) {
             return;
         }
-        renderer.DrawFilledRect(rect.x, rect.y, rect.w, rect.h, GetCurrentTrack());
+        DrawPart(renderer, rect, GetCurrentTrack(), partShape);
 
         const float filled = rect.w * GetFraction();
         if (filled > 0.0f) {
-            renderer.DrawFilledRect(rect.x, rect.y, filled, rect.h, GetCurrentFill());
+            DrawPart(renderer, {rect.x, rect.y, filled, rect.h}, GetCurrentFill(), partShape);
         }
     }
 

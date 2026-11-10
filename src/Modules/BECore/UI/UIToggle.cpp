@@ -74,19 +74,18 @@ namespace BECore {
         if (rect.IsEmpty()) {
             return;
         }
-        if (color.a > 0) {
-            renderer.DrawFilledRect(rect.x, rect.y, rect.w, rect.h, disabled ? WithAlpha(color, kDisabledAlpha) : Color(color));
-        }
+        // The plate is the box of every element (a rounded, bordered or graded one is drawn); the default is one DrawFilledRect of `color`
+        DrawBox(renderer, box, disabled ? WithAlpha(color, kDisabledAlpha) : Color(color), disabled ? WithAlpha(box.gradientColor, kDisabledAlpha) : Color(box.gradientColor));
 
         const Parts parts = GetParts(rect);
         DrawText(renderer, parts.text, disabled ? WithAlpha(textColor, kDisabledAlpha) : Color(textColor));
 
         if (!parts.track.IsEmpty()) {
-            renderer.DrawFilledRect(parts.track.x, parts.track.y, parts.track.w, parts.track.h, GetCurrentTrack());
+            DrawPart(renderer, parts.track, GetCurrentTrack(), partShape);
         }
         const Rect& thumb = IsOn() ? parts.thumbOn : parts.thumbOff;
         if (!thumb.IsEmpty()) {
-            renderer.DrawFilledRect(thumb.x, thumb.y, thumb.w, thumb.h, GetCurrentThumb());
+            DrawPart(renderer, thumb, GetCurrentThumb(), partShape);
         }
     }
 

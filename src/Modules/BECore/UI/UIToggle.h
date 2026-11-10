@@ -19,6 +19,8 @@ namespace BECore {
      * The switch is the only look: a track and a square thumb that sits at the right end when on and at the left end when off, so the state does not rest on color alone. Its size follows
      * the height of the element (named constants below); the caption is laid out in the rest of the width, and `CheckContent()` measures it there, so a caption that would run under the
      * switch is a `TextDoesNotFit` for the validator. `trackColor` (off), `fillColor` (on) and `thumbColor` are derived when left transparent: a translucent `textColor`, a green, the `textColor`.
+     * `partShape="Round"` makes the track a pill and the thumb a circle (`UIElement::DrawPart`); the colors and the sizes stay. The element's own plate (`color`) is the box of every element
+     * (`box`: rounded corners, border, gradient, shadow), drawn behind the caption and the switch; with the default style it is one rect of `color`.
      */
     class UIToggle : public UILabel {
         BE_CLASS(UIToggle)
@@ -31,9 +33,10 @@ namespace BECore {
         BE_REFLECT_FIELD PoolString onValue;   ///< the value of `bind` that means on; `"true"` unless a file says otherwise
         BE_REFLECT_FIELD PoolString offValue;  ///< the value a click on an on toggle asks for; `"false"` unless a file says otherwise
         BE_REFLECT_FIELD bool disabled = false;
-        BE_REFLECT_FIELD UIColor trackColor;  ///< the track while off; transparent derives it from `textColor`
-        BE_REFLECT_FIELD UIColor fillColor;   ///< the track while on; transparent is a green
-        BE_REFLECT_FIELD UIColor thumbColor;  ///< the thumb; transparent is `textColor`
+        BE_REFLECT_FIELD UIColor trackColor;                           ///< the track while off; transparent derives it from `textColor`
+        BE_REFLECT_FIELD UIColor fillColor;                            ///< the track while on; transparent is a green
+        BE_REFLECT_FIELD UIColor thumbColor;                           ///< the thumb; transparent is `textColor`
+        BE_REFLECT_FIELD UIPartShape partShape = UIPartShape::Square;  ///< `Round`: a pill track and a round thumb; `Square` (the default) the plain rectangles
 
         static constexpr float kSwitchHeightRatio = 0.5f;  ///< the track is this share of the element's height, centered
         static constexpr float kSwitchAspect = 2.0f;       ///< the track is this many times wider than high

@@ -3,6 +3,10 @@ paths:
   - "src/Modules/BECore/UI/UIBox*"
   - "src/Modules/BECore/UI/UIElement.*"
   - "src/Modules/BECore/UI/UIButton.*"
+  - "src/Modules/BECore/UI/UIToggle.*"
+  - "src/Modules/BECore/UI/UISlider.*"
+  - "src/Modules/BECore/UI/UIProgressBar.*"
+  - "src/Modules/BECore/UI/UIDropdown.*"
   - "tests/BECore/UIBox*"
 ---
 
@@ -35,9 +39,15 @@ Only non-default values are saved. A malformed value is reported and the default
 
 Hover lightens the fill (both gradient ends) and the border; pressed darkens, halves the shadow offset, cuts the blur by a third and drops the highlight; selected raises the border to `textColor` and adds a faint glow of it when the style has none, and the 4-unit bar stays inside the rounded bottom corners; disabled drops shadow and glow and fades fill, border and highlight. An explicit state colour replaces the start colour and the gradient end keeps its offset. A button with the default style is drawn exactly as before.
 
+## Parts of the widgets
+
+- **`partShape`** (`Square` default, `Round`; on `UIToggle`, `UISlider`, `UIProgressBar` only, since nothing else has parts) goes through `UIElement::DrawPart`. `Square` is the plain `DrawFilledRect` call the part always made. `Round` is a box whose only setting is a corner radius of half the shorter side (`DrawBoxIn`, the body of `DrawBox` for any rect): a pill for a track, a circle for a square thumb. Toggle: pill track, round thumb; slider: pill track and filled part, round thumb; progress bar: pill track and fill. The colours, shifts and sizes are the widget's own; the touch area and the layout do not change.
+- A fill shorter than the track is high (a bar at 2 %) is a smaller pill, not a track-high slice: accepted.
+- **The plate of a toggle** (its `color` and `box`) and **the header of a dropdown** go through `DrawBox` like any element's. The dropdown has `GetCurrentBox` (the `UIButton::Look`): the fill and the gradient end shift on hover and press, disabled drops shadow and glow and fades border and highlight, hover and press leave border and highlight as authored (no state colours of its own). The options of a dropdown are `UIButton`s with their own box; its arrow stays strips.
+
 ## What is not here
 
-The HTML + CSS front-end (`border-radius`, `border`, `linear-gradient`, `box-shadow`, `:hover` shifts in `UIWebCompiler`) and the shapes of the toggle, slider, progress bar and dropdown parts are slice 2 of the entry `ui-shapes`. Image skins and a sprite clipped to the corners are not done. The look on Vulkan is the owner's.
+The HTML + CSS front-end writes all of the above as attributes (`.claude/rules/ui-web.md`: `border-radius`, `border`, `linear-gradient`, `box-shadow`, `-be-highlight`, `-be-shape`). Not done: image skins, a sprite clipped to the corners, `%` radii, `inset` shadows, per-side borders, more than two shadow layers, per-state shape rules (a button has state colours only, so `:hover { border-color }` or `:hover { box-shadow }` is reported). The look on Vulkan is the owner's.
 
 ## Tests
 

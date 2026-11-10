@@ -50,6 +50,9 @@ namespace BECore {
     /// None is one flat colour; Vertical goes from the top edge to the bottom edge, Horizontal from the left edge to the right one
     CORE_ENUM(UIGradientDirection, uint8_t, None, Vertical, Horizontal)
 
+    /// The shape of the parts of a toggle, a slider and a progress bar: Square is the plain rectangle of every part, Round a pill for a track and a circle for a square thumb
+    CORE_ENUM(UIPartShape, uint8_t, Square, Round)
+
     /// A two-colour gradient: the colour of the box is its start, `end` is the colour at the far edge
     struct UIGradientSpec {
         UIGradientDirection direction = UIGradientDirection::None;

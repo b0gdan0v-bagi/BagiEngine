@@ -387,6 +387,7 @@ namespace BECore::Tests {
                 toggle->trackColor = Color{31, 32, 33, 34};
                 toggle->fillColor = Color{35, 36, 37, 38};
                 toggle->thumbColor = Color{39, 40, 41, 42};
+                toggle->partShape = UIPartShape::Round;
             } else if (auto* dropdown = element.Cast<UIDropdown>()) {
                 dropdown->bind = PoolString::Intern("busyPick");
                 dropdown->action = PoolString::Intern("BusyPickAction");
@@ -400,6 +401,7 @@ namespace BECore::Tests {
                 bar->maxValue = 12.5f;
                 bar->trackColor = Color{43, 44, 45, 46};
                 bar->fillColor = Color{47, 48, 49, 50};
+                bar->partShape = UIPartShape::Round;
             } else if (auto* slider = element.Cast<UISlider>()) {
                 slider->bind = PoolString::Intern("busyLevel");
                 slider->action = PoolString::Intern("BusySliderAction");
@@ -410,6 +412,7 @@ namespace BECore::Tests {
                 slider->trackColor = Color{51, 52, 53, 54};
                 slider->fillColor = Color{55, 56, 57, 58};
                 slider->thumbColor = Color{59, 60, 61, 62};
+                slider->partShape = UIPartShape::Round;
             }
             if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>() || element.Cast<UIDropdown>()) {
                 auto* text = label                      ? label

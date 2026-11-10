@@ -10,6 +10,7 @@
 #include <BECore/UI/UIProgressBar.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Common/UIPartShapeChecks.h>
 #include <CoreSDL/SDLEvents.h>
 #include <gtest/gtest.h>
 
@@ -453,6 +454,77 @@ namespace BECore::Tests {
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
         }
+    }
+
+    // ---- the shape of the parts ----------------------------------------------------------------------------------------------
+
+    TEST_F(UIProgressBarTest, TheTrackAndTheFillAreRectanglesByDefault) {
+        CoreManager::GetUIVars().Set(PoolString::Intern("percent"), "50");
+        Draw();
+        const Rect area = Bar("Percent").rect;
+        EXPECT_EQ(Bar("Percent").partShape, UIPartShape::Square);
+        EXPECT_EQ(RectsIn(area).size(), 2u);
+        EXPECT_TRUE(CallsIn(*_renderer, DrawKind::Geometry, area).empty());
+    }
+
+    TEST_F(UIProgressBarTest, ARoundBarDrawsAPillTrackAndAPillFill) {
+        CoreManager::GetUIVars().Set(PoolString::Intern("percent"), "50");
+        auto& bar = Bar("Percent");
+        bar.partShape = UIPartShape::Round;
+        Draw();
+        const Rect area = bar.rect;
+        EXPECT_TRUE(RectsIn(area).empty()) << "no rect of the bar is left";
+        const auto drawn = CallsIn(*_renderer, DrawKind::Geometry, area);
+        ASSERT_EQ(drawn.size(), 2u);
+        ExpectRoundPart(drawn[0], area);
+        ExpectRoundPart(drawn[1], {area.x, area.y, area.w * 0.5f, area.h});
+    }
+
+    TEST_F(UIProgressBarTest, AFillShorterThanTheBarIsHighIsASmallerPill) {
+        CoreManager::GetUIVars().Set(PoolString::Intern("percent"), "5");
+        auto& bar = Bar("Percent");
+        bar.partShape = UIPartShape::Round;
+        Draw();
+        const auto drawn = CallsIn(*_renderer, DrawKind::Geometry, bar.rect);
+        ASSERT_EQ(drawn.size(), 2u);
+        ExpectRoundPart(drawn[1], {bar.rect.x, bar.rect.y, bar.rect.w * 0.05f, bar.rect.h});
+    }
+
+    TEST_F(UIProgressBarTest, AnEmptyRoundBarDrawsOnlyTheTrack) {
+        auto& bar = Bar("Percent");
+        bar.partShape = UIPartShape::Round;
+        Draw();
+        EXPECT_EQ(CallsIn(*_renderer, DrawKind::Geometry, bar.rect).size(), 1u);
+    }
+
+    TEST_F(UIProgressBarTest, ThePartShapeSurvivesAnXmlRoundTripAndTheDefaultIsSkippedWhenAsked) {
+        auto element = [](const UIProgressBar& bar) {
+            XmlSerializer serializer;
+            serializer.SetSkipDefaults(true);
+            EXPECT_TRUE(serializer.BeginObject("element"));
+            bar.Serialize(serializer);
+            serializer.EndObject();
+            return serializer.SaveToString();
+        };
+        EXPECT_EQ(element(Bar("Unit")).find("partShape"), eastl::string::npos);
+        Bar("Unit").partShape = UIPartShape::Round;
+        EXPECT_NE(element(Bar("Unit")).find("partShape=\"Round\""), eastl::string::npos);
+
+        XmlSerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("component"));
+        _canvas->Serialize(serializer);
+        serializer.EndObject();
+        const eastl::string xml = serializer.SaveToString();
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        auto loaded = New<UICanvasComponent>();
+        ASSERT_TRUE(deserializer.BeginObject("component"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+        loaded->Initialize();
+        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Unit"))->Cast<UIProgressBar>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Percent"))->Cast<UIProgressBar>()->partShape, UIPartShape::Square);
     }
 
 }  // namespace BECore::Tests
