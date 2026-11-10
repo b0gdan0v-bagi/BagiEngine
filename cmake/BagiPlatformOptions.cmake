@@ -12,7 +12,7 @@
 #
 # The browser (Emscripten) build has no Vulkan, no sockets server, no shared libraries and no threads, so on EMSCRIPTEN all four
 # are forced to those values. ENGINE_TARGET_WEB mirrors EMSCRIPTEN for the other cmake files. A desktop build can switch the
-# options one by one to check the web configuration without an Emscripten SDK (root CLAUDE.md, "Build Commands").
+# options one by one to check the web configuration without an Emscripten SDK (cmake/CLAUDE.md, "Web-like build on the desktop").
 include_guard(GLOBAL)
 
 if(EMSCRIPTEN)

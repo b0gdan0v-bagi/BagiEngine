@@ -1,3 +1,9 @@
+---
+paths:
+  - "tools/todo/**/*"
+  - ".claude/agents/**/*"
+---
+
 # The todo areas of this repository
 
 Read by the skills `todo-loop`, `todo-merge`, `todo-add`, `todo-db` and by the agents `todo-*` (`.claude/skills/todo-loop/SKILL.md`, "Areas and the repository rules" explains the terms). A game that carries this repository as the submodule `engine/` has a file of the same name with its own table; the skills are the same text in both.

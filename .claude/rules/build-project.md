@@ -1,6 +1,15 @@
+---
+paths:
+  - "**/CMakeLists.txt"
+  - "CMakePresets.json"
+  - "CMakeUserPresets.json"
+  - "**/*.cmake"
+  - "CI/**/*"
+---
+
 # Build, format and include facts of this repository
 
-Read by the skills `build`, `clang-format` and `strip-pch-includes`. The three skills are the same text in the engine repository and in a game that carries the engine as the submodule `engine/` (symlinks into `engine/.claude/skills/`); what differs between the repositories is here. A game has a file of the same name with the same headings and fields: this file is its template. The todo areas are in `todo-project.md`, not here.
+Read by the skills `build`, `clang-format` and `strip-pch-includes` (they read it by path: it is not loaded into every session). The three skills are the same text in the engine repository and in a game that carries the engine as the submodule `engine/` (symlinks into `engine/.claude/skills/`); what differs between the repositories is here. A game has a file of the same name with the same headings and fields: this file is its template. The todo areas are in `todo-project.md`, not here.
 
 ## Terms
 
@@ -44,7 +53,7 @@ Engine:
 
 - The engine setup is `cmake/BagiEngine.cmake`. The root `CMakeLists.txt` and the games' own repositories include it. A change there needs a configure, like any `*.cmake`.
 - `compile_commands.json` lives in `build/<p>/`. Pass it to `tidy-fix` explicitly when several presets are configured: `--build-dir build/<p>`.
-- The option `BE_WITH_EDITOR` (`AUTO` by default: the editor panels are built in Debug and left out of a single-config Release; `ON` / `OFF`; presets `macos-release-editor`, `windows-msvc-release-editor`; root `CLAUDE.md`, "Build Commands") is a cache variable, so changing it is a configure (`cmake --preset <p> -DBE_WITH_EDITOR=ON`) and then a rebuild of everything that carries the definition (every engine and game target): sources are chosen at configure time and the definition `BE_WITH_EDITOR` is on every target. A Debug build ignores `OFF` with a configure WARNING. A configure prints `Editor: ENABLED` or `DISABLED`; `grep -c ViewportWidget build/<p>/compile_commands.json` is 0 in a build without the editor. Run `cmake --preset <p>` again without the flag afterwards, or the cache keeps the value.
+- The option `BE_WITH_EDITOR` (`AUTO` by default: the editor panels are built in Debug and left out of a single-config Release; `ON` / `OFF`; presets `macos-release-editor`, `windows-msvc-release-editor`; `cmake/CLAUDE.md`, "The editor option") is a cache variable, so changing it is a configure (`cmake --preset <p> -DBE_WITH_EDITOR=ON`) and then a rebuild of everything that carries the definition (every engine and game target): sources are chosen at configure time and the definition `BE_WITH_EDITOR` is on every target. A Debug build ignores `OFF` with a configure WARNING. A configure prints `Editor: ENABLED` or `DISABLED`; `grep -c ViewportWidget build/<p>/compile_commands.json` is 0 in a build without the editor. Run `cmake --preset <p>` again without the flag afterwards, or the cache keeps the value.
 - **Presets share `build/ClangmacOS/lib` (and the executables).** The output folder does not depend on the preset, so Debug, Release and release-editor overwrite each other's libraries, and `ninja` does not notice that a library was built with the other `BE_WITH_EDITOR`: the editor sources are in one and not in the other. When switching between them, delete every `build/ClangmacOS/lib/*.a` (on Windows every `build/ClangWindows/lib/*.lib`, or `build/MSVCWindows/lib` for the MSVC presets) before building; a stale `libRuntimeModule.a` / `libBECoreModule.a` alone is not enough. Symptoms of a mix: link errors for editor classes, or crashes and dozens of failures in `BagiEngineTests`.
 - The game runs the runtime `ITest`s at startup (`CoreManager::OnApplicationPreInit`) and opens a window, so it is never started to check a build. The gtest executables open no window.
 
