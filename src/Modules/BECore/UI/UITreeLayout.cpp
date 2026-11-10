@@ -13,7 +13,32 @@ namespace BECore {
             }
         }
 
-        void LayoutChildren(UIElement& parent, const Rect& fullBounds, bool parentIsRoot) {
+        void LayoutChildren(UIElement& parent, const Rect& contentBounds, const Rect& fullBounds, bool parentIsRoot);
+
+        // The children of a popup element are out of flow: closed they have no rect, open the element places them
+        void LayoutPopupChildren(UIElement& parent, const Rect& contentBounds, const Rect& fullBounds) {
+            if (!parent.IsPopupOpen()) {
+                for (const auto& child : parent.children) {
+                    ClearRects(*child);
+                }
+                return;
+            }
+            parent.LayoutPopup(contentBounds);
+            for (const auto& child : parent.children) {
+                if (child->active.visible) {
+                    LayoutChildren(*child, contentBounds, fullBounds, false);
+                } else {
+                    ClearRects(*child);
+                }
+            }
+        }
+
+        void LayoutChildren(UIElement& parent, const Rect& contentBounds, const Rect& fullBounds, bool parentIsRoot) {
+            if (parent.HasPopupChildren()) {
+                LayoutPopupChildren(parent, contentBounds, fullBounds);
+                return;
+            }
+
             eastl::vector<UIElement*> visible;
             eastl::vector<UIRectSpec> specs;
             for (const auto& child : parent.children) {
@@ -39,7 +64,7 @@ namespace BECore {
             }
 
             for (UIElement* child : visible) {
-                LayoutChildren(*child, fullBounds, false);
+                LayoutChildren(*child, contentBounds, fullBounds, false);
             }
         }
 
@@ -47,7 +72,7 @@ namespace BECore {
 
     void UITreeLayout::Run(UIElement& root, const Rect& contentBounds, const Rect& fullBounds) {
         root.rect = contentBounds;
-        LayoutChildren(root, fullBounds, true);
+        LayoutChildren(root, contentBounds, fullBounds, true);
     }
 
 }  // namespace BECore

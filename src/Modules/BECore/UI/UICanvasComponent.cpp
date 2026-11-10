@@ -41,6 +41,18 @@ namespace BECore {
             return found;
         }
 
+        bool Contains(const UIElement& root, const UIElement& searched) {
+            if (&root == &searched) {
+                return true;
+            }
+            for (const auto& child : root.children) {
+                if (Contains(*child, searched)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
     }  // namespace
 
     UICanvasComponent::~UICanvasComponent() {
@@ -136,9 +148,82 @@ namespace BECore {
             return;
         }
         element.DrawSelf(renderer);
+        if (element.HasPopupChildren()) {
+            return;  // drawn by DrawPopups() after the whole tree
+        }
         for (const auto& child : element.children) {
             DrawElement(renderer, *child);
         }
+    }
+
+    void UICanvasComponent::DrawPopups(IRenderer& renderer) const {
+        for (UIElement* popup : _layout.OpenPopups()) {
+            for (const auto& child : popup->children) {
+                DrawElement(renderer, *child);
+            }
+        }
+    }
+
+    bool UICanvasComponent::SyncPopups() {
+        const eastl::vector<UIElement*> open = _layout.OpenPopups();
+        UIElement* keep = nullptr;
+        for (UIElement* popup : open) {
+            if (popup != _popup.Get()) {
+                keep = popup;  // opened since the last look; the last one in tree order wins
+            }
+        }
+        if (!keep && !open.empty()) {
+            keep = _popup.Get();
+        }
+        bool changed = keep != _popup.Get();
+        for (UIElement* popup : open) {
+            if (popup != keep) {
+                popup->ClosePopup();
+                changed = true;
+            }
+        }
+        _popup = keep ? IntrusivePtr<UIElement>(keep) : IntrusivePtr<UIElement>{};
+        if (changed) {
+            Invalidate();
+        }
+        return changed;
+    }
+
+    void UICanvasComponent::CloseAllPopups() {
+        bool changed = static_cast<bool>(_popup);
+        for (UIElement* popup : _layout.OpenPopups()) {
+            popup->ClosePopup();
+            changed = true;
+        }
+        _popup.Reset();
+        if (changed) {
+            Invalidate();
+        }
+    }
+
+    UIElement* UICanvasComponent::FindPopupOf(const UIElement& element, UIElement*& child) const {
+        const eastl::vector<UIElement*> open = _layout.OpenPopups();
+        for (auto popup = open.rbegin(); popup != open.rend(); ++popup) {
+            for (const auto& candidate : (*popup)->children) {
+                if (Contains(*candidate, element)) {
+                    child = candidate.Get();
+                    return *popup;
+                }
+            }
+        }
+        return nullptr;
+    }
+
+    bool UICanvasComponent::IsInOpenPopup(const UIElement* element) const {
+        if (!element) {
+            return false;
+        }
+        for (UIElement* popup : _layout.OpenPopups()) {
+            if (Contains(*popup, *element)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     void UICanvasComponent::OnDraw() {
@@ -152,6 +237,7 @@ namespace BECore {
         if (!renderer || !_visible) {
             return;
         }
+        SyncPopups();  // a popup opened or closed by code since the last draw gets its rects now
         UpdateLayout(renderer->GetOutputWidth(), renderer->GetOutputHeight());
         if (!_layout.HasLayout()) {
             return;
@@ -161,6 +247,7 @@ namespace BECore {
         const ViewTransform sceneTransform = renderer->GetViewTransform();
         renderer->SetViewTransform(_layout.GetResolved().transform);
         DrawElement(*renderer, *_layout.root);
+        DrawPopups(*renderer);
         renderer->SetViewTransform(sceneTransform);
     }
 
@@ -190,6 +277,7 @@ namespace BECore {
     }
 
     void UICanvasComponent::ClearPointerState() {
+        CloseAllPopups();  // a canvas that cannot take input keeps no open list
         if (_hovered) {
             _hovered->hovered = false;
             _hovered.Reset();
@@ -217,6 +305,12 @@ namespace BECore {
             return false;
         }
         UIElement* hit = HitTestOutput(event.x, event.y);
+        if (event.button == SDL_BUTTON_LEFT && !IsInOpenPopup(hit) && !_layout.OpenPopups().empty()) {
+            // A press outside the open list only closes it: it is no click on what is below, and its release is ours too
+            CloseAllPopups();
+            _consumedButtons |= ButtonBit(event.button);
+            return true;
+        }
         const bool consumed = _modal || hit != nullptr;
         if (consumed) {
             _consumedButtons |= ButtonBit(event.button);
@@ -255,7 +349,14 @@ namespace BECore {
         const IntrusivePtr<UIElement> clicked = TakeClick(event);
         const bool consumed = ConsumeButtonUp(event);
         if (clicked) {
-            clicked->OnClick();
+            UIElement* choice = nullptr;
+            if (UIElement* popup = FindPopupOf(*clicked, choice)) {
+                const IntrusivePtr<UIElement> keep(popup);
+                popup->OnPopupChoice(*choice);
+            } else {
+                clicked->OnClick();
+            }
+            SyncPopups();  // the click may have opened or closed a list
         }
         return consumed;
     }
