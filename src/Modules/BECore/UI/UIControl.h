@@ -51,9 +51,9 @@ namespace BECore {
      * variable. A click on a dropdown's header toggles the list and answers with no "action" and no "value" (it emits nothing); one on an option of an open list answers the dropdown's
      * "action" and the option's "value" (what was emitted: both "" for a disabled option or dropdown, which take the click and leave the list open), and the list closes at the next
      * frame, so a client does `ui_click` the header, `step`, `ui_tree`, `ui_click` the option, `step`. A press elsewhere while the list is open closes it and is consumed (no click
-     * for what lies below). The same holds for a toggle (its "action" and the value it asks for: `offValue` while it is on, `onValue` while it is off, read before the click)
-     * and a slider (its "action" and the text of the value the press emitted, "" when nothing was emitted: a disabled slider or one without an action). A progress
-     * bar is not interactive, so it is `not_clickable`.
+     * for what lies below), so the answer has "consumed" true and an empty "action" and "value" even for a button, a toggle or a slider. The same holds for a toggle (its "action" and the value it
+     * asks for: `offValue` while it is on, `onValue` while it is off, read before the click) and a slider (its "action" and the text of the value the press emitted, "" when nothing was emitted: a
+     * disabled slider or one without an action). A progress bar is not interactive, so it is `not_clickable`.
      *
      * "at" is a number from 0 to 1, the horizontal position of the press inside the element's rect (default 0.5, the middle; 0 and 1 are the left and the right
      * edge, a hair inside it so the point still hits the element); the vertical position is always the middle. It is how a client sets a slider with one click:

@@ -864,6 +864,8 @@ namespace BECore::Tests {
 
         ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
         EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "") << "the answer must not report what the press did not emit";
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "");
         EXPECT_EQ(recorder.Count("UIControlApiBelow"), 0) << "the press only closed the list";
         EXPECT_EQ(recorder.Total(), 0u);
         Show("Pick");

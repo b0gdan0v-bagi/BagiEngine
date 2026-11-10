@@ -220,6 +220,34 @@ namespace BECore {
             return nullptr;
         }
 
+        /// Whether @p searched is @p root or lies below it
+        bool IsSameOrBelow(const UIElement& root, const UIElement& searched) {
+            if (&root == &searched) {
+                return true;
+            }
+            for (const auto& child : root.children) {
+                if (IsSameOrBelow(*child, searched)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// Whether a press on @p element only closes the open list of its canvas: a list is open and the element is neither the dropdown that owns it (its header) nor below it.
+        /// The canvas consumes such a press (UICanvasComponent::OnMouseButtonDown), so the element emits nothing
+        bool PressOnlyClosesList(const UICanvasLayout& layout, const UIElement& element) {
+            const eastl::vector<UIElement*> open = layout.OpenPopups();
+            if (open.empty()) {
+                return false;
+            }
+            for (const UIElement* popup : open) {
+                if (IsSameOrBelow(*popup, element)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         constexpr float kHalf = 0.5f;
 
         /// The press never lands on the very edge of a rect: the right and bottom edges are outside it for the hit test, and the round trip through output pixels may move a point by a
@@ -362,6 +390,7 @@ namespace BECore {
                 const bool optionEmits = owner != nullptr && owner->EmitsOnChoice(*button);
                 const PoolString optionAction = optionEmits ? owner->action : PoolString{};
                 const PoolString optionValue = optionEmits ? value : PoolString{};
+                const bool onlyClosesList = PressOnlyClosesList(target.canvas->GetLayout(), *target.element);
 
                 UIInput& input = CoreManager::GetUIInput();
                 SDL_MouseMotionEvent motion{};
@@ -391,6 +420,11 @@ namespace BECore {
                     // What the press emitted: empty when the slider is disabled or has no action (the element stays alive through `target`)
                     result["action"] = MakeJsonString(slider->action.ToStringView());
                     result["value"] = MakeJsonString(slider->GetLastEmittedValue().ToStringView());
+                }
+                if (onlyClosesList && result.contains("action")) {
+                    // The press only closed the open list and reached nothing below it: no action, no value
+                    result["action"] = MakeJsonString(eastl::string_view{});
+                    result["value"] = MakeJsonString(eastl::string_view{});
                 }
                 call.Reply(std::move(result));
                 return;
