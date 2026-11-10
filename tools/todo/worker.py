@@ -327,6 +327,12 @@ def session_in(sessions: list[dict], worker: Path) -> dict | None:
     return max(found, key=lambda s: s.get("startedAt") or 0) if found else None
 
 
+def session_ref(session: dict) -> str:
+    """How to name a session to `claude attach` / `logs` / `stop`: its id. The name (todo-w<k>) is shared by every
+    earlier session of the worker that `claude agents` still lists, and claude refuses a name that is not unique."""
+    return str(session.get("id") or session.get("sessionId") or session.get("name"))
+
+
 def limit_hit(session: dict | None) -> dict | None:
     """The usage limit that stopped a session: its last answer in the transcript is the API's rate-limit error.
     `{"text", "resets", "time"}` (`resets` is the time the message names, e.g. `10:30pm (Europe/Belgrade)`, or None),
@@ -416,7 +422,7 @@ def describe(session: dict | None) -> str:
         minutes = int((time.time() * 1000 - stopped) / 60000)
         when = f"{minutes // 60} h {minutes % 60} min" if minutes >= 60 else f"{minutes} min"
         return f"{session.get('name') or session.get('id')}: stopped by worker.py stop {when} ago (start or relaunch to go on)"
-    waiting = f", waits for you ({session.get('waitingFor') or 'input'}): claude attach {session.get('name') or session.get('id')}" if is_waiting(session) else ""
+    waiting = f", waits for you ({session.get('waitingFor') or 'input'}): claude attach {session_ref(session)}" if is_waiting(session) else ""
     return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}{waiting}"
 
 
@@ -1032,7 +1038,7 @@ def cmd_list(layout: Layout, args) -> None:
             line += f"  {describe(session_in(sessions, path))}"
         print(line)
     if sessions is not None and any(session_in(sessions, path) for _k, path in workers):
-        print(f"\nclaude agents (all of them), claude attach {SESSION_PREFIX}<k> (answer a session that waits), claude logs {SESSION_PREFIX}<k>")
+        print(f"\nclaude agents (all of them), {tool_command(layout)} attach <k> (answer a session that waits), {tool_command(layout)} logs <k>")
 
 
 def cmd_check(layout: Layout, args) -> None:
@@ -1075,6 +1081,25 @@ def cmd_run(layout: Layout, args) -> None:
         return
     os.chdir(worker)
     os.execvpe(command[0], command, env)
+
+
+def cmd_session(layout: Layout, args) -> None:
+    """attach / logs: `claude attach|logs` of the newest session of worker k, named by its id (see session_ref)."""
+    worker = layout.worker(args.k)
+    if not worker.is_dir():
+        raise WorkerError(f"no worker {worker}; create it first")
+    sessions = list_sessions(args.claude)
+    if sessions is None:
+        raise WorkerError(f"`{args.claude} agents --json` did not answer")
+    session = session_in(sessions, worker)
+    if session is None:
+        raise WorkerError(f"w{args.k}: no session")
+    command = [args.claude, args.command, session_ref(session)]
+    print(" ".join(command))
+    if args.print_only:
+        return
+    sys.stdout.flush()
+    os.execvp(command[0], command)
 
 
 def chosen_workers(layout: Layout, numbers: list[int]) -> list[tuple[int, Path]]:
@@ -1341,6 +1366,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--print", dest="print_only", action="store_true", help="only print the commands")
     p.add_argument("--json", action="store_true", help="print JSON (for tools/vscode/todo-workers)")
+    for verb, about in (("attach", "open the newest session of a worker (answer what it waits for)"), ("logs", "show the log of the newest session of a worker")):
+        p = sub.add_parser(verb, help=f"{about}: claude {verb} <its id>, since every session of the worker has the same name")
+        p.add_argument("k", type=int)
+        p.add_argument("--claude", default="claude", help="the command (default claude)")
+        p.add_argument("--print", dest="print_only", action="store_true", help="only print the command")
     p = sub.add_parser("stop", help="stop the background sessions of the workers")
     p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
@@ -1355,7 +1385,7 @@ def main(argv: list[str] | None = None) -> int:
     args.rest = rest
     try:
         layout = find_layout(Path.cwd())
-        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update}
+        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session}
         commands[args.command](layout, args)
     except WorkerError as error:
         print(f"error: {error}", file=sys.stderr)

@@ -183,7 +183,8 @@ function activate(context) {
         if (!session) return;
         const terminal = vscode.window.createTerminal({ name: `${worker.name} ${verb}`, cwd: worker.path, env: { PATH: toolEnv().PATH } });
         terminal.show();
-        terminal.sendText(`${shellQuote(config().claude)} ${verb} ${shellQuote(session.name || session.id)}`);
+        // By id: the name todo-w<k> is shared by every earlier session of the worker, and claude refuses it then.
+        terminal.sendText(`${shellQuote(config().claude)} ${verb} ${shellQuote(session.id || session.name)}`);
     }
 
     async function stopWorker(worker) {

@@ -280,13 +280,30 @@ def test_list_says_when_a_session_waits_for_the_person(game: Path, fake_claude, 
     assert not second["waiting"] and second["active"] and second["session"]["waitingFor"] is None
     assert worker.main(["list", "--claude", str(script)]) == 0
     out = capsys.readouterr().out
-    assert "waits for you (input needed): claude attach todo-w1" in out
+    assert "waits for you (input needed): claude attach a" in out
     assert out.count("waits for you") == 1
     sessions.write_text(json.dumps([session(workers / "w1", "blocked", "a"), session(workers / "w2", "done", "b")]))
     capsys.readouterr()
     assert worker.main(["list", "--json", "--claude", str(script)]) == 0
     first, second = json.loads(capsys.readouterr().out)["workers"]
     assert first["waiting"] and first["active"] and not second["waiting"]
+
+
+def test_attach_and_logs_name_the_newest_session_of_the_worker_by_its_id(game: Path, fake_claude, capsys):
+    script, _log, sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    workers = game.parent / "game.workers"
+    older = session(workers / "w1", "done", "old")
+    newer = dict(session(workers / "w1", "working", "new", status="waiting"), startedAt=5)
+    sessions.write_text(json.dumps([older, newer, session(workers / "w2", "working", "other")]))
+    capsys.readouterr()
+    assert worker.main(["attach", "1", "--print", "--claude", str(script)]) == 0
+    assert capsys.readouterr().out.strip() == f"{script} attach new"
+    assert worker.main(["logs", "2", "--print", "--claude", str(script)]) == 0
+    assert capsys.readouterr().out.strip() == f"{script} logs other"
+    sessions.write_text("[]")
+    assert worker.main(["attach", "1", "--print", "--claude", str(script)]) == 1
+    assert "w1: no session" in capsys.readouterr().err
 
 
 def test_list_json_activity_reads_the_session_and_its_agents_from_the_transcripts(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
