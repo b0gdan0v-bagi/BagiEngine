@@ -47,7 +47,7 @@ Hover lightens the fill (both gradient ends) and the border; pressed darkens, ha
 
 ## What is not here
 
-The HTML + CSS front-end (`border-radius`, `border`, `linear-gradient`, `box-shadow`, `:hover` shifts in `UIWebCompiler`) is slice 2 of the entry `ui-shapes`. Image skins and a sprite clipped to the corners are not done. The look on Vulkan is the owner's.
+The HTML + CSS front-end writes all of the above as attributes (`.claude/rules/ui-web.md`: `border-radius`, `border`, `linear-gradient`, `box-shadow`, `-be-highlight`, `-be-shape`). Not done: image skins, a sprite clipped to the corners, `%` radii, `inset` shadows, per-side borders, more than two shadow layers, per-state shape rules (a button has state colours only, so `:hover { border-color }` or `:hover { box-shadow }` is reported). The look on Vulkan is the owner's.
 
 ## Tests
 
