@@ -68,6 +68,6 @@ tools/            todo (the todo store), control (control API client, smoke test
 ## Docs, rules and skills
 
 - **Docs budget:** this file loads into every session and every agent: keep it under 12k characters; a nested `CLAUDE.md` loads whenever a file of its folder is read: keep it under 20k. Put a fact in the nested file of the folder it is about. Write contracts and reasons; do not restate what a test checks, a constant's value, measurements or decision history (those belong to the entry's plan in the todo store). `python3 CI/scripts/check_doc_budget.py --root .` checks it (in a game: `engine/CI/scripts/... --root .`).
-- `.claude/rules/` holds path-scoped guidance (CMake, reflection, reflection events, rendering, widgets, tests, UI in HTML and CSS). `build-project.md` and `todo-project.md` are read by the skills by path.
+- `.claude/rules/` holds path-scoped guidance (CMake, reflection, reflection events, rendering, widgets, tests, UI: layout, controls, control API, HTML and CSS, box shapes). `build-project.md` and `todo-project.md` are read by the skills by path.
 - `.claude/skills/` (`build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `context-sanitizer` (audits and slims the docs that load by themselves), `todo-*`, `cpp-senior-programmer`) and `.claude/agents/` (the four `todo-loop` agents) are one text shared with games by symlink; what differs per repository is in the two rules files above.
 - The todo list is the **todo store** (`tools/todo/CLAUDE.md`): a service on Railway, mirrored into Vikunja by itself; nothing of it is in git.

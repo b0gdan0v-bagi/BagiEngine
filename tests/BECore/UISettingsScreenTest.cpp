@@ -23,7 +23,7 @@
 namespace BECore::Tests {
 
     /*
-     * The screen test of a settings panel, the template for a screen with the controls of stage 6.4 and with translations (UI/CLAUDE.md, "Settings panels and translations").
+     * The screen test of a settings panel, the template for a screen with the controls of stage 6.4 and with translations (.claude/rules/ui-layout.md, "A screen test").
      * The shape of the panel (the choice panel of UISelectorScreenTest with other rows):
      *
      *  - a small canvas `Hud` with one button, `Open`, whose action shows the panel;

@@ -21,7 +21,7 @@ namespace BECore::Tests {
         constexpr float kTolerance = 0.51f;
 
         // A HUD the way a game writes it: a plate in the top left corner with a score and a Reset button, and in a portrait window the plate spans the top.
-        // The button is 48 units at the reference size and the canvas has a minScale, so it stays a touch target on a small window (UI/CLAUDE.md).
+        // The button is 48 units at the reference size and the canvas has a minScale, so it stays a touch target on a small window (.claude/rules/ui-layout.md, "Design rules").
         constexpr const char* kHudBody = R"(
   <elements>
     <element type="UIPanel" name="Plate" anchor="TopLeft" x="16" y="16" width="260" height="120" color="0,0,0,160">

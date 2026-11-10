@@ -20,7 +20,7 @@ namespace BECore::Tests {
 
     /*
      * The screen test of a choice panel, the template for a game that has one (the Chess opponent panel is the first: mode, color, engine and level as four groups).
-     * It is the shape that UI/CLAUDE.md ("Choice panels") points to:
+     * It is the shape that .claude/rules/ui-controls.md ("A choice panel") points to:
      *
      *  - a small canvas `Hud` with one button, `NewGame`, whose action opens the panel;
      *  - the panel is a modal `SceneView` canvas on a node of its own (`Selector`), started hidden: a dim, a plate and four rows, each a caption beside a `UISegmented`
