@@ -55,6 +55,8 @@ namespace BECore {
         BE_REFLECT_FIELD float _minScale = 0.25f;
         BE_REFLECT_FIELD float _maxScale = 8.0f;
         BE_REFLECT_FIELD bool _useSafeArea = false;
+        BE_REFLECT_FIELD bool _extendToOutput =
+            false;  ///< SceneView only, as on UICanvasComponent: the context covers the whole output (minus the safe area), so the document also lays out the bars around the view
         BE_REFLECT_FIELD bool _modal = false;
         BE_REFLECT_FIELD bool _visible = true;
         BE_REFLECT_FIELD bool _inputEnabled = true;
@@ -118,7 +120,7 @@ namespace BECore {
         };
 
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;
-        [[nodiscard]] UICanvasScaleParams MakeParams() const;
+        [[nodiscard]] UICanvasScaleParams MakeParams();
         void RefreshInputOrder();
         [[nodiscard]] bool TakesInput() const;
         bool CreateContext();
@@ -144,6 +146,7 @@ namespace BECore {
         uint64_t _varsVersion = 0;
         ActionListener _listener;
         bool _holdsRuntime = false;
+        bool _extendWarned = false;  // the ignored `extendToOutput` of a Screen or World document was reported
 
         eastl::vector<RmlUiFileStamp> _watched;
         double _lastPollTime = -std::numeric_limits<double>::infinity();

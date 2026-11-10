@@ -19,6 +19,11 @@ namespace BECore {
 
         constexpr float kAspectComboWidth = 80.0f;
         constexpr float kSafeAreaComboWidth = 130.0f;
+        constexpr float kViewComboWidth = 130.0f;
+        // The combo rows before the variants: Auto, then the default view
+        constexpr int kViewComboAuto = 0;
+        constexpr int kViewComboDefault = 1;
+        constexpr int kViewComboFirstVariant = 2;
         constexpr ImU32 kSafeAreaOutlineColor = IM_COL32(255, 200, 0, 200);
 
         // In the order of the enums (ViewportAspect, SafeAreaSimulation)
@@ -85,7 +90,16 @@ namespace BECore {
             // window runs in the high-density mode, where canvases would otherwise lay out twice as big. A sharper viewport (a target
             // of size times io.DisplayFramebufferScale, the mouse and the safe area scaled with it, the override set to that scale) is a follow-up.
             uiEnvironment.SetPixelDensityOverride(1.0f);
+            // The forced view lives for this pass only: Update(), Game mode and the other scenes pick by their own output
+            Scene* activeScene = CoreManager::GetSceneManager().GetActiveScene();
+            ValidateForcedView(activeScene);
+            if (activeScene) {
+                activeScene->SetViewOverride(_forcedView);
+            }
             CoreManager::GetSceneManager().DrawAll();
+            if (activeScene) {
+                activeScene->SetViewOverride(std::nullopt);
+            }
             uiEnvironment.SetSafeAreaOverride(std::nullopt);
             uiEnvironment.SetPixelDensityOverride(std::nullopt);
             renderer->UnsetRenderTarget();
@@ -122,12 +136,66 @@ namespace BECore {
             _safeAreaSimulation = static_cast<SafeAreaSimulation>(safeArea);
         }
 
-        // The view the scene drew with last, picked by the size of this image (read only)
         if (const Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
+            DrawViewCombo(*scene);
+
+            // The view the scene drew with last, picked by the size of this image or forced by the combo (read only)
             const ActiveSceneView view = scene->GetActiveView();
             ImGui::SameLine();
             const eastl::string_view name = view.index < 0 ? eastl::string_view("default") : view.name.ToStringView();
             ImGui::TextDisabled("View: %.*s %.0f x %.0f", static_cast<int>(name.size()), name.data(), view.width, view.height);
+        }
+    }
+
+    void ViewportWidget::ValidateForcedView(const Scene* scene) {
+        if (!_forcedView) {
+            return;
+        }
+        const bool sameScene = scene && scene->GetName() == _forcedViewScene;
+        const bool exists = sameScene && *_forcedView >= -1 && *_forcedView < static_cast<int32_t>(scene->GetViewVariants().size());
+        if (!exists) {
+            _forcedView = std::nullopt;
+        }
+    }
+
+    void ViewportWidget::DrawViewCombo(const Scene& scene) {
+        const eastl::span<const SceneViewVariant> variants = scene.GetViewVariants();
+        if (variants.empty()) {
+            return;
+        }
+        ValidateForcedView(&scene);
+
+        const auto variantLabel = [&variants](size_t index) {
+            const SceneViewVariant& variant = variants[index];
+            return variant.name.Empty() ? Format("#{}", index) : eastl::string(variant.name.ToStringView());
+        };
+
+        int current = kViewComboAuto;
+        if (_forcedView) {
+            current = *_forcedView < 0 ? kViewComboDefault : kViewComboFirstVariant + *_forcedView;
+        }
+        const eastl::string currentLabel = current == kViewComboAuto      ? eastl::string("Auto")
+                                           : current == kViewComboDefault ? eastl::string("Default")
+                                                                          : variantLabel(static_cast<size_t>(*_forcedView));
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(kViewComboWidth);
+        if (ImGui::BeginCombo("##ViewportView", currentLabel.c_str())) {
+            if (ImGui::Selectable("Auto", current == kViewComboAuto)) {
+                _forcedView = std::nullopt;
+            }
+            if (ImGui::Selectable("Default", current == kViewComboDefault)) {
+                _forcedView = -1;
+                _forcedViewScene = scene.GetName();
+            }
+            for (size_t i = 0; i < variants.size(); ++i) {
+                const int row = kViewComboFirstVariant + static_cast<int>(i);
+                if (ImGui::Selectable(variantLabel(i).c_str(), current == row)) {
+                    _forcedView = static_cast<int32_t>(i);
+                    _forcedViewScene = scene.GetName();
+                }
+            }
+            ImGui::EndCombo();
         }
     }
 

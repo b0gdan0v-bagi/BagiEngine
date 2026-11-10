@@ -7,6 +7,7 @@
 namespace BECore {
 
     class IDeserializer;
+    class Scene;
 
     // Renders the active scene into an offscreen texture and displays it as a
     // dockable ImGui window ("Viewport"). The offscreen pass happens BEFORE
@@ -16,6 +17,7 @@ namespace BECore {
     // A toolbar forces the image to a preset shape (16:9, 4:3, 21:9, 9:16) and pretends a safe area (a notch, side
     // insets), so a UI layout can be looked at in several shapes without resizing the window (UIPreview). The
     // viewport is not the window: the safe area that canvases see during the scene pass is the simulated one.
+    // A third combo forces one of the scene's view variants (Scene::SetViewOverride) around the viewport's own pass only.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
     public:
@@ -30,8 +32,14 @@ namespace BECore {
         BE_FUNCTION void Draw() override;
 
     private:
-        // The aspect and safe-area combos above the image
+        // The aspect, safe-area and view combos above the image
         void DrawPreviewToolbar();
+
+        // The view combo of the active scene (nothing for a scene without variants); keeps the choice as an index
+        void DrawViewCombo(const Scene& scene);
+
+        // Falls back to Auto when the active scene is not the one the choice was made for or the index does not exist in it
+        void ValidateForcedView(const Scene* scene);
 
         // The simulated safe area as an outline over the image, so it is clear what the canvases were given
         void DrawSafeAreaOutline(float minX, float minY, float maxX, float maxY) const;
@@ -45,6 +53,8 @@ namespace BECore {
         uint32_t _lastHeight = 0;
         ViewportAspect _aspect = ViewportAspect::Free;
         SafeAreaSimulation _safeAreaSimulation = SafeAreaSimulation::None;
+        std::optional<int32_t> _forcedView;                  // the index of the forced view variant, -1 the default, nullopt Auto
+        PoolString _forcedViewScene;                         // the scene the choice was made for
         bool _pressedInViewport[3] = {false, false, false};  // left, right, middle: pressed over the image and not yet released
     };
 

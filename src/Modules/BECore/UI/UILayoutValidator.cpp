@@ -23,7 +23,8 @@ namespace BECore {
             void VisitRoot(const UIElement& root) {
                 CheckStackSiblings(root);
                 for (const auto& child : root.children) {
-                    Visit(*child, child->ignoreSafeArea);
+                    const bool keepsOffView = eastl::find(_options.keepOffView.begin(), _options.keepOffView.end(), child->name) != _options.keepOffView.end();
+                    Visit(*child, child->ignoreSafeArea, keepsOffView);
                 }
             }
 
@@ -33,7 +34,8 @@ namespace BECore {
             }
 
             // @p ignoresSafeArea: a child of the root asked for the whole canvas (`ignoreSafeArea`), and so does everything under it; the flag of a deeper element means nothing
-            void Visit(const UIElement& element, bool ignoresSafeArea) {
+            // @p keepsOffView: a named child of the root (`keepOffView`), and so is everything under it, down to the first element that lies over the view
+            void Visit(const UIElement& element, bool ignoresSafeArea, bool keepsOffView) {
                 if (!element.active.visible) {
                     return;
                 }
@@ -58,6 +60,11 @@ namespace BECore {
                     Report(UILayoutIssueKind::TextDoesNotFit, element);
                 }
 
+                if (keepsOffView && !element.rect.IsEmpty() && Overlap(element.rect, _resolved.viewBounds)) {
+                    Report(UILayoutIssueKind::OverlapsSceneView, element);
+                    return;
+                }
+
                 // The children of a popup are out of flow: a closed one has none to look at, an open one is checked like anything else, and its options are not siblings in a stack
                 if (element.HasPopupChildren() && !element.IsPopupOpen()) {
                     return;
@@ -66,7 +73,7 @@ namespace BECore {
                     CheckStackSiblings(element);
                 }
                 for (const auto& child : element.children) {
-                    Visit(*child, ignoresSafeArea);
+                    Visit(*child, ignoresSafeArea, keepsOffView);
                 }
             }
 

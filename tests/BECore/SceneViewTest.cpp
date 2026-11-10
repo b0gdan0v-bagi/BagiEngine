@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Renderer/IRenderTarget.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/Scene.h>
@@ -309,6 +310,99 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(fit.GetViewWidth(), 400.0f);
         EXPECT_FLOAT_EQ(fit.GetViewHeight(), 200.0f);
         EXPECT_FLOAT_EQ(GetProbe("Fit"_intern)->seen.scale, 0.75f);
+    }
+
+    // The override a tool (the editor viewport) sets around one pass
+
+    TEST_F(SceneViewVariantsTest, TheVariantsAreListedInTheOrderOfTheFile) {
+        const eastl::span<const SceneViewVariant> variants = _scene->GetViewVariants();
+        ASSERT_EQ(variants.size(), 2u);
+        EXPECT_EQ(variants[0].name, "Portrait"_intern);
+        EXPECT_EQ(variants[1].name, "Wide"_intern);
+        EXPECT_TRUE(GetScene("Fit"_intern).GetViewVariants().empty());
+    }
+
+    TEST_F(SceneViewVariantsTest, AnOverrideForcesAVariantWhereTheOutputWouldPickTheDefault) {
+        _scene->SetViewOverride(0);
+        EXPECT_EQ(_scene->GetViewVersion(), 0u) << "setting the override does not pick";
+
+        DrawAt(900.0f, 600.0f);
+        EXPECT_EQ(_scene->GetActiveView().index, 0);
+        EXPECT_EQ(_scene->GetActiveView().name, "Portrait"_intern);
+        EXPECT_FLOAT_EQ(_scene->GetViewWidth(), 720.0f);
+        const ViewTransform expected = ViewTransform::Fit(720.0f, 1280.0f, 900.0f, 600.0f);
+        EXPECT_FLOAT_EQ(GetProbe("Responsive"_intern)->seen.scale, expected.scale);
+        EXPECT_EQ(GetProbe("Responsive"_intern)->seenView.index, 0) << "right already inside OnDraw()";
+    }
+
+    TEST_F(SceneViewVariantsTest, AnOverrideOfTheDefaultViewBeatsAVariantTheOutputWouldPick) {
+        _scene->SetViewOverride(-1);
+        DrawAt(600.0f, 900.0f);
+
+        EXPECT_EQ(_scene->GetActiveView().index, -1);
+        EXPECT_FLOAT_EQ(_scene->GetViewWidth(), 1280.0f);
+        EXPECT_FLOAT_EQ(GetProbe("Responsive"_intern)->seen.scale, ViewTransform::Fit(1280.0f, 720.0f, 600.0f, 900.0f).scale);
+    }
+
+    TEST_F(SceneViewVariantsTest, TheVersionMovesOnceForAForcedChangeAndOnceWhenItIsCleared) {
+        DrawAt(900.0f, 600.0f);
+        ASSERT_EQ(_scene->GetViewVersion(), 0u);
+
+        _scene->SetViewOverride(1);
+        DrawAt(900.0f, 600.0f);
+        DrawAt(900.0f, 600.0f);
+        EXPECT_EQ(_scene->GetViewVersion(), 1u);
+        EXPECT_EQ(_scene->GetActiveView().name, "Wide"_intern);
+
+        _scene->SetViewOverride(std::nullopt);
+        DrawAt(900.0f, 600.0f);
+        DrawAt(900.0f, 600.0f);
+        EXPECT_EQ(_scene->GetViewVersion(), 2u);
+        EXPECT_EQ(_scene->GetActiveView().index, -1);
+    }
+
+    TEST_F(SceneViewVariantsTest, NulloptAndAnIndexOutOfRangeBehaveAsAuto) {
+        for (const std::optional<int32_t> override : {std::optional<int32_t>{}, std::optional<int32_t>{2}, std::optional<int32_t>{-2}, std::optional<int32_t>{100}}) {
+            _scene->SetViewOverride(override);
+            DrawAt(900.0f, 600.0f);
+            EXPECT_EQ(_scene->GetActiveView().index, -1);
+            DrawAt(600.0f, 900.0f);
+            EXPECT_EQ(_scene->GetActiveView().index, 0);
+        }
+        EXPECT_EQ(_scene->GetViewVersion(), 7u) << "only the switches of the output moved it, the overrides themselves never did";
+    }
+
+    TEST_F(SceneViewVariantsTest, ScreenToSceneFollowsTheForcedView) {
+        _scene->SetViewOverride(0);
+        DrawAt(900.0f, 600.0f);
+
+        const ViewTransform fit = ViewTransform::Fit(720.0f, 1280.0f, 900.0f, 600.0f);
+        EXPECT_FLOAT_EQ(_scene->ScreenToSceneX(300.0f), (300.0f - fit.offsetX) / fit.scale);
+        EXPECT_FLOAT_EQ(_scene->ScreenToSceneY(450.0f), (450.0f - fit.offsetY) / fit.scale);
+    }
+
+    TEST_F(SceneViewVariantsTest, ASceneWithoutVariantsIgnoresAVariantIndex) {
+        _manager->SetActiveScene("Fit"_intern);
+        Scene& fit = *_manager->GetSceneByName("Fit"_intern);
+
+        fit.SetViewOverride(0);
+        _manager->DrawAll();
+
+        EXPECT_EQ(fit.GetActiveView().index, -1);
+        EXPECT_EQ(fit.GetViewVersion(), 0u);
+        EXPECT_FLOAT_EQ(fit.GetViewWidth(), 400.0f);
+    }
+
+    TEST_F(SceneViewVariantsTest, TheOverrideIsNotSaved) {
+        XmlSerializer plain;
+        _scene->Serialize(plain);
+        const eastl::string before = plain.SaveToString();
+
+        _scene->SetViewOverride(1);
+        DrawAt(900.0f, 600.0f);
+        XmlSerializer forced;
+        _scene->Serialize(forced);
+        EXPECT_EQ(forced.SaveToString(), before);
     }
 
     TEST_F(SceneViewVariantsTest, WithoutARendererTheViewIsTheDefault) {

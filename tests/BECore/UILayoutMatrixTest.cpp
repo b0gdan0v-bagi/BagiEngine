@@ -51,6 +51,27 @@ namespace BECore::Tests {
             return canvas;
         }
 
+        /// An extended canvas with a bar row that only a tall output has room for: shown by a variant on very tall outputs (`maxAspect`: the view alone is 0.5625), hidden otherwise
+        UICanvasLayout BarRowCanvas(bool hideWhereThereIsNoBar) {
+            UICanvasLayout canvas = BandCanvasWithPortraitLayout(true);
+            auto row = canvas.root->AddChild("Bar"_intern);
+            row->style.rect.anchor = UIAnchor::Bottom;
+            row->style.rect.y = -20.0f;
+            row->style.rect.width = UILength::Px(300.0f);
+            row->style.rect.height = UILength::Px(100.0f);
+            if (hideWhereThereIsNoBar) {
+                row->style.visible = false;
+                UIVariant tall;
+                tall.when.maxAspect = 0.5f;
+                UIElementOverride show;
+                show.element = "Bar"_intern;
+                show.visible = true;
+                tall.overrides.push_back(show);
+                canvas.variants.push_back(tall);
+            }
+            return canvas;
+        }
+
         UILayoutContext BaseView() {
             UILayoutContext context;
             context.sceneViewWidth = kLandscapeWidth;
@@ -124,6 +145,31 @@ namespace BECore::Tests {
         const auto brokenFailures = ValidateOnMatrix(broken, {}, BaseView(), ViewsOf(variants));
         ASSERT_FALSE(brokenFailures.empty());
         EXPECT_TRUE(AnyLabelEndsWith(brokenFailures, "view Portrait"));
+    }
+
+    TEST(UILayoutMatrixTest, ABarRowKeptOffTheViewPassesOnTheMatrixWhenAVariantHidesItWhereThereIsNoBar) {
+        const auto variants = PortraitVariants();
+        UILayoutValidatorOptions options;
+        options.keepOffView.push_back("Bar"_intern);
+        UICanvasLayout good = BarRowCanvas(true);
+
+        const auto failures = ValidateOnMatrix(good, options, BaseView(), ViewsOf(variants));
+        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
+
+        UICanvasLayout broken = BarRowCanvas(false);
+        const auto brokenFailures = ValidateOnMatrix(broken, options, BaseView(), ViewsOf(variants));
+        ASSERT_FALSE(brokenFailures.empty());
+        for (const UIMatrixFailure& failure : brokenFailures) {
+            ASSERT_FALSE(failure.issues.empty());
+            EXPECT_EQ(failure.issues[0].kind, UILayoutIssueKind::OverlapsSceneView) << failure.label.c_str();
+            EXPECT_EQ(failure.issues[0].element, "Bar"_intern);
+        }
+        EXPECT_TRUE(AnyLabelEndsWith(brokenFailures, "view default"));
+        EXPECT_TRUE(AnyLabelEndsWith(brokenFailures, "view Portrait"));
+
+        // Nothing is kept off the view unless the caller names it
+        UICanvasLayout unnamed = BarRowCanvas(false);
+        EXPECT_TRUE(ValidateOnMatrix(unnamed, {}, BaseView(), ViewsOf(variants)).empty());
     }
 
     TEST(UILayoutMatrixTest, AnUnnamedVariantIsLabelledByItsIndex) {

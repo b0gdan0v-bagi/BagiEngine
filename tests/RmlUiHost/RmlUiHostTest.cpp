@@ -18,8 +18,8 @@ namespace BECore::Tests {
 
         constexpr float kTolerance = 0.6f;  // RmlUi lays out in whole pixels at the context's scale
 
-        // "Main": a document on the screen at one pixel per unit. "Fit": a scene with a view size and a document in it, "FitViews" the same with a portrait view. "Scaled": the screen scaled with the
-        // output.
+        // "Main": a document on the screen at one pixel per unit. "Fit": a scene with a view size and a document in it, "FitViews" the same with a portrait view, "FitExtended" the same with a
+        // document that extends to the output, "ScreenExtended" a screen document with the flag (ignored). "Scaled": the screen scaled with the output.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -43,6 +43,19 @@ namespace BECore::Tests {
       </components></node>
     </nodes>
   </scene>
+  <scene type="Scene" name="FitExtended" viewWidth="400" viewHeight="300">
+    <viewVariants><view name="Portrait" when="orientation:portrait" width="300" height="400"/></viewVariants>
+    <nodes>
+      <node name="Doc"><components>
+        <component type="RmlUiDocumentComponent" space="SceneView" extendToOutput="true"/>
+      </components></node>
+    </nodes>
+  </scene>
+  <scene type="Scene" name="ScreenExtended"><nodes>
+    <node name="Doc"><components>
+      <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ConstantPixelSize" extendToOutput="true"/>
+    </components></node>
+  </nodes></scene>
   <scene type="Scene" name="Scaled"><nodes>
     <node name="Doc"><components>
       <component type="RmlUiDocumentComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5"/>
@@ -378,6 +391,100 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         Draw("FitViews");
         EXPECT_NEAR(BoxOf(*doc, "box").w, 600.0f, kTolerance);
         EXPECT_NEAR(BoxOf(*doc, "box").h, 800.0f, kTolerance);
+    }
+
+    TEST_F(RmlUiHostTest, AnExtendedDocumentFillsTheWholeOutput) {
+        auto extended = Doc("FitExtended");
+        auto fitted = Doc("Fit");
+        ASSERT_TRUE(extended && fitted);
+        EXPECT_TRUE(extended->_extendToOutput);
+        EXPECT_FALSE(fitted->_extendToOutput);
+        const char* style = "#box { position: absolute; left: 0dp; top: 0dp; width: 100%; height: 100%; }";
+        ASSERT_TRUE(extended->SetMarkup(Document(R"(<div id="box"></div>)", style)));
+        ASSERT_TRUE(fitted->SetMarkup(Document(R"(<div id="box"></div>)", style)));
+
+        _renderer->width = 1200.0f;  // the 400 x 300 view fits at scale 2: 800 x 600 at x = 200
+        _renderer->height = 600.0f;
+        Draw("FitExtended");
+        const Rect extendedBox = BoxOf(*extended, "box");
+        Draw("Fit");
+        const Rect fittedBox = BoxOf(*fitted, "box");
+
+        EXPECT_NEAR(extendedBox.x, 0.0f, kTolerance);
+        EXPECT_NEAR(extendedBox.w, 1200.0f, kTolerance);
+        EXPECT_NEAR(extendedBox.h, 600.0f, kTolerance);
+        EXPECT_EQ(extended->GetContextWidth(), 1200);
+        EXPECT_NEAR(fittedBox.x, 200.0f, kTolerance) << "without the flag the document is the fitted view";
+        EXPECT_NEAR(fittedBox.w, 800.0f, kTolerance);
+    }
+
+    TEST_F(RmlUiHostTest, AnExtendedDocumentKeepsTheScaleOfTheFit) {
+        auto doc = Doc("FitExtended");
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<div id="box"></div>)", "#box { position: absolute; left: 100dp; top: 50dp; width: 40dp; height: 20dp; }")));
+
+        _renderer->width = 1200.0f;
+        _renderer->height = 600.0f;
+        Draw("FitExtended");
+        const Rect box = BoxOf(*doc, "box");
+
+        // The origin of the document is the corner of the output, the scale is the fit's (2): a scene point is where it was, 200 + 100 * 2 pixels from the left
+        EXPECT_NEAR(box.x, 200.0f, kTolerance);
+        EXPECT_NEAR(box.y, 100.0f, kTolerance);
+        EXPECT_NEAR(box.w, 80.0f, kTolerance);
+    }
+
+    TEST_F(RmlUiHostTest, ABoxAtTheBottomOfAnExtendedDocumentLiesOnTheBar) {
+        auto extended = Doc("FitExtended");
+        auto fitted = Doc("FitViews");
+        const char* style = "#bar { position: absolute; left: 0dp; bottom: 0dp; width: 100%; height: 40dp; background-color: #285a3c; pointer-events: auto; }";
+        ASSERT_TRUE(extended->SetMarkup(Document(R"(<div id="bar" data-action="BarTap"></div>)", style)));
+        ASSERT_TRUE(fitted->SetMarkup(Document(R"(<div id="bar"></div>)", style)));
+
+        _renderer->width = 600.0f;  // the portrait view of 300 x 400 fits at scale 2: 600 x 800, bars of 100 above and below
+        _renderer->height = 1000.0f;
+        Draw("FitExtended");
+        const Rect bar = BoxOf(*extended, "bar");
+        Draw("FitViews");
+        const Rect barInView = BoxOf(*fitted, "bar");
+
+        EXPECT_NEAR(bar.y, 920.0f, kTolerance) << "the bar row ends at the bottom of the output";
+        EXPECT_GE(bar.y, 900.0f) << "and lies below the view (the view ends at 900)";
+        EXPECT_NEAR(bar.w, 600.0f, kTolerance);
+        EXPECT_NEAR(barInView.y, 820.0f, kTolerance) << "the same document without the flag ends at the bottom of the view";
+    }
+
+    TEST_F(RmlUiHostTest, AClickOnTheBarOfAnExtendedDocumentReachesItsElement) {
+        auto doc = Doc("FitExtended");
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<div id="bar" data-action="BarTap"></div>)",
+                                            "#bar { position: absolute; left: 0dp; bottom: 0dp; width: 100%; height: 40dp; background-color: #285a3c; pointer-events: auto; }")));
+        _renderer->width = 600.0f;
+        _renderer->height = 1000.0f;
+        Draw("FitExtended");
+        Recorder recorder;
+        UIInput& input = CoreManager::GetUIInput();
+
+        const bool down = input.DispatchMouseButtonDown(Button(300.0f, 950.0f, true));
+        const bool up = input.DispatchMouseButtonUp(Button(300.0f, 950.0f, false));
+
+        EXPECT_TRUE(down);
+        EXPECT_TRUE(up);
+        ASSERT_EQ(recorder.actions.size(), 1u);
+        EXPECT_EQ(recorder.actions[0], "BarTap"_intern);
+        EXPECT_EQ(recorder.gameDowns, 0);
+    }
+
+    TEST_F(RmlUiHostTest, AScreenDocumentIgnoresTheExtendFlag) {
+        auto doc = Doc("ScreenExtended");
+        ASSERT_TRUE(doc->SetMarkup(Document(R"(<div id="box"></div>)", "#box { position: absolute; left: 10dp; top: 0dp; width: 100%; height: 50%; }")));
+        ASSERT_TRUE(doc->_extendToOutput);
+
+        Draw("ScreenExtended");
+        const Rect box = BoxOf(*doc, "box");
+
+        EXPECT_NEAR(box.x, 10.0f, kTolerance);
+        EXPECT_NEAR(box.w, 800.0f, kTolerance);
+        EXPECT_NEAR(box.h, 300.0f, kTolerance);
+        EXPECT_EQ(doc->GetContextWidth(), 800);
     }
 
     TEST_F(RmlUiHostTest, AClipOfTheDocumentIsBalancedAfterTheDraw) {
@@ -759,7 +866,7 @@ body { width: 100%; height: 100%; font-family: "PT Sans"; font-size: 20dp; color
         {
             auto doc = Doc("Main");
             ASSERT_TRUE(doc->SetMarkup(Document("<p>x</p>")));
-            EXPECT_EQ(RmlUiRuntime::GetInstance().GetHolderCount(), 5) << "each of the five components of the scenes holds the runtime";
+            EXPECT_EQ(RmlUiRuntime::GetInstance().GetHolderCount(), 7) << "each of the seven components of the scenes holds the runtime";
         }
         _manager.Reset();
 

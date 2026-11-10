@@ -547,6 +547,23 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(recorder.events[1].view.width, 1280.0f);
     }
 
+    TEST_F(SceneViewChangedEventTest, AForcedViewIsAnnouncedLikeAPickAndSoIsClearingIt) {
+        ViewChangeRecorder recorder;
+
+        _scene->SetViewOverride(0);
+        DrawAt(900.0f, 600.0f);
+        _manager->UpdateAll();
+        _manager->UpdateAll();
+        ASSERT_EQ(recorder.events.size(), 1u);
+        EXPECT_EQ(recorder.events[0].view.index, 0);
+
+        _scene->SetViewOverride(std::nullopt);
+        DrawAt(900.0f, 600.0f);
+        _manager->UpdateAll();
+        ASSERT_EQ(recorder.events.size(), 2u);
+        EXPECT_EQ(recorder.events[1].view.index, -1);
+    }
+
     TEST_F(SceneViewChangedEventTest, OnlyTheSceneThatIsUpdatedAnnounces) {
         ViewChangeRecorder recorder;
         DrawAt(600.0f, 900.0f);

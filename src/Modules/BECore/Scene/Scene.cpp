@@ -90,7 +90,12 @@ namespace BECore {
     }
 
     void Scene::PickView(float outputWidth, float outputHeight) {
-        const int32_t index = SceneViewSelector::Pick(_viewWidth, _viewHeight, _viewVariants, outputWidth, outputHeight).index;
+        int32_t index = 0;
+        if (_viewOverride && *_viewOverride >= -1 && *_viewOverride < static_cast<int32_t>(_viewVariants.size())) {
+            index = *_viewOverride;
+        } else {
+            index = SceneViewSelector::Pick(_viewWidth, _viewHeight, _viewVariants, outputWidth, outputHeight).index;
+        }
         if (index != _activeViewIndex) {
             _activeViewIndex = index;
             ++_viewVersion;
@@ -107,6 +112,14 @@ namespace BECore {
 
     uint32_t Scene::GetViewVersion() const {
         return _viewVersion;
+    }
+
+    eastl::span<const SceneViewVariant> Scene::GetViewVariants() const {
+        return {_viewVariants.data(), _viewVariants.size()};
+    }
+
+    void Scene::SetViewOverride(std::optional<int32_t> index) {
+        _viewOverride = index;
     }
 
     float Scene::GetViewWidth() const {
