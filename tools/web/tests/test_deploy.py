@@ -85,7 +85,7 @@ class DryRunTest(DeployTestCase):
         self.assertEqual(len(lines), 3, out)
         self.assertIn("cmake --preset web-release", lines[0])
         self.assertIn("cmake --build --preset web-release --target BagiMatch3", lines[1])
-        self.assertRegex(lines[2].replace('"', "").replace("'", ""), r"package\.py .*ClangWeb.* .*dist.* --game BagiMatch3")
+        self.assertRegex(lines[2].replace('"', "").replace("'", ""), r"package\.py .*web-release[\\/]bin.* .*dist.* --game BagiMatch3")
         self.assertEqual(runner.calls, [])
 
     def test_a_dry_run_changes_nothing_on_disk(self):
@@ -114,10 +114,10 @@ class DryRunTest(DeployTestCase):
         _, out, _, _ = self.run_script("--dry-run")
         self.assertIn("--target BagiMatch3", out)
 
-    def test_the_default_is_the_threaded_page_in_build_clangweb(self):
+    def test_the_default_is_the_threaded_page_in_build_web_release_bin(self):
         _, out, _, _ = self.run_script("--dry-run")
         self.assertNotIn("single-thread", out)
-        self.assertRegex(out.replace('"', "").replace("'", ""), r"package\.py .*[\\/]build[\\/]ClangWeb ")
+        self.assertRegex(out.replace('"', "").replace("'", ""), r"package\.py .*[\\/]build[\\/]web-release[\\/]bin ")
 
     def test_the_package_step_of_a_single_thread_build_says_so_so_the_manifest_has_threads_false(self):
         _, out, _, _ = self.run_script("--dry-run", "--single-thread")
@@ -137,20 +137,21 @@ class DryRunTest(DeployTestCase):
                 lines = [line for line in out.splitlines() if line.startswith("+ ")]
                 self.assertIn(f"cmake --preset {expected}", lines[0])
                 self.assertIn(f"cmake --build --preset {expected} --target BagiMatch3", lines[1])
-                self.assertRegex(lines[2].replace('"', "").replace("'", ""), r"package\.py .*[\\/]build[\\/]ClangWebSingleThread ")
+                self.assertRegex(lines[2].replace('"', "").replace("'", ""), rf"package\.py .*[\\/]build[\\/]{expected}[\\/]bin ")
                 self.assertEqual(runner.calls, [])
 
     def test_a_single_thread_preset_named_by_hand_gets_the_single_thread_folder_too(self):
         _, out, _, _ = self.run_script("--dry-run", "--preset", "web-release-single-thread")
         self.assertIn("--preset web-release-single-thread --target", out)
         self.assertNotIn("single-thread-single-thread", out)
-        self.assertIn("ClangWebSingleThread", out)
+        self.assertRegex(out.replace('"', "").replace("'", ""), r"package\.py .*web-release-single-thread[\\/]bin ")
 
     def test_an_explicit_build_dir_wins_over_the_folder_of_the_configuration(self):
         build = self.source / "out"
         _, out, _, _ = self.run_script("--dry-run", "--single-thread", "--build-dir", str(build))
         self.assertIn(f"package.py {build} ", out.replace("'", ""))
-        self.assertNotIn("ClangWebSingleThread", out)
+        package_line = next(line for line in out.splitlines() if "package.py" in line)
+        self.assertNotIn("web-release-single-thread", package_line)
 
 
 class PreconditionTest(DeployTestCase):
