@@ -52,3 +52,6 @@ games/*/config/imgui.ini
 .claude/plans/
 *.plan.md
 todo-export/
+
+# Node packages (the Railway IaC SDK of tools/todo)
+node_modules/

@@ -4,3 +4,7 @@ tests/
 todo.py
 requirements-dev.txt
 CLAUDE.md
+node_modules/
+.railway/
+package.json
+package-lock.json
