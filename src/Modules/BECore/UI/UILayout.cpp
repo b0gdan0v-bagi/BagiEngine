@@ -29,6 +29,52 @@ namespace BECore {
             }
         }
 
+        /// One axis of an anchor layout once its size is known
+        struct AxisSize {
+            bool stretched = false;
+            float spanStart = 0.0f;  // the span between the two anchors minus the margins (a stretched axis)
+            float spanExtent = 0.0f;
+            float size = 0.0f;
+        };
+
+        /// Replaces @p value by @p explicitValue when that is a finite number
+        void ReplaceFinite(float& value, float explicitValue) {
+            if (std::isfinite(explicitValue)) {
+                value = explicitValue;
+            }
+        }
+
+        void Replace(Vec2& value, const std::optional<Vec2>& explicitValue) {
+            if (explicitValue) {
+                ReplaceFinite(value.x, explicitValue->x);
+                ReplaceFinite(value.y, explicitValue->y);
+            }
+        }
+
+        AxisSize ResolveAxisSize(float origin, float extent, float anchorMin, float anchorMax, float marginStart, float marginEnd, const UILength& length, const std::optional<UILength>& minimum,
+                                 const std::optional<UILength>& maximum) {
+            AxisSize axis;
+            axis.stretched = anchorMin < anchorMax;
+            float size;
+            if (axis.stretched) {
+                axis.spanStart = origin + extent * anchorMin + marginStart;
+                axis.spanExtent = std::max(extent * (anchorMax - anchorMin) - marginStart - marginEnd, 0.0f);
+                size = axis.spanExtent;
+            } else {
+                size = length.Resolve(extent);
+            }
+            axis.size = ClampExtent(size, extent, minimum, maximum);
+            return axis;
+        }
+
+        float ResolveAxisPosition(const AxisSize& axis, float origin, float extent, float anchorMin, float pivot, float offset) {
+            if (axis.stretched) {
+                return axis.spanStart + (axis.spanExtent - axis.size) * pivot;
+            }
+            // origin + extent * anchorMin - size * pivot, written so that anchorMin == pivot adds exactly 0 to the form every file has always had
+            return origin + (extent - axis.size) * pivot + extent * (anchorMin - pivot) + offset;
+        }
+
         struct ChildSize {
             float main = 0.0f;   // the size along the stack's direction
             float cross = 0.0f;  // the size across it
@@ -47,21 +93,37 @@ namespace BECore {
         return {rect.x + edges.left, rect.y + edges.top, std::max(rect.w - edges.left - edges.right, 0.0f), std::max(rect.h - edges.top - edges.bottom, 0.0f)};
     }
 
-    Rect UILayout::ResolveRect(const Rect& parent, const UIRectSpec& spec) {
-        const bool stretch = spec.anchor == UIAnchor::Stretch;
-        const Rect area = stretch ? Inset(parent, spec.margin) : parent;
-
-        float width = stretch ? area.w : spec.width.Resolve(parent.w);
-        float height = stretch ? area.h : spec.height.Resolve(parent.h);
-        width = ClampExtent(width, parent.w, spec.minWidth, spec.maxWidth);
-        height = ClampExtent(height, parent.h, spec.minHeight, spec.maxHeight);
-        ApplyAspect(width, height, spec);
-
-        if (stretch) {
-            return {area.x + (area.w - width) * 0.5f, area.y + (area.h - height) * 0.5f, width, height};
+    UIEffectiveAnchors UILayout::EffectiveAnchors(const UIRectSpec& spec) {
+        UIEffectiveAnchors anchors;
+        if (spec.anchor == UIAnchor::Stretch) {
+            anchors.min = {0.0f, 0.0f};
+            anchors.max = {1.0f, 1.0f};
+            anchors.pivot = {0.5f, 0.5f};
+        } else {
+            const auto [fractionX, fractionY] = AnchorFraction(spec.anchor);
+            anchors.min = anchors.max = anchors.pivot = {fractionX, fractionY};
         }
-        const auto [fractionX, fractionY] = AnchorFraction(spec.anchor);
-        return {parent.x + (parent.w - width) * fractionX + spec.x.Resolve(parent.w), parent.y + (parent.h - height) * fractionY + spec.y.Resolve(parent.h), width, height};
+        Replace(anchors.min, spec.anchorMin);
+        Replace(anchors.max, spec.anchorMax);
+        Replace(anchors.pivot, spec.pivot);
+        if (anchors.min.x > anchors.max.x) {
+            std::swap(anchors.min.x, anchors.max.x);
+        }
+        if (anchors.min.y > anchors.max.y) {
+            std::swap(anchors.min.y, anchors.max.y);
+        }
+        return anchors;
+    }
+
+    Rect UILayout::ResolveRect(const Rect& parent, const UIRectSpec& spec) {
+        const UIEffectiveAnchors anchors = EffectiveAnchors(spec);
+        AxisSize axisX = ResolveAxisSize(parent.x, parent.w, anchors.min.x, anchors.max.x, spec.margin.left, spec.margin.right, spec.width, spec.minWidth, spec.maxWidth);
+        AxisSize axisY = ResolveAxisSize(parent.y, parent.h, anchors.min.y, anchors.max.y, spec.margin.top, spec.margin.bottom, spec.height, spec.minHeight, spec.maxHeight);
+
+        ApplyAspect(axisX.size, axisY.size, spec);
+
+        return {ResolveAxisPosition(axisX, parent.x, parent.w, anchors.min.x, anchors.pivot.x, spec.x.Resolve(parent.w)),
+                ResolveAxisPosition(axisY, parent.y, parent.h, anchors.min.y, anchors.pivot.y, spec.y.Resolve(parent.h)), axisX.size, axisY.size};
     }
 
     void UILayout::LayoutStack(const Rect& parent, const UIStackSpec& stack, eastl::span<const UIRectSpec> children, eastl::vector<Rect>& rects) {
