@@ -136,6 +136,7 @@ namespace BECore {
     }
 
     void ControlService::Process(Request& request) {
+        BE_PROFILE_SCOPE("ControlService::Process");
         if (request.error) {
             request.reply(MakeErrorResponse(request.id, *request.error));
             return;
@@ -185,6 +186,7 @@ namespace BECore {
     }
 
     void ControlService::EndFrame() {
+        BE_PROFILE_SCOPE("ControlService::EndFrame");
         // By index: a hook may add hooks. A copy: a hook may replace itself
         for (size_t i = 0; i < _frameEndHooks.size(); ++i) {
             const FrameEndHook hook = _frameEndHooks[i].hook;

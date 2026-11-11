@@ -94,6 +94,7 @@ namespace BECore {
     }  // namespace
 
     IntrusivePtr<VulkanTexture> VulkanTextureUpload::Upload(VulkanRendererBackend& backend, PoolString path, const uint8_t* rgba, uint32_t width, uint32_t height) {
+        BE_PROFILE_SCOPE("VulkanTextureUpload::Upload");
         auto texture = New<VulkanTexture>();
 
         const uint32_t texWidth = width;

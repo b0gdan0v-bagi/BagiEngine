@@ -13,6 +13,8 @@ cmake --build --preset macos-profile --target BagiMatch3 BagiEngineTests
 
 `macos-release` keeps the profiler off: the baselines of a performance check are measured without any overhead.
 
+`macos-profile-editor` is the same build with the editor, for the ImGui Profiler panel (Ctrl+Shift+E to the editor, then Ctrl+Shift+P). The editor draws the scene into the viewport's offscreen target under ImGui, so its frame is not the Game frame: measure in `macos-profile` or with Tracy.
+
 ## A Chrome trace of a game run
 
 ```bash

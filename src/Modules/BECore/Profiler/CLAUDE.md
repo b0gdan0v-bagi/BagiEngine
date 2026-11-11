@@ -60,7 +60,7 @@ How to use it (flags, Perfetto, sampling profilers, measured costs): `HowToProfi
 
 ## Where the engine's zones are
 
-`Application::RunFrame` (`Frame` around one frame, `Idle` for a manual-clock pass, `Present`, the frame mark at the end), the stages of `CoreManager::OnGameCycle` (`Game cycle` around `Input`, `Tasks`, `Tweens`, `Scene update`, `Widgets update`, `Queued events`, `Draw screen`, `Draw widgets`), `Scene::Update`, `Scene::Draw`, `SceneDrawSystem::Run`, `LogEvent::Flush`, the tasks of the thread pool (`Task`) and of the main thread (`Main thread task`). Named threads: `Main`, `Worker <n>`, `Control accept`, `Control reader`, `Control writer`.
+`Application::RunFrame` (`Frame` around one frame, `Idle` for a manual-clock pass, `Present`, the frame mark at the end), the stages of `CoreManager::OnGameCycle` (`Game cycle` around `Input`, `Tasks`, `Tweens`, `Scene update`, `Widgets update`, `Queued events`, `Draw screen`, `Draw widgets`), `Scene::Update` (the fixed and the plain update events), `Scene::Draw`, `SceneDrawSystem::Run` (sync, sort, draw), `LogEvent::Flush`, the start-up steps (core services, configs, resources, scenes, the window and the renderer), the renderer backends (Vulkan: fence wait, acquire, submit, present; SDL: present, capture; texture loads and uploads), text (layout, glyph atlas, drawing), UI canvases (draw, layout, mouse), control calls, saves, the tasks of the thread pool (`Task`) and of the main thread (`Main thread task`). Named threads: `Main`, `Worker <n>`, `Control accept`, `Control reader`, `Control writer`.
 
 ## Tests
 

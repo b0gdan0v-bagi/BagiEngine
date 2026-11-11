@@ -14,6 +14,7 @@ namespace BECore {
     void ClearScreenWidget::Draw() {}
 
     void ClearScreenWidget::Update() {
+        BE_PROFILE_SCOPE("ClearScreenWidget::Update");
         RenderEvents::SetRenderDrawColorEvent::Emit(_clearColor);
         RenderEvents::RenderClearEvent::Emit();
     }

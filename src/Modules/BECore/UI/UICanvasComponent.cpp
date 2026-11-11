@@ -143,6 +143,7 @@ namespace BECore {
     }
 
     void UICanvasComponent::UpdateLayout(float outputWidth, float outputHeight) {
+        BE_PROFILE_SCOPE("UICanvas::UpdateLayout");
         if (outputWidth <= 0.0f || outputHeight <= 0.0f) {
             return;
         }
@@ -237,6 +238,7 @@ namespace BECore {
     }
 
     void UICanvasComponent::OnDraw() {
+        BE_PROFILE_SCOPE("UICanvas::OnDraw");
         // Also while hidden, so a canvas that is shown later (a modal dialog) already has its place in the input order
         RefreshInputOrder();
 
@@ -312,6 +314,7 @@ namespace BECore {
     }
 
     bool UICanvasComponent::OnMouseButtonDown(const SDL_MouseButtonEvent& event) {
+        BE_PROFILE_SCOPE("UICanvas::OnMouseButtonDown");
         if (!TakesInput()) {
             ClearPointerState();
             return false;
@@ -352,6 +355,7 @@ namespace BECore {
     }
 
     bool UICanvasComponent::OnMouseButtonUp(const SDL_MouseButtonEvent& event) {
+        BE_PROFILE_SCOPE("UICanvas::OnMouseButtonUp");
         if (!TakesInput()) {
             _consumedButtons = 0;
             ClearPointerState();
@@ -374,6 +378,7 @@ namespace BECore {
     }
 
     bool UICanvasComponent::OnMouseMotion(const SDL_MouseMotionEvent& event) {
+        BE_PROFILE_SCOPE("UICanvas::OnMouseMotion");
         if (!TakesInput()) {
             ClearPointerState();
             return false;

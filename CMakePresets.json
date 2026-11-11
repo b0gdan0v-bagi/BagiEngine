@@ -194,6 +194,11 @@
             "inherits": ["ninja", "host-macos", "clang", "profile", "tracy"]
         },
         {
+            "name": "macos-profile-editor",
+            "displayName": "macOS Clang Profile with the editor (the ImGui Profiler panel)",
+            "inherits": ["ninja", "host-macos", "clang", "editor", "profile"]
+        },
+        {
             "name": "windows-msvc-debug",
             "displayName": "Windows MSVC Ninja Debug",
             "inherits": ["ninja", "host-windows", "vs-env", "msvc", "debug"]
@@ -312,6 +317,12 @@
             "displayName": "macOS Clang Profile with Tracy",
             "inherits": "build-macos",
             "configurePreset": "macos-profile-tracy"
+        },
+        {
+            "name": "macos-profile-editor",
+            "displayName": "macOS Clang Profile with the editor (the ImGui Profiler panel)",
+            "inherits": "build-macos",
+            "configurePreset": "macos-profile-editor"
         },
         {
             "name": "macos-rmlui-debug",
@@ -469,6 +480,12 @@
             "displayName": "macOS Clang Profile with Tracy",
             "inherits": "test-macos",
             "configurePreset": "macos-profile-tracy"
+        },
+        {
+            "name": "macos-profile-editor",
+            "displayName": "macOS Clang Profile with the editor (the ImGui Profiler panel)",
+            "inherits": "test-macos",
+            "configurePreset": "macos-profile-editor"
         },
         {
             "name": "macos-rmlui-debug",

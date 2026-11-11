@@ -37,6 +37,7 @@ namespace BECore {
     }
 
     void TextComponent::OnDraw() {
+        BE_PROFILE_SCOPE("TextComponent::OnDraw");
         const auto& renderer = CoreManager::GetRenderer();
         if (!renderer || _text.empty()) {
             return;

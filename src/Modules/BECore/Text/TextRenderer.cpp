@@ -40,6 +40,7 @@ namespace BECore {
 
     size_t TextRenderer::Draw(IRenderer& renderer, FontAtlas& fillAtlas, FontAtlas* outlineAtlas, const TextLayoutResult& layout, float originX, float originY, const Color& tint,
                               const TextEffects& effects) {
+        BE_PROFILE_SCOPE("TextRenderer::Draw");
         if (layout.glyphs.empty()) {
             return 0;
         }

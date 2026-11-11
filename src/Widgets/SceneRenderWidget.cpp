@@ -12,6 +12,7 @@ namespace BECore {
     void SceneRenderWidget::Update() {}
 
     void SceneRenderWidget::DrawScreen() {
+        BE_PROFILE_SCOPE("SceneRenderWidget::DrawScreen");
         CoreManager::GetSceneManager().DrawAll();
     }
 

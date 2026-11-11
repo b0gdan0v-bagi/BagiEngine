@@ -28,8 +28,10 @@ namespace BECore {
         }
         const Time& time = CoreManager::GetTime();
         for (uint32_t step = 0; step < time.GetFixedStepCount(); ++step) {
+            BE_PROFILE_SCOPE("SceneFixedUpdateEvent");
             SceneEvents::SceneFixedUpdateEvent::Emit(time.GetFixedDeltaTime());
         }
+        BE_PROFILE_SCOPE("SceneUpdateEvent");
         SceneEvents::SceneUpdateEvent::Emit(time.GetDeltaTime());
     }
 

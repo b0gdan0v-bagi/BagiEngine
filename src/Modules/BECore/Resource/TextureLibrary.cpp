@@ -46,6 +46,7 @@ namespace BECore {
     }
 
     void TextureLibrary::Initialize() {
+        BE_PROFILE_SCOPE("TextureLibrary::Initialize");
         Clear();
 
         auto deserializer = CoreManager::GetConfigManager().CreateDeserializer("TextureLibrary"_intern);

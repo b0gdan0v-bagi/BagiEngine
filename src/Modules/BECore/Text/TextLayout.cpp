@@ -266,6 +266,7 @@ namespace BECore {
     }  // namespace
 
     TextLayoutResult TextLayout::Layout(const Font& font, eastl::string_view utf8, const TextLayoutOptions& options) {
+        BE_PROFILE_SCOPE("TextLayout::Layout");
         if (font.GetState() != ResourceState::Loaded || options.fontSize <= 0.0f) {
             return {};
         }

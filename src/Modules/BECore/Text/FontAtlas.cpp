@@ -61,6 +61,7 @@ namespace BECore {
     }
 
     bool FontAtlas::Prepare(IRenderer& renderer, eastl::span<const uint32_t> glyphs) {
+        BE_PROFILE_SCOPE("FontAtlas::Prepare");
         eastl::vector<uint32_t> missing;
         for (const uint32_t glyph : glyphs) {
             if (_glyphs.find(glyph) == _glyphs.end()) {
@@ -98,6 +99,7 @@ namespace BECore {
     }
 
     void FontAtlas::BuildPages(IRenderer& renderer, eastl::vector<Pending>& pending, bool& ok) {
+        BE_PROFILE_SCOPE("FontAtlas::BuildPages");
         while (!pending.empty()) {
             // Aim at a page just big enough; grow it while the glyphs do not fit and it is smaller than a full page
             uint64_t area = 0;

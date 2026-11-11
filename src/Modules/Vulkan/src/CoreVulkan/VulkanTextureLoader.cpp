@@ -28,6 +28,7 @@ namespace BECore {
     }
 
     IntrusivePtr<VulkanTexture> VulkanTextureLoader::LoadInternal(PoolString path) {
+        BE_PROFILE_SCOPE("VulkanTextureLoader::Load");
         auto* backend = dynamic_cast<VulkanRendererBackend*>(CoreManager::GetRenderer().Get());
         if (!backend) {
             LOG_ERROR(Format("VulkanTextureLoader: renderer is not VulkanRendererBackend when loading '{}'", path.ToStringView()).c_str());

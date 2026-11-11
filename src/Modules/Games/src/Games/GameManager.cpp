@@ -10,6 +10,7 @@
 namespace BECore {
 
     void GameManager::Initialize() {
+        BE_PROFILE_SCOPE("GameManager::Initialize");
         RegisterGameControl(CoreManager::GetControlService());
 
         const auto& metas = AbstractFactory<IGame>::GetInstance().GetRegisteredTypes();
@@ -55,6 +56,7 @@ namespace BECore {
     }
 
     void GameManager::SwitchTo(PoolString name) {
+        BE_PROFILE_SCOPE("GameManager::SwitchTo");
         if (_active && _active->GetName() == name) {
             return;
         }

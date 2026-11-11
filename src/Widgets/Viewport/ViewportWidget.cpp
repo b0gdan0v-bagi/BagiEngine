@@ -145,6 +145,7 @@ namespace BECore {
     }
 
     void ViewportWidget::Update() {
+        BE_PROFILE_SCOPE("ViewportWidget::Update");
         ImGui::SetNextWindowSize({800.0f, 600.0f}, ImGuiCond_FirstUseEver);
         if (!ImGui::Begin("Viewport")) {
             ImGui::End();

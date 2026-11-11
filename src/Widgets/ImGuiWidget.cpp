@@ -17,6 +17,7 @@ namespace BECore {
     }
 
     bool ImGuiWidget::Initialize(IDeserializer& /*deserializer*/) {
+        BE_PROFILE_SCOPE("ImGuiWidget::Initialize");
         if (_isInitialized) {
             return true;
         }
@@ -54,6 +55,7 @@ namespace BECore {
     }
 
     void ImGuiWidget::Draw() {
+        BE_PROFILE_SCOPE("ImGuiWidget::Draw");
         if (!_isInitialized) {
             return;
         }
@@ -111,6 +113,7 @@ namespace BECore {
     }
 
     void ImGuiWidget::OnNewFrame() const {
+        BE_PROFILE_SCOPE("ImGuiWidget::NewFrame");
         if (!_isInitialized) {
             return;
         }

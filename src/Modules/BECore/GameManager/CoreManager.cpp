@@ -28,6 +28,7 @@ namespace BECore {
     }
 
     void CoreManager::OnApplicationPreInit(PassKey<Application>) {
+        BE_PROFILE_SCOPE("CoreManager::OnApplicationPreInit");
         InitializeCoreServices();
         _testManager.RunAllTests();
     }
@@ -84,6 +85,7 @@ namespace BECore {
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
+        BE_PROFILE_SCOPE("CoreManager::OnApplicationInit");
         _widgetManager.CreateWidgets();
         _sceneManager = LoadSceneManagerFromConfig();  // SceneConfig, with its node files
         _sceneManager->Initialize();
@@ -146,6 +148,7 @@ namespace BECore {
     }
 
     void CoreManager::OnApplicationDeinit(PassKey<Application>) {
+        BE_PROFILE_SCOPE("CoreManager::OnApplicationDeinit");
         _tweenManager.Clear();  // no callbacks: the scenes and what the setters point at may be going away
         _controlService.Shutdown();
         TaskManager::GetInstance().Shutdown(PassKey<CoreManager>{});

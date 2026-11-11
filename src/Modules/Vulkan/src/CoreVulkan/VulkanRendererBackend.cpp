@@ -32,6 +32,7 @@ namespace BECore {
     }  // namespace
 
     bool VulkanRendererBackend::Initialize(IMainWindow& window) {
+        BE_PROFILE_SCOPE("Vulkan::Initialize");
         auto* sdlWindow = dynamic_cast<SDLMainWindow*>(&window);
         if (!sdlWindow) {
             LOG_ERROR("VulkanRendererBackend: IMainWindow is not a SDLMainWindow");
@@ -128,6 +129,7 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::WaitIdle() {
+        BE_PROFILE_SCOPE("Vulkan::WaitIdle");
         if (_device.GetDevice() != VK_NULL_HANDLE) {
             vkDeviceWaitIdle(_device.GetDevice());
         }
@@ -174,6 +176,7 @@ namespace BECore {
     }
 
     bool VulkanRendererBackend::RecreateSwapchain(int pixelWidth, int pixelHeight) {
+        BE_PROFILE_SCOPE("Vulkan::RecreateSwapchain");
         // The old framebuffers and image views may still be in use by the frames in flight
         vkDeviceWaitIdle(_device.GetDevice());
 
@@ -212,6 +215,7 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::AcquireFrame() {
+        BE_PROFILE_SCOPE("Vulkan::AcquireFrame");
         if (_frameAcquired) {
             return;
         }
@@ -232,8 +236,12 @@ namespace BECore {
         const uint32_t frameIdx = _currentFrame;
 
         // Wait until the GPU finishes the previous use of this frame slot
-        vkWaitForFences(vkDevice, 1, &_inFlightFences[frameIdx], VK_TRUE, UINT64_MAX);
+        {
+            BE_PROFILE_SCOPE("Vulkan::WaitFence");
+            vkWaitForFences(vkDevice, 1, &_inFlightFences[frameIdx], VK_TRUE, UINT64_MAX);
+        }
 
+        BE_PROFILE_SCOPE("Vulkan::AcquireImage");
         SwapchainAction action = HandleSwapchainStatus(_swapchain.AcquireNextImage(_device, _imageAvailableSemaphores[frameIdx], _currentImageIndex), SwapchainStage::Acquire);
         if (action == SwapchainAction::RecreateAndRetry) {
             // A failed acquire signaled nothing, so the semaphore is free for the second try. If that is out of date
@@ -288,6 +296,7 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::EndFrame() {
+        BE_PROFILE_SCOPE("Vulkan::EndFrame");
         if (!_inSwapchainPass) {
             return;
         }
@@ -310,7 +319,10 @@ namespace BECore {
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores    = &_renderFinishedSemaphores[frameIdx];
 
-        vkQueueSubmit(_device.GetGraphicsQueue(), 1, &submitInfo, _inFlightFences[frameIdx]);
+        {
+            BE_PROFILE_SCOPE("Vulkan::QueueSubmit");
+            vkQueueSubmit(_device.GetGraphicsQueue(), 1, &submitInfo, _inFlightFences[frameIdx]);
+        }
 
         _inSwapchainPass = false;
         _frameAcquired   = false;
@@ -325,6 +337,7 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::Present() {
+        BE_PROFILE_SCOPE("Vulkan::Present");
         // A frame that was acquired but never begun still owns a signaled semaphore: it is submitted with an empty pass
         if (_frameAcquired && !_inSwapchainPass && !_inOffscreenPass) {
             BeginFrame();
@@ -339,6 +352,7 @@ namespace BECore {
         _frameSubmitted = false;
 
         const uint32_t frameIdx = _currentFrame;
+        BE_PROFILE_SCOPE("Vulkan::QueuePresent");
         HandleSwapchainStatus(_swapchain.Present(_device, _renderFinishedSemaphores[frameIdx], _currentImageIndex), SwapchainStage::Present);
 
         _currentFrame = (_currentFrame + 1) % kMaxFramesInFlight;
@@ -557,6 +571,7 @@ namespace BECore {
     }
 
     IntrusivePtr<ITexture> VulkanRendererBackend::CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) {
+        BE_PROFILE_SCOPE("Vulkan::CreateTexture");
         if (!rgba || width == 0 || height == 0) {
             return {};
         }
@@ -578,6 +593,7 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::SetRenderTarget(IRenderTarget* target) {
+        BE_PROFILE_SCOPE("Vulkan::SetRenderTarget");
         // No open frame (minimized, swapchain out of date): the offscreen draws are skipped like everything else
         if (!_frameAcquired) {
             return;
@@ -620,6 +636,7 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::UnsetRenderTarget() {
+        BE_PROFILE_SCOPE("Vulkan::UnsetRenderTarget");
         if (!_inOffscreenPass) {
             return;
         }
@@ -706,11 +723,13 @@ namespace BECore {
     }
 
     void VulkanRendererBackend::OnImGuiNewFrame() {
+        BE_PROFILE_SCOPE("Vulkan::ImGuiNewFrame");
         ImGui_ImplSDL3_NewFrame();
         ImGui_ImplVulkan_NewFrame();
     }
 
     void VulkanRendererBackend::OnImGuiRender() {
+        BE_PROFILE_SCOPE("Vulkan::ImGuiRender");
         // Only into an open swapchain pass: a skipped frame has no command buffer to record into
         if (!_inSwapchainPass) {
             return;
