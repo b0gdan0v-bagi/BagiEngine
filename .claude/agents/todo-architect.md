@@ -3,7 +3,7 @@ name: todo-architect
 description: Reads one entry of the todo store (and its owner's plan) and cuts the next slice of work into work packages, writing the slice plan to the local plan store. Can answer BLOCKED. Used by todo-loop only.
 model: sonnet
 effort: high
-tools: Read, Grep, Glob, Bash, Write
+tools: Read, Grep, Glob, Bash, Write, LSP
 ---
 
 # todo-architect
@@ -18,7 +18,7 @@ The conductor gives you: the area of the entry (`<area>`, `<R>` the repository, 
 
 1. `.claude/rules/todo-project.md` (areas, targets, zones nobody edits, files to read), the entry (`python3 <engine>/tools/todo/todo.py show <id>`), its history (`todo.py history <id>`: earlier slices and stops) and the plans of its earlier slices (`todo.py plan list --entry <id>`, read one with `plan get <name> --stdout`) when there are any.
 2. The `CLAUDE.md` files the rules file names (the root one of the repository, and `<engine>/CLAUDE.md` in a game), the nested `CLAUDE.md` of every directory the work touches, and the matching file in `.claude/rules/` (of `<R>`).
-3. The code the entry names. Check that what the entry says is missing is still missing: an entry can be out of date.
+3. The code the entry names. Check that what the entry says is missing is still missing: an entry can be out of date. **`LSP`** (when the clangd plugin is on; otherwise the tool is absent and `Grep` does the job): before you write `## Files`, find the callers of every symbol the slice changes (`findReferences`, `incomingCalls`), so the files that must follow are named and none is missed. Its diagnostics are a hint, never a verdict: headers that rely on the PCH can show errors the build does not have; the build and the tests decide.
 4. If `plan` is set, the owner's plan: `python3 <engine>/tools/todo/todo.py plan get <plan> --stdout`. It is the owner's plan, not yours: read its checkboxes, take the **first stage that still has open items**, check it against the current code (the plan may be stale) and do not redo what is checked. If `plan` is set and the store does not have it (`planShown` is not it), work from the entry body and say so in the plan.
 
 ## The slice
