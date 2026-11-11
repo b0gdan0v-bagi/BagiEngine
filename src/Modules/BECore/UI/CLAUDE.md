@@ -36,6 +36,8 @@ Each file below loads by itself when a file of its area is read; read it by path
 | `UIColor`, `UIText` / `UIAttr` | colors and the state shifts; text forms of lengths, edges, colors, numbers |
 | `UIDocument`, `UIDocumentLoader` | a `.ui.xml` file, `Instantiate` per canvas |
 | `UIRegionSet` | the named rects (canvas units) a game publishes for a canvas; an element with `region` lays out inside one (`ui-layout.md`, "Named regions") |
+| `UIRectEdit` | the inverse of `UILayout::ResolveRect` (`SpecForRect`: a wanted rect to a spec, only numbers change; `exact` false when limits or aspect forbid it), the px / % switch that keeps the layout, the region names of a picker |
+| `UIAnchorPresets` | the Unity grid of sixteen anchors, `Match` of a spec, `Apply` that changes the anchors and keeps the rect on screen (Shift: pivot, Alt: position) |
 | `UIPreview`, `UIPreviewOverlay` | the viewport's shapes, devices, zoom and safe areas; the rects of its overlays (view, canvas bounds, touch marks, regions) |
 
 ## Rules
