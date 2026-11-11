@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- Failure: a button that already holds components. -->
+<node name="HasComponents" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIButton" name="Mixed" x="10" y="10" width="120" height="56" text="Mixed" action="Go">
+          <components><component type="UITooltipComponent" text="tip"/></components>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

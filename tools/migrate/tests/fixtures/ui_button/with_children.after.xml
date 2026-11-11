@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!-- A button with children of its own: the components come first, the children stay as they are (a button inside a button is composed too). -->
+<node name="WithChildren" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIElement" name="Card" x="10" y="10" width="200" height="120" color="50,50,80,255">
+          <components>
+            <component type="UITextComponent" text="Card" align="Center" verticalAlign="Center" wrap="false"/>
+            <component type="UIInputClicker" action="OpenCard"/>
+          </components>
+          <children>
+            <!-- a badge in the corner -->
+            <element type="UILabel" name="Badge" anchor="TopRight" width="24" height="24" text="3" />
+            <element type="UIElement" name="Inner" anchor="BottomRight" width="56" height="56">
+              <components>
+                <component type="UITextComponent" text="x" align="Center" verticalAlign="Center" wrap="false"/>
+                <component type="UIInputClicker" action="Inner"/>
+              </components>
+            </element>
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

@@ -1,5 +1,6 @@
 #include "SceneLoader.h"
 
+#include <BECore/Config/ContentVersion.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
@@ -30,8 +31,18 @@ namespace BECore {
         return manager;
     }
 
+    IntrusivePtrAtomic<SceneManager> LoadCheckedSceneManager(const XmlNode& configRoot, const NodeFileLoader& loader, eastl::string_view configName) {
+        if (configRoot) {
+            if (const auto version = CheckContentVersion(configRoot.GetPugiNode(), Format("Config '{}'", configName)); !version) {
+                LOG_ERROR(version.error().c_str());
+                return New<SceneManager>();
+            }
+        }
+        return LoadSceneManager(configRoot, loader, configName);
+    }
+
     IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromConfig() {
-        return LoadSceneManager(CoreManager::GetConfigManager().GetConfig(kSceneConfigName), MakeFileSystemNodeLoader(CoreManager::GetFileSystem()), kSceneConfigName);
+        return LoadCheckedSceneManager(CoreManager::GetConfigManager().GetConfig(kSceneConfigName), MakeFileSystemNodeLoader(CoreManager::GetFileSystem()), kSceneConfigName);
     }
 
 }  // namespace BECore

@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!--
+  The button HintButton (action MahjongHintAdvice, neutral, 120 x 56 units, hidden until the component shows it) of the hints. It is
+  the one interactive element of the hints and has a node of its own because the canvas Hints is a SceneView canvas, which the
+  table's fit scales (56 units are 32 px only from a window of 732 x 412), so a button there is under the touch minimum in every
+  narrow window. HintsButton is the same canvas in the same place (x 96, y 92, the left end of the strip under the waiting row in
+  the top left corner; the label AdviceText of Hints lies right of it, and like it the button keeps to the safe area), shown by
+  MahjongTableComponent exactly where Actions is shown and hidden where ActionsCompact is, which holds a HintButton of its own in its
+  row, 100 wide (a Screen canvas, touch minimum met). MahjongHintsComponent shows and hides the element by name, so both
+  follow. It comes after Hints (layer 6) so that it lies over the label's plate. In a portrait view it is at x 360, y 836, between the
+  waiting row and the label of Hints, and 68 high like the buttons of Actions there (kPortraitActionButtonHeight): the view is 720 wide,
+  so it is a touch target wherever Actions is. In a wide view (1560 x 720, minAspect:2: the landscape table 140 units in from each
+  side) it moves right by the wing (x 236), so it stays under the waiting row and clear of every tile as in landscape. In a narrow view (1080 x 768,
+  orientation:landscape;maxAspect:1.55) it is the left end of the strip in the top left corner (x 8, y 92).
+-->
+<node name="HintsButton" layer="6">
+  <components>
+    <component type="UICanvasComponent" space="SceneView" useSafeArea="true">
+      <elements>
+        <element type="UIButton" name="HintButton" anchor="TopLeft" visible="false" x="96" y="92" width="120" height="56" text="{#hints.adviseButton}" fontSize="22" action="MahjongHintAdvice" color="70,70,100,255" />
+      </elements>
+      <variants>
+        <variant when="orientation:portrait">
+          <overrides>
+            <set element="HintButton" x="360" y="836" height="68" />
+          </overrides>
+        </variant>
+        <variant when="orientation:landscape;maxAspect:1.55">
+          <overrides>
+            <set element="HintButton" x="8" />
+          </overrides>
+        </variant>
+        <variant when="minAspect:2">
+          <overrides>
+            <set element="HintButton" x="236" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

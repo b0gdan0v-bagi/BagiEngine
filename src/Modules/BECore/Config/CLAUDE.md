@@ -49,3 +49,13 @@ A list of factory objects (widgets, runtime tests, log sinks, assert handlers) i
 1. Drop `config/<Name>.xml`; it is picked up by name at the next start.
 2. Consume it with `GetConfig("<Name>"_intern)` or `MakeFromConfig<T>("<Name>")`.
 3. If users should edit it in the Config Editor, register enum or flag hints in `ConfigEditorWidget::Initialize` (`src/Widgets/ConfigEditor/`): `RegisterEnum<E>` for an enum, `RegisterFactoryTypes<Base>` for a `type` attribute resolved by `AbstractFactory<Base>`. The options must be the strings the loader accepts (for a factory, the class names), so take them from the factory or the enum, never from a copy.
+
+## Content version
+
+A **content file** is a file of a `config/` folder whose root element is `SceneManager` (a `SceneConfig.xml`) or `node` (a node file): `IsContentRoot` (`ContentVersion.h`). Its root may carry `contentVersion="N"`; **no attribute is version 1**, the format before versions (an explicit `0` is older than anything). The engine reads exactly one number, `kContentVersion`: a format change that old files cannot satisfy adds a step to `tools/migrate/steps/` and bumps it (`tools/migrate/CLAUDE.md`). Other files (`UIConfig.xml`, `TextureLibrary.xml`, ...) are not content files and carry no version; the first step that rewrites one adds its root to `IsContentRoot`.
+
+- **One number for the engine, one stamp per file:** a game's files are migrated together with the engine's, never read through an in-memory upgrade, so a loader only compares and refuses. A file is stamped by the tool, not by hand.
+- **Who checks:** `LoadSceneManagerFromConfig()` (the root of the game's `SceneConfig`; an older, newer or malformed root is one `LOG_ERROR` and an empty `SceneManager`) and `MakeFileSystemNodeLoader` (the node file of a reference is dropped like one that does not parse). **Who does not:** `LoadSceneManager(XmlNode, ...)` (a parsed root of tests and tools) and `MakeDirectoryNodeLoader`, so inline XML in tests needs no stamp; `CheckContentVersion` is the pure check a test of a content file calls. The message names the file, its version and the engine's, and says `python3 engine/tools/migrate/migrate.py <your game folder>` (older) or "update the engine" (newer).
+- **The stamp is not part of the scene:** `ExpandNodeReferences` removes it from the copy of a node it inserts; the deserializer ignores it on the `SceneConfig` root; the scene editor's save keeps that root as it is.
+- **A game's own steps** use the attribute `contentVersion.<track>`, which no engine loader reads: the game's test runs the tool with `--check`.
+- A test of a game's own content: `ExpectContentFilesAtCurrentVersion(configFolder)` (`tests/Common/ContentFilesCheck.h`).

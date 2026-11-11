@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!-- What the file says about the text is kept (Left, wrap), what it does not say gets the defaults of a UIButton (Center, Center, no wrap). The text fields keep their order. -->
+<node name="TextAttributes" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIElement" name="Left" width="200" height="56">
+          <components>
+            <component type="UITextComponent" text="Left aligned" align="Left" verticalAlign="Center" wrap="true"/>
+            <component type="UIInputClicker" action="Go"/>
+          </components>
+        </element>
+        <element type="UIElement" name="Styled" width="200" height="56" fontSize="20">
+          <components>
+            <component type="UITextComponent" text="He said &quot;go&quot;" fontFamily="Serif" fontWeight="700" textColor="250,240,200,255" align="Center" verticalAlign="Top" overflow="Clip" wrap="false" lineSpacing="1.2" textOutline="2,0,0,0,255" textShadow="1,1,#000000AA"/>
+            <component type="UIInputClicker" action="Go"/>
+          </components>
+        </element>
+        <element type="UIElement" name="OnlyColor" width="100" height="56" selectedColor="200,200,0,255">
+          <components>
+            <component type="UITextComponent" textColor="10,10,10,255" align="Center" verticalAlign="Center" wrap="false"/>
+            <component type="UIInputClicker" action="Go"/>
+          </components>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

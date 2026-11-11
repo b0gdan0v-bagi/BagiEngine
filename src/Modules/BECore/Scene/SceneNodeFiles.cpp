@@ -1,5 +1,7 @@
 #include "SceneNodeFiles.h"
 
+#include <BECore/Config/ContentVersion.h>
+
 namespace BECore {
 
     namespace {
@@ -30,8 +32,9 @@ namespace BECore {
             return {};
         }
 
-        /// Parses @p file into @p out and checks that its document element is a node that is not a reference itself
-        bool ReadNodeFile(const std::filesystem::path& file, pugi::xml_document& out, eastl::string& error) {
+        /// Parses @p file into @p out and checks that its document element is a node that is not a reference itself and, when
+        /// @p versionLabel is not empty, that its content version is the engine's (the label names the file in the message)
+        bool ReadNodeFile(const std::filesystem::path& file, pugi::xml_document& out, eastl::string& error, eastl::string_view versionLabel = {}) {
             std::error_code ec;
             if (file.empty() || !std::filesystem::is_regular_file(file, ec)) {
                 error = ec ? Format("the node file cannot be read: {}", ec.message()) : eastl::string{"the node file does not exist"};
@@ -50,6 +53,12 @@ namespace BECore {
             if (root.attribute(kNodeRefAttribute.data())) {
                 error = "the node of a node file cannot be a reference itself";
                 return false;
+            }
+            if (!versionLabel.empty()) {
+                if (const auto version = CheckContentVersion(root, versionLabel); !version) {
+                    error = version.error();
+                    return false;
+                }
             }
             return true;
         }
@@ -84,7 +93,8 @@ namespace BECore {
                     if (error.empty()) {
                         pugi::xml_document file;
                         if (loader(ref, file, error)) {
-                            nodesEl.insert_copy_before(file.document_element(), el);
+                            // The version is a fact about the file, not about the node in the live scene
+                            nodesEl.insert_copy_before(file.document_element(), el).remove_attribute(kContentVersionAttribute.data());
                             ++result.expanded;
                         } else if (error.empty()) {
                             error = "the node file cannot be loaded";
@@ -148,7 +158,7 @@ namespace BECore {
                 return false;
             }
             const eastl::string virtualPath = Format("{}/{}{}", kNodeFilesMountPoint, ref, kNodeFileExtension);
-            return ReadNodeFile(fs.ResolvePath(virtualPath), out, error);
+            return ReadNodeFile(fs.ResolvePath(virtualPath), out, error, virtualPath);
         };
     }
 

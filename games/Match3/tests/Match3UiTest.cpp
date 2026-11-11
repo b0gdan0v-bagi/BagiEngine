@@ -4,9 +4,10 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UILabel.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -227,6 +228,28 @@ namespace BECore::Match3::Tests {
             const UIElement* seed = root.FindByName(PoolString::Intern("Seed"));
             ASSERT_NE(seed, nullptr);
             EXPECT_GE(seed->rect.y, boardBottom - 0.01f) << "Seed at " << size.first << "x" << size.second;
+        }
+    }
+
+    /// The buttons of the shipped file are composed elements (migrated from `UIButton` by tools/migrate, step 1 to 2): a plain element with a
+    /// text component and a clicker that holds the action
+    TEST_F(Match3UiTest, TheShippedButtonsAreComposedElementsWithTheirAction) {
+        struct Button {
+            const char* scene;
+            const char* node;
+            const char* name;
+            const char* action;
+        };
+        for (const Button& button : {Button{"MainMenu", "Menu", "Play", "Match3Play"}, Button{"MainMenu", "Menu", "Quit", "Match3Quit"}, Button{"Match3Scene", "Hud", "Reset", "Match3Reset"},
+                                     Button{"Match3Scene", "Hud", "Menu", "Match3Menu"}}) {
+            auto canvas = Canvas(button.scene, button.node);
+            ASSERT_TRUE(canvas) << button.name;
+            UIElement* element = canvas->GetRoot().FindByName(PoolString::Intern(button.name));
+            ASSERT_NE(element, nullptr) << button.name;
+            const UIInputClicker* clicker = element->GetComponent<UIInputClicker>();
+            ASSERT_NE(clicker, nullptr) << button.name;
+            EXPECT_EQ(clicker->action, PoolString::Intern(button.action)) << button.name;
+            EXPECT_NE(element->GetComponent<UITextComponent>(), nullptr) << button.name;
         }
     }
 

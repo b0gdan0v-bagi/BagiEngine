@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!-- The icon fields of a button with no icon (an empty `icon`, or none) mean nothing: they are dropped, and the button is composed like any other. -->
+<node name="NoIcon" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIButton" name="Empty" x="10" y="10" width="120" height="56" text="Go" icon="" iconTint="255,200,0,255" iconSize="32" iconPlacement="Above" action="Go" />
+        <element type="UIButton" name="Stray" x="140" y="10" width="120" height="56" text="Stop" iconPlacement="Left" action="Stop" />
+      </elements>
+    </component>
+  </components>
+</node>

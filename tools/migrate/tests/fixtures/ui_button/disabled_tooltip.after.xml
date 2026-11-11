@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- A disabled button with a value and a tooltip that names a string key and a variable. -->
+<node name="Disabled" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="SceneView">
+      <elements>
+        <element type="UIElement" name="Buy" x="10" y="10" width="120" height="56" color="40,90,60,255" disabledColor="60,60,60,255">
+          <components>
+            <component type="UITextComponent" text="Buy {price}" align="Center" verticalAlign="Center" wrap="false"/>
+            <component type="UIInputClicker" action="Buy" value="sword" disabled="true"/>
+            <component type="UITooltipComponent" text="{#shop.tip}: {price} &amp; more"/>
+          </components>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

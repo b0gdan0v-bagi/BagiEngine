@@ -1,3 +1,4 @@
+#include <BECore/Config/ContentVersion.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/Control/Json.h>
 #include <BECore/FileSystem/FileSystem.h>
@@ -50,9 +51,10 @@ namespace BECore::Tests {
   </component>
 </components></node>)";
 
-        constexpr const char* kSharedEngineNode = R"(<node name="FromEngine"/>)";
-        constexpr const char* kSharedGameNode = R"(<node name="FromGame"/>)";
-        constexpr const char* kOnlyNode = R"(<node name="Only"/>)";
+        // Read through the file-system loader, which refuses a node file that is not at the current content version
+        eastl::string CurrentNode(const char* name) {
+            return Format("<node name=\"{}\" contentVersion=\"{}\"/>", name, kContentVersion);
+        }
 
         const char* const kNodeNames[] = {"Board", "Hud", "Menu"};
         const char* const kNodeTexts[] = {kBoardNode, kHudNode, kMenuNode};
@@ -353,9 +355,9 @@ namespace BECore::Tests {
         std::filesystem::remove_all(base);
         const std::filesystem::path engine = base / "engine";
         const std::filesystem::path game = base / "game";
-        WriteFile(engine / "config" / "nodes" / "Shared.xml", kSharedEngineNode);
-        WriteFile(game / "config" / "nodes" / "Shared.xml", kSharedGameNode);
-        WriteFile(engine / "config" / "nodes" / "Only.xml", kOnlyNode);
+        WriteFile(engine / "config" / "nodes" / "Shared.xml", CurrentNode("FromEngine").c_str());
+        WriteFile(game / "config" / "nodes" / "Shared.xml", CurrentNode("FromGame").c_str());
+        WriteFile(engine / "config" / "nodes" / "Only.xml", CurrentNode("Only").c_str());
 
         FileSystem fs;
         fs.AddContentRoot(engine);

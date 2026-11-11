@@ -42,6 +42,8 @@ Each WP holds:
 
 Every deliverable is a checkbox (`- [ ]`) so that progress can be counted.
 
+A slice that renames or removes a reflected class or field a content file can name, moves a field, or turns a control into components gets a **WP for the migration step** (`tools/migrate/steps/`, a before/after fixture pair, a test that the migrated content behaves as before, a bump of `kContentVersion`, the tool run on the engine's content: `tools/migrate/CLAUDE.md`). A game's own files are not part of the slice: the plan says in "Left for the owner" that the game runs the tool after `Update engine`.
+
 ## Level of a WP
 
 Each WP gets a **Level**; the conductor picks the model and the effort of the developer of its run from it, and runs the final review on sonnet instead of opus when every WP is `light` (`todo-loop/SKILL.md`, "Roles and models"). You decide where the work can go cheaper; when in doubt, `normal`.
