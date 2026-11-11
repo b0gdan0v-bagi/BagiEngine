@@ -98,6 +98,9 @@ namespace BECore {
         if (height) {
             style.rect.height = *height;
         }
+        if (region) {
+            style.rect.region = *region;
+        }
         if (direction) {
             style.stack.direction = *direction;
         }
@@ -118,6 +121,7 @@ namespace BECore {
         if (height) {
             UIAttr::WriteLength(s, "height", *height);
         }
+        SaveOptional(s, "region", region);
         SaveOptional(s, "direction", direction);
         SaveOptional(s, "fontSize", fontSize);
     }
@@ -130,6 +134,7 @@ namespace BECore {
         LoadOptional(d, "y", y);
         UIAttr::ReadOptionalLength(d, "width", width);
         UIAttr::ReadOptionalLength(d, "height", height);
+        LoadOptional(d, "region", region);
         LoadOptional(d, "direction", direction);
         LoadOptional(d, "fontSize", fontSize);
     }

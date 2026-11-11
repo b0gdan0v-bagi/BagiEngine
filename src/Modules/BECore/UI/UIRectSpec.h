@@ -53,6 +53,7 @@ namespace BECore {
         UIAspectMode aspectMode = UIAspectMode::Fit;
         UIEdges margin;     ///< Stretch only: the distance to each edge of the parent
         float flex = 0.0f;  ///< stack only: the weight of the share of the main axis that fixed children leave; 0 keeps the size
+        PoolString region;  ///< anchor layout only: the name of a region the game published (UIRegionSet); it replaces the parent box. Empty is none
 
         [[nodiscard]] bool operator==(const UIRectSpec&) const = default;
     };

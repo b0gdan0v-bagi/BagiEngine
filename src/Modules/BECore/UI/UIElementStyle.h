@@ -10,7 +10,7 @@ namespace BECore {
      * @brief Everything a variant can change about an element.
      *
      * In a file the style is not a child element: its properties are attributes of the element itself (`anchor`, `x`, `y`, `width`, `height`, `minWidth`,
-     * `maxWidth`, `minHeight`, `maxHeight`, `aspectRatio`, `aspectMode`, `margin`, `flex`, `direction`, `spacing`, `padding`, `wrapChildren`, `crossAlign`,
+     * `maxWidth`, `minHeight`, `maxHeight`, `aspectRatio`, `aspectMode`, `margin`, `flex`, `region`, `direction`, `spacing`, `padding`, `wrapChildren`, `crossAlign`,
      * `fontSize`, `visible`). Only a value that differs from the default is written. A length is "220" or "90%", `margin` and `padding` are one number or
      * "left,top,right,bottom".
      *
