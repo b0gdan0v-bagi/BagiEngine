@@ -1,0 +1,104 @@
+<?xml version="1.0"?>
+<!-- A button with an icon and a caption (the icon on the left): a horizontal stack of an image child and a caption child that takes the rest. The caption gets the text attributes
+     and the fontSize, the button the clicker, the tooltip and the stack. -->
+<node name="IconText" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIElement" name="Play" x="10" y="10" width="200" height="56" color="40,90,60,255" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker" action="Play" value="easy"/>
+            <component type="UITooltipComponent" text="{#tip.play}: {level}"/>
+          </components>
+          <children>
+            <element type="UIElement" name="PlayIcon" height="50%" aspectRatio="1">
+              <components>
+                <component type="UIImageComponent" sprite="icons.play"/>
+              </components>
+            </element>
+            <element type="UIElement" name="PlayCaption" flex="1" height="100%" fontSize="22">
+              <components>
+                <component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" overflow="Ellipsis" wrap="false"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIElement" name="Off" x="10" y="80" width="200" height="56" color="40,90,60,255" disabledColor="60,60,60,255" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker" action="Stop" disabled="true"/>
+          </components>
+          <children>
+            <element type="UIElement" name="OffIcon" height="50%" aspectRatio="1">
+              <components>
+                <component type="UIImageComponent" sprite="icons.stop"/>
+              </components>
+            </element>
+            <element type="UIElement" name="OffCaption" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="Stop" align="Center" verticalAlign="Center" wrap="false"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIElement" name="Styled" x="10" y="150" width="240" height="64" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker" action="Gear"/>
+          </components>
+          <children>
+            <element type="UIElement" name="StyledIcon" width="28" height="28">
+              <components>
+                <component type="UIImageComponent" sprite="icons.gear" tint="255,200,0,255"/>
+              </components>
+            </element>
+            <element type="UIElement" name="StyledCaption" flex="1" height="100%" fontSize="20">
+              <components>
+                <component type="UITextComponent" text="A long caption for the rest" textColor="250,240,200,255" align="Center" verticalAlign="Center" overflow="AutoFit" wrap="false" minFontSize="12"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIElement" x="10" y="230" width="120" height="56" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker" action="Anonymous"/>
+          </components>
+          <children>
+            <element type="UIElement" height="50%" aspectRatio="1">
+              <components>
+                <component type="UIImageComponent" sprite="icons.play"/>
+              </components>
+            </element>
+            <element type="UIElement" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="Go" align="Center" verticalAlign="Center" wrap="false"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIElement" name="Narrow" anchor="TopRight" x="-10" y="10" width="72" height="48" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker" action="Play"/>
+          </components>
+          <children>
+            <element type="UIElement" name="NarrowIcon" height="50%" aspectRatio="1">
+              <components>
+                <component type="UIImageComponent" sprite="icons.play"/>
+              </components>
+            </element>
+            <element type="UIElement" name="NarrowCaption" flex="1" height="100%" fontSize="18">
+              <components>
+                <component type="UITextComponent" text="Narrow caption" align="Center" verticalAlign="Center" wrap="false"/>
+              </components>
+            </element>
+          </children>
+        </element>
+      </elements>
+      <variants>
+        <variant when="orientation:portrait">
+          <overrides>
+            <set element="Play" x="0" width="90%" visible="true" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

@@ -55,7 +55,7 @@ A change that renames or removes a reflected class or field a content file can n
 
 1. A module `steps/sNNNN_<name>.py` with `@step(N, "<name>")`, N the current `kContentVersion`.
 2. A fixture pair `tests/fixtures/<name>/<case>.before.xml` / `.after.xml` per shape (a whole real file where one exists, plus a case per rule and per refusal) and a pytest that checks the output equals the `after` exactly and that the `after` migrates to itself. A failure case has a `before` and no `after`.
-3. When the behaviour must stay the same, a C++ test that loads both fixtures and compares what the user sees (`tests/BECore/ContentMigrationButtonTest.cpp` is the model).
+3. When the behaviour must stay the same, a C++ test that loads both fixtures and compares what the user sees (`tests/BECore/ContentMigrationButtonTest.cpp` is the model; a case that rebuilds the shape, such as the icon forms of step 1, compares the quads within a unit and refuses what it cannot make agree).
 4. `kContentVersion` becomes N+1.
 5. `python3 tools/migrate/migrate.py --root .` in the engine repository for its own content (`config/`, `games/Match3/config/`); the diff goes in the commit. The games are migrated by their owners after the engine is updated.
 

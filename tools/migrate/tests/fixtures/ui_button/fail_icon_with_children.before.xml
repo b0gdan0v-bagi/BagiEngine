@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!-- Failure: a button with an icon whose form is a stack of its own children cannot also have children, or a layout of its own; the file stays as it is. -->
+<node name="IconChildren" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIButton" name="Badged" x="10" y="10" width="120" height="56" icon="icons.play" text="Go" action="Play">
+          <children>
+            <element type="UILabel" name="Badge" anchor="TopRight" width="24" height="24" text="3" />
+          </children>
+        </element>
+        <element type="UIButton" name="Padded" x="150" y="10" width="56" height="56" icon="icons.play" padding="4" action="Play" />
+      </elements>
+    </component>
+  </components>
+</node>
