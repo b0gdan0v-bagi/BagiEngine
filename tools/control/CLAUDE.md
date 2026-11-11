@@ -8,6 +8,7 @@ Python tools that drive a game through the control API (`src/Modules/RemoteContr
 |------|---------|
 | `bagi_control_client.py` | WebSocket (RFC 6455) client with the standard library only: `BagiControlClient.call(method, params)`, pushed events in `events`, `ControlError` for an error response |
 | `game_process.py` | `GameProcess`: starts a game executable with `--control`, retries until it listens, keeps its log; `build_game_command`, `free_port`, `preset_executable` |
+| `scenario.py` | The scenario file ("Scenario files"): `load` / `dump`, the expectations (`evaluate`), what a recording writes (`minimal_expect`, `full_expect`) and `--update` writes (`updated_expect`). Standard library only, no I/O besides the two |
 | `bagi_session.py` | `GameSession`: one game, started (`launch`) or reached (`connect`), as plain Python calls. No MCP code, so it is tested without the `mcp` package. `SessionError` for what the session refuses; a refusal of the game stays a `ControlError` |
 | `bagi_mcp.py` | The MCP server (stdio). Each tool is one line over `GameSession`; the only file that needs `mcp` |
 | `requirements.txt` | `mcp` (2.x) and `pytest`; nothing else is needed |
@@ -20,6 +21,21 @@ Use the repository venv (`CI/setup_venv.*` makes `.venv`; on Windows `.venv\Scri
 ```bash
 .venv/bin/python -m pytest tools/control/tests                # the tests
 ```
+
+## Scenario files
+
+A session recorded as JSON lines (UTF-8, one object per line, no comments, blank lines skipped) that a player replays as a test. `scenario.py` holds the format; a file that breaks it is a `ScenarioError` naming file and line.
+
+- **Line 1, the header:** `{"scenario": 1, "game": "Match3", "flags": ["--headless", "--manual-clock"], "title": "..."}`. `scenario` is the format version (a tool refuses a number it does not know and says so); `game` is the active game's name (`list_games.active`, checked after the start); `flags` are the start flags besides `--control` / `--control-port` (`--headless` and `--manual-clock` map onto the launch options, any other goes to the game as it is, so a flag of a later entry fits); `title` is free text.
+- **Every other line is one control call:** `{"method": "perform_action", "params": {...}, "expect": {...}}`, sent in order on one connection. `params` and `expect` are optional, `note` (free text) is ignored.
+- **`expect`**, every member optional, all must hold, checked in this order:
+  - `error`: the error code the call must answer. An error without this member fails the line (the shrinker's `lenient` mode tolerates it); an `error` that does not happen fails too.
+  - `result`: the whole answer equals the value. `equal`: each member of the answer (top level) equals the value. `pointers`: JSON pointer (RFC 6901, `/state/score`, `/a/0/b`) to value; a missing path is its own "absent", not `null`. Equality is JSON's: `true` is not `1`.
+  - `versionStep`: `answer.version` minus the last `version` seen in an earlier answer of the run (any object result with an integer `version`). Relative on purpose: a scenario does not break when a counter starts elsewhere. Not checked when no version was seen before.
+  - `event`: `{"name": "state_changed", "equal": {"version": 5}, "timeout": 5}`: a push of that name whose `data` has these members arrives (already received, or within `timeout` seconds, default 5); the matching push is consumed.
+  - `logClean`: `true`: no line of the game's log since its start has the level Warning, Error or Fatal.
+- **What is written.** A recording (mode `minimal`, the default) writes `error` and `versionStep` only, so a scenario survives a change of the game's data and fails on what the API promises. Mode `full` adds `result`; the picture of a `screenshot` is never written, its `width` and `height` go to `equal` instead. `equal`, `pointers`, `event` and `logClean` are added by hand, never by default. `--update` of the player rewrites the values of `error`, `result`, `equal`, `pointers` and `versionStep` that a line has, drops what no longer applies, adds the minimal ones to a line with none of the five, and keeps `event` and `logClean`.
+- `dump` writes the stable form (members in a fixed order, `ensure_ascii=False`), so a loaded and dumped file does not change and a diff shows the real change.
 
 ## Naming the game
 
