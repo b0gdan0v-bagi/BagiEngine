@@ -204,15 +204,16 @@ def link_files(layout: Layout, worker: Path) -> None:
 
 
 def configure(layout: Layout, worker: Path, preset: str) -> None:
-    """The first configure of the worker's own build/, so its first build needs none (no ccache: a full
-    build of the game takes about 20 s on the owner's machine, and across worktrees the absolute paths of
-    the PCH and of the generated reflection code let ccache hit only about a third)."""
+    """The first configure of the worker's own build/, so its first build needs none. ENGINE_CCACHE_BASE_DIR
+    is the folder of the workers: ccache hashes the paths under it relative to the build folder, so the
+    workers share cache hits (cmake/BagiCompilerCache.cmake; __FILE__ and debug paths are relative there,
+    the main checkout keeps absolute ones and shares nothing with them)."""
     env = dict(os.environ)
     for venv in (layout.main / SHARED_SUBMODULE / ".venv" / "bin", layout.main / ".venv" / "bin"):
         if venv.is_dir():
             env["PATH"] = f"{venv}{os.pathsep}{env.get('PATH', '')}"
             break
-    command = ["cmake", "--preset", preset]
+    command = ["cmake", "--preset", preset, f"-DENGINE_CCACHE_BASE_DIR={layout.root}"]
     print(f"  configure: {' '.join(command)}")
     result = subprocess.run(command, cwd=worker, env=env, capture_output=True, text=True)
     if result.returncode != 0:
