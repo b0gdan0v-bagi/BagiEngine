@@ -15,6 +15,17 @@ namespace BECore {
         void WriteEdges(ISerializer& s, eastl::string_view key, const UIEdges& edges);
         bool ReadEdges(IDeserializer& d, eastl::string_view key, UIEdges& out);
 
+        /// "x,y" (UIText::FormatFraction2): an anchor or a pivot
+        void WriteVec2Fraction(ISerializer& s, eastl::string_view key, const Vec2& value);
+        /// Writes the attribute only when the optional holds a value
+        void WriteOptionalVec2Fraction(ISerializer& s, eastl::string_view key, const std::optional<Vec2>& value);
+        /// Sets @p out when the attribute is there and well formed; otherwise leaves it as it was (a malformed one is reported to @p d)
+        void ReadOptionalVec2Fraction(IDeserializer& d, eastl::string_view key, std::optional<Vec2>& out);
+
+        /// Writes the attribute only when the optional holds edges (even equal to the default: an override "margin is 0" must survive)
+        void WriteOptionalEdges(ISerializer& s, eastl::string_view key, const std::optional<UIEdges>& edges);
+        void ReadOptionalEdges(IDeserializer& d, eastl::string_view key, std::optional<UIEdges>& out);
+
         void WriteCorners(ISerializer& s, eastl::string_view key, const UICorners& corners);
         bool ReadCorners(IDeserializer& d, eastl::string_view key, UICorners& out);
 

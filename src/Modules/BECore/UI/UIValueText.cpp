@@ -8,6 +8,8 @@ namespace BECore::UIText {
 
         constexpr char PercentSign = '%';
         constexpr eastl::string_view PixelsSuffix = "px";
+        constexpr size_t FractionPartCount = 2;
+        constexpr float PercentDivisor = 100.0f;
         constexpr size_t RgbaPartCount = 4;
         constexpr size_t CornerCount = 4;
         constexpr size_t ShadowNumberCount = 4;  // offsetX, offsetY, blur, spread: the colour follows
@@ -102,6 +104,32 @@ namespace BECore::UIText {
             return std::nullopt;
         }
         return UILength{*value, unit};
+    }
+
+    eastl::string FormatFraction2(const Vec2& value) {
+        return Format("{},{}", value.x, value.y);
+    }
+
+    std::optional<Vec2> ParseFraction2(eastl::string_view text) {
+        const auto parts = String::Split(Trim(text), ',');
+        if (parts.size() != FractionPartCount) {
+            return std::nullopt;
+        }
+        float fractions[FractionPartCount] = {};
+        for (size_t i = 0; i < FractionPartCount; ++i) {
+            eastl::string_view part = Trim(parts[i]);
+            float divisor = 1.0f;
+            if (!part.empty() && part.back() == PercentSign) {
+                part.remove_suffix(1);
+                divisor = PercentDivisor;
+            }
+            const auto number = ParseFiniteFloat(part);
+            if (!number) {
+                return std::nullopt;
+            }
+            fractions[i] = *number / divisor;
+        }
+        return Vec2{fractions[0], fractions[1]};
     }
 
     eastl::string FormatEdges(const UIEdges& edges) {

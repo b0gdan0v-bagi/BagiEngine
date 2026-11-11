@@ -10,10 +10,14 @@ namespace BECore {
         PoolString element;
         std::optional<bool> visible;
         std::optional<UIAnchor> anchor;
+        std::optional<Vec2> anchorMin;
+        std::optional<Vec2> anchorMax;
+        std::optional<Vec2> pivot;
         std::optional<UILength> x;
         std::optional<UILength> y;
         std::optional<UILength> width;
         std::optional<UILength> height;
+        std::optional<UIEdges> margin;     ///< stretched axes only (UIRectSpec::margin)
         std::optional<PoolString> region;  ///< an empty name clears the region of the element
         std::optional<UIStackDirection> direction;
         std::optional<float> fontSize;

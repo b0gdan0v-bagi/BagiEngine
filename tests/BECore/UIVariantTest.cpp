@@ -227,6 +227,10 @@ namespace BECore::Tests {
         UIElementOverride all;
         all.visible = false;
         all.anchor = UIAnchor::BottomLeft;
+        all.anchorMin = Vec2{0.1f, 0.2f};
+        all.anchorMax = Vec2{0.9f, 0.8f};
+        all.pivot = Vec2{0.0f, 1.0f};
+        all.margin = UIEdges{1.0f, 2.0f, 3.0f, 4.0f};
         all.x = UILength::Px(1.0f);
         all.y = UILength::Px(2.0f);
         all.width = UILength::Percent(50.0f);
@@ -240,6 +244,10 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(style.visible);
         EXPECT_EQ(style.rect.anchor, UIAnchor::BottomLeft);
+        EXPECT_EQ(style.rect.anchorMin, std::optional<Vec2>(Vec2{0.1f, 0.2f}));
+        EXPECT_EQ(style.rect.anchorMax, std::optional<Vec2>(Vec2{0.9f, 0.8f}));
+        EXPECT_EQ(style.rect.pivot, std::optional<Vec2>(Vec2{0.0f, 1.0f}));
+        EXPECT_EQ(style.rect.margin, (UIEdges{1.0f, 2.0f, 3.0f, 4.0f}));
         EXPECT_FLOAT_EQ(style.rect.x.value, 1.0f);
         EXPECT_FLOAT_EQ(style.rect.y.value, 2.0f);
         EXPECT_EQ(style.rect.width, UILength::Percent(50.0f));
@@ -273,6 +281,61 @@ namespace BECore::Tests {
         loaded.overrides[0].ApplyTo(style);
         EXPECT_EQ(style.rect.x, UILength::Percent(5.0f));
         EXPECT_EQ(style.rect.y, UILength::Px(0.0f));
+    }
+
+    TEST(UIVariantsTest, EdgeAnchorsAndAMarginOfAnOverrideSurviveTheFileRoundTripEvenWhenTheyEqualADefault) {
+        UIVariant variant = PortraitHudVariant();
+        variant.overrides[0].anchorMin = Vec2{0.0f, 0.0f};  // the default of nothing: still the author's choice
+        variant.overrides[0].anchorMax = Vec2{0.35f, 1.0f};
+        variant.overrides[0].pivot = Vec2{0.5f, 0.0f};
+        variant.overrides[0].margin = UIEdges{};  // an explicit zero margin
+
+        XmlSerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("variant"));
+        variant.Serialize(serializer);
+        serializer.EndObject();
+        const eastl::string xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("anchorMin=\"0,0\""), eastl::string::npos) << xml.c_str();
+        EXPECT_NE(xml.find("anchorMax=\"0.35,1\""), eastl::string::npos);
+        EXPECT_NE(xml.find("pivot=\"0.5,0\""), eastl::string::npos);
+        EXPECT_NE(xml.find("margin=\"0\""), eastl::string::npos);
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        UIVariant loaded;
+        ASSERT_TRUE(deserializer.BeginObject("variant"));
+        loaded.Deserialize(deserializer);
+        deserializer.EndObject();
+
+        EXPECT_FALSE(deserializer.HasErrors());
+        EXPECT_TRUE(loaded == variant);
+        ASSERT_TRUE(loaded.overrides[0].margin.has_value());
+
+        // An override that sets none of them writes none of them
+        UIVariant bare = PortraitHudVariant();
+        XmlSerializer bareSerializer;
+        ASSERT_TRUE(bareSerializer.BeginObject("variant"));
+        bare.Serialize(bareSerializer);
+        bareSerializer.EndObject();
+        const eastl::string bareXml = bareSerializer.SaveToString();
+        EXPECT_EQ(bareXml.find("anchorM"), eastl::string::npos);
+        EXPECT_EQ(bareXml.find("pivot"), eastl::string::npos);
+        EXPECT_EQ(bareXml.find("margin"), eastl::string::npos);
+    }
+
+    TEST(UIVariantsTest, AMalformedEdgeAnchorOfAnOverrideIsReportedAndLeavesItUnset) {
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(
+            "<root><variant when=\"orientation:portrait\"><overrides><set element=\"Hud\" anchorMin=\"1\" pivot=\"0.5,0.5\" margin=\"1,2\"/></overrides></variant></root>"));
+        UIVariant loaded;
+        ASSERT_TRUE(deserializer.BeginObject("variant"));
+        loaded.Deserialize(deserializer);
+        deserializer.EndObject();
+
+        EXPECT_TRUE(deserializer.HasErrors());
+        ASSERT_EQ(loaded.overrides.size(), 1u);
+        EXPECT_FALSE(loaded.overrides[0].anchorMin);
+        EXPECT_FALSE(loaded.overrides[0].margin);
+        EXPECT_EQ(loaded.overrides[0].pivot, std::optional<Vec2>(Vec2{0.5f, 0.5f}));
     }
 
     TEST(UIVariantsTest, ARegionOfAnOverrideSurvivesTheFileRoundTrip) {
