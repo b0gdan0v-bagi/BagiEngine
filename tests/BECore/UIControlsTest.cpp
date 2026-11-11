@@ -380,6 +380,11 @@ namespace BECore::Tests {
                 button->selectedColor = Color{25, 26, 27, 28};
                 button->value = PoolString::Intern("BusyValue");
                 button->disabled = true;
+                button->icon = PoolString::Intern("BusyIcon");
+                button->iconTint = Color{67, 68, 69, 70};
+                button->iconPlacement = UIIconPlacement::Above;
+                button->iconSize = 31.5f;
+                button->tooltip = "Busy {#tip.key} {name}";
             } else if (auto* group = element.Cast<UISegmented>()) {
                 group->bind = PoolString::Intern("busyChoice");
                 group->disabled = true;
@@ -1520,6 +1525,34 @@ namespace BECore::Tests {
         EXPECT_EQ(button->selectedColor.g, 2);
         EXPECT_FALSE(button->selected) << "the selection is a runtime state, never read from a file";
         EXPECT_FALSE(button->groupDisabled);
+    }
+
+    TEST_F(UIControlsTest, TheIconAndTheTooltipOfAButtonAreReadFromTheFile) {
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString("<root><component><elements><element type=\"UIButton\" name=\"B\" icon=\"Gear\" iconTint=\"1,2,3,255\" iconPlacement=\"Above\" iconSize=\"20\""
+                                                " tooltip=\"{#tip.gear}\"/><element type=\"UIButton\" name=\"Plain\"/></elements></component></root>"));
+        auto canvas = New<UICanvasComponent>();
+        ASSERT_TRUE(deserializer.BeginObject("component"));
+        canvas->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+        ASSERT_EQ(canvas->_elements.size(), 2u);
+
+        const auto* button = canvas->_elements[0]->Cast<UIButton>();
+        ASSERT_NE(button, nullptr);
+        EXPECT_EQ(button->icon, PoolString::Intern("Gear"));
+        EXPECT_EQ(button->iconTint.g, 2);
+        EXPECT_EQ(button->iconPlacement, UIIconPlacement::Above);
+        EXPECT_FLOAT_EQ(button->iconSize, 20.0f);
+        EXPECT_STREQ(button->tooltip.c_str(), "{#tip.gear}");
+
+        const auto* plain = canvas->_elements[1]->Cast<UIButton>();
+        ASSERT_NE(plain, nullptr);
+        EXPECT_TRUE(plain->icon.Empty());
+        EXPECT_EQ(plain->iconTint.a, 0);
+        EXPECT_EQ(plain->iconPlacement, UIIconPlacement::Left);
+        EXPECT_FLOAT_EQ(plain->iconSize, 0.0f);
+        EXPECT_TRUE(plain->tooltip.empty());
     }
 
     TEST_F(UIControlsTest, ASelectedButtonIsFilledLighterAndHasABar) {

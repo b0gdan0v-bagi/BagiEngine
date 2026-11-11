@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Math/Vec2.h>
 #include <BECore/Resource/ResourceHandle.h>
 #include <BECore/Text/Font.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -48,6 +49,10 @@ namespace BECore {
         /// The text against a box of @p width x @p height units. The validator passes the rect; a subclass that draws its text in a smaller area (`DrawText(renderer, area, color)`)
         /// overrides this and calls it with the size of that area, so the check measures what is drawn
         [[nodiscard]] UIContentFit CheckContent(float width, float height, float scale) const override;
+
+        /// The size the shown text takes when it is wrapped at @p maxWidth canvas units, in canvas units at @p scale (output pixels per unit): the width of its widest line and the
+        /// height of all lines, laid out as `DrawText` would with a box @p maxWidth wide and as tall as the text needs. `{0, 0}` for an empty text or a font that did not load
+        [[nodiscard]] Vec2 MeasureText(float maxWidth, float scale) const;
 
         /// The text as it is shown: `text` with every `{#key}` replaced by the string of the current language (UIStrings), then every `{name}` by the variable of that
         /// name (UIVars; `{{` and `}}` are literal braces). It is made again only when `text`, a variable or (for a text with a `{#key}`) the string table changed, so a
