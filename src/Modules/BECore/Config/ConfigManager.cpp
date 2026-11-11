@@ -56,7 +56,7 @@ namespace BECore {
         // Запускаем параллельные задачи загрузки
         TaskGroup group;
         for (const auto& [path, name] : filesToLoad) {
-            auto handle = TaskManager::GetInstance().Run(LoadConfigAsync(path, name));
+            auto handle = TaskManager::GetInstance().Run(LoadConfigAsync(path, name), TaskPriority::Normal, ThreadType::Background, BE_TASK_LABEL("Load config"));
             group.Add(handle);
         }
 

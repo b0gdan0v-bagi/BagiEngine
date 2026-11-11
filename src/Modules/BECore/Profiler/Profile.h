@@ -9,6 +9,7 @@
  *   BE_PROFILE_FRAME()             the end of a frame
  *   BE_PROFILE_COUNTER("Name", v)  a named value at this moment
  *   BE_PROFILE_THREAD("Name")      names the calling thread (the text is copied)
+ *   BE_PROFILE_THREAD_ORDER("Name", n)  the same, and the thread's place in the list of threads (lower is higher; Chrome trace)
  *   BE_PROFILE_NO_ALLOC("Name")    no heap allocation is expected until the end of the scope; one that happens is reported, never
  *                                  fatal (needs ENGINE_PROFILER_ALLOC, otherwise nothing)
  *
@@ -31,6 +32,7 @@
 #define BE_PROFILE_FRAME() ::BECore::Profiler::FrameMark()
 #define BE_PROFILE_COUNTER(name, value) ::BECore::Profiler::Counter(name, static_cast<double>(value))
 #define BE_PROFILE_THREAD(name) ::BECore::Profiler::SetThreadName(name)
+#define BE_PROFILE_THREAD_ORDER(name, sortIndex) ::BECore::Profiler::SetThreadName(name, static_cast<uint32_t>(sortIndex))
 
 #else
 
@@ -39,6 +41,7 @@
 #define BE_PROFILE_FRAME() static_cast<void>(0)
 #define BE_PROFILE_COUNTER(name, value) static_cast<void>(0)
 #define BE_PROFILE_THREAD(name) static_cast<void>(0)
+#define BE_PROFILE_THREAD_ORDER(name, sortIndex) static_cast<void>(0)
 
 #endif
 

@@ -236,7 +236,7 @@ namespace BECore {
     template <HasReflection T>
     Task<T> ResourceManager::LoadSerializedAsync(eastl::string_view path) {
         // Switch to background thread for I/O
-        co_await SwitchToBackground();
+        co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load serialized resource"));
 
         auto opened = OpenDeserializer(path);
         if (!opened) {

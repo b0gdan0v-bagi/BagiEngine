@@ -25,6 +25,11 @@ namespace BECore {
         /// Selects the inline mode (see the class comment).
         struct InlineTag {};
 
+        /// Workers that get a profiler graph of their own (`Worker n: busy`, named by literals): TaskManager::kMaxWorkerThreads must not exceed it
+        static constexpr size_t kMaxGraphedWorkers = 4;
+        /// The place of worker n in the list of threads of a trace: kWorkerSortBase + n (the main thread is 0, the control threads 200 and up)
+        static constexpr uint32_t kWorkerSortBase = 100;
+
         /**
          * Создает пул потоков.
          * @param numThreads Количество потоков (0 = hardware_concurrency)
@@ -92,15 +97,33 @@ namespace BECore {
          */
         [[nodiscard]] size_t GetPendingTaskCount() const;
 
+        /**
+         * Returns the number of workers that run a job at this moment (0 for an inline pool).
+         */
+        [[nodiscard]] size_t GetBusyWorkerCount() const;
+
+        /**
+         * Sends the queues of the pool to the profiler as counters: `Pool: pending jobs` and `Pool: steals` (the steals since the last call).
+         * Not for an inline pool. The busy graphs are not sampled: worker n reports `Worker n: busy` and `Pool: busy workers` itself every
+         * time it starts or ends a job, so they are exact. Does nothing without a profiler backend or with BE_PROFILER=0.
+         */
+        void SampleProfilerCounters();
+
     private:
         void RunInline(TaskQueue::TaskFunc task);
         void WorkerLoop(size_t threadIndex);
+        void SetWorkerBusy(size_t threadIndex, bool busy);
         bool TryStealTask(size_t thiefIndex, TaskQueue::TaskFunc& task);
 
         eastl::vector<std::thread> _threads;
         eastl::vector<eastl::unique_ptr<TaskQueue>> _queues;
         std::atomic<bool> _stopped{false};
         std::atomic<size_t> _nextQueue{0};
+
+        // One flag per worker (written by that worker, read by GetBusyWorkerCount) and the jobs taken from another worker's queue since the last sample
+        eastl::unique_ptr<std::atomic<bool>[]> _workerBusy;
+        std::mutex _busyReportMutex;  // orders the busy graphs of the workers (only while a profiler backend records)
+        std::atomic<uint64_t> _stealCount{0};
 
         // Inline mode only. One thread uses the pool, so no lock.
         bool _isInline = false;

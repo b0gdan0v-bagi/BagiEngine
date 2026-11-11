@@ -17,6 +17,8 @@ namespace BECore {
         constinit thread_local uint32_t t_threadId = 0;
         // Copies made with std::malloc and never freed: a reader may hold the old pointer while a thread renames itself
         constinit std::atomic<const char*> g_threadNames[Profiler::kMaxThreads]{};
+        // The sort index + 1 of a thread, 0: none (so the zero-initialised table means "none")
+        constinit std::atomic<uint32_t> g_threadSortIndex[Profiler::kMaxThreads]{};
         constinit std::mutex g_backendMutex;
 
         /// The file Start was asked to write at Finish (main thread only)
@@ -70,6 +72,14 @@ namespace BECore {
         }
     }
 
+    void Profiler::SetThreadName(const char* name, uint32_t sortIndex) {
+        const uint32_t threadId = CurrentThreadId();
+        if (threadId < kMaxThreads && sortIndex < kNoSortIndex) {
+            g_threadSortIndex[threadId].store(sortIndex + 1, std::memory_order_release);
+        }
+        SetThreadName(name);
+    }
+
     uint32_t Profiler::CurrentThreadId() {
         if (t_threadId == 0) {
             t_threadId = g_nextThreadId.fetch_add(1, std::memory_order_relaxed);
@@ -79,6 +89,14 @@ namespace BECore {
 
     const char* Profiler::GetThreadName(uint32_t threadId) {
         return threadId < kMaxThreads ? g_threadNames[threadId].load(std::memory_order_acquire) : nullptr;
+    }
+
+    uint32_t Profiler::GetThreadSortIndex(uint32_t threadId) {
+        if (threadId >= kMaxThreads) {
+            return kNoSortIndex;
+        }
+        const uint32_t stored = g_threadSortIndex[threadId].load(std::memory_order_acquire);
+        return stored == 0 ? kNoSortIndex : stored - 1;
     }
 
     ChromeTraceBackend& Profiler::GetChromeTrace() {

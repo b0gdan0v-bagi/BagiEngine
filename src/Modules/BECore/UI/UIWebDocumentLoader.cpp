@@ -47,7 +47,7 @@ namespace BECore {
     }
 
     Task<IntrusivePtr<IResource>> UIWebDocumentLoader::LoadAsync(PoolString path) {
-        co_await SwitchToBackground();
+        co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load web UI document"));
         co_return LoadInternal(path);
     }
 

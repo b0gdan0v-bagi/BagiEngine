@@ -15,7 +15,7 @@ namespace BECore {
     void MainThreadAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
         auto* scheduler = TaskManager::GetInstance().GetScheduler();
         if (scheduler) {
-            scheduler->Schedule([handle]() mutable { handle.resume(); }, TaskPriority::Normal, ThreadType::MainThread);
+            scheduler->Schedule([handle, label = label]() mutable { RunLabeled(label, [&handle] { handle.resume(); }); }, TaskPriority::Normal, ThreadType::MainThread);
         }
     }
 
@@ -26,7 +26,7 @@ namespace BECore {
     void BackgroundAwaiter::await_suspend(std::coroutine_handle<> handle) noexcept {
         auto* scheduler = TaskManager::GetInstance().GetScheduler();
         if (scheduler) {
-            scheduler->Schedule([handle]() mutable { handle.resume(); }, priority, ThreadType::Background);
+            scheduler->Schedule([handle, label = label]() mutable { RunLabeled(label, [&handle] { handle.resume(); }); }, priority, ThreadType::Background);
         }
     }
 

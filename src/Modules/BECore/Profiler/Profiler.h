@@ -38,11 +38,16 @@ namespace BECore {
         static void Counter(const char* name, double value);
         /// Names the calling thread for every backend, the ones installed later included (a copy of @p name is kept)
         static void SetThreadName(const char* name);
+        /// Names the calling thread and gives it a place in the list of threads (the Chrome trace writes it as `thread_sort_index`: a lower
+        /// number is shown higher). The engine keeps the main thread at 0, the task pool at 100 + n and the control threads at 200
+        static void SetThreadName(const char* name, uint32_t sortIndex);
 
         /// The calling thread's id in traces: 1, 2, ... in the order threads first ask
         [[nodiscard]] static uint32_t CurrentThreadId();
         /// The name given to thread @p threadId, nullptr when it has none
         [[nodiscard]] static const char* GetThreadName(uint32_t threadId);
+        /// The place given to thread @p threadId by SetThreadName(name, sortIndex), kNoSortIndex when it has none
+        [[nodiscard]] static uint32_t GetThreadSortIndex(uint32_t threadId);
 
         /// The Chrome trace recorder of the process (created on first use, never destroyed)
         [[nodiscard]] static ChromeTraceBackend& GetChromeTrace();
@@ -53,6 +58,7 @@ namespace BECore {
         static std::expected<void, eastl::string> Finish();
 
         static constexpr uint32_t kMaxThreads = 256;  // threads beyond it are recorded without a name
+        static constexpr uint32_t kNoSortIndex = 0xFFFFFFFFu;
 
     private:
         static constinit inline std::atomic<IProfilerBackend*> _backend{nullptr};

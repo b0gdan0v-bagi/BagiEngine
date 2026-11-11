@@ -2,6 +2,7 @@
 
 #include <TaskSystem/Task.h>
 #include <TaskSystem/TaskHandle.h>
+#include <TaskSystem/TaskLabel.h>
 #include <TaskSystem/TaskPriority.h>
 #include <TaskSystem/TaskScheduler.h>
 #include <TaskSystem/ThreadPool.h>
@@ -72,13 +73,15 @@ namespace BECore {
          * @param task Корутина для выполнения
          * @param priority Приоритет задачи
          * @param threadType Тип потока для выполнения
+         * @param label BE_TASK_LABEL("name"): the zone that names the first slice of the task in a profiler trace (default: none).
+         *              A later slice after `co_await SwitchToBackground()` is named by the label of that call
          * @return Handle для отслеживания задачи
          */
         template <typename T>
-        IntrusivePtr<TaskHandle<T>> Run(Task<T> task, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background) {
+        IntrusivePtr<TaskHandle<T>> Run(Task<T> task, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background, TaskLabel label = {}) {
             auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
 
-            _scheduler.Schedule(MakeStartTask(handle), priority, threadType);
+            _scheduler.Schedule(MakeStartTask(handle, label), priority, threadType);
 
             return handle;
         }
@@ -87,10 +90,10 @@ namespace BECore {
          * Запускает отложенную задачу.
          */
         template <typename T>
-        IntrusivePtr<TaskHandle<T>> RunDelayed(Task<T> task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background) {
+        IntrusivePtr<TaskHandle<T>> RunDelayed(Task<T> task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::Background, TaskLabel label = {}) {
             auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
 
-            _scheduler.ScheduleDelayed(MakeStartTask(handle), delay, priority, threadType);
+            _scheduler.ScheduleDelayed(MakeStartTask(handle, label), delay, priority, threadType);
 
             return handle;
         }
@@ -102,10 +105,11 @@ namespace BECore {
          * when the run must be deterministic.
          */
         template <typename T>
-        IntrusivePtr<TaskHandle<T>> RunDelayedGameTime(Task<T> task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::MainThread) {
+        IntrusivePtr<TaskHandle<T>> RunDelayedGameTime(Task<T> task, Duration delay, TaskPriority priority = TaskPriority::Normal, ThreadType threadType = ThreadType::MainThread,
+                                                       TaskLabel label = {}) {
             auto handle = MakeIntrusive<TaskHandle<T>>(std::move(task));
 
-            _scheduler.ScheduleDelayed(MakeStartTask(handle), delay, priority, threadType, DelayClock::GameTime);
+            _scheduler.ScheduleDelayed(MakeStartTask(handle, label), delay, priority, threadType, DelayClock::GameTime);
 
             return handle;
         }
@@ -114,8 +118,8 @@ namespace BECore {
          * Запускает задачу в главном потоке.
          */
         template <typename T>
-        IntrusivePtr<TaskHandle<T>> RunOnMainThread(Task<T> task, TaskPriority priority = TaskPriority::Normal) {
-            return Run(std::move(task), priority, ThreadType::MainThread);
+        IntrusivePtr<TaskHandle<T>> RunOnMainThread(Task<T> task, TaskPriority priority = TaskPriority::Normal, TaskLabel label = {}) {
+            return Run(std::move(task), priority, ThreadType::MainThread, label);
         }
 
         // =================================================================
@@ -143,6 +147,15 @@ namespace BECore {
          * Возвращает количество ожидающих задач.
          */
         [[nodiscard]] size_t GetPendingTaskCount() const;
+
+        /**
+         * Sends the queues of the task system to the profiler as counters, one graph each (a Chrome trace `C` event, a Tracy plot):
+         * `Pool: pending jobs`, `Pool: steals` (since the last sample), `Main thread queue: pending`, `Delayed tasks: pending` and, in a
+         * single-thread build, `Cooperative queue: pending`. The busy graphs (`Pool: busy workers`, `Worker n: busy`, 0 or 1) are not
+         * sampled: the pool's workers send them on every change. Update samples once per frame, before it drains the queues; a test may
+         * call it. Does nothing without a profiler backend or with BE_PROFILER=0.
+         */
+        void SampleProfilerCounters();
 
         /**
          * Sets the time per frame that Update gives to the background jobs that yielded (single-thread build: the
@@ -190,10 +203,10 @@ namespace BECore {
          * The reference is moved into a local so a pool worker does not hold on to it after the job has run.
          */
         template <typename T>
-        static TaskQueue::TaskFunc MakeStartTask(IntrusivePtr<TaskHandle<T>> handle) {
-            return [handle]() mutable {
+        static TaskQueue::TaskFunc MakeStartTask(IntrusivePtr<TaskHandle<T>> handle, TaskLabel label) {
+            return [handle, label]() mutable {
                 auto owned = std::move(handle);
-                owned->Start();  // Start() сам вызывает Resume()
+                RunLabeled(label, [&owned] { owned->Start(); });  // Start() сам вызывает Resume()
             };
         }
 
