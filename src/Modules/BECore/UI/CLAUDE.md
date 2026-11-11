@@ -35,6 +35,7 @@ Each file below loads by itself when a file of its area is read; read it by path
 | `UICanvasLayout` | the pure pipeline with a cache, `HitTest`, `Validate` |
 | `UIColor`, `UIText` / `UIAttr` | colors and the state shifts; text forms of lengths, edges, colors, numbers |
 | `UIDocument`, `UIDocumentLoader` | a `.ui.xml` file, `Instantiate` per canvas |
+| `UIRegionSet` | the named rects (canvas units) a game publishes for a canvas; an element with `region` lays out inside one (`ui-layout.md`, "Named regions") |
 | `UIPreview` | the viewport's shapes and safe areas |
 
 ## Rules
@@ -58,6 +59,7 @@ Each file below loads by itself when a file of its area is read; read it by path
 
 - **A scene with view variants** (`Scene/CLAUDE.md`, "View size") picks its view in `Scene::Draw` before any canvas lays out; `MakeContext` reads the active size, so after a switch `bounds` are the new view and the canvas `variants` choose again, with no extra signal.
 - **`extendToOutput`** (`SceneView` only; ignored with a warning on the others): `bounds` are the whole output in scene units, with a negative origin where the fitted view leaves bars; `viewBounds` is the view inside them; `transform` stays the scene's fit, so scene points do not move. Everything that lays out (anchors, `x` / `y`, `contentBounds`, `OutsideCanvas`, the variants) uses `bounds`. `RmlUiDocumentComponent` takes the flag too (`RmlUiHost/CLAUDE.md`).
+- **Regions** are published by the game through `UICanvasComponent::SetRegion` at every change of its layout; they are not saved and need no `Invalidate()`.
 - **Draw order** is the scene's (layer, then scene order); **input order** the reverse (refreshed every draw, also while hidden).
 - **Input:** a canvas consumes a mouse event on a hit-testable element (`blocksInput` or `interactive`) by the last draw's layout; hover over one is consumed except a drag that began elsewhere; a press it took is followed to its release; a `modal` canvas consumes everything while shown; hidden, `inputEnabled` off and inactive-scene canvases consume nothing. Hit testing: child before parent, later sibling first; children are not clipped.
 - **Popups** (`UIElement::HasPopupChildren`, a dropdown's list): out of the flow, with no rect while closed; open, drawn after the whole tree and hit-tested before it. A left press anywhere else closes the popup and is **consumed** with its release. One popup per canvas (the newest wins).
@@ -71,4 +73,4 @@ Each file below loads by itself when a file of its area is read; read it by path
 
 ## Not done
 
-Button sounds, focus and keyboard / gamepad navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload, the debug overlay.
+The overlay of the regions in the editor viewport (it can read `GetRegions()`) and regions in the HTML + CSS front-end. Button sounds, focus and keyboard / gamepad navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload, the debug overlay.

@@ -636,6 +636,82 @@ namespace BECore::Tests {
         ExpectRect(Member(issue, "rect"), 400.0f, 10.0f, 20.0f, 20.0f);
     }
 
+    TEST_F(UIControlApiTest, ACanvasWithNoRegionsHasAnEmptyObjectAndItsElementsHaveNoRegionMember) {
+        Show("Main");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        ASSERT_NE(hud, nullptr);
+        const Json* regions = Member(*hud, "regions");
+        ASSERT_NE(regions, nullptr);
+        EXPECT_TRUE(regions->is_object());
+        EXPECT_TRUE(regions->empty());
+        const Json* ok = FindElement(*hud, "Ok");
+        ASSERT_NE(ok, nullptr);
+        EXPECT_EQ(Member(*ok, "region"), nullptr);
+    }
+
+    TEST_F(UIControlApiTest, ARegionIsListedWithItsRectAndTheElementThatNamesItShowsTheName) {
+        auto hudCanvas = Canvas("Main", "Hud");
+        hudCanvas->SetRegion("hud.corner"_intern, {10.0f, 20.0f, 300.0f, 100.0f});
+        hudCanvas->GetLayout().root->FindByName("Ok"_intern)->style.rect.region = "hud.corner"_intern;
+        hudCanvas->Invalidate();
+        Show("Main");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        ASSERT_NE(hud, nullptr);
+        const Json* regions = Member(*hud, "regions");
+        ASSERT_NE(regions, nullptr);
+        EXPECT_EQ(regions->size(), 1u);
+        ExpectRect(Member(*regions, "hud.corner"), 10.0f, 20.0f, 300.0f, 100.0f);
+        const Json* ok = FindElement(*hud, "Ok");
+        ASSERT_NE(ok, nullptr);
+        EXPECT_EQ(StringMember(*ok, "region"), "hud.corner");
+        const Json* issues = Member(*hud, "issues");
+        ASSERT_NE(issues, nullptr);
+        for (const Json& issue : *issues) {
+            EXPECT_NE(StringMember(issue, "kind"), "MissingRegion") << DumpJson(*issues).c_str();
+        }
+    }
+
+    TEST_F(UIControlApiTest, AnUnpublishedRegionIsNamedOnTheElementAndReportedAsMissing) {
+        auto hudCanvas = Canvas("Main", "Hud");
+        hudCanvas->GetLayout().root->FindByName("Ok"_intern)->style.rect.region = "hud.gone"_intern;
+        hudCanvas->Invalidate();
+        Show("Main");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        ASSERT_NE(hud, nullptr);
+        EXPECT_EQ(StringMember(*FindElement(*hud, "Ok"), "region"), "hud.gone");
+        const Json* issues = Member(*hud, "issues");
+        ASSERT_NE(issues, nullptr);
+        ASSERT_EQ(issues->size(), 1u) << DumpJson(*issues).c_str();
+        EXPECT_EQ(StringMember((*issues)[0], "kind"), "MissingRegion");
+        EXPECT_EQ(StringMember((*issues)[0], "element"), "Ok");
+        EXPECT_EQ(StringMember((*issues)[0], "other"), "hud.gone");
+    }
+
+    TEST_F(UIControlApiTest, TheRegionsOfACanvasThatWasNeverDrawnAreAlreadyListed) {
+        _manager->SetActiveScene(PoolString::Intern("Main"));
+        Canvas("Main", "Hud")->SetRegion("hud.corner"_intern, {1.0f, 2.0f, 3.0f, 4.0f});
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* hud = FindCanvas(*Member(response, "result"), "Hud");
+        ASSERT_NE(hud, nullptr);
+        EXPECT_FALSE(BoolMember(*hud, "laidOut"));
+        ExpectRect(Member(*Member(*hud, "regions"), "hud.corner"), 1.0f, 2.0f, 3.0f, 4.0f);
+    }
+
     TEST_F(UIControlApiTest, OutputRectsAreInTheOutputPixelsOfTheCanvasTransform) {
         Show("Fit", 1000.0f, 600.0f);
 
