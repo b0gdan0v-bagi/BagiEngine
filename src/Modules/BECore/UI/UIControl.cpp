@@ -9,10 +9,14 @@
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIDropdown.h>
+#include <BECore/UI/UIImageComponent.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISlider.h>
+#include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIToggle.h>
+#include <BECore/UI/UITooltipComponent.h>
 #include <BECore/UI/UIValueText.h>
 #include <SDL3/SDL_mouse.h>
 
@@ -85,11 +89,40 @@ namespace BECore {
             return json;
         }
 
+        /// The button-like facts of an element that is composed (a button is not a class there): the type names of its components and what its text, clicker, image and tooltip say, under
+        /// the names and with the meaning they have for a `UIButton`. Only what the element has: a plain element gets nothing
+        void DescribeComponents(const UIElement& element, Json& json) {
+            if (element.components.empty()) {
+                return;
+            }
+            Json types = Json::array();
+            for (const auto& component : element.components) {
+                types.push_back(MakeJsonString(component->GetTypeMeta().typeName));
+            }
+            json["components"] = std::move(types);
+            if (const auto* caption = element.GetComponent<UITextComponent>(); caption != nullptr && dynamic_cast<const UILabel*>(&element) == nullptr) {
+                json["text"] = MakeJsonString(caption->GetDisplayText());
+            }
+            if (const auto* clicker = element.GetComponent<UIInputClicker>()) {
+                json["action"] = MakeJsonString(clicker->action.ToStringView());
+                json["disabled"] = element.IsDisabled();
+                json["value"] = MakeJsonString(clicker->value.ToStringView());
+                json["selected"] = element.selected;
+            }
+            if (const auto* image = element.GetComponent<UIImageComponent>(); image != nullptr && !image->sprite.Empty()) {
+                json["icon"] = MakeJsonString(image->sprite.ToStringView());
+            }
+            const eastl::string& tooltip = element.GetTooltipText();
+            if (!tooltip.empty()) {
+                json["tooltip"] = MakeJsonString(eastl::string_view(tooltip.data(), tooltip.size()));
+            }
+        }
+
         Json DescribeElement(UIElement& element, const UICanvasResolved* resolved) {
             Json json = Json::object();
             json["type"] = MakeJsonString(element.GetTypeMeta().typeName);
             json["name"] = MakeJsonString(element.name.ToStringView());
-            json["interactive"] = element.interactive;
+            json["interactive"] = element.IsInteractive();
             json["blocksInput"] = element.blocksInput;
             json["hovered"] = element.hovered;
             json["pressed"] = element.pressed;
@@ -121,6 +154,8 @@ namespace BECore {
                 if (!button->tooltip.empty()) {
                     json["tooltip"] = MakeJsonString(eastl::string_view(button->tooltip.data(), button->tooltip.size()));
                 }
+            } else {
+                DescribeComponents(element, json);
             }
             if (auto* group = element.Cast<UISegmented>()) {
                 // The segments take `selected` and `groupDisabled` at the draw; apply them now so the tree shows the variable as it is, not as of the last draw
@@ -353,7 +388,7 @@ namespace BECore {
                         miss = ClickMiss::NotLaidOut;
                     } else if (!entry.canvas->TakesInput()) {
                         miss = ClickMiss::CanvasCannotTakeInput;
-                    } else if (!element->interactive) {
+                    } else if (!element->IsInteractive()) {
                         miss = ClickMiss::NotInteractive;
                     } else if (element->rect.IsEmpty()) {
                         miss = ClickMiss::Hidden;
@@ -454,6 +489,11 @@ namespace BECore {
                 const bool isButton = button != nullptr;
                 const PoolString action = isButton ? button->action : PoolString{};
                 const PoolString value = isButton ? button->value : PoolString{};
+                // A composed button answers as a button; a disabled one emits nothing, so the answer carries nothing (`UIButton` answers its own pair, as it always did)
+                const auto* clicker = isButton ? nullptr : target.element->GetComponent<UIInputClicker>();
+                const bool clickerEmits = clicker != nullptr && !target.element->IsDisabled();
+                const PoolString clickerAction = clickerEmits ? clicker->action : PoolString{};
+                const PoolString clickerValue = clickerEmits ? clicker->value : PoolString{};
                 // A toggle reports the value it asks for, read before the click (a handler may set the variable at once)
                 const auto* toggle = target.element->Cast<UIToggle>();
                 const bool isToggle = toggle != nullptr;
@@ -488,6 +528,9 @@ namespace BECore {
                 } else if (isButton) {
                     result["action"] = MakeJsonString(action.ToStringView());
                     result["value"] = MakeJsonString(value.ToStringView());
+                } else if (clicker != nullptr) {
+                    result["action"] = MakeJsonString(clickerAction.ToStringView());
+                    result["value"] = MakeJsonString(clickerValue.ToStringView());
                 } else if (isToggle) {
                     result["action"] = MakeJsonString(toggleAction.ToStringView());
                     result["value"] = MakeJsonString(toggleValue.ToStringView());
