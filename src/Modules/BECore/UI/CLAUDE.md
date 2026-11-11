@@ -87,4 +87,4 @@ The "UI elements" section of `SceneEditorWidget` (`UIRectInspector`, only with t
 
 ## Not done
 
-Regions in the HTML + CSS front-end. A round hit test for round buttons (the rect is the target), a tooltip style per game (`UITooltip`'s constants), a hover command in the control API. Button sounds, focus and keyboard / gamepad navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload, the debug overlay.
+Fonts and the shape values of `ui-shapes` (corner radius, border width, shadow offsets) as theme tokens: a numeric token needs a new grammar in every length field. Regions in the HTML + CSS front-end. A round hit test for round buttons (the rect is the target), a tooltip style per game (`UITooltip`'s constants), a hover command in the control API. Button sounds, focus and keyboard / gamepad navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload, the debug overlay.
