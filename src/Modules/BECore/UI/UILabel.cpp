@@ -140,6 +140,17 @@ namespace BECore {
         }
     }
 
+    Vec2 UILabel::MeasureText(float maxWidth, float scale) const {
+        const eastl::string_view shown = GetDisplayText();
+        Font* resolved = shown.empty() ? nullptr : ResolveFont();
+        if (!resolved || maxWidth <= 0.0f || scale <= 0.0f) {
+            return {};
+        }
+        // No height limit: the text is as tall as its lines
+        const TextLayoutResult layout = TextLayout::Layout(*resolved, shown, MakeOptions(maxWidth, 0.0f, scale));
+        return {layout.width / scale, layout.height / scale};
+    }
+
     UIContentFit UILabel::CheckContent(float width, float height, float scale) const {
         UIContentFit fit;
         const eastl::string_view shown = GetDisplayText();
