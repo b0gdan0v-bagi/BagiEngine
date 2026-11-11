@@ -80,6 +80,7 @@ namespace BECore {
         Scene* _lastScene = nullptr;                  // the scene the selection belongs to: a replaced scene drops it
         SceneNode* _uiSelectionNode = nullptr;        // the node whose canvas `_selectedUIElement` belongs to
         IntrusivePtr<UIElement> _selectedUIElement;   // held, so that a tree edit cannot leave it dangling
+        IntrusivePtr<UIElement> _inexactUIElement;    // the element whose last edit the layout limits kept from being exact (the inspector warns)
         SceneNode* _contextMenuTargetNode = nullptr;  // node to add a child to (null = root)
         char _nodeNameBuffer[256] = {};
         bool _showAddNodePopup = false;

@@ -191,6 +191,7 @@ namespace BECore {
 
     void SceneEditorWidget::ResetUISelection() {
         _selectedUIElement = nullptr;
+        _inexactUIElement = nullptr;
         _uiSelectionNode = nullptr;
     }
 
@@ -204,7 +205,7 @@ namespace BECore {
 
             if (_selectedUIElement) {
                 if (ImGui::CollapsingHeader("Rect", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    changed = InspectUIRect(canvas, *_selectedUIElement);
+                    changed = InspectUIRect(canvas, *_selectedUIElement, _inexactUIElement);
                 }
             } else {
                 ImGui::TextDisabled("Select an element");

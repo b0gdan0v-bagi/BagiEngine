@@ -17,6 +17,8 @@ namespace BECore {
         constexpr float kAnchorDragSpeed = 0.005f;
         constexpr float kPercentDragSpeed = 0.1f;
         constexpr float kUnitDragSpeed = 1.0f;
+        constexpr float kFlexDragSpeed = 0.05f;
+        constexpr float kUnitSwitchSpacing = 2.0f;  // between a number and its px / % button
         constexpr size_t kRegionBufferSize = 128;
         constexpr ImU32 kCellColor = IM_COL32(60, 60, 66, 255);
         constexpr ImU32 kCellCurrentColor = IM_COL32(60, 90, 140, 255);
@@ -24,9 +26,6 @@ namespace BECore {
         constexpr ImU32 kCellFrameColor = IM_COL32(150, 150, 160, 255);
         constexpr ImU32 kCellAnchorColor = IM_COL32(240, 200, 80, 255);
         constexpr ImVec4 kWarningColor = ImVec4(1.0f, 0.8f, 0.0f, 1.0f);
-
-        /// The element that the last edit could not keep exactly (limits or an aspect ratio forbid the rect); shown until the next edit
-        const UIElement* g_inexactElement = nullptr;
 
         const UIElement* FindParent(const UIElement& root, const UIElement& target) {
             for (const auto& child : root.children) {
@@ -111,7 +110,7 @@ namespace BECore {
             ImGui::SetNextItemWidth(kFieldWidth);
             const float speed = length.unit == UIUnit::Percent ? kPercentDragSpeed : kUnitDragSpeed;
             changed |= ImGui::DragFloat("##value", &length.value, speed, 0.0f, 0.0f, "%.2f");
-            ImGui::SameLine(0.0f, 2.0f);
+            ImGui::SameLine(0.0f, kUnitSwitchSpacing);
             const bool percent = length.unit == UIUnit::Percent;
             if (ImGui::SmallButton(percent ? "%" : "px")) {
                 if (const auto converted = UIRectEdit::ConvertUnit(length, percent ? UIUnit::Pixels : UIUnit::Percent, parentExtent)) {
@@ -161,7 +160,7 @@ namespace BECore {
                 }
                 for (const PoolString& name : choices) {
                     const bool published = canvas.GetRegions().Find(name) != nullptr;
-                    const eastl::string label = eastl::string(name.CStr()) + (published ? "" : " (not published)");
+                    const eastl::string label = Format("{}{}", name.CStr(), published ? "" : " (not published)");
                     if (ImGui::Selectable(label.c_str(), name == spec.region)) {
                         spec.region = name;
                         changed = true;
@@ -235,14 +234,12 @@ namespace BECore {
             ImGui::TextDisabled("The canvas has no elements");
             return;
         }
-        // A copy of the pointers: a selection never edits the tree, but keep the loop safe against it
-        const auto children = root.children;
-        for (const auto& child : children) {
+        for (const auto& child : root.children) {
             DrawElementNode(*child.Get(), selected);
         }
     }
 
-    bool InspectUIRect(UICanvasComponent& canvas, UIElement& element) {
+    bool InspectUIRect(UICanvasComponent& canvas, UIElement& element, IntrusivePtr<UIElement>& inexactElement) {
         const UIElement* parent = FindParent(canvas.GetRoot(), element);
         if (!parent) {
             ImGui::TextDisabled("The element is not in this canvas");
@@ -265,7 +262,7 @@ namespace BECore {
             ImGui::TextDisabled("The parent is a stack: the anchors, offsets and margin are ignored");
             changed |= InspectLength("width", spec.width, parent->rect.w);
             changed |= InspectLength("height", spec.height, parent->rect.h);
-            changed |= ImGui::DragFloat("flex", &spec.flex, 0.05f, 0.0f, 0.0f, "%.2f");
+            changed |= ImGui::DragFloat("flex", &spec.flex, kFlexDragSpeed, 0.0f, 0.0f, "%.2f");
             if (changed) {
                 canvas.Invalidate();
             }
@@ -281,7 +278,7 @@ namespace BECore {
         // ---- Preset ----
         const UIAnchorPreset* current = UIAnchorPresets::Match(spec);
         ImGui::BeginDisabled(!hasBox);
-        const eastl::string presetLabel = eastl::string("Anchor: ") + (current ? UIAnchorPresets::Name(*current) : "Custom") + "##preset_button";
+        const eastl::string presetLabel = Format("Anchor: {}##preset_button", current ? UIAnchorPresets::Name(*current) : "Custom");
         if (ImGui::Button(presetLabel.c_str())) {
             ImGui::OpenPopup("##anchor_presets");
         }
@@ -291,7 +288,7 @@ namespace BECore {
                 const UIAnchorApplyMode mode{.setPivot = io.KeyShift, .setPosition = io.KeyAlt};
                 const UIRectEditResult result = UIAnchorPresets::Apply(box, spec, *clicked, mode);
                 spec = result.spec;
-                g_inexactElement = result.exact ? nullptr : &element;
+                inexactElement = result.exact ? IntrusivePtr<UIElement>() : IntrusivePtr<UIElement>(&element);
                 changed = true;
                 ImGui::CloseCurrentPopup();
             }
@@ -305,13 +302,15 @@ namespace BECore {
         Vec2 anchorMax = anchors.max;
         Vec2 pivot = anchors.pivot;
         bool anchorsEdited = false;
+        ImGui::BeginDisabled(!hasBox);
         anchorsEdited |= InspectVec2("Anchor min##anchor_min", anchorMin);
         anchorsEdited |= InspectVec2("Anchor max##anchor_max", anchorMax);
         anchorsEdited |= InspectVec2("Pivot##pivot", pivot);
-        if (anchorsEdited && hasBox) {
+        ImGui::EndDisabled();
+        if (anchorsEdited) {
             const UIRectEditResult result = WithAnchors(box, spec, anchorMin, anchorMax, pivot);
             spec = result.spec;
-            g_inexactElement = result.exact ? nullptr : &element;
+            inexactElement = result.exact ? IntrusivePtr<UIElement>() : IntrusivePtr<UIElement>(&element);
             changed = true;
         }
 
@@ -352,10 +351,10 @@ namespace BECore {
 
         changed |= InspectRegion(canvas, spec);
         if (changed && !anchorsChanged) {
-            g_inexactElement = nullptr;
+            inexactElement = nullptr;
         }
 
-        if (g_inexactElement == &element) {
+        if (inexactElement.Get() == &element) {
             ImGui::TextColored(kWarningColor, "The limits or the aspect ratio keep the element from staying exactly where it was");
         }
         if (changed) {
