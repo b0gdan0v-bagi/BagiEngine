@@ -41,7 +41,7 @@ namespace BECore::Tests {
         // "Icons": 800 x 600 in window pixels. Gear is an icon button with a tooltip that holds a key and a variable, Quiet an icon button without a tooltip, Words a button with a caption only.
         // "Composed": 800 x 600 in window pixels, buttons made of components. Play (10, 10, 120 x 48) has a clicker, an image, a text and a tooltip, Dead (150, 10, 100 x 48) a disabled clicker and
         //   a text, Shade (10, 100, 100 x 40) a clicker with Cover (0, 90, 120 x 60) drawn over it, Wide (10, 200, 300 x 40) a clicker, Badge (300, 10, 48 x 48) an image and a tooltip but no clicker,
-        //   Bare (400, 10, 48 x 48) no components.
+        //   Bare (400, 10, 48 x 48) no components, Loud (500, 10, 120 x 48) a UIToggle with the text "Loud" that also carries a text component saying "Caption".
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -202,6 +202,9 @@ namespace BECore::Tests {
             <components><component type="UIImageComponent" sprite="BadgeIcon"/><component type="UITooltipComponent" text="Badge"/></components>
           </element>
           <element type="UIElement" name="Bare" x="400" y="10" width="48" height="48" color="40,90,60,255"/>
+          <element type="UIToggle" name="Loud" bind="uiApiLoud" text="Loud" x="500" y="10" width="120" height="48" color="30,30,30,255">
+            <components><component type="UITextComponent" text="Caption"/></components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -1738,6 +1741,20 @@ namespace BECore::Tests {
         EXPECT_FALSE(bare->contains("components")) << "the entry of an element with none is as before";
         EXPECT_FALSE(bare->contains("icon"));
         EXPECT_FALSE(bare->contains("tooltip"));
+    }
+
+    TEST_F(UIControlApiTest, AToggleWithATextComponentKeepsTheTextOfTheToggle) {
+        Show("Composed");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        ASSERT_NE(bar, nullptr);
+        const Json* loud = FindElement(*bar, "Loud");
+        ASSERT_NE(loud, nullptr);
+        EXPECT_EQ(StringMember(*loud, "type"), "UIToggle");
+        EXPECT_EQ(StringMember(*loud, "text"), "Loud") << "the text of the label class, not of the component";
     }
 
     TEST_F(UIControlApiTest, AClickOnAComposedButtonEmitsAndAnswersItsActionAndValue) {

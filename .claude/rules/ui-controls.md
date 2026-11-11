@@ -112,7 +112,6 @@ A button is no class but a set of components on one `UIElement` (`<components><c
 </element>
 ```
 
-
 ## Variables and strings
 
 - **`UIVars`** (`CoreManager::GetUIVars().Set("score"_intern, 120)`): name → text, a version that never goes back; `{name}` in a label is replaced, an unset one is empty, `{{` / `}}` are literal braces.
