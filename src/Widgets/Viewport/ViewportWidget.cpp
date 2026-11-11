@@ -18,13 +18,16 @@ namespace BECore {
         // The ImGui button index (0 left, 1 right, 2 middle) to the SDL button
         constexpr Uint8 kSDLButtons[kMouseButtonCount] = {SDL_BUTTON_LEFT, SDL_BUTTON_RIGHT, SDL_BUTTON_MIDDLE};
 
-        constexpr float kAspectComboWidth = 80.0f;
+        constexpr float kSizeComboWidth = 170.0f;
+        constexpr float kSizeFieldWidth = 60.0f;
         constexpr float kSafeAreaComboWidth = 130.0f;
         constexpr float kViewComboWidth = 130.0f;
         // The combo rows before the variants: Auto, then the default view
         constexpr int kViewComboAuto = 0;
         constexpr int kViewComboDefault = 1;
         constexpr int kViewComboFirstVariant = 2;
+        // The grid is not drawn when its lines would be closer than this on screen (a big target shown small)
+        constexpr float kMinDrawnGridStep = 2.0f;
         constexpr ImU32 kGridColor = IM_COL32(255, 255, 255, 40);
         constexpr ImU32 kSafeAreaOutlineColor = IM_COL32(255, 200, 0, 200);
 
@@ -33,6 +36,31 @@ namespace BECore {
         constexpr const char* kSafeAreaLabels[] = {"No safe area", "Notch", "Side insets", "Device"};
         static_assert(std::size(kAspectLabels) == EnumUtils<ViewportAspect>::Count());
         static_assert(std::size(kSafeAreaLabels) == EnumUtils<SafeAreaSimulation>::Count());
+        constexpr const char* kCustomLabel = "Custom...";
+
+        // The device of a shape for the Device safe area; none for a custom or an aspect shape and for an index this build lacks
+        const PreviewDevice* DeviceOf(const PreviewShape& shape) {
+            const auto devices = UIPreview::GetDevices();
+            if (shape.custom || shape.device < 0 || static_cast<size_t>(shape.device) >= devices.size()) {
+                return nullptr;
+            }
+            return &devices[static_cast<size_t>(shape.device)];
+        }
+
+        // The label of the current shape in the size combo
+        eastl::string SizeLabel(const PreviewShape& shape) {
+            if (shape.custom) {
+                return kCustomLabel;
+            }
+            if (const PreviewDevice* device = DeviceOf(shape)) {
+                return Format("{} ({}x{})", device->name, device->width, device->height);
+            }
+            return kAspectLabels[static_cast<size_t>(shape.aspect)];
+        }
+
+        bool IsFree(const PreviewShape& shape) {
+            return !shape.custom && !DeviceOf(shape) && shape.aspect == ViewportAspect::Free;
+        }
 
     }  // namespace
 
@@ -65,14 +93,19 @@ namespace BECore {
 
         DrawPreviewToolbar();
 
-        // The image is the largest rect of the preset's shape that fits what is left of the panel, centered in it
+        // The target is the shape's size (the largest rect of a preset's ratio that fits what is left of the panel, or the exact size
+        // of a device or custom size) and is shown at `zoom`, centered in the panel
         const ImVec2 available = ImGui::GetContentRegionAvail();
-        const auto [w, h] = UIPreview::FitSize(_aspect, available.x, available.y);
+        const PreviewTarget target = UIPreview::TargetFor(_shape, available.x, available.y);
+        const uint32_t w = target.width;
+        const uint32_t h = target.height;
         if (w == 0 || h == 0) {
             ImGui::End();
             return;
         }
         const ImVec2 size{static_cast<float>(w), static_cast<float>(h)};
+        const float zoom = target.zoom;
+        const ImVec2 shown{size.x * zoom, size.y * zoom};
 
         IRenderer* renderer = CoreManager::GetRenderer().Get();
         if (!renderer) {
@@ -93,10 +126,11 @@ namespace BECore {
             renderer->SetRenderTarget(_renderTarget.Get());
             // The target is not the window, so its safe area is the simulated one (the whole target for "No safe area"), never the window's
             UIEnvironment& uiEnvironment = CoreManager::GetUIEnvironment();
-            uiEnvironment.SetSafeAreaOverride(UIPreview::SimulatedSafeArea(_safeAreaSimulation, size.x, size.y));
-            // The target has one pixel per ImGui unit (the image is shown at that size), so its pixel density is 1 even when the
-            // window runs in the high-density mode, where canvases would otherwise lay out twice as big. A sharper viewport (a target
-            // of size times io.DisplayFramebufferScale, the mouse and the safe area scaled with it, the override set to that scale) is a follow-up.
+            const Rect safeArea = UIPreview::SimulatedSafeArea(_safeAreaSimulation, DeviceOf(_shape), size.x, size.y);
+            uiEnvironment.SetSafeAreaOverride(safeArea);
+            // The target has one pixel per ImGui unit at zoom 1, so its pixel density is 1 even when the window runs in the
+            // high-density mode, where canvases would otherwise lay out twice as big. A sharper viewport (a target of size times
+            // io.DisplayFramebufferScale, the mouse and the safe area scaled with it, the override set to that scale) is a follow-up.
             uiEnvironment.SetPixelDensityOverride(1.0f);
             // The forced view lives for this pass only: Update(), Game mode and the other scenes pick by their own output
             Scene* activeScene = CoreManager::GetSceneManager().GetActiveScene();
@@ -112,18 +146,18 @@ namespace BECore {
             uiEnvironment.SetPixelDensityOverride(std::nullopt);
             renderer->UnsetRenderTarget();
 
-            // Display the result as an ImGui image, centered when a preset leaves room on one side
+            // Display the result as an ImGui image, centered when the shape leaves room on one side
             const ImVec2 cursor = ImGui::GetCursorPos();
-            ImGui::SetCursorPos({cursor.x + (available.x - size.x) * 0.5f, cursor.y + (available.y - size.y) * 0.5f});
-            ImGui::Image(reinterpret_cast<ImTextureID>(_renderTarget->GetImGuiTextureId()), size);
+            ImGui::SetCursorPos({cursor.x + (available.x - shown.x) * 0.5f, cursor.y + (available.y - shown.y) * 0.5f});
+            ImGui::Image(reinterpret_cast<ImTextureID>(_renderTarget->GetImGuiTextureId()), shown);
 
             // Hand the mouse to the scene with viewport-local coordinates, so it can map them to scene units
             // (Scene::ScreenToSceneX/Y) with the fit of its last draw.
             const ImVec2 imageMin = ImGui::GetItemRectMin();
-            ForwardMouse(imageMin.x, imageMin.y, ImGui::IsItemHovered());
+            ForwardMouse(imageMin.x, imageMin.y, zoom, ImGui::IsItemHovered());
             const ImVec2 imageMax = ImGui::GetItemRectMax();
-            DrawGrid(imageMin.x, imageMin.y, imageMax.x, imageMax.y);
-            DrawSafeAreaOutline(imageMin.x, imageMin.y, imageMax.x, imageMax.y);
+            DrawGrid(imageMin.x, imageMin.y, imageMax.x, imageMax.y, zoom);
+            DrawSafeAreaOutline(imageMin.x, imageMin.y, zoom, safeArea);
         }
 
         ImGui::End();
@@ -131,12 +165,71 @@ namespace BECore {
 
     void ViewportWidget::Draw() {}
 
-    void ViewportWidget::DrawPreviewToolbar() {
-        int aspect = static_cast<int>(_aspect);
-        ImGui::SetNextItemWidth(kAspectComboWidth);
-        if (ImGui::Combo("##ViewportAspect", &aspect, kAspectLabels, static_cast<int>(std::size(kAspectLabels)))) {
-            _aspect = static_cast<ViewportAspect>(aspect);
+    void ViewportWidget::DrawSizeCombo() {
+        const auto devices = UIPreview::GetDevices();
+        const bool onDevice = DeviceOf(_shape) != nullptr;
+
+        // A device brings its own safe area; any other size drops it. The user can pick another simulation after either
+        const auto dropDeviceSafeArea = [this] {
+            if (_safeAreaSimulation == SafeAreaSimulation::Device) {
+                _safeAreaSimulation = SafeAreaSimulation::None;
+            }
+        };
+
+        ImGui::SetNextItemWidth(kSizeComboWidth);
+        if (ImGui::BeginCombo("##ViewportSize", SizeLabel(_shape).c_str())) {
+            for (size_t i = 0; i < std::size(kAspectLabels); ++i) {
+                const bool selected = !_shape.custom && !onDevice && static_cast<size_t>(_shape.aspect) == i;
+                if (ImGui::Selectable(kAspectLabels[i], selected)) {
+                    _shape.aspect = static_cast<ViewportAspect>(i);
+                    _shape.device = -1;
+                    _shape.custom = false;
+                    dropDeviceSafeArea();
+                }
+            }
+            ImGui::Separator();
+            for (size_t i = 0; i < devices.size(); ++i) {
+                const bool selected = !_shape.custom && _shape.device == static_cast<int32_t>(i);
+                const PreviewDevice& device = devices[i];
+                if (ImGui::Selectable(Format("{} ({}x{})", device.name, device.width, device.height).c_str(), selected)) {
+                    _shape.device = static_cast<int32_t>(i);
+                    _shape.custom = false;
+                    _safeAreaSimulation = SafeAreaSimulation::Device;
+                }
+            }
+            ImGui::Separator();
+            if (ImGui::Selectable(kCustomLabel, _shape.custom)) {
+                _shape.custom = true;
+                dropDeviceSafeArea();
+            }
+            ImGui::EndCombo();
         }
+    }
+
+    void ViewportWidget::DrawPreviewToolbar() {
+        DrawSizeCombo();
+
+        if (_shape.custom) {
+            // The sides are clamped to the range once the field is left, not while typing ("1" on the way to "1000" is not 64)
+            const auto sizeField = [](const char* label, uint32_t& side) {
+                int value = static_cast<int>(side);
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(kSizeFieldWidth);
+                if (ImGui::InputInt(label, &value, 0, 0)) {
+                    side = static_cast<uint32_t>(std::max(value, 0));
+                }
+                if (ImGui::IsItemDeactivatedAfterEdit()) {
+                    side = std::clamp(side, kMinPreviewSide, kMaxPreviewSide);
+                }
+            };
+            sizeField("W", _shape.customWidth);
+            sizeField("H", _shape.customHeight);
+        }
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(IsFree(_shape));
+        ImGui::Checkbox("Rotate", &_shape.rotated);
+        ImGui::EndDisabled();
 
         ImGui::SameLine();
         int safeArea = static_cast<int>(_safeAreaSimulation);
@@ -208,12 +301,15 @@ namespace BECore {
         }
     }
 
-    void ViewportWidget::DrawGrid(float minX, float minY, float maxX, float maxY) const {
+    void ViewportWidget::DrawGrid(float minX, float minY, float maxX, float maxY, float zoom) const {
         if (!_gridEnabled || _gridStep <= 0) {
             return;
         }
-        // A line every _gridStep image pixels from the top-left corner; the image is shown at one pixel per ImGui unit
-        const float step = static_cast<float>(_gridStep);
+        // A line every _gridStep image pixels from the top-left corner; a pixel of the image is zoom ImGui units
+        const float step = static_cast<float>(_gridStep) * zoom;
+        if (step < kMinDrawnGridStep) {
+            return;
+        }
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->PushClipRect({minX, minY}, {maxX, maxY}, true);
         for (float x = minX + step; x < maxX; x += step) {
@@ -225,20 +321,21 @@ namespace BECore {
         drawList->PopClipRect();
     }
 
-    void ViewportWidget::DrawSafeAreaOutline(float minX, float minY, float maxX, float maxY) const {
+    void ViewportWidget::DrawSafeAreaOutline(float minX, float minY, float zoom, const Rect& safeArea) const {
         if (_safeAreaSimulation == SafeAreaSimulation::None) {
             return;
         }
-        const Rect safe = UIPreview::SimulatedSafeArea(_safeAreaSimulation, maxX - minX, maxY - minY);
-        ImGui::GetWindowDrawList()->AddRect({minX + safe.x, minY + safe.y}, {minX + safe.x + safe.w, minY + safe.y + safe.h}, kSafeAreaOutlineColor);
+        ImGui::GetWindowDrawList()->AddRect({minX + safeArea.x * zoom, minY + safeArea.y * zoom}, {minX + (safeArea.x + safeArea.w) * zoom, minY + (safeArea.y + safeArea.h) * zoom},
+                                            kSafeAreaOutlineColor);
     }
 
-    void ViewportWidget::ForwardMouse(float originX, float originY, bool hovered) {
+    void ViewportWidget::ForwardMouse(float originX, float originY, float zoom, bool hovered) {
         const ImGuiIO& io = ImGui::GetIO();
         UIInput& uiInput = CoreManager::GetUIInput();
 
-        const float localX = io.MousePos.x - originX;
-        const float localY = io.MousePos.y - originY;
+        // The scene lives in target pixels, the image on screen is zoom times that
+        const float localX = (io.MousePos.x - originX) / zoom;
+        const float localY = (io.MousePos.y - originY) / zoom;
 
         // A press that began in the viewport is followed to its release even when the pointer has left the image
         const bool buttonHeld = std::any_of(std::begin(_pressedInViewport), std::end(_pressedInViewport), [](bool pressed) { return pressed; });
@@ -248,8 +345,8 @@ namespace BECore {
             motion.type = SDL_EVENT_MOUSE_MOTION;
             motion.x = localX;
             motion.y = localY;
-            motion.xrel = io.MouseDelta.x;
-            motion.yrel = io.MouseDelta.y;
+            motion.xrel = io.MouseDelta.x / zoom;
+            motion.yrel = io.MouseDelta.y / zoom;
             for (int i = 0; i < kMouseButtonCount; ++i) {
                 if (io.MouseDown[i]) {
                     motion.state |= SDL_BUTTON_MASK(kSDLButtons[i]);
