@@ -1836,6 +1836,123 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Element("p")->Cast<UIProgressBar>()->partShape, UIPartShape::Round);
     }
 
+    // ---- the icon and the tooltip of a button ----------------------------------------------------------------------------------
+
+    namespace {
+
+        constexpr const char* kIconButtonsHtml = R"(
+<div id="Bar">
+  <button id="Only" data-icon="Settings" title="Options" data-action="Opt"></button>
+  <button id="Left" data-icon="Settings" data-action="Opt">Options</button>
+  <button id="Above" data-icon="Settings" data-icon-position="above" title="{#opt.tip}" data-action="Opt">Options</button>
+  <button id="Plain" data-action="Opt">Plain</button>
+</div>)";
+
+        constexpr const char* kIconButtonsCss = R"(
+#Bar { anchor: top-left; left: 16px; top: 16px; width: 240px; height: 150px; display: flex; flex-wrap: wrap; gap: 12px; }
+#Only { width: 56px; height: 56px; -be-icon-color: #ffcc00; }
+#Left { width: 136px; height: 56px; }
+#Above { width: 100px; height: 72px; }
+#Plain { width: 80px; height: 56px; }
+)";
+
+    }  // namespace
+
+    TEST_F(UIWebTest, AnIconButtonCompilesToTheIconPlacementTintAndTooltip) {
+        const auto compiled = Compile(kIconButtonsHtml, kIconButtonsCss);
+        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+
+        EXPECT_EQ(compiled->Attr("Only", "icon"), "Settings");
+        EXPECT_EQ(compiled->Attr("Only", "tooltip"), "Options");
+        EXPECT_EQ(compiled->Attr("Only", "iconTint"), "255,204,0,255");
+        EXPECT_FALSE(compiled->Has("Only", "iconPlacement")) << "left is the default";
+        EXPECT_EQ(compiled->Attr("Above", "iconPlacement"), "Above");
+        EXPECT_EQ(compiled->Attr("Above", "tooltip"), "{#opt.tip}");
+        EXPECT_FALSE(compiled->Has("Left", "tooltip"));
+        EXPECT_FALSE(compiled->Has("Left", "iconTint"));
+        for (const char* key : {"icon", "tooltip", "iconTint", "iconPlacement"}) {
+            EXPECT_FALSE(compiled->Has("Plain", key)) << key;
+        }
+
+        const auto* only = dynamic_cast<UIButton*>(compiled->Element("Only"));
+        ASSERT_NE(only, nullptr);
+        EXPECT_EQ(only->icon, "Settings"_intern);
+        EXPECT_TRUE(only->text.empty());
+        EXPECT_EQ(only->tooltip, "Options");
+        EXPECT_EQ(only->iconTint.r, 255);
+        EXPECT_EQ(only->iconTint.g, 204);
+        EXPECT_EQ(only->iconPlacement, UIIconPlacement::Left);
+        const auto* left = dynamic_cast<UIButton*>(compiled->Element("Left"));
+        ASSERT_NE(left, nullptr);
+        EXPECT_EQ(left->icon, "Settings"_intern);
+        EXPECT_EQ(left->text, "Options");
+        EXPECT_TRUE(left->tooltip.empty());
+        EXPECT_EQ(left->iconTint.a, 0) << "no tint: the text colour is used";
+        const auto* above = dynamic_cast<UIButton*>(compiled->Element("Above"));
+        ASSERT_NE(above, nullptr);
+        EXPECT_EQ(above->iconPlacement, UIIconPlacement::Above);
+        EXPECT_EQ(above->tooltip, "{#opt.tip}");
+        const auto* plain = dynamic_cast<UIButton*>(compiled->Element("Plain"));
+        ASSERT_NE(plain, nullptr);
+        EXPECT_TRUE(plain->icon.Empty());
+        EXPECT_TRUE(plain->tooltip.empty());
+    }
+
+    TEST_F(UIWebTest, TheIconButtonsInHtmlPassTheSizeMatrix) {
+        const auto compiled = Compile(kIconButtonsHtml, kIconButtonsCss);
+        LaidOut web(compiled->content);
+        UILayoutValidatorOptions options;
+        options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
+        const auto failures = ValidateOnMatrix(web.layout, options);
+        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
+    }
+
+    TEST_F(UIWebTest, AnIconOnlyButtonThatIsTooSmallIsReportedByItsRect) {
+        const auto compiled = Compile(kIconButtonsHtml, std::string(kIconButtonsCss) + "#Only { width: 32px; height: 32px; }");
+        LaidOut web(compiled->content);
+        UILayoutValidatorOptions options;
+        options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
+        const auto failures = ValidateOnMatrix(web.layout, options);
+        EXPECT_FALSE(failures.empty()) << "the rect is the touch target, whatever the icon inside";
+        for (const UIMatrixFailure& failure : failures) {
+            for (const UILayoutIssue& issue : failure.issues) {
+                EXPECT_EQ(issue.kind, UILayoutIssueKind::TouchTargetTooSmall) << DescribeMatrixFailures(failures).c_str();
+                EXPECT_EQ(issue.element, "Only"_intern);
+            }
+        }
+    }
+
+    TEST_F(UIWebTest, TheIconAndTooltipAttributesOffAButtonAreReported) {
+        const auto compiled = Compile(R"(<div id="d" data-icon="Settings" data-icon-position="above" title="Tip"></div><span id="l">Text</span><div id="t" data-widget="toggle" title="Tip">T</div>)",
+                                      "#l { -be-icon-color: #fff; } #d { -be-icon-color: #fff; }");
+        EXPECT_EQ(compiled->IssuesMentioning("data-icon only applies to a <button>"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("data-icon-position only applies to a <button>"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("title only applies to a <button>"), 1u) << "one message for the div and the toggle";
+        EXPECT_EQ(compiled->IssuesMentioning("-be-icon-color applies to a button only"), 1u);
+        for (const char* name : {"d", "l", "t"}) {
+            for (const char* key : {"icon", "iconTint", "iconPlacement", "tooltip"}) {
+                EXPECT_FALSE(compiled->Has(name, key)) << name << " " << key;
+            }
+        }
+    }
+
+    TEST_F(UIWebTest, ABadIconPositionAndAnIconColorWithoutAnIconAreReported) {
+        const auto compiled =
+            Compile(R"(<button id="a" data-icon="Settings" data-icon-position="under"></button><button id="b" data-icon-position="above">B</button><button id="c" data-icon="">C</button>)",
+                    "#b { -be-icon-color: #fff } #c { -be-icon-color: #fff }");
+        EXPECT_EQ(compiled->IssuesMentioning("data-icon-position=\"under\" is not supported"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("data-icon-position has no effect without data-icon"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("data-icon needs the name of a sprite"), 1u);
+        EXPECT_EQ(compiled->Attr("a", "icon"), "Settings");
+        EXPECT_FALSE(compiled->Has("a", "iconPlacement")) << "the default is kept";
+        EXPECT_FALSE(compiled->Has("b", "iconPlacement"));
+        EXPECT_FALSE(compiled->Has("c", "icon"));
+        EXPECT_EQ(compiled->IssuesMentioning("-be-icon-color has no effect on a button without data-icon"), 1u) << "one message for both buttons";
+        EXPECT_FALSE(compiled->Has("b", "iconTint"));
+        EXPECT_FALSE(compiled->Has("c", "iconTint"));
+    }
+
     TEST_F(UIWebTest, AButtonStateRuleWithAGradientSetsTheStateColorAndReportsTheEnd) {
         const auto compiled =
             Compile(R"(<button id="b" data-action="Go">Go</button>)", "button { background: linear-gradient(#202020, #101010) } button:hover { background: linear-gradient(#303030, #202020) } "

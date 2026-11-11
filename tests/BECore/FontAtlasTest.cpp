@@ -1,4 +1,5 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Text/FontAtlas.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/Text/GlyphOutline.h>
@@ -441,6 +442,36 @@ namespace BECore::Tests {
         for (const DrawCall& call : renderer->calls) {
             EXPECT_EQ(call.kind, DrawKind::Texture);
         }
+    }
+
+#if BE_PROFILER_ALLOC
+    TEST_F(TextRendererTest, ADrawOfGlyphsTheAtlasHasAllocatesNothing) {
+        const TextLayoutResult layout = Layout("Hi, мир");
+        auto atlas = Atlas();
+        TextRenderer::Draw(*renderer, *atlas, layout, 0.0f, 0.0f, Color{255, 255, 255, 255});  // the atlas has every glyph from here on
+        renderer->calls.clear();
+        renderer->calls.reserve(layout.glyphs.size());  // the recording itself must not count
+
+        const uint64_t before = AllocTracker::GetThreadCounters().count;
+        const size_t drawn = TextRenderer::Draw(*renderer, *atlas, layout, 0.0f, 0.0f, Color{255, 255, 255, 255});
+
+        EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
+        EXPECT_EQ(drawn, 6u);
+    }
+#endif
+
+    TEST_F(TextRendererTest, AGlyphTheAtlasLacksIsPreparedByTheDraw) {
+        const TextLayoutResult layout = Layout("Hi", 24);
+        auto outline = Library().Get(*renderer, font, 24, 2);  // an outline atlas is not preloaded
+        ASSERT_EQ(outline->Find(layout.glyphs[0].glyph), nullptr);
+
+        TextEffects effects;
+        effects.outlineWidth = 2.0f;
+        effects.outlineColor = Color{0, 0, 0, 255};
+        TextRenderer::Draw(*renderer, *Atlas(), outline.Get(), layout, 0.0f, 0.0f, Color{255, 255, 255, 255}, effects);
+
+        EXPECT_NE(outline->Find(layout.glyphs[0].glyph), nullptr);
+        EXPECT_NE(outline->Find(layout.glyphs[1].glyph), nullptr);
     }
 
     TEST_F(TextRendererTest, TheTintIsTheTextColor) {

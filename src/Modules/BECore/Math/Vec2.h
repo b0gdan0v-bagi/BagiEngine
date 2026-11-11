@@ -2,7 +2,7 @@
 
 namespace BECore {
 
-    /// A point or a vector of two floats (positions in the engine are two floats in `TransformComponent`). There is no Vec3: nothing in the engine is 3D.
+    /// A point or a vector of two floats (positions in the engine are two floats in `TransformComponent`).
     struct Vec2 {
         float x = 0.0f;
         float y = 0.0f;

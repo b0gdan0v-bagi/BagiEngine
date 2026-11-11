@@ -114,6 +114,13 @@ namespace BECore {
                 json["disabled"] = button->disabled || button->groupDisabled;
                 json["value"] = MakeJsonString(button->value.ToStringView());
                 json["selected"] = button->selected;
+                // Only when set: the sprite name and the tooltip source (`{#key}` and `{var}` not expanded), so a plain button's entry does not change
+                if (!button->icon.Empty()) {
+                    json["icon"] = MakeJsonString(button->icon.ToStringView());
+                }
+                if (!button->tooltip.empty()) {
+                    json["tooltip"] = MakeJsonString(eastl::string_view(button->tooltip.data(), button->tooltip.size()));
+                }
             }
             if (auto* group = element.Cast<UISegmented>()) {
                 // The segments take `selected` and `groupDisabled` at the draw; apply them now so the tree shows the variable as it is, not as of the last draw

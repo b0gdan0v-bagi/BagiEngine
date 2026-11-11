@@ -282,6 +282,10 @@ namespace BECore {
 
     void SDLRendererBackend::UnsetRenderTarget() {}
 
+    eastl::string SDLRendererBackend::GetNoGpuDeviceReason() const {
+        return eastl::string("the SDL 2D renderer has no depth buffer and no shaders (use a renderer with a GPU device)");
+    }
+
     float SDLRendererBackend::GetOutputWidth() const {
         int width = 0;
         int height = 0;

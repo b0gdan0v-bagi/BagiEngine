@@ -38,6 +38,7 @@ namespace BECore::Tests {
         //   in steps of 0.1), Quiet a disabled UISlider (100, 400, 400 x 56), Loading a UIProgressBar (100, 300, 400 x 24, `uiApiLoad`, range 0..100).
         // "Pick": 800 x 600 in window pixels. Level is a UIDropdown (100, 100, 240 x 56, `uiApiLevel`, action UIControlApiLevel, options 56 high: Easy, Normal, Hard and Locked, a
         //   disabled option), Below (500, 200, 80 x 40) is a button the open list does not cover, Frozen (100, 450, 240 x 56) a disabled dropdown with one option.
+        // "Icons": 800 x 600 in window pixels. Gear is an icon button with a tooltip that holds a key and a variable, Quiet an icon button without a tooltip, Words a button with a caption only.
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -154,6 +155,17 @@ namespace BECore::Tests {
           <element type="UIPanel" name="Fancy" x="10" y="100" width="200" height="100" color="10,20,30,255" cornerRadius="16" borderWidth="2" borderColor="255,255,255,255"
                    gradientDirection="Vertical" gradientColor="50,60,70,255" shadow="0,4,8,0,#00000080" glow="0,0,12,2,#FFD70040" highlight="255,255,255,60"/>
           <element type="UIButton" name="Round" x="10" y="300" width="80" height="40" text="Round" action="UIControlApiRound" color="40,90,60,255" cornerRadius="4,8,12,0"/>
+        </elements>
+      </component>
+    </components></node>
+  </nodes></scene>
+  <scene type="Scene" name="Icons"><nodes>
+    <node name="Bar"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+        <elements>
+          <element type="UIButton" name="Gear" icon="GearIcon" tooltip="Open {#tip.gear} for {user}" x="10" y="10" width="48" height="48" action="UIControlApiGear" color="40,90,60,255"/>
+          <element type="UIButton" name="Quiet" icon="GearIcon" x="70" y="10" width="48" height="48" action="UIControlApiQuiet" color="40,90,60,255"/>
+          <element type="UIButton" name="Words" text="Words" x="130" y="10" width="80" height="48" action="UIControlApiWords" color="40,90,60,255"/>
         </elements>
       </component>
     </components></node>
@@ -634,6 +646,32 @@ namespace BECore::Tests {
         EXPECT_EQ(StringMember(issue, "kind"), "TouchTargetTooSmall");
         EXPECT_EQ(StringMember(issue, "element"), "Tiny");
         ExpectRect(Member(issue, "rect"), 400.0f, 10.0f, 20.0f, 20.0f);
+    }
+
+    TEST_F(UIControlApiTest, AButtonTellsItsIconAndItsTooltipSourceOnlyWhenTheyAreSet) {
+        CoreManager::GetUIVars().Set("user"_intern, "Ann");
+        Show("Icons");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        ASSERT_NE(bar, nullptr);
+        const Json* gear = FindElement(*bar, "Gear");
+        ASSERT_NE(gear, nullptr);
+        EXPECT_EQ(StringMember(*gear, "icon"), "GearIcon");
+        EXPECT_EQ(StringMember(*gear, "tooltip"), "Open {#tip.gear} for {user}") << "the source text, neither strings nor variables expanded";
+
+        const Json* quiet = FindElement(*bar, "Quiet");
+        ASSERT_NE(quiet, nullptr);
+        EXPECT_EQ(StringMember(*quiet, "icon"), "GearIcon");
+        EXPECT_FALSE(quiet->contains("tooltip"));
+
+        const Json* words = FindElement(*bar, "Words");
+        ASSERT_NE(words, nullptr);
+        EXPECT_FALSE(words->contains("icon"));
+        EXPECT_FALSE(words->contains("tooltip"));
+        EXPECT_EQ(StringMember(*words, "action"), "UIControlApiWords") << "the rest of a button's entry is as before";
     }
 
     TEST_F(UIControlApiTest, ACanvasWithNoRegionsHasAnEmptyObjectAndItsElementsHaveNoRegionMember) {

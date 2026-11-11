@@ -5,6 +5,7 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UIDocument.h>
 #include <Generated/UICanvasComponent.gen.hpp>
 
@@ -14,6 +15,12 @@ namespace BECore {
 
         constexpr uint32_t ButtonBit(uint8_t button) {
             return button < 32 ? 1u << button : 0u;
+        }
+
+        /// SDL tells a finger by the id of the mouse its events are made for
+        template <typename TEvent>
+        bool IsTouch(const TEvent& event) {
+            return event.which == SDL_TOUCH_MOUSEID;
         }
 
         bool SetVisibleIn(SceneNode& node, PoolString nodeName, bool visible) {
@@ -172,6 +179,45 @@ namespace BECore {
         }
     }
 
+    void UICanvasComponent::UpdateTooltip(UIElement* under, bool touch) {
+        _pointerOver = under ? IntrusivePtr<UIElement>(under) : IntrusivePtr<UIElement>{};
+        _pointerTouch = touch;
+        RefreshTooltip();
+    }
+
+    void UICanvasComponent::RefreshTooltip() {
+        UIButton* button = _pointerOver ? _pointerOver->Cast<UIButton>() : nullptr;
+        const bool hasTooltip = button && !button->tooltip.empty() && button->active.visible && !button->rect.IsEmpty();
+        // A mouse hides the tooltip for a press of any button on this canvas; a finger only counts the press that began on the button it is on
+        const bool pressed = _pointerTouch ? (_pressed && _pressed == _pointerOver) : _consumedButtons != 0;
+        _tooltip.Update(hasTooltip ? button : nullptr, _pointerTouch, pressed, CoreManager::GetTime().GetTotalTime());
+    }
+
+    void UICanvasComponent::DrawTooltip(IRenderer& renderer) {
+        UIButton* button = _pointerOver ? _pointerOver->Cast<UIButton>() : nullptr;
+        if (!button || !_tooltip.IsShown(button)) {
+            return;
+        }
+        if (!_tooltipLabel) {
+            _tooltipLabel = New<UILabel>();
+            _tooltipLabel->active.fontSize = UITooltip::kFontSize;
+            _tooltipLabel->textColor = UITooltip::kTextColor;
+        }
+        if (_tooltipLabel->text != button->tooltip) {
+            _tooltipLabel->text = button->tooltip;
+        }
+        const float scale = renderer.GetViewTransform().scale;
+        const Vec2 text = _tooltipLabel->MeasureText(UITooltip::kMaxWidth, scale);
+        if (text.x <= 0.0f || text.y <= 0.0f) {
+            return;
+        }
+        const Rect plate = UITooltip::Place(button->rect, {text.x + 2.0f * UITooltip::kPadding, text.y + 2.0f * UITooltip::kPadding}, _layout.GetResolved().contentBounds);
+        renderer.DrawFilledRect(plate.x, plate.y, plate.w, plate.h, UITooltip::kPlateColor);
+        // The text is laid out against the width it was measured with, so it wraps where the measure did; the plate (its left edge and its size) is what shows
+        _tooltipLabel->rect = {plate.x + UITooltip::kPadding, plate.y + UITooltip::kPadding, UITooltip::kMaxWidth, text.y};
+        _tooltipLabel->DrawSelf(renderer);
+    }
+
     bool UICanvasComponent::SyncPopups() {
         const eastl::vector<UIElement*> open = _layout.OpenPopups();
         UIElement* keep = nullptr;
@@ -249,6 +295,10 @@ namespace BECore {
         if (!renderer || !_visible) {
             return;
         }
+        if (!TakesInput()) {
+            _tooltip.Reset();  // a screen that takes no input (turned off while the pointer rested on it) shows no tooltip
+            _pointerOver.Reset();
+        }
         SyncPopups();  // a popup opened or closed by code since the last draw gets its rects now
         UpdateLayout(renderer->GetOutputWidth(), renderer->GetOutputHeight());
         if (!_layout.HasLayout()) {
@@ -260,6 +310,8 @@ namespace BECore {
         renderer->SetViewTransform(_layout.GetResolved().transform);
         DrawElement(*renderer, *_layout.root);
         DrawPopups(*renderer);
+        RefreshTooltip();
+        DrawTooltip(*renderer);
         renderer->SetViewTransform(sceneTransform);
     }
 
@@ -296,6 +348,8 @@ namespace BECore {
             _hovered->hovered = false;
             _hovered.Reset();
         }
+        _tooltip.Reset();
+        _pointerOver.Reset();
         if (_pressed) {
             _pressed->pressed = false;
             _pressed.Reset();
@@ -324,22 +378,27 @@ namespace BECore {
             // A press outside the open list only closes it: it is no click on what is below, and its release is ours too
             CloseAllPopups();
             _consumedButtons |= ButtonBit(event.button);
+            UpdateTooltip(hit, IsTouch(event));
             return true;
         }
         const bool consumed = _modal || hit != nullptr;
         if (consumed) {
             _consumedButtons |= ButtonBit(event.button);
         }
+        IntrusivePtr<UIElement> toPress;
         if (hit && hit->interactive && event.button == SDL_BUTTON_LEFT) {
             if (_pressed) {
                 _pressed->pressed = false;  // a release that never arrived
             }
             _pressed = IntrusivePtr<UIElement>(hit);
             hit->pressed = true;
+            toPress = _pressed;
+        }
+        UpdateTooltip(hit, IsTouch(event));
+        if (toPress) {
             // Last, like OnClick: the handler may do anything, and this canvas is done with the event by then. The copy keeps the element alive through it
-            const IntrusivePtr<UIElement> pressed = _pressed;
             const auto [x, y] = _layout.OutputToCanvas(event.x, event.y);
-            pressed->OnPress(x, y);
+            toPress->OnPress(x, y);
         }
         return consumed;
     }
@@ -362,8 +421,12 @@ namespace BECore {
             return false;
         }
         // The click runs last: its handlers may do anything, and this canvas is done with the event by then
-        const IntrusivePtr<UIElement> clicked = TakeClick(event);
+        IntrusivePtr<UIElement> clicked = TakeClick(event);
         const bool consumed = ConsumeButtonUp(event);
+        UpdateTooltip(HitTestOutput(event.x, event.y), IsTouch(event));
+        if (clicked && _tooltip.IsLongPress()) {
+            clicked.Reset();  // a finger held long enough showed the tooltip: the release is no click
+        }
         if (clicked) {
             UIElement* choice = nullptr;
             if (UIElement* popup = FindPopupOf(*clicked, choice)) {
@@ -387,6 +450,7 @@ namespace BECore {
         // A button is held and this canvas did not take its press: a drag of the game, which passing over the UI does not interrupt or light up
         const bool gameDrag = event.state != 0 && _consumedButtons == 0;
         SetHovered(gameDrag ? nullptr : hit);
+        UpdateTooltip(gameDrag ? nullptr : hit, IsTouch(event));
         if (_pressed && (event.state & SDL_BUTTON_LMASK) != 0) {
             // The press that began on this element is held: the element follows the pointer wherever it goes. The copy keeps it alive through the handler
             const IntrusivePtr<UIElement> pressed = _pressed;
