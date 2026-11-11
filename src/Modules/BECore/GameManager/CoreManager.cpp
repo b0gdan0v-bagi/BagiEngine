@@ -88,19 +88,44 @@ namespace BECore {
     }
 
     void CoreManager::OnGameCycle(PassKey<Application>) {
-        _eventsProviderManager.ProcessEvents();
+        {
+            BE_PROFILE_SCOPE("Input");
+            _eventsProviderManager.ProcessEvents();
+        }
+        BE_PROFILE_SCOPE("Game cycle");
         _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
         // The game clock of the delayed tasks gets the same frame delta as the tweens below (the clamp and the manual clock apply)
         TaskManager::GetInstance().AdvanceGameTime(PassKey<CoreManager>{}, _time.GetDeltaTime());
-        TaskManager::GetInstance().Update(PassKey<CoreManager>{});
+        {
+            BE_PROFILE_SCOPE("Tasks");
+            TaskManager::GetInstance().Update(PassKey<CoreManager>{});
+        }
         // Values are set before the logic of the frame reads them. The frame time is clamped to Time::kMaxFrameTime, so a pause does not finish every tween at once;
         // the manual clock gives the same ticks, and OnIdleCycle runs no frame and advances nothing
-        _tweenManager.Advance(_time.GetDeltaTime());
-        _sceneManager->UpdateAll();  // game logic before UI
-        _widgetManager.UpdateAll();  // clear, build the ImGui frame (Editor: ViewportWidget draws the scene)
-        EventsQueueRegistry::UpdateAll();
-        _widgetManager.DrawScreenAll();  // Game: SceneRenderWidget draws the scene into the back buffer
-        _widgetManager.DrawAll();        // ImGui::Render + GPU present
+        {
+            BE_PROFILE_SCOPE("Tweens");
+            _tweenManager.Advance(_time.GetDeltaTime());
+        }
+        {
+            BE_PROFILE_SCOPE("Scene update");
+            _sceneManager->UpdateAll();  // game logic before UI
+        }
+        {
+            BE_PROFILE_SCOPE("Widgets update");
+            _widgetManager.UpdateAll();  // clear, build the ImGui frame (Editor: ViewportWidget draws the scene)
+        }
+        {
+            BE_PROFILE_SCOPE("Queued events");
+            EventsQueueRegistry::UpdateAll();
+        }
+        {
+            BE_PROFILE_SCOPE("Draw screen");
+            _widgetManager.DrawScreenAll();  // Game: SceneRenderWidget draws the scene into the back buffer
+        }
+        {
+            BE_PROFILE_SCOPE("Draw and present");
+            _widgetManager.DrawAll();  // ImGui::Render + GPU present
+        }
     }
 
     void CoreManager::OnIdleCycle(PassKey<Application>) {

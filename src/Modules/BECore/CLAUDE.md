@@ -59,7 +59,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 
 Logic reads input and writes state; render only reads state. Do not draw from `SceneUpdateEvent` handlers and do not change game state from `OnDraw()`.
 
-After the present and `LogEvent::Flush()` the loop calls `ControlService::EndFrame()`: it runs the frame end hooks and counts down a control call that waits for frames (a `step`, a `screenshot`).
+After the present and `LogEvent::Flush()` the loop calls `ControlService::EndFrame()`: it runs the frame end hooks and counts down a control call that waits for frames (a `step`, a `screenshot`). Then the profiler's frame mark (`BE_PROFILE_FRAME`); the stages above are profiler zones (`Profiler/CLAUDE.md`).
 
 With the manual clock (`--manual-clock`, `Control/CLAUDE.md`) `Application::RunFrame` skips the whole frame unless a `step` or another deferred control call asks for one, and calls `CoreManager::OnIdleCycle` instead. The frame it does run is the same as above, so game logic cannot tell the clocks apart except that `deltaTime` is what the client asked for.
 
@@ -71,7 +71,7 @@ The GoogleTest executable (`tests/`) brings up the same services through `OnTest
 
 ## Subsystem guides
 
-Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManager`, `Timeline`, `co_await` of a tween), `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `Control/` (external control API core, JSON rules), `FileSystem/` (virtual paths and mount points), `Save/` (save games: slots, the game id and version envelope), `Scene/` (scene graph and components), `Logger/`, `Resource/`, `Text/` (fonts, layout, glyph atlases, `TextComponent`), `UI/` (in-game UI: canvases, adaptive layout, validator). Always read configs through `ConfigManager`, never by creating loaders by hand.
+Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManager`, `Timeline`, `co_await` of a tween), `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `Control/` (external control API core, JSON rules), `FileSystem/` (virtual paths and mount points), `Save/` (save games: slots, the game id and version envelope), `Scene/` (scene graph and components), `Logger/`, `Profiler/` (zones, frame marks, counters, the Chrome trace, allocation counts; `HowToProfile.md`), `Resource/`, `Text/` (fonts, layout, glyph atlases, `TextComponent`), `UI/` (in-game UI: canvases, adaptive layout, validator). Always read configs through `ConfigManager`, never by creating loaders by hand.
 
 ## Assert (CRTDebugHook, StackTrace)
 

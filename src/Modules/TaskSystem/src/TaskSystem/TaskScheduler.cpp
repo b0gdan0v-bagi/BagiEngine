@@ -103,6 +103,7 @@ namespace BECore {
         // Выполняем задачи вне мьютекса
         for (auto& pt : tasksToProcess) {
             if (pt.task) {
+                BE_PROFILE_SCOPE("Main thread task");
                 pt.task();
             }
         }

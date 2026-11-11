@@ -110,6 +110,7 @@ namespace BECore {
     }  // namespace
 
     void SceneDrawSystem::Run(Scene& scene) {
+        BE_PROFILE_SCOPE("SceneDrawSystem::Run");
         entt::registry& registry = scene.GetRegistry();
 
         uint32_t order = 0;
