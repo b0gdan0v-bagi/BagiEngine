@@ -4,6 +4,7 @@
     python3 tools/control/bagi_play.py <exe> <scenario.jsonl>
     python3 tools/control/bagi_play.py --preset macos-debug --game BagiMatch3 <scenario.jsonl>
     python3 tools/control/bagi_play.py <exe> <scenario.jsonl> --update        # rewrite the expectations from a run
+    python3 tools/control/bagi_play.py <exe> <scenario.jsonl> --shrink short.jsonl   # the fewest calls that still fail the same way
 
 The game is started with the flags of the header, the calls are sent in order, and the run stops at the first line whose expectation does not hold.
 Exit code: 0 passed, 1 failed, 2 a bad file or arguments, 77 skipped (the executable does not exist; ctest reads 77 as "skipped").
@@ -22,6 +23,7 @@ import scenario
 from bagi_control_client import ControlError
 from bagi_session import GameSession, SessionError
 from game_process import DEFAULT_STARTUP_TIMEOUT, PORT_TAKEN_MARKER, preset_executable
+from scenario_shrink import shrink
 
 EXIT_PASSED = 0
 EXIT_FAILED = 1
@@ -31,6 +33,7 @@ EXIT_SKIPPED = 77
 HEADLESS_FLAG = "--headless"
 MANUAL_CLOCK_FLAG = "--manual-clock"
 PARAMS_SHOWN = 200  # characters of a call's params in a failure message
+DEFAULT_MAX_PROBES = 200  # game launches a --shrink may spend: each probe starts the game
 HEADER_STEP = -1  # `failed_step` of a failure of the header (the game is not the one the file names)
 
 
@@ -194,12 +197,18 @@ def parse_arguments(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--game", help="the executable name for --preset, e.g. BagiMatch3")
     parser.add_argument("--root", type=Path, help="the repository whose build/ folder --preset means (default: the one holding these tools)")
     parser.add_argument("--update", action="store_true", help="play every call without checking and rewrite the expectations of the file from the run")
+    parser.add_argument("--shrink", type=Path, metavar="OUT", help="write to OUT the fewest calls of the scenario that still fail the same way (the scenario has to fail)")
+    parser.add_argument("--max-probes", type=int, default=DEFAULT_MAX_PROBES, help="game launches --shrink may spend (default %(default)s)")
     parser.add_argument("--timeout", type=float, default=DEFAULT_STARTUP_TIMEOUT, help="seconds to wait for the control API after the start")
     args = parser.parse_args(argv)
 
     by_preset = args.preset is not None or args.game is not None
     if by_preset and (args.preset is None or args.game is None):
         parser.error("--preset and --game go together")
+    if args.shrink is not None and args.update:
+        parser.error("--shrink and --update do not go together")
+    if args.max_probes < 1:
+        parser.error("--max-probes has to be at least 1")
     if len(args.paths) != (1 if by_preset else 2):
         parser.error("give the scenario file after the executable, or after --preset and --game (the executable is then not given)")
     args.scenario = Path(args.paths[-1])
@@ -222,7 +231,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"SKIPPED: {args.exe} does not exist")
         return EXIT_SKIPPED
 
-    result = play(args.exe.resolve(), header, steps, update=args.update, startup_timeout=args.timeout)  # the game runs in its own folder
+    exe = args.exe.resolve()  # the game runs in its own folder
+    if args.shrink is not None:
+        return _shrink(args, exe, header, steps, step_lines(text))
+    result = play(exe, header, steps, update=args.update, startup_timeout=args.timeout)
     if not result.passed:
         report(args.scenario, steps, step_lines(text), result)
         return EXIT_FAILED
@@ -230,6 +242,49 @@ def main(argv: list[str] | None = None) -> int:
         print(f"PASSED {args.scenario}: {result.calls} calls")
         return EXIT_PASSED
     return _write_update(args.scenario, header, steps, step_lines(text), result)
+
+
+def _shrink(args: argparse.Namespace, exe: Path, header: scenario.Header, steps: list[scenario.Step], lines: list[int]) -> int:
+    """Plays the file, which has to fail, then looks for the fewest calls that fail the same way and writes them to --shrink."""
+    full = play(exe, header, steps, startup_timeout=args.timeout)
+    if full.passed:
+        print(f"{args.scenario} passes, nothing to shrink")
+        return EXIT_USAGE
+    if full.failed_step is None or full.failed_step == HEADER_STEP or full.failure is None:
+        report(args.scenario, steps, lines, full)
+        print("  this is not a failed expectation of a call, so there is nothing to shrink")
+        return EXIT_FAILED
+    target, expectation = full.failed_step, full.failure.expectation
+    print(f"shrinking: {full.failure.expectation} of line {lines[target]} ({describe_call(steps[target])}) fails; looking for the calls it needs", flush=True)
+
+    # A dropped call changes the versions and the answers of the calls after it, so only the expectation that failed is kept, and lenient
+    # mode lets the other calls answer errors: whatever fails then is the failure that was found, not noise from the rest of the file.
+    stripped = [dataclasses.replace(step, expect=step.expect if index == target else {}) for index, step in enumerate(steps)]
+    launches = 0
+    cache: dict[tuple[int, ...], bool] = {}
+
+    def still_fails(candidate: list[int]) -> bool:
+        nonlocal launches
+        key = tuple(candidate)
+        if key not in cache:
+            launches += 1
+            probe = play(exe, header, [stripped[index] for index in candidate], lenient=True, startup_timeout=args.timeout)
+            cache[key] = probe.failure is not None and probe.failed_step is not None and probe.failed_step != HEADER_STEP and probe.failure.expectation == expectation
+        return cache[key]
+
+    try:
+        kept = shrink(list(range(len(steps))), still_fails, args.max_probes)
+    except ValueError:
+        print(f"the failure did not come back with the other expectations stripped ({launches} launches); the scenario is left as it is")
+        return EXIT_USAGE
+    try:
+        scenario.dump(args.shrink, header, [steps[index] for index in kept])
+    except OSError as error:
+        print(f"ERROR cannot write {args.shrink}: {error}")
+        return EXIT_FAILED
+    limit = f"; stopped at the limit of {args.max_probes} probes, so it may still shrink" if launches >= args.max_probes else ""
+    print(f"SHRUNK {args.shrink}: {len(steps)} calls -> {len(kept)} calls (lines {', '.join(str(lines[index]) for index in kept)} of {args.scenario}), {launches} probes{limit}")
+    return EXIT_PASSED
 
 
 def _write_update(path: Path, header: scenario.Header, steps: list[scenario.Step], lines: list[int], result: PlayResult) -> int:

@@ -10,6 +10,7 @@ Python tools that drive a game through the control API (`src/Modules/RemoteContr
 | `game_process.py` | `GameProcess`: starts a game executable with `--control`, retries until it listens, keeps its log; `build_game_command`, `free_port`, `preset_executable`, `log_problems` (the Warning, Error and Fatal lines of its log), `PORT_TAKEN_MARKER` |
 | `scenario.py` | The scenario file ("Scenario files"): `load` / `dump`, the expectations (`evaluate`), what a recording writes (`minimal_expect`, `full_expect`) and `--update` writes (`updated_expect`). Standard library only, no I/O besides the two |
 | `bagi_session.py` | `GameSession`: one game, started (`launch`) or reached (`connect`), as plain Python calls. No MCP code, so it is tested without the `mcp` package. `SessionError` for what the session refuses; a refusal of the game stays a `ControlError`. Records the calls as a scenario ("Scenario files") and keeps the pushed events (`take_event`) |
+| `scenario_shrink.py` | `shrink(items, fails, max_probes)`: delta debugging, the 1-minimal sublist that still fails. Pure, no I/O, knows no session |
 | `bagi_play.py` | The scenario player ("Playing a scenario"): `play(exe, header, steps, update, lenient)` and the command line |
 | `bagi_mcp.py` | The MCP server (stdio). Each tool is one line over `GameSession`; the only file that needs `mcp` |
 | `requirements.txt` | `mcp` (2.x) and `pytest`; nothing else is needed |
@@ -47,6 +48,10 @@ A session recorded as JSON lines (UTF-8, one object per line, no comments, blank
 - `play` is the function the shrinker reuses: it answers a `PlayResult` (the failing step and its `Failure`, or an `error`), `lenient=True` tolerates an error a line did not expect. A `step` gets the timeout of its frames in `GameSession.call` itself, so a scenario's long step does not hit the default.
 - **`logClean` is judged after `quit`**, not at its line: the game's stdout is block-buffered into the log file when redirected (only Error and Fatal go to the unbuffered stderr), so a Warning logged before the line may not be in the file yet. The failure is still reported at the line that asked for it, and what the game logs while shutting down counts too; put it on the last line. `GameSession.log_problems()` reads the log of a game that has quit.
 - **`--update`** plays every call without stopping at an expectation, rewrites the expectations with `scenario.updated_expect` and writes the file only when the run completed (a lost connection or a bad exit writes nothing); it prints the lines that changed. `event` is not waited for in this mode.
+
+### Shrinking
+
+`bagi_play.py <exe> <scenario> --shrink OUT` cuts a failing scenario down to the calls the failure needs, for the QA loop: record a long session, play it, and shrink the one that fails into a small regression file. The scenario has to fail (else exit 2, nothing written). A probe starts the game and plays a candidate list of the calls with **every `expect` stripped except that of the originally failing line**, in `lenient` mode: a dropped call moves the versions and answers of the calls after it, so the other expectations would only add noise, and an error they did not expect must not end the probe. A probe fails when that expectation fails again (same name). The written file keeps the header and the surviving calls with their original `expect`. `--max-probes` (default 200) bounds the game launches; at the limit the best list so far is written and the output says so. `shrink` itself keeps the list in order and tries chunks of halving size, then single calls.
 
 ## Naming the game
 
