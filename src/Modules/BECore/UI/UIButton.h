@@ -11,6 +11,9 @@ namespace BECore {
     /**
      * @brief A button: a label on a filled rect that reacts to the pointer and emits an action when it is clicked.
      *
+     * New content is the composed form instead (`UIElement` with `UITextComponent` and `UIInputClicker`, the icon in a child: `.claude/rules/ui-controls.md`, "Components"); `tools/migrate` moves the
+     * old files. `UIButton` stays for the segments of `UISegmented` and the options of `UIDropdown`, which look for their buttons by this class.
+     *
      * `<element type="UIButton" name="Reset" text="Reset" action="Match3Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" color="40,90,60,255"/>`
      *
      * A click is a press and its release, both on the button (the canvas follows the press to its release, so dragging off the button cancels it). It emits

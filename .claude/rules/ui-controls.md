@@ -46,7 +46,9 @@ The elements and variants are reflected fields of `UICanvasComponent`, so a scre
     <element type="UIPanel" name="Hud" x="16" y="16" width="240" height="120" color="0,0,0,160">
       <children>
         <element type="UILabel" name="Score" x="12" y="10" width="216" height="32" text="{#hud.score}: {score}" fontSize="28"/>
-        <element type="UIButton" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" text="{#hud.reset}" action="Match3Reset"/>
+        <element type="UIElement" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48">
+          <components><component type="UITextComponent" text="{#hud.reset}" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="Match3Reset"/></components>
+        </element>
       </children>
     </element>
   </elements>
@@ -73,7 +75,7 @@ Each derives from `UIElement`, draws itself in `DrawSelf` in canvas units; `colo
 | `UIPanel` | `sprite`, `sliceBorder`, `spriteTint` | fill then sprite, nine-sliced with `sliceBorder`; `blocksInput` by default |
 | `UIImage` | `sprite`, `tint`, `stretch` | sprite fitted, centered, proportional |
 | `UILabel` | `text`, `font` (a file path, wins), `fontFamily` + `fontWeight` (a face of the `families` table of `TextConfig.xml`; the layout check measures with it), `textColor`, `align`, `verticalAlign`, `overflow` (`Ellipsis` default, `Clip`, `AutoFit`), `wrap`, `lineSpacing`, `minFontSize`, `textOutline` (`width,color`), `textShadow` (`offsetX,offsetY,color`) | text at `fontSize` (24 when 0) x canvas scale in whole pixels. The outline and the hard shadow are UI units x scale, paint only (never measured, cut by `Clip`); every control that draws its caption through `UILabel::DrawText` has them, faded with a disabled caption |
-| `UIButton` | (the form `ui-button-composition` replaces by the components below; still used by the games, segments, dropdown options) `action`, `value`, `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, `disabled`, `icon`, `iconTint`, `iconPlacement`, `iconSize`, `tooltip` | a click emits `ActionEvent(action, value)`; state colors derived when transparent; `selected` adds a bar so selection is not colour alone; disabled still consumes the click; the states shift the box too. `icon` (a sprite name) alone in the rect, or `Left` / `Above` the caption (`GetParts`; `CheckContent` measures the caption in what the icon leaves); tinted by `iconTint` or `textColor`, shifted by hover / press / disabled (`GetCurrentIconColor`); the rect stays the touch target. `tooltip` is held here and shown by the canvas |
+| `UIButton` | (**only for the segments of a `UISegmented` and the options of a `UIDropdown`**, and for old content: a button is the components below, `tools/migrate` moves the old file) `action`, `value`, `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, `disabled`, `icon`, `iconTint`, `iconPlacement`, `iconSize`, `tooltip` | a click emits `ActionEvent(action, value)`; state colors derived when transparent; `selected` adds a bar so selection is not colour alone; disabled still consumes the click; the states shift the box too. `icon` (a sprite name) alone in the rect, or `Left` / `Above` the caption (`GetParts`; `CheckContent` measures the caption in what the icon leaves); tinted by `iconTint` or `textColor`, shifted by hover / press / disabled (`GetCurrentIconColor`); the rect stays the touch target. `tooltip` is held here and shown by the canvas |
 | `UIStack` | — | a stack container |
 | `UISegmented` | `bind`, `disabled` | radio group over direct `UIButton` children: the segment whose `value` equals the variable is `selected`. **Every segment needs an explicit `height`**, also with `flex` (else it is a 0-high rect: not drawn, not clickable, skipped by the validator) |
 | `UIToggle` | `bind`, `action`, `onValue`, `offValue`, `disabled`, track / fill / thumb colors, `partShape` | a caption with a switch at the right; on when the variable equals `onValue`; a click emits the opposite value. `partShape="Round"`: pill track, round thumb; its own plate is the `box` of any element |
@@ -88,7 +90,7 @@ Each derives from `UIElement`, draws itself in `DrawSelf` in canvas units; `colo
 
 ## Components
 
-A button is no class but a set of components on one `UIElement` (`<components><component type="..."/></components>`, `UIElement::components`, factory base `UIComponent`). Icon-only, captioned and icon-left buttons are all this; `UIButton` is the older form.
+A button is no class but a set of components on one `UIElement` (`<components><component type="..."/></components>`, `UIElement::components`, factory base `UIComponent`). Icon-only, captioned and icon-left buttons are all this; `UIButton` stays only for the segments of the groups. The HTML compiler (`ui-web.md`) and `tools/migrate` (step 1) write the forms below; new content is written in them.
 
 | Component | Fields | Does |
 |-----------|--------|------|
@@ -100,14 +102,19 @@ A button is no class but a set of components on one `UIElement` (`<components><c
 - **One component of each type per element:** `GetComponent<T>()` is the first, `AddComponent<T>()` returns the existing one, a second in a file is logged and dropped.
 - **Order:** the element draws its box, then its components in list order, then its children. `OnClick` / `OnPress` / `OnDrag` and `CheckContent` reach the components with the owner as the argument; a subclass that overrides them is unchanged.
 - **State** lives on the element: `hovered`, `pressed`, `selected`, `groupDisabled`, `IsDisabled()` (`groupDisabled` or the clicker's `disabled`) and the fills `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`; the box takes the state look only when a component says `GivesStateLook()` (the clicker), so a `blocksInput` panel does not light up. Image and text have per-state variants of their own.
-- **Icon and caption together** are two children of a stack (an image element and a text element), the clicker on the stack: the target is the rect of the stack, never a picture. `ui_tree` and `ui_click` answer a composed element as a button (`ui-control-api.md`).
+- **A child follows the button it is in:** an element with no clicker draws (and `GetVisualState()` says) in the state of its nearest ancestor that has one, so the image of `<N>Icon` and the text of `<N>Caption` follow hover, press and disabled; the child is not hovered or hit, only drawn so. The selected bar takes its colour from the `UITextComponent` of the element or of the first child that has one.
+- **A stack child with `aspectRatio` and one side given gets the other** (`height="50%" aspectRatio="1"` is a square as high as half the stack), which is how an icon is written next to a caption.
+- **Icon and caption together** are two children of a stack (an image element and a text element), the clicker on the stack: the target is the rect of the stack, never a picture. `ui_tree` and `ui_click` answer a composed element as a button, with `text` and `icon` taken from the children (`ui-control-api.md`).
+- **The two icon forms** (the HTML compiler and the migration step write exactly these, `<N>` the name of the button; children have no name when it has none): *icon only*, one child `<N>Icon` with `UIImageComponent` (`tint` is `iconTint`, else the `textColor` of the button, else white), `anchor="Center" width="60%" height="60%" aspectRatio="1"` (the square that fits; `UIButton::kIconOnlyShare`); *icon left of a caption*, the button is `layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center"` (`kIconPadding`, `kIconGap`) with `<N>Icon` (`height="50%" aspectRatio="1"`) and `<N>Caption` (`flex="1" height="100%"`, the `UITextComponent` and the `fontSize`). A variant that changes the font size of such a button is a `<set>` for `<N>Caption`. An icon above the caption has no composed form yet.
 
 ```xml
-<element type="UIStack" name="Play" direction="Horizontal" spacing="8" crossAlign="Center" width="200" height="48" color="40,60,90,255" cornerRadius="8">
+<element type="UIElement" name="Play" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center" width="200" height="48" color="40,60,90,255" cornerRadius="8">
   <components><component type="UIInputClicker" action="Play"/><component type="UITooltipComponent" text="{#tip.play}"/></components>
   <children>
-    <element type="UIElement" name="PlayIcon" width="32" height="32"><components><component type="UIImageComponent" sprite="icons.play"/></components></element>
-    <element type="UIElement" name="PlayText" width="100" height="32"><components><component type="UITextComponent" text="{#menu.play}" verticalAlign="Center"/></components></element>
+    <element type="UIElement" name="PlayIcon" height="50%" aspectRatio="1"><components><component type="UIImageComponent" sprite="icons.play"/></components></element>
+    <element type="UIElement" name="PlayCaption" flex="1" height="100%" fontSize="24">
+      <components><component type="UITextComponent" text="{#menu.play}" align="Center" verticalAlign="Center" wrap="false"/></components>
+    </element>
   </children>
 </element>
 ```
