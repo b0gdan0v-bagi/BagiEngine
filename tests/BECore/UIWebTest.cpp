@@ -10,6 +10,8 @@
 #include <BECore/UI/UIDocument.h>
 #include <BECore/UI/UIHtmlParser.h>
 #include <BECore/UI/UIImage.h>
+#include <BECore/UI/UIImageComponent.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
 #include <BECore/UI/UIProgressBar.h>
@@ -17,8 +19,10 @@
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISlider.h>
 #include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIToggle.h>
+#include <BECore/UI/UITooltipComponent.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <BECore/UI/UIWebText.h>
 #include <Common/EngineEnvironment.h>
@@ -50,6 +54,21 @@ namespace BECore::Tests {
             /// An attribute of the element of that name; "" when there is none
             [[nodiscard]] std::string Attr(const char* name, const char* attribute) const {
                 return Find(name).attribute(attribute).as_string();
+            }
+
+            /// The component of that type of the element of that name (`UITextComponent`...); empty when there is none
+            [[nodiscard]] pugi::xml_node Component(const char* name, const char* type) const {
+                for (pugi::xml_node component : Find(name).child("components").children()) {
+                    if (std::string(component.attribute("type").as_string()) == type) {
+                        return component;
+                    }
+                }
+                return {};
+            }
+
+            /// An attribute of a component of the element of that name; "" when there is none
+            [[nodiscard]] std::string ComponentAttr(const char* name, const char* type, const char* attribute) const {
+                return Component(name, type).attribute(attribute).as_string();
             }
 
             [[nodiscard]] bool Has(const char* name, const char* attribute) const {
@@ -183,7 +202,12 @@ button:hover { background: #3a6; }
     <element type="UIElement" name="Hud" x="16" y="16" width="220" height="96" color="0,0,0,160" blocksInput="true">
       <children>
         <element type="UILabel" name="Score" x="12" y="10" width="150" height="32" text="Score: {score}" fontSize="28"/>
-        <element type="UIButton" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" text="Reset" fontSize="24" action="Match3Reset" color="40,90,60,255" hoverColor="51,170,102,255"/>
+        <element type="UIElement" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" fontSize="24" color="40,90,60,255" hoverColor="51,170,102,255">
+          <components>
+            <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
+            <component type="UIInputClicker" action="Match3Reset"/>
+          </components>
+        </element>
       </children>
     </element>
   </elements>
@@ -194,8 +218,8 @@ button:hover { background: #3a6; }
   </variants>
 </ui>)";
 
-        // The main menu of Match3 as the game shipped it before its buttons became composed (games/Match3/config/SceneConfig.xml; the layout is the same, the HTML compiler still emits `UIButton`),
-        // and the same menu in HTML + CSS
+        // The main menu of Match3 as the game shipped it before its buttons became composed (games/Match3/config/SceneConfig.xml; the HTML compiler writes the composed form, whose layout is the
+        // same), and the same menu in HTML + CSS
         constexpr const char* kMenuXml = R"(<ui><elements>
   <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
     <children>
@@ -302,7 +326,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
           </element>
         </children>
       </element>
-      <element type="UIButton" name="Ok" height="56" text="OK" fontSize="26" action="SelectorClose" color="40,90,60,255" />
+      <element type="UIElement" name="Ok" height="56" fontSize="26" color="40,90,60,255">
+        <components>
+          <component type="UITextComponent" text="OK" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="SelectorClose"/>
+        </components>
+      </element>
     </children>
   </element>
 </elements>
@@ -400,6 +429,19 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                     EXPECT_FALSE(expected.attribute(attribute.name()).empty()) << name << " has the extra attribute " << attribute.name();
                 }
             }
+            // The components of a composed element: the same types in the same order, with the same attributes
+            pugi::xml_node actualComponent = actual.child("components").first_child();
+            for (pugi::xml_node expectedComponent : expected.child("components").children()) {
+                ASSERT_TRUE(actualComponent) << name << " lacks the component " << expectedComponent.attribute("type").as_string();
+                for (pugi::xml_attribute attribute : expectedComponent.attributes()) {
+                    EXPECT_EQ(std::string(attribute.as_string()), std::string(actualComponent.attribute(attribute.name()).as_string())) << name << " " << attribute.name();
+                }
+                for (pugi::xml_attribute attribute : actualComponent.attributes()) {
+                    EXPECT_FALSE(expectedComponent.attribute(attribute.name()).empty()) << name << " has the extra component attribute " << attribute.name();
+                }
+                actualComponent = actualComponent.next_sibling();
+            }
+            EXPECT_FALSE(actualComponent) << name << " has more components than expected";
             const pugi::xml_node expectedChildren = expected.child("children");
             const pugi::xml_node actualChildren = actual.child("children");
             pugi::xml_node a = actualChildren.first_child();
@@ -449,7 +491,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
           </element>
         </children>
       </element>
-      <element type="UIButton" name="Ok" height="56" text="{#settings.ok}" fontSize="26" action="SettingsClose" color="40,90,60,255"/>
+      <element type="UIElement" name="Ok" height="56" fontSize="26" color="40,90,60,255">
+        <components>
+          <component type="UITextComponent" text="{#settings.ok}" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="SettingsClose"/>
+        </components>
+      </element>
     </children>
   </element>
 </elements>
@@ -895,10 +942,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const auto* score = dynamic_cast<UILabel*>(compiled->Element("Score"));
         ASSERT_NE(score, nullptr);
         EXPECT_EQ(score->text, "Score: {score}");
-        const auto* reset = dynamic_cast<UIButton*>(compiled->Element("Reset"));
+        const UIElement* reset = compiled->Element("Reset");
         ASSERT_NE(reset, nullptr);
-        EXPECT_EQ(reset->text, "Reset");
-        EXPECT_EQ(reset->action.ToStringView(), "Match3Reset");
+        ASSERT_NE(reset->GetComponent<UITextComponent>(), nullptr);
+        ASSERT_NE(reset->GetComponent<UIInputClicker>(), nullptr);
+        EXPECT_EQ(reset->GetComponent<UITextComponent>()->text, "Reset");
+        EXPECT_EQ(reset->GetComponent<UIInputClicker>()->action.ToStringView(), "Match3Reset");
         EXPECT_EQ(reset->hoverColor.r, 51);
         EXPECT_EQ(reset->hoverColor.g, 170);
         EXPECT_EQ(compiled->report.elements, 3u);
@@ -1092,7 +1141,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("b", "hoverColor"), "48,48,48,255");
         EXPECT_EQ(compiled->Attr("b", "selectedColor"), "64,80,96,255");
         EXPECT_EQ(compiled->Attr("b", "pressedColor"), "16,16,16,255");
-        EXPECT_EQ(compiled->Attr("b", "value"), "v");
+        EXPECT_EQ(compiled->ComponentAttr("b", "UIInputClicker", "value"), "v");
         EXPECT_TRUE(compiled->report.issues.empty());
 
         // `:checked` counts as a class: a longer selector wins over a plain one, the order breaks ties
@@ -1138,7 +1187,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(value->Has("g", "value"));
         const auto onButton = Compile(R"(<button id="b" data-widget="segmented">B</button>)");
         EXPECT_EQ(onButton->IssuesMentioning("on a <button> is left out"), 1u);
-        EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), std::string("UIButton"));
+        EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), std::string("UIElement")) << "a button that is no segment is composed";
 
         // The widget name is not case sensitive, like a tag
         const auto upper = Compile(R"(<div id="g" data-widget="Segmented"></div>)", "div { display: flex }");
@@ -1360,7 +1409,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(onButton->IssuesMentioning("data-widget=\"toggle\" on a <button> is left out"), 1u);
         EXPECT_EQ(onButton->IssuesMentioning("data-widget=\"slider\" on a <img> is left out"), 1u);
         EXPECT_EQ(onButton->IssuesMentioning("disabled does not apply to a progress bar"), 1u);
-        EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), std::string("UIButton"));
+        EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), std::string("UIElement")) << "a button that is no segment is composed";
         EXPECT_EQ(onButton->Find("i").attribute("type").as_string(), std::string("UIImage"));
         EXPECT_FALSE(onButton->Has("p", "disabled"));
 
@@ -1570,16 +1619,16 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             Compile(R"(<button id="b" data-action="Go">Go</button>)",
                     "button { background: #202020; font-weight: bold; font-family: Roboto; text-shadow: #000 0 1px; -be-text-outline: #FFF 1px } button:hover { background: #303030 }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Attr("b", "fontFamily"), "Roboto");
-        EXPECT_EQ(compiled->Attr("b", "fontWeight"), "700");
-        EXPECT_EQ(compiled->Attr("b", "textShadow"), "0,1,#000000FF") << "the colour may come first";
-        EXPECT_EQ(compiled->Attr("b", "textOutline"), "1,#FFFFFFFF");
+        EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "fontFamily"), "Roboto");
+        EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "fontWeight"), "700");
+        EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "textShadow"), "0,1,#000000FF") << "the colour may come first";
+        EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "textOutline"), "1,#FFFFFFFF");
         EXPECT_EQ(compiled->Attr("b", "hoverColor"), "48,48,48,255");
         EXPECT_TRUE(compiled->report.issues.empty());
-        auto* button = compiled->Element("b")->Cast<UIButton>();
-        ASSERT_NE(button, nullptr);
-        EXPECT_EQ(button->fontWeight, 700);
-        EXPECT_FLOAT_EQ(button->textEffects.shadowOffsetY, 1.0f);
+        const auto* text = compiled->Element("b")->GetComponent<UITextComponent>();
+        ASSERT_NE(text, nullptr);
+        EXPECT_EQ(text->fontWeight, 700);
+        EXPECT_FLOAT_EQ(text->textEffects.shadowOffsetY, 1.0f);
     }
 
     TEST_F(UIWebTest, TheTextPropertiesAreInheritedFromAContainerAndAChildMayChangeThem) {
@@ -1592,7 +1641,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("a", "fontWeight"), "700");
         EXPECT_EQ(compiled->Attr("a", "fontFamily"), "Russo One");
         EXPECT_EQ(compiled->Attr("a", "textOutline"), "2,#FFFFFFFF");
-        EXPECT_EQ(compiled->Attr("c", "textShadow"), "1,1,#000000FF");
+        EXPECT_EQ(compiled->ComponentAttr("c", "UITextComponent", "textShadow"), "1,1,#000000FF") << "a button's text follows the container too";
         EXPECT_FALSE(compiled->Has("b", "fontWeight"));
         EXPECT_FALSE(compiled->Has("b", "fontFamily"));
         EXPECT_FALSE(compiled->Has("b", "textShadow"));
@@ -1633,8 +1682,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, AStringReferenceIsTextLikeAVariableAndReachesTheXmlUntouched) {
         const auto compiled = Compile(R"(<button id="b" data-action="Start">{#menu.start}</button><span id="s">{#score.title}: {score}</span><p id="q">{{#menu.start}}</p>)");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Find("b").attribute("type").as_string(), std::string("UIButton"));
-        EXPECT_EQ(compiled->Attr("b", "text"), "{#menu.start}");
+        EXPECT_EQ(compiled->Find("b").attribute("type").as_string(), std::string("UIElement"));
+        EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "text"), "{#menu.start}");
         EXPECT_EQ(compiled->Find("s").attribute("type").as_string(), std::string("UILabel"));
         EXPECT_EQ(compiled->Attr("s", "text"), "{#score.title}: {score}");
         EXPECT_EQ(compiled->Attr("q", "text"), "{{#menu.start}}") << "an escaped brace stays escaped";
@@ -1647,7 +1696,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         strings.Set("de"_intern, "menu.start", "Los");
         strings.Set("de"_intern, "score.title", "Punkte");
         CoreManager::GetUIVars().Set("score"_intern, 3);
-        auto* button = compiled->Element("b")->Cast<UIButton>();
+        auto* button = compiled->Element("b")->GetComponent<UITextComponent>();
         auto* span = compiled->Element("s")->Cast<UILabel>();
         auto* quoted = compiled->Element("q")->Cast<UILabel>();
         ASSERT_NE(button, nullptr) << compiled->xml.c_str();
@@ -1677,8 +1726,45 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("b", "hoverColor"), "48,48,48,255");
         EXPECT_EQ(compiled->Attr("b", "pressedColor"), "16,16,16,255");
         EXPECT_EQ(compiled->Attr("b", "disabledColor"), "85,85,85,255");
-        EXPECT_EQ(compiled->Attr("b", "disabled"), "true");
-        EXPECT_EQ(compiled->Attr("b", "action"), "Go") << "action works as well as data-action";
+        EXPECT_EQ(compiled->ComponentAttr("b", "UIInputClicker", "disabled"), "true");
+        EXPECT_EQ(compiled->ComponentAttr("b", "UIInputClicker", "action"), "Go") << "action works as well as data-action";
+        EXPECT_TRUE(compiled->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, AButtonCompilesToWhatTheMigrationStepWritesForTheSameAttributes) {
+        const auto compiled = Compile(R"(<button id="b" data-action="Go" data-value="v" disabled title="Tip">Go</button>)",
+                                      "#b { width: 120px; height: 56px; font-size: 24px; color: #010203; font-weight: 700; background: #202020 } #b:hover { background: #303030 }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_TRUE(compiled->report.issues.empty());
+        // The element `s0001_ui_button_to_components.py` makes of `<element type="UIButton" name="b" width="120" height="56" text="Go" fontSize="24" textColor="1,2,3,255" fontWeight="700"
+        // action="Go" value="v" disabled="true" tooltip="Tip" color="32,32,32,255" hoverColor="48,48,48,255"/>`
+        constexpr const char* kStepOutput = R"(<element type="UIElement" name="b" width="120" height="56" fontSize="24" color="32,32,32,255" hoverColor="48,48,48,255">
+  <components>
+    <component type="UITextComponent" text="Go" fontWeight="700" textColor="1,2,3,255" align="Center" verticalAlign="Center" wrap="false"/>
+    <component type="UIInputClicker" action="Go" value="v" disabled="true"/>
+    <component type="UITooltipComponent" text="Tip"/>
+  </components>
+</element>)";
+        pugi::xml_document reference;
+        ASSERT_TRUE(reference.load_string(kStepOutput));
+        ExpectSameAttributes(reference.child("element"), compiled->Find("b"));
+        EXPECT_EQ(compiled->report.elements, 1u);
+    }
+
+    TEST_F(UIWebTest, ASegmentOfAGroupStaysAUIButtonAndTheButtonBesideItIsComposed) {
+        const auto compiled =
+            Compile(R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x" data-action="Pick">A</button></div><button id="b" data-action="Go">Go</button>)",
+                    "#g { display: flex; height: 56px } #b { height: 56px }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->Attr("a", "type"), "UIButton");
+        EXPECT_EQ(compiled->Attr("a", "text"), "A");
+        EXPECT_EQ(compiled->Attr("a", "action"), "Pick");
+        EXPECT_TRUE(compiled->Find("a").child("components").empty());
+        EXPECT_EQ(compiled->Attr("b", "type"), "UIElement");
+        EXPECT_NE(dynamic_cast<UISegmented*>(compiled->Element("g")), nullptr);
+        EXPECT_NE(dynamic_cast<UIButton*>(compiled->Element("a")), nullptr) << "the group finds its segments by that class";
+        EXPECT_EQ(dynamic_cast<UIButton*>(compiled->Element("b")), nullptr);
+        EXPECT_NE(compiled->Element("b")->GetComponent<UIInputClicker>(), nullptr);
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
@@ -1860,45 +1946,147 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
     }  // namespace
 
-    TEST_F(UIWebTest, AnIconButtonCompilesToTheIconPlacementTintAndTooltip) {
+    TEST_F(UIWebTest, AnIconButtonCompilesToTheComposedFormsWithTheIconInAChild) {
         const auto compiled = Compile(kIconButtonsHtml, kIconButtonsCss);
-        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
+        // the one note: `above` has no composed form
+        EXPECT_EQ(compiled->report.issues.size(), 1u) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->IssuesMentioning("data-icon-position=\"above\" is not supported on a <button> yet"), 1u);
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
 
-        EXPECT_EQ(compiled->Attr("Only", "icon"), "Settings");
-        EXPECT_EQ(compiled->Attr("Only", "tooltip"), "Options");
-        EXPECT_EQ(compiled->Attr("Only", "iconTint"), "255,204,0,255");
-        EXPECT_FALSE(compiled->Has("Only", "iconPlacement")) << "left is the default";
-        EXPECT_EQ(compiled->Attr("Above", "iconPlacement"), "Above");
-        EXPECT_EQ(compiled->Attr("Above", "tooltip"), "{#opt.tip}");
-        EXPECT_FALSE(compiled->Has("Left", "tooltip"));
-        EXPECT_FALSE(compiled->Has("Left", "iconTint"));
-        for (const char* key : {"icon", "tooltip", "iconTint", "iconPlacement"}) {
-            EXPECT_FALSE(compiled->Has("Plain", key)) << key;
+        // Icon only: the button keeps its box, the icon is a centred square child that takes the tint and the clicker the action
+        EXPECT_EQ(compiled->Attr("Only", "type"), "UIElement");
+        for (const char* key : {"icon", "iconTint", "iconPlacement", "tooltip", "text", "layout"}) {
+            EXPECT_FALSE(compiled->Has("Only", key)) << key;
         }
+        EXPECT_EQ(compiled->Attr("OnlyIcon", "anchor"), "Center");
+        EXPECT_EQ(compiled->Attr("OnlyIcon", "width"), "60%");
+        EXPECT_EQ(compiled->Attr("OnlyIcon", "height"), "60%");
+        EXPECT_EQ(compiled->Attr("OnlyIcon", "aspectRatio"), "1");
+        EXPECT_EQ(compiled->ComponentAttr("OnlyIcon", "UIImageComponent", "sprite"), "Settings");
+        EXPECT_EQ(compiled->ComponentAttr("OnlyIcon", "UIImageComponent", "tint"), "255,204,0,255");
+        EXPECT_EQ(compiled->ComponentAttr("Only", "UIInputClicker", "action"), "Opt");
+        EXPECT_EQ(compiled->ComponentAttr("Only", "UITooltipComponent", "text"), "Options");
+        EXPECT_TRUE(compiled->Component("Only", "UITextComponent").empty()) << "no caption, no text component";
+        EXPECT_EQ(static_cast<float>(UIButton::kIconOnlyShare), 0.6f) << "the 60% above is the share of UIButton";
 
-        const auto* only = dynamic_cast<UIButton*>(compiled->Element("Only"));
+        // Icon left of a caption: a horizontal stack of the icon and the caption, the caption holds the text and the font size
+        EXPECT_EQ(compiled->Attr("Left", "layout"), "Stack");
+        EXPECT_EQ(compiled->Attr("Left", "direction"), "Horizontal");
+        EXPECT_EQ(compiled->Attr("Left", "padding"), "8,0,0,0");
+        EXPECT_EQ(compiled->Attr("Left", "spacing"), "6");
+        EXPECT_EQ(compiled->Attr("Left", "crossAlign"), "Center");
+        EXPECT_EQ(compiled->Attr("LeftIcon", "height"), "50%");
+        EXPECT_EQ(compiled->Attr("LeftIcon", "aspectRatio"), "1");
+        EXPECT_FALSE(compiled->Has("LeftIcon", "width"));
+        EXPECT_FALSE(compiled->Has("LeftIcon", "anchor"));
+        EXPECT_EQ(compiled->Attr("LeftCaption", "flex"), "1");
+        EXPECT_EQ(compiled->Attr("LeftCaption", "height"), "100%");
+        EXPECT_EQ(compiled->ComponentAttr("LeftCaption", "UITextComponent", "text"), "Options");
+        EXPECT_EQ(compiled->ComponentAttr("LeftCaption", "UITextComponent", "align"), "Center");
+        EXPECT_FALSE(compiled->Has("LeftIcon", "text"));
+        EXPECT_TRUE(compiled->Component("Left", "UITextComponent").empty()) << "the text is the caption's";
+        EXPECT_TRUE(compiled->Component("Left", "UITooltipComponent").empty());
+        EXPECT_FALSE(compiled->Component("LeftIcon", "UIImageComponent").attribute("tint")) << "no tint: the icon follows the text colour";
+        EXPECT_EQ(static_cast<float>(UIButton::kIconWithTextShare), 0.5f);
+        EXPECT_EQ(static_cast<float>(UIButton::kIconPadding), 8.0f);
+        EXPECT_EQ(static_cast<float>(UIButton::kIconGap), 6.0f);
+
+        // Above is left, with the tooltip kept
+        EXPECT_EQ(compiled->Attr("Above", "layout"), "Stack");
+        EXPECT_EQ(compiled->ComponentAttr("Above", "UITooltipComponent", "text"), "{#opt.tip}");
+        EXPECT_NE(compiled->Find("AboveCaption"), pugi::xml_node());
+
+        // A plain button has no children
+        EXPECT_FALSE(compiled->Find("Plain").child("children"));
+        EXPECT_FALSE(compiled->Has("Plain", "layout"));
+
+        const UIElement* only = compiled->Element("Only");
         ASSERT_NE(only, nullptr);
-        EXPECT_EQ(only->icon, "Settings"_intern);
-        EXPECT_TRUE(only->text.empty());
-        EXPECT_EQ(only->tooltip, "Options");
-        EXPECT_EQ(only->iconTint.r, 255);
-        EXPECT_EQ(only->iconTint.g, 204);
-        EXPECT_EQ(only->iconPlacement, UIIconPlacement::Left);
-        const auto* left = dynamic_cast<UIButton*>(compiled->Element("Left"));
+        ASSERT_EQ(only->children.size(), 1u);
+        const auto* image = only->children[0]->GetComponent<UIImageComponent>();
+        ASSERT_NE(image, nullptr);
+        EXPECT_EQ(image->sprite, "Settings"_intern);
+        EXPECT_EQ(image->tint.r, 255);
+        EXPECT_EQ(image->tint.g, 204);
+        const UIElement* left = compiled->Element("Left");
         ASSERT_NE(left, nullptr);
-        EXPECT_EQ(left->icon, "Settings"_intern);
-        EXPECT_EQ(left->text, "Options");
-        EXPECT_TRUE(left->tooltip.empty());
-        EXPECT_EQ(left->iconTint.a, 0) << "no tint: the text colour is used";
-        const auto* above = dynamic_cast<UIButton*>(compiled->Element("Above"));
-        ASSERT_NE(above, nullptr);
-        EXPECT_EQ(above->iconPlacement, UIIconPlacement::Above);
-        EXPECT_EQ(above->tooltip, "{#opt.tip}");
-        const auto* plain = dynamic_cast<UIButton*>(compiled->Element("Plain"));
-        ASSERT_NE(plain, nullptr);
-        EXPECT_TRUE(plain->icon.Empty());
-        EXPECT_TRUE(plain->tooltip.empty());
+        EXPECT_EQ(left->children.size(), 2u);
+        EXPECT_EQ(compiled->report.elements, 10u) << "Bar, three icon buttons with two children or one, a plain button";
+    }
+
+    TEST_F(UIWebTest, AnIconWithoutAnIconColorTakesTheTextColorAndAnIconOnlyButtonKeepsItForItsBar) {
+        const auto compiled = Compile(R"(<button id="a" data-icon="Star"></button><button id="b" data-icon="Star"></button>)", "#a { color: #ff0000 } #b { }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->ComponentAttr("aIcon", "UIImageComponent", "tint"), "255,0,0,255");
+        EXPECT_EQ(compiled->ComponentAttr("a", "UITextComponent", "textColor"), "255,0,0,255") << "the bar of a selected button takes it";
+        EXPECT_EQ(compiled->Component("a", "UITextComponent").attribute("text"), pugi::xml_attribute()) << "a colour and nothing else";
+        EXPECT_FALSE(compiled->Component("bIcon", "UIImageComponent").empty());
+        EXPECT_FALSE(compiled->Has("bIcon", "tint"));
+        EXPECT_TRUE(compiled->Component("b", "UITextComponent").empty());
+        EXPECT_TRUE(compiled->report.issues.empty());
+    }
+
+    TEST_F(UIWebTest, AnIconButtonWithoutAnIdHasChildrenWithoutNames) {
+        const auto compiled = Compile(R"(<button data-icon="Star">Go</button>)");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        const pugi::xml_node button = compiled->document.child("ui").child("elements").child("element");
+        ASSERT_TRUE(button);
+        size_t children = 0;
+        for (pugi::xml_node child : button.child("children").children()) {
+            EXPECT_TRUE(child.attribute("name").empty());
+            ++children;
+        }
+        EXPECT_EQ(children, 2u);
+    }
+
+    TEST_F(UIWebTest, AFlexOnAnIconButtonIsLeftOutAndReported) {
+        const auto compiled = Compile(R"(<button id="b" data-icon="Star">Go</button>)", "#b { display: flex; gap: 20px; padding: 4px; width: 120px; height: 56px }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->IssuesMentioning("lays its icon and caption out itself"), 1u);
+        EXPECT_EQ(compiled->Attr("b", "spacing"), "6") << "the form's own";
+        EXPECT_EQ(compiled->Attr("b", "padding"), "8,0,0,0");
+    }
+
+    TEST_F(UIWebTest, AButtonInASegmentedGroupKeepsItsIconOnTheUIButton) {
+        const auto compiled = Compile(R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x" data-icon="Star" data-icon-position="above" title="T">A</button></div>)",
+                                      "div { display: flex; height: 56px } #a { -be-icon-color: #fff }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->Attr("a", "type"), "UIButton");
+        EXPECT_EQ(compiled->Attr("a", "icon"), "Star");
+        EXPECT_EQ(compiled->Attr("a", "iconPlacement"), "Above");
+        EXPECT_EQ(compiled->Attr("a", "iconTint"), "255,255,255,255");
+        EXPECT_EQ(compiled->Attr("a", "tooltip"), "T");
+        EXPECT_FALSE(compiled->Find("a").child("children"));
+        EXPECT_EQ(compiled->IssuesMentioning("not supported on a <button> yet"), 0u) << "a segment has the placement";
+        const auto* segment = dynamic_cast<UIButton*>(compiled->Element("a"));
+        ASSERT_NE(segment, nullptr);
+        EXPECT_EQ(segment->iconPlacement, UIIconPlacement::Above);
+    }
+
+    TEST_F(UIWebTest, AMediaFontSizeOfAnIconLeftButtonIsWrittenForItsCaption) {
+        const auto compiled = Compile(R"(<button id="b" data-icon="Star" data-action="Go">Go</button><button id="c" data-action="Go">Go</button><button id="d" data-icon="Star"></button>)",
+                                      "button { font-size: 24px; width: 140px; height: 56px } @media (orientation: portrait) { button { font-size: 18px } }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_FALSE(compiled->Has("b", "fontSize")) << "the caption has it";
+        EXPECT_EQ(compiled->Attr("bCaption", "fontSize"), "24");
+        EXPECT_EQ(compiled->Attr("c", "fontSize"), "24") << "a plain button keeps it";
+        EXPECT_EQ(compiled->Attr("d", "fontSize"), "24") << "an icon-only button has no caption: it stays";
+        ASSERT_EQ(compiled->content.variants.size(), 1u);
+        const auto& overrides = compiled->content.variants[0].overrides;
+        const auto find = [&](const char* element) -> const UIElementOverride* {
+            for (const auto& entry : overrides) {
+                if (entry.element == PoolString::Intern(element)) {
+                    return &entry;
+                }
+            }
+            return nullptr;
+        };
+        ASSERT_NE(find("bCaption"), nullptr) << compiled->xml.c_str();
+        EXPECT_FLOAT_EQ(find("bCaption")->fontSize.value_or(0.0f), 18.0f);
+        EXPECT_EQ(find("b"), nullptr) << "nothing of the button itself changes";
+        ASSERT_NE(find("c"), nullptr);
+        EXPECT_FLOAT_EQ(find("c")->fontSize.value_or(0.0f), 18.0f);
+        EXPECT_EQ(compiled->report.issues.size(), 0u) << compiled->report.issues[0].message.c_str();
     }
 
     TEST_F(UIWebTest, TheIconButtonsInHtmlPassTheSizeMatrix) {
@@ -1946,13 +2134,14 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->IssuesMentioning("data-icon-position=\"under\" is not supported"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("data-icon-position has no effect without data-icon"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("data-icon needs the name of a sprite"), 1u);
-        EXPECT_EQ(compiled->Attr("a", "icon"), "Settings");
+        EXPECT_EQ(compiled->ComponentAttr("aIcon", "UIImageComponent", "sprite"), "Settings");
         EXPECT_FALSE(compiled->Has("a", "iconPlacement")) << "the default is kept";
-        EXPECT_FALSE(compiled->Has("b", "iconPlacement"));
-        EXPECT_FALSE(compiled->Has("c", "icon"));
+        EXPECT_TRUE(compiled->Find("bIcon").empty()) << "no icon, no child";
+        EXPECT_TRUE(compiled->Find("cIcon").empty());
         EXPECT_EQ(compiled->IssuesMentioning("-be-icon-color has no effect on a button without data-icon"), 1u) << "one message for both buttons";
         EXPECT_FALSE(compiled->Has("b", "iconTint"));
         EXPECT_FALSE(compiled->Has("c", "iconTint"));
+        EXPECT_EQ(compiled->report.issues.size(), 4u);
     }
 
     TEST_F(UIWebTest, AButtonStateRuleWithAGradientSetsTheStateColorAndReportsTheEnd) {
@@ -1965,7 +2154,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("b", "pressedColor"), "5,5,5,255");
         EXPECT_EQ(compiled->IssuesMentioning("the far end of a state gradient is derived from its start color"), 1u) << "once, for both states";
         EXPECT_EQ(compiled->report.issues.size(), 1u);
-        EXPECT_EQ(compiled->Element("b")->Cast<UIButton>()->box.gradientColor.r, 16) << "the box of the base look, the state shifts come from the start color";
+        EXPECT_EQ(compiled->Element("b")->box.gradientColor.r, 16) << "the box of the base look, the state shifts come from the start color";
     }
 
     TEST_F(UIWebTest, ABoxPropertyInAStateRuleIsReported) {
@@ -2247,8 +2436,12 @@ button  { height: 56px; font-size: 28px; }
   <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
     <children>
       <element type="UILabel" name="Title" height="88" text="Match 3" fontSize="56" align="Center" verticalAlign="Center" />
-      <element type="UIButton" name="Play" height="56" text="Play" fontSize="28" action="Match3Play" color="@play" />
-      <element type="UIButton" name="Quit" height="56" text="Quit" fontSize="28" action="Match3Quit" color="@quit" />
+      <element type="UIElement" name="Play" height="56" fontSize="28" color="@play">
+        <components><component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="Match3Play"/></components>
+      </element>
+      <element type="UIElement" name="Quit" height="56" fontSize="28" color="@quit">
+        <components><component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="Match3Quit"/></components>
+      </element>
     </children>
   </element>
 </elements></ui>)";
@@ -2292,7 +2485,7 @@ button  { height: 56px; font-size: 28px; }
         EXPECT_EQ(compiled->Attr("bar", "trackColor"), "@panel");
         EXPECT_EQ(compiled->Attr("bar", "fillColor"), "@accent");
         EXPECT_EQ(compiled->Attr("knob", "thumbColor"), "@line");
-        EXPECT_EQ(compiled->Attr("icon", "iconTint"), "@accent");
+        EXPECT_EQ(compiled->ComponentAttr("iconIcon", "UIImageComponent", "tint"), "@accent");
 
         // The XML front-end reads it back into the fields, as tokens
         const auto* card = compiled->Element("card");

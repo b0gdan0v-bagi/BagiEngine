@@ -15,7 +15,8 @@ namespace BECore {
      * |------|---------|
      * | `div`, `section`, `nav`, `ul`, `li`, ... | `UIPanel` when it has a `background-image`, else `UIElement` (a group) |
      * | `span`, `p`, `h1`..`h6`, `label`, or any element that holds only text | `UILabel` (its `background` is the fill behind the text) |
-     * | `button` | `UIButton` (`data-action` or `action` is the action; `disabled` disables it; `data-icon`, `data-icon-position` and `title` are `icon`, `iconPlacement` and `tooltip`) |
+     * | `button` | `UIElement` with `UITextComponent`, `UIInputClicker` and `UITooltipComponent` (`title`); a `UIButton` in a segmented group |
+     * | `button` with `data-icon` | the same, the icon in a child `<N>Icon` (and `<N>Caption` with text); `-be-icon-color` is its `tint` (`ui-controls.md`) |
      * | `img` | `UIImage` (`src` is the sprite name) |
      * | any element with `data-widget="segmented"` | `UISegmented` (`data-bind` is `bind`; its `<button data-value>` children are the segments) |
      * | any element with `data-widget="toggle"` | `UIToggle` (`data-bind`, `data-action`, `data-on` / `data-off` are `onValue` / `offValue`; the text is the caption) |
@@ -28,8 +29,8 @@ namespace BECore {
      * `text-shadow`, `-be-text-outline`, `text-align` and `line-height` are inherited. `@media` blocks become responsive variants: for each block the cascade is run again with its rules
      * and what changed becomes the overrides of the variant, so a variant can change only what UIElementOverride can (visibility, anchor, offset, size, stack
      * direction, font size). The engine-only `-be-track-color`, `-be-fill-color` and `-be-thumb-color` set `trackColor`, `fillColor` and `thumbColor` of the three widgets, `-be-icon-color` the
-     * `iconTint` of a button; the states of the widgets are derived, so a state rule on them is reported. `:hover`, `:active`, `:disabled` and `:checked` on a button set its four fills (`hoverColor`,
-     * `pressedColor`, `disabledColor`, `selectedColor`).
+     * `tint` of the icon of a button; the states of the widgets are derived, so a state rule on them is reported. `:hover`, `:active`, `:disabled` and `:checked` on a button set its four fills
+     * (`hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`).
      *
      * The box (`UIBoxStyle`): `border-radius` and its four longhands (px, one value per corner), `border` / `border-width` / `border-color` / `border-style` (`solid`, `none`; a border is
      * drawn inside the rect and is not layout), `linear-gradient()` of two colors in `background` or `background-image` (it replaces `background-color`; a `url()` beside it is the sprite
