@@ -1,3 +1,5 @@
+#include "WebSocketTestClient.h"
+
 #include <BECore/Control/ControlCall.h>
 #include <BECore/Control/ControlService.h>
 #include <Common/Printers.h>
@@ -13,183 +15,14 @@ namespace BECore::Tests {
 
         using namespace std::chrono_literals;
 
-        constexpr WebSocketMask kMask = {0x12, 0x34, 0x56, 0x78};
-        constexpr const char* kKey = "dGhlIHNhbXBsZSBub25jZQ==";
-        constexpr auto kWaitLimit = 30s;
-        constexpr int kMaxChunksPerFill = 1024;
-
         /// The test thread plays the main thread: it drains the queue while it waits, so responses can come back
         template <typename Predicate>
-        bool WaitUntil(ControlService& service, Predicate done, std::chrono::milliseconds limit = kWaitLimit) {
-            const auto deadline = std::chrono::steady_clock::now() + limit;
-            while (std::chrono::steady_clock::now() < deadline) {
-                service.Drain();
-                if (done()) {
-                    return true;
-                }
-                std::this_thread::sleep_for(1ms);
-            }
-            return false;
+        bool WaitUntil(ControlService& service, Predicate done, std::chrono::milliseconds limit = kClientWaitLimit) {
+            return WaitUntil(WaitPump([&service] { service.Drain(); }), std::move(done), limit);
         }
 
-        eastl::span<const uint8_t> AsBytes(const std::string& text) {
-            return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
-        }
-
-        eastl::span<const uint8_t> AsBytes(const eastl::vector<uint8_t>& bytes) {
-            return eastl::span<const uint8_t>(bytes.data(), bytes.size());
-        }
-
-        std::string HandshakeRequest(uint16_t port, const std::string& extraHeaders = "", const std::string& host = "") {
-            const std::string hostValue = host.empty() ? "127.0.0.1:" + std::to_string(port) : host;
-            return "GET /control HTTP/1.1\r\nHost: " + hostValue + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + std::string(kKey) + "\r\nSec-WebSocket-Version: 13\r\n" +
-                   extraHeaders + "\r\n";
-        }
-
-        struct ServerFrame {
-            uint8_t opcode = 0;
-            std::string payload;
-        };
-
-        /// A raw client: the handshake and the frames are written by hand, so the server is tested against the bytes of the RFC
-        class TestClient {
-        public:
-            static std::optional<TestClient> Open(uint16_t port) {
-                auto socket = Socket::Connect(port);
-                if (!socket) {
-                    ADD_FAILURE() << "connect failed: " << socket.error().c_str();
-                    return std::nullopt;
-                }
-                TestClient client;
-                client._socket = std::move(*socket);
-                client._socket.SetReceiveTimeout(5ms);
-                return client;
-            }
-
-            void Send(eastl::span<const uint8_t> bytes) {
-                EXPECT_TRUE(_socket.SendAll(bytes));
-            }
-
-            void Send(const std::string& text) {
-                Send(AsBytes(text));
-            }
-
-            void SendText(const std::string& text) {
-                Send(AsBytes(EncodeTextFrame(eastl::string_view(text.data(), text.size()), kMask)));
-            }
-
-            /// The response head of the handshake, and the body when it says Content-Length. Empty when nothing came in time
-            std::string ReadHttpResponse(ControlService& service) {
-                constexpr std::string_view kHeadEnd = "\r\n\r\n";
-                std::string response;
-                size_t bodyExpected = 0;
-                const bool complete = WaitUntil(service, [&] {
-                    FillBuffer();
-                    const std::string text(reinterpret_cast<const char*>(_buffer.data()), _buffer.size());
-                    const size_t headEnd = text.find(kHeadEnd);
-                    if (headEnd == std::string::npos) {
-                        return false;
-                    }
-                    const size_t lengthAt = text.find("Content-Length: ");
-                    bodyExpected = (lengthAt == std::string::npos || lengthAt > headEnd) ? 0 : static_cast<size_t>(std::stoul(text.substr(lengthAt + 16)));
-                    if (text.size() < headEnd + kHeadEnd.size() + bodyExpected) {
-                        return false;
-                    }
-                    response = text.substr(0, headEnd + kHeadEnd.size() + bodyExpected);
-                    _buffer.erase(_buffer.begin(), _buffer.begin() + static_cast<ptrdiff_t>(response.size()));
-                    return true;
-                });
-                return complete ? response : std::string();
-            }
-
-            /// Performs the handshake of the RFC and returns whether the server switched protocols
-            bool Handshake(ControlService& service, uint16_t port) {
-                Send(HandshakeRequest(port));
-                return ReadHttpResponse(service).starts_with("HTTP/1.1 101 ");
-            }
-
-            /// The next complete frame of the server, nullopt when none came yet
-            std::optional<ServerFrame> TryReadFrame() {
-                if (const auto frame = ParseBuffered()) {
-                    return frame;
-                }
-                FillBuffer();
-                return ParseBuffered();
-            }
-
-            std::optional<ServerFrame> WaitForFrame(ControlService& service) {
-                std::optional<ServerFrame> frame;
-                WaitUntil(service, [&] {
-                    frame = TryReadFrame();
-                    return frame.has_value();
-                });
-                return frame;
-            }
-
-            /// True when the server ended the connection (and every frame it sent before has been read)
-            bool WaitForEndOfStream(ControlService& service) {
-                return WaitUntil(service, [&] {
-                    FillBuffer();
-                    return _ended;
-                });
-            }
-
-        private:
-            TestClient() = default;
-
-            /// Reads everything that has arrived (up to kMaxChunksPerFill chunks); a loop, because WaitUntil sleeps 1 ms
-            /// between its calls, which is 15 ms on Windows, and a megabyte in chunks of 4 KiB would take seconds
-            void FillBuffer() {
-                std::array<uint8_t, 4096> chunk;
-                for (int i = 0; i < kMaxChunksPerFill; ++i) {
-                    const auto received = _socket.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
-                    if (!received) {
-                        if (received.error() != SocketError::TimedOut) {
-                            _ended = true;
-                        }
-                        return;
-                    }
-                    // Pointers, not std::array iterators: EASTL's insert does not take MSVC's class iterator
-                    _buffer.insert(_buffer.end(), chunk.data(), chunk.data() + *received);
-                }
-            }
-
-            /// The frames of a server are not masked
-            std::optional<ServerFrame> ParseBuffered() {
-                if (_buffer.size() < 2) {
-                    return std::nullopt;
-                }
-                size_t length = _buffer[1] & 0x7F;
-                size_t headerSize = 2;
-                if (length == 126 || length == 127) {
-                    const size_t lengthBytes = (length == 126) ? 2 : 8;
-                    if (_buffer.size() < 2 + lengthBytes) {
-                        return std::nullopt;
-                    }
-                    length = 0;
-                    for (size_t i = 0; i < lengthBytes; ++i) {
-                        length = (length << 8) | _buffer[2 + i];
-                    }
-                    headerSize += lengthBytes;
-                }
-                if (_buffer.size() < headerSize + length) {
-                    return std::nullopt;
-                }
-                ServerFrame frame;
-                frame.opcode = _buffer[0] & 0x0F;
-                frame.payload.assign(reinterpret_cast<const char*>(_buffer.data()) + headerSize, length);
-                _buffer.erase(_buffer.begin(), _buffer.begin() + static_cast<ptrdiff_t>(headerSize + length));
-                return frame;
-            }
-
-            Socket _socket;
-            eastl::vector<uint8_t> _buffer;
-            bool _ended = false;
-        };
-
-        uint16_t CloseCodeOf(const ServerFrame& frame) {
-            return static_cast<uint16_t>((static_cast<uint8_t>(frame.payload[0]) << 8) | static_cast<uint8_t>(frame.payload[1]));
-        }
+        using TestClient = WebSocketTestClient;
+        constexpr WebSocketMask kMask = kClientMask;
 
         std::string Request(int64_t id, std::string_view method, std::string_view paramsJson = "{}") {
             return "{\"id\":" + std::to_string(id) + ",\"method\":\"" + std::string(method) + "\",\"params\":" + std::string(paramsJson) + "}";
@@ -244,10 +77,14 @@ namespace BECore::Tests {
                 return port.value_or(0);
             }
 
+            std::optional<TestClient> OpenClient(uint16_t port) {
+                return TestClient::Open(port, [this] { service.Drain(); });
+            }
+
             /// A connected client that finished the handshake
             std::optional<TestClient> Connect(uint16_t port) {
-                auto client = TestClient::Open(port);
-                if (client && !client->Handshake(service, port)) {
+                auto client = OpenClient(port);
+                if (client && !client->Handshake(port)) {
                     ADD_FAILURE() << "the handshake was not accepted";
                     return std::nullopt;
                 }
@@ -256,7 +93,7 @@ namespace BECore::Tests {
 
             Response Call(TestClient& client, const std::string& request) {
                 client.SendText(request);
-                const auto frame = client.WaitForFrame(service);
+                const auto frame = client.WaitForFrame();
                 if (!frame) {
                     ADD_FAILURE() << "no response to " << request;
                     return {};
@@ -322,25 +159,25 @@ namespace BECore::Tests {
 
     TEST_F(WebSocketServerTest, HandshakeSwitchesProtocols) {
         const uint16_t port = StartServer();
-        auto client = TestClient::Open(port);
+        auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
         client->Send(HandshakeRequest(port));
-        const std::string response = client->ReadHttpResponse(service);
+        const std::string response = client->ReadHttpResponse();
         EXPECT_TRUE(response.starts_with("HTTP/1.1 101 Switching Protocols\r\n")) << response;
         EXPECT_NE(response.find("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"), std::string::npos) << response;
     }
 
     TEST_F(WebSocketServerTest, HandshakeMayArriveInPieces) {
         const uint16_t port = StartServer();
-        auto client = TestClient::Open(port);
+        auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
         const std::string request = HandshakeRequest(port);
         client->Send(request.substr(0, 20));
         std::this_thread::sleep_for(20ms);
         client->Send(request.substr(20));
-        EXPECT_TRUE(client->ReadHttpResponse(service).starts_with("HTTP/1.1 101 "));
+        EXPECT_TRUE(client->ReadHttpResponse().starts_with("HTTP/1.1 101 "));
     }
 
     TEST_F(WebSocketServerTest, RequestGetsItsResponse) {
@@ -382,7 +219,7 @@ namespace BECore::Tests {
         client->Send(AsBytes(batch));
 
         for (int id = 1; id <= kRequests; ++id) {
-            const auto frame = client->WaitForFrame(service);
+            const auto frame = client->WaitForFrame();
             ASSERT_TRUE(frame.has_value()) << "response " << id << " is missing";
             const Response response = ParseResponse(frame->payload);
             EXPECT_TRUE(response.ok);
@@ -402,7 +239,7 @@ namespace BECore::Tests {
         client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kText, AsBytes(first), kMask, /*fin=*/false)));
         client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kContinuation, AsBytes(second), kMask, /*fin=*/true)));
 
-        const auto frame = client->WaitForFrame(service);
+        const auto frame = client->WaitForFrame();
         ASSERT_TRUE(frame.has_value());
         const Response response = ParseResponse(frame->payload);
         EXPECT_TRUE(response.ok);
@@ -429,7 +266,7 @@ namespace BECore::Tests {
 
         const std::string payload = "are you there";
         client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kPing, AsBytes(payload), kMask)));
-        const auto frame = client->WaitForFrame(service);
+        const auto frame = client->WaitForFrame();
         ASSERT_TRUE(frame.has_value());
         EXPECT_EQ(frame->opcode, WebSocketOpcode::kPong);
         EXPECT_EQ(frame->payload, payload);
@@ -441,11 +278,11 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         client->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, "bye", kMask)));
-        const auto frame = client->WaitForFrame(service);
+        const auto frame = client->WaitForFrame();
         ASSERT_TRUE(frame.has_value());
         EXPECT_EQ(frame->opcode, WebSocketOpcode::kClose);
         EXPECT_EQ(CloseCodeOf(*frame), WebSocketCloseCode::kNormal);
-        EXPECT_TRUE(client->WaitForEndOfStream(service));
+        EXPECT_TRUE(client->WaitForEndOfStream());
     }
 
     TEST_F(WebSocketServerTest, BinaryMessageEndsTheConnectionWithUnsupportedData) {
@@ -454,11 +291,11 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         client->Send(AsBytes(EncodeFrame(WebSocketOpcode::kBinary, AsBytes(std::string("\x01\x02")), kMask)));
-        const auto frame = client->WaitForFrame(service);
+        const auto frame = client->WaitForFrame();
         ASSERT_TRUE(frame.has_value());
         EXPECT_EQ(frame->opcode, WebSocketOpcode::kClose);
         EXPECT_EQ(CloseCodeOf(*frame), WebSocketCloseCode::kUnsupportedData);
-        EXPECT_TRUE(client->WaitForEndOfStream(service));
+        EXPECT_TRUE(client->WaitForEndOfStream());
     }
 
     TEST_F(WebSocketServerTest, UnmaskedFrameEndsTheConnectionWithAProtocolError) {
@@ -467,11 +304,11 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
 
         client->Send(AsBytes(EncodeTextFrame(Request(1, "ping").c_str())));
-        const auto frame = client->WaitForFrame(service);
+        const auto frame = client->WaitForFrame();
         ASSERT_TRUE(frame.has_value());
         EXPECT_EQ(frame->opcode, WebSocketOpcode::kClose);
         EXPECT_EQ(CloseCodeOf(*frame), WebSocketCloseCode::kProtocolError);
-        EXPECT_TRUE(client->WaitForEndOfStream(service));
+        EXPECT_TRUE(client->WaitForEndOfStream());
     }
 
     TEST_F(WebSocketServerTest, MessageOverTheLimitEndsTheConnectionWithTooBig) {
@@ -488,7 +325,7 @@ namespace BECore::Tests {
         header.insert(header.end(), kMask.data(), kMask.data() + kMask.size());
         client->Send(AsBytes(header));
 
-        const auto frame = client->WaitForFrame(service);
+        const auto frame = client->WaitForFrame();
         ASSERT_TRUE(frame.has_value());
         EXPECT_EQ(frame->opcode, WebSocketOpcode::kClose);
         EXPECT_EQ(CloseCodeOf(*frame), WebSocketCloseCode::kMessageTooBig);
@@ -512,55 +349,55 @@ namespace BECore::Tests {
 
     TEST_F(WebSocketServerTest, ForeignOriginIsRefusedAndNothingReachesTheQueue) {
         const uint16_t port = StartServer();
-        auto client = TestClient::Open(port);
+        auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
         client->Send(HandshakeRequest(port, "Origin: http://evil.example\r\n"));
-        const std::string response = client->ReadHttpResponse(service);
+        const std::string response = client->ReadHttpResponse();
         EXPECT_TRUE(response.starts_with("HTTP/1.1 403 Forbidden\r\n")) << response;
 
         // A request in the same breath is not read: the connection is over
         client->SendText(Request(1, "echo"));
-        EXPECT_TRUE(client->WaitForEndOfStream(service));
+        EXPECT_TRUE(client->WaitForEndOfStream());
         EXPECT_EQ(echoCalls.load(), 0);
     }
 
     TEST_F(WebSocketServerTest, LoopbackOriginIsAccepted) {
         const uint16_t port = StartServer();
-        auto client = TestClient::Open(port);
+        auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
         client->Send(HandshakeRequest(port, "Origin: http://localhost:3000\r\n"));
-        EXPECT_TRUE(client->ReadHttpResponse(service).starts_with("HTTP/1.1 101 "));
+        EXPECT_TRUE(client->ReadHttpResponse().starts_with("HTTP/1.1 101 "));
     }
 
     TEST_F(WebSocketServerTest, ForeignHostIsRefused) {
         const uint16_t port = StartServer();
-        auto client = TestClient::Open(port);
+        auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
         client->Send(HandshakeRequest(port, "", "rebound.example.com:" + std::to_string(port)));
-        EXPECT_TRUE(client->ReadHttpResponse(service).starts_with("HTTP/1.1 403 Forbidden\r\n"));
+        EXPECT_TRUE(client->ReadHttpResponse().starts_with("HTTP/1.1 403 Forbidden\r\n"));
     }
 
     TEST_F(WebSocketServerTest, PlainHttpRequestIsAnsweredWithAnError) {
         const uint16_t port = StartServer();
-        auto client = TestClient::Open(port);
+        auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
         client->Send(std::string("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"));
-        EXPECT_TRUE(client->ReadHttpResponse(service).starts_with("HTTP/1.1 400 Bad Request\r\n"));
+        EXPECT_TRUE(client->ReadHttpResponse().starts_with("HTTP/1.1 400 Bad Request\r\n"));
     }
 
     TEST_F(WebSocketServerTest, WrongVersionIsAskedToUseThirteen) {
         const uint16_t port = StartServer();
-        auto client = TestClient::Open(port);
+        auto client = OpenClient(port);
         ASSERT_TRUE(client.has_value());
 
         std::string request = HandshakeRequest(port);
         request.replace(request.find("Version: 13"), 11, "Version: 8");
         client->Send(request);
-        const std::string response = client->ReadHttpResponse(service);
+        const std::string response = client->ReadHttpResponse();
         EXPECT_TRUE(response.starts_with("HTTP/1.1 426 Upgrade Required\r\n")) << response;
         EXPECT_NE(response.find("Sec-WebSocket-Version: 13\r\n"), std::string::npos);
     }
@@ -575,10 +412,10 @@ namespace BECore::Tests {
             clients.push_back(std::move(*client));
         }
 
-        auto fifth = TestClient::Open(port);
+        auto fifth = OpenClient(port);
         ASSERT_TRUE(fifth.has_value());
         fifth->Send(HandshakeRequest(port));
-        const std::string response = fifth->ReadHttpResponse(service);
+        const std::string response = fifth->ReadHttpResponse();
         EXPECT_TRUE(response.starts_with("HTTP/1.1 503 Service Unavailable\r\n")) << response;
 
         // The four are not affected
@@ -594,10 +431,10 @@ namespace BECore::Tests {
         for (size_t round = 0; round < WebSocketServer::kMaxConnections * 3; ++round) {
             bool connected = false;
             for (int attempt = 0; attempt < 200 && !connected; ++attempt) {
-                auto client = TestClient::Open(port);
+                auto client = OpenClient(port);
                 ASSERT_TRUE(client.has_value());
                 client->Send(HandshakeRequest(port));
-                const std::string response = client->ReadHttpResponse(service);
+                const std::string response = client->ReadHttpResponse();
                 if (response.starts_with("HTTP/1.1 101 ")) {
                     connected = true;
                 } else {
@@ -620,7 +457,7 @@ namespace BECore::Tests {
         service.Publish("state_changed", data);
 
         for (TestClient* client : {&*first, &*second}) {
-            const auto frame = client->WaitForFrame(service);
+            const auto frame = client->WaitForFrame();
             ASSERT_TRUE(frame.has_value());
             EXPECT_EQ(frame->opcode, WebSocketOpcode::kText);
             const auto event = ParseJson(eastl::string_view(frame->payload.data(), frame->payload.size()));
@@ -639,7 +476,7 @@ namespace BECore::Tests {
 
         server.Stop();
         service.Publish("state_changed", Json::object());  // the sink is gone: nothing to send to, nothing to crash
-        EXPECT_TRUE(client->WaitForEndOfStream(service));
+        EXPECT_TRUE(client->WaitForEndOfStream());
     }
 
     TEST_F(WebSocketServerTest, StopEndsOpenAndUnfinishedConnections) {
@@ -648,9 +485,9 @@ namespace BECore::Tests {
         ASSERT_TRUE(open.has_value());
 
         // A client that connected but never finishes its handshake holds a reader thread in the 5 s wait
-        auto silent = TestClient::Open(port);
+        auto silent = OpenClient(port);
         ASSERT_TRUE(silent.has_value());
-        auto halfway = TestClient::Open(port);
+        auto halfway = OpenClient(port);
         ASSERT_TRUE(halfway.has_value());
         halfway->Send(std::string("GET / HTT"));
         std::this_thread::sleep_for(50ms);
@@ -659,9 +496,9 @@ namespace BECore::Tests {
         server.Stop();
         EXPECT_LT(std::chrono::steady_clock::now() - before, WebSocketServer::kHandshakeTimeout) << "Stop() waited for the handshake timeout";
 
-        EXPECT_TRUE(open->WaitForEndOfStream(service));
-        EXPECT_TRUE(silent->WaitForEndOfStream(service));
-        EXPECT_TRUE(halfway->WaitForEndOfStream(service));
+        EXPECT_TRUE(open->WaitForEndOfStream());
+        EXPECT_TRUE(silent->WaitForEndOfStream());
+        EXPECT_TRUE(halfway->WaitForEndOfStream());
     }
 
     TEST_F(WebSocketServerTest, RequestsAfterServiceShutdownAreAnsweredShuttingDown) {
@@ -702,8 +539,8 @@ namespace BECore::Tests {
         first->SendText(Request(100, "echo"));
         second->SendText(Request(200, "echo"));
 
-        const auto firstFrame = first->WaitForFrame(service);
-        const auto secondFrame = second->WaitForFrame(service);
+        const auto firstFrame = first->WaitForFrame();
+        const auto secondFrame = second->WaitForFrame();
         ASSERT_TRUE(firstFrame.has_value());
         ASSERT_TRUE(secondFrame.has_value());
         EXPECT_EQ(ParseResponse(firstFrame->payload).id, 100);

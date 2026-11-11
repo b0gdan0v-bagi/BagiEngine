@@ -1,31 +1,20 @@
 #pragma once
 
-#include <BECore/Control/ControlTypes.h>
-#include <RemoteControl/Socket.h>
-#include <RemoteControl/WebSocketFrame.h>
-#include <thread>
+#include <RemoteControl/WebSocketListener.h>
 
 namespace BECore {
 
     class ControlService;
 
-    /// Error codes of WebSocketServer::Start()
-    namespace RemoteControlErrors {
-        inline constexpr eastl::string_view kListenFailed = "listen_failed";
-        inline constexpr eastl::string_view kAlreadyRunning = "already_running";
-    }  // namespace RemoteControlErrors
-
     /**
      * @brief The WebSocket transport of the control API: a server on 127.0.0.1 that feeds ControlService::Post().
      *
-     * Every text message of a client is a request; the response goes back to the connection that sent it, and the
-     * events of ControlService::Publish() go to every open connection. See RemoteControl/CLAUDE.md for the protocol
-     * details and the limits.
+     * A WebSocketListener (which owns the threads, the connections and the limits) plus the glue: every text message of a client is
+     * a request; the response goes back to the connection that sent it, and the events of ControlService::Publish() go to every open
+     * connection. See RemoteControl/CLAUDE.md for the protocol details and the limits.
      *
-     * Threads: one accepts connections; each connection has a reader thread (handshake, frames, Post()) and a writer
-     * thread that sends from a queue, so a client that does not read cannot stall the game: when its queue passes
-     * kMaxOutboxBytes the connection is dropped. The main thread calls Start() and Stop(); responses are queued from
-     * the main thread, never sent from it.
+     * A client that does not read cannot stall the game: when its queue passes kMaxOutboxBytes the connection is dropped. The main
+     * thread calls Start() and Stop(); responses are queued from the main thread, never sent from it.
      *
      * Stop() the server before ControlService::Shutdown().
      */
@@ -53,35 +42,17 @@ namespace BECore {
         void Stop();
 
         [[nodiscard]] bool IsRunning() const {
-            return _listener.IsValid();
+            return _listener.IsRunning();
         }
 
         /// The port in use; 0 when the server is not running
         [[nodiscard]] uint16_t GetPort() const {
-            return _port;
+            return _listener.GetPort();
         }
 
     private:
-        class Connection;
-
-        void AcceptLoop();
-        void AddConnection(Socket socket);
-        void ReapFinishedConnections();
-        void RunConnection(const eastl::shared_ptr<Connection>& connection);
-        void ReadMessages(const eastl::shared_ptr<Connection>& connection, eastl::vector<uint8_t> pendingBytes);
-
-        /// Acts on one message of a client; false when the connection has to end
-        bool HandleMessage(const eastl::shared_ptr<Connection>& connection, WebSocketMessage message);
-        void Broadcast(const eastl::string& text);
-
         ControlService& _service;
-        Socket _listener;
-        uint16_t _port = 0;
-        std::atomic<bool> _stopping{false};
-        std::thread _acceptThread;
-
-        std::mutex _connectionsMutex;
-        eastl::vector<eastl::shared_ptr<Connection>> _connections;  // guarded by _connectionsMutex
+        WebSocketListener _listener;
     };
 
 }  // namespace BECore
