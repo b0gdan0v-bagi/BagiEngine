@@ -44,7 +44,8 @@ namespace BECore {
      * the span between the two edges minus `margin`, and the size and the offset of that axis are ignored. A Stretch element ignores x, y,
      * width and height on both axes (until a field turns an axis into a point).
      * The minimum and maximum limits come after the size and before the aspect ratio; when they disagree the minimum wins. A stack uses the
-     * size, the limits and `flex` of its children and ignores their anchor, offset, margin and aspect ratio.
+     * size, the limits and `flex` of its children and ignores their anchor, offset and margin; it uses the aspect ratio only of a child that
+     * gives exactly one side (a percent or a non-zero number of units) and has no `flex`: the other side follows from the ratio, then the limits.
      */
     struct UIRectSpec {
         UIAnchor anchor = UIAnchor::TopLeft;

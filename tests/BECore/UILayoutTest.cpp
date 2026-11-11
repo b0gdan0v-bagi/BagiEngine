@@ -419,6 +419,117 @@ namespace BECore::Tests {
         EXPECT_NEAR(rects[2].x, 100.0f, kTolerance);
     }
 
+    // A stack child with an aspect ratio that gives exactly one side gets the other (an icon square next to a caption)
+
+    namespace {
+
+        UIRectSpec WithAspect(UIRectSpec spec, float ratio) {
+            spec.aspectRatio = ratio;
+            return spec;
+        }
+
+        UIRectSpec HeightOnly(UILength height) {
+            UIRectSpec spec;
+            spec.height = height;
+            return spec;
+        }
+
+        UIRectSpec WidthOnly(UILength width) {
+            UIRectSpec spec;
+            spec.width = width;
+            return spec;
+        }
+
+        UIStackSpec Horizontal() {
+            UIStackSpec stack;
+            stack.direction = UIStackDirection::Horizontal;
+            return stack;
+        }
+
+    }  // namespace
+
+    TEST(UIStackTest, AHorizontalChildWithAHeightAndARatioGetsItsWidth) {
+        const UIRectSpec children[] = {WithAspect(HeightOnly(UILength::Percent(50.0f)), 2.0f), WithAspect(HeightOnly(UILength::Px(40.0f)), 1.0f)};
+        UIStackSpec stack = Horizontal();
+        stack.spacing = 10.0f;
+        eastl::vector<Rect> rects;
+
+        UILayout::LayoutStack(kParent, stack, children, rects);
+
+        ExpectRect(rects[0], 100.0f, 50.0f, 200.0f, 100.0f);  // 50% of the 200 content height, twice as wide
+        ExpectRect(rects[1], 310.0f, 50.0f, 40.0f, 40.0f);
+    }
+
+    TEST(UIStackTest, AHorizontalChildWithAWidthAndARatioGetsItsHeight) {
+        const UIRectSpec children[] = {WithAspect(WidthOnly(UILength::Px(80.0f)), 2.0f)};
+        eastl::vector<Rect> rects;
+
+        UILayout::LayoutStack(kParent, Horizontal(), children, rects);
+
+        ExpectRect(rects[0], 100.0f, 50.0f, 80.0f, 40.0f);
+    }
+
+    TEST(UIStackTest, AVerticalChildWithOnlyAWidthIsAsHighAsTheRatioSays) {
+        UIStackSpec stack;
+        stack.spacing = 8.0f;
+        const UIRectSpec children[] = {WithAspect(WidthOnly(UILength::Px(100.0f)), 2.0f), WithAspect(WidthOnly(UILength::Percent(50.0f)), 4.0f)};
+        eastl::vector<Rect> rects;
+
+        UILayout::LayoutStack(kParent, stack, children, rects);
+
+        ExpectRect(rects[0], 100.0f, 50.0f, 100.0f, 50.0f);
+        ExpectRect(rects[1], 100.0f, 108.0f, 200.0f, 50.0f);  // a percent cross size is of the content width
+    }
+
+    TEST(UIStackTest, AChildWithBothSidesOrNoneKeepsItsSpecEvenWithARatio) {
+        const UIRectSpec children[] = {WithAspect(Sized(100.0f, 40.0f), 1.0f), WithAspect(UIRectSpec{}, 1.0f)};
+        eastl::vector<Rect> rects;
+
+        UILayout::LayoutStack(kParent, Horizontal(), children, rects);
+
+        ExpectRect(rects[0], 100.0f, 50.0f, 100.0f, 40.0f);
+        ExpectRect(rects[1], 200.0f, 50.0f, 0.0f, 0.0f);
+    }
+
+    TEST(UIStackTest, AFlexChildKeepsItsShareDespiteARatio) {
+        UIRectSpec grow = WithAspect(HeightOnly(UILength::Px(100.0f)), 2.0f);
+        grow.flex = 1.0f;
+        const UIRectSpec children[] = {grow};
+        eastl::vector<Rect> rects;
+
+        UILayout::LayoutStack(kParent, Horizontal(), children, rects);
+
+        ExpectRect(rects[0], 100.0f, 50.0f, 400.0f, 100.0f);
+    }
+
+    TEST(UIStackTest, TheLimitsClampTheDerivedSide) {
+        UIRectSpec capped = WithAspect(HeightOnly(UILength::Px(100.0f)), 2.0f);
+        capped.maxWidth = UILength::Px(150.0f);
+        UIRectSpec floored = WithAspect(HeightOnly(UILength::Px(20.0f)), 1.0f);
+        floored.minWidth = UILength::Px(60.0f);
+        const UIRectSpec children[] = {capped, floored};
+        eastl::vector<Rect> rects;
+
+        UILayout::LayoutStack(kParent, Horizontal(), children, rects);
+
+        ExpectRect(rects[0], 100.0f, 50.0f, 150.0f, 100.0f);
+        ExpectRect(rects[1], 250.0f, 50.0f, 60.0f, 20.0f);
+    }
+
+    TEST(UIStackTest, ADerivedSizeIsPlacedByCrossAlign) {
+        const UIRectSpec children[] = {WithAspect(HeightOnly(UILength::Px(40.0f)), 1.0f)};
+        UIStackSpec stack = Horizontal();
+        eastl::vector<Rect> rects;
+
+        stack.crossAlign = UIStackAlign::Center;
+        UILayout::LayoutStack(kParent, stack, children, rects);
+        ExpectRect(rects[0], 100.0f, 130.0f, 40.0f, 40.0f);
+
+        stack.crossAlign = UIStackAlign::Stretch;  // the line's height replaces the cross size; the main size stays
+        UILayout::LayoutStack(kParent, stack, children, rects);
+        ExpectRect(rects[0], 100.0f, 50.0f, 40.0f, 200.0f);
+    }
+
     TEST(UIStackTest, AnEmptyStackGivesNoRects) {
         eastl::vector<Rect> rects{Rect{1.0f, 2.0f, 3.0f, 4.0f}};
 

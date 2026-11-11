@@ -75,6 +75,11 @@ namespace BECore {
             return origin + (extent - axis.size) * pivot + extent * (anchorMin - pivot) + offset;
         }
 
+        /// A side the spec states: a percent (even 0%) or a non-zero number of units; a bare 0 px is "not given"
+        bool IsGiven(const UILength& length) {
+            return length.unit == UIUnit::Percent || length.value != 0.0f;
+        }
+
         struct ChildSize {
             float main = 0.0f;   // the size along the stack's direction
             float cross = 0.0f;  // the size across it
@@ -151,6 +156,19 @@ namespace BECore {
             size.flex = std::max(spec.flex, 0.0f);
             size.main = ClampExtent(mainLength.Resolve(mainExtent), mainExtent, size.minMain, size.maxMain);
             size.cross = ClampExtent(crossLength.Resolve(crossExtent), crossExtent, size.minCross, size.maxCross);
+
+            // A fixed child with an aspect ratio and one side given gets the other (a flex child and a child with both or none are as their spec says)
+            if (spec.aspectRatio > 0.0f && size.flex <= 0.0f && IsGiven(spec.width) != IsGiven(spec.height)) {
+                if (IsGiven(spec.width)) {
+                    const float width = vertical ? size.cross : size.main;
+                    const float height = ClampExtent(width / spec.aspectRatio, content.h, spec.minHeight, spec.maxHeight);
+                    (vertical ? size.main : size.cross) = height;
+                } else {
+                    const float height = vertical ? size.main : size.cross;
+                    const float width = ClampExtent(height * spec.aspectRatio, content.w, spec.minWidth, spec.maxWidth);
+                    (vertical ? size.cross : size.main) = width;
+                }
+            }
         }
 
         // Lines: one, or as many as the main axis needs when the stack wraps
