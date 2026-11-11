@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Renderer/Gpu/IGpuDevice.h>
 #include <BECore/Renderer/IRenderTarget.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Renderer/ITexture.h>
@@ -163,6 +164,17 @@ namespace BECore::Tests {
             return height;
         }
 
+        /// Makes GetGpuDevice() answer with @p device (a RecordingGpuDevice), so the 3D renderer has a renderer to ask; none by default, like the SDL renderer
+        void SetGpuDevice(IntrusivePtr<IGpuDevice> device) {
+            _gpuDevice = std::move(device);
+        }
+        IGpuDevice* GetGpuDevice() override {
+            return _gpuDevice.Get();
+        }
+        eastl::string GetNoGpuDeviceReason() const override {
+            return eastl::string("the recording renderer has no GPU device set");
+        }
+
         void ClearCalls() {
             calls.clear();
         }
@@ -171,6 +183,9 @@ namespace BECore::Tests {
         float height = 600.0f;
         eastl::vector<DrawCall> calls;
         uint32_t texturesCreated = 0;
+
+    private:
+        IntrusivePtr<IGpuDevice> _gpuDevice;
     };
 
 }  // namespace BECore::Tests
