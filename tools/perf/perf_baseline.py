@@ -1,6 +1,6 @@
 """The machine fingerprint and the baseline plan of the perf runner. Standard library only.
 
-A baseline is a plan of kind `baseline` in the todo store (`tools/todo/CLAUDE.md`), one per area and machine:
+A baseline is a plan of the todo store (`tools/todo/CLAUDE.md`) without an entry, kind `owner`, one per area and machine:
 `perf-baseline-<area>-<machine>.md`. It is markdown with one section per update, each holding a fenced JSON record; the newest record
 (the last one) is the baseline, the older ones are its history. A record holds every benchmark the area has measured on the machine, each
 with the commit it was measured on, so an update of a few benchmarks keeps the others.
@@ -16,6 +16,7 @@ from pathlib import Path
 
 RECORD_RE = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
 TODO_CLI = Path(__file__).resolve().parents[1] / "todo" / "todo.py"
+PLAN_KIND = "owner"  # the store has no kind of its own for it; the name `perf-baseline-*.md` tells it apart
 EXIT_STORE_REFUSED = 2  # todo.py: the store refused (404 for a plan that does not exist)
 
 
@@ -102,7 +103,7 @@ def read_store(name: str) -> str | None:
 
 def write_store(name: str, content: str) -> str:
     done = subprocess.run(
-        [sys.executable, str(TODO_CLI), "--actor", "perf", "plan", "put", name, "--file", "-", "--kind", "baseline"],
+        [sys.executable, str(TODO_CLI), "--actor", "perf", "plan", "put", name, "--file", "-", "--kind", PLAN_KIND],
         input=content,
         capture_output=True,
         text=True,
