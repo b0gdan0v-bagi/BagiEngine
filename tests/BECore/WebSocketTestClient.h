@@ -87,6 +87,11 @@ namespace BECore::Tests {
             Send(AsBytes(text));
         }
 
+        /// Sends without a test failure when the server has ended the connection (a client that is being dropped); false then
+        [[nodiscard]] bool TrySend(eastl::span<const uint8_t> bytes) {
+            return _socket.SendAll(bytes);
+        }
+
         void SendText(const std::string& text) {
             Send(AsBytes(EncodeTextFrame(eastl::string_view(text.data(), text.size()), kClientMask)));
         }

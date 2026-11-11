@@ -595,6 +595,12 @@ add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
 # Rooms of an online game by code: protocol, room logic, hub (pure code over Games' ISeatedGame; no sockets yet)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Rooms)
 
+# The Rooms hub on the network. It needs the sockets of RemoteControl, which the web build does not have, so it exists only with them
+# (Rooms stays unconditional: the browser client of a later slice speaks its protocol)
+if(ENGINE_WITH_REMOTE_CONTROL)
+    add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RoomServer)
+endif()
+
 # The host of the vendored RmlUi: the interfaces over the engine and the scene component (only with ENGINE_UI_RMLUI)
 if(ENGINE_UI_RMLUI)
     add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RmlUiHost)
