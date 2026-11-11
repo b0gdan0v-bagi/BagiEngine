@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Reflection/DataAccessor.h>
+#include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/UI/UIValueText.h>
 
 namespace BECore {
@@ -88,5 +89,23 @@ namespace BECore {
         };
 
     }  // namespace Ser
+
+    namespace PropVisit {
+
+        /// The inspector edits the channels of a UIColor; an edit makes it a literal colour, so the token that would overwrite the channels at the next draw is dropped (an edit of a
+        /// token is a decision to leave it). Like the Color it derives from, the channels are one group of four numbers
+        inline bool Visit(IPropertyVisitor& v, UIColor& value, eastl::string_view key) {
+            bool changed = false;
+            if (v.BeginCompound(key)) {
+                changed = value.VisitProperties(v);
+                v.EndCompound();
+            }
+            if (changed) {
+                value.token = PoolString{};
+            }
+            return changed;
+        }
+
+    }  // namespace PropVisit
 
 }  // namespace BECore

@@ -6,6 +6,8 @@
 
 namespace BECore {
 
+    class UIThemes;
+
     /**
      * @brief The outline and the hard drop shadow of a label's text, flat in a file like UIBoxStyle: two attributes of the element.
      *
@@ -27,6 +29,9 @@ namespace BECore {
         /// The effects in output pixels for a canvas of @p scale (output pixels per UI unit): the outline width rounded to a whole pixel the outline atlas has
         /// (FontAtlasLibrary::QuantizeOutline), the offsets rounded. The alpha of both colours is multiplied by @p alphaFactor (a faded text fades its outline too)
         [[nodiscard]] TextEffects ToPixels(float scale, float alphaFactor = 1.0f) const;
+
+        /// Writes the current theme's colours into the outline and the shadow colour when they are tokens (UIElement::ApplyTheme, the controls with text)
+        void ResolveTheme(UIThemes& themes);
 
         void Serialize(ISerializer& s) const;
         void Deserialize(IDeserializer& d);

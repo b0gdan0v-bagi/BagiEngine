@@ -3,6 +3,7 @@
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UIAttributeIO.h>
+#include <BECore/UI/UIThemes.h>
 
 namespace BECore {
 
@@ -45,6 +46,11 @@ namespace BECore {
     void UITextEffects::Deserialize(IDeserializer& d) {
         UIAttr::ReadTextOutline(d, OutlineKey, outlineWidth, outlineColor);
         UIAttr::ReadTextShadow(d, ShadowKey, shadowOffsetX, shadowOffsetY, shadowColor);
+    }
+
+    void UITextEffects::ResolveTheme(UIThemes& themes) {
+        themes.Resolve(outlineColor);
+        themes.Resolve(shadowColor);
     }
 
     bool UITextEffects::VisitProperties(IPropertyVisitor& v) {

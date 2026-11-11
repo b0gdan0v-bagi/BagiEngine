@@ -4,6 +4,7 @@ namespace BECore {
 
     class IRenderer;
     class UIElement;
+    class UIThemes;
     struct UIContentFit;
 
     /**
@@ -32,6 +33,10 @@ namespace BECore {
         virtual void OnPress(UIElement& owner, float x, float y);
         virtual void OnDrag(UIElement& owner, float x, float y);
         virtual void OnClick(UIElement& owner);
+
+        /// Writes the current theme's colours into the colour fields of this component that are tokens (`UIColor::token`); called by `UIElement::ApplyTheme` when the theme version moved.
+        /// A component with no colour keeps the empty default
+        virtual void ApplyTheme(UIThemes& themes);
 
         /// The component takes clicks, so the owner is `UIElement::IsInteractive()`: hit-testable, and the validator checks its touch size
         [[nodiscard]] virtual bool MakesInteractive() const;

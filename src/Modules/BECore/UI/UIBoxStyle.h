@@ -6,6 +6,8 @@
 
 namespace BECore {
 
+    class UIThemes;
+
     /**
      * @brief How an element draws its box: rounded corners, a border, a gradient, a shadow, a glow and a highlight (UIBoxMesh draws it).
      *
@@ -49,6 +51,9 @@ namespace BECore {
         [[nodiscard]] UIGradientSpec MakeGradient(const Color& end) const {
             return {gradientDirection, end};
         }
+
+        /// Writes the current theme's colours into every colour that is a token, the shadow's and the glow's included (UIElement::ApplyTheme)
+        void ResolveTheme(UIThemes& themes);
 
         void Serialize(ISerializer& s) const;
         void Deserialize(IDeserializer& d);
