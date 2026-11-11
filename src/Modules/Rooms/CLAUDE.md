@@ -2,9 +2,9 @@
 
 ## Overview
 
-Online play in rooms by code, with an authoritative server (the entry `network-rooms` of the todo store, slice 1 of 4). The server owns the game (`ISeatedGame`, `Games/CLAUDE.md`, "Seats"); every client is a seat and sees only what the game says that seat may see. This module is **pure code**: JSON text in, JSON text out, no sockets, no clock, no randomness of its own. A transport (a later slice) feeds it. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomsModule`; `BagiEngineTests` links it with `LINK RemoteControlModule RoomsModule RuntimeModule`).
+Online play in rooms by code, with an authoritative server (the entry `network-rooms` of the todo store, slices 1 and 2 of 4). The server owns the game (`ISeatedGame`, `Games/CLAUDE.md`, "Seats"); every client is a seat and sees only what the game says that seat may see. This module is **pure code**: JSON text in, JSON text out, no sockets, no clock, no randomness of its own. A transport feeds it: `RoomServer` (`RoomServer/CLAUDE.md`) on WebSocket. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomsModule`; `BagiEngineTests` links it with `LINK RemoteControlModule RoomsModule RuntimeModule`).
 
-Built (slice 1): the protocol, codes and tokens, the limits, `Room` and `RoomHub`. Slices 2 to 4: "For later slices".
+Built: the protocol, codes and tokens, the limits, `Room` and `RoomHub` (slice 1), the server over WebSocket (slice 2, `RoomServer`). Slices 3 and 4: "For later slices".
 
 ## Files
 
@@ -117,7 +117,6 @@ The host matters in the lobby (only the host starts). After the start it is only
 
 ## For later slices
 
-- **Slice 2, the server over WebSocket.** The hub is fed by one thread. Things the transport must do that the hub does not: give every connection a unique `ConnectionId` (a repeated id of a live connection is not detected here); close a connection that never sends anything before it is known to the hub (the hub's `idle` rule starts at `OnConnected`, so the transport reports every accepted socket); per-address limits (the hub limits connections in total, not per IP address, so one address can use all `maxConnections`); an allow-list of origins; a write queue per connection so a slow reader cannot block `Tick`.
 - **Slice 3, the client** (`RoomClient`), **slice 4, hosting** (Dockerfile, settings from the environment: the values of `RoomHubSettings`).
 - A lobby has no timeout of its own: a room whose members stay connected and silent is kept (their connections are closed by the idle rule only while in no room). The transport or a later change may add one.
 - The Mahjong adapter and screens are entries of the `mahjong` area.
