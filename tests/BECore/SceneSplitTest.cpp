@@ -10,6 +10,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
+#include <BECore/UI/UILabel.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -79,6 +80,51 @@ namespace BECore::Tests {
                 nodes += std::string("<node ref=\"nodes/") + kNodeNames[index] + "\"/>";
             }
             return Scene(nodes);
+        }
+
+        // A node with a transform and a screen canvas, written inline for the overrides: the name, the layer, the origin and the elements are the parts an instance changes. The
+        // button of 20 units is under the touch size, so the validator has something to find on every instance.
+        std::string PanelElements(const std::string& title) {
+            return "<elements>"
+                   "<element type=\"UILabel\" name=\"Title\" x=\"8\" y=\"8\" width=\"184\" height=\"30\" text=\"" +
+                   title +
+                   "\" fontSize=\"24\"/>"
+                   "<element type=\"UIButton\" name=\"Tiny\" x=\"400\" y=\"10\" width=\"20\" height=\"20\" text=\"T\" action=\"SceneSplitTiny\" color=\"40,90,60,255\"/>"
+                   "</elements>";
+        }
+
+        std::string PanelNode(const std::string& name, int layer, int x, int y, const std::string& elements) {
+            return "<node name=\"" + name + "\" layer=\"" + std::to_string(layer) +
+                   "\"><components>"
+                   "<component type=\"TransformComponent\" x=\"" +
+                   std::to_string(x) + "\" y=\"" + std::to_string(y) +
+                   "\" width=\"200\" height=\"100\"/>"
+                   "<component type=\"UICanvasComponent\" space=\"Screen\" scaleMode=\"ConstantPixelSize\">" +
+                   elements + "</component></components></node>";
+        }
+
+        /// The node file of every instance: Panel, layer 2, at (10, 20), the title "Base"
+        std::string PanelFile() {
+            return PanelNode("Panel", 2, 10, 20, PanelElements("Base"));
+        }
+
+        // Three instances of the one node file, each overriding some of the values; PanelInline() below is the same three nodes written out
+        const std::string kPanelRefA = "<node ref=\"nodes/Panel\" name=\"PanelA\" layer=\"7\"><components>"
+                                       "<component type=\"TransformComponent\" x=\"100\"/>"
+                                       "<component type=\"UICanvasComponent\">" +
+                                       PanelElements("A") + "</component></components></node>";
+        const std::string kPanelRefB = "<node ref=\"nodes/Panel\" name=\"PanelB\"><components><component type=\"TransformComponent\" y=\"55\"/></components></node>";
+        const std::string kPanelRefC =
+            "<node ref=\"nodes/Panel\" name=\"PanelC\" layer=\"1\"><components><component type=\"UICanvasComponent\">" + PanelElements("C") + "</component></components></node>";
+
+        std::string PanelInlineA() {
+            return PanelNode("PanelA", 7, 100, 20, PanelElements("A"));
+        }
+        std::string PanelInlineB() {
+            return PanelNode("PanelB", 2, 10, 55, PanelElements("Base"));
+        }
+        std::string PanelInlineC() {
+            return PanelNode("PanelC", 1, 10, 20, PanelElements("C"));
         }
 
         void WriteFile(const std::filesystem::path& path, const std::string& text) {
@@ -345,6 +391,127 @@ namespace BECore::Tests {
         EXPECT_TRUE(result.Ok());
         EXPECT_EQ(result.expanded, 3u);
         EXPECT_EQ(Printed(split.document_element()), Printed(inlined.document_element()));
+    }
+
+    // ---- overrides ----------------------------------------------------------------------------------------------------------
+
+    /// The fixture of a scene made of instances of one node file, Panel
+    class SceneSplitOverrideTest : public SceneSplitTest {
+    protected:
+        void SetUp() override {
+            SceneSplitTest::SetUp();
+            WriteFile(_dir / "nodes" / "Panel.xml", PanelFile());
+        }
+    };
+
+    TEST_F(SceneSplitOverrideTest, InstancesWithOverridesLoadAsTheInlineScene) {
+        pugi::xml_document inlineDoc;
+        pugi::xml_document splitDoc;
+        const auto inlined = Load(Scene(PanelInlineA() + PanelInlineB() + PanelInlineC()), inlineDoc);
+        const auto split = Load(Scene(kPanelRefA + kPanelRefB + kPanelRefC), splitDoc);
+
+        ExpectSameScene(Main(inlined), Main(split));
+        EXPECT_EQ(NodeNamesOf(Main(split)), (std::vector<std::string>{"PanelA", "PanelB", "PanelC"}));
+        // The layers decide the draw order: PanelC (1), PanelB (2), PanelA (7); the ranks count the root node too
+        EXPECT_EQ(DrawRanks(Main(split)), (eastl::vector<int32_t>{3, 2, 1}));
+
+        const auto& nodes = Main(split).GetRootNode().GetChildren();
+        EXPECT_EQ(nodes[0]->GetLayer(), 7);
+        EXPECT_EQ(nodes[1]->GetLayer(), 2);
+        EXPECT_EQ(nodes[0]->GetComponent<TransformComponent>()->_x, 100.0f);
+        EXPECT_EQ(nodes[0]->GetComponent<TransformComponent>()->_y, 20.0f);
+        EXPECT_EQ(nodes[1]->GetComponent<TransformComponent>()->_x, 10.0f);
+        EXPECT_EQ(nodes[1]->GetComponent<TransformComponent>()->_y, 55.0f);
+    }
+
+    TEST_F(SceneSplitOverrideTest, TheUiTreeAndTheValidatorFindingsAreTheSame) {
+        pugi::xml_document inlineDoc;
+        pugi::xml_document splitDoc;
+        pugi::xml_document plainDoc;
+        const auto inlined = Load(Scene(PanelInlineA() + PanelInlineB() + PanelInlineC()), inlineDoc);
+        const auto split = Load(Scene(kPanelRefA + kPanelRefB + kPanelRefC), splitDoc);
+        const auto plain = Load(Scene("<node ref=\"nodes/Panel\"/>"), plainDoc);
+
+        const std::string expectedTree = UiTree(inlined);
+        const std::string expectedFindings = ValidatorFindings(inlined);
+
+        EXPECT_EQ(expectedTree, UiTree(split));
+        EXPECT_EQ(expectedFindings, ValidatorFindings(split));
+        // Not vacuous: the overridden titles are in the tree, the instances differ from the file, and the small button is found on all three
+        EXPECT_NE(expectedTree.find("\"Tiny\""), std::string::npos) << expectedTree;
+        EXPECT_NE(expectedTree, UiTree(plain));
+        EXPECT_NE(expectedFindings.find("PanelA:"), std::string::npos) << expectedFindings;
+        EXPECT_NE(expectedFindings.find("Tiny"), std::string::npos) << expectedFindings;
+    }
+
+    TEST_F(SceneSplitOverrideTest, TwoInstancesWithDifferentNamesAndLayersAreTwoNodesInTheOrderOfTheReferences) {
+        pugi::xml_document doc;
+        const auto manager = Load(Scene("<node ref=\"nodes/Panel\" name=\"Second\" layer=\"9\"/><node ref=\"nodes/Panel\" name=\"First\" layer=\"4\"/>"), doc);
+
+        EXPECT_EQ(NodeNamesOf(Main(manager)), (std::vector<std::string>{"Second", "First"}));
+        const auto& nodes = Main(manager).GetRootNode().GetChildren();
+        ASSERT_EQ(nodes.size(), 2u);
+        EXPECT_EQ(nodes[0]->GetLayer(), 9);
+        EXPECT_EQ(nodes[1]->GetLayer(), 4);
+        EXPECT_NE(nodes[0].Get(), nodes[1].Get());
+        // Both keep the file's transform and canvas
+        EXPECT_EQ(nodes[0]->GetComponent<TransformComponent>()->_x, 10.0f);
+        EXPECT_EQ(nodes[1]->GetComponent<TransformComponent>()->_x, 10.0f);
+        EXPECT_EQ(nodes[0]->GetComponent<UICanvasComponent>()->_elements.size(), 2u);
+    }
+
+    TEST_F(SceneSplitOverrideTest, AnOverrideThatErrorsDropsThatInstanceOnly) {
+        // The Panel file has no QuadRendererComponent to override
+        const std::string bad = "<node ref=\"nodes/Panel\" name=\"Broken\"><components><component type=\"QuadRendererComponent\"/></components></node>";
+        pugi::xml_document withBadDoc;
+        pugi::xml_document withoutDoc;
+        const auto withBad = Load(Scene(kPanelRefA + bad + kPanelRefC), withBadDoc);
+        const auto without = Load(Scene(kPanelRefA + kPanelRefC), withoutDoc);
+
+        EXPECT_EQ(NodeNamesOf(Main(withBad)), (std::vector<std::string>{"PanelA", "PanelC"}));
+        ExpectSameScene(Main(without), Main(withBad));
+        EXPECT_EQ(UiTree(without), UiTree(withBad));
+    }
+
+    TEST_F(SceneSplitOverrideTest, LoadSceneManagerLeavesTheGivenNodeWithItsReferencesAndOverrides) {
+        pugi::xml_document doc;
+        ASSERT_TRUE(doc.load_string(Scene(kPanelRefA + kPanelRefB + kPanelRefC).c_str()));
+        const std::string before = Printed(doc.document_element());
+
+        const auto manager = LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
+
+        EXPECT_EQ(NodeNamesOf(Main(manager)), (std::vector<std::string>{"PanelA", "PanelB", "PanelC"}));
+        EXPECT_EQ(Printed(doc.document_element()), before);
+        EXPECT_NE(before.find("name=\"PanelA\""), std::string::npos);
+        EXPECT_NE(before.find("ref=\"nodes/Panel\""), std::string::npos);
+        // Nothing of the node file leaked into the given document
+        EXPECT_EQ(before.find("Base"), std::string::npos);
+    }
+
+    TEST_F(SceneSplitOverrideTest, LoadSceneDocumentWithOverridesEqualsTheInlineDocument) {
+        WriteFile(_dir / "SceneConfig.xml", Scene(kPanelRefA + kPanelRefB + kPanelRefC));
+
+        pugi::xml_document split;
+        const NodeExpansion result = LoadSceneDocument(_dir / "SceneConfig.xml", split);
+
+        pugi::xml_document inlined;
+        ASSERT_TRUE(inlined.load_string(Scene(PanelInlineA() + PanelInlineB() + PanelInlineC()).c_str()));
+        EXPECT_TRUE(result.Ok()) << (result.errors.empty() ? "" : result.errors[0].c_str());
+        EXPECT_EQ(result.expanded, 3u);
+        EXPECT_EQ(Printed(split.document_element()), Printed(inlined.document_element()));
+    }
+
+    TEST_F(SceneSplitOverrideTest, AnElementsOverrideReachesTheLiveCanvas) {
+        pugi::xml_document doc;
+        const auto manager = Load(Scene(kPanelRefC), doc);
+
+        const auto canvas = Main(manager).GetRootNode().GetChildren()[0]->GetComponent<UICanvasComponent>();
+        ASSERT_TRUE(canvas);
+        ASSERT_EQ(canvas->_elements.size(), 2u);
+        const auto* title = canvas->_elements[0]->Cast<UILabel>();
+        ASSERT_NE(title, nullptr);
+        EXPECT_EQ(title->name, PoolString::Intern("Title"));
+        EXPECT_EQ(title->text, "C");
     }
 
     // ---- layering ---------------------------------------------------------------------------------------------------------
