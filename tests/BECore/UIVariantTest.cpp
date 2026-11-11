@@ -28,19 +28,19 @@ namespace BECore::Tests {
             root->name = "Root"_intern;
             auto hud = root->AddChild("Hud"_intern);
             hud->style.rect.anchor = UIAnchor::TopLeft;
-            hud->style.rect.x = 16.0f;
-            hud->style.rect.y = 16.0f;
+            hud->style.rect.x = UILength::Px(16.0f);
+            hud->style.rect.y = UILength::Px(16.0f);
             hud->style.rect.width = UILength::Px(220.0f);
             hud->style.rect.height = UILength::Px(96.0f);
             auto score = hud->AddChild("Score"_intern);
-            score->style.rect.x = 12.0f;
-            score->style.rect.y = 10.0f;
+            score->style.rect.x = UILength::Px(12.0f);
+            score->style.rect.y = UILength::Px(10.0f);
             score->style.rect.width = UILength::Px(120.0f);
             score->style.rect.height = UILength::Px(28.0f);
             auto reset = hud->AddChild("Reset"_intern);
             reset->style.rect.anchor = UIAnchor::BottomRight;
-            reset->style.rect.x = -12.0f;
-            reset->style.rect.y = -10.0f;
+            reset->style.rect.x = UILength::Px(-12.0f);
+            reset->style.rect.y = UILength::Px(-10.0f);
             reset->style.rect.width = UILength::Px(96.0f);
             reset->style.rect.height = UILength::Px(32.0f);
             return root;
@@ -52,7 +52,7 @@ namespace BECore::Tests {
             UIElementOverride hud;
             hud.element = "Hud"_intern;
             hud.anchor = UIAnchor::Top;
-            hud.x = 0.0f;
+            hud.x = UILength::Px(0.0f);
             hud.width = UILength::Percent(90.0f);
             variant.overrides.push_back(hud);
             return variant;
@@ -153,7 +153,7 @@ namespace BECore::Tests {
         UIElement* hud = root->FindByName("Hud"_intern);
         EXPECT_EQ(hud->active.rect.anchor, UIAnchor::Top);
         EXPECT_EQ(hud->active.rect.width, UILength::Percent(90.0f));
-        EXPECT_FLOAT_EQ(hud->active.rect.y, 16.0f);  // not named: stays
+        EXPECT_FLOAT_EQ(hud->active.rect.y.value, 16.0f);  // not named: stays
         EXPECT_EQ(hud->active.rect.height, UILength::Px(96.0f));
         EXPECT_EQ(hud->style.rect.anchor, UIAnchor::TopLeft);  // the authored style is never touched
         UIElement* score = root->FindByName("Score"_intern);
@@ -165,21 +165,21 @@ namespace BECore::Tests {
         UIVariant first;
         UIElementOverride a;
         a.element = "Hud"_intern;
-        a.x = 100.0f;
-        a.y = 200.0f;
+        a.x = UILength::Px(100.0f);
+        a.y = UILength::Px(200.0f);
         first.overrides.push_back(a);
         UIVariant second;
         UIElementOverride b;
         b.element = "Hud"_intern;
-        b.x = 300.0f;
+        b.x = UILength::Px(300.0f);
         second.overrides.push_back(b);
         const UIVariant variants[] = {first, second};
 
         EXPECT_EQ(UIVariants::Apply(*root, variants, kLandscape), 2u);
 
         UIElement* hud = root->FindByName("Hud"_intern);
-        EXPECT_FLOAT_EQ(hud->active.rect.x, 300.0f);  // the second wins
-        EXPECT_FLOAT_EQ(hud->active.rect.y, 200.0f);  // the first one's y stays
+        EXPECT_FLOAT_EQ(hud->active.rect.x.value, 300.0f);  // the second wins
+        EXPECT_FLOAT_EQ(hud->active.rect.y.value, 200.0f);  // the first one's y stays
     }
 
     TEST(UIVariantsTest, TheOrderOfTheListNotThePriorityOfTheConditionDecides) {
@@ -187,15 +187,15 @@ namespace BECore::Tests {
         UIVariant broad;  // matches everything, listed last
         UIElementOverride wide;
         wide.element = "Hud"_intern;
-        wide.x = 1.0f;
+        wide.x = UILength::Px(1.0f);
         broad.overrides.push_back(wide);
         UIVariant narrow = PortraitHudVariant();
-        narrow.overrides[0].x = 50.0f;
+        narrow.overrides[0].x = UILength::Px(50.0f);
         const UIVariant variants[] = {narrow, broad};
 
         UIVariants::Apply(*root, variants, kPortrait);
 
-        EXPECT_FLOAT_EQ(root->FindByName("Hud"_intern)->active.rect.x, 1.0f);
+        EXPECT_FLOAT_EQ(root->FindByName("Hud"_intern)->active.rect.x.value, 1.0f);
     }
 
     TEST(UIVariantsTest, GoingBackToAShapeNoVariantMatchesRestoresTheAuthoredStyle) {
@@ -227,8 +227,12 @@ namespace BECore::Tests {
         UIElementOverride all;
         all.visible = false;
         all.anchor = UIAnchor::BottomLeft;
-        all.x = 1.0f;
-        all.y = 2.0f;
+        all.anchorMin = Vec2{0.1f, 0.2f};
+        all.anchorMax = Vec2{0.9f, 0.8f};
+        all.pivot = Vec2{0.0f, 1.0f};
+        all.margin = UIEdges{1.0f, 2.0f, 3.0f, 4.0f};
+        all.x = UILength::Px(1.0f);
+        all.y = UILength::Px(2.0f);
         all.width = UILength::Percent(50.0f);
         all.height = UILength::Px(30.0f);
         all.region = "table.plate.1"_intern;
@@ -240,13 +244,98 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(style.visible);
         EXPECT_EQ(style.rect.anchor, UIAnchor::BottomLeft);
-        EXPECT_FLOAT_EQ(style.rect.x, 1.0f);
-        EXPECT_FLOAT_EQ(style.rect.y, 2.0f);
+        EXPECT_EQ(style.rect.anchorMin, std::optional<Vec2>(Vec2{0.1f, 0.2f}));
+        EXPECT_EQ(style.rect.anchorMax, std::optional<Vec2>(Vec2{0.9f, 0.8f}));
+        EXPECT_EQ(style.rect.pivot, std::optional<Vec2>(Vec2{0.0f, 1.0f}));
+        EXPECT_EQ(style.rect.margin, (UIEdges{1.0f, 2.0f, 3.0f, 4.0f}));
+        EXPECT_FLOAT_EQ(style.rect.x.value, 1.0f);
+        EXPECT_FLOAT_EQ(style.rect.y.value, 2.0f);
         EXPECT_EQ(style.rect.width, UILength::Percent(50.0f));
         EXPECT_EQ(style.rect.height, UILength::Px(30.0f));
         EXPECT_EQ(style.rect.region, "table.plate.1"_intern);
         EXPECT_EQ(style.stack.direction, UIStackDirection::Horizontal);
         EXPECT_FLOAT_EQ(style.fontSize, 18.0f);
+    }
+
+    TEST(UIVariantsTest, APercentOffsetOfAnOverrideSurvivesTheFileRoundTripAndReachesTheStyle) {
+        UIVariant variant = PortraitHudVariant();
+        variant.overrides[0].x = UILength::Percent(5.0f);
+        variant.overrides[0].y = UILength::Px(0.0f);
+
+        XmlSerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("variant"));
+        variant.Serialize(serializer);
+        serializer.EndObject();
+        const eastl::string xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("x=\"5%\""), eastl::string::npos);
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        UIVariant loaded;
+        ASSERT_TRUE(deserializer.BeginObject("variant"));
+        loaded.Deserialize(deserializer);
+        deserializer.EndObject();
+
+        EXPECT_FALSE(deserializer.HasErrors());
+        EXPECT_TRUE(loaded == variant);
+        UIElementStyle style;
+        loaded.overrides[0].ApplyTo(style);
+        EXPECT_EQ(style.rect.x, UILength::Percent(5.0f));
+        EXPECT_EQ(style.rect.y, UILength::Px(0.0f));
+    }
+
+    TEST(UIVariantsTest, EdgeAnchorsAndAMarginOfAnOverrideSurviveTheFileRoundTripEvenWhenTheyEqualADefault) {
+        UIVariant variant = PortraitHudVariant();
+        variant.overrides[0].anchorMin = Vec2{0.0f, 0.0f};  // the default of nothing: still the author's choice
+        variant.overrides[0].anchorMax = Vec2{0.35f, 1.0f};
+        variant.overrides[0].pivot = Vec2{0.5f, 0.0f};
+        variant.overrides[0].margin = UIEdges{};  // an explicit zero margin
+
+        XmlSerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("variant"));
+        variant.Serialize(serializer);
+        serializer.EndObject();
+        const eastl::string xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("anchorMin=\"0,0\""), eastl::string::npos) << xml.c_str();
+        EXPECT_NE(xml.find("anchorMax=\"0.35,1\""), eastl::string::npos);
+        EXPECT_NE(xml.find("pivot=\"0.5,0\""), eastl::string::npos);
+        EXPECT_NE(xml.find("margin=\"0\""), eastl::string::npos);
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        UIVariant loaded;
+        ASSERT_TRUE(deserializer.BeginObject("variant"));
+        loaded.Deserialize(deserializer);
+        deserializer.EndObject();
+
+        EXPECT_FALSE(deserializer.HasErrors());
+        EXPECT_TRUE(loaded == variant);
+        ASSERT_TRUE(loaded.overrides[0].margin.has_value());
+
+        // An override that sets none of them writes none of them
+        UIVariant bare = PortraitHudVariant();
+        XmlSerializer bareSerializer;
+        ASSERT_TRUE(bareSerializer.BeginObject("variant"));
+        bare.Serialize(bareSerializer);
+        bareSerializer.EndObject();
+        const eastl::string bareXml = bareSerializer.SaveToString();
+        EXPECT_EQ(bareXml.find("anchorM"), eastl::string::npos);
+        EXPECT_EQ(bareXml.find("pivot"), eastl::string::npos);
+        EXPECT_EQ(bareXml.find("margin"), eastl::string::npos);
+    }
+
+    TEST(UIVariantsTest, AMalformedEdgeAnchorOfAnOverrideIsReportedAndLeavesItUnset) {
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(
+            "<root><variant when=\"orientation:portrait\"><overrides><set element=\"Hud\" anchorMin=\"1\" pivot=\"0.5,0.5\" margin=\"1,2\"/></overrides></variant></root>"));
+        UIVariant loaded;
+        ASSERT_TRUE(deserializer.BeginObject("variant"));
+        loaded.Deserialize(deserializer);
+        deserializer.EndObject();
+
+        EXPECT_TRUE(deserializer.HasErrors());
+        ASSERT_EQ(loaded.overrides.size(), 1u);
+        EXPECT_FALSE(loaded.overrides[0].anchorMin);
+        EXPECT_FALSE(loaded.overrides[0].margin);
+        EXPECT_EQ(loaded.overrides[0].pivot, std::optional<Vec2>(Vec2{0.5f, 0.5f}));
     }
 
     TEST(UIVariantsTest, ARegionOfAnOverrideSurvivesTheFileRoundTrip) {

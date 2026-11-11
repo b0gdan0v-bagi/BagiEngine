@@ -37,8 +37,8 @@ namespace BECore::Tests {
 
         IntrusivePtr<UIElement> AddBox(UIElement& parent, const char* name, float x, float y, float width, float height, bool interactive = false) {
             auto box = parent.AddChild(PoolString::Intern(name));
-            box->style.rect.x = x;
-            box->style.rect.y = y;
+            box->style.rect.x = UILength::Px(x);
+            box->style.rect.y = UILength::Px(y);
             box->style.rect.width = UILength::Px(width);
             box->style.rect.height = UILength::Px(height);
             box->interactive = interactive;

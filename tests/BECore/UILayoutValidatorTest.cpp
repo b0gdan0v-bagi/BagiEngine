@@ -44,8 +44,8 @@ namespace BECore::Tests {
 
         IntrusivePtr<UIElement> AddBox(UIElement& parent, const char* name, float x, float y, float width, float height) {
             auto box = parent.AddChild(PoolString::Intern(name));
-            box->style.rect.x = x;
-            box->style.rect.y = y;
+            box->style.rect.x = UILength::Px(x);
+            box->style.rect.y = UILength::Px(y);
             box->style.rect.width = UILength::Px(width);
             box->style.rect.height = UILength::Px(height);
             return box;
@@ -191,8 +191,8 @@ namespace BECore::Tests {
 
         // The same tree without the flag, put on the same absolute place (offsets count from the safe area then): the safe area applies to the root child and everything under it
         bar->ignoreSafeArea = false;
-        bar->style.rect.x = -50.0f;
-        bar->style.rect.y = -40.0f;
+        bar->style.rect.x = UILength::Px(-50.0f);
+        bar->style.rect.y = UILength::Px(-40.0f);
         canvas.Invalidate();
         canvas.Update(context);
         const auto issues = canvas.Validate({});

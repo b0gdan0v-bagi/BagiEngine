@@ -86,6 +86,15 @@ namespace BECore {
         if (anchor) {
             style.rect.anchor = *anchor;
         }
+        if (anchorMin) {
+            style.rect.anchorMin = *anchorMin;
+        }
+        if (anchorMax) {
+            style.rect.anchorMax = *anchorMax;
+        }
+        if (pivot) {
+            style.rect.pivot = *pivot;
+        }
         if (x) {
             style.rect.x = *x;
         }
@@ -97,6 +106,9 @@ namespace BECore {
         }
         if (height) {
             style.rect.height = *height;
+        }
+        if (margin) {
+            style.rect.margin = *margin;
         }
         if (region) {
             style.rect.region = *region;
@@ -113,14 +125,22 @@ namespace BECore {
         Ser::DataAccessor<PoolString>::Save(s, element, "element");
         SaveOptional(s, "visible", visible);
         SaveOptional(s, "anchor", anchor);
-        SaveOptional(s, "x", x);
-        SaveOptional(s, "y", y);
+        UIAttr::WriteOptionalVec2Fraction(s, "anchorMin", anchorMin);
+        UIAttr::WriteOptionalVec2Fraction(s, "anchorMax", anchorMax);
+        UIAttr::WriteOptionalVec2Fraction(s, "pivot", pivot);
+        if (x) {
+            UIAttr::WriteLength(s, "x", *x);
+        }
+        if (y) {
+            UIAttr::WriteLength(s, "y", *y);
+        }
         if (width) {
             UIAttr::WriteLength(s, "width", *width);
         }
         if (height) {
             UIAttr::WriteLength(s, "height", *height);
         }
+        UIAttr::WriteOptionalEdges(s, "margin", margin);
         SaveOptional(s, "region", region);
         SaveOptional(s, "direction", direction);
         SaveOptional(s, "fontSize", fontSize);
@@ -130,10 +150,14 @@ namespace BECore {
         Ser::Load(d, element, "element");
         LoadOptional(d, "visible", visible);
         LoadOptional(d, "anchor", anchor);
-        LoadOptional(d, "x", x);
-        LoadOptional(d, "y", y);
+        UIAttr::ReadOptionalVec2Fraction(d, "anchorMin", anchorMin);
+        UIAttr::ReadOptionalVec2Fraction(d, "anchorMax", anchorMax);
+        UIAttr::ReadOptionalVec2Fraction(d, "pivot", pivot);
+        UIAttr::ReadOptionalLength(d, "x", x);
+        UIAttr::ReadOptionalLength(d, "y", y);
         UIAttr::ReadOptionalLength(d, "width", width);
         UIAttr::ReadOptionalLength(d, "height", height);
+        UIAttr::ReadOptionalEdges(d, "margin", margin);
         LoadOptional(d, "region", region);
         LoadOptional(d, "direction", direction);
         LoadOptional(d, "fontSize", fontSize);

@@ -17,6 +17,11 @@ namespace BECore {
         /// "220", "220px" or "90%"
         [[nodiscard]] std::optional<UILength> ParseLength(eastl::string_view text);
 
+        /// "x,y": two plain fractions, the text form of an anchor or a pivot (a percent is written as the fraction, so 50% is 0.5)
+        [[nodiscard]] eastl::string FormatFraction2(const Vec2& value);
+        /// "x,y", each a number or `N%` (10% is 0.1); both finite
+        [[nodiscard]] std::optional<Vec2> ParseFraction2(eastl::string_view text);
+
         /// One number when the four edges are equal, otherwise "left,top,right,bottom"
         [[nodiscard]] eastl::string FormatEdges(const UIEdges& edges);
         /// One number (all edges) or "left,top,right,bottom"

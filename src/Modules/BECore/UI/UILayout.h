@@ -4,6 +4,15 @@
 
 namespace BECore {
 
+    /// The anchors of a spec after the shorthand and the explicit fields are merged: fractions of the parent box, min <= max on each axis
+    struct UIEffectiveAnchors {
+        Vec2 min;
+        Vec2 max;
+        Vec2 pivot;
+
+        [[nodiscard]] constexpr bool operator==(const UIEffectiveAnchors&) const = default;
+    };
+
     /**
      * @brief Pure layout rules: specs and rects in, rects out. No window, renderer or scene is involved, so every rule is tested alone.
      *
@@ -14,15 +23,25 @@ namespace BECore {
         /// The point of a parent that an anchor names, as fractions of its width and height (BottomRight is {1, 1}); Stretch is the center
         [[nodiscard]] static constexpr std::pair<float, float> AnchorFraction(UIAnchor anchor);
 
+        /**
+         * @brief The anchors that lay @p spec out: the shorthand of `spec.anchor` (a point: min = max = pivot = AnchorFraction; Stretch: min 0, max 1,
+         *        pivot 0.5), each of `anchorMin`, `anchorMax` and `pivot` replaced by its field when that is set.
+         *
+         * Per axis the two edges are put in order. A field that is not finite counts as unset.
+         */
+        [[nodiscard]] static UIEffectiveAnchors EffectiveAnchors(const UIRectSpec& spec);
+
         /// @return @p rect moved inward by @p edges; never narrower or lower than 0
         [[nodiscard]] static Rect Inset(const Rect& rect, const UIEdges& edges);
 
         /**
          * @brief The rect of an element inside @p parent (anchor layout).
          *
-         * The size comes from the width and height (a percent is of the parent), or from the parent minus the margins for Stretch.
-         * Then the minimum and maximum limits apply, then the aspect ratio, then the element is pinned to its anchor
-         * and moved by its offset. A Stretch element smaller than its area (limits, aspect ratio) is centered in it.
+         * Each axis is either a point (the effective min equals max) or stretched (min is less than max). The size of a point axis comes from the
+         * width or height (a percent is of the parent); the size of a stretched one is its span, between the two anchors, minus the margins.
+         * Then the minimum and maximum limits apply, then the aspect ratio, then the element is placed: on a point axis its pivot sits on
+         * the anchor point, moved by the offset; on a stretched axis it sits in the span at its pivot (a Stretch element smaller than its span, by limits or
+         * aspect ratio, is centered). Size, offset and margin of the other kind of axis are ignored.
          */
         [[nodiscard]] static Rect ResolveRect(const Rect& parent, const UIRectSpec& spec);
 

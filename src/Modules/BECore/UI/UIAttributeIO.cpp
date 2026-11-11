@@ -59,6 +59,42 @@ namespace BECore::UIAttr {
         return true;
     }
 
+    void WriteVec2Fraction(ISerializer& s, eastl::string_view key, const Vec2& value) {
+        WriteText(s, key, UIText::FormatFraction2(value));
+    }
+
+    void WriteOptionalVec2Fraction(ISerializer& s, eastl::string_view key, const std::optional<Vec2>& value) {
+        if (value) {
+            WriteVec2Fraction(s, key, *value);
+        }
+    }
+
+    void ReadOptionalVec2Fraction(IDeserializer& d, eastl::string_view key, std::optional<Vec2>& out) {
+        eastl::string text;
+        if (!ReadText(d, key, text)) {
+            return;
+        }
+        const auto value = UIText::ParseFraction2(eastl::string_view(text.data(), text.size()));
+        if (!value) {
+            ReportMalformed(d, key, text);
+            return;
+        }
+        out = *value;
+    }
+
+    void WriteOptionalEdges(ISerializer& s, eastl::string_view key, const std::optional<UIEdges>& edges) {
+        if (edges) {
+            WriteEdges(s, key, *edges);
+        }
+    }
+
+    void ReadOptionalEdges(IDeserializer& d, eastl::string_view key, std::optional<UIEdges>& out) {
+        UIEdges edges;
+        if (ReadEdges(d, key, edges)) {
+            out = edges;
+        }
+    }
+
     void WriteCorners(ISerializer& s, eastl::string_view key, const UICorners& corners) {
         WriteText(s, key, UIText::FormatCorners(corners));
     }

@@ -9,10 +9,10 @@ namespace BECore {
     /**
      * @brief Everything a variant can change about an element.
      *
-     * In a file the style is not a child element: its properties are attributes of the element itself (`anchor`, `x`, `y`, `width`, `height`, `minWidth`,
-     * `maxWidth`, `minHeight`, `maxHeight`, `aspectRatio`, `aspectMode`, `margin`, `flex`, `region`, `direction`, `spacing`, `padding`, `wrapChildren`, `crossAlign`,
+     * In a file the style is not a child element: its properties are attributes of the element itself (`anchor`, `anchorMin`, `anchorMax`, `pivot`, `x`, `y`, `width`,
+     * `height`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, `aspectRatio`, `aspectMode`, `margin`, `flex`, `region`, `direction`, `spacing`, `padding`, `wrapChildren`, `crossAlign`,
      * `fontSize`, `visible`). Only a value that differs from the default is written. A length is "220" or "90%", `margin` and `padding` are one number or
-     * "left,top,right,bottom".
+     * "left,top,right,bottom", `anchorMin`, `anchorMax` and `pivot` are "x,y" (fractions, "10%" reads as 0.1, written as 0.1) and are written only when set.
      *
      * These names share the element's attributes with the fields of every control (a label has its own `wrap`, the text one), so a new style attribute must not
      * reuse the name of a control field: `UIControlsTest` round-trips every control with everything set and fails on a clash.

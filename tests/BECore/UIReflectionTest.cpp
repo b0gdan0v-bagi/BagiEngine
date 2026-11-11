@@ -56,7 +56,8 @@ namespace BECore::Tests {
 
             auto panel = MakeElement("Panel");
             panel->style.rect.anchor = UIAnchor::BottomRight;
-            panel->style.rect.x = -12.0f;
+            panel->style.rect.x = UILength::Px(-12.0f);
+            panel->style.rect.y = UILength::Percent(5.0f);
             panel->style.rect.width = UILength::Percent(35.5f);
             panel->style.rect.height = UILength::Px(96.0f);
             panel->style.rect.minWidth = UILength::Px(0.0f);
@@ -89,7 +90,8 @@ namespace BECore::Tests {
             portrait.when.maxHeight = 2000.0f;
             UIElementOverride move;
             move.element = PoolString::Intern("Panel");
-            move.x = 0.0f;  // an explicit zero must survive
+            move.x = UILength::Px(0.0f);  // an explicit zero must survive
+            move.y = UILength::Percent(-5.0f);
             move.visible = false;
             move.width = UILength::Percent(90.0f);
             move.direction = UIStackDirection::Vertical;
@@ -147,6 +149,28 @@ namespace BECore::Tests {
 
         for (const char* bad : {"", "px", "%", "abc", "12 3", "1e", "10em"}) {
             EXPECT_FALSE(UIText::ParseLength(bad)) << bad;
+        }
+    }
+
+    TEST(UIReflectionTest, AFractionPairIsTwoNumbersAndAPercentIsTheFraction) {
+        EXPECT_EQ(UIText::FormatFraction2({0.1f, 0.5f}), "0.1,0.5");
+        EXPECT_EQ(UIText::FormatFraction2({0.0f, 1.0f}), "0,1");
+        EXPECT_EQ(UIText::FormatFraction2({-0.25f, 1.5f}), "-0.25,1.5");
+
+        const auto plain = UIText::ParseFraction2("0.1,0.5");
+        const auto spaced = UIText::ParseFraction2(" 0.65 , 1 ");
+        const auto percent = UIText::ParseFraction2("10%, 50%");
+        const auto mixed = UIText::ParseFraction2("25%,0.5");
+        ASSERT_TRUE(plain && spaced && percent && mixed);
+        EXPECT_EQ(*plain, Vec2(0.1f, 0.5f));
+        EXPECT_EQ(*spaced, Vec2(0.65f, 1.0f));
+        EXPECT_NEAR(percent->x, 0.1f, kTolerance);
+        EXPECT_NEAR(percent->y, 0.5f, kTolerance);
+        EXPECT_NEAR(mixed->x, 0.25f, kTolerance);
+        EXPECT_NEAR(mixed->y, 0.5f, kTolerance);
+
+        for (const char* bad : {"", "0.5", "1,2,3", ",", "0.5,", ",0.5", "a,b", "%,50%", "0.5,10px", "nan,0", "0,inf", "-inf,0", "inf%,0", "1 2,3"}) {
+            EXPECT_FALSE(UIText::ParseFraction2(bad)) << bad;
         }
     }
 
@@ -253,6 +277,74 @@ namespace BECore::Tests {
         ExpectSameCanvas(*canvas, *loaded);
     }
 
+    TEST(UIReflectionTest, AnOffsetIsALengthInUnitsOrPercentAndAPlainNumberSavesAsBefore) {
+        const eastl::string xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"12\" y=\"5%\"/></elements></component></root>";
+        const auto canvas = FromXml(xml);
+
+        ASSERT_EQ(canvas->_elements.size(), 1u);
+        EXPECT_EQ(canvas->_elements[0]->style.rect.x, UILength::Px(12.0f));
+        EXPECT_EQ(canvas->_elements[0]->style.rect.y, UILength::Percent(5.0f));
+        const eastl::string saved = ToXml(*canvas, true);
+        EXPECT_NE(saved.find("x=\"12\""), eastl::string::npos);
+        EXPECT_NE(saved.find("y=\"5%\""), eastl::string::npos);
+    }
+
+    TEST(UIReflectionTest, EdgeAnchorsAndAPivotLoadFromAFileAndSaveOnlyWhenSet) {
+        const eastl::string xml = "<root><component><elements>"
+                                  "<element type=\"UIElement\" name=\"Bar\" anchorMin=\"10%,0.5\" anchorMax=\"0.9,0.5\" pivot=\"0.5,0\" y=\"-5%\"/>"
+                                  "<element type=\"UIElement\" name=\"Plain\" anchor=\"Top\" x=\"4\"/>"
+                                  "</elements></component></root>";
+        const auto canvas = FromXml(xml);
+
+        ASSERT_EQ(canvas->_elements.size(), 2u);
+        const UIRectSpec& bar = canvas->_elements[0]->style.rect;
+        ASSERT_TRUE(bar.anchorMin && bar.anchorMax && bar.pivot);
+        EXPECT_NEAR(bar.anchorMin->x, 0.1f, kTolerance);
+        EXPECT_EQ(*bar.anchorMin, Vec2(0.1f, 0.5f));
+        EXPECT_EQ(*bar.anchorMax, Vec2(0.9f, 0.5f));
+        EXPECT_EQ(*bar.pivot, Vec2(0.5f, 0.0f));
+        const UIRectSpec& plain = canvas->_elements[1]->style.rect;
+        EXPECT_FALSE(plain.anchorMin || plain.anchorMax || plain.pivot);
+
+        const eastl::string saved = ToXml(*canvas, true);
+        EXPECT_NE(saved.find("anchorMin=\"0.1,0.5\""), eastl::string::npos) << saved.c_str();  // written as plain numbers
+        EXPECT_NE(saved.find("anchorMax=\"0.9,0.5\""), eastl::string::npos);
+        EXPECT_NE(saved.find("pivot=\"0.5,0\""), eastl::string::npos);
+        const auto again = FromXml(saved);
+        ASSERT_NO_FATAL_FAILURE(ExpectSameElements(canvas->_elements, again->_elements));
+        EXPECT_EQ(ToXml(*again, true), saved);
+
+        // A file that never names them gets none of them back: its second save is its first
+        const eastl::string legacy = ToXml(*MakeCanvas(), true);
+        EXPECT_EQ(legacy.find("anchorMin"), eastl::string::npos);
+        EXPECT_EQ(legacy.find("anchorMax"), eastl::string::npos);
+        EXPECT_EQ(legacy.find("pivot"), eastl::string::npos);
+        // A value equal to the shorthand's is still a choice of the author: a set field is written, even a zero one
+        auto zero = New<UICanvasComponent>();
+        auto element = MakeElement("Zero");
+        element->style.rect.pivot = Vec2{0.0f, 0.0f};
+        zero->_elements.push_back(element);
+        EXPECT_NE(ToXml(*zero, true).find("pivot=\"0,0\""), eastl::string::npos);
+    }
+
+    TEST(UIReflectionTest, AMalformedEdgeAnchorIsReportedAndLeavesTheOtherFieldsAlone) {
+        for (const char* attribute : {"anchorMin=\"1\"", "anchorMax=\"a,b\"", "pivot=\"nan,0\"", "anchorMin=\"1,2,3\""}) {
+            const eastl::string xml = eastl::string("<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"5\" ") + attribute + "/></elements></component></root>";
+            XmlDeserializer deserializer;
+            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+            auto canvas = New<UICanvasComponent>();
+            ASSERT_TRUE(deserializer.BeginObject("component"));
+            canvas->Deserialize(deserializer);
+            deserializer.EndObject();
+
+            EXPECT_TRUE(deserializer.HasErrors()) << attribute;
+            ASSERT_EQ(canvas->_elements.size(), 1u) << attribute;
+            const UIRectSpec& rect = canvas->_elements[0]->style.rect;
+            EXPECT_FALSE(rect.anchorMin || rect.anchorMax || rect.pivot) << attribute;
+            EXPECT_FLOAT_EQ(rect.x.value, 5.0f) << attribute;
+        }
+    }
+
     TEST(UIReflectionTest, AMalformedValueIsReportedAndLeavesTheDefault) {
         const eastl::string xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" width=\"wide\" color=\"1,2\" margin=\"1,2\" x=\"5\"/></elements>"
                                   "<variants><variant when=\"orientation:sideways\"/></variants></component></root>";
@@ -263,7 +355,7 @@ namespace BECore::Tests {
         EXPECT_EQ(element.style.rect.width, UILength{});
         EXPECT_EQ(element.color.a, 0);
         EXPECT_EQ(element.style.rect.margin, UIEdges{});
-        EXPECT_FLOAT_EQ(element.style.rect.x, 5.0f);  // the well-formed attributes still load
+        EXPECT_FLOAT_EQ(element.style.rect.x.value, 5.0f);  // the well-formed attributes still load
 
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
@@ -329,7 +421,7 @@ namespace BECore::Tests {
         ASSERT_EQ(root.children.size(), 1u);
         const UIElement& panel = *root.children[0];
         EXPECT_EQ(panel.name, PoolString::Intern("Panel"));
-        EXPECT_FLOAT_EQ(panel.style.rect.x, 16.0f);
+        EXPECT_FLOAT_EQ(panel.style.rect.x.value, 16.0f);
         EXPECT_EQ(panel.style.rect.width, UILength::Px(220.0f));
         EXPECT_EQ(panel.color.a, 160);
         EXPECT_TRUE(panel.blocksInput);

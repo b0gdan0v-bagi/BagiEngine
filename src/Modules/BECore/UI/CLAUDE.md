@@ -36,6 +36,8 @@ Each file below loads by itself when a file of its area is read; read it by path
 | `UIColor`, `UIText` / `UIAttr` | colors and the state shifts; text forms of lengths, edges, colors, numbers |
 | `UIDocument`, `UIDocumentLoader` | a `.ui.xml` file, `Instantiate` per canvas |
 | `UIRegionSet` | the named rects (canvas units) a game publishes for a canvas; an element with `region` lays out inside one (`ui-layout.md`, "Named regions") |
+| `UIRectEdit` | the inverse of `UILayout::ResolveRect` (`SpecForRect`: a wanted rect to a spec, only numbers change; `exact` false when limits or aspect forbid it), the px / % switch that keeps the layout, the region names of a picker |
+| `UIAnchorPresets` | the Unity grid of sixteen anchors, `Match` of a spec, `Apply` that changes the anchors and keeps the rect on screen (Shift: pivot, Alt: position) |
 | `UIPreview`, `UIPreviewOverlay` | the viewport's shapes, devices, zoom and safe areas; the rects of its overlays (view, canvas bounds, touch marks, regions) |
 
 ## Rules
@@ -74,6 +76,10 @@ Each file below loads by itself when a file of its area is read; read it by path
 The "Overlays" popup toggles the safe area, the view bounds (the fitted view, bars tinted), the canvas bounds, the touch targets and the regions, all from `UIPreviewOverlay` in output pixels. The regions are what a game published with `SetRegion`: each is outlined under the touch targets with its name, and hovering one (the smallest under the pointer) shows the name and the rect in canvas units; `RegionMarks` keeps a region partly outside the canvas as it is. A touch target is a visible interactive element of a laid-out canvas, red under `minTouchSize` by the rule of `UILayoutValidator`. `TouchTargets` skips an interactive element with an empty rect, while the validator reports it as too small. RmlUi documents are not in the overlays.
 
 The choice (shape, safe area, overlays; not the forced view) is an editor setting: `EditorSettings` stores it in `preferences.json` (`viewportPreview`, the device by name) and it never reaches `Scene::Serialize`. The widget gets it with `EditorPreferencesChangedEvent` and reports a change with `ViewportPreviewChangedEvent`.
+
+## Editor
+
+The "UI elements" section of `SceneEditorWidget` (`UIRectInspector`, only with the editor) shows for a node with a `UICanvasComponent` the element tree and, for the selected element, the rect inspector: preset grid, `anchorMin` / `anchorMax` / `pivot`, offsets and sizes with a px / % switch, margins, `region`. It edits the authored `style`, never `active` (a variant of the canvas may still override it: the inspector says how many do) and the canvas is invalidated at every change. The numbers come from `UIRectEdit` and `UIAnchorPresets`, the widget only draws. The edits live in memory: saving back to a node file or a `.ui.xml` is the next slice, and the scene editor still refuses to save a scene with `<node ref>`.
 
 ## Not done
 

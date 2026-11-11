@@ -38,6 +38,20 @@ namespace BECore {
             return changed;
         }
 
+        bool VisitVec2(IPropertyVisitor& v, eastl::string_view key, Vec2& value) {
+            bool changed = false;
+            if (v.BeginCompound(key)) {
+                changed |= PropVisit::Visit(v, value.x, "x");
+                changed |= PropVisit::Visit(v, value.y, "y");
+                v.EndCompound();
+            }
+            return changed;
+        }
+
+        bool VisitOptionalVec2(IPropertyVisitor& v, eastl::string_view key, std::optional<Vec2>& value) {
+            return value && VisitVec2(v, key, *value);
+        }
+
         bool VisitOptionalLength(IPropertyVisitor& v, eastl::string_view key, std::optional<UILength>& length) {
             return length && VisitLength(v, key, *length);
         }
@@ -48,8 +62,11 @@ namespace BECore {
         const UIElementStyle defaults;
         SaveIfChanged(s, visible, defaults.visible, "visible");
         SaveIfChanged(s, rect.anchor, defaults.rect.anchor, "anchor");
-        SaveIfChanged(s, rect.x, defaults.rect.x, "x");
-        SaveIfChanged(s, rect.y, defaults.rect.y, "y");
+        UIAttr::WriteOptionalVec2Fraction(s, "anchorMin", rect.anchorMin);
+        UIAttr::WriteOptionalVec2Fraction(s, "anchorMax", rect.anchorMax);
+        UIAttr::WriteOptionalVec2Fraction(s, "pivot", rect.pivot);
+        SaveLengthIfChanged(s, rect.x, defaults.rect.x, "x");
+        SaveLengthIfChanged(s, rect.y, defaults.rect.y, "y");
         SaveLengthIfChanged(s, rect.width, defaults.rect.width, "width");
         SaveLengthIfChanged(s, rect.height, defaults.rect.height, "height");
         UIAttr::WriteOptionalLength(s, "minWidth", rect.minWidth);
@@ -72,8 +89,11 @@ namespace BECore {
     void UIElementStyle::Deserialize(IDeserializer& d) {
         Ser::Load(d, visible, "visible");
         Ser::Load(d, rect.anchor, "anchor");
-        Ser::Load(d, rect.x, "x");
-        Ser::Load(d, rect.y, "y");
+        UIAttr::ReadOptionalVec2Fraction(d, "anchorMin", rect.anchorMin);
+        UIAttr::ReadOptionalVec2Fraction(d, "anchorMax", rect.anchorMax);
+        UIAttr::ReadOptionalVec2Fraction(d, "pivot", rect.pivot);
+        UIAttr::ReadLength(d, "x", rect.x);
+        UIAttr::ReadLength(d, "y", rect.y);
         UIAttr::ReadLength(d, "width", rect.width);
         UIAttr::ReadLength(d, "height", rect.height);
         UIAttr::ReadOptionalLength(d, "minWidth", rect.minWidth);
@@ -97,8 +117,11 @@ namespace BECore {
         bool changed = false;
         changed |= PropVisit::Visit(v, visible, "visible");
         changed |= PropVisit::Visit(v, rect.anchor, "anchor");
-        changed |= PropVisit::Visit(v, rect.x, "x");
-        changed |= PropVisit::Visit(v, rect.y, "y");
+        changed |= VisitOptionalVec2(v, "anchorMin", rect.anchorMin);
+        changed |= VisitOptionalVec2(v, "anchorMax", rect.anchorMax);
+        changed |= VisitOptionalVec2(v, "pivot", rect.pivot);
+        changed |= VisitLength(v, "x", rect.x);
+        changed |= VisitLength(v, "y", rect.y);
         changed |= VisitLength(v, "width", rect.width);
         changed |= VisitLength(v, "height", rect.height);
         changed |= VisitOptionalLength(v, "minWidth", rect.minWidth);

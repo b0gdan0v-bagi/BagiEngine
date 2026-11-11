@@ -263,7 +263,7 @@ namespace BECore::Tests {
         EXPECT_EQ(canvas->GetRoot().children[0]->name, PoolString::Intern("FromFile"));
         EXPECT_EQ(canvas->GetRoot().children[1]->name, PoolString::Intern("Inline"));
         ASSERT_EQ(canvas->GetLayout().variants.size(), 2u);
-        EXPECT_FLOAT_EQ(*canvas->GetLayout().variants[1].overrides[0].x, 2.0f);  // the later one wins in the portrait shape
+        EXPECT_FLOAT_EQ((*canvas->GetLayout().variants[1].overrides[0].x).value, 2.0f);  // the later one wins in the portrait shape
         EXPECT_EQ(canvas->_elements.size(), 1u) << "only the inline element is saved back";
     }
 

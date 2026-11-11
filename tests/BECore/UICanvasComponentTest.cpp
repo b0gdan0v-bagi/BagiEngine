@@ -172,8 +172,8 @@ namespace BECore::Tests {
         IntrusivePtr<PointerProbe> AddProbe(UICanvasComponent& canvas, const char* name, float x, float y, float size, bool interactive = true) {
             auto probe = New<PointerProbe>();
             probe->name = PoolString::Intern(name);
-            probe->style.rect.x = x;
-            probe->style.rect.y = y;
+            probe->style.rect.x = UILength::Px(x);
+            probe->style.rect.y = UILength::Px(y);
             probe->style.rect.width = UILength::Px(size);
             probe->style.rect.height = UILength::Px(size);
             probe->interactive = interactive;
@@ -186,8 +186,8 @@ namespace BECore::Tests {
         /// A square element with a color that a click on it is consumed by
         IntrusivePtr<UIElement> AddSquare(UICanvasComponent& canvas, const char* name, float x, float y, float size, Color color = Color{255, 255, 255, 255}) {
             auto square = canvas.GetRoot().AddChild(PoolString::Intern(name));
-            square->style.rect.x = x;
-            square->style.rect.y = y;
+            square->style.rect.x = UILength::Px(x);
+            square->style.rect.y = UILength::Px(y);
             square->style.rect.width = UILength::Px(size);
             square->style.rect.height = UILength::Px(size);
             square->color = color;
@@ -1010,6 +1010,47 @@ namespace BECore::Tests {
         EXPECT_TRUE(hud->GetRegions().IsEmpty());
         hud->UpdateLayout(800.0f, 600.0f);
         ExpectRect(plate->rect, 0.0f, 0.0f, 50.0f, 50.0f);
+    }
+
+    TEST_F(UICanvasComponentTest, ACanvasLoadedFromXmlWithEdgeAnchorsLaysOutAsTheModelSays) {
+        const char* xml = R"(<root><component><elements>
+          <element type="UIElement" name="Side" anchorMin="0.65,0" anchorMax="1,1" margin="0,10,0,10"/>
+          <element type="UIElement" name="Bar" anchorMin="10%,1" anchorMax="0.9,1" pivot="0.5,1" y="-10" height="40"/>
+          <element type="UIElement" name="Pct" anchor="TopRight" pivot="1,0" x="-5%" width="100" height="30"/>
+        </elements><variants><variant when="orientation:portrait"><overrides>
+          <set element="Side" anchorMin="0,0.5" anchorMax="1,1"/>
+        </overrides></variant></variants></component></root>)";
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(xml));
+        auto loaded = New<UICanvasComponent>();
+        ASSERT_TRUE(deserializer.BeginObject("component"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+        ASSERT_EQ(loaded->_elements.size(), 3u);
+
+        auto hud = Canvas("Main", "Hud");
+        for (const auto& element : loaded->_elements) {
+            hud->GetRoot().children.push_back(element);
+        }
+        hud->GetLayout().variants = loaded->_variants;
+        hud->Invalidate();
+
+        hud->UpdateLayout(800.0f, 600.0f);
+        const auto find = [&](const char* name) {
+            for (const auto& element : hud->GetRoot().children) {
+                if (element->name == PoolString::Intern(name)) {
+                    return element;
+                }
+            }
+            return IntrusivePtrNonAtomic<UIElement>{};
+        };
+        ExpectRect(find("Side")->rect, 520.0f, 10.0f, 280.0f, 580.0f);  // 0.65 of 800 to the right edge, the margin only on the stretched axis' ends
+        ExpectRect(find("Bar")->rect, 80.0f, 550.0f, 640.0f, 40.0f);    // stretched X, a point Y at the bottom edge: pivot 1, then 10 up
+        ExpectRect(find("Pct")->rect, 660.0f, 0.0f, 100.0f, 30.0f);     // the right edge, 5% of 800 to the left, pivot at its right
+
+        hud->UpdateLayout(600.0f, 800.0f);  // portrait: the variant moves the side panel to the lower half
+        ExpectRect(find("Side")->rect, 0.0f, 410.0f, 600.0f, 380.0f);
     }
 
     TEST_F(UICanvasComponentTest, ADestroyedSceneLeavesNoHandlerBehind) {

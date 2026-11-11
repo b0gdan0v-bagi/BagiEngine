@@ -91,8 +91,8 @@ namespace BECore::Tests {
         };
 
         void Place(UIElement& element, float x, float y, float width, float height) {
-            element.style.rect.x = x;
-            element.style.rect.y = y;
+            element.style.rect.x = UILength::Px(x);
+            element.style.rect.y = UILength::Px(y);
             element.style.rect.width = UILength::Px(width);
             element.style.rect.height = UILength::Px(height);
         }
@@ -395,7 +395,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIPopupTest, AnOpenListThatLeavesTheCanvasIsReported) {
-        _pop->style.rect.y = 500.0f;
+        _pop->style.rect.y = UILength::Px(500.0f);
         _canvas->Invalidate();
         _pop->open = true;
         Draw();

@@ -169,8 +169,8 @@ namespace BECore::Tests {
         auto root = New<UIElement>();
         auto element = AddInRegion(*root, "Plate", kLeft, 40.0f, 20.0f);
         element->style.rect.anchor = UIAnchor::BottomRight;
-        element->style.rect.x = -12.0f;
-        element->style.rect.y = -5.0f;
+        element->style.rect.x = UILength::Px(-12.0f);
+        element->style.rect.y = UILength::Px(-5.0f);
 
         Layout(*root, PlateRegions());
 
@@ -205,7 +205,7 @@ namespace BECore::Tests {
         auto none = AddInRegion(*root, "None", PoolString{}, 40.0f, 20.0f);
         for (const auto& element : {named, none}) {
             element->style.rect.anchor = UIAnchor::BottomRight;
-            element->style.rect.x = -12.0f;
+            element->style.rect.x = UILength::Px(-12.0f);
         }
 
         Layout(*root, PlateRegions());
