@@ -15,9 +15,9 @@ namespace BECore {
      * `lineSpacing`, `minFontSize`, `textOutline`, `textShadow`) and draws with the same `UITextPainter`, so the two draw the same quads. The size is not a field: it is `fontSize` of the
      * owner's style in UI units (24 when it is 0, so a responsive variant of the element can change it). The text may name `{variables}` and `{#strings}`.
      *
-     * **State.** The text takes the colour of the owner's state: `disabledTextColor`, `pressedTextColor`, `selectedTextColor`, `hoverTextColor`, in that order of priority; a transparent
-     * one leaves `textColor` as it is (a button does not tint its caption). A fainter state colour fades the outline and the shadow of the text by the same share. The check is the text
-     * against the rect of the owner: a text that does not fit and cannot shrink is a defect of the layout validator.
+     * **State.** The text takes the colour of the owner's state (a child of a button has the state of the button: `UIElement::GetVisualState`): `disabledTextColor`, `pressedTextColor`,
+     * `selectedTextColor`, `hoverTextColor`, in that order of priority; a transparent one leaves `textColor` as it is (a button does not tint its caption). A fainter state colour fades the outline
+     * and the shadow of the text by the same share. The check is the text against the rect of the owner: a text that does not fit and cannot shrink is a defect of the layout validator.
      */
     class UITextComponent : public UIComponent {
         BE_CLASS(UITextComponent)

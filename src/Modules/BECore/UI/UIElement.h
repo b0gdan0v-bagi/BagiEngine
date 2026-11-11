@@ -41,6 +41,8 @@ namespace BECore {
      * **State.** `hovered` and `pressed` are set by the canvas, `selected` and `groupDisabled` by whoever owns a choice; `GetVisualState()` is what they add up to and `UIStateLook` (the pure
      * rules) turns it into a look. The element's own box takes that look (the fills `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, or the derived shifts) only when a
      * component says `GivesStateLook()`; a panel that merely `blocksInput` is hovered too and must not light up. A control that is its own class (`UIButton`) draws the state look itself.
+     * An element with no `UIInputClicker` is drawn in the state of its nearest ancestor that has one (`GetVisualState`), so the `UIImageComponent` and the `UITextComponent` of the children of
+     * a composed button follow its hover, press and disabled state; the child itself is not hovered (its flags, the hit test and `ui_tree` are its own).
      *
      * **Theme tokens.** A colour field may be a token (`color="@primary"`, UIThemes). The canvas calls `ResolveTheme()` before it draws the element: the token's colour is written into the
      * channels of every colour field (the element's own, the box's, its controls' and components'), so every reader of a colour keeps reading channels. `_themeVersion` is the version of
@@ -161,8 +163,16 @@ namespace BECore {
             return *component;
         }
 
-        /// The pointer and the owner's flags as the state look reads them: `pressed` only while the pointer is still over the element, `disabled` is `IsDisabled()`
+        /// The pointer and the owner's flags as the state look reads them: `pressed` only while the pointer is still over the element, `disabled` is `IsDisabled()`. An element that has no
+        /// `UIInputClicker` of its own but was drawn inside one that has (`SetInheritedState`) answers with that ancestor's state: the image and the text of a button's children follow it
         [[nodiscard]] UIStateLook::State GetVisualState() const;
+
+        /// The element has a `UIInputClicker`: it is the owner of the state its descendants without a clicker are drawn in
+        [[nodiscard]] bool OwnsState() const;
+
+        /// Runtime, called by the canvas before it draws the element: the state of the nearest ancestor that `OwnsState()`, null for none. Ignored by an element that `OwnsState()`. Not
+        /// reflected and not saved; the element's own flags, `ui_tree` and the hit test never read it
+        void SetInheritedState(const UIStateLook::State* state);
 
         /// The element does not react: `groupDisabled` or the `disabled` of its `UIInputClicker` (a control that has a `disabled` of its own adds it). A disabled element still takes the click and
         /// does nothing with it
@@ -175,7 +185,8 @@ namespace BECore {
         /// The box, the fill and the gradient end for the state the element is in now (pure: reads the state and changes nothing)
         [[nodiscard]] UIStateLook::Look GetStateLook() const;
 
-        /// The colour of the selection (the bar, the border and the glow of a selected box): the text colour of a control (or of its `UITextComponent`) that has one, white for a plain element
+        /// The colour of the selection (the bar, the border and the glow of a selected box): the text colour of a control, of its `UITextComponent` or else of the first child that has one (the
+        /// caption of a composed button), white for a plain element
         [[nodiscard]] virtual Color GetStateAccent() const;
 
         /// Some component shows the pointer state in the box, so `DrawSelf` draws the state look
@@ -227,6 +238,8 @@ namespace BECore {
         void DrawPart(IRenderer& renderer, const Rect& area, const Color& fill, UIPartShape shape);
 
     private:
+        bool _hasInheritedState = false;  ///< runtime: `_inheritedState` was passed down by the canvas at the last draw
+        UIStateLook::State _inheritedState;
         uint64_t _themeVersion = 0;  ///< UIThemes::GetVersion() at the last resolve; 0: never (the table starts at 1)
 
         // The triangles of DrawBox, kept so that a steady frame allocates nothing
