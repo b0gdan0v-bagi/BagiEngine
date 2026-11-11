@@ -1,5 +1,7 @@
 #include "Match3GameControl.h"
 
+#include <BECore/Control/Json.h>
+
 namespace BECore::Match3 {
 
     namespace {

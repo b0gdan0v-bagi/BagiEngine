@@ -1,6 +1,7 @@
 #include "GameControlTest.h"
 
 #include <BECore/Control/ControlService.h>
+#include <BECore/Control/Json.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>

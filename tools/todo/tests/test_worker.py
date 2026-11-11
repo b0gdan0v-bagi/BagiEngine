@@ -989,3 +989,11 @@ def test_dispatch_orders_by_preference_and_asks_only_for_the_missing_verdicts(ga
     assert state["candidates"][1]["verdict"]["verdict"] == "eligible"
     assert state["skipped"]["avoided"] == ["editor-x"] and state["skipped"]["blocked"] == [{"id": "held", "by": ["z"]}]
     assert state["slots"] == 1 and state["classify"] == ["ui-one"]  # one cached eligible + one to classify fill 2 x 1 slot
+
+
+def test_configure_shares_ccache_between_the_workers(game: Path, monkeypatch):
+    layout = worker.find_layout(game)
+    calls = []
+    monkeypatch.setattr(worker.subprocess, "run", lambda command, **kw: calls.append(command) or subprocess.CompletedProcess(command, 0, "", ""))
+    worker.configure(layout, layout.worker(1), "macos-debug")
+    assert calls == [["cmake", "--preset", "macos-debug", f"-DENGINE_CCACHE_BASE_DIR={layout.root}"]]
