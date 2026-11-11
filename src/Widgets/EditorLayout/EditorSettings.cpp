@@ -33,6 +33,7 @@ namespace BECore {
         constexpr eastl::string_view kOverlayViewBoundsKey = "overlayViewBounds";
         constexpr eastl::string_view kOverlayCanvasBoundsKey = "overlayCanvasBounds";
         constexpr eastl::string_view kOverlayTouchTargetsKey = "overlayTouchTargets";
+        constexpr eastl::string_view kOverlayRegionsKey = "overlayRegions";
 
         std::string ToStdString(eastl::string_view text) {
             return std::string(text.data(), text.size());
@@ -131,7 +132,7 @@ namespace BECore {
         // Reads the "viewportPreview" object into @p preview and gives the members it does not know to @p extra
         void ReadViewportPreview(const Json& object, PreviewSettings& preview, Json& extra) {
             extra = UnknownMembers(object, {kPreviewAspectKey, kPreviewDeviceKey, kPreviewCustomKey, kPreviewCustomWidthKey, kPreviewCustomHeightKey, kPreviewRotatedKey, kPreviewSafeAreaKey,
-                                            kOverlaySafeAreaKey, kOverlayViewBoundsKey, kOverlayCanvasBoundsKey, kOverlayTouchTargetsKey});
+                                            kOverlaySafeAreaKey, kOverlayViewBoundsKey, kOverlayCanvasBoundsKey, kOverlayTouchTargetsKey, kOverlayRegionsKey});
             PreviewShape& shape = preview.shape;
             ReadEnum(object, kPreviewAspectKey, shape.aspect);
             ReadBool(object, kPreviewCustomKey, shape.custom);
@@ -143,6 +144,7 @@ namespace BECore {
             ReadBool(object, kOverlayViewBoundsKey, preview.overlays.viewBounds);
             ReadBool(object, kOverlayCanvasBoundsKey, preview.overlays.canvasBounds);
             ReadBool(object, kOverlayTouchTargetsKey, preview.overlays.touchTargets);
+            ReadBool(object, kOverlayRegionsKey, preview.overlays.regions);
 
             // The device is stored by name, so a table that changed between builds never gives another device
             if (object.contains(ToStdString(kPreviewDeviceKey))) {
@@ -180,6 +182,7 @@ namespace BECore {
             object[ToStdString(kOverlayViewBoundsKey)] = preview.overlays.viewBounds;
             object[ToStdString(kOverlayCanvasBoundsKey)] = preview.overlays.canvasBounds;
             object[ToStdString(kOverlayTouchTargetsKey)] = preview.overlays.touchTargets;
+            object[ToStdString(kOverlayRegionsKey)] = preview.overlays.regions;
             return object;
         }
 

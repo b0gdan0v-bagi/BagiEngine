@@ -235,4 +235,67 @@ namespace BECore::Tests {
         ExpectRect(UIPreviewOverlay::CanvasBounds(canvas.GetResolved()), {0.0f, 150.0f, 400.0f, 300.0f});
     }
 
+    TEST(UIPreviewOverlayTest, RegionsComeBackInOutputPixelsInTheOrderOfPublishing) {
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.regions.Set(PoolString::Intern("Hand"), {10.0f, 20.0f, 300.0f, 80.0f});
+        canvas.regions.Set(PoolString::Intern("Board"), {0.0f, 100.0f, 400.0f, 300.0f});
+        canvas.Update(Output(400.0f, 600.0f));
+
+        const auto marks = UIPreviewOverlay::RegionMarks(canvas);
+        ASSERT_EQ(marks.size(), 2u);
+        EXPECT_EQ(marks[0].name, PoolString::Intern("Hand"));
+        ExpectRect(marks[0].rect, {10.0f, 20.0f, 300.0f, 80.0f});
+        EXPECT_EQ(marks[1].name, PoolString::Intern("Board"));
+        ExpectRect(marks[1].rect, {0.0f, 100.0f, 400.0f, 300.0f});
+    }
+
+    TEST(UIPreviewOverlayTest, ARegionOfASceneViewCanvasMapsThroughTheFit) {
+        UICanvasLayout canvas;
+        canvas.params.space = CanvasSpace::SceneView;
+        canvas.regions.Set(PoolString::Intern("Board"), {40.0f, 30.0f, 200.0f, 100.0f});
+        UILayoutContext context = Output(400.0f, 600.0f);
+        context.sceneViewWidth = 400.0f;
+        context.sceneViewHeight = 300.0f;
+        canvas.Update(context);
+
+        const auto marks = UIPreviewOverlay::RegionMarks(canvas);
+        ASSERT_EQ(marks.size(), 1u);
+        ExpectRect(marks[0].rect, ViewTransform::Fit(400.0f, 300.0f, 400.0f, 600.0f).ToOutput(40.0f, 30.0f, 200.0f, 100.0f));
+        // The fit puts the view in the middle of a taller output, so the region is below the top of the image
+        EXPECT_GT(marks[0].rect.y, 150.0f);
+    }
+
+    TEST(UIPreviewOverlayTest, ACanvasWithNoLayoutOrNoRegionsGivesNoRegionMarks) {
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.regions.Set(PoolString::Intern("Hand"), {10.0f, 20.0f, 300.0f, 80.0f});
+        EXPECT_TRUE(UIPreviewOverlay::RegionMarks(canvas).empty());
+
+        UICanvasLayout empty = MakeCanvas();
+        empty.Update(Output(400.0f, 600.0f));
+        EXPECT_TRUE(UIPreviewOverlay::RegionMarks(empty).empty());
+    }
+
+    TEST(UIPreviewOverlayTest, AZeroSizedRegionAndOneOutsideTheCanvasAreKept) {
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.regions.Set(PoolString::Intern("Point"), {50.0f, 60.0f, 0.0f, 0.0f});
+        canvas.regions.Set(PoolString::Intern("Spill"), {-30.0f, 500.0f, 200.0f, 300.0f});
+        canvas.Update(Output(400.0f, 600.0f));
+
+        const auto marks = UIPreviewOverlay::RegionMarks(canvas);
+        ASSERT_EQ(marks.size(), 2u);
+        ExpectRect(marks[0].rect, {50.0f, 60.0f, 0.0f, 0.0f});
+        ExpectRect(marks[1].rect, {-30.0f, 500.0f, 200.0f, 300.0f});
+    }
+
+    TEST(UIPreviewOverlayTest, ANamePublishedTwiceShowsOnceWithTheLastRect) {
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.regions.Set(PoolString::Intern("Hand"), {10.0f, 20.0f, 300.0f, 80.0f});
+        canvas.regions.Set(PoolString::Intern("Hand"), {0.0f, 0.0f, 100.0f, 50.0f});
+        canvas.Update(Output(400.0f, 600.0f));
+
+        const auto marks = UIPreviewOverlay::RegionMarks(canvas);
+        ASSERT_EQ(marks.size(), 1u);
+        ExpectRect(marks[0].rect, {0.0f, 0.0f, 100.0f, 50.0f});
+    }
+
 }  // namespace BECore::Tests

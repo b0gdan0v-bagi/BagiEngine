@@ -44,6 +44,19 @@ namespace BECore {
         return marks;
     }
 
+    eastl::vector<RegionMark> UIPreviewOverlay::RegionMarks(const UICanvasLayout& canvas) {
+        eastl::vector<RegionMark> marks;
+        if (!canvas.HasLayout()) {
+            return marks;
+        }
+        const ViewTransform& transform = canvas.GetResolved().transform;
+        marks.reserve(canvas.regions.Size());
+        for (const auto& region : canvas.regions) {
+            marks.push_back({region.name, transform.ToOutput(region.rect.x, region.rect.y, region.rect.w, region.rect.h)});
+        }
+        return marks;
+    }
+
     Rect UIPreviewOverlay::CanvasBounds(const UICanvasResolved& resolved) {
         return resolved.transform.ToOutput(resolved.bounds.x, resolved.bounds.y, resolved.bounds.w, resolved.bounds.h);
     }

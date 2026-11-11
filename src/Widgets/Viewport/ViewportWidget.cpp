@@ -41,6 +41,9 @@ namespace BECore {
         constexpr ImU32 kTouchOkFill = IM_COL32(60, 220, 90, 40);
         constexpr ImU32 kTouchSmallColor = IM_COL32(255, 60, 60, 240);
         constexpr ImU32 kTouchSmallFill = IM_COL32(255, 60, 60, 70);
+        constexpr ImU32 kRegionColor = IM_COL32(0, 215, 215, 230);
+        constexpr ImU32 kRegionFill = IM_COL32(0, 215, 215, 30);
+        constexpr float kRegionLabelInset = 3.0f;  // the gap between the outline of a region and its name, in screen units
         // Bars thinner than this (output pixels) are not tinted
         constexpr float kMinBarSize = 0.5f;
         // Two bounds closer than this (output pixels) are the same rect
@@ -86,6 +89,12 @@ namespace BECore {
                 CollectCanvases(*child, out);
             }
         }
+
+        // A region drawn this frame, with the rect as the game published it (canvas units) for the tooltip
+        struct HoverRegion {
+            RegionMark mark;
+            Rect canvasRect;
+        };
 
         bool SameRect(const Rect& a, const Rect& b) {
             return std::abs(a.x - b.x) < kSameRectTolerance && std::abs(a.y - b.y) < kSameRectTolerance && std::abs(a.w - b.w) < kSameRectTolerance && std::abs(a.h - b.h) < kSameRectTolerance;
@@ -388,6 +397,7 @@ namespace BECore {
             ImGui::Checkbox("View bounds", &_overlays.viewBounds);
             ImGui::Checkbox("Canvas bounds", &_overlays.canvasBounds);
             ImGui::Checkbox("Touch targets", &_overlays.touchTargets);
+            ImGui::Checkbox("Regions", &_overlays.regions);
             ImGui::EndPopup();
         }
     }
@@ -423,13 +433,14 @@ namespace BECore {
             outline(viewRect, kViewOutlineColor);
         }
 
-        if (scene && (_overlays.canvasBounds || _overlays.touchTargets)) {
+        if (scene && (_overlays.canvasBounds || _overlays.touchTargets || _overlays.regions)) {
             eastl::vector<IntrusivePtr<UICanvasComponent>> canvases;
             CollectCanvases(scene->GetRootNode(), canvases);
             const float minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
             const ImVec2 mouse = ImGui::GetIO().MousePos;
             const TouchMark* hoveredMark = nullptr;
             eastl::vector<TouchMark> marks;
+            eastl::vector<HoverRegion> regionHits;
             for (const auto& canvas : canvases) {
                 const UICanvasLayout& layout = canvas->GetLayout();
                 if (!canvas->_visible || !layout.HasLayout()) {
@@ -441,6 +452,22 @@ namespace BECore {
                     outline(bounds, kCanvasBoundsColor);
                     if (!SameRect(bounds, content)) {
                         outline(content, kContentBoundsColor);
+                    }
+                }
+                // Regions go under the touch targets
+                if (_overlays.regions) {
+                    for (RegionMark& mark : UIPreviewOverlay::RegionMarks(layout)) {
+                        const auto [min, max] = toScreen(mark.rect);
+                        fill(mark.rect, kRegionFill);
+                        drawList->AddRect(min, max, kRegionColor);
+                        const eastl::string_view name = mark.name.ToStringView();
+                        const ImVec2 textSize = ImGui::CalcTextSize(name.data(), name.data() + name.size());
+                        if (max.x - min.x >= textSize.x + kRegionLabelInset * 2.0f) {
+                            drawList->AddText({min.x + kRegionLabelInset, min.y + kRegionLabelInset}, kRegionColor, name.data(), name.data() + name.size());
+                        }
+                        if (const Rect* canvasRect = layout.regions.Find(mark.name)) {
+                            regionHits.push_back({std::move(mark), *canvasRect});
+                        }
                     }
                 }
                 if (_overlays.touchTargets) {
@@ -461,6 +488,21 @@ namespace BECore {
             if (hoveredMark) {
                 const eastl::string_view name = hoveredMark->name.ToStringView();
                 ImGui::SetTooltip("%.*s", static_cast<int>(name.size()), name.data());
+            } else if (hovered) {
+                // The smallest region under the pointer, so a region inside another one stays reachable
+                const HoverRegion* smallest = nullptr;
+                for (const HoverRegion& hit : regionHits) {
+                    const auto [min, max] = toScreen(hit.mark.rect);
+                    const bool under = mouse.x >= min.x && mouse.x < max.x && mouse.y >= min.y && mouse.y < max.y;
+                    if (under && (!smallest || hit.mark.rect.w * hit.mark.rect.h < smallest->mark.rect.w * smallest->mark.rect.h)) {
+                        smallest = &hit;
+                    }
+                }
+                if (smallest) {
+                    const eastl::string_view name = smallest->mark.name.ToStringView();
+                    const Rect& rect = smallest->canvasRect;
+                    ImGui::SetTooltip("%.*s\nx %g  y %g  w %g  h %g", static_cast<int>(name.size()), name.data(), rect.x, rect.y, rect.w, rect.h);
+                }
             }
         }
 

@@ -40,6 +40,7 @@ namespace BECore {
         bool viewBounds = false;    ///< the fitted view of the scene inside the target, the bars tinted
         bool canvasBounds = false;  ///< the bounds (and the content bounds, when they differ) of every visible canvas
         bool touchTargets = false;  ///< every visible interactive element, red where it is under UISettings::minTouchSize
+        bool regions = false;       ///< the rects a game published for each visible canvas, with their names
 
         bool operator==(const PreviewOverlays&) const = default;
     };

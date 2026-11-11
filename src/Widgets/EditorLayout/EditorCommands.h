@@ -68,19 +68,20 @@ namespace BECore {
         BE_REFLECT_FIELD bool overlayViewBounds = false;
         BE_REFLECT_FIELD bool overlayCanvasBounds = false;
         BE_REFLECT_FIELD bool overlayTouchTargets = false;
+        BE_REFLECT_FIELD bool overlayRegions = false;
 
         EditorPreferencesChangedEvent() = default;
         EditorPreferencesChangedEvent(bool grid, int32_t step, const PreviewSettings& preview)
             : viewportGrid(grid), viewportGridStep(step), previewAspect(preview.shape.aspect), previewDevice(preview.shape.device), previewCustom(preview.shape.custom),
               previewWidth(preview.shape.customWidth), previewHeight(preview.shape.customHeight), previewRotated(preview.shape.rotated), previewSafeArea(preview.safeArea),
               overlaySafeArea(preview.overlays.safeArea), overlayViewBounds(preview.overlays.viewBounds), overlayCanvasBounds(preview.overlays.canvasBounds),
-              overlayTouchTargets(preview.overlays.touchTargets) {}
+              overlayTouchTargets(preview.overlays.touchTargets), overlayRegions(preview.overlays.regions) {}
 
         /// The viewport preview choice carried by the event
         [[nodiscard]] PreviewSettings GetPreview() const {
             return {{previewAspect, previewDevice, previewCustom, previewWidth, previewHeight, previewRotated},
                     previewSafeArea,
-                    {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets}};
+                    {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets, overlayRegions}};
         }
     };
 
@@ -100,17 +101,19 @@ namespace BECore {
         BE_REFLECT_FIELD bool overlayViewBounds = false;
         BE_REFLECT_FIELD bool overlayCanvasBounds = false;
         BE_REFLECT_FIELD bool overlayTouchTargets = false;
+        BE_REFLECT_FIELD bool overlayRegions = false;
 
         ViewportPreviewChangedEvent() = default;
         explicit ViewportPreviewChangedEvent(const PreviewSettings& preview)
             : previewAspect(preview.shape.aspect), previewDevice(preview.shape.device), previewCustom(preview.shape.custom), previewWidth(preview.shape.customWidth),
               previewHeight(preview.shape.customHeight), previewRotated(preview.shape.rotated), previewSafeArea(preview.safeArea), overlaySafeArea(preview.overlays.safeArea),
-              overlayViewBounds(preview.overlays.viewBounds), overlayCanvasBounds(preview.overlays.canvasBounds), overlayTouchTargets(preview.overlays.touchTargets) {}
+              overlayViewBounds(preview.overlays.viewBounds), overlayCanvasBounds(preview.overlays.canvasBounds), overlayTouchTargets(preview.overlays.touchTargets),
+              overlayRegions(preview.overlays.regions) {}
 
         [[nodiscard]] PreviewSettings GetPreview() const {
             return {{previewAspect, previewDevice, previewCustom, previewWidth, previewHeight, previewRotated},
                     previewSafeArea,
-                    {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets}};
+                    {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets, overlayRegions}};
         }
     };
 
