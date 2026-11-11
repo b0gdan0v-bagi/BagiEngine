@@ -35,7 +35,7 @@ Only non-default values are saved. A malformed value is reported and the default
 - A `UIPanel` draws its sprite over the rounded fill; the sprite is not clipped to the corners.
 - A box that has an effect draws nothing for an empty rect; the default style draws nothing for a colour with no alpha.
 
-## Button states (`UIButton::GetCurrentBox`, rules in the `UIButton.h` comment)
+## Button states (`UIStateLook`: `UIButton::GetCurrentBox` and the box of any element with a `UIInputClicker` call it)
 
 Hover lightens the fill (both gradient ends) and the border; pressed darkens, halves the shadow offset, cuts the blur by a third and drops the highlight; selected raises the border to `textColor` and adds a faint glow of it when the style has none, and the 4-unit bar stays inside the rounded bottom corners; disabled drops shadow and glow and fades fill, border and highlight. An explicit state colour replaces the start colour and the gradient end keeps its offset. A button with the default style is drawn exactly as before.
 
