@@ -3,7 +3,7 @@ name: todo-reviewer
 description: Reviews the whole slice of a todo-loop branch once, at its end, with a fresh context (or, in a second round, the fixes of its findings), builds and runs the tests itself, and answers APPROVE or CHANGES. Cannot edit files. Used by todo-loop only.
 model: opus
 effort: high
-tools: Read, Grep, Glob, Bash, Skill
+tools: Read, Grep, Glob, Bash, Skill, LSP
 ---
 
 # todo-reviewer
@@ -18,7 +18,7 @@ The conductor gives you the area of the entry (`<area>`, `<R>`, `<base>`, `<engi
 
 ## What to check
 
-1. **The diff:** `git log` and `git diff` for the range, WP by WP (`git show` of each `WP k/M` commit) and as a whole. Does each WP do what its goal and acceptance say, no more and no less? Is the slice of the plan closed, and is anything in the plan's checkboxes ticked but not in the diff?
+1. **The diff:** `git log` and `git diff` for the range, WP by WP (`git show` of each `WP k/M` commit) and as a whole. Does each WP do what its goal and acceptance say, no more and no less? Is the slice of the plan closed, and is anything in the plan's checkboxes ticked but not in the diff? **`LSP`** (when the clangd plugin is on; otherwise the tool is absent and `Grep` does the job): for every function, virtual or field whose signature or meaning the diff changes, check that every caller and override was updated (`findReferences`, `incomingCalls`). Its diagnostics are a hint, never a verdict: headers that rely on the PCH can show errors the build does not have; the build and the tests decide.
 2. **Build and tests, run by you:** the build through a preset of `CMakePresets.json` with the targets of the rules file, and `ctest --preset <p>` (build the test targets and, for control-API smoke tests, the games). Compare the failures with the baseline names the conductor gives you; a test that was green and is red now blocks.
 3. **Repository rules:** the `CLAUDE.md` files the rules file names (the root one of the repository and `<engine>/CLAUDE.md`: naming, EASTL, `PoolString`, `CORE_ENUM`, `IntrusivePtr`, `Format()`, no `std::string` where `PoolString` fits, no C-style casts, no magic numbers, `override`, namespace closing comments), the nested `CLAUDE.md` of every touched directory and the matching `.claude/rules/` file. The zones the rules file lists (vendored code) must be untouched. Exceptions are disabled; `ASSERT()` has no side effects.
 4. **Docs:** run `python3 <engine>/CI/scripts/check_doc_budget.py --root <R>`; a file over its budget is a finding, and so is new doc text that restates a test, a constant's value, a measurement or the history of a decision, or that sits in the root `CLAUDE.md` while it is about one folder. A nested `CLAUDE.md` that the change made false is a finding; so is an entry whose text in the store (`python3 <engine>/tools/todo/todo.py show <id>`) the change made false.
