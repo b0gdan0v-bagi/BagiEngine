@@ -30,7 +30,8 @@ namespace BECore {
      * output pixels, the pixels of a `screenshot`), "children"}, plus "text" for a label or a button (as shown, variables replaced) and "action", "disabled"
      * (the button's own flag or its group's: whether a click does anything), "value" (what the click emits with the action; "" for a plain button) and
      * "selected" (a segment of a choice group that the bound variable names) for a button, and, for an element made of components (`UIElement::components`, a button is not a class there):
-     * "components" (the type names in list order, only when it has any), "text" (the `UITextComponent`'s, as shown), "icon" (the sprite of its `UIImageComponent`), "tooltip" (its
+     * "components" (the type names in list order, only when it has any), "text" (the `UITextComponent`'s, as shown), "icon" (the sprite of its `UIImageComponent`; an element with a
+     * `UIInputClicker` and none of its own takes them from the first descendant that has one, not going through another clicker: the caption and the icon child of a button), "tooltip" (its
      * `UITooltipComponent`'s source) and, with a `UIInputClicker`, "action", "value", "disabled" (the clicker's flag or its group's) and "selected", with the meaning they have for a button, and
      * "bind" (the variable), "selectedValue" (its value: "" when unset) and "disabled" for a `UISegmented`. The value controls add: for a `UIToggle` (also a label, so it has "text", the caption)
      * "bind", "onValue", "offValue", "checked" (the variable equals `onValue`), "action" and "disabled"; for a `UIProgressBar` "bind", "minValue", "maxValue" and "fraction" (0..1, how much is

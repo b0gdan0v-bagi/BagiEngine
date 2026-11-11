@@ -89,8 +89,27 @@ namespace BECore {
             return json;
         }
 
+        /// The first component of type `T` that `accept` takes, in the descendants of `element` (depth first, in the order of the children). It does not go through an element with a
+        /// `UIInputClicker`: that is another button, and what it shows is its own
+        template <class T, class Accept>
+        const T* FindInDescendants(const UIElement& element, const Accept& accept) {
+            for (const auto& child : element.children) {
+                if (child->GetComponent<UIInputClicker>() != nullptr) {
+                    continue;
+                }
+                if (const auto* component = child->GetComponent<T>(); component != nullptr && accept(*component)) {
+                    return component;
+                }
+                if (const T* found = FindInDescendants<T>(*child, accept)) {
+                    return found;
+                }
+            }
+            return nullptr;
+        }
+
         /// The button-like facts of an element that is composed (a button is not a class there): the type names of its components and what its text, clicker, image and tooltip say, under
-        /// the names and with the meaning they have for a `UIButton`. Only what the element has: a plain element gets nothing
+        /// the names and with the meaning they have for a `UIButton`. Only what the element has: a plain element gets nothing. A clicker element with no text or image of its own answers
+        /// `text` and `icon` from the first descendant that has one (the caption and the icon child of a button made of children)
         void DescribeComponents(const UIElement& element, Json& json) {
             if (element.components.empty()) {
                 return;
@@ -100,7 +119,13 @@ namespace BECore {
                 types.push_back(MakeJsonString(component->GetTypeMeta().typeName));
             }
             json["components"] = std::move(types);
-            if (const auto* caption = element.GetComponent<UITextComponent>(); caption != nullptr && dynamic_cast<const UILabel*>(&element) == nullptr) {
+            const bool isLabel = dynamic_cast<const UILabel*>(&element) != nullptr;
+            const bool hasClicker = element.GetComponent<UIInputClicker>() != nullptr;
+            const UITextComponent* caption = element.GetComponent<UITextComponent>();
+            if (caption == nullptr && hasClicker && !isLabel) {
+                caption = FindInDescendants<UITextComponent>(element, [](const UITextComponent&) { return true; });
+            }
+            if (caption != nullptr && !isLabel) {
                 json["text"] = MakeJsonString(caption->GetDisplayText());
             }
             if (const auto* clicker = element.GetComponent<UIInputClicker>()) {
@@ -109,7 +134,11 @@ namespace BECore {
                 json["value"] = MakeJsonString(clicker->value.ToStringView());
                 json["selected"] = element.selected;
             }
-            if (const auto* image = element.GetComponent<UIImageComponent>(); image != nullptr && !image->sprite.Empty()) {
+            const UIImageComponent* image = element.GetComponent<UIImageComponent>();
+            if (image == nullptr && hasClicker) {
+                image = FindInDescendants<UIImageComponent>(element, [](const UIImageComponent& found) { return !found.sprite.Empty(); });
+            }
+            if (image != nullptr && !image->sprite.Empty()) {
                 json["icon"] = MakeJsonString(image->sprite.ToStringView());
             }
             const eastl::string& tooltip = element.GetTooltipText();
