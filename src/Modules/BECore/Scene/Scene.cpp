@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/SceneDrawSystem.h>
+#include <BECore/Scene/SceneNodeInstance.h>
 #include <Events/SceneEvents.h>
 #include <Generated/Scene.gen.hpp>
 
@@ -182,6 +183,44 @@ namespace BECore {
         }
 
         return node;
+    }
+
+    IntrusivePtr<SceneNode> Scene::InstantiateNode(pugi::xml_node reference, const NodeFileLoader& loader, SceneNode* parent, size_t index) {
+        const eastl::string ref = reference.attribute(kNodeRefAttribute.data()).as_string();
+        const auto fail = [&](eastl::string_view reason) {
+            LOG_ERROR(Format("Scene '{}': cannot instantiate '{}': {}", _name.CStr(), ref, reason).c_str());
+            return IntrusivePtr<SceneNode>{};
+        };
+
+        if (!_rootNode) {
+            return fail("the scene is not initialized");
+        }
+        SceneNode* const target = parent ? parent : _rootNode.Get();
+        if (target->_scene != this || !_registry.valid(target->_entity)) {
+            return fail("the parent is not a node of this scene");
+        }
+
+        pugi::xml_document expanded;
+        eastl::string error;
+        if (!ExpandNodeReference(reference, loader, true, expanded, error)) {
+            return fail(error);
+        }
+
+        auto node = DeserializeNode(expanded.document_element(), Format("{} instance of {}", _name.CStr(), ref));
+        node->WireToScene(this, target);
+        const size_t place = eastl::min(index, target->_children.size());
+        target->_children.insert(target->_children.begin() + static_cast<ptrdiff_t>(place), node);
+        return node;
+    }
+
+    IntrusivePtr<SceneNode> Scene::InstantiateNode(eastl::string_view ref, SceneNode* parent, size_t index) {
+        pugi::xml_document document;
+        document.append_child(kNodeElementName.data()).append_attribute(kNodeRefAttribute.data()).set_value(eastl::string(ref).c_str());
+        return InstantiateNode(document.document_element(), MakeFileSystemNodeLoader(CoreManager::GetFileSystem()), parent, index);
+    }
+
+    IntrusivePtr<SceneNode> Scene::InstantiateNode(const XmlNode& reference, SceneNode* parent, size_t index) {
+        return InstantiateNode(reference.GetPugiNode(), MakeFileSystemNodeLoader(CoreManager::GetFileSystem()), parent, index);
     }
 
     void Scene::DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>) {

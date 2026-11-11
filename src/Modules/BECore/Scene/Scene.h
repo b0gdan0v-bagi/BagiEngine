@@ -2,6 +2,7 @@
 
 #include <BECore/Renderer/ViewTransform.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Scene/SceneNodeFiles.h>
 #include <BECore/Scene/SceneView.h>
 #include <entt/entt.hpp>
 
@@ -112,6 +113,37 @@ namespace BECore {
         PoolString GetName() const;
 
         IntrusivePtr<SceneNode> CreateNode(PoolString name, SceneNode* parent = nullptr);
+
+        /// The @p index of InstantiateNode() that means "after the last child"
+        static constexpr size_t kAppend = std::numeric_limits<size_t>::max();
+
+        /**
+         * @brief Instantiates a node file at run time, with the overrides a `<node ref>` of a scene file would have
+         *
+         * @p reference is a `<node ref=".." name=".." layer="..">` element with the same overrides as in a scene file
+         * (ApplyNodeOverrides), so a game writes the overrides as XML text and loads it with XmlDocument: there is no second
+         * override language. The expansion is ExpandNodeReference, the same function that expands the scene file, with the
+         * source mark: the new node answers SceneNode::GetSourceRef(). The node is wired as a loaded one is (entity, then
+         * IComponent::OnAttached of every component) and inserted into the children of @p parent at @p index, so its draw
+         * and input order follow from the tree. It has no children of its own.
+         *
+         * A reference that cannot be used (invalid, a file that is missing or of another content version, a bad override), a
+         * scene that is not initialized and a @p parent that is not a live node of this scene are one LOG_ERROR that names the
+         * scene and the reference; an empty pointer is returned and the scene is not changed.
+         *
+         * @param reference The `<node ref="..">` element
+         * @param loader Reads the node file of the reference
+         * @param parent The parent node, the scene's root when null
+         * @param index Place among the children of the parent, clamped to their number; kAppend is the last
+         * @return The new node (also held by its parent), empty on failure
+         */
+        IntrusivePtr<SceneNode> InstantiateNode(pugi::xml_node reference, const NodeFileLoader& loader, SceneNode* parent = nullptr, size_t index = kAppend);
+
+        /// InstantiateNode() of a reference without overrides (`nodes/MahjongHud`), the node file found through the FileSystem of CoreManager (a game's `config/nodes/X.xml` wins over the engine's)
+        IntrusivePtr<SceneNode> InstantiateNode(eastl::string_view ref, SceneNode* parent = nullptr, size_t index = kAppend);
+
+        /// InstantiateNode() of a reference element with overrides, the node file found through the FileSystem of CoreManager
+        IntrusivePtr<SceneNode> InstantiateNode(const XmlNode& reference, SceneNode* parent = nullptr, size_t index = kAppend);
 
         /// Called by SceneNode::RemoveChild() only: destroys the entity of @p node and of its descendants and resets their GetEntity() to entt::null.
         void DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>);
