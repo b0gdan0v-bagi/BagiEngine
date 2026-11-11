@@ -100,7 +100,7 @@ namespace BECore {
                 types.push_back(MakeJsonString(component->GetTypeMeta().typeName));
             }
             json["components"] = std::move(types);
-            if (const auto* caption = element.GetComponent<UITextComponent>(); caption != nullptr && dynamic_cast<const UILabel*>(&element) == nullptr) {
+            if (const auto* caption = element.GetComponent<UITextComponent>(); caption != nullptr && !element.Is<UILabel>()) {
                 json["text"] = MakeJsonString(caption->GetDisplayText());
             }
             if (const auto* clicker = element.GetComponent<UIInputClicker>()) {

@@ -95,7 +95,7 @@ A button is no class but a set of components on one `UIElement` (`<components><c
 | `UIImageComponent` | `sprite`, `tint`, `hoverTint`, `pressedTint`, `disabledTint`, `stretch` | the sprite fitted and centred in the owner's rect (`UISprite::FitInto`); a transparent state tint is derived (`UIStateLook::ResolveTint`) |
 | `UITextComponent` | the text fields of `UILabel` under the same names, `hoverTextColor`, `pressedTextColor`, `disabledTextColor`, `selectedTextColor` | the text in the owner's rect, at the owner's `fontSize`; a transparent state colour leaves `textColor`; measured by `CheckContent` |
 | `UIInputClicker` | `action`, `value`, `disabled` | a click emits `ActionEvent(action, value)`; makes the element `IsInteractive()` (hit target, touch size, `ui_click`) and gives its box the state look; a disabled one still takes the click |
-| `UITooltipComponent` | `text` | the tooltip of any element, not only of a clicker |
+| `UITooltipComponent` | `text` | the tooltip of a hit-testable element (a clicker or `blocksInput`), not only of a clicker |
 
 - **One component of each type per element:** `GetComponent<T>()` is the first, `AddComponent<T>()` returns the existing one, a second in a file is logged and dropped.
 - **Order:** the element draws its box, then its components in list order, then its children. `OnClick` / `OnPress` / `OnDrag` and `CheckContent` reach the components with the owner as the argument; a subclass that overrides them is unchanged.
@@ -112,7 +112,6 @@ A button is no class but a set of components on one `UIElement` (`<components><c
 </element>
 ```
 
-The screen test is `UIComposedButtonScreenTest` (each composed button beside a `UIButton` twin on the matrix).
 
 ## Variables and strings
 

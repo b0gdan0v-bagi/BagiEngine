@@ -26,6 +26,7 @@ namespace BECore::Tests {
         //   Edge  (752, 540, 48 x 48)   a tooltip, in the corner of the screen
         //   Under (50, 170, 300 x 48)   the plate of Icon is drawn over it
         //   Comp, CompLang, CompBare (y 420)   composed elements (a UIInputClicker): a UITooltipComponent, one of a string key, none
+        //   Panel (700, 420)  blocksInput and a UITooltipComponent; Ghost (700, 480)  a UITooltipComponent and no hit target
         // Modal (layer 20, hidden until a test shows it): modal, one button with a tooltip at (400, 400)
         constexpr const char* kTooltipXml = R"(
 <SceneManager><scenes>
@@ -47,6 +48,12 @@ namespace BECore::Tests {
           </element>
           <element type="UIElement" name="CompBare" x="500" y="420" width="48" height="48" color="30,30,30,255">
             <components><component type="UIInputClicker" action="OpenCompBare"/></components>
+          </element>
+          <element type="UIElement" name="Panel" blocksInput="true" x="700" y="420" width="48" height="48" color="30,30,30,255">
+            <components><component type="UITooltipComponent" text="Panel tip"/></components>
+          </element>
+          <element type="UIElement" name="Ghost" x="700" y="480" width="48" height="48" color="30,30,30,255">
+            <components><component type="UITooltipComponent" text="Ghost tip"/></components>
           </element>
         </elements>
       </component>
@@ -567,6 +574,17 @@ namespace BECore::Tests {
         Wait(3.0);
 
         EXPECT_FALSE(Plate());
+    }
+
+    TEST_F(UICanvasTooltipTest, ABlocksInputElementShowsItsTooltipComponentAndAnElementWithNoHitTargetShowsNone) {
+        HoverUntilShown("Panel");
+        const auto plate = Plate();
+        ASSERT_TRUE(plate.has_value());
+        EXPECT_EQ(GlyphsIn(*plate), 8u) << "Panel tip";
+
+        HoverUntilShown("Ghost");
+        Wait(3.0);
+        EXPECT_FALSE(Plate()) << "the canvas asks only hit-testable elements";
     }
 
     TEST_F(UICanvasTooltipTest, ATooltipOfAComposedElementFollowsTheLanguageToo) {

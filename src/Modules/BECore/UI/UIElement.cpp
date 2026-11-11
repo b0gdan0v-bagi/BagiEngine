@@ -8,6 +8,10 @@
 
 namespace BECore {
 
+    namespace {
+        constexpr Color kDefaultStateAccent{255, 255, 255, 255};  // the accent of a box without a caption
+    }  // namespace
+
     IntrusivePtr<UIElement> UIElement::AddChild(PoolString childName) {
         auto child = New<UIElement>();
         child->name = childName;
@@ -76,7 +80,7 @@ namespace BECore {
         if (const UITextComponent* caption = GetComponent<UITextComponent>()) {
             return caption->textColor;
         }
-        return {255, 255, 255, 255};
+        return kDefaultStateAccent;
     }
 
     bool UIElement::GivesStateLook() const {
