@@ -7,6 +7,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UILayoutValidator.h>
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <Common/EngineEnvironment.h>
@@ -504,6 +505,220 @@ namespace BECore::Tests {
         probe.canShrink = true;
         const auto shrinking = _canvas->GetLayout().Validate({});
         EXPECT_TRUE(eastl::none_of(shrinking.begin(), shrinking.end(), [](const UILayoutIssue& issue) { return issue.kind == UILayoutIssueKind::TextDoesNotFit; }));
+    }
+
+    // ---- UIImageComponent -------------------------------------------------------------------------------------------------
+
+    namespace {
+
+        constexpr uint32_t kPictureSide = 32;
+        constexpr float kPictureHalfHeight = 16.0f;
+
+        /// Plain is 60 x 60 at (500, 10); the box is drawn under the picture
+        constexpr float kPlainX = 500.0f;
+        constexpr float kPlainY = 10.0f;
+        constexpr float kPlainSide = 60.0f;
+
+        const Color kHoverTint{1, 2, 3, 255};
+        const Color kPressedTint{4, 5, 6, 255};
+        const Color kDisabledTint{7, 8, 9, 128};
+
+    }  // namespace
+
+    class UIImageComponentTest : public UIComponentTest {
+    protected:
+        void SetUp() override {
+            UIComponentTest::SetUp();
+            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kPictureSide) * kPictureSide * 4, 200);
+            _texture = _renderer->CreateTexture(pixels.data(), kPictureSide, kPictureSide);
+            _image = &Get("Plain").AddComponent<UIImageComponent>();
+            _image->GetSprite().SetTexture(_texture);
+        }
+
+        void TearDown() override {
+            _image = nullptr;
+            _texture.Reset();
+            UIComponentTest::TearDown();
+        }
+
+        /// The one textured draw of the last frame, none when there was no picture
+        std::optional<DrawCall> Picture() const {
+            std::optional<DrawCall> found;
+            for (const DrawCall& call : _renderer->calls) {
+                if (call.kind == DrawKind::Texture) {
+                    EXPECT_FALSE(found.has_value()) << "more than one picture";
+                    found = call;
+                }
+            }
+            return found;
+        }
+
+        IntrusivePtr<ITexture> _texture;
+        UIImageComponent* _image = nullptr;
+    };
+
+    TEST(UISpriteFitTest, TheLargestRectOfTheProportionsThatFitsIsCentred) {
+        const Rect wide = UISprite::FitInto({10.0f, 20.0f, 100.0f, 50.0f}, {0.0f, 0.0f, 32.0f, 32.0f});
+        EXPECT_NEAR(wide.x, 35.0f, 1e-3f);
+        EXPECT_NEAR(wide.y, 20.0f, 1e-3f);
+        EXPECT_NEAR(wide.w, 50.0f, 1e-3f);
+        EXPECT_NEAR(wide.h, 50.0f, 1e-3f);
+
+        const Rect tall = UISprite::FitInto({0.0f, 0.0f, 20.0f, 60.0f}, {5.0f, 5.0f, 40.0f, 20.0f});
+        EXPECT_NEAR(tall.x, 0.0f, 1e-3f);
+        EXPECT_NEAR(tall.y, 25.0f, 1e-3f);
+        EXPECT_NEAR(tall.w, 20.0f, 1e-3f);
+        EXPECT_NEAR(tall.h, 10.0f, 1e-3f);
+    }
+
+    TEST(UISpriteFitTest, AnEmptySourceFillsTheArea) {
+        const Rect area{3.0f, 4.0f, 50.0f, 70.0f};
+        const Rect fitted = UISprite::FitInto(area, {});
+        EXPECT_FLOAT_EQ(fitted.x, area.x);
+        EXPECT_FLOAT_EQ(fitted.y, area.y);
+        EXPECT_FLOAT_EQ(fitted.w, area.w);
+        EXPECT_FLOAT_EQ(fitted.h, area.h);
+    }
+
+    TEST_F(UIImageComponentTest, ThePictureIsFittedAndCentredInTheRectOfTheOwner) {
+        _image->GetSprite().SetTexture(_texture, {0.0f, 0.0f, static_cast<float>(kPictureSide), kPictureHalfHeight});
+        Draw();
+        const auto picture = Picture();
+        ASSERT_TRUE(picture.has_value());
+        EXPECT_NEAR(picture->rect.x, kPlainX, 1e-3f);
+        EXPECT_NEAR(picture->rect.w, kPlainSide, 1e-3f);
+        EXPECT_NEAR(picture->rect.h, kPlainSide * 0.5f, 1e-3f) << "the proportions of the sprite are kept";
+        EXPECT_NEAR(picture->rect.y, kPlainY + kPlainSide * 0.25f, 1e-3f) << "centred in the height";
+    }
+
+    TEST_F(UIImageComponentTest, ASquarePictureInAWideRectKeepsItsShape) {
+        UIElement& host = Get("Host");
+        auto& image = host.AddComponent<UIImageComponent>();
+        image.GetSprite().SetTexture(_texture);
+        _image->tint = UIColor{0, 0, 0, 0};  // the picture of Plain is not drawn: only Host's is left
+        Draw();
+        const auto picture = Picture();
+        ASSERT_TRUE(picture.has_value());
+        EXPECT_NEAR(picture->rect.w, host.rect.h, 1e-3f);
+        EXPECT_NEAR(picture->rect.h, host.rect.h, 1e-3f);
+        EXPECT_NEAR(picture->rect.x, host.rect.x + (host.rect.w - host.rect.h) * 0.5f, 1e-3f);
+    }
+
+    TEST_F(UIImageComponentTest, StretchFillsTheRect) {
+        _image->GetSprite().SetTexture(_texture, {0.0f, 0.0f, static_cast<float>(kPictureSide), kPictureHalfHeight});
+        _image->stretch = true;
+        Draw();
+        const auto picture = Picture();
+        ASSERT_TRUE(picture.has_value());
+        EXPECT_NEAR(picture->rect.x, kPlainX, 1e-3f);
+        EXPECT_NEAR(picture->rect.y, kPlainY, 1e-3f);
+        EXPECT_NEAR(picture->rect.w, kPlainSide, 1e-3f);
+        EXPECT_NEAR(picture->rect.h, kPlainSide, 1e-3f);
+    }
+
+    TEST_F(UIImageComponentTest, ThePictureIsDrawnAfterTheBoxOfItsOwner) {
+        Draw();
+        size_t boxAt = _renderer->calls.size();
+        size_t pictureAt = _renderer->calls.size();
+        for (size_t i = 0; i < _renderer->calls.size(); ++i) {
+            const DrawCall& call = _renderer->calls[i];
+            if (call.kind == DrawKind::Rect && call.rect.x == kPlainX) {
+                boxAt = i;
+            } else if (call.kind == DrawKind::Texture) {
+                pictureAt = i;
+            }
+        }
+        ASSERT_LT(boxAt, _renderer->calls.size());
+        EXPECT_LT(boxAt, pictureAt);
+    }
+
+    TEST_F(UIImageComponentTest, ATransparentTintDrawsNothing) {
+        _image->tint = UIColor{255, 255, 255, 0};
+        Draw();
+        EXPECT_FALSE(Picture().has_value());
+    }
+
+    TEST_F(UIImageComponentTest, AnUnknownSpriteDrawsNothing) {
+        auto& other = Get("Passive").AddComponent<UIImageComponent>();
+        other.sprite = PoolString::Intern("NoSuchSprite");
+        _image->tint = UIColor{0, 0, 0, 0};
+        Draw();
+        EXPECT_FALSE(Picture().has_value());
+    }
+
+    TEST_F(UIImageComponentTest, TheTintFollowsTheStateOfTheOwner) {
+        UIElement& plain = Get("Plain");
+        _image->hoverTint = kHoverTint;
+        _image->pressedTint = kPressedTint;
+        _image->disabledTint = kDisabledTint;
+        const auto drawn = [this]() {
+            Draw();
+            const auto picture = Picture();
+            return picture.has_value() ? picture->color : Color{};
+        };
+
+        EXPECT_TRUE(ColorsEqual(drawn(), Color(255, 255, 255, 255)));
+        plain.hovered = true;
+        EXPECT_TRUE(ColorsEqual(drawn(), kHoverTint));
+        plain.pressed = true;
+        EXPECT_TRUE(ColorsEqual(drawn(), kPressedTint));
+        plain.pressed = false;
+        plain.hovered = false;
+        plain.selected = true;
+        EXPECT_TRUE(ColorsEqual(drawn(), Color(255, 255, 255, 255))) << "a selected picture is left alone";
+        plain.groupDisabled = true;
+        EXPECT_TRUE(ColorsEqual(drawn(), kDisabledTint));
+    }
+
+    TEST_F(UIImageComponentTest, ATintThatIsNotGivenForAStateIsDerivedFromTheTint) {
+        UIElement& plain = Get("Plain");
+        _image->tint = UIColor{100, 120, 140, 200};
+        const Color base = _image->tint;
+        const UIStateLook::State hovered{true, false, false, false};
+        const UIStateLook::State pressed{true, true, false, false};
+        const UIStateLook::State disabled{false, false, true, false};
+
+        plain.hovered = true;
+        Draw();
+        EXPECT_TRUE(ColorsEqual(Picture()->color, UIStateLook::ResolveTint(base, {}, hovered)));
+        EXPECT_TRUE(ColorsEqual(_image->GetStateTint(hovered), UIStateLook::ResolveTint(base, {}, hovered)));
+        EXPECT_GT(_image->GetStateTint(hovered).r, base.r) << "lighter under the pointer";
+        EXPECT_LT(_image->GetStateTint(pressed).r, base.r) << "darker pressed";
+        EXPECT_LT(_image->GetStateTint(disabled).a, base.a) << "fainter disabled";
+    }
+
+    TEST_F(UIImageComponentTest, APressThatLeftTheOwnerIsNotShownAsPressed) {
+        UIElement& plain = Get("Plain");
+        _image->pressedTint = kPressedTint;
+        plain.pressed = true;
+        plain.hovered = false;
+        Draw();
+        EXPECT_TRUE(ColorsEqual(Picture()->color, Color(255, 255, 255, 255)));
+    }
+
+    TEST_F(UIImageComponentTest, TheFieldsComeFromAFileAndSaveBack) {
+        constexpr const char* xml =
+            R"(<root><element type="UIElement" name="Icon" width="40" height="40"><components><component type="UIImageComponent" sprite="icons.play" tint="10,20,30,255" hoverTint="1,2,3,255" pressedTint="4,5,6,255" disabledTint="7,8,9,128" stretch="true"/></components></element></root>)";
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(xml));
+        auto loaded = New<UIElement>();
+        ASSERT_TRUE(deserializer.BeginObject("element"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+
+        const UIImageComponent* image = loaded->GetComponent<UIImageComponent>();
+        ASSERT_NE(image, nullptr);
+        EXPECT_EQ(image->sprite, PoolString::Intern("icons.play"));
+        EXPECT_TRUE(ColorsEqual(image->tint, Color(10, 20, 30, 255)));
+        EXPECT_TRUE(ColorsEqual(image->hoverTint, kHoverTint));
+        EXPECT_TRUE(ColorsEqual(image->pressedTint, kPressedTint));
+        EXPECT_TRUE(ColorsEqual(image->disabledTint, kDisabledTint));
+        EXPECT_TRUE(image->stretch);
+
+        const eastl::string saved = ElementToXml(*loaded);
+        EXPECT_NE(saved.find("hoverTint"), eastl::string::npos) << saved.c_str();
+        EXPECT_NE(saved.find("stretch"), eastl::string::npos) << saved.c_str();
     }
 
 }  // namespace BECore::Tests

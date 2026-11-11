@@ -2,6 +2,7 @@
 
 #include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIComponent.h>
+#include <BECore/UI/UIStateLook.h>
 #include <BECore/UI/UITextEffects.h>
 #include <BECore/UI/UITextPainter.h>
 

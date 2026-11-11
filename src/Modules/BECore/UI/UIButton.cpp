@@ -85,16 +85,8 @@ namespace BECore {
         if (!texture || tint.a == 0) {
             return;
         }
-        // The largest rect of the sprite's proportions that fits the icon rect, centred: the sprite is never squashed
         const Rect source = _iconSprite.GetSource();
-        Rect target = area;
-        if (!source.IsEmpty()) {
-            const float scale = std::min(area.w / source.w, area.h / source.h);
-            target.w = source.w * scale;
-            target.h = source.h * scale;
-            target.x = area.x + (area.w - target.w) * 0.5f;
-            target.y = area.y + (area.h - target.h) * 0.5f;
-        }
+        const Rect target = UISprite::FitInto(area, source);
         renderer.DrawTexture(*texture, &source, target.x, target.y, target.w, target.h, tint);
     }
 
