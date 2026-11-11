@@ -36,7 +36,8 @@ namespace BECore {
         /**
          * @brief The "UI elements" section of a node with a canvas: the element tree and the rect inspector of the selected element
          *
-         * Edits the authored `style` of the element, live; it is not saved to a node file or a `.ui.xml` yet.
+         * Edits the authored `style` of the element, live. It is saved in the scene file (for an instance of a node file the whole `<elements>` list as an override); the node file and a `.ui.xml` are
+         * never edited.
          * @return true when an element changed
          */
         bool RenderUIElements(UICanvasComponent& canvas);
@@ -72,7 +73,8 @@ namespace BECore {
 
         /**
          * @brief Replace the `<scene>` of the active scene in SceneConfig.xml (WriteSceneToConfig) and save the file
-         *        through ConfigManager. The other scenes of the file stay as they are.
+         *        through ConfigManager, with the node files found through the FileSystem. The other scenes of the file stay as they are;
+         *        an instance that cannot be written as a reference is written inline and logged as a warning.
          */
         void SaveScene();
 
