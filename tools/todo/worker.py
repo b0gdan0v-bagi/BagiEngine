@@ -41,7 +41,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 if sys.version_info < (3, 10):  # before the first `X | None` evaluated at import, which 3.9 turns into a TypeError
@@ -1297,6 +1297,243 @@ def cmd_overlap(layout: Layout, args) -> None:
         print(f"{args.id}: no busy entry names its files ({len(ours)} paths in its text)")
 
 
+# --- dispatch: one read of what /todo-dispatch decides on --------------------------------------------
+#
+# The owner's preferences (`prefer`, `avoid`: ids, id prefixes, words of a title, area names) and the classifier's
+# verdicts live in ~/.claude/todo/, by the workers' root, like the queues. A verdict is reused while the entry's
+# `version` is the same and it is not older than its time to live, so the classifier reads only new or edited
+# entries, and only as many as the free slots need.
+
+VERDICT_TTL_S = 14 * 24 * 3600
+VERDICT_SHORT_TTL_S = 24 * 3600  # reasons that depend on other entries
+VOLATILE_REASONS = ("blocked by", "depends on unmerged", "conflicts with")  # never reused
+SHORT_REASONS = ("needs engine change",)
+CLASSIFY_MARGIN = 2  # candidates sent to the classifier per free slot (conflicts eat some)
+
+
+def prefs_file() -> Path:
+    return claude_home() / "todo" / "dispatch-prefs.json"
+
+
+def verdicts_file() -> Path:
+    return claude_home() / "todo" / "dispatch-verdicts.json"
+
+
+def read_rooted(path: Path, layout: Layout) -> dict:
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    mine = data.get(str(layout.root)) if isinstance(data, dict) else None
+    return mine if isinstance(mine, dict) else {}
+
+
+def write_rooted(path: Path, layout: Layout, value: dict) -> None:
+    try:
+        data = json.loads(path.read_text())
+        data = data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        data = {}
+    data[str(layout.root)] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(data, indent=1, ensure_ascii=False))
+    temporary.replace(path)
+
+
+def split_terms(text: str | None) -> list[str]:
+    return [term.strip() for term in (text or "").split(",") if term.strip()]
+
+
+def term_matches(term: str, entry: dict) -> bool:
+    """A term names an entry by its area, its id, a prefix of a word of its id (`ui` for `mahjong-ui-skin`) or of
+    a word of its title (`UI` for "UI colours are literals"), ignoring case."""
+    if term.lower() == (entry.get("area") or "").lower():
+        return True
+    pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(term), re.I)
+    return bool(pattern.search(entry.get("id") or "") or pattern.search(entry.get("title") or ""))
+
+
+def preference_rank(prefer: list[str], entry: dict) -> int | None:
+    """The index of the first `prefer` term that names the entry; None when none does."""
+    return next((i for i, term in enumerate(prefer) if term_matches(term, entry)), None)
+
+
+def cmd_prefs(layout: Layout, args) -> None:
+    """`prefs` shows, `prefs --prefer a,b --avoid c` replaces the given fields, `prefs --clear` empties them."""
+    prefs = read_rooted(prefs_file(), layout)
+    if args.clear:
+        prefs = {}
+    for field in ("prefer", "avoid"):
+        given = getattr(args, field)
+        if given is not None:
+            prefs[field] = split_terms(given)
+    if args.clear or args.prefer is not None or args.avoid is not None:
+        prefs["updated"] = datetime.now(timezone.utc).date().isoformat()
+        write_rooted(prefs_file(), layout, prefs)
+    shown = {"prefer": prefs.get("prefer", []), "avoid": prefs.get("avoid", []), "updated": prefs.get("updated")}
+    if args.json:
+        print(json.dumps(shown, ensure_ascii=False))
+        return
+    print(f"prefer: {', '.join(shown['prefer']) or '-'}\navoid: {', '.join(shown['avoid']) or '-'}")
+
+
+def fresh_verdict(cached: dict | None, version, now: float) -> dict | None:
+    if not cached or cached.get("version") != version:
+        return None
+    reason = cached.get("reason") or ""
+    if cached.get("verdict") == "skip" and reason.startswith(VOLATILE_REASONS):
+        return None
+    ttl = VERDICT_SHORT_TTL_S if reason.startswith(SHORT_REASONS) else VERDICT_TTL_S
+    return cached if now - float(cached.get("at") or 0) <= ttl else None
+
+
+def open_entries(layout: Layout) -> list[dict]:
+    """The entries open, in progress and in review of the areas of the rules file."""
+    entries = json.loads(todo_cli(layout, "list", "--status", "open,in progress,review", "--json") or "[]")
+    areas = rule_areas(layout.main)
+    return [e for e in entries if isinstance(e, dict) and (areas is None or e.get("area") in areas)]
+
+
+def record_verdicts(layout: Layout, source: str) -> int:
+    """Stores the classifier's answer (its JSON, a file or `-`) with each entry's current version."""
+    text = sys.stdin.read() if source == "-" else Path(source).read_text()
+    answer = json.loads(text[text.find("{") : text.rfind("}") + 1])
+    versions = {e["id"]: e.get("version") for e in open_entries(layout)}
+    cache = read_rooted(verdicts_file(), layout)
+    now = time.time()
+    count = 0
+    for item in answer.get("entries", []):
+        entry_id = item.get("id")
+        if entry_id not in versions:
+            continue
+        keep = {key: item.get(key) for key in ("verdict", "size", "level", "touches", "reason")}
+        cache[entry_id] = {**keep, "version": versions[entry_id], "at": now}
+        count += 1
+    known = set(versions)
+    write_rooted(verdicts_file(), layout, {k: v for k, v in cache.items() if k in known})  # closed entries drop out
+    return count
+
+
+def busy_files(layout: Layout, entry: dict, area: dict) -> list[str]:
+    """What the branch of a taken entry changed plus the `## Files` of its slice plan (todo-loop, "Busy files")."""
+    repo = (layout.main / area["repo"]).resolve()
+    files = set(git("diff", "--name-only", f"{area['base']}...{entry['branch']}", cwd=repo, check=False).split())
+    try:
+        files |= plan_files(todo_cli(layout, "plan", "get", f"todo-loop-{entry['branch'].removeprefix('todo/')}.md", "--stdout"))
+    except WorkerError:
+        pass
+    return sorted(files)
+
+
+def dispatch_state(layout: Layout, args) -> dict:
+    listing = list_json(layout, argparse.Namespace(claude=args.claude, store=False, usage=False, activity=False))
+    saved = read_rooted(prefs_file(), layout)
+    prefer = split_terms(args.prefer) if args.prefer is not None else saved.get("prefer", [])
+    avoid = split_terms(args.avoid) if args.avoid is not None else saved.get("avoid", [])
+    table = {row["area"]: row for row in rule_area_table(layout.main)}
+    entries = open_entries(layout)
+    by_id = {e["id"]: e for e in entries}
+    unmerged = set()
+    for area in table.values():
+        repo = (layout.main / area["repo"]).resolve()
+        listed = git("branch", "--list", "todo/*", "--no-merged", area["base"], "--format=%(refname:short)", cwd=repo, check=False)
+        unmerged |= {(area["area"], b) for b in listed.split()}
+
+    held = {}
+    for w in listing["workers"]:
+        for head in (w.get("head"), w.get("engine")):
+            if head and head.get("branch"):
+                held[head["branch"]] = w["name"]
+    workers = []
+    for w in listing["workers"]:
+        branches = [h["branch"] for h in (w.get("head"), w.get("engine")) if h and h.get("branch")]
+        holds = next((e["id"] for e in entries if e.get("branch") in branches and e.get("status") != "review"), None)
+        why = ("running" if w["active"] and not w["waiting"] else None) or ("waiting" if w["waiting"] else None) \
+            or ("dirty" if w["dirty"] else None) or ("limited" if w["limited"] else None) or (f"holds {holds}" if holds else None)
+        workers.append({"k": w["k"], "name": w["name"], "free": why is None, "busy": why, "branches": branches, "queue": w["queue"]})
+
+    cache = read_rooted(verdicts_file(), layout)
+    now = time.time()
+    queued = {i for w in workers for i in w["queue"]}
+    busy = []
+    for e in entries:
+        if e.get("status") in ("in progress", "review") and e.get("branch") and e.get("area") in table:
+            busy.append({"id": e["id"], "area": e["area"], "status": e["status"], "branch": e["branch"],
+                         "worker": held.get(e["branch"]), "files": busy_files(layout, e, table[e["area"]])})
+    for entry_id in sorted(queued):
+        cached = cache.get(entry_id) or {}
+        if entry_id in by_id:
+            busy.append({"id": entry_id, "area": by_id[entry_id]["area"], "status": "queued", "branch": None, "worker": None,
+                         "files": cached.get("touches") or []})
+
+    candidates, skipped = [], {"avoided": [], "blocked": [], "waits": [], "branch": [], "queued": sorted(queued)}
+    for e in entries:
+        entry_id, status = e["id"], e.get("status")
+        if entry_id in queued:
+            continue
+        stopped = status == "in progress" and e.get("branch") and e["branch"] not in held
+        if status != "open" and not stopped:
+            continue
+        if any(term_matches(t, e) for t in avoid):
+            skipped["avoided"].append(entry_id)
+            continue
+        open_blockers = [b for b in e.get("blockedBy") or [] if b.get("status") != "closed"]
+        if open_blockers and not stopped:
+            if all(b.get("status") == "review" for b in open_blockers):
+                skipped["waits"].append({"id": entry_id, "for": [b["id"] for b in open_blockers]})
+            else:
+                skipped["blocked"].append({"id": entry_id, "by": [b["id"] for b in open_blockers]})
+            continue
+        if not stopped and any(a == e["area"] and (b == f"todo/{entry_id}" or b.startswith(f"todo/{entry_id}-")) for a, b in unmerged):
+            skipped["branch"].append(entry_id)
+            continue
+        unblocks = sum(1 for b in e.get("blocks") or [] if b.get("status") != "closed")
+        verdict = fresh_verdict(cache.get(entry_id), e.get("version"), now)
+        candidates.append({
+            "area": e["area"], "id": entry_id, "title": e.get("title"), "stage": e.get("stage"), "summary": e.get("summary"),
+            "continue": bool(stopped), "prefer": preference_rank(prefer, e), "unblocks": unblocks,
+            "verdict": None if verdict is None else {k: verdict.get(k) for k in ("verdict", "size", "level", "touches", "reason")},
+        })
+    candidates.sort(key=lambda c: (not c["continue"], c["prefer"] is None, c["prefer"] or 0, -c["unblocks"],
+                                   -1 if c["stage"] is None else c["stage"], c["id"]))
+    free = [w for w in workers if w["free"] and (not args.workers or w["k"] in args.workers)]
+    slots = len(free) * args.depth
+    want = slots * CLASSIFY_MARGIN
+    classify, ready = [], 0
+    for c in candidates:
+        if ready + len(classify) >= want:
+            break
+        if c["verdict"] is None:
+            classify.append(c["id"])
+        elif c["verdict"]["verdict"] == "eligible":
+            ready += 1
+    return {"prefs": {"prefer": prefer, "avoid": avoid, "saved": bool(saved)}, "workers": workers, "slots": slots,
+            "review": [{"id": e["id"], "area": e["area"], "branch": e.get("branch")} for e in entries if e.get("status") == "review"],
+            "busy": busy, "candidates": candidates, "classify": classify, "skipped": skipped}
+
+
+def cmd_dispatch(layout: Layout, args) -> None:
+    """`dispatch --json`: the workers (free or why busy), the review pile, the busy files, the candidates in the
+    dispatcher's order with the cached verdicts, and `classify`, the ids the classifier still has to read.
+    `dispatch --record <file|->`: store a classifier answer for the next runs."""
+    if args.record:
+        print(f"recorded {record_verdicts(layout, args.record)} verdicts")
+        return
+    sys.stdout.reconfigure(encoding="utf-8")
+    state = dispatch_state(layout, args)
+    if args.json:
+        print(json.dumps(state, ensure_ascii=False, indent=1))
+        return
+    for w in state["workers"]:
+        print(f"{w['name']}: {'free' if w['free'] else w['busy']}  queue: {' '.join(w['queue']) or '-'}")
+    print(f"review: {' '.join(e['id'] for e in state['review']) or '-'}")
+    for c in state["candidates"][:20]:
+        v = c["verdict"]
+        print(f"  {c['id']:40} {'continue ' if c['continue'] else ''}prefer={c['prefer']} unblocks={c['unblocks']} {v['verdict'] if v else '?'}")
+    print(f"classify: {' '.join(state['classify']) or '-'}")
+
+
 BUILD_RULES = Path(".claude") / "rules" / "build-project.md"
 
 
@@ -1773,6 +2010,19 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("overlap", help="the busy entries whose slice plans name files the entry names (a hint before a start)")
     p.add_argument("id")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("prefs", help="the owner's preferences of /todo-dispatch (a local file, ~/.claude/todo/dispatch-prefs.json)")
+    p.add_argument("--prefer", help="comma list of ids, id or title word prefixes, areas, first is strongest ('' clears)")
+    p.add_argument("--avoid", help="comma list of the same: never dispatched ('' clears)")
+    p.add_argument("--clear", action="store_true", help="forget both")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("dispatch", help="one read for /todo-dispatch: free workers, review pile, busy files, candidates in order with cached verdicts")
+    p.add_argument("workers", nargs="*", type=int, help="only these workers count as free slots (default: all)")
+    p.add_argument("--depth", type=int, default=2, help="entries per free worker (default 2)")
+    p.add_argument("--prefer", help="this run only, instead of the saved `prefer`")
+    p.add_argument("--avoid", help="this run only, instead of the saved `avoid`")
+    p.add_argument("--record", help="store a classifier answer (a JSON file, or - for stdin) and exit")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("build-info", help="the product, tests, preset and screenshot tool of this checkout (for the panel)")
     p.add_argument("--preset", help="this preset instead of the platform's debug one")
     p.add_argument("--json", action="store_true")
@@ -1790,7 +2040,7 @@ def main(argv: list[str] | None = None) -> int:
     args.rest = rest
     try:
         layout = find_layout(Path.cwd())
-        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session, "queue": cmd_queue, "overlap": cmd_overlap, "build-info": cmd_build_info}
+        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session, "queue": cmd_queue, "overlap": cmd_overlap, "prefs": cmd_prefs, "dispatch": cmd_dispatch, "build-info": cmd_build_info}
         commands[args.command](layout, args)
     except WorkerError as error:
         print(f"error: {error}", file=sys.stderr)

@@ -84,6 +84,8 @@ python3 tools/todo/worker.py update [k ...]          # detach an idle worker at 
 python3 tools/todo/worker.py remove 3      # a clean folder; its branches stay
 python3 tools/todo/worker.py queue [k] [--add id [--first] | --remove id | --pop | --clear]  # the panel's next entries per worker
 python3 tools/todo/worker.py overlap <id>  # busy entries whose slice plans name files the entry names (a hint)
+python3 tools/todo/worker.py prefs [--prefer a,b] [--avoid c] [--clear]   # the owner's preferences of /todo-dispatch
+python3 tools/todo/worker.py dispatch --json [k ...] [--depth N]  # one read for /todo-dispatch; --record <file> keeps a classifier answer
 python3 tools/todo/worker.py build-info    # preset, product, tests, screenshot tool (the panel's Verify, Build & run, Shots)
 ```
 
@@ -96,7 +98,7 @@ python3 tools/todo/worker.py build-info    # preset, product, tests, screenshot 
 - **Branches of another checkout:** branches are never pushed, so an entry is reviewed and merged only where it was taken. `claim --base` stores `base` and `origin`; `list --store` marks entries whose branch is not here (`local` false) or was cut from another base (`foreignBase`), and the panel and `merge` refuse them.
 - **Update** detaches every area repository of an idle, clean worker at its base tip; it never builds and never runs `git submodule update`.
 - **Removing:** `remove` deletes a clean folder and prunes the worktrees of both repositories.
-- **The panel's files** (outside every repository, in `~/.claude/todo/`): `worker-queues.json` (by the workers' root) and `usage-ledger.json` (the tokens of each loop session by the entry its worker held, so an entry's cost survives its sessions). `list --store` also checks each local review branch (`merge-tree` against the base and the other review branches, the base's commits since the cut and the files both changed), and `list` names the pending tool call of a waiting session (`asking`) and the engine pointer's state (`pointer`).
+- **The panel's files** (outside every repository, in `~/.claude/todo/`): `worker-queues.json` (by the workers' root), `dispatch-prefs.json` and `dispatch-verdicts.json` (by the workers' root: the owner's preferences and the classifier's verdicts of `/todo-dispatch`, a verdict reused while the entry's `version` is unchanged, a skip that depends on other entries never) and `usage-ledger.json` (the tokens of each loop session by the entry its worker held, so an entry's cost survives its sessions). `list --store` also checks each local review branch (`merge-tree` against the base and the other review branches, the base's commits since the cut and the files both changed), and `list` names the pending tool call of a waiting session (`asking`) and the engine pointer's state (`pointer`).
 
 ## Railway
 

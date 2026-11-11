@@ -928,3 +928,64 @@ def test_pointer_state_says_when_the_engine_checkout_moved(game: Path):
     commit_file(game / "engine", "new.txt", "n\n", "engine moves")
     after = worker.pointer_state(layout)
     assert after["moved"] and after["checkout"] != after["recorded"]
+
+
+def test_terms_name_entries_by_area_id_and_word_prefix():
+    entry = {"area": "engine", "id": "ui-themes", "title": "UI colours are literals"}
+    assert worker.term_matches("engine", entry) and worker.term_matches("ui", entry) and worker.term_matches("colour", entry)
+    assert not worker.term_matches("ui", {"area": "mahjong", "id": "mahjong-build-paths", "title": "Build folder"})
+    assert worker.term_matches("ui", {"area": "mahjong", "id": "mahjong-ui-skin", "title": "x"})
+    assert worker.preference_rank(["seat", "ui"], entry) == 1 and worker.preference_rank(["seat"], entry) is None
+
+
+def test_prefs_are_saved_by_root_and_replaced_per_field(game: Path, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    worker.main(["create", "1", "--no-configure"])
+    assert worker.main(["prefs", "--prefer", "ui, seat", "--avoid", "editor"]) == 0
+    assert worker.main(["prefs", "--avoid", ""]) == 0
+    capsys.readouterr()
+    assert worker.main(["prefs", "--json"]) == 0
+    shown = json.loads(capsys.readouterr().out)
+    assert shown["prefer"] == ["ui", "seat"] and shown["avoid"] == []
+    assert worker.main(["prefs", "--clear"]) == 0
+
+
+def test_a_cached_verdict_lives_while_the_version_holds():
+    now = 1_000_000.0
+    eligible = {"verdict": "eligible", "reason": "x", "version": 3, "at": now - 60}
+    assert worker.fresh_verdict(eligible, 3, now) is eligible
+    assert worker.fresh_verdict(eligible, 4, now) is None  # the entry was edited
+    assert worker.fresh_verdict({**eligible, "at": now - worker.VERDICT_TTL_S - 1}, 3, now) is None
+    assert worker.fresh_verdict({"verdict": "skip", "reason": "blocked by x", "version": 3, "at": now}, 3, now) is None
+    engine_wait = {"verdict": "skip", "reason": "needs engine change: y", "version": 3, "at": now - worker.VERDICT_SHORT_TTL_S - 1}
+    assert worker.fresh_verdict(engine_wait, 3, now) is None
+
+
+def test_dispatch_orders_by_preference_and_asks_only_for_the_missing_verdicts(game: Path, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    worker.main(["create", "1", "--no-configure"])
+    entries = [
+        {"id": "a-big", "area": "game", "title": "A", "status": "open", "version": 1, "blocks": [{"id": "x", "status": "open"}], "blockedBy": []},
+        {"id": "ui-one", "area": "game", "title": "UI one", "status": "open", "version": 1, "blocks": [], "blockedBy": []},
+        {"id": "ui-two", "area": "game", "title": "UI two", "status": "open", "version": 2, "blocks": [], "blockedBy": []},
+        {"id": "held", "area": "game", "title": "H", "status": "open", "version": 1, "blocks": [], "blockedBy": [{"id": "z", "status": "open"}]},
+        {"id": "editor-x", "area": "game", "title": "E", "status": "open", "version": 1, "blocks": [], "blockedBy": []},
+    ]
+
+    def fake_cli(_layout, *args):
+        if args[0] == "list":
+            return json.dumps(entries)
+        raise worker.WorkerError("no plan")
+
+    monkeypatch.setattr(worker, "todo_cli", fake_cli)
+    monkeypatch.setattr(worker, "list_sessions", lambda _claude: [])
+    answer = tmp_path / "answer.json"
+    answer.write_text('text {"entries": [{"id": "ui-two", "verdict": "eligible", "size": "S", "touches": ["a.cpp"], "reason": "r"}]} text')
+    assert worker.main(["dispatch", "--record", str(answer)]) == 0
+    capsys.readouterr()
+    assert worker.main(["dispatch", "--json", "--depth", "1", "--prefer", "ui", "--avoid", "editor"]) == 0
+    state = json.loads(capsys.readouterr().out)
+    assert [c["id"] for c in state["candidates"]] == ["ui-one", "ui-two", "a-big"]
+    assert state["candidates"][1]["verdict"]["verdict"] == "eligible"
+    assert state["skipped"]["avoided"] == ["editor-x"] and state["skipped"]["blocked"] == [{"id": "held", "by": ["z"]}]
+    assert state["slots"] == 1 and state["classify"] == ["ui-one"]  # one cached eligible + one to classify fill 2 x 1 slot
