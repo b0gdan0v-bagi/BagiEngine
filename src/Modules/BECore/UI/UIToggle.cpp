@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/UI/UIThemes.h>
 #include <Events/InputEvents.h>
 #include <Generated/UIToggle.gen.hpp>
 
@@ -68,6 +69,13 @@ namespace BECore {
     Color UIToggle::GetCurrentThumb() const {
         const Color base = thumbColor.a > 0 ? Color(thumbColor) : Color(textColor);
         return disabled ? WithAlpha(base, kDisabledAlpha) : base;
+    }
+
+    void UIToggle::ApplyTheme(UIThemes& themes) {
+        UILabel::ApplyTheme(themes);
+        themes.Resolve(trackColor);
+        themes.Resolve(fillColor);
+        themes.Resolve(thumbColor);
     }
 
     void UIToggle::DrawSelf(IRenderer& renderer) {

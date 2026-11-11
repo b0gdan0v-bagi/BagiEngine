@@ -9,6 +9,7 @@
 namespace BECore {
 
     class IRenderer;
+    class UIThemes;
 
     /// How an element lays out its children: each one against the element's rect through its own anchor, or one after another
     CORE_ENUM(UILayoutKind, uint8_t, Anchor, Stack)
@@ -40,6 +41,11 @@ namespace BECore {
      * **State.** `hovered` and `pressed` are set by the canvas, `selected` and `groupDisabled` by whoever owns a choice; `GetVisualState()` is what they add up to and `UIStateLook` (the pure
      * rules) turns it into a look. The element's own box takes that look (the fills `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, or the derived shifts) only when a
      * component says `GivesStateLook()`; a panel that merely `blocksInput` is hovered too and must not light up. A control that is its own class (`UIButton`) draws the state look itself.
+     *
+     * **Theme tokens.** A colour field may be a token (`color="@primary"`, UIThemes). The canvas calls `ResolveTheme()` before it draws the element: the token's colour is written into the
+     * channels of every colour field (the element's own, the box's, its controls' and components'), so every reader of a colour keeps reading channels. `_themeVersion` is the version of
+     * the table the channels were last resolved at; it is runtime state, neither reflected nor saved, and an element is never copied with it (elements are shared by pointer; a new one
+     * starts at 0 and resolves on its first draw). Code that assigns a token to a live element calls `ResetTheme()`.
      */
     class UIElement : public RefCounted {
         BE_CLASS(UIElement, FACTORY_BASE, ELEMENT = element, REGISTER_SELF)
@@ -76,6 +82,16 @@ namespace BECore {
 
         /// Draws the components in list order, with the view transform of the canvas in effect. The canvas calls it after `DrawSelf` and before the children
         void DrawComponents(IRenderer& renderer);
+
+        /// Resolves the theme tokens of this element (not its children: the canvas walks the tree) when the version of @p themes moved since the last call; at once otherwise. The
+        /// canvas calls it before `DrawSelf`, so a theme switch recolours the open screen at the next frame with no tree edit and no `Invalidate()`; a hidden element resolves when it is shown
+        void ResolveTheme(UIThemes& themes);
+
+        /// Forgets what was resolved: the next `ResolveTheme` resolves again. **Call it after assigning a token to a live element** (`color = UIColor::FromToken(...)`); a token loaded from a file
+        /// needs nothing, the element has not been resolved yet
+        void ResetTheme() {
+            _themeVersion = 0;
+        }
 
         /// A press and its release both landed on this element: the canvas calls it. A button emits its action here; the base forwards to the components
         virtual void OnClick();
@@ -141,6 +157,7 @@ namespace BECore {
             }
             auto component = New<T>();
             components.push_back(component);
+            ResetTheme();  // its colours are not resolved yet
             return *component;
         }
 
@@ -179,6 +196,13 @@ namespace BECore {
         void Initialize();
 
     protected:
+        /**
+         * Writes the current theme's colours into every colour field of this element that is a token: its own `color` and state fills, the box, and the components. A control that
+         * declares colour fields overrides it, calls the base first and resolves its own (`themes.Resolve(field)`). Called only through `ResolveTheme`, which decides when; it reads the
+         * theme and writes channels, nothing else (no layout, no `Invalidate()`)
+         */
+        virtual void ApplyTheme(UIThemes& themes);
+
         /// Draws the box in the look of the state the element is in now and, when it is selected, the bar along its foot. `DrawSelf` does it when a component gives the state look; a control
         /// that always shows its state calls it itself
         void DrawStateBox(IRenderer& renderer);
@@ -203,6 +227,8 @@ namespace BECore {
         void DrawPart(IRenderer& renderer, const Rect& area, const Color& fill, UIPartShape shape);
 
     private:
+        uint64_t _themeVersion = 0;  ///< UIThemes::GetVersion() at the last resolve; 0: never (the table starts at 1)
+
         // The triangles of DrawBox, kept so that a steady frame allocates nothing
         eastl::vector<GeometryVertex> _boxVertices;
         eastl::vector<int> _boxIndices;

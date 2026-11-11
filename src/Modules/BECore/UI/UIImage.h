@@ -27,6 +27,10 @@ namespace BECore {
 
         void DrawSelf(IRenderer& renderer) override;
 
+    protected:
+        /// Resolves the colour fields of this control (UIElement::ApplyTheme): `tint`
+        void ApplyTheme(UIThemes& themes) override;
+
     private:
         UISprite _sprite;
     };

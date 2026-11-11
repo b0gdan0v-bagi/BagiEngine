@@ -3,6 +3,7 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UITooltipComponent.h>
 #include <Generated/UIElement.gen.hpp>
 
@@ -105,6 +106,26 @@ namespace BECore {
         for (size_t i = 0; i < components.size(); ++i) {
             const IntrusivePtrNonAtomic<UIComponent> component = components[i];
             component->DrawSelf(renderer, *this);
+        }
+    }
+
+    void UIElement::ResolveTheme(UIThemes& themes) {
+        if (_themeVersion == themes.GetVersion()) {
+            return;
+        }
+        ApplyTheme(themes);
+        _themeVersion = themes.GetVersion();
+    }
+
+    void UIElement::ApplyTheme(UIThemes& themes) {
+        themes.Resolve(color);
+        themes.Resolve(hoverColor);
+        themes.Resolve(pressedColor);
+        themes.Resolve(disabledColor);
+        themes.Resolve(selectedColor);
+        box.ResolveTheme(themes);
+        for (const auto& component : components) {
+            component->ApplyTheme(themes);
         }
     }
 

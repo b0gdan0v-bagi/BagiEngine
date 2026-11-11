@@ -347,48 +347,55 @@ namespace BECore::Tests {
             style.fontSize = 13.0f;
         }
 
-        /// Every property of the box set to something other than its default
-        void SetEveryBoxProperty(UIBoxStyle& box) {
-            box.cornerRadius = {4.0f, 8.0f, 12.0f, 0.0f};
-            box.borderWidth = 2.5f;
-            box.borderColor = Color{71, 72, 73, 74};
-            box.gradientColor = Color{75, 76, 77, 78};
-            box.gradientDirection = UIGradientDirection::Horizontal;
-            box.shadow = {1.0f, 2.0f, 3.0f, 4.0f, Color{79, 80, 81, 82}};
-            box.glow = {-1.0f, -2.0f, 5.0f, -0.5f, Color{83, 84, 85, 86}};
-            box.highlight = Color{87, 88, 89, 90};
+        /// A colour for the "everything set" round trip: the literal, or a reference to a token named after its red channel (its channels are then transparent, as before a first draw)
+        UIColor Paint(bool tokens, const Color& color) {
+            return tokens ? UIColor::FromToken(PoolString::Intern(Format("tok{}", static_cast<int>(color.r)))) : UIColor(color);
         }
 
-        void SetEveryControlField(UIElement& element) {
+        /// Every property of the box set to something other than its default
+        void SetEveryBoxProperty(UIBoxStyle& box, bool tokens) {
+            box.cornerRadius = {4.0f, 8.0f, 12.0f, 0.0f};
+            box.borderWidth = 2.5f;
+            box.borderColor = Paint(tokens, Color{71, 72, 73, 74});
+            box.gradientColor = Paint(tokens, Color{75, 76, 77, 78});
+            box.gradientDirection = UIGradientDirection::Horizontal;
+            box.shadow = {1.0f, 2.0f, 3.0f, 4.0f, tokens ? Color{} : Color{79, 80, 81, 82}};
+            box.shadowColorToken = tokens ? PoolString::Intern("tokShadow") : PoolString{};
+            box.glow = {-1.0f, -2.0f, 5.0f, -0.5f, tokens ? Color{} : Color{83, 84, 85, 86}};
+            box.glowColorToken = tokens ? PoolString::Intern("tokGlow") : PoolString{};
+            box.highlight = Paint(tokens, Color{87, 88, 89, 90});
+        }
+
+        void SetEveryControlField(UIElement& element, bool tokens) {
             element.name = PoolString::Intern("Busy");
             element.layout = UILayoutKind::Stack;
-            element.color = Color{1, 2, 3, 4};
+            element.color = Paint(tokens, Color{1, 2, 3, 4});
             element.blocksInput = true;
             element.interactive = true;
             element.ignoreSafeArea = true;
             auto& probe = element.AddComponent<UITestProbe>();  // the list of components rides along with every control
             probe.tag = PoolString::Intern("BusyProbe");
-            probe.mark = Color{1, 2, 3, 4};
+            probe.mark = Paint(tokens, Color{1, 2, 3, 4});
             probe.takesClicks = true;
             element.AddComponent<UITestOther>().tag = PoolString::Intern("BusyOther");
             if (auto* panel = element.Cast<UIPanel>()) {
                 panel->sprite = PoolString::Intern("PanelSprite");
                 panel->sliceBorder = {1.0f, 2.0f, 3.0f, 4.0f};
-                panel->spriteTint = Color{5, 6, 7, 8};
+                panel->spriteTint = Paint(tokens, Color{5, 6, 7, 8});
             } else if (auto* image = element.Cast<UIImage>()) {
                 image->sprite = PoolString::Intern("ImageSprite");
-                image->tint = Color{5, 6, 7, 8};
+                image->tint = Paint(tokens, Color{5, 6, 7, 8});
                 image->stretch = true;
             } else if (auto* button = element.Cast<UIButton>()) {
                 button->action = PoolString::Intern("BusyAction");
-                button->hoverColor = Color{9, 10, 11, 12};
-                button->pressedColor = Color{13, 14, 15, 16};
-                button->disabledColor = Color{17, 18, 19, 20};
-                button->selectedColor = Color{25, 26, 27, 28};
+                button->hoverColor = Paint(tokens, Color{9, 10, 11, 12});
+                button->pressedColor = Paint(tokens, Color{13, 14, 15, 16});
+                button->disabledColor = Paint(tokens, Color{17, 18, 19, 20});
+                button->selectedColor = Paint(tokens, Color{25, 26, 27, 28});
                 button->value = PoolString::Intern("BusyValue");
                 button->disabled = true;
                 button->icon = PoolString::Intern("BusyIcon");
-                button->iconTint = Color{67, 68, 69, 70};
+                button->iconTint = Paint(tokens, Color{67, 68, 69, 70});
                 button->iconPlacement = UIIconPlacement::Above;
                 button->iconSize = 31.5f;
                 button->tooltip = "Busy {#tip.key} {name}";
@@ -401,23 +408,23 @@ namespace BECore::Tests {
                 toggle->onValue = PoolString::Intern("BusyOn");
                 toggle->offValue = PoolString::Intern("BusyOff");
                 toggle->disabled = true;
-                toggle->trackColor = Color{31, 32, 33, 34};
-                toggle->fillColor = Color{35, 36, 37, 38};
-                toggle->thumbColor = Color{39, 40, 41, 42};
+                toggle->trackColor = Paint(tokens, Color{31, 32, 33, 34});
+                toggle->fillColor = Paint(tokens, Color{35, 36, 37, 38});
+                toggle->thumbColor = Paint(tokens, Color{39, 40, 41, 42});
                 toggle->partShape = UIPartShape::Round;
             } else if (auto* dropdown = element.Cast<UIDropdown>()) {
                 dropdown->bind = PoolString::Intern("busyPick");
                 dropdown->action = PoolString::Intern("BusyPickAction");
                 dropdown->Open();  // runtime state: the saved text of the original and of the copy must still agree
                 dropdown->disabled = true;
-                dropdown->arrowColor = Color{63, 64, 65, 66};
+                dropdown->arrowColor = Paint(tokens, Color{63, 64, 65, 66});
                 dropdown->optionHeight = 33.5f;
             } else if (auto* bar = element.Cast<UIProgressBar>()) {
                 bar->bind = PoolString::Intern("busyProgress");
                 bar->minValue = -2.5f;
                 bar->maxValue = 12.5f;
-                bar->trackColor = Color{43, 44, 45, 46};
-                bar->fillColor = Color{47, 48, 49, 50};
+                bar->trackColor = Paint(tokens, Color{43, 44, 45, 46});
+                bar->fillColor = Paint(tokens, Color{47, 48, 49, 50});
                 bar->partShape = UIPartShape::Round;
             } else if (auto* slider = element.Cast<UISlider>()) {
                 slider->bind = PoolString::Intern("busyLevel");
@@ -426,9 +433,9 @@ namespace BECore::Tests {
                 slider->maxValue = 7.5f;
                 slider->step = 0.25f;
                 slider->disabled = true;
-                slider->trackColor = Color{51, 52, 53, 54};
-                slider->fillColor = Color{55, 56, 57, 58};
-                slider->thumbColor = Color{59, 60, 61, 62};
+                slider->trackColor = Paint(tokens, Color{51, 52, 53, 54});
+                slider->fillColor = Paint(tokens, Color{55, 56, 57, 58});
+                slider->thumbColor = Paint(tokens, Color{59, 60, 61, 62});
                 slider->partShape = UIPartShape::Round;
             }
             if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>() || element.Cast<UIDropdown>()) {
@@ -440,47 +447,55 @@ namespace BECore::Tests {
                 text->font = PoolString::Intern("assets/fonts/Other.ttf");
                 text->fontFamily = PoolString::Intern("Test");
                 text->fontWeight = 700;
-                text->textColor = Color{21, 22, 23, 24};
+                text->textColor = Paint(tokens, Color{21, 22, 23, 24});
                 text->align = TextAlign::Right;
                 text->verticalAlign = UIVerticalAlign::Bottom;
                 text->overflow = TextOverflow::AutoFit;
                 text->wrap = false;  // the text one: the stack one is style.stack.wrap, and the two must stay apart
                 text->lineSpacing = 1.5f;
                 text->minFontSize = 10.0f;
-                text->textEffects = {1.5f, Color{91, 92, 93, 94}, 2.0f, -3.0f, Color{95, 96, 97, 98}};
+                text->textEffects = {1.5f, Paint(tokens, Color{91, 92, 93, 94}), 2.0f, -3.0f, Paint(tokens, Color{95, 96, 97, 98})};
+            }
+        }
+
+        void ExpectEveryPropertySurvivesARoundTrip(bool tokens) {
+            for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle", "UIDropdown", "UIProgressBar", "UISlider"}) {
+                auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
+                ASSERT_TRUE(original) << type;
+                SetEveryStyleProperty(original->style);
+                SetEveryBoxProperty(original->box, tokens);
+                SetEveryControlField(*original, tokens);
+
+                auto canvas = New<UICanvasComponent>();
+                canvas->_elements.push_back(original);
+                XmlSerializer serializer;
+                ASSERT_TRUE(serializer.BeginObject("component"));
+                canvas->Serialize(serializer);
+                serializer.EndObject();
+                const eastl::string xml = serializer.SaveToString();
+                EXPECT_EQ(xml.find("@tok") != eastl::string::npos, tokens) << type << ": " << xml.c_str();
+
+                XmlDeserializer deserializer;
+                ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+                auto loaded = New<UICanvasComponent>();
+                ASSERT_TRUE(deserializer.BeginObject("component"));
+                loaded->Deserialize(deserializer);
+                deserializer.EndObject();
+                ASSERT_FALSE(deserializer.HasErrors()) << type;
+                ASSERT_EQ(loaded->_elements.size(), 1u) << type;
+
+                EXPECT_TRUE(original->style == loaded->_elements[0]->style) << type << ": the style changed on the way";
+                EXPECT_TRUE(original->box == loaded->_elements[0]->box) << type << ": the box changed on the way";
+                EXPECT_STREQ(ElementToXml(*original).c_str(), ElementToXml(*loaded->_elements[0]).c_str()) << type;
             }
         }
 
     }  // namespace
 
     TEST_F(UIControlsTest, EveryPropertyOfEveryControlSurvivesARoundTrip) {
-        for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle", "UIDropdown", "UIProgressBar", "UISlider"}) {
-            auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
-            ASSERT_TRUE(original) << type;
-            SetEveryStyleProperty(original->style);
-            SetEveryBoxProperty(original->box);
-            SetEveryControlField(*original);
-
-            auto canvas = New<UICanvasComponent>();
-            canvas->_elements.push_back(original);
-            XmlSerializer serializer;
-            ASSERT_TRUE(serializer.BeginObject("component"));
-            canvas->Serialize(serializer);
-            serializer.EndObject();
-            const eastl::string xml = serializer.SaveToString();
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
-            auto loaded = New<UICanvasComponent>();
-            ASSERT_TRUE(deserializer.BeginObject("component"));
-            loaded->Deserialize(deserializer);
-            deserializer.EndObject();
-            ASSERT_FALSE(deserializer.HasErrors()) << type;
-            ASSERT_EQ(loaded->_elements.size(), 1u) << type;
-
-            EXPECT_TRUE(original->style == loaded->_elements[0]->style) << type << ": the style changed on the way";
-            EXPECT_TRUE(original->box == loaded->_elements[0]->box) << type << ": the box changed on the way";
-            EXPECT_STREQ(ElementToXml(*original).c_str(), ElementToXml(*loaded->_elements[0]).c_str()) << type;
+        // Once with literal colours and once with a theme token (`@name`) in every colour field: a save that lost a token would draw the wrong colour in another theme
+        for (const bool tokens : {false, true}) {
+            ExpectEveryPropertySurvivesARoundTrip(tokens);
         }
     }
 

@@ -1,9 +1,15 @@
 #include "UIImage.h"
 
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/UI/UIThemes.h>
 #include <Generated/UIImage.gen.hpp>
 
 namespace BECore {
+
+    void UIImage::ApplyTheme(UIThemes& themes) {
+        UIElement::ApplyTheme(themes);
+        themes.Resolve(tint);
+    }
 
     void UIImage::DrawSelf(IRenderer& renderer) {
         UIElement::DrawSelf(renderer);

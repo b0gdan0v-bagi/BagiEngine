@@ -2,12 +2,20 @@
 
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/UI/UIElement.h>
+#include <BECore/UI/UIThemes.h>
 #include <Generated/UIImageComponent.gen.hpp>
 
 namespace BECore {
 
     Color UIImageComponent::GetStateTint(const UIStateLook::State& state) const {
         return UIStateLook::ResolveTint(tint, {hoverTint, pressedTint, disabledTint}, state);
+    }
+
+    void UIImageComponent::ApplyTheme(UIThemes& themes) {
+        themes.Resolve(tint);
+        themes.Resolve(hoverTint);
+        themes.Resolve(pressedTint);
+        themes.Resolve(disabledTint);
     }
 
     void UIImageComponent::DrawSelf(IRenderer& renderer, UIElement& owner) {

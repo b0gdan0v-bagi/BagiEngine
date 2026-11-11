@@ -17,6 +17,8 @@ namespace BECore {
 
     void UIComponent::OnClick(UIElement& /*owner*/) {}
 
+    void UIComponent::ApplyTheme(UIThemes& /*themes*/) {}
+
     bool UIComponent::MakesInteractive() const {
         return false;
     }

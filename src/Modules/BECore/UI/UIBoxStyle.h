@@ -6,6 +6,8 @@
 
 namespace BECore {
 
+    class UIThemes;
+
     /**
      * @brief How an element draws its box: rounded corners, a border, a gradient, a shadow, a glow and a highlight (UIBoxMesh draws it).
      *
@@ -16,9 +18,12 @@ namespace BECore {
      * - `cornerRadius` is one number or "topLeft,topRight,bottomRight,bottomLeft" in UI units; a radius that does not fit the rect shrinks (UICorners::Clamped).
      * - `borderWidth` in UI units and `borderColor`: a ring inside the rect, drawn over the fill. Nothing for a width of 0 or a colour with no alpha.
      * - `gradientDirection` (`None`, `Vertical` top to bottom, `Horizontal` left to right) and `gradientColor`: the element's `color` is the start, `gradientColor` the end.
-     * - `shadow` and `glow` are "offsetX,offsetY,blur,spread,color" (UIShadowSpec; the colour as "#RRGGBBAA" or "r,g,b,a"). Both are paint of the same kind and drawn before the
+     * - `shadow` and `glow` are "offsetX,offsetY,blur,spread,color" (UIShadowSpec; the colour as "#RRGGBBAA", "r,g,b,a" or a theme token "@name"). Both are paint of the same kind and drawn before the
      *   fill, the shadow first. They go beyond the rect and are neither layout nor validated. A colour with no alpha is no shadow.
      * - `highlight`: the colour of a one-unit line just inside the top edge, following the top corners (a raised look). No alpha, no line.
+     *
+     * Every colour attribute may be a theme token (`@name`, UIThemes): `borderColor`, `gradientColor` and `highlight` are UIColor fields, the colours of `shadow` and `glow` keep
+     * theirs in `shadowColorToken` / `glowColorToken`. A token whose theme colour is invisible is still "set": it is saved and compared.
      *
      * The names must not clash with a field of a control (`UIControlsTest` round-trips every control with everything set).
      */
@@ -31,6 +36,10 @@ namespace BECore {
         UIShadowSpec shadow;
         UIShadowSpec glow;
         UIColor highlight;
+        /// The theme tokens (`@name`) of the colours of `shadow` and `glow`, empty for a literal. UIShadowSpec is a mesh spec and holds a plain Color, so the reference sits
+        /// beside it; UIElement::ApplyTheme() resolves it into the spec's colour
+        PoolString shadowColorToken;
+        PoolString glowColorToken;
 
         [[nodiscard]] bool operator==(const UIBoxStyle& other) const;
 
@@ -42,6 +51,9 @@ namespace BECore {
         [[nodiscard]] UIGradientSpec MakeGradient(const Color& end) const {
             return {gradientDirection, end};
         }
+
+        /// Writes the current theme's colours into every colour that is a token, the shadow's and the glow's included (UIElement::ApplyTheme)
+        void ResolveTheme(UIThemes& themes);
 
         void Serialize(ISerializer& s) const;
         void Deserialize(IDeserializer& d);

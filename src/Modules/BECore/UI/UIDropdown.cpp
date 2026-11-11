@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/UI/UIThemes.h>
 #include <Events/InputEvents.h>
 #include <Generated/UIDropdown.gen.hpp>
 
@@ -158,6 +159,11 @@ namespace BECore {
     Color UIDropdown::GetCurrentArrow() const {
         const Color base = arrowColor.a > 0 ? Color(arrowColor) : Color(textColor);
         return disabled ? WithAlpha(base, kDisabledAlpha) : base;
+    }
+
+    void UIDropdown::ApplyTheme(UIThemes& themes) {
+        UILabel::ApplyTheme(themes);
+        themes.Resolve(arrowColor);
     }
 
     void UIDropdown::DrawSelf(IRenderer& renderer) {

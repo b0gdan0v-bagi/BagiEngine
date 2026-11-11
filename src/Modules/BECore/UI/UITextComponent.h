@@ -43,6 +43,8 @@ namespace BECore {
         BE_REFLECT_FIELD UITextEffects textEffects;  ///< the outline and the shadow of the text, the attributes `textOutline` and `textShadow`: paint, never part of the layout or the check
 
         void DrawSelf(IRenderer& renderer, UIElement& owner) override;
+        /// Resolves the colour fields of this component: `textColor`, the four state text colours and the effects
+        void ApplyTheme(UIThemes& themes) override;
         [[nodiscard]] UIContentFit CheckContent(const UIElement& owner, float width, float height, float scale) const override;
 
         /// The colour the text is drawn in for @p state: the state's own colour when it is set, else `textColor`

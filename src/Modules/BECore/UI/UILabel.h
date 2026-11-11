@@ -70,6 +70,9 @@ namespace BECore {
         }
 
     protected:
+        /// Resolves the colour fields of this control (UIElement::ApplyTheme): `textColor` and the colours of `textEffects`; a subclass calls it first
+        void ApplyTheme(UIThemes& themes) override;
+
         /// The text that `GetDisplayText()` expands: `text` here. A control that shows another text (a dropdown shows the chosen option's) returns that one, so the authored `text`
         /// stays what a file holds and is never overwritten by what is shown
         [[nodiscard]] virtual const eastl::string& GetSourceText() const {

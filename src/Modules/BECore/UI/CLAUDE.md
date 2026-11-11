@@ -35,7 +35,8 @@ Each file below loads by itself when a file of its area is read; read it by path
 | `UIComponent` (`UIImageComponent`, `UITextComponent`, `UIInputClicker`, `UITooltipComponent`) | a behaviour or a picture of an element: a button is `UIElement` + components, not a class (`.claude/rules/ui-controls.md`, "Components"). A component holds no pointer to its element: every virtual takes the owner |
 | `UIStateLook`, `UITextPainter` | pure: the hover / pressed / selected / disabled look of a box and of a tint (`UIButton` and the components share it), the text machinery of `UILabel` and `UITextComponent` |
 | `UICanvasLayout` | the pure pipeline with a cache, `HitTest`, `Validate` |
-| `UIColor`, `UIText` / `UIAttr` | colors and the state shifts; text forms of lengths, edges, colors, numbers |
+| `UIThemes` (`CoreManager::GetUIThemes()`) | the colour themes: tokens per theme from `config/UIThemes.xml`, a current theme switched at run time with a version, fallback to the default theme (the model is `UIStrings`) |
+| `UIColor`, `UIText` / `UIAttr` | colors (a literal or a theme token `@name`: `token` is the reference, the channels the resolved value) and the state shifts; text forms of lengths, edges, colors, numbers |
 | `UIDocument`, `UIDocumentLoader` | a `.ui.xml` file, `Instantiate` per canvas |
 | `UIRegionSet` | the named rects (canvas units) a game publishes for a canvas; an element with `region` lays out inside one (`ui-layout.md`, "Named regions") |
 | `UIRectEdit` | the inverse of `UILayout::ResolveRect` (`SpecForRect`: a wanted rect to a spec, only numbers change; `exact` false when limits or aspect forbid it), the px / % switch that keeps the layout, the region names of a picker |
@@ -86,4 +87,4 @@ The "UI elements" section of `SceneEditorWidget` (`UIRectInspector`, only with t
 
 ## Not done
 
-Regions in the HTML + CSS front-end. A round hit test for round buttons (the rect is the target), a tooltip style per game (`UITooltip`'s constants), a hover command in the control API. Button sounds, focus and keyboard / gamepad navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload, the debug overlay.
+Fonts and the shape values of `ui-shapes` (corner radius, border width, shadow offsets) as theme tokens: a numeric token needs a new grammar in every length field. Regions in the HTML + CSS front-end. A round hit test for round buttons (the rect is the target), a tooltip style per game (`UITooltip`'s constants), a hover command in the control API. Button sounds, focus and keyboard / gamepad navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload, the debug overlay.

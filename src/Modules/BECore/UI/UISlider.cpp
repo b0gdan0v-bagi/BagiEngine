@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/UI/UIProgressBar.h>
+#include <BECore/UI/UIThemes.h>
 #include <Events/InputEvents.h>
 #include <Generated/UISlider.gen.hpp>
 #include <cmath>
@@ -114,6 +115,13 @@ namespace BECore {
             return ShiftColor(base, -kPressDarken);
         }
         return hovered ? ShiftColor(base, kHoverBrighten) : base;
+    }
+
+    void UISlider::ApplyTheme(UIThemes& themes) {
+        UIElement::ApplyTheme(themes);
+        themes.Resolve(trackColor);
+        themes.Resolve(fillColor);
+        themes.Resolve(thumbColor);
     }
 
     void UISlider::DrawSelf(IRenderer& renderer) {

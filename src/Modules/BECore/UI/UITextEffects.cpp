@@ -3,6 +3,7 @@
 #include <BECore/Reflection/PropertyVisitorDispatch.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UIAttributeIO.h>
+#include <BECore/UI/UIThemes.h>
 
 namespace BECore {
 
@@ -14,8 +15,8 @@ namespace BECore {
     }  // namespace
 
     bool UITextEffects::operator==(const UITextEffects& other) const {
-        return outlineWidth == other.outlineWidth && ColorsEqual(outlineColor, other.outlineColor) && shadowOffsetX == other.shadowOffsetX && shadowOffsetY == other.shadowOffsetY &&
-               ColorsEqual(shadowColor, other.shadowColor);
+        return outlineWidth == other.outlineWidth && outlineColor == other.outlineColor && shadowOffsetX == other.shadowOffsetX && shadowOffsetY == other.shadowOffsetY &&
+               shadowColor == other.shadowColor;
     }
 
     TextEffects UITextEffects::ToPixels(float scale, float alphaFactor) const {
@@ -34,22 +35,22 @@ namespace BECore {
 
     void UITextEffects::Serialize(ISerializer& s) const {
         const UITextEffects defaults;
-        if (outlineWidth != defaults.outlineWidth || !ColorsEqual(outlineColor, defaults.outlineColor)) {
+        if (outlineWidth != defaults.outlineWidth || !(outlineColor == defaults.outlineColor)) {
             UIAttr::WriteTextOutline(s, OutlineKey, outlineWidth, outlineColor);
         }
-        if (shadowOffsetX != defaults.shadowOffsetX || shadowOffsetY != defaults.shadowOffsetY || !ColorsEqual(shadowColor, defaults.shadowColor)) {
+        if (shadowOffsetX != defaults.shadowOffsetX || shadowOffsetY != defaults.shadowOffsetY || !(shadowColor == defaults.shadowColor)) {
             UIAttr::WriteTextShadow(s, ShadowKey, shadowOffsetX, shadowOffsetY, shadowColor);
         }
     }
 
     void UITextEffects::Deserialize(IDeserializer& d) {
-        Color color;
-        if (UIAttr::ReadTextOutline(d, OutlineKey, outlineWidth, color)) {
-            outlineColor = color;
-        }
-        if (UIAttr::ReadTextShadow(d, ShadowKey, shadowOffsetX, shadowOffsetY, color)) {
-            shadowColor = color;
-        }
+        UIAttr::ReadTextOutline(d, OutlineKey, outlineWidth, outlineColor);
+        UIAttr::ReadTextShadow(d, ShadowKey, shadowOffsetX, shadowOffsetY, shadowColor);
+    }
+
+    void UITextEffects::ResolveTheme(UIThemes& themes) {
+        themes.Resolve(outlineColor);
+        themes.Resolve(shadowColor);
     }
 
     bool UITextEffects::VisitProperties(IPropertyVisitor& v) {

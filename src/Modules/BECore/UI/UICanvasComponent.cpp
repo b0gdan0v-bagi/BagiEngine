@@ -161,6 +161,7 @@ namespace BECore {
         if (!element.active.visible) {
             return;
         }
+        element.ResolveTheme(CoreManager::GetUIThemes());
         element.DrawSelf(renderer);
         element.DrawComponents(renderer);
         if (element.HasPopupChildren()) {

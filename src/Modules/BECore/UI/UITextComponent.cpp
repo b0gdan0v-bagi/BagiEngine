@@ -1,6 +1,7 @@
 #include "UITextComponent.h"
 
 #include <BECore/UI/UIElement.h>
+#include <BECore/UI/UIThemes.h>
 #include <Generated/UITextComponent.gen.hpp>
 
 namespace BECore {
@@ -37,6 +38,15 @@ namespace BECore {
             return given(hoverTextColor);
         }
         return textColor;
+    }
+
+    void UITextComponent::ApplyTheme(UIThemes& themes) {
+        themes.Resolve(textColor);
+        themes.Resolve(hoverTextColor);
+        themes.Resolve(pressedTextColor);
+        themes.Resolve(disabledTextColor);
+        themes.Resolve(selectedTextColor);
+        textEffects.ResolveTheme(themes);
     }
 
     void UITextComponent::DrawSelf(IRenderer& renderer, UIElement& owner) {

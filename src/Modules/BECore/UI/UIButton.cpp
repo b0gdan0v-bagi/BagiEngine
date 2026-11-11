@@ -1,6 +1,7 @@
 #include "UIButton.h"
 
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/UI/UIThemes.h>
 #include <Events/InputEvents.h>
 #include <Generated/UIButton.gen.hpp>
 
@@ -60,6 +61,11 @@ namespace BECore {
     Color UIButton::GetCurrentIconColor() const {
         const Color base = iconTint.a > 0 ? Color(iconTint) : Color(textColor);
         return UIStateLook::ResolveTint(base, {}, GetVisualState());
+    }
+
+    void UIButton::ApplyTheme(UIThemes& themes) {
+        UILabel::ApplyTheme(themes);
+        themes.Resolve(iconTint);
     }
 
     void UIButton::DrawSelf(IRenderer& renderer) {

@@ -1,5 +1,6 @@
 #include "UILabel.h"
 
+#include <BECore/UI/UIThemes.h>
 #include <Generated/UILabel.gen.hpp>
 
 namespace BECore {
@@ -32,6 +33,12 @@ namespace BECore {
 
     PoolString UILabel::GetResolvedFontPath() const {
         return _painter.GetResolvedFontPath(MakeParams());
+    }
+
+    void UILabel::ApplyTheme(UIThemes& themes) {
+        UIElement::ApplyTheme(themes);
+        themes.Resolve(textColor);
+        textEffects.ResolveTheme(themes);
     }
 
     void UILabel::DrawSelf(IRenderer& renderer) {

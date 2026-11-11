@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/UI/UIThemes.h>
 #include <Generated/UIProgressBar.gen.hpp>
 
 namespace BECore {
@@ -20,6 +21,12 @@ namespace BECore {
 
     Color UIProgressBar::GetCurrentFill() const {
         return fillColor.a > 0 ? Color(fillColor) : kFillFallback;
+    }
+
+    void UIProgressBar::ApplyTheme(UIThemes& themes) {
+        UIElement::ApplyTheme(themes);
+        themes.Resolve(trackColor);
+        themes.Resolve(fillColor);
     }
 
     void UIProgressBar::DrawSelf(IRenderer& renderer) {

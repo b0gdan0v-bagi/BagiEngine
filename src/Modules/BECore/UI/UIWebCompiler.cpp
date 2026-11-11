@@ -108,12 +108,12 @@ namespace BECore {
         /// `-be-text-outline` (width in pixels, colour) and `text-shadow` (offsets in pixels, colour) after parsing
         struct TextOutlineValue {
             float width = 0.0f;
-            Color color;
+            UIWebText::WebColor color;
         };
         struct TextShadowValue {
             float offsetX = 0.0f;
             float offsetY = 0.0f;
-            Color color;
+            UIWebText::WebColor color;
         };
 
         /// What the declarations of one element come to, last one winning. Every field is "not set" until a declaration sets it
@@ -141,19 +141,19 @@ namespace BECore {
             eastl::string flexDirection;
             std::optional<bool> wrapChildren;
             eastl::string alignItems;
-            std::optional<Color> background;
+            std::optional<UIWebText::WebColor> background;
             eastl::string sprite;
             std::optional<UIWebText::GradientSpec> gradient;
             std::optional<UICorners> cornerRadius;
             std::optional<float> borderWidth;
-            std::optional<Color> borderColor;
+            std::optional<UIWebText::WebColor> borderColor;
             bool borderHidden = false;  ///< `border-style: none`
             std::optional<UIWebText::BoxShadows> shadows;
-            std::optional<Color> highlight;
+            std::optional<UIWebText::WebColor> highlight;
             std::optional<UIPartShape> partShape;
             std::optional<UIEdges> slice;
             std::optional<bool> pointerEvents;
-            std::optional<Color> textColor;
+            std::optional<UIWebText::WebColor> textColor;
             std::optional<float> fontSize;
             eastl::string fontPath;
             eastl::string fontFamily;  ///< a name of the `families` table of TextConfig.xml, which the compiler does not know: a name nobody registered is the label's warning at run time
@@ -168,10 +168,10 @@ namespace BECore {
             std::optional<bool> wrapText;
             std::optional<float> lineHeightRatio;
             std::optional<float> lineHeightPixels;
-            std::optional<Color> trackColor;
-            std::optional<Color> fillColor;
-            std::optional<Color> thumbColor;
-            std::optional<Color> iconColor;
+            std::optional<UIWebText::WebColor> trackColor;
+            std::optional<UIWebText::WebColor> fillColor;
+            std::optional<UIWebText::WebColor> thumbColor;
+            std::optional<UIWebText::WebColor> iconColor;
             /// Set by a handler that applied a value with a caveat (a blurred shadow drawn hard): the check of the declarations reports it, the value still counts
             eastl::string note;
         };
@@ -521,7 +521,7 @@ namespace BECore {
                      }
                  }
                  // The shorthand resets what it does not name
-                 r.background = parsed.background ? parsed.background : std::optional<Color>{Color{0, 0, 0, 0}};
+                 r.background = parsed.background ? parsed.background : std::optional<UIWebText::WebColor>{Color{0, 0, 0, 0}};
                  r.sprite = parsed.sprite;
                  r.gradient = parsed.gradient;
                  return true;
@@ -547,7 +547,7 @@ namespace BECore {
                  }
                  r.borderHidden = false;
                  r.borderWidth = border->width;
-                 r.borderColor = border->none ? std::optional<Color>{} : std::optional<Color>{border->color};
+                 r.borderColor = border->none ? std::optional<UIWebText::WebColor>{} : std::optional<UIWebText::WebColor>{border->color};
                  return true;
              }},
             {"border-width",
@@ -680,7 +680,7 @@ namespace BECore {
                  }
                  float numbers[TextShadowMaxNumbers] = {};
                  size_t numberCount = 0;
-                 std::optional<Color> color;
+                 std::optional<UIWebText::WebColor> color;
                  for (const eastl::string_view word : UIWebText::SplitWords(shadows[0])) {
                      if (const auto pixels = UIWebText::ParsePixels(word)) {
                          if (numberCount == TextShadowMaxNumbers) {
@@ -1081,8 +1081,11 @@ namespace BECore {
                 if (result == ApplyResult::Applied || result == ApplyResult::Ignored) {
                     return;
                 }
+                const bool hasVar = UIWebText::ToLower(declaration.value).find("var(") != eastl::string::npos;
                 const eastl::string message = result == ApplyResult::UnknownProperty ? Format("property '{}' is not supported", declaration.property.c_str())
-                                                                                     : Format("'{}: {}' is not understood or not supported", declaration.property.c_str(), declaration.value.c_str());
+                                              : hasVar ? Format("'{}: {}': var() is read only as var(--name) of a theme token, with no fallback value, where a color is read",
+                                                                declaration.property.c_str(), declaration.value.c_str())
+                                                       : Format("'{}: {}' is not understood or not supported", declaration.property.c_str(), declaration.value.c_str());
                 if (_report.AddOnce(SourceOf(declaration), declaration.line, message)) {
                     ++_report.declarationsUnsupported;
                 }
@@ -1488,11 +1491,11 @@ namespace BECore {
                     attrs.Set("fontSize", Number(*r.fontSize));
                 }
                 // A gradient replaces the background color (CSS paints the image over the color); its start is the `color` of the element
-                const bool hasFill = r.gradient ? r.gradient->start.a != 0 : (r.background && r.background->a != 0);
+                const bool hasFill = r.gradient ? r.gradient->start.IsVisible() : (r.background && r.background->IsVisible());
                 if (r.gradient) {
-                    attrs.Set("color", UIText::FormatColor(r.gradient->start));
+                    attrs.Set("color", UIWebText::FormatWebColor(r.gradient->start));
                 } else if (hasFill) {
-                    attrs.Set("color", UIText::FormatColor(*r.background));
+                    attrs.Set("color", UIWebText::FormatWebColor(*r.background));
                 }
                 AddBox(attrs, r, node.kind, report);
                 // A panel takes clicks by itself; any other element does when it is a visible plate, and `pointer-events` decides when it is said.
@@ -1598,25 +1601,25 @@ namespace BECore {
                 const bool borderWanted = !r.borderHidden && r.borderWidth && *r.borderWidth > 0.0f;
                 if (borderWanted && r.borderColor) {
                     attrs.Set("borderWidth", Number(*r.borderWidth));
-                    attrs.Set("borderColor", UIText::FormatColor(*r.borderColor));
+                    attrs.Set("borderColor", UIWebText::FormatWebColor(*r.borderColor));
                 } else if (borderWanted) {
                     Note(report, "a border needs a color: `border: 1px solid <color>` or `border-color`");
                 }
                 if (r.gradient) {
                     attrs.Set("gradientDirection", r.gradient->direction == UIGradientDirection::Horizontal ? "Horizontal" : "Vertical");
-                    attrs.Set("gradientColor", UIText::FormatColor(r.gradient->end));
+                    attrs.Set("gradientColor", UIWebText::FormatWebColor(r.gradient->end));
                 }
                 if (r.shadows && r.shadows->count > 0) {
                     // CSS paints the first layer on top, the engine paints the glow over the shadow
                     if (r.shadows->count == 1) {
-                        attrs.Set("shadow", UIText::FormatShadow(r.shadows->layers[0]));
+                        attrs.Set("shadow", UIText::FormatShadow(r.shadows->layers[0], r.shadows->tokens[0]));
                     } else {
-                        attrs.Set("glow", UIText::FormatShadow(r.shadows->layers[0]));
-                        attrs.Set("shadow", UIText::FormatShadow(r.shadows->layers[1]));
+                        attrs.Set("glow", UIText::FormatShadow(r.shadows->layers[0], r.shadows->tokens[0]));
+                        attrs.Set("shadow", UIText::FormatShadow(r.shadows->layers[1], r.shadows->tokens[1]));
                     }
                 }
                 if (r.highlight) {
-                    attrs.Set("highlight", UIText::FormatColor(*r.highlight));
+                    attrs.Set("highlight", UIWebText::FormatWebColor(*r.highlight));
                 }
                 if (r.partShape) {
                     if (kind == WebKind::Toggle || kind == WebKind::Slider || kind == WebKind::Progress) {
@@ -1635,14 +1638,14 @@ namespace BECore {
                 const bool thumb = kind == WebKind::Toggle || kind == WebKind::Slider;
                 if (r.trackColor) {
                     if (track) {
-                        attrs.Set("trackColor", UIText::FormatColor(*r.trackColor));
+                        attrs.Set("trackColor", UIWebText::FormatWebColor(*r.trackColor));
                     } else {
                         Note(report, "-be-track-color applies to a toggle, slider or progress bar only");
                     }
                 }
                 if (r.fillColor) {
                     if (track) {
-                        attrs.Set("fillColor", UIText::FormatColor(*r.fillColor));
+                        attrs.Set("fillColor", UIWebText::FormatWebColor(*r.fillColor));
                     } else {
                         Note(report, "-be-fill-color applies to a toggle, slider or progress bar only");
                     }
@@ -1652,7 +1655,7 @@ namespace BECore {
                 }
                 if (r.thumbColor) {
                     if (thumb) {
-                        attrs.Set("thumbColor", UIText::FormatColor(*r.thumbColor));
+                        attrs.Set("thumbColor", UIWebText::FormatWebColor(*r.thumbColor));
                     } else {
                         Note(report, "-be-thumb-color applies to a toggle or slider only (a progress bar has no thumb)");
                     }
@@ -1782,13 +1785,13 @@ namespace BECore {
                     attrs.Set("fontWeight", Number(static_cast<float>(*r.fontWeight)));
                 }
                 if (r.textOutline && r.textOutline->width > 0.0f) {
-                    attrs.Set("textOutline", UIText::FormatTextOutline(r.textOutline->width, r.textOutline->color));
+                    attrs.Set("textOutline", UIText::FormatTextOutline(r.textOutline->width, r.textOutline->color, r.textOutline->color.token));
                 }
                 if (r.textShadow) {
-                    attrs.Set("textShadow", UIText::FormatTextShadow(r.textShadow->offsetX, r.textShadow->offsetY, r.textShadow->color));
+                    attrs.Set("textShadow", UIText::FormatTextShadow(r.textShadow->offsetX, r.textShadow->offsetY, r.textShadow->color, r.textShadow->color.token));
                 }
                 if (r.textColor) {
-                    attrs.Set("textColor", UIText::FormatColor(*r.textColor));
+                    attrs.Set("textColor", UIWebText::FormatWebColor(*r.textColor));
                 }
                 if (!r.textAlign.empty()) {
                     attrs.Set("align", r.textAlign);
@@ -1834,7 +1837,7 @@ namespace BECore {
                         }
                     }
                     if (r.iconColor) {
-                        attrs.Set("iconTint", UIText::FormatColor(*r.iconColor));
+                        attrs.Set("iconTint", UIWebText::FormatWebColor(*r.iconColor));
                     }
                 } else if (r.iconColor) {
                     Note(report, "-be-icon-color has no effect on a button without data-icon");

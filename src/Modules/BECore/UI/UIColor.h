@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Reflection/DataAccessor.h>
+#include <BECore/Reflection/IPropertyVisitor.h>
 #include <BECore/UI/UIValueText.h>
 
 namespace BECore {
@@ -9,11 +10,33 @@ namespace BECore {
      * @brief A Color that a UI file writes in one attribute (`color="0,0,0,160"` or `color="#000000A0"`) instead of the child element a plain Color uses.
      *
      * It is a Color for everything else: it converts from one and is passed where one is expected.
+     *
+     * It may instead refer to a theme token (`color="@primary"`, UIThemes): `token` is the name and the four channels are the **resolved** value, which UIThemes::Resolve() writes
+     * (transparent until the element is first drawn). Every reader of a colour reads the channels and needs no change. Assigning a plain Color drops the token; a token is
+     * written back as `@name`, so a save keeps the reference.
      */
     struct UIColor : Color {
+        PoolString token;  ///< the name of the theme token; empty: a literal colour
+
         constexpr UIColor() = default;
         constexpr UIColor(unsigned char r_, unsigned char g_, unsigned char b_, unsigned char a_) : Color(r_, g_, b_, a_) {}
         constexpr UIColor(const Color& color) : Color(color) {}  // NOLINT(google-explicit-constructor): a UI field takes a plain Color
+
+        /// A reference to @p token, its channels transparent until UIThemes::Resolve()
+        [[nodiscard]] static constexpr UIColor FromToken(PoolString token) {
+            UIColor color;
+            color.token = token;
+            return color;
+        }
+
+        [[nodiscard]] constexpr bool HasToken() const {
+            return !token.Empty();
+        }
+
+        /// The same channels and the same token. (ColorsEqual() looks at the channels only)
+        [[nodiscard]] constexpr bool operator==(const UIColor& other) const {
+            return r == other.r && g == other.g && b == other.b && a == other.a && token == other.token;
+        }
     };
 
     /// @p color with every channel moved by @p delta (clamped to 0..255), the alpha kept: the lighter and darker states of a control are derived with it
@@ -46,7 +69,7 @@ namespace BECore {
         template <>
         struct DataAccessor<UIColor> {
             static void Save(ISerializer& s, const UIColor& value, eastl::string_view key) {
-                const eastl::string text = UIText::FormatColor(value);
+                const eastl::string text = UIText::FormatColorRef(value, value.token);
                 s.WriteAttribute(key, eastl::string_view(text.data(), text.size()));
             }
 
@@ -55,16 +78,34 @@ namespace BECore {
                 if (!d.ReadAttribute(key, text)) {
                     return false;
                 }
-                const auto color = UIText::ParseColor(eastl::string_view(text.data(), text.size()));
+                const auto color = UIText::ParseColorRef(eastl::string_view(text.data(), text.size()));
                 if (!color) {
                     d.ReportError(key, eastl::string_view(Format("Invalid color: '{}'", text).c_str()));
                     return false;
                 }
-                value = *color;
+                value = color->token.Empty() ? UIColor(color->color) : UIColor::FromToken(color->token);
                 return true;
             }
         };
 
     }  // namespace Ser
+
+    namespace PropVisit {
+
+        /// The inspector edits the channels of a UIColor; an edit makes it a literal colour, so the token that would overwrite the channels at the next draw is dropped (an edit of a
+        /// token is a decision to leave it). Like the Color it derives from, the channels are one group of four numbers
+        inline bool Visit(IPropertyVisitor& v, UIColor& value, eastl::string_view key) {
+            bool changed = false;
+            if (v.BeginCompound(key)) {
+                changed = value.VisitProperties(v);
+                v.EndCompound();
+            }
+            if (changed) {
+                value.token = PoolString{};
+            }
+            return changed;
+        }
+
+    }  // namespace PropVisit
 
 }  // namespace BECore
