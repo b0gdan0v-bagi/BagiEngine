@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/UI/UIElement.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 
@@ -9,6 +10,8 @@ namespace pugi {
 }
 
 namespace BECore {
+
+    class UICanvasComponent;
 
     /**
      * @brief ImGui widget for real-time scene editing
@@ -30,6 +33,17 @@ namespace BECore {
         BE_FUNCTION void Draw() override;
 
     private:
+        /**
+         * @brief The "UI elements" section of a node with a canvas: the element tree and the rect inspector of the selected element
+         *
+         * Edits the authored `style` of the element, live; it is not saved to a node file or a `.ui.xml` yet.
+         * @return true when an element changed
+         */
+        bool RenderUIElements(UICanvasComponent& canvas);
+
+        /// Forgets the selected canvas element (the node changed or the scene was replaced)
+        void ResetUISelection();
+
         /**
          * @brief Runs `scene.save` like the Save button (only with unsaved changes)
          */
@@ -63,6 +77,9 @@ namespace BECore {
         void SaveScene();
 
         SceneNode* _selectedNode = nullptr;
+        Scene* _lastScene = nullptr;                  // the scene the selection belongs to: a replaced scene drops it
+        SceneNode* _uiSelectionNode = nullptr;        // the node whose canvas `_selectedUIElement` belongs to
+        IntrusivePtr<UIElement> _selectedUIElement;   // held, so that a tree edit cannot leave it dangling
         SceneNode* _contextMenuTargetNode = nullptr;  // node to add a child to (null = root)
         char _nodeNameBuffer[256] = {};
         bool _showAddNodePopup = false;

@@ -77,6 +77,10 @@ The "Overlays" popup toggles the safe area, the view bounds (the fitted view, ba
 
 The choice (shape, safe area, overlays; not the forced view) is an editor setting: `EditorSettings` stores it in `preferences.json` (`viewportPreview`, the device by name) and it never reaches `Scene::Serialize`. The widget gets it with `EditorPreferencesChangedEvent` and reports a change with `ViewportPreviewChangedEvent`.
 
+## Editor
+
+The "UI elements" section of `SceneEditorWidget` (`UIRectInspector`, only with the editor) shows for a node with a `UICanvasComponent` the element tree and, for the selected element, the rect inspector: preset grid, `anchorMin` / `anchorMax` / `pivot`, offsets and sizes with a px / % switch, margins, `region`. It edits the authored `style`, never `active` (a variant of the canvas may still override it: the inspector says how many do) and the canvas is invalidated at every change. The numbers come from `UIRectEdit` and `UIAnchorPresets`, the widget only draws. The edits live in memory: saving back to a node file or a `.ui.xml` is the next slice, and the scene editor still refuses to save a scene with `<node ref>`.
+
 ## Not done
 
 Regions in the HTML + CSS front-end. Button sounds, focus and keyboard / gamepad navigation, text input, scrolling, clipping of children, a vertical or range slider, a drag over the control API, OS language detection, plural forms, hot reload, the debug overlay.

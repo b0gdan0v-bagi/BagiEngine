@@ -2,6 +2,7 @@
 
 #include "ComponentInspectors.h"
 #include "SceneConfigWriter.h"
+#include "UIRectInspector.h"
 
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/GameManager/CoreManager.h>
@@ -10,11 +11,16 @@
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/UI/UICanvasComponent.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <imgui.h>
 
 namespace BECore {
+
+    namespace {
+        constexpr float kUITreeHeight = 160.0f;
+    }
 
     // =========================================================================
     // IWidget interface
@@ -41,6 +47,14 @@ namespace BECore {
 
         auto& sceneManager = CoreManager::GetSceneManager();
         auto* scene = sceneManager.GetActiveScene();
+
+        if (scene != _lastScene) {
+            // A replaced scene frees its nodes: the selection would dangle
+            _selectedNode = nullptr;
+            _contextMenuTargetNode = nullptr;
+            ResetUISelection();
+            _lastScene = scene;
+        }
 
         if (!scene) {
             ImGui::TextDisabled("No active scene");
@@ -155,6 +169,7 @@ namespace BECore {
                 if (parent) {
                     if (_selectedNode == &node) {
                         _selectedNode = nullptr;
+                        ResetUISelection();
                     }
                     parent->RemoveChild(&node);
                     _isDirty = true;
@@ -174,10 +189,40 @@ namespace BECore {
         }
     }
 
+    void SceneEditorWidget::ResetUISelection() {
+        _selectedUIElement = nullptr;
+        _uiSelectionNode = nullptr;
+    }
+
+    bool SceneEditorWidget::RenderUIElements(UICanvasComponent& canvas) {
+        bool changed = false;
+        if (ImGui::TreeNodeEx("UI elements", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::TextDisabled("Edits the authored style, live; not saved to a node file yet");
+            ImGui::BeginChild("##ui_tree", ImVec2(0.0f, kUITreeHeight), true);
+            DrawUIElementTree(canvas, _selectedUIElement);
+            ImGui::EndChild();
+
+            if (_selectedUIElement) {
+                if (ImGui::CollapsingHeader("Rect", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    changed = InspectUIRect(canvas, *_selectedUIElement);
+                }
+            } else {
+                ImGui::TextDisabled("Select an element");
+            }
+            ImGui::TreePop();
+        }
+        return changed;
+    }
+
     void SceneEditorWidget::RenderInspector() {
         if (!_selectedNode) {
             ImGui::TextDisabled("Select a node to inspect");
             return;
+        }
+
+        if (_uiSelectionNode != _selectedNode) {
+            ResetUISelection();
+            _uiSelectionNode = _selectedNode;
         }
 
         // Node name editor
@@ -222,6 +267,9 @@ namespace BECore {
 
             if (isOpen) {
                 ImGui::Indent();
+                if (typeMeta.typeHash == UICanvasComponent::GetStaticTypeMeta().typeHash && RenderUIElements(static_cast<UICanvasComponent&>(*component.Get()))) {
+                    _isDirty = true;
+                }
                 if (RenderComponentInspector(component.Get())) {
                     _isDirty = true;
                 }
