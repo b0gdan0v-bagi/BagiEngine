@@ -32,10 +32,10 @@ namespace BECore {
      * `UIElement::OnPopupChoice` of the popup instead of the child's `OnClick`. Opening one popup closes another; a canvas that cannot take input closes its popups. The canvas
      * invalidates its layout when the set of open popups changed (the layout cache does not see element edits), at the latest on the next draw.
      *
-     * **Tooltips.** A hovered `UIButton` with a `tooltip` shows it after `UITooltip::kHoverDelay`, a finger held on it for `UITooltip::kLongPress` shows it too and that press is no click
-     * (the release is swallowed); the rules are `UITooltip::Tracker`, the time is `CoreManager::GetTime()`. The plate is drawn last, over the popups, by a label the canvas owns: it is
-     * no element of the tree, so it takes no input, is never hit, and the layout, `ui_tree` and the validator do not see it. A hidden canvas, one without input and any
-     * press of a mouse hide it.
+     * **Tooltips.** A hovered element with a tooltip (`UIElement::GetTooltipText`: a `UITooltipComponent`, or the `tooltip` of a `UIButton`) shows it after `UITooltip::kHoverDelay`, a finger held on
+     * it for `UITooltip::kLongPress` shows it too and that press is no click (the release is swallowed); the rules are `UITooltip::Tracker`, the time is `CoreManager::GetTime()`. The plate is drawn
+     * last, over the popups, by a label the canvas owns: it is no element of the tree, so it takes no input, is never hit, and the layout, `ui_tree` and the validator do not see it. A hidden canvas,
+     * one without input and any press of a mouse hide it.
      *
      * **Regions.** The game publishes named rectangles with SetRegion() and an element places itself in one with `region="name"` (UIRectSpec::region).
      */

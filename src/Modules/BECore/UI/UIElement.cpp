@@ -1,7 +1,9 @@
 #include "UIElement.h"
 
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UITooltipComponent.h>
 #include <Generated/UIElement.gen.hpp>
 
 namespace BECore {
@@ -53,12 +55,17 @@ namespace BECore {
     }
 
     bool UIElement::IsDisabled() const {
-        return groupDisabled;
+        if (groupDisabled) {
+            return true;
+        }
+        const UIInputClicker* clicker = GetComponent<UIInputClicker>();
+        return clicker && clicker->disabled;
     }
 
     const eastl::string& UIElement::GetTooltipText() const {
         static const eastl::string none;
-        return none;
+        const UITooltipComponent* tooltip = GetComponent<UITooltipComponent>();
+        return tooltip ? tooltip->text : none;
     }
 
     UIStateLook::Look UIElement::GetStateLook() const {

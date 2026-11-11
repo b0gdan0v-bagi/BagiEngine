@@ -147,10 +147,12 @@ namespace BECore {
         /// The pointer and the owner's flags as the state look reads them: `pressed` only while the pointer is still over the element, `disabled` is `IsDisabled()`
         [[nodiscard]] UIStateLook::State GetVisualState() const;
 
-        /// The element does not react: `groupDisabled` (a control that has a `disabled` of its own adds it). A disabled element still takes the click and does nothing with it
+        /// The element does not react: `groupDisabled` or the `disabled` of its `UIInputClicker` (a control that has a `disabled` of its own adds it). A disabled element still takes the click and
+        /// does nothing with it
         [[nodiscard]] virtual bool IsDisabled() const;
 
-        /// The text of the tooltip the canvas shows after a hover or a long touch press, empty for none; it may hold `{#key}` and `{var}`
+        /// The text of the tooltip the canvas shows after a hover or a long touch press, empty for none: the `UITooltipComponent` text (a control with a tooltip of its own overrides it); it may hold
+        /// `{#key}` and `{var}`
         [[nodiscard]] virtual const eastl::string& GetTooltipText() const;
 
         /// The box, the fill and the gradient end for the state the element is in now (pure: reads the state and changes nothing)

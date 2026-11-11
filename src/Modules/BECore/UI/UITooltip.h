@@ -7,18 +7,18 @@ namespace BECore {
     class UIElement;
 
     /**
-     * @brief The rules of the tooltip of a button, with no scene and no renderer: where the plate goes and when it is shown.
+     * @brief The rules of the tooltip of an element, with no scene and no renderer: where the plate goes and when it is shown.
      *
-     * `UICanvasComponent` holds a `Tracker`, feeds it with what the pointer does and draws the plate where `Place` says (`UIButton::tooltip` is only the text). Times are seconds of game
+     * `UICanvasComponent` holds a `Tracker`, feeds it with what the pointer does and draws the plate where `Place` says (`UIElement::GetTooltipText` is only the text). Times are seconds of game
      * time, any clock that does not go back.
      */
     class UITooltip {
     public:
-        static constexpr double kHoverDelay = 0.5;   ///< a mouse resting on the same button this long shows the tooltip
-        static constexpr double kLongPress = 0.5;    ///< a touch held on the button this long shows it and is no click
+        static constexpr double kHoverDelay = 0.5;   ///< a mouse resting on the same element this long shows the tooltip
+        static constexpr double kLongPress = 0.5;    ///< a touch held on the element this long shows it and is no click
         static constexpr double kTouchLinger = 1.5;  ///< after the finger lifts, a touch tooltip stays this long
 
-        static constexpr float kGap = 8.0f;         ///< between the button and the plate, in canvas units
+        static constexpr float kGap = 8.0f;         ///< between the element and the plate, in canvas units
         static constexpr float kPadding = 10.0f;    ///< between the edge of the plate and the text
         static constexpr float kMaxWidth = 280.0f;  ///< the text wraps at this width
         static constexpr float kFontSize = 18.0f;
@@ -26,17 +26,17 @@ namespace BECore {
         static constexpr Color kTextColor{255, 255, 255, 255};
 
         /**
-         * @brief The plate of a size @p size for the button @p target inside @p bounds (canvas units).
+         * @brief The plate of a size @p size for the element @p target inside @p bounds (canvas units).
          *
-         * Centred under the button with `kGap` between them; when it does not fit below it goes above the button; then it is moved into @p bounds. A plate larger than @p bounds starts
-         * at the top-left edge of it. The plate may cover the button when it fits on neither side.
+         * Centred under the element with `kGap` between them; when it does not fit below it goes above the element; then it is moved into @p bounds. A plate larger than @p bounds starts
+         * at the top-left edge of it. The plate may cover the element when it fits on neither side.
          */
         [[nodiscard]] static Rect Place(const Rect& target, const Vec2& size, const Rect& bounds);
 
         /**
          * @brief When the tooltip is shown: a small state machine fed with the pointer.
          *
-         * Call `Update` whenever the pointer, a button or the clock may have changed (an event, a draw). **Mouse:** shown once the pointer has rested on the same target for `kHoverDelay`;
+         * Call `Update` whenever the pointer, an element or the clock may have changed (an event, a draw). **Mouse:** shown once the pointer has rested on the same target for `kHoverDelay`;
          * hidden by leaving it and by a press, and a press keeps it hidden until the pointer has left and come back. **Touch:** a finger has no hover, so nothing shows until a press on
          * the target has lasted `kLongPress`: then it is shown and `IsLongPress()` is true (the canvas swallows the click that the release would make); it stays `kTouchLinger` after the
          * release. A short touch is never a long press. Another target, or switching between mouse and touch, starts again.
