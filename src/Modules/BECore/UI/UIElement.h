@@ -156,7 +156,7 @@ namespace BECore {
         /// The box, the fill and the gradient end for the state the element is in now (pure: reads the state and changes nothing)
         [[nodiscard]] UIStateLook::Look GetStateLook() const;
 
-        /// The colour of the selection (the bar, the border and the glow of a selected box): the text colour of a control that has one, white for a plain element
+        /// The colour of the selection (the bar, the border and the glow of a selected box): the text colour of a control (or of its `UITextComponent`) that has one, white for a plain element
         [[nodiscard]] virtual Color GetStateAccent() const;
 
         /// Some component shows the pointer state in the box, so `DrawSelf` draws the state look

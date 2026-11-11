@@ -1,6 +1,7 @@
 #include "UIElement.h"
 
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Generated/UIElement.gen.hpp>
 
 namespace BECore {
@@ -65,6 +66,9 @@ namespace BECore {
     }
 
     Color UIElement::GetStateAccent() const {
+        if (const UITextComponent* caption = GetComponent<UITextComponent>()) {
+            return caption->textColor;
+        }
         return {255, 255, 255, 255};
     }
 
