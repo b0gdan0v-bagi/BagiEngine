@@ -32,6 +32,21 @@ namespace BECore {
             return drawn;
         }
 
+        /// Prepare() of the glyphs of the layout, but only when the atlas lacks one of them: a text drawn again (every frame) finds them all
+        /// and builds no list, so a frame at rest does not allocate here
+        void PrepareLayout(IRenderer& renderer, FontAtlas& atlas, const TextLayoutResult& layout) {
+            const bool complete = eastl::all_of(layout.glyphs.begin(), layout.glyphs.end(), [&atlas](const PositionedGlyph& positioned) { return atlas.Find(positioned.glyph) != nullptr; });
+            if (complete) {
+                return;
+            }
+            eastl::vector<uint32_t> glyphs;
+            glyphs.reserve(layout.glyphs.size());
+            for (const PositionedGlyph& positioned : layout.glyphs) {
+                glyphs.push_back(positioned.glyph);
+            }
+            atlas.Prepare(renderer, glyphs);
+        }
+
     }  // namespace
 
     size_t TextRenderer::Draw(IRenderer& renderer, FontAtlas& atlas, const TextLayoutResult& layout, float originX, float originY, const Color& tint) {
@@ -45,15 +60,10 @@ namespace BECore {
             return 0;
         }
 
-        eastl::vector<uint32_t> glyphs;
-        glyphs.reserve(layout.glyphs.size());
-        for (const PositionedGlyph& positioned : layout.glyphs) {
-            glyphs.push_back(positioned.glyph);
-        }
-        fillAtlas.Prepare(renderer, glyphs);
+        PrepareLayout(renderer, fillAtlas, layout);
         const bool outlined = outlineAtlas != nullptr && effects.HasOutline();
         if (outlined) {
-            outlineAtlas->Prepare(renderer, glyphs);
+            PrepareLayout(renderer, *outlineAtlas, layout);
         }
 
         const ViewTransform view = renderer.GetViewTransform();
