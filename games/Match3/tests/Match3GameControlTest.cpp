@@ -1,3 +1,4 @@
+#include <BECore/Control/Json.h>
 #include <Match3/Match3GameControl.h>
 #include <gtest/gtest.h>
 

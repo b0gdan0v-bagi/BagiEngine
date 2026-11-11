@@ -1,6 +1,7 @@
 #pragma once
 
-#include <BECore/Control/Json.h>
+#include <BECore/Control/ControlTypes.h>
+#include <BECore/Control/JsonFwd.h>
 
 namespace BECore {
 
