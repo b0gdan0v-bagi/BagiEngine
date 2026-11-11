@@ -26,17 +26,18 @@ namespace BECore {
      * Canvas: {"node", "space", "visible", "modal", "inputEnabled", "takesInput", "inputOrder", "laidOut"} and, once laid out, "scale" (output pixels per UI
      * unit), "bounds", "safeBounds", "contentBounds" (rects in UI units), "elements" (the tree) and "issues" (the layout validator's findings: {"kind",
      * "element", "other", "rect"}). A canvas that was never drawn has no layout, so it has the structure of the tree and no rects.
-     * Element: {"type", "name", "visible", "interactive", "blocksInput", "hovered", "pressed", "rect" (UI units of the canvas), "outputRect" (render
+     * Element: {"type", "name", "visible", "interactive" (a button, or an element with a `UIInputClicker`), "blocksInput", "hovered", "pressed", "rect" (UI units of the canvas), "outputRect" (render
      * output pixels, the pixels of a `screenshot`), "children"}, plus "text" for a label or a button (as shown, variables replaced) and "action", "disabled"
      * (the button's own flag or its group's: whether a click does anything), "value" (what the click emits with the action; "" for a plain button) and
-     * "selected" (a segment of a choice group that the bound variable names) for a button, and "bind" (the variable), "selectedValue" (its value: "" when
-     * unset) and "disabled" for a `UISegmented`. The value controls add: for a `UIToggle` (also a label, so it has "text", the caption) "bind", "onValue",
-     * "offValue", "checked" (the variable equals `onValue`), "action" and "disabled"; for a `UIProgressBar` "bind", "minValue", "maxValue" and "fraction"
-     * (0..1, how much is filled); for a `UIDropdown` (also a label: "text" is the header as shown, the chosen option or the placeholder) "bind", "selectedValue", "open" (the
-     * list is open), "action" and "disabled", and its options are its children (`UIButton`s with "value" and "selected", hidden, with no rect, while the list is closed); for a `UISlider` "bind",
-     * "minValue", "maxValue", "step", "value" (a number: the variable as the slider reads it, clamped, the minimum when unset), "fraction" (0..1, where the thumb stands), "action" and "disabled". (A
-     * slider's "value" is a number here and the text that a click emits in the `ui_click` answer; a button's "value" is its text in both.) A rect is {"x","y","w","h"}. An element is visible when its
-     * rect is not empty.
+     * "selected" (a segment of a choice group that the bound variable names) for a button, and, for an element made of components (`UIElement::components`, a button is not a class there):
+     * "components" (the type names in list order, only when it has any), "text" (the `UITextComponent`'s, as shown), "icon" (the sprite of its `UIImageComponent`), "tooltip" (its
+     * `UITooltipComponent`'s source) and, with a `UIInputClicker`, "action", "value", "disabled" (the clicker's flag or its group's) and "selected", with the meaning they have for a button, and
+     * "bind" (the variable), "selectedValue" (its value: "" when unset) and "disabled" for a `UISegmented`. The value controls add: for a `UIToggle` (also a label, so it has "text", the caption)
+     * "bind", "onValue", "offValue", "checked" (the variable equals `onValue`), "action" and "disabled"; for a `UIProgressBar` "bind", "minValue", "maxValue" and "fraction" (0..1, how much is
+     * filled); for a `UIDropdown` (also a label: "text" is the header as shown, the chosen option or the placeholder) "bind", "selectedValue", "open" (the list is open), "action" and "disabled", and
+     * its options are its children (`UIButton`s with "value" and "selected", hidden, with no rect, while the list is closed); for a `UISlider` "bind", "minValue", "maxValue", "step", "value" (a
+     * number: the variable as the slider reads it, clamped, the minimum when unset), "fraction" (0..1, where the thumb stands), "action" and "disabled". (A slider's "value" is a number here and the
+     * text that a click emits in the `ui_click` answer; a button's "value" is its text in both.) A rect is {"x","y","w","h"}. An element is visible when its rect is not empty.
      *
      * `selected` and `selectedValue` are those of **this moment**: `ui_tree` calls `UISegmented::SyncChildren()` on every group before it describes the
      * segments, so a variable that the game set since the last draw is already in the answer (the rects are still those of the last draw). So are `checked`,
@@ -59,8 +60,9 @@ namespace BECore {
      * edge, a hair inside it so the point still hits the element); the vertical position is always the middle. It is how a client sets a slider with one click:
      * `at` 0 asks for the minimum, 1 for the maximum, and the answer's "value" says what that came to (a drag in several steps is not offered). Anything else
      * (a string, null, a number outside 0..1) is `invalid_params`, checked before anything is pressed. `at` is also used for the covered-by check, so a point
-     * under another element is `not_clickable`. A click with `at` on a button is a press at that point of the button. A disabled button takes the click and does nothing with it. The answer comes
-     * after the click: its handlers (an action that switches the scene) have run.
+     * under another element is `not_clickable`. A click with `at` on a button is a press at that point of the button. A disabled button takes the click and does nothing with it. An element with a
+     * `UIInputClicker` answers as a button, but a disabled one (its flag or its group's) answers "action" and "value" empty: it emitted nothing. The answer comes after the click: its handlers (an
+     * action that switches the scene) have run.
      *
      * Not seen: the documents of `RmlUiDocumentComponent` have a DOM of their own.
      *

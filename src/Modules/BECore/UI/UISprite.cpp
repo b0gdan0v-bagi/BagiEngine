@@ -37,6 +37,19 @@ namespace BECore {
         _direct = static_cast<bool>(_texture);
     }
 
+    Rect UISprite::FitInto(const Rect& area, const Rect& source) {
+        if (source.IsEmpty()) {
+            return area;
+        }
+        const float scale = std::min(area.w / source.w, area.h / source.h);
+        Rect target;
+        target.w = source.w * scale;
+        target.h = source.h * scale;
+        target.x = area.x + (area.w - target.w) * 0.5f;
+        target.y = area.y + (area.h - target.h) * 0.5f;
+        return target;
+    }
+
     Rect UISprite::GetSource() const {
         if (!_source.IsEmpty() || !_texture) {
             return _source;

@@ -5,7 +5,6 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UIDocument.h>
 #include <Generated/UICanvasComponent.gen.hpp>
 
@@ -163,6 +162,7 @@ namespace BECore {
             return;
         }
         element.DrawSelf(renderer);
+        element.DrawComponents(renderer);
         if (element.HasPopupChildren()) {
             return;  // drawn by DrawPopups() after the whole tree
         }
@@ -186,32 +186,33 @@ namespace BECore {
     }
 
     void UICanvasComponent::RefreshTooltip() {
-        UIButton* button = _pointerOver ? _pointerOver->Cast<UIButton>() : nullptr;
-        const bool hasTooltip = button && !button->tooltip.empty() && button->active.visible && !button->rect.IsEmpty();
-        // A mouse hides the tooltip for a press of any button on this canvas; a finger only counts the press that began on the button it is on
+        const UIElement* target = _pointerOver.Get();
+        const bool hasTooltip = target && !target->GetTooltipText().empty() && target->active.visible && !target->rect.IsEmpty();
+        // A mouse hides the tooltip for a press of any button on this canvas; a finger only counts the press that began on the element it is on
         const bool pressed = _pointerTouch ? (_pressed && _pressed == _pointerOver) : _consumedButtons != 0;
-        _tooltip.Update(hasTooltip ? button : nullptr, _pointerTouch, pressed, CoreManager::GetTime().GetTotalTime());
+        _tooltip.Update(hasTooltip ? target : nullptr, _pointerTouch, pressed, CoreManager::GetTime().GetTotalTime());
     }
 
     void UICanvasComponent::DrawTooltip(IRenderer& renderer) {
-        UIButton* button = _pointerOver ? _pointerOver->Cast<UIButton>() : nullptr;
-        if (!button || !_tooltip.IsShown(button)) {
+        const UIElement* target = _pointerOver.Get();
+        if (!target || !_tooltip.IsShown(target)) {
             return;
         }
+        const eastl::string& tooltipText = target->GetTooltipText();
         if (!_tooltipLabel) {
             _tooltipLabel = New<UILabel>();
             _tooltipLabel->active.fontSize = UITooltip::kFontSize;
             _tooltipLabel->textColor = UITooltip::kTextColor;
         }
-        if (_tooltipLabel->text != button->tooltip) {
-            _tooltipLabel->text = button->tooltip;
+        if (_tooltipLabel->text != tooltipText) {
+            _tooltipLabel->text = tooltipText;
         }
         const float scale = renderer.GetViewTransform().scale;
         const Vec2 text = _tooltipLabel->MeasureText(UITooltip::kMaxWidth, scale);
         if (text.x <= 0.0f || text.y <= 0.0f) {
             return;
         }
-        const Rect plate = UITooltip::Place(button->rect, {text.x + 2.0f * UITooltip::kPadding, text.y + 2.0f * UITooltip::kPadding}, _layout.GetResolved().contentBounds);
+        const Rect plate = UITooltip::Place(target->rect, {text.x + 2.0f * UITooltip::kPadding, text.y + 2.0f * UITooltip::kPadding}, _layout.GetResolved().contentBounds);
         renderer.DrawFilledRect(plate.x, plate.y, plate.w, plate.h, UITooltip::kPlateColor);
         // The text is laid out against the width it was measured with, so it wraps where the measure did; the plate (its left edge and its size) is what shows
         _tooltipLabel->rect = {plate.x + UITooltip::kPadding, plate.y + UITooltip::kPadding, UITooltip::kMaxWidth, text.y};
@@ -386,7 +387,7 @@ namespace BECore {
             _consumedButtons |= ButtonBit(event.button);
         }
         IntrusivePtr<UIElement> toPress;
-        if (hit && hit->interactive && event.button == SDL_BUTTON_LEFT) {
+        if (hit && hit->IsInteractive() && event.button == SDL_BUTTON_LEFT) {
             if (_pressed) {
                 _pressed->pressed = false;  // a release that never arrived
             }

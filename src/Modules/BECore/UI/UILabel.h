@@ -1,17 +1,10 @@
 #pragma once
 
-#include <BECore/Math/Vec2.h>
-#include <BECore/Resource/ResourceHandle.h>
-#include <BECore/Text/Font.h>
-#include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/Text/TextLayoutCache.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UITextEffects.h>
+#include <BECore/UI/UITextPainter.h>
 
 namespace BECore {
-
-    /// Where the text sits in the height of its rect when it does not fill it
-    CORE_ENUM(UIVerticalAlign, uint8_t, Top, Center, Bottom)
 
     /**
      * @brief A text in the rect of the element: `<element type="UILabel" text="Score: 0" fontSize="28" textColor="255,255,255,255"/>`.
@@ -22,12 +15,13 @@ namespace BECore {
      * `textColor` is the text. The face is `font` (a file path), else the nearest face of `fontFamily` at `fontWeight` in the table of `TextConfig.xml`; the validator measures with it. The text may
      * name variables, `text="Score: {score}"`, which follow `CoreManager::GetUIVars()`, and strings, `text="{#menu.start}"`, which follow `CoreManager::GetUIStrings()` and its language. Vertical
      * alignment is the label's (TextLayout has none). `textOutline` and `textShadow` (UITextEffects) paint an outline and a hard shadow round the text of the label and of every control that draws its
-     * text through it; they are not measured, and a `Clip` label cuts them at its rect like the text.
+     * text through it; they are not measured, and a `Clip` label cuts them at its rect like the text. The text machinery is `UITextPainter`, which `UITextComponent` uses too: a label is
+     * the element form of the same text.
      */
     class UILabel : public UIElement {
         BE_CLASS(UILabel)
     public:
-        static constexpr float DefaultFontSize = 24.0f;
+        static constexpr float DefaultFontSize = UITextPainter::kDefaultFontSize;
 
         UILabel() = default;
         ~UILabel() override = default;
@@ -67,12 +61,12 @@ namespace BECore {
 
         /// The layout of the last draw (empty before the first one)
         [[nodiscard]] const TextLayoutResult& GetLastLayout() const {
-            return _layoutCache.GetLast();
+            return _painter.GetLastLayout();
         }
 
         /// How many times the text was laid out: an unchanged label is not laid out again
         [[nodiscard]] uint32_t GetLayoutCount() const {
-            return _layoutCache.GetLayoutCount();
+            return _painter.GetLayoutCount();
         }
 
     protected:
@@ -90,18 +84,9 @@ namespace BECore {
         void DrawText(IRenderer& renderer, const Rect& area, const Color& color);
 
     private:
-        [[nodiscard]] TextLayoutOptions MakeOptions(float width, float height, float scale) const;
-        [[nodiscard]] Font* ResolveFont() const;
+        [[nodiscard]] UITextParams MakeParams() const;
 
-        mutable ResourceHandle<Font> _fontHandle;
-        mutable PoolString _fontPath;      // the path _fontHandle was loaded from, to notice a changed font, family or weight
-        mutable FontRequest _fontRequest;  // the request of the last resolve: an unknown family is logged when it changes, not on every frame
-        mutable TextLayoutCache _layoutCache;
-        mutable eastl::string _expandedSource;  // the `text` that _expanded was made from
-        mutable eastl::string _expanded;
-        mutable uint64_t _expandedVersion = 0;         // the version of UIVars it was made at
-        mutable uint64_t _expandedStringsVersion = 0;  // the version of UIStrings it was made at, read only when _expandedUsesStrings
-        mutable bool _expandedUsesStrings = false;     // the text holds a `{#key}`
+        mutable UITextPainter _painter;
     };
 
 }  // namespace BECore

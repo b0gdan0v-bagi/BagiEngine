@@ -1,86 +1,37 @@
 #include "UILabel.h"
 
-#include <BECore/GameManager/CoreManager.h>
-#include <BECore/Renderer/IRenderer.h>
-#include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/Text/TextRenderer.h>
 #include <Generated/UILabel.gen.hpp>
 
 namespace BECore {
 
-    eastl::string_view UILabel::GetDisplayText() const {
+    UITextParams UILabel::MakeParams() const {
         const eastl::string& source = GetSourceText();
-        if (!UIVars::HasPlaceholders(source)) {
-            return eastl::string_view(source.data(), source.size());
-        }
-        const UIVars& variables = CoreManager::GetUIVars();
-        UIStrings& strings = CoreManager::GetUIStrings();
-        // A text that names no string does not depend on the string table, so a language switch leaves it alone
-        const bool stale = _expandedSource != source || _expandedVersion != variables.GetVersion() || (_expandedUsesStrings && _expandedStringsVersion != strings.GetVersion());
-        if (stale) {
-            const eastl::string_view sourceView(source.data(), source.size());
-            _expandedUsesStrings = UIStrings::HasReferences(sourceView);
-            if (_expandedUsesStrings) {
-                // Strings first, variables second: a translation may hold `{score}`, and a string is not resolved again
-                const size_t missingBefore = strings.GetMissing().size();
-                const eastl::string resolved = strings.Resolve(sourceView);
-                const auto& missing = strings.GetMissing();
-                for (size_t i = missingBefore; i < missing.size(); ++i) {
-                    LOG_WARNING("UILabel: no string '{}' in the language '{}' or the default one"_format(missing[i].key.c_str(), missing[i].language.ToStringView()));
-                }
-                _expanded = variables.Expand(eastl::string_view(resolved.data(), resolved.size()));
-                _expandedStringsVersion = strings.GetVersion();
-            } else {
-                _expanded = variables.Expand(sourceView);
-            }
-            _expandedSource = source;
-            _expandedVersion = variables.GetVersion();
-        }
-        return eastl::string_view(_expanded.data(), _expanded.size());
+        UITextParams params;
+        params.text = eastl::string_view(source.data(), source.size());
+        params.font = font;
+        params.fontFamily = fontFamily;
+        params.fontWeight = fontWeight;
+        params.fontSize = active.fontSize;
+        params.align = align;
+        params.verticalAlign = verticalAlign;
+        params.overflow = overflow;
+        params.wrap = wrap;
+        params.lineSpacing = lineSpacing;
+        params.minFontSize = minFontSize;
+        params.effects = textEffects;
+        return params;
+    }
+
+    eastl::string_view UILabel::GetDisplayText() const {
+        return _painter.GetDisplayText(MakeParams().text);
     }
 
     float UILabel::GetFontSize() const {
-        return active.fontSize > 0.0f ? active.fontSize : DefaultFontSize;
-    }
-
-    TextLayoutOptions UILabel::MakeOptions(float width, float height, float scale) const {
-        // The text is laid out and rasterized in output pixels, so that a glyph lands on the pixels it was drawn for (the way TextComponent does it)
-        TextLayoutOptions options;
-        options.fontSize = static_cast<float>(FontAtlasLibrary::QuantizeSize(GetFontSize() * scale));
-        options.minFontSize = minFontSize * scale;
-        options.maxWidth = width * scale;
-        options.maxHeight = height * scale;
-        options.align = align;
-        options.overflow = overflow;
-        options.wrap = wrap;
-        options.lineSpacing = lineSpacing;
-        return options;
-    }
-
-    Font* UILabel::ResolveFont() const {
-        const FontRequest request{font, fontFamily, fontWeight};
-        bool known = true;
-        const PoolString path = CoreManager::GetFontAtlasLibrary().ResolveFontPath(request, &known);
-        if (request != _fontRequest) {
-            _fontRequest = request;
-            if (!known) {
-                LOG_WARNING("UILabel: no font family '{}' in TextConfig.xml, using the default font"_format(fontFamily.ToStringView()));
-            }
-        }
-        if (path != _fontPath) {
-            // First use, or a field was changed. A path that does not load is logged once and tried again only when it changes
-            _fontPath = path;
-            _fontHandle = CoreManager::GetResourceManager().Load<Font>(path.ToStringView());
-            if (!_fontHandle || _fontHandle->GetState() != ResourceState::Loaded) {
-                LOG_ERROR("UILabel: cannot load the font '{}'"_format(path.ToStringView()));
-                _fontHandle.Reset();
-            }
-        }
-        return _fontHandle ? _fontHandle.Get() : nullptr;
+        return UITextPainter::EffectiveFontSize(active.fontSize);
     }
 
     PoolString UILabel::GetResolvedFontPath() const {
-        return ResolveFont() ? _fontPath : PoolString{};
+        return _painter.GetResolvedFontPath(MakeParams());
     }
 
     void UILabel::DrawSelf(IRenderer& renderer) {
@@ -93,76 +44,15 @@ namespace BECore {
     }
 
     void UILabel::DrawText(IRenderer& renderer, const Rect& area, const Color& color) {
-        const eastl::string_view shown = GetDisplayText();
-        if (shown.empty() || area.IsEmpty() || color.a == 0) {
-            return;
-        }
-        Font* resolved = ResolveFont();
-        const float scale = renderer.GetViewTransform().scale;
-        if (!resolved || scale <= 0.0f) {
-            return;
-        }
-
-        const TextLayoutResult& layout = _layoutCache.Get(*resolved, shown, MakeOptions(area.w, area.h, scale));
-        if (layout.glyphs.empty()) {
-            return;
-        }
-        const int pixelSize = FontAtlasLibrary::QuantizeSize(layout.fontSize);
-        auto atlas = CoreManager::GetFontAtlasLibrary().Get(renderer, IntrusivePtr<Font>(resolved), pixelSize);
-        if (!atlas) {
-            return;
-        }
-
-        // A control that fades its text (a disabled toggle) passes the faded colour: the effects fade by the same share, so no strong outline stays round faded text
-        const float fade = textColor.a > 0 ? std::min(1.0f, static_cast<float>(color.a) / static_cast<float>(textColor.a)) : 1.0f;
-        const TextEffects effects = textEffects.ToPixels(scale, fade);
-        IntrusivePtr<FontAtlas> outlineAtlas;
-        if (effects.HasOutline()) {
-            outlineAtlas = CoreManager::GetFontAtlasLibrary().Get(renderer, IntrusivePtr<Font>(resolved), pixelSize, static_cast<int>(effects.outlineWidth));
-        }
-
-        // The layout is in output pixels, the origin in the units of the canvas
-        const float freeHeight = std::max(0.0f, area.h * scale - layout.height);
-        float offset = 0.0f;
-        if (verticalAlign == UIVerticalAlign::Center) {
-            offset = freeHeight * 0.5f;
-        } else if (verticalAlign == UIVerticalAlign::Bottom) {
-            offset = freeHeight;
-        }
-
-        const bool clip = layout.overflowed && overflow == TextOverflow::Clip;
-        if (clip) {
-            renderer.PushClipRect(renderer.GetViewTransform().ToOutput(area.x, area.y, area.w, area.h));
-        }
-        TextRenderer::Draw(renderer, *atlas, outlineAtlas.Get(), layout, area.x, area.y + offset / scale, color, effects);
-        if (clip) {
-            renderer.PopClipRect();
-        }
+        _painter.Draw(renderer, MakeParams(), area, color, textColor);
     }
 
     Vec2 UILabel::MeasureText(float maxWidth, float scale) const {
-        const eastl::string_view shown = GetDisplayText();
-        Font* resolved = shown.empty() ? nullptr : ResolveFont();
-        if (!resolved || maxWidth <= 0.0f || scale <= 0.0f) {
-            return {};
-        }
-        // No height limit: the text is as tall as its lines
-        const TextLayoutResult layout = TextLayout::Layout(*resolved, shown, MakeOptions(maxWidth, 0.0f, scale));
-        return {layout.width / scale, layout.height / scale};
+        return _painter.Measure(MakeParams(), maxWidth, scale);
     }
 
     UIContentFit UILabel::CheckContent(float width, float height, float scale) const {
-        UIContentFit fit;
-        const eastl::string_view shown = GetDisplayText();
-        Font* resolved = shown.empty() ? nullptr : ResolveFont();
-        if (!resolved || width <= 0.0f || height <= 0.0f || scale <= 0.0f) {
-            return fit;
-        }
-        const TextLayoutResult layout = TextLayout::Layout(*resolved, shown, MakeOptions(width, height, scale));
-        fit.hasContent = true;
-        fit.fits = !layout.overflowed && !layout.truncated;
-        fit.canShrink = overflow != TextOverflow::Clip;
-        return fit;
+        return _painter.Check(MakeParams(), width, height, scale);
     }
 
 }  // namespace BECore

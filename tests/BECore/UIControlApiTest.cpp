@@ -39,6 +39,9 @@ namespace BECore::Tests {
         // "Pick": 800 x 600 in window pixels. Level is a UIDropdown (100, 100, 240 x 56, `uiApiLevel`, action UIControlApiLevel, options 56 high: Easy, Normal, Hard and Locked, a
         //   disabled option), Below (500, 200, 80 x 40) is a button the open list does not cover, Frozen (100, 450, 240 x 56) a disabled dropdown with one option.
         // "Icons": 800 x 600 in window pixels. Gear is an icon button with a tooltip that holds a key and a variable, Quiet an icon button without a tooltip, Words a button with a caption only.
+        // "Composed": 800 x 600 in window pixels, buttons made of components. Play (10, 10, 120 x 48) has a clicker, an image, a text and a tooltip, Dead (150, 10, 100 x 48) a disabled clicker and
+        //   a text, Shade (10, 100, 100 x 40) a clicker with Cover (0, 90, 120 x 60) drawn over it, Wide (10, 200, 300 x 40) a clicker, Badge (300, 10, 48 x 48) an image and a tooltip but no clicker,
+        //   Bare (400, 10, 48 x 48) no components, Loud (500, 10, 120 x 48) a UIToggle with the text "Loud" that also carries a text component saying "Caption".
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -166,6 +169,42 @@ namespace BECore::Tests {
           <element type="UIButton" name="Gear" icon="GearIcon" tooltip="Open {#tip.gear} for {user}" x="10" y="10" width="48" height="48" action="UIControlApiGear" color="40,90,60,255"/>
           <element type="UIButton" name="Quiet" icon="GearIcon" x="70" y="10" width="48" height="48" action="UIControlApiQuiet" color="40,90,60,255"/>
           <element type="UIButton" name="Words" text="Words" x="130" y="10" width="80" height="48" action="UIControlApiWords" color="40,90,60,255"/>
+        </elements>
+      </component>
+    </components></node>
+  </nodes></scene>
+  <scene type="Scene" name="Composed"><nodes>
+    <node name="Bar"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+        <elements>
+          <element type="UIElement" name="Play" x="10" y="10" width="120" height="48" color="40,90,60,255" fontSize="24">
+            <components>
+              <component type="UIInputClicker" action="UIControlApiPlay" value="easy"/>
+              <component type="UIImageComponent" sprite="PlayIcon"/>
+              <component type="UITextComponent" text="Play {user}"/>
+              <component type="UITooltipComponent" text="Start {#tip.play}"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Dead" x="150" y="10" width="100" height="48" color="40,90,60,255" fontSize="24">
+            <components>
+              <component type="UIInputClicker" action="UIControlApiDead" value="v" disabled="true"/>
+              <component type="UITextComponent" text="Dead"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Shade" x="10" y="100" width="100" height="40" color="40,90,60,255">
+            <components><component type="UIInputClicker" action="UIControlApiShade"/></components>
+          </element>
+          <element type="UIPanel" name="Cover" x="0" y="90" width="120" height="60" blocksInput="true"/>
+          <element type="UIElement" name="Wide" x="10" y="200" width="300" height="40" color="40,90,60,255">
+            <components><component type="UIInputClicker" action="UIControlApiWide" value="wide"/></components>
+          </element>
+          <element type="UIElement" name="Badge" x="300" y="10" width="48" height="48">
+            <components><component type="UIImageComponent" sprite="BadgeIcon"/><component type="UITooltipComponent" text="Badge"/></components>
+          </element>
+          <element type="UIElement" name="Bare" x="400" y="10" width="48" height="48" color="40,90,60,255"/>
+          <element type="UIToggle" name="Loud" bind="uiApiLoud" text="Loud" x="500" y="10" width="120" height="48" color="30,30,30,255">
+            <components><component type="UITextComponent" text="Caption"/></components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -1630,6 +1669,169 @@ namespace BECore::Tests {
         Json badCanvas = Click("Ok");
         badCanvas["canvas"] = 7;
         EXPECT_EQ(ErrorCode(Call("ui_click", badCanvas)), "invalid_params");
+    }
+
+    // ---- a button made of components -----------------------------------------------------------------------------------------------
+
+    TEST_F(UIControlApiTest, AComposedButtonTellsItsComponentsAndTheFieldsOfAButton) {
+        CoreManager::GetUIVars().Set("user"_intern, "Ann");
+        Show("Composed");
+        Canvas("Composed", "Bar")->GetRoot().FindByName(PoolString::Intern("Play"))->selected = true;
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        ASSERT_NE(bar, nullptr);
+        const Json* play = FindElement(*bar, "Play");
+        ASSERT_NE(play, nullptr);
+        EXPECT_EQ(StringMember(*play, "type"), "UIElement");
+        EXPECT_TRUE(BoolMember(*play, "interactive")) << "a clicker makes it one";
+        const Json* components = Member(*play, "components");
+        ASSERT_NE(components, nullptr);
+        ASSERT_EQ(components->size(), 4u);
+        EXPECT_EQ((*components)[0], "UIInputClicker") << "in the order of the list";
+        EXPECT_EQ((*components)[1], "UIImageComponent");
+        EXPECT_EQ((*components)[2], "UITextComponent");
+        EXPECT_EQ((*components)[3], "UITooltipComponent");
+        EXPECT_EQ(StringMember(*play, "text"), "Play Ann") << "as shown, variables replaced";
+        EXPECT_EQ(StringMember(*play, "action"), "UIControlApiPlay");
+        EXPECT_EQ(StringMember(*play, "value"), "easy");
+        EXPECT_FALSE(BoolMember(*play, "disabled"));
+        EXPECT_TRUE(BoolMember(*play, "selected"));
+        EXPECT_EQ(StringMember(*play, "icon"), "PlayIcon");
+        EXPECT_EQ(StringMember(*play, "tooltip"), "Start {#tip.play}") << "the source text";
+    }
+
+    TEST_F(UIControlApiTest, AComposedButtonIsDisabledByItsClickerAndByItsGroup) {
+        Show("Composed");
+        UICanvasComponent& bar = *Canvas("Composed", "Bar");
+        bar.GetRoot().FindByName(PoolString::Intern("Wide"))->groupDisabled = true;
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* node = FindCanvas(*Member(response, "result"), "Bar");
+        ASSERT_NE(node, nullptr);
+        EXPECT_TRUE(BoolMember(*FindElement(*node, "Dead"), "disabled"));
+        EXPECT_TRUE(BoolMember(*FindElement(*node, "Wide"), "disabled"));
+        EXPECT_FALSE(BoolMember(*FindElement(*node, "Play"), "disabled"));
+    }
+
+    TEST_F(UIControlApiTest, AnElementWithNoClickerTellsOnlyWhatItHas) {
+        Show("Composed");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        ASSERT_NE(bar, nullptr);
+        const Json* badge = FindElement(*bar, "Badge");
+        ASSERT_NE(badge, nullptr);
+        EXPECT_FALSE(BoolMember(*badge, "interactive"));
+        EXPECT_EQ(StringMember(*badge, "icon"), "BadgeIcon");
+        EXPECT_EQ(StringMember(*badge, "tooltip"), "Badge");
+        EXPECT_FALSE(badge->contains("action"));
+        EXPECT_FALSE(badge->contains("disabled"));
+        EXPECT_FALSE(badge->contains("selected"));
+        EXPECT_FALSE(badge->contains("text"));
+
+        const Json* bare = FindElement(*bar, "Bare");
+        ASSERT_NE(bare, nullptr);
+        EXPECT_FALSE(bare->contains("components")) << "the entry of an element with none is as before";
+        EXPECT_FALSE(bare->contains("icon"));
+        EXPECT_FALSE(bare->contains("tooltip"));
+    }
+
+    TEST_F(UIControlApiTest, AToggleWithATextComponentKeepsTheTextOfTheToggle) {
+        Show("Composed");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        ASSERT_NE(bar, nullptr);
+        const Json* loud = FindElement(*bar, "Loud");
+        ASSERT_NE(loud, nullptr);
+        EXPECT_EQ(StringMember(*loud, "type"), "UIToggle");
+        EXPECT_EQ(StringMember(*loud, "text"), "Loud") << "the text of the label class, not of the component";
+    }
+
+    TEST_F(UIControlApiTest, AClickOnAComposedButtonEmitsAndAnswersItsActionAndValue) {
+        Show("Composed");
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("Play"));
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json& result = *Member(response, "result");
+        EXPECT_TRUE(BoolMember(result, "consumed"));
+        EXPECT_EQ(StringMember(result, "action"), "UIControlApiPlay");
+        EXPECT_EQ(StringMember(result, "value"), "easy");
+        EXPECT_EQ(recorder.Count("UIControlApiPlay"), 1);
+        EXPECT_EQ(recorder.LastValue(), "easy");
+        EXPECT_EQ(recorder.downs, 0) << "the canvas took the press, game code did not see it";
+    }
+
+    TEST_F(UIControlApiTest, ADisabledComposedButtonTakesTheClickAndAnswersWithNothingEmitted) {
+        Show("Composed");
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("Dead"));
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json& result = *Member(response, "result");
+        EXPECT_TRUE(BoolMember(result, "consumed"));
+        EXPECT_EQ(StringMember(result, "action"), "");
+        EXPECT_EQ(StringMember(result, "value"), "");
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, AComposedButtonOfADisabledGroupEmitsNothingEither) {
+        Show("Composed");
+        Canvas("Composed", "Bar")->GetRoot().FindByName(PoolString::Intern("Wide"))->groupDisabled = true;
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("Wide"));
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "");
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, AComposedButtonCoveredByAnotherElementIsNotClickable) {
+        Show("Composed");
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("Shade"));
+
+        EXPECT_EQ(ErrorCode(response), "not_clickable");
+        EXPECT_NE(ErrorMessage(response).find("Cover"), std::string::npos) << ErrorMessage(response);
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, AnElementWithNoClickerIsNotClickable) {
+        Show("Composed");
+
+        const Json response = Call("ui_click", Click("Badge"));
+
+        EXPECT_EQ(ErrorCode(response), "not_clickable");
+        EXPECT_NE(ErrorMessage(response).find("not interactive"), std::string::npos) << ErrorMessage(response);
+    }
+
+    TEST_F(UIControlApiTest, AtPicksTheHorizontalPointOfAComposedButton) {
+        Show("Composed");
+        Recorder recorder;
+        Json params = Click("Wide");
+        params["at"] = 0.0;
+
+        const Json response = Call("ui_click", params);
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json& result = *Member(response, "result");
+        EXPECT_NEAR(NumberMember(result, "x"), 10.0f, 1.0f) << "the left edge, a hair inside";
+        EXPECT_EQ(StringMember(result, "action"), "UIControlApiWide");
+        EXPECT_EQ(recorder.Count("UIControlApiWide"), 1);
     }
 
 }  // namespace BECore::Tests

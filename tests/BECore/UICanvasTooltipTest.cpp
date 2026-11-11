@@ -6,6 +6,7 @@
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UITooltip.h>
+#include <BECore/UI/UITooltipComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <CoreSDL/SDLEvents.h>
@@ -24,6 +25,8 @@ namespace BECore::Tests {
         //   Lang  (100, 300, 48 x 48)   a tooltip of a string key
         //   Edge  (752, 540, 48 x 48)   a tooltip, in the corner of the screen
         //   Under (50, 170, 300 x 48)   the plate of Icon is drawn over it
+        //   Comp, CompLang, CompBare (y 420)   composed elements (a UIInputClicker): a UITooltipComponent, one of a string key, none
+        //   Panel (700, 420)  blocksInput and a UITooltipComponent; Ghost (700, 480)  a UITooltipComponent and no hit target
         // Modal (layer 20, hidden until a test shows it): modal, one button with a tooltip at (400, 400)
         constexpr const char* kTooltipXml = R"(
 <SceneManager><scenes>
@@ -37,6 +40,21 @@ namespace BECore::Tests {
           <element type="UIButton" name="Lang" action="OpenLang" tooltip="{#tip.settings}" x="100" y="300" width="48" height="48" color="30,30,30,255"/>
           <element type="UIButton" name="Edge" action="OpenEdge" tooltip="Settings of the game" x="752" y="540" width="48" height="48" color="30,30,30,255"/>
           <element type="UIButton" name="Under" action="OpenUnder" x="50" y="170" width="300" height="48" color="30,30,30,255"/>
+          <element type="UIElement" name="Comp" x="100" y="420" width="48" height="48" color="30,30,30,255">
+            <components><component type="UIInputClicker" action="OpenComp"/><component type="UITooltipComponent" text="Composed tip"/></components>
+          </element>
+          <element type="UIElement" name="CompLang" x="300" y="420" width="48" height="48" color="30,30,30,255">
+            <components><component type="UIInputClicker" action="OpenCompLang"/><component type="UITooltipComponent" text="{#tip.settings}"/></components>
+          </element>
+          <element type="UIElement" name="CompBare" x="500" y="420" width="48" height="48" color="30,30,30,255">
+            <components><component type="UIInputClicker" action="OpenCompBare"/></components>
+          </element>
+          <element type="UIElement" name="Panel" blocksInput="true" x="700" y="420" width="48" height="48" color="30,30,30,255">
+            <components><component type="UITooltipComponent" text="Panel tip"/></components>
+          </element>
+          <element type="UIElement" name="Ghost" x="700" y="480" width="48" height="48" color="30,30,30,255">
+            <components><component type="UITooltipComponent" text="Ghost tip"/></components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -173,6 +191,12 @@ namespace BECore::Tests {
             return *button;
         }
 
+        UIElement& GetElement(const char* name) const {
+            UIElement* element = _hud->GetRoot().FindByName(PoolString::Intern(name));
+            EXPECT_NE(element, nullptr) << name;
+            return *element;
+        }
+
         static Rect CenterOf(const Rect& rect) {
             return {rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f, 0.0f, 0.0f};
         }
@@ -202,7 +226,7 @@ namespace BECore::Tests {
 
         /// The pointer comes to a button and rests there until its tooltip is due; the last frame is the first one that shows it
         void HoverUntilShown(const char* name) {
-            const Rect at = CenterOf(Get(name).rect);
+            const Rect at = CenterOf(GetElement(name).rect);
             Motion(at.x, at.y);
             Wait(UITooltip::kHoverDelay);
         }
@@ -525,6 +549,77 @@ namespace BECore::Tests {
         ASSERT_TRUE(Plate().has_value());
 
         Get("Icon").tooltip.clear();
+        Draw();
+        EXPECT_FALSE(Plate());
+    }
+
+    // ---- a composed element: the text of its UITooltipComponent --------------------------------------------------------------------
+
+    TEST_F(UICanvasTooltipTest, AComposedElementShowsTheTooltipOfItsComponentAfterTheDelay) {
+        const Rect comp = GetElement("Comp").rect;
+        const Rect at = CenterOf(comp);
+        Motion(at.x, at.y);
+        Wait(UITooltip::kHoverDelay - kStep);
+        EXPECT_FALSE(Plate()) << "not yet";
+
+        Wait(kStep);
+        const auto plate = Plate();
+        ASSERT_TRUE(plate.has_value());
+        EXPECT_TRUE(Inside(*plate, {0.0f, 0.0f, 800.0f, 600.0f}));
+        EXPECT_EQ(GlyphsIn(*plate), 11u) << "Composed tip";
+    }
+
+    TEST_F(UICanvasTooltipTest, AComposedElementWithNoTooltipComponentShowsNone) {
+        HoverUntilShown("CompBare");
+        Wait(3.0);
+
+        EXPECT_FALSE(Plate());
+    }
+
+    TEST_F(UICanvasTooltipTest, ABlocksInputElementShowsItsTooltipComponentAndAnElementWithNoHitTargetShowsNone) {
+        HoverUntilShown("Panel");
+        const auto plate = Plate();
+        ASSERT_TRUE(plate.has_value());
+        EXPECT_EQ(GlyphsIn(*plate), 8u) << "Panel tip";
+
+        HoverUntilShown("Ghost");
+        Wait(3.0);
+        EXPECT_FALSE(Plate()) << "the canvas asks only hit-testable elements";
+    }
+
+    TEST_F(UICanvasTooltipTest, ATooltipOfAComposedElementFollowsTheLanguageToo) {
+        HoverUntilShown("CompLang");
+        const auto english = Plate();
+        ASSERT_TRUE(english.has_value());
+        EXPECT_EQ(GlyphsIn(*english), 8u) << "Settings";
+
+        ASSERT_TRUE(CoreManager::GetUIStrings().SetLanguage("ru"_intern));
+        Draw();
+        const auto russian = Plate();
+        ASSERT_TRUE(russian.has_value());
+        EXPECT_EQ(GlyphsIn(*russian), 9u) << "Настройки";
+    }
+
+    TEST_F(UICanvasTooltipTest, AFingerHeldOnAComposedElementShowsItsTooltipAndTheReleaseIsNoClick) {
+        ActionRecorder actions;
+        const Rect at = CenterOf(GetElement("Comp").rect);
+        Motion(at.x, at.y, true);
+        Press(at.x, at.y, true);
+        Wait(UITooltip::kLongPress);
+        ASSERT_TRUE(Plate().has_value());
+        Release(at.x, at.y, true);
+        EXPECT_EQ(actions.Total(), 0u) << "the long press is not a click";
+
+        Press(at.x, at.y, true);
+        Release(at.x, at.y, true);
+        EXPECT_EQ(actions.Count("OpenComp"), 1) << "a short touch clicks";
+    }
+
+    TEST_F(UICanvasTooltipTest, ATooltipComponentTextThatIsEmptiedWhileShownGoes) {
+        HoverUntilShown("Comp");
+        ASSERT_TRUE(Plate().has_value());
+
+        GetElement("Comp").GetComponent<UITooltipComponent>()->text.clear();
         Draw();
         EXPECT_FALSE(Plate());
     }

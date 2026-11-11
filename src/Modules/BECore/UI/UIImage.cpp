@@ -16,15 +16,7 @@ namespace BECore {
         }
 
         const Rect source = _sprite.GetSource();
-        Rect target = rect;
-        if (!stretch && !source.IsEmpty()) {
-            // The largest rect of the sprite's proportions that fits, centered
-            const float scale = std::min(rect.w / source.w, rect.h / source.h);
-            target.w = source.w * scale;
-            target.h = source.h * scale;
-            target.x = rect.x + (rect.w - target.w) * 0.5f;
-            target.y = rect.y + (rect.h - target.h) * 0.5f;
-        }
+        const Rect target = stretch ? rect : UISprite::FitInto(rect, source);
         renderer.DrawTexture(*texture, &source, target.x, target.y, target.w, target.h, tint);
     }
 

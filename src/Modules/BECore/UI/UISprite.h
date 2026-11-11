@@ -26,6 +26,10 @@ namespace BECore {
         /// The part of the texture to draw: the rect of the library entry or of SetTexture(), else the whole texture. Valid after Resolve()
         [[nodiscard]] Rect GetSource() const;
 
+        /// Where a sprite whose part of the texture is @p source draws in @p area: the largest rect of the proportions of @p source that fits, centred, so a sprite is never squashed.
+        /// @p area itself for an empty @p source (the whole texture, whatever its shape)
+        [[nodiscard]] static Rect FitInto(const Rect& area, const Rect& source);
+
     private:
         IntrusivePtr<ITexture> _texture;
         Rect _source;

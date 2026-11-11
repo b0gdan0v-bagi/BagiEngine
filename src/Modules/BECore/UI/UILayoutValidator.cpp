@@ -53,7 +53,7 @@ namespace BECore {
                     }
                 }
 
-                if (element.interactive) {
+                if (element.IsInteractive()) {
                     const float size = std::min(element.rect.w, element.rect.h) * _resolved.scale / std::max(_options.pixelDensity, 1e-3f);
                     if (size < _options.minTouchSize - kTolerance) {
                         Report(UILayoutIssueKind::TouchTargetTooSmall, element);

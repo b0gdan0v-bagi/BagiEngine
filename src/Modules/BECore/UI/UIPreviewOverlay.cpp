@@ -12,7 +12,7 @@ namespace BECore {
             if (!element.active.visible) {
                 return;
             }
-            if (element.interactive && !element.rect.IsEmpty()) {
+            if (element.IsInteractive() && !element.rect.IsEmpty()) {
                 const float size = std::min(element.rect.w, element.rect.h) * resolved.scale / std::max(pixelDensity, kMinPixelDensity);
                 marks.push_back({resolved.transform.ToOutput(element.rect.x, element.rect.y, element.rect.w, element.rect.h), element.name, size < minTouchSize - kTouchTolerance});
             }
