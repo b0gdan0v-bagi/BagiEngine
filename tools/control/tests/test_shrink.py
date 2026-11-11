@@ -172,6 +172,23 @@ def test_shrink_keeps_the_calls_a_failure_depends_on(fake_game_exe, tmp_path):
     assert steps[1].expect == {"equal": {"version": 1}}
 
 
+def test_shrink_keeps_the_setup_of_a_target_that_would_answer_an_error_without_it(fake_game_exe, tmp_path):
+    # "needs_noop" is refused until some action ran. Its expectation (a version step of 5) fails on the full run; without the noop it
+    # answers an error, which is not that failure, so the noop has to stay
+    path = write(
+        tmp_path,
+        {"method": "get_state"},
+        {"method": "perform_action", "params": {"type": "noop"}},
+        {"method": "step"},
+        {"method": "perform_action", "params": {"type": "needs_noop"}, "expect": {"versionStep": 5}},
+    )
+    out = tmp_path / "short.jsonl"
+    assert main([str(fake_game_exe), str(path), "--shrink", str(out), "--max-probes", "50"]) == EXIT_PASSED
+    _header, steps = scenario.load(out)
+    assert [(step.params or {}).get("type") for step in steps] == ["noop", "needs_noop"]
+    assert steps[1].expect == {"versionStep": 5}
+
+
 def test_shrink_and_update_exclude_each_other(fake_game_exe, tmp_path):
     path = write(tmp_path, {"method": "get_state"})
     with pytest.raises(SystemExit) as refusal:

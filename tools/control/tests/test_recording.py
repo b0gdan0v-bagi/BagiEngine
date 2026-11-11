@@ -265,6 +265,18 @@ def test_connecting_again_writes_the_recording_of_the_old_game_and_starts_a_new_
     assert len(load(second)[1]) == 2
 
 
+def test_a_recording_that_cannot_be_written_does_not_stop_the_next_connect(session, game, tmp_path):
+    folder = tmp_path / "gone"
+    folder.mkdir()
+    session.connect(port=game.port, record=str(folder / "old.jsonl"))
+    session.call("get_state")
+    folder.rmdir()  # the old file can no longer be written
+    session.connect(port=game.port, record=str(tmp_path / "new.jsonl"))
+    session.call("get_state")
+    assert session.stop_recording()["calls"] == 1
+    assert [step.method for step in load(tmp_path / "new.jsonl")[1]] == ["get_state"]
+
+
 # --- pushed events ---
 
 

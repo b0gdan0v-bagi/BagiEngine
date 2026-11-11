@@ -84,11 +84,12 @@ def play(
     steps: list[scenario.Step],
     update: bool = False,
     lenient: bool = False,
+    strict_step: int | None = None,
     startup_timeout: float = DEFAULT_STARTUP_TIMEOUT,
 ) -> PlayResult:
     """Starts the game, plays `steps` and stops it. Stops at the first line that fails, unless `update`, which plays all and rewrites the expectations.
 
-    `lenient` tolerates an error a line did not expect (the shrinker's probes). `logClean` is judged after the game has quit: the game's stdout is
+    `lenient` tolerates an error a line did not expect (the shrinker's probes), except at `strict_step`, the line the probe is about. `logClean` is judged after the game has quit: the game's stdout is
     block-buffered into its log, so a Warning may not be in the file while the game runs; the failure still names the line that asked for it.
     """
     result = PlayResult(steps=list(steps))
@@ -103,7 +104,7 @@ def play(
             result.failed_step = HEADER_STEP
             result.failure = scenario.Failure("game", header.game, str(description.get("activeGame")))
             return result
-        if not _play_steps(session, steps, result, update, lenient):
+        if not _play_steps(session, steps, result, update, lenient, strict_step):
             return result
         try:
             quit_answer = session.quit()
@@ -122,7 +123,7 @@ def play(
     return result
 
 
-def _play_steps(session: GameSession, steps: list[scenario.Step], result: PlayResult, update: bool, lenient: bool) -> bool:
+def _play_steps(session: GameSession, steps: list[scenario.Step], result: PlayResult, update: bool, lenient: bool, strict_step: int | None) -> bool:
     """Sends the calls in order; False when the run has to stop (`result` says why)."""
     versions = scenario.VersionTracker()
     for index, step in enumerate(steps):
@@ -146,7 +147,7 @@ def _play_steps(session: GameSession, steps: list[scenario.Step], result: PlayRe
         if update:
             result.steps[index] = dataclasses.replace(step, expect=scenario.updated_expect(step.expect, outcome))
             continue
-        failure = scenario.evaluate({name: value for name, value in step.expect.items() if name != "logClean"}, outcome, lenient)
+        failure = scenario.evaluate({name: value for name, value in step.expect.items() if name != "logClean"}, outcome, lenient and index != strict_step)
         if failure is not None:
             result.failed_step, result.failure = index, failure
             return False
@@ -259,6 +260,7 @@ def _shrink(args: argparse.Namespace, exe: Path, header: scenario.Header, steps:
 
     # A dropped call changes the versions and the answers of the calls after it, so only the expectation that failed is kept, and lenient
     # mode lets the other calls answer errors: whatever fails then is the failure that was found, not noise from the rest of the file.
+    # The target line itself is not lenient: when the dropped calls were what it needed, it answers an error, which is another failure.
     stripped = [dataclasses.replace(step, expect=step.expect if index == target else {}) for index, step in enumerate(steps)]
     launches = 0
     cache: dict[tuple[int, ...], bool] = {}
@@ -266,10 +268,13 @@ def _shrink(args: argparse.Namespace, exe: Path, header: scenario.Header, steps:
     def still_fails(candidate: list[int]) -> bool:
         nonlocal launches
         key = tuple(candidate)
+        if target not in candidate:
+            return False  # no other line has an expectation left, so nothing can fail
         if key not in cache:
             launches += 1
-            probe = play(exe, header, [stripped[index] for index in candidate], lenient=True, startup_timeout=args.timeout)
-            cache[key] = probe.failure is not None and probe.failed_step is not None and probe.failed_step != HEADER_STEP and probe.failure.expectation == expectation
+            position = candidate.index(target)
+            probe = play(exe, header, [stripped[index] for index in candidate], lenient=True, strict_step=position, startup_timeout=args.timeout)
+            cache[key] = probe.failure is not None and probe.failed_step == position and probe.failure.expectation == expectation
         return cache[key]
 
     try:

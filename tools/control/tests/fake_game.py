@@ -5,8 +5,8 @@
 
 The environment variable FAKE_GAME_EXIT makes it exit at once (code 3) like --exit-immediately.
 
-Methods: ping, status, list_games, get_state (echoes the flags), list_actions, perform_action (a refusal for {"type": "bad"}; it
-raises the state version by one and pushes state_changed behind its answer), step, screenshot (a 2x1 PNG; one frame on the manual
+Methods: ping, status, list_games, get_state (echoes the flags), list_actions, perform_action (a refusal for {"type": "bad"}, and for
+{"type": "needs_noop"} until some action has run; it raises the state version by one and pushes state_changed behind its answer), step, screenshot (a 2x1 PNG; one frame on the manual
 clock, as the real game), warn (logs a line of the given level, "Warning" by default: {"level": "Error", "text": "..."}),
 quit (exits the process). Runs until quit, or until WATCHDOG_SECONDS have passed: on Windows the
 tests start it through a .bat, and killing the .bat (GameProcess.stop) would leave this process listening.
@@ -65,6 +65,8 @@ def main() -> int:
         if method == "perform_action":
             if (params or {}).get("type") == "bad":
                 raise FakeError("illegal_action", "not allowed")
+            if (params or {}).get("type") == "needs_noop" and state["version"] == 1:
+                raise FakeError("illegal_action", "a noop has to come first")  # a precondition: an action that is legal only after another
             state["version"] += 1
             server.push("state_changed", {"game": "Fake", "version": state["version"]}, after_reply=True)
             return {"game": "Fake", "version": state["version"], "outcome": params}

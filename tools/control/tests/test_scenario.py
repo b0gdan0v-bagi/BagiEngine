@@ -335,7 +335,7 @@ def test_updated_expect_adds_the_minimal_members_to_a_line_without_any():
 
 def test_updated_expect_follows_a_call_that_changed_from_failing_to_working_and_back():
     assert scenario.updated_expect({"error": "illegal_action"}, ok({"version": 3}, version_step=1)) == {}
-    assert scenario.updated_expect({"versionStep": 1}, refused("not_found")) == {}
+    assert scenario.updated_expect({"versionStep": 1}, refused("not_found")) == {"error": "not_found"}
     assert scenario.updated_expect({"error": "illegal_action"}, refused("not_found")) == {"error": "not_found"}
     assert scenario.updated_expect({"result": {"a": 1}, "error": "x"}, refused("y")) == {"error": "y"}
 
@@ -350,3 +350,9 @@ def test_what_updated_expect_writes_holds_for_the_same_outcome():
     outcome = ok({"version": 9, "list": [10, 20]}, version_step=4)
     expect = {"result": {"x": 1}, "pointers": {"/list/1": 0}, "versionStep": 1, "logClean": True}
     assert evaluate(scenario.updated_expect(expect, outcome), outcome) is None
+
+
+def test_what_updated_expect_writes_holds_for_a_refused_call():
+    outcome = refused("not_found")
+    for expect in ({"versionStep": 1}, {"equal": {"a": 1}}, {"result": {"x": 1}, "logClean": True}, {"error": "illegal_action"}, {"pointers": {"/a": 1}}):
+        assert evaluate(scenario.updated_expect(expect, outcome), outcome) is None, expect

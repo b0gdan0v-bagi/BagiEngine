@@ -288,11 +288,18 @@ class GameSession:
         return result
 
     def close(self) -> None:
-        """Lets go of the game: a launched one is killed at once, one that was only connected to keeps running. A recording is written."""
+        """Lets go of the game: a launched one is killed at once, one that was only connected to keeps running. A recording is written.
+
+        A recording that cannot be written is dropped without an error: `launch` and `connect` call this first, and the old file must not stop a
+        new game (`stop_recording` and `quit` report a write that fails).
+        """
         self._drop_client()
         self._stop_game(0)
         if self._recording is not None:
-            self._finish_recording()
+            try:
+                self._finish_recording()
+            except SessionError:
+                pass
 
     def _begin_session(self, flags: list[str] | None) -> None:
         self._flags = flags

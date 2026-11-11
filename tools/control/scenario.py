@@ -233,15 +233,16 @@ def full_expect(outcome: Outcome) -> dict[str, Any]:
 def updated_expect(expect: dict[str, Any], outcome: Outcome) -> dict[str, Any]:
     """`expect` with the values of error, result, equal, pointers and versionStep taken from `outcome`; `event` and `logClean` are kept.
 
-    A member that no longer applies (the call stopped failing, a path is gone) is dropped. A line without any of the
-    five gets the minimal expectation.
+    A member that no longer applies (the call stopped failing, a path is gone) is dropped. A call that now answers an
+    error gets `error`, so the written line holds for the run it came from. A line without any of the five gets the
+    minimal expectation.
     """
     if not any(name in expect for name in UPDATED_MEMBERS):
         return _in_order({**minimal_expect(outcome), **{name: value for name, value in expect.items() if name not in UPDATED_MEMBERS}})
     updated = {name: value for name, value in expect.items() if name not in UPDATED_MEMBERS}
     failed = outcome.error_code is not None
-    if "error" in expect and failed:
-        updated["error"] = outcome.error_code
+    if failed:
+        updated["error"] = outcome.error_code  # also when the line did not expect one: the next play would fail it
     if "result" in expect and not failed:
         updated.update(_answer_expect(outcome.result))  # a screenshot becomes `equal`, see _answer_expect
     equal = dict(updated.pop("equal", {}))
