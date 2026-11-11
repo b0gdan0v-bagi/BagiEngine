@@ -6,12 +6,35 @@ The `Rooms` hub on the network (the entry `network-rooms` of the todo store, sli
 
 Built only with `ENGINE_WITH_REMOTE_CONTROL` (the web build has no sockets). Module order: after `Rooms`.
 
-Not here yet (later WPs and slices): the demo game and the executable `BagiRoomServer`, the client side, hosting.
+Not here yet (later slices): the client side, hosting (Docker, the environment settings).
 
 | File | Purpose |
 |------|---------|
 | `RoomServerSettings.h` | `RoomServerSettings`: port, bind scope, handshake policy, transport limits, the hub's `RoomHubSettings`, the tick interval, the ping interval, the injected clock and `RandomFn` |
 | `RoomWebSocketServer.h/.cpp` | `RoomWebSocketServer(registry, settings)`: `Start()`, `Stop()`, `GetPort()`, `IsRunning()` |
+| `RoomServerArgs.h/.cpp` | `RoomServerArgs` (what a server is started with: a plain struct), `ParseRoomServerArgs(argc, argv)`, `GetRoomServerUsage()`, `ToSettings(args)` |
+| `RoomServerMain.h/.cpp` | `RunRoomServer(registry, args)`: logging, the server, the listening line, the loop until SIGINT / SIGTERM |
+| `DemoCardGame.h/.cpp` | `DemoCardGame`, the card game of the tests and of `--test-games` (not for a product), `LeakyDemoCardGame` (negative control), `FindHiddenCards` |
+| `server/main.cpp` | the executable `BagiRoomServer`; outside `src/`, so the module glob does not take it |
+
+## A server main
+
+A game's own server is a `main` that fills a `SeatedGameRegistry` and calls `RunRoomServer(registry, args)`; `server/main.cpp` is the model (`be_add_headless_executable(<Name> SOURCES main.cpp LINK RoomServerModule ...)`: the engine core, no window, no `Application`). `args` comes from `ParseRoomServerArgs(argc, argv)` or is filled by hand (the environment, in the hosting slice). `RunRoomServer` makes a console log sink in code (a server has no `LoggerConfig.xml`), prints `BagiRoomServer listening on ws://0.0.0.0:<port>` to stdout (flushed: a program that starts the server waits for that line; `127.0.0.1` with `--bind loopback`), drains the log every 50 ms on the calling thread, and ends with exit code 0 on SIGINT or SIGTERM (1 when it cannot listen, the message on stderr). `BagiRoomServer` registers `cards` and `cards-leaky` only with `--test-games`; without it the registry is empty and it exits 1.
+
+Run: `build/<preset>/bin/BagiRoomServer --test-games --port 0`.
+
+| Flag | Meaning (default) |
+|------|-------------------|
+| `--port N` | 0..65535, 0 picks a free port (8080) |
+| `--bind loopback\|any` | the machine's own address, or every address (`any`) |
+| `--origin O` | a web page that may connect, repeatable, `*` is every page (none: browsers refused, programs let in). The policy is always the public one, also on the loopback: `Host` is not checked |
+| `--max-connections N` | connections the hub admits, 1..4096 (512); the transport allows 64 more |
+| `--max-per-address N` | open sockets of one address, 0 is off (32) |
+| `--computer-delay-ms N`, `--reconnect-grace-ms N` | the hub's times (800, 30000) |
+| `--ping-interval-ms N` | liveness pings, 0 is off (20000) |
+| `--test-games`, `--help` | |
+
+Numbers are range-checked; an unknown flag or a bad number is an error with a message and exit code 1.
 
 ## Threads
 
@@ -54,4 +77,4 @@ In public mode (`policy.loopbackOnly = false`) `Origin` keeps foreign **web page
 
 ## Tests
 
-`tests/BECore/Rooms/RoomWebSocketServerTest.cpp`: the server on port 0 against real sockets (`RoomSocketClient.h`: the raw client of `WebSocketTestClient.h` plus the messages of the protocol, with a cursor to read forward) and `FakeSeatedGame`. Covers the exchange (create, join by code, order of replies), what the hub's close and the transport's limits look like on the wire, an abrupt drop, the origin and per-address checks, `Stop()` under load, a client that never reads, the liveness pings on a manual clock, two servers. The bounded queue itself has no test of its own.
+`tests/BECore/Rooms/RoomServerArgsTest.cpp`: the flags and `ToSettings`. `tests/BECore/Rooms/RoomWebSocketServerTest.cpp`: the server on port 0 against real sockets (`RoomSocketClient.h`: the raw client of `WebSocketTestClient.h` plus the messages of the protocol, with a cursor to read forward) and `FakeSeatedGame`. Covers the exchange (create, join by code, order of replies), what the hub's close and the transport's limits look like on the wire, an abrupt drop, the origin and per-address checks, `Stop()` under load, a client that never reads, the liveness pings on a manual clock, two servers. The bounded queue itself has no test of its own.

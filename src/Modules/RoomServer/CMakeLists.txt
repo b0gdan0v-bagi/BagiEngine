@@ -9,3 +9,9 @@ be_add_module(RoomServer LINK
     RoomsModule
     RemoteControlModule
 )
+
+# The headless server of the demo games: a registry fill and RunRoomServer(). server/ is outside src/, so the module glob does not take main.cpp
+be_add_headless_executable(BagiRoomServer
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/server/main.cpp
+    LINK RoomServerModule RoomsModule RemoteControlModule
+)

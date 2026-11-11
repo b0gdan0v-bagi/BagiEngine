@@ -6,6 +6,9 @@
 
 namespace BECore {
 
+    /// The transport allows this many sockets above the hub's own limit, for connections that are still in their handshake
+    inline constexpr size_t kHandshakeConnectionReserve = 64;
+
     /// Everything a RoomWebSocketServer is configured with. The defaults are the limits of the room server (RoomServer/CLAUDE.md);
     /// a test overrides what it needs, and a server executable fills the struct from its arguments or its environment
     struct RoomServerSettings {
@@ -20,7 +23,7 @@ namespace BECore {
 
         /// Open sockets, handshakes included. The hub limits the connections it knows (`hub.maxConnections`, answered with `server_full`) and
         /// this is above it, so a connection still in its handshake has room and the hub's answer comes first
-        size_t maxConnections = RoomLimits::kMaxConnections + 64;
+        size_t maxConnections = RoomLimits::kMaxConnections + kHandshakeConnectionReserve;
 
         /// Open sockets of one client address; 0 turns it off (behind a proxy every client has the proxy's address)
         size_t maxConnectionsPerAddress = 32;
