@@ -32,6 +32,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+if sys.version_info < (3, 10):  # before the first `X | None` evaluated at import, which 3.9 turns into a TypeError
+    sys.exit(f"error: todo.py needs Python 3.10 or newer, this is {sys.version.split()[0]} ({sys.executable})")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from todo_markdown import README_FILE, ROADMAP_FILE, ParseError, parse_entry_text, parse_stages  # noqa: E402
