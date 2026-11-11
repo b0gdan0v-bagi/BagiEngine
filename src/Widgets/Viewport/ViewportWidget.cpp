@@ -124,6 +124,9 @@ namespace BECore {
     }
 
     void ViewportWidget::EmitPreviewIfChanged() {
+        if (_editingSize) {
+            return;
+        }
         const PreviewSettings current{_shape, _safeAreaSimulation, _overlays};
         if (current == _storedPreview) {
             return;
@@ -259,9 +262,10 @@ namespace BECore {
     void ViewportWidget::DrawPreviewToolbar() {
         DrawSizeCombo();
 
+        _editingSize = false;
         if (_shape.custom) {
             // The sides are clamped to the range once the field is left, not while typing ("1" on the way to "1000" is not 64)
-            const auto sizeField = [](const char* label, uint32_t& side) {
+            const auto sizeField = [this](const char* label, uint32_t& side) {
                 int value = static_cast<int>(side);
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth(kSizeFieldWidth);
@@ -271,6 +275,7 @@ namespace BECore {
                 if (ImGui::IsItemDeactivatedAfterEdit()) {
                     side = std::clamp(side, kMinPreviewSide, kMaxPreviewSide);
                 }
+                _editingSize = _editingSize || ImGui::IsItemActive();
             };
             sizeField("W", _shape.customWidth);
             sizeField("H", _shape.customHeight);

@@ -46,7 +46,8 @@ namespace BECore {
         // The grid over the image: a line every _gridStep image pixels (zoom screen units per pixel), clipped to the image
         void DrawGrid(float minX, float minY, float maxX, float maxY, float zoom) const;
 
-        // Tells EditorLayoutWidget (ViewportPreviewChangedEvent) when the size, rotation, safe area or an overlay differs from what it was last told or told us
+        // Tells EditorLayoutWidget (ViewportPreviewChangedEvent) when the size, rotation, safe area or an overlay differs from what it was last told or told us (not while a custom W / H field is
+        // being typed in)
         void EmitPreviewIfChanged();
 
         // The size picker (with W / H for a custom size), the rotate toggle, the safe-area and view combos above the image
@@ -86,6 +87,7 @@ namespace BECore {
         PreviewSettings _storedPreview;      // the choice the editor last stored (applied from a preferences event, or sent by us)
         std::optional<int32_t> _forcedView;  // the index of the forced view variant, -1 the default, nullopt Auto
         PoolString _forcedViewScene;         // the scene the choice was made for
+        bool _editingSize = false;           // a custom W / H field is being typed in: the shape is applied live, the editor is told when the field is left
         bool _gridEnabled = false;
         int32_t _gridStep = 0;
         bool _pressedInViewport[3] = {false, false, false};  // left, right, middle: pressed over the image and not yet released

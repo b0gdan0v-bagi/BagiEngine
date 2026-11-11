@@ -60,8 +60,8 @@ namespace BECore {
         BE_REFLECT_FIELD ViewportAspect previewAspect = ViewportAspect::Free;
         BE_REFLECT_FIELD int32_t previewDevice = -1;
         BE_REFLECT_FIELD bool previewCustom = false;
-        BE_REFLECT_FIELD uint32_t previewWidth = 0;
-        BE_REFLECT_FIELD uint32_t previewHeight = 0;
+        BE_REFLECT_FIELD uint32_t previewWidth = PreviewShape{}.customWidth;
+        BE_REFLECT_FIELD uint32_t previewHeight = PreviewShape{}.customHeight;
         BE_REFLECT_FIELD bool previewRotated = false;
         BE_REFLECT_FIELD SafeAreaSimulation previewSafeArea = SafeAreaSimulation::None;
         BE_REFLECT_FIELD bool overlaySafeArea = true;
@@ -92,8 +92,8 @@ namespace BECore {
         BE_REFLECT_FIELD ViewportAspect previewAspect = ViewportAspect::Free;
         BE_REFLECT_FIELD int32_t previewDevice = -1;
         BE_REFLECT_FIELD bool previewCustom = false;
-        BE_REFLECT_FIELD uint32_t previewWidth = 0;
-        BE_REFLECT_FIELD uint32_t previewHeight = 0;
+        BE_REFLECT_FIELD uint32_t previewWidth = PreviewShape{}.customWidth;
+        BE_REFLECT_FIELD uint32_t previewHeight = PreviewShape{}.customHeight;
         BE_REFLECT_FIELD bool previewRotated = false;
         BE_REFLECT_FIELD SafeAreaSimulation previewSafeArea = SafeAreaSimulation::None;
         BE_REFLECT_FIELD bool overlaySafeArea = true;
