@@ -30,7 +30,7 @@ namespace BECore {
 
         // In the order of the enums (ViewportAspect, SafeAreaSimulation)
         constexpr const char* kAspectLabels[] = {"Free", "16:9", "4:3", "21:9", "9:16"};
-        constexpr const char* kSafeAreaLabels[] = {"No safe area", "Notch", "Side insets"};
+        constexpr const char* kSafeAreaLabels[] = {"No safe area", "Notch", "Side insets", "Device"};
         static_assert(std::size(kAspectLabels) == EnumUtils<ViewportAspect>::Count());
         static_assert(std::size(kSafeAreaLabels) == EnumUtils<SafeAreaSimulation>::Count());
 

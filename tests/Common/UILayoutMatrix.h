@@ -49,6 +49,8 @@ namespace BECore::Tests {
                     return "notch";
                 case SafeAreaSimulation::SideInsets:
                     return "side insets";
+                case SafeAreaSimulation::Device:
+                    return "device";
             }
             return "";
         }
