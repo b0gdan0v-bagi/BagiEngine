@@ -46,6 +46,7 @@ namespace BECore {
     }  // namespace
 
     bool SDLRendererBackend::Initialize(IMainWindow& window) {
+        BE_PROFILE_SCOPE("SDLRenderer::Initialize");
         auto* sdlWindow = dynamic_cast<SDLMainWindow*>(&window);
         if (!sdlWindow) {
             return false;
@@ -179,6 +180,7 @@ namespace BECore {
     }
 
     IntrusivePtr<ITexture> SDLRendererBackend::CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) {
+        BE_PROFILE_SCOPE("SDLRenderer::CreateTexture");
         if (!_renderer || !rgba || width == 0 || height == 0) {
             return {};
         }
@@ -309,6 +311,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::PresentFrame() {
+        BE_PROFILE_SCOPE("SDLRenderer::PresentFrame");
         if (_renderer) {
             ServeCapture();  // the pixels have to be read before the present: after it the back buffer is undefined
             SDL_RenderPresent(_renderer);
@@ -324,6 +327,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::ServeCapture() {
+        BE_PROFILE_SCOPE("SDLRenderer::ServeCapture");
         if (!_captureCallback) {
             return;
         }
@@ -387,6 +391,7 @@ namespace BECore {
     }
 
     void SDLRendererBackend::OnImGuiRender() {
+        BE_PROFILE_SCOPE("SDLRenderer::ImGuiRender");
         if (_renderer) {
             ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), _renderer);
         }

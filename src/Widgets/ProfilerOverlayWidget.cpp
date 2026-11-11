@@ -45,6 +45,7 @@ namespace BECore {
     void ProfilerOverlayWidget::Draw() {}
 
     void ProfilerOverlayWidget::DrawScreen() {
+        BE_PROFILE_SCOPE("ProfilerOverlay::DrawScreen");
         const IntrusivePtr<IRenderer>& renderer = CoreManager::GetRenderer();
         if (kProfilerViewsBuilt && _visible && renderer) {
             DrawOverlay(*renderer);

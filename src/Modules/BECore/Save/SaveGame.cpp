@@ -186,6 +186,7 @@ namespace BECore {
     }
 
     std::expected<void, SaveError> SaveGameService::Save(eastl::string_view slot, const SaveSchema& schema, const eastl::function<void(ISerializer&)>& writeState) {
+        BE_PROFILE_SCOPE("SaveGame::Save");
         if (!_initialized) {
             return NotInitializedError();
         }
@@ -205,6 +206,7 @@ namespace BECore {
     }
 
     std::expected<SaveInfo, SaveError> SaveGameService::Load(eastl::string_view slot, const SaveSchema& schema, const eastl::function<void(IDeserializer&)>& readState) const {
+        BE_PROFILE_SCOPE("SaveGame::Load");
         const auto bytes = ReadSlot(slot);
         if (!bytes) {
             return std::unexpected(bytes.error());

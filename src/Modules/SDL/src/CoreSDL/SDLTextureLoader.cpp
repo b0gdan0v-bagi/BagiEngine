@@ -27,6 +27,7 @@ namespace BECore {
     }
 
     IntrusivePtr<SDLTexture> SDLTextureLoader::LoadInternal(PoolString path) {
+        BE_PROFILE_SCOPE("SDLTextureLoader::Load");
         auto texture = New<SDLTexture>();
 
         auto* sdlBackend = dynamic_cast<SDLRendererBackend*>(CoreManager::GetRenderer().Get());

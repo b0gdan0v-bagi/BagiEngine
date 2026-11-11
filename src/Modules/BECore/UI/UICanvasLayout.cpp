@@ -45,6 +45,7 @@ namespace BECore {
     }  // namespace
 
     bool UICanvasLayout::Update(const UILayoutContext& context) {
+        BE_PROFILE_SCOPE("UICanvasLayout::Update");
         if (_valid && _hasContext && context == _context && params == _params && regions == _regions) {
             return false;
         }

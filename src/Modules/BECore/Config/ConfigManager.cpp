@@ -12,6 +12,7 @@
 namespace BECore {
 
     void ConfigManager::Initialize() {
+        BE_PROFILE_SCOPE("ConfigManager::Initialize");
         if (_initialized.load(std::memory_order_acquire)) {
             LOG_INFO("[ConfigManager] Already initialized");
             return;
@@ -145,6 +146,7 @@ namespace BECore {
     }
 
     bool ConfigManager::SaveConfig(PoolString name) {
+        BE_PROFILE_SCOPE("ConfigManager::SaveConfig");
         ASSERT(_initialized.load(std::memory_order_acquire));
         std::scoped_lock lock(_writeMutex);
         auto it = _configs.find(name);
@@ -167,6 +169,7 @@ namespace BECore {
     }
 
     bool ConfigManager::ReloadConfig(PoolString name) {
+        BE_PROFILE_SCOPE("ConfigManager::ReloadConfig");
         ASSERT(_initialized.load(std::memory_order_acquire));
         std::filesystem::path filePath;
         {

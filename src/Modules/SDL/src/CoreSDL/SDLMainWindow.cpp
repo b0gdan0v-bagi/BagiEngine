@@ -21,6 +21,7 @@ namespace BECore {
     SDLMainWindow::~SDLMainWindow() = default;
 
     bool SDLMainWindow::Initialize(eastl::string_view configPath) {
+        BE_PROFILE_SCOPE("SDLMainWindow::Initialize");
 
         // The video driver is read by SDL_Init, so the hint has to come first
         if (_headless) {

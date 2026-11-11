@@ -18,6 +18,7 @@ namespace BECore {
     }  // namespace
 
     bool SDL3ApplicationFabric::Create(const ApplicationConfig& config, const ApplicationOptions& options) {
+        BE_PROFILE_SCOPE("SDL3ApplicationFabric::Create");
         if (config._path.empty()) {
             LOG_ERROR("ApplicationConfig: no path (the window config of SDL3ApplicationFabric)");
             return false;

@@ -21,6 +21,7 @@ namespace BECore {
     }
 
     IntrusivePtr<Font> FontLoader::LoadInternal(PoolString path) {
+        BE_PROFILE_SCOPE("FontLoader::Load");
         const auto realPath = CoreManager::GetFileSystem().ResolvePath(path.ToStringView());
         std::ifstream file(realPath, std::ios::binary | std::ios::ate);
         if (realPath.empty() || !file) {

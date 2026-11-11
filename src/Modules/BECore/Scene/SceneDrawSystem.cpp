@@ -113,15 +113,22 @@ namespace BECore {
         BE_PROFILE_SCOPE("SceneDrawSystem::Run");
         entt::registry& registry = scene.GetRegistry();
 
-        uint32_t order = 0;
-        WriteDrawItems(registry, scene.GetRootNode(), order);
+        {
+            BE_PROFILE_SCOPE("Sync draw items");
+            uint32_t order = 0;
+            WriteDrawItems(registry, scene.GetRootNode(), order);
+        }
 
         // The keys are unique (order is the traversal index), so the result does not depend on the sort being stable.
         // EnTT sorts so that a view iterates in the order of the comparator: the first item of the view is the lowest (layer, order).
-        registry.sort<SceneDrawItem>([](const SceneDrawItem& a, const SceneDrawItem& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
+        {
+            BE_PROFILE_SCOPE("Sort draw items");
+            registry.sort<SceneDrawItem>([](const SceneDrawItem& a, const SceneDrawItem& b) { return a.layer != b.layer ? a.layer < b.layer : a.order < b.order; });
+        }
 
         // The quad and the sprite are drawn from their registry data at the place of their component in the node; any other
         // component draws itself.
+        BE_PROFILE_SCOPE("Draw items");
         for (const auto [entity, item] : registry.view<SceneDrawItem>().each()) {
             const TransformData* transform = registry.try_get<TransformData>(entity);
             const QuadDrawData* quad = registry.try_get<QuadDrawData>(entity);

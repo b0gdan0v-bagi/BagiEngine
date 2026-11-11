@@ -5,6 +5,7 @@
 namespace BECore {
 
     void ResourceManager::Initialize() {
+        BE_PROFILE_SCOPE("ResourceManager::Initialize");
         LOG_INFO("Initializing ResourceManager...");
 
         // Create all registered loaders via the self-registration factory.
