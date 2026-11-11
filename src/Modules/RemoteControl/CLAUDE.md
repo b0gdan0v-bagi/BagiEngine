@@ -11,7 +11,7 @@ Module order: after `TaskSystem`, before `SDL`. It links `BECoreModule` and `Eve
 | File | Purpose |
 |------|---------|
 | `Sha1` | `Sha1()`, only for the handshake |
-| `WebSocketHandshake` | `ParseHandshakeRequest()` (RFC 6455 section 4.2 plus the loopback checks), `ComputeAcceptKey()`, `BuildAcceptResponse()`, `BuildRejectResponse()` |
+| `WebSocketHandshake` | `ParseHandshakeRequest(text, HandshakePolicy)` (RFC 6455 section 4.2 plus the loopback checks or the origin allow-list), `IsOriginAllowed()`, `ComputeAcceptKey()`, `BuildAcceptResponse()`, `BuildRejectResponse()` |
 | `WebSocketFrame` | `EncodeFrame()` and friends, `WebSocketFrameParser` (bytes in, messages out) |
 | `Socket` | `Socket`: move-only IPv4 TCP socket, POSIX or Winsock behind one interface; `Listen(port, SocketBind)` binds the loopback (default) or every address (backlog 128 instead of 8), `Accept(timeout, &peer)` tells the client's address as dotted text |
 | `WebSocketServer` | `WebSocketServer`: the accept thread, the connections, the queues; `Start(port)`, `Stop()` |
@@ -20,12 +20,13 @@ The handshake, the frame parser and `Sha1` are pure functions and classes with n
 
 ## Security
 
-The API lets any client play, reset and quit the game, so the server is closed to everything but the person at this machine:
+The control API lets any client play, reset and quit the game, so by default (`HandshakePolicy::loopbackOnly`) the server is closed to everything but the person at this machine:
 
 - It binds `127.0.0.1` only. There is no token: any local process can connect, which is accepted for a tool that is off by default.
 - `Host` has to be `127.0.0.1`, `localhost` or `[::1]` (a port is allowed). A web page of another site whose name resolves to 127.0.0.1 (DNS rebinding) sends its own name there and gets a 403.
 - `Origin`, when the request has one, has to be an `http://` or `https://` page of the loopback. Browsers always send it, programs do not, so a page from the internet cannot open the connection, a script can. The `null` origin of a `file://` page is refused.
 - At most `WebSocketServer::kMaxConnections` (4) connections, handshakes included; the next client gets a 503. A client has `kHandshakeTimeout` (5 s) to finish its handshake and `kMaxHandshakeBytes` (8 KiB) for its request head.
+- **The second mode, `loopbackOnly = false`, is for a public server** (the room server: it is not a tool of the person at this machine and has no cookies, so the secret is its room token, not the page). `Host` is not checked beyond being present (behind a proxy the public name is not known, and DNS rebinding gains nothing without ambient credentials). `Origin` is what keeps a foreign web page out: when present it has to equal an entry of `HandshakePolicy::allowedOrigins` (`IsOriginAllowed()` in the header: scheme and host in any case, `https://a.com` equals `https://a.com:443`, an empty path or `/` only, no `userinfo@`, no suffix or wildcard match; `*` allows all, for development; `null` only with its own entry). An empty list refuses every browser and admits programs, which send no `Origin`, so **`Origin` does not protect against a program**, only against pages; `allowMissingOrigin = false` refuses those too. A 403 names the refused origin (cut to 100 bytes, printable ASCII) so the operator can fix the list. Every other check of the handshake applies in both modes.
 - A message is at most `ControlService::kMaxRequestBytes` (1 MiB). The frame parser checks the length announced in the frame header, so a client cannot make the server buffer more.
 
 ## Protocol
@@ -63,7 +64,7 @@ with BagiControlClient() as c: print(c.call('get_state'))"
 
 ## Tests
 
-- `tests/BECore/Sha1Test.cpp` (FIPS 180 vectors, the lengths around the block edges), `WebSocketHandshakeTest.cpp` (the key of RFC 6455, every refusal, `Host` and `Origin`), `WebSocketFrameTest.cpp` (the examples of RFC 6455 section 5.7, lengths, fragments, every protocol violation, the limits).
+- `tests/BECore/Sha1Test.cpp` (FIPS 180 vectors, the lengths around the block edges), `WebSocketHandshakeTest.cpp` (the key of RFC 6455, every refusal, `Host` and `Origin`, the origin allow-list with its look-alikes), `WebSocketFrameTest.cpp` (the examples of RFC 6455 section 5.7, lengths, fragments, every protocol violation, the limits).
 - `tests/BECore/SocketTest.cpp`: `Socket` alone on a loopback pair (a `Receive()` and a `SendAll()` that wait are woken by `ShutdownBoth()`, the receive timeout, data and the end of the stream).
 - `tests/BECore/WebSocketServerTest.cpp`: the server on a free port against a raw client in the test (`Socket` plus hand-written frames). The test thread plays the main thread and calls `Drain()` while it waits. Covers handshake, pipelining and order, garbage, close, binary, oversize, foreign `Origin` and `Host`, the connection limit and the slot being freed, events, `Stop()` with open and half-open connections, a client that leaves with a request pending.
 - `tools/control/tests/test_frames.py` (pytest, the frames of the Python client), `tools/control/tests/smoke.py` (starts a game executable with `--control` and plays a few moves; the ctest entry `BagiMatch3ControlSmoke` from `be_add_game_control_tests`, `.claude/rules/cmake-rules.md`; a game with its own scenario calls `run_smoke()` from its script, as `tests/control_smoke.py` of BagiEngine-Chess does for `BagiChessControlSmoke`). The smoke test runs the game `--headless`, once on the real clock and once with `--manual-clock`, and looks at screenshots (decoded by `tools/control/tests/png_reader.py`, tested in `test_png_reader.py`); `--window` runs it in a real window instead. Recorded sessions (scenario files, `tools/control/CLAUDE.md`) run as `BagiMatch3Scenario.<file>` from `be_add_game_scenario_tests` over `games/Match3/tests/scenarios/*.jsonl`.

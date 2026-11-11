@@ -12,6 +12,14 @@ namespace BECore {
         constexpr eastl::string_view kRequestLineSuffix = " HTTP/1.1";
         constexpr size_t kClientKeyLength = 24;  // 16 random bytes in base64 with padding
         constexpr size_t kMaxPortDigits = 5;
+        constexpr uint32_t kMaxPort = 65535;
+        constexpr size_t kMaxQuotedOriginBytes = 100;  // how much of a refused origin an error message repeats
+        constexpr int kNoPort = -1;
+        constexpr int kDefaultHttpPort = 80;
+        constexpr int kDefaultHttpsPort = 443;
+        constexpr eastl::string_view kSchemeSeparator = "://";
+        constexpr eastl::string_view kAnyOrigin = "*";
+        constexpr eastl::string_view kNullOrigin = "null";
 
         namespace HeaderNames {
             constexpr eastl::string_view kHost = "host";
@@ -116,6 +124,132 @@ namespace BECore {
             return IsLoopbackAuthority(rest.substr(0, rest.find('/')));
         }
 
+        /// An origin split into the parts that are compared: `scheme://host[:port]`
+        struct ParsedOrigin {
+            eastl::string scheme;  // lower case
+            eastl::string host;    // lower case, `[v6]` keeps its brackets
+            int port = kNoPort;    // the port written, or the default of the scheme, or kNoPort
+        };
+
+        bool IsSchemeCharacter(char letter, bool first) {
+            const char lower = AsciiLower(letter);
+            if (lower >= 'a' && lower <= 'z') {
+                return true;
+            }
+            return !first && ((letter >= '0' && letter <= '9') || letter == '+' || letter == '-' || letter == '.');
+        }
+
+        bool IsHostCharacter(char letter) {
+            const char lower = AsciiLower(letter);
+            return (lower >= 'a' && lower <= 'z') || (letter >= '0' && letter <= '9') || letter == '-' || letter == '.';
+        }
+
+        /// A registered name, an IPv4 address or an IPv6 literal in brackets (hex digits, ':' and '.'); never empty
+        bool IsOriginHost(eastl::string_view host) {
+            if (host.empty()) {
+                return false;
+            }
+            if (host.front() == '[') {
+                if (host.size() < 3 || host.back() != ']') {
+                    return false;
+                }
+                const eastl::string_view inside = host.substr(1, host.size() - 2);
+                return std::all_of(inside.begin(), inside.end(), [](char letter) {
+                    const char lower = AsciiLower(letter);
+                    return (lower >= 'a' && lower <= 'f') || (letter >= '0' && letter <= '9') || letter == ':' || letter == '.';
+                });
+            }
+            return std::all_of(host.begin(), host.end(), IsHostCharacter);
+        }
+
+        int DefaultPortOf(eastl::string_view scheme) {
+            if (scheme == "http") {
+                return kDefaultHttpPort;
+            }
+            return scheme == "https" ? kDefaultHttpsPort : kNoPort;
+        }
+
+        /// Parses `scheme://host[:port]` with an optional single trailing `/`; nullopt for anything else
+        std::optional<ParsedOrigin> ParseOrigin(eastl::string_view text) {
+            const size_t separator = text.find(kSchemeSeparator);
+            if (separator == eastl::string_view::npos || separator == 0) {
+                return std::nullopt;
+            }
+            const eastl::string_view scheme = text.substr(0, separator);
+            for (size_t i = 0; i < scheme.size(); ++i) {
+                if (!IsSchemeCharacter(scheme[i], i == 0)) {
+                    return std::nullopt;
+                }
+            }
+
+            eastl::string_view authority = text.substr(separator + kSchemeSeparator.size());
+            if (authority.ends_with('/')) {
+                authority.remove_suffix(1);  // `https://a.com/` is the same origin; `https://a.com/x` is not an origin at all
+            }
+
+            eastl::string_view host = authority;
+            eastl::string_view port;
+            bool hasPort = false;
+            const size_t hostEnd = authority.starts_with('[') ? authority.find(']') : authority.find(':');
+            if (authority.starts_with('[')) {
+                if (hostEnd == eastl::string_view::npos) {
+                    return std::nullopt;
+                }
+                host = authority.substr(0, hostEnd + 1);
+                const eastl::string_view rest = authority.substr(hostEnd + 1);
+                if (!rest.empty()) {
+                    if (!rest.starts_with(':')) {
+                        return std::nullopt;
+                    }
+                    port = rest.substr(1);
+                    hasPort = true;
+                }
+            } else if (hostEnd != eastl::string_view::npos) {
+                host = authority.substr(0, hostEnd);
+                port = authority.substr(hostEnd + 1);
+                hasPort = true;
+            }
+            if (!IsOriginHost(host)) {
+                return std::nullopt;  // also catches a path, `userinfo@`, spaces, control characters and a second ':'
+            }
+
+            ParsedOrigin parsed;
+            parsed.scheme = Lowered(scheme);
+            parsed.host = Lowered(host);
+            parsed.port = DefaultPortOf(parsed.scheme);
+            if (hasPort) {
+                if (!IsPort(port)) {
+                    return std::nullopt;
+                }
+                uint32_t value = 0;
+                for (const char digit : port) {
+                    value = value * 10 + static_cast<uint32_t>(digit - '0');
+                }
+                if (value == 0 || value > kMaxPort) {
+                    return std::nullopt;
+                }
+                parsed.port = static_cast<int>(value);
+            }
+            return parsed;
+        }
+
+        bool SameOrigin(const ParsedOrigin& left, const ParsedOrigin& right) {
+            return left.scheme == right.scheme && left.host == right.host && left.port == right.port;
+        }
+
+        /// The origin as an error message may repeat it: printable ASCII only, at most kMaxQuotedOriginBytes
+        eastl::string Quoted(eastl::string_view origin) {
+            eastl::string quoted;
+            quoted.reserve(std::min(origin.size(), kMaxQuotedOriginBytes) + 3);
+            for (const char letter : origin.substr(0, kMaxQuotedOriginBytes)) {
+                quoted.push_back(letter >= ' ' && letter <= '~' ? letter : '?');
+            }
+            if (origin.size() > kMaxQuotedOriginBytes) {
+                quoted.append("...");
+            }
+            return quoted;
+        }
+
         bool IsBase64Character(char letter) {
             return (letter >= 'A' && letter <= 'Z') || (letter >= 'a' && letter <= 'z') || (letter >= '0' && letter <= '9') || letter == '+' || letter == '/';
         }
@@ -195,7 +329,35 @@ namespace BECore {
         return Base64Encode(eastl::span<const uint8_t>(digest.data(), digest.size()));
     }
 
-    std::expected<eastl::string, HandshakeError> ParseHandshakeRequest(eastl::string_view requestText) {
+    bool IsOriginAllowed(eastl::string_view origin, const HandshakePolicy& policy) {
+        if (policy.loopbackOnly) {
+            return IsLoopbackOrigin(origin);
+        }
+        const bool isNull = EqualsIgnoreCase(origin, kNullOrigin);
+        const std::optional<ParsedOrigin> parsed = isNull ? std::nullopt : ParseOrigin(origin);
+        for (const eastl::string& entry : policy.allowedOrigins) {
+            const eastl::string_view allowed(entry.data(), entry.size());
+            if (allowed == kAnyOrigin) {
+                return true;
+            }
+            if (isNull) {
+                if (EqualsIgnoreCase(allowed, kNullOrigin)) {
+                    return true;
+                }
+                continue;
+            }
+            if (!parsed) {
+                continue;  // only `*` can admit an origin that is not well formed
+            }
+            const std::optional<ParsedOrigin> entryOrigin = ParseOrigin(allowed);
+            if (entryOrigin && SameOrigin(*parsed, *entryOrigin)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::expected<eastl::string, HandshakeError> ParseHandshakeRequest(eastl::string_view requestText, const HandshakePolicy& policy) {
         if (requestText.size() > kMaxHandshakeBytes) {
             return std::unexpected(Refuse(431, "the request head is too long"));
         }
@@ -222,13 +384,18 @@ namespace BECore {
         if (host == nullptr) {
             return std::unexpected(Refuse(400, "the Host header is missing"));
         }
-        if (!IsLoopbackAuthority(*host)) {
+        if (policy.loopbackOnly && !IsLoopbackAuthority(*host)) {
             return std::unexpected(Refuse(403, Format("the Host '{}' is not the loopback", *host)));
         }
         if (const eastl::string* origin = FindHeader(headers, HeaderNames::kOrigin)) {
-            if (!IsLoopbackOrigin(*origin)) {
-                return std::unexpected(Refuse(403, Format("the Origin '{}' is not a page of the loopback", *origin)));
+            if (!IsOriginAllowed(*origin, policy)) {
+                if (policy.loopbackOnly) {
+                    return std::unexpected(Refuse(403, Format("the Origin '{}' is not a page of the loopback", *origin)));
+                }
+                return std::unexpected(Refuse(403, Format("the Origin '{}' is not allowed by this server", Quoted(*origin))));
             }
+        } else if (!policy.loopbackOnly && !policy.allowMissingOrigin) {
+            return std::unexpected(Refuse(403, "this server accepts only requests that carry an Origin header"));
         }
 
         const eastl::string* upgrade = FindHeader(headers, HeaderNames::kUpgrade);

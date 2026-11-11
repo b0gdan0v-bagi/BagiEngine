@@ -69,6 +69,24 @@ namespace BECore::Tests {
             return ParseHandshakeRequest(View(text));
         }
 
+        HandshakePolicy PublicPolicy(std::initializer_list<const char*> origins = {}) {
+            HandshakePolicy policy;
+            policy.loopbackOnly = false;
+            for (const char* origin : origins) {
+                policy.allowedOrigins.push_back(origin);
+            }
+            return policy;
+        }
+
+        std::expected<eastl::string, HandshakeError> Parse(const Request& request, const HandshakePolicy& policy) {
+            const std::string text = request.Text();
+            return ParseHandshakeRequest(View(text), policy);
+        }
+
+        bool Allowed(const char* origin, const HandshakePolicy& policy) {
+            return IsOriginAllowed(origin, policy);
+        }
+
         void ExpectRefused(const std::expected<eastl::string, HandshakeError>& result, int status) {
             ASSERT_FALSE(result.has_value());
             EXPECT_EQ(result.error().httpStatus, status) << result.error().message.c_str();
@@ -194,6 +212,235 @@ namespace BECore::Tests {
     TEST(WebSocketHandshakeTest, HeadOverTheLimitIsRefused) {
         const std::string text = Request().Add("X-Padding: " + std::string(kMaxHandshakeBytes, 'x')).Text();
         ExpectRefused(ParseHandshakeRequest(View(text)), 431);
+    }
+
+    // Public mode: the origin allow-list instead of the loopback checks
+
+    TEST(WebSocketHandshakeTest, DefaultPolicyIsTheLoopbackPolicy) {
+        const HandshakePolicy policy;
+        EXPECT_TRUE(policy.loopbackOnly);
+        EXPECT_TRUE(policy.allowedOrigins.empty());
+        EXPECT_TRUE(policy.allowMissingOrigin);
+        EXPECT_TRUE(Parse(Request(), policy).has_value());
+        ExpectRefused(Parse(Request().Set("Host", "example.com"), policy), 403);
+        ExpectRefused(Parse(Request().Set("Origin", "https://good.example"), policy), 403);
+        EXPECT_TRUE(IsOriginAllowed("http://localhost:3000", policy));
+        EXPECT_FALSE(IsOriginAllowed("https://good.example", policy));
+    }
+
+    TEST(WebSocketHandshakeTest, PublicPolicyAcceptsAListedOriginAndRefusesAForeignOne) {
+        const HandshakePolicy policy = PublicPolicy({"https://good.example", "http://localhost:3000"});
+        EXPECT_TRUE(Parse(Request().Set("Origin", "https://good.example"), policy).has_value());
+        EXPECT_TRUE(Parse(Request().Set("Origin", "http://localhost:3000"), policy).has_value());
+        ExpectRefused(Parse(Request().Set("Origin", "https://evil.example"), policy), 403);
+        ExpectRefused(Parse(Request().Set("Origin", "http://localhost:3001"), policy), 403);
+        // The loopback is not special in public mode: it has to be listed
+        ExpectRefused(Parse(Request().Set("Origin", "http://127.0.0.1:3000"), policy), 403);
+    }
+
+    TEST(WebSocketHandshakeTest, PublicPolicyDoesNotCheckTheHostButNeedsOne) {
+        const HandshakePolicy policy = PublicPolicy({"https://good.example"});
+        EXPECT_TRUE(Parse(Request().Set("Host", "rooms.example.com"), policy).has_value());
+        EXPECT_TRUE(Parse(Request().Set("Host", "10.0.0.7:8080"), policy).has_value());
+        ExpectRefused(Parse(Request().Remove("Host"), policy), 400);
+        ExpectRefused(Parse(Request().Set("Host", "rooms.example.com")), 403);  // the loopback mode refuses the same request
+    }
+
+    TEST(WebSocketHandshakeTest, PublicPolicyWithNoEntriesRefusesBrowsersAndAdmitsPrograms) {
+        const HandshakePolicy policy = PublicPolicy();
+        EXPECT_TRUE(Parse(Request(), policy).has_value());  // no Origin: a program
+        ExpectRefused(Parse(Request().Set("Origin", "https://good.example"), policy), 403);
+        ExpectRefused(Parse(Request().Set("Origin", "null"), policy), 403);
+        ExpectRefused(Parse(Request().Set("Origin", ""), policy), 403);
+    }
+
+    TEST(WebSocketHandshakeTest, PublicPolicyCanRefuseProgramsToo) {
+        HandshakePolicy policy = PublicPolicy({"https://good.example"});
+        policy.allowMissingOrigin = false;
+        ExpectRefused(Parse(Request(), policy), 403);
+        EXPECT_TRUE(Parse(Request().Set("Origin", "https://good.example"), policy).has_value());
+        // The flag belongs to the public mode: the loopback mode always admits programs
+        HandshakePolicy loopback;
+        loopback.allowMissingOrigin = false;
+        EXPECT_TRUE(Parse(Request(), loopback).has_value());
+    }
+
+    TEST(WebSocketHandshakeTest, StarAllowsEveryOrigin) {
+        const HandshakePolicy policy = PublicPolicy({"*"});
+        for (const char* origin : {"https://anything.example", "http://127.0.0.1:1", "null", "garbage", ""}) {
+            EXPECT_TRUE(Allowed(origin, policy)) << origin;
+        }
+        EXPECT_TRUE(Parse(Request().Set("Origin", "https://anything.example"), policy).has_value());
+        EXPECT_TRUE(IsOriginAllowed("https://a.example", PublicPolicy({"https://b.example", "*"})));
+    }
+
+    TEST(WebSocketHandshakeTest, NullOriginNeedsItsOwnEntry) {
+        EXPECT_FALSE(Allowed("null", PublicPolicy({"https://good.example"})));
+        EXPECT_FALSE(Allowed("null", PublicPolicy()));
+        EXPECT_TRUE(Allowed("null", PublicPolicy({"https://good.example", "null"})));
+        EXPECT_TRUE(Parse(Request().Set("Origin", "null"), PublicPolicy({"null"})).has_value());
+        // The entry `null` admits nothing but the null origin
+        EXPECT_FALSE(Allowed("https://good.example", PublicPolicy({"null"})));
+        EXPECT_FALSE(Allowed("https://null", PublicPolicy({"null"})));
+    }
+
+    TEST(WebSocketHandshakeTest, SchemeAndHostAreComparedInAnyCase) {
+        const HandshakePolicy policy = PublicPolicy({"https://Good.Example"});
+        EXPECT_TRUE(Allowed("https://good.example", policy));
+        EXPECT_TRUE(Allowed("HTTPS://GOOD.EXAMPLE", policy));
+        EXPECT_TRUE(Allowed("HtTpS://gOoD.eXaMpLe", PublicPolicy({"https://good.example"})));
+    }
+
+    TEST(WebSocketHandshakeTest, PortsAreComparedAsNumbersWithTheDefaultOfTheScheme) {
+        EXPECT_TRUE(Allowed("https://a.example:443", PublicPolicy({"https://a.example"})));
+        EXPECT_TRUE(Allowed("https://a.example", PublicPolicy({"https://a.example:443"})));
+        EXPECT_TRUE(Allowed("http://a.example:80", PublicPolicy({"http://a.example"})));
+        EXPECT_TRUE(Allowed("http://a.example", PublicPolicy({"http://a.example:80"})));
+        EXPECT_TRUE(Allowed("http://a.example:8080", PublicPolicy({"http://a.example:8080"})));
+        EXPECT_TRUE(Allowed("http://a.example:08080", PublicPolicy({"http://a.example:8080"})));
+
+        EXPECT_FALSE(Allowed("https://a.example:8443", PublicPolicy({"https://a.example"})));
+        EXPECT_FALSE(Allowed("https://a.example", PublicPolicy({"https://a.example:8443"})));
+        EXPECT_FALSE(Allowed("https://a.example:80", PublicPolicy({"https://a.example"})));  // 80 is the default of http, not of https
+        EXPECT_FALSE(Allowed("http://a.example:443", PublicPolicy({"http://a.example"})));
+        EXPECT_FALSE(Allowed("http://a.example:8081", PublicPolicy({"http://a.example:8080"})));
+    }
+
+    TEST(WebSocketHandshakeTest, OtherSchemesHaveNoDefaultPort) {
+        EXPECT_TRUE(Allowed("capacitor://localhost", PublicPolicy({"capacitor://localhost"})));
+        EXPECT_FALSE(Allowed("capacitor://localhost:80", PublicPolicy({"capacitor://localhost"})));
+        EXPECT_FALSE(Allowed("capacitor://localhost", PublicPolicy({"http://localhost"})));
+    }
+
+    TEST(WebSocketHandshakeTest, ADifferentSchemeIsAnotherOrigin) {
+        EXPECT_FALSE(Allowed("http://good.example", PublicPolicy({"https://good.example"})));
+        EXPECT_FALSE(Allowed("https://good.example", PublicPolicy({"http://good.example"})));
+        EXPECT_FALSE(Allowed("http://good.example:443", PublicPolicy({"https://good.example"})));
+    }
+
+    TEST(WebSocketHandshakeTest, ATrailingSlashIsTheSameOriginButAPathIsNot) {
+        EXPECT_TRUE(Allowed("https://good.example/", PublicPolicy({"https://good.example"})));
+        EXPECT_TRUE(Allowed("https://good.example", PublicPolicy({"https://good.example/"})));
+        EXPECT_FALSE(Allowed("https://good.example//", PublicPolicy({"https://good.example"})));
+        EXPECT_FALSE(Allowed("https://good.example/index.html", PublicPolicy({"https://good.example"})));
+        EXPECT_FALSE(Allowed("https://good.example/?x", PublicPolicy({"https://good.example"})));
+        EXPECT_FALSE(Allowed("https://good.example#frag", PublicPolicy({"https://good.example"})));
+        EXPECT_FALSE(Allowed("https://good.example:443/x", PublicPolicy({"https://good.example"})));
+        // An entry with a path matches nothing
+        EXPECT_FALSE(Allowed("https://good.example", PublicPolicy({"https://good.example/app"})));
+        EXPECT_FALSE(Allowed("https://good.example/app", PublicPolicy({"https://good.example/app"})));
+    }
+
+    TEST(WebSocketHandshakeTest, UserinfoSpacesAndControlCharactersNeverMatch) {
+        const HandshakePolicy policy = PublicPolicy({"https://good.example"});
+        for (const char* origin : {"https://user@good.example",
+                                   "https://good.example@evil.example",
+                                   "https://evil.example@good.example",
+                                   "https://user:pass@good.example",
+                                   "https://good .example",
+                                   "https://good.example\r",
+                                   "https://good\x01.example",
+                                   "https://good.example\\evil",
+                                   "https://good.example:",
+                                   "https://good.example:0",
+                                   "https://good.example:65536",
+                                   "https://good.example:443x",
+                                   "https://good.example:4:43",
+                                   "https://",
+                                   "://good.example",
+                                   "good.example",
+                                   "https:good.example",
+                                   "https:/good.example",
+                                   "https://good_.example%00",
+                                   "https://good.example."}) {
+            SCOPED_TRACE(origin);
+            EXPECT_FALSE(Allowed(origin, policy));
+            ExpectRefused(Parse(Request().Set("Origin", origin), policy), 403);
+        }
+        // The header line is trimmed of spaces and tabs around the value (HTTP), the function itself does not trim
+        for (const char* origin : {"https://good.example ", " https://good.example", "https://good.example\t"}) {
+            SCOPED_TRACE(origin);
+            EXPECT_FALSE(Allowed(origin, policy));
+        }
+        // An entry that carries one of these matches nothing, not even itself
+        for (const char* entry : {"https://user@good.example", "https://good.example ", "https://good.example:", "https://"}) {
+            SCOPED_TRACE(entry);
+            EXPECT_FALSE(Allowed(entry, PublicPolicy({entry})));
+        }
+    }
+
+    TEST(WebSocketHandshakeTest, LookAlikesAreNotMatched) {
+        const HandshakePolicy policy = PublicPolicy({"https://good.com"});
+        for (const char* origin :
+             {"https://good.com.evil.org", "https://evil.org/https://good.com", "https://evil.org?https://good.com", "https://notgood.com", "https://good.comx", "https://sub.good.com",
+              "https://good.co", "https://good.com:443.evil.org", "https://evil.org#@good.com", "https://good.com@evil.org", "https://xgood.com", "https://good-.com"}) {
+            SCOPED_TRACE(origin);
+            EXPECT_FALSE(Allowed(origin, policy));
+        }
+        EXPECT_FALSE(Allowed("https://good.com", PublicPolicy({"https://sub.good.com"})));
+        EXPECT_FALSE(Allowed("https://good.com", PublicPolicy({"https://*.good.com"})));  // no wildcard inside an entry
+        EXPECT_FALSE(Allowed("https://a.good.com", PublicPolicy({"https://*.good.com"})));
+        EXPECT_FALSE(Allowed("https://good.com", PublicPolicy({"good.com"})));
+    }
+
+    TEST(WebSocketHandshakeTest, IpAddressesAndBracketedHostsAreOrigins) {
+        EXPECT_TRUE(Allowed("http://192.168.1.5:8080", PublicPolicy({"http://192.168.1.5:8080"})));
+        EXPECT_FALSE(Allowed("http://192.168.1.6:8080", PublicPolicy({"http://192.168.1.5:8080"})));
+        EXPECT_TRUE(Allowed("http://[::1]:5000", PublicPolicy({"http://[::1]:5000"})));
+        EXPECT_TRUE(Allowed("http://[::1]", PublicPolicy({"http://[::1]:80"})));
+        EXPECT_FALSE(Allowed("http://[::1", PublicPolicy({"http://[::1"})));
+        EXPECT_FALSE(Allowed("http://[]", PublicPolicy({"http://[]"})));
+        EXPECT_FALSE(Allowed("http://[::1]x", PublicPolicy({"http://[::1]"})));
+        EXPECT_FALSE(Allowed("http://[::1]:", PublicPolicy({"http://[::1]"})));
+    }
+
+    TEST(WebSocketHandshakeTest, TheFirstMatchingEntryIsEnoughAndAnUnparsableEntryDoesNotStopTheSearch) {
+        const HandshakePolicy policy = PublicPolicy({"nonsense", "https://x.example/path", "https://good.example"});
+        EXPECT_TRUE(Allowed("https://good.example", policy));
+        EXPECT_FALSE(Allowed("https://other.example", policy));
+    }
+
+    TEST(WebSocketHandshakeTest, PublicRefusalNamesTheOriginCutToOneHundredBytes) {
+        const HandshakePolicy policy = PublicPolicy({"https://good.example"});
+        const auto refused = Parse(Request().Set("Origin", "https://evil.example"), policy);
+        ExpectRefused(refused, 403);
+        EXPECT_NE(refused.error().message.find("https://evil.example"), eastl::string::npos);
+
+        const std::string huge = "https://" + std::string(6000, 'a') + ".example";
+        const auto cut = Parse(Request().Set("Origin", huge), policy);
+        ExpectRefused(cut, 403);
+        EXPECT_LT(cut.error().message.size(), 200u);
+        EXPECT_NE(cut.error().message.find(std::string(90, 'a').c_str()), eastl::string::npos);
+        EXPECT_EQ(cut.error().message.find(std::string(150, 'a').c_str()), eastl::string::npos);
+
+        // Bytes that are not printable ASCII never reach the response
+        const auto odd = Parse(Request().Set("Origin", "https://\x01\xC3\xA9.example"), policy);
+        ExpectRefused(odd, 403);
+        for (const char letter : odd.error().message) {
+            EXPECT_TRUE(letter >= ' ' && letter <= '~');
+        }
+    }
+
+    TEST(WebSocketHandshakeTest, AnOriginThatFillsTheWholeHeadIsRefusedAndOneOverTheLimitIs431) {
+        const HandshakePolicy policy = PublicPolicy({"https://good.example"});
+        const std::string almost = "https://" + std::string(kMaxHandshakeBytes - 400, 'a');
+        ExpectRefused(Parse(Request().Set("Origin", almost), policy), 403);
+        const std::string tooMuch = "https://" + std::string(kMaxHandshakeBytes, 'a');
+        ExpectRefused(Parse(Request().Set("Origin", tooMuch), policy), 431);
+    }
+
+    TEST(WebSocketHandshakeTest, PublicPolicyKeepsEveryOtherCheckOfTheHandshake) {
+        const HandshakePolicy policy = PublicPolicy({"https://good.example"});
+        ExpectRefused(Parse(Request().Set("Sec-WebSocket-Version", "8"), policy), 426);
+        ExpectRefused(Parse(Request().Remove("Upgrade"), policy), 400);
+        ExpectRefused(Parse(Request().Remove("Connection"), policy), 400);
+        ExpectRefused(Parse(Request().Set("Sec-WebSocket-Key", "short"), policy), 400);
+        ExpectRefused(Parse(Request().Add("Origin: https://good.example").Add("Origin: https://good.example"), policy), 400);
+        Request post;
+        post.requestLine = "POST /x HTTP/1.1";
+        ExpectRefused(Parse(post, policy), 400);
+        const std::string text = Request().Add("X-Padding: " + std::string(kMaxHandshakeBytes, 'x')).Text();
+        ExpectRefused(ParseHandshakeRequest(View(text), policy), 431);
     }
 
     TEST(WebSocketHandshakeTest, AcceptResponseCompletesTheHandshake) {
