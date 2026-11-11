@@ -5,6 +5,9 @@
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNode.h>
+#include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIPreviewOverlay.h>
 #include <Generated/ViewportWidget.gen.hpp>
 #include <SDL3/SDL.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
@@ -30,6 +33,22 @@ namespace BECore {
         constexpr float kMinDrawnGridStep = 2.0f;
         constexpr ImU32 kGridColor = IM_COL32(255, 255, 255, 40);
         constexpr ImU32 kSafeAreaOutlineColor = IM_COL32(255, 200, 0, 200);
+        constexpr ImU32 kViewOutlineColor = IM_COL32(80, 160, 255, 220);
+        constexpr ImU32 kViewBarTint = IM_COL32(0, 0, 0, 110);
+        constexpr ImU32 kCanvasBoundsColor = IM_COL32(190, 90, 255, 200);
+        constexpr ImU32 kContentBoundsColor = IM_COL32(255, 130, 220, 200);
+        constexpr ImU32 kTouchOkColor = IM_COL32(60, 220, 90, 230);
+        constexpr ImU32 kTouchOkFill = IM_COL32(60, 220, 90, 40);
+        constexpr ImU32 kTouchSmallColor = IM_COL32(255, 60, 60, 240);
+        constexpr ImU32 kTouchSmallFill = IM_COL32(255, 60, 60, 70);
+        // Bars thinner than this (output pixels) are not tinted
+        constexpr float kMinBarSize = 0.5f;
+        // Two bounds closer than this (output pixels) are the same rect
+        constexpr float kSameRectTolerance = 0.5f;
+        // The viewport pass runs at density 1: a window unit is an output pixel, what UISettings::minTouchSize is measured in
+        constexpr float kViewportPixelDensity = 1.0f;
+        constexpr const char* kOverlaysButton = "Overlays";
+        constexpr const char* kOverlaysPopup = "##ViewportOverlays";
 
         // In the order of the enums (ViewportAspect, SafeAreaSimulation)
         constexpr const char* kAspectLabels[] = {"Free", "16:9", "4:3", "21:9", "9:16"};
@@ -56,6 +75,20 @@ namespace BECore {
                 return Format("{} ({}x{})", device->name, device->width, device->height);
             }
             return kAspectLabels[static_cast<size_t>(shape.aspect)];
+        }
+
+        // The canvases of a subtree in the order of the scene (the walk of CollectCanvases in UIControl.cpp)
+        void CollectCanvases(const SceneNode& node, eastl::vector<IntrusivePtr<UICanvasComponent>>& out) {
+            if (auto canvas = node.GetComponent<UICanvasComponent>()) {
+                out.push_back(std::move(canvas));
+            }
+            for (const auto& child : node.GetChildren()) {
+                CollectCanvases(*child, out);
+            }
+        }
+
+        bool SameRect(const Rect& a, const Rect& b) {
+            return std::abs(a.x - b.x) < kSameRectTolerance && std::abs(a.y - b.y) < kSameRectTolerance && std::abs(a.w - b.w) < kSameRectTolerance && std::abs(a.h - b.h) < kSameRectTolerance;
         }
 
         bool IsFree(const PreviewShape& shape) {
@@ -156,8 +189,9 @@ namespace BECore {
             const ImVec2 imageMin = ImGui::GetItemRectMin();
             ForwardMouse(imageMin.x, imageMin.y, zoom, ImGui::IsItemHovered());
             const ImVec2 imageMax = ImGui::GetItemRectMax();
+            const bool imageHovered = ImGui::IsItemHovered();
             DrawGrid(imageMin.x, imageMin.y, imageMax.x, imageMax.y, zoom);
-            DrawSafeAreaOutline(imageMin.x, imageMin.y, zoom, safeArea);
+            DrawOverlays(activeScene, imageMin, imageMax, zoom, size, safeArea, imageHovered);
         }
 
         ImGui::End();
@@ -237,6 +271,9 @@ namespace BECore {
         if (ImGui::Combo("##ViewportSafeArea", &safeArea, kSafeAreaLabels, static_cast<int>(std::size(kSafeAreaLabels)))) {
             _safeAreaSimulation = static_cast<SafeAreaSimulation>(safeArea);
         }
+
+        ImGui::SameLine();
+        DrawOverlaysPopup();
 
         if (const Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
             DrawViewCombo(*scene);
@@ -321,8 +358,97 @@ namespace BECore {
         drawList->PopClipRect();
     }
 
+    void ViewportWidget::DrawOverlaysPopup() {
+        if (ImGui::Button(kOverlaysButton)) {
+            ImGui::OpenPopup(kOverlaysPopup);
+        }
+        if (ImGui::BeginPopup(kOverlaysPopup)) {
+            ImGui::Checkbox("Safe area", &_overlays.safeArea);
+            ImGui::Checkbox("View bounds", &_overlays.viewBounds);
+            ImGui::Checkbox("Canvas bounds", &_overlays.canvasBounds);
+            ImGui::Checkbox("Touch targets", &_overlays.touchTargets);
+            ImGui::EndPopup();
+        }
+    }
+
+    void ViewportWidget::DrawOverlays(Scene* scene, const ImVec2& imageMin, const ImVec2& imageMax, float zoom, const ImVec2& outputSize, const Rect& safeArea, bool hovered) const {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->PushClipRect(imageMin, imageMax, true);
+
+        // Rects are in target pixels, the image is zoom screen units per pixel
+        const auto toScreen = [&](const Rect& rect) {
+            return std::pair<ImVec2, ImVec2>{{imageMin.x + rect.x * zoom, imageMin.y + rect.y * zoom}, {imageMin.x + (rect.x + rect.w) * zoom, imageMin.y + (rect.y + rect.h) * zoom}};
+        };
+        const auto fill = [&](const Rect& rect, ImU32 color) {
+            if (rect.w > kMinBarSize && rect.h > kMinBarSize) {
+                const auto [min, max] = toScreen(rect);
+                drawList->AddRectFilled(min, max, color);
+            }
+        };
+        const auto outline = [&](const Rect& rect, ImU32 color) {
+            const auto [min, max] = toScreen(rect);
+            drawList->AddRect(min, max, color);
+        };
+
+        if (scene && _overlays.viewBounds) {
+            const ActiveSceneView view = scene->GetActiveView();
+            const Rect viewRect = UIPreviewOverlay::ViewRect(view.width, view.height, outputSize.x, outputSize.y);
+            const float right = viewRect.x + viewRect.w;
+            const float bottom = viewRect.y + viewRect.h;
+            fill({0.0f, 0.0f, outputSize.x, viewRect.y}, kViewBarTint);
+            fill({0.0f, bottom, outputSize.x, outputSize.y - bottom}, kViewBarTint);
+            fill({0.0f, viewRect.y, viewRect.x, viewRect.h}, kViewBarTint);
+            fill({right, viewRect.y, outputSize.x - right, viewRect.h}, kViewBarTint);
+            outline(viewRect, kViewOutlineColor);
+        }
+
+        if (scene && (_overlays.canvasBounds || _overlays.touchTargets)) {
+            eastl::vector<IntrusivePtr<UICanvasComponent>> canvases;
+            CollectCanvases(scene->GetRootNode(), canvases);
+            const float minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
+            const ImVec2 mouse = ImGui::GetIO().MousePos;
+            const TouchMark* hoveredMark = nullptr;
+            eastl::vector<TouchMark> marks;
+            for (const auto& canvas : canvases) {
+                const UICanvasLayout& layout = canvas->GetLayout();
+                if (!canvas->_visible || !layout.HasLayout()) {
+                    continue;
+                }
+                if (_overlays.canvasBounds) {
+                    const Rect bounds = UIPreviewOverlay::CanvasBounds(layout.GetResolved());
+                    const Rect content = UIPreviewOverlay::ContentBounds(layout.GetResolved());
+                    outline(bounds, kCanvasBoundsColor);
+                    if (!SameRect(bounds, content)) {
+                        outline(content, kContentBoundsColor);
+                    }
+                }
+                if (_overlays.touchTargets) {
+                    for (TouchMark& mark : UIPreviewOverlay::TouchTargets(layout, minTouchSize, kViewportPixelDensity)) {
+                        marks.push_back(std::move(mark));
+                    }
+                }
+            }
+            // The last mark under the pointer is the one drawn on top
+            for (const TouchMark& mark : marks) {
+                const auto [min, max] = toScreen(mark.rect);
+                drawList->AddRectFilled(min, max, mark.tooSmall ? kTouchSmallFill : kTouchOkFill);
+                drawList->AddRect(min, max, mark.tooSmall ? kTouchSmallColor : kTouchOkColor);
+                if (hovered && mouse.x >= min.x && mouse.x < max.x && mouse.y >= min.y && mouse.y < max.y) {
+                    hoveredMark = &mark;
+                }
+            }
+            if (hoveredMark) {
+                const eastl::string_view name = hoveredMark->name.ToStringView();
+                ImGui::SetTooltip("%.*s", static_cast<int>(name.size()), name.data());
+            }
+        }
+
+        drawList->PopClipRect();
+        DrawSafeAreaOutline(imageMin.x, imageMin.y, zoom, safeArea);
+    }
+
     void ViewportWidget::DrawSafeAreaOutline(float minX, float minY, float zoom, const Rect& safeArea) const {
-        if (_safeAreaSimulation == SafeAreaSimulation::None) {
+        if (!_overlays.safeArea || _safeAreaSimulation == SafeAreaSimulation::None) {
             return;
         }
         ImGui::GetWindowDrawList()->AddRect({minX + safeArea.x * zoom, minY + safeArea.y * zoom}, {minX + (safeArea.x + safeArea.w) * zoom, minY + (safeArea.y + safeArea.h) * zoom},

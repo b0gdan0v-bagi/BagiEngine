@@ -5,6 +5,8 @@
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 
+struct ImVec2;
+
 namespace BECore {
 
     class IDeserializer;
@@ -21,6 +23,8 @@ namespace BECore {
     // window: the safe area that canvases see during the scene pass is the simulated one, and a device or custom size
     // renders the target at exactly that size (canvases lay out for it) and shows it scaled down to fit the panel, never
     // above 100%; the mouse is mapped back through that zoom.
+    // An "Overlays" popup toggles what is drawn over the image: the safe area, the view bounds, the canvas bounds and the touch targets
+    // (UIPreviewOverlay; the touch rule is the validator's).
     // A third combo forces one of the scene's view variants (Scene::SetViewOverride) around the viewport's own pass only.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
@@ -54,6 +58,14 @@ namespace BECore {
         // Falls back to Auto when the active scene is not the one the choice was made for or the index does not exist in it
         void ValidateForcedView(const Scene* scene);
 
+        // The "Overlays" button and its popup of checkboxes (_overlays)
+        void DrawOverlaysPopup();
+
+        // The overlays over the image, in target pixels scaled by zoom and clipped to the image: the view bounds (bars tinted), the bounds of
+        // every visible canvas, the touch targets (red under UISettings::minTouchSize, the element name on hover), the safe area. The canvases
+        // are the ones the pass just laid out for this target. @p outputSize is the target's size, @p hovered the pointer is over the image
+        void DrawOverlays(Scene* scene, const ImVec2& imageMin, const ImVec2& imageMax, float zoom, const ImVec2& outputSize, const Rect& safeArea, bool hovered) const;
+
         // The simulated safe area (in target pixels) as an outline over the image, so it is clear what the canvases were given
         void DrawSafeAreaOutline(float minX, float minY, float zoom, const Rect& safeArea) const;
 
@@ -67,6 +79,7 @@ namespace BECore {
         uint32_t _lastHeight = 0;
         PreviewShape _shape;
         SafeAreaSimulation _safeAreaSimulation = SafeAreaSimulation::None;
+        PreviewOverlays _overlays;
         std::optional<int32_t> _forcedView;  // the index of the forced view variant, -1 the default, nullopt Auto
         PoolString _forcedViewScene;         // the scene the choice was made for
         bool _gridEnabled = false;

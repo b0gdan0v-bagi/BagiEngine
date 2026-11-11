@@ -34,6 +34,16 @@ namespace BECore {
         bool operator==(const PreviewShape&) const = default;
     };
 
+    /// Which overlays the viewport draws over the image (the editor's choice, not the scene's)
+    struct PreviewOverlays {
+        bool safeArea = true;       ///< the outline of the simulated safe area (when a simulation is on)
+        bool viewBounds = false;    ///< the fitted view of the scene inside the target, the bars tinted
+        bool canvasBounds = false;  ///< the bounds (and the content bounds, when they differ) of every visible canvas
+        bool touchTargets = false;  ///< every visible interactive element, red where it is under UISettings::minTouchSize
+
+        bool operator==(const PreviewOverlays&) const = default;
+    };
+
     /// The size of the viewport image (the render target) and how much of it is shown: the image is drawn at width * zoom x height * zoom
     struct PreviewTarget {
         uint32_t width = 0;
