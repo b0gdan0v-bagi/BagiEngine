@@ -15,7 +15,7 @@ ctest --preset macos-debug                 # every test in its own process, 8 at
 - C++23, exceptions disabled (`ENGINE_NO_EXCEPTIONS=ON`). Re-run `cmake --preset` after changing `BE_CLASS` / `BE_REFLECT_FIELD` or adding files (sources are globbed).
 - **Output goes to the build folder of the preset**: executables in `build/<preset>/bin`, static libraries in `build/<preset>/lib`, so Debug and Release sit side by side (Visual Studio presets add `bin/<Config>/`).
 - Tests: `BagiEngineTests` (`tests/`), `Match3Tests` (`games/Match3/tests/`), `BagiMatch3ControlSmoke` (skipped with 77 when the game is not built). **They run 8 at a time**, so every test must be safe beside others: temp names from `tests/Common/TempPath.h`, port 0, polls with a time limit, never read `engine.log`. Rules: `.claude/rules/tests-module.md`. Runtime `ITest`s run at game start-up (`config/TestsConfig.xml`).
-- Python tools have pytest suites outside ctest: `.venv/bin/python -m pytest tools/control/tests`, `... CI/meta_generator/tests`.
+- Python tools have pytest suites outside ctest: `.venv/bin/python -m pytest tools/control/tests`, `... tools/perf/tests`, `... CI/meta_generator/tests`.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ src/Modules/      BECore, Events, TaskSystem, RemoteControl, SDL, Vulkan, Games,
 config/, assets/  engine content; a game's files of the same name replace the engine's (FileSystem/CLAUDE.md)
 games/Match3/     the engine's own game
 tests/            BagiEngineTests + Common (BagiEngineTestSupport)
-tools/            todo (the todo store), control (control API client, smoke test, MCP server), web, vscode/todo-workers
+tools/            todo (the todo store), control (control API client, smoke test, MCP server), perf (benchmarks, trace summary), web, vscode/todo-workers
 ```
 
 **BECore subsystems** (each has a `CLAUDE.md`): `GameManager/CoreManager` (the service locator), `Scene/`, `UI/` (canvases, scaler, layout, validator), `Text/`, `Animation/` (tweens, timelines), `Control/` (the control API core; transport in `RemoteControl`), `Save/`, `Config/`, `FileSystem/`, `Resource/`, `Renderer/` (`IRenderer`, SDL or Vulkan backend by `renderer` in `ApplicationConfig.xml`), `Reflection/`, `Logger/`, `Profiler/` (the `BE_PROFILE_*` macros; `ENGINE_PROFILER`, preset `macos-profile`).
@@ -68,6 +68,6 @@ tools/            todo (the todo store), control (control API client, smoke test
 ## Docs, rules and skills
 
 - **Docs budget:** this file loads into every session and every agent: keep it under 12k characters; a nested `CLAUDE.md` loads whenever a file of its folder is read: keep it under 20k. Put a fact in the nested file of the folder it is about. Write contracts and reasons; do not restate what a test checks, a constant's value, measurements or decision history (those belong to the entry's plan in the todo store). `python3 CI/scripts/check_doc_budget.py --root .` checks it (in a game: `engine/CI/scripts/... --root .`).
-- `.claude/rules/` holds path-scoped guidance (CMake, reflection, reflection events, rendering, widgets, tests, UI: layout, controls, control API, HTML and CSS, box shapes). `build-project.md` and `todo-project.md` are read by the skills by path.
-- `.claude/skills/` (`build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `context-sanitizer` (audits and slims the docs that load by themselves), `todo-*`, `cpp-senior-programmer`) and `.claude/agents/` (the four `todo-loop` agents) are one text shared with games by symlink; what differs per repository is in the two rules files above.
+- `.claude/rules/` holds path-scoped guidance (CMake, reflection, reflection events, rendering, widgets, tests, UI: layout, controls, control API, HTML and CSS, box shapes). `build-project.md`, `todo-project.md` and `perf-project.md` (the benchmark set) are read by the skills by path.
+- `.claude/skills/` (`build`, `clang-format`, `strip-pch-includes`, `tidy-fix`, `context-sanitizer` (audits and slims the docs that load by themselves), `todo-*`, `perf` and `perf-investigate` (benchmarks against a per-machine baseline in the todo store, traces: `tools/perf/CLAUDE.md`), `cpp-senior-programmer`) and `.claude/agents/` (the four `todo-loop` agents) are one text shared with games by symlink; what differs per repository is in the three rules files above.
 - The todo list is the **todo store** (`tools/todo/CLAUDE.md`): a service on Railway, mirrored into Vikunja by itself; nothing of it is in git.
