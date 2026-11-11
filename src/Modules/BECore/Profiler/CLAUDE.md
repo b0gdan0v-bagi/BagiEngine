@@ -34,10 +34,18 @@ How to use it (flags, Perfetto, sampling profilers, measured costs): `HowToProfi
 - A full thread buffer (`kMaxEventsPerThread`) or too many threads drop events; the count is `otherData.dropped` of the file.
 - Events: `B` / `E` per zone (`args`: `file`, `line`; with `ENGINE_PROFILER_ALLOC` the `E` carries `allocs` and `bytes`, inclusive of inner zones), `C` counters, `i` frame marks (global scope), `M` thread names. Time in microseconds.
 
+## Allocations (`ENGINE_PROFILER_ALLOC`)
+
+- `Alloc/GlobalOperatorNew.cpp` replaces every form of the global `operator new` / `delete` (plain, array, nothrow, sized, aligned) and is compiled only with the option; without it the C++ runtime's operators run and every count is zero. `BECoreModule` is linked `WHOLE_ARCHIVE`, so the replacement reaches every executable of the engine and of a game.
+- **Scope:** what goes through `operator new`: our code, EASTL (`Utils/EASTLOperators.cpp` forwards to it), `std`. `malloc` from vendored C code (SDL, stb, ImGui's allocator, Tracy) is not counted.
+- **No header in front of a block** (`Alloc/AllocPlatform.h`): `malloc` / `posix_memalign` / `free` with `malloc_size` (macOS) or `malloc_usable_size`, and on Windows `_aligned_malloc` for every block, so whichever delete frees a block is right. That keeps EASTL's aligned `new[]` freed by a plain `delete[]` harmless.
+- `AllocTracker` (static, `constinit`): totals (count, bytes asked, frees, live usable bytes and their peak, the largest allocation, no-alloc violations) as relaxed atomics; per thread a monotonic count and bytes in a `constinit thread_local`, read by `ProfileZone` at both ends, so a zone's allocations are inclusive of inner zones and never another thread's. Per-site totals go into a fixed lock-free table (`kZoneSlots`), with or without a backend, so a window-less tool reads allocations per zone without a trace. A re-entrancy guard keeps a backend's `OnAlloc` that allocates (Tracy) from being counted twice. **Nothing on the allocation path allocates, locks or logs.**
+- `BE_PROFILE_NO_ALLOC(name)`: allocations of the thread inside the scope are counted as violations and reported by one `LOG_WARNING` when the scope ends (name, file, line); never an abort.
+
 ## Where the engine's zones are
 
 `Application::RunFrame` (`Frame` around one frame, `Idle` for a manual-clock pass, the frame mark at the end), the stages of `CoreManager::OnGameCycle` (`Input`, `Tasks`, `Tweens`, `Scene update`, `Widgets update`, `Queued events`, `Draw screen`, `Draw and present`), `Scene::Update`, `Scene::Draw`, `SceneDrawSystem::Run`, `LogEvent::Flush`, the tasks of the thread pool (`Task`) and of the main thread (`Main thread task`). Named threads: `Main`, `Worker <n>`, `Control accept`, `Control reader`, `Control writer`.
 
 ## Tests
 
-`tests/BECore/ProfilerTest.cpp`: the flags, the recorder (nesting, escaping, a dump while four threads record, the drop cap, `MarkTraceStart`), the macros (`#if BE_PROFILER`: every path balances; otherwise: nothing recorded, arguments not evaluated), `ScopedTrace`, and the disabled `ProfilerCostTest` that `HowToProfile.md` quotes.
+`tests/BECore/ProfilerTest.cpp`: the flags, the recorder (nesting, escaping, a dump while four threads record, the drop cap, `MarkTraceStart`), the macros (`#if BE_PROFILER`: every path balances; otherwise: nothing recorded, arguments not evaluated), `ScopedTrace`, and the disabled `ProfilerCostTest` that `HowToProfile.md` quotes. `tests/BECore/AllocTrackerTest.cpp` (`#if BE_PROFILER_ALLOC`, explicit `::operator new` calls so the optimizer keeps them): a zone and its parent, live bytes after a free, every form, an `alignas(64)` EASTL vector, another thread, the no-alloc report, the `E` args of the trace; without the option nothing is counted.

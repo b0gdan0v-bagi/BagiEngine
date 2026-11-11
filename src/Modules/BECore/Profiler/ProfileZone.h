@@ -8,6 +8,8 @@ namespace BECore {
      * @brief One zone of the BE_PROFILE_SCOPE macros: begins in the constructor, ends in the destructor.
      *
      * It keeps the backend it began on (a backend is never destroyed), so a zone that spans a change of the backend stays balanced.
+     * With ENGINE_PROFILER_ALLOC it also counts the allocations of its thread between the two (inclusive of inner zones) into the
+     * statistics of its site, with or without a backend.
      */
     class ProfileZone {
     public:
@@ -21,8 +23,10 @@ namespace BECore {
         const ProfileSite& _site;
         IProfilerBackend* _backend;
         uint64_t _token = 0;
+#if BE_PROFILER_ALLOC
         uint64_t _allocCountAtBegin = 0;
         uint64_t _allocBytesAtBegin = 0;
+#endif
     };
 
 }  // namespace BECore

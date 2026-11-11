@@ -6,7 +6,10 @@
 #include <new>
 
 // EASTL allocator uses these custom operator new[] functions when debug parameters are enabled
-// These operators forward to the standard operators while accepting debug parameters
+// These operators forward to the standard operators while accepting debug parameters.
+// EASTL frees what they return with the plain operator delete[] even when it was allocated over-aligned. That is harmless with
+// the C++ runtime's operators on macOS and Linux (posix_memalign memory goes to free()) and with the profiler's replacement
+// (BECore/Profiler/Alloc/AllocPlatform.h), but not with the MSVC runtime, whose aligned blocks need the aligned delete.
 
 // Array new operator with debug parameters
 void* operator new[](std::size_t size, const char* /*pName*/, int /*flags*/, unsigned int /*debugFlags*/, const char* /*pFile*/, int /*line*/) {

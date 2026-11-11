@@ -55,12 +55,15 @@ Mark coarse work: a stage, a system, one rollout. A zone that runs millions of t
 
 Measured on an Apple M-series machine with `macos-profile` (`BagiEngineTests --gtest_also_run_disabled_tests --gtest_filter='ProfilerCost*'`):
 
-| What | ns per call |
-|------|-------------|
-| `steady_clock::now()` | 12.8 |
-| `ProfilerClock::Now()` (`mach_absolute_time`) | 4.0 |
-| a zone, no backend installed | 1.7 |
-| a zone recorded into the Chrome trace | 22.7 |
+| What | `macos-release` | `macos-profile` |
+|------|-----------------|-----------------|
+| `steady_clock::now()` | 13 to 20 | 13 |
+| `ProfilerClock::Now()` (`mach_absolute_time`) | 4 to 5 | 4 |
+| a zone, no backend installed | 0 (compiled out; 1.9 measured directly) | 4.5 (with the allocation snapshot) |
+| a zone recorded into the Chrome trace | | 26 |
+| `new` + `delete` of 64 bytes, one thread | 33 (the C++ runtime's) | 28 (counted) |
+
+Counting allocations costs nothing measurable on one thread (the replacement calls `malloc` directly, the runtime's `operator new` adds its own layer); many threads allocating at once share the atomic totals and pay more.
 
 ## Sampling profilers
 

@@ -15,6 +15,7 @@
  * Zones are for coarse work (a frame stage, a system, a rollout), not for a function called millions of times per second.
  */
 
+#include <BECore/Profiler/Alloc/NoAllocScope.h>
 #include <BECore/Profiler/ProfileZone.h>
 
 #define BE_PROFILE_CONCAT_INNER(a, b) a##b
