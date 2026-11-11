@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Ring/RingSnapshot.h>
 
 namespace BECore {
@@ -38,5 +39,16 @@ namespace BECore {
 
     /// The rows whose zone name or `file:line` contains @p text, ignoring case; empty text keeps every row
     [[nodiscard]] eastl::vector<ZoneStatRow> FilterZoneStats(const eastl::vector<ZoneStatRow>& rows, eastl::string_view text);
+
+    /// The segments of the stacked stage bar, in the order they are stacked from the bottom
+    enum ExclusiveStage : size_t { UpdateOnly, SceneUpdateStage, RenderOnly, SceneDrawStage, PresentStage, OtherStage, kExclusiveStageCount };
+
+    /**
+     * @brief The stage times of a frame without double counting (FrameStats::stageMs has SceneUpdate inside Update and SceneDraw inside
+     * Render): Update and Render lose their inner stage, and Other is what is left of cpuMs. A stage longer than the one around it (a
+     * clock hiccup) and a sum over cpuMs give 0 for that segment, never a negative one, so the segments sum to cpuMs unless the stages
+     * together exceed it.
+     */
+    [[nodiscard]] eastl::array<double, kExclusiveStageCount> ExclusiveStageMs(const FrameStats& frame);
 
 }  // namespace BECore

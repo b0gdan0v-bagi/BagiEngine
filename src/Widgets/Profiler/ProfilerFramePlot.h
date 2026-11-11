@@ -2,12 +2,16 @@
 
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Profiler/Ring/RingSnapshot.h>
+#include <BECore/Profiler/Ring/ZoneStats.h>
 
 namespace BECore {
 
     /**
      * @brief The frame time bars of the Profiler panel: one bar per frame of the collector's history, colored by the budget, with the
      * budget lines; a click on a bar picks the frame of the ring that the bar stands for.
+     *
+     * The bars show the frame time or its stage split (ExclusiveStageMs), and the counters a frame carries (FrameStats::counters) can be
+     * picked and drawn as line graphs over the same frames.
      *
      * Editor only. The budget (16.6 ms, 33.3 ms or a custom value) is a field of the plot for the run, not saved.
      */
@@ -37,9 +41,20 @@ namespace BECore {
 
     private:
         enum class Budget : int { Fps60, Fps30, Custom };
+        enum class BarMode : int { FrameTime, StageSplit };
+
+        void DrawStageLegend() const;
+        void DrawCounters(const eastl::vector<FrameStats>& history, const RingSnapshot& snapshot, std::optional<uint64_t> selectedFrame);
 
         Budget _budget = Budget::Fps60;
         float _customBudgetMs = 20.0f;
+        BarMode _barMode = BarMode::FrameTime;
+
+        // Kept as members so a steady panel allocates nothing: the names are rebuilt when the newest frame number moves
+        eastl::vector<PoolString> _counterNames;
+        eastl::vector<PoolString> _pickedCounters;
+        eastl::vector<float> _counterValues;
+        uint64_t _counterNamesFrame = 0;
     };
 
 }  // namespace BECore
