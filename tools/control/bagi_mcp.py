@@ -190,6 +190,41 @@ def ui_click(name: str, canvas: str | None = None, at: float | None = None) -> d
 
 @server.tool()
 @reports_errors
+def frame_stats(frames: int = 1) -> dict[str, Any]:
+    """What the last frames cost, oldest first: {frames: [...], allocTracking}.
+
+    frames: how many (1 to 240). Each has frame, frameMs (end to end), cpuMs, stagesMs (Update, SceneUpdate, Render, SceneDraw, Present;
+    the scene stages are inside the other two), drawCalls, triangles, textureSwitches (the engine's draws; ImGui's are the counters
+    "ImGui draw calls" / "ImGui triangles"), allocCount, allocBytes, liveBytes (0 unless the game was built with ENGINE_PROFILER_ALLOC,
+    allocTracking says) and counters (named values set during the frame). Times are only meaningful in an optimized build (macos-profile).
+    """
+    return session.call("frame_stats", {"frames": frames})
+
+
+@server.tool()
+@reports_errors
+def profiler_dump(path: str = "trace.json") -> dict[str, Any]:
+    """Writes the Chrome trace recorded so far to path (relative to the game's working folder, no ".."), for ui.perfetto.dev.
+
+    Needs a game built with ENGINE_PROFILER (preset macos-profile) and started with --trace=<file> or --profiler=chrome
+    (launch_game does not pass them); otherwise the error not_recording.
+    """
+    return session.call("profiler_dump", {"path": path})
+
+
+@server.tool()
+@reports_errors
+def zone_allocs(top: int = 20, reset: bool = False) -> dict[str, Any]:
+    """The heap allocations per profiler zone, the most bytes first, and the totals of the process: {enabled, zones, totals}.
+
+    A zone counts its own allocations and those of the zones inside it. enabled is false (and everything zero) unless the game was built
+    with ENGINE_PROFILER_ALLOC. top: how many zones (1 to 1000). reset: zero the zone statistics after answering, to measure the next frames.
+    """
+    return session.call("zone_allocs", {"top": top, "reset": reset})
+
+
+@server.tool()
+@reports_errors
 def game_log(lines: int = 40) -> str:
     """The last lines of the output of the game that launch_game started: use it when the game fails or an action is refused for no visible reason."""
     return session.game_log(lines)

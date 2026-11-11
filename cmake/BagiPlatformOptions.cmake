@@ -9,9 +9,14 @@
 #                                    shim over SDL3::SDL3-static, made in cmake/BagiEngine.cmake), because the vendored imgui
 #                                    CMake file and our modules link that name.
 #   ENGINE_SINGLE_THREAD        OFF  The task system creates no thread (the definition BE_SINGLE_THREAD=1; TaskSystem/CLAUDE.md).
+#   ENGINE_PROFILER             OFF  The BE_PROFILE_* macros record zones, frames, counters (BE_PROFILER=1; BECore/Profiler/CLAUDE.md).
+#                                    The recorder and the Chrome-trace writer compile in every build; only the macros compile out.
+#   ENGINE_PROFILER_ALLOC       OFF  The global operator new / delete are replaced to count allocations (BE_PROFILER_ALLOC=1).
+#                                    Needs ENGINE_PROFILER.
+#   ENGINE_PROFILER_TRACY       OFF  The vendored Tracy client and its backend (BE_PROFILER_TRACY=1). Needs ENGINE_PROFILER.
 #
 # The browser (Emscripten) build has no Vulkan, no sockets server and no shared libraries, so on EMSCRIPTEN those three are forced
-# to the values above. Threads are not forced: the default there is OFF like everywhere, which is a threaded page (-pthread and a
+# to the values above; the profiler is for the PC, so its three options are forced off there too. Threads are not forced: the default there is OFF like everywhere, which is a threaded page (-pthread and a
 # pool of Web Workers, the page then needs cross-origin isolation); ENGINE_SINGLE_THREAD=ON is the single-thread page (the presets
 # web-*-single-thread). ENGINE_TARGET_WEB mirrors EMSCRIPTEN for the other cmake files. A desktop build can switch the options one
 # by one to check the web configuration without an Emscripten SDK (cmake/CLAUDE.md, "Web-like build on the desktop").
@@ -27,11 +32,17 @@ option(ENGINE_WITH_VULKAN "Build the Vulkan renderer backend (VulkanModule)" ON)
 option(ENGINE_WITH_REMOTE_CONTROL "Build the WebSocket server of the control API (RemoteControlModule)" ON)
 option(ENGINE_STATIC_SDL "Build SDL3 and SDL3_image as static libraries" OFF)
 option(ENGINE_SINGLE_THREAD "Run the task system without worker threads" OFF)
+option(ENGINE_PROFILER "Record the BE_PROFILE_* zones, frames and counters" OFF)
+option(ENGINE_PROFILER_ALLOC "Replace the global operator new / delete to count allocations (needs ENGINE_PROFILER)" OFF)
+option(ENGINE_PROFILER_TRACY "Build the vendored Tracy client and its profiler backend (needs ENGINE_PROFILER)" OFF)
 
 if(ENGINE_TARGET_WEB)
     set(ENGINE_WITH_VULKAN OFF CACHE BOOL "Build the Vulkan renderer backend (VulkanModule)" FORCE)
     set(ENGINE_WITH_REMOTE_CONTROL OFF CACHE BOOL "Build the WebSocket server of the control API (RemoteControlModule)" FORCE)
     set(ENGINE_STATIC_SDL ON CACHE BOOL "Build SDL3 and SDL3_image as static libraries" FORCE)
+    set(ENGINE_PROFILER OFF CACHE BOOL "Record the BE_PROFILE_* zones, frames and counters" FORCE)
+    set(ENGINE_PROFILER_ALLOC OFF CACHE BOOL "Replace the global operator new / delete to count allocations (needs ENGINE_PROFILER)" FORCE)
+    set(ENGINE_PROFILER_TRACY OFF CACHE BOOL "Build the vendored Tracy client and its profiler backend (needs ENGINE_PROFILER)" FORCE)
     add_compile_definitions(PLATFORM_WEB)
     # EABase (vendored) knows no Emscripten: without help it stops with "Unknown platform / processor". Its only branch that takes the
     # platform from a definition and probes no compiler macro is EA_PLATFORM_SAMSUNG_TV (Linux, POSIX, little endian, ARM32). ARM32 is
@@ -45,7 +56,7 @@ if(ENGINE_TARGET_WEB)
     # EASTL's debug break for ARM is inline assembly ("BKPT 10") that wasm cannot assemble (assert.cpp: "invalid instruction"); a trap is
     # what the web has (the same as ENGINE_DEBUG_BREAK in BECore/Assert/PlatformDebug.h)
     add_compile_definitions(EASTL_DEBUG_BREAK_OVERRIDE=__builtin_trap)
-    message(STATUS "Target: web (Emscripten), Vulkan, remote control and shared SDL are forced off")
+    message(STATUS "Target: web (Emscripten), Vulkan, remote control, shared SDL and the profiler are forced off")
 endif()
 
 if(ENGINE_WITH_VULKAN)
@@ -88,3 +99,24 @@ else()
         message(STATUS "Web threads: -pthread, a pool of ${BE_WEB_THREAD_POOL_SIZE} Web Workers (BE_WEB_THREAD_POOL_SIZE)")
     endif()
 endif()
+
+# The profiler: the definitions are always 0 or 1, so code tests them with #if, never #ifdef
+if((ENGINE_PROFILER_ALLOC OR ENGINE_PROFILER_TRACY) AND NOT ENGINE_PROFILER)
+    message(FATAL_ERROR "ENGINE_PROFILER_ALLOC and ENGINE_PROFILER_TRACY need ENGINE_PROFILER=ON")
+endif()
+if(ENGINE_PROFILER)
+    add_compile_definitions(BE_PROFILER=1)
+else()
+    add_compile_definitions(BE_PROFILER=0)
+endif()
+if(ENGINE_PROFILER_ALLOC)
+    add_compile_definitions(BE_PROFILER_ALLOC=1)
+else()
+    add_compile_definitions(BE_PROFILER_ALLOC=0)
+endif()
+if(ENGINE_PROFILER_TRACY)
+    add_compile_definitions(BE_PROFILER_TRACY=1)
+else()
+    add_compile_definitions(BE_PROFILER_TRACY=0)
+endif()
+message(STATUS "Profiler: ${ENGINE_PROFILER} (allocations ${ENGINE_PROFILER_ALLOC}, Tracy ${ENGINE_PROFILER_TRACY})")

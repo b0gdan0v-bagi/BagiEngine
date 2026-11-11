@@ -8,6 +8,7 @@
 #include <BECore/Input/UIInput.h>
 #include <BECore/Logger/LoggerManager.h>
 #include <BECore/MainWindow/MainWindowManager.h>
+#include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
 #include <BECore/Renderer/RendererManager.h>
 #include <BECore/Resource/ResourceManager.h>
 #include <BECore/Resource/TextureLibrary.h>
@@ -105,6 +106,11 @@ namespace BECore {
             return GetInstance()._tweenManager;
         }
 
+        /// The cost of the last frames: stage times, draws, allocations, named counters (Profiler/CLAUDE.md, "Frame statistics")
+        static FrameStatsCollector& GetFrameStats() {
+            return GetInstance()._frameStats;
+        }
+
         static ControlService& GetControlService() {
             return GetInstance()._controlService;
         }
@@ -177,6 +183,7 @@ namespace BECore {
         // A setter may point into a scene: OnApplicationDeinit and OnTestEnvironmentDeinit Clear() it first. Declared after _sceneManager on purpose: the
         // destructor then drops the tweens before the scenes go, a second guarantee besides Clear(); moving it above _sceneManager could break that silently
         TweenManager _tweenManager;
+        FrameStatsCollector _frameStats;
         ControlService _controlService;
     };
 

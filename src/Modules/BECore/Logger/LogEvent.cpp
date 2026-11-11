@@ -9,6 +9,7 @@ namespace BECore {
     }
 
     void LogEvent::Flush() {
+        BE_PROFILE_SCOPE("Log flush");
         LogRingBuffer<>::GetGlobal().Drain([](const LogEntry& entry) { EventBase<LogEvent>::Emit(entry.level, eastl::string_view{entry.message, entry.messageLength}); });
     }
 

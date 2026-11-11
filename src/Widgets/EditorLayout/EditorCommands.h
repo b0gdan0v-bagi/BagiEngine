@@ -38,6 +38,9 @@ namespace BECore {
         /// Switches Game and Editor. Application reads Ctrl+Shift+E from the raw SDL event (RunMode.h), before ImGui, so
         /// this command is fixed: the map lists it, the palette runs it through WidgetManager::RequestToggle().
         inline constexpr auto kModeToggle = "mode.toggle"_intern;
+        /// Shows and hides the Profiler panel. Fixed like mode.toggle: ProfilerWidget reads Ctrl+Shift+P from the raw SDL event
+        /// (Profiler/ProfilerToggle.h), the palette runs it through this command
+        inline constexpr auto kViewProfiler = "view.profiler"_intern;
     }  // namespace EditorCommandIds
 
     /// A command was asked for, by the palette, a menu item or a hotkey. Emitted, not enqueued: it runs inside a frame.

@@ -117,30 +117,35 @@ namespace BECore {
     }
 
     void ThreadPool::WorkerLoop(size_t threadIndex) {
+        BE_PROFILE_THREAD(Format("Worker {}", threadIndex).c_str());
         TaskQueue::TaskFunc task;
+        const auto run = [&task] {
+            BE_PROFILE_SCOPE("Task");
+            task();
+        };
 
         while (!_stopped.load(std::memory_order_acquire)) {
             // Сначала пытаемся взять из своей очереди
             if (_queues[threadIndex]->TryPop(task)) {
-                task();
+                run();
                 continue;
             }
 
             // Пытаемся украсть у других
             if (TryStealTask(threadIndex, task)) {
-                task();
+                run();
                 continue;
             }
 
             // Ждем задачу в своей очереди
             if (_queues[threadIndex]->Pop(task)) {
-                task();
+                run();
             }
         }
 
         // Доделываем оставшиеся задачи в своей очереди
         while (_queues[threadIndex]->TryPop(task)) {
-            task();
+            run();
         }
     }
 

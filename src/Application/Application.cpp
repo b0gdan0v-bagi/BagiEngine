@@ -6,6 +6,9 @@
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
+#include <BECore/Profiler/Profiler.h>
+#include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>
@@ -29,6 +32,20 @@ namespace BECore {
     }
 
     bool Application::Initialize() {
+
+        // First: a trace covers the start-up, and a profiler flag that cannot be honoured stops the start before anything is built
+        BE_PROFILE_THREAD("Main");
+        const auto profilerSettings = ResolveProfilerSettings(_arguments);
+        if (!profilerSettings) {
+            LOG_ERROR("Profiler: {}"_format(profilerSettings.error()));
+            LogEvent::Flush();
+            return false;
+        }
+        if (const auto started = Profiler::Start(*profilerSettings); !started) {
+            LOG_ERROR("Profiler: {}"_format(started.error()));
+            LogEvent::Flush();
+            return false;
+        }
 
         _isRunning = true;
         Subscribe<ApplicationEvents::QuitEvent, &Application::StopApplication>(this);
@@ -114,6 +131,7 @@ namespace BECore {
         if (control.IsManualClock()) {
             // Game time moves only for the frames that a `step` asks for; in between the window and the requests stay alive
             if (!control.IsStepDue()) {
+                BE_PROFILE_SCOPE("Idle");
                 CoreManager::GetInstance().OnIdleCycle({});
                 LogEvent::Flush();
                 return _isRunning;
@@ -122,9 +140,20 @@ namespace BECore {
         } else {
             CoreManager::GetTime().Tick({});
         }
+        BE_PROFILE_SCOPE("Frame");
+        FrameStatsCollector& frameStats = CoreManager::GetFrameStats();
+        frameStats.BeginFrame();
         RenderEvents::NewFrameEvent::Emit();
         CoreManager::GetInstance().OnGameCycle({});
-        RenderEvents::RenderPresentEvent::Emit();
+        {
+            BE_PROFILE_SCOPE("Present");
+            const FrameStatsCollector::StageScope present(frameStats, FrameStage::Present);
+            RenderEvents::RenderPresentEvent::Emit();
+        }
+        {
+            const IntrusivePtr<IRenderer>& renderer = CoreManager::GetRenderer();
+            frameStats.EndFrame(renderer ? renderer->TakeRenderCounters() : RenderCounters{}, AllocTracker::GetTotals());
+        }
 #if BE_WITH_EDITOR
         // The only safe point to replace the widgets: the frame is over, so no widget is inside its own call and no ImGui frame is open.
         // The manual-clock idle branch above never gets here, because no frame is open there either
@@ -132,6 +161,7 @@ namespace BECore {
 #endif
         LogEvent::Flush();
         control.EndFrame();
+        BE_PROFILE_FRAME();
         return _isRunning;
     }
 
@@ -185,6 +215,11 @@ namespace BECore {
         CoreManager::GetWidgetManager().DestroyAll();
         ApplicationEvents::ApplicationCleanUpEvent::Emit();
         CoreManager::GetInstance().OnApplicationDeinit({});
+        // After the deinit: the worker threads have been joined, so every zone is complete in the trace
+        if (const auto finished = Profiler::Finish(); !finished) {
+            LOG_ERROR("Profiler: {}"_format(finished.error()));
+        }
+        LogEvent::Flush();
     }
 
     void Application::StopApplication() {

@@ -12,11 +12,35 @@ file(GLOB_RECURSE CORE_MODULE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
 )
 
+# The profiler's Tracy backend and the vendored Tracy client exist only with ENGINE_PROFILER_TRACY (cmake/BagiPlatformOptions.cmake).
+# One list of definitions on exactly these two files, compiled without the PCH, so the PCH of BECore stays the same in every build
+# and TRACY_ENABLE never reaches a header another file sees
+list(FILTER CORE_MODULE_SOURCES EXCLUDE REGEX "/Profiler/Backends/TracyProfilerBackend\\.cpp$")
+if(ENGINE_PROFILER_TRACY)
+    set(BE_TRACY_DIR "${PROJECT_ROOT}/src/Modules/tracy/public")
+    set(BE_TRACY_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/Profiler/Backends/TracyProfilerBackend.cpp"
+        "${BE_TRACY_DIR}/TracyClient.cpp"
+    )
+    set_source_files_properties(${BE_TRACY_SOURCES} PROPERTIES
+        COMPILE_DEFINITIONS "TRACY_ENABLE;TRACY_ON_DEMAND;TRACY_MANUAL_LIFETIME;TRACY_DELAYED_INIT"
+        INCLUDE_DIRECTORIES "${BE_TRACY_DIR}"
+        SKIP_PRECOMPILE_HEADERS ON
+    )
+    # Vendored code: its warnings are not ours to fix
+    set_source_files_properties("${BE_TRACY_DIR}/TracyClient.cpp" PROPERTIES COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/w,-w>")
+endif()
+
 # Создаем статическую библиотеку BECore
 add_library(BECoreModule STATIC ${CORE_MODULE_SOURCES})
 
 # Группировка файлов в IDE
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Core" FILES ${CORE_MODULE_SOURCES})
+
+if(ENGINE_PROFILER_TRACY)
+    target_sources(BECoreModule PRIVATE ${BE_TRACY_SOURCES})
+    source_group("Core/Profiler/Tracy" FILES ${BE_TRACY_SOURCES})
+endif()
 
 # Устанавливаем свойства для группировки в IDE
 set_target_properties(BECoreModule PROPERTIES FOLDER "Modules")

@@ -67,7 +67,10 @@ namespace BECore {
                 std::lock_guard<std::mutex> lock(_mutex);
                 _open = true;
             }
-            _writer = std::thread([this] { WriterLoop(); });
+            _writer = std::thread([this] {
+                BE_PROFILE_THREAD("Control writer");
+                WriterLoop();
+            });
         }
 
         /// Called by the reader when it is done: a queued close frame is sent, anything else is dropped; then the writer ends
@@ -245,7 +248,10 @@ namespace BECore {
         _stopping = false;
 
         _service.SetEventSink([this](const eastl::string& text) { Broadcast(text); });
-        _acceptThread = std::thread([this] { AcceptLoop(); });
+        _acceptThread = std::thread([this] {
+            BE_PROFILE_THREAD("Control accept");
+            AcceptLoop();
+        });
 
         LOG_INFO("Control API listening on ws://127.0.0.1:{}"_format(_port));
         return _port;
@@ -299,7 +305,10 @@ namespace BECore {
             if (_connections.size() < kMaxConnections) {
                 auto connection = eastl::make_shared<Connection>(std::move(socket));
                 _connections.push_back(connection);
-                connection->StartReader(std::thread([this, connection] { RunConnection(connection); }));
+                connection->StartReader(std::thread([this, connection] {
+                    BE_PROFILE_THREAD("Control reader");
+                    RunConnection(connection);
+                }));
                 return;
             }
         }

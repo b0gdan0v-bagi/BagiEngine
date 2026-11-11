@@ -53,6 +53,27 @@
             }
         },
         {
+            "name": "profile",
+            "hidden": true,
+            "description": "An optimized build with debug information for measuring (RelWithDebInfo): asserts and expects off, no editor, the profiler and its allocation tracking on",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "ENGINE_ENABLE_ASSERTS": "OFF",
+                "ENGINE_ENABLE_EXPECTS": "OFF",
+                "BE_WITH_EDITOR": "OFF",
+                "ENGINE_PROFILER": "ON",
+                "ENGINE_PROFILER_ALLOC": "ON"
+            }
+        },
+        {
+            "name": "tracy",
+            "hidden": true,
+            "description": "Adds the vendored Tracy client and its profiler backend (src/Modules/tracy/), the default backend then",
+            "cacheVariables": {
+                "ENGINE_PROFILER_TRACY": "ON"
+            }
+        },
+        {
             "name": "clang",
             "hidden": true,
             "cacheVariables": {
@@ -163,6 +184,16 @@
             "inherits": ["ninja", "host-macos", "clang", "release", "editor"]
         },
         {
+            "name": "macos-profile",
+            "displayName": "macOS Clang Profile (RelWithDebInfo, profiler and allocations)",
+            "inherits": ["ninja", "host-macos", "clang", "profile"]
+        },
+        {
+            "name": "macos-profile-tracy",
+            "displayName": "macOS Clang Profile with Tracy",
+            "inherits": ["ninja", "host-macos", "clang", "profile", "tracy"]
+        },
+        {
             "name": "windows-msvc-debug",
             "displayName": "Windows MSVC Ninja Debug",
             "inherits": ["ninja", "host-windows", "vs-env", "msvc", "debug"]
@@ -269,6 +300,18 @@
             "displayName": "macOS Clang Release with the editor",
             "inherits": "build-macos",
             "configurePreset": "macos-release-editor"
+        },
+        {
+            "name": "macos-profile",
+            "displayName": "macOS Clang Profile (RelWithDebInfo, profiler and allocations)",
+            "inherits": "build-macos",
+            "configurePreset": "macos-profile"
+        },
+        {
+            "name": "macos-profile-tracy",
+            "displayName": "macOS Clang Profile with Tracy",
+            "inherits": "build-macos",
+            "configurePreset": "macos-profile-tracy"
         },
         {
             "name": "macos-rmlui-debug",
@@ -414,6 +457,18 @@
             "displayName": "macOS Clang Release with the editor",
             "inherits": "test-macos",
             "configurePreset": "macos-release-editor"
+        },
+        {
+            "name": "macos-profile",
+            "displayName": "macOS Clang Profile (RelWithDebInfo, profiler and allocations)",
+            "inherits": "test-macos",
+            "configurePreset": "macos-profile"
+        },
+        {
+            "name": "macos-profile-tracy",
+            "displayName": "macOS Clang Profile with Tracy",
+            "inherits": "test-macos",
+            "configurePreset": "macos-profile-tracy"
         },
         {
             "name": "macos-rmlui-debug",

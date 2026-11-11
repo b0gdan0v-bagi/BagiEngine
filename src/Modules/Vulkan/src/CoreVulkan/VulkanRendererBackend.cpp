@@ -434,6 +434,7 @@ namespace BECore {
         }
         const Rect rect = GetViewTransform().ToOutput(x, y, w, h);
         _rectPipeline.Draw(_commandBuffers[_currentFrame], rect.x, rect.y, rect.w, rect.h, color, _currentExtent, scissor);
+        CountDraw(nullptr, kQuadTriangles);
     }
 
     void VulkanRendererBackend::DrawTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint) {
@@ -484,6 +485,7 @@ namespace BECore {
         pc.screenH = static_cast<float>(_currentExtent.height);
 
         _texturePipeline.Draw(_commandBuffers[_currentFrame], vkTexture->GetDescriptorSet(), pc, scissor);
+        CountDraw(&texture, kQuadTriangles);
     }
 
     VkDescriptorSet VulkanRendererBackend::GetWhiteTextureDescriptorSet() {
@@ -551,6 +553,7 @@ namespace BECore {
 
         _geometryPipeline.Draw(_commandBuffers[_currentFrame], descriptorSet, allocation.buffer, allocation.vertexOffset, allocation.indexOffset, static_cast<uint32_t>(indexCount), _currentExtent,
                                scissor);
+        CountDraw(texture, indexCount / kIndicesPerTriangle);
     }
 
     IntrusivePtr<ITexture> VulkanRendererBackend::CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) {

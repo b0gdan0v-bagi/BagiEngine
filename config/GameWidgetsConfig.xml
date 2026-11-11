@@ -11,5 +11,7 @@
     </widget>
     <widget
       type="SceneRenderWidget" />
+    <widget
+      type="ProfilerOverlayWidget" />
   </widgets>
 </root>

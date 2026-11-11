@@ -21,6 +21,7 @@ namespace BECore {
     }
 
     void Scene::Update() {
+        BE_PROFILE_SCOPE("Scene::Update");
         if (_viewVersion != _announcedViewVersion) {
             _announcedViewVersion = _viewVersion;
             SceneEvents::SceneViewChangedEvent::Emit(this, GetActiveView());
@@ -33,6 +34,8 @@ namespace BECore {
     }
 
     void Scene::Draw() {
+        BE_PROFILE_SCOPE("Scene::Draw");
+        const FrameStatsCollector::StageScope stage(CoreManager::GetFrameStats(), FrameStage::SceneDraw);
         if (!_rootNode) {
             return;
         }

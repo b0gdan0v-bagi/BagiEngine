@@ -15,6 +15,13 @@ namespace BECore {
         }
     }
 
+    RenderCounters IRenderer::TakeRenderCounters() {
+        const RenderCounters taken = _counters;
+        _counters = {};
+        _lastCountedTexture = nullptr;  // the first textured draw of the next frame is a switch
+        return taken;
+    }
+
     void IRenderer::DrawGeometry(ITexture* /*texture*/, eastl::span<const GeometryVertex> /*vertices*/, eastl::span<const int> /*indices*/, float /*translateX*/, float /*translateY*/) {
         if (!_geometryWarned) {
             _geometryWarned = true;

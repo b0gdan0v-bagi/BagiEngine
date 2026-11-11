@@ -12,7 +12,7 @@ file(GLOB_RECURSE RUNTIME_MODULE_SOURCES
 
 # The editor panels are built only with BE_WITH_EDITOR (cmake/BagiEngine.cmake). ImGuiWidget stays: a game may use it in its HUD.
 if(NOT BE_EDITOR_ENABLED)
-    list(FILTER RUNTIME_MODULE_SOURCES EXCLUDE REGEX "/Widgets/(ConfigEditor|EditorLayout|SceneEditor|TextureEditor|Viewport)/")
+    list(FILTER RUNTIME_MODULE_SOURCES EXCLUDE REGEX "/Widgets/(ConfigEditor|EditorLayout|Profiler|SceneEditor|TextureEditor|Viewport)/")
 endif()
 
 add_library(RuntimeModule STATIC ${RUNTIME_MODULE_SOURCES})

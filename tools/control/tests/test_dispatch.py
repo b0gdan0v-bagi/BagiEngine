@@ -41,6 +41,12 @@ def echo_handler(method: str, params: dict | None):
         if (params or {}).get("name") == "Nothing":
             raise FakeError("not_found", "no element named 'Nothing'")
         return {"clicked": (params or {}).get("name"), "params": params}
+    if method == "frame_stats":
+        return {"frames": [{"frame": 1, "drawCalls": 5}], "allocTracking": False, "params": params}
+    if method == "profiler_dump":
+        raise FakeError("not_recording", "the Chrome trace is not recording")
+    if method == "zone_allocs":
+        return {"enabled": False, "zones": [], "totals": {"count": 0}, "params": params}
     if method == "quit":
         raise QuitServer({"quitting": True})
     raise FakeError("unknown_method", method)
@@ -226,6 +232,7 @@ def test_launch_of_a_missing_executable_names_the_path(session, tmp_path):
 
 EXPECTED_TOOLS = {
     "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "game_log", "quit",
+    "frame_stats", "profiler_dump", "zone_allocs",
 }
 
 
@@ -273,7 +280,17 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
             missing = await client.call_tool("ui_click", {"name": "Nothing"})
             assert missing.is_error and "not_found" in missing.content[0].text
 
+            stats = await client.call_tool("frame_stats", {"frames": 3})
+            assert not stats.is_error and "drawCalls" in stats.content[0].text
+            dumped = await client.call_tool("profiler_dump", {})
+            assert dumped.is_error and "not_recording" in dumped.content[0].text
+            zones = await client.call_tool("zone_allocs", {"top": 5, "reset": True})
+            assert not zones.is_error and "totals" in zones.content[0].text
+
     asyncio.run(scenario())
     assert requests_of(server, "screenshot")[-1] == {"maxSize": 64}
     assert requests_of(server, "step")[-1] == {"frames": 2}
+    assert requests_of(server, "frame_stats")[-1] == {"frames": 3}
+    assert requests_of(server, "profiler_dump")[-1] == {"path": "trace.json"}
+    assert requests_of(server, "zone_allocs")[-1] == {"top": 5, "reset": True}
     assert requests_of(server, "ui_click")[:3] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}, {"name": "Volume", "at": 0.25}]

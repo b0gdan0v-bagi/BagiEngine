@@ -76,3 +76,6 @@
 
 // Assert system (macros: ASSERT, EXPECT, FATALERROR)
 #include <BECore/Assert/AssertMacros.h>
+
+// Profiling macros (BE_PROFILE_*), compiled out without ENGINE_PROFILER
+#include <BECore/Profiler/Profile.h>
