@@ -17,13 +17,24 @@ namespace BECore {
      * every deserializer error is one LOG_ERROR; what could be read is kept. An invalid @p configRoot gives a manager with
      * default values, as MakeFromConfig does for a missing config.
      *
+     * It does not check the content version of @p configRoot (tests and tools load inline XML of any version):
+     * LoadCheckedSceneManager does.
+     *
      * @param configRoot Document element of SceneConfig (`<SceneManager>`)
      * @param loader Reads the node file of a reference
      * @param configName Name used in the log messages
      */
     IntrusivePtrAtomic<SceneManager> LoadSceneManager(const XmlNode& configRoot, const NodeFileLoader& loader, eastl::string_view configName = kSceneConfigName);
 
-    /// LoadSceneManager of the config `SceneConfig` of ConfigManager, with the node files found through the layered FileSystem (`config/<ref>.xml`)
+    /**
+     * @brief LoadSceneManager of a root whose content version is checked first
+     *
+     * A root that is not kContentVersion (`BECore/Config/ContentVersion.h`) is one LOG_ERROR with the message of
+     * CheckContentVersion and gives an empty SceneManager: no scene is read from a format the engine does not know.
+     */
+    IntrusivePtrAtomic<SceneManager> LoadCheckedSceneManager(const XmlNode& configRoot, const NodeFileLoader& loader, eastl::string_view configName = kSceneConfigName);
+
+    /// LoadCheckedSceneManager of the config `SceneConfig` of ConfigManager, with the node files found through the layered FileSystem (`config/<ref>.xml`, checked too)
     IntrusivePtrAtomic<SceneManager> LoadSceneManagerFromConfig();
 
 }  // namespace BECore

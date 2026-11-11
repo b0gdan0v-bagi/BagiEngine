@@ -10,7 +10,8 @@ namespace BECore {
      * Inside `<nodes>` of a `<scene>` the element `<node ref="nodes/MahjongHud"/>` stands for the node in
      * `config/nodes/MahjongHud.xml`, whose document element is one `<node name=".." layer="..">` with `<components>`,
      * exactly as a node inside SceneConfig. The expansion replaces the reference by a copy of that element in the same
-     * place, so the scene order (and with it the draw order and the input order) is the order of the references.
+     * place, so the scene order (and with it the draw order and the input order) is the order of the references. The copy
+     * loses the `contentVersion` attribute of the file's root: the live scene never sees it.
      *
      * Everything here works on pugixml documents: no CoreManager, no scene, no renderer. A bad reference never stops a
      * game: it is one error in NodeExpansion::errors, the reference element is dropped and the rest of the scene stays.
@@ -71,15 +72,17 @@ namespace BECore {
     /**
      * @brief Loader that reads `<baseDirectory>/<ref>.xml`, for tools and tests that have only a folder
      *
-     * Checks IsValidNodeRef and that the document element is `node` without a `ref` attribute.
+     * Checks IsValidNodeRef and that the document element is `node` without a `ref` attribute. It does **not** check the
+     * content version (`BECore/Config/ContentVersion.h`): tools and tests with a folder read files of any version.
      */
     NodeFileLoader MakeDirectoryNodeLoader(std::filesystem::path baseDirectory);
 
     /**
      * @brief Loader that reads `FileSystem::ResolvePath("config/<ref>.xml")`, so the content layers apply
      *
-     * A file of the game with the same relative path replaces the engine's. Same checks as MakeDirectoryNodeLoader.
-     * @p fs must outlive the loader.
+     * A file of the game with the same relative path replaces the engine's. Same checks as MakeDirectoryNodeLoader, and a
+     * file whose content version is not kContentVersion is refused (the reason names the file, the versions and the
+     * migration command). @p fs must outlive the loader.
      */
     NodeFileLoader MakeFileSystemNodeLoader(const FileSystem& fs);
 

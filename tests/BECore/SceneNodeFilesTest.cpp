@@ -1,3 +1,4 @@
+#include <BECore/Config/ContentVersion.h>
 #include <BECore/Scene/SceneNodeFiles.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -49,6 +50,11 @@ namespace BECore::Tests {
 
         std::string SceneConfigWith(const std::string& nodesXml) {
             return "<SceneManager><scenes><scene type=\"Scene\" name=\"Main\"><nodes>" + nodesXml + "</nodes></scene></scenes></SceneManager>";
+        }
+
+        /// A node file at the current content version, as the file-system loader wants it
+        std::string CurrentNode(const char* name) {
+            return std::string("<node name=\"") + name + "\" contentVersion=\"" + std::to_string(kContentVersion) + "\"/>";
         }
 
         bool Mentions(const eastl::string& error, const char* part) {
@@ -300,9 +306,9 @@ namespace BECore::Tests {
     TEST_F(SceneNodeFilesTest, FileSystemLoaderUsesTheContentLayers) {
         const auto engineRoot = _dir / "engineRoot";
         const auto gameRoot = _dir / "gameRoot";
-        WriteFile(engineRoot / "config" / "nodes" / "Shared.xml", R"(<node name="FromEngine"/>)");
-        WriteFile(gameRoot / "config" / "nodes" / "Shared.xml", R"(<node name="FromGame"/>)");
-        WriteFile(engineRoot / "config" / "nodes" / "Only.xml", R"(<node name="OnlyEngine"/>)");
+        WriteFile(engineRoot / "config" / "nodes" / "Shared.xml", CurrentNode("FromEngine"));
+        WriteFile(gameRoot / "config" / "nodes" / "Shared.xml", CurrentNode("FromGame"));
+        WriteFile(engineRoot / "config" / "nodes" / "Only.xml", CurrentNode("OnlyEngine"));
 
         FileSystem fs;
         fs.AddContentRoot(engineRoot);
@@ -362,6 +368,79 @@ namespace BECore::Tests {
         EXPECT_FALSE(result.Ok());
         EXPECT_EQ(result.errors.size(), 1u);
         EXPECT_FALSE(doc.document_element());
+    }
+
+    // ---- content version --------------------------------------------------------------------------------------------------
+
+    /// The file-system loader checks the content version of the node file it reads: the reason names the file and the versions
+    TEST_F(SceneNodeFilesTest, FileSystemLoaderRefusesAnOlderAndANewerNodeFile) {
+        ASSERT_GT(kContentVersion, 0u);
+        const auto root = _dir / "root";
+        WriteFile(root / "config" / "nodes" / "Old.xml", "<node name=\"Old\" contentVersion=\"" + std::to_string(kContentVersion - 1) + "\"/>");
+        WriteFile(root / "config" / "nodes" / "New.xml", "<node name=\"New\" contentVersion=\"" + std::to_string(kContentVersion + 1) + "\"/>");
+        WriteFile(root / "config" / "nodes" / "Bad.xml", R"(<node name="Bad" contentVersion="two"/>)");
+        WriteFile(root / "config" / "nodes" / "Now.xml", CurrentNode("Now"));
+        FileSystem fs;
+        fs.AddContentRoot(root);
+        fs.Initialize();
+        const NodeFileLoader loader = MakeFileSystemNodeLoader(fs);
+
+        pugi::xml_document doc;
+        eastl::string error;
+        EXPECT_FALSE(loader("nodes/Old", doc, error));
+        EXPECT_TRUE(Mentions(error, "config/nodes/Old.xml: content version")) << error.c_str();
+        EXPECT_TRUE(Mentions(error, "migrate.py")) << error.c_str();
+        error.clear();
+        EXPECT_FALSE(loader("nodes/New", doc, error));
+        EXPECT_TRUE(Mentions(error, "newer than this engine reads")) << error.c_str();
+        error.clear();
+        EXPECT_FALSE(loader("nodes/Bad", doc, error));
+        EXPECT_TRUE(Mentions(error, "is not a whole number")) << error.c_str();
+        error.clear();
+        EXPECT_TRUE(loader("nodes/Now", doc, error)) << error.c_str();
+    }
+
+    TEST_F(SceneNodeFilesTest, AnOlderNodeFileIsADroppedReferenceInTheExpansion) {
+        ASSERT_GT(kContentVersion, 0u);
+        const auto root = _dir / "root";
+        WriteFile(root / "config" / "nodes" / "Old.xml", "<node name=\"Old\" contentVersion=\"" + std::to_string(kContentVersion - 1) + "\"/>");
+        WriteFile(root / "config" / "nodes" / "Now.xml", CurrentNode("Now"));
+        FileSystem fs;
+        fs.AddContentRoot(root);
+        fs.Initialize();
+
+        pugi::xml_document doc;
+        ASSERT_TRUE(doc.load_string(SceneConfigWith(R"(<node ref="nodes/Now"/><node ref="nodes/Old"/><node name="Inline"/>)").c_str()));
+        const NodeExpansion result = ExpandNodeReferences(doc.document_element(), MakeFileSystemNodeLoader(fs));
+
+        EXPECT_EQ(result.expanded, 1u);
+        ASSERT_EQ(result.errors.size(), 1u);
+        EXPECT_TRUE(Mentions(result.errors[0], "'Main'")) << result.errors[0].c_str();
+        EXPECT_TRUE(Mentions(result.errors[0], "nodes/Old")) << result.errors[0].c_str();
+        EXPECT_TRUE(Mentions(result.errors[0], "content version")) << result.errors[0].c_str();
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"Now", "Inline"}));
+    }
+
+    TEST_F(SceneNodeFilesTest, DirectoryLoaderReadsAnyVersion) {
+        WriteFile(_dir / "nodes" / "Zero.xml", R"(<node name="Zero" contentVersion="0"/>)");
+        WriteFile(_dir / "nodes" / "Far.xml", R"(<node name="Far" contentVersion="999"/>)");
+        pugi::xml_document doc;
+        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Zero"/><node ref="nodes/Far"/>)"), doc);
+
+        EXPECT_TRUE(result.Ok());
+        EXPECT_EQ(NodeNames(doc.document_element(), "Main"), (std::vector<std::string>{"Zero", "Far"}));
+    }
+
+    TEST_F(SceneNodeFilesTest, TheExpandedCopyHasNoContentVersion) {
+        WriteFile(_dir / "nodes" / "Stamped.xml", R"(<node name="Stamped" layer="3" contentVersion="2"/>)");
+        pugi::xml_document doc;
+        const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Stamped"/>)"), doc);
+
+        ASSERT_TRUE(result.Ok());
+        const pugi::xml_node node = doc.document_element().child("scenes").child("scene").child("nodes").child("node");
+        EXPECT_STREQ(node.attribute("name").as_string(), "Stamped");
+        EXPECT_STREQ(node.attribute("layer").as_string(), "3");
+        EXPECT_FALSE(node.attribute("contentVersion"));
     }
 
 }  // namespace BECore::Tests
