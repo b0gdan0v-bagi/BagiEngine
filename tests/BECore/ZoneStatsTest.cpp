@@ -238,12 +238,12 @@ namespace BECore::Tests {
         frame.stageMs[+FrameStage::SceneDraw] = 4.0;
         frame.stageMs[+FrameStage::Present] = 3.0;
         const auto segments = ExclusiveStageMs(frame);
-        EXPECT_NEAR(segments[UpdateOnly], 3.0, kTolerance);
-        EXPECT_NEAR(segments[SceneUpdateStage], 2.0, kTolerance);
-        EXPECT_NEAR(segments[RenderOnly], 2.0, kTolerance);
-        EXPECT_NEAR(segments[SceneDrawStage], 4.0, kTolerance);
-        EXPECT_NEAR(segments[PresentStage], 3.0, kTolerance);
-        EXPECT_NEAR(segments[OtherStage], 2.0, kTolerance);
+        EXPECT_NEAR(segments[+ExclusiveStage::UpdateOnly], 3.0, kTolerance);
+        EXPECT_NEAR(segments[+ExclusiveStage::SceneUpdateStage], 2.0, kTolerance);
+        EXPECT_NEAR(segments[+ExclusiveStage::RenderOnly], 2.0, kTolerance);
+        EXPECT_NEAR(segments[+ExclusiveStage::SceneDrawStage], 4.0, kTolerance);
+        EXPECT_NEAR(segments[+ExclusiveStage::PresentStage], 3.0, kTolerance);
+        EXPECT_NEAR(segments[+ExclusiveStage::OtherStage], 2.0, kTolerance);
         double sum = 0.0;
         for (const double segment : segments) {
             sum += segment;
@@ -262,9 +262,9 @@ namespace BECore::Tests {
         for (const double segment : segments) {
             EXPECT_GE(segment, 0.0);
         }
-        EXPECT_EQ(segments[UpdateOnly], 0.0);
-        EXPECT_EQ(segments[RenderOnly], 0.0);
-        EXPECT_EQ(segments[OtherStage], 2.0);
+        EXPECT_EQ(segments[+ExclusiveStage::UpdateOnly], 0.0);
+        EXPECT_EQ(segments[+ExclusiveStage::RenderOnly], 0.0);
+        EXPECT_EQ(segments[+ExclusiveStage::OtherStage], 2.0);
     }
 
 }  // namespace BECore::Tests

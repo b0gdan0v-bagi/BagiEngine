@@ -49,14 +49,6 @@ namespace BECore {
             return ImColor::HSV(static_cast<float>(hash % kHueBuckets) / kHueScale, kHashSaturation, kHashValue);
         }
 
-        const RingFrame* FindFrame(const RingSnapshot& snapshot, std::optional<uint64_t> index) {
-            if (!index || snapshot.frames.empty() || *index < snapshot.frames.front().index) {
-                return nullptr;
-            }
-            const uint64_t position = *index - snapshot.frames.front().index;
-            return position < snapshot.frames.size() ? &snapshot.frames[position] : nullptr;
-        }
-
         /// The step of a ruler of 1, 2, 5, 10, ... times a power of ten that is at least @p minimumMs
         double NiceStepMs(double minimumMs) {
             const double decade = std::pow(10.0, std::floor(std::log10(minimumMs)));
@@ -97,7 +89,8 @@ namespace BECore {
         const TickRange extent = SnapshotExtent(snapshot);
         _view.SetExtent(extent.begin, extent.end, snapshot.nanosecondsPerTick);
 
-        const RingFrame* selected = FindFrame(snapshot, selectedFrame);
+        const std::optional<size_t> selectedPosition = FramePosition(snapshot, selectedFrame);
+        const RingFrame* selected = selectedPosition ? &snapshot.frames[*selectedPosition] : nullptr;
         const RingFrame& frame = selected != nullptr ? *selected : snapshot.frames.back();
         if (selectedFrame != _shownSelection) {
             // A click on another bar opens that frame; no selection goes back to the newest one

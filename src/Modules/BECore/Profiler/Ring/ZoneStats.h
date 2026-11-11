@@ -41,7 +41,9 @@ namespace BECore {
     [[nodiscard]] eastl::vector<ZoneStatRow> FilterZoneStats(const eastl::vector<ZoneStatRow>& rows, eastl::string_view text);
 
     /// The segments of the stacked stage bar, in the order they are stacked from the bottom
-    enum ExclusiveStage : size_t { UpdateOnly, SceneUpdateStage, RenderOnly, SceneDrawStage, PresentStage, OtherStage, kExclusiveStageCount };
+    CORE_ENUM(ExclusiveStage, uint8_t, UpdateOnly, SceneUpdateStage, RenderOnly, SceneDrawStage, PresentStage, OtherStage)
+
+    inline constexpr size_t kExclusiveStageCount = 6;
 
     /**
      * @brief The stage times of a frame without double counting (FrameStats::stageMs has SceneUpdate inside Update and SceneDraw inside

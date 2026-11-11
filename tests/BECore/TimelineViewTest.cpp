@@ -205,6 +205,17 @@ namespace BECore::Tests {
         EXPECT_EQ(FrameAt(snapshot, 250), nullptr);
     }
 
+    TEST(TimelineViewTest, FramePositionFindsAFrameByItsNumber) {
+        RingSnapshot snapshot;
+        EXPECT_FALSE(FramePosition(snapshot, 4));
+        snapshot.frames = {RingFrame{4, 0, 100}, RingFrame{5, 100, 250}, RingFrame{6, 250, 300}};
+        EXPECT_FALSE(FramePosition(snapshot, std::nullopt));
+        EXPECT_FALSE(FramePosition(snapshot, 3));  // fell out of the ring
+        EXPECT_EQ(FramePosition(snapshot, 4), 0u);
+        EXPECT_EQ(FramePosition(snapshot, 6), 2u);
+        EXPECT_FALSE(FramePosition(snapshot, 7));
+    }
+
     TEST(TimelineViewTest, TheExtentOfASnapshotIsItsFramesElseItsZones) {
         RingSnapshot snapshot;
         AddThread(snapshot, 1, 0).zones = {Zone(kOuterSite, 30, 50, 0), Zone(kOuterSite, 20, 90, 0)};

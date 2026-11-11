@@ -96,4 +96,7 @@ namespace BECore {
     /// The frame whose interval holds @p tick, nullptr when none does
     [[nodiscard]] const RingFrame* FrameAt(const RingSnapshot& snapshot, uint64_t tick);
 
+    /// The position in RingSnapshot::frames of the frame numbered @p frameIndex (RingFrame::index), none when there is none or the ring no longer holds it
+    [[nodiscard]] std::optional<size_t> FramePosition(const RingSnapshot& snapshot, std::optional<uint64_t> frameIndex);
+
 }  // namespace BECore

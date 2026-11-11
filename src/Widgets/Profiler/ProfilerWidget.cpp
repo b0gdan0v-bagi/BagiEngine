@@ -242,8 +242,8 @@ namespace BECore {
             // Nothing is frozen: the frame the view is on, the selected one or the newest
             const RingFrame* frame = nullptr;
             if (!_snapshot.frames.empty()) {
-                const uint64_t front = _snapshot.frames.front().index;
-                frame = _selectedFrame && *_selectedFrame >= front && *_selectedFrame - front < _snapshot.frames.size() ? &_snapshot.frames[*_selectedFrame - front] : &_snapshot.frames.back();
+                const std::optional<size_t> position = FramePosition(_snapshot, _selectedFrame);
+                frame = position ? &_snapshot.frames[*position] : &_snapshot.frames.back();
             }
             if (frame == nullptr) {
                 _traceMessage = "No frame in the ring to write";

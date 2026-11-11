@@ -29,7 +29,7 @@ A headless run with the manual clock gives a trace of exactly N frames: `--headl
 
 ## In the editor
 
-Ctrl+Shift+E to the editor, then Ctrl+Shift+P opens the Profiler panel. Zones need a build with `ENGINE_PROFILER` (`macos-profile-editor`); without it the panel says so. The panel records into a ring only while it is open, so it shows frames since it was opened.
+Ctrl+Shift+E to the editor, then Ctrl+Shift+P opens the Profiler panel. Zones need a build with `ENGINE_PROFILER` (`macos-profile-editor`); without it the panel says so. The panel records into a ring only while it is open, so it shows frames since it was last opened (a reopened panel starts clean; the time it was closed is in no frame).
 
 - **Frame bars:** one bar per recent frame against a budget line (16.6 ms, 33.3 ms or custom); "Bars" switches to the stage split; a click opens that frame. Counters (draw calls, allocations, ...) can be picked as graphs.
 - **Timeline:** a lane per thread with nested zone bars of the opened frame; wheel zooms, drag pans, hover shows name, `file:line`, duration and allocations; Pause freezes the view.

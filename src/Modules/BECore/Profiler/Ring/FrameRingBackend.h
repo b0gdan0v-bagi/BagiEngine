@@ -41,7 +41,8 @@ namespace BECore {
         FrameRingBackend(const FrameRingBackend&) = delete;
         FrameRingBackend& operator=(const FrameRingBackend&) = delete;
 
-        /// Zones still open on a thread are forgotten (their ends record nothing): a ring switched on in the middle of a zone
+        /// Begins a new epoch: zones still open on a thread are forgotten (their ends record nothing), and what the ring holds from before
+        /// is not in a Snapshot() any more. The first frame of the epoch begins now, so the time the ring was off is in no frame
         bool Start() override;
 
         uint64_t BeginZone(const ProfileSite& site) override;
@@ -64,7 +65,6 @@ namespace BECore {
         const Options _options;
         const uint64_t _id;  // tells the thread-local cache which ring its buffer belongs to
         std::atomic<uint64_t> _generation{1};
-        const uint64_t _startTicks;  // frame 0 begins here
         std::atomic<uint64_t> _dropped{0};
 
         mutable std::mutex _registryMutex;
@@ -76,6 +76,12 @@ namespace BECore {
         mutable uint64_t _markTicks[kMaxFrames]{};  // accessed through std::atomic_ref (mutable: Snapshot() reads it atomically)
         std::atomic<uint64_t> _markReserved{0};
         std::atomic<uint64_t> _markCount{0};
+
+        // The epoch: the ring made, or the last Start. Snapshot() shows no frame or zone from before it. Written by Start, read by Snapshot,
+        // and a writer never takes this mutex
+        mutable std::mutex _epochMutex;
+        uint64_t _epochMark = 0;   // the first mark that ends a frame of the epoch
+        uint64_t _epochTicks = 0;  // that frame begins here
     };
 
 }  // namespace BECore

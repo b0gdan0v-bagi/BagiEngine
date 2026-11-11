@@ -1,5 +1,6 @@
 #include "ProfilerFramePlot.h"
 
+#include <BECore/Profiler/Ring/TimelineView.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 #include <imgui.h>
@@ -31,6 +32,7 @@ namespace BECore {
         constexpr float kBarModeComboWidth = 140.0f;
         constexpr float kCounterGraphHeight = 40.0f;
         constexpr float kStageSwatchSize = 10.0f;
+        constexpr float kStageSwatchOffsetY = 2.0f;  // centres the swatch on the text line
         constexpr ImU32 kMarkerColor = IM_COL32(255, 255, 255, 200);
 
         // One fixed color per segment of ExclusiveStage
@@ -114,12 +116,7 @@ namespace BECore {
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(origin, ImVec2(origin.x + size.x, bottom), kBackgroundColor);
-        const std::optional<size_t> selectedPosition = [&]() -> std::optional<size_t> {
-            if (!selectedFrame || snapshot.frames.empty() || *selectedFrame < snapshot.frames.front().index) {
-                return std::nullopt;
-            }
-            return static_cast<size_t>(*selectedFrame - snapshot.frames.front().index);
-        }();
+        const std::optional<size_t> selectedPosition = FramePosition(snapshot, selectedFrame);
         for (size_t bar = 0; bar < barCount; ++bar) {
             const float x = origin.x + static_cast<float>(bar) * barWidth;
             eastl::array<double, kExclusiveStageCount> stages{};
@@ -175,7 +172,7 @@ namespace BECore {
                 ImGui::SameLine();
             }
             const ImVec2 at = ImGui::GetCursorScreenPos();
-            drawList->AddRectFilled(ImVec2(at.x, at.y + 2.0f), ImVec2(at.x + kStageSwatchSize, at.y + 2.0f + kStageSwatchSize), kStageColors[segment]);
+            drawList->AddRectFilled(ImVec2(at.x, at.y + kStageSwatchOffsetY), ImVec2(at.x + kStageSwatchSize, at.y + kStageSwatchOffsetY + kStageSwatchSize), kStageColors[segment]);
             ImGui::Dummy(ImVec2(kStageSwatchSize, kStageSwatchSize));
             ImGui::SameLine();
             ImGui::TextUnformatted(kStageNames[segment]);
@@ -206,7 +203,7 @@ namespace BECore {
         for (const PoolString& name : _counterNames) {
             const auto picked = eastl::find(_pickedCounters.begin(), _pickedCounters.end(), name);
             bool isPicked = picked != _pickedCounters.end();
-            if (ImGui::Selectable(name.ToStringView().data(), isPicked)) {
+            if (ImGui::Selectable(name.CStr(), isPicked)) {
                 if (isPicked) {
                     _pickedCounters.erase(picked);
                 } else {
@@ -214,12 +211,7 @@ namespace BECore {
                 }
             }
         }
-        const std::optional<size_t> selectedPosition = [&]() -> std::optional<size_t> {
-            if (!selectedFrame || snapshot.frames.empty() || *selectedFrame < snapshot.frames.front().index) {
-                return std::nullopt;
-            }
-            return static_cast<size_t>(*selectedFrame - snapshot.frames.front().index);
-        }();
+        const std::optional<size_t> selectedPosition = FramePosition(snapshot, selectedFrame);
         for (const PoolString& name : _pickedCounters) {
             _counterValues.clear();
             for (const FrameStats& frame : history) {
@@ -227,7 +219,10 @@ namespace BECore {
             }
             const ImVec2 origin = ImGui::GetCursorScreenPos();
             const float width = ImGui::GetContentRegionAvail().x;
-            ImGui::PlotLines(name.ToStringView().data(), _counterValues.data(), static_cast<int>(_counterValues.size()), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(width, kCounterGraphHeight));
+            // The same label as the Selectable above: its own ID scope keeps the two apart
+            ImGui::PushID(name.CStr());
+            ImGui::PlotLines(name.CStr(), _counterValues.data(), static_cast<int>(_counterValues.size()), 0, nullptr, FLT_MAX, FLT_MAX, ImVec2(width, kCounterGraphHeight));
+            ImGui::PopID();
             // The marker of the selected frame: the plot spreads its points over the width
             if (selectedPosition && _counterValues.size() > 1) {
                 for (size_t bar = 0; bar < _counterValues.size(); ++bar) {

@@ -13,7 +13,7 @@ namespace BECore {
         constexpr double kOnePixel = 1.0;
 
         bool Overlaps(const ZoneRecord& zone, double beginTicks, double endTicks) {
-            return static_cast<double>(zone.beginTicks)<endTicks&& static_cast<double>(zone.endTicks)> beginTicks;
+            return (static_cast<double>(zone.beginTicks) < endTicks) && (static_cast<double>(zone.endTicks) > beginTicks);
         }
 
     }  // namespace
@@ -173,6 +173,14 @@ namespace BECore {
             }
         }
         return nullptr;
+    }
+
+    std::optional<size_t> FramePosition(const RingSnapshot& snapshot, std::optional<uint64_t> frameIndex) {
+        if (!frameIndex || snapshot.frames.empty() || *frameIndex < snapshot.frames.front().index) {
+            return std::nullopt;
+        }
+        const uint64_t position = *frameIndex - snapshot.frames.front().index;
+        return position < snapshot.frames.size() ? std::optional<size_t>(static_cast<size_t>(position)) : std::nullopt;
     }
 
 }  // namespace BECore

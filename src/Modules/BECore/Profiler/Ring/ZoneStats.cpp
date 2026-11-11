@@ -174,12 +174,12 @@ namespace BECore {
         const double sceneDraw = eastl::max(frame.GetStageMs(FrameStage::SceneDraw), 0.0);
         const double present = eastl::max(frame.GetStageMs(FrameStage::Present), 0.0);
         eastl::array<double, kExclusiveStageCount> result{};
-        result[UpdateOnly] = eastl::max(frame.GetStageMs(FrameStage::Update) - sceneUpdate, 0.0);
-        result[SceneUpdateStage] = sceneUpdate;
-        result[RenderOnly] = eastl::max(frame.GetStageMs(FrameStage::Render) - sceneDraw, 0.0);
-        result[SceneDrawStage] = sceneDraw;
-        result[PresentStage] = present;
-        result[OtherStage] = eastl::max(frame.cpuMs - (result[UpdateOnly] + sceneUpdate + result[RenderOnly] + sceneDraw + present), 0.0);
+        result[+ExclusiveStage::UpdateOnly] = eastl::max(frame.GetStageMs(FrameStage::Update) - sceneUpdate, 0.0);
+        result[+ExclusiveStage::SceneUpdateStage] = sceneUpdate;
+        result[+ExclusiveStage::RenderOnly] = eastl::max(frame.GetStageMs(FrameStage::Render) - sceneDraw, 0.0);
+        result[+ExclusiveStage::SceneDrawStage] = sceneDraw;
+        result[+ExclusiveStage::PresentStage] = present;
+        result[+ExclusiveStage::OtherStage] = eastl::max(frame.cpuMs - (result[+ExclusiveStage::UpdateOnly] + sceneUpdate + result[+ExclusiveStage::RenderOnly] + sceneDraw + present), 0.0);
         return result;
     }
 

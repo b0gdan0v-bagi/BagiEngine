@@ -83,7 +83,6 @@ namespace BECore {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(kFilterWidth);
         ImGui::InputTextWithHint("##zoneFilter", "filter by name or file", _filter, sizeof(_filter));
-        RefreshRows(snapshot, version, selectedFrame);
 
         const ProfileSite* shown = nullptr;
         if (!ImGui::BeginTable("##zoneStats", kColumnCount,
@@ -109,6 +108,7 @@ namespace BECore {
             _sortColumn = static_cast<ZoneStatColumn>(specs->Specs[0].ColumnUserID);
             _sortAscending = specs->Specs[0].SortDirection == ImGuiSortDirection_Ascending;
         }
+        RefreshRows(snapshot, version, selectedFrame);  // after the specs, so a click on a header sorts this frame
 
         ImGuiListClipper clipper;
         clipper.Begin(static_cast<int>(_rows.size()));

@@ -3,6 +3,7 @@
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
 #include <BECore/Profiler/ScopedTrace.h>
 #include <Common/TempPath.h>
+#include <chrono>
 #include <gtest/gtest.h>
 #include <thread>
 
@@ -150,6 +151,41 @@ namespace BECore::Tests {
         }
     }
 
+    TEST(FrameRingTest, AReopenedRingShowsNoFrameOrZoneFromBeforeTheGap) {
+        FrameRingBackend ring(ManualOptions());
+        ring.Start();
+        RecordZone(ring, kOuterSite, 1, 3);
+        g_manualTick = 10;
+        ring.FrameMark();
+        g_manualTick = 5000;  // the ring was off for a long time
+        ring.Start();
+        RecordZone(ring, kInnerSite, 5001, 5004);
+        g_manualTick = 5016;
+        ring.FrameMark();
+        g_manualTick = 5032;
+        ring.FrameMark();
+
+        const RingSnapshot snapshot = ring.Snapshot();
+        ASSERT_EQ(snapshot.frames.size(), 2u);
+        EXPECT_EQ(snapshot.frames[0].index, 1u);
+        EXPECT_EQ(snapshot.frames[0].beginTicks, 5000u);  // the epoch's tick, not the mark before the gap
+        EXPECT_EQ(snapshot.frames[0].endTicks, 5016u);
+        EXPECT_EQ(snapshot.frames[1].index, 2u);
+        EXPECT_EQ(snapshot.frames[1].beginTicks, 5016u);
+        ASSERT_EQ(snapshot.threads.size(), 1u);
+        ASSERT_EQ(snapshot.threads[0].zones.size(), 1u);
+        EXPECT_EQ(snapshot.threads[0].zones[0].site, &kInnerSite);
+    }
+
+    TEST(FrameRingTest, ARingReopenedWithoutAMarkShowsNoFrame) {
+        FrameRingBackend ring(ManualOptions());
+        g_manualTick = 10;
+        ring.FrameMark();
+        g_manualTick = 99;
+        ring.Start();
+        EXPECT_TRUE(ring.Snapshot().frames.empty());
+    }
+
     TEST(FrameRingTest, TheLastFramesKeepTheirNumbersAsOlderOnesFallOut) {
         constexpr uint32_t kExtra = 10;
         FrameRingBackend ring(ManualOptions());
@@ -294,13 +330,18 @@ namespace BECore::Tests {
     TEST(FrameRingTest, ASnapshotWhileAThreadRecordsNeverHoldsAZoneTheWriterDidNotWrite) {
         // The writer's zones are Outer [t, t + 3] around Inner [t + 1, t + 2] on a clock that counts, and it writes far more of them than the
         // ring holds, so the oldest slots are overwritten all the time the reader copies. A torn slot would show as a pair that does not fit
+        // The writer goes on until the reader took enough snapshots (an optimized build writes the minimum before the reader gets its first one)
         constexpr uint32_t kPairs = FrameRingBackend::kEventsPerThread * 6;
+        constexpr size_t kMinSnapshots = 50;
+        constexpr std::chrono::seconds kTimeLimit{20};
         FrameRingBackend ring({.now = &CountingNow, .nanosecondsPerTick = kNanosecondsPerTestTick});
         std::atomic<bool> started{false};
         std::atomic<bool> done{false};
+        std::atomic<size_t> snapshots{0};
         std::thread writer([&] {
             started = true;
-            for (uint32_t i = 0; i < kPairs; ++i) {
+            const auto deadline = std::chrono::steady_clock::now() + kTimeLimit;
+            for (uint32_t i = 0; i < kPairs || (snapshots.load() < kMinSnapshots && std::chrono::steady_clock::now() < deadline); ++i) {
                 const uint64_t outer = ring.BeginZone(kOuterSite);
                 const uint64_t inner = ring.BeginZone(kInnerSite);
                 ring.EndZone(inner, kInnerSite, {.count = 1, .bytes = 8});
@@ -315,7 +356,6 @@ namespace BECore::Tests {
             std::this_thread::yield();
         }
 
-        size_t snapshots = 0;
         size_t zonesChecked = 0;
         const auto check = [&](const RingSnapshot& snapshot) {
             ASSERT_LE(snapshot.threads.size(), 1u);
@@ -351,7 +391,7 @@ namespace BECore::Tests {
         }
         writer.join();
         ASSERT_NO_FATAL_FAILURE(check(ring.Snapshot()));
-        EXPECT_GT(snapshots, 0u);
+        EXPECT_GE(snapshots.load(), kMinSnapshots);
         EXPECT_GT(zonesChecked, 0u);
         const RingSnapshot last = ring.Snapshot();
         EXPECT_EQ(last.threads[0].zones.size(), FrameRingBackend::kEventsPerThread);

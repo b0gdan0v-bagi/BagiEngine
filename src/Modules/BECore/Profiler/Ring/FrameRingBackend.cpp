@@ -1,6 +1,7 @@
 #include "FrameRingBackend.h"
 
 #include <BECore/Profiler/Profiler.h>
+#include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 #include <cstdlib>
 #include <new>
@@ -52,7 +53,9 @@ namespace BECore {
 
     FrameRingBackend::FrameRingBackend() : FrameRingBackend(Options{}) {}
 
-    FrameRingBackend::FrameRingBackend(const Options& options) : _options(options), _id(g_nextRingId.fetch_add(1, std::memory_order_relaxed)), _startTicks(options.now()) {}
+    FrameRingBackend::FrameRingBackend(const Options& options) : _options(options), _id(g_nextRingId.fetch_add(1, std::memory_order_relaxed)) {
+        _epochTicks = options.now();
+    }
 
     FrameRingBackend::~FrameRingBackend() {
         const uint32_t count = _bufferCount.load(std::memory_order_acquire);
@@ -66,6 +69,12 @@ namespace BECore {
 
     bool FrameRingBackend::Start() {
         _generation.fetch_add(1, std::memory_order_relaxed);
+        // The clock is read under the mark mutex, so no mark of the new epoch is older than its start
+        std::lock_guard markLock(_markMutex);
+        const uint64_t ticks = _options.now();
+        std::lock_guard epochLock(_epochMutex);
+        _epochMark = _markCount.load(std::memory_order_relaxed);
+        _epochTicks = ticks;
         return true;
     }
 
@@ -161,8 +170,8 @@ namespace BECore {
     }
 
     void FrameRingBackend::FrameMark() {
-        const uint64_t ticks = _options.now();
         std::lock_guard lock(_markMutex);
+        const uint64_t ticks = _options.now();  // under the lock, so the stored ticks never go backwards
         const uint64_t index = _markCount.load(std::memory_order_relaxed);
         _markReserved.store(index + 1, std::memory_order_relaxed);
         std::atomic_thread_fence(std::memory_order_release);
@@ -179,10 +188,18 @@ namespace BECore {
         snapshot.nanosecondsPerTick = _options.nanosecondsPerTick;
         snapshot.dropped = GetDroppedCount();
 
-        // Frames: mark k ends frame k, which begins at mark k-1 (frame 0 begins when the ring was made). The oldest mark still held has
-        // lost its predecessor, so the frame it ends is left out
+        // Frames: mark k ends frame k, which begins at mark k-1; the first frame of an epoch (the ring made, or Start) begins at the epoch's
+        // tick, and what came before the epoch is left out. The oldest mark still held has lost its predecessor, so the frame it ends is
+        // left out. The marks are counted before the epoch is read: a Start between the two leaves no frame instead of one over the gap
+        uint64_t epochMark = 0;
+        uint64_t epochTicks = 0;
         {
             const uint64_t count = _markCount.load(std::memory_order_acquire);
+            {
+                std::lock_guard epochLock(_epochMutex);
+                epochMark = _epochMark;
+                epochTicks = _epochTicks;
+            }
             const uint64_t first = count > kMaxFrames ? count - kMaxFrames : 0;
             eastl::vector<uint64_t> ticks;
             ticks.reserve(static_cast<size_t>(count - first));
@@ -191,16 +208,16 @@ namespace BECore {
             }
             std::atomic_thread_fence(std::memory_order_acquire);
             const uint64_t intact = std::max(first, FirstIntactIndex(_markReserved.load(std::memory_order_relaxed), kMaxFrames));
-            for (uint64_t index = intact; index < count; ++index) {
-                if (index == 0) {
-                    snapshot.frames.push_back(RingFrame{0, _startTicks, ticks[0]});
+            for (uint64_t index = std::max(intact, epochMark); index < count; ++index) {
+                if (index == epochMark) {
+                    snapshot.frames.push_back(RingFrame{index, epochTicks, ticks[static_cast<size_t>(index - first)]});
                 } else if (index > intact) {
                     snapshot.frames.push_back(RingFrame{index, ticks[static_cast<size_t>(index - 1 - first)], ticks[static_cast<size_t>(index - first)]});
                 }
             }
         }
 
-        std::lock_guard lock(_registryMutex);
+        // No registry mutex: a buffer is published by the release store of the count, and is never freed or moved before the destructor
         const uint32_t bufferCount = _bufferCount.load(std::memory_order_acquire);
         for (uint32_t i = 0; i < bufferCount; ++i) {
             const ThreadBuffer& buffer = *_buffers[i];
@@ -234,6 +251,9 @@ namespace BECore {
             }
             eastl::sort(thread.zones.begin(), thread.zones.end(),
                         [](const ZoneRecord& a, const ZoneRecord& b) { return a.beginTicks != b.beginTicks ? a.beginTicks < b.beginTicks : a.depth < b.depth; });
+            // Zones of an earlier epoch are still in the ring
+            const auto older = eastl::lower_bound(thread.zones.begin(), thread.zones.end(), epochTicks, [](const ZoneRecord& zone, uint64_t ticks) { return zone.beginTicks < ticks; });
+            thread.zones.erase(thread.zones.begin(), older);
         }
         return snapshot;
     }
