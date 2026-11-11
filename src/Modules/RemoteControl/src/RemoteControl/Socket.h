@@ -7,12 +7,16 @@ namespace BECore {
     /// Why a socket call did not give what it was asked for
     CORE_ENUM(SocketError, uint8_t, Closed, TimedOut, Failed)
 
+    /// Which local addresses a listening socket accepts connections on
+    CORE_ENUM(SocketBind, uint8_t, Loopback, AnyAddress)
+
     /**
-     * @brief A TCP socket on the loopback (127.0.0.1), POSIX or Winsock behind one interface.
+     * @brief A TCP socket (IPv4), POSIX or Winsock behind one interface.
      *
      * Owns its handle and closes it on destruction; move-only. On POSIX the calls block, so a thread that waits in
      * Accept() or Receive() is woken by ShutdownBoth() from another thread (a connected socket) or by its timeout
-     * (a listening socket, see Accept()). Only IPv4 loopback is supported: the control API is a local tool.
+     * (a listening socket, see Accept()). A listening socket binds the loopback (the control API is a local tool) or,
+     * for a public server, every address (SocketBind); only IPv4 is supported. Connect() goes to the loopback only.
      *
      * Winsock does not wake a blocked recv() or send() on shutdown(), so there a connected socket is non-blocking
      * and Receive() / SendAll() wait in slices of kWakeInterval that look for ShutdownBoth(); the interface is the same.
@@ -30,14 +34,16 @@ namespace BECore {
         Socket(Socket&& other) noexcept;
         Socket& operator=(Socket&& other) noexcept;
 
-        /// Listens on 127.0.0.1:@p port; port 0 lets the system pick a free one (GetLocalPort() tells which). The error is a message for the log
-        [[nodiscard]] static std::expected<Socket, eastl::string> Listen(uint16_t port);
+        /// Listens on @p port, on 127.0.0.1 only or on every address (@p scope); port 0 lets the system pick a free one
+        /// (GetLocalPort() tells which). The error is a message for the log and names the address used
+        [[nodiscard]] static std::expected<Socket, eastl::string> Listen(uint16_t port, SocketBind scope = SocketBind::Loopback);
 
         /// Connects to 127.0.0.1:@p port (clients and tests; the engine only listens)
         [[nodiscard]] static std::expected<Socket, eastl::string> Connect(uint16_t port);
 
-        /// Waits up to @p timeout for a connection: TimedOut when none came, Failed when the socket is broken or was shut down
-        [[nodiscard]] std::expected<Socket, SocketError> Accept(std::chrono::milliseconds timeout);
+        /// Waits up to @p timeout for a connection: TimedOut when none came, Failed when the socket is broken or was shut down.
+        /// @p peerAddress, when given, gets the IPv4 address of the client as dotted text ("?" when it is unknown)
+        [[nodiscard]] std::expected<Socket, SocketError> Accept(std::chrono::milliseconds timeout, eastl::string* peerAddress = nullptr);
 
         /// Sends all of @p data; false when the connection is gone
         [[nodiscard]] bool SendAll(eastl::span<const uint8_t> data);

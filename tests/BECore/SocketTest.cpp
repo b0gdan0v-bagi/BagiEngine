@@ -129,4 +129,38 @@ namespace BECore::Tests {
         EXPECT_EQ(ended.error(), SocketError::Closed);
     }
 
+    TEST(SocketTest, AnyAddressListenerAcceptsALoopbackClientAndTellsItsAddress) {
+        auto listener = Socket::Listen(0, SocketBind::AnyAddress);
+        ASSERT_TRUE(listener.has_value());
+        ASSERT_NE(listener->GetLocalPort(), 0u);
+        auto client = Socket::Connect(listener->GetLocalPort());
+        ASSERT_TRUE(client.has_value());
+
+        eastl::string peerAddress;
+        auto accepted = listener->Accept(kWaitLimit, &peerAddress);
+        ASSERT_TRUE(accepted.has_value());
+        EXPECT_EQ(peerAddress, "127.0.0.1");
+        EXPECT_TRUE(accepted->IsValid());
+    }
+
+    TEST(SocketTest, DefaultListenerBindsTheLoopbackAndAcceptsWithoutAPeerAddress) {
+        auto listener = Socket::Listen(0);
+        ASSERT_TRUE(listener.has_value());
+        ASSERT_NE(listener->GetLocalPort(), 0u);
+        auto client = Socket::Connect(listener->GetLocalPort());
+        ASSERT_TRUE(client.has_value());
+
+        auto accepted = listener->Accept(kWaitLimit);  // peerAddress is optional
+        ASSERT_TRUE(accepted.has_value());
+        EXPECT_TRUE(accepted->IsValid());
+    }
+
+    TEST(SocketTest, ListenOnATakenPortNamesTheAddressInTheError) {
+        auto first = Socket::Listen(0, SocketBind::AnyAddress);
+        ASSERT_TRUE(first.has_value());
+        const auto second = Socket::Listen(first->GetLocalPort(), SocketBind::AnyAddress);
+        ASSERT_FALSE(second.has_value());
+        EXPECT_NE(second.error().find("0.0.0.0"), eastl::string::npos);
+    }
+
 }  // namespace BECore::Tests
