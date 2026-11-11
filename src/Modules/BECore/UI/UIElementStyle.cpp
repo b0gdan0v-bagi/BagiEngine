@@ -60,6 +60,7 @@ namespace BECore {
         SaveIfChanged(s, rect.aspectMode, defaults.rect.aspectMode, "aspectMode");
         SaveEdgesIfChanged(s, rect.margin, defaults.rect.margin, "margin");
         SaveIfChanged(s, rect.flex, defaults.rect.flex, "flex");
+        SaveIfChanged(s, rect.region, defaults.rect.region, "region");
         SaveIfChanged(s, stack.direction, defaults.stack.direction, "direction");
         SaveIfChanged(s, stack.spacing, defaults.stack.spacing, "spacing");
         SaveEdgesIfChanged(s, stack.padding, defaults.stack.padding, "padding");
@@ -83,6 +84,7 @@ namespace BECore {
         Ser::Load(d, rect.aspectMode, "aspectMode");
         UIAttr::ReadEdges(d, "margin", rect.margin);
         Ser::Load(d, rect.flex, "flex");
+        Ser::Load(d, rect.region, "region");
         Ser::Load(d, stack.direction, "direction");
         Ser::Load(d, stack.spacing, "spacing");
         UIAttr::ReadEdges(d, "padding", stack.padding);
@@ -106,6 +108,7 @@ namespace BECore {
         changed |= PropVisit::Visit(v, rect.aspectRatio, "aspectRatio");
         changed |= PropVisit::Visit(v, rect.aspectMode, "aspectMode");
         changed |= PropVisit::Visit(v, rect.flex, "flex");
+        changed |= PropVisit::Visit(v, rect.region, "region");
         changed |= PropVisit::Visit(v, stack.direction, "direction");
         changed |= PropVisit::Visit(v, stack.spacing, "spacing");
         changed |= PropVisit::Visit(v, stack.wrap, "wrapChildren");

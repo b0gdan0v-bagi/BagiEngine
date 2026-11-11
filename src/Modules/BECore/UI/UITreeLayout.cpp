@@ -13,10 +13,10 @@ namespace BECore {
             }
         }
 
-        void LayoutChildren(UIElement& parent, const Rect& contentBounds, const Rect& fullBounds, bool parentIsRoot);
+        void LayoutChildren(UIElement& parent, const Rect& contentBounds, const Rect& fullBounds, const UIRegionSet& regions, bool parentIsRoot);
 
         // The children of a popup element are out of flow: closed they have no rect, open the element places them
-        void LayoutPopupChildren(UIElement& parent, const Rect& contentBounds, const Rect& fullBounds) {
+        void LayoutPopupChildren(UIElement& parent, const Rect& contentBounds, const Rect& fullBounds, const UIRegionSet& regions) {
             if (!parent.IsPopupOpen()) {
                 for (const auto& child : parent.children) {
                     ClearRects(*child);
@@ -26,16 +26,16 @@ namespace BECore {
             parent.LayoutPopup(contentBounds);
             for (const auto& child : parent.children) {
                 if (child->active.visible) {
-                    LayoutChildren(*child, contentBounds, fullBounds, false);
+                    LayoutChildren(*child, contentBounds, fullBounds, regions, false);
                 } else {
                     ClearRects(*child);
                 }
             }
         }
 
-        void LayoutChildren(UIElement& parent, const Rect& contentBounds, const Rect& fullBounds, bool parentIsRoot) {
+        void LayoutChildren(UIElement& parent, const Rect& contentBounds, const Rect& fullBounds, const UIRegionSet& regions, bool parentIsRoot) {
             if (parent.HasPopupChildren()) {
-                LayoutPopupChildren(parent, contentBounds, fullBounds);
+                LayoutPopupChildren(parent, contentBounds, fullBounds, regions);
                 return;
             }
 
@@ -58,21 +58,23 @@ namespace BECore {
                 }
             } else {
                 for (size_t i = 0; i < visible.size(); ++i) {
-                    const Rect& area = parentIsRoot && visible[i]->ignoreSafeArea ? fullBounds : parent.rect;
+                    // A published region is the box of the element; one that is not published leaves it in its parent
+                    const Rect* region = regions.Find(specs[i].region);
+                    const Rect& area = region ? *region : parentIsRoot && visible[i]->ignoreSafeArea ? fullBounds : parent.rect;
                     visible[i]->rect = UILayout::ResolveRect(area, specs[i]);
                 }
             }
 
             for (UIElement* child : visible) {
-                LayoutChildren(*child, contentBounds, fullBounds, false);
+                LayoutChildren(*child, contentBounds, fullBounds, regions, false);
             }
         }
 
     }  // namespace
 
-    void UITreeLayout::Run(UIElement& root, const Rect& contentBounds, const Rect& fullBounds) {
+    void UITreeLayout::Run(UIElement& root, const Rect& contentBounds, const Rect& fullBounds, const UIRegionSet& regions) {
         root.rect = contentBounds;
-        LayoutChildren(root, contentBounds, fullBounds, true);
+        LayoutChildren(root, contentBounds, fullBounds, regions, true);
     }
 
 }  // namespace BECore

@@ -99,6 +99,10 @@ namespace BECore {
                 json["rect"] = RectToJson(rect);
                 json["outputRect"] = RectToJson(resolved->transform.ToOutput(rect.x, rect.y, rect.w, rect.h));
             }
+            if (!element.active.rect.region.Empty()) {
+                // The name, published or not: a client reads the cause of a MissingRegion in `issues` here
+                json["region"] = MakeJsonString(element.active.rect.region.ToStringView());
+            }
             if (!(element.box == UIBoxStyle{})) {
                 json["box"] = DescribeBox(element.box);
             }
@@ -169,6 +173,15 @@ namespace BECore {
             return json;
         }
 
+        /// The regions the game published, also before the first draw (they do not depend on one)
+        Json DescribeRegions(const UIRegionSet& regions) {
+            Json json = Json::object();
+            for (const UIRegionSet::Entry& entry : regions) {
+                json[std::string(entry.name.ToStringView().data(), entry.name.ToStringView().size())] = RectToJson(entry.rect);
+            }
+            return json;
+        }
+
         Json DescribeCanvas(const CanvasEntry& entry, const Scene& scene) {
             const UICanvasComponent& canvas = *entry.canvas;
             const UICanvasLayout& layout = canvas.GetLayout();
@@ -181,6 +194,7 @@ namespace BECore {
             json["takesInput"] = canvas.TakesInput();
             json["inputOrder"] = canvas.GetInputOrder();
             json["laidOut"] = layout.HasLayout();
+            json["regions"] = DescribeRegions(layout.regions);
             if (canvas._space == CanvasSpace::SceneView) {
                 // The view the scene drew with last: the canvas is laid out against it
                 const ActiveSceneView view = scene.GetActiveView();

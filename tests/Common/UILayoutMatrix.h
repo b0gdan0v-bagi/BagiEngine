@@ -25,6 +25,10 @@ namespace BECore::Tests {
         eastl::span<const SceneViewVariant> variants;
     };
 
+    /// Fills the regions a game publishes for one case: @p regions is cleared first, @p resolved (the scale, `bounds`, `contentBounds`, `viewBounds`) is what the canvas will lay out in.
+    /// A game passes the function it calls itself when its layout changes (the one that computes the scene regions from the bounds).
+    using UIMatrixRegions = eastl::function<void(UIRegionSet& regions, const UICanvasResolved& resolved)>;
+
     namespace UIMatrixDetail {
 
         struct Aspect {
@@ -89,17 +93,21 @@ namespace BECore::Tests {
      * @brief Lays @p canvas out on every case of UILayoutMatrix() and returns the cases where the validator found something.
      *
      * A Screen canvas runs with each of the three scale modes and the user scales 1.0 and 1.5; a SceneView or World canvas ignores both, so it runs once.
-     * The canvas keeps its own params afterwards. For a World canvas set `context.worldBox` through @p baseContext. A screen test is one line:
+     * The canvas keeps its own params and regions afterwards. For a World canvas set `context.worldBox` through @p baseContext. A screen test is one line:
      * `EXPECT_TRUE(ValidateOnMatrix(canvas).empty())`.
      * @param baseContext the fields that the matrix does not set (the scene view size, the world box, the density)
      * @param views the scene's view declaration, for a SceneView canvas of a scene with `viewVariants`: every case sets `sceneViewWidth` / `sceneViewHeight` to the view
      *        that SceneViewSelector::Pick() gives for the output of the case (what Scene::Draw() would pick) and the label ends with `view <name>` (`view default` for the
      *        default, `view #<index>` for an unnamed variant). Left empty (the default), the matrix keeps the view size of @p baseContext in every case, as before.
+     * @param publishRegions the game's function that computes its named regions (`UICanvasLayout::regions`) from the bounds of the case: called per case with an empty set and the
+     *        resolved canvas (`UICanvasScaler::Resolve` of the case's params and context, before the layout), so the validator checks "inside its region" on the whole matrix.
+     *        A name the function does not set is a `MissingRegion` in every case. Left empty (the default), the canvas keeps the regions it has in every case.
      */
     inline eastl::vector<UIMatrixFailure> ValidateOnMatrix(UICanvasLayout& canvas, const UILayoutValidatorOptions& options = {}, const UILayoutContext& baseContext = {},
-                                                           const UIMatrixViews& views = {}) {
+                                                           const UIMatrixViews& views = {}, const UIMatrixRegions& publishRegions = {}) {
         const bool pickView = views.defaultWidth > 0.0f && views.defaultHeight > 0.0f;
         const UICanvasScaleParams saved = canvas.params;
+        const UIRegionSet savedRegions = canvas.regions;
         const bool screen = saved.space == CanvasSpace::Screen;
         const CanvasScaleMode modes[] = {CanvasScaleMode::ConstantPixelSize, CanvasScaleMode::ScaleWithScreen, CanvasScaleMode::ConstantPhysicalSize};
         const float userScales[] = {1.0f, 1.5f};
@@ -133,6 +141,10 @@ namespace BECore::Tests {
                             viewName = Format(" view {}", view.name.ToStringView());
                         }
                     }
+                    if (publishRegions) {
+                        canvas.regions.Clear();
+                        publishRegions(canvas.regions, UICanvasScaler::Resolve(canvas.params, context));
+                    }
                     canvas.Update(context);
 
                     UILayoutValidatorOptions caseOptions = options;
@@ -146,6 +158,7 @@ namespace BECore::Tests {
             }
         }
         canvas.params = saved;
+        canvas.regions = savedRegions;
         canvas.Invalidate();
         return failures;
     }

@@ -333,6 +333,7 @@ namespace BECore::Tests {
             style.rect.aspectMode = UIAspectMode::Fill;
             style.rect.margin = {1.0f, 2.0f, 3.0f, 4.0f};
             style.rect.flex = 2.0f;
+            style.rect.region = PoolString::Intern("table.plate.1");
             style.stack.direction = UIStackDirection::Horizontal;
             style.stack.spacing = 7.0f;
             style.stack.padding = {8.0f, 9.0f, 10.0f, 11.0f};

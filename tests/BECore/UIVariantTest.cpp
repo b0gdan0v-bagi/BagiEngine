@@ -1,3 +1,5 @@
+#include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/UI/UILayout.h>
 #include <BECore/UI/UITreeLayout.h>
 #include <BECore/UI/UIVariant.h>
@@ -229,6 +231,7 @@ namespace BECore::Tests {
         all.y = 2.0f;
         all.width = UILength::Percent(50.0f);
         all.height = UILength::Px(30.0f);
+        all.region = "table.plate.1"_intern;
         all.direction = UIStackDirection::Horizontal;
         all.fontSize = 18.0f;
         UIElementStyle style;
@@ -241,8 +244,65 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(style.rect.y, 2.0f);
         EXPECT_EQ(style.rect.width, UILength::Percent(50.0f));
         EXPECT_EQ(style.rect.height, UILength::Px(30.0f));
+        EXPECT_EQ(style.rect.region, "table.plate.1"_intern);
         EXPECT_EQ(style.stack.direction, UIStackDirection::Horizontal);
         EXPECT_FLOAT_EQ(style.fontSize, 18.0f);
+    }
+
+    TEST(UIVariantsTest, ARegionOfAnOverrideSurvivesTheFileRoundTrip) {
+        UIVariant variant = PortraitHudVariant();
+        variant.overrides[0].region = "table.plate.2"_intern;
+        UIElementOverride cleared;
+        cleared.element = "Score"_intern;
+        cleared.region = PoolString{};
+        variant.overrides.push_back(cleared);
+
+        XmlSerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("variant"));
+        variant.Serialize(serializer);
+        serializer.EndObject();
+        const eastl::string xml = serializer.SaveToString();
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        UIVariant loaded;
+        ASSERT_TRUE(deserializer.BeginObject("variant"));
+        loaded.Deserialize(deserializer);
+        deserializer.EndObject();
+
+        EXPECT_FALSE(deserializer.HasErrors());
+        EXPECT_TRUE(loaded == variant);
+        ASSERT_EQ(loaded.overrides.size(), 2u);
+        EXPECT_EQ(loaded.overrides[0].region, std::optional<PoolString>{"table.plate.2"_intern});
+        EXPECT_TRUE(loaded.overrides[1].region.has_value()) << "region=\"\" is an override that clears, not an absent one";
+        EXPECT_TRUE(loaded.overrides[1].region->Empty());
+    }
+
+    TEST(UIVariantsTest, ARegionOverrideMovesTheElementAndTheAuthoredRegionComesBack) {
+        auto root = MakeHudTree();
+        auto hud = root->FindByName("Hud"_intern);
+        hud->style.rect.region = "table.hud"_intern;
+        UIVariant variant;
+        variant.when.orientation = UIOrientation::Portrait;
+        UIElementOverride toPlate;
+        toPlate.element = "Hud"_intern;
+        toPlate.region = "table.plate.2"_intern;
+        UIElementOverride cleared;
+        cleared.element = "Hud"_intern;
+        cleared.region = PoolString{};
+        variant.overrides.push_back(toPlate);
+        const UIVariant plate[] = {variant};
+        variant.overrides.push_back(cleared);
+        const UIVariant clearing[] = {variant};
+
+        EXPECT_EQ(UIVariants::Apply(*root, plate, kPortrait), 1u);
+        EXPECT_EQ(hud->active.rect.region, "table.plate.2"_intern);
+        EXPECT_EQ(hud->style.rect.region, "table.hud"_intern);
+
+        EXPECT_EQ(UIVariants::Apply(*root, clearing, kPortrait), 1u);
+        EXPECT_TRUE(hud->active.rect.region.Empty()) << "a later override with an empty name clears the region";
+
+        EXPECT_EQ(UIVariants::Apply(*root, plate, kLandscape), 0u);
+        EXPECT_EQ(hud->active.rect.region, "table.hud"_intern);
     }
 
     // ---- laying out a tree ------------------------------------------------------------------------------------------------

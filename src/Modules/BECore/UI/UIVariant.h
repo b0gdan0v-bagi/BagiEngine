@@ -14,6 +14,7 @@ namespace BECore {
         std::optional<float> y;
         std::optional<UILength> width;
         std::optional<UILength> height;
+        std::optional<PoolString> region;  ///< an empty name clears the region of the element
         std::optional<UIStackDirection> direction;
         std::optional<float> fontSize;
 

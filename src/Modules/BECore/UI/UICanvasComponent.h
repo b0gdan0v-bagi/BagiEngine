@@ -29,6 +29,8 @@ namespace BECore {
      * popup element nor inside it closes the popup and is consumed (the release too; no click on what is below, no pressed element). A click that ends inside an open popup goes to
      * `UIElement::OnPopupChoice` of the popup instead of the child's `OnClick`. Opening one popup closes another; a canvas that cannot take input closes its popups. The canvas
      * invalidates its layout when the set of open popups changed (the layout cache does not see element edits), at the latest on the next draw.
+     *
+     * **Regions.** The game publishes named rectangles with SetRegion() and an element places itself in one with `region="name"` (UIRectSpec::region).
      */
     class UICanvasComponent : public IComponent, public IUIInputHandler {
         BE_CLASS(UICanvasComponent)
@@ -79,6 +81,32 @@ namespace BECore {
         }
         void Invalidate() {
             _layout.Invalidate();
+        }
+
+        /**
+         * @brief Publishes a named rectangle in canvas units for the elements whose `region` is @p name (for a SceneView canvas: scene units).
+         *
+         * An element in an anchor layout that names the region is laid out inside the rect instead of inside its parent. The rect replaces one of the same name;
+         * the same rect again changes nothing. The next draw (or UpdateLayout) lays the canvas out again after a change, with no Invalidate(): the layout
+         * compares the set. Regions are not reflected fields and are not saved with the scene, so the game publishes them again at every change of its own layout.
+         */
+        void SetRegion(PoolString name, const Rect& rect) {
+            _layout.regions.Set(name, rect);
+        }
+
+        /// Withdraws a region; the elements that name it fall back to their parent. @return whether it was published
+        bool RemoveRegion(PoolString name) {
+            return _layout.regions.Remove(name);
+        }
+
+        /// Withdraws every region
+        void ClearRegions() {
+            _layout.regions.Clear();
+        }
+
+        /// The regions published so far (the validator and `ui_tree` list them)
+        [[nodiscard]] const UIRegionSet& GetRegions() const {
+            return _layout.regions;
         }
 
         /// Lays the canvas out for an output of this size now, as the next draw would. Draw() does it itself; this is for a caller that needs the rects before one

@@ -1,5 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Resource/XmlResource.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
@@ -264,6 +265,34 @@ namespace BECore::Tests {
         ASSERT_EQ(canvas->GetLayout().variants.size(), 2u);
         EXPECT_FLOAT_EQ(*canvas->GetLayout().variants[1].overrides[0].x, 2.0f);  // the later one wins in the portrait shape
         EXPECT_EQ(canvas->_elements.size(), 1u) << "only the inline element is saved back";
+    }
+
+    TEST_F(UIDocumentTest, ARegionOfAnElementAndOfAnOverrideIsReadAndSavedBack) {
+        const auto canvas = LoadCanvas("", R"(<elements><element type="UIElement" name="Plate" region="table.plate.1" width="50%"/></elements>
+<variants><variant when="orientation:portrait"><overrides><set element="Plate" region="table.plate.2"/></overrides></variant></variants>)");
+        ASSERT_TRUE(canvas);
+        ASSERT_EQ(canvas->GetRoot().children.size(), 1u);
+        EXPECT_EQ(canvas->GetRoot().children[0]->style.rect.region, "table.plate.1"_intern);
+        ASSERT_EQ(canvas->GetLayout().variants.size(), 1u);
+        ASSERT_TRUE(canvas->GetLayout().variants[0].overrides[0].region.has_value());
+        EXPECT_EQ(*canvas->GetLayout().variants[0].overrides[0].region, "table.plate.2"_intern);
+
+        XmlSerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("component"));
+        canvas->Serialize(serializer);
+        serializer.EndObject();
+        const eastl::string xml = serializer.SaveToString();
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
+        auto loaded = New<UICanvasComponent>();
+        ASSERT_TRUE(deserializer.BeginObject("component"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        EXPECT_FALSE(deserializer.HasErrors());
+        loaded->Initialize();
+
+        ExpectSameElements(canvas->GetRoot().children, loaded->GetRoot().children);
+        EXPECT_TRUE(canvas->GetLayout().variants == loaded->GetLayout().variants);
     }
 
     // ---- failures ---------------------------------------------------------------------------------------------------------
