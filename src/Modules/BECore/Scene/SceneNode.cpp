@@ -101,6 +101,14 @@ namespace BECore {
         _layer = layer;
     }
 
+    PoolString SceneNode::GetSourceRef() const {
+        return _sourceRef;
+    }
+
+    void SceneNode::SetSourceRef(PoolString sourceRef) {
+        _sourceRef = sourceRef;
+    }
+
     entt::entity SceneNode::GetEntity() const {
         return _entity;
     }
