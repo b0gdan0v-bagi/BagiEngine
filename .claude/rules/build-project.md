@@ -92,27 +92,26 @@ Engine: `CMakeUserPresets.json` (git-ignored) holds per-machine settings. It may
     "version": 6,
     "configurePresets": [
         {
-            "name": "macos-debug-ccache",
+            "name": "macos-debug-local",
             "inherits": "macos-debug",
             "cacheVariables": {
-                "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
                 "VULKAN_SDK": "/Users/me/VulkanSDK/1.4.363.0/macOS"
             }
         }
     ],
     "buildPresets": [
         {
-            "name": "macos-debug-ccache",
+            "name": "macos-debug-local",
             "inherits": "macos-debug",
-            "configurePreset": "macos-debug-ccache"
+            "configurePreset": "macos-debug-local"
         }
     ]
 }
 ```
 
-`VULKAN_SDK` is only needed when `glslc` is not on PATH.
+`VULKAN_SDK` is only needed when `glslc` is not on PATH. ccache needs no preset: the build uses it by itself when it is installed (`ENGINE_CCACHE`, `cmake/BagiCompilerCache.cmake`; `-DENGINE_CCACHE=OFF` switches it off). To share hits between checkouts (the main one and the worker folders), set `ENGINE_CCACHE_BASE_DIR` to a folder that holds all of them; paths in `__FILE__`, diagnostics and debug info then become relative to the build folder.
 
-On Windows the same with the default Windows preset: `"inherits": "windows-clang-debug"`, `CMAKE_CXX_COMPILER_LAUNCHER` and `CMAKE_C_COMPILER_LAUNCHER` `ccache` (its own `build/<name>/` comes from `base`), configured and built through `python CI/scripts/vs_env.py` like the shared preset (the `build` skill, step 1).
+On Windows the same with the default Windows preset: `"inherits": "windows-clang-debug"` (its own `build/<name>/` comes from `base`), configured and built through `python CI/scripts/vs_env.py` like the shared preset (the `build` skill, step 1).
 
 ### VS Code
 

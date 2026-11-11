@@ -29,6 +29,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)
 # Vulkan, the control socket server, static SDL, threads (the web build forces the first three off / on and takes -pthread)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
+# ccache in front of the compiler when it is installed (before the first target, so every target gets the launcher)
+include(${CMAKE_CURRENT_LIST_DIR}/BagiCompilerCache.cmake)
 
 # =============================================================================
 # External Dependencies
