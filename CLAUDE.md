@@ -33,7 +33,7 @@ cmake/            engine setup, be_* functions, build options (cmake/CLAUDE.md)
 src/Application/  the application loop (RuntimeModule)
 src/Widgets/      editor panels and frame widgets — no game UI (.claude/rules/widgets-module.md)
 src/Modules/      BECore, Events, TaskSystem, RemoteControl, SDL, Vulkan, Games, Rooms (online rooms by code; no sockets yet), RmlUiHost (only with ENGINE_UI_RMLUI)
-                  vendored, never edited, left out of broad searches: EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, stb
+                  vendored, never edited, left out of broad searches: EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, stb, tracy
 config/, assets/  engine content; a game's files of the same name replace the engine's (FileSystem/CLAUDE.md)
 games/Match3/     the engine's own game
 tests/            BagiEngineTests + Common (BagiEngineTestSupport)

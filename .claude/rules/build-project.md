@@ -131,7 +131,7 @@ Fields the `clang-format` skill reads (the `strip-pch-includes` skill uses `Pyth
 | Python | the interpreter `<py>`. The two scripts use only the standard library, so no venv is needed; `uv run python` also works. A repository may name its venv interpreter instead (a game on Windows: `engine\.venv\Scripts\python`) | `python3` (Windows: `python`) |
 | `<engine>` and `<R>` | the values of the two terms for the default run | `.` and `.` (so `--root .`, which is also the scripts' default here) |
 | Format scope | the folders `--all` covers (also for `strip-pch-includes`) | `src/`, `config/`, `games/`. The engine's own `tests/` is **not** covered by `--all` (`--changed` formats it) |
-| Ignore file | the `.clang-format-ignore` in the root of `<R>`: required, one path or prefix per line, `#` comments, not merged with a default | `external/`, `build/`, `.venv/`, the vendored modules under `src/Modules/` (EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, Vulkan), `src/Modules/BECore/pch.h`, `src/Modules/BECore/Assert/StackTrace.cpp`. `BECore` itself is project code and is formatted |
+| Ignore file | the `.clang-format-ignore` in the root of `<R>`: required, one path or prefix per line, `#` comments, not merged with a default | `external/`, `build/`, `.venv/`, the vendored modules under `src/Modules/` (EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, tracy, Vulkan), `src/Modules/BECore/pch.h`, `src/Modules/BECore/Assert/StackTrace.cpp`. `BECore` itself is project code and is formatted |
 | `--root` | never left out where it matters | a default in the engine repository; **required in a game**, because without it the scripts format the engine |
 | Launcher | whether a GUI runs the same scripts | yes, see "Launcher" |
 

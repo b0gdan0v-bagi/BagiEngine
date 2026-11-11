@@ -36,6 +36,18 @@ A headless run with the manual clock gives a trace of exactly N frames: `--headl
 }                                                   // written here
 ```
 
+## Tracy
+
+For a live view (zones, frames, plots, allocations with call stacks, while the game runs):
+
+```bash
+cmake --preset macos-profile-tracy
+cmake --build --preset macos-profile-tracy --target BagiMatch3
+build/macos-profile-tracy/bin/BagiMatch3        # Tracy is the default backend of this build
+```
+
+Then open the Tracy viewer of the **same version** as the vendored client (v0.15.0; `src/Modules/tracy/README.md` says where to get it) and connect to `127.0.0.1`. Nothing is sent until a viewer connects. `--trace=<file>` in this build records the Chrome trace instead.
+
 ## Marking code
 
 ```cpp

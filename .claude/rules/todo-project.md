@@ -31,7 +31,7 @@ Parallel loops run in worker folders (`.claude/skills/todo-loop/SKILL.md`, "Para
 
 ## Zones nobody edits
 
-The vendored code: `src/Modules/EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`, `pugixml/`, `RmlUi/`, `stb/`, and `external/`.
+The vendored code: `src/Modules/EABase/`, `EnTT/`, `fmt/`, `imgui/`, `nlohmann/`, `pugixml/`, `RmlUi/`, `stb/`, `tracy/`, and `external/`.
 
 ## Classifier
 

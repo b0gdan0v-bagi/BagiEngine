@@ -121,6 +121,9 @@ namespace BECore {
             TracePath().clear();
         }
         SetBackend(nullptr);
+#if BE_PROFILER_TRACY
+        TracyProfilerBackend::Shutdown();
+#endif
         return result;
     }
 

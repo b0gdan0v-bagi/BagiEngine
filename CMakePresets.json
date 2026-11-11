@@ -66,6 +66,14 @@
             }
         },
         {
+            "name": "tracy",
+            "hidden": true,
+            "description": "Adds the vendored Tracy client and its profiler backend (src/Modules/tracy/), the default backend then",
+            "cacheVariables": {
+                "ENGINE_PROFILER_TRACY": "ON"
+            }
+        },
+        {
             "name": "clang",
             "hidden": true,
             "cacheVariables": {
@@ -181,6 +189,11 @@
             "inherits": ["ninja", "host-macos", "clang", "profile"]
         },
         {
+            "name": "macos-profile-tracy",
+            "displayName": "macOS Clang Profile with Tracy",
+            "inherits": ["ninja", "host-macos", "clang", "profile", "tracy"]
+        },
+        {
             "name": "windows-msvc-debug",
             "displayName": "Windows MSVC Ninja Debug",
             "inherits": ["ninja", "host-windows", "vs-env", "msvc", "debug"]
@@ -293,6 +306,12 @@
             "displayName": "macOS Clang Profile (RelWithDebInfo, profiler and allocations)",
             "inherits": "build-macos",
             "configurePreset": "macos-profile"
+        },
+        {
+            "name": "macos-profile-tracy",
+            "displayName": "macOS Clang Profile with Tracy",
+            "inherits": "build-macos",
+            "configurePreset": "macos-profile-tracy"
         },
         {
             "name": "macos-rmlui-debug",
@@ -444,6 +463,12 @@
             "displayName": "macOS Clang Profile (RelWithDebInfo, profiler and allocations)",
             "inherits": "test-macos",
             "configurePreset": "macos-profile"
+        },
+        {
+            "name": "macos-profile-tracy",
+            "displayName": "macOS Clang Profile with Tracy",
+            "inherits": "test-macos",
+            "configurePreset": "macos-profile-tracy"
         },
         {
             "name": "macos-rmlui-debug",
