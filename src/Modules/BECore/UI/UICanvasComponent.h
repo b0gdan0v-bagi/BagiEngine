@@ -23,7 +23,7 @@ namespace BECore {
      * **Input.** The canvas registers as a UIInput handler, with the draw rank of its node as the order: the topmost canvas is asked first, and a `modal`
      * canvas consumes every mouse event while it is shown, so nothing below it and no game code sees one. Otherwise a canvas consumes an event that lands on
      * a hit-testable element (motion over one is consumed as a hover, unless a button is held whose press the canvas did not take: that drag is the game's),
-     * uses the layout of its last draw, and follows a press that it consumed to the release. The press of an `interactive` element and the motion while it is held reach the element through
+     * uses the layout of its last draw, and follows a press that it consumed to the release. The press of an element that `IsInteractive()` and the motion while it is held reach the element through
      * `UIElement::OnPress` / `OnDrag` (a slider acts on them); the click on the release is still `OnClick`. A canvas of an inactive scene, a hidden one (`visible`) and one with `inputEnabled` off
      * never consume anything.
      *

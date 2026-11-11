@@ -163,6 +163,7 @@ namespace BECore {
             return;
         }
         element.DrawSelf(renderer);
+        element.DrawComponents(renderer);
         if (element.HasPopupChildren()) {
             return;  // drawn by DrawPopups() after the whole tree
         }
@@ -386,7 +387,7 @@ namespace BECore {
             _consumedButtons |= ButtonBit(event.button);
         }
         IntrusivePtr<UIElement> toPress;
-        if (hit && hit->interactive && event.button == SDL_BUTTON_LEFT) {
+        if (hit && hit->IsInteractive() && event.button == SDL_BUTTON_LEFT) {
             if (_pressed) {
                 _pressed->pressed = false;  // a release that never arrived
             }

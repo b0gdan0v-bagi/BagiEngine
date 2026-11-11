@@ -1,3 +1,5 @@
+#include "UIComponentTest.h"
+
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
@@ -364,6 +366,11 @@ namespace BECore::Tests {
             element.blocksInput = true;
             element.interactive = true;
             element.ignoreSafeArea = true;
+            auto& probe = element.AddComponent<UITestProbe>();  // the list of components rides along with every control
+            probe.tag = PoolString::Intern("BusyProbe");
+            probe.mark = Color{1, 2, 3, 4};
+            probe.takesClicks = true;
+            element.AddComponent<UITestOther>().tag = PoolString::Intern("BusyOther");
             if (auto* panel = element.Cast<UIPanel>()) {
                 panel->sprite = PoolString::Intern("PanelSprite");
                 panel->sliceBorder = {1.0f, 2.0f, 3.0f, 4.0f};

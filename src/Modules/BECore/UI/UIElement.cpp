@@ -24,6 +24,57 @@ namespace BECore {
         return nullptr;
     }
 
+    void UIElement::Initialize() {
+        // The second of a type is dropped, as `AddComponent` would never have made it
+        for (size_t i = 0; i < components.size(); ++i) {
+            const auto typeName = components[i]->GetTypeMeta().typeName;
+            for (size_t j = 0; j < i; ++j) {
+                if (components[j]->GetTypeMeta().typeName == typeName) {
+                    LOG_WARNING("UIElement '{}': a second {} is ignored, an element holds one component of each type"_format(name.ToStringView(), typeName));
+                    components.erase(components.begin() + static_cast<ptrdiff_t>(i));
+                    --i;
+                    break;
+                }
+            }
+        }
+    }
+
+    bool UIElement::IsInteractive() const {
+        if (interactive) {
+            return true;
+        }
+        return std::any_of(components.begin(), components.end(), [](const auto& component) { return component->MakesInteractive(); });
+    }
+
+    void UIElement::DrawComponents(IRenderer& renderer) {
+        // By index and with a copy of the pointer: a component that changes the list while it draws does not invalidate the loop
+        for (size_t i = 0; i < components.size(); ++i) {
+            const IntrusivePtrNonAtomic<UIComponent> component = components[i];
+            component->DrawSelf(renderer, *this);
+        }
+    }
+
+    void UIElement::OnClick() {
+        for (size_t i = 0; i < components.size(); ++i) {
+            const IntrusivePtrNonAtomic<UIComponent> component = components[i];
+            component->OnClick(*this);
+        }
+    }
+
+    void UIElement::OnPress(float x, float y) {
+        for (size_t i = 0; i < components.size(); ++i) {
+            const IntrusivePtrNonAtomic<UIComponent> component = components[i];
+            component->OnPress(*this, x, y);
+        }
+    }
+
+    void UIElement::OnDrag(float x, float y) {
+        for (size_t i = 0; i < components.size(); ++i) {
+            const IntrusivePtrNonAtomic<UIComponent> component = components[i];
+            component->OnDrag(*this, x, y);
+        }
+    }
+
     void UIElement::DrawBox(IRenderer& renderer, const UIBoxStyle& boxStyle, const Color& fill, const Color& gradientEnd) {
         DrawBoxIn(renderer, rect, boxStyle, fill, gradientEnd);
     }
@@ -69,8 +120,21 @@ namespace BECore {
         DrawBox(renderer, box, color, box.gradientColor);
     }
 
-    UIContentFit UIElement::CheckContent(float /*width*/, float /*height*/, float /*scale*/) const {
-        return {};
+    UIContentFit UIElement::CheckContent(float width, float height, float scale) const {
+        bool hasContent = false;
+        bool defect = false;  // a part that does not fit and cannot shrink
+        bool shrunk = false;  // a part that does not fit but cuts or shrinks its content
+        for (const auto& component : components) {
+            const UIContentFit fit = component->CheckContent(*this, width, height, scale);
+            if (!fit.hasContent) {
+                continue;
+            }
+            hasContent = true;
+            if (!fit.fits) {
+                (fit.canShrink ? shrunk : defect) = true;
+            }
+        }
+        return {hasContent, !defect && !shrunk, shrunk && !defect};
     }
 
 }  // namespace BECore

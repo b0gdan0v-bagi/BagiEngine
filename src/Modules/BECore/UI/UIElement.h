@@ -2,6 +2,7 @@
 
 #include <BECore/UI/UIBoxStyle.h>
 #include <BECore/UI/UIColor.h>
+#include <BECore/UI/UIComponent.h>
 #include <BECore/UI/UIElementStyle.h>
 
 namespace BECore {
@@ -29,6 +30,11 @@ namespace BECore {
      * **In a file.** An element is `<element type="UIPanel" name="Hud" ...>` and its authored state is reflected: `name`, `layout`, the style as flat
      * attributes (UIElementStyle), `color`, the box as flat attributes too (UIBoxStyle: rounded corners, border, gradient, shadow, glow, highlight), `blocksInput`, `interactive`, `ignoreSafeArea` and
      * a `<children>` array of elements. The type names come from AbstractFactory<UIElement>, so a control is one more derived class. `active` and `rect` are results and are not saved.
+     *
+     * **Components.** What an element shows and does can also be a list of UIComponent (`<components><component type="..."/></components>`), one of each type: the element is
+     * the set of its components, not a class of its own. `DrawSelf` draws the box, `DrawComponents` the components in list order (the canvas calls it right after `DrawSelf`), then the
+     * children follow. `OnClick`, `OnPress`, `OnDrag` and `CheckContent` of this class forward to the components (a subclass that overrides them keeps its own and does not),
+     * and a component that takes clicks makes the element `IsInteractive()`: use that, not the field `interactive`, to ask whether it takes the pointer.
      */
     class UIElement : public RefCounted {
         BE_CLASS(UIElement, FACTORY_BASE, ELEMENT = element, REGISTER_SELF)
@@ -47,7 +53,8 @@ namespace BECore {
         BE_REFLECT_FIELD bool ignoreSafeArea =
             false;  ///< a child of the canvas root only: laid out against the whole canvas, not the safe area (a background); the validator spares it and its descendants
         Rect rect;  ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
-        BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> children;  // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
+        BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> children;      // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
+        BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIComponent>> components;  // the same: the long name; one of each type, in draw order
 
         /// Pointer state, set by the canvas that owns the tree: the pointer is over the element; a press that began on the element is still held
         bool hovered = false;
@@ -56,22 +63,19 @@ namespace BECore {
         /// Draws this element, not its children, with the view transform of the canvas in effect (units of the canvas). The base draws the box (`DrawBox`) of `color` and `box`
         virtual void DrawSelf(IRenderer& renderer);
 
-        /// A press and its release both landed on this element: the canvas calls it. A button emits its action here
-        virtual void OnClick() {}
+        /// Draws the components in list order, with the view transform of the canvas in effect. The canvas calls it after `DrawSelf` and before the children
+        void DrawComponents(IRenderer& renderer);
 
-        /// The left button went down on this element (it is `interactive`): the canvas calls it at once, not on the release. @p x and @p y are the point in the units of the canvas, like
+        /// A press and its release both landed on this element: the canvas calls it. A button emits its action here; the base forwards to the components
+        virtual void OnClick();
+
+        /// The left button went down on this element (it `IsInteractive()`): the canvas calls it at once, not on the release. @p x and @p y are the point in the units of the canvas, like
         /// `rect`. A click is still decided on the release (`OnClick`); this is for a control that acts while the press is held, such as a slider
-        virtual void OnPress(float x, float y) {
-            static_cast<void>(x);
-            static_cast<void>(y);
-        }
+        virtual void OnPress(float x, float y);
 
         /// The pointer moved while the left button is held and the press began on this element: called on every motion, wherever the pointer is (also outside the element), until the
         /// release. Not called for a hover, after the release, or for a press the canvas did not take. @p x and @p y as for `OnPress`
-        virtual void OnDrag(float x, float y) {
-            static_cast<void>(x);
-            static_cast<void>(y);
-        }
+        virtual void OnDrag(float x, float y);
 
         /// **Popup protocol.** An element whose children are a popup (a dropdown's list) says so with `HasPopupChildren()`: the canvas takes those children out of the flow. Closed, their
         /// rects are empty (not drawn, not hit, not validated, not in `ui_tree` as visible). Open, `LayoutPopup` places them against the content bounds of the canvas, they are drawn
@@ -107,12 +111,41 @@ namespace BECore {
         /// The first element named @p searched, this one included, depth first; null when there is none
         [[nodiscard]] UIElement* FindByName(PoolString searched);
 
-        [[nodiscard]] bool IsHitTestable() const {
-            return blocksInput || interactive;
+        /// The first component of type T, null when there is none
+        template <typename T>
+        [[nodiscard]] T* GetComponent() const {
+            for (const auto& component : components) {
+                if (T* found = component->template Cast<T>()) {
+                    return found;
+                }
+            }
+            return nullptr;
         }
 
-        /// Called by the validator once the element has its rect. @p scale is output pixels per UI unit, for content that is measured in pixels (a text).
+        /// The component of type T, made and appended when the element has none: an element holds one of each type
+        template <typename T>
+        T& AddComponent() {
+            if (T* existing = GetComponent<T>()) {
+                return *existing;
+            }
+            auto component = New<T>();
+            components.push_back(component);
+            return *component;
+        }
+
+        /// It takes clicks: the field `interactive` (a control) or a component that takes them. The hit test, the validator's touch rule, the preview's touch marks and the canvas press read this
+        [[nodiscard]] bool IsInteractive() const;
+
+        [[nodiscard]] bool IsHitTestable() const {
+            return blocksInput || IsInteractive();
+        }
+
+        /// Called by the validator once the element has its rect. @p scale is output pixels per UI unit, for content that is measured in pixels (a text). The base is the combination of
+        /// the components' answers: any content that does not fit and cannot shrink is a defect
         [[nodiscard]] virtual UIContentFit CheckContent(float width, float height, float scale) const;
+
+        /// Runs after the element is loaded from a file: drops the second component of a type (logged), so `AddComponent` and the file agree
+        void Initialize();
 
     protected:
         /**
