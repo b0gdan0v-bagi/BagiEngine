@@ -261,6 +261,22 @@ namespace BECore::Tests {
         EXPECT_EQ(snapshot.threads[0].zones[1].depth, 1u);
     }
 
+    TEST(SpikeCaptureTest, FreezeFrameKeepsAFrameThatIsNotASpike) {
+        const RingSnapshot snapshot = WithASpike(80);
+        const FrozenFrame steady = FreezeFrame(snapshot, snapshot.frames[1], 0.0);
+        EXPECT_EQ(steady.frameIndex, 1u);
+        EXPECT_NEAR(steady.frameMs, static_cast<double>(kSteadyFrameTicks), kTolerance);
+        EXPECT_NEAR(steady.nanosecondsPerTick, kNanosecondsPerTestTick, kTolerance);
+        EXPECT_TRUE(steady.threads.empty());  // the zones of WithASpike are in its spike frame
+
+        const FrozenFrame spike = FreezeFrame(snapshot, snapshot.frames[3], 16.0);
+        EXPECT_EQ(spike.frameIndex, 3u);
+        EXPECT_NEAR(spike.medianMs, 16.0, kTolerance);
+        ASSERT_EQ(spike.threads.size(), 1u);
+        EXPECT_EQ(spike.threads[0].zones.size(), 2u);
+        EXPECT_EQ(spike.truncatedZones, 0u);
+    }
+
     TEST(FrozenTraceTest, TheJsonParsesAndEveryBeginHasItsEnd) {
         SpikeCapture capture;
         capture.SetSettings(AbsoluteSettings(50.0));

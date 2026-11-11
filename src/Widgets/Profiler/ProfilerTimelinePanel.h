@@ -18,6 +18,9 @@ namespace BECore {
         /// The source of the snapshot changed (live, a frozen frame): forget the view and follow the newest frame again
         void Reset();
 
+        /// Marks @p zone with an outline and fits the view to its frame (the caller has made that frame the selected one)
+        void ShowZone(const ZoneRecord& zone);
+
         /// @p selectedFrame is a RingFrame::index of @p snapshot, none for the newest frame
         void Draw(const RingSnapshot& snapshot, std::optional<uint64_t> selectedFrame);
 
@@ -32,6 +35,8 @@ namespace BECore {
         bool _follow = true;
         bool _fitRequested = false;
         std::optional<uint64_t> _shownSelection;
+        const ProfileSite* _markedSite = nullptr;  // the call ShowZone marked: its site and begin tick
+        uint64_t _markedBeginTicks = 0;
     };
 
 }  // namespace BECore

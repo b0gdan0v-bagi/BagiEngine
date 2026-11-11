@@ -73,6 +73,10 @@ namespace BECore {
         bool _hasJudged = false;
     };
 
+    /// A frame of @p snapshot with the zones that began inside it, as the capture freezes a spike (at most SpikeCapture::kMaxFrozenZones of
+    /// them); @p medianMs is stored as given. For a look at a frame that is not a spike, such as the one chosen for the export
+    [[nodiscard]] FrozenFrame FreezeFrame(const RingSnapshot& snapshot, const RingFrame& frame, double medianMs);
+
     /// One frozen frame as a one-frame snapshot, so the timeline shows it through the code that shows a live one
     [[nodiscard]] RingSnapshot ToSnapshot(const FrozenFrame& frame);
 

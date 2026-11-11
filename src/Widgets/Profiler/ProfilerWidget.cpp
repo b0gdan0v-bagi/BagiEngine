@@ -7,6 +7,8 @@
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerToggle.h>
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
+#include <BECore/Profiler/Ring/FrozenTrace.h>
+#include <BECore/Profiler/Ring/TimelineView.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Generated/ProfilerWidget.gen.hpp>
 #include <imgui.h>
@@ -56,13 +58,50 @@ namespace BECore {
     }
 
     void ProfilerWidget::Capture() {
-        _history = CoreManager::GetFrameStats().GetHistory(FrameStatsCollector::kFrameHistory);
+        RingSnapshot fresh;
         if constexpr (BE_PROFILER != 0) {
-            _snapshot = Profiler::GetFrameRing().Snapshot();
+            fresh = Profiler::GetFrameRing().Snapshot();
+            _spikes.Update(fresh);  // also while paused: the frames go on
         }
+        if (_paused) {
+            return;
+        }
+        _history = CoreManager::GetFrameStats().GetHistory(FrameStatsCollector::kFrameHistory);
+        _snapshot = eastl::move(fresh);
+        ++_snapshotVersion;
         if (_selectedFrame && (_snapshot.frames.empty() || *_selectedFrame < _snapshot.frames.front().index)) {
             _selectedFrame.reset();  // the ring has overwritten it
         }
+    }
+
+    void ProfilerWidget::OpenSpike(size_t spikeIndex) {
+        const FrozenFrame& spike = _spikes.GetSpikes()[spikeIndex];
+        _spikeSnapshot = ToSnapshot(spike);
+        _openedSpike = spike.frameIndex;
+        _timeline.Reset();
+    }
+
+    void ProfilerWidget::ShowLive() {
+        if (_openedSpike) {
+            _openedSpike.reset();
+            _spikeSnapshot = RingSnapshot();
+            _timeline.Reset();
+        }
+    }
+
+    void ProfilerWidget::ShowWorstCall(const ProfileSite& site) {
+        const std::optional<ZoneHit> hit = FindWorstCall(_snapshot, &site);
+        if (!hit) {
+            return;
+        }
+        const ZoneRecord& zone = _snapshot.threads[hit->threadIndex].zones[hit->zoneIndex];
+        const RingFrame* frame = FrameAt(_snapshot, zone.beginTicks);
+        if (frame == nullptr) {
+            return;
+        }
+        ShowLive();
+        _selectedFrame = frame->index;
+        _timeline.ShowZone(zone);
     }
 
     void ProfilerWidget::Update() {
@@ -70,13 +109,13 @@ namespace BECore {
         if (!_open) {
             return;
         }
+        Capture();
         ImGui::SetNextWindowSize(ImVec2(560.0f, 520.0f), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Profiler", &_open)) {
-            if (!_paused) {
-                Capture();
-            }
             DrawFrames();
             DrawTimeline();
+            DrawZoneTable();
+            DrawSpikes();
             DrawMemory();
             DrawZoneAllocs();
             DrawTrace();
@@ -94,6 +133,7 @@ namespace BECore {
         ImGui::SameLine();
         ImGui::TextDisabled("(click a bar to open the frame)");
         if (const std::optional<uint64_t> clicked = _framePlot.Draw(_history, _snapshot, _selectedFrame)) {
+            ShowLive();
             _selectedFrame = clicked;
         }
         // The overlay's text: one place says what a frame cost
@@ -110,7 +150,39 @@ namespace BECore {
             ImGui::TextUnformatted("Zones are recorded with ENGINE_PROFILER=ON (preset macos-profile-editor)");
             return;
         }
-        _timeline.Draw(_snapshot, _selectedFrame);
+        if (_openedSpike) {
+            ImGui::Text("Frozen frame %llu (the Live button of the spikes goes back)", static_cast<unsigned long long>(*_openedSpike));
+            _timeline.Draw(_spikeSnapshot, std::nullopt);
+        } else {
+            _timeline.Draw(_snapshot, _selectedFrame);
+        }
+    }
+
+    void ProfilerWidget::DrawZoneTable() {
+        if constexpr (BE_PROFILER == 0) {
+            return;  // the timeline's header says why there are no zones
+        }
+        if (!ImGui::CollapsingHeader("Zones", ImGuiTreeNodeFlags_DefaultOpen)) {
+            return;
+        }
+        if (const ProfileSite* site = _zoneTable.Draw(_snapshot, _snapshotVersion, _selectedFrame)) {
+            ShowWorstCall(*site);
+        }
+    }
+
+    void ProfilerWidget::DrawSpikes() {
+        if constexpr (BE_PROFILER == 0) {
+            return;
+        }
+        if (!ImGui::CollapsingHeader("Spikes")) {
+            return;
+        }
+        const ProfilerSpikePanel::Result result = _spikePanel.Draw(_spikes, _openedSpike);
+        if (result.open) {
+            OpenSpike(*result.open);
+        } else if (result.live) {
+            ShowLive();
+        }
     }
 
     void ProfilerWidget::DrawMemory() {
@@ -164,6 +236,25 @@ namespace BECore {
         ImGui::EndTable();
     }
 
+    void ProfilerWidget::WriteFrozen() {
+        eastl::vector<FrozenFrame> frames = _spikes.GetSpikes();
+        if (frames.empty()) {
+            // Nothing is frozen: the frame the view is on, the selected one or the newest
+            const RingFrame* frame = nullptr;
+            if (!_snapshot.frames.empty()) {
+                const uint64_t front = _snapshot.frames.front().index;
+                frame = _selectedFrame && *_selectedFrame >= front && *_selectedFrame - front < _snapshot.frames.size() ? &_snapshot.frames[*_selectedFrame - front] : &_snapshot.frames.back();
+            }
+            if (frame == nullptr) {
+                _traceMessage = "No frame in the ring to write";
+                return;
+            }
+            frames.push_back(FreezeFrame(_snapshot, *frame, 0.0));
+        }
+        const auto written = WriteFrozenTraceFile(_tracePath, frames);
+        _traceMessage = written ? Format("Written {} ({} frame(s))", _tracePath, frames.size()) : written.error();
+    }
+
     void ProfilerWidget::DrawTrace() {
         if (!ImGui::CollapsingHeader("Chrome trace")) {
             return;
@@ -185,6 +276,9 @@ namespace BECore {
         if (recording && ImGui::Button("Write")) {
             const auto written = recorder.WriteFile(_tracePath);
             _traceMessage = written ? Format("Written {} (dropped events: {})", _tracePath, recorder.GetDroppedCount()) : written.error();
+        }
+        if (ImGui::Button(_spikes.GetSpikes().empty() ? "Write selected frame" : "Write frozen frames")) {
+            WriteFrozen();
         }
         if (!_traceMessage.empty()) {
             ImGui::TextWrapped("%s", _traceMessage.c_str());

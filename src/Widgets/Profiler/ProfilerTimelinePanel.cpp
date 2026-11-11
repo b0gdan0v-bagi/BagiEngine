@@ -35,6 +35,8 @@ namespace BECore {
         constexpr ImU32 kRulerColor = IM_COL32(150, 150, 160, 255);
         constexpr ImU32 kRulerGridColor = IM_COL32(255, 255, 255, 22);
         constexpr ImU32 kFrameLineColor = IM_COL32(255, 220, 90, 110);
+        constexpr ImU32 kMarkedColor = IM_COL32(255, 255, 255, 255);
+        constexpr float kMarkedThickness = 2.0f;
 
         ImU32 ZoneColor(const ProfileSite& site) {
             if (site.color != 0) {
@@ -72,7 +74,15 @@ namespace BECore {
         _follow = true;
         _fitRequested = false;
         _shownSelection.reset();
+        _markedSite = nullptr;
         _view = TimelineView();
+    }
+
+    void ProfilerTimelinePanel::ShowZone(const ZoneRecord& zone) {
+        _markedSite = zone.site;
+        _markedBeginTicks = zone.beginTicks;
+        _follow = false;
+        _fitRequested = true;
     }
 
     void ProfilerTimelinePanel::FitFrame(const RingFrame& frame) {
@@ -196,6 +206,9 @@ namespace BECore {
                     continue;
                 }
                 drawList->AddRectFilled(min, max, ZoneColor(*zone.site));
+                if (zone.site == _markedSite && zone.beginTicks == _markedBeginTicks) {
+                    drawList->AddRect(min, max, kMarkedColor, 0.0f, ImDrawFlags_None, kMarkedThickness);
+                }
                 if (max.x - min.x >= kMinLabelWidth) {
                     drawList->PushClipRect(min, max, true);
                     drawList->AddText(ImVec2(min.x + kLabelPadding, y0), kBarTextColor, zone.site->name);

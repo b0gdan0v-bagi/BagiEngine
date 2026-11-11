@@ -59,35 +59,7 @@ namespace BECore {
         const bool spike = _settings.mode == SpikeMode::AbsoluteMs ? frameMs > _settings.thresholdMs : (medianMs > 0.0 && frameMs > medianMs * _settings.medianFactor);
 
         if (spike) {
-            FrozenFrame& frozen = _spikes.emplace_back();
-            frozen.frameIndex = frame.index;
-            frozen.frameMs = frameMs;
-            frozen.medianMs = medianMs;
-            frozen.beginTicks = frame.beginTicks;
-            frozen.endTicks = frame.endTicks;
-            frozen.nanosecondsPerTick = snapshot.nanosecondsPerTick;
-
-            size_t kept = 0;
-            for (const RingThread& thread : snapshot.threads) {
-                RingThread copy;
-                for (const ZoneRecord& zone : thread.zones) {
-                    if (zone.beginTicks < frame.beginTicks || zone.beginTicks >= frame.endTicks) {
-                        continue;
-                    }
-                    if (kept == kMaxFrozenZones) {
-                        ++frozen.truncatedZones;
-                        continue;
-                    }
-                    copy.zones.push_back(zone);
-                    ++kept;
-                }
-                if (!copy.zones.empty()) {
-                    copy.threadId = thread.threadId;
-                    copy.name = thread.name;
-                    copy.sortIndex = thread.sortIndex;
-                    frozen.threads.push_back(eastl::move(copy));
-                }
-            }
+            _spikes.push_back(FreezeFrame(snapshot, frame, medianMs));
             if (_spikes.size() > _settings.keep) {
                 _spikes.erase(_spikes.begin());
             }
@@ -98,6 +70,39 @@ namespace BECore {
             _recentMs.erase(_recentMs.begin());
         }
         _recentMs.push_back(frameMs);
+    }
+
+    FrozenFrame FreezeFrame(const RingSnapshot& snapshot, const RingFrame& frame, double medianMs) {
+        FrozenFrame frozen;
+        frozen.frameIndex = frame.index;
+        frozen.frameMs = snapshot.TicksToMs(frame.endTicks - frame.beginTicks);
+        frozen.medianMs = medianMs;
+        frozen.beginTicks = frame.beginTicks;
+        frozen.endTicks = frame.endTicks;
+        frozen.nanosecondsPerTick = snapshot.nanosecondsPerTick;
+
+        size_t kept = 0;
+        for (const RingThread& thread : snapshot.threads) {
+            RingThread copy;
+            for (const ZoneRecord& zone : thread.zones) {
+                if (zone.beginTicks < frame.beginTicks || zone.beginTicks >= frame.endTicks) {
+                    continue;
+                }
+                if (kept == SpikeCapture::kMaxFrozenZones) {
+                    ++frozen.truncatedZones;
+                    continue;
+                }
+                copy.zones.push_back(zone);
+                ++kept;
+            }
+            if (!copy.zones.empty()) {
+                copy.threadId = thread.threadId;
+                copy.name = thread.name;
+                copy.sortIndex = thread.sortIndex;
+                frozen.threads.push_back(eastl::move(copy));
+            }
+        }
+        return frozen;
     }
 
     RingSnapshot ToSnapshot(const FrozenFrame& frame) {
