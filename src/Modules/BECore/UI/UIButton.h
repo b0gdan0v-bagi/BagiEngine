@@ -24,16 +24,9 @@ namespace BECore {
      * than `color` when left transparent) and has a bar of `kSelectedBarHeight` units in `textColor` along its bottom edge, so the selection does not rest on color alone.
      * `groupDisabled` is the same for a whole group: it counts as `disabled`.
      *
-     * The state shows in the shape too when the button has a box style (`UIElement::box`; a button with the default one is drawn exactly as above and nothing below applies).
-     * `GetCurrentBox` is the one place that decides it:
-     * - hover lightens the fill (both gradient ends) by `kHoverBrighten` and the border colour by the same shift;
-     * - pressed darkens the fill and the border by `kPressDarken`, shrinks the shadow offset to `kPressShadowOffsetScale` and its blur to `kPressShadowBlurScale` and drops
-     *   the highlight;
-     * - selected brightens the fill as above, raises the border to `textColor` (at least `kSelectedBorderMin` units wide) and adds a glow of `textColor` when the style has none;
-     *   the bar stays, inset by the two bottom radii so it does not leave the rounded corners;
-     * - disabled drops the shadow and the glow and keeps `kDisabledAlpha` of the alpha of fill, border and highlight (a disabled button that is also selected keeps the raised
-     *   border, faded, and no selected fill).
-     * An explicit `hoverColor`, `pressedColor`, `disabledColor` or `selectedColor` replaces the start colour; the gradient end keeps its per-channel offset from the start.
+     * The state shows in the shape too when the button has a box style (`UIElement::box`; a button with the default one is drawn exactly as above and nothing below applies). The rules
+     * (hover, press, selected, disabled and the numbers) are `UIStateLook`'s, shared with every element that shows a state; `GetCurrentBox` is the button's call of them. An explicit
+     * `hoverColor`, `pressedColor`, `disabledColor` or `selectedColor` (fields of `UIElement`) replaces the start colour.
      *
      * **An icon.** `icon` names a sprite of the `TextureLibrary`; a button with one draws it fitted and centred in its icon rect (proportions kept, as `UIImage` does). No text: the icon
      * is alone in the rect (an icon-only button, the rect stays the touch target, never the icon). With text: `iconPlacement` `Left` puts the icon at the left edge and the caption in the
@@ -52,10 +45,6 @@ namespace BECore {
         ~UIButton() override = default;
 
         BE_REFLECT_FIELD PoolString action;
-        BE_REFLECT_FIELD UIColor hoverColor;
-        BE_REFLECT_FIELD UIColor pressedColor;
-        BE_REFLECT_FIELD UIColor disabledColor;
-        BE_REFLECT_FIELD UIColor selectedColor;
         BE_REFLECT_FIELD PoolString value;       ///< emitted with the action
         BE_REFLECT_FIELD bool disabled = false;  ///< not `enabled`: a vector of factory-made objects writes an `enabled` attribute of its own
         BE_REFLECT_FIELD PoolString icon;        ///< a TextureLibrary sprite name; empty: no icon
@@ -64,15 +53,13 @@ namespace BECore {
         BE_REFLECT_FIELD float iconSize = 0.0f;  ///< the side of the icon in canvas units; 0: derived from the rect
         BE_REFLECT_FIELD eastl::string tooltip;  ///< shown by the canvas on hover or a long touch press; may hold `{#key}` and `{var}`; empty: none
 
-        /// The height of the bar at the foot of a selected button, in canvas units
-        static constexpr float kSelectedBarHeight = 4.0f;
-
-        /// The shifts of the box states (the colour shifts are `kHoverBrighten` and `kPressDarken`)
-        static constexpr float kPressShadowOffsetScale = 0.5f;       ///< a pressed button's shadow keeps this share of its offset
-        static constexpr float kPressShadowBlurScale = 2.0f / 3.0f;  ///< a pressed button's shadow keeps this share of its blur
-        static constexpr float kSelectedBorderMin = 1.0f;            ///< the least width of the border of a selected button, in canvas units
-        static constexpr float kSelectedGlowBlur = 6.0f;             ///< the glow added to a selected button: blur in canvas units
-        static constexpr float kSelectedGlowAlpha = 0.4f;            ///< and the share of the alpha of `textColor` it takes
+        /// The numbers of the state looks are `UIStateLook`'s; these are the names the button's tests and users know
+        static constexpr float kSelectedBarHeight = UIStateLook::kSelectedBarHeight;
+        static constexpr float kPressShadowOffsetScale = UIStateLook::kPressShadowOffsetScale;
+        static constexpr float kPressShadowBlurScale = UIStateLook::kPressShadowBlurScale;
+        static constexpr float kSelectedBorderMin = UIStateLook::kSelectedBorderMin;
+        static constexpr float kSelectedGlowBlur = UIStateLook::kSelectedGlowBlur;
+        static constexpr float kSelectedGlowAlpha = UIStateLook::kSelectedGlowAlpha;
 
         /// The icon, as a share of the shorter side of the rect when `iconSize` is 0
         static constexpr float kIconOnlyShare = 0.6f;      ///< a button with no caption
@@ -80,11 +67,17 @@ namespace BECore {
         static constexpr float kIconPadding = 8.0f;        ///< the air between the edge of the rect and an icon next to a caption, in canvas units
         static constexpr float kIconGap = 6.0f;            ///< and between that icon and the caption
 
-        bool selected = false;       ///< runtime, like `hovered`: drawn as the chosen one
-        bool groupDisabled = false;  ///< runtime: the group this button is in is disabled
-
         void DrawSelf(IRenderer& renderer) override;
         void OnClick() override;
+
+        /// `disabled` or the group's (`selected` and `groupDisabled` are fields of `UIElement`)
+        [[nodiscard]] bool IsDisabled() const override;
+        [[nodiscard]] const eastl::string& GetTooltipText() const override {
+            return tooltip;
+        }
+        [[nodiscard]] Color GetStateAccent() const override {
+            return textColor;
+        }
 
         /// Where the icon and the caption are in a rect. Pure geometry, so a test and `CheckContent()` use the same numbers. Without an icon the text area is the whole @p area; without text
         /// the icon is centred alone. Both rects stay inside @p area, however small it is (an empty rect for what has no room)
@@ -106,11 +99,7 @@ namespace BECore {
         [[nodiscard]] UIContentFit CheckContent(float width, float height, float scale) const override;
 
         /// What the button draws its box with in the state it is in now
-        struct Look {
-            UIBoxStyle box;     ///< the authored box with the state's border, shadow, glow and highlight
-            Color fill;         ///< the fill, the start of the gradient
-            Color gradientEnd;  ///< the far end of the gradient
-        };
+        using Look = UIStateLook::Look;
 
         /// The fill for the state the button is in now
         [[nodiscard]] Color GetCurrentFill() const;

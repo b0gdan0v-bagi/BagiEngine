@@ -46,6 +46,45 @@ namespace BECore {
         return std::any_of(components.begin(), components.end(), [](const auto& component) { return component->MakesInteractive(); });
     }
 
+    UIStateLook::State UIElement::GetVisualState() const {
+        // A press that moved off the element is not shown as pressed: letting go there does nothing
+        return {hovered, pressed && hovered, IsDisabled(), selected};
+    }
+
+    bool UIElement::IsDisabled() const {
+        return groupDisabled;
+    }
+
+    const eastl::string& UIElement::GetTooltipText() const {
+        static const eastl::string none;
+        return none;
+    }
+
+    UIStateLook::Look UIElement::GetStateLook() const {
+        return UIStateLook::ResolveBox(box, color, {hoverColor, pressedColor, disabledColor, selectedColor}, GetVisualState(), GetStateAccent());
+    }
+
+    Color UIElement::GetStateAccent() const {
+        return {255, 255, 255, 255};
+    }
+
+    bool UIElement::GivesStateLook() const {
+        return std::any_of(components.begin(), components.end(), [](const auto& component) { return component->GivesStateLook(); });
+    }
+
+    void UIElement::DrawStateBox(IRenderer& renderer) {
+        const UIStateLook::Look look = GetStateLook();
+        DrawBox(renderer, look.box, look.fill, look.gradientEnd);
+        if (!selected) {
+            return;
+        }
+        const Rect bar = UIStateLook::SelectedBar(rect, box);
+        if (!bar.IsEmpty()) {
+            const Color accent = GetStateAccent();
+            renderer.DrawFilledRect(bar.x, bar.y, bar.w, bar.h, IsDisabled() ? WithAlpha(accent, kDisabledAlpha) : accent);
+        }
+    }
+
     void UIElement::DrawComponents(IRenderer& renderer) {
         // By index and with a copy of the pointer: a component that changes the list while it draws does not invalidate the loop
         for (size_t i = 0; i < components.size(); ++i) {
@@ -117,6 +156,10 @@ namespace BECore {
     }
 
     void UIElement::DrawSelf(IRenderer& renderer) {
+        if (GivesStateLook()) {
+            DrawStateBox(renderer);
+            return;
+        }
         DrawBox(renderer, box, color, box.gradientColor);
     }
 

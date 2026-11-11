@@ -4,6 +4,7 @@
 #include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIComponent.h>
 #include <BECore/UI/UIElementStyle.h>
+#include <BECore/UI/UIStateLook.h>
 
 namespace BECore {
 
@@ -35,6 +36,10 @@ namespace BECore {
      * the set of its components, not a class of its own. `DrawSelf` draws the box, `DrawComponents` the components in list order (the canvas calls it right after `DrawSelf`), then the
      * children follow. `OnClick`, `OnPress`, `OnDrag` and `CheckContent` of this class forward to the components (a subclass that overrides them keeps its own and does not),
      * and a component that takes clicks makes the element `IsInteractive()`: use that, not the field `interactive`, to ask whether it takes the pointer.
+     *
+     * **State.** `hovered` and `pressed` are set by the canvas, `selected` and `groupDisabled` by whoever owns a choice; `GetVisualState()` is what they add up to and `UIStateLook` (the pure
+     * rules) turns it into a look. The element's own box takes that look (the fills `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, or the derived shifts) only when a
+     * component says `GivesStateLook()`; a panel that merely `blocksInput` is hovered too and must not light up. A control that is its own class (`UIButton`) draws the state look itself.
      */
     class UIElement : public RefCounted {
         BE_CLASS(UIElement, FACTORY_BASE, ELEMENT = element, REGISTER_SELF)
@@ -51,14 +56,20 @@ namespace BECore {
         BE_REFLECT_FIELD bool blocksInput = false;  ///< a hit test finds it: a click on it does not reach what is below
         BE_REFLECT_FIELD bool interactive = false;  ///< it takes clicks (a button): hit-testable, and the validator checks its touch size
         BE_REFLECT_FIELD bool ignoreSafeArea =
-            false;  ///< a child of the canvas root only: laid out against the whole canvas, not the safe area (a background); the validator spares it and its descendants
-        Rect rect;  ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
+            false;                               ///< a child of the canvas root only: laid out against the whole canvas, not the safe area (a background); the validator spares it and its descendants
+        BE_REFLECT_FIELD UIColor hoverColor;     ///< the fill under the pointer; transparent: `color` lightened (the state looks: UIStateLook)
+        BE_REFLECT_FIELD UIColor pressedColor;   ///< the fill while pressed; transparent: `color` darkened
+        BE_REFLECT_FIELD UIColor disabledColor;  ///< the fill when disabled; transparent: `color` at half alpha
+        BE_REFLECT_FIELD UIColor selectedColor;  ///< the fill when selected; transparent: `color` brightened
+        Rect rect;                               ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
         BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> children;      // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
         BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIComponent>> components;  // the same: the long name; one of each type, in draw order
 
         /// Pointer state, set by the canvas that owns the tree: the pointer is over the element; a press that began on the element is still held
         bool hovered = false;
         bool pressed = false;
+        bool selected = false;       ///< runtime, set by whoever owns the choice: drawn as the chosen one (a bar, a brighter fill)
+        bool groupDisabled = false;  ///< runtime: the group this element is in is disabled
 
         /// Draws this element, not its children, with the view transform of the canvas in effect (units of the canvas). The base draws the box (`DrawBox`) of `color` and `box`
         virtual void DrawSelf(IRenderer& renderer);
@@ -133,6 +144,24 @@ namespace BECore {
             return *component;
         }
 
+        /// The pointer and the owner's flags as the state look reads them: `pressed` only while the pointer is still over the element, `disabled` is `IsDisabled()`
+        [[nodiscard]] UIStateLook::State GetVisualState() const;
+
+        /// The element does not react: `groupDisabled` (a control that has a `disabled` of its own adds it). A disabled element still takes the click and does nothing with it
+        [[nodiscard]] virtual bool IsDisabled() const;
+
+        /// The text of the tooltip the canvas shows after a hover or a long touch press, empty for none; it may hold `{#key}` and `{var}`
+        [[nodiscard]] virtual const eastl::string& GetTooltipText() const;
+
+        /// The box, the fill and the gradient end for the state the element is in now (pure: reads the state and changes nothing)
+        [[nodiscard]] UIStateLook::Look GetStateLook() const;
+
+        /// The colour of the selection (the bar, the border and the glow of a selected box): the text colour of a control that has one, white for a plain element
+        [[nodiscard]] virtual Color GetStateAccent() const;
+
+        /// Some component shows the pointer state in the box, so `DrawSelf` draws the state look
+        [[nodiscard]] bool GivesStateLook() const;
+
         /// It takes clicks: the field `interactive` (a control) or a component that takes them. The hit test, the validator's touch rule, the preview's touch marks and the canvas press read this
         [[nodiscard]] bool IsInteractive() const;
 
@@ -148,6 +177,10 @@ namespace BECore {
         void Initialize();
 
     protected:
+        /// Draws the box in the look of the state the element is in now and, when it is selected, the bar along its foot. `DrawSelf` does it when a component gives the state look; a control
+        /// that always shows its state calls it itself
+        void DrawStateBox(IRenderer& renderer);
+
         /**
          * Draws the box in `rect`: shadow, glow, fill, border, highlight, in this order, as one DrawGeometry call (the order of the triangles is the order of the paint). A
          * @p boxStyle with no effect (`UIBoxStyle::HasEffect`) is the plain `DrawFilledRect` of @p fill, the call every element made before the box existed. @p fill is the colour

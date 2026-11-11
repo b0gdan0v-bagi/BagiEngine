@@ -386,6 +386,54 @@ namespace BECore::Tests {
         EXPECT_TRUE(plain.IsInteractive());
     }
 
+    // ---- the state look of the box ----------------------------------------------------------------------------------------
+
+    TEST_F(UIComponentTest, TheBoxTakesTheStateLookOnlyWhenAComponentGivesIt) {
+        Draw();
+        UIElement& host = Get("Host");        // a component that takes clicks gives the state look
+        UIElement& passive = Get("Passive");  // one that takes none does not: a hovered panel that merely blocks input must not light up
+        EXPECT_TRUE(host.GivesStateLook());
+        EXPECT_FALSE(passive.GivesStateLook());
+
+        host.hovered = true;
+        passive.hovered = true;
+        _renderer->ClearCalls();
+        host.DrawSelf(*_renderer);
+        passive.DrawSelf(*_renderer);
+
+        ASSERT_EQ(_renderer->calls.size(), 2u);
+        EXPECT_TRUE(ColorsEqual(_renderer->calls[0].color, ShiftColor(kHostColor, kHoverBrighten)));
+        EXPECT_TRUE(ColorsEqual(_renderer->calls[1].color, Color{50, 50, 50, 255}));
+    }
+
+    TEST_F(UIComponentTest, TheStateColorsOfTheElementAreTheFillsOfItsStates) {
+        Draw();
+        UIElement& host = Get("Host");
+        host.pressedColor = Color{90, 91, 92, 255};
+        host.disabledColor = Color{80, 81, 82, 255};
+        host.hovered = true;
+        host.pressed = true;
+        _renderer->ClearCalls();
+        host.DrawSelf(*_renderer);
+        EXPECT_TRUE(ColorsEqual(_renderer->calls[0].color, host.pressedColor));
+
+        host.groupDisabled = true;  // the group's flag disables an element as a `disabled` does a button
+        _renderer->ClearCalls();
+        host.DrawSelf(*_renderer);
+        EXPECT_TRUE(ColorsEqual(_renderer->calls[0].color, host.disabledColor));
+    }
+
+    TEST_F(UIComponentTest, ASelectedElementThatShowsItsStateDrawsTheBarAtItsFoot) {
+        Draw();
+        UIElement& host = Get("Host");
+        host.selected = true;
+        _renderer->ClearCalls();
+        host.DrawSelf(*_renderer);
+        ASSERT_EQ(_renderer->calls.size(), 2u);
+        EXPECT_FLOAT_EQ(_renderer->calls[1].rect.h, UIStateLook::kSelectedBarHeight);
+        EXPECT_FLOAT_EQ(_renderer->calls[1].rect.y + _renderer->calls[1].rect.h, host.rect.y + host.rect.h);
+    }
+
     // ---- touch size and content -------------------------------------------------------------------------------------------
 
     TEST_F(UIComponentTest, TheValidatorChecksTheTouchSizeOfAnElementWhoseComponentTakesClicks) {
