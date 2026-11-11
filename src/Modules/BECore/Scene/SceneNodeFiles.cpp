@@ -17,19 +17,135 @@ namespace BECore {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
         }
 
-        /// A reference element carries `ref` and nothing else; empty when it is fine, else the reason
-        eastl::string CheckReferenceElement(pugi::xml_node reference) {
-            for (pugi::xml_attribute attr = reference.first_attribute(); attr; attr = attr.next_attribute()) {
-                if (eastl::string_view{attr.name()} != kNodeRefAttribute) {
-                    return Format("attribute '{}' is not supported on a node reference", attr.name());
-                }
-            }
-            for (pugi::xml_node child = reference.first_child(); child; child = child.next_sibling()) {
-                if (child.type() == pugi::node_element) {
-                    return Format("element '{}' is not supported inside a node reference", child.name());
+        bool IsNodeOverrideAttribute(eastl::string_view name) {
+            return std::find(kNodeOverrideAttributes.begin(), kNodeOverrideAttributes.end(), name) != kNodeOverrideAttributes.end();
+        }
+
+        /// One `<component>` of a reference and the component of the node file it is merged into
+        struct ComponentOverride {
+            pugi::xml_node source;
+            pugi::xml_node target;
+        };
+
+        /// The `<component type="@p type">` of @p node, empty when there is none
+        pugi::xml_node FindComponent(pugi::xml_node node, eastl::string_view type) {
+            const pugi::xml_node components = node.child(kComponentsElementName.data());
+            for (pugi::xml_node component = components.child(kComponentElementName.data()); component; component = component.next_sibling(kComponentElementName.data())) {
+                if (eastl::string_view{component.attribute(kComponentTypeAttribute.data()).as_string()} == type) {
+                    return component;
                 }
             }
             return {};
+        }
+
+        /// A field written in both spellings in one override has no single winner; empty when fine, else the reason
+        eastl::string CheckFieldSpelling(pugi::xml_node source, eastl::string_view type) {
+            for (pugi::xml_attribute attr = source.first_attribute(); attr; attr = attr.next_attribute()) {
+                if (eastl::string_view{attr.name()} != kComponentTypeAttribute && source.child(attr.name())) {
+                    return Format("component '{}': field '{}' is written both as an attribute and as an element", type, attr.name());
+                }
+            }
+            return {};
+        }
+
+        /// Checks the whole reference element and looks every component up in @p node, changing nothing
+        bool CollectOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::vector<ComponentOverride>& overrides, eastl::string& error) {
+            for (pugi::xml_attribute attr = reference.first_attribute(); attr; attr = attr.next_attribute()) {
+                const eastl::string_view name = attr.name();
+                if (name != kNodeRefAttribute && !IsNodeOverrideAttribute(name)) {
+                    error = Format("attribute '{}' is not supported on a node reference", name);
+                    return false;
+                }
+            }
+
+            pugi::xml_node componentsEl;
+            for (pugi::xml_node child = reference.first_child(); child; child = child.next_sibling()) {
+                if (child.type() != pugi::node_element) {
+                    continue;
+                }
+                if (eastl::string_view{child.name()} != kComponentsElementName) {
+                    error = Format("element '{}' is not supported inside a node reference", child.name());
+                    return false;
+                }
+                if (componentsEl) {
+                    error = Format("a node reference has one '{}' element at most", kComponentsElementName);
+                    return false;
+                }
+                componentsEl = child;
+            }
+
+            for (pugi::xml_node source = componentsEl.first_child(); source; source = source.next_sibling()) {
+                if (source.type() != pugi::node_element) {
+                    continue;
+                }
+                if (eastl::string_view{source.name()} != kComponentElementName) {
+                    error = Format("element '{}' is not supported inside '{}'", source.name(), kComponentsElementName);
+                    return false;
+                }
+                const eastl::string_view type = source.attribute(kComponentTypeAttribute.data()).as_string();
+                if (type.empty()) {
+                    error = Format("a '{}' of a node reference has no '{}'", kComponentElementName, kComponentTypeAttribute);
+                    return false;
+                }
+                for (const ComponentOverride& seen : overrides) {
+                    if (eastl::string_view{seen.source.attribute(kComponentTypeAttribute.data()).as_string()} == type) {
+                        error = Format("component '{}' is overridden twice", type);
+                        return false;
+                    }
+                }
+                const pugi::xml_node target = FindComponent(node, type);
+                if (!target) {
+                    error = Format("node file has no component '{}'", type);
+                    return false;
+                }
+                error = CheckFieldSpelling(source, type);
+                if (!error.empty()) {
+                    return false;
+                }
+                overrides.push_back({source, target});
+            }
+            return true;
+        }
+
+        void SetAttribute(pugi::xml_node node, const char* name, const char* value) {
+            pugi::xml_attribute attr = node.attribute(name);
+            if (!attr) {
+                attr = node.append_attribute(name);
+            }
+            attr.set_value(value);
+        }
+
+        /// Writes the override's fields over @p target; each field is replaced whole, in the spelling of the override
+        void MergeComponent(pugi::xml_node target, pugi::xml_node source) {
+            for (pugi::xml_attribute attr = source.first_attribute(); attr; attr = attr.next_attribute()) {
+                if (eastl::string_view{attr.name()} == kComponentTypeAttribute) {
+                    continue;
+                }
+                while (target.remove_child(attr.name())) {
+                }
+                SetAttribute(target, attr.name(), attr.value());
+            }
+
+            for (pugi::xml_node field = source.first_child(); field; field = field.next_sibling()) {
+                // One pass per distinct name: a repeated element is copied together with its first one
+                if (field.type() != pugi::node_element || field.previous_sibling(field.name())) {
+                    continue;
+                }
+                target.remove_attribute(field.name());
+                const pugi::xml_node first = target.child(field.name());
+                for (pugi::xml_node copy = field; copy; copy = copy.next_sibling(field.name())) {
+                    if (first) {
+                        target.insert_copy_before(copy, first);
+                    } else {
+                        target.append_copy(copy);
+                    }
+                }
+                for (pugi::xml_node old = first; old;) {
+                    const pugi::xml_node next = old.next_sibling(field.name());
+                    target.remove_child(old);
+                    old = next;
+                }
+            }
         }
 
         /// Parses @p file into @p out and checks that its document element is a node that is not a reference itself and, when
@@ -85,19 +201,21 @@ namespace BECore {
                     }
                     const eastl::string ref = refAttr.as_string();
 
-                    eastl::string error = CheckReferenceElement(el);
-                    if (error.empty() && !IsValidNodeRef(ref)) {
+                    eastl::string error;
+                    if (!IsValidNodeRef(ref)) {
                         error = "not a valid reference (segments of letters, digits, '_' and '-' separated by '/')";
                     }
 
                     if (error.empty()) {
                         pugi::xml_document file;
-                        if (loader(ref, file, error)) {
+                        if (!loader(ref, file, error)) {
+                            if (error.empty()) {
+                                error = "the node file cannot be loaded";
+                            }
+                        } else if (ApplyNodeOverrides(file.document_element(), el, error)) {
                             // The version is a fact about the file, not about the node in the live scene
                             nodesEl.insert_copy_before(file.document_element(), el).remove_attribute(kContentVersionAttribute.data());
                             ++result.expanded;
-                        } else if (error.empty()) {
-                            error = "the node file cannot be loaded";
                         }
                     }
 
@@ -129,6 +247,23 @@ namespace BECore {
             }
         }
         return segmentLength != 0;
+    }
+
+    bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::string& error) {
+        eastl::vector<ComponentOverride> overrides;
+        if (!CollectOverrides(node, reference, overrides, error)) {
+            return false;
+        }
+
+        for (const eastl::string_view name : kNodeOverrideAttributes) {
+            if (const pugi::xml_attribute attr = reference.attribute(name.data())) {
+                SetAttribute(node, name.data(), attr.value());
+            }
+        }
+        for (const ComponentOverride& item : overrides) {
+            MergeComponent(item.target, item.source);
+        }
+        return true;
     }
 
     NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, const NodeFileLoader& loader) {
