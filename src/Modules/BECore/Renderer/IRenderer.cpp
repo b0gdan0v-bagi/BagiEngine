@@ -15,6 +15,17 @@ namespace BECore {
         }
     }
 
+    eastl::string IRenderer::GetNoGpuDeviceReason() const {
+        return eastl::string("this renderer backend has no GPU device");
+    }
+
+    std::expected<IGpuDevice*, eastl::string> RequireGpuDevice(IRenderer& renderer) {
+        if (IGpuDevice* device = renderer.GetGpuDevice()) {
+            return device;
+        }
+        return std::unexpected(Format("{} cannot draw in 3D: {}", renderer.GetTypeMeta().typeName, renderer.GetNoGpuDeviceReason()));
+    }
+
     RenderCounters IRenderer::TakeRenderCounters() {
         const RenderCounters taken = _counters;
         _counters = {};

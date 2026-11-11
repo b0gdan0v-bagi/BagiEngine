@@ -8,6 +8,7 @@
 namespace BECore {
 
     class IDeserializer;
+    class IGpuDevice;
     class IMainWindow;
     class ITexture;
     class IRenderTarget;
@@ -47,6 +48,16 @@ namespace BECore {
         // Blocks until the GPU has finished everything that was submitted. Call it before releasing textures that a
         // frame in flight may still use. The default does nothing (the SDL renderer has no frames in flight).
         virtual void WaitIdle() {}
+
+        // The GPU interface of a renderer that can draw in 3D (Renderer/Gpu/IGpuDevice.h), or null: the SDL 2D renderer has none. Owned by the
+        // renderer, valid until Destroy(). A 3D caller goes through RequireGpuDevice(), which says why when there is none.
+        // Not BE_FUNCTION (a raw pointer of a type the control API does not know).
+        [[nodiscard]] virtual IGpuDevice* GetGpuDevice() {
+            return nullptr;
+        }
+
+        // Why GetGpuDevice() is null, for the log line of a caller that wanted 3D (the default is generic, a backend says what it lacks)
+        [[nodiscard]] virtual eastl::string GetNoGpuDeviceReason() const;
 
         BE_FUNCTION virtual bool Initialize(IMainWindow& window) = 0;
         BE_FUNCTION virtual void Destroy() = 0;
@@ -187,6 +198,10 @@ namespace BECore {
         const ITexture* _lastCountedTexture = nullptr;  // compared only, never dereferenced
         int _countersPaused = 0;
     };
+
+    /// The GPU device of @p renderer, or the renderer's name and why it has none. What a 3D caller uses, so the game logs the error once (LOG_ERROR at
+    /// the caller) instead of drawing a blank screen.
+    [[nodiscard]] std::expected<IGpuDevice*, eastl::string> RequireGpuDevice(IRenderer& renderer);
 
     /// Stops a renderer counting its draws for the length of a scope
     class ScopedRenderCountersPause {

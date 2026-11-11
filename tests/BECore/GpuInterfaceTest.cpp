@@ -1,5 +1,6 @@
 #include <Common/RecordingGpuDevice.h>
 #include <Common/RecordingRenderer.h>
+#include <CoreSDL/SDLRendererBackend.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -401,6 +402,54 @@ namespace BECore::Tests {
         EXPECT_EQ(recorded.firstIndex, 3u);
         EXPECT_EQ(recorded.vertexOffset, -2);
         EXPECT_EQ(f.device.errors.size(), 1u);
+    }
+
+    TEST(RendererGpuDeviceTest, ARendererWithoutADeviceAnswersNull) {
+        RecordingRenderer renderer;
+
+        EXPECT_EQ(renderer.GetGpuDevice(), nullptr);
+        EXPECT_FALSE(renderer.GetNoGpuDeviceReason().empty());
+    }
+
+    TEST(RendererGpuDeviceTest, RequireGpuDeviceNamesTheRendererAndTheReasonWhenThereIsNone) {
+        RecordingRenderer renderer;
+
+        auto required = RequireGpuDevice(renderer);
+
+        ASSERT_FALSE(required.has_value());
+        EXPECT_NE(required.error().find("IRenderer"), eastl::string::npos);
+        EXPECT_NE(required.error().find(renderer.GetNoGpuDeviceReason()), eastl::string::npos);
+    }
+
+    TEST(RendererGpuDeviceTest, RequireGpuDeviceGivesTheDeviceOfTheRenderer) {
+        RecordingRenderer renderer;
+        IntrusivePtr<RecordingGpuDevice> device = New<RecordingGpuDevice>();
+        renderer.SetGpuDevice(device);
+
+        auto required = RequireGpuDevice(renderer);
+
+        ASSERT_TRUE(required.has_value());
+        EXPECT_EQ(*required, device.Get());
+    }
+
+    TEST(RendererGpuDeviceTest, TheSDLRendererSaysItHasNo3D) {
+        IntrusivePtr<SDLRendererBackend> renderer = New<SDLRendererBackend>();
+
+        EXPECT_EQ(renderer->GetGpuDevice(), nullptr);
+        auto required = RequireGpuDevice(*renderer);
+        ASSERT_FALSE(required.has_value());
+        EXPECT_NE(required.error().find("SDLRendererBackend"), eastl::string::npos);
+        EXPECT_NE(required.error().find("no depth buffer"), eastl::string::npos);
+    }
+
+    TEST(RendererGpuDeviceTest, AGpuDeviceChangesNothingOf2DDrawing) {
+        RecordingRenderer renderer;
+        renderer.SetGpuDevice(New<RecordingGpuDevice>());
+
+        renderer.DrawFilledRect(1.0f, 2.0f, 3.0f, 4.0f, Color{255, 0, 0, 255});
+
+        ASSERT_EQ(renderer.calls.size(), 1u);
+        EXPECT_EQ(renderer.calls[0].kind, DrawKind::Rect);
     }
 
 }  // namespace BECore::Tests
