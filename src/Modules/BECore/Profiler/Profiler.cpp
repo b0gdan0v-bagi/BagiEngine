@@ -7,8 +7,6 @@
 #endif
 
 #include <cstdlib>
-#include <cstring>
-#include <mutex>
 #include <new>
 
 namespace BECore {

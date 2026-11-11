@@ -1,8 +1,5 @@
 #pragma once
 
-#include <EASTL/string.h>
-#include <EASTL/string_view.h>
-
 namespace BECore {
 
     class IProfilerBackend;

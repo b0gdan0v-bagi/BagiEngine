@@ -2,8 +2,6 @@
 
 #include <BECore/Profiler/Alloc/AllocPlatform.h>
 #include <BECore/Profiler/Profiler.h>
-#include <algorithm>
-#include <atomic>
 
 namespace BECore {
 

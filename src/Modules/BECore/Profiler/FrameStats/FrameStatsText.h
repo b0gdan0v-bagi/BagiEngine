@@ -2,8 +2,6 @@
 
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/FrameStats/FrameStatsCollector.h>
-#include <EASTL/string.h>
-#include <EASTL/vector.h>
 
 namespace BECore {
 

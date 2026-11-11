@@ -6,7 +6,6 @@
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/Profiler.h>
-#include <filesystem>
 
 namespace BECore {
 

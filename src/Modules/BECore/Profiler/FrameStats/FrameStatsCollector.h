@@ -1,12 +1,8 @@
 #pragma once
 
-#include <BECore/PoolString/PoolString.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Renderer/RenderCounters.h>
-#include <BECore/Utils/EnumUtils.h>
 #include <EASTL/array.h>
-#include <EASTL/fixed_vector.h>
-#include <EASTL/vector.h>
 
 namespace BECore {
 

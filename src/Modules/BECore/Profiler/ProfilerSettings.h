@@ -1,11 +1,5 @@
 #pragma once
 
-#include <BECore/Utils/EnumUtils.h>
-#include <EASTL/span.h>
-#include <EASTL/string.h>
-#include <EASTL/string_view.h>
-#include <expected>
-
 namespace BECore {
 
     /// The backend the BE_PROFILE_* macros send to: none, the Chrome trace recorder of the engine, or the vendored Tracy client

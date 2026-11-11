@@ -72,7 +72,7 @@ Measured on an Apple M-series machine with `macos-profile` (`BagiEngineTests --g
 | `steady_clock::now()` | 13 to 20 | 13 |
 | `ProfilerClock::Now()` (`mach_absolute_time`) | 4 to 5 | 4 |
 | a zone, no backend installed | 0 (compiled out; 1.9 measured directly) | 4.5 (with the allocation snapshot) |
-| a zone recorded into the Chrome trace | | 26 |
+| a zone recorded into the Chrome trace | 25 (the recorder called directly) | 26 |
 | `new` + `delete` of 64 bytes, one thread | 33 (the C++ runtime's) | 28 (counted) |
 
 Counting allocations costs nothing measurable on one thread (the replacement calls `malloc` directly, the runtime's `operator new` adds its own layer); many threads allocating at once share the atomic totals and pay more.

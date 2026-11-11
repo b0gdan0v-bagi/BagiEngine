@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-
 namespace BECore {
 
     /// The time stamps of the profiler: raw ticks of the cheapest monotonic clock of the platform, converted only when written out

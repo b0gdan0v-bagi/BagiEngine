@@ -1,9 +1,7 @@
 #pragma once
 
 #include <BECore/Profiler/ProfileSite.h>
-#include <EASTL/vector.h>
 #include <cstddef>
-#include <cstdint>
 
 namespace BECore {
 

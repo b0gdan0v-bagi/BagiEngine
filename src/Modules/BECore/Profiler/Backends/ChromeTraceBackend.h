@@ -1,11 +1,6 @@
 #pragma once
 
 #include <BECore/Profiler/IProfilerBackend.h>
-#include <EASTL/string.h>
-#include <EASTL/string_view.h>
-#include <atomic>
-#include <expected>
-#include <mutex>
 
 namespace BECore {
 
