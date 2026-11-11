@@ -26,7 +26,6 @@
 #include <Common/TempPath.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UITreeCompare.h>
-#include <fstream>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -194,7 +193,8 @@ button:hover { background: #3a6; }
   </variants>
 </ui>)";
 
-        // The main menu of Match3 as the game ships it (games/Match3/config/SceneConfig.xml), and the same menu in HTML + CSS
+        // The main menu of Match3 as the game shipped it before its buttons became composed (games/Match3/config/SceneConfig.xml; the layout is the same, the HTML compiler still emits `UIButton`),
+        // and the same menu in HTML + CSS
         constexpr const char* kMenuXml = R"(<ui><elements>
   <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
     <children>
@@ -220,7 +220,7 @@ button  { height: 56px; font-size: 28px; }
 #Quit   { background: rgb(90, 50, 50); }
 )";
 
-        // The HUD of Match3 as the game ships it (games/Match3/config/SceneConfig.xml), and the same HUD in HTML + CSS
+        // The HUD of Match3 as the game shipped it before its buttons became composed (same note as the menu), and the same HUD in HTML + CSS
         constexpr const char* kMatch3HudXml = R"(<ui><elements>
   <element type="UILabel" name="Score" x="96" y="12" width="250" height="40" text="Score: {score}" fontSize="28" verticalAlign="Center" />
   <element type="UIStack" name="Buttons" anchor="TopRight" x="-96" y="12" width="260" height="48" direction="Horizontal" spacing="12" crossAlign="Stretch">

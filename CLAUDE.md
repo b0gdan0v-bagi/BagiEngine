@@ -15,7 +15,7 @@ ctest --preset macos-debug                 # every test in its own process, 8 at
 - C++23, exceptions disabled (`ENGINE_NO_EXCEPTIONS=ON`). Re-run `cmake --preset` after changing `BE_CLASS` / `BE_REFLECT_FIELD` or adding files (sources are globbed).
 - **Output goes to the build folder of the preset**: executables in `build/<preset>/bin`, static libraries in `build/<preset>/lib`, so Debug and Release sit side by side (Visual Studio presets add `bin/<Config>/`).
 - Tests: `BagiEngineTests` (`tests/`), `Match3Tests` (`games/Match3/tests/`), `BagiMatch3ControlSmoke` and `BagiMatch3Scenario.*` (the recorded sessions of `games/Match3/tests/scenarios/`; both skipped with 77 when the game is not built). **They run 8 at a time**, so every test must be safe beside others: temp names from `tests/Common/TempPath.h`, port 0, polls with a time limit, never read `engine.log`. Rules: `.claude/rules/tests-module.md`. Runtime `ITest`s run at game start-up (`config/TestsConfig.xml`).
-- Python tools have pytest suites outside ctest: `.venv/bin/python -m pytest tools/control/tests`, `... tools/perf/tests`, `... CI/meta_generator/tests`.
+- Python tools have pytest suites outside ctest: `.venv/bin/python -m pytest tools/control/tests`, `... tools/perf/tests`, `... tools/migrate/tests`, `... CI/meta_generator/tests`.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ src/Modules/      BECore, Events, TaskSystem, RemoteControl, SDL, Vulkan, Games,
 config/, assets/  engine content; a game's files of the same name replace the engine's (FileSystem/CLAUDE.md)
 games/Match3/     the engine's own game
 tests/            BagiEngineTests + Common (BagiEngineTestSupport)
-tools/            todo (the todo store), control (control API client, smoke test, MCP server), perf (benchmarks, trace summary), web, vscode/todo-workers
+tools/            todo (the todo store), control (control API client, smoke test, MCP server), perf (benchmarks, trace summary), migrate (rewrites the content files of a game to the engine's format), web, vscode/todo-workers
 ```
 
 **BECore subsystems** (each has a `CLAUDE.md`): `GameManager/CoreManager` (the service locator), `Scene/`, `UI/` (canvases, scaler, layout, validator), `Text/`, `Animation/` (tweens, timelines), `Control/` (the control API core; transport in `RemoteControl`), `Save/`, `Config/`, `FileSystem/`, `Resource/`, `Renderer/` (`IRenderer`, SDL or Vulkan backend by `renderer` in `ApplicationConfig.xml`), `Reflection/`, `Logger/`, `Profiler/` (the `BE_PROFILE_*` macros; `ENGINE_PROFILER`, preset `macos-profile`).
@@ -63,6 +63,7 @@ tools/            todo (the todo store), control (control API client, smoke test
 ## After making changes
 
 - Run `clang-format` on changed files; after include changes run `strip-pch-includes`.
+- A change that alters what a content file (`SceneConfig.xml`, a node file) may say (renames or removes a reflected class or field it can name, moves a field, turns a control into components) **adds a step** to `tools/migrate/steps/`, bumps `kContentVersion` and runs the tool on the engine's content; a game's content files are never edited by hand (`tools/migrate/CLAUDE.md`, `src/Modules/BECore/Config/CLAUDE.md`, "Content version").
 - Plans are never committed: they live in the todo store (`python3 tools/todo/todo.py plan put NAME.md`). Status `review` is set only by `todo-loop`; `/todo-merge` merges, closes and deletes the branch.
 
 ## Docs, rules and skills

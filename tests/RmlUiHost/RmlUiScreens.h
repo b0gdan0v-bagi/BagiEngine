@@ -9,6 +9,8 @@ namespace BECore::Tests::RmlUiScreens {
 
     // The three screens that the repository ships, in the engine's XML (games/*/config/SceneConfig.xml) and in RmlUi's HTML + CSS dialect.
     // The XML is the reference: every element of the RML screen must land on the same rect, in every shape of the size matrix.
+    // The XML keeps the `UIButton` form on purpose: the shipped files were migrated to composed buttons (tools/migrate, step 1 to 2) and the
+    // HTML compiler still emits `UIButton`; the layout of the two forms is the same. Moving the compiler is `ui-button-composition`.
 
     inline constexpr const char* kMenuXml = R"(<ui><elements>
   <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">

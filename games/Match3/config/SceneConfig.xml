@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<SceneManager>
+<SceneManager contentVersion="2">
   <scenes>
     <!-- The first screen: a title and two buttons on a Screen canvas. Match3MenuComponent answers Match3Play and Match3Quit. -->
     <scene
@@ -14,8 +14,18 @@
                 <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
                   <children>
                     <element type="UILabel" name="Title" height="88" text="Match 3" fontSize="56" align="Center" verticalAlign="Center" />
-                    <element type="UIButton" name="Play" height="56" text="Play" fontSize="28" action="Match3Play" color="40,90,60,255" />
-                    <element type="UIButton" name="Quit" height="56" text="Quit" fontSize="28" action="Match3Quit" color="90,50,50,255" />
+                    <element type="UIElement" name="Play" height="56" fontSize="28" color="40,90,60,255">
+                      <components>
+                        <component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/>
+                        <component type="UIInputClicker" action="Match3Play"/>
+                      </components>
+                    </element>
+                    <element type="UIElement" name="Quit" height="56" fontSize="28" color="90,50,50,255">
+                      <components>
+                        <component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/>
+                        <component type="UIInputClicker" action="Match3Quit"/>
+                      </components>
+                    </element>
                   </children>
                 </element>
               </elements>
@@ -47,8 +57,18 @@
                 <element type="UILabel" name="Score" x="96" y="12" width="250" height="40" text="Score: {score}" fontSize="28" verticalAlign="Center" />
                 <element type="UIStack" name="Buttons" anchor="TopRight" x="-96" y="12" width="260" height="48" direction="Horizontal" spacing="12" crossAlign="Stretch">
                   <children>
-                    <element type="UIButton" name="Reset" width="124" height="48" text="Reset" fontSize="24" action="Match3Reset" color="40,90,60,255" />
-                    <element type="UIButton" name="Menu" width="124" height="48" text="Menu" fontSize="24" action="Match3Menu" color="70,70,100,255" />
+                    <element type="UIElement" name="Reset" width="124" height="48" fontSize="24" color="40,90,60,255">
+                      <components>
+                        <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
+                        <component type="UIInputClicker" action="Match3Reset"/>
+                      </components>
+                    </element>
+                    <element type="UIElement" name="Menu" width="124" height="48" fontSize="24" color="70,70,100,255">
+                      <components>
+                        <component type="UITextComponent" text="Menu" align="Center" verticalAlign="Center" wrap="false"/>
+                        <component type="UIInputClicker" action="Match3Menu"/>
+                      </components>
+                    </element>
                   </children>
                 </element>
                 <element type="UILabel" name="Seed" anchor="BottomLeft" x="96" y="-26" width="300" height="24" text="seed {seed}" fontSize="16" textColor="190,190,190,255" />
