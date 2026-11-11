@@ -89,11 +89,11 @@ def git(root: Path, *args: str) -> str:
 def commit_of(root: Path) -> str:
     """The short commit of the repository, `+engine <commit>` when it carries the engine, `-dirty` for uncommitted changes."""
     commit = git(root, "rev-parse", "--short", "HEAD") or "unknown"
-    if git(root, "status", "--porcelain", "--ignore-submodules=all"):
+    if git(root, "status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"):
         commit += "-dirty"
     if (root / "engine" / ".git").exists():
         engine = git(root / "engine", "rev-parse", "--short", "HEAD")
-        engine_dirty = "-dirty" if git(root / "engine", "status", "--porcelain") else ""
+        engine_dirty = "-dirty" if git(root / "engine", "status", "--porcelain", "--untracked-files=no") else ""
         commit += f"+engine-{engine}{engine_dirty}"
     return commit
 

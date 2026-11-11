@@ -45,7 +45,7 @@ Each metric: the mean of the repetitions and the half-width of its 95 % interval
 
 ## The baseline
 
-A plan of kind `baseline` in the todo store, one per area and machine, no entry. The machine is named by a fingerprint (model, CPU, cores, memory, OS and its major version); the slug of the plan name keeps model, cores and OS (`mac16-7-14c-macos26`). Each `--update-baseline` appends a section (the date, the commits, the preset) with a fenced JSON record; the last record is the baseline, the ones above are its history. A record holds every benchmark of the area, each with the commit it was measured on and its samples, so updating a few keeps the others. The commit is `<repo>[-dirty]` plus `+engine-<commit>[-dirty]` in a game; `--update-baseline` refuses a dirty tree unless `--allow-dirty`. `--baseline-file F` uses a local file instead of the store (tests, offline).
+A plan of kind `baseline` in the todo store, one per area and machine, no entry. The machine is named by a fingerprint (model, CPU, cores, memory, OS and its major version); the slug of the plan name keeps model, cores and OS (`mac16-7-14c-macos26`). Each `--update-baseline` appends a section (the date, the commits, the preset) with a fenced JSON record; the last record is the baseline, the ones above are its history. A record holds every benchmark of the area, each with the commit it was measured on and its samples, so updating a few keeps the others. The commit is `<repo>[-dirty]` (changes to tracked files; untracked ones do not count) plus `+engine-<commit>[-dirty]` in a game; `--update-baseline` refuses a dirty tree unless `--allow-dirty`. `--baseline-file F` uses a local file instead of the store (tests, offline).
 
 ## Caveats
 
