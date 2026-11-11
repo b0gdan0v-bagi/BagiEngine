@@ -28,6 +28,9 @@ follow only after a step, so call step before screenshot when the picture should
 
 Every action comes from list_actions: pass one of them to perform_action as it is. A refused action is an error with a
 code (illegal_action, game_over, ...), the state stays as it was. Call quit when done.
+
+To keep a bug as a test, call record_start right after launch_game (or pass record= to launch_game) and record_stop when done: the file is
+a scenario that replays from a fresh start of the game, and its calls become the test.
 """
 
 session = GameSession()
@@ -53,23 +56,27 @@ def reports_errors(tool: Callable[..., Any]) -> Callable[..., Any]:
 
 @server.tool()
 @reports_errors
-def launch_game(exe: str = "", headless: bool = True, manual_clock: bool = True, preset: str = "", game: str = "") -> dict[str, Any]:
+def launch_game(exe: str = "", headless: bool = True, manual_clock: bool = True, preset: str = "", game: str = "", record: str = "") -> dict[str, Any]:
     """Starts a game executable with the control API and connects to it (a game started earlier by this server is stopped).
 
     exe: path of the built game, relative to where this server runs (the repository root) or absolute.
     preset, game: instead of exe, the CMake preset that built it and the name of the game (build/<preset>/bin/<game>). Give exe or both of these.
     headless: no window, drawn in memory by the software renderer; screenshots work only like this. False opens a real window.
     manual_clock: game time moves only on step (deterministic). False runs it on the real clock.
+    record: the path of a scenario file to record the session to, as record_start does (error codes and version steps).
     Answers the port, the clock status and the games the executable has.
     """
-    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game)
+    return session.launch(exe, headless=headless, manual_clock=manual_clock, preset=preset, game=game, record=record or None)
 
 
 @server.tool()
 @reports_errors
-def connect(port: int = 8765, host: str = "127.0.0.1") -> dict[str, Any]:
-    """Connects to a game that is already running with --control (a person's window, for example)."""
-    return session.connect(host=host, port=port)
+def connect(port: int = 8765, host: str = "127.0.0.1", record: str = "") -> dict[str, Any]:
+    """Connects to a game that is already running with --control (a person's window, for example).
+
+    record: the path of a scenario file to record to; the game may be past its start, and the file replays from a fresh start (the answer says so).
+    """
+    return session.connect(host=host, port=port, record=record or None)
 
 
 @server.tool()
@@ -228,6 +235,26 @@ def zone_allocs(top: int = 20, reset: bool = False) -> dict[str, Any]:
 def game_log(lines: int = 40) -> str:
     """The last lines of the output of the game that launch_game started: use it when the game fails or an action is refused for no visible reason."""
     return session.game_log(lines)
+
+
+@server.tool()
+@reports_errors
+def record_start(path: str, expect: str = "minimal") -> dict[str, Any]:
+    """Starts recording the calls of this session into a scenario file (JSON lines), written by record_stop or quit.
+
+    Call it right after launch_game: the file replays from a fresh start of the game, so calls made before it are not in it (the answer says
+    when there were any). path: where to write it (the folder must exist). expect: "minimal" writes the error code of a refused call and the
+    step of the state version, which is what the game's API promises; "full" adds every answer (a screenshot as its size), which breaks on any
+    change of the game's data. python3 tools/control/bagi_play.py <exe> <file> plays the file back as a test.
+    """
+    return session.start_recording(path, expect)
+
+
+@server.tool()
+@reports_errors
+def record_stop() -> dict[str, Any]:
+    """Ends the recording and writes the scenario file: answers its path and the number of calls in it."""
+    return session.stop_recording()
 
 
 @server.tool(name="quit")

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import scenario
 from bagi_control_client import ControlError
 from bagi_session import GameSession, SessionError
 from fake_control_server import FakeControlServer, FakeError, QuitServer
@@ -218,7 +219,7 @@ def test_launch_of_a_missing_executable_names_the_path(session, tmp_path):
 
 EXPECTED_TOOLS = {
     "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "game_log", "quit",
-    "frame_stats", "profiler_dump", "zone_allocs",
+    "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop",
 }
 
 
@@ -280,3 +281,51 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
     assert requests_of(server, "profiler_dump")[-1] == {"path": "trace.json"}
     assert requests_of(server, "zone_allocs")[-1] == {"top": 5, "reset": True}
     assert requests_of(server, "ui_click")[:3] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}, {"name": "Volume", "at": 0.25}]
+
+
+def test_every_mcp_tool_is_wrapped_in_reports_errors():
+    pytest.importorskip("mcp")
+    import bagi_mcp
+
+    tools = bagi_mcp.server._tool_manager.list_tools()  # no public list outside the async protocol
+    assert {tool.name for tool in tools} == EXPECTED_TOOLS
+    # reports_errors uses functools.wraps, which leaves __wrapped__ on the function the server calls
+    assert [tool.name for tool in tools if not hasattr(tool.fn, "__wrapped__")] == []
+
+
+def test_the_mcp_server_records_a_session_as_a_scenario(fake_game_exe, tmp_path):
+    mcp = pytest.importorskip("mcp")
+    target = tmp_path / "bug.jsonl"
+
+    async def run() -> None:
+        parameters = mcp.StdioServerParameters(command=sys.executable, args=[str(TOOL_DIR / "bagi_mcp.py")])
+        async with mcp.Client(parameters) as client:
+            launched = await client.call_tool("launch_game", {"exe": str(fake_game_exe)})
+            assert not launched.is_error
+
+            started = await client.call_tool("record_start", {"path": str(target)})
+            assert not started.is_error and "bug.jsonl" in started.content[0].text
+
+            again = await client.call_tool("record_start", {"path": str(target)})
+            assert again.is_error and "already recording" in again.content[0].text
+
+            assert not (await client.call_tool("get_state", {})).is_error
+            assert not (await client.call_tool("perform_action", {"action": {"type": "noop"}})).is_error
+            refused = await client.call_tool("perform_action", {"action": {"type": "bad"}})
+            assert refused.is_error and "illegal_action" in refused.content[0].text
+
+            stopped = await client.call_tool("record_stop", {})
+            assert not stopped.is_error
+            assert "bug.jsonl" in stopped.content[0].text and '"calls": 3' in stopped.content[0].text
+
+            missing = await client.call_tool("record_stop", {})
+            assert missing.is_error and "not recording" in missing.content[0].text
+            assert "record_start" in missing.content[0].text
+
+            assert not (await client.call_tool("quit", {})).is_error
+
+    asyncio.run(run())
+    header, steps = scenario.load(target)
+    assert header.game == "Fake" and header.flags == ["--headless", "--manual-clock"]
+    assert [step.method for step in steps] == ["get_state", "perform_action", "perform_action"]
+    assert steps[2].expect == {"error": "illegal_action"}
