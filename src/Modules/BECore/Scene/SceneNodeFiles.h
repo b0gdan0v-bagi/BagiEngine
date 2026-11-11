@@ -13,6 +13,10 @@ namespace BECore {
      * place, so the scene order (and with it the draw order and the input order) is the order of the references. The copy
      * loses the `contentVersion` attribute of the file's root: the live scene never sees it.
      *
+     * A reference may override values of its instance (see ApplyNodeOverrides): the attributes `name` and `layer` of the
+     * node and, inside `<components>`, attributes and child elements of the node file's components, matched by `type`.
+     * It cannot add or remove a component or a field.
+     *
      * Everything here works on pugixml documents: no CoreManager, no scene, no renderer. A bad reference never stops a
      * game: it is one error in NodeExpansion::errors, the reference element is dropped and the rest of the scene stays.
      */
@@ -22,6 +26,17 @@ namespace BECore {
 
     /// Attribute of `<node>` that makes it a reference
     inline constexpr eastl::string_view kNodeRefAttribute = "ref";
+
+    /// Attributes of a reference that replace the same attribute of the node file's `<node>`: the reflected fields of
+    /// SceneNode (`_name`, `_layer`). When SceneNode gets a field, extend this list.
+    inline constexpr std::array<eastl::string_view, 2> kNodeOverrideAttributes = {"name", "layer"};
+
+    /// The only child element of a reference, and its children: one per component to override
+    inline constexpr eastl::string_view kComponentsElementName = "components";
+    inline constexpr eastl::string_view kComponentElementName = "component";
+
+    /// Attribute of `<component>` that names its type (in the node file and in the override)
+    inline constexpr eastl::string_view kComponentTypeAttribute = "type";
 
     /// Mount point of the node files; a reference `a/b` is the file `config/a/b.xml`
     inline constexpr eastl::string_view kNodeFilesMountPoint = "config";
@@ -57,12 +72,36 @@ namespace BECore {
     bool IsValidNodeRef(eastl::string_view ref);
 
     /**
+     * @brief Merges the overrides of a node reference into the `<node>` of its file
+     *
+     * - The attributes `name` and `layer` of @p reference replace (or add) the same attribute of @p node; `ref` is the
+     *   reference itself; any other attribute is an error.
+     * - The only child element of @p reference is one `<components>`, whose only children are `<component type="..">`.
+     *   Each is merged into the component of @p node with the same `type`: an attribute other than `type` replaces (or
+     *   adds) the attribute of the file's component, a child element replaces, whole, the child elements of the same name
+     *   (at the place of the first, appended when there is none). No deep merge.
+     * - A field is overridden whole in either spelling: the file's attribute and its child elements of that name are
+     *   removed first, then the spelling of the override is written, so exactly one remains.
+     * - No adding and no removing: a `type` that @p node has no component of is an error. A duplicate `type`, a field
+     *   of one component written in both spellings, a child other than `components` / `component`, a second `<components>`
+     *   and a `component` without `type` are errors. Text and comments are ignored.
+     *
+     * The whole reference is checked before anything changes: on false @p node is untouched.
+     *
+     * @param node The `<node>` of a loaded node file
+     * @param reference The `<node ref="..">` element of the scene
+     * @param error Receives the reason when the reference is invalid
+     * @return false when the reference is invalid or names a component @p node does not have
+     */
+    bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::string& error);
+
+    /**
      * @brief Replaces every `scenes/scene/nodes/node[@ref]` of @p configRoot by the node of its file
      *
-     * The copy of the file's document element takes the place of the reference. A reference that cannot be used (invalid,
-     * with an attribute other than `ref` or with a child element, a file that is missing, does not parse or is not a node
-     * file) is removed and recorded in the result; the other nodes of the scene are kept in order. Elements without `ref`
-     * and documents without references are left as they are.
+     * The copy of the file's document element, with the overrides of the reference applied (ApplyNodeOverrides), takes
+     * the place of the reference. A reference that cannot be used (invalid, a file that is missing, does not parse or is
+     * not a node file, an invalid override) is removed and recorded in the result, never half applied; the other nodes of
+     * the scene are kept in order. Elements without `ref` and documents without references are left as they are.
      *
      * @param configRoot Document element of SceneConfig (`<SceneManager>`)
      * @param loader Reads the node file of a reference
