@@ -1751,6 +1751,43 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->report.elements, 1u);
     }
 
+    TEST_F(UIWebTest, TheIconFormsAreTheOnesTheMigrationStepWrites) {
+        const auto compiled = Compile(R"(<button id="Left" data-icon="Settings" data-action="Opt">Options</button><button id="Only" data-icon="Settings" title="Options" data-action="Opt"></button>)",
+                                      "#Left { width: 136px; height: 56px; font-size: 24px; background: #202020 } #Only { width: 56px; height: 56px; background: #202020; -be-icon-color: #ffcc00 }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_TRUE(compiled->report.issues.empty());
+        // What `s0001_ui_button_to_components.py` makes of the two `UIButton`s with the same attributes (`icon`, `text`, `fontSize`, `iconTint`, `tooltip`)
+        constexpr const char* kStepOutput = R"(<elements>
+  <element type="UIElement" name="Left" width="136" height="56" color="32,32,32,255" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center">
+    <components><component type="UIInputClicker" action="Opt"/></components>
+    <children>
+      <element type="UIElement" name="LeftIcon" height="50%" aspectRatio="1"><components><component type="UIImageComponent" sprite="Settings"/></components></element>
+      <element type="UIElement" name="LeftCaption" flex="1" height="100%" fontSize="24">
+        <components><component type="UITextComponent" text="Options" align="Center" verticalAlign="Center" wrap="false"/></components>
+      </element>
+    </children>
+  </element>
+  <element type="UIElement" name="Only" width="56" height="56" color="32,32,32,255">
+    <components><component type="UIInputClicker" action="Opt"/><component type="UITooltipComponent" text="Options"/></components>
+    <children>
+      <element type="UIElement" name="OnlyIcon" anchor="Center" width="60%" height="60%" aspectRatio="1">
+        <components><component type="UIImageComponent" sprite="Settings" tint="255,204,0,255"/></components>
+      </element>
+    </children>
+  </element>
+</elements>)";
+        pugi::xml_document reference;
+        ASSERT_TRUE(reference.load_string(kStepOutput));
+        const pugi::xml_node actual = compiled->document.child("ui").child("elements");
+        pugi::xml_node actualElement = actual.first_child();
+        for (pugi::xml_node expected : reference.child("elements").children()) {
+            ASSERT_TRUE(actualElement);
+            ExpectSameAttributes(expected, actualElement);
+            actualElement = actualElement.next_sibling();
+        }
+        EXPECT_FALSE(actualElement);
+    }
+
     TEST_F(UIWebTest, ASegmentOfAGroupStaysAUIButtonAndTheButtonBesideItIsComposed) {
         const auto compiled =
             Compile(R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x" data-action="Pick">A</button></div><button id="b" data-action="Go">Go</button>)",
