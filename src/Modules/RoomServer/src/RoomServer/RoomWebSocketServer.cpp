@@ -141,6 +141,7 @@ namespace BECore {
                         .close = [this](ConnectionId connection, eastl::string reason) { CloseConnection(connection, reason); },
                     });
 
+        LivenessMap liveness;
         auto nextTick = std::chrono::steady_clock::now() + _settings.tickInterval;
         eastl::deque<Event> batch;
         for (;;) {
@@ -157,13 +158,19 @@ namespace BECore {
 
             for (const Event& event : batch) {
                 switch (event.kind) {
-                    case EventKind::Opened:
-                        hub.OnConnected(event.connection, Now());
+                    case EventKind::Opened: {
+                        const RoomTime now = Now();
+                        if (const auto opened = FindConnection(event.connection)) {
+                            liveness[event.connection] = Liveness{opened->GetBytesReceived(), now, false};
+                        }
+                        hub.OnConnected(event.connection, now);
                         break;
+                    }
                     case EventKind::Message:
                         hub.OnMessage(event.connection, event.text, Now());
                         break;
                     case EventKind::Closed:
+                        liveness.erase(event.connection);
                         hub.OnDisconnected(event.connection, Now());
                         break;
                 }
@@ -171,8 +178,41 @@ namespace BECore {
             batch.clear();
 
             if (std::chrono::steady_clock::now() >= nextTick) {
-                hub.Tick(Now());
+                const RoomTime now = Now();
+                hub.Tick(now);
+                CheckLiveness(liveness, now);
                 nextTick = std::chrono::steady_clock::now() + _settings.tickInterval;
+            }
+        }
+    }
+
+    void RoomWebSocketServer::CheckLiveness(LivenessMap& liveness, RoomTime now) {
+        if (_settings.pingInterval <= std::chrono::milliseconds::zero()) {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(_connectionsMutex);
+        for (const auto& [id, connection] : _connections) {
+            if (!connection->IsOpen()) {
+                continue;  // closing or dropped: its Closed event is on the way
+            }
+            const uint64_t received = connection->GetBytesReceived();
+            const auto [entry, isNew] = liveness.try_emplace(id, Liveness{received, now, false});
+            Liveness& state = entry->second;
+            if (isNew) {
+                continue;
+            }
+            if (received != state.bytesReceived) {
+                state = Liveness{received, now, false};
+                continue;
+            }
+
+            const auto silence = now - state.lastLife;
+            if (silence >= 2 * _settings.pingInterval) {
+                LOG_INFO("{}: a connection did not answer and was dropped"_format(kLogName));
+                connection->Abort();
+            } else if (silence >= _settings.pingInterval && !state.pingSent) {
+                state.pingSent = connection->QueuePing();
             }
         }
     }

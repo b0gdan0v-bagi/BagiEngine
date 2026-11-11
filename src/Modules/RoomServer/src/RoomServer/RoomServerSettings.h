@@ -34,6 +34,11 @@ namespace BECore {
         /// How often the hub thread ticks when nothing arrives (real time)
         std::chrono::milliseconds tickInterval{50};
 
+        /// A connection from which nothing arrived for this long gets a WebSocket ping, and one that stays silent for twice as long is dropped
+        /// (the hub then sees it leave). It finds half-open connections, which would keep a seat "connected" for ever. 0 turns it off. Judged
+        /// with `clock`. A client has to answer pings (a browser does by itself)
+        std::chrono::milliseconds pingInterval{20'000};
+
         /// What the hub is told the time is. Empty: the real clock (`steady_clock`). A test moves a manual clock instead of sleeping
         std::function<RoomTime()> clock;
 

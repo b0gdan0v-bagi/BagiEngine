@@ -4,6 +4,7 @@
 
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
+#include <atomic>
 #include <gtest/gtest.h>
 #include <thread>
 
@@ -44,6 +45,31 @@ namespace BECore::Tests {
                 batch.insert(batch.end(), frame.data(), frame.data() + frame.size());
             }
             return batch;
+        }
+
+        /// The time the hub and the liveness check see, moved by the test instead of waited for
+        class ManualClock {
+        public:
+            RoomTime Now() const {
+                return _start + std::chrono::milliseconds(_elapsedMs.load());
+            }
+
+            void Advance(std::chrono::milliseconds step) {
+                _elapsedMs += step.count();
+            }
+
+            [[nodiscard]] std::function<RoomTime()> AsFunction() {
+                return [this] { return Now(); };
+            }
+
+        private:
+            const RoomTime _start = std::chrono::steady_clock::now();
+            std::atomic<int64_t> _elapsedMs{0};
+        };
+
+        /// Sleeps a few ticks of the hub thread (MakeSettings() ticks every 10 ms) so that it has looked at the clock and the sockets
+        void LetTicksPass() {
+            std::this_thread::sleep_for(60ms);
         }
 
         class RoomWebSocketServerTest : public ::testing::Test {
@@ -367,6 +393,163 @@ namespace BECore::Tests {
             EXPECT_LT(std::chrono::steady_clock::now() - start, 5s);
         }
         EXPECT_TRUE(dropped) << "the connection that never reads was not dropped";
+    }
+
+    namespace {
+
+        constexpr std::chrono::milliseconds kPingInterval{1000};
+        constexpr std::chrono::milliseconds kClockStep{250};
+
+        /// Settings with a short liveness interval on a manual clock
+        RoomServerSettings MakeLivenessSettings(ManualClock& clock, std::chrono::milliseconds pingInterval = kPingInterval) {
+            RoomServerSettings settings = MakeSettings();
+            settings.pingInterval = pingInterval;
+            settings.clock = clock.AsFunction();
+            return settings;
+        }
+
+        /// A message of the protocol the server answers at once: proves the hub got what the client sent before it
+        void RoundTrip(RoomSocketClient& client) {
+            client.Send(PingMessage{});
+            ASSERT_TRUE(client.WaitFor(RoomMessageTypes::kPong).has_value());
+        }
+
+        /// True when @p lobby shows a human seat that is not connected
+        bool HasAwayHuman(const ReceivedMessage& lobby) {
+            const Json* seats = FindJsonMember(lobby.json, "seats");
+            if (!seats || !seats->is_array()) {
+                return false;
+            }
+            for (const Json& seat : *seats) {
+                const Json* connected = FindJsonMember(seat, "connected");
+                if (GetJsonString(seat, "kind").value_or("") == "human" && connected && connected->is_boolean() && !connected->get<bool>()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// Reads frames until a ping arrives (text frames before it are skipped); false when none does or the connection ends first
+        bool WaitForPing(RoomSocketClient& client, std::chrono::milliseconds limit = 5s) {
+            const auto deadline = std::chrono::steady_clock::now() + limit;
+            while (std::chrono::steady_clock::now() < deadline) {
+                const auto frame = client.Raw().WaitForFrame(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()));
+                if (!frame) {
+                    return false;
+                }
+                if (frame->opcode == WebSocketOpcode::kPing) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void SendPong(RoomSocketClient& client) {
+            client.Raw().Send(AsBytes(EncodeFrame(WebSocketOpcode::kPong, {}, kClientMask)));
+        }
+
+    }  // namespace
+
+    TEST_F(RoomWebSocketServerTest, SilentClientGetsAPingAnswersWithAPongAndStays) {
+        ManualClock clock;
+        const uint16_t port = StartServer(MakeLivenessSettings(clock));
+        auto client = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(client.has_value());
+        RoundTrip(*client);  // the hub knows the connection
+        LetTicksPass();      // and the liveness check has seen what it sent
+
+        clock.Advance(kPingInterval);
+        ASSERT_TRUE(WaitForPing(*client)) << "a connection that was silent for pingInterval must be pinged";
+
+        // The pong is life: the next ping comes only after another interval of silence
+        SendPong(*client);
+        RoundTrip(*client);
+        LetTicksPass();
+        clock.Advance(kPingInterval / 2);
+        LetTicksPass();
+        EXPECT_FALSE(client->Raw().WaitForFrame(100ms).has_value()) << "no second ping inside the interval";
+        clock.Advance(kPingInterval / 2);
+        EXPECT_TRUE(WaitForPing(*client));
+        SendPong(*client);
+        RoundTrip(*client);
+        EXPECT_FALSE(client->GetCloseFrame().has_value());
+    }
+
+    TEST_F(RoomWebSocketServerTest, ClientThatNeverAnswersIsDroppedAfterTwoIntervalsAndItsSeatGoesAway) {
+        ManualClock clock;
+        const uint16_t port = StartServer(MakeLivenessSettings(clock));
+        auto host = MakeHost(port);
+        ASSERT_TRUE(host.has_value());
+        auto guest = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(guest.has_value());
+        guest->JoinByName(host->roomCode, "Guest");
+        ASSERT_TRUE(guest->WaitFor(RoomMessageTypes::kJoined).has_value());
+        ASSERT_TRUE(guest->WaitFor(RoomMessageTypes::kLobby).has_value());
+        host->Start();
+        ASSERT_TRUE(host->WaitFor(RoomMessageTypes::kView).has_value());
+        RoundTrip(*host);
+        RoundTrip(*guest);
+        LetTicksPass();
+
+        // The host is alive all the time (it sends something every step), the guest says nothing and never pongs
+        bool guestAway = false;
+        for (int step = 0; step < 12 && !guestAway; ++step) {
+            clock.Advance(kClockStep);
+            RoundTrip(*host);
+            LetTicksPass();
+            while (const auto lobby = host->WaitFor(RoomMessageTypes::kLobby, 20ms)) {
+                guestAway = guestAway || HasAwayHuman(*lobby);
+            }
+        }
+        // The lobby of the drop may still be on its way: three intervals have passed, so it is only a matter of delivery
+        while (!guestAway) {
+            const auto lobby = host->WaitFor(RoomMessageTypes::kLobby, 5s);
+            if (!lobby) {
+                break;
+            }
+            guestAway = HasAwayHuman(*lobby);
+        }
+        EXPECT_TRUE(guestAway) << "the host never saw the silent guest go away";
+
+        // The guest got the ping first, then the end of the connection
+        EXPECT_TRUE(WaitForPing(*guest));
+        EXPECT_TRUE(guest->Raw().WaitForEndOfStream());
+        // The host stayed
+        RoundTrip(*host);
+        EXPECT_FALSE(host->GetCloseFrame().has_value());
+    }
+
+    TEST_F(RoomWebSocketServerTest, ClientThatSendsRegularlyIsNeverPinged) {
+        ManualClock clock;
+        const uint16_t port = StartServer(MakeLivenessSettings(clock));
+        auto client = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(client.has_value());
+        RoundTrip(*client);
+        LetTicksPass();
+
+        for (int step = 0; step < 16; ++step) {
+            clock.Advance(kClockStep);  // four intervals in all
+            RoundTrip(*client);
+        }
+        LetTicksPass();
+        EXPECT_FALSE(client->GetCloseFrame().has_value());
+        for (const ReceivedMessage& message : client->Received()) {
+            EXPECT_EQ(message.type, RoomMessageTypes::kPong);
+        }
+        EXPECT_FALSE(client->Raw().WaitForFrame(100ms).has_value()) << "no ping, no close frame";
+    }
+
+    TEST_F(RoomWebSocketServerTest, PingIntervalZeroSendsNoPingAndDropsNobody) {
+        ManualClock clock;
+        const uint16_t port = StartServer(MakeLivenessSettings(clock, 0ms));
+        auto client = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(client.has_value());
+        RoundTrip(*client);
+
+        clock.Advance(25s);  // far over any interval, under the 30 s the hub lets a connection that is in no room stay silent
+        LetTicksPass();
+        EXPECT_FALSE(client->Raw().WaitForFrame(200ms).has_value());
+        RoundTrip(*client);
     }
 
     TEST_F(RoomWebSocketServerTest, TwoServersOnTwoPortsDoNotInterfere) {

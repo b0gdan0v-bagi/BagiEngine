@@ -19,6 +19,10 @@ namespace BECore {
      * writes to a socket, so a slow client cannot stall the hub), `close` queues a close frame. For one connection the order of
      * the frames is the order the hub produced them.
      *
+     * Liveness: on every tick the hub thread looks at the byte counter of each open connection. One that sent nothing for
+     * `pingInterval` gets a ping, one that sent nothing (a pong counts) for twice that is dropped, which the hub learns as a
+     * disconnect.
+     *
      * The queue holds at most kMaxQueuedEvents events and kMaxQueuedBytes of text: a reader that finds it full waits, so TCP slows
      * the fast sender and the memory stays bounded.
      *
@@ -63,8 +67,19 @@ namespace BECore {
         /// Puts an event in the queue (the reader thread of a connection); waits while the queue is full. False when the server is stopping
         bool PushEvent(EventKind kind, ConnectionId connection, eastl::string text);
 
+        /// What the hub thread knows about the life of one connection
+        struct Liveness {
+            uint64_t bytesReceived = 0;  // the counter when it last changed
+            RoomTime lastLife;           // when anything last arrived
+            bool pingSent = false;       // a ping went out since then
+        };
+        using LivenessMap = eastl::hash_map<ConnectionId, Liveness>;
+
         [[nodiscard]] WebSocketHandler MakeHandler();
         void RunHub();
+
+        /// Pings the connections that went quiet and drops the ones that did not answer (hub thread, on the tick)
+        void CheckLiveness(LivenessMap& liveness, RoomTime now);
 
         /// The HubSink
         void SendTo(ConnectionId connection, eastl::string text);
