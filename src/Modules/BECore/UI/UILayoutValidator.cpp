@@ -18,13 +18,15 @@ namespace BECore {
 
         class Walker {
         public:
-            Walker(const UICanvasResolved& resolved, const UILayoutValidatorOptions& options, eastl::vector<UILayoutIssue>& issues) : _resolved(resolved), _options(options), _issues(issues) {}
+            Walker(const UICanvasResolved& resolved, const UILayoutValidatorOptions& options, const UIRegionSet& regions, eastl::vector<UILayoutIssue>& issues)
+                : _resolved(resolved), _options(options), _regions(regions), _issues(issues) {}
 
             void VisitRoot(const UIElement& root) {
                 CheckStackSiblings(root);
+                const bool regionsIgnored = root.layout == UILayoutKind::Stack;
                 for (const auto& child : root.children) {
                     const bool keepsOffView = eastl::find(_options.keepOffView.begin(), _options.keepOffView.end(), child->name) != _options.keepOffView.end();
-                    Visit(*child, child->ignoreSafeArea, keepsOffView);
+                    Visit(*child, child->ignoreSafeArea, keepsOffView, regionsIgnored);
                 }
             }
 
@@ -35,10 +37,13 @@ namespace BECore {
 
             // @p ignoresSafeArea: a child of the root asked for the whole canvas (`ignoreSafeArea`), and so does everything under it; the flag of a deeper element means nothing
             // @p keepsOffView: a named child of the root (`keepOffView`), and so is everything under it, down to the first element that lies over the view
-            void Visit(const UIElement& element, bool ignoresSafeArea, bool keepsOffView) {
+            // @p regionsIgnored: the parent is a stack or a popup element, which place their children themselves, so a `region` of this element does nothing
+            void Visit(const UIElement& element, bool ignoresSafeArea, bool keepsOffView, bool regionsIgnored) {
                 if (!element.active.visible) {
                     return;
                 }
+
+                CheckRegion(element, regionsIgnored);
 
                 if (!element.rect.IsEmpty()) {
                     if (!IsInside(element.rect, _resolved.bounds)) {
@@ -72,8 +77,26 @@ namespace BECore {
                 if (!element.HasPopupChildren()) {
                     CheckStackSiblings(element);
                 }
+                const bool childrenIgnoreRegions = element.layout == UILayoutKind::Stack || element.HasPopupChildren();
                 for (const auto& child : element.children) {
-                    Visit(*child, ignoresSafeArea, keepsOffView);
+                    Visit(*child, ignoresSafeArea, keepsOffView, childrenIgnoreRegions);
+                }
+            }
+
+            void CheckRegion(const UIElement& element, bool regionsIgnored) {
+                const PoolString name = element.active.rect.region;
+                if (name.Empty()) {
+                    return;
+                }
+                if (regionsIgnored) {
+                    Report(UILayoutIssueKind::RegionIgnored, element, name);
+                    return;
+                }
+                const Rect* region = _regions.Find(name);
+                if (!region) {
+                    Report(UILayoutIssueKind::MissingRegion, element, name);
+                } else if (!element.rect.IsEmpty() && !IsInside(element.rect, *region)) {
+                    Report(UILayoutIssueKind::OutsideRegion, element, name);
                 }
             }
 
@@ -97,14 +120,15 @@ namespace BECore {
 
             const UICanvasResolved& _resolved;
             const UILayoutValidatorOptions& _options;
+            const UIRegionSet& _regions;
             eastl::vector<UILayoutIssue>& _issues;
         };
 
     }  // namespace
 
-    eastl::vector<UILayoutIssue> UILayoutValidator::Validate(const UIElement& root, const UICanvasResolved& resolved, const UILayoutValidatorOptions& options) {
+    eastl::vector<UILayoutIssue> UILayoutValidator::Validate(const UIElement& root, const UICanvasResolved& resolved, const UILayoutValidatorOptions& options, const UIRegionSet& regions) {
         eastl::vector<UILayoutIssue> issues;
-        Walker(resolved, options, issues).VisitRoot(root);
+        Walker(resolved, options, regions, issues).VisitRoot(root);
         return issues;
     }
 

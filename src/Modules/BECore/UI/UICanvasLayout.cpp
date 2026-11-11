@@ -98,7 +98,7 @@ namespace BECore {
     }
 
     eastl::vector<UILayoutIssue> UICanvasLayout::Validate(const UILayoutValidatorOptions& options) const {
-        return UILayoutValidator::Validate(*root, _resolved, options);
+        return UILayoutValidator::Validate(*root, _resolved, options, _regions);
     }
 
 }  // namespace BECore

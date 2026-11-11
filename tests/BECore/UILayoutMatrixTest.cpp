@@ -183,4 +183,77 @@ namespace BECore::Tests {
         EXPECT_TRUE(AnyLabelEndsWith(failures, "view #0"));
     }
 
+    namespace {
+
+        /// The region a game derives from the bounds of each case: the left third of the canvas, its whole height
+        UIMatrixRegions LeftThirdAs(const char* name) {
+            return [name](UIRegionSet& regions, const UICanvasResolved& resolved) {
+                const Rect& bounds = resolved.bounds;
+                regions.Set(PoolString::Intern(name), {bounds.x, bounds.y, bounds.w / 3.0f, bounds.h});
+            };
+        }
+
+        /// A Screen canvas with one element of the given size (units or percent) at the top left of the region "side"
+        UICanvasLayout RegionCanvas(UILength width, UILength height) {
+            UICanvasLayout canvas;
+            auto element = canvas.root->AddChild("Side"_intern);
+            element->style.rect.region = "side"_intern;
+            element->style.rect.width = width;
+            element->style.rect.height = height;
+            return canvas;
+        }
+
+        constexpr size_t kScreenRunsPerCase = 6;  // three scale modes, two user scales
+
+    }  // namespace
+
+    TEST(UILayoutMatrixTest, AnElementAnchoredByPercentInARegionTheGamePublishesIsCleanOnTheWholeMatrix) {
+        UICanvasLayout canvas = RegionCanvas(UILength::Percent(80.0f), UILength::Percent(50.0f));
+        canvas.regions.Set("kept"_intern, {1.0f, 2.0f, 3.0f, 4.0f});
+
+        const auto failures = ValidateOnMatrix(canvas, {}, {}, {}, LeftThirdAs("side"));
+
+        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
+        EXPECT_EQ(canvas.regions.Size(), 1u);  // the canvas gets its own set back
+        ASSERT_NE(canvas.regions.Find("kept"_intern), nullptr);
+        EXPECT_FLOAT_EQ(canvas.regions.Find("kept"_intern)->h, 4.0f);
+    }
+
+    TEST(UILayoutMatrixTest, ARegionNameThePublisherDoesNotSetFailsEveryCaseWithMissingRegion) {
+        UICanvasLayout canvas = RegionCanvas(UILength::Percent(80.0f), UILength::Percent(50.0f));
+
+        const auto failures = ValidateOnMatrix(canvas, {}, {}, {}, LeftThirdAs("other"));
+
+        EXPECT_EQ(failures.size(), UILayoutMatrix().size() * kScreenRunsPerCase);
+        for (const UIMatrixFailure& failure : failures) {
+            ASSERT_EQ(failure.issues.size(), 1u) << failure.label.c_str();
+            EXPECT_EQ(failure.issues[0].kind, UILayoutIssueKind::MissingRegion);
+            EXPECT_EQ(failure.issues[0].other, "side"_intern);
+        }
+    }
+
+    TEST(UILayoutMatrixTest, AFixedSizeElementWiderThanItsRegionFailsWithOutsideRegionOnTheSmallCases) {
+        UICanvasLayout canvas = RegionCanvas(UILength::Px(400.0f), UILength::Px(40.0f));
+
+        const auto failures = ValidateOnMatrix(canvas, {}, {}, {}, LeftThirdAs("side"));
+
+        ASSERT_FALSE(failures.empty());
+        EXPECT_LT(failures.size(), UILayoutMatrix().size() * kScreenRunsPerCase);  // the wide cases have room for it
+        for (const UIMatrixFailure& failure : failures) {
+            // A canvas narrower than the element also gets OutsideCanvas; the region is what every failing case has in common
+            const bool outsideRegion = eastl::any_of(failure.issues.begin(), failure.issues.end(), [](const UILayoutIssue& issue) { return issue.kind == UILayoutIssueKind::OutsideRegion; });
+            EXPECT_TRUE(outsideRegion) << failure.label.c_str();
+        }
+    }
+
+    TEST(UILayoutMatrixTest, WithNoPublisherTheCanvasKeepsItsOwnRegionsInEveryCase) {
+        UICanvasLayout canvas = RegionCanvas(UILength::Percent(100.0f), UILength::Percent(100.0f));
+        canvas.regions.Set("side"_intern, {0.0f, 0.0f, 100.0f, 100.0f});
+
+        const auto failures = ValidateOnMatrix(canvas);
+
+        // The region is 100 units in a canvas of at least a few hundred: the element fills it and is inside it everywhere
+        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
+    }
+
 }  // namespace BECore::Tests

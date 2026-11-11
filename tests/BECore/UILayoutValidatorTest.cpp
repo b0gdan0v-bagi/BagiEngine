@@ -17,6 +17,17 @@ namespace BECore::Tests {
             UIContentFit fit;
         };
 
+        /// A popup element that is open and places its children where the layout left them (their rects stay empty), enough for the validator to walk into them
+        class OpenPopupElement : public UIElement {
+        public:
+            [[nodiscard]] bool HasPopupChildren() const override {
+                return true;
+            }
+            [[nodiscard]] bool IsPopupOpen() const override {
+                return true;
+            }
+        };
+
         UILayoutContext Output(float width, float height) {
             UILayoutContext context;
             context.outputWidth = width;
@@ -480,6 +491,127 @@ namespace BECore::Tests {
         canvas.Update(Output(1000.0f, 500.0f));
 
         EXPECT_EQ(CountOf(canvas.Validate({}), UILayoutIssueKind::TouchTargetTooSmall), 1u);
+    }
+
+    // ---- regions ----------------------------------------------------------------------------------------------------------
+
+    namespace {
+
+        constexpr const char* kRegionName = "table.plate";
+
+        /// A 120 x 60 element in the region "table.plate" of 300 x 100 at (100, 100); a canvas of 1000 x 500 units
+        UICanvasLayout MakeRegionCanvas(const char* regionName = kRegionName) {
+            UICanvasLayout canvas = MakeCanvas();
+            canvas.regions.Set(PoolString::Intern(kRegionName), {100.0f, 100.0f, 300.0f, 100.0f});
+            AddBox(*canvas.root, "Plate", 0.0f, 0.0f, 120.0f, 60.0f)->style.rect.region = PoolString::Intern(regionName);
+            return canvas;
+        }
+
+    }  // namespace
+
+    TEST(UILayoutValidatorTest, ARegionThatIsNotPublishedIsMissingAndTheElementFallsBackToItsParent) {
+        UICanvasLayout canvas = MakeRegionCanvas("table.gone");
+        auto plate = canvas.root->children[0];
+        canvas.Update(Output(1000.0f, 500.0f));
+
+        const auto issues = canvas.Validate({});
+
+        ASSERT_EQ(issues.size(), 1u);
+        EXPECT_EQ(issues[0].kind, UILayoutIssueKind::MissingRegion);
+        EXPECT_EQ(issues[0].element, "Plate"_intern);
+        EXPECT_EQ(issues[0].other, "table.gone"_intern);
+        EXPECT_FLOAT_EQ(plate->rect.x, 0.0f);  // laid out in the canvas, as with no region
+
+        UICanvasLayout published = MakeRegionCanvas();  // the broken copy's repair: the name that is published
+        published.Update(Output(1000.0f, 500.0f));
+        EXPECT_TRUE(published.Validate({}).empty());
+    }
+
+    TEST(UILayoutValidatorTest, AnElementThatSticksOutOfItsRegionIsReportedAndOneInsideIsNot) {
+        UICanvasLayout canvas = MakeRegionCanvas();
+        auto plate = canvas.root->children[0];
+        plate->style.rect.width = UILength::Percent(100.0f);  // the whole region
+        canvas.Update(Output(1000.0f, 500.0f));
+        EXPECT_TRUE(canvas.Validate({}).empty());
+
+        plate->style.rect.width = UILength::Percent(120.0f);  // 360 in a region of 300
+        canvas.Invalidate();
+        canvas.Update(Output(1000.0f, 500.0f));
+        const auto issues = canvas.Validate({});
+
+        ASSERT_EQ(issues.size(), 1u);
+        EXPECT_EQ(issues[0].kind, UILayoutIssueKind::OutsideRegion);
+        EXPECT_EQ(issues[0].element, "Plate"_intern);
+        EXPECT_EQ(issues[0].other, "table.plate"_intern);
+        EXPECT_FLOAT_EQ(issues[0].rect.w, 360.0f);
+    }
+
+    TEST(UILayoutValidatorTest, AnElementInsideItsRegionStillAnswersToTheCanvas) {
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.regions.Set("table.edge"_intern, {800.0f, 100.0f, 300.0f, 100.0f});  // 100 units of it are past the canvas
+        auto plate = AddBox(*canvas.root, "Plate", 0.0f, 0.0f, 120.0f, 60.0f);
+        plate->style.rect.region = "table.edge"_intern;
+        plate->style.rect.width = UILength::Percent(120.0f);
+        canvas.Update(Output(1000.0f, 500.0f));
+
+        const auto issues = canvas.Validate({});
+
+        EXPECT_EQ(CountOf(issues, UILayoutIssueKind::OutsideCanvas), 1u);
+        EXPECT_EQ(CountOf(issues, UILayoutIssueKind::OutsideRegion), 1u);
+
+        plate->style.rect.width = UILength::Percent(100.0f);  // fills the region: inside it, still outside the canvas
+        canvas.Invalidate();
+        canvas.Update(Output(1000.0f, 500.0f));
+        const auto filling = canvas.Validate({});
+        EXPECT_EQ(CountOf(filling, UILayoutIssueKind::OutsideCanvas), 1u);
+        EXPECT_EQ(CountOf(filling, UILayoutIssueKind::OutsideRegion), 0u);
+    }
+
+    TEST(UILayoutValidatorTest, ARegionOfAStackChildIsIgnoredAndTheStackItselfMayNameOne) {
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.regions.Set("table.row"_intern, {100.0f, 100.0f, 300.0f, 100.0f});
+        canvas.regions.Set("table.cell"_intern, {600.0f, 100.0f, 100.0f, 100.0f});
+        auto row = AddBox(*canvas.root, "Row", 0.0f, 0.0f, 300.0f, 100.0f);
+        row->layout = UILayoutKind::Stack;
+        row->style.rect.region = "table.row"_intern;
+        auto cell = AddBox(*row, "Cell", 0.0f, 0.0f, 100.0f, 50.0f);
+        canvas.Update(Output(1000.0f, 500.0f));
+        EXPECT_TRUE(canvas.Validate({}).empty());
+
+        cell->style.rect.region = "table.cell"_intern;
+        canvas.Invalidate();
+        canvas.Update(Output(1000.0f, 500.0f));
+        const auto issues = canvas.Validate({});
+
+        ASSERT_EQ(issues.size(), 1u);
+        EXPECT_EQ(issues[0].kind, UILayoutIssueKind::RegionIgnored);
+        EXPECT_EQ(issues[0].element, "Cell"_intern);
+        EXPECT_EQ(issues[0].other, "table.cell"_intern);
+        EXPECT_FLOAT_EQ(cell->rect.x, 100.0f);  // placed by the stack, not by the region
+    }
+
+    TEST(UILayoutValidatorTest, ARegionOfAPopupChildIsIgnored) {
+        UICanvasLayout canvas = MakeCanvas();
+        canvas.regions.Set("table.item"_intern, {600.0f, 100.0f, 100.0f, 100.0f});
+        auto popup = New<OpenPopupElement>();
+        popup->name = "Popup"_intern;
+        canvas.root->children.push_back(popup);
+        auto item = AddBox(*popup, "Item", 0.0f, 0.0f, 50.0f, 20.0f);
+        item->style.rect.region = "table.item"_intern;
+        canvas.Update(Output(1000.0f, 500.0f));
+
+        const auto issues = canvas.Validate({});
+
+        ASSERT_EQ(CountOf(issues, UILayoutIssueKind::RegionIgnored), 1u);
+        EXPECT_EQ(CountOf(issues, UILayoutIssueKind::MissingRegion), 0u);
+    }
+
+    TEST(UILayoutValidatorTest, AHiddenElementWithAMissingRegionIsNotChecked) {
+        UICanvasLayout canvas = MakeRegionCanvas("table.gone");
+        canvas.root->children[0]->style.visible = false;
+        canvas.Update(Output(1000.0f, 500.0f));
+
+        EXPECT_TRUE(canvas.Validate({}).empty());
     }
 
     TEST(UILayoutValidatorTest, CompileTimeChecks) {}
