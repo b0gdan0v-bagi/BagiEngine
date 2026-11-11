@@ -399,9 +399,37 @@ def is_waiting(session: dict | None) -> bool:
     return session is not None and session.get("state") != "done" and (session.get("status") == "waiting" or session.get("state") == "blocked")
 
 
+def turn_ended(session: dict | None) -> bool:
+    """The session's last answer in its transcript ended the turn with text (`stop_reason` `end_turn`, no tool call). A
+    background run that ends its report with an offer to the owner stays `blocked` in `claude agents` for hours, though
+    nothing waits: a permission or an `AskUserQuestion` is a pending tool call, so it never looks like this."""
+    if not session or not session.get("cwd") or not session.get("sessionId"):
+        return False
+    for record in reversed(tail_records(transcript_of(session["cwd"], session["sessionId"]))):
+        if record.get("type") != "assistant":
+            continue
+        message = record.get("message") or {}
+        content = message.get("content") if isinstance(message.get("content"), list) else []
+        if any(isinstance(part, dict) and part.get("type") == "tool_use" for part in content):
+            return False
+        return message.get("stop_reason") == "end_turn"
+    return False
+
+
+def waits_for_owner(session: dict | None) -> bool:
+    """`is_waiting`, less a run that only ended its turn (`turn_ended`)."""
+    return is_waiting(session) and not turn_ended(session)
+
+
 def is_active(session: dict | None) -> bool:
     """A session that has not finished its work: busy, or waiting for the person (a permission)."""
     return session is not None and session.get("state") != "done"
+
+
+def is_running(session: dict | None) -> bool:
+    """`is_active`, less a run that ended its turn and only stays listed as blocked (`turn_ended`): `start` and `update`
+    treat it as finished, and `start` stops it before it starts the next loop (one session per worker)."""
+    return is_active(session) and not (is_waiting(session) and turn_ended(session))
 
 
 def describe(session: dict | None) -> str:
@@ -422,6 +450,8 @@ def describe(session: dict | None) -> str:
         minutes = int((time.time() * 1000 - stopped) / 60000)
         when = f"{minutes // 60} h {minutes % 60} min" if minutes >= 60 else f"{minutes} min"
         return f"{session.get('name') or session.get('id')}: stopped by worker.py stop {when} ago (start or relaunch to go on)"
+    if is_waiting(session) and turn_ended(session):
+        return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}, its run ended (nothing waits; stop clears it)"
     waiting = f", waits for you ({session.get('waitingFor') or 'input'}): claude attach {session_ref(session)}" if is_waiting(session) else ""
     return f"{session.get('name') or session.get('id')}: {state}/{session.get('status', '?')}{since}{waiting}"
 
@@ -1004,8 +1034,9 @@ def list_json(layout: Layout, args) -> dict:
             "engine": engine,
             "dirty": bool(changed),
             "session": None if session is None else {key: session.get(key) for key in ("id", "name", "state", "status", "waitingFor", "startedAt")},
-            "active": is_active(session),
-            "waiting": is_waiting(session) and limited is None,
+            "active": is_running(session),
+            "waiting": waits_for_owner(session) and limited is None,
+            "endedTurn": is_waiting(session) and limited is None and turn_ended(session),
             "limited": limited,
             "stopped": stopped_at(session),
             "activity": session_activity(session) if args.activity else None,
@@ -1168,9 +1199,11 @@ def cmd_start(layout: Layout, args) -> None:
     failed = False
     for k, path in workers:
         session = session_in(sessions or [], path)
-        if is_active(session):
+        if is_running(session):
             print(f"w{k}: already runs ({describe(session)}), left alone")
             continue
+        if is_active(session) and not args.print_only:
+            subprocess.run([args.claude, "stop", str(session.get("id") or session["sessionId"])], capture_output=True, text=True)
         command = [args.claude, "--bg", "--name", session_name(k), *flags, *args.rest, prompt]
         if started and args.delay > 0:
             print(f"  waiting {args.delay} s before w{k} (the loops must not choose at the same moment)")
@@ -1284,7 +1317,7 @@ def update_one(layout: Layout, k: int, path: Path, sessions: list[dict] | None) 
     """Detach every repository of a worker at the tip of its base, what the loop calls "go to the base"; the
     branch it held stays as it is. Refused for a session that has not finished and for uncommitted changes."""
     session = session_in(sessions or [], path)
-    if is_active(session):
+    if is_running(session):
         raise WorkerError(f"w{k}: its session runs ({describe(session)}); stop it first")
     repos = worker_repos(layout, path)
     for repo, _base in repos:

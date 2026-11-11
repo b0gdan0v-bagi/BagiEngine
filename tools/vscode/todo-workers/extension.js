@@ -96,7 +96,7 @@ function sessionWord(worker) {
     if (!s) return "no session";
     if (worker.limited) return "limited";
     if (worker.stopped) return "stopped"; // worker.py stop ended it (its entry stays in progress)
-    if (s.state === "done") return "done";
+    if (s.state === "done" || worker.endedTurn) return "done"; // a run that ended its turn waits for nothing
     if (worker.waiting) return "waiting";
     return s.status === "busy" ? "busy" : "idle";
 }

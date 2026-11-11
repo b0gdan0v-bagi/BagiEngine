@@ -791,3 +791,50 @@ def test_relaunch_of_a_named_worker_refuses_a_busy_session_and_one_that_is_missi
     limited_session(game.parent / "game.workers" / "w1", sessions, state="done", limited=False)
     assert worker.main(["relaunch", "1", "--claude", str(script), "--prompt", "go on"]) == 0
     assert log.read_text().splitlines()[-1].endswith("args=--bg --resume sess-limit --name todo-w1 go on")  # done: no stop
+
+
+# --- a run that ended its turn ------------------------------------------------------------------------------
+
+
+def blocked_session(w: Path, sessions: Path, last: dict) -> None:
+    record = session(w, "blocked", "ended1")
+    record["sessionId"] = "sess-ended"
+    sessions.write_text(json.dumps([record]))
+    path = worker.transcript_of(str(w), "sess-ended")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    first = {"type": "assistant", "message": {"content": [{"type": "text", "text": "Starting the reviewer."}], "stop_reason": "tool_use"}}
+    path.write_text("\n".join(json.dumps(r) for r in (first, {"type": "user", "message": {"content": "ok"}}, last)) + "\n")
+
+
+ENDED = {"type": "assistant", "message": {"content": [{"type": "text", "text": "Report. Run /todo-merge?"}], "stop_reason": "end_turn"}}
+ASKING = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash", "input": {"command": "rm x"}}], "stop_reason": "tool_use"}}
+
+
+def test_a_run_that_ended_its_turn_waits_for_nobody(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
+    script, log, sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    w1 = game.parent / "game.workers" / "w1"
+    blocked_session(w1, sessions, ENDED)
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    row = json.loads(capsys.readouterr().out)["workers"][0]
+    assert row["endedTurn"] and not row["waiting"] and not row["active"]
+    assert worker.main(["list", "--claude", str(script)]) == 0
+    out = capsys.readouterr().out
+    assert "its run ended" in out and "waits for you" not in out
+    # start stops the ended session and starts the next loop
+    assert worker.main(["start", "--delay", "0", "--claude", str(script)]) == 0
+    calls = log.read_text().splitlines()
+    assert "stop ended1" in calls and any("--bg --name todo-w1" in c for c in calls)
+
+
+def test_a_run_with_a_pending_tool_call_still_waits(game: Path, fake_claude, tmp_path, monkeypatch, capsys):
+    script, _log, sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    blocked_session(game.parent / "game.workers" / "w1", sessions, ASKING)
+    capsys.readouterr()
+    assert worker.main(["list", "--json", "--claude", str(script)]) == 0
+    row = json.loads(capsys.readouterr().out)["workers"][0]
+    assert row["waiting"] and row["active"] and not row["endedTurn"]

@@ -53,7 +53,7 @@
         } else if (worker.stopped) {
             word = "stopped";
             kind = "stopped";
-        } else if (s && s.state === "done") {
+        } else if ((s && s.state === "done") || worker.endedTurn) {
             word = "done";
             kind = "done";
         } else if (worker.waiting) {
@@ -75,7 +75,7 @@
         if (kind === "waiting") badge.title = `The loop waits for your answer (${(s && s.waitingFor) || "input needed"}): Answer opens it`;
         if (kind === "limited") badge.title = `${worker.limited.text}. Relaunch continues the loop after the reset`;
         if (kind === "stopped") badge.title = "worker.py stop ended this session; its entry stays in progress on its branch: Relaunch or Fast start continues it";
-        if (kind === "done") badge.title = "The session has finished; Log shows it, Update and Fast start begin anew";
+        if (kind === "done") badge.title = worker.endedTurn ? "The run ended its turn (claude agents still lists it as blocked, but nothing waits): Stop clears it, Log shows it" : "The session has finished; Log shows it, Update and Fast start begin anew";
         return badge;
     }
 
@@ -215,7 +215,7 @@
             const said = [...events].reverse().find((e) => e.kind === "say");
             if (said) {
                 const now = el("div", "now");
-                now.append(el("span", "label", worker.active ? "Now" : "Last"), el("span", "time", ago(said.time)), el("div", "said", plain(said.text)));
+                now.append(el("span", "label", worker.active && !worker.endedTurn ? "Now" : "Last"), el("span", "time", ago(said.time)), el("div", "said", plain(said.text)));
                 card.appendChild(now);
             }
             return card;
@@ -239,7 +239,7 @@
             const said = [...events].reverse().find((e) => e.kind === "say");
             if (said) {
                 const now = el("div", "now");
-                now.append(el("span", "label", worker.active ? "Now" : "Last"), el("span", "time", ago(said.time)), el("div", "said", plain(said.text)));
+                now.append(el("span", "label", worker.active && !worker.endedTurn ? "Now" : "Last"), el("span", "time", ago(said.time)), el("div", "said", plain(said.text)));
                 card.appendChild(now);
             }
             const agents = activity.agents || [];
