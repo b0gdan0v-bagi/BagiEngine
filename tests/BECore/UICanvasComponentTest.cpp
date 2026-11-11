@@ -982,6 +982,36 @@ namespace BECore::Tests {
         EXPECT_EQ(probe->drags.size(), 1u);
     }
 
+    TEST_F(UICanvasComponentTest, PublishedRegionsPlaceTheElementsThatNameThemAndTheElementFollowsEveryChange) {
+        auto hud = Canvas("Main", "Hud");
+        auto plate = AddSquare(*hud, "Plate", 0.0f, 0.0f, 50.0f);
+        plate->style.rect.region = "table.plate"_intern;
+
+        hud->UpdateLayout(800.0f, 600.0f);
+        ExpectRect(plate->rect, 0.0f, 0.0f, 50.0f, 50.0f);  // not published yet: the parent box
+
+        hud->SetRegion("table.plate"_intern, {200.0f, 100.0f, 300.0f, 100.0f});
+        hud->UpdateLayout(800.0f, 600.0f);
+        ExpectRect(plate->rect, 200.0f, 100.0f, 50.0f, 50.0f);
+        EXPECT_EQ(hud->GetRegions().Size(), 1u);
+
+        hud->SetRegion("table.plate"_intern, {10.0f, 20.0f, 300.0f, 100.0f});
+        hud->UpdateLayout(800.0f, 600.0f);
+        ExpectRect(plate->rect, 10.0f, 20.0f, 50.0f, 50.0f);
+
+        EXPECT_TRUE(hud->RemoveRegion("table.plate"_intern));
+        EXPECT_FALSE(hud->RemoveRegion("table.plate"_intern));
+        hud->UpdateLayout(800.0f, 600.0f);
+        ExpectRect(plate->rect, 0.0f, 0.0f, 50.0f, 50.0f);
+
+        hud->SetRegion("table.plate"_intern, {200.0f, 100.0f, 300.0f, 100.0f});
+        hud->UpdateLayout(800.0f, 600.0f);
+        hud->ClearRegions();
+        EXPECT_TRUE(hud->GetRegions().IsEmpty());
+        hud->UpdateLayout(800.0f, 600.0f);
+        ExpectRect(plate->rect, 0.0f, 0.0f, 50.0f, 50.0f);
+    }
+
     TEST_F(UICanvasComponentTest, ADestroyedSceneLeavesNoHandlerBehind) {
         auto hud = Canvas("Main", "Hud");
         AddSquare(*hud, "Button", 100.0f, 100.0f, 50.0f);

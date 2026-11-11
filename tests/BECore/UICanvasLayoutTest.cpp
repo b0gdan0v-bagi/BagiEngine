@@ -113,6 +113,65 @@ namespace BECore::Tests {
         ExpectRect(canvas.GetResolved().bounds, 0.0f, 0.0f, 1280.0f, 720.0f);
     }
 
+    // ---- regions ----------------------------------------------------------------------------------------------------------
+
+    TEST(UICanvasLayoutTest, AChangedRegionSetMovesTheElementOnTheNextUpdateWithNoInvalidate) {
+        UICanvasLayout canvas;
+        auto plate = AddBox(*canvas.root, "Plate", 0.0f, 0.0f, 40.0f, 20.0f);
+        plate->style.rect.region = "table.plate"_intern;
+        canvas.regions.Set("table.plate"_intern, {100.0f, 200.0f, 300.0f, 100.0f});
+        canvas.Update(Output(1280.0f, 720.0f));
+        ExpectRect(plate->rect, 100.0f, 200.0f, 40.0f, 20.0f);
+
+        canvas.regions.Set("table.plate"_intern, {500.0f, 50.0f, 300.0f, 100.0f});
+        EXPECT_TRUE(canvas.Update(Output(1280.0f, 720.0f)));
+        ExpectRect(plate->rect, 500.0f, 50.0f, 40.0f, 20.0f);
+
+        canvas.regions.Remove("table.plate"_intern);
+        EXPECT_TRUE(canvas.Update(Output(1280.0f, 720.0f)));
+        ExpectRect(plate->rect, 0.0f, 0.0f, 40.0f, 20.0f);
+    }
+
+    TEST(UICanvasLayoutTest, TheSameRegionSetAgainDoesNotLayOutAndANewOneDoesNotChooseTheVariantsAgain) {
+        UICanvasLayout canvas;
+        AddBox(*canvas.root, "Plate", 0.0f, 0.0f, 40.0f, 20.0f)->style.rect.region = "table.plate"_intern;
+        canvas.regions.Set("table.plate"_intern, {100.0f, 200.0f, 300.0f, 100.0f});
+        canvas.Update(Output(1280.0f, 720.0f));
+        ASSERT_EQ(canvas.GetLayoutRuns(), 1u);
+        ASSERT_EQ(canvas.GetVariantRuns(), 1u);
+
+        canvas.regions.Set("table.plate"_intern, {100.0f, 200.0f, 300.0f, 100.0f});
+        EXPECT_FALSE(canvas.Update(Output(1280.0f, 720.0f)));
+        EXPECT_EQ(canvas.GetLayoutRuns(), 1u);
+
+        canvas.regions.Set("table.plate"_intern, {101.0f, 200.0f, 300.0f, 100.0f});
+        EXPECT_TRUE(canvas.Update(Output(1280.0f, 720.0f)));
+        EXPECT_EQ(canvas.GetLayoutRuns(), 2u);
+        EXPECT_EQ(canvas.GetVariantRuns(), 1u);
+    }
+
+    TEST(UICanvasLayoutTest, AVariantThatSetsTheRegionMovesTheElementAndTheBoundsPickTheOtherRegion) {
+        UICanvasLayout canvas;
+        canvas.params.scaleMode = CanvasScaleMode::ConstantPixelSize;
+        auto plate = AddBox(*canvas.root, "Plate", 0.0f, 0.0f, 40.0f, 20.0f);
+        plate->style.rect.region = "table.wide"_intern;
+        UIVariant portrait;
+        portrait.when.orientation = UIOrientation::Portrait;
+        UIElementOverride toTall;
+        toTall.element = "Plate"_intern;
+        toTall.region = "table.tall"_intern;
+        portrait.overrides.push_back(toTall);
+        canvas.variants.push_back(portrait);
+        canvas.regions.Set("table.wide"_intern, {10.0f, 20.0f, 300.0f, 100.0f});
+        canvas.regions.Set("table.tall"_intern, {70.0f, 80.0f, 100.0f, 300.0f});
+
+        canvas.Update(Output(1000.0f, 500.0f));
+        ExpectRect(plate->rect, 10.0f, 20.0f, 40.0f, 20.0f);
+
+        canvas.Update(Output(500.0f, 1000.0f));
+        ExpectRect(plate->rect, 70.0f, 80.0f, 40.0f, 20.0f);
+    }
+
     TEST(UICanvasLayoutTest, InvalidateMakesTheNextUpdateChooseAndLayOutAgain) {
         UICanvasLayout canvas;
         BuildHud(canvas);

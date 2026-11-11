@@ -45,12 +45,13 @@ namespace BECore {
     }  // namespace
 
     bool UICanvasLayout::Update(const UILayoutContext& context) {
-        if (_valid && _hasContext && context == _context && params == _params) {
+        if (_valid && _hasContext && context == _context && params == _params && regions == _regions) {
             return false;
         }
 
         _context = context;
         _params = params;
+        _regions = regions;
         _hasContext = true;
         _resolved = UICanvasScaler::Resolve(params, context);
 
@@ -62,7 +63,7 @@ namespace BECore {
             ++_variantRuns;
         }
 
-        UITreeLayout::Run(*root, _resolved.contentBounds, _resolved.bounds);
+        UITreeLayout::Run(*root, _resolved.contentBounds, _resolved.bounds, _regions);
         ++_layoutRuns;
         _valid = true;
         return true;

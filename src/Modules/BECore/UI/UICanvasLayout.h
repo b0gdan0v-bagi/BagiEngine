@@ -3,6 +3,7 @@
 #include <BECore/UI/UICanvasScaler.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UILayoutValidator.h>
+#include <BECore/UI/UIRegions.h>
 #include <BECore/UI/UIVariant.h>
 
 namespace BECore {
@@ -14,14 +15,16 @@ namespace BECore {
      * sizes without a scene. The fields are public: change them and call Invalidate() (the settings in `params` are noticed by themselves).
      *
      * Update() works in this order: resolve the scale and bounds (UICanvasScaler), choose the variants of the bounds (UIVariants::Apply, only when
-     * the bounds changed or after Invalidate()), lay the tree out in the content bounds (UITreeLayout). It does nothing when neither the context, the
-     * params nor the tree changed.
+     * the bounds changed or after Invalidate()), lay the tree out in the content bounds (UITreeLayout), an element that names a published region in that
+     * region. It does nothing when neither the context, the params, the `regions` nor the tree changed. A change of `regions` lays the tree out again and
+     * does not choose the variants again: they depend on the bounds only.
      */
     class UICanvasLayout {
     public:
         UICanvasScaleParams params;
         IntrusivePtr<UIElement> root = New<UIElement>();  ///< the canvas itself: its children are the elements; its rect is the content bounds
         eastl::vector<UIVariant> variants;
+        UIRegionSet regions;  ///< the rectangles the game published, in canvas units; noticed by Update() by themselves, like `params`
 
         /// @return true when the layout was computed again
         bool Update(const UILayoutContext& context);
@@ -71,6 +74,7 @@ namespace BECore {
 
     private:
         UICanvasScaleParams _params;
+        UIRegionSet _regions;
         UILayoutContext _context;
         UICanvasResolved _resolved;
         bool _valid = false;       // the layout in the tree is current
