@@ -11,6 +11,7 @@
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Games/GameManager.h>
+#include <TaskSystem/TaskManager.h>
 #if BE_WITH_REMOTE_CONTROL
 #include <RemoteControl/WebSocketServer.h>
 #endif
@@ -59,6 +60,10 @@ namespace BECore {
 
         // The control fields stopped the start-up above; what is left is every other field (`mode`, `type`, `renderer`, `path`)
         LogDeserializeErrors("ApplicationConfig", load.errors);
+
+        if (load.config._taskFrameBudgetMs >= 0.0) {
+            CoreManager::GetTaskManager().SetFrameBudget(std::chrono::duration_cast<TaskManager::Duration>(std::chrono::duration<double, std::milli>(load.config._taskFrameBudgetMs)));
+        }
 
         // Before the first frame: the loop reads it from the start
         CoreManager::GetControlService().SetManualClock(controlSettings->manualClock);

@@ -24,7 +24,7 @@ namespace BECore::Tests {
 
     TEST(ApplicationConfigTest, ReadsEveryField) {
         const auto load = Load(R"(<root type="SDL3ApplicationFabric" renderer="SDLRendererBackend" path="config/Window.xml" mode="Game"
-                                         control="true" controlPort="9100" manualClock="1" headless="true"/>)");
+                                         control="true" controlPort="9100" manualClock="1" headless="true" taskFrameBudgetMs="2.5"/>)");
         EXPECT_TRUE(load.found);
         EXPECT_TRUE(load.errors.empty());
         EXPECT_EQ(load.config._type, "SDL3ApplicationFabric");
@@ -35,6 +35,7 @@ namespace BECore::Tests {
         EXPECT_EQ(load.config._controlPort, 9100);
         EXPECT_TRUE(load.config._manualClock);
         EXPECT_TRUE(load.config._headless);
+        EXPECT_DOUBLE_EQ(load.config._taskFrameBudgetMs, 2.5);
     }
 
     TEST(ApplicationConfigTest, MissingAttributesGiveTheDefaults) {
@@ -48,6 +49,13 @@ namespace BECore::Tests {
         EXPECT_EQ(load.config._controlPort, kDefaultControlPort);
         EXPECT_FALSE(load.config._manualClock);
         EXPECT_FALSE(load.config._headless);
+        EXPECT_DOUBLE_EQ(load.config._taskFrameBudgetMs, kNoTaskFrameBudget);
+    }
+
+    TEST(ApplicationConfigTest, BadTaskFrameBudgetKeepsTheDefaultAndIsReported) {
+        const auto load = Load(R"(<root taskFrameBudgetMs="fast"/>)");
+        EXPECT_TRUE(HasOnlyErrorAt(load, "taskFrameBudgetMs"));
+        EXPECT_DOUBLE_EQ(load.config._taskFrameBudgetMs, kNoTaskFrameBudget);
     }
 
     TEST(ApplicationConfigTest, ReadsEveryMode) {
