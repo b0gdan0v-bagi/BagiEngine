@@ -25,7 +25,7 @@ from typing import Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bagi_control_client import BagiControlClient, ConnectionClosed, ControlError  # noqa: E402
-from game_process import free_port, log_tail, preset_executable  # noqa: E402
+from game_process import PORT_TAKEN_MARKER, free_port, log_tail, preset_executable  # noqa: E402
 from png_reader import PngError, PngImage, read_png  # noqa: E402
 
 EXIT_PASSED = 0
@@ -41,7 +41,6 @@ DEFAULT_SCREENSHOT_SIZE = 1024
 SMALL_SCREENSHOT_SIZE = 200
 BOARD_COLORS = 5  # a Match3 board shows at least this many different colours (tiles, background, frame)
 CLOCK_TOLERANCE = 1e-6
-PORT_TAKEN_MARKER = "cannot listen on 127.0.0.1:"  # what the game logs when it cannot bind the control port (Application::StartControlServer)
 
 
 class SmokeFailure(Exception):

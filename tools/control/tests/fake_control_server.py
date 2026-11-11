@@ -7,6 +7,9 @@
 
 The handler returns the "result" of the response, or raises FakeError(code, message) for an error response, or QuitServer to
 answer and then drop the connection (a game that quits). `requests` keeps (method, params) of every request in order.
+`push(event, data)` sends a push to the clients: called from the handler it goes out before the answer, with `after_reply=True`
+behind it (the real game pushes at the end of a frame, after the answer of the request); called from another thread it goes to
+every open connection at once.
 Standard library only; the frames come from bagi_control_client.
 """
 
@@ -40,6 +43,8 @@ class FakeControlServer:
         self._threads: list[threading.Thread] = []
         self._connections: list[socket.socket] = []
         self._lock = threading.Lock()
+        self._send_lock = threading.Lock()  # frames of one connection come from the serving thread and from push()
+        self._handling = threading.local()  # connection and after-reply pushes of the request being handled by this thread
         self._stopped = threading.Event()
         self.requests: list[tuple[str, dict | None]] = []
         self.quit_requested = threading.Event()
@@ -56,6 +61,23 @@ class FakeControlServer:
         self._threads.append(accept)
         return listener.getsockname()[1]
 
+    def push(self, event: str, data: Any = None, after_reply: bool = False) -> None:
+        frame = encode_frame(OPCODE_TEXT, json.dumps({"event": event, "data": data}).encode("utf-8"))
+        queue = getattr(self._handling, "after_reply", None)
+        if queue is not None and after_reply:
+            queue.append(frame)
+            return
+        if queue is not None:
+            self._send(self._handling.connection, frame)
+            return
+        with self._lock:
+            connections = list(self._connections)
+        for connection in connections:
+            try:
+                self._send(connection, frame)
+            except OSError:
+                pass
+
     def stop(self) -> None:
         self._stopped.set()
         if self._listener is not None:
@@ -67,6 +89,10 @@ class FakeControlServer:
                 except OSError:
                     pass
                 connection.close()
+
+    def _send(self, connection: socket.socket, data: bytes) -> None:
+        with self._send_lock:
+            connection.sendall(data)
 
     def _accept_loop(self) -> None:
         assert self._listener is not None
@@ -129,9 +155,9 @@ class FakeControlServer:
                 continue
             fin, opcode, payload = frame
             if opcode == OPCODE_PING:
-                connection.sendall(encode_frame(OPCODE_PONG, payload))
+                self._send(connection, encode_frame(OPCODE_PONG, payload))
             elif opcode == OPCODE_CLOSE:
-                connection.sendall(encode_frame(OPCODE_CLOSE, payload[:2]))
+                self._send(connection, encode_frame(OPCODE_CLOSE, payload[:2]))
                 return
             elif opcode == OPCODE_TEXT or opcode == 0x0:
                 message += payload
@@ -147,6 +173,7 @@ class FakeControlServer:
         with self._lock:
             self.requests.append((method, params))
         quit_after = False
+        self._handling.connection, self._handling.after_reply = connection, []
         try:
             result = self._handler(method, params)
             response: dict[str, Any] = {"id": request["id"], "ok": True, "result": result}
@@ -155,7 +182,11 @@ class FakeControlServer:
         except QuitServer as quit_request:
             response = {"id": request["id"], "ok": True, "result": quit_request.result}
             quit_after = True
-        connection.sendall(encode_frame(OPCODE_TEXT, json.dumps(response).encode("utf-8")))
+        finally:
+            behind_the_answer, self._handling.after_reply = self._handling.after_reply, None
+        self._send(connection, encode_frame(OPCODE_TEXT, json.dumps(response).encode("utf-8")))
+        for frame in behind_the_answer:
+            self._send(connection, frame)
         if quit_after:
             self.quit_requested.set()
         return quit_after

@@ -5,8 +5,10 @@
 
 The environment variable FAKE_GAME_EXIT makes it exit at once (code 3) like --exit-immediately.
 
-Methods: ping, status, list_games, get_state (echoes the flags), list_actions, perform_action (a refusal for {"type": "bad"}),
-step, screenshot (a 2x1 PNG), quit (exits the process). Runs until quit, or until WATCHDOG_SECONDS have passed: on Windows the
+Methods: ping, status, list_games, get_state (echoes the flags), list_actions, perform_action (a refusal for {"type": "bad"}; it
+raises the state version by one and pushes state_changed behind its answer), step, screenshot (a 2x1 PNG; one frame on the manual
+clock, as the real game), warn (logs a line of the given level, "Warning" by default: {"level": "Error", "text": "..."}),
+quit (exits the process). Runs until quit, or until WATCHDOG_SECONDS have passed: on Windows the
 tests start it through a .bat, and killing the .bat (GameProcess.stop) would leave this process listening.
 """
 
@@ -47,6 +49,7 @@ def main() -> int:
     manual_clock = "--manual-clock" in args
     flags = [arg for arg in args if arg.startswith("--") and "=" not in arg]
     frame = {"count": 0}
+    state = {"version": 1}
 
     def handle(method: str, params: dict | None):
         if method == "ping":
@@ -56,17 +59,25 @@ def main() -> int:
         if method == "list_games":
             return {"active": "Fake", "games": [{"name": "Fake", "controllable": True}]}
         if method == "get_state":
-            return {"game": "Fake", "version": 1, "state": {"flags": flags}}
+            return {"game": "Fake", "version": state["version"], "state": {"flags": flags}}
         if method == "list_actions":
-            return {"game": "Fake", "version": 1, "actions": [{"type": "noop"}]}
+            return {"game": "Fake", "version": state["version"], "actions": [{"type": "noop"}]}
         if method == "perform_action":
             if (params or {}).get("type") == "bad":
                 raise FakeError("illegal_action", "not allowed")
-            return {"game": "Fake", "version": 2, "outcome": params}
+            state["version"] += 1
+            server.push("state_changed", {"game": "Fake", "version": state["version"]}, after_reply=True)
+            return {"game": "Fake", "version": state["version"], "outcome": params}
+        if method == "warn":
+            level, text = (params or {}).get("level", "Warning"), (params or {}).get("text", "something odd")
+            print(f"[{level}] [12:00:00.000] {text}", flush=True)
+            return {"logged": True}
         if method == "step":
             frame["count"] += (params or {}).get("frames", 1)
             return {"frame": frame["count"]}
         if method == "screenshot":
+            if manual_clock:
+                frame["count"] += 1
             return {"width": 2, "height": 1, "png_base64": base64.b64encode(png_2x1()).decode("ascii")}
         if method == "quit":
             raise QuitServer({"quitting": True})
