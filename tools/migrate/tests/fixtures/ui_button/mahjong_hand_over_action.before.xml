@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!--
+  The button of the score table (MahjongNextHand, which settles the hand and deals on) in the centre of the table: in the window's centre,
+  in the gap that the plate of HandOver leaves for it (the element ButtonGap, 64 high, between the seat rows and the lines). A Screen
+  canvas with the settings of HudMenu (match 0.5, minScale 0.6: the 56 unit button is 33.6 px), so it is a touch target in any window. Shown
+  and hidden by MahjongHudComponent together with HandOver, which is modal and takes every click that the button does not. It is 56 high at
+  22, 176 wide, and its word shrinks (AutoFit): "Следующая раздача" does not fit 176 at 22. The button and the plate are on two scales (the
+  canvas follows the window with a floor, the plate follows the fit of the table), so the button is as tall in view units as 56 times the ratio
+  of the two, which is 1.0 in a 16:9 window and at most 1.42 in a landscape one of the matrix at user scale 1.0 (32:9): the gap and the two gaps of 8 of the
+  plate around it, 80 units, hold that. The button has ignoreSafeArea (a child of the root: the validator lets it) and is anchored to the
+  centre, so a notch or side insets do not move it off the gap; y 4 centres it in the gap of the plate (the gap's middle is 6 units
+  under the middle of the view).
+  In a portrait window (height at least width, 1:1 included) the table is the portrait view, as wide as the window or narrower with bars at the
+  sides, and the plate of HandOver is 724 high with a gap of 112 (the variant of that file): the ratio of the two scales reaches 1.6 there (the
+  1:1 window of 480 px) and 56 x 1.6 = 90 fits the gap, so the button stays in the middle of the window as in a landscape one. MahjongTouchSizeTest and
+  MahjongEndScreenTest hold the place against the plate and the hands in every window of the matrix.
+-->
+<node name="HandOverAction" layer="26">
+  <components>
+    <component type="UICanvasComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="0.6" useSafeArea="true" visible="false">
+      <elements>
+        <element type="UIButton" name="NextHand" anchor="Center" ignoreSafeArea="true" x="0" y="4" width="176" height="56" text="{handOverButton}" fontSize="22" overflow="AutoFit" minFontSize="12" action="MahjongNextHand" color="40,110,60,255" />
+      </elements>
+    </component>
+  </components>
+</node>
