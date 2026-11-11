@@ -42,9 +42,9 @@ def id_of(path: Path) -> str:
 
 def test_every_fixture_is_a_pair_or_a_failure_and_the_cases_are_there():
     names = {id_of(p) for p in BEFORE_FILES}
-    for case in ("mahjong_hints_button", "mahjong_hand_over_action", "mahjong_setup", "match3_menu_hud", "blocker", "text_attributes", "disabled_tooltip", "with_children", "icon_only", "already_composed"):
+    for case in ("mahjong_hints_button", "mahjong_hand_over_action", "mahjong_setup", "match3_menu_hud", "blocker", "text_attributes", "disabled_tooltip", "with_children", "already_composed", "icon_attributes_without_icon", "long_caption"):
         assert case in names
-    assert {id_of(p) for p in FAILURES} == {"fail_icon_with_text", "fail_set_text", "fail_interactive_off", "fail_has_components"}
+    assert {id_of(p) for p in FAILURES} == {"fail_icon_with_text", "fail_icon_only", "fail_set_text", "fail_interactive_off", "fail_has_components"}
     assert not list(FIXTURES.glob("fail_*.after.xml"))
 
 
@@ -74,7 +74,8 @@ def test_nothing_of_a_button_is_left_where_it_was_but_the_buttons(before):
 
 
 EXPECTED_REASONS = {
-    "fail_icon_with_text": ['button "Play"', "icon and a caption", "by hand"],
+    "fail_icon_with_text": ['button "Play"', 'icon="icons.play"', "by hand"],
+    "fail_icon_only": ['button "Settings"', 'icon="icons.settings"', "by hand"],
     "fail_set_text": ['button "Go"', "variant sets text"],
     "fail_interactive_off": ['button "Dead"', 'interactive="false"'],
     "fail_has_components": ['button "Mixed"', "<components> already"],
@@ -83,13 +84,14 @@ EXPECTED_REASONS = {
 
 @pytest.mark.parametrize("before", FAILURES, ids=id_of)
 def test_a_failure_names_the_element_and_the_line(before):
-    _, ctx = apply(before.read_text(encoding="utf-8"))
-    assert len(ctx.failures) == 1
+    text = before.read_text(encoding="utf-8")
+    _, ctx = apply(text)
+    assert len(ctx.failures) == (2 if id_of(before) == "fail_icon_only" else 1)  # every refused button is reported
     failure = ctx.failures[0]
     for part in EXPECTED_REASONS[id_of(before)]:
         assert part in failure.text
-    line = before.read_text(encoding="utf-8").splitlines()[failure.line - 1]
-    assert 'type="UIButton"' in line
+    for each in ctx.failures:
+        assert 'type="UIButton"' in text.splitlines()[each.line - 1]
 
 
 @pytest.mark.parametrize("before", FAILURES, ids=id_of)
@@ -148,29 +150,10 @@ def test_a_set_of_the_layout_on_a_button_is_fine_and_a_set_of_another_canvas_is_
     assert not ctx.failures and len(ctx.notes) == 1
 
 
-def test_an_unnamed_button_is_composed_and_its_icon_child_has_no_name():
-    output, ctx = apply('<node><element type="UIButton" icon="i" width="48" height="48"/></node>')
+def test_an_unnamed_button_is_composed():
+    output, ctx = apply('<node><element type="UIButton" width="48" height="48"/></node>')
     assert not ctx.failures
-    assert "name=" not in output
-    assert 'sprite="i"' in output
-
-
-def test_the_icon_keeps_what_the_old_button_drew():
-    """A transparent iconTint falls back to textColor, a tint with an alpha wins, a size of 0 or a malformed one is the share of the rect."""
-    cases = {
-        '<element type="UIButton" icon="i" iconTint="9,9,9,0" textColor="1,2,3,255"/>': 'tint="1,2,3,255"',
-        '<element type="UIButton" icon="i" iconTint="9,9,9,200" textColor="1,2,3,255"/>': 'tint="9,9,9,200"',
-        '<element type="UIButton" icon="i" iconTint="#102030"/>': 'tint="#102030"',
-        '<element type="UIButton" icon="i" iconSize="0"/>': 'width="60%" height="60%"',
-        '<element type="UIButton" icon="i" iconSize="-4"/>': 'width="60%" height="60%"',
-        '<element type="UIButton" icon="i" iconSize="30"/>': 'width="30" height="30" maxWidth="100%" maxHeight="100%"',
-    }
-    for before, expected in cases.items():
-        output, ctx = apply(f"<node>{before}</node>")
-        assert not ctx.failures
-        assert expected in output, before
-    output, _ = apply('<node><element type="UIButton" icon="i"/></node>')
-    assert "tint=" not in output
+    assert "name=" not in output and 'type="UIInputClicker"' in output
 
 
 # ---- the lists against the C++ classes --------------------------------------------------------------------------------------
@@ -217,9 +200,3 @@ def test_the_defaults_written_are_those_of_the_constructor_of_uibutton():
     assert "verticalAlign = UIVerticalAlign::Center" in constructor
     assert "wrap = false" in constructor
     assert dict(step_module.BUTTON_TEXT_DEFAULTS) == {"align": "Center", "verticalAlign": "Center", "wrap": "false"}
-
-
-def test_the_icon_share_is_that_of_uibutton():
-    header = (UI_SOURCES / "UIButton.h").read_text(encoding="utf-8")
-    assert "kIconOnlyShare = 0.6f" in header
-    assert step_module.ICON_ONLY_SHARE == "60%"
