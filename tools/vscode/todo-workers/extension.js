@@ -52,14 +52,18 @@ const FEED_KEEP = 200;
 const VERIFY_KEY = "todoWorkers.lastVerify";
 const SHOTS_ROOT = path.join(os.homedir(), ".claude", "plans", "review-shots"); // outside every work tree (ui_shots.py refuses one)
 
-// VS Code started from the Dock does not see the PATH of a login shell, where `claude` usually is.
+// VS Code started from the Dock does not see the PATH of a login shell, where `claude` usually is. The extra
+// folders go before the system ones, not after: `/usr/bin/python3` of macOS is 3.9 and worker.py needs 3.10, so a
+// bare `python3` must find Homebrew's first (execFile looks the command up in options.env.PATH). The owner's own
+// folders keep their order ahead of the system ones.
+const SYSTEM_DIRS = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
 function toolEnv() {
     const home = os.homedir();
     const extra = [path.join(home, ".local", "bin"), path.join(home, ".claude", "local"), "/opt/homebrew/bin", "/usr/local/bin"];
     const parts = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
-    for (const dir of extra) {
-        if (!parts.includes(dir)) parts.push(dir);
-    }
+    const firstSystem = parts.findIndex((dir) => SYSTEM_DIRS.includes(dir));
+    const missing = extra.filter((dir) => !parts.includes(dir));
+    parts.splice(firstSystem < 0 ? parts.length : firstSystem, 0, ...missing);
     return { ...process.env, PATH: parts.join(path.delimiter) };
 }
 

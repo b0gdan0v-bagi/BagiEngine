@@ -44,6 +44,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+if sys.version_info < (3, 10):  # before the first `X | None` evaluated at import, which 3.9 turns into a TypeError
+    sys.exit(f"error: worker.py needs Python 3.10 or newer, this is {sys.version.split()[0]} ({sys.executable})")
+
 SHARED_SUBMODULE = "engine"
 WORKER_PREFIX = "w"
 WORKERS_SUFFIX = ".workers"

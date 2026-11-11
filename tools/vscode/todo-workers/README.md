@@ -48,11 +48,11 @@ No npm: the packer uses the standard library.
 
 ```bash
 python3 tools/vscode/todo-workers/pack.py        # in a game: engine/tools/vscode/todo-workers/pack.py
-code --install-extension tools/vscode/todo-workers/build/todo-workers-0.16.0.vsix
+code --install-extension tools/vscode/todo-workers/build/todo-workers-0.16.1.vsix
 ```
 
 `code` is in `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/` on macOS when it is not on PATH. Then **Developer: Reload Window**. After a change bump `version` in `package.json`, pack and install again.
 
 ## Settings
 
-`todoWorkers.python` (`python3`), `todoWorkers.claude` (`claude`; a full path when VS Code started from the Dock does not see it: the panel says "claude agents did not answer"), `todoWorkers.refreshSeconds` (15), `todoWorkers.notify` (true).
+`todoWorkers.python` (`python3`, at least 3.10; a bare name is looked up with `~/.local/bin`, Homebrew and `/usr/local/bin` ahead of the system folders, whose `python3` on macOS is 3.9), `todoWorkers.claude` (`claude`; a full path when VS Code started from the Dock does not see it: the panel says "claude agents did not answer"), `todoWorkers.refreshSeconds` (15), `todoWorkers.notify` (true).
