@@ -115,6 +115,21 @@ namespace BECore {
     void ViewportWidget::OnPreferencesChanged(const EditorPreferencesChangedEvent& event) {
         _gridEnabled = event.viewportGrid;
         _gridStep = event.viewportGridStep;
+
+        // The stored choice; it is also what we last sent, so applying it sends nothing back
+        _storedPreview = event.GetPreview();
+        _shape = _storedPreview.shape;
+        _safeAreaSimulation = _storedPreview.safeArea;
+        _overlays = _storedPreview.overlays;
+    }
+
+    void ViewportWidget::EmitPreviewIfChanged() {
+        const PreviewSettings current{_shape, _safeAreaSimulation, _overlays};
+        if (current == _storedPreview) {
+            return;
+        }
+        _storedPreview = current;
+        ViewportPreviewChangedEvent::Emit(current);
     }
 
     void ViewportWidget::Update() {
@@ -125,6 +140,7 @@ namespace BECore {
         }
 
         DrawPreviewToolbar();
+        EmitPreviewIfChanged();
 
         // The target is the shape's size (the largest rect of a preset's ratio that fits what is left of the panel, or the exact size
         // of a device or custom size) and is shown at `zoom`, centered in the panel

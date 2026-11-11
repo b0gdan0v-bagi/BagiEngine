@@ -44,6 +44,16 @@ namespace BECore {
         bool operator==(const PreviewOverlays&) const = default;
     };
 
+    /// Everything the viewport lets the user choose about the preview, so it can be stored and restored as one value (an editor setting, never in a scene).
+    /// The forced view variant is not part of it: it is an index into one scene's variants.
+    struct PreviewSettings {
+        PreviewShape shape;
+        SafeAreaSimulation safeArea = SafeAreaSimulation::None;
+        PreviewOverlays overlays;
+
+        bool operator==(const PreviewSettings&) const = default;
+    };
+
     /// The size of the viewport image (the render target) and how much of it is shown: the image is drawn at width * zoom x height * zoom
     struct PreviewTarget {
         uint32_t width = 0;

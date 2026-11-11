@@ -30,6 +30,7 @@ namespace BECore {
         ApplyPreferences(_settings->GetPreferences());
 
         Subscribe<EditorCommandEvent, &EditorLayoutWidget::OnCommand>(this);
+        Subscribe<ViewportPreviewChangedEvent, &EditorLayoutWidget::OnViewportPreviewChanged>(this);
         Subscribe<RenderEvents::ImGuiNewFrameEvent, &EditorLayoutWidget::OnImGuiNewFrame>(this);
         return true;
     }
@@ -64,6 +65,14 @@ namespace BECore {
         } else if (event.commandId == kViewPreferences) {
             _preferencesWindow.Open();
         }
+    }
+
+    void EditorLayoutWidget::OnViewportPreviewChanged(const ViewportPreviewChangedEvent& event) {
+        // The viewport already shows this state, so the panels are not told again (no EditorPreferencesChangedEvent)
+        EditorPreferences preferences = _settings->GetPreferences();
+        preferences.viewportPreview = event.GetPreview();
+        _settings->SetPreferences(preferences);
+        _settings->SavePreferences();
     }
 
     void EditorLayoutWidget::OnImGuiNewFrame() {
@@ -191,7 +200,7 @@ namespace BECore {
 
     void EditorLayoutWidget::AnnouncePreferences() const {
         const EditorPreferences& preferences = _settings->GetPreferences();
-        EditorPreferencesChangedEvent::Emit(preferences.viewportGrid, preferences.viewportGridStep);
+        EditorPreferencesChangedEvent::Emit(preferences.viewportGrid, preferences.viewportGridStep, preferences.viewportPreview);
     }
 
     void EditorLayoutWidget::DispatchHotkeys() {

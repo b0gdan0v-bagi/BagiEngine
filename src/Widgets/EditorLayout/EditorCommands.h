@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/UI/UIPreview.h>
 #include <Events/EventBase.h>
 #include <Widgets/EditorLayout/KeyChord.h>
 
@@ -55,9 +56,62 @@ namespace BECore {
         BE_EVENT(EditorPreferencesChangedEvent)
         BE_REFLECT_FIELD bool viewportGrid = false;
         BE_REFLECT_FIELD int32_t viewportGridStep = 0;
+        // The viewport preview choice (PreviewSettings, flat); the device is its index in UIPreview::GetDevices()
+        BE_REFLECT_FIELD ViewportAspect previewAspect = ViewportAspect::Free;
+        BE_REFLECT_FIELD int32_t previewDevice = -1;
+        BE_REFLECT_FIELD bool previewCustom = false;
+        BE_REFLECT_FIELD uint32_t previewWidth = 0;
+        BE_REFLECT_FIELD uint32_t previewHeight = 0;
+        BE_REFLECT_FIELD bool previewRotated = false;
+        BE_REFLECT_FIELD SafeAreaSimulation previewSafeArea = SafeAreaSimulation::None;
+        BE_REFLECT_FIELD bool overlaySafeArea = true;
+        BE_REFLECT_FIELD bool overlayViewBounds = false;
+        BE_REFLECT_FIELD bool overlayCanvasBounds = false;
+        BE_REFLECT_FIELD bool overlayTouchTargets = false;
 
         EditorPreferencesChangedEvent() = default;
-        EditorPreferencesChangedEvent(bool grid, int32_t step) : viewportGrid(grid), viewportGridStep(step) {}
+        EditorPreferencesChangedEvent(bool grid, int32_t step, const PreviewSettings& preview)
+            : viewportGrid(grid), viewportGridStep(step), previewAspect(preview.shape.aspect), previewDevice(preview.shape.device), previewCustom(preview.shape.custom),
+              previewWidth(preview.shape.customWidth), previewHeight(preview.shape.customHeight), previewRotated(preview.shape.rotated), previewSafeArea(preview.safeArea),
+              overlaySafeArea(preview.overlays.safeArea), overlayViewBounds(preview.overlays.viewBounds), overlayCanvasBounds(preview.overlays.canvasBounds),
+              overlayTouchTargets(preview.overlays.touchTargets) {}
+
+        /// The viewport preview choice carried by the event
+        [[nodiscard]] PreviewSettings GetPreview() const {
+            return {{previewAspect, previewDevice, previewCustom, previewWidth, previewHeight, previewRotated},
+                    previewSafeArea,
+                    {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets}};
+        }
+    };
+
+    /// The viewport's preview choice (size, rotation, safe area, overlays) changed: sent by ViewportWidget only on a real change (never every
+    /// frame, and not for what it just applied from EditorPreferencesChangedEvent). EditorLayoutWidget stores and saves it and does not
+    /// answer with another EditorPreferencesChangedEvent.
+    struct ViewportPreviewChangedEvent : public EventBase<ViewportPreviewChangedEvent> {
+        BE_EVENT(ViewportPreviewChangedEvent)
+        BE_REFLECT_FIELD ViewportAspect previewAspect = ViewportAspect::Free;
+        BE_REFLECT_FIELD int32_t previewDevice = -1;
+        BE_REFLECT_FIELD bool previewCustom = false;
+        BE_REFLECT_FIELD uint32_t previewWidth = 0;
+        BE_REFLECT_FIELD uint32_t previewHeight = 0;
+        BE_REFLECT_FIELD bool previewRotated = false;
+        BE_REFLECT_FIELD SafeAreaSimulation previewSafeArea = SafeAreaSimulation::None;
+        BE_REFLECT_FIELD bool overlaySafeArea = true;
+        BE_REFLECT_FIELD bool overlayViewBounds = false;
+        BE_REFLECT_FIELD bool overlayCanvasBounds = false;
+        BE_REFLECT_FIELD bool overlayTouchTargets = false;
+
+        ViewportPreviewChangedEvent() = default;
+        explicit ViewportPreviewChangedEvent(const PreviewSettings& preview)
+            : previewAspect(preview.shape.aspect), previewDevice(preview.shape.device), previewCustom(preview.shape.custom), previewWidth(preview.shape.customWidth),
+              previewHeight(preview.shape.customHeight), previewRotated(preview.shape.rotated), previewSafeArea(preview.safeArea), overlaySafeArea(preview.overlays.safeArea),
+              overlayViewBounds(preview.overlays.viewBounds), overlayCanvasBounds(preview.overlays.canvasBounds), overlayTouchTargets(preview.overlays.touchTargets) {}
+
+        [[nodiscard]] PreviewSettings GetPreview() const {
+            return {{previewAspect, previewDevice, previewCustom, previewWidth, previewHeight, previewRotated},
+                    previewSafeArea,
+                    {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets}};
+        }
     };
 
 }  // namespace BECore

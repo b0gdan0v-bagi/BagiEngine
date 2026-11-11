@@ -33,6 +33,8 @@ namespace BECore {
         void BuildDefaultLayout(ImGuiID dockspaceId, ImVec2 size);
 
         void OnCommand(const EditorCommandEvent& event);
+        /// Keeps the preview choice of the viewport in the preferences and saves them
+        void OnViewportPreviewChanged(const ViewportPreviewChangedEvent& event);
         /// Runs before ImGui::NewFrame (RenderEvents::ImGuiNewFrameEvent): the only safe moment to load an ini
         void OnImGuiNewFrame();
 

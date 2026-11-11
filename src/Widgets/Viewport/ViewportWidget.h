@@ -40,11 +40,14 @@ namespace BECore {
         BE_FUNCTION void Draw() override;
 
     private:
-        // The grid preference of the editor (EditorLayoutWidget sends it on its first frame and on every change)
+        // The grid preference and the stored preview choice of the editor (EditorLayoutWidget sends them on its first frame and on every change)
         void OnPreferencesChanged(const EditorPreferencesChangedEvent& event);
 
         // The grid over the image: a line every _gridStep image pixels (zoom screen units per pixel), clipped to the image
         void DrawGrid(float minX, float minY, float maxX, float maxY, float zoom) const;
+
+        // Tells EditorLayoutWidget (ViewportPreviewChangedEvent) when the size, rotation, safe area or an overlay differs from what it was last told or told us
+        void EmitPreviewIfChanged();
 
         // The size picker (with W / H for a custom size), the rotate toggle, the safe-area and view combos above the image
         void DrawPreviewToolbar();
@@ -80,6 +83,7 @@ namespace BECore {
         PreviewShape _shape;
         SafeAreaSimulation _safeAreaSimulation = SafeAreaSimulation::None;
         PreviewOverlays _overlays;
+        PreviewSettings _storedPreview;      // the choice the editor last stored (applied from a preferences event, or sent by us)
         std::optional<int32_t> _forcedView;  // the index of the forced view variant, -1 the default, nullopt Auto
         PoolString _forcedViewScene;         // the scene the choice was made for
         bool _gridEnabled = false;
