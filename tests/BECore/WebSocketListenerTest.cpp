@@ -215,6 +215,29 @@ namespace BECore::Tests {
         EXPECT_TRUE(recorder.Events().empty());
     }
 
+    TEST_F(WebSocketListenerTest, ClientThatDripsItsRequestIsCutAtTheHandshakeDeadline) {
+        WebSocketListenerSettings settings;
+        settings.handshakeTimeout = 600ms;
+        const uint16_t port = Start(settings);
+        auto dripper = WebSocketTestClient::Open(port);
+        ASSERT_TRUE(dripper.has_value());
+
+        // One byte now and then, each well inside the timeout, and never the blank line that ends the head: the timeout counts from
+        // the connect, not from the last byte, so the server has to hang up although the client never goes quiet for long
+        constexpr std::chrono::milliseconds kDripInterval{50};
+        const auto start = std::chrono::steady_clock::now();
+        const auto giveUp = start + 5 * settings.handshakeTimeout;
+        dripper->Send(std::string("GET / HTTP/1.1\r\nX-Slow: "));
+        bool hungUp = false;
+        while (!hungUp && std::chrono::steady_clock::now() < giveUp) {
+            std::this_thread::sleep_for(kDripInterval);
+            hungUp = !dripper->TrySend(AsBytes(std::string("a")));
+        }
+        EXPECT_TRUE(hungUp) << "a client that sends a byte every " << kDripInterval.count() << " ms held its slot past the handshake timeout";
+        EXPECT_TRUE(dripper->WaitForEndOfStream());
+        EXPECT_TRUE(recorder.Events().empty()) << "the handler must never hear of it";
+    }
+
     TEST_F(WebSocketListenerTest, HandlerThatRefusesAMessageEndsTheConnection) {
         const uint16_t port = Start();
         auto client = Connect(port);

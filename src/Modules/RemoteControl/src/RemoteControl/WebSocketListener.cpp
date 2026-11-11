@@ -9,10 +9,6 @@ namespace BECore {
         constexpr size_t kReadChunkSize = 16 * 1024;
         constexpr int kServiceUnavailable = 503;
 
-        eastl::span<const uint8_t> AsBytes(const eastl::string& text) {
-            return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
-        }
-
         /// Answers a client that cannot be served now. The request is read first: closing a socket with unread data
         /// makes the system reset the connection, and the client could lose the answer
         void RejectBusy(Socket socket, const eastl::string& message) {

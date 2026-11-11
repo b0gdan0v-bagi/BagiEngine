@@ -2,7 +2,7 @@
 
 ## Overview
 
-Online play in rooms by code, with an authoritative server (the entry `network-rooms` of the todo store, slices 1 and 2 of 4). The server owns the game (`ISeatedGame`, `Games/CLAUDE.md`, "Seats"); every client is a seat and sees only what the game says that seat may see. This module is **pure code**: JSON text in, JSON text out, no sockets, no clock, no randomness of its own. A transport feeds it: `RoomServer` (`RoomServer/CLAUDE.md`) on WebSocket. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomsModule`; `BagiEngineTests` links it with `LINK RemoteControlModule RoomsModule RuntimeModule`).
+Online play in rooms by code, with an authoritative server (the entry `network-rooms` of the todo store, slices 1 and 2 of 4). The server owns the game (`ISeatedGame`, `Games/CLAUDE.md`, "Seats"); every client is a seat and sees only what the game says that seat may see. This module is **pure code**: JSON text in, JSON text out, no sockets, no clock, no randomness of its own. A transport feeds it: `RoomServer` (`RoomServer/CLAUDE.md`) on WebSocket. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomsModule`; `BagiEngineTests` links it with `LINK RemoteControlModule RoomsModule RoomServerModule RuntimeModule`).
 
 Built: the protocol, codes and tokens, the limits, `Room` and `RoomHub` (slice 1), the server over WebSocket (slice 2, `RoomServer`). Slices 3 and 4: "For later slices".
 

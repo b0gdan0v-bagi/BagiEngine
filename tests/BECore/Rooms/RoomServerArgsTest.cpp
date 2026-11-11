@@ -70,6 +70,18 @@ namespace BECore::Tests {
         EXPECT_EQ(args->origins[2], "http://localhost:5173");
     }
 
+    TEST(RoomServerArgsTest, OriginThatCouldMatchNothingIsAnError) {
+        for (const char* origin : {"", "example.com", "https://a.example/path", "https://", "https://a.example:0", "https://a.example:99999", "https://user@a.example", "https://a b.example"}) {
+            const std::string error = ErrorOf({"--origin", origin});
+            EXPECT_NE(error.find("--origin"), std::string::npos) << origin;
+            EXPECT_NE(error.find(origin), std::string::npos) << origin;
+        }
+        EXPECT_TRUE(ErrorOf({"--origin", "https://a.example:8443"}).empty());
+        EXPECT_TRUE(ErrorOf({"--origin", "http://localhost:5173"}).empty());
+        EXPECT_TRUE(ErrorOf({"--origin", "null"}).empty());
+        EXPECT_TRUE(ErrorOf({"--origin", "*"}).empty());
+    }
+
     TEST(RoomServerArgsTest, HelpIsAFlagAndTheUsageNamesEveryFlag) {
         const auto args = Parse({"--help"});
         ASSERT_TRUE(args.has_value());

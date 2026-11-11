@@ -428,6 +428,45 @@ namespace BECore::Tests {
             client.Raw().Send(AsBytes(EncodeFrame(WebSocketOpcode::kPong, {}, kClientMask)));
         }
 
+        /// Moves the clock on by kClockStep at a time until a ping reaches @p client, and tells how far it moved; nullopt when no ping came
+        /// within @p limit of clock time. The hub thread looks at the clock on its own schedule, so a test cannot know which step it
+        /// notices a silence at: it asks how long the silence had to be
+        std::optional<std::chrono::milliseconds> AdvanceUntilPing(ManualClock& clock, RoomSocketClient& client, std::chrono::milliseconds limit = 3 * kPingInterval) {
+            std::chrono::milliseconds advanced{0};
+            while (advanced < limit) {
+                clock.Advance(kClockStep);
+                advanced += kClockStep;
+                if (WaitForPing(client, 200ms)) {
+                    return advanced;
+                }
+            }
+            return std::nullopt;
+        }
+
+        /// True once @p client has received a lobby that shows a human seat away (all the messages it ever got, whatever was read from them)
+        bool SawAwayHuman(const RoomSocketClient& client) {
+            for (const ReceivedMessage& message : client.Received()) {
+                if (message.type == RoomMessageTypes::kLobby && HasAwayHuman(message)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// Reads what the server sends until @p done holds for @p client (it looks at Received(), so the cursor does not matter) or @p limit has passed
+        template <typename Predicate>
+        bool ReadUntil(RoomSocketClient& client, Predicate done, std::chrono::milliseconds limit = 10s) {
+            const auto deadline = std::chrono::steady_clock::now() + limit;
+            while (!done()) {
+                const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+                if (left <= 0ms || client.GetCloseFrame().has_value()) {
+                    return false;
+                }
+                client.Next(std::min(left, 20ms));
+            }
+            return true;
+        }
+
     }  // namespace
 
     TEST_F(RoomWebSocketServerTest, SilentClientGetsAPingAnswersWithAPongAndStays) {
@@ -436,20 +475,16 @@ namespace BECore::Tests {
         auto client = RoomSocketClient::Connect(port);
         ASSERT_TRUE(client.has_value());
         RoundTrip(*client);  // the hub knows the connection
-        LetTicksPass();      // and the liveness check has seen what it sent
 
         clock.Advance(kPingInterval);
         ASSERT_TRUE(WaitForPing(*client)) << "a connection that was silent for pingInterval must be pinged";
 
-        // The pong is life: the next ping comes only after another interval of silence
+        // The pong is life: the next ping comes only after another interval of silence, counted from the pong
         SendPong(*client);
         RoundTrip(*client);
-        LetTicksPass();
-        clock.Advance(kPingInterval / 2);
-        LetTicksPass();
-        EXPECT_FALSE(client->Raw().WaitForFrame(100ms).has_value()) << "no second ping inside the interval";
-        clock.Advance(kPingInterval / 2);
-        EXPECT_TRUE(WaitForPing(*client));
+        const auto silence = AdvanceUntilPing(clock, *client);
+        ASSERT_TRUE(silence.has_value()) << "the connection that answered must be pinged again after another silence";
+        EXPECT_GE(*silence, kPingInterval) << "no second ping inside the interval";
         SendPong(*client);
         RoundTrip(*client);
         EXPECT_FALSE(client->GetCloseFrame().has_value());
@@ -469,27 +504,16 @@ namespace BECore::Tests {
         ASSERT_TRUE(host->WaitFor(RoomMessageTypes::kView).has_value());
         RoundTrip(*host);
         RoundTrip(*guest);
-        LetTicksPass();
 
-        // The host is alive all the time (it sends something every step), the guest says nothing and never pongs
-        bool guestAway = false;
-        for (int step = 0; step < 12 && !guestAway; ++step) {
+        // The host is alive all the time (it sends something every step), the guest says nothing and never pongs. The drop shows as a
+        // lobby in Received() of the host; RoundTrip() reads past it, so it is looked for there, not read from the cursor
+        for (int step = 0; step < 12 && !SawAwayHuman(*host); ++step) {
             clock.Advance(kClockStep);
             RoundTrip(*host);
-            LetTicksPass();
-            while (const auto lobby = host->WaitFor(RoomMessageTypes::kLobby, 20ms)) {
-                guestAway = guestAway || HasAwayHuman(*lobby);
-            }
+            LetTicksPass();  // pacing: the hub thread has to look at every clock value, or the guest would be dropped without the ping before it
         }
-        // The lobby of the drop may still be on its way: three intervals have passed, so it is only a matter of delivery
-        while (!guestAway) {
-            const auto lobby = host->WaitFor(RoomMessageTypes::kLobby, 5s);
-            if (!lobby) {
-                break;
-            }
-            guestAway = HasAwayHuman(*lobby);
-        }
-        EXPECT_TRUE(guestAway) << "the host never saw the silent guest go away";
+        // Three intervals have passed by now, so the lobby of the drop is only a matter of delivery
+        EXPECT_TRUE(ReadUntil(*host, [&] { return SawAwayHuman(*host); })) << "the host never saw the silent guest go away";
 
         // The guest got the ping first, then the end of the connection
         EXPECT_TRUE(WaitForPing(*guest));

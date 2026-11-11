@@ -4,7 +4,7 @@
 
 The `Rooms` hub on the network (the entry `network-rooms` of the todo store, slice 2 of 4): a WebSocket server that feeds every text message of a client to `RoomHub` and sends what the hub says back. `Rooms` is the logic and the protocol (`Rooms/CLAUDE.md`), `RemoteControl` the transport (`WebSocketListener`, `RemoteControl/CLAUDE.md`); this module is the glue between them and knows no game. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomServerModule`; `BagiEngineTests` links it).
 
-Built only with `ENGINE_WITH_REMOTE_CONTROL` (the web build has no sockets). Module order: after `Rooms`. Its `CMakeLists.txt` also builds the executable `BagiRoomServer` and registers the ctest entry `BagiRoomServerSmoke` (`tools/rooms/CLAUDE.md`).
+Built only with `ENGINE_WITH_REMOTE_CONTROL` (the web build has no sockets). Module order: after `Rooms`. Its `CMakeLists.txt` also builds the executable `BagiRoomServer` and registers the ctest entry `BagiRoomServerSmoke` (`tools/rooms/CLAUDE.md`); in a game's build, which does not build the executable, `ctest` lists it as skipped (exit code 77): expected.
 
 | File | Purpose |
 |------|---------|
@@ -40,7 +40,7 @@ Numbers are range-checked; an unknown flag or a bad number is an error with a me
 - **One hub thread** (`Room hub`) owns the `RoomHub`, which is single-threaded: the hub is a local of the thread function, so nothing else can reach it. It waits for an event or for `tickInterval`, takes the whole queue, feeds the hub in the order of the queue, then ticks it when the interval has passed (so a flood cannot starve the tick). The tick interval is real time; the time the hub sees is `settings.clock`.
 - **The queue is bounded**: `kMaxQueuedEvents` (4096) events and `kMaxQueuedBytes` (4 MiB) of text. A reader that finds it full waits in `PushEvent`, so it stops reading its socket, TCP slows the sender and memory stays bounded; the other connections are only as slow as the hub. `Stop()` wakes the waiting readers first (they return false and end their connection), because the listener joins them.
 - The `HubSink` runs on the hub thread. `send` looks the connection up (a map under a mutex of the server) and queues a text frame: it never writes to a socket, so a slow client cannot stall the hub, and a client whose queue passes `maxOutboxBytes` is dropped by its connection (the hub learns it from the `Closed` event). `close` queues a close frame. For one connection the frames go out in the order the hub produced them. A message for a connection that is gone is dropped.
-- A connection is reported to the hub (`Opened`) **after** its handshake succeeded; a socket that never completes it is cut by the handshake timeout (5 s) and the hub never hears of it. The hub's `Closed` handling ignores a connection it closed itself.
+- A connection is reported to the hub (`Opened`) **after** its handshake succeeded; a socket that never completes it is cut when the handshake timeout (5 s, one deadline for the whole request head, not per read) runs out, and the hub never hears of it. The hub's `Closed` handling ignores a connection it closed itself.
 - **Liveness** (`pingInterval`, 20 s; 0 is off). On every tick the hub thread compares the byte counter of each open connection (`GetBytesReceived()`) with the one it saw last. A change is life (any byte: a message, a pong); a connection silent for `pingInterval` gets one WebSocket ping, and one silent for twice that is aborted, which the hub learns as a `Closed` event, so the seat goes through the reconnect rules. Without it a half-open connection (a cable pulled, a phone out of range) would keep a seat "connected" for ever and the table would wait for a dead player. The time is `settings.clock`, so a test moves it by hand. **A client has to answer pings** (a browser does by itself; the desktop client of slice 3 must).
 - `Stop()`: wake the readers, stop the listener (which ends every connection and joins the readers, so every `onClosed` has run), stop and join the hub thread. After it returns no callback runs and nothing is sent. Safe twice and when never started; the server can be started again (it makes a new hub, so the rooms are gone).
 
@@ -64,7 +64,7 @@ The transport adds its own: 1009 for a message over `hub.maxMessageBytes` (check
 | open sockets of one address (`maxConnectionsPerAddress`) | 32; 0 is off (behind a proxy every client has the proxy's address) |
 | send queue of a connection (`maxOutboxBytes`) | 1 MiB |
 | message | `hub.maxMessageBytes` (16 KiB) |
-| handshake | 5 s, request head 8 KiB |
+| handshake | 5 s in all, request head 8 KiB |
 | silence (`pingInterval`) | a ping after 20 s, a drop after 40 s |
 
 Two threads per connection, so about 1200 threads at the limit: accepted for a server of friends.

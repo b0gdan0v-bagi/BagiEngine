@@ -10,6 +10,11 @@ namespace BECore {
     /// Which local addresses a listening socket accepts connections on
     CORE_ENUM(SocketBind, uint8_t, Loopback, AnyAddress)
 
+    /// The bytes of @p text, for SendAll()
+    [[nodiscard]] inline eastl::span<const uint8_t> AsBytes(eastl::string_view text) {
+        return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+    }
+
     /**
      * @brief A TCP socket (IPv4), POSIX or Winsock behind one interface.
      *

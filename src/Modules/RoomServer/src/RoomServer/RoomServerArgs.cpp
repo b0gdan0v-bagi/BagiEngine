@@ -30,16 +30,16 @@ namespace BECore {
             return std::chrono::milliseconds(*value);
         }
 
-        bool IsPlainOrigin(eastl::string_view origin) {
-            if (origin.empty() || origin.size() > kMaxOriginBytes) {
+        /// An entry the allow-list can match: `*`, `null` or `scheme://host[:port]`. One that matches nothing (a path, a bare host) would
+        /// only lock every page out, so it is told at start. The check is the one the handshake makes: the entry has to admit itself
+        bool IsUsableOrigin(eastl::string_view origin) {
+            if (origin.size() > kMaxOriginBytes) {
                 return false;
             }
-            for (const char c : origin) {
-                if (static_cast<unsigned char>(c) <= ' ' || static_cast<unsigned char>(c) == 0x7F) {
-                    return false;
-                }
-            }
-            return true;
+            HandshakePolicy policy;
+            policy.loopbackOnly = false;
+            policy.allowedOrigins.emplace_back(origin);
+            return IsOriginAllowed(origin, policy);
         }
 
     }  // namespace
@@ -76,8 +76,8 @@ namespace BECore {
                     return std::unexpected(Format("--bind is 'loopback' or 'any', got '{}'", value));
                 }
             } else if (flag == "--origin") {
-                if (!IsPlainOrigin(value)) {
-                    return std::unexpected(Format("--origin needs an origin such as https://example.com (or *), got '{}'", value));
+                if (!IsUsableOrigin(value)) {
+                    return std::unexpected(Format("--origin needs an origin such as https://example.com:8443 (scheme, host and optional port, no path; or *), got '{}'", value));
                 }
                 args.origins.emplace_back(value);
             } else if (flag == "--computer-delay-ms" || flag == "--reconnect-grace-ms" || flag == "--ping-interval-ms") {

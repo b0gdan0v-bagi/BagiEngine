@@ -13,7 +13,7 @@ namespace BECore {
 
         /// What the client is told when the hub ends its connection
         uint16_t GetCloseCode(const eastl::string& reason) {
-            if (reason == "rate_limited" || reason == "too_many_failed_joins") {
+            if (reason == RoomErrors::kRateLimited || reason == "too_many_failed_joins") {
                 return WebSocketCloseCode::kPolicyViolation;
             }
             if (reason == "server_full") {
