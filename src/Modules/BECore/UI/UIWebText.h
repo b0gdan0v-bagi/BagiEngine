@@ -20,8 +20,30 @@ namespace BECore::UIWebText {
     /// A CSS number with an optional `px` (`12`, `12px`, `.5`, `-3`). Other units give nullopt
     [[nodiscard]] std::optional<float> ParsePixels(eastl::string_view text);
 
-    /// A CSS color: `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()` / `rgba()` (commas or spaces, alpha as a number 0 to 1 or a percent), `transparent` and a few names
-    [[nodiscard]] std::optional<Color> ParseColor(eastl::string_view text);
+    /// A colour of a style sheet: a literal, or a reference to a theme token (`var(--name)`, written `@name` in the generated XML, `UIThemes`). For a token the channels are
+    /// transparent: the theme gives them when the element is drawn. It is a Color for everything that reads a literal
+    struct WebColor : Color {
+        PoolString token;  ///< the name of the theme token; empty: a literal colour
+
+        WebColor() = default;
+        WebColor(const Color& literal) : Color(literal) {}  // NOLINT(google-explicit-constructor): a literal colour is a WebColor
+
+        [[nodiscard]] bool IsToken() const {
+            return !token.Empty();
+        }
+
+        /// Whether the colour paints anything: a token does (its theme colour is not known here), a literal does with a non-zero alpha
+        [[nodiscard]] bool IsVisible() const {
+            return IsToken() || a != 0;
+        }
+    };
+
+    /// The attribute text of @p color: `@name` for a token, else `r,g,b,a`
+    [[nodiscard]] eastl::string FormatWebColor(const WebColor& color);
+
+    /// A CSS color: `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()` / `rgba()` (commas or spaces, alpha as a number 0 to 1 or a percent), `transparent` and a few names; or `var(--name)`
+    /// with a legal token name (`UIThemes::IsValidToken`) and **no fallback value**, which is a token. Nothing for anything else (`var(--name, red)` included)
+    [[nodiscard]] std::optional<WebColor> ParseColor(eastl::string_view text);
 
     /// The content of `url(...)` with its quotes removed; nullopt when @p text is not a url
     [[nodiscard]] std::optional<eastl::string> ParseUrl(eastl::string_view text);
@@ -33,7 +55,7 @@ namespace BECore::UIWebText {
     /// The border of a box as the `border` shorthand gives it
     struct BorderSpec {
         float width = 0.0f;  ///< px; 0 when there is no border
-        Color color;         ///< unset (transparent black) when there is no border
+        WebColor color;      ///< unset (transparent black) when there is no border
         bool none = false;   ///< `none` or a zero width: no border
     };
 
@@ -45,8 +67,8 @@ namespace BECore::UIWebText {
     /// A `linear-gradient()` of two colors, as the box attributes want it: the direction, the start (top or left edge) and the end colors
     struct GradientSpec {
         UIGradientDirection direction = UIGradientDirection::Vertical;
-        Color start;
-        Color end;
+        WebColor start;
+        WebColor end;
     };
 
     /// A `linear-gradient(...)`: an optional direction (`to bottom`, `to right`, `to top`, `to left`, `180deg`, `90deg`, `0deg`, `270deg`; to bottom when left out)
@@ -59,7 +81,8 @@ namespace BECore::UIWebText {
 
     /// The layers of a `box-shadow`, in the order of the text (the first is painted on top in CSS)
     struct BoxShadows {
-        eastl::array<UIShadowSpec, MaxShadowLayers> layers;  ///< the first `min(count, MaxShadowLayers)` are set
+        eastl::array<UIShadowSpec, MaxShadowLayers> layers;  ///< the first `min(count, MaxShadowLayers)` are set; the colour of a layer with a token is transparent
+        eastl::array<PoolString, MaxShadowLayers> tokens;    ///< per layer, the theme token of its colour; empty for a literal (UIShadowSpec is a mesh spec and holds none)
         size_t count = 0;                                    ///< the layers in the text, also those past MaxShadowLayers (the caller reports them)
     };
 

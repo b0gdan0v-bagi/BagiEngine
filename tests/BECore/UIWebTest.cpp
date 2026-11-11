@@ -17,6 +17,7 @@
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISlider.h>
 #include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIToggle.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <BECore/UI/UIWebText.h>
@@ -520,6 +521,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         void TearDown() override {
             CoreManager::GetUIVars().Clear();
             CoreManager::GetUIStrings().Clear();
+            CoreManager::GetUIThemes().Clear();
             CoreManager::GetResourceManager().ClearCache();
         }
     };
@@ -2213,6 +2215,242 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, AMissingHtmlFileFails) {
         auto handle = CoreManager::GetResourceManager().Load<UIDocument>("no/such/file.ui.html");
         EXPECT_FALSE(handle && handle->GetState() == ResourceState::Loaded);
+    }
+
+    // ---- theme tokens: var(--name) ---------------------------------------------------------------------------------------------
+
+    namespace {
+
+        /// Two themes of the tokens the tests below use; the second one leaves `line` to the default theme
+        void FillThemes(UIThemes& themes) {
+            const PoolString light = PoolString::Intern("light");
+            const PoolString dark = PoolString::Intern("dark");
+            themes.Set(light, "panel", Color{240, 240, 230, 255});
+            themes.Set(light, "line", Color{10, 20, 30, 255});
+            themes.Set(light, "accent", Color{40, 90, 60, 255});
+            themes.Set(light, "shade", Color{0, 0, 0, 120});
+            themes.Set(dark, "panel", Color{30, 32, 40, 255});
+            themes.Set(dark, "accent", Color{200, 180, 40, 255});
+            themes.Set(dark, "shade", Color{0, 0, 0, 220});
+            themes.SetDefaultTheme(light);
+        }
+
+        constexpr const char* kTokenMenuCss = R"(
+#Column { anchor: center; display: flex; flex-direction: column; align-items: stretch; gap: 16px; width: 90%; max-width: 320px; height: 232px; }
+#Title  { height: 88px; font-size: 56px; text-align: center; vertical-align: middle; }
+button  { height: 56px; font-size: 28px; }
+#Play   { background: var(--play); }
+#Quit   { background: var(--quit); }
+)";
+
+        constexpr const char* kTokenMenuXml = R"(<ui><elements>
+  <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
+    <children>
+      <element type="UILabel" name="Title" height="88" text="Match 3" fontSize="56" align="Center" verticalAlign="Center" />
+      <element type="UIButton" name="Play" height="56" text="Play" fontSize="28" action="Match3Play" color="@play" />
+      <element type="UIButton" name="Quit" height="56" text="Quit" fontSize="28" action="Match3Quit" color="@quit" />
+    </children>
+  </element>
+</elements></ui>)";
+
+    }  // namespace
+
+    TEST_F(UIWebTest, AVarOfAColorPropertyBecomesATokenAndEveryFormOfItCompilesLikeTheLiteral) {
+        const auto compiled = Compile(R"(
+<div id="card"></div>
+<div id="grad"></div>
+<div id="glow"></div>
+<span id="text">Hi</span>
+<div id="bar" data-widget="progress"></div>
+<div id="knob" data-widget="slider"></div>
+<button id="icon" data-action="Go" data-icon="Star">Go</button>)",
+                                      R"(
+#card { width: 100px; height: 40px; background: var(--panel); border: 2px solid var(--line); box-shadow: 0 2px 4px var(--shade); -be-highlight: var(--accent); }
+#grad { width: 100px; height: 40px; background: linear-gradient(to right, var(--panel), var(--accent)); }
+#glow { width: 100px; height: 40px; box-shadow: 0 0 6px var(--accent), 1px 2px var(--shade); }
+#text { width: 100px; height: 40px; color: var(--line); text-shadow: 1px 1px var(--shade); -be-text-outline: 2px var(--accent); }
+#bar  { width: 100px; height: 20px; -be-track-color: var(--panel); -be-fill-color: var(--accent); }
+#knob { width: 100px; height: 20px; -be-thumb-color: var(--line); }
+#icon { width: 100px; height: 40px; -be-icon-color: var(--accent); }
+)");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_TRUE(compiled->report.issues.empty()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
+
+        EXPECT_EQ(compiled->Attr("card", "color"), "@panel");
+        EXPECT_EQ(compiled->Attr("card", "borderColor"), "@line");
+        EXPECT_EQ(compiled->Attr("card", "borderWidth"), "2");
+        EXPECT_EQ(compiled->Attr("card", "shadow"), "0,2,4,0,@shade");
+        EXPECT_EQ(compiled->Attr("card", "highlight"), "@accent");
+        EXPECT_EQ(compiled->Attr("grad", "color"), "@panel");
+        EXPECT_EQ(compiled->Attr("grad", "gradientColor"), "@accent");
+        EXPECT_EQ(compiled->Attr("grad", "gradientDirection"), "Horizontal");
+        EXPECT_EQ(compiled->Attr("glow", "glow"), "0,0,6,0,@accent");
+        EXPECT_EQ(compiled->Attr("glow", "shadow"), "1,2,0,0,@shade");
+        EXPECT_EQ(compiled->Attr("text", "textColor"), "@line");
+        EXPECT_EQ(compiled->Attr("text", "textShadow"), "1,1,@shade");
+        EXPECT_EQ(compiled->Attr("text", "textOutline"), "2,@accent");
+        EXPECT_EQ(compiled->Attr("bar", "trackColor"), "@panel");
+        EXPECT_EQ(compiled->Attr("bar", "fillColor"), "@accent");
+        EXPECT_EQ(compiled->Attr("knob", "thumbColor"), "@line");
+        EXPECT_EQ(compiled->Attr("icon", "iconTint"), "@accent");
+
+        // The XML front-end reads it back into the fields, as tokens
+        const auto* card = compiled->Element("card");
+        ASSERT_NE(card, nullptr);
+        EXPECT_EQ(card->color.token.ToStringView(), "panel");
+        const auto* label = compiled->Element("text")->Cast<UILabel>();
+        ASSERT_NE(label, nullptr);
+        EXPECT_EQ(label->textColor.token.ToStringView(), "line");
+        EXPECT_EQ(label->textEffects.shadowColor.token.ToStringView(), "shade");
+    }
+
+    TEST_F(UIWebTest, AVarIsAlsoWrittenWithSpacesAndInTheCaseOfTheFunctionName) {
+        using UIWebText::ParseColor;
+        for (const char* text : {"var(--panel)", "  VAR( --panel )  ", "var(  --panel)"}) {
+            const auto color = ParseColor(text);
+            ASSERT_TRUE(color) << text;
+            EXPECT_TRUE(color->IsToken()) << text;
+            EXPECT_EQ(color->token.ToStringView(), "panel") << text;
+            EXPECT_EQ(color->a, 0) << text;
+            EXPECT_EQ(UIWebText::FormatWebColor(*color), "@panel") << text;
+        }
+        EXPECT_FALSE(ParseColor("#fff")->IsToken());
+        EXPECT_EQ(UIWebText::FormatWebColor(*ParseColor("#102030")), "16,32,48,255");
+        // The name keeps its case: a token is not a keyword
+        EXPECT_EQ(ParseColor("var(--Panel_2)")->token.ToStringView(), "Panel_2");
+        for (const char* text : {"var(--panel, red)", "var(panel)", "var(--)", "var(--1a)", "var()", "var(--a b)", "var(--panel", "vary(--panel)", "env(--panel)", "calc(--panel)"}) {
+            EXPECT_FALSE(ParseColor(text)) << text;
+        }
+    }
+
+    TEST_F(UIWebTest, AStateRuleOfAButtonTakesATokenAndAnEqualTokenIsNoChange) {
+        const auto compiled = Compile(R"(<button id="b" data-action="Go">Go</button><button id="same" data-action="Go">Same</button>)",
+                                      R"(
+button { background: var(--panel); }
+button:hover { background: var(--accent); }
+button:active { background: var(--line); }
+button:disabled { background: var(--shade); }
+button:checked { background: var(--panel); }
+#same:hover { background: var(--panel); }
+)");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_TRUE(compiled->report.issues.empty()) << compiled->report.issues[0].message.c_str();
+        EXPECT_EQ(compiled->Attr("b", "color"), "@panel");
+        EXPECT_EQ(compiled->Attr("b", "hoverColor"), "@accent");
+        EXPECT_EQ(compiled->Attr("b", "pressedColor"), "@line");
+        EXPECT_EQ(compiled->Attr("b", "disabledColor"), "@shade");
+        EXPECT_FALSE(compiled->Has("b", "selectedColor")) << "the same token as the base is no change, as an equal literal is none";
+        EXPECT_FALSE(compiled->Has("same", "hoverColor"));
+    }
+
+    TEST_F(UIWebTest, ATokenFillIsAFillAndTransparentIsNot) {
+        const auto compiled = Compile(R"(<div id="a"></div><div id="b"></div><div id="c"></div>)",
+                                      "#a { width: 10px; height: 10px; background: var(--panel); } #b { width: 10px; height: 10px; background: transparent; }"
+                                      "#c { width: 10px; height: 10px; background: linear-gradient(var(--panel), transparent); }");
+        EXPECT_EQ(compiled->Attr("a", "color"), "@panel");
+        EXPECT_FALSE(compiled->Has("b", "color"));
+        EXPECT_EQ(compiled->Attr("c", "color"), "@panel");
+        EXPECT_EQ(compiled->Attr("c", "gradientColor"), "0,0,0,0");
+    }
+
+    TEST_F(UIWebTest, AVarThatIsNotUnderstoodIsReportedWithItsLineAndLeavesTheDefault) {
+        const auto compiled = Compile(R"(<div id="a"></div>)", "#a { width: 10px; height: 10px;\n"
+                                                               "  background: var(--panel, red);\n"
+                                                               "  border: 1px solid var(panel);\n"
+                                                               "  --panel: #fff;\n"
+                                                               "  width: var(--w); }\n"
+                                                               "#a { color: var(--bad name); }\n");
+        EXPECT_EQ(compiled->IssuesMentioning("'background: var(--panel, red)': var() is read only as var(--name)"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'border: 1px solid var(panel)'"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("property '--panel' is not supported"), 1u) << "a custom property is no definition: the tokens are the engine's table";
+        EXPECT_EQ(compiled->IssuesMentioning("'width: var(--w)': var() is read only"), 1u) << "a var() of a length is not a token";
+        EXPECT_EQ(compiled->IssuesMentioning("'color: var(--bad name)'"), 1u);
+        EXPECT_EQ(compiled->report.issues.size(), 5u);
+        EXPECT_EQ(compiled->report.declarationsUnsupported, 5u);
+        for (const UIWebIssue& issue : compiled->report.issues) {
+            EXPECT_EQ(issue.source, "css");
+            EXPECT_GE(issue.line, 1u) << issue.message.c_str();
+        }
+        EXPECT_FALSE(compiled->Has("a", "color")) << "nothing written for the rejected values";
+        EXPECT_FALSE(compiled->Has("a", "borderColor"));
+        EXPECT_EQ(compiled->Attr("a", "width"), "10") << "a rejected width leaves the earlier one";
+    }
+
+    TEST_F(UIWebTest, AVarInAStyleAttributeCompilesAndInAMediaBlockIsAChangeOfTheBox) {
+        const auto inlineStyle = Compile(R"HTML(<div id="a" style="width: 10px; height: 10px; background: var(--panel)"></div>)HTML");
+        EXPECT_EQ(inlineStyle->Attr("a", "color"), "@panel");
+        EXPECT_TRUE(inlineStyle->report.issues.empty());
+        const auto media = Compile(R"(<div id="a"></div>)", "#a { width: 10px; height: 10px; background: var(--panel); } @media (orientation: portrait) { #a { background: var(--accent); } }");
+        EXPECT_EQ(media->IssuesMentioning("@media changes 'color'"), 1u) << "a token is a box change like a literal colour";
+    }
+
+    TEST_F(UIWebTest, TheMenuWrittenWithTokensCompilesToTheMenuWithTokensAndFollowsTheTheme) {
+        UIThemes& themes = CoreManager::GetUIThemes();
+        themes.Set(PoolString::Intern("light"), "play", Color{40, 90, 60, 255});
+        themes.Set(PoolString::Intern("light"), "quit", Color{90, 50, 50, 255});
+        themes.Set(PoolString::Intern("dark"), "play", Color{20, 160, 90, 255});
+        themes.Set(PoolString::Intern("dark"), "quit", Color{160, 40, 60, 255});
+        themes.SetDefaultTheme(PoolString::Intern("light"));
+
+        const auto compiled = Compile(kMenuHtml, kTokenMenuCss);
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str() << " / " << compiled->xml.c_str();
+
+        // Compiles to the XML of the menu with `@token`, and that XML lays out as the literal menu does
+        const UIScreenContent tokens = ReadXml(kTokenMenuXml);
+        ExpectSameElements(tokens.elements, compiled->content.elements);
+        LaidOut web(compiled->content);
+        LaidOut literal(ReadXml(kMenuXml));
+        web.At(1280.0f, 720.0f);
+        literal.At(1280.0f, 720.0f);
+        for (const char* name : {"Column", "Title", "Play", "Quit"}) {
+            ExpectSameRect(literal.Find(name), web.Find(name), name);
+        }
+
+        // and draws in the colours of the current theme, and in the other ones after a switch
+        UIElement* play = compiled->Element("Play");
+        ASSERT_NE(play, nullptr);
+        play->ResolveTheme(themes);
+        EXPECT_TRUE(ColorsEqual(play->color, Color{40, 90, 60, 255}));
+        ASSERT_TRUE(themes.SetTheme(PoolString::Intern("dark")));
+        play->ResolveTheme(themes);
+        EXPECT_TRUE(ColorsEqual(play->color, Color{20, 160, 90, 255}));
+        EXPECT_EQ(play->color.token.ToStringView(), "play");
+        UIElement* quit = compiled->Element("Quit");
+        quit->ResolveTheme(themes);
+        EXPECT_TRUE(ColorsEqual(quit->color, Color{160, 40, 60, 255}));
+        EXPECT_TRUE(themes.GetMissing().empty());
+    }
+
+    TEST_F(UIWebTest, ACardWithTokensIsDrawnInTheColorsOfTheThemeAndTheOtherOnesAfterASwitch) {
+        UIThemes& themes = CoreManager::GetUIThemes();
+        FillThemes(themes);
+        const auto compiled = Compile(R"(<div id="card"></div>)", "#card { width: 100px; height: 40px; background: var(--panel); }");
+        ASSERT_FALSE(compiled->deserializeErrors);
+        UIElement* card = compiled->Element("card");
+        ASSERT_NE(card, nullptr);
+        card->rect = {0.0f, 0.0f, 100.0f, 40.0f};
+        RecordingRenderer renderer;
+
+        const auto drawn = [&] {
+            renderer.ClearCalls();
+            card->ResolveTheme(themes);
+            card->DrawSelf(renderer);
+            return renderer.calls.empty() ? Color{} : renderer.calls[0].color;
+        };
+        EXPECT_TRUE(ColorsEqual(drawn(), Color{240, 240, 230, 255}));
+        ASSERT_TRUE(themes.SetTheme(PoolString::Intern("dark")));
+        EXPECT_TRUE(ColorsEqual(drawn(), Color{30, 32, 40, 255}));
+        EXPECT_TRUE(themes.GetMissing().empty());
+
+        // A token the table lacks is magenta and is recorded once
+        const auto ghost = Compile(R"(<div id="ghost"></div>)", "#ghost { width: 10px; height: 10px; background: var(--nowhere); }");
+        UIElement* element = ghost->Element("ghost");
+        element->rect = {0.0f, 0.0f, 10.0f, 10.0f};
+        element->ResolveTheme(themes);
+        EXPECT_TRUE(ColorsEqual(element->color, kMissingTokenColor));
+        ASSERT_EQ(themes.GetMissing().size(), 1u);
+        EXPECT_EQ(themes.GetMissing()[0].ToStringView(), "nowhere");
     }
 
 }  // namespace BECore::Tests

@@ -1,5 +1,6 @@
 #include "UIWebText.h"
 
+#include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIValueText.h>
 
 namespace BECore::UIWebText {
@@ -18,6 +19,7 @@ namespace BECore::UIWebText {
         constexpr eastl::string_view RgbaName = "rgba";
         constexpr eastl::string_view UrlName = "url";
         constexpr eastl::string_view GradientName = "linear-gradient";
+        constexpr eastl::string_view TokenPrefix = "--";
         constexpr eastl::string_view NoneKeyword = "none";
         constexpr eastl::string_view SolidKeyword = "solid";
         constexpr eastl::string_view InsetKeyword = "inset";
@@ -140,6 +142,34 @@ namespace BECore::UIWebText {
             return Color{*r, *g, *b, *a};
         }
 
+        std::optional<Color> ParseLiteralColor(eastl::string_view text) {
+            text = TrimSpace(text);
+            if (text.empty()) {
+                return std::nullopt;
+            }
+            if (text.front() == '#') {
+                return ParseHexColor(text.substr(1));
+            }
+            const size_t open = text.find('(');
+            if (open != eastl::string_view::npos) {
+                if (text.back() != ')') {
+                    return std::nullopt;
+                }
+                const eastl::string name = ToLower(TrimSpace(text.substr(0, open)));
+                if (name != RgbName && name != RgbaName) {
+                    return std::nullopt;
+                }
+                return ParseFunctionColor(text.substr(open + 1, text.size() - open - 2));
+            }
+            const eastl::string lower = ToLower(text);
+            for (const NamedColor& named : NamedColors) {
+                if (named.name == lower) {
+                    return named.color;
+                }
+            }
+            return std::nullopt;
+        }
+
         /// A px length that is a finite number
         std::optional<float> ParseLength(eastl::string_view text) {
             const auto value = ParsePixels(text);
@@ -194,10 +224,15 @@ namespace BECore::UIWebText {
             return std::nullopt;
         }
 
-        /// One layer of a `box-shadow`
-        std::optional<UIShadowSpec> ParseShadowLayer(eastl::string_view text) {
+        /// One layer of a `box-shadow`: the spec and the theme token of its colour
+        struct ShadowLayer {
+            UIShadowSpec spec;
+            PoolString token;
+        };
+
+        std::optional<ShadowLayer> ParseShadowLayer(eastl::string_view text) {
             eastl::vector<float> lengths;
-            std::optional<Color> color;
+            std::optional<WebColor> color;
             for (const eastl::string_view word : SplitWords(text)) {
                 if (ToLower(word) == InsetKeyword) {
                     return std::nullopt;
@@ -213,16 +248,18 @@ namespace BECore::UIWebText {
             if (!color || lengths.size() < MinShadowLengths || lengths.size() > MaxShadowLengths) {
                 return std::nullopt;
             }
-            UIShadowSpec shadow;
+            ShadowLayer layer;
+            UIShadowSpec& shadow = layer.spec;
             shadow.offsetX = lengths[0];
             shadow.offsetY = lengths[1];
             shadow.blur = lengths.size() > ShadowBlurIndex ? lengths[ShadowBlurIndex] : 0.0f;
             shadow.spread = lengths.size() > ShadowSpreadIndex ? lengths[ShadowSpreadIndex] : 0.0f;
             shadow.color = *color;
+            layer.token = color->token;
             if (shadow.blur < 0.0f) {
                 return std::nullopt;
             }
-            return shadow;
+            return layer;
         }
 
     }  // namespace
@@ -321,32 +358,33 @@ namespace BECore::UIWebText {
         return UIText::ParseFloat(text);
     }
 
-    std::optional<Color> ParseColor(eastl::string_view text) {
+    eastl::string FormatWebColor(const WebColor& color) {
+        return UIText::FormatColorRef(color, color.token);
+    }
+
+    std::optional<WebColor> ParseColor(eastl::string_view text) {
         text = TrimSpace(text);
-        if (text.empty()) {
+        constexpr eastl::string_view varName = "var";
+        const size_t open = text.find('(');
+        if (open != eastl::string_view::npos && text.back() == ')' && ToLower(TrimSpace(text.substr(0, open))) == varName) {
+            // `var(--name)`: a theme token. A fallback (a comma) is not read
+            eastl::string_view name = TrimSpace(text.substr(open + 1, text.size() - open - 2));
+            if (name.size() <= TokenPrefix.size() || name.substr(0, TokenPrefix.size()) != TokenPrefix) {
+                return std::nullopt;
+            }
+            name.remove_prefix(TokenPrefix.size());
+            if (!UIThemes::IsValidToken(name)) {
+                return std::nullopt;
+            }
+            WebColor token;
+            token.token = PoolString::Intern(name);
+            return token;
+        }
+        const auto literal = ParseLiteralColor(text);
+        if (!literal) {
             return std::nullopt;
         }
-        if (text.front() == '#') {
-            return ParseHexColor(text.substr(1));
-        }
-        const size_t open = text.find('(');
-        if (open != eastl::string_view::npos) {
-            if (text.back() != ')') {
-                return std::nullopt;
-            }
-            const eastl::string name = ToLower(TrimSpace(text.substr(0, open)));
-            if (name != RgbName && name != RgbaName) {
-                return std::nullopt;
-            }
-            return ParseFunctionColor(text.substr(open + 1, text.size() - open - 2));
-        }
-        const eastl::string lower = ToLower(text);
-        for (const NamedColor& named : NamedColors) {
-            if (named.name == lower) {
-                return named.color;
-            }
-        }
-        return std::nullopt;
+        return WebColor{*literal};
     }
 
     std::optional<eastl::string> ParseUrl(eastl::string_view text) {
@@ -389,7 +427,7 @@ namespace BECore::UIWebText {
 
     std::optional<BorderSpec> ParseBorder(eastl::string_view text) {
         std::optional<float> width;
-        std::optional<Color> color;
+        std::optional<WebColor> color;
         std::optional<bool> solid;
         for (const eastl::string_view word : SplitWords(text)) {
             const eastl::string lower = ToLower(word);
@@ -465,7 +503,8 @@ namespace BECore::UIWebText {
                 return std::nullopt;
             }
             if (shadows.count < MaxShadowLayers) {
-                shadows.layers[shadows.count] = *parsed;
+                shadows.layers[shadows.count] = parsed->spec;
+                shadows.tokens[shadows.count] = parsed->token;
             }
             ++shadows.count;
         }
