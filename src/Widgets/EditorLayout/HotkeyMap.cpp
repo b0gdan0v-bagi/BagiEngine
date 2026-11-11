@@ -6,6 +6,7 @@ namespace BECore {
 
         constexpr KeyChord kReservedChords[] = {
             {ImGuiKey_E, kChordModCtrl | kChordModShift},
+            {ImGuiKey_P, kChordModCtrl | kChordModShift},
             {ImGuiKey_A, kChordModCtrl},
             {ImGuiKey_C, kChordModCtrl},
             {ImGuiKey_V, kChordModCtrl},

@@ -156,17 +156,17 @@ namespace BECore::Tests {
 
     /// The widget classes live in RuntimeModule (not registered in this executable) and the Editor ones build ImGui,
     /// so the types of the files are compared. BagiMatch3ControlSmoke runs the Game set for real.
-    TEST_F(WidgetListTest, GameModeConfigListsTheClearScreenAndSceneRenderWidgetsInOrder) {
+    TEST_F(WidgetListTest, GameModeConfigListsTheClearScreenSceneRenderAndOverlayWidgetsInOrder) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Game));
 
-        const eastl::vector<eastl::string> expected{"ClearScreenWidget", "SceneRenderWidget"};
+        const eastl::vector<eastl::string> expected{"ClearScreenWidget", "SceneRenderWidget", "ProfilerOverlayWidget"};
         EXPECT_EQ(types, expected);
     }
 
     TEST_F(WidgetListTest, EditorModeConfigListsTheEditorWidgetsInOrder) {
         const auto types = WidgetTypes(GetWidgetsConfigName(RunMode::Editor));
 
-        const eastl::vector<eastl::string> expected{"ImGuiWidget", "EditorLayoutWidget", "ViewportWidget", "ClearScreenWidget", "ConfigEditorWidget", "SceneEditorWidget", "TextureEditorWidget"};
+        const eastl::vector<eastl::string> expected{"ImGuiWidget", "EditorLayoutWidget", "ViewportWidget", "ClearScreenWidget", "ConfigEditorWidget", "SceneEditorWidget", "TextureEditorWidget", "ProfilerWidget"};
         EXPECT_EQ(types, expected);
     }
 
