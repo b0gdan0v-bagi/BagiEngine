@@ -3,6 +3,8 @@
 #include <BECore/Input/UIInput.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/UI/UICanvasLayout.h>
+#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UITooltip.h>
 
 namespace BECore {
 
@@ -29,6 +31,11 @@ namespace BECore {
      * popup element nor inside it closes the popup and is consumed (the release too; no click on what is below, no pressed element). A click that ends inside an open popup goes to
      * `UIElement::OnPopupChoice` of the popup instead of the child's `OnClick`. Opening one popup closes another; a canvas that cannot take input closes its popups. The canvas
      * invalidates its layout when the set of open popups changed (the layout cache does not see element edits), at the latest on the next draw.
+     *
+     * **Tooltips.** A hovered `UIButton` with a `tooltip` shows it after `UITooltip::kHoverDelay`, a finger held on it for `UITooltip::kLongPress` shows it too and that press is no click
+     * (the release is swallowed); the rules are `UITooltip::Tracker`, the time is `CoreManager::GetTime()`. The plate is drawn last, over the popups, by a label the canvas owns: it is
+     * no element of the tree, so it takes no input, is never hit, and the layout, `ui_tree` and the validator do not see it. A hidden canvas, one without input and any
+     * press of a mouse hide it.
      *
      * **Regions.** The game publishes named rectangles with SetRegion() and an element places itself in one with `region="name"` (UIRectSpec::region).
      */
@@ -140,6 +147,7 @@ namespace BECore {
         void AdoptDocument();
         void DrawElement(IRenderer& renderer, UIElement& element) const;
         void DrawPopups(IRenderer& renderer) const;
+        void DrawTooltip(IRenderer& renderer);
         void RefreshInputOrder();
 
         /// The element under a point in output pixels, by the layout of the last draw
@@ -147,6 +155,10 @@ namespace BECore {
         // Pointer state of the interactive elements (UIElement::hovered, pressed, OnClick)
         void SetHovered(UIElement* element);
         void ClearPointerState();
+        /// Tells the tooltip rule what the pointer is over (@p under, null for nothing) and whether it is a finger, from an event
+        void UpdateTooltip(UIElement* under, bool touch);
+        /// Feeds the rule again with the same pointer at the time now (every draw, so a delay runs out with no event)
+        void RefreshTooltip();
 
         /// The open popups changed since the last look (opened, closed, a second one opened): keeps the newest, closes the others, invalidates the layout. @return true on a change
         bool SyncPopups();
@@ -168,6 +180,11 @@ namespace BECore {
         IntrusivePtr<UIElement> _popup;    // the open popup the last SyncPopups() saw
         bool _extendWarned = false;        // the ignored `extendToOutput` of a Screen or World canvas was reported
         bool _authoredAdopted = false;     // Initialize() has handed `_elements` and `_variants` to the layout
+
+        UITooltip::Tracker _tooltip;
+        IntrusivePtr<UIElement> _pointerOver;  // what the last pointer event was over, for the tooltip (a hover the game's drag does not count)
+        bool _pointerTouch = false;            // that event came from a finger
+        IntrusivePtr<UILabel> _tooltipLabel;   // draws the plate's text; made at the first tooltip, not in the tree
     };
 
 }  // namespace BECore
