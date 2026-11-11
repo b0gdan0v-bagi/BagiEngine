@@ -32,7 +32,7 @@ button:hover { background: #3a6; }
 
 | HTML | Becomes |
 |------|---------|
-| `button` | `UIButton`: `data-action` (or `action`), `data-value`, `disabled`, the text is the label |
+| `button` | `UIButton`: `data-action` (or `action`), `data-value`, `disabled`, the text is the label; `data-icon` (a sprite name; an empty button is icon-only), `data-icon-position="left\|above"` (`iconPlacement`), `title` (the `tooltip`, `{#key}` allowed). On anything else they are reported |
 | container with `data-widget="segmented"` | `UISegmented`: `data-bind`, `disabled`, `<button data-value data-action>` children. Needs `display: flex` (reported otherwise) |
 | `data-widget="toggle"` | `UIToggle`: text = caption, `data-bind`, `data-action`, `data-on` / `data-off` |
 | `data-widget="slider"` | `UISlider`: `data-bind`, `data-action`, `data-min` / `data-max` / `data-step` |
@@ -65,6 +65,7 @@ CSS's cascade: `!important`, `style=""`, specificity, source order. Selectors: t
 | `text-shadow: <x> <y> [blur] <color>`, `-be-text-outline: <width> <color>` (`none` clears both) | `textShadow`, `textOutline`: a hard shadow and an outline, paint only. A blur and every shadow after the first are reported (drawn hard / left out). Like `color`, they reach only the elements that become a label, button or toggle |
 | `-be-text-fit: shrink`, `-be-min-font-size` | `overflow="AutoFit"`, `minFontSize` |
 | `-be-track-color`, `-be-fill-color`, `-be-thumb-color` | of a toggle, slider, progress bar only |
+| `-be-icon-color` | `iconTint` of a button with `data-icon` (not inherited; reported on anything else) |
 | `:hover`, `:active`, `:disabled`, `:checked` with `background` | `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`. Not on toggle / slider / progress (their states are derived; reported) |
 
 **The box** (`.claude/rules/ui-shapes.md`): px only. A border is drawn inside the rect, so it is not layout (as with `box-sizing: border-box`); the same for shadows. The gradient takes two colors with no stop positions and the directions `to bottom|right|top|left` or `180|90|0|270deg` (`to top` and `to left` swap the colors); it replaces `background-color`, a `url()` beside it is the sprite drawn over it, and a `background` shorthand after it resets it. `box-shadow` has no `inset`, a colour is required, a third layer is reported. A box effect alone does not make a group take clicks, a visible gradient start does. The shifts of a button's states are automatic from its fill: a state rule changes the background only (the far end of a gradient is derived from its start; a state rule that changes another box property, and a `@media` block that changes the box, are reported).

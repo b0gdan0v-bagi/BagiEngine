@@ -171,6 +171,7 @@ namespace BECore {
             std::optional<Color> trackColor;
             std::optional<Color> fillColor;
             std::optional<Color> thumbColor;
+            std::optional<Color> iconColor;
             /// Set by a handler that applied a value with a caveat (a blurred shadow drawn hard): the check of the declarations reports it, the value still counts
             eastl::string note;
         };
@@ -823,6 +824,14 @@ namespace BECore {
                  }
                  return color.has_value();
              }},
+            {"-be-icon-color",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto color = UIWebText::ParseColor(v);
+                 if (color) {
+                     r.iconColor = *color;
+                 }
+                 return color.has_value();
+             }},
             {"white-space",
              [](Resolved& r, eastl::string_view v) {
                  const eastl::string lower = UIWebText::ToLower(v);
@@ -1310,6 +1319,45 @@ namespace BECore {
                 return number && *number >= minimum ? number : std::nullopt;
             }
 
+            /// The icon and the tooltip of a button: `data-icon`, `data-icon-position` and `title` anywhere else, or with a value that is not understood, are reported
+            void CheckIconAttributes(const UIHtmlNode& html, WebKind kind) {
+                const auto report = [&](eastl::string message) { _report.AddOnce(HtmlSource, html.line, std::move(message)); };
+                const bool button = kind == WebKind::Button;
+                if (!button) {
+                    if (html.HasAttribute("data-icon")) {
+                        report("data-icon only applies to a <button>");
+                    }
+                    if (html.HasAttribute("data-icon-position")) {
+                        report("data-icon-position only applies to a <button>");
+                    }
+                    if (html.HasAttribute("title")) {
+                        report("title only applies to a <button> (it becomes the tooltip): it is left out here");
+                    }
+                    return;
+                }
+                const eastl::string* icon = html.FindAttribute("data-icon");
+                if (icon != nullptr && icon->empty()) {
+                    report("data-icon needs the name of a sprite: no icon is drawn");
+                }
+                if (const eastl::string* position = html.FindAttribute("data-icon-position")) {
+                    if (icon == nullptr || icon->empty()) {
+                        report("data-icon-position has no effect without data-icon");
+                    }
+                    if (!IconPlacementOf(*position)) {
+                        report(Format("data-icon-position=\"{}\" is not supported (\"left\" or \"above\"): the default (left) is kept", position->c_str()));
+                    }
+                }
+            }
+
+            /// The placement a `data-icon-position` names
+            [[nodiscard]] static const char* IconPlacementOf(const eastl::string& position) {
+                const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(position));
+                if (lower == "left") {
+                    return "Left";
+                }
+                return lower == "above" ? "Above" : nullptr;
+            }
+
             /// `data-widget` and the `data-*` attributes of the widgets outside the places that understand them are reported, never dropped in silence
             void CheckWidgetAttributes(int htmlIndex, WebKind kind) {
                 const UIHtmlNode& html = _document.nodes[htmlIndex];
@@ -1330,6 +1378,7 @@ namespace BECore {
                 if (html.HasAttribute("data-action") && kind != WebKind::Button && kind != WebKind::Toggle && kind != WebKind::Slider) {
                     report("data-action only applies to a <button> or an element with data-widget=\"toggle\" or \"slider\"");
                 }
+                CheckIconAttributes(html, kind);
                 if (kind != WebKind::Toggle) {
                     for (const char* attribute : {"data-on", "data-off"}) {
                         if (html.HasAttribute(attribute)) {
@@ -1598,6 +1647,9 @@ namespace BECore {
                         Note(report, "-be-fill-color applies to a toggle, slider or progress bar only");
                     }
                 }
+                if (r.iconColor && kind != WebKind::Button) {
+                    Note(report, "-be-icon-color applies to a button only");
+                }
                 if (r.thumbColor) {
                     if (thumb) {
                         attrs.Set("thumbColor", UIText::FormatColor(*r.thumbColor));
@@ -1766,6 +1818,26 @@ namespace BECore {
                         attrs.Set("value", *value);
                     }
                     AddDisabled(attrs, html);
+                    AddIcon(attrs, r, html);
+                }
+            }
+
+            /// The icon, its placement and its colour, and the tooltip of a button; each only when set (a bad placement was reported when the node was added)
+            static void AddIcon(Attrs& attrs, const Resolved& r, const UIHtmlNode& html) {
+                const eastl::string* icon = html.FindAttribute("data-icon");
+                if (icon != nullptr && !icon->empty()) {
+                    attrs.Set("icon", *icon);
+                    if (const eastl::string* position = html.FindAttribute("data-icon-position")) {
+                        if (const char* placement = IconPlacementOf(*position); placement != nullptr && eastl::string_view(placement) != "Left") {
+                            attrs.Set("iconPlacement", placement);
+                        }
+                    }
+                    if (r.iconColor) {
+                        attrs.Set("iconTint", UIText::FormatColor(*r.iconColor));
+                    }
+                }
+                if (const eastl::string* tooltip = html.FindAttribute("title"); tooltip != nullptr && !tooltip->empty()) {
+                    attrs.Set("tooltip", *tooltip);
                 }
             }
 
