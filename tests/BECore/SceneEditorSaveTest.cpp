@@ -6,7 +6,11 @@
 #include <BECore/Scene/Components/QuadRendererComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <BECore/Scene/Components/TransformComponent.h>
+#include <BECore/Scene/SceneLoader.h>
 #include <BECore/Scene/SceneManager.h>
+#include <BECore/Scene/SceneNodeFiles.h>
+#include <BECore/UI/UICanvasComponent.h>
+#include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/TempPath.h>
@@ -105,10 +109,75 @@ namespace BECore::Tests {
             return false;
         }
 
-        /// Puts `<node ref="nodes/Extra"/>` between the nodes of the `<scene>` element called @p sceneName
-        void AddNodeReference(pugi::xml_node configRoot, const char* sceneName) {
-            pugi::xml_node nodes = FindSceneElement(configRoot, sceneName).child("nodes");
-            nodes.insert_child_after("node", nodes.first_child()).append_attribute("ref").set_value("nodes/Extra");
+        constexpr const char* kBoxFile = R"(<node name="Box" layer="2"><components>
+  <component type="TransformComponent" x="1" y="2" width="30" height="40"/>
+  <component type="QuadRendererComponent"><color r="1" g="2" b="3" a="255"/></component>
+</components></node>)";
+
+        constexpr const char* kPanelFile = R"(<node name="Panel"><components>
+  <component type="TransformComponent" x="10" y="20" width="200" height="100"/>
+  <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+    <elements>
+      <element type="UILabel" name="Title" x="8" y="8" width="184" height="30" text="Base" fontSize="24"/>
+    </elements>
+  </component>
+</components></node>)";
+
+        // Scene Main: an instance, an inline node, an instance with overrides (written the way BuildNodeReference writes them), an instance of a second file.
+        // Scene Other holds one instance, saved by nobody.
+        constexpr const char* kBoxOverrideRef = R"(<node ref="nodes/Box" name="BoxB" layer="3"><components><component type="TransformComponent" x="100"/></components></node>)";
+        constexpr const char* kSplitScenesXml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Main"><nodes>
+    <node ref="nodes/Box"/>
+    <node name="Plain"><components>
+      <component type="TransformComponent" x="5" y="6" width="7" height="8"/>
+    </components></node>
+    <node ref="nodes/Box" name="BoxB" layer="3"><components><component type="TransformComponent" x="100"/></components></node>
+    <node ref="nodes/Panel"/>
+  </nodes></scene>
+  <scene type="Scene" name="Other"><nodes>
+    <node ref="nodes/Box" name="OtherBox"/>
+  </nodes></scene>
+</scenes></SceneManager>)";
+
+        constexpr float kEditedX = 77.0f;
+        constexpr int32_t kEditedLayer = 5;
+
+        void WriteFile(const std::filesystem::path& path, const char* text) {
+            std::filesystem::create_directories(path.parent_path());
+            std::ofstream(path) << text;
+        }
+
+        /// The element in the compact form, for comparing a node with the text it should have
+        eastl::string Raw(pugi::xml_node node) {
+            std::ostringstream stream;
+            node.print(stream, "", pugi::format_raw);
+            const std::string text = stream.str();
+            return eastl::string{text.c_str(), text.size()};
+        }
+
+        /// The components of @p node as text: type and serialized fields, in order
+        eastl::vector<eastl::string> ComponentTexts(const SceneNode& node) {
+            eastl::vector<eastl::string> texts;
+            for (const auto& component : node.GetComponents()) {
+                XmlSerializer serializer;
+                component->Serialize(serializer);
+                eastl::string text = component->GetTypeMeta().typeName.data();
+                text.append(":");
+                text.append(Raw(serializer.GetRootNode()));
+                texts.push_back(text);
+            }
+            return texts;
+        }
+
+        /// The i-th `<node>` of the `<nodes>` of the `<scene>` called @p sceneName
+        pugi::xml_node SavedNode(pugi::xml_node configRoot, const char* sceneName, size_t index) {
+            pugi::xml_node node = FindSceneElement(configRoot, sceneName).child("nodes").first_child();
+            for (size_t i = 0; i < index && node; ++i) {
+                node = node.next_sibling();
+            }
+            return node;
         }
 
         SceneNode* FindTopLevelNode(Scene& scene, PoolString name) {
@@ -208,8 +277,6 @@ namespace BECore::Tests {
         XmlDocument _document;
         IntrusivePtrAtomic<SceneManager> _manager;
         IntrusivePtrAtomic<SceneManager> _reloaded;
-
-    private:
         std::filesystem::path _dir;
     };
 
@@ -542,47 +609,247 @@ namespace BECore::Tests {
         EXPECT_EQ(CountScenes(ConfigRoot()), 3u);
     }
 
-    TEST_F(SceneEditorSaveTest, ASceneWithANodeReferenceIsRefused) {
-        ASSERT_NO_FATAL_FAILURE(LoadScenes());
-        AddNodeReference(ConfigRoot(), "Game");
-        const eastl::string before = Print(ConfigRoot());
+    /**
+     * A scene made of node files: the nodes of `nodes/Box` and `nodes/Panel` in a temporary folder, the scenes loaded with LoadSceneManager (so
+     * the nodes remember their file) and the saved document loaded the same way.
+     */
+    class SceneEditorSaveReferencesTest : public SceneEditorSaveTest {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
 
-        // The live tree is flat: saving it would inline the reference. Nothing is written, not even the other scenes
-        _manager->SetActiveScene("Game"_intern);
-        FindTopLevelNode(*_manager->GetActiveScene(), "Piece"_intern)->SetName("Pawn"_intern);
-        EXPECT_FALSE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
-        EXPECT_EQ(Print(ConfigRoot()), before);
-        EXPECT_EQ(SceneOrder(ConfigRoot()), "Menu,Game,Credits");
-        EXPECT_TRUE(FindSceneElement(ConfigRoot(), "Game").child("nodes").child("node").next_sibling("node").attribute("ref"));
+        void SetUp() override {
+            SceneEditorSaveTest::SetUp();
+            WriteFile(_dir / "nodes" / "Box.xml", kBoxFile);
+            WriteFile(_dir / "nodes" / "Panel.xml", kPanelFile);
+            _loader = MakeDirectoryNodeLoader(_dir);
+        }
+
+        /// Loads the document and the scenes (through the node files); the active scene is Main. Use through ASSERT_NO_FATAL_FAILURE.
+        void LoadSplitScenes() {
+            ASSERT_TRUE(_document.LoadFromString(kSplitScenesXml));
+            _manager = LoadSceneManager(_document.GetRoot(), _loader);
+            _manager->Initialize();
+            ASSERT_NE(_manager->GetSceneByName("Main"_intern), nullptr);
+            ASSERT_NE(_manager->GetSceneByName("Other"_intern), nullptr);
+            _manager->SetActiveScene("Main"_intern);
+        }
+
+        /// Saves the document and loads the file the way a game does, node files included. Use through ASSERT_NO_FATAL_FAILURE.
+        void SaveAndReloadSplit() {
+            ASSERT_TRUE(_document.SaveToFile(SavedPath()));
+            ASSERT_TRUE(_reloadedDocument.LoadFromFile(SavedPath()));
+            _reloaded = LoadSceneManager(_reloadedDocument.GetRoot(), _loader);
+            _reloaded->Initialize();
+            ASSERT_NE(_reloaded->GetSceneByName("Main"_intern), nullptr);
+        }
+
+        bool Save(Scene& scene) {
+            return WriteSceneToConfig(ConfigRoot(), scene, &_loader, &_notes);
+        }
+
+        /// The live scene and the one loaded from the saved file hold the same nodes: order, name, layer, node file, components
+        void ExpectReloadedEqualsLive(const char* sceneName) {
+            const auto& live = GetScene(sceneName).GetRootNode().GetChildren();
+            const auto& loaded = Reloaded(sceneName).GetRootNode().GetChildren();
+            ASSERT_EQ(live.size(), loaded.size());
+            for (size_t i = 0; i < live.size(); ++i) {
+                SCOPED_TRACE(live[i]->GetName().CStr());
+                EXPECT_EQ(live[i]->GetName(), loaded[i]->GetName());
+                EXPECT_EQ(live[i]->GetLayer(), loaded[i]->GetLayer());
+                EXPECT_EQ(live[i]->GetSourceRef(), loaded[i]->GetSourceRef());
+                EXPECT_EQ(ComponentTexts(*live[i]), ComponentTexts(*loaded[i]));
+            }
+        }
+
+        SceneNode& Child(const char* sceneName, size_t index) {
+            return *GetScene(sceneName).GetRootNode().GetChildren()[index];
+        }
+
+        NodeFileLoader _loader;
+        XmlDocument _reloadedDocument;
+        eastl::vector<eastl::string> _notes;
+    };
+
+    TEST_F(SceneEditorSaveReferencesTest, AnUntouchedSplitSceneKeepsItsReferences) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+        constexpr size_t kReferenceIndices[] = {0, 2, 3};
+        eastl::vector<eastl::string> before;
+        for (const size_t index : kReferenceIndices) {
+            before.push_back(Raw(SavedNode(ConfigRoot(), "Main", index)));
+        }
+
+        ASSERT_TRUE(Save(GetScene("Main")));
+
+        // Every reference has the text it had, a bare one stays bare, and the file does not learn the node file of a node
+        for (size_t i = 0; i < before.size(); ++i) {
+            EXPECT_EQ(Raw(SavedNode(ConfigRoot(), "Main", kReferenceIndices[i])), before[i]);
+        }
+        EXPECT_FALSE(HasAttributeBelow(ConfigRoot(), "sourceRef"));
+        EXPECT_TRUE(_notes.empty());
+        EXPECT_EQ(Raw(SavedNode(ConfigRoot(), "Main", 0)), "<node ref=\"nodes/Box\"/>");
+        EXPECT_EQ(Raw(SavedNode(ConfigRoot(), "Main", 2)), kBoxOverrideRef);
+
+        ASSERT_NO_FATAL_FAILURE(SaveAndReloadSplit());
+        ASSERT_NO_FATAL_FAILURE(ExpectReloadedEqualsLive("Main"));
     }
 
-    TEST_F(SceneEditorSaveTest, ASceneWithoutReferencesIsStillWritten) {
-        ASSERT_NO_FATAL_FAILURE(LoadScenes());
-        AddNodeReference(ConfigRoot(), "Game");
-        const eastl::string gameBefore = Print(FindSceneElement(ConfigRoot(), "Game"));
+    TEST_F(SceneEditorSaveReferencesTest, AnEditOfAnInstanceIsSavedAsTheOverrideOnly) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
 
-        _manager->SetActiveScene("Menu"_intern);
-        FindTopLevelNode(*_manager->GetActiveScene(), "Title"_intern)->SetName("Heading"_intern);
-        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
+        // A field of the first instance, the name and the layer of the third, the title of the canvas of the fourth
+        Child("Main", 0).GetComponent<TransformComponent>()->_x = kEditedX;
+        SceneNode& box = Child("Main", 2);
+        box.SetName("Crate"_intern);
+        box.SetLayer(kEditedLayer);
+        Child("Main", 3).GetComponent<UICanvasComponent>()->_elements[0]->name = "Heading"_intern;
 
-        // Menu is written, the scene with the reference is left as it was
-        EXPECT_STREQ(FindSceneElement(ConfigRoot(), "Menu").child("nodes").first_child().attribute("name").as_string(), "Heading");
-        EXPECT_EQ(Print(FindSceneElement(ConfigRoot(), "Game")), gameBefore);
-        EXPECT_EQ(SceneOrder(ConfigRoot()), "Menu,Game,Credits");
+        ASSERT_TRUE(Save(GetScene("Main")));
+        EXPECT_TRUE(_notes.empty());
+
+        EXPECT_EQ(Raw(SavedNode(ConfigRoot(), "Main", 0)), "<node ref=\"nodes/Box\"><components><component type=\"TransformComponent\" x=\"77\"/></components></node>");
+        const pugi::xml_node third = SavedNode(ConfigRoot(), "Main", 2);
+        EXPECT_STREQ(third.attribute("ref").as_string(), "nodes/Box");
+        EXPECT_STREQ(third.attribute("name").as_string(), "Crate");
+        EXPECT_EQ(third.attribute("layer").as_int(), kEditedLayer);
+        EXPECT_EQ(third.child("components").first_child().attribute("x").as_int(), 100);
+        const pugi::xml_node fourth = SavedNode(ConfigRoot(), "Main", 3);
+        EXPECT_STREQ(fourth.attribute("ref").as_string(), "nodes/Panel");
+        EXPECT_FALSE(fourth.attribute("name"));
+        EXPECT_TRUE(fourth.child("components").child("component").child("elements"));
+        EXPECT_FALSE(fourth.child("components").child("component").attribute("space"));
+
+        ASSERT_NO_FATAL_FAILURE(SaveAndReloadSplit());
+        ASSERT_NO_FATAL_FAILURE(ExpectReloadedEqualsLive("Main"));
+        EXPECT_EQ(Reloaded("Main").GetRootNode().GetChildren()[2]->GetName(), "Crate"_intern);
     }
 
-    TEST_F(SceneEditorSaveTest, AReferenceInAnotherSceneDoesNotBlock) {
-        ASSERT_NO_FATAL_FAILURE(LoadScenes());
-        AddNodeReference(ConfigRoot(), "Credits");
+    TEST_F(SceneEditorSaveReferencesTest, AnInlineNodeNextToInstancesStaysInline) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+        Child("Main", 1).GetComponent<TransformComponent>()->_x = kEditedX;
 
-        _manager->SetActiveScene("Game"_intern);
-        FindTopLevelNode(*_manager->GetActiveScene(), "Piece"_intern)->SetName("Pawn"_intern);
-        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), *_manager->GetActiveScene()));
+        ASSERT_TRUE(Save(GetScene("Main")));
 
-        const pugi::xml_node game = FindSceneElement(ConfigRoot(), "Game");
-        EXPECT_STREQ(game.child("nodes").first_child().next_sibling().attribute("name").as_string(), "Pawn");
-        EXPECT_TRUE(FindSceneElement(ConfigRoot(), "Credits").child("nodes").first_child().next_sibling().attribute("ref"));
-        EXPECT_EQ(SceneOrder(ConfigRoot()), "Menu,Game,Credits");
+        const pugi::xml_node plain = SavedNode(ConfigRoot(), "Main", 1);
+        EXPECT_STREQ(plain.attribute("name").as_string(), "Plain");
+        EXPECT_FALSE(plain.attribute("ref"));
+        EXPECT_EQ(plain.child("components").first_child().attribute("x").as_int(), static_cast<int>(kEditedX));
+        EXPECT_TRUE(_notes.empty());
+
+        ASSERT_NO_FATAL_FAILURE(SaveAndReloadSplit());
+        ASSERT_NO_FATAL_FAILURE(ExpectReloadedEqualsLive("Main"));
+        EXPECT_TRUE(Reloaded("Main").GetRootNode().GetChildren()[1]->GetSourceRef().Empty());
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, ADeletedInstanceDisappearsAndANewOneTakesItsPlace) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+        Scene& main = GetScene("Main");
+        main.GetRootNode().RemoveChild(&Child("Main", 0));
+        ASSERT_EQ(main.GetRootNode().GetChildren().size(), 3u);
+
+        // A node of the file put first, with an override, the way code would
+        pugi::xml_document reference;
+        pugi::xml_node referenceEl = reference.append_child("node");
+        referenceEl.append_attribute("ref").set_value("nodes/Box");
+        referenceEl.append_attribute("name").set_value("Added");
+        ASSERT_TRUE(main.InstantiateNode(referenceEl, _loader, nullptr, 0));
+
+        ASSERT_TRUE(Save(main));
+        EXPECT_TRUE(_notes.empty());
+
+        const pugi::xml_node nodes = FindSceneElement(ConfigRoot(), "Main").child("nodes");
+        EXPECT_EQ(Raw(nodes.first_child()), "<node ref=\"nodes/Box\" name=\"Added\"/>");
+        size_t count = 0;
+        for (pugi::xml_node node = nodes.first_child(); node; node = node.next_sibling()) {
+            ++count;
+        }
+        EXPECT_EQ(count, 4u);
+
+        ASSERT_NO_FATAL_FAILURE(SaveAndReloadSplit());
+        ASSERT_NO_FATAL_FAILURE(ExpectReloadedEqualsLive("Main"));
+        EXPECT_EQ(Reloaded("Main").GetRootNode().GetChildren()[0]->GetSourceRef(), "nodes/Box"_intern);
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, AnInstanceThatGainedAComponentIsWrittenInlineWithANote) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+        SceneNode& box = Child("Main", 0);
+        box.AddComponent(New<SpriteRendererComponent>());
+
+        ASSERT_TRUE(Save(GetScene("Main")));
+
+        ASSERT_EQ(_notes.size(), 1u);
+        EXPECT_NE(_notes[0].find("node 'Box'"), eastl::string::npos) << _notes[0].c_str();
+        EXPECT_NE(_notes[0].find("written inline"), eastl::string::npos) << _notes[0].c_str();
+        const pugi::xml_node saved = SavedNode(ConfigRoot(), "Main", 0);
+        EXPECT_FALSE(saved.attribute("ref"));
+        EXPECT_STREQ(saved.attribute("name").as_string(), "Box");
+
+        // The data is kept, the link to the file is not; the other instances are still references
+        ASSERT_NO_FATAL_FAILURE(SaveAndReloadSplit());
+        const auto& loaded = Reloaded("Main").GetRootNode().GetChildren();
+        EXPECT_TRUE(loaded[0]->GetSourceRef().Empty());
+        EXPECT_TRUE(loaded[0]->GetComponent<SpriteRendererComponent>());
+        EXPECT_EQ(ComponentTexts(*loaded[0]), ComponentTexts(box));
+        EXPECT_TRUE(SavedNode(ConfigRoot(), "Main", 2).attribute("ref"));
+        EXPECT_EQ(loaded[2]->GetSourceRef(), "nodes/Box"_intern);
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, WithoutALoaderEveryInstanceIsWrittenInlineWithANote) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), GetScene("Main"), nullptr, &_notes));
+
+        EXPECT_EQ(_notes.size(), 3u);
+        EXPECT_FALSE(HasAttributeBelow(FindSceneElement(ConfigRoot(), "Main"), "ref"));
+        // Nothing of the file is lost, only the links
+        ASSERT_NO_FATAL_FAILURE(SaveAndReloadSplit());
+        const auto& live = GetScene("Main").GetRootNode().GetChildren();
+        const auto& loaded = Reloaded("Main").GetRootNode().GetChildren();
+        ASSERT_EQ(live.size(), loaded.size());
+        for (size_t i = 0; i < live.size(); ++i) {
+            EXPECT_TRUE(loaded[i]->GetSourceRef().Empty());
+            EXPECT_EQ(ComponentTexts(*live[i]), ComponentTexts(*loaded[i]));
+        }
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, ANodeFileThatIsGoneGivesAnInlineNodeAndANote) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+        std::filesystem::remove(_dir / "nodes" / "Panel.xml");
+
+        ASSERT_TRUE(Save(GetScene("Main")));
+
+        ASSERT_EQ(_notes.size(), 1u);
+        EXPECT_NE(_notes[0].find("node 'Panel'"), eastl::string::npos) << _notes[0].c_str();
+        const pugi::xml_node panel = SavedNode(ConfigRoot(), "Main", 3);
+        EXPECT_FALSE(panel.attribute("ref"));
+        EXPECT_TRUE(panel.child("components").find_child_by_attribute("type", "UICanvasComponent").child("elements"));
+        EXPECT_TRUE(SavedNode(ConfigRoot(), "Main", 0).attribute("ref"));
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, TheOtherScenesKeepTheirReferencesVerbatim) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+        const eastl::string otherBefore = Print(FindSceneElement(ConfigRoot(), "Other"));
+        const pugi::xml_node otherEl = FindSceneElement(ConfigRoot(), "Other");
+        otherEl.parent().insert_child_before(pugi::node_comment, otherEl).set_value(kCreditsComment);
+
+        ASSERT_TRUE(Save(GetScene("Main")));
+
+        EXPECT_EQ(Print(FindSceneElement(ConfigRoot(), "Other")), otherBefore);
+        EXPECT_EQ(SceneOrder(ConfigRoot()), "Main,Other");
+        EXPECT_EQ(FindSceneElement(ConfigRoot(), "Other").previous_sibling().type(), pugi::node_comment);
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, SavingTwiceGivesTheSameDocument) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+        Child("Main", 0).GetComponent<TransformComponent>()->_x = kEditedX;
+
+        ASSERT_TRUE(Save(GetScene("Main")));
+        const eastl::string once = Print(ConfigRoot());
+        ASSERT_TRUE(Save(GetScene("Main")));
+
+        EXPECT_EQ(Print(ConfigRoot()), once);
+        EXPECT_EQ(CountScenes(ConfigRoot()), 2u);
     }
 
     TEST_F(SceneEditorSaveTest, AnInvalidRootIsRejected) {

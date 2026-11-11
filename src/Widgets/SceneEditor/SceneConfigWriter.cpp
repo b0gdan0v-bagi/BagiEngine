@@ -4,11 +4,13 @@
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/Scene/Scene.h>
-#include <BECore/Scene/SceneNodeFiles.h>
+#include <BECore/Scene/SceneNodeInstance.h>
 
 namespace BECore {
 
     namespace {
+
+        constexpr const char* kNoLoaderReason = "no node file loader was given";
 
         void BuildNodeXml(pugi::xml_node parent, const SceneNode& node) {
             pugi::xml_node nodeEl = parent.append_child("node");
@@ -48,25 +50,29 @@ namespace BECore {
             return {};
         }
 
-        /// True when the `<nodes>` of @p sceneEl has a `<node ref>`
-        bool HasNodeReference(pugi::xml_node sceneEl) {
-            for (pugi::xml_node el = sceneEl.child("nodes").child(kNodeElementName.data()); el; el = el.next_sibling(kNodeElementName.data())) {
-                if (el.attribute(kNodeRefAttribute.data())) {
-                    return true;
+        /// One top-level node into @p nodesEl: an instance of a node file as its `<node ref>` with the overrides, any other node (and an instance that
+        /// cannot be written that way, with a line in @p notes) inline
+        void AppendNode(pugi::xml_node nodesEl, const SceneNode& node, const NodeFileLoader* loader, eastl::vector<eastl::string>* notes) {
+            if (!node.GetSourceRef().Empty()) {
+                eastl::string reason;
+                if (loader) {
+                    if (BuildNodeReference(node, *loader, nodesEl, reason)) {
+                        return;
+                    }
+                } else {
+                    reason = kNoLoaderReason;
+                }
+                if (notes) {
+                    notes->push_back(Format("node '{}': written inline, {}", node.GetName().CStr(), reason.c_str()));
                 }
             }
-            return false;
+            BuildNodeXml(nodesEl, node);
         }
 
     }  // namespace
 
-    bool WriteSceneToConfig(pugi::xml_node configRoot, Scene& scene) {
+    bool WriteSceneToConfig(pugi::xml_node configRoot, Scene& scene, const NodeFileLoader* loader, eastl::vector<eastl::string>* notes) {
         if (!configRoot) {
-            return false;
-        }
-
-        // Looked at before anything is changed, PrepareForSave included
-        if (const pugi::xml_node existing = FindSceneElement(configRoot.child("scenes"), scene.GetName().CStr()); HasNodeReference(existing)) {
             return false;
         }
 
@@ -99,7 +105,7 @@ namespace BECore {
 
         pugi::xml_node nodesEl = sceneEl.append_child("nodes");
         for (const auto& nodePtr : scene.GetRootNode().GetChildren()) {
-            BuildNodeXml(nodesEl, *nodePtr.Get());
+            AppendNode(nodesEl, *nodePtr.Get(), loader, notes);
         }
 
         if (oldEl) {
