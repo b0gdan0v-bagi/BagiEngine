@@ -109,6 +109,7 @@ namespace BECore {
             const Rect out = GetViewTransform().ToOutput(x, y, w, h);
             SDL_FRect rect{out.x, out.y, out.w, out.h};
             SDL_RenderFillRect(_renderer, &rect);
+            CountDraw(nullptr, kQuadTriangles);
         }
     }
 
@@ -133,6 +134,7 @@ namespace BECore {
         } else {
             SDL_RenderTexture(_renderer, handle, nullptr, &dst);
         }
+        CountDraw(&texture, kQuadTriangles);
     }
 
     void SDLRendererBackend::DrawTransformedTexture(ITexture& texture, const Rect* srcRect, float dstX, float dstY, float dstW, float dstH, const Color& tint, const DrawTransform& transform) {
@@ -173,6 +175,7 @@ namespace BECore {
         } else {
             SDL_RenderTextureRotated(_renderer, handle, nullptr, &dst, static_cast<double>(transform.rotation), &center, flipMode);
         }
+        CountDraw(&texture, kQuadTriangles);  // the identity branch above is counted by DrawTexture
     }
 
     IntrusivePtr<ITexture> SDLRendererBackend::CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) {
@@ -245,7 +248,9 @@ namespace BECore {
                                   _geometryTexCoords.data(), 2 * sizeof(float), vertexCount, indices.data(), static_cast<int>(indices.size() - indices.size() % kIndicesPerTriangle), sizeof(int));
         if (!drawn) {
             LOG_ERROR("SDLRendererBackend: DrawGeometry failed: {}"_format(SDL_GetError()));
+            return;
         }
+        CountDraw(texture, indices.size() / kIndicesPerTriangle);
     }
 
     void SDLRendererBackend::OnClipRectChanged() {

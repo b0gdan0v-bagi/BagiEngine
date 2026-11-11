@@ -92,6 +92,7 @@ The file half is the reflected `ApplicationConfig` read with strict values (`IDe
 | `BECore/Control/ControlBuiltins` | `ping`, `status`, `step`, `quit` |
 | `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
 | `BECore/UI/UIControl` | `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?, at?}`: a real mouse click on a visible button, toggle or slider, `at` 0..1 the horizontal position, which also sets a slider; the answer has its `action` and `value`; codes `no_scene`, `not_found`, `not_clickable`, `invalid_params`; `UI/CLAUDE.md`, "Control API") |
+| `BECore/Profiler/ProfilerControl` | `frame_stats` (`{frames?}` 1..240: the last frames, oldest first, with stage times, draws, allocations, named counters), `profiler_dump` (`{path?}` relative, no `..`: writes the Chrome trace; `not_recording` unless the game runs with `--trace=` or `--profiler=chrome`), `zone_allocs` (`{top?, reset?}`: allocations per zone and the totals; `enabled` false without `ENGINE_PROFILER_ALLOC`); `Profiler/CLAUDE.md` |
 | `Games/GameControl` | `list_games`, `switch_game`, `reset`, `get_state`, `list_actions`, `perform_action`, `set_state` (`Games/CLAUDE.md`) |
 
 ## Adding a method

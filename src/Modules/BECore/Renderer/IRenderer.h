@@ -2,6 +2,7 @@
 
 #include <BECore/Renderer/BlendMode.h>
 #include <BECore/Renderer/DrawTransform.h>
+#include <BECore/Renderer/RenderCounters.h>
 #include <BECore/Renderer/ViewTransform.h>
 
 namespace BECore {
@@ -140,9 +141,38 @@ namespace BECore {
             return _clipStack.size();
         }
 
+        // The draws counted since the last call, and a fresh start (the frame statistics take them once per frame, FrameStatsCollector).
+        // Counted by the backends where a primitive really reaches the GPU, after their early returns, so a draw that a clip or a missing
+        // texture drops is not counted, and a composed draw (DrawTransformedRect over DrawGeometry) is counted once.
+        RenderCounters TakeRenderCounters();
+        [[nodiscard]] const RenderCounters& PeekRenderCounters() const {
+            return _counters;
+        }
+        // While any pause is alive the draws are not counted (the profiler's own overlay, ScopedRenderCountersPause)
+        void PauseCounters() {
+            ++_countersPaused;
+        }
+        void ResumeCounters() {
+            --_countersPaused;
+        }
+
     protected:
         // Called after the clip changes (push or pop). A backend applies GetClipRect() to its next draws.
         virtual void OnClipRectChanged() {}
+
+        // A backend calls it once per primitive it submits: @p texture is null for an untextured draw
+        void CountDraw(const ITexture* texture, uint64_t triangles) {
+            if (_countersPaused > 0) {
+                return;
+            }
+            ++_counters.drawCalls;
+            _counters.triangles += triangles;
+            if (texture != nullptr && texture != _lastCountedTexture) {
+                ++_counters.textureSwitches;
+                _lastCountedTexture = texture;
+            }
+        }
+        static constexpr uint64_t kQuadTriangles = 2;
 
     private:
         static constexpr Color kWhite{255, 255, 255, 255};
@@ -153,6 +183,26 @@ namespace BECore {
         BlendMode _blendMode = BlendMode::Alpha;
         // Each entry is already intersected with the one below it
         eastl::vector<Rect> _clipStack;
+        RenderCounters _counters;
+        const ITexture* _lastCountedTexture = nullptr;  // compared only, never dereferenced
+        int _countersPaused = 0;
+    };
+
+    /// Stops a renderer counting its draws for the length of a scope
+    class ScopedRenderCountersPause {
+    public:
+        explicit ScopedRenderCountersPause(IRenderer& renderer) : _renderer(renderer) {
+            _renderer.PauseCounters();
+        }
+        ~ScopedRenderCountersPause() {
+            _renderer.ResumeCounters();
+        }
+
+        ScopedRenderCountersPause(const ScopedRenderCountersPause&) = delete;
+        ScopedRenderCountersPause& operator=(const ScopedRenderCountersPause&) = delete;
+
+    private:
+        IRenderer& _renderer;
     };
 
     /// Sets a blend mode on a renderer for the length of a scope and puts the previous one back

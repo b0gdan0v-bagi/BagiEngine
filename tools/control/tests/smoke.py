@@ -298,6 +298,17 @@ def run_real_clock_scenario(client: BagiControlClient, headless: bool) -> None:
         check_screenshot_basics(client)
 
 
+def check_frame_stats(client: BagiControlClient) -> None:
+    """The frame statistics of the stepped frames: the scene draws something every frame."""
+    frames = client.call("frame_stats", {"frames": 3})["frames"]
+    check(len(frames) == 3, f"frame_stats of 3 frames answered {len(frames)}")
+    check(frames[-1]["frame"] == frames[0]["frame"] + 2, f"frame_stats is not the last frames in order: {[f['frame'] for f in frames]}")
+    check(all(frame["drawCalls"] > 0 for frame in frames), f"a frame of Match3 drew nothing: {[f['drawCalls'] for f in frames]}")
+    check(all(frame["cpuMs"] >= 0 and "Update" in frame["stagesMs"] for frame in frames), f"frame_stats has no stage times: {frames[-1]}")
+    expect_error("invalid_params", lambda: client.call("frame_stats", {"frames": 0}), "frame_stats of no frames")
+    check("totals" in client.call("zone_allocs"), "zone_allocs has no totals")
+
+
 def run_manual_clock_scenario(client: BagiControlClient, headless: bool) -> None:
     status = client.call("status")
     check(status["manualClock"] is True, f"--manual-clock did not turn the manual clock on: {status}")
@@ -333,6 +344,8 @@ def run_manual_clock_scenario(client: BagiControlClient, headless: bool) -> None
     expect_error("invalid_params", lambda: client.call("step", {"dt": -1}), "a step of negative time")
     expect_error("invalid_params", lambda: client.call("step", {"dt": 10}), "a step of ten seconds")
     check(client.call("status")["frame"] == 9, "a refused step ran frames")
+
+    check_frame_stats(client)
 
     # The push of a state change comes at the end of the next frame, before the answer of the step that ran it
     client.call("reset", {"seed": 2})

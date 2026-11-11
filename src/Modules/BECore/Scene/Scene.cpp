@@ -35,6 +35,7 @@ namespace BECore {
 
     void Scene::Draw() {
         BE_PROFILE_SCOPE("Scene::Draw");
+        const FrameStatsCollector::StageScope stage(CoreManager::GetFrameStats(), FrameStage::SceneDraw);
         if (!_rootNode) {
             return;
         }

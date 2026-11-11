@@ -4,6 +4,7 @@
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Logger/OutputSink.h>
+#include <BECore/Profiler/ProfilerControl.h>
 #include <BECore/Scene/SceneLoader.h>
 #include <BECore/UI/UIControl.h>
 #include <Events/EventsQueueRegistry.h>
@@ -79,6 +80,7 @@ namespace BECore {
 
         RegisterControlBuiltins(_controlService);
         RegisterUIControl(_controlService);
+        RegisterProfilerControl(_controlService);
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
@@ -88,28 +90,35 @@ namespace BECore {
     }
 
     void CoreManager::OnGameCycle(PassKey<Application>) {
-        {
-            BE_PROFILE_SCOPE("Input");
-            _eventsProviderManager.ProcessEvents();
-        }
         BE_PROFILE_SCOPE("Game cycle");
-        _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
-        // The game clock of the delayed tasks gets the same frame delta as the tweens below (the clamp and the manual clock apply)
-        TaskManager::GetInstance().AdvanceGameTime(PassKey<CoreManager>{}, _time.GetDeltaTime());
         {
-            BE_PROFILE_SCOPE("Tasks");
-            TaskManager::GetInstance().Update(PassKey<CoreManager>{});
+            // Update: input, commands, tasks, tweens and the logic (FrameStage::Update; the scene's part is SceneUpdate)
+            const FrameStatsCollector::StageScope update(_frameStats, FrameStage::Update);
+            {
+                BE_PROFILE_SCOPE("Input");
+                _eventsProviderManager.ProcessEvents();
+            }
+            _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
+            // The game clock of the delayed tasks gets the same frame delta as the tweens below (the clamp and the manual clock apply)
+            TaskManager::GetInstance().AdvanceGameTime(PassKey<CoreManager>{}, _time.GetDeltaTime());
+            {
+                BE_PROFILE_SCOPE("Tasks");
+                TaskManager::GetInstance().Update(PassKey<CoreManager>{});
+            }
+            // Values are set before the logic of the frame reads them. The frame time is clamped to Time::kMaxFrameTime, so a pause does not finish every tween at once;
+            // the manual clock gives the same ticks, and OnIdleCycle runs no frame and advances nothing
+            {
+                BE_PROFILE_SCOPE("Tweens");
+                _tweenManager.Advance(_time.GetDeltaTime());
+            }
+            {
+                BE_PROFILE_SCOPE("Scene update");
+                const FrameStatsCollector::StageScope sceneUpdate(_frameStats, FrameStage::SceneUpdate);
+                _sceneManager->UpdateAll();  // game logic before UI
+            }
         }
-        // Values are set before the logic of the frame reads them. The frame time is clamped to Time::kMaxFrameTime, so a pause does not finish every tween at once;
-        // the manual clock gives the same ticks, and OnIdleCycle runs no frame and advances nothing
-        {
-            BE_PROFILE_SCOPE("Tweens");
-            _tweenManager.Advance(_time.GetDeltaTime());
-        }
-        {
-            BE_PROFILE_SCOPE("Scene update");
-            _sceneManager->UpdateAll();  // game logic before UI
-        }
+        // Render: the widgets (Editor: ViewportWidget draws the scene in its update), queued events, the screen draws and ImGui
+        const FrameStatsCollector::StageScope render(_frameStats, FrameStage::Render);
         {
             BE_PROFILE_SCOPE("Widgets update");
             _widgetManager.UpdateAll();  // clear, build the ImGui frame (Editor: ViewportWidget draws the scene)
@@ -123,8 +132,8 @@ namespace BECore {
             _widgetManager.DrawScreenAll();  // Game: SceneRenderWidget draws the scene into the back buffer
         }
         {
-            BE_PROFILE_SCOPE("Draw and present");
-            _widgetManager.DrawAll();  // ImGui::Render + GPU present
+            BE_PROFILE_SCOPE("Draw widgets");
+            _widgetManager.DrawAll();  // ImGui::Render; the present follows in Application (RenderPresentEvent)
         }
     }
 

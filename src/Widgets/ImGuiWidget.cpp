@@ -59,6 +59,16 @@ namespace BECore {
         }
 
         ImGui::Render();
+        // ImGui's draws reach the GPU through its own backend, past IRenderer's counters: the frame statistics get them as named counters
+        if (const ImDrawData* drawData = ImGui::GetDrawData()) {
+            int commands = 0;
+            for (const ImDrawList* list : drawData->CmdLists) {
+                commands += list->CmdBuffer.Size;
+            }
+            FrameStatsCollector& frameStats = CoreManager::GetFrameStats();
+            frameStats.SetCounter("ImGui draw calls"_intern, static_cast<double>(commands));
+            frameStats.SetCounter("ImGui triangles"_intern, static_cast<double>(drawData->TotalIdxCount / 3));
+        }
         RenderEvents::ImGuiRenderEvent::Emit();
 
         const ImGuiIO& io = ImGui::GetIO();

@@ -6,6 +6,7 @@
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerSettings.h>
 #include <BECore/Reflection/OpenDeserializer.h>
@@ -140,9 +141,19 @@ namespace BECore {
             CoreManager::GetTime().Tick({});
         }
         BE_PROFILE_SCOPE("Frame");
+        FrameStatsCollector& frameStats = CoreManager::GetFrameStats();
+        frameStats.BeginFrame();
         RenderEvents::NewFrameEvent::Emit();
         CoreManager::GetInstance().OnGameCycle({});
-        RenderEvents::RenderPresentEvent::Emit();
+        {
+            BE_PROFILE_SCOPE("Present");
+            const FrameStatsCollector::StageScope present(frameStats, FrameStage::Present);
+            RenderEvents::RenderPresentEvent::Emit();
+        }
+        {
+            const IntrusivePtr<IRenderer>& renderer = CoreManager::GetRenderer();
+            frameStats.EndFrame(renderer ? renderer->TakeRenderCounters() : RenderCounters{}, AllocTracker::GetTotals());
+        }
 #if BE_WITH_EDITOR
         // The only safe point to replace the widgets: the frame is over, so no widget is inside its own call and no ImGui frame is open.
         // The manual-clock idle branch above never gets here, because no frame is open there either

@@ -66,6 +66,8 @@ namespace BECore::Tests {
      */
     class RecordingRenderer : public IRenderer {
     public:
+        static constexpr size_t kGeometryIndicesPerTriangle = 3;
+
         bool Initialize(IMainWindow&) override {
             return true;
         }
@@ -86,6 +88,7 @@ namespace BECore::Tests {
             call.clip = GetClipRect();
             call.blend = GetBlendMode();
             calls.push_back(call);
+            CountDraw(nullptr, kQuadTriangles);
         }
 
         using IRenderer::DrawTexture;
@@ -104,6 +107,7 @@ namespace BECore::Tests {
             call.clip = GetClipRect();
             call.blend = GetBlendMode();
             calls.push_back(call);
+            CountDraw(&texture, kQuadTriangles);
         }
 
         void DrawGeometry(ITexture* texture, eastl::span<const GeometryVertex> vertices, eastl::span<const int> indices, float translateX, float translateY) override {
@@ -135,6 +139,7 @@ namespace BECore::Tests {
             call.rect = Rect{left, top, right - left, bottom - top};
             call.indices.assign(indices.begin(), indices.end());
             calls.push_back(std::move(call));
+            CountDraw(texture, indices.size() / kGeometryIndicesPerTriangle);
         }
 
         IntrusivePtr<ITexture> CreateTexture(const uint8_t* rgba, uint32_t width, uint32_t height) override {
