@@ -66,6 +66,8 @@ A swap that a person makes with the mouse slides, the matched gems shrink away, 
 
 ## Tests
 
+`tests/scenarios/*.jsonl` are recorded control sessions of the real game (`tools/control/CLAUDE.md`, "Scenario files"), each a ctest entry `BagiMatch3Scenario.<file>`; re-record with `bagi_play.py --update` after a deliberate change of the rules.
+
 Executable `Match3Tests`, no engine services needed:
 
 - `Match3GameModelTest.cpp`: board, matches, swaps, cascade.

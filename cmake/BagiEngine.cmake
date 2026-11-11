@@ -10,7 +10,7 @@
 # and output directories set here must apply to the game's targets as well.
 #
 # Public API (defined below): be_add_module, be_add_game_reflection, be_add_game_executable,
-# be_add_game_tests, be_add_game_control_tests, be_link_engine, be_force_include_pch.
+# be_add_game_tests, be_add_game_control_tests, be_add_game_scenario_tests, be_link_engine, be_force_include_pch.
 # =============================================================================
 include_guard(GLOBAL)
 
@@ -808,5 +808,38 @@ if(ENGINE_BUILD_TESTS)
             RESOURCE_LOCK bagi_control_smoke
             ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
         )
+    endfunction()
+
+    # be_add_game_scenario_tests(<ExeTarget> DIR <folder>)
+    # One ctest entry <ExeTarget>Scenario.<file name without extension> per *.jsonl file of DIR (relative to the calling
+    # CMakeLists): a scenario file (a recorded control session, tools/control/CLAUDE.md, "Scenario files") that
+    # tools/control/bagi_play.py plays against the game executable. A new file shows up at the next build (the glob is
+    # CONFIGURE_DEPENDS), with no CMake edit. Same rules as be_add_game_control_tests: call it from the game's CMakeLists,
+    # a missing executable is a skip (77), a folder without files registers nothing. The scenarios share the lock of the
+    # smoke test: each starts a game with the control API, and one lock keeps the games of one ctest run apart while the
+    # unit tests run beside them (a port is chosen free per run; the player retries once when it was taken in between).
+    function(be_add_game_scenario_tests EXE_TARGET)
+        cmake_parse_arguments(ARG "" "DIR" "" ${ARGN})
+        if(NOT ARG_DIR)
+            message(FATAL_ERROR "be_add_game_scenario_tests(${EXE_TARGET}): DIR is required")
+        endif()
+        if(NOT Python3_FOUND)
+            message(WARNING "be_add_game_scenario_tests(${EXE_TARGET}): Python3 not found, the scenario tests are not registered")
+            return()
+        endif()
+
+        cmake_path(ABSOLUTE_PATH ARG_DIR BASE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} NORMALIZE OUTPUT_VARIABLE SCENARIO_DIR)
+        file(GLOB SCENARIO_FILES CONFIGURE_DEPENDS "${SCENARIO_DIR}/*.jsonl")
+        foreach(SCENARIO_FILE IN LISTS SCENARIO_FILES)
+            get_filename_component(SCENARIO_NAME ${SCENARIO_FILE} NAME_WE)
+            set(TEST_NAME ${EXE_TARGET}Scenario.${SCENARIO_NAME})
+            add_test(NAME ${TEST_NAME} COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/control/bagi_play.py $<TARGET_FILE:${EXE_TARGET}> ${SCENARIO_FILE})
+            set_tests_properties(${TEST_NAME} PROPERTIES
+                SKIP_RETURN_CODE 77
+                TIMEOUT 120
+                RESOURCE_LOCK bagi_control_smoke
+                ENVIRONMENT "BAGI_ENGINE_DIR=${BAGI_ENGINE_DIR}"
+            )
+        endforeach()
     endfunction()
 endif()

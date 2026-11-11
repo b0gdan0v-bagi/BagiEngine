@@ -1,0 +1,25 @@
+{"scenario": 1, "game": "Match3", "flags": ["--headless", "--manual-clock"], "title": "Match3: seed 1, a legal swap, a refused swap, and the Play / Reset / Menu buttons"}
+{"method": "step", "params": {"frames": 2}}
+{"method": "reset", "params": {"seed": 1}}
+{"method": "get_state", "expect": {"pointers": {"/state/score": 0, "/state/seed": 1, "/state/status": "playing", "/state/legalSwapCount": 17}, "versionStep": 0}}
+{"method": "list_actions", "expect": {"versionStep": 0}}
+{"method": "perform_action", "params": {"from": {"col": 2, "row": 0}, "to": {"col": 3, "row": 0}, "type": "swap"}, "expect": {"pointers": {"/outcome/scoreGained": 3, "/outcome/score": 3}, "versionStep": 1}}
+{"method": "perform_action", "params": {"type": "swap", "from": {"col": 0, "row": 0}, "to": {"col": 5, "row": 5}}, "expect": {"error": "illegal_action"}}
+{"method": "ui_tree", "expect": {"pointers": {"/scene": "Match3Scene"}}}
+{"method": "step", "params": {"frames": 2}}
+{"method": "ui_click", "params": {"name": "Menu"}}
+{"method": "step", "params": {"frames": 2}}
+{"method": "ui_tree", "expect": {"pointers": {"/scene": "MainMenu"}}}
+{"method": "ui_click", "params": {"name": "Play"}}
+{"method": "step", "params": {"frames": 2}}
+{"method": "ui_tree", "expect": {"pointers": {"/scene": "Match3Scene"}}}
+{"method": "reset", "params": {"seed": 2}, "expect": {"versionStep": 2}}
+{"method": "list_actions", "expect": {"versionStep": 0}}
+{"method": "perform_action", "params": {"from": {"col": 3, "row": 0}, "to": {"col": 3, "row": 1}, "type": "swap"}, "expect": {"versionStep": 1}}
+{"method": "get_state", "expect": {"pointers": {"/state/score": 3}, "versionStep": 0}}
+{"method": "ui_click", "params": {"name": "Reset"}}
+{"method": "step", "params": {"frames": 2}}
+{"method": "get_state", "expect": {"pointers": {"/state/score": 0}, "versionStep": 1}}
+{"method": "ui_click", "params": {"name": "Menu"}}
+{"method": "step", "params": {"frames": 2}}
+{"method": "ui_tree", "expect": {"pointers": {"/scene": "MainMenu"}, "logClean": true}}
