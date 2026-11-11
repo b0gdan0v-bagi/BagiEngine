@@ -219,6 +219,117 @@ namespace BECore::Tests {
         EXPECT_EQ(hotkeys["bindings"]["scene.save"], "Ctrl+K");
     }
 
+    // ---- The viewport's preview choice ("viewportPreview" in preferences.json)
+
+    TEST_F(EditorSettingsTest, ThePreviewChoiceIsTheDefaultWhenTheKeyIsMissing) {
+        WriteFile("preferences.json", R"({"version":1,"theme":"Light"})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EXPECT_EQ(settings.GetPreferences().viewportPreview, PreviewSettings{});
+        EXPECT_EQ(settings.GetPreferences().theme, EditorTheme::Light);
+    }
+
+    TEST_F(EditorSettingsTest, ThePreviewChoiceRoundTripsWithTheDeviceStoredByName) {
+        const auto devices = UIPreview::GetDevices();
+        ASSERT_GE(devices.size(), 2u);
+        EditorPreferences changed;
+        changed.viewportPreview.shape.aspect = ViewportAspect::Wide16x9;
+        changed.viewportPreview.shape.device = 1;
+        changed.viewportPreview.shape.custom = true;
+        changed.viewportPreview.shape.customWidth = 700;
+        changed.viewportPreview.shape.customHeight = 1234;
+        changed.viewportPreview.shape.rotated = true;
+        changed.viewportPreview.safeArea = SafeAreaSimulation::SideInsets;
+        changed.viewportPreview.overlays = {false, true, true, true};
+
+        EditorSettings writer(_directory);
+        writer.SetPreferences(changed);
+        ASSERT_TRUE(writer.SavePreferences());
+
+        const Json file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(file["viewportPreview"]["device"], std::string(devices[1].name.data(), devices[1].name.size()));
+        EXPECT_EQ(file["viewportPreview"]["aspect"], "Wide16x9");
+        EXPECT_EQ(file["viewportPreview"]["safeArea"], "SideInsets");
+
+        EditorSettings reader(_directory);
+        reader.Load();
+        EXPECT_EQ(reader.GetPreferences(), changed);
+    }
+
+    TEST_F(EditorSettingsTest, ADeviceThisBuildLacksGivesTheFreeShape) {
+        WriteFile("preferences.json", R"({"viewportPreview":{"aspect":"Standard4x3","device":"No Such Phone 9","safeArea":"Device","rotated":true,"overlayTouchTargets":true}})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        const PreviewSettings& preview = settings.GetPreferences().viewportPreview;
+        EXPECT_EQ(preview.shape.device, -1);
+        EXPECT_FALSE(preview.shape.custom);
+        EXPECT_EQ(preview.shape.aspect, ViewportAspect::Free);
+        EXPECT_EQ(preview.safeArea, SafeAreaSimulation::None);
+        // The rest of the choice is kept
+        EXPECT_TRUE(preview.shape.rotated);
+        EXPECT_TRUE(preview.overlays.touchTargets);
+    }
+
+    TEST_F(EditorSettingsTest, PreviewMembersOfTheWrongTypeGiveTheirDefaultAndSizesAreClamped) {
+        const std::string text = R"({"viewportPreview":{"aspect":3,"custom":"yes","customWidth":10,"customHeight":99999,"rotated":true,"safeArea":"Nope","overlayViewBounds":1}})";
+        WriteFile("preferences.json", text);
+        EditorSettings settings(_directory);
+        settings.Load();
+        const PreviewSettings& preview = settings.GetPreferences().viewportPreview;
+        EXPECT_EQ(preview.shape.aspect, ViewportAspect::Free);
+        EXPECT_FALSE(preview.shape.custom);
+        EXPECT_EQ(preview.shape.customWidth, kMinPreviewSide);
+        EXPECT_EQ(preview.shape.customHeight, kMaxPreviewSide);
+        EXPECT_TRUE(preview.shape.rotated);
+        EXPECT_EQ(preview.safeArea, SafeAreaSimulation::None);
+        EXPECT_FALSE(preview.overlays.viewBounds);
+        // Load does not write
+        EXPECT_EQ(ReadFile("preferences.json"), text);
+
+        WriteFile("preferences.json", R"({"viewportPreview":[1,2]})");
+        settings.Load();
+        EXPECT_EQ(settings.GetPreferences().viewportPreview, PreviewSettings{});
+
+        EditorPreferences wild;
+        wild.viewportPreview.shape.customWidth = 1;
+        wild.viewportPreview.shape.customHeight = 100000;
+        wild.viewportPreview.shape.device = 9999;
+        settings.SetPreferences(wild);
+        EXPECT_EQ(settings.GetPreferences().viewportPreview.shape.customWidth, kMinPreviewSide);
+        EXPECT_EQ(settings.GetPreferences().viewportPreview.shape.customHeight, kMaxPreviewSide);
+        EXPECT_EQ(settings.GetPreferences().viewportPreview.shape.device, -1);
+    }
+
+    TEST_F(EditorSettingsTest, UnknownMembersOfThePreviewObjectSurviveASave) {
+        WriteFile("preferences.json", R"({"viewportPreview":{"future":{"a":1},"overlayViewBounds":true}})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EXPECT_TRUE(settings.GetPreferences().viewportPreview.overlays.viewBounds);
+        ASSERT_TRUE(settings.SavePreferences());
+        const Json file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(file["viewportPreview"]["future"]["a"], 1);
+        EXPECT_EQ(file["viewportPreview"]["overlayViewBounds"], true);
+    }
+
+    TEST_F(EditorSettingsTest, AnOldFileGainsOnlyThePreviewKey) {
+        WriteFile("preferences.json", R"({"version":1,"theme":"Classic","fontScale":1.5,"viewportGrid":true,"viewportGridStep":16,"futureOption":7})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EditorPreferences expected;
+        expected.theme = EditorTheme::Classic;
+        expected.fontScale = 1.5f;
+        expected.viewportGrid = true;
+        expected.viewportGridStep = 16;
+        EXPECT_EQ(settings.GetPreferences(), expected);
+
+        ASSERT_TRUE(settings.SavePreferences());
+        Json file = ReadJsonFile("preferences.json");
+        ASSERT_TRUE(file.contains("viewportPreview"));
+        file.erase("viewportPreview");
+        const Json oldFile = *ParseJson(R"({"version":1,"theme":"Classic","fontScale":1.5,"viewportGrid":true,"viewportGridStep":16,"futureOption":7})");
+        EXPECT_EQ(file, oldFile);
+    }
+
     TEST_F(EditorSettingsTest, BadHotkeyEntriesAreDropped) {
         WriteFile("hotkeys.json", R"({"bindings":{
             "scene.save":"Ctrl+P",

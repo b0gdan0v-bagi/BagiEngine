@@ -19,6 +19,20 @@ namespace BECore {
         constexpr eastl::string_view kViewportGridKey = "viewportGrid";
         constexpr eastl::string_view kViewportGridStepKey = "viewportGridStep";
         constexpr eastl::string_view kBindingsKey = "bindings";
+        constexpr eastl::string_view kViewportPreviewKey = "viewportPreview";
+
+        // The members of the "viewportPreview" object
+        constexpr eastl::string_view kPreviewAspectKey = "aspect";
+        constexpr eastl::string_view kPreviewDeviceKey = "device";
+        constexpr eastl::string_view kPreviewCustomKey = "custom";
+        constexpr eastl::string_view kPreviewCustomWidthKey = "customWidth";
+        constexpr eastl::string_view kPreviewCustomHeightKey = "customHeight";
+        constexpr eastl::string_view kPreviewRotatedKey = "rotated";
+        constexpr eastl::string_view kPreviewSafeAreaKey = "safeArea";
+        constexpr eastl::string_view kOverlaySafeAreaKey = "overlaySafeArea";
+        constexpr eastl::string_view kOverlayViewBoundsKey = "overlayViewBounds";
+        constexpr eastl::string_view kOverlayCanvasBoundsKey = "overlayCanvasBounds";
+        constexpr eastl::string_view kOverlayTouchTargetsKey = "overlayTouchTargets";
 
         std::string ToStdString(eastl::string_view text) {
             return std::string(text.data(), text.size());
@@ -64,11 +78,122 @@ namespace BECore {
             LOG_WARNING(Format("Editor settings: '{}' in {} is not {}; using the default", key, file, expected));
         }
 
+        // The index of the device called @p name in the table of this build, -1 when there is none
+        int32_t FindDeviceByName(eastl::string_view name) {
+            const auto devices = UIPreview::GetDevices();
+            for (size_t i = 0; i < devices.size(); ++i) {
+                if (devices[i].name == name) {
+                    return static_cast<int32_t>(i);
+                }
+            }
+            return -1;
+        }
+
+        // A bool member of @p object: left in @p value when absent, a warning and left when of another type
+        void ReadBool(const Json& object, eastl::string_view key, bool& value) {
+            if (!object.contains(ToStdString(key))) {
+                return;
+            }
+            if (const std::optional<bool> read = GetJsonBool(object, key)) {
+                value = *read;
+            } else {
+                WarnWrongType(kPreferencesFileName, key, "true or false");
+            }
+        }
+
+        // A side of the custom size: clamped into its range like the grid step
+        void ReadSide(const Json& object, eastl::string_view key, uint32_t& value) {
+            if (!object.contains(ToStdString(key))) {
+                return;
+            }
+            if (const std::optional<int64_t> read = GetJsonInt(object, key)) {
+                value = static_cast<uint32_t>(std::clamp<int64_t>(*read, kMinPreviewSide, kMaxPreviewSide));
+            } else {
+                WarnWrongType(kPreferencesFileName, key, "an integer");
+            }
+        }
+
+        // An enum member of @p object by name
+        template <typename TEnum>
+        void ReadEnum(const Json& object, eastl::string_view key, TEnum& value) {
+            if (!object.contains(ToStdString(key))) {
+                return;
+            }
+            const std::optional<eastl::string> name = GetJsonString(object, key);
+            const std::optional<TEnum> parsed = name ? EnumUtils<TEnum>::Cast(eastl::string_view(name->data(), name->size())) : std::nullopt;
+            if (parsed) {
+                value = *parsed;
+            } else {
+                WarnWrongType(kPreferencesFileName, key, "a known name");
+            }
+        }
+
+        // Reads the "viewportPreview" object into @p preview and gives the members it does not know to @p extra
+        void ReadViewportPreview(const Json& object, PreviewSettings& preview, Json& extra) {
+            extra = UnknownMembers(object, {kPreviewAspectKey, kPreviewDeviceKey, kPreviewCustomKey, kPreviewCustomWidthKey, kPreviewCustomHeightKey, kPreviewRotatedKey, kPreviewSafeAreaKey,
+                                            kOverlaySafeAreaKey, kOverlayViewBoundsKey, kOverlayCanvasBoundsKey, kOverlayTouchTargetsKey});
+            PreviewShape& shape = preview.shape;
+            ReadEnum(object, kPreviewAspectKey, shape.aspect);
+            ReadBool(object, kPreviewCustomKey, shape.custom);
+            ReadSide(object, kPreviewCustomWidthKey, shape.customWidth);
+            ReadSide(object, kPreviewCustomHeightKey, shape.customHeight);
+            ReadBool(object, kPreviewRotatedKey, shape.rotated);
+            ReadEnum(object, kPreviewSafeAreaKey, preview.safeArea);
+            ReadBool(object, kOverlaySafeAreaKey, preview.overlays.safeArea);
+            ReadBool(object, kOverlayViewBoundsKey, preview.overlays.viewBounds);
+            ReadBool(object, kOverlayCanvasBoundsKey, preview.overlays.canvasBounds);
+            ReadBool(object, kOverlayTouchTargetsKey, preview.overlays.touchTargets);
+
+            // The device is stored by name, so a table that changed between builds never gives another device
+            if (object.contains(ToStdString(kPreviewDeviceKey))) {
+                const std::optional<eastl::string> name = GetJsonString(object, kPreviewDeviceKey);
+                if (!name) {
+                    WarnWrongType(kPreferencesFileName, kPreviewDeviceKey, "a device name");
+                } else if (!name->empty()) {
+                    shape.device = FindDeviceByName(eastl::string_view(name->data(), name->size()));
+                    if (shape.device < 0) {
+                        LOG_WARNING(Format("Editor settings: the preview device '{}' in {} is not known to this build; using the Free shape", *name, kPreferencesFileName));
+                        if (!shape.custom) {
+                            shape.aspect = ViewportAspect::Free;
+                        }
+                        if (preview.safeArea == SafeAreaSimulation::Device) {
+                            preview.safeArea = SafeAreaSimulation::None;
+                        }
+                    }
+                }
+            }
+        }
+
+        Json ViewportPreviewToJson(const PreviewSettings& preview, const Json& extra) {
+            Json object = extra;
+            const PreviewShape& shape = preview.shape;
+            const auto devices = UIPreview::GetDevices();
+            const bool hasDevice = shape.device >= 0 && static_cast<size_t>(shape.device) < devices.size();
+            object[ToStdString(kPreviewAspectKey)] = ToStdString(EnumUtils<ViewportAspect>::ToString(shape.aspect));
+            object[ToStdString(kPreviewDeviceKey)] = hasDevice ? ToStdString(devices[static_cast<size_t>(shape.device)].name) : std::string();
+            object[ToStdString(kPreviewCustomKey)] = shape.custom;
+            object[ToStdString(kPreviewCustomWidthKey)] = shape.customWidth;
+            object[ToStdString(kPreviewCustomHeightKey)] = shape.customHeight;
+            object[ToStdString(kPreviewRotatedKey)] = shape.rotated;
+            object[ToStdString(kPreviewSafeAreaKey)] = ToStdString(EnumUtils<SafeAreaSimulation>::ToString(preview.safeArea));
+            object[ToStdString(kOverlaySafeAreaKey)] = preview.overlays.safeArea;
+            object[ToStdString(kOverlayViewBoundsKey)] = preview.overlays.viewBounds;
+            object[ToStdString(kOverlayCanvasBoundsKey)] = preview.overlays.canvasBounds;
+            object[ToStdString(kOverlayTouchTargetsKey)] = preview.overlays.touchTargets;
+            return object;
+        }
+
     }  // namespace
 
     EditorPreferences ClampPreferences(EditorPreferences preferences) {
         preferences.fontScale = std::clamp(preferences.fontScale, kMinFontScale, kMaxFontScale);
         preferences.viewportGridStep = std::clamp(preferences.viewportGridStep, kMinViewportGridStep, kMaxViewportGridStep);
+        PreviewShape& shape = preferences.viewportPreview.shape;
+        shape.customWidth = std::clamp(shape.customWidth, kMinPreviewSide, kMaxPreviewSide);
+        shape.customHeight = std::clamp(shape.customHeight, kMinPreviewSide, kMaxPreviewSide);
+        if (shape.device < 0 || static_cast<size_t>(shape.device) >= UIPreview::GetDevices().size()) {
+            shape.device = -1;
+        }
         return preferences;
     }
 
@@ -100,12 +225,13 @@ namespace BECore {
     void EditorSettings::LoadPreferences() {
         _preferences = EditorPreferences{};
         _extraPreferences = Json::object();
+        _extraViewportPreview = Json::object();
 
         Json content;
         if (!ReadJsonObject(_directory / ToStdString(kPreferencesFileName), content, _preferencesUnreadable)) {
             return;
         }
-        _extraPreferences = UnknownMembers(content, {kVersionKey, kThemeKey, kFontScaleKey, kViewportGridKey, kViewportGridStepKey});
+        _extraPreferences = UnknownMembers(content, {kVersionKey, kThemeKey, kFontScaleKey, kViewportGridKey, kViewportGridStepKey, kViewportPreviewKey});
 
         EditorPreferences preferences;
         if (content.contains(ToStdString(kThemeKey))) {
@@ -136,6 +262,14 @@ namespace BECore {
                 preferences.viewportGridStep = static_cast<int32_t>(std::clamp<int64_t>(*step, kMinViewportGridStep, kMaxViewportGridStep));
             } else {
                 WarnWrongType(kPreferencesFileName, kViewportGridStepKey, "an integer");
+            }
+        }
+        if (content.contains(ToStdString(kViewportPreviewKey))) {
+            const Json* preview = FindJsonMember(content, kViewportPreviewKey);
+            if (preview != nullptr && preview->is_object()) {
+                ReadViewportPreview(*preview, preferences.viewportPreview, _extraViewportPreview);
+            } else {
+                WarnWrongType(kPreferencesFileName, kViewportPreviewKey, "an object");
             }
         }
         _preferences = ClampPreferences(preferences);
@@ -258,6 +392,7 @@ namespace BECore {
         content[ToStdString(kFontScaleKey)] = _preferences.fontScale;
         content[ToStdString(kViewportGridKey)] = _preferences.viewportGrid;
         content[ToStdString(kViewportGridStepKey)] = _preferences.viewportGridStep;
+        content[ToStdString(kViewportPreviewKey)] = ViewportPreviewToJson(_preferences.viewportPreview, _extraViewportPreview);
         return Save(_directory / ToStdString(kPreferencesFileName), content, _preferencesUnreadable);
     }
 

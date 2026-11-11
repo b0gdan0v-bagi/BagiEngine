@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Control/Json.h>
+#include <BECore/UI/UIPreview.h>
 #include <Widgets/EditorLayout/HotkeyMap.h>
 
 namespace BECore {
@@ -18,11 +19,14 @@ namespace BECore {
         float fontScale = 1.0f;
         bool viewportGrid = false;
         int32_t viewportGridStep = 32;
+        /// The viewport's size, rotation, safe area and overlays: the user's choice, kept between runs (never part of a scene)
+        PreviewSettings viewportPreview;
 
         [[nodiscard]] bool operator==(const EditorPreferences& other) const = default;
     };
 
-    /// @p preferences with fontScale and viewportGridStep brought into their ranges
+    /// @p preferences with fontScale, viewportGridStep and the custom preview sides brought into their ranges, and a preview device index
+    /// this build lacks turned into none
     [[nodiscard]] EditorPreferences ClampPreferences(EditorPreferences preferences);
 
     /// Names of the user files in the editor folder
@@ -49,6 +53,9 @@ namespace BECore {
      * command table (`"commandId": "Ctrl+K"`, or `""` for unbound), so a changed default of a later build reaches
      * users who never rebound the command. An entry of a command this build does not know is not applied but is kept
      * and written back; an entry with a bad chord, for a fixed command, or that conflicts is dropped with a warning.
+     *
+     * The viewport's preview choice is one object, `viewportPreview`, in `preferences.json`; its device is stored by name, and a
+     * name this build lacks gives the Free shape, never another device.
      *
      * Save writes atomically (UserFileIo.h). On failure it keeps the old file, logs the error and returns false; the
      * text is in GetLastSaveError().
@@ -96,6 +103,7 @@ namespace BECore {
 
         // Members of the files that this build does not read, written back on save (JSON objects)
         Json _extraPreferences = Json::object();
+        Json _extraViewportPreview = Json::object();  // members of the "viewportPreview" object that this build does not read
         Json _extraHotkeys = Json::object();
         Json _unknownBindings = Json::object();
         bool _preferencesUnreadable = false;

@@ -35,7 +35,7 @@ Each file below loads by itself when a file of its area is read; read it by path
 | `UICanvasLayout` | the pure pipeline with a cache, `HitTest`, `Validate` |
 | `UIColor`, `UIText` / `UIAttr` | colors and the state shifts; text forms of lengths, edges, colors, numbers |
 | `UIDocument`, `UIDocumentLoader` | a `.ui.xml` file, `Instantiate` per canvas |
-| `UIPreview` | the viewport's shapes and safe areas |
+| `UIPreview`, `UIPreviewOverlay` | the viewport's shapes, devices, zoom and safe areas; the rects of its overlays (view, canvas bounds, touch marks) |
 
 ## Rules
 
@@ -67,7 +67,11 @@ Each file below loads by itself when a file of its area is read; read it by path
 
 ## Editor preview
 
-`ViewportWidget` has an aspect preset and a safe-area simulation; during its scene pass it holds `SetSafeAreaOverride` and `SetPixelDensityOverride(1)`, so canvases never see the window's metrics. The size of its target picks the scene's view variant; a combo forces one through `Scene::SetViewOverride` (`Scene/CLAUDE.md`).
+`ViewportWidget` previews other shapes without resizing the window. A size picker offers the panel (Free), the aspect presets, the devices of `UIPreview::GetDevices()` (logical size in portrait, with the cut-out and home bar) and a custom `W x H`; "Rotate" swaps the sides (off for Free). A device or custom size renders the target at exactly that size (clamped 64..4096), so canvases lay out for the real size, and shows it at a zoom of at most 100%; the mouse and the overlays are mapped through the zoom. `SafeAreaSimulation::Device` is the chosen device's cut-out by orientation. During its scene pass the viewport holds `SetSafeAreaOverride` and `SetPixelDensityOverride(1)`, so canvases never see the window's metrics; a device's own pixel density is not simulated (the density stays 1, which is what `minTouchSize` is measured in). The size of the target picks the scene's view variant; a combo forces one through `Scene::SetViewOverride` (`Scene/CLAUDE.md`).
+
+The "Overlays" popup toggles the safe area, the view bounds (the fitted view, bars tinted), the canvas bounds and the touch targets, all from `UIPreviewOverlay` in output pixels. A touch target is a visible interactive element of a laid-out canvas, red under `minTouchSize` by the rule of `UILayoutValidator`. `TouchTargets` skips an interactive element with an empty rect, while the validator reports it as too small. RmlUi documents are not in the overlays.
+
+The choice (shape, safe area, overlays; not the forced view) is an editor setting: `EditorSettings` stores it in `preferences.json` (`viewportPreview`, the device by name) and it never reaches `Scene::Serialize`. The widget gets it with `EditorPreferencesChangedEvent` and reports a change with `ViewportPreviewChangedEvent`.
 
 ## Not done
 
