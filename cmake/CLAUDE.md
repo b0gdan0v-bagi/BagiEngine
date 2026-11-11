@@ -6,7 +6,7 @@
 
 | OS | Presets |
 |----|---------|
-| macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-release-editor`; `macos-rmlui-debug` / `-release` (`ENGINE_UI_RMLUI=ON`) |
+| macOS | `macos-debug`, `macos-release` (Clang + Ninja); `macos-release-editor`; `macos-profile` (RelWithDebInfo with the profiler and allocation tracking, no editor: `src/Modules/BECore/Profiler/HowToProfile.md`); `macos-rmlui-debug` / `-release` (`ENGINE_UI_RMLUI=ON`) |
 | Windows | `windows-clang-{debug,release}` (default; configure and build through `python CI/scripts/vs_env.py cmake ...`), `windows-msvc-{debug,release}`, `windows-msvc-release-editor`, `windows-vs2022-*`, `windows-vs2022-clangcl-*`. The MSVC builds are fallbacks (their PDBs break parallel builds now and then: `LNK1103`, `C1090`) |
 | Web | `web-release`, `web-debug` (threaded, the default: the task system's workers are Web Workers, the page needs cross-origin isolation, which `tools/web/serve.py` and the Docker image send), `web-release-single-thread`, `web-debug-single-thread` (needs nothing). Always listed: they find the SDK in the submodule `external/emsdk` (pinned tag, about 2 GB), installed once per checkout by `python CI/scripts/setup_emsdk.py` (in a game `engine/CI/...`; `--check`); without it configure stops with "could not find toolchain file". Build only, no editor (also in Debug), no tests. Output `build/<preset>/bin` (the page `BagiMatch3.html`). Entry `web-build` of the todo store; the browser side: `tools/web/CLAUDE.md` |
 
