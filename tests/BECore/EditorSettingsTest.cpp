@@ -240,7 +240,7 @@ namespace BECore::Tests {
         changed.viewportPreview.shape.customHeight = 1234;
         changed.viewportPreview.shape.rotated = true;
         changed.viewportPreview.safeArea = SafeAreaSimulation::SideInsets;
-        changed.viewportPreview.overlays = {false, true, true, true};
+        changed.viewportPreview.overlays = {false, true, true, true, true};
 
         EditorSettings writer(_directory);
         writer.SetPreferences(changed);
@@ -268,10 +268,12 @@ namespace BECore::Tests {
         // The rest of the choice is kept
         EXPECT_TRUE(preview.shape.rotated);
         EXPECT_TRUE(preview.overlays.touchTargets);
+        // An old file has no regions key
+        EXPECT_FALSE(preview.overlays.regions);
     }
 
     TEST_F(EditorSettingsTest, PreviewMembersOfTheWrongTypeGiveTheirDefaultAndSizesAreClamped) {
-        const std::string text = R"({"viewportPreview":{"aspect":3,"custom":"yes","customWidth":10,"customHeight":99999,"rotated":true,"safeArea":"Nope","overlayViewBounds":1}})";
+        const std::string text = R"({"viewportPreview":{"aspect":3,"custom":"yes","customWidth":10,"customHeight":99999,"rotated":true,"safeArea":"Nope","overlayViewBounds":1,"overlayRegions":1}})";
         WriteFile("preferences.json", text);
         EditorSettings settings(_directory);
         settings.Load();
@@ -283,6 +285,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(preview.shape.rotated);
         EXPECT_EQ(preview.safeArea, SafeAreaSimulation::None);
         EXPECT_FALSE(preview.overlays.viewBounds);
+        EXPECT_FALSE(preview.overlays.regions);
         // Load does not write
         EXPECT_EQ(ReadFile("preferences.json"), text);
 
