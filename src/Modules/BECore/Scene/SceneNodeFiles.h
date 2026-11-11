@@ -17,6 +17,9 @@ namespace BECore {
      * node and, inside `<components>`, attributes and child elements of the node file's components, matched by `type`.
      * It cannot add or remove a component or a field.
      *
+     * One reference also has a single form, ExpandNodeReference, that the scene expansion and the runtime instantiation of
+     * a node (`Scene::InstantiateNode`) share, so the overrides can never differ between them.
+     *
      * Everything here works on pugixml documents: no CoreManager, no scene, no renderer. A bad reference never stops a
      * game: it is one error in NodeExpansion::errors, the reference element is dropped and the rest of the scene stays.
      */
@@ -30,6 +33,10 @@ namespace BECore {
     /// Attributes of a reference that replace the same attribute of the node file's `<node>`: the reflected fields of
     /// SceneNode (`_name`, `_layer`). When SceneNode gets a field, extend this list.
     inline constexpr std::array<eastl::string_view, 2> kNodeOverrideAttributes = {"name", "layer"};
+
+    /// Attribute that the expansion may set on the copy of a node file's `<node>`: the reference it came from. The live
+    /// SceneNode keeps it (`GetSourceRef`) so the scene editor can write the node back as a reference
+    inline constexpr eastl::string_view kNodeSourceAttribute = "sourceRef";
 
     /// The only child element of a reference, and its children: one per component to override
     inline constexpr eastl::string_view kComponentsElementName = "components";
@@ -96,6 +103,22 @@ namespace BECore {
     bool ApplyNodeOverrides(pugi::xml_node node, pugi::xml_node reference, eastl::string& error);
 
     /**
+     * @brief Expands one `<node ref="..">` element into a copy of its file's `<node>`
+     *
+     * Checks IsValidNodeRef, loads the file with @p loader, merges the overrides (ApplyNodeOverrides) and leaves in @p out
+     * a document whose only element is a copy of the file's `<node>` without `contentVersion`. With @p markSource the copy
+     * carries `sourceRef="<ref>"` (kNodeSourceAttribute). @p reference is not changed.
+     *
+     * @param reference The `<node ref="..">` element, with its overrides
+     * @param loader Reads the node file of the reference
+     * @param markSource Set kNodeSourceAttribute on the copy
+     * @param out Receives the node; empty on failure
+     * @param error Receives the reason on failure
+     * @return false when the reference cannot be used (invalid, file missing or wrong, invalid override)
+     */
+    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, eastl::string& error);
+
+    /**
      * @brief Replaces every `scenes/scene/nodes/node[@ref]` of @p configRoot by the node of its file
      *
      * The copy of the file's document element, with the overrides of the reference applied (ApplyNodeOverrides), takes
@@ -105,8 +128,10 @@ namespace BECore {
      *
      * @param configRoot Document element of SceneConfig (`<SceneManager>`)
      * @param loader Reads the node file of a reference
+     * @param markSource Every expanded node gets kNodeSourceAttribute (what LoadSceneManager wants); tools that read the
+     *        file leave it false, so the document they see is the plain inline one
      */
-    NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, const NodeFileLoader& loader);
+    NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, const NodeFileLoader& loader, bool markSource = false);
 
     /**
      * @brief Loader that reads `<baseDirectory>/<ref>.xml`, for tools and tests that have only a folder

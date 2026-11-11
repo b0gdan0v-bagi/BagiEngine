@@ -187,7 +187,7 @@ namespace BECore {
             result.errors.push_back(Format("scene '{}': node reference '{}': {}", scene, ref, reason));
         }
 
-        void ExpandScene(pugi::xml_node sceneEl, const NodeFileLoader& loader, NodeExpansion& result) {
+        void ExpandScene(pugi::xml_node sceneEl, const NodeFileLoader& loader, bool markSource, NodeExpansion& result) {
             const eastl::string_view sceneName = sceneEl.attribute(kSceneNameAttribute.data()).as_string();
 
             for (pugi::xml_node nodesEl = sceneEl.child(kNodesElement.data()); nodesEl; nodesEl = nodesEl.next_sibling(kNodesElement.data())) {
@@ -199,28 +199,14 @@ namespace BECore {
                     if (!refAttr) {
                         continue;
                     }
-                    const eastl::string ref = refAttr.as_string();
 
+                    pugi::xml_document expanded;
                     eastl::string error;
-                    if (!IsValidNodeRef(ref)) {
-                        error = "not a valid reference (segments of letters, digits, '_' and '-' separated by '/')";
-                    }
-
-                    if (error.empty()) {
-                        pugi::xml_document file;
-                        if (!loader(ref, file, error)) {
-                            if (error.empty()) {
-                                error = "the node file cannot be loaded";
-                            }
-                        } else if (ApplyNodeOverrides(file.document_element(), el, error)) {
-                            // The version is a fact about the file, not about the node in the live scene
-                            nodesEl.insert_copy_before(file.document_element(), el).remove_attribute(kContentVersionAttribute.data());
-                            ++result.expanded;
-                        }
-                    }
-
-                    if (!error.empty()) {
-                        Fail(result, sceneName, ref, error);
+                    if (ExpandNodeReference(el, loader, markSource, expanded, error)) {
+                        nodesEl.insert_copy_before(expanded.document_element(), el);
+                        ++result.expanded;
+                    } else {
+                        Fail(result, sceneName, refAttr.as_string(), error);
                     }
                     nodesEl.remove_child(el);
                 }
@@ -266,11 +252,39 @@ namespace BECore {
         return true;
     }
 
-    NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, const NodeFileLoader& loader) {
+    bool ExpandNodeReference(pugi::xml_node reference, const NodeFileLoader& loader, bool markSource, pugi::xml_document& out, eastl::string& error) {
+        out.reset();
+        const eastl::string ref = reference.attribute(kNodeRefAttribute.data()).as_string();
+        if (!IsValidNodeRef(ref)) {
+            error = "not a valid reference (segments of letters, digits, '_' and '-' separated by '/')";
+            return false;
+        }
+
+        pugi::xml_document file;
+        if (!loader(ref, file, error)) {
+            if (error.empty()) {
+                error = "the node file cannot be loaded";
+            }
+            return false;
+        }
+        if (!ApplyNodeOverrides(file.document_element(), reference, error)) {
+            return false;
+        }
+
+        // The version is a fact about the file, not about the node in the live scene
+        pugi::xml_node node = out.append_copy(file.document_element());
+        node.remove_attribute(kContentVersionAttribute.data());
+        if (markSource) {
+            SetAttribute(node, kNodeSourceAttribute.data(), ref.c_str());
+        }
+        return true;
+    }
+
+    NodeExpansion ExpandNodeReferences(pugi::xml_node configRoot, const NodeFileLoader& loader, bool markSource) {
         NodeExpansion result;
         for (pugi::xml_node scenesEl = configRoot.child(kScenesElement.data()); scenesEl; scenesEl = scenesEl.next_sibling(kScenesElement.data())) {
             for (pugi::xml_node sceneEl = scenesEl.child(kSceneElement.data()); sceneEl; sceneEl = sceneEl.next_sibling(kSceneElement.data())) {
-                ExpandScene(sceneEl, loader, result);
+                ExpandScene(sceneEl, loader, markSource, result);
             }
         }
         return result;

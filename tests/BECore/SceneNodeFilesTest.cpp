@@ -738,6 +738,124 @@ namespace BECore::Tests {
         EXPECT_TRUE(Mentions(error, "no component 'TransformComponent'")) << error.c_str();
     }
 
+    // ---- one reference (ExpandNodeReference) and the source mark ------------------------------------------------------------
+
+    TEST_F(SceneNodeFilesTest, ExpandNodeReferenceGivesTheFilesNode) {
+        pugi::xml_document reference = Parse(R"(<node ref="nodes/Hud"/>)");
+        pugi::xml_document out;
+        eastl::string error;
+
+        ASSERT_TRUE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), false, out, error)) << error.c_str();
+
+        EXPECT_TRUE(error.empty());
+        pugi::xml_document file = Parse(kHudNode);
+        EXPECT_EQ(Saved(out.document_element()), Saved(file.document_element()));
+        // The reference is not changed
+        EXPECT_STREQ(reference.document_element().attribute("ref").as_string(), "nodes/Hud");
+    }
+
+    /// The single form gives what the scene expansion puts in the place of the same reference
+    TEST_F(SceneNodeFilesTest, ExpandNodeReferenceEqualsTheSceneExpansion) {
+        constexpr const char* kReference = R"(<node ref="nodes/Hud" name="Left" layer="3"><components>
+  <component type="TransformComponent" x="40"/>
+  <component type="QuadRendererComponent"><color r="1" g="2"/></component>
+</components></node>)";
+        pugi::xml_document scene;
+        ASSERT_TRUE(Expand(SceneConfigWith(kReference), scene).Ok());
+
+        pugi::xml_document reference = Parse(kReference);
+        pugi::xml_document out;
+        eastl::string error;
+        ASSERT_TRUE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), false, out, error)) << error.c_str();
+
+        EXPECT_EQ(Saved(out.document_element()), Saved(FirstNode(scene)));
+        EXPECT_STREQ(out.document_element().attribute("name").as_string(), "Left");
+        EXPECT_STREQ(out.document_element().attribute("layer").as_string(), "3");
+    }
+
+    TEST_F(SceneNodeFilesTest, ExpandNodeReferenceErrorsLeaveOutEmptyAndGiveTheReason) {
+        pugi::xml_document missing = Parse(R"(<node ref="nodes/Nothing"/>)");
+        pugi::xml_document invalidRef = Parse(R"(<node ref="../nodes/B"/>)");
+        pugi::xml_document noRef = Parse(R"(<node name="A"/>)");
+        for (pugi::xml_document* reference : {&missing, &invalidRef, &noRef}) {
+            pugi::xml_document out;
+            out.append_child("stale");
+            eastl::string error;
+            EXPECT_FALSE(ExpandNodeReference(reference->document_element(), MakeDirectoryNodeLoader(_dir), true, out, error));
+            EXPECT_FALSE(error.empty());
+            EXPECT_FALSE(out.document_element());
+        }
+
+        for (const char* text : kInvalidReferences) {
+            SCOPED_TRACE(text);
+            pugi::xml_document reference = Parse(text);
+            pugi::xml_document out;
+            eastl::string error;
+            EXPECT_FALSE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), false, out, error));
+            EXPECT_FALSE(error.empty());
+            EXPECT_FALSE(out.document_element());
+        }
+    }
+
+    TEST_F(SceneNodeFilesTest, ExpandNodeReferenceReportsTheLoadersReason) {
+        const NodeFileLoader loader = [](eastl::string_view, pugi::xml_document&, eastl::string& error) {
+            error = "the loader says no";
+            return false;
+        };
+        pugi::xml_document reference = Parse(R"(<node ref="nodes/Hud"/>)");
+        pugi::xml_document out;
+        eastl::string error;
+
+        EXPECT_FALSE(ExpandNodeReference(reference.document_element(), loader, false, out, error));
+        EXPECT_TRUE(Mentions(error, "the loader says no")) << error.c_str();
+    }
+
+    TEST_F(SceneNodeFilesTest, MarkSourceSetsOnlyTheSourceRefOnTheCopy) {
+        WriteFile(_dir / "nodes" / "Stamped.xml", R"(<node name="Stamped" layer="3" contentVersion="2"><components><component type="TransformComponent" x="1"/></components></node>)");
+        pugi::xml_document reference = Parse(R"(<node ref="nodes/Stamped" name="Own"><components><component type="TransformComponent" x="9"/></components></node>)");
+        pugi::xml_document plain;
+        pugi::xml_document marked;
+        eastl::string error;
+        ASSERT_TRUE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), false, plain, error)) << error.c_str();
+        ASSERT_TRUE(ExpandNodeReference(reference.document_element(), MakeDirectoryNodeLoader(_dir), true, marked, error)) << error.c_str();
+
+        EXPECT_FALSE(plain.document_element().attribute(kNodeSourceAttribute.data()));
+        EXPECT_STREQ(marked.document_element().attribute(kNodeSourceAttribute.data()).as_string(), "nodes/Stamped");
+        EXPECT_FALSE(marked.document_element().attribute("contentVersion"));
+        // Nothing else differs: the mark removed, the two copies are the same text
+        marked.document_element().remove_attribute(kNodeSourceAttribute.data());
+        EXPECT_EQ(Saved(marked.document_element()), Saved(plain.document_element()));
+    }
+
+    TEST_F(SceneNodeFilesTest, ExpandNodeReferencesWithoutTheFlagLeavesNoSourceRef) {
+        pugi::xml_document doc;
+        ASSERT_TRUE(Expand(SceneConfigWith(R"(<node ref="nodes/Hud"/><node name="Own"/><node ref="nodes/B" name="X"/>)"), doc).Ok());
+
+        for (pugi::xml_node node : doc.document_element().child("scenes").child("scene").child("nodes").children("node")) {
+            EXPECT_FALSE(node.attribute(kNodeSourceAttribute.data())) << node.attribute("name").as_string();
+        }
+    }
+
+    TEST_F(SceneNodeFilesTest, ExpandNodeReferencesWithTheFlagMarksTheExpandedNodesOnly) {
+        const std::string hudBefore = ReadFile(_dir / "nodes" / "Hud.xml");
+        pugi::xml_document doc;
+        ASSERT_TRUE(doc.load_string(SceneConfigWith(R"(<node ref="nodes/Hud"/><node name="Own"/><node ref="nodes/B" name="X"/>)").c_str()));
+
+        const auto result = ExpandNodeReferences(doc.document_element(), MakeDirectoryNodeLoader(_dir), true);
+
+        ASSERT_TRUE(result.Ok());
+        EXPECT_EQ(result.expanded, 2u);
+        const pugi::xml_node hud = FirstNode(doc);
+        const pugi::xml_node own = hud.next_sibling("node");
+        const pugi::xml_node second = own.next_sibling("node");
+        EXPECT_STREQ(hud.attribute(kNodeSourceAttribute.data()).as_string(), "nodes/Hud");
+        EXPECT_FALSE(own.attribute(kNodeSourceAttribute.data()));
+        EXPECT_STREQ(second.attribute(kNodeSourceAttribute.data()).as_string(), "nodes/B");
+        EXPECT_STREQ(second.attribute("name").as_string(), "X");
+        // The node file on disk is unchanged
+        EXPECT_EQ(ReadFile(_dir / "nodes" / "Hud.xml"), hudBefore);
+    }
+
     TEST_F(SceneNodeFilesTest, LoadSceneDocumentAppliesOverridesNextToTheFile) {
         WriteFile(_dir / "SceneConfig.xml", SceneConfigWith(R"(<node name="A"/><node ref="nodes/Hud" name="Left" layer="1"><components>
   <component type="TransformComponent" x="40"/>
