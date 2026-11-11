@@ -15,12 +15,17 @@ namespace BECore {
         inline constexpr eastl::string_view kHeadless = "headless";
     }  // namespace ApplicationConfigFields
 
+    /// The value of `taskFrameBudgetMs` that leaves the default frame budget of TaskManager as it is
+    inline constexpr double kNoTaskFrameBudget = -1.0;
+
     /**
      * @brief The root attributes of config/ApplicationConfig.xml, read through the reflection.
      *
      * `type`, `renderer` and `path` say which ApplicationFabric starts, which renderer it creates and where its window config is;
      * `mode` asks for the run mode (RunMode.h); `control`, `controlPort`, `manualClock` and `headless` are the settings of the control
-     * API (ControlSettings.h, the command line is applied over them). Every field has the default of a missing attribute.
+     * API (ControlSettings.h, the command line is applied over them); `taskFrameBudgetMs` is the time per frame, in milliseconds, that a
+     * single-thread build gives to the background tasks (TaskManager::SetFrameBudget; a negative or missing value keeps the default of
+     * TaskManager). Every field has the default of a missing attribute.
      */
     struct ApplicationConfig {
         BE_CLASS(ApplicationConfig)
@@ -33,6 +38,7 @@ namespace BECore {
         BE_REFLECT_FIELD uint16_t _controlPort = kDefaultControlPort;
         BE_REFLECT_FIELD bool _manualClock = false;
         BE_REFLECT_FIELD bool _headless = false;
+        BE_REFLECT_FIELD double _taskFrameBudgetMs = kNoTaskFrameBudget;
     };
 
     /// An ApplicationConfig and what went wrong while reading it. A field with an error keeps its default.
