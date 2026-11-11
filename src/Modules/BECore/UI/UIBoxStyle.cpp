@@ -12,7 +12,7 @@ namespace BECore {
         }
 
         void SaveColorIfSet(ISerializer& s, const UIColor& color, eastl::string_view key) {
-            if (!ColorsEqual(color, UIColor{})) {
+            if (!(color == UIColor{})) {  // a token with transparent channels (not resolved yet, or an invisible theme colour) is set
                 Ser::DataAccessor<UIColor>::Save(s, color, key);
             }
         }
@@ -45,8 +45,9 @@ namespace BECore {
     }  // namespace
 
     bool UIBoxStyle::operator==(const UIBoxStyle& other) const {
-        return cornerRadius == other.cornerRadius && borderWidth == other.borderWidth && ColorsEqual(borderColor, other.borderColor) && ColorsEqual(gradientColor, other.gradientColor) &&
-               gradientDirection == other.gradientDirection && shadow == other.shadow && glow == other.glow && ColorsEqual(highlight, other.highlight);
+        return cornerRadius == other.cornerRadius && borderWidth == other.borderWidth && borderColor == other.borderColor && gradientColor == other.gradientColor &&
+               gradientDirection == other.gradientDirection && shadow == other.shadow && glow == other.glow && highlight == other.highlight && shadowColorToken == other.shadowColorToken &&
+               glowColorToken == other.glowColorToken;
     }
 
     bool UIBoxStyle::HasEffect() const {
@@ -67,11 +68,11 @@ namespace BECore {
         if (gradientDirection != defaults.gradientDirection) {
             Ser::DataAccessor<UIGradientDirection>::Save(s, gradientDirection, "gradientDirection");
         }
-        if (!(shadow == defaults.shadow)) {
-            UIAttr::WriteShadow(s, "shadow", shadow);
+        if (!(shadow == defaults.shadow) || !shadowColorToken.Empty()) {
+            UIAttr::WriteShadow(s, "shadow", shadow, shadowColorToken);
         }
-        if (!(glow == defaults.glow)) {
-            UIAttr::WriteShadow(s, "glow", glow);
+        if (!(glow == defaults.glow) || !glowColorToken.Empty()) {
+            UIAttr::WriteShadow(s, "glow", glow, glowColorToken);
         }
         SaveColorIfSet(s, highlight, "highlight");
     }
@@ -82,8 +83,8 @@ namespace BECore {
         Ser::Load(d, borderColor, "borderColor");
         Ser::Load(d, gradientColor, "gradientColor");
         Ser::Load(d, gradientDirection, "gradientDirection");
-        UIAttr::ReadShadow(d, "shadow", shadow);
-        UIAttr::ReadShadow(d, "glow", glow);
+        UIAttr::ReadShadow(d, "shadow", shadow, shadowColorToken);
+        UIAttr::ReadShadow(d, "glow", glow, glowColorToken);
         Ser::Load(d, highlight, "highlight");
     }
 

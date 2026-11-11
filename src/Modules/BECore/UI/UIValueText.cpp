@@ -1,5 +1,6 @@
 #include "UIValueText.h"
 
+#include <BECore/UI/UIThemes.h>
 #include <cmath>
 
 namespace BECore::UIText {
@@ -19,6 +20,20 @@ namespace BECore::UIText {
         constexpr size_t HexRgbaLength = 8;
         constexpr int HexBase = 16;
         constexpr unsigned char OpaqueAlpha = 255;
+        constexpr char TokenSign = '@';
+
+        /// A colour text of a composite attribute: a literal, or a token when @p token is given. Without @p token a "@name" is refused
+        bool ParseColorPart(eastl::string_view text, Color& color, PoolString* token) {
+            const auto parsed = ParseColorRef(text);
+            if (!parsed || (!parsed->token.Empty() && !token)) {
+                return false;
+            }
+            color = parsed->color;
+            if (token) {
+                *token = parsed->token;
+            }
+            return true;
+        }
 
         std::optional<unsigned char> ParseByte(eastl::string_view text) {
             text = Trim(text);
@@ -184,12 +199,15 @@ namespace BECore::UIText {
         return parts.size() == 1 ? UICorners::Uniform(radii[0]) : UICorners{radii[0], radii[1], radii[2], radii[3]};
     }
 
-    eastl::string FormatShadow(const UIShadowSpec& shadow) {
+    eastl::string FormatShadow(const UIShadowSpec& shadow, PoolString colorToken) {
+        if (!colorToken.Empty()) {
+            return Format("{},{},{},{},@{}", shadow.offsetX, shadow.offsetY, shadow.blur, shadow.spread, colorToken.ToStringView());
+        }
         return Format("{},{},{},{},#{:02X}{:02X}{:02X}{:02X}", shadow.offsetX, shadow.offsetY, shadow.blur, shadow.spread, static_cast<int>(shadow.color.r), static_cast<int>(shadow.color.g),
                       static_cast<int>(shadow.color.b), static_cast<int>(shadow.color.a));
     }
 
-    std::optional<UIShadowSpec> ParseShadow(eastl::string_view text) {
+    std::optional<UIShadowSpec> ParseShadow(eastl::string_view text, PoolString* colorToken) {
         text = Trim(text);
         float numbers[ShadowNumberCount] = {};
         for (float& number : numbers) {
@@ -204,38 +222,44 @@ namespace BECore::UIText {
             number = *parsed;
             text.remove_prefix(comma + 1);
         }
-        const auto color = ParseColor(text);
-        if (!color || numbers[ShadowBlurIndex] < 0.0f) {
+        Color color;
+        if (numbers[ShadowBlurIndex] < 0.0f || !ParseColorPart(text, color, colorToken)) {
             return std::nullopt;
         }
-        return UIShadowSpec{numbers[0], numbers[1], numbers[ShadowBlurIndex], numbers[3], *color};
+        return UIShadowSpec{numbers[0], numbers[1], numbers[ShadowBlurIndex], numbers[3], color};
     }
 
-    eastl::string FormatTextOutline(float width, const Color& color) {
+    eastl::string FormatTextOutline(float width, const Color& color, PoolString token) {
+        if (!token.Empty()) {
+            return Format("{},@{}", width, token.ToStringView());
+        }
         return Format("{},#{:02X}{:02X}{:02X}{:02X}", width, static_cast<int>(color.r), static_cast<int>(color.g), static_cast<int>(color.b), static_cast<int>(color.a));
     }
 
-    bool ParseTextOutline(eastl::string_view text, float& width, Color& color) {
+    bool ParseTextOutline(eastl::string_view text, float& width, Color& color, PoolString* token) {
         text = Trim(text);
         const size_t comma = text.find(',');
         if (comma == eastl::string_view::npos) {
             return false;
         }
         const auto parsedWidth = ParseFiniteFloat(text.substr(0, comma));
-        const auto parsedColor = ParseColor(text.substr(comma + 1));
-        if (!parsedWidth || !parsedColor || *parsedWidth < 0.0f) {
+        Color parsedColor;
+        if (!parsedWidth || *parsedWidth < 0.0f || !ParseColorPart(text.substr(comma + 1), parsedColor, token)) {
             return false;
         }
         width = *parsedWidth;
-        color = *parsedColor;
+        color = parsedColor;
         return true;
     }
 
-    eastl::string FormatTextShadow(float offsetX, float offsetY, const Color& color) {
+    eastl::string FormatTextShadow(float offsetX, float offsetY, const Color& color, PoolString token) {
+        if (!token.Empty()) {
+            return Format("{},{},@{}", offsetX, offsetY, token.ToStringView());
+        }
         return Format("{},{},#{:02X}{:02X}{:02X}{:02X}", offsetX, offsetY, static_cast<int>(color.r), static_cast<int>(color.g), static_cast<int>(color.b), static_cast<int>(color.a));
     }
 
-    bool ParseTextShadow(eastl::string_view text, float& offsetX, float& offsetY, Color& color) {
+    bool ParseTextShadow(eastl::string_view text, float& offsetX, float& offsetY, Color& color, PoolString* token) {
         text = Trim(text);
         float numbers[TextShadowNumberCount] = {};
         for (float& number : numbers) {
@@ -250,13 +274,13 @@ namespace BECore::UIText {
             number = *parsed;
             text.remove_prefix(comma + 1);
         }
-        const auto parsedColor = ParseColor(text);
-        if (!parsedColor) {
+        Color parsedColor;
+        if (!ParseColorPart(text, parsedColor, token)) {
             return false;
         }
         offsetX = numbers[0];
         offsetY = numbers[1];
-        color = *parsedColor;
+        color = parsedColor;
         return true;
     }
 
@@ -292,6 +316,29 @@ namespace BECore::UIText {
             return std::nullopt;
         }
         return Color{*r, *g, *b, *a};
+    }
+
+    eastl::string FormatColorRef(const Color& color, PoolString token) {
+        if (!token.Empty()) {
+            return Format("@{}", token.ToStringView());
+        }
+        return FormatColor(color);
+    }
+
+    std::optional<ColorRef> ParseColorRef(eastl::string_view text) {
+        text = Trim(text);
+        if (!text.empty() && text.front() == TokenSign) {
+            const eastl::string_view name = text.substr(1);
+            if (!UIThemes::IsValidToken(name)) {
+                return std::nullopt;
+            }
+            return ColorRef{Color{}, PoolString::Intern(name)};
+        }
+        const auto color = ParseColor(text);
+        if (!color) {
+            return std::nullopt;
+        }
+        return ColorRef{*color, PoolString{}};
     }
 
 }  // namespace BECore::UIText

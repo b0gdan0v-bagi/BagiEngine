@@ -32,26 +32,40 @@ namespace BECore {
         /// "r,g,b,a" (0 to 255 each), "#RRGGBB" or "#RRGGBBAA"
         [[nodiscard]] std::optional<Color> ParseColor(eastl::string_view text);
 
+        /// A colour as a file writes it: a literal, or a reference to a theme token (`@primary`, UIThemes)
+        struct ColorRef {
+            Color color;       ///< the literal; transparent for a token (its colour is the theme's)
+            PoolString token;  ///< empty: a literal
+        };
+
+        /// "@name" for a non-empty @p token (the colour is ignored), else FormatColor()
+        [[nodiscard]] eastl::string FormatColorRef(const Color& color, PoolString token);
+        /// Any form of ParseColor(), or "@name" with a legal token name (UIThemes::IsValidToken) that is interned into the pool of names. Nothing for anything else
+        [[nodiscard]] std::optional<ColorRef> ParseColorRef(eastl::string_view text);
+
         /// One radius when the four corners are equal, otherwise "topLeft,topRight,bottomRight,bottomLeft"
         [[nodiscard]] eastl::string FormatCorners(const UICorners& corners);
         /// One number (all corners) or "topLeft,topRight,bottomRight,bottomLeft"; every number finite
         [[nodiscard]] std::optional<UICorners> ParseCorners(eastl::string_view text);
 
-        /// "offsetX,offsetY,blur,spread,#RRGGBBAA"
-        [[nodiscard]] eastl::string FormatShadow(const UIShadowSpec& shadow);
+        /// "offsetX,offsetY,blur,spread,#RRGGBBAA", or with "@name" instead of the colour for a non-empty @p colorToken
+        [[nodiscard]] eastl::string FormatShadow(const UIShadowSpec& shadow, PoolString colorToken = {});
         /// "offsetX,offsetY,blur,spread,color", the colour in any form of ParseColor (so also "r,g,b,a": the first four commas split the numbers, the rest is the colour). The numbers
-        /// are finite and the blur is not negative
-        [[nodiscard]] std::optional<UIShadowSpec> ParseShadow(eastl::string_view text);
+        /// are finite and the blur is not negative. A colour "@name" is refused unless @p colorToken is given: it gets the name and the spec's colour stays transparent (a literal
+        /// colour sets it empty)
+        [[nodiscard]] std::optional<UIShadowSpec> ParseShadow(eastl::string_view text, PoolString* colorToken = nullptr);
 
-        /// "width,#RRGGBBAA": the outline of a text in UI units
-        [[nodiscard]] eastl::string FormatTextOutline(float width, const Color& color);
-        /// "width,color", the colour in any form of ParseColor (the first comma splits the width, the rest is the colour); the width is finite and not negative
-        [[nodiscard]] bool ParseTextOutline(eastl::string_view text, float& width, Color& color);
+        /// "width,#RRGGBBAA": the outline of a text in UI units ("@name" for a non-empty @p token)
+        [[nodiscard]] eastl::string FormatTextOutline(float width, const Color& color, PoolString token = {});
+        /// "width,color", the colour in any form of ParseColor (the first comma splits the width, the rest is the colour); the width is finite and not negative. "@name" as the
+        /// colour is refused unless @p token is given (see ParseShadow)
+        [[nodiscard]] bool ParseTextOutline(eastl::string_view text, float& width, Color& color, PoolString* token = nullptr);
 
-        /// "offsetX,offsetY,#RRGGBBAA": the hard shadow of a text in UI units
-        [[nodiscard]] eastl::string FormatTextShadow(float offsetX, float offsetY, const Color& color);
-        /// "offsetX,offsetY,color", the colour in any form of ParseColor (the first two commas split the numbers); the numbers are finite
-        [[nodiscard]] bool ParseTextShadow(eastl::string_view text, float& offsetX, float& offsetY, Color& color);
+        /// "offsetX,offsetY,#RRGGBBAA": the hard shadow of a text in UI units ("@name" for a non-empty @p token)
+        [[nodiscard]] eastl::string FormatTextShadow(float offsetX, float offsetY, const Color& color, PoolString token = {});
+        /// "offsetX,offsetY,color", the colour in any form of ParseColor (the first two commas split the numbers); the numbers are finite. "@name" as the colour is refused unless
+        /// @p token is given (see ParseShadow)
+        [[nodiscard]] bool ParseTextShadow(eastl::string_view text, float& offsetX, float& offsetY, Color& color, PoolString* token = nullptr);
 
         /// A number that fills the whole text (surrounding spaces are allowed)
         [[nodiscard]] std::optional<float> ParseFloat(eastl::string_view text);

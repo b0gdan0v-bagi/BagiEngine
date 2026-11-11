@@ -148,6 +148,24 @@ namespace BECore {
         return std::nullopt;
     }
 
+    void UIThemes::Resolve(UIColor& color) {
+        if (!color.HasToken()) {
+            return;
+        }
+        if (const auto found = Find(color.token.ToStringView())) {
+            static_cast<Color&>(color) = *found;
+            return;
+        }
+        static_cast<Color&>(color) = kMissingTokenColor;
+        for (const PoolString missing : _missing) {
+            if (missing == color.token) {
+                return;
+            }
+        }
+        _missing.push_back(color.token);
+        LOG_WARNING("UIThemes: the token '@{}' is in no theme, drawn in magenta"_format(color.token.ToStringView()));
+    }
+
     bool UIThemes::HasToken(PoolString theme, eastl::string_view token) const {
         return FindColor(FindTheme(theme), token).has_value();
     }
@@ -156,6 +174,7 @@ namespace BECore {
         _themes.clear();
         _themeIds.clear();
         _tokens.clear();
+        _missing.clear();
         _default = PoolString{};
         _current = PoolString{};
         ++_version;

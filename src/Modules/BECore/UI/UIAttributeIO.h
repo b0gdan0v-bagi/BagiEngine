@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/UI/UIBoxMesh.h>
+#include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIRectSpec.h>
 
 namespace BECore {
@@ -29,16 +30,19 @@ namespace BECore {
         void WriteCorners(ISerializer& s, eastl::string_view key, const UICorners& corners);
         bool ReadCorners(IDeserializer& d, eastl::string_view key, UICorners& out);
 
-        void WriteShadow(ISerializer& s, eastl::string_view key, const UIShadowSpec& shadow);
-        bool ReadShadow(IDeserializer& d, eastl::string_view key, UIShadowSpec& out);
+        /// The colour of a shadow may be a theme token (`@name`): @p colorToken is its name (empty for a literal). A Read sets @p out and @p colorToken together, and leaves both as
+        /// they were when the attribute is missing or malformed
+        void WriteShadow(ISerializer& s, eastl::string_view key, const UIShadowSpec& shadow, PoolString colorToken);
+        bool ReadShadow(IDeserializer& d, eastl::string_view key, UIShadowSpec& out, PoolString& colorToken);
 
-        /// "width,color" (UI units); a Read leaves its outputs as they were when the attribute is missing or malformed (a malformed one is reported to @p d)
-        void WriteTextOutline(ISerializer& s, eastl::string_view key, float width, const Color& color);
-        bool ReadTextOutline(IDeserializer& d, eastl::string_view key, float& width, Color& color);
+        /// "width,color" (UI units), the colour a literal or a token (the token is written back as `@name`); a Read leaves its outputs as they were when the attribute is missing or
+        /// malformed (a malformed one is reported to @p d)
+        void WriteTextOutline(ISerializer& s, eastl::string_view key, float width, const UIColor& color);
+        bool ReadTextOutline(IDeserializer& d, eastl::string_view key, float& width, UIColor& color);
 
-        /// "offsetX,offsetY,color" (UI units)
-        void WriteTextShadow(ISerializer& s, eastl::string_view key, float offsetX, float offsetY, const Color& color);
-        bool ReadTextShadow(IDeserializer& d, eastl::string_view key, float& offsetX, float& offsetY, Color& color);
+        /// "offsetX,offsetY,color" (UI units), the colour a literal or a token
+        void WriteTextShadow(ISerializer& s, eastl::string_view key, float offsetX, float offsetY, const UIColor& color);
+        bool ReadTextShadow(IDeserializer& d, eastl::string_view key, float& offsetX, float& offsetY, UIColor& color);
 
         /// Writes the attribute only when the optional holds a length
         void WriteOptionalLength(ISerializer& s, eastl::string_view key, const std::optional<UILength>& length);

@@ -36,7 +36,7 @@ Each file below loads by itself when a file of its area is read; read it by path
 | `UIStateLook`, `UITextPainter` | pure: the hover / pressed / selected / disabled look of a box and of a tint (`UIButton` and the components share it), the text machinery of `UILabel` and `UITextComponent` |
 | `UICanvasLayout` | the pure pipeline with a cache, `HitTest`, `Validate` |
 | `UIThemes` (`CoreManager::GetUIThemes()`) | the colour themes: tokens per theme from `config/UIThemes.xml`, a current theme switched at run time with a version, fallback to the default theme (the model is `UIStrings`) |
-| `UIColor`, `UIText` / `UIAttr` | colors and the state shifts; text forms of lengths, edges, colors, numbers |
+| `UIColor`, `UIText` / `UIAttr` | colors (a literal or a theme token `@name`: `token` is the reference, the channels the resolved value) and the state shifts; text forms of lengths, edges, colors, numbers |
 | `UIDocument`, `UIDocumentLoader` | a `.ui.xml` file, `Instantiate` per canvas |
 | `UIRegionSet` | the named rects (canvas units) a game publishes for a canvas; an element with `region` lays out inside one (`ui-layout.md`, "Named regions") |
 | `UIRectEdit` | the inverse of `UILayout::ResolveRect` (`SpecForRect`: a wanted rect to a spec, only numbers change; `exact` false when limits or aspect forbid it), the px / % switch that keeps the layout, the region names of a picker |

@@ -9,11 +9,11 @@ namespace BECore {
     /**
      * @brief The outline and the hard drop shadow of a label's text, flat in a file like UIBoxStyle: two attributes of the element.
      *
-     * - `textOutline="width,color"`: a ring of that width (UI units) round every glyph, in the colour (`#RRGGBBAA` or `r,g,b,a`). No width or no alpha: no outline.
+     * - `textOutline="width,color"`: a ring of that width (UI units) round every glyph, in the colour (`#RRGGBBAA`, `r,g,b,a` or a theme token `@name`). No width or no alpha: no outline.
      * - `textShadow="offsetX,offsetY,color"` (UI units): the text again, moved by the offset, under the outline. No alpha or a zero offset: no shadow.
      *
-     * Both are paint, never layout: they do not enter the layout cache key and the validator measures the text without them. Only a value that differs from the default is
-     * written. The names must not clash with a field of a control.
+     * Both colours may be theme tokens (UIColor::token, UIThemes). Both are paint, never layout: they do not enter the layout cache key and the validator measures the text without them. Only a value
+     * that differs from the default is written. The names must not clash with a field of a control.
      */
     struct UITextEffects {
         float outlineWidth = 0.0f;  ///< UI units

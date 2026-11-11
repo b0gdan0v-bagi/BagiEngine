@@ -113,49 +113,52 @@ namespace BECore::UIAttr {
         return true;
     }
 
-    void WriteShadow(ISerializer& s, eastl::string_view key, const UIShadowSpec& shadow) {
-        WriteText(s, key, UIText::FormatShadow(shadow));
+    void WriteShadow(ISerializer& s, eastl::string_view key, const UIShadowSpec& shadow, PoolString colorToken) {
+        WriteText(s, key, UIText::FormatShadow(shadow, colorToken));
     }
 
-    bool ReadShadow(IDeserializer& d, eastl::string_view key, UIShadowSpec& out) {
+    bool ReadShadow(IDeserializer& d, eastl::string_view key, UIShadowSpec& out, PoolString& colorToken) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return false;
         }
-        const auto shadow = UIText::ParseShadow(eastl::string_view(text.data(), text.size()));
+        PoolString token;
+        const auto shadow = UIText::ParseShadow(eastl::string_view(text.data(), text.size()), &token);
         if (!shadow) {
             ReportMalformed(d, key, text);
             return false;
         }
         out = *shadow;
+        colorToken = token;
         return true;
     }
 
-    void WriteTextOutline(ISerializer& s, eastl::string_view key, float width, const Color& color) {
-        WriteText(s, key, UIText::FormatTextOutline(width, color));
+    void WriteTextOutline(ISerializer& s, eastl::string_view key, float width, const UIColor& color) {
+        WriteText(s, key, UIText::FormatTextOutline(width, color, color.token));
     }
 
-    bool ReadTextOutline(IDeserializer& d, eastl::string_view key, float& width, Color& color) {
+    bool ReadTextOutline(IDeserializer& d, eastl::string_view key, float& width, UIColor& color) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return false;
         }
         float parsedWidth = 0.0f;
         Color parsedColor;
-        if (!UIText::ParseTextOutline(eastl::string_view(text.data(), text.size()), parsedWidth, parsedColor)) {
+        PoolString token;
+        if (!UIText::ParseTextOutline(eastl::string_view(text.data(), text.size()), parsedWidth, parsedColor, &token)) {
             ReportMalformed(d, key, text);
             return false;
         }
         width = parsedWidth;
-        color = parsedColor;
+        color = token.Empty() ? UIColor(parsedColor) : UIColor::FromToken(token);
         return true;
     }
 
-    void WriteTextShadow(ISerializer& s, eastl::string_view key, float offsetX, float offsetY, const Color& color) {
-        WriteText(s, key, UIText::FormatTextShadow(offsetX, offsetY, color));
+    void WriteTextShadow(ISerializer& s, eastl::string_view key, float offsetX, float offsetY, const UIColor& color) {
+        WriteText(s, key, UIText::FormatTextShadow(offsetX, offsetY, color, color.token));
     }
 
-    bool ReadTextShadow(IDeserializer& d, eastl::string_view key, float& offsetX, float& offsetY, Color& color) {
+    bool ReadTextShadow(IDeserializer& d, eastl::string_view key, float& offsetX, float& offsetY, UIColor& color) {
         eastl::string text;
         if (!ReadText(d, key, text)) {
             return false;
@@ -163,13 +166,14 @@ namespace BECore::UIAttr {
         float parsedX = 0.0f;
         float parsedY = 0.0f;
         Color parsedColor;
-        if (!UIText::ParseTextShadow(eastl::string_view(text.data(), text.size()), parsedX, parsedY, parsedColor)) {
+        PoolString token;
+        if (!UIText::ParseTextShadow(eastl::string_view(text.data(), text.size()), parsedX, parsedY, parsedColor, &token)) {
             ReportMalformed(d, key, text);
             return false;
         }
         offsetX = parsedX;
         offsetY = parsedY;
-        color = parsedColor;
+        color = token.Empty() ? UIColor(parsedColor) : UIColor::FromToken(token);
         return true;
     }
 

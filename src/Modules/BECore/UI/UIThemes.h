@@ -1,8 +1,13 @@
 #pragma once
 
+#include <BECore/UI/UIColor.h>
+
 namespace BECore {
 
     class XmlNode;
+
+    /// What a token that no theme defines is drawn in, so a typo shows in the window and never as an invisible element
+    inline constexpr Color kMissingTokenColor{255, 0, 255, 255};
 
     /**
      * @brief The colour themes of the in-game UI: themes, tokens and their colours. `CoreManager::GetUIThemes()`.
@@ -57,6 +62,17 @@ namespace BECore {
         /// The colour of @p token in the current theme, else in the default theme, else nothing. Records nothing
         [[nodiscard]] std::optional<Color> Find(eastl::string_view token) const;
 
+        /**
+         * @brief Writes into @p color the channels of its token: the colour of Find(), else kMissingTokenColor with the token recorded in GetMissing() and logged, once per token.
+         *        A literal colour (an empty token) is left alone. The token stays, so the colour resolves again when the theme changes
+         */
+        void Resolve(UIColor& color);
+
+        /// The tokens Resolve() did not find in any theme, once each, in the order they were asked for
+        [[nodiscard]] const eastl::vector<PoolString>& GetMissing() const {
+            return _missing;
+        }
+
         /// Every token any theme defines, in the order they were first set: what a theme has to define to be complete
         [[nodiscard]] const eastl::vector<PoolString>& GetTokens() const {
             return _tokens;
@@ -64,7 +80,7 @@ namespace BECore {
         /// Whether @p theme itself (not its fallback to the default) defines @p token
         [[nodiscard]] bool HasToken(PoolString theme, eastl::string_view token) const;
 
-        /// Drops every theme, the default and the current theme. The version grows
+        /// Drops every theme, the default and the current theme, and the record of missing tokens. The version grows
         void Clear();
 
         /// Starts at 1, grows when a colour changes, the effective theme or the default theme changes, and on Clear(); never goes back. A colour that resolved at an older
@@ -93,6 +109,7 @@ namespace BECore {
         eastl::vector<Theme> _themes;
         eastl::vector<PoolString> _themeIds;
         eastl::vector<PoolString> _tokens;
+        eastl::vector<PoolString> _missing;
         PoolString _default;
         PoolString _current;
         uint64_t _version = 1;
