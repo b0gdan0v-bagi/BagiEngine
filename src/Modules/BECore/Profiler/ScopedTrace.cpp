@@ -5,7 +5,7 @@
 
 namespace BECore {
 
-    ScopedTrace::ScopedTrace(eastl::string_view path) : _path(path.data(), path.size()), _previous(Profiler::GetBackend()) {
+    ScopedTrace::ScopedTrace(eastl::string_view path) : _path(path.data(), path.size()), _previous(Profiler::GetPrimaryBackend()) {
         Profiler::GetChromeTrace().MarkTraceStart();
         Profiler::SetBackend(&Profiler::GetChromeTrace());
     }

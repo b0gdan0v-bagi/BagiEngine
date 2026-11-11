@@ -1,13 +1,11 @@
 #pragma once
 
 #include <BECore/Profiler/IProfilerBackend.h>
-#include <EASTL/string.h>
-#include <atomic>
-#include <expected>
 
 namespace BECore {
 
     class ChromeTraceBackend;
+    class FrameRingBackend;
     struct ProfilerSettings;
 
     /**
@@ -21,16 +19,39 @@ namespace BECore {
     public:
         Profiler() = delete;
 
-        /// The installed backend, nullptr when none (any thread)
+        /// The backend the zones go to, nullptr when none (any thread). It is the primary backend, or the frame ring when that is on
+        /// and there is no primary, or a fan-out of the two. Callers that mean "what the application chose" read GetPrimaryBackend
         [[nodiscard]] static IProfilerBackend* GetBackend() {
             return _backend.load(std::memory_order_acquire);
         }
 
+        /// The backend that SetBackend installed (the application's choice: none, the Chrome trace, Tracy), without the frame ring
+        [[nodiscard]] static IProfilerBackend* GetPrimaryBackend() {
+            return _primary.load(std::memory_order_acquire);
+        }
+
         /**
-         * @brief Installs @p backend (nullptr: none). Starts it, then stops the one it replaces.
+         * @brief Installs @p backend as the primary backend (nullptr: none). Starts it, then stops the one it replaces.
+         * With the frame ring on, the ring keeps running beside the new primary.
          * @return False when @p backend did not start; the old backend stays installed then
          */
         static bool SetBackend(IProfilerBackend* backend);
+
+        /**
+         * @brief Runs the frame ring (GetFrameRing) beside the primary backend, or stops it. With the ring off GetBackend() is exactly
+         * the primary backend, so a closed panel costs nothing.
+         *
+         * With no primary the ring is the installed backend; with one it is a FanOutBackend of the two. A fan-out is immutable and
+         * never destroyed because a zone ends on the backend it began on; Profiler makes one per distinct primary (a small fixed
+         * table). When the table is full the ring is left out and one warning says so.
+         */
+        static void SetRingEnabled(bool enabled);
+        [[nodiscard]] static bool IsRingEnabled() {
+            return _ringEnabled.load(std::memory_order_acquire);
+        }
+
+        /// The frame ring of the process (created on first use, never destroyed); it records only while SetRingEnabled(true)
+        [[nodiscard]] static FrameRingBackend& GetFrameRing();
 
         /// The end of a frame, to the installed backend
         static void FrameMark();
@@ -59,9 +80,15 @@ namespace BECore {
 
         static constexpr uint32_t kMaxThreads = 256;  // threads beyond it are recorded without a name
         static constexpr uint32_t kNoSortIndex = 0xFFFFFFFFu;
+        static constexpr uint32_t kMaxFanOuts = 16;  // distinct primary backends that can run beside the ring over the life of the process
 
     private:
-        static constinit inline std::atomic<IProfilerBackend*> _backend{nullptr};
+        /// What GetBackend() becomes for @p primary with the ring on or off (the backend mutex is held)
+        static IProfilerBackend* ResolveEffective(IProfilerBackend* primary, bool ringEnabled);
+
+        static constinit inline std::atomic<IProfilerBackend*> _backend{nullptr};  // the effective backend
+        static constinit inline std::atomic<IProfilerBackend*> _primary{nullptr};
+        static constinit inline std::atomic<bool> _ringEnabled{false};
     };
 
 }  // namespace BECore

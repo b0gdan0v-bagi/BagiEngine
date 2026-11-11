@@ -1,6 +1,8 @@
+#include <BECore/Profiler/Backends/ChromeTraceBackend.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/Ring/FrameRingBackend.h>
-#include <atomic>
+#include <BECore/Profiler/ScopedTrace.h>
+#include <Common/TempPath.h>
 #include <gtest/gtest.h>
 #include <thread>
 
@@ -354,5 +356,221 @@ namespace BECore::Tests {
         const RingSnapshot last = ring.Snapshot();
         EXPECT_EQ(last.threads[0].zones.size(), FrameRingBackend::kEventsPerThread);
     }
+
+    // ---- The ring beside the primary backend (Profiler::SetRingEnabled) ----
+
+    namespace {
+
+        constexpr ProfileSite kRingOnlySite{"Ring only", "Test", "FrameRingTest.cpp", 10, 0};
+        constexpr ProfileSite kBothSite{"In both", "Test", "FrameRingTest.cpp", 11, 0};
+        constexpr ProfileSite kSwitchedSite{"Spans the switch", "Test", "FrameRingTest.cpp", 12, 0};
+        constexpr ProfileSite kPrimaryOnlySite{"Primary only", "Test", "FrameRingTest.cpp", 13, 0};
+
+        /// Leaves the process with no backend and the ring off, whatever the test did
+        class ProfilerStateGuard {
+        public:
+            ProfilerStateGuard() = default;
+            ~ProfilerStateGuard() {
+                Profiler::SetRingEnabled(false);
+                Profiler::SetBackend(nullptr);
+            }
+            ProfilerStateGuard(const ProfilerStateGuard&) = delete;
+            ProfilerStateGuard& operator=(const ProfilerStateGuard&) = delete;
+        };
+
+        /// The zones of @p site in the process's ring (all threads)
+        size_t CountInRing(const ProfileSite& site) {
+            size_t count = 0;
+            for (const RingThread& thread : Profiler::GetFrameRing().Snapshot().threads) {
+                for (const ZoneRecord& zone : thread.zones) {
+                    count += zone.site == &site ? 1 : 0;
+                }
+            }
+            return count;
+        }
+
+        size_t CountText(const eastl::string& text, const char* needle) {
+            size_t count = 0;
+            for (size_t at = text.find(needle); at != eastl::string::npos; at = text.find(needle, at + 1)) {
+                ++count;
+            }
+            return count;
+        }
+
+        size_t CountBegins(const ChromeTraceBackend& recorder) {
+            return CountText(recorder.WriteJson(), "\"ph\":\"B\"");
+        }
+
+        size_t CountEnds(const ChromeTraceBackend& recorder) {
+            return CountText(recorder.WriteJson(), "\"ph\":\"E\"");
+        }
+
+    }  // namespace
+
+    TEST(ProfilerRingTest, WithTheRingOffTheBackendIsExactlyThePrimary) {
+        const ProfilerStateGuard guard;
+        ChromeTraceBackend recorder;
+        ASSERT_TRUE(Profiler::SetBackend(&recorder));
+        EXPECT_EQ(Profiler::GetBackend(), &recorder);
+        EXPECT_EQ(Profiler::GetPrimaryBackend(), &recorder);
+        EXPECT_FALSE(Profiler::IsRingEnabled());
+
+        Profiler::SetBackend(nullptr);
+        EXPECT_EQ(Profiler::GetBackend(), nullptr);
+        EXPECT_EQ(Profiler::GetPrimaryBackend(), nullptr);
+    }
+
+    TEST(ProfilerRingTest, TheRingAloneIsTheBackendWhenThereIsNoPrimary) {
+        const ProfilerStateGuard guard;
+        const size_t before = CountInRing(kRingOnlySite);
+        Profiler::SetRingEnabled(true);
+        EXPECT_TRUE(Profiler::IsRingEnabled());
+        EXPECT_EQ(Profiler::GetBackend(), &Profiler::GetFrameRing());
+        EXPECT_EQ(Profiler::GetPrimaryBackend(), nullptr);
+        {
+            const ProfileZone zone(kRingOnlySite);
+        }
+        EXPECT_EQ(CountInRing(kRingOnlySite), before + 1);
+
+        Profiler::SetRingEnabled(false);
+        EXPECT_EQ(Profiler::GetBackend(), nullptr);
+        {
+            const ProfileZone zone(kRingOnlySite);
+        }
+        EXPECT_EQ(CountInRing(kRingOnlySite), before + 1);  // off: nothing more is recorded
+    }
+
+    TEST(ProfilerRingTest, AZoneLandsInThePrimaryAndInTheRing) {
+        const ProfilerStateGuard guard;
+        ChromeTraceBackend recorder;
+        Profiler::SetBackend(&recorder);
+        Profiler::SetRingEnabled(true);
+        EXPECT_NE(Profiler::GetBackend(), &recorder);
+        EXPECT_NE(Profiler::GetBackend(), &Profiler::GetFrameRing());
+        EXPECT_EQ(Profiler::GetPrimaryBackend(), &recorder);
+
+        const size_t before = CountInRing(kBothSite);
+        {
+            const ProfileZone zone(kBothSite);
+        }
+        EXPECT_EQ(CountInRing(kBothSite), before + 1);
+        EXPECT_EQ(CountBegins(recorder), 1u);
+        EXPECT_EQ(CountEnds(recorder), 1u);
+
+        Profiler::SetRingEnabled(false);
+        EXPECT_EQ(Profiler::GetBackend(), &recorder);
+    }
+
+    TEST(ProfilerRingTest, TheSameFanOutServesAPrimaryEveryTimeTheRingComesBack) {
+        const ProfilerStateGuard guard;
+        ChromeTraceBackend recorder;
+        Profiler::SetBackend(&recorder);
+        Profiler::SetRingEnabled(true);
+        IProfilerBackend* const first = Profiler::GetBackend();
+        Profiler::SetRingEnabled(false);
+        Profiler::SetRingEnabled(true);
+        EXPECT_EQ(Profiler::GetBackend(), first);
+    }
+
+    TEST(ProfilerRingTest, ChangingThePrimaryKeepsTheRing) {
+        const ProfilerStateGuard guard;
+        ChromeTraceBackend first;
+        ChromeTraceBackend second;
+        Profiler::SetBackend(&first);
+        Profiler::SetRingEnabled(true);
+        ASSERT_TRUE(Profiler::SetBackend(&second));
+        EXPECT_TRUE(Profiler::IsRingEnabled());
+        EXPECT_EQ(Profiler::GetPrimaryBackend(), &second);
+
+        const size_t before = CountInRing(kBothSite);
+        {
+            const ProfileZone zone(kBothSite);
+        }
+        EXPECT_EQ(CountInRing(kBothSite), before + 1);
+        EXPECT_EQ(CountBegins(second), 1u);
+        EXPECT_EQ(CountBegins(first), 0u);
+
+        // No primary at all: the ring goes on alone
+        Profiler::SetBackend(nullptr);
+        EXPECT_EQ(Profiler::GetBackend(), &Profiler::GetFrameRing());
+    }
+
+    TEST(ProfilerRingTest, AZoneEndsOnTheBackendItBeganOnWhenTheRingGoesOff) {
+        const ProfilerStateGuard guard;
+        ChromeTraceBackend recorder;
+        Profiler::SetBackend(&recorder);
+        Profiler::SetRingEnabled(true);
+        const size_t before = CountInRing(kSwitchedSite);
+        {
+            std::optional<ProfileZone> zone;
+            zone.emplace(kSwitchedSite);
+            Profiler::SetRingEnabled(false);
+            zone.reset();  // ends on the fan-out it began on, not on the bare recorder
+        }
+        EXPECT_EQ(CountBegins(recorder), 1u);
+        EXPECT_EQ(CountEnds(recorder), 1u);
+        EXPECT_EQ(CountInRing(kSwitchedSite), before + 1);
+    }
+
+    TEST(ProfilerRingTest, AZoneBegunBeforeTheRingWasOnEndsOnThePrimaryOnly) {
+        const ProfilerStateGuard guard;
+        ChromeTraceBackend recorder;
+        Profiler::SetBackend(&recorder);
+        const size_t before = CountInRing(kPrimaryOnlySite);
+        {
+            std::optional<ProfileZone> zone;
+            zone.emplace(kPrimaryOnlySite);
+            Profiler::SetRingEnabled(true);
+            zone.reset();
+        }
+        EXPECT_EQ(CountBegins(recorder), 1u);
+        EXPECT_EQ(CountEnds(recorder), 1u);
+        EXPECT_EQ(CountInRing(kPrimaryOnlySite), before);
+    }
+
+    TEST(ProfilerRingTest, ScopedTraceWithTheRingOnRestoresThePrimary) {
+        const ProfilerStateGuard guard;
+        ChromeTraceBackend original;
+        Profiler::SetBackend(&original);
+        Profiler::SetRingEnabled(true);
+
+        const std::filesystem::path folder = TestTempDirectory("profiler_ring");
+        std::filesystem::create_directories(folder);
+        {
+            const ScopedTrace trace(eastl::string((folder / "trace.json").string().c_str()));
+            EXPECT_EQ(Profiler::GetPrimaryBackend(), &Profiler::GetChromeTrace());
+            EXPECT_TRUE(Profiler::IsRingEnabled());
+        }
+        EXPECT_EQ(Profiler::GetPrimaryBackend(), &original);
+        EXPECT_TRUE(Profiler::IsRingEnabled());
+        std::filesystem::remove_all(folder);
+    }
+
+#if BE_PROFILER
+
+    TEST(ProfilerRingTest, TheMacrosReachTheRing) {
+        const ProfilerStateGuard guard;
+        // The macro makes a site of its own, so the zone is found by name
+        const auto countByName = [](const char* name) {
+            size_t count = 0;
+            for (const RingThread& thread : Profiler::GetFrameRing().Snapshot().threads) {
+                for (const ZoneRecord& zone : thread.zones) {
+                    count += std::string_view(zone.site->name) == name ? 1 : 0;
+                }
+            }
+            return count;
+        };
+        Profiler::SetRingEnabled(true);
+        const size_t zonesBefore = countByName("Ring macro zone");
+        const size_t framesBefore = Profiler::GetFrameRing().Snapshot().frames.size();
+        {
+            BE_PROFILE_SCOPE("Ring macro zone");
+        }
+        BE_PROFILE_FRAME();
+        EXPECT_EQ(countByName("Ring macro zone"), zonesBefore + 1);
+        EXPECT_GT(Profiler::GetFrameRing().Snapshot().frames.size(), framesBefore);
+    }
+
+#endif
 
 }  // namespace BECore::Tests

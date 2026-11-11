@@ -138,7 +138,7 @@ namespace BECore {
             return;
         }
         ChromeTraceBackend& recorder = Profiler::GetChromeTrace();
-        const bool recording = Profiler::GetBackend() == &recorder;
+        const bool recording = Profiler::GetPrimaryBackend() == &recorder;
         if (!recording && ImGui::Button("Record")) {
             recorder.MarkTraceStart();
             Profiler::SetBackend(&recorder);
