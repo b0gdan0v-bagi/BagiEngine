@@ -18,6 +18,7 @@
 #include <BECore/Time/Time.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIVars.h>
 #include <BECore/Widgets/WidgetManager.h>
 #include <Events/EventsProviderManager.h>
@@ -133,6 +134,11 @@ namespace BECore {
             return GetInstance()._uiStrings;
         }
 
+        /// The colour themes of the UI (`color="@primary"`), loaded from `config/UIThemes.xml` when the game ships one; `SetTheme` switches the open screen at its next draw
+        static UIThemes& GetUIThemes() {
+            return GetInstance()._uiThemes;
+        }
+
         // Pre-initialization function (FileSystem, AssertHandlers, runtime ITests)
         void OnApplicationPreInit(PassKey<Application>);
 
@@ -158,7 +164,7 @@ namespace BECore {
         void OnApplicationDeinit(PassKey<Application>);
 
     private:
-        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, FontAtlasLibrary, UIEnvironment, UIStrings, the builtin control methods
+        // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, FontAtlasLibrary, UIEnvironment, UIStrings, UIThemes, the builtin control methods
         void InitializeCoreServices();
 
         FileSystem _fileSystem;
@@ -176,6 +182,7 @@ namespace BECore {
         UIEnvironment _uiEnvironment;
         UIVars _uiVars;
         UIStrings _uiStrings;
+        UIThemes _uiThemes;
         IntrusivePtrAtomic<SceneManager> _sceneManager;
         TextureLibrary _textureLibrary;
         FontAtlasLibrary _fontAtlasLibrary;
