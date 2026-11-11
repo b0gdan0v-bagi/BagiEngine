@@ -8,6 +8,9 @@ namespace BECore {
     static_assert(BE_WEB_THREAD_POOL_SIZE >= TaskManager::kMaxWorkerThreads + 1, "BE_WEB_THREAD_POOL_SIZE (cmake/BagiWeb.cmake) must be at least TaskManager::kMaxWorkerThreads + 1");
 #endif
 
+    // Every worker has a graph of its own, named by a literal (ThreadPool.cpp)
+    static_assert(ThreadPool::kMaxGraphedWorkers >= TaskManager::kMaxWorkerThreads, "ThreadPool::kMaxGraphedWorkers must cover every worker of the task system");
+
     void TaskManager::Initialize(PassKey<CoreManager>) {
         if (_isInitialized) {
             LOG_WARNING("[TaskManager] Already initialized");
@@ -45,6 +48,8 @@ namespace BECore {
         if (!_isInitialized) {
             return;
         }
+
+        SampleProfilerCounters();
 
         // Обрабатываем отложенные задачи
         _scheduler.ProcessDelayedTasks();
@@ -97,6 +102,24 @@ namespace BECore {
 
     size_t TaskManager::GetWorkerCount() const {
         return _threadPool ? _threadPool->GetThreadCount() : 0;
+    }
+
+    void TaskManager::SampleProfilerCounters() {
+#if BE_PROFILER
+        if (!_isInitialized || Profiler::GetBackend() == nullptr) {
+            return;
+        }
+
+        const bool inlinePool = _threadPool != nullptr && _threadPool->IsInline();
+        if (_threadPool && !inlinePool) {
+            _threadPool->SampleProfilerCounters();
+        }
+        BE_PROFILE_COUNTER("Main thread queue: pending", _scheduler.GetMainThreadQueueSize());
+        BE_PROFILE_COUNTER("Delayed tasks: pending", _scheduler.GetDelayedTaskCount());
+        if (inlinePool) {
+            BE_PROFILE_COUNTER("Cooperative queue: pending", _scheduler.GetBackgroundSliceCount());
+        }
+#endif
     }
 
     size_t TaskManager::GetPendingTaskCount() const {

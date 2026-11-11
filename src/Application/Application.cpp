@@ -34,7 +34,7 @@ namespace BECore {
     bool Application::Initialize() {
 
         // First: a trace covers the start-up, and a profiler flag that cannot be honoured stops the start before anything is built
-        BE_PROFILE_THREAD("Main");
+        BE_PROFILE_THREAD_ORDER("Main", 0);
         const auto profilerSettings = ResolveProfilerSettings(_arguments);
         if (!profilerSettings) {
             LOG_ERROR("Profiler: {}"_format(profilerSettings.error()));

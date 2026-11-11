@@ -1,5 +1,6 @@
 #pragma once
 
+#include <TaskSystem/TaskLabel.h>
 #include <TaskSystem/TaskPriority.h>
 #include <chrono>
 #include <coroutine>
@@ -16,6 +17,8 @@ namespace BECore {
      * co_await SwitchToMainThread();
      */
     struct MainThreadAwaiter {
+        TaskLabel label;  ///< The zone of the slice that runs on the main thread (empty: none)
+
         bool await_ready() const noexcept;
         void await_suspend(std::coroutine_handle<> handle) noexcept;
         void await_resume() const noexcept {}
@@ -26,9 +29,11 @@ namespace BECore {
      *
      * @example
      * co_await SwitchToBackground();
+     * co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load font"));
      */
     struct BackgroundAwaiter {
         TaskPriority priority = TaskPriority::Normal;
+        TaskLabel label;  ///< The zone of the slice that runs on the pool thread (empty: none)
 
         bool await_ready() const noexcept {
             return false;
@@ -97,15 +102,15 @@ namespace BECore {
     /**
      * Переключает выполнение на главный поток.
      */
-    inline MainThreadAwaiter SwitchToMainThread() {
-        return {};
+    inline MainThreadAwaiter SwitchToMainThread(TaskLabel label = {}) {
+        return {label};
     }
 
     /**
      * Переключает выполнение на фоновый поток.
      */
-    inline BackgroundAwaiter SwitchToBackground(TaskPriority priority = TaskPriority::Normal) {
-        return {priority};
+    inline BackgroundAwaiter SwitchToBackground(TaskPriority priority = TaskPriority::Normal, TaskLabel label = {}) {
+        return {priority, label};
     }
 
     /**

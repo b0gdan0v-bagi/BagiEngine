@@ -10,7 +10,7 @@ namespace BECore {
 
     Task<IntrusivePtr<IResource>> XmlResourceLoader::LoadAsync(PoolString path) {
         // Run loading on thread pool
-        co_await SwitchToBackground();
+        co_await SwitchToBackground(TaskPriority::Normal, BE_TASK_LABEL("Load XML resource"));
 
         auto resource = LoadInternal(path);
         co_return resource;

@@ -2,6 +2,15 @@
 
 namespace BECore {
 
+#if BE_PROFILER
+    namespace {
+
+        // Counter names are string literals (Profiler/CLAUDE.md), so each graphed worker has its own
+        constexpr const char* kWorkerBusyCounters[ThreadPool::kMaxGraphedWorkers] = {"Worker 0: busy", "Worker 1: busy", "Worker 2: busy", "Worker 3: busy"};
+
+    }  // namespace
+#endif
+
     ThreadPool::ThreadPool(size_t numThreads) {
         if (numThreads == 0) {
             numThreads = std::thread::hardware_concurrency();
@@ -9,6 +18,8 @@ namespace BECore {
                 numThreads = 2;
             }
         }
+
+        _workerBusy = eastl::make_unique<std::atomic<bool>[]>(numThreads);
 
         // Создаем очереди для каждого потока
         _queues.reserve(numThreads);
@@ -116,12 +127,52 @@ namespace BECore {
         return count;
     }
 
+    size_t ThreadPool::GetBusyWorkerCount() const {
+        size_t count = 0;
+        for (size_t i = 0; i < _threads.size(); ++i) {
+            count += _workerBusy[i].load(std::memory_order_relaxed) ? 1 : 0;
+        }
+        return count;
+    }
+
+    void ThreadPool::SampleProfilerCounters() {
+#if BE_PROFILER
+        if (_isInline || Profiler::GetBackend() == nullptr) {
+            return;
+        }
+        BE_PROFILE_COUNTER("Pool: pending jobs", GetPendingTaskCount());
+        BE_PROFILE_COUNTER("Pool: steals", _stealCount.exchange(0, std::memory_order_relaxed));
+#endif
+    }
+
+    void ThreadPool::SetWorkerBusy(size_t threadIndex, bool busy) {
+#if BE_PROFILER
+        if (Profiler::GetBackend() != nullptr) {
+            // One lock around the flag and the points it moves, so the graphs get their values in the order they were true: two workers
+            // that change at the same moment must not leave `Pool: busy workers` at the older value. Taken only while a backend records
+            std::lock_guard lock(_busyReportMutex);
+            _workerBusy[threadIndex].store(busy, std::memory_order_relaxed);
+            if (threadIndex < kMaxGraphedWorkers) {
+                BE_PROFILE_COUNTER(kWorkerBusyCounters[threadIndex], busy ? 1 : 0);
+            }
+            BE_PROFILE_COUNTER("Pool: busy workers", GetBusyWorkerCount());
+            return;
+        }
+#endif
+        _workerBusy[threadIndex].store(busy, std::memory_order_relaxed);
+    }
+
     void ThreadPool::WorkerLoop(size_t threadIndex) {
-        BE_PROFILE_THREAD(Format("Worker {}", threadIndex).c_str());
+        BE_PROFILE_THREAD_ORDER(Format("Worker {}", threadIndex).c_str(), kWorkerSortBase + threadIndex);
+        SetWorkerBusy(threadIndex, false);  // the first point of the graph of this worker
         TaskQueue::TaskFunc task;
-        const auto run = [&task] {
-            BE_PROFILE_SCOPE("Task");
-            task();
+        const auto run = [this, threadIndex, &task] {
+            SetWorkerBusy(threadIndex, true);
+            {
+                BE_PROFILE_SCOPE("Task");
+                task();
+            }
+            SetWorkerBusy(threadIndex, false);
         };
 
         while (!_stopped.load(std::memory_order_acquire)) {
@@ -133,12 +184,18 @@ namespace BECore {
 
             // Пытаемся украсть у других
             if (TryStealTask(threadIndex, task)) {
+                _stealCount.fetch_add(1, std::memory_order_relaxed);
                 run();
                 continue;
             }
 
-            // Ждем задачу в своей очереди
-            if (_queues[threadIndex]->Pop(task)) {
+            // Ждем задачу в своей очереди; the wait is a zone, so a trace tells an idle worker from a busy one
+            bool gotTask = false;
+            {
+                BE_PROFILE_SCOPE("Idle");
+                gotTask = _queues[threadIndex]->Pop(task);
+            }
+            if (gotTask) {
                 run();
             }
         }

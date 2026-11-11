@@ -201,6 +201,10 @@ namespace BECore {
                 out.append(Format("{{\"name\":\"thread_name\",\"ph\":\"M\",\"pid\":{},\"tid\":{},\"args\":{{\"name\":", kPid, tid));
                 AppendJsonString(out, name);
                 out.append("}}");
+                if (const uint32_t sortIndex = Profiler::GetThreadSortIndex(tid); sortIndex != Profiler::kNoSortIndex) {
+                    beginEvent();
+                    out.append(Format("{{\"name\":\"thread_sort_index\",\"ph\":\"M\",\"pid\":{},\"tid\":{},\"args\":{{\"sort_index\":{}}}}}", kPid, tid, sortIndex));
+                }
             }
 
             open.clear();

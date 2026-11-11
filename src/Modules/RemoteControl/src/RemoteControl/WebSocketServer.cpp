@@ -68,7 +68,7 @@ namespace BECore {
                 _open = true;
             }
             _writer = std::thread([this] {
-                BE_PROFILE_THREAD("Control writer");
+                BE_PROFILE_THREAD_ORDER("Control writer", 202);
                 WriterLoop();
             });
         }
@@ -249,7 +249,7 @@ namespace BECore {
 
         _service.SetEventSink([this](const eastl::string& text) { Broadcast(text); });
         _acceptThread = std::thread([this] {
-            BE_PROFILE_THREAD("Control accept");
+            BE_PROFILE_THREAD_ORDER("Control accept", 200);
             AcceptLoop();
         });
 
@@ -306,7 +306,7 @@ namespace BECore {
                 auto connection = eastl::make_shared<Connection>(std::move(socket));
                 _connections.push_back(connection);
                 connection->StartReader(std::thread([this, connection] {
-                    BE_PROFILE_THREAD("Control reader");
+                    BE_PROFILE_THREAD_ORDER("Control reader", 201);
                     RunConnection(connection);
                 }));
                 return;
