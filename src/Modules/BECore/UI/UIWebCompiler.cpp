@@ -1522,14 +1522,14 @@ namespace BECore {
                         break;
                     case WebKind::Label:
                     case WebKind::Button:
-                        AddText(attrs, r, node, html);
+                        AddText(attrs, r, node, html, report);
                         break;
                     case WebKind::Segmented:
                         AddBind(attrs, html);
                         AddDisabled(attrs, html);
                         break;
                     case WebKind::Toggle:
-                        AddText(attrs, r, node, html);
+                        AddText(attrs, r, node, html, report);
                         AddBind(attrs, html);
                         AddAction(attrs, html);
                         if (const eastl::string* on = html.FindAttribute("data-on")) {
@@ -1771,7 +1771,7 @@ namespace BECore {
                 }
             }
 
-            static void AddText(Attrs& attrs, const Resolved& r, const WebNode& node, const UIHtmlNode& html) {
+            static void AddText(Attrs& attrs, const Resolved& r, const WebNode& node, const UIHtmlNode& html, UIWebReport* report) {
                 attrs.Set("text", node.text);
                 if (!r.fontPath.empty()) {
                     attrs.Set("font", r.fontPath);
@@ -1818,12 +1818,13 @@ namespace BECore {
                         attrs.Set("value", *value);
                     }
                     AddDisabled(attrs, html);
-                    AddIcon(attrs, r, html);
+                    AddIcon(attrs, r, html, report);
                 }
             }
 
-            /// The icon, its placement and its colour, and the tooltip of a button; each only when set (a bad placement was reported when the node was added)
-            static void AddIcon(Attrs& attrs, const Resolved& r, const UIHtmlNode& html) {
+            /// The icon, its placement and its colour, and the tooltip of a button; each only when set (a bad placement was reported when the node was added; a colour without an icon is reported
+            /// here)
+            static void AddIcon(Attrs& attrs, const Resolved& r, const UIHtmlNode& html, UIWebReport* report) {
                 const eastl::string* icon = html.FindAttribute("data-icon");
                 if (icon != nullptr && !icon->empty()) {
                     attrs.Set("icon", *icon);
@@ -1835,6 +1836,8 @@ namespace BECore {
                     if (r.iconColor) {
                         attrs.Set("iconTint", UIText::FormatColor(*r.iconColor));
                     }
+                } else if (r.iconColor) {
+                    Note(report, "-be-icon-color has no effect on a button without data-icon");
                 }
                 if (const eastl::string* tooltip = html.FindAttribute("title"); tooltip != nullptr && !tooltip->empty()) {
                     attrs.Set("tooltip", *tooltip);

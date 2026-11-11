@@ -214,7 +214,7 @@ namespace BECore {
         const Rect plate = UITooltip::Place(button->rect, {text.x + 2.0f * UITooltip::kPadding, text.y + 2.0f * UITooltip::kPadding}, _layout.GetResolved().contentBounds);
         renderer.DrawFilledRect(plate.x, plate.y, plate.w, plate.h, UITooltip::kPlateColor);
         // The text is laid out against the width it was measured with, so it wraps where the measure did; the plate (its left edge and its size) is what shows
-        _tooltipLabel->rect = {plate.x + UITooltip::kPadding, plate.y + UITooltip::kPadding, UITooltip::kMaxWidth, text.y + UITooltip::kPadding};
+        _tooltipLabel->rect = {plate.x + UITooltip::kPadding, plate.y + UITooltip::kPadding, UITooltip::kMaxWidth, text.y};
         _tooltipLabel->DrawSelf(renderer);
     }
 

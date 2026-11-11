@@ -1939,7 +1939,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
     TEST_F(UIWebTest, ABadIconPositionAndAnIconColorWithoutAnIconAreReported) {
         const auto compiled =
-            Compile(R"(<button id="a" data-icon="Settings" data-icon-position="under"></button><button id="b" data-icon-position="above">B</button><button id="c" data-icon="">C</button>)");
+            Compile(R"(<button id="a" data-icon="Settings" data-icon-position="under"></button><button id="b" data-icon-position="above">B</button><button id="c" data-icon="">C</button>)",
+                    "#b { -be-icon-color: #fff } #c { -be-icon-color: #fff }");
         EXPECT_EQ(compiled->IssuesMentioning("data-icon-position=\"under\" is not supported"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("data-icon-position has no effect without data-icon"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("data-icon needs the name of a sprite"), 1u);
@@ -1947,6 +1948,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(compiled->Has("a", "iconPlacement")) << "the default is kept";
         EXPECT_FALSE(compiled->Has("b", "iconPlacement"));
         EXPECT_FALSE(compiled->Has("c", "icon"));
+        EXPECT_EQ(compiled->IssuesMentioning("-be-icon-color has no effect on a button without data-icon"), 1u) << "one message for both buttons";
+        EXPECT_FALSE(compiled->Has("b", "iconTint"));
+        EXPECT_FALSE(compiled->Has("c", "iconTint"));
     }
 
     TEST_F(UIWebTest, AButtonStateRuleWithAGradientSetsTheStateColorAndReportsTheEnd) {
