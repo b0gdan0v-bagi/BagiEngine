@@ -111,7 +111,9 @@ namespace BECore {
         return {-q.x, -q.y, -q.z, q.w};
     }
 
-    inline constexpr float kSlerpLinearThreshold = 0.9995f;  ///< above this dot product two quaternions are so close that the sine of the angle between them is unreliable
+    namespace Details {
+        inline constexpr float kSlerpLinearThreshold = 0.9995f;  ///< above this dot product two quaternions are so close that the sine of the angle between them is unreliable
+    }  // namespace Details
 
     /**
      * @brief The rotation a fraction @p t of the way from @p from to @p to along the shortest arc (constant angular speed).
@@ -129,7 +131,7 @@ namespace BECore {
 
         float fromWeight = 1.0f - t;
         float toWeight = t;
-        if (cosAngle <= kSlerpLinearThreshold) {
+        if (cosAngle <= Details::kSlerpLinearThreshold) {
             const float angle = std::acos(cosAngle);
             const float sinAngle = std::sin(angle);
             fromWeight = std::sin((1.0f - t) * angle) / sinAngle;

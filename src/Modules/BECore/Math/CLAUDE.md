@@ -1,6 +1,6 @@
 # Math
 
-Small value types, header-only except `Color`: `Vec2`, `Vec3`, `Vec4`, `Mat4`, `Quat`, `Rect`, `Color`. `Vec2` and `Rect` are the 2D scene's; `Vec3`, `Vec4`, `Mat4` and `Quat` are the 3D renderer's (`Renderer/Render3D/`, `.claude/rules/rendering-module.md`, "Generic GPU interface and 3D"). Every type has the `Serialize` / `Deserialize` / `VisitProperties` templates.
+Small value types, header-only except `Color`: `Vec2`, `Vec3`, `Vec4`, `Mat4`, `Quat`, `Rect`, `Color`. `Vec2` and `Rect` are the 2D scene's; `Vec3`, `Vec4`, `Mat4` and `Quat` are the 3D renderer's (`Renderer/Render3D/`, `.claude/rules/rendering-module.md`, "Generic GPU interface and 3D"). Every type but `Mat4` (a transform is built, never stored in a config) has the `Serialize` / `Deserialize` / `VisitProperties` templates.
 
 ## 3D conventions
 

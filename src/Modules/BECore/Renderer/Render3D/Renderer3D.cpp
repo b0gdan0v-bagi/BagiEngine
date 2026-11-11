@@ -40,7 +40,7 @@ namespace BECore {
     FrameConstants Renderer3D::MakeFrameConstants(const Scene3D& scene, float aspect) {
         FrameConstants constants;
         constants.viewProjection = ViewProjection(scene.camera, aspect);
-        constants.lightDirection = Vec4(scene.light.direction.Normalized() * -1.0f, 0.0f);
+        constants.lightDirection = Vec4(-scene.light.direction.Normalized(), 0.0f);
         const Vec4 light = ColorToLinear(scene.light.color);
         constants.lightColor = Vec4(light.XYZ() * scene.light.intensity, 1.0f);
         const Vec4 ambient = ColorToLinear(scene.ambient.color);
