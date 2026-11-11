@@ -75,6 +75,8 @@ namespace BECore::Tests {
             if (!frame) {
                 return std::nullopt;
             }
+            _maskedFrames += frame->masked ? 1 : 0;
+            _binaryFrames += frame->opcode == WebSocketOpcode::kBinary ? 1 : 0;
             if (frame->opcode != WebSocketOpcode::kText) {
                 _closeFrame = *frame;
                 return std::nullopt;
@@ -133,6 +135,15 @@ namespace BECore::Tests {
             return _closeFrame;
         }
 
+        /// Frames of the server with the mask bit set, and binary frames, seen so far: a server sends neither
+        [[nodiscard]] size_t GetMaskedFrameCount() const {
+            return _maskedFrames;
+        }
+
+        [[nodiscard]] size_t GetBinaryFrameCount() const {
+            return _binaryFrames;
+        }
+
         /// Types of the messages received so far, in order ("joined,lobby")
         [[nodiscard]] std::string Types() const {
             std::string result;
@@ -154,6 +165,8 @@ namespace BECore::Tests {
         std::vector<ReceivedMessage> _received;
         size_t _cursor = 0;
         std::optional<ServerFrame> _closeFrame;
+        size_t _maskedFrames = 0;
+        size_t _binaryFrames = 0;
     };
 
 }  // namespace BECore::Tests

@@ -1,10 +1,10 @@
 #include "FakeSeatedGame.h"
+#include "ManualClock.h"
 #include "RoomSocketClient.h"
 #include "TestRandom.h"
 
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
-#include <atomic>
 #include <gtest/gtest.h>
 #include <thread>
 
@@ -46,26 +46,6 @@ namespace BECore::Tests {
             }
             return batch;
         }
-
-        /// The time the hub and the liveness check see, moved by the test instead of waited for
-        class ManualClock {
-        public:
-            RoomTime Now() const {
-                return _start + std::chrono::milliseconds(_elapsedMs.load());
-            }
-
-            void Advance(std::chrono::milliseconds step) {
-                _elapsedMs += step.count();
-            }
-
-            [[nodiscard]] std::function<RoomTime()> AsFunction() {
-                return [this] { return Now(); };
-            }
-
-        private:
-            const RoomTime _start = std::chrono::steady_clock::now();
-            std::atomic<int64_t> _elapsedMs{0};
-        };
 
         /// Sleeps a few ticks of the hub thread (MakeSettings() ticks every 10 ms) so that it has looked at the clock and the sockets
         void LetTicksPass() {

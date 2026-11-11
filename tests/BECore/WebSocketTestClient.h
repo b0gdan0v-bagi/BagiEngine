@@ -52,6 +52,8 @@ namespace BECore::Tests {
     struct ServerFrame {
         uint8_t opcode = 0;
         std::string payload;
+        /// The mask bit of the header: a server must never set it (RFC 6455, 5.1)
+        bool masked = false;
     };
 
     inline uint16_t CloseCodeOf(const ServerFrame& frame) {
@@ -207,6 +209,7 @@ namespace BECore::Tests {
             }
             ServerFrame frame;
             frame.opcode = _buffer[0] & 0x0F;
+            frame.masked = (_buffer[1] & 0x80) != 0;
             frame.payload.assign(reinterpret_cast<const char*>(_buffer.data()) + headerSize, length);
             _buffer.erase(_buffer.begin(), _buffer.begin() + static_cast<ptrdiff_t>(headerSize + length));
             return frame;
