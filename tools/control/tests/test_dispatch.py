@@ -11,7 +11,7 @@ import pytest
 
 import scenario
 from bagi_control_client import ControlError
-from bagi_session import GameSession, SessionError
+from bagi_session import CALL_TIMEOUT_SECONDS, STEP_SECONDS_PER_FRAME, GameSession, SessionError
 from fake_control_server import FakeControlServer, FakeError, QuitServer
 from game_process import free_port
 
@@ -107,6 +107,22 @@ def test_step_sends_frames_and_leaves_out_dt_when_not_given(session, server):
     session.step(3)
     session.step(2, 0.25)
     assert requests_of(server, "step") == [{"frames": 3}, {"frames": 2, "dt": 0.25}]
+
+
+def test_a_step_called_through_call_gets_the_timeout_of_its_frames(session, server, monkeypatch):
+    session.connect(port=server.port)
+    seen = []
+    client = session._client
+    real_call = client.call
+
+    def spy(method, params=None):
+        seen.append((method, client.timeout))
+        return real_call(method, params)
+
+    monkeypatch.setattr(client, "call", spy)
+    session.call("step", {"frames": 1000})
+    session.call("get_state")
+    assert seen == [("step", CALL_TIMEOUT_SECONDS + 1000 * STEP_SECONDS_PER_FRAME), ("get_state", CALL_TIMEOUT_SECONDS)]
 
 
 def test_screenshot_gives_the_decoded_png_and_its_size(session, server):

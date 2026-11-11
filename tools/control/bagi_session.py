@@ -35,6 +35,7 @@ LOG_LINES = 40
 EVENT_BUFFER_SIZE = 256
 EVENT_POLL_SECONDS = 0.05  # the least a take_event waits for a push that is on its way, also with a timeout of 0
 QUIT_METHOD = "quit"
+STEP_METHOD = "step"
 
 
 @dataclass
@@ -56,6 +57,7 @@ class GameSession:
     def __init__(self) -> None:
         self._client: BagiControlClient | None = None
         self._game: GameProcess | None = None
+        self._finished: GameProcess | None = None  # the game this session stopped last: its log is still there to read
         self._flags: list[str] | None = None  # the start flags of a launched game; None for one only connected to
         self._calls_made = 0  # calls since the launch or connect, to tell a recording that started late
         self._events: collections.deque[dict[str, Any]] = collections.deque(maxlen=EVENT_BUFFER_SIZE)
@@ -137,11 +139,13 @@ class GameSession:
         return description
 
     def call(self, method: str, params: dict[str, Any] | None = None, timeout: float | None = None) -> Any:
-        """One control call. `timeout` (seconds) replaces the default for a call that is known to take long.
+        """One control call. `timeout` (seconds) replaces the default for a call that is known to take long; a `step` gets one for its frames.
 
         While recording, a call the game answered (or refused with a ControlError) becomes a line of the scenario; a SessionError is not recorded.
         """
         sent = copy.deepcopy(params) if self._recording is not None else None  # the caller may reuse its dict
+        if timeout is None and method == STEP_METHOD:
+            timeout = self._step_timeout(params)
         try:
             result = self._call_raw(method, params, timeout)
         except ControlError as error:
@@ -184,8 +188,7 @@ class GameSession:
         params: dict[str, Any] = {"frames": frames}
         if dt is not None:
             params["dt"] = dt
-        timeout = CALL_TIMEOUT_SECONDS + max(frames, 0) * STEP_SECONDS_PER_FRAME
-        return self.call("step", params, timeout=timeout)
+        return self.call(STEP_METHOD, params)
 
     def screenshot(self, max_size: int | None = None) -> tuple[bytes, dict[str, int]]:
         """The PNG of the next frame and its size. `max_size` shrinks the longer side of a bigger picture (the game's default is 1024)."""
@@ -228,10 +231,14 @@ class GameSession:
                 self._events.append(message)
 
     def log_problems(self) -> list[str]:
-        """The Warning, Error and Fatal lines the game this session started has logged so far."""
-        if self._game is None:
+        """The Warning, Error and Fatal lines the game this session started (the last one, also after quit) has logged so far.
+
+        The game's stdout is block-buffered into the log file, so a Warning may show only after the game has exited; Error and Fatal go to stderr, unbuffered.
+        """
+        game = self._game or self._finished
+        if game is None:
             raise SessionError("this session did not start the game, so it has no log; launch_game starts one")
-        return self._game.log_problems()
+        return game.log_problems()
 
     def start_recording(self, path: str, expect: str = scenario.RECORD_MINIMAL) -> dict[str, Any]:
         """Records the calls from now on into the scenario file `path` (written by stop_recording, quit and close).
@@ -289,12 +296,19 @@ class GameSession:
 
     def _begin_session(self, flags: list[str] | None) -> None:
         self._flags = flags
+        self._finished = None
         self._calls_made = 0
         self._events.clear()
 
     def _describe(self, port: int) -> dict[str, Any]:
         games = self._call_raw("list_games")
         return {"port": port, "status": self._call_raw("status"), "activeGame": games.get("active"), "games": games.get("games", [])}
+
+    @staticmethod
+    def _step_timeout(params: dict[str, Any] | None) -> float:
+        frames = params.get("frames") if isinstance(params, dict) else None
+        count = frames if isinstance(frames, int) and not isinstance(frames, bool) else 1
+        return CALL_TIMEOUT_SECONDS + max(count, 0) * STEP_SECONDS_PER_FRAME
 
     @staticmethod
     def _check_record_target(path: Path, expect: str) -> None:
@@ -339,7 +353,10 @@ class GameSession:
 
     def _stop_game(self, timeout: float) -> int | None:
         game, self._game = self._game, None
-        return None if game is None else game.stop(timeout)
+        if game is None:
+            return None
+        self._finished = game
+        return game.stop(timeout)
 
     def _exit_note(self) -> str:
         if self._game is None:
