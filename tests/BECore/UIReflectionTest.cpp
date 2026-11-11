@@ -56,7 +56,8 @@ namespace BECore::Tests {
 
             auto panel = MakeElement("Panel");
             panel->style.rect.anchor = UIAnchor::BottomRight;
-            panel->style.rect.x = -12.0f;
+            panel->style.rect.x = UILength::Px(-12.0f);
+            panel->style.rect.y = UILength::Percent(5.0f);
             panel->style.rect.width = UILength::Percent(35.5f);
             panel->style.rect.height = UILength::Px(96.0f);
             panel->style.rect.minWidth = UILength::Px(0.0f);
@@ -89,7 +90,8 @@ namespace BECore::Tests {
             portrait.when.maxHeight = 2000.0f;
             UIElementOverride move;
             move.element = PoolString::Intern("Panel");
-            move.x = 0.0f;  // an explicit zero must survive
+            move.x = UILength::Px(0.0f);  // an explicit zero must survive
+            move.y = UILength::Percent(-5.0f);
             move.visible = false;
             move.width = UILength::Percent(90.0f);
             move.direction = UIStackDirection::Vertical;
@@ -253,6 +255,18 @@ namespace BECore::Tests {
         ExpectSameCanvas(*canvas, *loaded);
     }
 
+    TEST(UIReflectionTest, AnOffsetIsALengthInUnitsOrPercentAndAPlainNumberSavesAsBefore) {
+        const eastl::string xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" x=\"12\" y=\"5%\"/></elements></component></root>";
+        const auto canvas = FromXml(xml);
+
+        ASSERT_EQ(canvas->_elements.size(), 1u);
+        EXPECT_EQ(canvas->_elements[0]->style.rect.x, UILength::Px(12.0f));
+        EXPECT_EQ(canvas->_elements[0]->style.rect.y, UILength::Percent(5.0f));
+        const eastl::string saved = ToXml(*canvas, true);
+        EXPECT_NE(saved.find("x=\"12\""), eastl::string::npos);
+        EXPECT_NE(saved.find("y=\"5%\""), eastl::string::npos);
+    }
+
     TEST(UIReflectionTest, AMalformedValueIsReportedAndLeavesTheDefault) {
         const eastl::string xml = "<root><component><elements><element type=\"UIElement\" name=\"A\" width=\"wide\" color=\"1,2\" margin=\"1,2\" x=\"5\"/></elements>"
                                   "<variants><variant when=\"orientation:sideways\"/></variants></component></root>";
@@ -263,7 +277,7 @@ namespace BECore::Tests {
         EXPECT_EQ(element.style.rect.width, UILength{});
         EXPECT_EQ(element.color.a, 0);
         EXPECT_EQ(element.style.rect.margin, UIEdges{});
-        EXPECT_FLOAT_EQ(element.style.rect.x, 5.0f);  // the well-formed attributes still load
+        EXPECT_FLOAT_EQ(element.style.rect.x.value, 5.0f);  // the well-formed attributes still load
 
         XmlDeserializer deserializer;
         ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
@@ -329,7 +343,7 @@ namespace BECore::Tests {
         ASSERT_EQ(root.children.size(), 1u);
         const UIElement& panel = *root.children[0];
         EXPECT_EQ(panel.name, PoolString::Intern("Panel"));
-        EXPECT_FLOAT_EQ(panel.style.rect.x, 16.0f);
+        EXPECT_FLOAT_EQ(panel.style.rect.x.value, 16.0f);
         EXPECT_EQ(panel.style.rect.width, UILength::Px(220.0f));
         EXPECT_EQ(panel.color.a, 160);
         EXPECT_TRUE(panel.blocksInput);

@@ -321,8 +321,8 @@ namespace BECore::Tests {
         void SetEveryStyleProperty(UIElementStyle& style) {
             style.visible = false;
             style.rect.anchor = UIAnchor::Bottom;
-            style.rect.x = 3.0f;
-            style.rect.y = 4.0f;
+            style.rect.x = UILength::Px(3.0f);
+            style.rect.y = UILength::Px(4.0f);
             style.rect.width = UILength::Percent(50.0f);
             style.rect.height = UILength::Px(20.0f);
             style.rect.minWidth = UILength::Px(5.0f);

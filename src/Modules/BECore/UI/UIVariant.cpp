@@ -113,8 +113,12 @@ namespace BECore {
         Ser::DataAccessor<PoolString>::Save(s, element, "element");
         SaveOptional(s, "visible", visible);
         SaveOptional(s, "anchor", anchor);
-        SaveOptional(s, "x", x);
-        SaveOptional(s, "y", y);
+        if (x) {
+            UIAttr::WriteLength(s, "x", *x);
+        }
+        if (y) {
+            UIAttr::WriteLength(s, "y", *y);
+        }
         if (width) {
             UIAttr::WriteLength(s, "width", *width);
         }
@@ -130,8 +134,8 @@ namespace BECore {
         Ser::Load(d, element, "element");
         LoadOptional(d, "visible", visible);
         LoadOptional(d, "anchor", anchor);
-        LoadOptional(d, "x", x);
-        LoadOptional(d, "y", y);
+        UIAttr::ReadOptionalLength(d, "x", x);
+        UIAttr::ReadOptionalLength(d, "y", y);
         UIAttr::ReadOptionalLength(d, "width", width);
         UIAttr::ReadOptionalLength(d, "height", height);
         LoadOptional(d, "region", region);

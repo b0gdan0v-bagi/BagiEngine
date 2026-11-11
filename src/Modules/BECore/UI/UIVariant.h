@@ -10,8 +10,8 @@ namespace BECore {
         PoolString element;
         std::optional<bool> visible;
         std::optional<UIAnchor> anchor;
-        std::optional<float> x;
-        std::optional<float> y;
+        std::optional<UILength> x;
+        std::optional<UILength> y;
         std::optional<UILength> width;
         std::optional<UILength> height;
         std::optional<PoolString> region;  ///< an empty name clears the region of the element

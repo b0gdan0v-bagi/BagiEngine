@@ -424,7 +424,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(element.box == UIBoxStyle{});
         EXPECT_FALSE(element.box.HasEffect());
         EXPECT_TRUE(SameColor(element.color, Color{40, 90, 60, 255}));
-        EXPECT_FLOAT_EQ(element.style.rect.x, 10.0f);
+        EXPECT_FLOAT_EQ(element.style.rect.x.value, 10.0f);
         EXPECT_FALSE(element.blocksInput);
     }
 

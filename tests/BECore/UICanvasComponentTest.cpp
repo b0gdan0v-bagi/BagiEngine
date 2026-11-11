@@ -172,8 +172,8 @@ namespace BECore::Tests {
         IntrusivePtr<PointerProbe> AddProbe(UICanvasComponent& canvas, const char* name, float x, float y, float size, bool interactive = true) {
             auto probe = New<PointerProbe>();
             probe->name = PoolString::Intern(name);
-            probe->style.rect.x = x;
-            probe->style.rect.y = y;
+            probe->style.rect.x = UILength::Px(x);
+            probe->style.rect.y = UILength::Px(y);
             probe->style.rect.width = UILength::Px(size);
             probe->style.rect.height = UILength::Px(size);
             probe->interactive = interactive;
@@ -186,8 +186,8 @@ namespace BECore::Tests {
         /// A square element with a color that a click on it is consumed by
         IntrusivePtr<UIElement> AddSquare(UICanvasComponent& canvas, const char* name, float x, float y, float size, Color color = Color{255, 255, 255, 255}) {
             auto square = canvas.GetRoot().AddChild(PoolString::Intern(name));
-            square->style.rect.x = x;
-            square->style.rect.y = y;
+            square->style.rect.x = UILength::Px(x);
+            square->style.rect.y = UILength::Px(y);
             square->style.rect.width = UILength::Px(size);
             square->style.rect.height = UILength::Px(size);
             square->color = color;

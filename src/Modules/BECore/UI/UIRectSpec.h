@@ -35,14 +35,14 @@ namespace BECore {
      * @brief How one element finds its rect in its parent (anchor layout) or its place in a stack.
      *
      * Everything is relative to the parent, never to the screen, so the same spec works at any canvas size.
-     * `x` and `y` are an offset in UI units from the anchor point. A Stretch element ignores x, y, width and height on both axes.
+     * `x` and `y` are an offset from the anchor point, in UI units or a percent of the parent's extent on that axis. A Stretch element ignores x, y, width and height on both axes.
      * The minimum and maximum limits come after the size and before the aspect ratio; when they disagree the minimum wins. A stack uses the
      * size, the limits and `flex` of its children and ignores their anchor, offset, margin and aspect ratio.
      */
     struct UIRectSpec {
         UIAnchor anchor = UIAnchor::TopLeft;
-        float x = 0.0f;
-        float y = 0.0f;
+        UILength x;  ///< the offset from the anchor point on X: units, or a percent of the parent's width
+        UILength y;  ///< the same on Y, against the parent's height
         UILength width;
         UILength height;
         std::optional<UILength> minWidth;

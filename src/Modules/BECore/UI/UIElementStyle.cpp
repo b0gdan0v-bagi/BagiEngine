@@ -48,8 +48,8 @@ namespace BECore {
         const UIElementStyle defaults;
         SaveIfChanged(s, visible, defaults.visible, "visible");
         SaveIfChanged(s, rect.anchor, defaults.rect.anchor, "anchor");
-        SaveIfChanged(s, rect.x, defaults.rect.x, "x");
-        SaveIfChanged(s, rect.y, defaults.rect.y, "y");
+        SaveLengthIfChanged(s, rect.x, defaults.rect.x, "x");
+        SaveLengthIfChanged(s, rect.y, defaults.rect.y, "y");
         SaveLengthIfChanged(s, rect.width, defaults.rect.width, "width");
         SaveLengthIfChanged(s, rect.height, defaults.rect.height, "height");
         UIAttr::WriteOptionalLength(s, "minWidth", rect.minWidth);
@@ -72,8 +72,8 @@ namespace BECore {
     void UIElementStyle::Deserialize(IDeserializer& d) {
         Ser::Load(d, visible, "visible");
         Ser::Load(d, rect.anchor, "anchor");
-        Ser::Load(d, rect.x, "x");
-        Ser::Load(d, rect.y, "y");
+        UIAttr::ReadLength(d, "x", rect.x);
+        UIAttr::ReadLength(d, "y", rect.y);
         UIAttr::ReadLength(d, "width", rect.width);
         UIAttr::ReadLength(d, "height", rect.height);
         UIAttr::ReadOptionalLength(d, "minWidth", rect.minWidth);
@@ -97,8 +97,8 @@ namespace BECore {
         bool changed = false;
         changed |= PropVisit::Visit(v, visible, "visible");
         changed |= PropVisit::Visit(v, rect.anchor, "anchor");
-        changed |= PropVisit::Visit(v, rect.x, "x");
-        changed |= PropVisit::Visit(v, rect.y, "y");
+        changed |= VisitLength(v, "x", rect.x);
+        changed |= VisitLength(v, "y", rect.y);
         changed |= VisitLength(v, "width", rect.width);
         changed |= VisitLength(v, "height", rect.height);
         changed |= VisitOptionalLength(v, "minWidth", rect.minWidth);

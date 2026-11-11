@@ -31,8 +31,8 @@ namespace BECore::Tests {
             canvas.params.space = CanvasSpace::SceneView;
             canvas.params.extendToOutput = extend;
             auto band = canvas.root->AddChild("Band"_intern);
-            band->style.rect.x = 100.0f;
-            band->style.rect.y = 300.0f;
+            band->style.rect.x = UILength::Px(100.0f);
+            band->style.rect.y = UILength::Px(300.0f);
             band->style.rect.width = UILength::Px(1000.0f);
             band->style.rect.height = UILength::Px(120.0f);
             return canvas;
@@ -56,7 +56,7 @@ namespace BECore::Tests {
             UICanvasLayout canvas = BandCanvasWithPortraitLayout(true);
             auto row = canvas.root->AddChild("Bar"_intern);
             row->style.rect.anchor = UIAnchor::Bottom;
-            row->style.rect.y = -20.0f;
+            row->style.rect.y = UILength::Px(-20.0f);
             row->style.rect.width = UILength::Px(300.0f);
             row->style.rect.height = UILength::Px(100.0f);
             if (hideWhereThereIsNoBar) {
@@ -134,7 +134,7 @@ namespace BECore::Tests {
         // A row on the bar below the view: anchored to the bottom of the whole output
         auto row = good.root->AddChild("Row"_intern);
         row->style.rect.anchor = UIAnchor::Bottom;
-        row->style.rect.y = -20.0f;
+        row->style.rect.y = UILength::Px(-20.0f);
         row->style.rect.width = UILength::Px(300.0f);
         row->style.rect.height = UILength::Px(100.0f);
 

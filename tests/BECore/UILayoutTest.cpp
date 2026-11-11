@@ -62,17 +62,28 @@ namespace BECore::Tests {
     TEST(UILayoutTest, TheOffsetMovesTheElementFromItsAnchor) {
         UIRectSpec spec = Sized(96.0f, 32.0f);
         spec.anchor = UIAnchor::BottomRight;
-        spec.x = -12.0f;
-        spec.y = -10.0f;
+        spec.x = UILength::Px(-12.0f);
+        spec.y = UILength::Px(-10.0f);
 
         // The bottom right corner of the element is 12 left of and 10 above the bottom right corner of the parent
         ExpectRect(UILayout::ResolveRect(kParent, spec), 500.0f - 12.0f - 96.0f, 250.0f - 10.0f - 32.0f, 96.0f, 32.0f);
     }
 
+    TEST(UILayoutTest, APercentOffsetIsOfTheParentOnItsOwnAxis) {
+        UIRectSpec spec = Sized(40.0f, 20.0f);
+        spec.anchor = UIAnchor::BottomRight;
+        spec.x = UILength::Percent(-5.0f);
+        spec.y = UILength::Percent(-10.0f);
+
+        // 5 percent of the width 400 is 20 and 10 percent of the height 200 is 20
+        ExpectRect(UILayout::ResolveRect(kParent, spec), 500.0f - 20.0f - 40.0f, 250.0f - 20.0f - 20.0f, 40.0f, 20.0f);
+        ExpectRect(UILayout::ResolveRect({0.0f, 0.0f, 1000.0f, 100.0f}, spec), 1000.0f - 50.0f - 40.0f, 100.0f - 10.0f - 20.0f, 40.0f, 20.0f);
+    }
+
     TEST(UILayoutTest, PercentSizesFollowTheParentOnTheirOwnAxis) {
         UIRectSpec spec;
         spec.anchor = UIAnchor::Top;
-        spec.y = 16.0f;
+        spec.y = UILength::Px(16.0f);
         spec.width = UILength::Percent(90.0f);
         spec.height = UILength::Percent(10.0f);
 
@@ -102,8 +113,8 @@ namespace BECore::Tests {
     TEST(UILayoutTest, StretchIgnoresSizeAndOffset) {
         UIRectSpec spec = Sized(5.0f, 5.0f);
         spec.anchor = UIAnchor::Stretch;
-        spec.x = 99.0f;
-        spec.y = 99.0f;
+        spec.x = UILength::Px(99.0f);
+        spec.y = UILength::Px(99.0f);
 
         ExpectRect(UILayout::ResolveRect(kParent, spec), 100.0f, 50.0f, 400.0f, 200.0f);
     }

@@ -61,7 +61,7 @@ namespace BECore {
             return {area.x + (area.w - width) * 0.5f, area.y + (area.h - height) * 0.5f, width, height};
         }
         const auto [fractionX, fractionY] = AnchorFraction(spec.anchor);
-        return {parent.x + (parent.w - width) * fractionX + spec.x, parent.y + (parent.h - height) * fractionY + spec.y, width, height};
+        return {parent.x + (parent.w - width) * fractionX + spec.x.Resolve(parent.w), parent.y + (parent.h - height) * fractionY + spec.y.Resolve(parent.h), width, height};
     }
 
     void UILayout::LayoutStack(const Rect& parent, const UIStackSpec& stack, eastl::span<const UIRectSpec> children, eastl::vector<Rect>& rects) {

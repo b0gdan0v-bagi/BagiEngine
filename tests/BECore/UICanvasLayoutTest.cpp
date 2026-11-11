@@ -25,8 +25,8 @@ namespace BECore::Tests {
 
         IntrusivePtr<UIElement> AddBox(UIElement& parent, const char* name, float x, float y, float width, float height) {
             auto box = parent.AddChild(PoolString::Intern(name));
-            box->style.rect.x = x;
-            box->style.rect.y = y;
+            box->style.rect.x = UILength::Px(x);
+            box->style.rect.y = UILength::Px(y);
             box->style.rect.width = UILength::Px(width);
             box->style.rect.height = UILength::Px(height);
             return box;
@@ -213,7 +213,7 @@ namespace BECore::Tests {
         UIElementOverride hud;
         hud.element = "Hud"_intern;
         hud.anchor = UIAnchor::Top;
-        hud.x = 0.0f;
+        hud.x = UILength::Px(0.0f);
         hud.width = UILength::Percent(90.0f);
         portrait.overrides.push_back(hud);
         canvas.variants.push_back(portrait);
@@ -237,8 +237,8 @@ namespace BECore::Tests {
         UIElementOverride hud;
         hud.element = "Hud"_intern;
         hud.anchor = UIAnchor::Top;
-        hud.x = 0.0f;
-        hud.y = 16.0f;
+        hud.x = UILength::Px(0.0f);
+        hud.y = UILength::Px(16.0f);
         portrait.overrides.push_back(hud);
         canvas.variants.push_back(portrait);
         auto inView = [](float viewWidth, float viewHeight) {
