@@ -838,3 +838,93 @@ def test_a_run_with_a_pending_tool_call_still_waits(game: Path, fake_claude, tmp
     assert worker.main(["list", "--json", "--claude", str(script)]) == 0
     row = json.loads(capsys.readouterr().out)["workers"][0]
     assert row["waiting"] and row["active"] and not row["endedTurn"]
+
+
+# --- the panel's checks ---------------------------------------------------------------------------------------
+
+
+def commit_file(repo: Path, name: str, text: str, message: str) -> None:
+    (repo / name).write_text(text)
+    run("add", name, cwd=repo)
+    run("commit", "-q", "-m", message, cwd=repo)
+
+
+def test_review_checks_name_conflicts_moved_base_risky_files_and_each_other(game: Path):
+    commit_file(game, "a.txt", "one\n", "a")
+    commit_file(game, "b.txt", "one\n", "b")
+    for branch, text in (("todo/x", "x\n"), ("todo/y", "y\n")):
+        run("switch", "-q", "-c", branch, "main", cwd=game)
+        commit_file(game, "a.txt", text, branch)
+    run("switch", "-q", "-c", "todo/z", "main", cwd=game)
+    commit_file(game, "b.txt", "z\n", "z")
+    run("switch", "-q", "main", cwd=game)
+    commit_file(game, "b.txt", "main\nmore\n", "main moves b")
+    entries = [
+        {"id": i, "status": "review", "local": True, "foreignBase": None, "repo": str(game), "base": "main", "branch": f"todo/{i}"}
+        for i in ("x", "y", "z")
+    ]
+    worker.review_checks(entries)
+    x, y, z = entries
+    assert x["conflicts"] == [] and x["behind"]["count"] == 1 and x["riskFiles"] == []
+    assert [c["id"] for c in x["conflictsWith"]] == ["y"] and x["conflictsWith"][0]["files"] == ["a.txt"]
+    assert [c["id"] for c in y["conflictsWith"]] == ["x"]
+    assert z["conflicts"] == ["b.txt"] and z["riskFiles"] == ["b.txt"] and z["conflictsWith"] == []
+
+
+def test_pending_ask_names_the_tool_call_without_a_result(game: Path, tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    record = {"cwd": str(game), "sessionId": "sess-ask"}
+    path = worker.transcript_of(str(game), "sess-ask")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    done = {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}]}}
+    result = {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}
+    ask = {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t2", "name": "AskUserQuestion", "input": {"questions": [{"question": "Merge it?"}]}}]}}
+    path.write_text("\n".join(json.dumps(r) for r in (done, result, ask)) + "\n")
+    assert worker.pending_ask(record) == {"tool": "AskUserQuestion", "text": "Merge it?"}
+    path.write_text("\n".join(json.dumps(r) for r in (done, result)) + "\n")
+    assert worker.pending_ask(record) is None
+
+
+def test_queue_keeps_an_entry_in_one_worker_and_pops_in_order(game: Path, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    worker.main(["create", "2", "--no-configure"])
+    assert worker.main(["queue", "1", "--add", "a"]) == 0
+    assert worker.main(["queue", "1", "--add", "b"]) == 0
+    assert worker.main(["queue", "2", "--add", "a"]) == 0  # moves from w1 to w2
+    assert worker.main(["queue", "1", "--add", "c", "--first"]) == 0
+    capsys.readouterr()
+    assert worker.main(["queue", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"w1": ["c", "b"], "w2": ["a"]}
+    assert worker.main(["queue", "1", "--pop", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"popped": "c"}
+    assert worker.main(["queue", "3", "--add", "x"]) == 1  # no such worker
+    assert worker.main(["queue", "1", "--add", "no spaces"]) == 1
+
+
+def test_paths_and_plan_files_meet_by_folder():
+    body = "**Where:** `src/Mahjong/Table/TableLayout.{h,cpp}`, `config/nodes/*.xml`, the `--jobs` flag, `README.md`"
+    assert worker.paths_in(body) == {"src/Mahjong/Table/TableLayout", "config/nodes/"}
+    assert worker.overlapping(worker.paths_in(body), {"src/Mahjong/Table/TableLayout.cpp"}) == ["src/Mahjong/Table/TableLayout"]
+    plan = "# x\n\n## Files\n- config/nodes/MahjongHud.xml\n- tests/X.cpp\n\n## Slice\n- not/a/file\n"
+    assert worker.plan_files(plan) == {"config/nodes/MahjongHud.xml", "tests/X.cpp"}
+    assert worker.overlapping({"config/nodes/"}, {"config/nodes/MahjongHud.xml", "tests/X.cpp"}) == ["config/nodes/"]
+    assert worker.overlapping({"src/a.cpp"}, {"src/ab.cpp"}) == []
+
+
+def test_build_info_reads_the_product_and_tests_of_the_rules(game: Path, capsys):
+    rules = game / ".claude" / "rules"
+    rules.mkdir(parents=True)
+    (rules / "build-project.md").write_text("| Field | Meaning | Value here |\n|---|---|---|\n| Product | the exe | `BagiGame` |\n| Tests | gtests | `GameTests`, `MoreTests` |\n")
+    capsys.readouterr()
+    assert worker.main(["build-info", "--json", "--preset", "p1"]) == 0
+    info = json.loads(capsys.readouterr().out)
+    assert info["product"] == "BagiGame" and info["tests"] == ["GameTests", "MoreTests"] and info["exe"] == "build/p1/bin/BagiGame" and info["shots"] is None
+
+
+def test_pointer_state_says_when_the_engine_checkout_moved(game: Path):
+    layout = worker.find_layout(game)
+    before = worker.pointer_state(layout)
+    assert before is not None and not before["moved"]
+    commit_file(game / "engine", "new.txt", "n\n", "engine moves")
+    after = worker.pointer_state(layout)
+    assert after["moved"] and after["checkout"] != after["recorded"]

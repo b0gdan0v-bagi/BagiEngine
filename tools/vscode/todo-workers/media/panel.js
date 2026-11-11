@@ -9,7 +9,7 @@
     const collapsed = new Set(saved.collapsed || []); // worker cards folded to their status lines
 
     function save() {
-        vscode.setState({ openSteps: [...openSteps], collapsed: [...collapsed] });
+        vscode.setState({ openSteps: [...openSteps], collapsed: [...collapsed], feedOpen: saved.feedOpen });
     }
 
     function el(tag, className, text) {
@@ -137,12 +137,46 @@
         return String(model || "?").replace(/^claude-/, "");
     }
 
+    // Dollars at the API list prices of the settings (todoWorkers.prices): the first key that is part of the model id.
+    function priceOf(model) {
+        const prices = payload.prices || {};
+        const key = Object.keys(prices).find((k) => String(model || "").includes(k));
+        return key ? prices[key] : null;
+    }
+
+    function costOf(models) {
+        let sum = 0;
+        let known = false;
+        Object.entries(models || {}).forEach(([model, c]) => {
+            const p = priceOf(model);
+            if (!p) return;
+            known = true;
+            sum += ((c.input || 0) * p.input + (c.output || 0) * p.output + (c.cacheWrite || 0) * p.cacheWrite + (c.cacheRead || 0) * p.cacheRead) / 1e6;
+        });
+        return known ? sum : null;
+    }
+
+    function dollars(n) {
+        return n === null || n === undefined ? "" : n >= 100 ? `$${Math.round(n)}` : `$${n.toFixed(2)}`;
+    }
+
+    function entryCost(id) {
+        const usage = payload.state && payload.state.entryUsage;
+        return usage && usage[id] ? costOf(usage[id]) : null;
+    }
+
     // Tokens: the whole run, the last minutes ("now"), the context of the session, by model.
     function usageBlock(usage, withContext) {
         if (!usage || !usage.total || !usage.total.total) return null;
         const box = el("div", "usage");
         const top = el("div", "usage-top");
         top.append(el("span", "label", "Tokens"), el("span", "big", tokens(usage.total.total)));
+        const cost = costOf(usage.models);
+        if (cost !== null) {
+            const chip = el("span", "big cost", dollars(cost));
+            chip.title = "what these tokens cost at the API list prices (todoWorkers.prices); a subscription bills otherwise";
+            top.append(chip);
+        }
         const recent = usage.recent && usage.recent.total;
         top.append(el("span", `rate${recent ? "" : " muted"}`, `${tokens(recent)} in the last ${usage.recentMinutes} min`));
         box.appendChild(top);
@@ -188,10 +222,23 @@
         card.appendChild(top);
 
         if (entry) card.appendChild(el("div", "title", entry.title));
+        if (worker.queue && worker.queue.length) {
+            const row = el("div", "queue");
+            row.appendChild(el("span", "muted", "next:"));
+            worker.queue.forEach((id) => {
+                const chip = el("span", "chip", id);
+                const x = el("button", "chip-x", "\u00D7");
+                x.title = `take ${id} out of the queue of ${worker.name}`;
+                x.addEventListener("click", () => vscode.postMessage({ cmd: "unqueue", entry: id, worker: worker.k }));
+                chip.appendChild(x);
+                row.appendChild(chip);
+            });
+            card.appendChild(row);
+        }
         if (worker.waiting) {
             const ask = el("div", "ask");
             ask.append(
-                el("span", "", `Waits for your answer: ${(worker.session && worker.session.waitingFor) || "input needed"}`),
+                el("span", "", worker.asking ? `Asks: ${worker.asking.tool}: ${worker.asking.text}` : `Waits for your answer: ${(worker.session && worker.session.waitingFor) || "input needed"}`),
                 button("Answer", { cmd: "attach", worker: worker.k }, "claude attach: open the session and answer its question or permission", "primary")
             );
             card.appendChild(ask);
@@ -270,6 +317,7 @@
         }
         actions.append(button("Folder", { cmd: "folder", worker: worker.k }, "open the worker in a new window"), button("Terminal", { cmd: "terminal", worker: worker.k }));
         if (entry) actions.append(button("Plan", { cmd: "plan", entry: entry.id }, "~/.claude/plans/todo-loop-<branch>.md"));
+        if (entry && entry.branch) actions.append(button("Build & run", { cmd: "run", worker: worker.k }, "configure, build the product and start it in this worker folder (its branch as it is now)"));
         if (worker.session && !worker.limited && worker.session.status !== "busy" && entry && entry.status !== "review")
             actions.append(button("Relaunch", { cmd: "relaunch", worker: worker.k }, "worker.py relaunch <k>: continue this session's conversation in the background (a loop that ended before its entry reached review)"));
         if (worker.active) actions.append(button("Stop", { cmd: "stop", worker: worker.k }, "worker.py stop", true));
@@ -292,6 +340,18 @@
         card.append(top, el("div", "title", entry.title));
         if (entry.statusNote) card.appendChild(el("div", "note", entry.statusNote));
         card.appendChild(head("branch", { branch: entry.branch }));
+        const cost = entryCost(entry.id);
+        if (cost !== null) card.appendChild(el("div", "muted", `cost so far ${dollars(cost)} (every loop session that held it, at API prices)`));
+        // worker.py list --store: what a merge meets (review_checks)
+        if (entry.conflicts && entry.conflicts.length) card.appendChild(el("div", "warn", `conflicts with ${entry.base}: ${entry.conflicts.join(", ")}`));
+        (entry.conflictsWith || []).forEach((c) => card.appendChild(el("div", "warn", `conflicts with ${c.id} (also in review): ${c.files.join(", ")}; the second to merge needs a hand`)));
+        if (entry.behind && entry.behind.count) {
+            const line = el("div", entry.riskFiles && entry.riskFiles.length ? "warn soft" : "muted", `${entry.base} moved ${entry.behind.count} commit${entry.behind.count === 1 ? "" : "s"} since the cut` + (entry.riskFiles && entry.riskFiles.length ? `; they changed ${entry.riskFiles.length} of its files: ${entry.riskFiles.slice(0, 6).join(", ")}${entry.riskFiles.length > 6 ? ", ..." : ""} (no git conflict, but test the merge)` : ""));
+            line.title = entry.behind.subjects.join("\n");
+            card.appendChild(line);
+        }
+        const opens = (entry.blocks || []).filter((b) => b.status !== "closed").map((b) => b.id);
+        if (opens.length) card.appendChild(el("div", "muted", `waiting on it: ${opens.join(", ")}`));
         // the claim stored where the branch was made (todo.py claim --base: takenBase, takenOrigin); older entries have neither
         const taken = [entry.takenOrigin ? `taken in ${entry.takenOrigin}` : "", entry.takenBase ? `base ${entry.takenBase}` : ""].filter(Boolean).join(", ");
         if (taken) card.appendChild(el("div", "muted", taken));
@@ -315,9 +375,12 @@
         const gated = [
             button("Review", { cmd: "review", entry: entry.id }, "the changes of the branch against its base, in one diff editor"),
             button("Review with Claude", { cmd: "claudeReview", entry: entry.id }, "a terminal in the main checkout runs claude with a read-only review of the branch against its base: findings with file:line and a verdict"),
-            button("Quick merge", { cmd: "quickMerge", entry: entry.id }, "worker.py merge: a dialog with the commits, then merge --no-ff, close the entry, delete the branch (and the engine pointer); no build", away ? "" : "primary"),
+            button("Merge + test", { cmd: "mergeTest", entry: entry.id }, "Quick merge, then configure, build and ctest the main checkout in a task terminal; the result lands on the panel", away || (entry.conflicts && entry.conflicts.length) ? "" : "primary"),
+            button("Quick merge", { cmd: "quickMerge", entry: entry.id }, "worker.py merge: a dialog with the commits, then merge --no-ff, close the entry, delete the branch (and the engine pointer); no build"),
+            button("Build & run", { cmd: "run", entry: entry.id }, "configure, build and start the product in the worker folder that holds the branch"),
             button("Merge with Claude", { cmd: "merge", entry: entry.id }, "a terminal in the main checkout runs claude '/todo-merge <branch>': it reports, asks, and builds when the base moved"),
         ];
+        if (payload.shotsTool) gated.push(button("Shots", { cmd: "shots", entry: entry.id }, "screenshots of the branch (its worker) and of the base (the main checkout) with the repository's tools/ui_shots.py, side by side in a tab"));
         if (away) gated.forEach((b) => (b.disabled = true));
         actions.append(...gated, button("Plan", { cmd: "plan", entry: entry.id }));
         card.appendChild(actions);
@@ -354,6 +417,23 @@
         if (!state.sessionsKnown) root.appendChild(el("div", "warn", "claude agents did not answer: set todoWorkers.claude to the full path of claude."));
         if (state.store !== "ok" && state.store !== "off") root.appendChild(el("div", "warn", `todo store: ${state.store}`));
 
+        const p = state.pointer;
+        if (p) {
+            const line = el("div", p.moved ? "warn soft pointer" : "muted pointer");
+            const text = p.moved
+                ? `engine/ at ${p.checkout}${p.branch ? ` (${p.branch})` : ""}, the game records ${p.recorded}: the pointer is not committed`
+                : `engine/ pointer ${p.recorded}${p.ahead && p.ahead.count ? `; ${p.base} is ${p.ahead.count} commit${p.ahead.count === 1 ? "" : "s"} ahead` : `, ${p.base || "its base"} has nothing newer`}`;
+            line.appendChild(el("span", "", text));
+            if (p.ahead && p.ahead.count) line.title = p.ahead.subjects.join("\n");
+            if (p.moved) line.appendChild(button("Commit pointer", { cmd: "commitPointer" }, "one commit of engine/ only in the game: Update engine: <subject>"));
+            root.appendChild(line);
+        }
+        const verify = payload.lastVerify;
+        const check = el("div", verify && !verify.ok ? "warn verify" : "muted verify");
+        check.appendChild(el("span", "", payload.verifying ? "verify runs ..." : verify ? `last verify ${verify.ok ? "green" : "RED"}${verify.about ? ` after ${verify.about}` : ""} at ${verify.head} · ${ago(verify.at)}` : "no verify yet"));
+        check.appendChild(button("Verify", { cmd: "verify" }, "configure, build and ctest the main checkout now"));
+        root.appendChild(check);
+
         const all = usageBlock(state.usage, false);
         if (all) {
             root.appendChild(el("h2", "", "All workers"));
@@ -368,6 +448,23 @@
         root.appendChild(el("h2", "", `Review: ${state.review.length} to merge`));
         if (!state.review.length) root.appendChild(el("p", "muted", "Nothing waits for /todo-merge."));
         state.review.forEach((e) => root.appendChild(reviewCard(e, state)));
+
+        const items = payload.feed || [];
+        const box = el("details", "feed");
+        box.open = saved.feedOpen !== false;
+        box.addEventListener("toggle", () => {
+            saved.feedOpen = box.open;
+            vscode.setState({ ...saved, openSteps: [...openSteps], collapsed: [...collapsed] });
+        });
+        box.appendChild(el("summary", "", `Feed (${items.length})`));
+        items.slice(0, 40).forEach((item) => {
+            const line = el("div", `feed-item ${item.kind}`);
+            line.append(el("span", "time", ago(item.at)), el("span", "kind", item.kind), el("span", "text", item.text));
+            box.appendChild(line);
+        });
+        if (items.length) box.appendChild(button("Clear", { cmd: "clearFeed" }, "forget the feed"));
+        root.appendChild(el("h2", "", "What happened"));
+        root.appendChild(box);
     }
 
     window.addEventListener("message", (event) => {

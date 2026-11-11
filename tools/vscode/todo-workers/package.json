@@ -2,7 +2,7 @@
     "name": "todo-workers",
     "displayName": "Todo Workers",
     "description": "The parallel todo-loop workers of BagiEngine: their sessions, entries and branches, and the entries waiting for /todo-merge.",
-    "version": "0.15.0",
+    "version": "0.16.0",
     "publisher": "bagiengine",
     "license": "UNLICENSED",
     "private": true,
@@ -92,6 +92,52 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Show a notification when an entry reaches review or a worker's session ends."
+                },
+                "todoWorkers.autoStartQueue": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Start the next queued entry of a worker (worker.py queue) as soon as the worker is free: no session running, no uncommitted changes, its entry in review or none."
+                },
+                "todoWorkers.preset": {
+                    "type": "string",
+                    "default": "",
+                    "description": "The configure/build preset of Verify, Merge + test, Build & run and Shots; empty: the debug preset of this platform (worker.py build-info)."
+                },
+                "todoWorkers.prices": {
+                    "type": "object",
+                    "default": {
+                        "fable": {
+                            "input": 8,
+                            "output": 40,
+                            "cacheWrite": 10,
+                            "cacheRead": 0.2
+                        },
+                        "mythos": {
+                            "input": 8,
+                            "output": 40,
+                            "cacheWrite": 10,
+                            "cacheRead": 0.2
+                        },
+                        "opus": {
+                            "input": 4,
+                            "output": 20,
+                            "cacheWrite": 5,
+                            "cacheRead": 0.2
+                        },
+                        "sonnet": {
+                            "input": 2,
+                            "output": 10,
+                            "cacheWrite": 2.5,
+                            "cacheRead": 0.1
+                        },
+                        "haiku": {
+                            "input": 0.1,
+                            "output": 0.5,
+                            "cacheWrite": 0.125,
+                            "cacheRead": 0.01
+                        }
+                    },
+                    "description": "Dollars per million tokens by model family (the first key that is part of a model id): what the panel's costs are counted with. API list prices; a subscription bills otherwise."
                 }
             }
         }

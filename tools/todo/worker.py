@@ -529,7 +529,7 @@ def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
         entries = json.loads(result.stdout or "[]")
     except json.JSONDecodeError as error:
         return [], f"todo.py list: {error}"
-    keep = ("id", "area", "title", "status", "statusNote", "branch", "planProgress")
+    keep = ("id", "area", "title", "status", "statusNote", "branch", "planProgress", "blocks")
     table = {row["area"]: row for row in rule_area_table(layout.main)}
     shown = []
     for entry in entries:
@@ -692,6 +692,7 @@ def merge_plan(layout: Layout, entry_id: str) -> dict:
         "conflicts": conflicts,
         "moved": git("merge-base", base, branch, cwd=repo) != git("rev-parse", base, cwd=repo),
         "reopen": SLICE_REOPEN in (entry.get("statusNote") or ""),
+        "blocks": [b["id"] for b in entry.get("blocks") or [] if isinstance(b, dict) and b.get("status") != "closed"],
         "pointer": layout.shared is not None and repo == layout.shared.resolve(),
         "heldBy": str(held) if held is not None and held.resolve() != repo else None,
         "problems": problems,
@@ -738,6 +739,16 @@ def do_merge(layout: Layout, plan: dict) -> dict:
         if not git_ok("diff", "--cached", "--quiet", "--", SHARED_SUBMODULE, cwd=layout.main):
             git("commit", "-m", f"Update engine: {plan['title']}", "--", SHARED_SUBMODULE, cwd=layout.main)
             result["pointer"] = git("rev-parse", "--short", "HEAD", cwd=layout.main)
+    # the entries this close let go: their last open blocker was this one (only when the entry is closed now)
+    result["unblocked"] = []
+    if result.get("status") == "closed":
+        for other in plan.get("blocks") or []:
+            try:
+                shown = json.loads(todo_cli(layout, "show", other, "--json"))
+            except (WorkerError, ValueError):
+                continue
+            if not shown.get("blocked") and shown.get("status") == "open":
+                result["unblocked"].append({"id": other, "title": shown.get("title")})
     result["notes"] = notes
     return result
 
@@ -1012,11 +1023,331 @@ def session_usage(session: dict | None) -> dict | None:
     }
 
 
+# --- the panel's checks: what a review branch meets, what a session asks, what an entry cost --------------
+#
+# Everything below feeds tools/vscode/todo-workers. Reads only, except the two local files of the panel
+# (the usage ledger and the worker queues), both in ~/.claude/todo/, outside every repository.
+
+REVIEW_SUBJECTS = 8  # the base's commits named for a review branch whose base moved
+POINTER_SUBJECTS = 10  # the commits of the engine's base the game's pointer has not yet
+
+
+def merge_conflicts(repo: Path, ours: str, theirs: str) -> list[str]:
+    """The files `git merge-tree` cannot merge when `theirs` is merged into `ours` (empty: a clean merge)."""
+    tree = subprocess.run(["git", "merge-tree", "--write-tree", "--name-only", ours, theirs], cwd=repo, capture_output=True, text=True)
+    if tree.returncode == 0:
+        return []
+    files = []
+    for line in tree.stdout.splitlines()[1:]:
+        if not line.strip():
+            break
+        files.append(line.strip())
+    return files or [(tree.stderr or tree.stdout).strip() or "git merge-tree failed"]
+
+
+def changed_files(repo: Path, since: str, until: str) -> set[str]:
+    return {line for line in git("diff", "--name-only", since, until, cwd=repo, check=False).splitlines() if line}
+
+
+def review_checks(entries: list[dict]) -> None:
+    """For every local entry in review, in place: `conflicts` with its base, `behind` (commits of the base since
+    the branch was cut, with their subjects), `riskFiles` (files those commits changed that the branch changes
+    too: no conflict for git, but the place a merge breaks), and `conflictsWith` the other review branches of the
+    same repository (merging one first makes the other conflict)."""
+    local = [e for e in entries if e.get("status") == "review" and e.get("local") and not e.get("foreignBase") and e.get("repo") and e.get("branch")]
+    for entry in local:
+        repo, base, branch = Path(entry["repo"]), entry["base"], entry["branch"]
+        shared = git("merge-base", base, branch, cwd=repo, check=False)
+        entry["conflicts"] = merge_conflicts(repo, base, branch)
+        behind = git("log", "--format=%h %s", f"{shared}..{base}", cwd=repo, check=False).splitlines() if shared else []
+        entry["behind"] = {"count": len(behind), "subjects": behind[:REVIEW_SUBJECTS]}
+        entry["riskFiles"] = sorted(changed_files(repo, shared, base) & changed_files(repo, shared, branch)) if shared and behind else []
+        entry["conflictsWith"] = []
+    for i, first in enumerate(local):
+        for second in local[i + 1 :]:
+            if first["repo"] != second["repo"]:
+                continue
+            files = merge_conflicts(Path(first["repo"]), first["branch"], second["branch"])
+            if files:
+                first["conflictsWith"].append({"id": second["id"], "files": files})
+                second["conflictsWith"].append({"id": first["id"], "files": files})
+
+
+def pending_ask(session: dict | None) -> dict | None:
+    """What a waiting session asks: the tool call of its last answer that has no result yet (a permission, or the
+    questions of `AskUserQuestion`), as `{"tool", "text"}`; None when nothing is pending."""
+    if not session or not session.get("cwd") or not session.get("sessionId"):
+        return None
+    answered: set[str] = set()
+    for record in reversed(tail_records(transcript_of(session["cwd"], session["sessionId"]))):
+        content = (record.get("message") or {}).get("content")
+        parts = content if isinstance(content, list) else []
+        if record.get("type") == "user":
+            answered |= {str(p.get("tool_use_id")) for p in parts if isinstance(p, dict) and p.get("type") == "tool_result"}
+            continue
+        if record.get("type") != "assistant":
+            continue
+        for part in reversed(parts):
+            if not isinstance(part, dict) or part.get("type") != "tool_use" or str(part.get("id")) in answered:
+                continue
+            given = part.get("input") if isinstance(part.get("input"), dict) else {}
+            name = str(part.get("name"))
+            if name == "AskUserQuestion":
+                questions = [str(q.get("question", "")) for q in given.get("questions", []) if isinstance(q, dict)]
+                return {"tool": name, "text": one_line(" / ".join(q for q in questions if q), 400)}
+            return {"tool": name, "text": tool_text(name, given)}
+        return None
+    return None
+
+
+def ledger_file() -> Path:
+    """The tokens of every loop session by entry: `{session id: {entry, worker, models, updated}}`. A session is
+    counted for the entry its worker held when the panel last saw it (a loop of N slices: the last one)."""
+    return claude_home() / "todo" / "usage-ledger.json"
+
+
+LEDGER_KEEP = 500
+
+
+def update_ledger(workers: list[dict]) -> dict[str, dict]:
+    """Write the usage of the sessions that hold an entry now into the ledger and return the tokens by entry and
+    model: `{entry id: {model: counts}}`. A ledger that cannot be read or written only loses the history."""
+    path = ledger_file()
+    try:
+        ledger = json.loads(path.read_text())
+        ledger = ledger if isinstance(ledger, dict) else {}
+    except (OSError, ValueError):
+        ledger = {}
+    changed = False
+    for row in workers:
+        session, usage, entry = row.get("session"), row.get("usage"), row.get("entry")
+        ident = session and session.get("id")
+        if not ident or not usage or not entry:
+            continue
+        ledger[str(ident)] = {"entry": entry["id"], "worker": row["name"], "models": usage.get("models") or {}, "updated": int(time.time() * 1000)}
+        changed = True
+    if changed:
+        newest = dict(sorted(ledger.items(), key=lambda kv: kv[1].get("updated", 0) if isinstance(kv[1], dict) else 0)[-LEDGER_KEEP:])
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text(json.dumps(newest))
+            temporary.replace(path)
+        except OSError:
+            pass
+        ledger = newest
+    by_entry: dict[str, dict] = {}
+    for record in ledger.values():
+        if not isinstance(record, dict) or not record.get("entry"):
+            continue
+        models = by_entry.setdefault(record["entry"], {})
+        for model, counts in (record.get("models") or {}).items():
+            add_counts(models.setdefault(model, {}), counts)
+    return by_entry
+
+
+def pointer_state(layout: Layout) -> dict | None:
+    """In a game: where the pointer of `engine/` stands against the engine's checkout and its base branch.
+    `recorded` (the commit of HEAD), `checkout` (engine/'s HEAD), `branch`, `base`, `moved` (the checkout is not
+    the recorded commit: `git status` shows engine modified), `ahead` (commits of the base the pointer has not,
+    with subjects). None outside a game."""
+    if layout.shared is None:
+        return None
+    engine = layout.main / SHARED_SUBMODULE
+    tree = git("ls-tree", "HEAD", SHARED_SUBMODULE, cwd=layout.main, check=False).split()
+    recorded = tree[2] if len(tree) >= 3 else ""
+    checkout = git("rev-parse", "HEAD", cwd=engine, check=False)
+    row = next((r for r in rule_area_table(layout.main) if (layout.main / r["repo"]).resolve() == engine.resolve()), None)
+    base = row["base"] if row else None
+    ahead = git("log", "--format=%h %s", f"{recorded}..{base}", cwd=engine, check=False).splitlines() if base and recorded else []
+    return {
+        "recorded": recorded[:9],
+        "checkout": checkout[:9],
+        "branch": git("symbolic-ref", "--quiet", "--short", "HEAD", cwd=engine, check=False) or None,
+        "base": base,
+        "moved": bool(recorded) and checkout != recorded,
+        "ahead": {"count": len(ahead), "subjects": ahead[:POINTER_SUBJECTS]},
+    }
+
+
+def queue_file() -> Path:
+    """The entries the panel starts next in each worker: `{"<root>": {"w1": [ids]}}`, by the workers' root."""
+    return claude_home() / "todo" / "worker-queues.json"
+
+
+def read_queues(layout: Layout) -> dict[str, list[str]]:
+    try:
+        data = json.loads(queue_file().read_text())
+    except (OSError, ValueError):
+        return {}
+    mine = data.get(str(layout.root)) if isinstance(data, dict) else None
+    return {k: [str(i) for i in v] for k, v in mine.items() if isinstance(v, list)} if isinstance(mine, dict) else {}
+
+
+def write_queues(layout: Layout, queues: dict[str, list[str]]) -> None:
+    path = queue_file()
+    try:
+        data = json.loads(path.read_text())
+        data = data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        data = {}
+    data[str(layout.root)] = {k: v for k, v in queues.items() if v}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(data, indent=1))
+    temporary.replace(path)
+
+
+def cmd_queue(layout: Layout, args) -> None:
+    """`queue` (all), `queue <k> --add <id> [--first]`, `queue <k> --remove <id>`, `queue <k> --pop`, `queue <k> --clear`."""
+    queues = read_queues(layout)
+    names = {f"{WORKER_PREFIX}{k}" for k, _path in layout.workers()}
+    if args.k is not None:
+        name = f"{WORKER_PREFIX}{args.k}"
+        if name not in names:
+            raise WorkerError(f"no worker {name} in {layout.root}")
+        items = queues.get(name, [])
+        popped = None
+        if args.add:
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", args.add):
+                raise WorkerError(f"not an entry id: {args.add}")
+            for other in queues.values():
+                if args.add in other:
+                    other.remove(args.add)  # an entry waits in one queue only
+            items = queues.get(name, [])
+            items.insert(0, args.add) if args.first else items.append(args.add)
+        if args.remove and args.remove in items:
+            items.remove(args.remove)
+        if args.pop and items:
+            popped = items.pop(0)
+        if args.clear:
+            items = []
+        queues[name] = items
+        if args.add or args.remove or args.pop or args.clear:
+            write_queues(layout, queues)
+        if args.pop:
+            print(json.dumps({"popped": popped}) if args.json else (popped or ""))
+            return
+    shown = {name: queues.get(name, []) for name in sorted(names)}
+    if args.json:
+        print(json.dumps(shown))
+        return
+    for name, items in shown.items():
+        print(f"{name}: {' '.join(items) if items else '(empty)'}")
+
+
+PATH_IN_TEXT = re.compile(r"`([A-Za-z0-9_.\-/]+/[A-Za-z0-9_.\-/{},*]*|[A-Za-z0-9_\-/]+\.[A-Za-z]{1,5})`")
+
+
+def paths_in(text: str) -> set[str]:
+    """The repository paths an entry or a plan names in code spans (`src/Mahjong/Table/`, `config/nodes/X.xml`),
+    with a brace list split and a glob or a `{h,cpp}` cut to its folder."""
+    found = set()
+    for match in PATH_IN_TEXT.findall(text or ""):
+        path = match.split("{")[0].split("*")[0].rstrip(".")
+        if path and "/" in path:
+            found.add(path)
+    return found
+
+
+def plan_files(text: str) -> set[str]:
+    """The `## Files` section of a slice plan (`- <path>` lines)."""
+    section = re.search(r"^## Files[ \t]*$(.*?)(?=^## |\Z)", text or "", re.M | re.S)
+    if not section:
+        return set()
+    return {m.strip().strip("`") for m in re.findall(r"^\s*-\s+(\S+)", section.group(1), re.M)}
+
+
+def overlapping(ours: set[str], theirs: set[str]) -> list[str]:
+    """The paths of `ours` that are one of `theirs`, inside one of them or hold one (a folder and its file, a stem and its file)."""
+    def meets(a: str, b: str) -> bool:
+        a, b = a.rstrip("/"), b.rstrip("/")
+        # a folder holds its files; a stem (`TableLayout` of `TableLayout.{h,cpp}`) holds its extensions
+        return a == b or any(x.startswith(y + sep) for x, y in ((a, b), (b, a)) for sep in ("/", "."))
+    return sorted({a for a in ours for b in theirs if meets(a, b)})
+
+
+def cmd_overlap(layout: Layout, args) -> None:
+    """The busy entries (in progress, in review) whose slice plans name files the entry `id` names: what a loop
+    on `id` would meet. The entry's paths come from its text (its classifier is not run here), so it is a hint."""
+    entry = json.loads(todo_cli(layout, "show", args.id, "--json"))
+    ours = paths_in(entry.get("body") or "")
+    busy, _error = store_entries(layout)
+    found = []
+    for other in busy:
+        if other["id"] == args.id or not other.get("branch"):
+            continue
+        try:
+            text = todo_cli(layout, "plan", "get", f"todo-loop-{other['branch'].removeprefix('todo/')}.md", "--stdout")
+        except WorkerError:
+            continue
+        shared = overlapping(ours, plan_files(text))
+        if shared:
+            found.append({"id": other["id"], "status": other["status"], "files": shared})
+    result = {"id": args.id, "paths": sorted(ours), "overlaps": found}
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False))
+        return
+    for item in found:
+        print(f"{item['id']} ({item['status']}): {', '.join(item['files'])}")
+    if not found:
+        print(f"{args.id}: no busy entry names its files ({len(ours)} paths in its text)")
+
+
+BUILD_RULES = Path(".claude") / "rules" / "build-project.md"
+
+
+def build_field(text: str, field: str) -> list[str]:
+    """The code spans of the value cell of a `| Field | Meaning | Value |` row of build-project.md."""
+    for line in text.splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) >= 3 and cells[0] == field:
+            return re.findall(r"`([^`]+)`", cells[-1])
+    return []
+
+
+def default_preset(main: Path) -> str | None:
+    """The debug preset of this platform among `cmake --list-presets` (no web, editor or RmlUi variant)."""
+    platform = {"darwin": "macos", "win32": "windows"}.get(sys.platform, "linux")
+    try:
+        listed = subprocess.run(["cmake", "--list-presets"], cwd=main, capture_output=True, text=True, timeout=30).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return DEFAULT_PRESETS.get(sys.platform)
+    names = re.findall(r'^\s*"([^"]+)"', listed, re.M)
+    for name in names:
+        if platform in name and "debug" in name and not any(word in name for word in ("web", "editor", "rmlui")):
+            return name
+    return DEFAULT_PRESETS.get(sys.platform)
+
+
+def cmd_build_info(layout: Layout, args) -> None:
+    """What the panel builds and runs for a branch: the product, the test targets, the preset and, when the
+    repository has it, the screenshot tool (`tools/ui_shots.py`, which takes --exe, --label and --out)."""
+    try:
+        text = (layout.main / BUILD_RULES).read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    preset = args.preset or default_preset(layout.main)
+    product = (build_field(text, "Product") or [None])[0]
+    shots = layout.main / "tools" / "ui_shots.py"
+    info = {
+        "preset": preset,
+        "product": product,
+        "tests": build_field(text, "Tests"),
+        "exe": f"build/{preset}/bin/{product}" if preset and product else None,
+        "shots": "tools/ui_shots.py" if shots.is_file() else None,
+    }
+    print(json.dumps(info) if args.json else "\n".join(f"{k}: {v}" for k, v in info.items()))
+
+
 def list_json(layout: Layout, args) -> dict:
     """What `list --json` prints: the workers, their sessions and entries, and the entries in review
     (the VS Code panel of tools/vscode/todo-workers reads it)."""
     sessions = list_sessions(args.claude)
     entries, store_error = store_entries(layout) if args.store else ([], None)
+    if args.store:
+        review_checks(entries)
+    queues = read_queues(layout)
     by_branch = {entry["branch"]: entry for entry in entries if entry.get("branch")}
     workers = []
     for k, path in layout.workers():
@@ -1036,21 +1367,30 @@ def list_json(layout: Layout, args) -> dict:
             "session": None if session is None else {key: session.get(key) for key in ("id", "name", "state", "status", "waitingFor", "startedAt")},
             "active": is_running(session),
             "waiting": waits_for_owner(session) and limited is None,
+            "asking": pending_ask(session) if waits_for_owner(session) and limited is None else None,
             "endedTurn": is_waiting(session) and limited is None and turn_ended(session),
             "limited": limited,
             "stopped": stopped_at(session),
             "activity": session_activity(session) if args.activity else None,
             "usage": session_usage(session) if args.usage else None,
             "entry": entry,
+            "queue": queues.get(f"{WORKER_PREFIX}{k}", []),
         })
+    entry_usage = update_ledger(workers) if args.usage else {}
     usage: dict = {}
     recent: dict = {}
+    models: dict[str, dict] = {}
     for row in workers:
         if row["usage"]:
             add_counts(usage, row["usage"]["total"])
             add_counts(recent, row["usage"]["recent"])
+            for model, counts in (row["usage"].get("models") or {}).items():
+                add_counts(models.setdefault(model, {}), counts)
     return {
-        "usage": {"total": usage, "recent": recent, "recentMinutes": USAGE_RECENT_MINUTES} if args.usage else None,
+        "usage": {"total": usage, "recent": recent, "models": models, "recentMinutes": USAGE_RECENT_MINUTES} if args.usage else None,
+        # the tokens of every entry by model, over every loop session that held it (update_ledger)
+        "entryUsage": entry_usage if args.usage else None,
+        "pointer": pointer_state(layout),
         "main": str(layout.main),
         "root": str(layout.root),
         "sessionsKnown": sessions is not None,
@@ -1419,6 +1759,20 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("k", type=int)
         p.add_argument("--claude", default="claude", help="the command (default claude)")
         p.add_argument("--print", dest="print_only", action="store_true", help="only print the command")
+    p = sub.add_parser("queue", help="the entries the VS Code panel starts next in each worker (a local file, ~/.claude/todo/worker-queues.json)")
+    p.add_argument("k", nargs="?", type=int, help="the worker (default: show every queue)")
+    p.add_argument("--add", help="put this entry at the end (taken out of any other queue)")
+    p.add_argument("--first", action="store_true", help="with --add: at the front")
+    p.add_argument("--remove", help="take this entry out")
+    p.add_argument("--pop", action="store_true", help="take the first entry out and print it")
+    p.add_argument("--clear", action="store_true", help="empty the queue")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("overlap", help="the busy entries whose slice plans name files the entry names (a hint before a start)")
+    p.add_argument("id")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("build-info", help="the product, tests, preset and screenshot tool of this checkout (for the panel)")
+    p.add_argument("--preset", help="this preset instead of the platform's debug one")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("stop", help="stop the background sessions of the workers")
     p.add_argument("workers", nargs="*", type=int, help="the workers (default: all)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
@@ -1433,7 +1787,7 @@ def main(argv: list[str] | None = None) -> int:
     args.rest = rest
     try:
         layout = find_layout(Path.cwd())
-        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session}
+        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session, "queue": cmd_queue, "overlap": cmd_overlap, "build-info": cmd_build_info}
         commands[args.command](layout, args)
     except WorkerError as error:
         print(f"error: {error}", file=sys.stderr)

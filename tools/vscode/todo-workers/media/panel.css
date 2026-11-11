@@ -206,3 +206,17 @@ button.danger { color: var(--vscode-errorForeground, #f14c4c); }
     line-height: 18px;
     background: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.15));
 }
+
+.big.cost { color: var(--vscode-charts-green, #388a34); }
+.queue { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 4px 0; font-size: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 2px; padding: 0 2px 0 6px; border-radius: 9px; background: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.15)); }
+.chip-x { padding: 0 4px; background: transparent; }
+.warn.soft { opacity: 0.9; }
+.pointer, .verify { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; font-size: 12px; }
+.feed { font-size: 12px; }
+.feed summary { cursor: pointer; }
+.feed-item { display: flex; gap: 6px; padding: 2px 0; }
+.feed-item .kind { font-weight: 600; min-width: 64px; }
+.feed-item .text { word-break: break-word; }
+.feed-item.broken .kind, .feed-item.error .kind, .feed-item.waiting .kind { color: var(--vscode-errorForeground, #f14c4c); }
+.feed-item.verified .kind, .feed-item.merged .kind { color: var(--vscode-charts-green, #388a34); }

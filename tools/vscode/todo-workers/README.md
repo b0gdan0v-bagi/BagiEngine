@@ -12,6 +12,19 @@ A panel for the parallel `todo-loop` workers (`tools/todo/worker.py`, "Workers" 
 - **collapse**: the arrow left of a worker's name folds its card to a few lines (the name, the entry and the badge, the title, the review note or the plan bar, the last thing the loop said in two lines); the toolbar's **Collapse all** / **Expand all** fold every card; the choice is kept while the panel lives;
 - buttons: **Attach** (`claude attach <session id>`; **Answer** takes its place while the session waits), **Log** (`claude logs`), **Folder** (a new window), **Terminal**, **Plan** (`~/.claude/plans/todo-loop-<branch-id>.md`), **Stop** (`worker.py stop <k>`, after a question, while the session runs); while it does not: **Update** (`worker.py update <k>`: the game and `engine/` detached at the tips of their base branches, as the loop's "go to the base"; the branch it held is kept; refused with uncommitted changes) and **Fast start** (`worker.py start <k>` at once: `/todo-loop` with the settings `todoWorkers.startSlices`, `todoWorkers.loopArgs` and `todoWorkers.reportTo`).
 
+Added in 0.16 (the data from `worker.py`, the actions in the panel):
+
+- **What a merge meets** (`list --store`: `conflicts`, `behind`, `riskFiles`, `conflictsWith`): a review card names the files that conflict with the base, the other review branches it conflicts with (merging one first makes the other need a hand), how far the base moved since the cut and which of the branch's files those commits changed (no git conflict, but where a merge breaks), and the entries that wait on it.
+- **Merge + test**: Quick merge, then `cmake --preset`, the build of the product and the tests and `ctest` in the main checkout as a VS Code task; the result (green or red, at which commit) stays on the panel and in the feed. **Verify** runs the same at any time. The preset and targets: `worker.py build-info` (the platform's debug preset, `Product` and `Tests` of `.claude/rules/build-project.md`; `todoWorkers.preset` overrides).
+- **Unblocked**: after a merge that closes an entry, the entries whose last open blocker it was (`merge --json`: `unblocked`) come in a notification with **Start** (a free worker) and **Queue**.
+- **Queues** (`worker.py queue`, `~/.claude/todo/worker-queues.json`): **Queue for worker** in the Todo list puts an open entry in a worker's queue; the card shows it (× takes it out), and the panel starts the next one as soon as the worker is free (no session, clean, its entry in review or none; `todoWorkers.autoStartQueue`). Queueing and **Attach to free worker** first show the busy entries whose slice plans name files the entry names (`worker.py overlap`, a hint from the entry's text).
+- **What it asks**: a waiting card shows the pending tool call (the command of a permission, the questions of `AskUserQuestion`; `list`: `asking`).
+- **Feed** ("What happened", kept across reloads): reached review, waits, limit, ended, merged, unblocked, verify green or red, queued and started, pointer commits. The loops' reports land here even when `reportTo` names no session.
+- **Build & run** (worker and review cards): configure, build and start the product in the worker folder that holds the branch. The window has the engine's size (no command line option sets another yet).
+- **Shots** (review cards, when the repository has `tools/ui_shots.py`): the tool on the branch (its worker) and on the base (the main checkout) into `~/.claude/plans/review-shots/<id>/{after,before}`, then a tab with the pictures side by side.
+- **Dollars**: tokens priced with `todoWorkers.prices` (API list prices by model family; a subscription bills otherwise) on every usage block, and per entry over every loop session that held it (`~/.claude/todo/usage-ledger.json`; `list --usage`: `entryUsage`).
+- **The engine pointer** (in a game; `list`: `pointer`): the recorded commit against `engine/`'s checkout and its base, and **Commit pointer** (one commit of `engine/` only, `Update engine: <subject>`, after a confirmation) when they differ.
+
 Below them the entries in `review` of the areas of `.claude/rules/todo-project.md` (other games' entries in the store are left out), with:
 
 - **Review**: the changes of the branch against the point where it left its base, every file in one multi-diff editor (a terminal with `git diff --stat` when the editor cannot show it);
@@ -35,7 +48,7 @@ No npm: the packer uses the standard library.
 
 ```bash
 python3 tools/vscode/todo-workers/pack.py        # in a game: engine/tools/vscode/todo-workers/pack.py
-code --install-extension tools/vscode/todo-workers/build/todo-workers-0.15.0.vsix
+code --install-extension tools/vscode/todo-workers/build/todo-workers-0.16.0.vsix
 ```
 
 `code` is in `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/` on macOS when it is not on PATH. Then **Developer: Reload Window**. After a change bump `version` in `package.json`, pack and install again.

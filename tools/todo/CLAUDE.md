@@ -82,6 +82,9 @@ python3 tools/todo/worker.py relaunch [k]  # resume sessions stopped by the usag
 python3 tools/todo/worker.py merge <id> [--dry-run]  # quick merge of an entry in review
 python3 tools/todo/worker.py update [k ...]          # detach an idle worker at the tips of its base branches
 python3 tools/todo/worker.py remove 3      # a clean folder; its branches stay
+python3 tools/todo/worker.py queue [k] [--add id [--first] | --remove id | --pop | --clear]  # the panel's next entries per worker
+python3 tools/todo/worker.py overlap <id>  # busy entries whose slice plans name files the entry names (a hint)
+python3 tools/todo/worker.py build-info    # preset, product, tests, screenshot tool (the panel's Verify, Build & run, Shots)
 ```
 
 - **Worktrees, not clones:** one shared `.git`, so a worker's branch is at once in the main checkout (tried and merged there, no `fetch`) and in the other workers. A worker starts detached at the base, because the main checkout holds the base branch.
@@ -93,6 +96,7 @@ python3 tools/todo/worker.py remove 3      # a clean folder; its branches stay
 - **Branches of another checkout:** branches are never pushed, so an entry is reviewed and merged only where it was taken. `claim --base` stores `base` and `origin`; `list --store` marks entries whose branch is not here (`local` false) or was cut from another base (`foreignBase`), and the panel and `merge` refuse them.
 - **Update** detaches every area repository of an idle, clean worker at its base tip; it never builds and never runs `git submodule update`.
 - **Removing:** `remove` deletes a clean folder and prunes the worktrees of both repositories.
+- **The panel's files** (outside every repository, in `~/.claude/todo/`): `worker-queues.json` (by the workers' root) and `usage-ledger.json` (the tokens of each loop session by the entry its worker held, so an entry's cost survives its sessions). `list --store` also checks each local review branch (`merge-tree` against the base and the other review branches, the base's commits since the cut and the files both changed), and `list` names the pending tool call of a waiting session (`asking`) and the engine pointer's state (`pointer`).
 
 ## Railway
 

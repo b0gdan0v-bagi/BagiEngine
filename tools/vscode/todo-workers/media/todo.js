@@ -173,7 +173,17 @@
             top.insertBefore(badge, top.lastChild);
         }
         if (away) item.appendChild(el("div", "note", "its branch lives in another checkout or on another machine (or was cut from another base): review, merge and continue it there"));
-        else if (!holder && (entry.status === "open" || entry.status === "in progress")) item.appendChild(el("div", "actions")).appendChild(startButton(entry));
+        else if (!holder && (entry.status === "open" || entry.status === "in progress")) {
+            const actions = item.appendChild(el("div", "actions"));
+            actions.appendChild(startButton(entry));
+            const queued = (payload.workers || []).find((w) => (w.queue || []).includes(entry.id));
+            if (queued) {
+                top.insertBefore(el("span", "badge queued", `queued in ${queued.name}`), top.lastChild);
+                actions.appendChild(button("Unqueue", { cmd: "unqueue", entry: entry.id, worker: queued.k }, `take it out of the queue of ${queued.name}`));
+            } else if (entry.status === "open") {
+                actions.appendChild(button("Queue for worker", { cmd: "queue", entry: entry.id }, "the panel starts it in the worker you pick as soon as that worker is free (its loop ended, or its entry reached review); a check for busy entries that name the same files comes first"));
+            }
+        }
 
         if (open.has(entry.id)) {
             if (taken && (entry.status === "in progress" || entry.status === "review")) item.appendChild(el("div", "muted", taken));

@@ -31,8 +31,26 @@ function config() {
         startSlices: Math.max(1, Math.floor(c.get("startSlices", 1))),
         loopArgs: c.get("loopArgs", ""),
         reportTo: c.get("reportTo", ""),
+        autoStartQueue: c.get("autoStartQueue", true),
+        preset: c.get("preset", ""),
+        prices: c.get("prices", DEFAULT_PRICES),
     };
 }
+
+// API list prices in dollars per million tokens (cache write: the 5-minute write, 1.25 x input). The first key that is
+// part of a model id wins. A plan's subscription bills otherwise: the panel's dollars are what the same tokens cost on the API.
+const DEFAULT_PRICES = {
+    fable: { input: 8, output: 40, cacheWrite: 10, cacheRead: 0.2 },
+    mythos: { input: 8, output: 40, cacheWrite: 10, cacheRead: 0.2 },
+    opus: { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
+    sonnet: { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.1 },
+    haiku: { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01 },
+};
+
+const FEED_KEY = "todoWorkers.feed";
+const FEED_KEEP = 200;
+const VERIFY_KEY = "todoWorkers.lastVerify";
+const SHOTS_ROOT = path.join(os.homedir(), ".claude", "plans", "review-shots"); // outside every work tree (ui_shots.py refuses one)
 
 // VS Code started from the Dock does not see the PATH of a login shell, where `claude` usually is.
 function toolEnv() {
@@ -178,6 +196,259 @@ function activate(context) {
     const workerOf = (k) => state && state.workers.find((w) => w.k === k);
     const entryOf = (id) => state && [...state.review, ...state.workers.map((w) => w.entry)].find((e) => e && e.id === id);
 
+    // --- the feed: what happened, kept across reloads (the loops' reports land here, not in a session) ---------
+    function feed() {
+        return context.globalState.get(FEED_KEY, []);
+    }
+
+    function addFeed(kind, text, extra) {
+        const items = [{ at: Date.now(), kind, text, ...(extra || {}) }, ...feed()].slice(0, FEED_KEEP);
+        context.globalState.update(FEED_KEY, items);
+        if (state) view.show({ ...view.payload, feed: items });
+    }
+
+    // --- build info and tasks ---------------------------------------------------------------------------------
+    let buildInfo = null; // worker.py build-info: preset, product, tests, exe, shots
+    async function getBuildInfo() {
+        const tool = findTool();
+        if (!tool) return null;
+        if (buildInfo && buildInfo.forPreset === config().preset) return buildInfo;
+        const args = ["build-info", "--json", ...(config().preset ? ["--preset", config().preset] : [])];
+        try {
+            buildInfo = { ...JSON.parse(await runTool(tool, args, 60000)), forPreset: config().preset };
+        } catch (error) {
+            // remembered, so the refresh timer does not ask (and complain) every time; a change of the preset asks again
+            vscode.window.showErrorMessage(`worker.py build-info: ${error.message}`);
+            buildInfo = { forPreset: config().preset, error: error.message };
+        }
+        return buildInfo;
+    }
+
+    // A shell command as a VS Code task (its own terminal, the problem matchers of none); resolves to the exit code.
+    function runTask(name, cwd, command) {
+        return new Promise((resolve) => {
+            const task = new vscode.Task({ type: "todoWorkers", name }, vscode.TaskScope.Workspace, name, "todo", new vscode.ShellExecution(command, { cwd, env: { PATH: toolEnv().PATH } }));
+            task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, panel: vscode.TaskPanelKind.Dedicated, clear: true };
+            let execution = null;
+            const done = vscode.tasks.onDidEndTaskProcess((event) => {
+                if (execution && event.execution === execution) {
+                    done.dispose();
+                    resolve(event.exitCode === undefined ? -1 : event.exitCode);
+                }
+            });
+            vscode.tasks.executeTask(task).then(
+                (started) => (execution = started),
+                (error) => {
+                    done.dispose();
+                    vscode.window.showErrorMessage(`${name}: ${error.message}`);
+                    resolve(-1);
+                }
+            );
+        });
+    }
+
+    const q = shellQuote;
+    function buildCommand(info, targets) {
+        return `cmake --preset ${q(info.preset)} && cmake --build --preset ${q(info.preset)} --target ${targets.map(q).join(" ")}`;
+    }
+
+    // Verify: configure, build the product and the tests, ctest, in the main checkout (where a merge lands).
+    let verifying = false;
+    async function verifyMain(about) {
+        const tool = findTool();
+        const info = await getBuildInfo();
+        if (!tool || !info || !info.preset || !info.product) {
+            vscode.window.showWarningMessage("Verify: no preset or product (worker.py build-info; the Product field of .claude/rules/build-project.md)");
+            return;
+        }
+        if (verifying) return;
+        verifying = true;
+        const label = about ? `after ${about}` : "of the main checkout";
+        const head = (await runGit(tool.cwd, ["rev-parse", "--short", "HEAD"]).catch(() => "?")).trim();
+        view.show({ ...view.payload, verifying: label });
+        try {
+            const code = await runTask(`verify ${label}`, tool.cwd, `${buildCommand(info, [info.product, ...info.tests])} && ctest --preset ${q(info.preset)} -j 8`);
+            const result = { at: Date.now(), ok: code === 0, code, head, about: about || null, preset: info.preset };
+            await context.globalState.update(VERIFY_KEY, result);
+            addFeed(result.ok ? "verified" : "broken", `${result.ok ? "build and ctest green" : `build or ctest failed (exit ${code})`} ${label} at ${head}`, { entry: about || null });
+            if (result.ok) vscode.window.showInformationMessage(`Verify ${label}: build and ctest green (${head})`);
+            else vscode.window.showErrorMessage(`Verify ${label}: failed (exit ${code}, ${head}); the merge commit is local: fix it or reset it yourself`, "Show task").then((pick) => pick && vscode.commands.executeCommand("workbench.action.tasks.showTasks"));
+        } finally {
+            verifying = false;
+            view.show({ ...view.payload, verifying: null, lastVerify: context.globalState.get(VERIFY_KEY, null) });
+        }
+    }
+
+    // Build & run: the product built and started in the worker folder that holds the branch.
+    function holderOf(entry) {
+        return state && entry && state.workers.find((w) => [w.head, w.engine].some((h) => h && h.branch === entry.branch));
+    }
+
+    async function runBranch(entry, worker) {
+        const info = await getBuildInfo();
+        const where = worker || holderOf(entry);
+        if (!info || !info.exe) {
+            vscode.window.showWarningMessage("Build & run: no preset or product (worker.py build-info)");
+            return;
+        }
+        if (!where) {
+            vscode.window.showWarningMessage(`${entry ? entry.branch : "the branch"} is checked out in no worker folder: switch a free worker to it, or try it in the main checkout yourself`);
+            return;
+        }
+        const terminal = vscode.window.createTerminal({ name: `run ${entry ? entry.id : where.name}`, cwd: where.path, env: { PATH: toolEnv().PATH } });
+        terminal.show();
+        terminal.sendText(`${buildCommand(info, [info.product])} && ./${info.exe}`);
+        addFeed("run", `build & run of ${entry ? entry.id : where.name} in ${where.name}`, { entry: entry ? entry.id : null });
+    }
+
+    // Shots: the screenshot tool of the repository (tools/ui_shots.py) on the branch (its worker) and on the base
+    // (the main checkout), into ~/.claude/plans/review-shots/<id>/{after,before}, then a tab that shows them side by side.
+    async function shots(entry) {
+        const tool = findTool();
+        const info = await getBuildInfo();
+        const where = holderOf(entry);
+        if (!tool || !info || !info.shots || !info.exe) {
+            vscode.window.showWarningMessage("Shots: this repository has no tools/ui_shots.py (or no product)");
+            return;
+        }
+        if (!where) {
+            vscode.window.showWarningMessage(`${entry.branch} is checked out in no worker folder: the after shots need it built somewhere`);
+            return;
+        }
+        const out = path.join(SHOTS_ROOT, entry.id);
+        const shoot = (cwd, label) => `(cd ${q(cwd)} && ${buildCommand(info, [info.product])} && python3 ${q(info.shots)} --exe ${q(info.exe)} --label ${label} --out ${q(out)})`;
+        addFeed("shots", `screenshots of ${entry.id}: building the branch in ${where.name} and the base in the main checkout`, { entry: entry.id });
+        const code = await runTask(`shots ${entry.id}`, tool.cwd, `rm -rf ${q(out)} && ${shoot(where.path, "after")} && ${shoot(tool.cwd, "before")}`);
+        if (code !== 0) {
+            vscode.window.showErrorMessage(`Shots of ${entry.id}: failed (exit ${code}); the task terminal says why`);
+            return;
+        }
+        showShots(entry, out);
+    }
+
+    function showShots(entry, out) {
+        const names = (dir) => {
+            try {
+                return fs.readdirSync(dir).filter((n) => n.endsWith(".png")).sort();
+            } catch (error) {
+                return [];
+            }
+        };
+        const before = names(path.join(out, "before"));
+        const after = names(path.join(out, "after"));
+        const all = [...new Set([...before, ...after])].filter((n) => !n.includes("640x"));
+        const panel = vscode.window.createWebviewPanel("todoWorkers.shots", `Shots: ${entry.id}`, vscode.ViewColumn.Active, { localResourceRoots: [vscode.Uri.file(out)] });
+        const src = (side, name) => panel.webview.asWebviewUri(vscode.Uri.file(path.join(out, side, name))).toString();
+        const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+        const rows = all.map((name) => {
+            const cell = (side, list) => (list.includes(name) ? `<img src="${src(side, name)}" alt="${side} ${esc(name)}">` : `<p class="none">no ${side} shot</p>`);
+            return `<h3>${esc(name)}</h3><div class="pair"><figure>${cell("before", before)}<figcaption>before (${esc(entry.base)})</figcaption></figure><figure>${cell("after", after)}<figcaption>after (${esc(entry.branch)})</figcaption></figure></div>`;
+        });
+        panel.webview.html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${panel.webview.cspSource}; style-src 'unsafe-inline';">
+<style>body{font-family:var(--vscode-font-family);color:var(--vscode-foreground);background:var(--vscode-editor-background);padding:8px 16px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}figure{margin:0}img{width:100%;border:1px solid var(--vscode-widget-border,#444)}
+figcaption,.none{opacity:.7;font-size:12px}h3{margin:18px 0 6px;font-size:13px}</style></head>
+<body><h2>${esc(entry.id)}: ${esc(entry.title || "")}</h2>${rows.join("") || "<p>No screenshots were written.</p>"}</body></html>`;
+        addFeed("shots", `screenshots of ${entry.id}: ${all.length} scenes before and after`, { entry: entry.id });
+    }
+
+    // --- queues: the next entries of each worker, started by the panel as soon as the worker is free ----------
+    async function overlapWarning(id) {
+        const tool = findTool();
+        try {
+            const result = JSON.parse(await runTool(tool, ["overlap", id, "--json"], 90000));
+            return result.overlaps.map((o) => `${o.id} (${o.status}): ${o.files.join(", ")}`);
+        } catch (error) {
+            return [];
+        }
+    }
+
+    async function queueEntry(id) {
+        const tool = findTool();
+        if (!tool || !id || !/^[A-Za-z0-9_-]+$/.test(id)) return;
+        if (!state) await refresh();
+        if (!state || !state.workers.length) return;
+        const label = (w) => `${w.name}${w.entry ? ` (now ${w.entry.id})` : ""}${w.queue && w.queue.length ? `, ${w.queue.length} queued` : ""}`;
+        const overlaps = await overlapWarning(id);
+        const detail = [
+            "The panel starts /todo-loop 1 " + id + " there as soon as that worker is free (no session running, no uncommitted changes, its entry in review or none).",
+            ...(overlaps.length ? ["", "Busy entries name the same files (the loop will see them as busy):", ...overlaps.map((o) => `  ${o}`)] : []),
+        ].join("\n");
+        const picked = await vscode.window.showInformationMessage(`Queue ${id} for which worker?`, { modal: true, detail }, ...state.workers.map(label));
+        const worker = state.workers.find((w) => label(w) === picked);
+        if (!worker) return;
+        try {
+            await runTool(tool, ["queue", String(worker.k), "--add", id], 30000);
+            addFeed("queued", `${id} queued for ${worker.name}${overlaps.length ? ` (meets ${overlaps.length} busy entr${overlaps.length === 1 ? "y" : "ies"})` : ""}`, { entry: id });
+        } catch (error) {
+            vscode.window.showErrorMessage(`worker.py queue: ${error.message}`);
+        }
+        await refresh();
+    }
+
+    async function unqueueEntry(id, k) {
+        const tool = findTool();
+        if (!tool || !id) return;
+        try {
+            await runTool(tool, ["queue", String(k), "--remove", id], 30000);
+        } catch (error) {
+            vscode.window.showErrorMessage(`worker.py queue: ${error.message}`);
+        }
+        await refresh();
+    }
+
+    // A free worker with a queue gets its next entry; one start per refresh, so the loops do not choose at once.
+    let autoStarting = false;
+    async function autoStartQueues() {
+        const c = config();
+        const tool = findTool();
+        if (!c.autoStartQueue || !tool || !state || autoStarting) return;
+        const worker = state.workers.find(
+            (w) => w.queue && w.queue.length && !w.active && !w.dirty && !w.limited && !w.stopped && !busy.has(w.k) && (!w.entry || w.entry.status === "review")
+        );
+        if (!worker) return;
+        autoStarting = true;
+        busy.add(worker.k);
+        try {
+            const popped = JSON.parse(await runTool(tool, ["queue", String(worker.k), "--pop", "--json"], 30000)).popped;
+            if (!popped) return;
+            const loopArgs = [popped, c.loopArgs].filter(Boolean).join(" ");
+            const args = ["start", String(worker.k), "--delay", "0", "--slices", "1", "--loop-args", loopArgs, "--claude", c.claude];
+            if (c.reportTo) args.push("--report-to", c.reportTo);
+            await runTool(tool, args, 90000);
+            addFeed("started", `${worker.name} took ${popped} from its queue`, { entry: popped });
+            if (c.notify) vscode.window.showInformationMessage(`Todo: ${worker.name} started ${popped} from its queue`);
+        } catch (error) {
+            addFeed("error", `${worker.name}: the queued start failed: ${error.message}`);
+        } finally {
+            busy.delete(worker.k);
+            autoStarting = false;
+            refresh();
+        }
+    }
+
+    // --- the engine pointer: the one commit of the game that moves engine/ to what its checkout holds -----------
+    async function commitPointer() {
+        const tool = findTool();
+        const p = state && state.pointer;
+        if (!tool || !p || !p.moved) return;
+        const subjects = (await runGit(path.join(tool.cwd, "engine"), ["log", "--format=%s", `${p.recorded}..${p.checkout}`]).catch(() => "")).split("\n").filter(Boolean);
+        const title = subjects.length === 1 ? subjects[0] : `${subjects[0] || "engine"}${subjects.length > 1 ? ` (+${subjects.length - 1} more)` : ""}`;
+        const pick = await vscode.window.showWarningMessage(
+            `Commit the engine pointer ${p.recorded} -> ${p.checkout}?`,
+            { modal: true, detail: [`One commit in the game, only engine/: "Update engine: ${title}".`, "", ...subjects.slice(0, 12).map((s) => `  ${s}`), "", "Nothing is pushed."].join("\n") },
+            "Commit"
+        );
+        if (pick !== "Commit") return;
+        try {
+            await runGit(tool.cwd, ["commit", "-m", `Update engine: ${title}`, "--", "engine"]);
+            addFeed("pointer", `engine pointer moved to ${p.checkout}: ${title}`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`git commit engine: ${error.message}`);
+        }
+        refresh();
+    }
+
     function openSessionTerminal(worker, verb) {
         const session = worker && worker.session;
         if (!session) return;
@@ -317,7 +588,7 @@ function activate(context) {
     // closes the entry (or opens it again for the next slice), frees and deletes the branch and, for the
     // engine in a game, commits the pointer. Conflicts and a dirty checkout are refused by worker.py.
     const merging = new Set();
-    async function quickMerge(entry) {
+    async function quickMerge(entry, verify) {
         const tool = findTool();
         if (!entry || !tool || merging.has(entry.id) || notHere(entry)) return;
         merging.add(entry.id);
@@ -337,14 +608,16 @@ function activate(context) {
             const detail = [`${plan.commits.length} commits into ${plan.base}: ${plan.stat}`, ...plan.commits.slice(0, 8).map((line) => `  ${line}`)];
             if (plan.commits.length > 8) detail.push(`  ... and ${plan.commits.length - 8} more`);
             detail.push("");
-            if (plan.moved) detail.push("The base moved since the branch was cut: the merged result is not built or tested here. Run the tests after it.");
+            if (verify) detail.push("Then the main checkout is configured, built and tested (ctest) in a task terminal; the result lands on the panel.");
+            else if (plan.moved) detail.push(`The base moved since the branch was cut${entry.riskFiles && entry.riskFiles.length ? ` and changed ${entry.riskFiles.length} of its files` : ""}: the merged result is not built or tested here. Merge + test does that.`);
             detail.push(plan.reopen ? "The entry is a slice: it goes back to open for the next one." : "The entry is closed.");
             if (plan.heldBy) detail.push(`${plan.heldBy} lets go of the branch (detached at ${plan.base}); the branch is deleted.`);
             else detail.push("The branch is deleted.");
             if (plan.pointer) detail.push(`Then one commit in the game: "Update engine: ${plan.title}".`);
             detail.push("Nothing is pushed.");
-            const pick = await vscode.window.showWarningMessage(`Merge ${plan.branch} into ${plan.base}?`, { modal: true, detail: detail.join("\n") }, "Merge");
-            if (pick !== "Merge") return;
+            const pick = await vscode.window.showWarningMessage(`Merge ${plan.branch} into ${plan.base}${verify ? " and test it" : ""}?`, { modal: true, detail: detail.join("\n") }, verify ? "Merge + test" : "Merge");
+            if (!pick) return;
+            let merged = null;
             try {
                 const result = JSON.parse(await runTool(tool, ["merge", entry.id, "--json"], 120000));
                 const parts = [`Merged ${result.branch} into ${result.base} (${result.merge})`, `entry ${result.status || "still in review"}`];
@@ -352,13 +625,30 @@ function activate(context) {
                 const text = parts.join(", ");
                 if (result.notes.length) vscode.window.showWarningMessage(`${text}. ${result.notes.join("; ")}`);
                 else vscode.window.showInformationMessage(text);
+                addFeed("merged", text, { entry: entry.id });
+                merged = result;
             } catch (error) {
                 vscode.window.showErrorMessage(`Quick merge of ${entry.id}: ${error.message}`);
             }
+            if (merged && merged.unblocked && merged.unblocked.length) offerUnblocked(merged.unblocked, entry.id);
+            if (merged && verify) verifyMain(entry.id);
         } finally {
             merging.delete(entry.id);
             refresh();
         }
+    }
+
+    // The entries a merge let go (their last open blocker was the merged one): start one in a free worker or queue it.
+    function offerUnblocked(unblocked, by) {
+        const ids = unblocked.map((u) => u.id);
+        addFeed("unblocked", `${by} merged: ${ids.join(", ")} can start now`, { entry: by });
+        const first = ids.slice(0, 2);
+        vscode.window.showInformationMessage(`Todo: merging ${by} unblocked ${ids.join(", ")}`, ...first.map((id) => `Start ${id}`), ...first.map((id) => `Queue ${id}`)).then((pick) => {
+            if (!pick) return;
+            const id = pick.replace(/^(Start|Queue) /, "");
+            if (pick.startsWith("Start")) startEntryInWorker(id);
+            else queueEntry(id);
+        });
     }
 
     // /todo-merge needs the owner's answer and the main checkout, so the button starts an interactive
@@ -494,7 +784,7 @@ function activate(context) {
     // What the Todo list tab needs of the workers: who is free, who works which entry.
     function workersForList() {
         if (!state) return null;
-        return state.workers.map((w) => ({ k: w.k, name: w.name, active: Boolean(w.active), dirty: Boolean(w.dirty), busy: busy.has(w.k), entry: w.entry ? w.entry.id : null }));
+        return state.workers.map((w) => ({ k: w.k, name: w.name, active: Boolean(w.active), dirty: Boolean(w.dirty), busy: busy.has(w.k), entry: w.entry ? w.entry.id : null, queue: w.queue || [] }));
     }
 
     // The ids of the entries whose branch lives in another checkout (worker.py list: elsewhere).
@@ -546,11 +836,10 @@ function activate(context) {
         const c = config();
         const loopArgs = [id, c.loopArgs].filter(Boolean).join(" ");
         const label = (w) => (w.entry && w.entry.id !== id ? `${w.name} (leaves ${w.entry.id})` : w.entry ? `${w.name} (holds its branch)` : w.name);
-        const picked = await vscode.window.showInformationMessage(
-            `Start /todo-loop 1 ${loopArgs} in a free worker?`,
-            { modal: true, detail: "It runs as the background session todo-w<k> of that worker; the loop goes to the base itself. Attach opens it when it asks for a permission." },
-            ...free.map(label)
-        );
+        const overlaps = await overlapWarning(id);
+        const detail = ["It runs as the background session todo-w<k> of that worker; the loop goes to the base itself. Attach opens it when it asks for a permission."];
+        if (overlaps.length) detail.push("", "Busy entries name the same files (merging both later may conflict):", ...overlaps.map((o) => `  ${o}`));
+        const picked = await vscode.window.showInformationMessage(`Start /todo-loop 1 ${loopArgs} in a free worker?`, { modal: true, detail: detail.join("\n") }, ...free.map(label));
         const worker = free.find((w) => label(w) === picked);
         if (!worker || busy.has(worker.k)) return;
         const args = ["start", String(worker.k), "--delay", "0", "--slices", "1", "--loop-args", loopArgs, "--claude", c.claude];
@@ -585,6 +874,8 @@ function activate(context) {
                 case "plan": return openTodoPlan(message.name);
                 case "copy": return vscode.env.clipboard.writeText(String(message.text || ""));
                 case "startInWorker": return startEntryInWorker(message.entry);
+                case "queue": return queueEntry(message.entry);
+                case "unqueue": return unqueueEntry(message.entry, message.worker);
             }
         });
         todoPanel.onDidChangeViewState((event) => {
@@ -610,7 +901,14 @@ function activate(context) {
             case "relaunchAll": return relaunch(null);
             case "plan": return openPlan(entryOf(message.entry));
             case "merge": return startMerge(entryOf(message.entry));
-            case "quickMerge": return quickMerge(entryOf(message.entry));
+            case "quickMerge": return quickMerge(entryOf(message.entry), false);
+            case "mergeTest": return quickMerge(entryOf(message.entry), true);
+            case "verify": return verifyMain(null);
+            case "run": return message.entry ? runBranch(entryOf(message.entry), null) : runBranch(worker && worker.entry, worker);
+            case "shots": return shots(entryOf(message.entry));
+            case "unqueue": return unqueueEntry(message.entry, message.worker);
+            case "commitPointer": return commitPointer();
+            case "clearFeed": return context.globalState.update(FEED_KEY, []).then(() => view.show({ ...view.payload, feed: [] }));
             case "review": return reviewBranch(entryOf(message.entry));
             case "claudeReview": return startClaudeReview(entryOf(message.entry));
             case "todoList": return openTodoList();
@@ -628,11 +926,13 @@ function activate(context) {
             waiting: new Set(state.workers.filter((w) => w.waiting).map((w) => w.name)),
             limited: new Set(state.workers.filter((w) => w.limited).map((w) => w.name)),
         };
-        if (previous && config().notify) {
+        if (previous) {
             for (const entry of state.review) {
-                if (!previous.review.has(entry.id)) {
-                    vscode.window.showInformationMessage(`Todo: ${entry.id} is in review (${entry.branch})`, "Review", "Review with Claude", "Quick merge", "Merge with Claude").then((pick) => {
+                if (!previous.review.has(entry.id)) addFeed("review", `${entry.id} reached review: ${entry.statusNote || entry.branch}`, { entry: entry.id });
+                if (!previous.review.has(entry.id) && config().notify) {
+                    vscode.window.showInformationMessage(`Todo: ${entry.id} is in review (${entry.branch})`, "Review", "Review with Claude", "Merge + test", "Merge with Claude").then((pick) => {
                         if (pick === "Review") reviewBranch(entry);
+                        else if (pick === "Merge + test") quickMerge(entry, true);
                         else if (pick === "Review with Claude") startClaudeReview(entry);
                         else if (pick === "Quick merge") quickMerge(entry);
                         else if (pick === "Merge with Claude") startMerge(entry);
@@ -641,8 +941,13 @@ function activate(context) {
             }
             for (const worker of state.workers) {
                 // A loop that asks a question or a permission stops until someone answers: Answer opens it.
+                const notify = config().notify;
+                if (worker.waiting && !previous.waiting.has(worker.name)) addFeed("waiting", `${worker.name} waits for you: ${worker.asking ? `${worker.asking.tool}: ${worker.asking.text}` : "input needed"}`, { entry: worker.entry ? worker.entry.id : null });
+                if (worker.limited && !previous.limited.has(worker.name)) addFeed("limited", `${worker.name} hit the usage limit${worker.limited.resets ? `, resets ${worker.limited.resets}` : ""}`);
+                if (previous.active.get(worker.name) && !worker.active && !worker.limited && !worker.stopped) addFeed("ended", `${worker.name}: the loop ended${worker.entry ? ` (${worker.entry.id}, ${worker.entry.status})` : ""}`, { entry: worker.entry ? worker.entry.id : null });
+                if (!notify) continue;
                 if (worker.waiting && !previous.waiting.has(worker.name)) {
-                    const what = (worker.session && worker.session.waitingFor) || "input needed";
+                    const what = worker.asking ? `${worker.asking.tool}: ${worker.asking.text}` : (worker.session && worker.session.waitingFor) || "input needed";
                     const about = worker.entry ? ` (${worker.entry.id})` : "";
                     vscode.window.showWarningMessage(`Todo: ${worker.name}${about} waits for you: ${what}`, "Answer").then((pick) => pick && openSessionTerminal(worker, "attach"));
                 }
@@ -713,10 +1018,12 @@ function activate(context) {
         try {
             const out = await runTool(tool, ["list", "--json", "--store", "--activity", "--usage", "--claude", config().claude], 90000);
             state = JSON.parse(out);
-            view.show({ state, at: Date.now() });
+            const info = buildInfo || (await getBuildInfo());
+            view.show({ state, at: Date.now(), feed: feed(), lastVerify: context.globalState.get(VERIFY_KEY, null), prices: config().prices, shotsTool: Boolean(info && info.shots), verifying: verifying ? "running" : null });
             postWorkersToList();
             updateStatus(null);
             notifyChanges();
+            autoStartQueues();
         } catch (error) {
             view.show({ ...(state ? { state } : {}), error: `worker.py list: ${error.message}`, at: Date.now() });
             if (!state) updateStatus(error.message);
