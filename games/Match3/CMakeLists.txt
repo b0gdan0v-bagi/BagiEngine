@@ -32,4 +32,7 @@ if(ENGINE_BUILD_TESTS)
 
     # Starts BagiMatch3 with the control API and plays a few moves over WebSocket
     be_add_game_control_tests(BagiMatch3)
+
+    # Plays the recorded control sessions of tests/scenarios/*.jsonl (tools/control/bagi_play.py)
+    be_add_game_scenario_tests(BagiMatch3 DIR tests/scenarios)
 endif()

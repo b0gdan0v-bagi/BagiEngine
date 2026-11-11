@@ -12,12 +12,14 @@
 The game writes its output to a temporary file; log_tail() gives the end of it for an error message.
 """
 
+import re
 import socket
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Sequence
 
 from bagi_control_client import BagiControlClient
 
@@ -25,6 +27,10 @@ DEFAULT_STARTUP_TIMEOUT = 30.0
 DEFAULT_SHUTDOWN_TIMEOUT = 10.0
 CONNECT_RETRY_SECONDS = 0.1
 LOG_TAIL_LINES = 25
+PORT_TAKEN_MARKER = "cannot listen on 127.0.0.1:"  # what the game logs when it cannot bind the control port (Application::StartControlServer)
+# A log line is "[Warning] [12:00:00.000] text", with the level tag wrapped in an ANSI colour when the console sink colours (ConsoleSink.cpp)
+ANSI_COLOR = re.compile(r"\x1b\[[0-9;]*m")
+LOG_PROBLEM_PATTERN = re.compile(r"^\[(?:Warning|Error|Fatal)\]")
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]  # tools/control/game_process.py
 
 
@@ -62,7 +68,17 @@ def log_tail(log_path: Path, lines: int = LOG_TAIL_LINES) -> str:
     return "\n".join(text[-lines:])
 
 
-def build_game_command(exe: Path, port: int, headless: bool = True, manual_clock: bool = True, extra: tuple[str, ...] = ()) -> list[str]:
+def log_problems(log_path: Path) -> list[str]:
+    """The lines of the game's log whose level is Warning, Error or Fatal (the colour codes are removed)."""
+    try:
+        lines = log_path.read_text(errors="replace").splitlines()
+    except OSError:
+        return []
+    plain = (ANSI_COLOR.sub("", line) for line in lines)
+    return [line for line in plain if LOG_PROBLEM_PATTERN.match(line)]
+
+
+def build_game_command(exe: Path, port: int, headless: bool = True, manual_clock: bool = True, extra: Sequence[str] = ()) -> list[str]:
     """The command line that runs `exe` with the control API on `port` (flags: src/Modules/RemoteControl/CLAUDE.md)."""
     command = [str(exe), "--control", f"--control-port={port}"]
     if headless:
@@ -119,6 +135,9 @@ class GameProcess:
 
     def log_tail(self, lines: int = LOG_TAIL_LINES) -> str:
         return log_tail(self.log_path, lines)
+
+    def log_problems(self) -> list[str]:
+        return log_problems(self.log_path)
 
     def stop(self, timeout: float = DEFAULT_SHUTDOWN_TIMEOUT) -> int | None:
         """Waits `timeout` seconds for the game to exit (after a `quit` call), then kills it; 0 kills at once. Gives the exit code.

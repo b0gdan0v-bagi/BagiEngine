@@ -9,14 +9,14 @@ from pathlib import Path
 
 import pytest
 
+import scenario
 from bagi_control_client import ControlError
-from bagi_session import GameSession, SessionError
+from bagi_session import CALL_TIMEOUT_SECONDS, STEP_SECONDS_PER_FRAME, GameSession, SessionError
 from fake_control_server import FakeControlServer, FakeError, QuitServer
 from game_process import free_port
 
 TESTS_DIR = Path(__file__).resolve().parent
 TOOL_DIR = TESTS_DIR.parent
-FAKE_GAME = TESTS_DIR / "fake_game.py"
 
 
 def echo_handler(method: str, params: dict | None):
@@ -67,19 +67,6 @@ def session():
     game.close()
 
 
-@pytest.fixture
-def fake_game_exe(tmp_path):
-    """An executable that runs fake_game.py with the flags the session gives it: a script with a shebang, a .bat on Windows."""
-    if sys.platform == "win32":
-        exe = tmp_path / "FakeGame.bat"
-        exe.write_text(f'@"{sys.executable}" "{FAKE_GAME}" %*\r\n@exit /b %ERRORLEVEL%\r\n')
-        return exe
-    exe = tmp_path / "FakeGame"
-    exe.write_text(f"#!{sys.executable}\nimport runpy\nrunpy.run_path({str(FAKE_GAME)!r}, run_name='__main__')\n")
-    exe.chmod(0o755)
-    return exe
-
-
 def requests_of(server: FakeControlServer, method: str) -> list:
     return [params for name, params in server.requests if name == method]
 
@@ -120,6 +107,22 @@ def test_step_sends_frames_and_leaves_out_dt_when_not_given(session, server):
     session.step(3)
     session.step(2, 0.25)
     assert requests_of(server, "step") == [{"frames": 3}, {"frames": 2, "dt": 0.25}]
+
+
+def test_a_step_called_through_call_gets_the_timeout_of_its_frames(session, server, monkeypatch):
+    session.connect(port=server.port)
+    seen = []
+    client = session._client
+    real_call = client.call
+
+    def spy(method, params=None):
+        seen.append((method, client.timeout))
+        return real_call(method, params)
+
+    monkeypatch.setattr(client, "call", spy)
+    session.call("step", {"frames": 1000})
+    session.call("get_state")
+    assert seen == [("step", CALL_TIMEOUT_SECONDS + 1000 * STEP_SECONDS_PER_FRAME), ("get_state", CALL_TIMEOUT_SECONDS)]
 
 
 def test_screenshot_gives_the_decoded_png_and_its_size(session, server):
@@ -232,7 +235,7 @@ def test_launch_of_a_missing_executable_names_the_path(session, tmp_path):
 
 EXPECTED_TOOLS = {
     "launch_game", "connect", "status", "get_state", "list_actions", "perform_action", "set_state", "reset", "step", "screenshot", "ui_tree", "ui_click", "game_log", "quit",
-    "frame_stats", "profiler_dump", "zone_allocs",
+    "frame_stats", "profiler_dump", "zone_allocs", "record_start", "record_stop",
 }
 
 
@@ -294,3 +297,51 @@ def test_the_mcp_server_serves_the_tools_over_stdio(server):
     assert requests_of(server, "profiler_dump")[-1] == {"path": "trace.json"}
     assert requests_of(server, "zone_allocs")[-1] == {"top": 5, "reset": True}
     assert requests_of(server, "ui_click")[:3] == [{"name": "Ok"}, {"name": "Ok", "canvas": "Debug"}, {"name": "Volume", "at": 0.25}]
+
+
+def test_every_mcp_tool_is_wrapped_in_reports_errors():
+    pytest.importorskip("mcp")
+    import bagi_mcp
+
+    tools = bagi_mcp.server._tool_manager.list_tools()  # no public list outside the async protocol
+    assert {tool.name for tool in tools} == EXPECTED_TOOLS
+    # reports_errors uses functools.wraps, which leaves __wrapped__ on the function the server calls
+    assert [tool.name for tool in tools if not hasattr(tool.fn, "__wrapped__")] == []
+
+
+def test_the_mcp_server_records_a_session_as_a_scenario(fake_game_exe, tmp_path):
+    mcp = pytest.importorskip("mcp")
+    target = tmp_path / "bug.jsonl"
+
+    async def run() -> None:
+        parameters = mcp.StdioServerParameters(command=sys.executable, args=[str(TOOL_DIR / "bagi_mcp.py")])
+        async with mcp.Client(parameters) as client:
+            launched = await client.call_tool("launch_game", {"exe": str(fake_game_exe)})
+            assert not launched.is_error
+
+            started = await client.call_tool("record_start", {"path": str(target)})
+            assert not started.is_error and "bug.jsonl" in started.content[0].text
+
+            again = await client.call_tool("record_start", {"path": str(target)})
+            assert again.is_error and "already recording" in again.content[0].text
+
+            assert not (await client.call_tool("get_state", {})).is_error
+            assert not (await client.call_tool("perform_action", {"action": {"type": "noop"}})).is_error
+            refused = await client.call_tool("perform_action", {"action": {"type": "bad"}})
+            assert refused.is_error and "illegal_action" in refused.content[0].text
+
+            stopped = await client.call_tool("record_stop", {})
+            assert not stopped.is_error
+            assert "bug.jsonl" in stopped.content[0].text and '"calls": 3' in stopped.content[0].text
+
+            missing = await client.call_tool("record_stop", {})
+            assert missing.is_error and "not recording" in missing.content[0].text
+            assert "record_start" in missing.content[0].text
+
+            assert not (await client.call_tool("quit", {})).is_error
+
+    asyncio.run(run())
+    header, steps = scenario.load(target)
+    assert header.game == "Fake" and header.flags == ["--headless", "--manual-clock"]
+    assert [step.method for step in steps] == ["get_state", "perform_action", "perform_action"]
+    assert steps[2].expect == {"error": "illegal_action"}
