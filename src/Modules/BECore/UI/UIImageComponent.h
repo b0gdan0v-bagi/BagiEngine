@@ -33,6 +33,8 @@ namespace BECore {
         }
 
         void DrawSelf(IRenderer& renderer, UIElement& owner) override;
+        /// Resolves the colour fields of this component: `tint` and the three state tints
+        void ApplyTheme(UIThemes& themes) override;
 
         /// The tint the picture is drawn with for @p state
         [[nodiscard]] Color GetStateTint(const UIStateLook::State& state) const;

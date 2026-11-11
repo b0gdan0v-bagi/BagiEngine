@@ -66,6 +66,10 @@ namespace BECore {
 
         /// The caption against the area left of the switch, not the whole rect
         [[nodiscard]] UIContentFit CheckContent(float width, float height, float scale) const override;
+
+    protected:
+        /// Resolves the colour fields of this control (UIElement::ApplyTheme): `trackColor`, `fillColor`, `thumbColor`
+        void ApplyTheme(UIThemes& themes) override;
     };
 
 }  // namespace BECore

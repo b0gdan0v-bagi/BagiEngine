@@ -2,9 +2,15 @@
 
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/UI/UINineSlice.h>
+#include <BECore/UI/UIThemes.h>
 #include <Generated/UIPanel.gen.hpp>
 
 namespace BECore {
+
+    void UIPanel::ApplyTheme(UIThemes& themes) {
+        UIElement::ApplyTheme(themes);
+        themes.Resolve(spriteTint);
+    }
 
     void UIPanel::DrawSelf(IRenderer& renderer) {
         // The box first (rounded, bordered, shadowed as authored), then the sprite over it. The sprite is a plain textured rect: it is not cut to the rounded corners, so a

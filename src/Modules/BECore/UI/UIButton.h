@@ -107,6 +107,10 @@ namespace BECore {
         /// The box, the fill and the gradient end for the state the button is in now (pure: it reads the state and changes nothing)
         [[nodiscard]] Look GetCurrentBox() const;
 
+    protected:
+        /// Resolves the colour fields of this control (UIElement::ApplyTheme): `iconTint`
+        void ApplyTheme(UIThemes& themes) override;
+
     private:
         void DrawIcon(IRenderer& renderer, const Rect& area);
 

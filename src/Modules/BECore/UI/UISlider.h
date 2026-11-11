@@ -85,6 +85,10 @@ namespace BECore {
         void OnPress(float x, float y) override;
         void OnDrag(float x, float y) override;
 
+    protected:
+        /// Resolves the colour fields of this control (UIElement::ApplyTheme): `trackColor`, `fillColor`, `thumbColor`
+        void ApplyTheme(UIThemes& themes) override;
+
     private:
         /// Emits the value at @p x unless it is the one emitted last
         void Follow(float x);

@@ -123,6 +123,9 @@ namespace BECore {
         [[nodiscard]] UIContentFit CheckContent(float width, float height, float scale) const override;
 
     protected:
+        /// Resolves the colour fields of this control (UIElement::ApplyTheme): `arrowColor`, after the label's
+        void ApplyTheme(UIThemes& themes) override;
+
         /// The chosen option's text, or the dropdown's own when none is chosen
         [[nodiscard]] const eastl::string& GetSourceText() const override;
 

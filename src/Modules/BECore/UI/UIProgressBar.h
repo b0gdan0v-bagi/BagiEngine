@@ -42,6 +42,10 @@ namespace BECore {
         [[nodiscard]] Color GetCurrentFill() const;
 
         void DrawSelf(IRenderer& renderer) override;
+
+    protected:
+        /// Resolves the colour fields of this control (UIElement::ApplyTheme): `trackColor`, `fillColor`
+        void ApplyTheme(UIThemes& themes) override;
     };
 
 }  // namespace BECore
