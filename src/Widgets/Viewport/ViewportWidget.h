@@ -23,8 +23,8 @@ namespace BECore {
     // window: the safe area that canvases see during the scene pass is the simulated one, and a device or custom size
     // renders the target at exactly that size (canvases lay out for it) and shows it scaled down to fit the panel, never
     // above 100%; the mouse is mapped back through that zoom.
-    // An "Overlays" popup toggles what is drawn over the image: the safe area, the view bounds, the canvas bounds and the touch targets
-    // (UIPreviewOverlay; the touch rule is the validator's).
+    // An "Overlays" popup toggles what is drawn over the image: the safe area, the view bounds, the canvas bounds, the touch targets
+    // and the regions a game published for its canvases (UIPreviewOverlay; the touch rule is the validator's).
     // A third combo forces one of the scene's view variants (Scene::SetViewOverride) around the viewport's own pass only.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
@@ -66,7 +66,8 @@ namespace BECore {
         void DrawOverlaysPopup();
 
         // The overlays over the image, in target pixels scaled by zoom and clipped to the image: the view bounds (bars tinted), the bounds of
-        // every visible canvas, the touch targets (red under UISettings::minTouchSize, the element name on hover), the safe area. The canvases
+        // every visible canvas, the regions (named outlines, under the touch targets; the name and the canvas-unit rect on hover), the touch targets
+        // (red under UISettings::minTouchSize, the element name on hover, which wins over a region), the safe area. The canvases
         // are the ones the pass just laid out for this target. @p outputSize is the target's size, @p hovered the pointer is over the image
         void DrawOverlays(Scene* scene, const ImVec2& imageMin, const ImVec2& imageMax, float zoom, const ImVec2& outputSize, const Rect& safeArea, bool hovered) const;
 
