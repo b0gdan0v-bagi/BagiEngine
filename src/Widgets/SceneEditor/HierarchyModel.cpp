@@ -1,6 +1,7 @@
 #include "HierarchyModel.h"
 
 #include <BECore/Reflection/ClassMeta.h>
+#include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
 
 namespace BECore::HierarchyModel {
@@ -92,6 +93,26 @@ namespace BECore::HierarchyModel {
             }
         }
         return false;
+    }
+
+    SceneNode* FindNode(SceneNode& root, const SceneNode* wanted) {
+        if (&root == wanted) {
+            return &root;
+        }
+        for (const auto& child : root.GetChildren()) {
+            if (SceneNode* found = FindNode(*child, wanted)) {
+                return found;
+            }
+        }
+        return nullptr;
+    }
+
+    void AncestorsOf(const SceneNode& node, eastl::vector<SceneNode*>& out) {
+        out.clear();
+        for (SceneNode* ancestor = node.GetParent(); ancestor != nullptr; ancestor = ancestor->GetParent()) {
+            out.push_back(ancestor);
+        }
+        eastl::reverse(out.begin(), out.end());
     }
 
     bool IsFilterActive(eastl::string_view query, eastl::string_view componentType) {

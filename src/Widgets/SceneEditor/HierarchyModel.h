@@ -57,6 +57,32 @@ namespace BECore::HierarchyModel {
     /// True when @p node is @p root or lies in its tree. Compares pointers only, so a node that is already gone is safe to ask about
     bool ContainsNode(const SceneNode& root, const SceneNode* node);
 
+    /// The node of the tree under @p root (the root included) that is @p wanted, or null. Compares pointers only and never dereferences @p wanted, so a
+    /// pointer that is stale or from another scene is safe to ask about
+    SceneNode* FindNode(SceneNode& root, const SceneNode* wanted);
+
+    /// Replaces the contents of @p out with the ancestors of @p node from the root down to its parent: the nodes whose rows must be open for @p node to be seen.
+    /// @p out keeps its capacity
+    void AncestorsOf(const SceneNode& node, eastl::vector<SceneNode*>& out);
+
+    /// Remembers the selection that was last told to others, so a selection event is sent once per change
+    class SelectionTracker {
+    public:
+        /// True when (@p scene, @p node) differs from the last pair seen, which it then remembers. The pair before the first call is (null, null)
+        bool Changed(const Scene* scene, const SceneNode* node) {
+            if (scene == _scene && node == _node) {
+                return false;
+            }
+            _scene = scene;
+            _node = node;
+            return true;
+        }
+
+    private:
+        const Scene* _scene = nullptr;
+        const SceneNode* _node = nullptr;
+    };
+
     /// True when a search text or a component type is set, so the tree shows only what the filter keeps
     bool IsFilterActive(eastl::string_view query, eastl::string_view componentType);
 

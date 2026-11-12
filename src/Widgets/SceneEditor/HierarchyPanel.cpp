@@ -184,7 +184,7 @@ namespace BECore {
             // A filter opens the path to its matches; an ancestor that is not a match and a hidden node (its own flag or an ancestor's) are dimmed
             const bool hidden = ancestorHidden || node.HasEditorFlag(EditorFlags::Hidden);
             const bool dimmed = hidden || (filterOn && !HierarchyModel::NodeMatchesFilter(node, state.searchBuffer, state.componentType));
-            if (state.revealNode == &node || (filterOn && !children.empty())) {
+            if (state.revealNode == &node || (filterOn && !children.empty()) || eastl::find(state.openNodes.begin(), state.openNodes.end(), &node) != state.openNodes.end()) {
                 ImGui::SetNextItemOpen(true);
             }
 
@@ -195,6 +195,10 @@ namespace BECore {
             const bool isOpen = renaming ? ImGui::TreeNodeEx(&node, flags, "%s", IconOfNode(node)) : ImGui::TreeNodeEx(&node, flags, "%s %s", IconOfNode(node), node.GetName().CStr());
             if (dimmed) {
                 ImGui::PopStyleColor();
+            }
+            if (state.scrollTo == &node) {
+                ImGui::SetScrollHereY();
+                state.scrollTo = nullptr;
             }
             const float rowRight = ImGui::GetItemRectMax().x;
             const float rowTop = ImGui::GetItemRectMin().y;
@@ -311,6 +315,25 @@ namespace BECore {
 
     namespace HierarchyPanel {
 
+        bool Reveal(Scene& active, HierarchyState& state, const Scene* scene, const SceneNode* node) {
+            if (scene != &active) {
+                return false;
+            }
+            SceneNode* const live = HierarchyModel::FindNode(active.GetRootNode(), node);
+            if (live == nullptr) {
+                return false;
+            }
+            state.selected = live;
+            state.renameTarget = nullptr;
+            HierarchyModel::AncestorsOf(*live, state.openNodes);
+            state.scrollTo = live;
+            if (FilterIsOn(state) && !HierarchyModel::SubtreeMatchesFilter(*live, state.searchBuffer, state.componentType)) {
+                state.searchBuffer[0] = '\0';
+                state.componentType = {};
+            }
+            return true;
+        }
+
         void BeginRename(HierarchyState& state, SceneNode& node) {
             if (IsLocked(node)) {
                 return;
@@ -344,6 +367,8 @@ namespace BECore {
                 DrawNode(state, scene.GetRootNode(), filterOn, false);
             }
             state.revealNode = nullptr;
+            state.openNodes.clear();
+            state.scrollTo = nullptr;
             ApplyPending(scene, state);
 
             ImGui::Separator();

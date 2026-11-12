@@ -40,6 +40,7 @@ namespace BECore {
 
     bool SceneEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &SceneEditorWidget::OnCommand>(this);
+        Subscribe<SelectSceneNodeRequestEvent, &SceneEditorWidget::OnSelectRequest>(this);
         return true;
     }
 
@@ -47,6 +48,18 @@ namespace BECore {
         // The same rule as the Save button: nothing to save while there are no unsaved changes
         if (event.commandId == EditorCommandIds::kSceneSave && _isDirty) {
             SaveScene();
+        }
+    }
+
+    void SceneEditorWidget::OnSelectRequest(const SelectSceneNodeRequestEvent& event) {
+        if (Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
+            HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node);
+        }
+    }
+
+    void SceneEditorWidget::AnnounceSelection(const Scene* scene) {
+        if (_announcedSelection.Changed(scene, _hierarchy.selected)) {
+            SceneNodeSelectedEvent::Emit(scene, _hierarchy.selected);
         }
     }
 
@@ -69,6 +82,7 @@ namespace BECore {
         }
 
         if (!scene) {
+            AnnounceSelection(nullptr);
             EmptyState(ICON_LC_LAYERS, "No active scene");
             ImGui::End();
             return;
@@ -100,6 +114,7 @@ namespace BECore {
 
         ImGui::EndChild();
         ApplyHierarchyAnswers();
+        AnnounceSelection(scene);
 
         // ----------------------------------------------------------------
         // Right panel - Inspector

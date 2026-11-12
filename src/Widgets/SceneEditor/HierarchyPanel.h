@@ -16,7 +16,9 @@ namespace BECore {
         char renameBuffer[HierarchyModel::kMaxNodeNameLength + 1] = {};
         bool renameFocus = false;  ///< the text field takes the keyboard focus on its first frame
         HierarchyModel::Operation pending;
-        SceneNode* revealNode = nullptr;  ///< opened on the next walk, so a moved, copied or added node is seen
+        SceneNode* revealNode = nullptr;      ///< opened on the next walk, so a moved, copied or added node is seen
+        eastl::vector<SceneNode*> openNodes;  ///< opened on the next walk (a reveal request: the ancestors of the node); kept as a member for its capacity
+        SceneNode* scrollTo = nullptr;        ///< the row scrolls into view on the next walk
 
         // The filter: matches stay with their ancestors, the rest is hidden
         char searchBuffer[HierarchyModel::kMaxNodeNameLength + 1] = {};
@@ -41,6 +43,14 @@ namespace BECore {
         /// Draws the "Hierarchy" section into the current ImGui window: the tree, its context menu, F2 / Delete / Ctrl+D while the window is focused, and the Add Node button. Needs a frame in
         /// progress
         void Draw(Scene& scene, HierarchyState& state);
+
+        /**
+         * @brief Selects @p node and prepares the next Draw() to show it: its ancestors open, its row scrolls into view, a filter that hides it is cleared
+         *
+         * @p node is looked up in the tree of @p active by pointer and is never dereferenced before it is found. A request for another scene (@p scene is not
+         * @p active), for null or for a node that is not in the tree changes nothing and gives false. A locked node is revealed like any other. Needs no frame.
+         */
+        bool Reveal(Scene& active, HierarchyState& state, const Scene* scene, const SceneNode* node);
 
         /// Starts renaming @p node: its row shows a text field with the current name. A locked node (EditorFlags::Locked) is not renamed
         void BeginRename(HierarchyState& state, SceneNode& node);

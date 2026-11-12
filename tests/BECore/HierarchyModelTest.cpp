@@ -4,6 +4,7 @@
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
+#include <Widgets/SceneEditor/HierarchyPanel.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
@@ -369,6 +370,105 @@ namespace BECore::Tests {
 
         EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Delete, Find(otherScene->GetRootNode(), "A"), nullptr, 0}).changed);
         EXPECT_NE(Find(otherScene->GetRootNode(), "A"), nullptr);
+    }
+
+    TEST_F(HierarchyModelTest, AncestorsOfListsTheRowsToOpenFromTheRootDown) {
+        eastl::vector<SceneNode*> ancestors;
+        ancestors.push_back(&Node("A"));
+
+        AncestorsOf(Node("Leaf"), ancestors);
+
+        ASSERT_EQ(ancestors.size(), 3u);
+        EXPECT_EQ(ancestors[0], &Root());
+        EXPECT_EQ(ancestors[1], &Node("Branch"));
+        EXPECT_EQ(ancestors[2], &Node("B1"));
+
+        AncestorsOf(Root(), ancestors);
+        EXPECT_TRUE(ancestors.empty());
+    }
+
+    TEST_F(HierarchyModelTest, FindNodeComparesPointersAndGivesTheLiveNode) {
+        EXPECT_EQ(FindNode(Root(), &Node("Leaf")), &Node("Leaf"));
+        EXPECT_EQ(FindNode(Root(), &Root()), &Root());
+        EXPECT_EQ(FindNode(Root(), nullptr), nullptr);
+        EXPECT_EQ(FindNode(Node("Branch"), &Node("A")), nullptr);
+
+        SceneNode* removed = &Node("B2");
+        Node("Branch").RemoveChild(removed);
+        EXPECT_EQ(FindNode(Root(), removed), nullptr);
+    }
+
+    TEST_F(HierarchyModelTest, TheSelectionIsAnnouncedOncePerChange) {
+        SelectionTracker tracker;
+
+        EXPECT_FALSE(tracker.Changed(nullptr, nullptr));
+        EXPECT_TRUE(tracker.Changed(_scene, nullptr));
+        EXPECT_FALSE(tracker.Changed(_scene, nullptr));
+        EXPECT_TRUE(tracker.Changed(_scene, &Node("A")));
+        EXPECT_FALSE(tracker.Changed(_scene, &Node("A")));
+        EXPECT_TRUE(tracker.Changed(_scene, nullptr));
+        EXPECT_TRUE(tracker.Changed(nullptr, nullptr));
+    }
+
+    TEST_F(HierarchyModelTest, RevealSelectsTheNodeAndPreparesTheNextWalk) {
+        HierarchyState state;
+
+        ASSERT_TRUE(HierarchyPanel::Reveal(*_scene, state, _scene, &Node("Leaf")));
+
+        EXPECT_EQ(state.selected, &Node("Leaf"));
+        EXPECT_EQ(state.scrollTo, &Node("Leaf"));
+        ASSERT_EQ(state.openNodes.size(), 3u);
+        EXPECT_EQ(state.openNodes[2], &Node("B1"));
+    }
+
+    TEST_F(HierarchyModelTest, RevealClearsAFilterThatHidesTheNodeAndKeepsOneThatDoesNot) {
+        HierarchyState state;
+        state.componentType = kTransform;
+        snprintf(state.searchBuffer, sizeof(state.searchBuffer), "a");
+
+        // "Leaf" has no transform and no "a" in its subtree: the filter hides it
+        ASSERT_TRUE(HierarchyPanel::Reveal(*_scene, state, _scene, &Node("Leaf")));
+        EXPECT_EQ(state.searchBuffer[0], '\0');
+        EXPECT_TRUE(state.componentType.empty());
+
+        // "A" passes the filter
+        state.componentType = kTransform;
+        snprintf(state.searchBuffer, sizeof(state.searchBuffer), "a");
+        ASSERT_TRUE(HierarchyPanel::Reveal(*_scene, state, _scene, &Node("A")));
+        EXPECT_STREQ(state.searchBuffer, "a");
+        EXPECT_EQ(state.componentType, kTransform);
+    }
+
+    TEST_F(HierarchyModelTest, RevealIgnoresAnotherSceneANodeNotInTheTreeAndNull) {
+        auto other = New<SceneManager>();
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(kTreeScene));
+        other->Deserialize(deserializer);
+        other->Initialize();
+        Scene* otherScene = other->GetSceneByName("Main"_intern);
+        ASSERT_NE(otherScene, nullptr);
+        SceneNode* removed = &Node("B2");
+        HierarchyState state;
+        state.selected = &Node("A");
+
+        // The node of another scene, asked for with its own scene or with ours
+        EXPECT_FALSE(HierarchyPanel::Reveal(*_scene, state, otherScene, Find(otherScene->GetRootNode(), "A")));
+        EXPECT_FALSE(HierarchyPanel::Reveal(*_scene, state, _scene, Find(otherScene->GetRootNode(), "A")));
+        EXPECT_FALSE(HierarchyPanel::Reveal(*_scene, state, _scene, nullptr));
+        Node("Branch").RemoveChild(removed);
+        EXPECT_FALSE(HierarchyPanel::Reveal(*_scene, state, _scene, removed));
+
+        EXPECT_EQ(state.selected, &Node("A"));
+        EXPECT_EQ(state.scrollTo, nullptr);
+        EXPECT_TRUE(state.openNodes.empty());
+    }
+
+    TEST_F(HierarchyModelTest, ALockedNodeCanBeRevealed) {
+        Node("A").SetEditorFlags(EditorFlags::Locked);
+        HierarchyState state;
+
+        EXPECT_TRUE(HierarchyPanel::Reveal(*_scene, state, _scene, &Node("A")));
+        EXPECT_EQ(state.selected, &Node("A"));
     }
 
     TEST_F(HierarchyModelTest, SelfOrAncestorOf) {
