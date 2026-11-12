@@ -5,6 +5,22 @@ Library `BagiFuzzTargets`: one plain function per kind of untrusted input, `void
 - **`FuzzCorpusTest`** (`tests/BECore`, part of `BagiEngineTests`, so of every `ctest`): replays every file of `corpus/<folder>/` through its target, then `BAGI_FUZZ_ITERATIONS` (default 50000, about 2 s in Debug) mutations of the seeds taken in turn, with the generator of `FuzzMutator` (xorshift64*, fixed seed per target): the same bytes on every platform and every run. `BAGI_FUZZ_ITERATIONS=2000000 ctest --preset macos-debug -R FuzzCorpus` is a longer run with no libFuzzer. An engine `ASSERT` reached by input is a gtest failure (`AssertBridge`), a `FUZZ_CHECK` or a sanitizer report kills the process.
 - **libFuzzer**, for long runs: preset `macos-fuzz` (Homebrew LLVM, ASan + UBSan on all code, asserts and expects ON; `cmake/CLAUDE.md`, "Fuzzing"), one executable `BagiFuzz<Name>` per target, made by `be_add_fuzz_executable(<Name> <Function>)` in `CMakeLists.txt` over the same function. `InstallAssertAbort()` (`FuzzAssertAbort.h`) makes an engine assertion that an input reaches abort the run, because a libFuzzer process has no gtest. `tools/fuzz/run_fuzzers.py` runs every executable for N seconds over a copy of its corpus and keeps the findings in `build/<preset>/fuzz-artifacts/` (the commands: `.claude/rules/build-project.md`, "Fuzzing"). The corpus test also runs under the sanitizers: `ctest --preset macos-fuzz -R Fuzz`. Running all of `BagiEngineTests` there is the entry `sanitizers`.
 
+## The targets
+
+| Target (`Fuzz<Name>`) | Corpus folder | Guards |
+|-----------------------|---------------|--------|
+| `BinaryDeserializer` | `binary` | `BinaryDeserializer::LoadFromBuffer` (`BECore/Reflection`) |
+| `XmlDeserializer` | `xml` | `XmlDeserializer::LoadFromString`, lenient and strict (`BECore/Reflection`) |
+| `SaveEnvelope` | `save` | `SaveGameService::Peek` / `Load` (`BECore/Save`) |
+| `SceneNode` | `scene` | node references and component deserialization (`BECore/Scene`) |
+| `WebSocketFrame` | `ws_frame` | `WebSocketFrameParser`, both peers (`RemoteControl`) |
+| `Handshake` | `ws_handshake` | the opening handshake, request, response and URL (`RemoteControl`) |
+| `RoomProtocol` | `room_protocol` | `ParseClientMessage`, `ParseServerMessage`, `SanitizePlayerName` (`Rooms`) |
+| `RoomHub` | `room_hub` | `RoomHub` fed with operations over the demo game (`Rooms`, `RoomServer`) |
+| `ControlRequest` | `control_request` | `ControlService::Post` with the builtins and the game methods (`BECore/Control`) |
+
+Not covered yet: the sockets and threads of the transports (`WebSocketListener`, `RoomWebSocketServer`: the next slice, `hostile.py`), `LoadFromFile` of both readers, the rest of the control methods (`ui_*`, `screenshot`, the profiler: they need a scene, a renderer or a profiler), and the content and saves as consumers see them in a release build.
+
 ## A target
 
 - Feeds the bytes to the real code and checks properties inside (`FUZZ_CHECK(cond)`: prints and `std::abort()`s in every build; not the engine `ASSERT`, which compiles out in Release). It is exception free like the engine: a malformed input is a refusal or undefined behaviour, and the second is the finding.
