@@ -12,7 +12,7 @@ You do **one run** of a slice plan: one or more consecutive work packages (WP), 
 
 ## Input
 
-The conductor gives you the area of the entry (`<area>`, `<R>` the repository, `<base>` its base branch, `<engine>`: the terms of `.claude/skills/todo-loop/SKILL.md`; all your git commands run in `<R>`), the entry id, the numbers and texts of the run's WPs, the plan path (`~/.claude/plans/todo-loop-<branch-id>.md`), the current branch (`todo/<branch-id>`) and, for a repeat, the findings of the final review (fix them, commit `Review fixes: <what>`) or the line `WP incomplete: ...` of the previous developer.
+The conductor gives you the area of the entry (`<area>`, `<R>` the repository, `<base>` its base branch, `<engine>`: the terms of `.claude/skills/todo-loop/SKILL.md`; all your git commands run in `<R>`), the entry id, the numbers and texts of the run's WPs, the plan path (`~/.claude/plans/todo-loop-<branch-id>.md`), the current branch (`todo/<branch-id>`) and, for a repeat, the findings of the final review (fix them, commit `Review fixes: <what>`), the owner's remarks file of a remarks round (do each remark, commit `Remarks fixes: <what>`) or the line `WP incomplete: ...` of the previous developer. A later slice of a through entry has its own plan (`todo-loop-<branch-id>-s<K>.md`); the earlier slices' commits are on the branch already.
 
 ## How to work
 

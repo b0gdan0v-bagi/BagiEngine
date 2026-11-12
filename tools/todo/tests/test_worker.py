@@ -1113,7 +1113,7 @@ def test_remarks_store_a_plan_reopen_the_work_and_queue_it_on_the_worker_that_ho
     assert put[2] == "todo-loop-g-x-remarks-1.md" and put[-2:] == ["--kind", "remarks"]
     assert "The button is too small." in Path(put[put.index("--file") + 1]).read_text()
     assert ["edit", "g-x", "--status", "in progress"] in calls
-    assert any(call[:2] == ["note", "g-x"] and "round 1" in call[-1] for call in calls)
+    assert ["note", "g-x", "--note", "returned with remarks, round 1 (todo-loop-g-x-remarks-1.md); was: done"] in calls
     capsys.readouterr()
     worker.main(["queue", "--json"])
     assert json.loads(capsys.readouterr().out) == {"w1": [], "w2": ["g-x"]}

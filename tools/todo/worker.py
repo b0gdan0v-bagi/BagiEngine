@@ -1276,7 +1276,9 @@ def cmd_remarks(layout: Layout, args) -> None:
     local.write_text(f"# Remarks of the owner, round {round_no}: {entry['title']}\n\nBranch `{branch}`, entry `{args.id}`.\n\n{text}\n", encoding="utf-8")
     todo_cli(layout, "plan", "put", name, "--file", str(local), "--entry", args.id, "--kind", "remarks", actor=REMARKS_ACTOR)
     todo_cli(layout, "edit", args.id, "--status", "in progress", actor=REMARKS_ACTOR)
-    todo_cli(layout, "note", args.id, "--note", f"returned with remarks, round {round_no} ({name})", actor=REMARKS_ACTOR)
+    # the review note stays at the end: its slice suffix ("slice K of M, after the merge ...", "stacked on ...") is the loop's to keep
+    was = re.sub(r"^returned with remarks, round \d+ \([^)]*\); was: ", "", entry.get("statusNote") or "")
+    todo_cli(layout, "note", args.id, "--note", f"returned with remarks, round {round_no} ({name}); was: {was}", actor=REMARKS_ACTOR)
     sessions = list_sessions(args.claude)
     holder = worktree_of(repo, branch)
     chosen = None
@@ -1415,11 +1417,10 @@ def cmd_overlap(layout: Layout, args) -> None:
     for other in busy:
         if other["id"] == args.id or not other.get("branch"):
             continue
-        try:
-            text = todo_cli(layout, "plan", "get", f"todo-loop-{other['branch'].removeprefix('todo/')}.md", "--stdout")
-        except WorkerError:
+        theirs = planned_files(layout, other)
+        if theirs is None:
             continue
-        shared = overlapping(ours, plan_files(text))
+        shared = overlapping(ours, theirs)
         if shared:
             found.append({"id": other["id"], "status": other["status"], "files": shared})
     result = {"id": args.id, "paths": sorted(ours), "overlaps": found}
@@ -1550,15 +1551,26 @@ def record_verdicts(layout: Layout, source: str) -> int:
     return count
 
 
+def planned_files(layout: Layout, entry: dict) -> set[str] | None:
+    """The `## Files` of a taken entry's plans: its first slice plan, its newest one and, for a through entry, its stage
+    plan (every stage). None when the store has none of them."""
+    branch_id = entry["branch"].removeprefix("todo/")
+    names = dict.fromkeys(name for name in (f"todo-loop-{branch_id}.md", entry.get("planShown"), entry.get("stagesPlan")) if name)
+    found = None
+    for name in names:
+        try:
+            files = plan_files(todo_cli(layout, "plan", "get", name, "--stdout"))
+        except WorkerError:
+            continue
+        found = (found or set()) | files
+    return found
+
+
 def busy_files(layout: Layout, entry: dict, area: dict) -> list[str]:
-    """What the branch of a taken entry changed plus the `## Files` of its slice plan (todo-loop, "Busy files")."""
+    """What the branch of a taken entry changed plus the `## Files` of its plans (todo-loop, "Busy files")."""
     repo = (layout.main / area["repo"]).resolve()
     files = set(git("diff", "--name-only", f"{area['base']}...{entry['branch']}", cwd=repo, check=False).split())
-    try:
-        files |= plan_files(todo_cli(layout, "plan", "get", f"todo-loop-{entry['branch'].removeprefix('todo/')}.md", "--stdout"))
-    except WorkerError:
-        pass
-    return sorted(files)
+    return sorted(files | (planned_files(layout, entry) or set()))
 
 
 def dispatch_state(layout: Layout, args) -> dict:

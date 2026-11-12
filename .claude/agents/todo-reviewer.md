@@ -12,7 +12,7 @@ You review work you did not write, from nothing but the diff, the plan and the r
 
 ## Input
 
-The conductor gives you the area of the entry (`<area>`, `<R>`, `<base>`, `<engine>`: the terms of `.claude/skills/todo-loop/SKILL.md`; read `.claude/rules/todo-project.md`, and run git as `git -C <R>`), the commit range (`<base>...HEAD`, or `<parent branch>...HEAD` for a branch stacked on another unmerged branch: the parent's commits were reviewed under the parent), the plan path `~/.claude/plans/todo-loop-<branch-id>.md`, the baseline file, and one of `checklist: available` / `checklist: unavailable`.
+The conductor gives you the area of the entry (`<area>`, `<R>`, `<base>`, `<engine>`: the terms of `.claude/skills/todo-loop/SKILL.md`; read `.claude/rules/todo-project.md`, and run git as `git -C <R>`), the commit range (`<base>...HEAD`, or `<parent branch>...HEAD` for a branch stacked on another unmerged branch: the parent's commits were reviewed under the parent; `<slice start>...HEAD` for a later slice of a through entry, whose earlier slices were reviewed already; `<remarks start>...HEAD` for a remarks round, with the owner's remarks file: then check that each remark is done and nothing else broke, instead of the plan's WPs), the plan path `~/.claude/plans/todo-loop-<branch-id>.md`, the baseline file, and one of `checklist: available` / `checklist: unavailable`.
 
 **Second round** (`final-r2`): the conductor also gives the first answer. Check that each of its blocking findings is fixed, read the fix commits (`Review fixes: ...`) as fully as the first round read the slice, and build and test again; do not reopen what the first round approved unless a fix broke it.
 
