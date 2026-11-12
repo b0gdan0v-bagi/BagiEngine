@@ -1,5 +1,8 @@
 #include "TlsStream.h"
 
+// The stub of a platform without a backend; macOS and Windows have their own file that defines the two functions at the end
+#if !defined(PLATFORM_MACOS) && !defined(PLATFORM_WINDOWS)
+
 namespace BECore {
 
     namespace {
@@ -51,3 +54,5 @@ namespace BECore {
     }
 
 }  // namespace BECore
+
+#endif  // no TLS backend on this platform

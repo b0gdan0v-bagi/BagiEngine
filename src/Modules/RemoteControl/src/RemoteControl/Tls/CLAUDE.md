@@ -16,6 +16,16 @@
 
 A new file `<Name>TlsStream.cpp` in this folder, the whole file inside `#ifdef PLATFORM_<X>`, that defines `IsTlsSupported()` and `MakeTlsStream()`; the stub of `TlsStream.cpp` gets the matching `#if !defined(...)` so exactly one definition exists. `be_add_module` globs every `src/*.cpp`; `CMakeLists.txt` only links the system libraries.
 
+## macOS: Network.framework (`NetworkFrameworkTlsStream.cpp`)
+
+Why not Secure Transport: deprecated since macOS 10.15 and TLS 1.2 at most; Network.framework does 1.3 and checks the chain against the system trust store and the host name by default. It is a C API with blocks, so the file stays a `.cpp` (Apple clang has `-fblocks` on). It cannot be layered on a file descriptor, hence the connection-level interface. `CMakeLists.txt` links `Network`, `Security`, `CoreFoundation`.
+
+- **State and lifetime:** everything the blocks touch lives in one `StreamState` that every block holds by `shared_ptr`, under one mutex and one condition variable. The stream never waits for the system to finish a cancel: `Close()` / `ShutdownBoth()` cancel the connection, `Close()` drops our reference, a late callback finds the state alive. Safe in every state, `Connect()` included (it sees `closing` within `kWakeInterval`).
+- **Default check:** nothing of the verification is touched, so the system does it (chain, validity, name as the endpoint host). With additional anchors a verify block evaluates the trust itself (`SecTrustEvaluateWithError`, the SSL policy for the host, the anchors added with `SecTrustSetAnchorCertificatesOnly(false)`) and its failure code is kept because it says more than the connection's error. A verify block that returned true without evaluating would be a hole in the check.
+- **Failures** are mapped to words by `DescribeNetworkFailure()` (`NetworkFrameworkErrors.h`: pure, tested); the codes go only to the log. The system's own check reports a wrong host name as a generic chain error, so that text says both. A refused connection or an unresolvable name arrives as state `waiting` with an error, which the stream treats as a failure.
+- **Receive:** one `nw_connection_receive` stays pending across a `Receive()` that timed out, its data waits in the inbox; end of stream is `is_complete` without content (or a final context). `SendAll()` returns when the send completion ran (data is copied, so a wake-up by `ShutdownBoth()` may leave early).
+- `connectTimeout` is the TCP connection timeout option (whole seconds, at least 1); `handshakeDeadline` is the caller's clock for ready.
+
 ## The fake backend
 
 `tests/BECore/Tls/FakeTlsStream.h` is a scripted backend over a real loopback `Socket`, so everything that uses an `ITlsStream` runs on every platform without a certificate. The client sends `FAKE-HELLO <serverName> <anchor count>\n`; the test server answers `FAKE-OK\n` or `FAKE-REJECT <reason>\n`; then every byte is XOR-ed with `kFakeTlsMask` both ways. `FakeTlsServerSide` is the other end for a hand-written server on an accepted `Socket`. `WebSocketClientSettings::tls.factory` takes `FakeTlsFactory()`.

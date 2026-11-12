@@ -10,3 +10,8 @@ be_add_module(RemoteControl LINK
 if(WIN32)
     target_link_libraries(RemoteControlModule PUBLIC ws2_32)
 endif()
+
+if(APPLE)
+    # The TLS backend of macOS (Tls/NetworkFrameworkTlsStream.cpp): Network.framework with the trust evaluation of Security
+    target_link_libraries(RemoteControlModule PUBLIC "-framework Network" "-framework Security" "-framework CoreFoundation")
+endif()
