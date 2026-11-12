@@ -3,7 +3,7 @@
 
 Every folder of external/, every module of src/Modules/ without a CLAUDE.md of its own (the engine's own modules have one), every font
 of assets/fonts/ and every source file under src/ that calls itself vendored in its first lines must have a row of the notices; every
-row's path and licence file must exist. Exit 0 when all hold, 1 with one line per problem.
+row's path and licence file must exist, unless the row lies in a submodule that is not checked out (an empty folder). Exit 0 when all hold, 1 with one line per problem.
 
     python3 CI/scripts/check_third_party_notices.py [--root <engine folder>]
 """
@@ -73,6 +73,17 @@ def required_paths(root: Path) -> list[str]:
     return required
 
 
+def in_missing_submodule(root: Path, relative: str) -> bool:
+    """Whether `relative` lies in a folder that is there but empty: a git submodule that is not checked out (a worker folder has no
+    emsdk, SDL_image's own submodules may be missing). Its rows cannot be checked there and are left alone."""
+    path = root / relative
+    while path != root:
+        if path.is_dir():
+            return not any(path.iterdir())
+        path = path.parent
+    return False
+
+
 def check(root: Path) -> list[str]:
     notices = root / NOTICES
     if not notices.is_file():
@@ -85,6 +96,8 @@ def check(root: Path) -> list[str]:
         if path not in listed and not any(other.startswith(path + "/") for other in listed):
             problems.append(f"{path}: no row in {NOTICES}")
     for path, licence in rows:
+        if in_missing_submodule(root, path):
+            continue
         if not (root / path).exists():
             problems.append(f"{path}: the row's path does not exist")
         if licence is not None and not (root / licence).is_file():
