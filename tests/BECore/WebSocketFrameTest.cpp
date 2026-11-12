@@ -366,4 +366,88 @@ namespace BECore::Tests {
         }
     }
 
+    // The role of a client that reads a server: its frames are not masked
+
+    TEST(WebSocketFrameTest, ServerRoleReadsUnmaskedTextBinaryPingAndClose) {
+        WebSocketFrameParser parser(1024, WebSocketPeer::Server);
+        parser.Feed(Span(EncodeTextFrame("Hello")));
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kBinary, TextBytes("bin"))));
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kPing, TextBytes("p"))));
+        parser.Feed(Span(EncodeCloseFrame(1001, "bye")));
+
+        const WebSocketMessage text = PopMessage(parser);
+        EXPECT_EQ(text.kind, WebSocketMessageKind::Text);
+        EXPECT_EQ(TextOf(text), "Hello");
+        const WebSocketMessage binary = PopMessage(parser);
+        EXPECT_EQ(binary.kind, WebSocketMessageKind::Binary);
+        EXPECT_EQ(TextOf(binary), "bin");
+        const WebSocketMessage ping = PopMessage(parser);
+        EXPECT_EQ(ping.kind, WebSocketMessageKind::Ping);
+        EXPECT_EQ(TextOf(ping), "p");
+        const WebSocketMessage close = PopMessage(parser);
+        EXPECT_EQ(close.kind, WebSocketMessageKind::Close);
+        EXPECT_EQ(close.closeCode, 1001);
+        EXPECT_EQ(TextOf(close), "bye");
+        ExpectNothingReady(parser);
+    }
+
+    TEST(WebSocketFrameTest, ServerRoleReadsFragmentsAndEveryLengthForm) {
+        WebSocketFrameParser parser(200000, WebSocketPeer::Server);
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kText, TextBytes("He"), std::nullopt, /*fin=*/false)));
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kPing, TextBytes("x"))));
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("llo"), std::nullopt, /*fin=*/true)));
+        EXPECT_EQ(PopMessage(parser).kind, WebSocketMessageKind::Ping);
+        EXPECT_EQ(TextOf(PopMessage(parser)), "Hello");
+
+        for (const size_t length : {0u, 125u, 126u, 65535u, 65536u, 100000u}) {
+            const std::string payload(length, 'y');
+            parser.Feed(Span(EncodeTextFrame(eastl::string_view(payload.data(), payload.size()))));
+            EXPECT_EQ(TextOf(PopMessage(parser)), payload) << length;
+        }
+    }
+
+    TEST(WebSocketFrameTest, ServerRoleWaitsForTheRestOfAnUnmaskedFrame) {
+        const eastl::vector<uint8_t> frame = EncodeFrame(WebSocketOpcode::kText, TextBytes(std::string(300, 'a')));
+        WebSocketFrameParser parser(1024, WebSocketPeer::Server);
+        // 1 byte, the first byte of the 16-bit length, the whole header, some of the payload
+        for (const size_t size : {size_t{1}, size_t{3}, size_t{4}, size_t{100}}) {
+            WebSocketFrameParser partial(1024, WebSocketPeer::Server);
+            partial.Feed(eastl::span<const uint8_t>(frame.data(), size));
+            SCOPED_TRACE(size);
+            ExpectNothingReady(partial);
+        }
+        parser.Feed(Span(frame));
+        EXPECT_EQ(TextOf(PopMessage(parser)).size(), 300u);
+    }
+
+    TEST(WebSocketFrameTest, ServerRoleRefusesAMaskedFrame) {
+        WebSocketFrameParser parser(1024, WebSocketPeer::Server);
+        parser.Feed(Span(EncodeTextFrame("masked", kMask)));
+        ExpectViolation(parser, WebSocketCloseCode::kProtocolError);
+    }
+
+    TEST(WebSocketFrameTest, ServerRoleKeepsTheSharedRules) {
+        {
+            WebSocketFrameParser parser(10, WebSocketPeer::Server);
+            parser.Feed(Span(EncodeTextFrame("0123456789A")));
+            ExpectViolation(parser, WebSocketCloseCode::kMessageTooBig);
+        }
+        {
+            WebSocketFrameParser parser(1024, WebSocketPeer::Server);
+            parser.Feed(Span(Bytes({0xC1, 0x00})));  // RSV1
+            ExpectViolation(parser, WebSocketCloseCode::kProtocolError);
+        }
+        {
+            WebSocketFrameParser parser(1024, WebSocketPeer::Server);
+            parser.Feed(Span(EncodeFrame(WebSocketOpcode::kPing, TextBytes("p"), std::nullopt, /*fin=*/false)));
+            ExpectViolation(parser, WebSocketCloseCode::kProtocolError);
+        }
+    }
+
+    TEST(WebSocketFrameTest, TheDefaultRoleStillRefusesAnUnmaskedFrame) {
+        WebSocketFrameParser parser(1024);
+        parser.Feed(Span(EncodeTextFrame("unmasked")));
+        ExpectViolation(parser, WebSocketCloseCode::kProtocolError);
+    }
+
 }  // namespace BECore::Tests

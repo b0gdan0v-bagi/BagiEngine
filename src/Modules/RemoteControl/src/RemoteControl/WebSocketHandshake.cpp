@@ -36,47 +36,8 @@ namespace BECore {
             return (letter >= 'A' && letter <= 'Z') ? static_cast<char>(letter - 'A' + 'a') : letter;
         }
 
-        eastl::string Lowered(eastl::string_view text) {
-            eastl::string lowered;
-            lowered.reserve(text.size());
-            for (const char letter : text) {
-                lowered.push_back(AsciiLower(letter));
-            }
-            return lowered;
-        }
-
-        bool EqualsIgnoreCase(eastl::string_view left, eastl::string_view right) {
-            return left.size() == right.size() && Lowered(left) == Lowered(right);
-        }
-
-        eastl::string_view Trimmed(eastl::string_view text) {
-            while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
-                text.remove_prefix(1);
-            }
-            while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
-                text.remove_suffix(1);
-            }
-            return text;
-        }
-
         HandshakeError Refuse(int status, eastl::string message) {
             return HandshakeError{status, std::move(message)};
-        }
-
-        /// True when the comma-separated list @p value has the token @p token (any case)
-        bool HasToken(eastl::string_view value, eastl::string_view token) {
-            while (!value.empty()) {
-                const size_t comma = value.find(',');
-                const eastl::string_view item = Trimmed(value.substr(0, comma));
-                if (EqualsIgnoreCase(item, token)) {
-                    return true;
-                }
-                if (comma == eastl::string_view::npos) {
-                    break;
-                }
-                value.remove_prefix(comma + 1);
-            }
-            return false;
         }
 
         bool IsPort(eastl::string_view text) {
@@ -214,8 +175,8 @@ namespace BECore {
             }
 
             ParsedOrigin parsed;
-            parsed.scheme = Lowered(scheme);
-            parsed.host = Lowered(host);
+            parsed.scheme = LowerAscii(scheme);
+            parsed.host = LowerAscii(host);
             parsed.port = DefaultPortOf(parsed.scheme);
             if (hasPort) {
                 if (!IsPort(port)) {
@@ -282,8 +243,8 @@ namespace BECore {
                 if (colon == eastl::string_view::npos || colon == 0) {
                     return Refuse(400, "a header line has no name or no colon");
                 }
-                const eastl::string name = Lowered(line.substr(0, colon));
-                const eastl::string_view value = Trimmed(line.substr(colon + 1));
+                const eastl::string name = LowerAscii(line.substr(0, colon));
+                const eastl::string_view value = TrimHeaderValue(line.substr(colon + 1));
 
                 auto found = headers.find(name);
                 if (found == headers.end()) {
@@ -321,6 +282,44 @@ namespace BECore {
         }
 
     }  // namespace
+
+    eastl::string LowerAscii(eastl::string_view text) {
+        eastl::string lowered;
+        lowered.reserve(text.size());
+        for (const char letter : text) {
+            lowered.push_back(AsciiLower(letter));
+        }
+        return lowered;
+    }
+
+    bool EqualsIgnoreCase(eastl::string_view left, eastl::string_view right) {
+        return left.size() == right.size() && LowerAscii(left) == LowerAscii(right);
+    }
+
+    eastl::string_view TrimHeaderValue(eastl::string_view text) {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
+            text.remove_prefix(1);
+        }
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) {
+            text.remove_suffix(1);
+        }
+        return text;
+    }
+
+    bool HeaderHasToken(eastl::string_view value, eastl::string_view token) {
+        while (!value.empty()) {
+            const size_t comma = value.find(',');
+            const eastl::string_view item = TrimHeaderValue(value.substr(0, comma));
+            if (EqualsIgnoreCase(item, token)) {
+                return true;
+            }
+            if (comma == eastl::string_view::npos) {
+                break;
+            }
+            value.remove_prefix(comma + 1);
+        }
+        return false;
+    }
 
     eastl::string ComputeAcceptKey(eastl::string_view clientKey) {
         eastl::string joined(clientKey.data(), clientKey.size());
@@ -399,11 +398,11 @@ namespace BECore {
         }
 
         const eastl::string* upgrade = FindHeader(headers, HeaderNames::kUpgrade);
-        if (upgrade == nullptr || !HasToken(*upgrade, "websocket")) {
+        if (upgrade == nullptr || !HeaderHasToken(*upgrade, "websocket")) {
             return std::unexpected(Refuse(400, "expected 'Upgrade: websocket'"));
         }
         const eastl::string* connection = FindHeader(headers, HeaderNames::kConnection);
-        if (connection == nullptr || !HasToken(*connection, "upgrade")) {
+        if (connection == nullptr || !HeaderHasToken(*connection, "upgrade")) {
             return std::unexpected(Refuse(400, "expected 'Connection: Upgrade'"));
         }
         const eastl::string* version = FindHeader(headers, HeaderNames::kVersion);
