@@ -18,6 +18,8 @@ namespace BECore {
         bool listening = false;
         uint16_t port = 0;
         uint32_t clients = 0;  // open connections, handshakes done
+
+        [[nodiscard]] bool operator==(const ControlServerStatus& other) const = default;
     };
 
     /// Frame time of a frame that a deferred call asks for when it does not say how long the frame is: one frame at 60 fps
