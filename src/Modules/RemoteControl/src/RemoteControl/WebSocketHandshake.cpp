@@ -10,6 +10,8 @@ namespace BECore {
         constexpr eastl::string_view kSupportedVersion = "13";
         constexpr eastl::string_view kRequestLinePrefix = "GET ";
         constexpr eastl::string_view kRequestLineSuffix = " HTTP/1.1";
+        constexpr eastl::string_view kRequestLineSuffixHttp10 = " HTTP/1.0";
+        constexpr eastl::string_view kHealthBody = "ok";
         constexpr size_t kClientKeyLength = 24;  // 16 random bytes in base64 with padding
         constexpr size_t kMaxPortDigits = 5;
         constexpr uint32_t kMaxPort = 65535;
@@ -414,6 +416,44 @@ namespace BECore {
             return std::unexpected(Refuse(400, "'Sec-WebSocket-Key' is missing or is not 16 bytes in base64"));
         }
         return *key;
+    }
+
+    bool IsHealthCheckRequest(eastl::string_view requestText, const HandshakePolicy& policy) {
+        if (policy.loopbackOnly || policy.healthPath.empty() || requestText.size() > kMaxHandshakeBytes) {
+            return false;
+        }
+
+        const size_t requestLineEnd = requestText.find('\n');
+        eastl::string_view requestLine = requestText.substr(0, requestLineEnd);
+        if (requestLine.ends_with('\r')) {
+            requestLine.remove_suffix(1);
+        }
+        if (!requestLine.starts_with(kRequestLinePrefix)) {
+            return false;
+        }
+        requestLine.remove_prefix(kRequestLinePrefix.size());
+        if (requestLine.ends_with(kRequestLineSuffix)) {
+            requestLine.remove_suffix(kRequestLineSuffix.size());
+        } else if (requestLine.ends_with(kRequestLineSuffixHttp10)) {
+            requestLine.remove_suffix(kRequestLineSuffixHttp10.size());
+        } else {
+            return false;
+        }
+        const eastl::string_view path = requestLine.substr(0, requestLine.find('?'));
+        if (path != eastl::string_view(policy.healthPath.data(), policy.healthPath.size())) {
+            return false;
+        }
+
+        const eastl::string_view headerLines = (requestLineEnd == eastl::string_view::npos) ? eastl::string_view() : requestText.substr(requestLineEnd + 1);
+        Headers headers;
+        if (ReadHeaders(headerLines, headers)) {
+            return false;  // a malformed head gets the usual 400
+        }
+        return FindHeader(headers, HeaderNames::kUpgrade) == nullptr;
+    }
+
+    eastl::string BuildHealthResponse() {
+        return Format("HTTP/1.1 200 OK\r\nConnection: close\r\nCache-Control: no-store\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", kHealthBody.size(), kHealthBody);
     }
 
     eastl::string BuildAcceptResponse(eastl::string_view clientKey) {
