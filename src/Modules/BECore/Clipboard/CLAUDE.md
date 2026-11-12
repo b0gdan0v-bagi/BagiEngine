@@ -28,6 +28,10 @@ The text clipboard of the game: `CoreManager::GetClipboard()` (`Clipboard`), wit
 - If a browser delivers both the shortcut and the `paste` event for one press the game gets two identical `PasteEvent`s. This is accepted: pasting the same text twice is harmless.
 - **Zero allocations** in a steady frame: `Update()` with nothing pending does not allocate (the containers are members and keep their capacity).
 
+## Desktop
+
+`SDLClipboardBackend` (`SDL/src/CoreSDL/SDLClipboard.h`) runs on `SDL_SetClipboardText` / `SDL_GetClipboardText`; `SDL3ApplicationFabric::Create` installs it (`MakePlatformClipboardBackend()`). It is available once SDL video is initialised, and a read finishes at once (answered at the next `Update()` all the same). A headless run (the `dummy` driver) keeps the clipboard in SDL's memory, so a control smoke never touches the system one. The paste shortcut (`IsPasteShortcut`: V with Cmd on Apple, Ctrl elsewhere, Shift allowed, Alt and the other primary modifier not, no key repeat) is turned into `RequestPaste()` by `SDLEventsProvider` under the rules of keys: not while paused and not while ImGui wants the keyboard; the `KeyDownEvent` is emitted as before.
+
 ## Tests
 
 `FakeClipboard`: content as a string, `SetContent`, `Content()`, `SetAvailable(false)`, `SetRefuse(true)` (reads answer `Refused`, writes return false), `SetDeferred(n)` (a read finishes after `n` polls), `QueuePasted(text)`, counters `WriteCount()` / `ReadCount()`. `ScopedClipboardBackend` installs a backend on `CoreManager::GetClipboard()` and puts the old one back, so a test never leaks a fake into the next. The real system clipboard is never touched by ctest.
