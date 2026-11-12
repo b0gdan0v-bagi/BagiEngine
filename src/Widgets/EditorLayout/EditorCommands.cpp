@@ -30,6 +30,12 @@ namespace BECore {
                 {kGamePause, "Pause / Resume Game", kF6, true},
                 {kGameStep, "Step One Frame", kF7, true, true},
                 {kViewportInputMode, "Toggle Viewport Input: Edit / Play", kF8, true},
+                {kViewportToolTranslate, "Viewport Tool: Move", std::nullopt, true},
+                {kViewportToolRotate, "Viewport Tool: Rotate", std::nullopt, true},
+                {kViewportToolScale, "Viewport Tool: Scale", std::nullopt, true},
+                {kViewportGizmoSpace, "Viewport Gizmo: World / Local", std::nullopt, true},
+                {kViewportSnap, "Viewport Snap: On / Off", std::nullopt, true},
+                {kViewportFrameSelected, "Viewport: Frame Selection", std::nullopt, true},
                 {kModeToggle, "Switch Game and Editor", kCtrlShiftE, false},
                 {kViewProfiler, "Profiler", kCtrlShiftP, false},
             };

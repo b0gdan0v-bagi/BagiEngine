@@ -23,6 +23,20 @@ namespace BECore {
     };
 
     /**
+     * @brief The set of selected nodes changed (a click or a box in the viewport, a Ctrl+click in the hierarchy, a node that died, a scene change)
+     *
+     * Sent by SceneEditorWidget once per change, with SceneNodeSelectedEvent when the primary node differs too. @c nodes is the editor's own list in selection order, the last
+     * one is the primary (the node the inspector shows); empty for none. It is valid for the frame of the event only, as the pointers of SceneNodeSelectedEvent.
+     */
+    struct SceneSelectionChangedEvent : public EventBase<SceneSelectionChangedEvent> {
+        const Scene* scene = nullptr;
+        eastl::span<SceneNode* const> nodes;
+
+        SceneSelectionChangedEvent() = default;
+        SceneSelectionChangedEvent(const Scene* s, eastl::span<SceneNode* const> n) : scene(s), nodes(n) {}
+    };
+
+    /**
      * @brief Asks the scene editor to select a node and show it in the hierarchy
      *
      * SceneEditorWidget answers only for a node that is alive in the tree of the active scene (it walks the tree, so a stale pointer is never dereferenced);

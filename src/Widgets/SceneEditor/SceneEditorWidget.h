@@ -1,6 +1,7 @@
 #pragma once
 
 #include "HierarchyPanel.h"
+#include "SceneSelection.h"
 #include "SceneSelectionEvents.h"
 
 #include <BECore/Scene/SceneNode.h>
@@ -58,11 +59,23 @@ namespace BECore {
         /// Answers SelectSceneNodeRequestEvent: selects and reveals the node when it is alive in the active scene, else does nothing
         void OnSelectRequest(const SelectSceneNodeRequestEvent& event);
 
-        /// Answers a left click of the viewport in the Edit input mode: picks the topmost node or canvas element under it (ScenePick) and reveals it like a request does. A hit on a canvas
-        /// element also selects that element in the "UI elements" section; a click on nothing changes nothing
+        /// Answers a left click of the viewport in the Edit input mode: picks the topmost node or canvas element under it (ScenePick) and applies it with ApplyClick (Ctrl toggles, Shift
+        /// adds, a plain click replaces the selection; a plain click on nothing clears it, with Ctrl or Shift a click on nothing changes nothing). The primary node is revealed like a
+        /// request does, only if it stays selected. A hit on a canvas element also selects that element in the "UI elements" section
         void OnViewportClick(const ViewportEditClickEvent& event);
 
-        /// Sends SceneNodeSelectedEvent when the selection (or the scene it belongs to) differs from the last one announced
+        /// Answers the end of a rubber-band drag: the nodes the box touches (ScenePick::PickInRect) replace the selection, or are added to it with Ctrl or Shift
+        void OnViewportBoxSelect(const ViewportBoxSelectEvent& event);
+
+        /// Answers the end of a gizmo drag: a Commit marks the scene as changed (Begin, Change and Cancel leave the nodes as the drag found them or put them back)
+        void OnTransformEdit(const NodeTransformEditEvent& event);
+
+        /// Brings the selection and HierarchyState::selected back in line after the hierarchy panel or a handler changed one of them: applies the clicked row, drops the nodes
+        /// that are no longer in the tree, takes a node that only HierarchyState::selected names (a created, duplicated or revealed one) as the whole selection, and makes the
+        /// primary node the selected one
+        void SyncSelection(Scene& scene);
+
+        /// Sends SceneNodeSelectedEvent when the primary node (or the scene it belongs to) differs from the last one announced, and SceneSelectionChangedEvent when the set does
         void AnnounceSelection(const Scene* scene);
 
         /// Takes what the hierarchy panel asked for in the last Draw(): the dirty mark, the forgotten UI selection of a removed subtree, the "Add Node" popup
@@ -90,7 +103,11 @@ namespace BECore {
          */
         void SaveScene();
 
-        HierarchyState _hierarchy;                             // the selected node, the rename and the pending tree edit of the hierarchy panel
+        HierarchyState _hierarchy;                  // the primary node, the rename and the pending tree edit of the hierarchy panel
+        SceneSelection _selection;                  // every selected node; its primary is `_hierarchy.selected`
+        eastl::vector<SceneNode*> _boxHits;         // the nodes of a rubber band, kept for its capacity
+        eastl::vector<SceneNode*> _announcedNodes;  // what SceneSelectionChangedEvent last told
+        const Scene* _announcedNodesScene = nullptr;
         HierarchyModel::SelectionTracker _announcedSelection;  // what SceneNodeSelectedEvent last told
         Scene* _lastScene = nullptr;                           // the scene the selection belongs to: a replaced scene drops it
         SceneNode* _uiSelectionNode = nullptr;                 // the node whose canvas `_selectedUIElement` belongs to

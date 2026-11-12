@@ -10,6 +10,7 @@
 #include <CoreSDL/SDLEvents.h>
 #include <Events/InputEvents.h>
 #include <Events/SubscriptionHolder.h>
+#include <Widgets/SceneEditor/SceneSelection.h>
 #include <Widgets/Viewport/ViewportInput.h>
 #include <gtest/gtest.h>
 
@@ -160,6 +161,21 @@ namespace BECore::Tests {
         EXPECT_EQ(ResolveTarget(ViewportInputMode::Edit, true), ViewportInputTarget::Game);
     }
 
+    TEST(ViewportInputTargetTest, SelectionModifiersAreTheBitsOfTheKeysHeld) {
+        EXPECT_EQ(SelectionModifiersOf(false, false), 0u);
+        EXPECT_EQ(SelectionModifiersOf(true, false), kSelectionModifierCtrl);
+        EXPECT_EQ(SelectionModifiersOf(false, true), kSelectionModifierShift);
+        EXPECT_EQ(SelectionModifiersOf(true, true), kSelectionModifierCtrl | kSelectionModifierShift);
+    }
+
+    TEST(ViewportInputTargetTest, ADragNeedsToPassTheThresholdInOneAxisToBeABox) {
+        EXPECT_FALSE(IsBoxSelectDrag(10.0f, 10.0f, 10.0f, 10.0f));
+        EXPECT_FALSE(IsBoxSelectDrag(10.0f, 10.0f, 10.0f + kBoxSelectMinDrag - 1.0f, 10.0f - kBoxSelectMinDrag + 1.0f));
+        EXPECT_TRUE(IsBoxSelectDrag(10.0f, 10.0f, 10.0f + kBoxSelectMinDrag, 10.0f));
+        EXPECT_TRUE(IsBoxSelectDrag(10.0f, 10.0f, 10.0f, 10.0f - kBoxSelectMinDrag));
+        EXPECT_TRUE(IsBoxSelectDrag(0.0f, 0.0f, 1.0f, 2.0f, 2.0f));
+    }
+
     TEST_F(ViewportInputTest, PlayClickOnAButtonFiresItAndTheGameSeesNoPress) {
         Click(kBoxX, kBoxY, ViewportInputMode::Play);
 
@@ -182,6 +198,27 @@ namespace BECore::Tests {
         EXPECT_EQ(_recorder.ups[0].x, kGroundX);
         EXPECT_EQ(_recorder.actions, 0);
         EXPECT_TRUE(_editClicks.empty());
+    }
+
+    TEST_F(ViewportInputTest, TheEditClickCarriesTheModifiersOfThePress) {
+        ViewportPointerFrame press = Press(kBoxX, kBoxY);
+        press.modifiers = kSelectionModifierCtrl | kSelectionModifierShift;
+        Send(press, ViewportInputMode::Edit);
+        Send(Release(kBoxX, kBoxY), ViewportInputMode::Edit);
+
+        ASSERT_EQ(_editClicks.size(), 1u);
+        EXPECT_EQ(_editClicks[0].modifiers, kSelectionModifierCtrl | kSelectionModifierShift);
+    }
+
+    TEST_F(ViewportInputTest, ATakenPressGetsNoEditClickAndItsReleaseStaysWithTheEditor) {
+        // The viewport passes an empty sink for a press that a gizmo or a pan took
+        _pointer.Forward(Press(kGroundX, kGroundY), ViewportInputMode::Edit, false, CoreManager::GetUIInput(), {});
+        Send(Release(kGroundX, kGroundY), ViewportInputMode::Edit);
+
+        EXPECT_TRUE(_editClicks.empty());
+        EXPECT_TRUE(_recorder.downs.empty());
+        EXPECT_TRUE(_recorder.ups.empty());
+        EXPECT_FALSE(_pointer.IsGameHeld());
     }
 
     TEST_F(ViewportInputTest, EditGivesTheGameNothingAndTheSinkOneEditClick) {

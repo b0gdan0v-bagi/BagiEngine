@@ -21,6 +21,15 @@ namespace BECore {
     /// @return where a press goes: the mode's target, or the other one while the one-off modifier is held
     [[nodiscard]] ViewportInputTarget ResolveTarget(ViewportInputMode mode, bool oneOffModifier);
 
+    /// A drag on empty space shorter than this (screen units, in x and in y) is a plain click, not a rubber band
+    inline constexpr float kBoxSelectMinDrag = 4.0f;
+
+    /// True when the pointer moved from (@p startX, @p startY) to (@p nowX, @p nowY) far enough, in x or in y, for a box selection
+    [[nodiscard]] bool IsBoxSelectDrag(float startX, float startY, float nowX, float nowY, float threshold = kBoxSelectMinDrag);
+
+    /// The bits of the `modifiers` field of the viewport events (kSelectionModifierCtrl, kSelectionModifierShift of SceneSelection.h) for the keys held
+    [[nodiscard]] uint32_t SelectionModifiersOf(bool ctrl, bool shift);
+
     /// The mouse buttons the viewport follows, by the ImGui index: 0 left, 1 right, 2 middle
     inline constexpr int kViewportButtonCount = 3;
 
@@ -36,6 +45,7 @@ namespace BECore {
         bool clicked[kViewportButtonCount] = {};    // pressed in this frame
         bool released[kViewportButtonCount] = {};   // released in this frame
         uint8_t clicks[kViewportButtonCount] = {};  // the click count of a press (1 single, 2 double)
+        uint32_t modifiers = 0;                     // the selection keys held (SelectionModifiersOf), carried by an edit click
         float wheelX = 0.0f;
         float wheelY = 0.0f;
         ViewportPointerSource source = ViewportPointerSource::Mouse;
