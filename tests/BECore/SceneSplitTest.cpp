@@ -289,6 +289,27 @@ namespace BECore::Tests {
         EXPECT_EQ(DrawRanks(Main(split)), (eastl::vector<int32_t>{1, 3, 2}));
     }
 
+    TEST_F(SceneSplitTest, ALoadedNodeKnowsItsNodeFile) {
+        pugi::xml_document doc;
+        const auto split = Load(Scene("<node ref=\"nodes/Board\"/><node name=\"Own\"/><node ref=\"nodes/Hud\"/><node ref=\"nodes/Menu\"/>"), doc);
+
+        const auto& nodes = Main(split).GetRootNode().GetChildren();
+        ASSERT_EQ(nodes.size(), 4u);
+        EXPECT_EQ(nodes[0]->GetSourceRef(), PoolString::Intern("nodes/Board"));
+        EXPECT_TRUE(nodes[1]->GetSourceRef().Empty());
+        EXPECT_EQ(nodes[2]->GetSourceRef(), PoolString::Intern("nodes/Hud"));
+        EXPECT_EQ(nodes[3]->GetSourceRef(), PoolString::Intern("nodes/Menu"));
+    }
+
+    TEST_F(SceneSplitTest, AnInlineSceneHasNoSourceRefs) {
+        pugi::xml_document doc;
+        const auto inlined = Load(InlineScene({0, 1, 2}), doc);
+
+        for (const auto& node : Main(inlined).GetRootNode().GetChildren()) {
+            EXPECT_TRUE(node->GetSourceRef().Empty()) << node->GetName().CStr();
+        }
+    }
+
     TEST_F(SceneSplitTest, TheUiTreeIsTheSame) {
         pugi::xml_document inlineDoc;
         pugi::xml_document splitDoc;
@@ -422,6 +443,34 @@ namespace BECore::Tests {
         EXPECT_EQ(nodes[0]->GetComponent<TransformComponent>()->_y, 20.0f);
         EXPECT_EQ(nodes[1]->GetComponent<TransformComponent>()->_x, 10.0f);
         EXPECT_EQ(nodes[1]->GetComponent<TransformComponent>()->_y, 55.0f);
+    }
+
+    /// A node with overrides, also under another name, keeps the reference of its file
+    TEST_F(SceneSplitOverrideTest, AnInstanceWithOverridesKeepsTheReferenceOfItsFile) {
+        pugi::xml_document doc;
+        const auto split = Load(Scene(kPanelRefA + kPanelRefB + "<node name=\"Own\"/>" + kPanelRefC), doc);
+
+        const auto& nodes = Main(split).GetRootNode().GetChildren();
+        ASSERT_EQ(nodes.size(), 4u);
+        EXPECT_EQ(nodes[0]->GetName(), PoolString::Intern("PanelA"));
+        EXPECT_EQ(nodes[0]->GetSourceRef(), PoolString::Intern("nodes/Panel"));
+        EXPECT_EQ(nodes[1]->GetSourceRef(), PoolString::Intern("nodes/Panel"));
+        EXPECT_TRUE(nodes[2]->GetSourceRef().Empty());
+        EXPECT_EQ(nodes[3]->GetSourceRef(), PoolString::Intern("nodes/Panel"));
+    }
+
+    /// The mark is on the live node only: the document a tool reads has no `sourceRef`, and the given node is not changed
+    TEST_F(SceneSplitOverrideTest, NoSourceRefReachesTheDocuments) {
+        WriteFile(_dir / "SceneConfig.xml", Scene(kPanelRefA + kPanelRefB));
+        pugi::xml_document split;
+        ASSERT_TRUE(LoadSceneDocument(_dir / "SceneConfig.xml", split).Ok());
+        EXPECT_EQ(Printed(split.document_element()).find("sourceRef"), std::string::npos);
+
+        pugi::xml_document doc;
+        ASSERT_TRUE(doc.load_string(Scene(kPanelRefA).c_str()));
+        const std::string before = Printed(doc.document_element());
+        LoadSceneManager(XmlNode{doc.document_element()}, MakeDirectoryNodeLoader(_dir));
+        EXPECT_EQ(Printed(doc.document_element()), before);
     }
 
     TEST_F(SceneSplitOverrideTest, TheUiTreeAndTheValidatorFindingsAreTheSame) {

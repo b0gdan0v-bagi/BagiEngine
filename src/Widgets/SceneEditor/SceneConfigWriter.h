@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Scene/SceneNodeFiles.h>
+
 namespace BECore {
 
     class Scene;
@@ -17,18 +19,20 @@ namespace BECore {
      * Scene::PrepareForSave() leaves it: `name`, `layer` when it is not 0, and the components through IComponent::Serialize.
      * Calls Scene::PrepareForSave() itself.
      *
-     * A scene whose existing element has a `<node ref>` child (a node kept in a node file, see Scene/SceneNodeFiles.h) is
-     * not written: the live tree is flat, so saving would inline every reference and undo the split of the file. Nothing is
-     * changed then. Until the editor can save references, the file of such a scene is edited by hand. A reference in
-     * another scene does not matter.
+     * A top-level node that came from a node file (SceneNode::GetSourceRef(), see Scene/SceneNodeFiles.h) is written as its
+     * `<node ref>` with only the overrides that differ from the file (BuildNodeReference, Scene/SceneNodeInstance.h), so the
+     * split of the file survives a save. When that is not possible (no @p loader, the file is gone or changed, the instance
+     * gained, lost or reordered a component, the reference would not load back as the live node) the node is written inline:
+     * its data is kept, its link to the file is not, and one line goes to @p notes. The node file itself is never edited.
      *
-     * Needs no ImGui and no engine services, so a test can run it on a document of its own.
+     * Needs no ImGui, and the node files are read only through @p loader (no CoreManager here), so a test can run it on a document of its own.
      *
      * @param configRoot Document element of SceneConfig (`<SceneManager>`, XmlNode::GetPugiNode() of the config)
      * @param scene Scene to write
-     * @return false when @p configRoot is not a valid node or the scene's element has node references (nothing is
-     * written); true when the element was written
+     * @param loader Reads the node files of the instances; null writes every instance inline
+     * @param notes Receives a line `node 'X': written inline, <reason>` for every instance written inline; may be null
+     * @return false when @p configRoot is not a valid node (nothing is written); true when the element was written
      */
-    bool WriteSceneToConfig(pugi::xml_node configRoot, Scene& scene);
+    bool WriteSceneToConfig(pugi::xml_node configRoot, Scene& scene, const NodeFileLoader* loader = nullptr, eastl::vector<eastl::string>* notes = nullptr);
 
 }  // namespace BECore

@@ -13,7 +13,8 @@ namespace BECore {
      *
      * The document of @p configRoot is copied, the references are expanded in the copy (ExpandNodeReferences) and the copy
      * is deserialized, so the cached config of ConfigManager is never changed and what reads the scene afterwards (canvases,
-     * `ui_tree`, the validator, the draw order) sees the same tree as for a scene written inline. Every expansion error and
+     * `ui_tree`, the validator, the draw order) sees the same tree as for a scene written inline. Every expanded node
+     * remembers its file (`SceneNode::GetSourceRef`, from the expansion's `markSource`). Every expansion error and
      * every deserializer error is one LOG_ERROR; what could be read is kept. An invalid @p configRoot gives a manager with
      * default values, as MakeFromConfig does for a missing config.
      *

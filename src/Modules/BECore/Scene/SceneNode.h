@@ -41,6 +41,16 @@ namespace BECore {
         int32_t GetLayer() const;
         void SetLayer(int32_t layer);
 
+        /**
+         * @brief The node file this node was expanded from (`nodes/MahjongHud`), empty for a node written inline
+         *
+         * Set by the scene loader for a `<node ref>` and by Scene::InstantiateNode; read by the editor save, which writes
+         * the node back as a reference with its overrides. Nothing else writes it, and a hand-written `sourceRef` in a
+         * scene file is not supported.
+         */
+        PoolString GetSourceRef() const;
+        void SetSourceRef(PoolString sourceRef);
+
         entt::entity GetEntity() const;
         const eastl::vector<IntrusivePtr<IComponent>>& GetComponents() const;
 
@@ -51,6 +61,7 @@ namespace BECore {
 
         BE_REFLECT_FIELD PoolString _name;
         BE_REFLECT_FIELD int32_t _layer = 0;
+        BE_REFLECT_FIELD PoolString _sourceRef;
         entt::entity _entity = entt::null;
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;

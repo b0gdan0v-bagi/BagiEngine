@@ -198,7 +198,7 @@ namespace BECore {
     bool SceneEditorWidget::RenderUIElements(UICanvasComponent& canvas) {
         bool changed = false;
         if (ImGui::TreeNodeEx("UI elements", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::TextDisabled("Edits the authored style, live; not saved to a node file yet");
+            ImGui::TextDisabled("Edits the authored style, live; saved in the scene file (an instance: as an override), not in the node file");
             ImGui::BeginChild("##ui_tree", ImVec2(0.0f, kUITreeHeight), true);
             DrawUIElementTree(canvas, _selectedUIElement);
             ImGui::EndChild();
@@ -245,6 +245,10 @@ namespace BECore {
         if (ImGui::InputInt("##node_layer", &layer)) {
             _selectedNode->SetLayer(layer);
             _isDirty = true;
+        }
+
+        if (!_selectedNode->GetSourceRef().Empty()) {
+            ImGui::TextDisabled("Instance of %s", _selectedNode->GetSourceRef().CStr());
         }
 
         // Entity ID (read-only)
@@ -376,9 +380,14 @@ namespace BECore {
             return;
         }
 
-        if (!WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene)) {  // <SceneManager>
-            LOG_WARNING(Format("SceneEditor: scene '{}' not saved: the editor does not save scenes with node files (<node ref>) yet; edit the file by hand", scene->GetName().CStr()).c_str());
+        // An instance of a node file is saved as its <node ref> with the overrides; one that cannot be goes inline and is told here
+        const NodeFileLoader loader = MakeFileSystemNodeLoader(CoreManager::GetFileSystem());
+        eastl::vector<eastl::string> notes;
+        if (!WriteSceneToConfig(xmlRoot.GetPugiNode(), *scene, &loader, &notes)) {  // <SceneManager>
             return;
+        }
+        for (const eastl::string& note : notes) {
+            LOG_WARNING(Format("SceneEditor: scene '{}': {}", scene->GetName().CStr(), note.c_str()).c_str());
         }
 
         if (configManager.SaveConfig("SceneConfig"_intern)) {

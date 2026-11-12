@@ -83,7 +83,7 @@ The choice (shape, safe area, overlays; not the forced view) is an editor settin
 
 ## Editor
 
-The "UI elements" section of `SceneEditorWidget` (`UIRectInspector`, only with the editor) shows for a node with a `UICanvasComponent` the element tree and, for the selected element, the rect inspector: preset grid, `anchorMin` / `anchorMax` / `pivot`, offsets and sizes with a px / % switch, margins, `region`. It edits the authored `style`, never `active` (a variant of the canvas may still override it: the inspector says how many do) and the canvas is invalidated at every change. The numbers come from `UIRectEdit` and `UIAnchorPresets`, the widget only draws. The edits live in memory: saving back to a node file or a `.ui.xml` is the next slice, and the scene editor still refuses to save a scene with `<node ref>`.
+The "UI elements" section of `SceneEditorWidget` (`UIRectInspector`, only with the editor) shows for a node with a `UICanvasComponent` the element tree and, for the selected element, the rect inspector: preset grid, `anchorMin` / `anchorMax` / `pivot`, offsets and sizes with a px / % switch, margins, `region`. It edits the authored `style`, never `active` (a variant of the canvas may still override it: the inspector says how many do) and the canvas is invalidated at every change. The numbers come from `UIRectEdit` and `UIAnchorPresets`, the widget only draws. An edit of an instance of a node file is saved with the scene as an `<elements>` override of the whole list (`Scene/CLAUDE.md`, "Node files"); saving back into the node file itself or a `.ui.xml` is not built.
 
 ## Not done
 
