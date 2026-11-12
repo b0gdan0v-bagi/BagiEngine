@@ -14,6 +14,8 @@ import subprocess
 import tempfile
 import time
 import unittest
+import urllib.error
+import urllib.request
 import zlib
 from pathlib import Path
 from types import SimpleNamespace
@@ -131,6 +133,11 @@ class ArgumentsTest(unittest.TestCase):
         self.assertEqual(options.device_scale_factor, 1.0)
         self.assertFalse(options.touch)
         self.assertEqual(options.expect_console, [])
+
+    def test_the_upload_check_is_on_and_no_upload_check_switches_it_off(self):
+        self.assertTrue(self.parse("--dist", "d").upload_check)
+        self.assertFalse(self.parse("--dist", "d", "--no-upload-check").upload_check)
+        self.assertEqual(self.parse("--selftest", "--selftest-fault", "upload").selftest_fault, "upload")
 
     def test_the_browser_and_input_options_are_read(self):
         options = self.parse("--selftest", "--browser-channel", "msedge", "--device-scale-factor", "2", "--touch")
@@ -415,7 +422,9 @@ class SelftestPageTest(unittest.TestCase):
 
     def test_the_faults_change_the_page_and_none_does_not_break_it(self):
         pages = {fault: web_smoke.selftest_page(fault) for fault in web_smoke.SELFTEST_FAULTS}
-        self.assertEqual(len(set(pages.values())), len(pages))
+        # the fault `upload` is in the server (it has no match store), so its page is the good one
+        self.assertEqual(pages["upload"], pages["none"])
+        self.assertEqual(len(set(pages.values())), len(pages) - 1)
         self.assertNotIn("on purpose", pages["none"])
         self.assertIn("var flat = false", pages["none"])
         self.assertIn("var flat = true", pages["flat"])
@@ -425,6 +434,15 @@ class SelftestPageTest(unittest.TestCase):
         self.assertIn("var moving = true", pages["moving"])
         self.assertIn("console.error", pages["console-error"])
         self.assertIn("throw new Error", pages["page-error"])
+
+    def test_the_page_carries_the_script_of_the_shell_unchanged_before_its_own(self):
+        shell = web_smoke.SHELL_PATH.read_text(encoding="utf-8")
+        script = web_smoke.web_post_script()
+        self.assertIn("window.bagiWebPost", script)
+        self.assertIn(script, shell)
+        page = web_smoke.selftest_page()
+        self.assertIn(f'<script id="bagi-web-post">{script}</script>', page)
+        self.assertLess(page.index("bagi-web-post"), page.index("<script>"))
 
     @unittest.skipUnless(NODE, "node is not on PATH")
     def test_the_script_of_every_variant_passes_node_check(self):
@@ -582,6 +600,92 @@ class WebManifestCheckTest(unittest.TestCase):
                 self.assertEqual(web_smoke.check_web_manifest(web_smoke.fetch_from(url)), [])
 
 
+class UploadCheckTest(unittest.TestCase):
+    """Check 7 on a `post` function and a store folder (no browser): the file is read back from the store."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.store = Path(self.temp.name)
+        self.posts = []
+
+    def storing(self, status=200, content=None):
+        """A post that stores `content` (the posted body when None) as the piece and answers `status`."""
+        def post(path, body):
+            self.posts.append((path, body))
+            match_id = path.split("/")[2]
+            if content != b"":
+                (self.store / match_id).mkdir()
+                (self.store / match_id / "0.jsonl").write_bytes(body.encode("utf-8") if content is None else content)
+            return {"status": status}
+        return post
+
+    def test_a_stored_piece_passes_and_the_post_is_a_start_line_to_a_fresh_id_with_the_smoke_version(self):
+        self.assertEqual(web_smoke.check_upload(self.storing(), self.store), [])
+        path, body = self.posts[0]
+        self.assertRegex(path, r"^/matches/[0-9a-f]{32}/0$")
+        self.assertEqual(json.loads(body), {"event": "start", "version": web_smoke.SMOKE_LOG_VERSION})
+        self.assertTrue(body.endswith("\n"))
+        self.assertEqual(web_smoke.check_upload(self.storing(), self.store), [])
+        self.assertNotEqual(self.posts[0][0], self.posts[1][0])  # a fresh id every time
+
+    def test_an_error_of_the_page_or_a_status_other_than_200_is_check_7(self):
+        for name, answer in (("error", {"error": "the page has no window.bagiWebPost"}), ("405", {"status": 405}), ("0", {"status": 0}),
+                             ("no dict", None)):
+            with self.subTest(name):
+                problems = web_smoke.check_upload(lambda path, body: answer, self.store)
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn("(7)", problems[0])
+        self.assertIn("window.bagiWebPost", web_smoke.check_upload(lambda path, body: {"error": "the page has no window.bagiWebPost"}, self.store)[0])
+        self.assertIn("HTTP 405", web_smoke.check_upload(lambda path, body: {"status": 405}, self.store)[0])
+
+    def test_a_page_that_cannot_run_the_script_is_check_7(self):
+        def post(path, body):
+            raise RuntimeError("Target page, context or browser has been closed\nlog")
+        problems = web_smoke.check_upload(post, self.store)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("(7)", problems[0])
+        self.assertIn("has been closed", problems[0])
+
+    def test_a_200_with_no_file_or_other_bytes_in_the_store_is_check_7(self):
+        for content, expected in ((b"", "not in the match store"), (b'{"event":"start","version":2}\n', "differs")):
+            with self.subTest(content):
+                problems = web_smoke.check_upload(self.storing(content=content), self.store)
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn("(7)", problems[0])
+                self.assertIn(expected, problems[0])
+
+    def test_the_problems_reach_the_verdict_of_a_run(self):
+        self.assertEqual(web_smoke.evaluate(good_run(upload_problems=["(7) boom"])), ["(7) boom"])
+        self.assertEqual(web_smoke.evaluate(good_run(upload_problems=[])), [])
+        self.assertEqual(web_smoke.evaluate(good_run()), [])  # not made (--no-upload-check)
+
+    def test_the_real_server_stores_what_the_check_posts_and_a_server_without_a_store_does_not(self):
+        with tempfile.TemporaryDirectory() as site:
+            root = Path(site)
+            (root / "index.html").write_text("<!doctype html>", encoding="utf-8")
+            store = self.store / "matches"
+
+            def post_through(base):
+                def post(path, body):
+                    request = urllib.request.Request(base.rstrip("/") + path, data=body.encode("utf-8"), method="POST")
+                    try:
+                        with urllib.request.urlopen(request, timeout=10) as response:
+                            return {"status": response.status}
+                    except urllib.error.HTTPError as error:
+                        with error:
+                            return {"status": error.code}
+                return post
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                with web_smoke.served(root, store) as url:
+                    self.assertEqual(web_smoke.check_upload(post_through(url), store), [])
+                with web_smoke.served(root) as url:
+                    problems = web_smoke.check_upload(post_through(url), store)
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("HTTP 405", problems[0])
+
+
 class FakeCanvas:
     """`shots` are the screenshots in order (the last one repeats); once the page has been clicked they are `after_click` instead,
     when given: a canvas that changes only because of the click."""
@@ -612,8 +716,10 @@ class FakeCanvas:
 
 
 class FakePage:
-    def __init__(self, canvas, status=200, console=(), page_errors=(), info=None):
+    def __init__(self, canvas, status=200, console=(), page_errors=(), info=None, post_answer=None):
         self.canvas = canvas
+        self.post_answer = post_answer  # what the page's post answers (None: a real POST to the server of the run)
+        self.posted = []
         self.info = info if info is not None else {"crossOriginIsolated": False, "sharedArrayBuffer": "undefined", "devicePixelRatio": 1,
                                                    "cssWidth": 400, "cssHeight": 300, "canvasWidth": 400, "canvasHeight": 300}
         self.taps = []
@@ -629,8 +735,21 @@ class FakePage:
         self.mouse = SimpleNamespace(click=self._click, move=self._move)
         self.touchscreen = SimpleNamespace(tap=self._tap)
 
-    def evaluate(self, script):
+    def evaluate(self, script, arg=None):
+        if script == web_smoke.UPLOAD_PAGE_SCRIPT:  # check 7: what the page script does, done here by a plain POST to the served page
+            path, body, _, _ = arg
+            self.posted.append((path, body))
+            return self.post_answer if self.post_answer is not None else self._post_to_server(path, body)
         return dict(self.info)
+
+    def _post_to_server(self, path, body):
+        request = urllib.request.Request(self.urls[0].split("?", 1)[0].rstrip("/") + path, data=body.encode("utf-8"), method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return {"status": response.status}
+        except urllib.error.HTTPError as error:
+            with error:
+                return {"status": error.code}
 
     def _tap(self, x, y):
         self.taps.append((x, y))
@@ -993,11 +1112,42 @@ class BrowserFlowTest(unittest.TestCase):
         code, out, _ = self.smoke_output(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES]))
         self.assertEqual(code, 0, out)
         self.assertIn("PASS", out)
-        self.assertEqual(out.count("ok: ("), 5)  # (1) to (4) and (6); (5) is skipped for the selftest page
+        self.assertEqual(out.count("ok: ("), 6)  # (1) to (4), (6) and (7); (5) is skipped for the selftest page
         self.assertIn("ok: (6) manifest.webmanifest", out)
+        self.assertIn("ok: (7)", out)
         self.assertIn("skip: (5)", out)
         self.assertIn("input: mouse (a click)", out)
         self.assertIn("page: crossOriginIsolated=false, typeof SharedArrayBuffer=undefined", out)
+
+    def test_check_7_posts_one_start_piece_through_the_page_and_a_page_without_the_call_fails_it(self):
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES])))
+        with contextlib.redirect_stdout(io.StringIO()):
+            run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options())
+        self.assertIsNone(run.upload_problems)  # no store given: not made
+        answer = {"error": "the page has no window.bagiWebPost"}
+        page = FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES]), post_answer=answer)
+        fake = FakePlaywright(page)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), tempfile.TemporaryDirectory() as store:
+            run = web_smoke.run_browser(SimpleNamespace(sync_playwright=fake.sync_playwright), "http://h/", options(), Path(store))
+        self.assertEqual(len(page.posted), 1)
+        self.assertEqual(len(run.upload_problems), 1)
+        self.assertEqual(web_smoke.evaluate(run), run.upload_problems)
+        self.assertIn("window.bagiWebPost", run.upload_problems[0])
+
+    def test_the_fault_upload_fails_check_7_only_and_no_upload_check_leaves_it_out(self):
+        for kwargs, code, marker in ((dict(selftest_fault="upload"), 1, "FAIL: (7)"), (dict(upload_check=False), 0, "skip: (7)"), ({}, 0, "ok: (7)")):
+            with self.subTest(kwargs):
+                fake = FakePlaywright(FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES])))
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    result = web_smoke.run_smoke(options(**kwargs), SimpleNamespace(sync_playwright=fake.sync_playwright))
+                self.assertEqual(result, code, out.getvalue())
+                self.assertIn(marker, out.getvalue())
+                self.assertEqual(len(fake.page.posted), 0 if kwargs.get("upload_check") is False else 1)
+                if code:
+                    self.assertEqual(out.getvalue().count("FAIL:"), 1)
+                    self.assertIn("HTTP 405", out.getvalue())
 
     def test_run_smoke_of_a_dist_checks_the_canvas_size_and_prints_the_ratio(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -1093,6 +1243,12 @@ class RealBrowserTest(unittest.TestCase):
         code, output = self.run_selftest()
         self.assertEqual(code, 0, output)
 
+    def test_the_page_posts_a_piece_through_its_own_script_and_the_check_can_be_left_out(self):
+        code, output = self.run_selftest()
+        self.assertEqual(code, 0, output)
+        self.assertIn("ok: (7)", output)
+        self.assertIn("skip: (7)", self.run_selftest("--no-upload-check")[1])
+
     def test_a_tap_and_a_pixel_ratio_of_two_are_accepted(self):
         code, output = self.run_selftest("--touch", "--device-scale-factor", "2")
         self.assertEqual(code, 0, output)
@@ -1107,7 +1263,8 @@ class RealBrowserTest(unittest.TestCase):
         self.assertIn("FAIL: (4) no console message matched", output)
 
     def test_each_fault_is_found(self):
-        expected = {"flat": "(2)", "console-error": "(4)", "page-error": "(1)", "deaf": "(3)", "moving": "(3) cannot judge"}
+        expected = {"flat": "(2)", "console-error": "(4)", "page-error": "(1)", "deaf": "(3)", "moving": "(3) cannot judge",
+                    "upload": "(7)"}
         for fault, check in expected.items():
             with self.subTest(fault):
                 code, output = self.run_selftest("--selftest-fault", fault, "--timeout", "3")
