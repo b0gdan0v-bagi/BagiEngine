@@ -529,6 +529,38 @@ namespace BECore::Tests {
         EXPECT_TRUE(Call(*other, Request(2, "ping")).ok);
     }
 
+    TEST_F(WebSocketServerTest, ClientCountFollowsTheOpenConnections) {
+        EXPECT_EQ(server.GetClientCount(), 0u);
+        const uint16_t port = StartServer();
+        EXPECT_EQ(server.GetClientCount(), 0u);
+
+        auto first = Connect(port);
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(WaitUntil(service, [&] { return server.GetClientCount() == 1; }));
+
+        auto second = Connect(port);
+        ASSERT_TRUE(second.has_value());
+        ASSERT_TRUE(WaitUntil(service, [&] { return server.GetClientCount() == 2; }));
+
+        second->Drop();
+        ASSERT_TRUE(WaitUntil(service, [&] { return server.GetClientCount() == 1; }));
+
+        first->Drop();
+        ASSERT_TRUE(WaitUntil(service, [&] { return server.GetClientCount() == 0; }));
+    }
+
+    TEST_F(WebSocketServerTest, ClientCountIsZeroAfterStop) {
+        const uint16_t port = StartServer();
+        auto first = Connect(port);
+        auto second = Connect(port);
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(second.has_value());
+        ASSERT_TRUE(WaitUntil(service, [&] { return server.GetClientCount() == 2; }));
+
+        server.Stop();
+        EXPECT_EQ(server.GetClientCount(), 0u);
+    }
+
     TEST_F(WebSocketServerTest, TwoClientsGetTheirOwnResponses) {
         const uint16_t port = StartServer();
         auto first = Connect(port);

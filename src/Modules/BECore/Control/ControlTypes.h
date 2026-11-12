@@ -12,6 +12,14 @@ namespace BECore {
     /// ControlService::Shutdown() (answered on the posting thread).
     using ControlReplyFn = std::function<void(eastl::string)>;
 
+    /// What the transport of the control API is doing, for whoever shows it (the editor's status bar). Published by Application every
+    /// frame, so a widget reads it without reaching into the transport
+    struct ControlServerStatus {
+        bool listening = false;
+        uint16_t port = 0;
+        uint32_t clients = 0;  // open connections, handshakes done
+    };
+
     /// Frame time of a frame that a deferred call asks for when it does not say how long the frame is: one frame at 60 fps
     inline constexpr double kDefaultStepSeconds = 1.0 / 60.0;
 

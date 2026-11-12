@@ -135,6 +135,7 @@ namespace BECore {
             if (!control.IsStepDue()) {
                 BE_PROFILE_SCOPE("Idle");
                 CoreManager::GetInstance().OnIdleCycle({});
+                PublishControlStatus();
                 LogEvent::Flush();
                 return _isRunning;
             }
@@ -162,6 +163,7 @@ namespace BECore {
         CoreManager::GetWidgetManager().ApplyPendingMode();
 #endif
         UpdateWindowTitle();  // after ApplyPendingMode: the mode and a game switch both show here
+        PublishControlStatus();
         LogEvent::Flush();
         control.EndFrame();
         BE_PROFILE_FRAME();
@@ -183,6 +185,14 @@ namespace BECore {
         _titleGame = gameName;
         _titleEditor = editorMode;
         window->SetTitle(ComposeWindowTitle(window->GetConfiguredTitle(), gameName.ToStringView(), editorMode));
+    }
+
+    void Application::PublishControlStatus() const {
+#if BE_WITH_REMOTE_CONTROL
+        if (_controlServer) {
+            CoreManager::GetControlService().SetServerStatus({_controlServer->IsRunning(), _controlServer->GetPort(), _controlServer->GetClientCount()});
+        }
+#endif
     }
 
     void Application::Finish() {
@@ -225,6 +235,7 @@ namespace BECore {
         if (_controlServer) {
             _controlServer->Stop();
             _controlServer.reset();
+            CoreManager::GetControlService().SetServerStatus({});
         }
 #endif
         GameManager::GetInstance().Shutdown();

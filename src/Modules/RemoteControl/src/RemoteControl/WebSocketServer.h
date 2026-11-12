@@ -50,8 +50,14 @@ namespace BECore {
             return _listener.GetPort();
         }
 
+        /// Connections that finished the handshake and have not ended yet. Any thread
+        [[nodiscard]] uint32_t GetClientCount() const {
+            return _clientCount.load(std::memory_order_relaxed);
+        }
+
     private:
         ControlService& _service;
+        std::atomic<uint32_t> _clientCount{0};  // before _listener: its handler, built with the listener, counts into it
         WebSocketListener _listener;
     };
 

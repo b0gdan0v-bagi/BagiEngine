@@ -95,6 +95,15 @@ namespace BECore {
             return _pendingSeconds;
         }
 
+        /// The state of the transport as the application last published it; not listening until something publishes. Main thread only
+        void SetServerStatus(const ControlServerStatus& status) {
+            _serverStatus = status;
+        }
+
+        [[nodiscard]] const ControlServerStatus& GetServerStatus() const {
+            return _serverStatus;
+        }
+
         /// Blocks until a request has been posted or @p timeout has passed (the idle wait of the manual clock). Main thread
         void WaitForRequests(std::chrono::milliseconds timeout);
 
@@ -130,6 +139,7 @@ namespace BECore {
         uint32_t _pendingFramesLeft = 0;
         double _pendingSeconds = kDefaultStepSeconds;
         bool _manualClock = false;
+        ControlServerStatus _serverStatus;
         EventSink _eventSink;
         eastl::vector<HookEntry> _frameEndHooks;
     };
