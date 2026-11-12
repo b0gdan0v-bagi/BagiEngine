@@ -30,7 +30,7 @@ namespace BECore {
         constexpr eastl::string_view TextComponentKeys[] = {"text",     "font", "fontFamily",  "fontWeight",  "textColor",   "align",     "verticalAlign",
                                                             "overflow", "wrap", "lineSpacing", "minFontSize", "textOutline", "textShadow"};
         constexpr eastl::string_view ClickerKeys[] = {"action", "value", "disabled"};
-        constexpr eastl::string_view IconKeys[] = {"icon", "iconTint", "iconPlacement"};
+        constexpr eastl::string_view IconKeys[] = {"icon", "iconTint"};
         constexpr eastl::string_view StackKeys[] = {"layout", "direction", "spacing", "padding", "crossAlign", "wrapChildren"};
         // What a `UIButton` does with its text and a `UITextComponent` does not
         struct ButtonTextDefault {
@@ -59,8 +59,6 @@ namespace BECore {
                     return "UIPanel";
                 case WebKind::Label:
                     return "UILabel";
-                case WebKind::Button:
-                    return "UIButton";  // a segment of a group; any other button is composed (`WriteButton`)
                 case WebKind::Image:
                     return "UIImage";
                 case WebKind::Segmented:
@@ -72,6 +70,7 @@ namespace BECore {
                 case WebKind::Progress:
                     return "UIProgressBar";
                 case WebKind::Group:
+                case WebKind::Button:  // written by `WriteButton`, a composed `UIElement`
                     break;
             }
             return "UIElement";
@@ -975,7 +974,6 @@ namespace BECore {
             int parent = -1;
             eastl::vector<int> children;
             eastl::string text;
-            bool composed = false;  ///< a button that is not a segment of a group: written as a `UIElement` with components, not as a `UIButton`
         };
 
         enum class CascadeState { None, Hover, Active, Disabled, Checked };
@@ -1349,7 +1347,7 @@ namespace BECore {
             }
 
             /// The icon and the tooltip of a button: `data-icon`, `data-icon-position` and `title` anywhere else, or with a value that is not understood, are reported
-            void CheckIconAttributes(const UIHtmlNode& html, WebKind kind, bool composed) {
+            void CheckIconAttributes(const UIHtmlNode& html, WebKind kind) {
                 const auto report = [&](eastl::string message) { _report.AddOnce(HtmlSource, html.line, std::move(message)); };
                 const bool button = kind == WebKind::Button;
                 if (!button) {
@@ -1374,7 +1372,7 @@ namespace BECore {
                     }
                     if (!IconPlacementOf(*position)) {
                         report(Format("data-icon-position=\"{}\" is not supported (\"left\" or \"above\"): the default (left) is kept", position->c_str()));
-                    } else if (composed && icon != nullptr && !icon->empty() && eastl::string_view(IconPlacementOf(*position)) == "Above") {
+                    } else if (icon != nullptr && !icon->empty() && eastl::string_view(IconPlacementOf(*position)) == "Above") {
                         report("data-icon-position=\"above\" is not supported on a <button> yet: the icon is put left of the caption");
                     }
                 }
@@ -1390,7 +1388,7 @@ namespace BECore {
             }
 
             /// `data-widget` and the `data-*` attributes of the widgets outside the places that understand them are reported, never dropped in silence
-            void CheckWidgetAttributes(int htmlIndex, WebKind kind, bool composed) {
+            void CheckWidgetAttributes(int htmlIndex, WebKind kind) {
                 const UIHtmlNode& html = _document.nodes[htmlIndex];
                 const auto report = [&](eastl::string message) { _report.AddOnce(HtmlSource, html.line, std::move(message)); };
                 const bool widget = IsWidgetKind(kind);
@@ -1409,7 +1407,7 @@ namespace BECore {
                 if (html.HasAttribute("data-action") && kind != WebKind::Button && kind != WebKind::Toggle && kind != WebKind::Slider) {
                     report("data-action only applies to a <button> or an element with data-widget=\"toggle\" or \"slider\"");
                 }
-                CheckIconAttributes(html, kind, composed);
+                CheckIconAttributes(html, kind);
                 if (kind != WebKind::Toggle) {
                     for (const char* attribute : {"data-on", "data-off"}) {
                         if (html.HasAttribute(attribute)) {
@@ -1469,9 +1467,7 @@ namespace BECore {
                         _report.AddOnce(HtmlSource, html.line, Format("<{}> is not supported, it is read as a <div>", html.tag.c_str()));
                     }
                 }
-                // A segment of a group stays a `UIButton`: the group finds its segments by that class
-                node.composed = node.kind == WebKind::Button && !(parent != -1 && _nodes[parent].kind == WebKind::Segmented);
-                CheckWidgetAttributes(htmlIndex, node.kind, node.composed);
+                CheckWidgetAttributes(htmlIndex, node.kind);
                 if (IsTextKind(node.kind)) {
                     GatherText(htmlIndex, node.text);
                     node.text = CollapseWhitespace(node.text);
@@ -1851,21 +1847,16 @@ namespace BECore {
                         attrs.Set("value", *value);
                     }
                     AddDisabled(attrs, html);
-                    AddIcon(attrs, r, html, node.composed, report);
+                    AddIcon(attrs, r, html, report);
                 }
             }
 
             /// The icon, its placement and its colour, and the tooltip of a button; each only when set (a bad placement was reported when the node was added; a colour without an icon is reported
-            /// here). A composed button has no placement: its icon is always left of the caption
-            static void AddIcon(Attrs& attrs, const Resolved& r, const UIHtmlNode& html, bool composed, UIWebReport* report) {
+            /// here). A button has no placement: its icon is always left of the caption
+            static void AddIcon(Attrs& attrs, const Resolved& r, const UIHtmlNode& html, UIWebReport* report) {
                 const eastl::string* icon = html.FindAttribute("data-icon");
                 if (icon != nullptr && !icon->empty()) {
                     attrs.Set("icon", *icon);
-                    if (const eastl::string* position = html.FindAttribute("data-icon-position"); position != nullptr && !composed) {
-                        if (const char* placement = IconPlacementOf(*position); placement != nullptr && eastl::string_view(placement) != "Left") {
-                            attrs.Set("iconPlacement", placement);
-                        }
-                    }
                     if (r.iconColor) {
                         attrs.Set("iconTint", UIWebText::FormatWebColor(*r.iconColor));
                     }
@@ -1991,7 +1982,7 @@ namespace BECore {
             [[nodiscard]] bool IsIconLeft(int index) const {
                 const Attrs& attrs = _baseAttrs[index];
                 const eastl::string* text = attrs.Find("text");
-                return _nodes[index].composed && attrs.Find("icon") != nullptr && text != nullptr && !text->empty();
+                return attrs.Find("icon") != nullptr && text != nullptr && !text->empty();
             }
 
             static void AddComponentAttribute(pugi::xml_node component, const Attrs& attrs, eastl::string_view key) {
@@ -2120,7 +2111,7 @@ namespace BECore {
 
             void WriteNode(pugi::xml_node parent, int index) {
                 const WebNode& node = _nodes[index];
-                if (node.composed) {
+                if (node.kind == WebKind::Button) {
                     WriteButton(parent, index);
                     return;
                 }

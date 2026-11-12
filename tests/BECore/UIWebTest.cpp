@@ -285,8 +285,18 @@ button   { width: 124px; height: 48px; font-size: 24px; }
           <element type="UILabel" name="ModeCaption" width="150" height="56" text="Opponent" fontSize="24" verticalAlign="Center" />
           <element type="UISegmented" name="Mode" bind="opponentMode" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
             <children>
-              <element type="UIButton" name="ModeTwo" flex="1" height="56" text="Two players" fontSize="24" value="two" action="SelectorMode" color="70,70,100,255" selectedColor="110,130,200,255" />
-              <element type="UIButton" name="ModeComputer" flex="1" height="56" text="Computer" fontSize="24" value="computer" action="SelectorMode" color="70,70,100,255" selectedColor="110,130,200,255" />
+              <element type="UIElement" name="ModeTwo" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
+                <components>
+                  <component type="UITextComponent" text="Two players" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorMode" value="two"/>
+                </components>
+              </element>
+              <element type="UIElement" name="ModeComputer" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
+                <components>
+                  <component type="UITextComponent" text="Computer" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorMode" value="computer"/>
+                </components>
+              </element>
             </children>
           </element>
         </children>
@@ -296,8 +306,18 @@ button   { width: 124px; height: 48px; font-size: 24px; }
           <element type="UILabel" name="ColorCaption" width="150" height="56" text="Play as" fontSize="24" verticalAlign="Center" />
           <element type="UISegmented" name="Color" bind="opponentColor" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
             <children>
-              <element type="UIButton" name="ColorWhite" flex="1" height="56" text="White" fontSize="24" value="white" action="SelectorColor" color="70,70,100,255" selectedColor="110,130,200,255" />
-              <element type="UIButton" name="ColorBlack" flex="1" height="56" text="Black" fontSize="24" value="black" action="SelectorColor" color="70,70,100,255" selectedColor="110,130,200,255" />
+              <element type="UIElement" name="ColorWhite" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
+                <components>
+                  <component type="UITextComponent" text="White" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorColor" value="white"/>
+                </components>
+              </element>
+              <element type="UIElement" name="ColorBlack" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
+                <components>
+                  <component type="UITextComponent" text="Black" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorColor" value="black"/>
+                </components>
+              </element>
             </children>
           </element>
         </children>
@@ -307,8 +327,18 @@ button   { width: 124px; height: 48px; font-size: 24px; }
           <element type="UILabel" name="EngineCaption" width="150" height="56" text="Engine" fontSize="24" verticalAlign="Center" />
           <element type="UISegmented" name="Engine" bind="opponentEngine" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
             <children>
-              <element type="UIButton" name="EngineStockfish" flex="1" height="56" text="Stockfish" fontSize="24" value="stockfish" action="SelectorEngine" color="70,70,100,255" selectedColor="110,130,200,255" />
-              <element type="UIButton" name="EngineOwn" flex="1" height="56" text="Own engine" fontSize="24" value="own" action="SelectorEngine" color="70,70,100,255" selectedColor="110,130,200,255" />
+              <element type="UIElement" name="EngineStockfish" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
+                <components>
+                  <component type="UITextComponent" text="Stockfish" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorEngine" value="stockfish"/>
+                </components>
+              </element>
+              <element type="UIElement" name="EngineOwn" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
+                <components>
+                  <component type="UITextComponent" text="Own engine" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorEngine" value="own"/>
+                </components>
+              </element>
             </children>
           </element>
         </children>
@@ -318,10 +348,30 @@ button   { width: 124px; height: 48px; font-size: 24px; }
           <element type="UILabel" name="LevelCaption" width="150" height="56" text="Level" fontSize="24" verticalAlign="Center" />
           <element type="UISegmented" name="Level" bind="opponentLevel" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
             <children>
-              <element type="UIButton" name="LevelEasy" flex="1" height="56" text="Easy" fontSize="24" value="easy" action="SelectorLevel" color="70,70,100,255" selectedColor="110,130,200,255" />
-              <element type="UIButton" name="LevelMedium" flex="1" height="56" text="Medium" fontSize="24" value="medium" action="SelectorLevel" color="70,70,100,255" selectedColor="110,130,200,255" />
-              <element type="UIButton" name="LevelHard" flex="1" height="56" text="Hard" fontSize="24" value="hard" action="SelectorLevel" color="70,70,100,255" selectedColor="110,130,200,255" />
-              <element type="UIButton" name="LevelMax" flex="1" height="56" text="Max" fontSize="24" value="max" action="SelectorLevel" color="70,70,100,255" selectedColor="110,130,200,255" />
+              <element type="UIElement" name="LevelEasy" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
+                <components>
+                  <component type="UITextComponent" text="Easy" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorLevel" value="easy"/>
+                </components>
+              </element>
+              <element type="UIElement" name="LevelMedium" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
+                <components>
+                  <component type="UITextComponent" text="Medium" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorLevel" value="medium"/>
+                </components>
+              </element>
+              <element type="UIElement" name="LevelHard" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
+                <components>
+                  <component type="UITextComponent" text="Hard" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorLevel" value="hard"/>
+                </components>
+              </element>
+              <element type="UIElement" name="LevelMax" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
+                <components>
+                  <component type="UITextComponent" text="Max" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorLevel" value="max"/>
+                </components>
+              </element>
             </children>
           </element>
         </children>
@@ -484,9 +534,24 @@ button   { width: 124px; height: 48px; font-size: 24px; }
           <element type="UILabel" name="LanguageCaption" width="220" height="56" text="{#settings.language}" fontSize="24" verticalAlign="Center"/>
           <element type="UISegmented" name="Language" bind="language" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
             <children>
-              <element type="UIButton" name="LanguageEn" flex="1" height="56" text="{#lang.en}" fontSize="24" value="en" action="SettingsLanguage" color="70,70,100,255"/>
-              <element type="UIButton" name="LanguageRu" flex="1" height="56" text="{#lang.ru}" fontSize="24" value="ru" action="SettingsLanguage" color="70,70,100,255"/>
-              <element type="UIButton" name="LanguageDe" flex="1" height="56" text="{#lang.de}" fontSize="24" value="de" action="SettingsLanguage" color="70,70,100,255"/>
+              <element type="UIElement" name="LanguageEn" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="{#lang.en}" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SettingsLanguage" value="en"/>
+                </components>
+              </element>
+              <element type="UIElement" name="LanguageRu" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="{#lang.ru}" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SettingsLanguage" value="ru"/>
+                </components>
+              </element>
+              <element type="UIElement" name="LanguageDe" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="{#lang.de}" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SettingsLanguage" value="de"/>
+                </components>
+              </element>
             </children>
           </element>
         </children>
@@ -1062,10 +1127,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_NE(level, nullptr) << "a data-widget=\"segmented\" div is a UISegmented";
         EXPECT_EQ(level->bind.ToStringView(), "opponentLevel");
         EXPECT_EQ(level->layout, UILayoutKind::Stack);
-        const auto* max = dynamic_cast<UIButton*>(compiled->Element("LevelMax"));
+        const UIElement* max = compiled->Element("LevelMax");
         ASSERT_NE(max, nullptr);
-        EXPECT_EQ(max->value.ToStringView(), "max");
-        EXPECT_EQ(max->action.ToStringView(), "SelectorLevel");
+        const auto* clicker = max->GetComponent<UIInputClicker>();
+        ASSERT_NE(clicker, nullptr) << "a segment is a button with a clicker";
+        EXPECT_EQ(clicker->value.ToStringView(), "max");
+        EXPECT_EQ(clicker->action.ToStringView(), "SelectorLevel");
         EXPECT_EQ(max->selectedColor.r, 110);
         EXPECT_EQ(max->selectedColor.g, 130);
         EXPECT_EQ(max->selectedColor.b, 200);
@@ -1108,8 +1175,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, ThePanelInHtmlFollowsTheVariablesAndPassesItsClicksOn) {
         const auto compiled = Compile(kPanelHtml, kPanelCss);
         auto* color = dynamic_cast<UISegmented*>(compiled->Element("Color"));
-        auto* white = dynamic_cast<UIButton*>(compiled->Element("ColorWhite"));
-        auto* black = dynamic_cast<UIButton*>(compiled->Element("ColorBlack"));
+        UIElement* white = compiled->Element("ColorWhite");
+        UIElement* black = compiled->Element("ColorBlack");
         ASSERT_TRUE(color != nullptr && white != nullptr && black != nullptr);
         color->SyncChildren();
         EXPECT_FALSE(white->selected || black->selected) << "an unset variable selects nothing";
@@ -1124,14 +1191,14 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const auto compiled = Compile(R"(<div id="g" data-widget="segmented" data-bind="v" disabled><button id="a" data-value="x">A</button></div>)", "div { display: flex; height: 56px }");
         EXPECT_EQ(compiled->Attr("g", "disabled"), "true");
         EXPECT_EQ(compiled->Attr("g", "bind"), "v");
-        EXPECT_EQ(compiled->Attr("a", "disabled"), "") << "the group greys its buttons at run time, the button is not disabled itself";
-        EXPECT_EQ(compiled->Attr("a", "value"), "x");
+        EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "disabled"), "") << "the group greys its buttons at run time, the button is not disabled itself";
+        EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "value"), "x");
         EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
         auto* group = dynamic_cast<UISegmented*>(compiled->Element("g"));
         ASSERT_NE(group, nullptr);
         EXPECT_TRUE(group->disabled);
         group->SyncChildren();
-        EXPECT_TRUE(dynamic_cast<UIButton*>(compiled->Element("a"))->groupDisabled);
+        EXPECT_TRUE(compiled->Element("a")->groupDisabled);
     }
 
     TEST_F(UIWebTest, CheckedAndHoverOnOneButton) {
@@ -1788,19 +1855,19 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(actualElement);
     }
 
-    TEST_F(UIWebTest, ASegmentOfAGroupStaysAUIButtonAndTheButtonBesideItIsComposed) {
+    TEST_F(UIWebTest, ASegmentOfAGroupIsComposedLikeTheButtonBesideIt) {
         const auto compiled =
             Compile(R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x" data-action="Pick">A</button></div><button id="b" data-action="Go">Go</button>)",
                     "#g { display: flex; height: 56px } #b { height: 56px }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Attr("a", "type"), "UIButton");
-        EXPECT_EQ(compiled->Attr("a", "text"), "A");
-        EXPECT_EQ(compiled->Attr("a", "action"), "Pick");
-        EXPECT_TRUE(compiled->Find("a").child("components").empty());
+        EXPECT_EQ(compiled->Attr("a", "type"), "UIElement");
+        EXPECT_EQ(compiled->ComponentAttr("a", "UITextComponent", "text"), "A");
+        EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "action"), "Pick");
+        EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "value"), "x");
         EXPECT_EQ(compiled->Attr("b", "type"), "UIElement");
         EXPECT_NE(dynamic_cast<UISegmented*>(compiled->Element("g")), nullptr);
-        EXPECT_NE(dynamic_cast<UIButton*>(compiled->Element("a")), nullptr) << "the group finds its segments by that class";
-        EXPECT_EQ(dynamic_cast<UIButton*>(compiled->Element("b")), nullptr);
+        EXPECT_EQ(dynamic_cast<UIButton*>(compiled->Element("a")), nullptr) << "the compiler writes no UIButton";
+        EXPECT_NE(compiled->Element("a")->GetComponent<UIInputClicker>(), nullptr) << "the group finds its segments by the clicker";
         EXPECT_NE(compiled->Element("b")->GetComponent<UIInputClicker>(), nullptr);
         EXPECT_TRUE(compiled->report.issues.empty());
     }
@@ -2084,20 +2151,55 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("b", "padding"), "8,0,0,0");
     }
 
-    TEST_F(UIWebTest, AButtonInASegmentedGroupKeepsItsIconOnTheUIButton) {
-        const auto compiled = Compile(R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x" data-icon="Star" data-icon-position="above" title="T">A</button></div>)",
-                                      "div { display: flex; height: 56px } #a { -be-icon-color: #fff }");
+    TEST_F(UIWebTest, AnIconSegmentIsTheIconFormAndTheVariableSelectsIt) {
+        const auto compiled = Compile(
+            R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x" data-icon="Star" title="T">A</button><button id="b" data-value="y" data-icon="Star"></button></div>)",
+            "div { display: flex; height: 56px } button { flex: 1; color: #112233 } #a { -be-icon-color: #fff } #a:checked { background: #405060 }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Attr("a", "type"), "UIButton");
-        EXPECT_EQ(compiled->Attr("a", "icon"), "Star");
-        EXPECT_EQ(compiled->Attr("a", "iconPlacement"), "Above");
-        EXPECT_EQ(compiled->Attr("a", "iconTint"), "255,255,255,255");
-        EXPECT_EQ(compiled->Attr("a", "tooltip"), "T");
-        EXPECT_FALSE(compiled->Find("a").child("children"));
-        EXPECT_EQ(compiled->IssuesMentioning("not supported on a <button> yet"), 0u) << "a segment has the placement";
-        const auto* segment = dynamic_cast<UIButton*>(compiled->Element("a"));
-        ASSERT_NE(segment, nullptr);
-        EXPECT_EQ(segment->iconPlacement, UIIconPlacement::Above);
+        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
+        EXPECT_EQ(compiled->Attr("a", "type"), "UIElement");
+        EXPECT_EQ(compiled->Attr("a", "selectedColor"), "64,80,96,255");
+        EXPECT_EQ(compiled->ComponentAttr("aIcon", "UIImageComponent", "sprite"), "Star");
+        EXPECT_EQ(compiled->ComponentAttr("aIcon", "UIImageComponent", "tint"), "255,255,255,255");
+        EXPECT_EQ(compiled->ComponentAttr("aCaption", "UITextComponent", "text"), "A");
+        EXPECT_EQ(compiled->ComponentAttr("a", "UITooltipComponent", "text"), "T");
+        EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "textColor"), "17,34,51,255") << "an icon-only segment keeps the colour for its bar";
+
+        auto* group = dynamic_cast<UISegmented*>(compiled->Element("g"));
+        UIElement* a = compiled->Element("a");
+        UIElement* b = compiled->Element("b");
+        ASSERT_TRUE(group != nullptr && a != nullptr && b != nullptr);
+        CoreManager::GetUIVars().Set("v"_intern, "x");
+        group->SyncChildren();
+        EXPECT_TRUE(a->selected);
+        EXPECT_FALSE(b->selected);
+        EXPECT_EQ(a->GetStateAccent().r, 17) << "the bar takes the colour of the caption child";
+        EXPECT_EQ(b->GetStateAccent().r, 17) << "and that of an icon-only segment its own text component";
+        CoreManager::GetUIVars().Set("v"_intern, "y");
+        group->SyncChildren();
+        EXPECT_FALSE(a->selected);
+        EXPECT_TRUE(b->selected);
+    }
+
+    TEST_F(UIWebTest, ASegmentOfAnIconAboveIsTheIconLeftFormAndSaysSo) {
+        const auto compiled = Compile(R"(<div id="g" data-widget="segmented" data-bind="v"><button id="a" data-value="x" data-icon="Star" data-icon-position="above">A</button></div>)",
+                                      "div { display: flex; height: 56px }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->IssuesMentioning("not supported on a <button> yet"), 1u);
+        EXPECT_FALSE(compiled->Has("a", "iconPlacement"));
+        EXPECT_NE(compiled->Find("aCaption"), pugi::xml_node());
+    }
+
+    TEST_F(UIWebTest, ACompiledSegmentedGroupPassesTheSizeMatrix) {
+        const auto compiled = Compile(
+            R"(<div id="g" data-widget="segmented" data-bind="v"><button data-value="x" data-icon="Star">One</button><button data-value="y">Two</button><button data-value="z" data-icon="Star"></button></div>)",
+            "div { display: flex; gap: 4px; width: 90%; height: 56px } button { flex: 1; height: 56px; font-size: 20px }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        LaidOut web(compiled->content);
+        UILayoutValidatorOptions options;
+        options.minTouchSize = CoreManager::GetUIEnvironment().GetSettings().minTouchSize;
+        const auto failures = ValidateOnMatrix(web.layout, options);
+        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
     }
 
     TEST_F(UIWebTest, AMediaFontSizeOfAnIconLeftButtonIsWrittenForItsCaption) {

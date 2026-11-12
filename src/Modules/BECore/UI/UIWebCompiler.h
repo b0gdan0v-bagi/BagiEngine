@@ -15,10 +15,10 @@ namespace BECore {
      * |------|---------|
      * | `div`, `section`, `nav`, `ul`, `li`, ... | `UIPanel` when it has a `background-image`, else `UIElement` (a group) |
      * | `span`, `p`, `h1`..`h6`, `label`, or any element that holds only text | `UILabel` (its `background` is the fill behind the text) |
-     * | `button` | `UIElement` with `UITextComponent`, `UIInputClicker` and `UITooltipComponent` (`title`); a `UIButton` in a segmented group |
+     * | `button` | `UIElement` with `UITextComponent`, `UIInputClicker` and `UITooltipComponent` (`title`); also as a segment of a segmented group |
      * | `button` with `data-icon` | the same, the icon in a child `<N>Icon` (and `<N>Caption` with text); `-be-icon-color` is its `tint` (`ui-controls.md`) |
      * | `img` | `UIImage` (`src` is the sprite name) |
-     * | any element with `data-widget="segmented"` | `UISegmented` (`data-bind` is `bind`; its `<button data-value>` children are the segments) |
+     * | any element with `data-widget="segmented"` | `UISegmented` (`data-bind` is `bind`; its `<button data-value>` children are the segments, composed like any button) |
      * | any element with `data-widget="toggle"` | `UIToggle` (`data-bind`, `data-action`, `data-on` / `data-off` are `onValue` / `offValue`; the text is the caption) |
      * | any element with `data-widget="slider"` | `UISlider` (`data-bind`, `data-action`, `data-min`, `data-max`, `data-step`) |
      * | any element with `data-widget="progress"` | `UIProgressBar` (`data-bind`, `data-min`, `data-max`) |
