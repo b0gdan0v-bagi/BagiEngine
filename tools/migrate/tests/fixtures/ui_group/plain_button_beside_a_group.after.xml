@@ -24,7 +24,7 @@
         <element type="UIStack" name="Row" x="10" y="80" width="300" height="56" direction="Horizontal">
           <children>
             <element type="UIButton" name="Inside" flex="1" text="Inside a stack" action="Inside" />
-            <element type="UIDropdown" name="Pick" bind="pick" action="Pick" width="100" text="Pick">
+            <element type="UIDropdown" name="Pick" bind="pick" action="Pick" width="100" height="48" text="Pick">
               <children>
                 <element type="UIElement" name="One">
                   <components>
