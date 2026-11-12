@@ -118,6 +118,18 @@ namespace BECore {
         _sourceRef = sourceRef;
     }
 
+    EditorFlags SceneNode::GetEditorFlags() const {
+        return _editorFlags;
+    }
+
+    void SceneNode::SetEditorFlags(EditorFlags flags) {
+        _editorFlags = flags;
+    }
+
+    bool SceneNode::HasEditorFlag(EditorFlags flag) const {
+        return (_editorFlags & flag) != EditorFlags::None;
+    }
+
     entt::entity SceneNode::GetEntity() const {
         return _entity;
     }

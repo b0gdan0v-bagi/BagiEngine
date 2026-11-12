@@ -965,6 +965,24 @@ namespace BECore::Tests {
         EXPECT_EQ(Print(ConfigRoot()), once);
     }
 
+    TEST_F(SceneEditorSaveTest, TheEditorFlagsAreNotSaved) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kNestedScenesXml));
+        Scene& main = GetScene("Main");
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
+        const eastl::string plain = Print(ConfigRoot());
+
+        // Tree: Left (Inner (Deep), Last), Right
+        ASSERT_FALSE(main.GetRootNode().GetChildren().empty());
+        SceneNode& left = *main.GetRootNode().GetChildren()[0];
+        ASSERT_FALSE(left.GetChildren().empty());
+        SceneNode* inner = left.GetChildren()[0].Get();
+        ASSERT_EQ(inner->GetName(), "Inner"_intern);
+        inner->SetEditorFlags(EditorFlags::Hidden | EditorFlags::Locked);
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
+
+        EXPECT_EQ(Print(ConfigRoot()), plain);
+    }
+
     TEST_F(SceneEditorSaveReferencesTest, AnInstanceWithChildrenIsWrittenInlineWithANote) {
         ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
         SceneNode& box = Child("Main", 0);

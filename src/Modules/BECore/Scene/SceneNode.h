@@ -6,6 +6,25 @@ namespace BECore {
 
     class Scene;
 
+    /// Editor-only state of a node (a bit set): never serialized, never saved, never copied by Scene::DuplicateNode
+    enum class EditorFlags : uint8_t {
+        None = 0,
+        Hidden = 1,  ///< the node and its descendants draw nothing; they keep their draw rank and still update
+        Locked = 2,  ///< the editor refuses to rename, delete, move or edit the node
+    };
+
+    constexpr EditorFlags operator|(EditorFlags a, EditorFlags b) {
+        return static_cast<EditorFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+    }
+
+    constexpr EditorFlags operator&(EditorFlags a, EditorFlags b) {
+        return static_cast<EditorFlags>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
+    }
+
+    constexpr EditorFlags operator~(EditorFlags a) {
+        return static_cast<EditorFlags>(~static_cast<uint8_t>(a));
+    }
+
     class SceneNode : public RefCounted {
         BE_CLASS(SceneNode, FACTORY_BASE, ELEMENT = node)
     public:
@@ -54,6 +73,16 @@ namespace BECore {
         PoolString GetSourceRef() const;
         void SetSourceRef(PoolString sourceRef);
 
+        /**
+         * @brief Editor-only flags of this node (hidden, locked)
+         *
+         * A plain member, not a reflected field: no file, no Serialize and no copy sees it, and the scene editor resets it when it
+         * goes away (Scene::ClearEditorFlags()). SceneDrawSystem skips drawing a node that is hidden or has a hidden ancestor.
+         */
+        EditorFlags GetEditorFlags() const;
+        void SetEditorFlags(EditorFlags flags);
+        bool HasEditorFlag(EditorFlags flag) const;
+
         entt::entity GetEntity() const;
         const eastl::vector<IntrusivePtr<IComponent>>& GetComponents() const;
 
@@ -68,6 +97,7 @@ namespace BECore {
         entt::entity _entity = entt::null;
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;
+        EditorFlags _editorFlags = EditorFlags::None;
         BE_REFLECT_FIELD eastl::vector<IntrusivePtr<IComponent>> _components;
         BE_REFLECT_FIELD eastl::vector<IntrusivePtr<SceneNode>> _children;
     };

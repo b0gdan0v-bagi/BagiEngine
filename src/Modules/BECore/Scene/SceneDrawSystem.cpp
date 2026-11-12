@@ -98,12 +98,13 @@ namespace BECore {
         }
 
         // Depth-first, a parent before its children: the traversal index is the scene order. emplace_or_replace makes a changed layer
-        // show up and does not allocate once the node has its item.
-        void WriteDrawItems(entt::registry& registry, SceneNode& node, uint32_t& order) {
-            registry.emplace_or_replace<SceneDrawItem>(node.GetEntity(), node.GetLayer(), order++, &node);
+        // or flag show up and does not allocate once the node has its item. A hidden node hides its whole subtree but keeps its rank.
+        void WriteDrawItems(entt::registry& registry, SceneNode& node, uint32_t& order, bool ancestorHidden) {
+            const bool hidden = ancestorHidden || node.HasEditorFlag(EditorFlags::Hidden);
+            registry.emplace_or_replace<SceneDrawItem>(node.GetEntity(), node.GetLayer(), order++, &node, hidden);
             SyncRenderData(registry, node);
             for (const auto& child : node.GetChildren()) {
-                WriteDrawItems(registry, *child, order);
+                WriteDrawItems(registry, *child, order, hidden);
             }
         }
 
@@ -116,7 +117,7 @@ namespace BECore {
         {
             BE_PROFILE_SCOPE("Sync draw items");
             uint32_t order = 0;
-            WriteDrawItems(registry, scene.GetRootNode(), order);
+            WriteDrawItems(registry, scene.GetRootNode(), order, false);
         }
 
         // The keys are unique (order is the traversal index), so the result does not depend on the sort being stable.
@@ -130,6 +131,9 @@ namespace BECore {
         // component draws itself.
         BE_PROFILE_SCOPE("Draw items");
         for (const auto [entity, item] : registry.view<SceneDrawItem>().each()) {
+            if (item.hidden) {
+                continue;
+            }
             const TransformData* transform = registry.try_get<TransformData>(entity);
             const QuadDrawData* quad = registry.try_get<QuadDrawData>(entity);
             const SpriteDrawData* sprite = registry.try_get<SpriteDrawData>(entity);

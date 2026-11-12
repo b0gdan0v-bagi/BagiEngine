@@ -171,6 +171,9 @@ namespace BECore {
         /// @p base when no child of @p parent is called so, else `base 2`, `base 3`, ... the first one that is free
         PoolString MakeUniqueSiblingName(const SceneNode& parent, eastl::string_view base) const;
 
+        /// Clears the editor flags (SceneNode::GetEditorFlags()) of every node of the tree, the root included. The scene editor calls it when it goes away
+        void ClearEditorFlags();
+
         /// Called by SceneNode::RemoveChild() only: destroys the entity of @p node and of its descendants and resets their GetEntity() to entt::null.
         void DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>);
 

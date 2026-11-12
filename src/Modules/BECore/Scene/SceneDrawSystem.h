@@ -10,6 +10,7 @@ namespace BECore {
         int32_t layer = 0;   ///< SceneNode::GetLayer() when the pass started
         uint32_t order = 0;  ///< index of the node in the depth-first walk of the tree (the scene order)
         SceneNode* node = nullptr;
+        bool hidden = false;  ///< the node or an ancestor has EditorFlags::Hidden: the node keeps its place in the order but draws nothing
     };
 
     /**
@@ -26,6 +27,9 @@ namespace BECore {
      * drawn by the system itself from that registry data (DrawFilledRect(), FitSpriteRect() and DrawTexture()), a quad or
      * a sprite without a TransformData and a sprite without a texture draw nothing; every other component draws itself
      * through IComponent::OnDraw().
+     *
+     * A hidden node (SceneNode::GetEditorFlags()) and everything below it keep their item and their rank but draw nothing, neither the quad
+     * and the sprite nor OnDraw(); they still update.
      *
      * A node with a rotation or a sprite flip is drawn with DrawTransformedRect() / DrawTransformedTexture() about the pivot of
      * the node's rect; with neither it makes the plain calls above. The quad's or sprite's blend mode is set on the renderer

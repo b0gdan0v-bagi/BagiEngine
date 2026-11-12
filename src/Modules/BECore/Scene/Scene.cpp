@@ -288,6 +288,19 @@ namespace BECore {
         return copy;
     }
 
+    void Scene::ClearEditorFlags() {
+        if (!_rootNode) {
+            return;
+        }
+        const auto clear = [](auto&& self, SceneNode& node) -> void {
+            node.SetEditorFlags(EditorFlags::None);
+            for (const auto& child : node.GetChildren()) {
+                self(self, *child);
+            }
+        };
+        clear(clear, *_rootNode);
+    }
+
     void Scene::DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>) {
         DestroyEntities(node);
     }
