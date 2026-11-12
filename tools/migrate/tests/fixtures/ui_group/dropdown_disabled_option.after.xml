@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<!-- A UIDropdown with an option that is disabled (it takes the click and the list stays open) and one with an icon beside the caption. -->
+<node name="DisabledOption" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIDropdown" name="Level" bind="level" action="SetLevel" x="10" y="10" width="120" height="48" optionHeight="44" text="Level" color="50,56,80,255">
+          <children>
+            <element type="UIElement" name="Easy" color="70,70,100,255">
+              <components>
+                <component type="UITextComponent" text="Easy" align="Center" verticalAlign="Center" wrap="false"/>
+                <component type="UIInputClicker" value="easy"/>
+              </components>
+            </element>
+            <element type="UIElement" name="Hard" color="70,70,100,255" disabledColor="60,60,60,255">
+              <components>
+                <component type="UITextComponent" text="Hard" align="Center" verticalAlign="Center" wrap="false"/>
+                <component type="UIInputClicker" value="hard" disabled="true"/>
+              </components>
+            </element>
+            <element type="UIElement" name="Expert" color="70,70,100,255" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center">
+              <components>
+                <component type="UIInputClicker" value="expert"/>
+              </components>
+              <children>
+                <element type="UIElement" name="ExpertIcon" height="50%" aspectRatio="1">
+                  <components>
+                    <component type="UIImageComponent" sprite="icons.star"/>
+                  </components>
+                </element>
+                <element type="UIElement" name="ExpertCaption" flex="1" height="100%">
+                  <components>
+                    <component type="UITextComponent" text="Expert" align="Center" verticalAlign="Center" wrap="false"/>
+                  </components>
+                </element>
+              </children>
+            </element>
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

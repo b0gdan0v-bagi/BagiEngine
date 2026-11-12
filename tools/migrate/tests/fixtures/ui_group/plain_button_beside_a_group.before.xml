@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!-- A file at version 2: the plain UIButton Close is not a group child and is left (step 2 matches the children of a UISegmented or a UIDropdown only); the segments and the option are composed. -->
+<node name="Beside" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIButton" name="Close" x="10" y="10" width="56" height="56" text="X" action="Close" color="70,70,100,255" />
+        <element type="UISegmented" name="Kind" bind="kind" x="80" y="10" width="200" height="56" direction="Horizontal" color="30,34,46,255">
+          <children>
+            <element type="UIButton" name="A" flex="1" height="100%" text="A" action="Kind" value="a" selectedColor="40,110,60,255" />
+            <element type="UIButton" name="B" flex="1" height="100%" text="B" action="Kind" value="b" selectedColor="40,110,60,255" />
+          </children>
+        </element>
+        <element type="UIStack" name="Row" x="10" y="80" width="300" height="56" direction="Horizontal">
+          <children>
+            <element type="UIButton" name="Inside" flex="1" text="Inside a stack" action="Inside" />
+            <element type="UIDropdown" name="Pick" bind="pick" action="Pick" width="100" text="Pick">
+              <children>
+                <element type="UIButton" name="One" text="One" value="1" />
+              </children>
+            </element>
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

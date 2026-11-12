@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- Failure: a variant sets `text` of a segment; after the move the element has no `text`. A set of the layout (fontSize, width) would have been fine. -->
+<node name="SegmentSetText" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UISegmented" name="Kind" bind="kind" x="10" y="10" width="200" height="56" direction="Horizontal">
+          <children>
+            <element type="UIButton" name="A" flex="1" text="A" action="Kind" value="a" />
+            <element type="UIButton" name="B" flex="1" text="B" action="Kind" value="b" />
+          </children>
+        </element>
+      </elements>
+      <variants>
+        <variant when="orientation:portrait">
+          <overrides>
+            <set element="A" fontSize="30" text="Alpha" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

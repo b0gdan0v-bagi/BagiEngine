@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- A UIDropdown with an option that is disabled (it takes the click and the list stays open) and one with an icon beside the caption. -->
+<node name="DisabledOption" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIDropdown" name="Level" bind="level" action="SetLevel" x="10" y="10" width="120" height="48" optionHeight="44" text="Level" color="50,56,80,255">
+          <children>
+            <element type="UIButton" name="Easy" text="Easy" value="easy" color="70,70,100,255" />
+            <element type="UIButton" name="Hard" text="Hard" value="hard" disabled="true" color="70,70,100,255" disabledColor="60,60,60,255" />
+            <element type="UIButton" name="Expert" icon="icons.star" text="Expert" value="expert" color="70,70,100,255" />
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

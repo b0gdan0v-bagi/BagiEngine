@@ -19,6 +19,7 @@ STEP_FILE = TOOL_DIR / "steps" / "s0001_ui_button_to_components.py"
 _spec = importlib.util.spec_from_file_location("s0001_ui_button_to_components_under_test", STEP_FILE)
 step_module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(step_module)
+shared = step_module.shared  # the mapping and its lists are in steps/_ui_button.py
 
 BEFORE_FILES = sorted(FIXTURES.glob("*.before.xml"))
 PAIRS = [p for p in BEFORE_FILES if p.with_name(p.name.replace(".before.", ".after.")).exists()]
@@ -69,7 +70,7 @@ def test_nothing_of_a_button_is_left_where_it_was_but_the_buttons(before):
     doc = xmltext.read(before)
     out = xmltext.parse(apply(before.read_text(encoding="utf-8"))[0])
     left = [e for e in out.find_all(lambda e: e.get("type") == "UIButton")]
-    expected = [e for e in doc.find_all(lambda e: e.get("type") == "UIButton") if step_module._group_segment(e)]
+    expected = [e for e in doc.find_all(lambda e: e.get("type") == "UIButton") if shared.is_group_child(e)]
     assert [e.get("name") for e in left] == [e.get("name") for e in expected]
 
 
@@ -108,12 +109,12 @@ def test_a_failed_file_stays_byte_for_byte_and_the_run_exits_2(before, tmp_path,
     assert "config/nodes/X.xml:" in captured.err
 
 
-def test_the_tool_migrates_a_game_with_the_real_step_and_stamps_every_file(tmp_path, capsys):
+def test_the_tool_migrates_a_game_with_the_real_steps_and_stamps_every_file(tmp_path, capsys):
     game = tmp_path / "game"
     nodes = game / "config" / "nodes"
     nodes.mkdir(parents=True)
     (nodes / "Hints.xml").write_bytes((FIXTURES / "mahjong_hints_button.before.xml").read_bytes())
-    (nodes / "Done.xml").write_bytes((FIXTURES / "already_composed.before.xml").read_bytes())
+    (nodes / "Done.xml").write_bytes((TESTS_DIR / "fixtures" / "ui_group" / "already_composed.after.xml").read_bytes())
     (game / "config" / "SceneConfig.xml").write_bytes((FIXTURES / "match3_menu_hud.before.xml").read_bytes())
     assert migrate.main([str(game), "--check"]) == 1
     capsys.readouterr()
@@ -122,9 +123,10 @@ def test_the_tool_migrates_a_game_with_the_real_step_and_stamps_every_file(tmp_p
     assert "config/nodes/Hints.xml: 1 to 2 (ui-button-to-components): 1 element" in out
     assert "config/SceneConfig.xml: 1 to 2 (ui-button-to-components): 4 elements" in out
     hints = (nodes / "Hints.xml").read_text(encoding="utf-8")
-    assert '<node name="HintsButton" layer="6" contentVersion="2">' in hints
-    assert hints.replace(' contentVersion="2"', "", 1) == (FIXTURES / "mahjong_hints_button.after.xml").read_text(encoding="utf-8")
-    assert (nodes / "Done.xml").read_text(encoding="utf-8").count('contentVersion="2"') == 1
+    stamp = f' contentVersion="{migrate.build_registry().latest(migrate.ENGINE_TRACK)}"'
+    assert f'<node name="HintsButton" layer="6"{stamp}>' in hints
+    assert hints.replace(stamp, "", 1) == (FIXTURES / "mahjong_hints_button.after.xml").read_text(encoding="utf-8")
+    assert (nodes / "Done.xml").read_text(encoding="utf-8").count(stamp) == 1
     assert migrate.main([str(game), "--check"]) == 0
 
 
@@ -218,17 +220,17 @@ def test_the_lists_of_the_step_are_the_reflected_fields_of_the_classes():
 
     effects = {"textOutline", "textShadow"}  # the two attributes of the field `textEffects`
     assert "textEffects" in label and "textEffects" in text_component
-    assert set(step_module.TEXT_ATTRIBUTES) == (label - {"textEffects"}) | effects
-    assert set(step_module.TEXT_ATTRIBUTES) <= (text_component - {"textEffects"}) | effects
-    assert set(step_module.CLICKER_ATTRIBUTES) == clicker
-    assert "text" in reflected("UITooltipComponent.h") and step_module.TOOLTIP_ATTRIBUTE == "tooltip"
+    assert set(shared.TEXT_ATTRIBUTES) == (label - {"textEffects"}) | effects
+    assert set(shared.TEXT_ATTRIBUTES) <= (text_component - {"textEffects"}) | effects
+    assert set(shared.CLICKER_ATTRIBUTES) == clicker
+    assert "text" in reflected("UITooltipComponent.h") and shared.TOOLTIP_ATTRIBUTE == "tooltip"
     # every field the button adds to its label is accounted for: a clicker field, the tooltip or the icon
-    assert button == set(step_module.CLICKER_ATTRIBUTES) | {step_module.TOOLTIP_ATTRIBUTE} | set(step_module.ICON_ATTRIBUTES)
+    assert button == set(shared.CLICKER_ATTRIBUTES) | {shared.TOOLTIP_ATTRIBUTE} | set(shared.ICON_ATTRIBUTES)
     # what stays on the element is not moved, except `interactive`, which the clicker replaces
-    moved = set(step_module.TEXT_ATTRIBUTES) | set(step_module.CLICKER_ATTRIBUTES) | set(step_module.ICON_ATTRIBUTES) | {step_module.TOOLTIP_ATTRIBUTE}
+    moved = set(shared.TEXT_ATTRIBUTES) | set(shared.CLICKER_ATTRIBUTES) | set(shared.ICON_ATTRIBUTES) | {shared.TOOLTIP_ATTRIBUTE}
     assert moved & element == set()
-    assert set(step_module.DROPPED_ATTRIBUTES) == {"interactive"} and "interactive" in element
-    assert {n for n, _ in step_module.BUTTON_TEXT_DEFAULTS} <= set(step_module.TEXT_ATTRIBUTES)
+    assert set(shared.DROPPED_ATTRIBUTES) == {"interactive"} and "interactive" in element
+    assert {n for n, _ in shared.BUTTON_TEXT_DEFAULTS} <= set(shared.TEXT_ATTRIBUTES)
 
 
 def test_the_forms_of_an_icon_are_the_constants_of_uibutton():
@@ -237,10 +239,10 @@ def test_the_forms_of_an_icon_are_the_constants_of_uibutton():
     def constant(name: str) -> float:
         return float(re.search(rf"{name}\s*=\s*([0-9.]+)f", header).group(1))
 
-    assert step_module.ICON_ONLY_SHARE == f"{round(constant('kIconOnlyShare') * 100)}%"
-    assert step_module.ICON_WITH_TEXT_SHARE == f"{round(constant('kIconWithTextShare') * 100)}%"
-    assert float(step_module.ICON_PADDING) == constant("kIconPadding")
-    assert float(step_module.ICON_GAP) == constant("kIconGap")
+    assert shared.ICON_ONLY_SHARE == f"{round(constant('kIconOnlyShare') * 100)}%"
+    assert shared.ICON_WITH_TEXT_SHARE == f"{round(constant('kIconWithTextShare') * 100)}%"
+    assert float(shared.ICON_PADDING) == constant("kIconPadding")
+    assert float(shared.ICON_GAP) == constant("kIconGap")
 
 
 def test_the_defaults_written_are_those_of_the_constructor_of_uibutton():
@@ -249,4 +251,4 @@ def test_the_defaults_written_are_those_of_the_constructor_of_uibutton():
     assert "align = TextAlign::Center" in constructor
     assert "verticalAlign = UIVerticalAlign::Center" in constructor
     assert "wrap = false" in constructor
-    assert dict(step_module.BUTTON_TEXT_DEFAULTS) == {"align": "Center", "verticalAlign": "Center", "wrap": "false"}
+    assert dict(shared.BUTTON_TEXT_DEFAULTS) == {"align": "Center", "verticalAlign": "Center", "wrap": "false"}

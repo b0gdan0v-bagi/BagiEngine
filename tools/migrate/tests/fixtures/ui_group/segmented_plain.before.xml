@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<!-- The rows of the options screen of the Mahjong game (config/nodes/MahjongOptions.xml): a UISegmented of plain UIButton segments with a caption, an action, a value and the colour of the chosen one. -->
+<node name="Options" layer="30">
+  <components>
+    <component type="UICanvasComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="0.6" useSafeArea="true" modal="true" visible="false">
+      <elements>
+        <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="100%" maxHeight="600" direction="Vertical" spacing="8" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
+          <children>
+            <element type="UIStack" name="LanguageRow" flex="1" maxHeight="64" direction="Horizontal" spacing="8" padding="4,0,4,0" crossAlign="Center" color="48,54,72,255">
+              <children>
+                <element type="UILabel" name="LanguageCaption" width="112" height="87.5%" text="{#setup.language}" fontSize="22" overflow="AutoFit" minFontSize="12" verticalAlign="Center" textColor="190,196,190,255" />
+                <element type="UISegmented" name="Language" bind="language" flex="1" height="87.5%" direction="Horizontal" spacing="4" color="48,54,72,255">
+                  <children>
+                    <element type="UIButton" name="LanguageEn" flex="1" height="100%" text="{#lang.en}" fontSize="22" overflow="AutoFit" minFontSize="12" action="MahjongSetLanguage" value="en" color="70,70,100,255" selectedColor="40,110,60,255" />
+                    <element type="UIButton" name="LanguageRu" flex="1" height="100%" text="{#lang.ru}" fontSize="22" overflow="AutoFit" minFontSize="12" action="MahjongSetLanguage" value="ru" color="70,70,100,255" selectedColor="40,110,60,255" />
+                  </children>
+                </element>
+              </children>
+            </element>
+            <element type="UIStack" name="SpeedRow" flex="1" maxHeight="64" direction="Horizontal" spacing="8" padding="4,0,4,0" crossAlign="Center" color="48,54,72,255">
+              <children>
+                <element type="UILabel" name="SpeedCaption" width="96" height="87.5%" text="{#options.speed}" fontSize="22" overflow="AutoFit" minFontSize="12" verticalAlign="Center" textColor="190,196,190,255" />
+                <element type="UISegmented" name="SpeedChoice" bind="speedChoice" flex="1" height="87.5%" direction="Horizontal" spacing="4" color="48,54,72,255">
+                  <children>
+                    <element type="UIButton" name="SpeedSlow" flex="1" height="100%" text="{#options.speedSlow}" fontSize="22" overflow="AutoFit" minFontSize="12" action="MahjongSetSpeed" value="slow" color="70,70,100,255" selectedColor="40,110,60,255" />
+                    <element type="UIButton" name="SpeedNormal" flex="1" height="100%" text="{#options.speedNormal}" fontSize="22" overflow="AutoFit" minFontSize="12" action="MahjongSetSpeed" value="normal" color="70,70,100,255" selectedColor="40,110,60,255" />
+                    <element type="UIButton" name="SpeedFast" flex="1" height="100%" text="{#options.speedFast}" fontSize="22" overflow="AutoFit" minFontSize="12" action="MahjongSetSpeed" value="fast" color="70,70,100,255" selectedColor="40,110,60,255" />
+                  </children>
+                </element>
+              </children>
+            </element>
+          </children>
+        </element>
+      </elements>
+      <variants>
+        <variant when="maxWidth:480">
+          <overrides>
+            <set element="LanguageEn" fontSize="18" />
+            <set element="Language" spacing="2" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

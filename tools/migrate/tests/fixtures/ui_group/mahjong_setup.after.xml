@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<!--
+  Lines of the setup panel of the Mahjong game (config/nodes/MahjongSetup.xml, copied as they are), as step 1 leaves them: the close cross is composed already; the segments of
+  SeatKind0 (a UISegmented) and the options of SeatLevel0 (a UIDropdown, `value` and no `action`) are UIButtons, which step 2 composes.
+-->
+<node name="Setup" layer="30">
+  <components>
+    <component type="UICanvasComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="0.6" useSafeArea="true" modal="true" visible="false">
+      <elements>
+        <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="100%" maxHeight="600" direction="Vertical" spacing="8" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
+          <children>
+            <element type="UIStack" name="TitleRow" flex="0.875" maxHeight="56" direction="Horizontal" spacing="0" crossAlign="Stretch" color="58,66,92,255">
+              <children>
+                <element type="UIElement" name="SetupClose" width="56" fontSize="28" color="70,70,100,255">
+                  <components>
+                    <component type="UITextComponent" text="{#setup.closeMark}" align="Center" verticalAlign="Center" overflow="AutoFit" wrap="false" minFontSize="12"/>
+                    <component type="UIInputClicker" action="MahjongSetupClose"/>
+                    <component type="UITooltipComponent" text="{#setup.close}"/>
+                  </components>
+                </element>
+              </children>
+            </element>
+            <element type="UIStack" name="SeatRow0" flex="1" maxHeight="64" direction="Horizontal" spacing="8" padding="4,0,4,0" crossAlign="Center" color="48,54,72,255">
+              <children>
+                <element type="UISegmented" name="SeatKind0" bind="seatKind0" flex="1" height="87.5%" direction="Horizontal" spacing="4" color="48,54,72,255">
+                  <children>
+                    <element type="UIElement" name="Seat0Person" flex="1" height="100%" fontSize="22" color="70,70,100,255" selectedColor="40,110,60,255">
+                      <components>
+                        <component type="UITextComponent" text="{#setup.person}" align="Center" verticalAlign="Center" overflow="AutoFit" wrap="false" minFontSize="12"/>
+                        <component type="UIInputClicker" action="MahjongSetSeat0" value="person"/>
+                      </components>
+                    </element>
+                    <element type="UIElement" name="Seat0Computer" flex="1" height="100%" fontSize="22" color="70,70,100,255" selectedColor="40,110,60,255">
+                      <components>
+                        <component type="UITextComponent" text="{#setup.computer}" align="Center" verticalAlign="Center" overflow="AutoFit" wrap="false" minFontSize="12"/>
+                        <component type="UIInputClicker" action="MahjongSetSeat0" value="computer"/>
+                      </components>
+                    </element>
+                  </children>
+                </element>
+                <element type="UIDropdown" name="SeatLevel0" bind="seatLevel0" action="MahjongSetSeatLevel0" width="72" height="87.5%" optionHeight="56" text="" fontSize="22" overflow="AutoFit" minFontSize="8" verticalAlign="Center" color="70,70,100,255">
+                  <children>
+                    <element type="UIElement" name="Seat0Level1" fontSize="22" color="70,70,100,255">
+                      <components>
+                        <component type="UITextComponent" text="1" align="Center" verticalAlign="Center" overflow="AutoFit" wrap="false" minFontSize="12"/>
+                        <component type="UIInputClicker" value="1"/>
+                      </components>
+                    </element>
+                    <element type="UIElement" name="Seat0Level2" fontSize="22" color="70,70,100,255">
+                      <components>
+                        <component type="UITextComponent" text="2" align="Center" verticalAlign="Center" overflow="AutoFit" wrap="false" minFontSize="12"/>
+                        <component type="UIInputClicker" value="2"/>
+                      </components>
+                    </element>
+                  </children>
+                </element>
+              </children>
+            </element>
+          </children>
+        </element>
+      </elements>
+      <variants>
+        <variant when="maxWidth:480">
+          <overrides>
+            <set element="SetupClose" width="40" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>
