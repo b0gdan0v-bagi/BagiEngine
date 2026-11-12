@@ -92,7 +92,6 @@ GUESS_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
 ROOM_CODE_LENGTH = 5
 
 
-
 def mask_payload(payload: bytes, mask: bytes) -> bytes:
     return bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
 

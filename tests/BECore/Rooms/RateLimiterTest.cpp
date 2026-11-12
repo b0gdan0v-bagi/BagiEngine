@@ -138,6 +138,16 @@ namespace BECore::Tests {
         EXPECT_TRUE(limiter.TryTake(kStart + milliseconds(1000)));
     }
 
+    TEST(RateLimiterTest, SpendTakesOneWhenThereIsOneAndNothingWhenEmpty) {
+        RateLimiter limiter(2, 0.0);
+        limiter.Spend(kStart);
+        EXPECT_NEAR(limiter.PeekTokens(kStart), 1.0, 1e-9);
+        limiter.Spend(kStart);
+        limiter.Spend(kStart);
+        EXPECT_NEAR(limiter.PeekTokens(kStart), 0.0, 1e-9);
+        EXPECT_FALSE(limiter.TryTake(kStart));
+    }
+
     TEST(RateLimiterTest, LimitersAreIndependent) {
         RateLimiter first(1, 1.0);
         RateLimiter second(1, 1.0);

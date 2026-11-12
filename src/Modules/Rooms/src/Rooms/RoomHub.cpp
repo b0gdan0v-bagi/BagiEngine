@@ -68,12 +68,12 @@ namespace BECore {
     }
 
     void RoomHub::SpendJoinBudget(const Connection& connection, RoomTime now) {
-        (void)_serverJoinBudget.TryTake(now);
+        _serverJoinBudget.Spend(now);
         if (connection.address.empty()) {
             return;
         }
         if (const auto found = _addresses.find(connection.address); found != _addresses.end()) {
-            (void)found->second.joinBudget.TryTake(now);
+            found->second.joinBudget.Spend(now);
         }
     }
 
@@ -187,7 +187,8 @@ namespace BECore {
 
         auto parsed = ParseClientMessage(text, _settings.maxMessageBytes);
         if (!parsed) {
-            // Only `join_room` can give these two at parse time: a code or a token that cannot exist is a guess
+            // Only `join_room` can give these two at parse time: a code or a token that cannot exist is a guess. It is answered as
+            // it is (unknown_room / bad_token, not rate_limited) even when the budgets are empty, and spends a token if one is left
             if (IsJoinGuess(parsed.error().code)) {
                 connection.lastActivity = now;
                 FailJoin(id, connection, parsed.error(), now);
@@ -500,7 +501,8 @@ namespace BECore {
             CloseConnection(id, "idle", now);
         }
 
-        // An address with no connection and a full budget is forgotten, so the map cannot grow with the clients that came and went
+        // An address with no connection and a full budget is forgotten, so the map cannot grow with the clients that came and went.
+        // With addressJoinRefill == 0 a spent bucket never fills again: the address stays, which is the ban that setting asks for
         for (auto it = _addresses.begin(); it != _addresses.end();) {
             if (it->second.connections == 0 && it->second.joinBudget.PeekTokens(now) >= static_cast<double>(std::max(_settings.addressJoinBurst, 1))) {
                 it = _addresses.erase(it);
