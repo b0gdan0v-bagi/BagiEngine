@@ -18,7 +18,8 @@ namespace BECore::Tests {
 
         // "Main" has no view size: a scene unit is an output pixel. Back and Front overlap (tree order); High is on layer 1 and overlaps Low, declared later on layer 0;
         // Under (layer 1), the canvas Hud (layer 3) and Over (layer 5) overlap at the Panel of the canvas; Turned is a strip turned by a quarter; Plain has a transform only;
-        // Both is a node with a transform and a canvas that has no elements. "Fit" shows a 400 x 200 view in the 800 x 600 output: scale 2, a bar of 100 pixels above and below.
+        // Both is a node with a transform and a canvas that has no elements; Diamond is a square turned by 45 degrees about its centre (350, 150). "Fit" shows a 400 x 200 view in the 800 x 600
+        // output: scale 2, a bar of 100 pixels above and below.
         constexpr const char* kPickScenesXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -60,6 +61,10 @@ namespace BECore::Tests {
       <component type="TransformComponent" x="600" y="400" width="100" height="100"/>
       <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize"/>
     </components></node>
+    <node name="Diamond"><components>
+      <component type="TransformComponent" x="300" y="100" width="100" height="100" rotation="45"/>
+      <component type="QuadRendererComponent"/>
+    </components></node>
     <node name="Ghost"><components>
       <component type="TransformComponent" x="300" y="500" width="50" height="50"/>
       <component type="QuadRendererComponent"/>
@@ -89,6 +94,14 @@ namespace BECore::Tests {
                 }
             }
             return nullptr;
+        }
+
+        void ExpectNodes(const eastl::vector<SceneNode*>& actual, std::initializer_list<const SceneNode*> expected) {
+            ASSERT_EQ(actual.size(), expected.size());
+            size_t index = 0;
+            for (const SceneNode* node : expected) {
+                EXPECT_EQ(actual[index++], node);
+            }
         }
 
         void ExpectCorner(const Vec2& corner, float x, float y) {
@@ -157,6 +170,14 @@ namespace BECore::Tests {
         ScenePick::Hit Pick(float x, float y) {
             return ScenePick::PickAt(GetScene("Main"), x, y);
         }
+
+        /// The nodes of "Main" that the box touches
+        const eastl::vector<SceneNode*>& PickBox(float x0, float y0, float x1, float y1) {
+            ScenePick::PickInRect(GetScene("Main"), x0, y0, x1, y1, _picked);
+            return _picked;
+        }
+
+        eastl::vector<SceneNode*> _picked;
 
         IntrusivePtr<RecordingRenderer> _renderer;
         IntrusivePtrAtomic<SceneManager> _manager;
@@ -285,6 +306,96 @@ namespace BECore::Tests {
         EXPECT_EQ(ScenePick::PickAt(fit, 299.0f, 399.0f).node, &Node("Fit", "Box"));
         EXPECT_EQ(ScenePick::PickAt(fit, 60.0f, 60.0f).node, nullptr);  // the scene point (30, -20), in the bar
         EXPECT_EQ(ScenePick::PickAt(fit, 310.0f, 250.0f).node, nullptr);
+    }
+
+    // ---- PickInRect -------------------------------------------------------------------------------------------------------
+
+    TEST_F(ScenePickTest, ABoxGivesTheNodesItTouchesInTreeOrder) {
+        // Hud and Both have canvases that fill the output: every box inside the output touches their bounds
+        SceneNode& hud = Node("Main", "Hud");
+        SceneNode& both = Node("Main", "Both");
+        ExpectNodes(PickBox(10.0f, 10.0f, 20.0f, 20.0f), {&Node("Main", "Back"), &hud, &both});
+        ExpectNodes(PickBox(60.0f, 60.0f, 70.0f, 70.0f), {&Node("Main", "Back"), &Node("Main", "Front"), &hud, &both});
+        ExpectNodes(PickBox(140.0f, 140.0f, 400.0f, 400.0f), {&Node("Main", "Front"), &Node("Main", "Under"), &hud, &Node("Main", "Over"), &both, &Node("Main", "Diamond")});
+    }
+
+    TEST_F(ScenePickTest, ABoxInsideANodeTouchesIt) {
+        ExpectNodes(PickBox(505.0f, 5.0f, 510.0f, 10.0f), {&Node("Main", "High"), &Node("Main", "Hud"), &Node("Main", "Both")});
+    }
+
+    TEST_F(ScenePickTest, TheCornersOfTheBoxMayComeInAnyOrder) {
+        const eastl::vector<SceneNode*> forward = PickBox(60.0f, 60.0f, 70.0f, 70.0f);
+        const eastl::vector<SceneNode*> backward = PickBox(70.0f, 70.0f, 60.0f, 60.0f);
+
+        EXPECT_FALSE(forward.empty());
+        EXPECT_TRUE(forward == backward);
+    }
+
+    TEST_F(ScenePickTest, ABoxInTheCornerOfATurnedRectsBoundsButOutsideItMissesIt) {
+        // The diamond spans 279..421 x 79..221 but its edge from (279, 150) to (350, 79) cuts the corner
+        for (SceneNode* node : PickBox(285.0f, 85.0f, 305.0f, 115.0f)) {
+            EXPECT_NE(node, &Node("Main", "Diamond"));
+        }
+        const eastl::vector<SceneNode*>& touching = PickBox(285.0f, 120.0f, 305.0f, 140.0f);
+        EXPECT_NE(eastl::find(touching.begin(), touching.end(), &Node("Main", "Diamond")), touching.end());
+    }
+
+    TEST_F(ScenePickTest, ATurnedRectIsTouchedByItsCornerAndNotPastIt) {
+        SceneNode& turned = Node("Main", "Turned");  // 790..810 x 110..310
+        ExpectNodes(PickBox(805.0f, 300.0f, 900.0f, 400.0f), {&turned});
+        EXPECT_TRUE(PickBox(812.0f, 300.0f, 900.0f, 400.0f).empty());
+    }
+
+    TEST_F(ScenePickTest, ABoxFullyInsideAGapOutsideTheOutputGivesNothing) {
+        EXPECT_TRUE(PickBox(900.0f, 700.0f, 950.0f, 750.0f).empty());
+        EXPECT_TRUE(PickBox(-50.0f, -50.0f, -10.0f, -10.0f).empty());
+    }
+
+    TEST_F(ScenePickTest, ABoxPicksAHiddenNodeNeverAndALockedNodeLikeAnyOther) {
+        SceneNode& ghost = Node("Main", "Ghost");
+        const SceneNode& hud = Node("Main", "Hud");
+        const SceneNode& both = Node("Main", "Both");
+        ghost.SetEditorFlags(EditorFlags::Hidden);
+        ExpectNodes(PickBox(320.0f, 520.0f, 380.0f, 530.0f), {&hud, &both});
+
+        ghost.SetEditorFlags(EditorFlags::Locked);
+        ExpectNodes(PickBox(320.0f, 520.0f, 330.0f, 530.0f), {&hud, &both, &ghost});
+    }
+
+    TEST_F(ScenePickTest, ABoxSkipsANodeWithATransformOnlyAndAHiddenCanvas) {
+        const eastl::vector<SceneNode*>& plain = PickBox(10.0f, 510.0f, 20.0f, 520.0f);
+        EXPECT_EQ(eastl::find(plain.begin(), plain.end(), &Node("Main", "Plain")), plain.end());
+
+        Node("Main", "Hud").SetEditorFlags(EditorFlags::Hidden);
+        Node("Main", "Both").SetEditorFlags(EditorFlags::Hidden);
+        EXPECT_TRUE(PickBox(10.0f, 510.0f, 20.0f, 520.0f).empty());
+    }
+
+    TEST_F(ScenePickTest, ANodeWithBothAQuadAndACanvasIsListedOnce) {
+        const eastl::vector<SceneNode*>& both = PickBox(610.0f, 410.0f, 620.0f, 420.0f);
+
+        EXPECT_EQ(eastl::count(both.begin(), both.end(), &Node("Main", "Both")), 1);
+    }
+
+    TEST_F(ScenePickTest, TheBoxIsInOutputPixelsOfTheViewOfTheLastDraw) {
+        Draw("Fit");
+        Scene& fit = GetScene("Fit");
+        eastl::vector<SceneNode*> picked;
+
+        ScenePick::PickInRect(fit, 0.0f, 0.0f, 90.0f, 190.0f, picked);
+        EXPECT_TRUE(picked.empty());  // the box lies left of and above the node's output rect 100..300 x 200..400
+
+        ScenePick::PickInRect(fit, 290.0f, 390.0f, 500.0f, 500.0f, picked);
+        ExpectNodes(picked, {&Node("Fit", "Box")});
+    }
+
+    TEST_F(ScenePickTest, ThePickedListIsClearedAndKeepsItsCapacity) {
+        PickBox(0.0f, 0.0f, 800.0f, 600.0f);
+        const size_t capacity = _picked.capacity();
+        ASSERT_GT(_picked.size(), 1u);
+
+        EXPECT_TRUE(PickBox(900.0f, 700.0f, 950.0f, 750.0f).empty());
+        EXPECT_EQ(_picked.capacity(), capacity);
     }
 
     // ---- SelectionOutlines ------------------------------------------------------------------------------------------------

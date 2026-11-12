@@ -26,6 +26,17 @@ namespace BECore::ScenePick {
      */
     Hit PickAt(Scene& scene, float outputX, float outputY);
 
+    /**
+     * @brief Every node that the box from (@p x0, @p y0) to (@p x1, @p y1) touches, for a rubber-band selection; @p out is cleared first and keeps its capacity.
+     *
+     * The same candidates as PickAt (hidden subtrees skipped, locked nodes included, a node rect with its rotation), but a candidate is in when the box touches its outline
+     * at all, not when it covers a point: a scene node when the box meets its turned rect, a canvas node when it meets the bounds of its canvas (UIPreviewOverlay::CanvasBounds).
+     * Nodes come in tree order; a node is listed once. The corners of the box may come in any order.
+     *
+     * @param x0,y0,x1,y1 the box in the pixels of the pass that drew the scene last (as for PickAt)
+     */
+    void PickInRect(Scene& scene, float x0, float y0, float x1, float y1, eastl::vector<SceneNode*>& out);
+
     /// True when (@p x, @p y) lies in @p rect turned by @p rotationDegrees (clockwise on the screen) about the pivot, a point of the rect from 0 to 1 on each axis. The left and top edges belong to
     /// the rect
     bool PointInRotatedRect(const Rect& rect, float rotationDegrees, float pivotX, float pivotY, float x, float y);
