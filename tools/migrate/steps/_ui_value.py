@@ -23,6 +23,8 @@ TRACK_COLOR = "trackColor"
 THUMB_COLOR = "thumbColor"
 # What the constructor of UIToggle sets and a UITextComponent does not
 TOGGLE_TEXT_DEFAULTS = (("verticalAlign", "Center"), ("wrap", "false"))
+# The class faded its caption while disabled; the caption child says so (`UITextComponent::fadeWhenDisabled`), for a colour of any kind, a theme token too
+FADE_CAPTION = ("fadeWhenDisabled", "true")
 
 # The row of a toggle: a horizontal stack of the caption and the switch (`UIToggle::kCaptionGap`); the tests hold the numbers to the headers
 CAPTION_GAP = "8"
@@ -160,6 +162,7 @@ def compose_toggle(toggle: xmltext.Element, name: str) -> str:
     own = _pairs(toggle, TOGGLE_ATTRIBUTES)
     defaults = dict(TOGGLE_TEXT_DEFAULTS)
     text = [(n, shared._text_of(toggle, n) if toggle.has(n) else defaults[n]) for n in shared.TEXT_ATTRIBUTES if toggle.has(n) or n in defaults]
+    text.append(FADE_CAPTION)
     colors = dict(_pairs(toggle, SWITCH_ATTRIBUTES))
     colors.update({TRACK_COLOR: track} if track is not None else {})
     colors.update({THUMB_COLOR: thumb} if thumb is not None else {})

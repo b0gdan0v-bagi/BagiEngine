@@ -26,7 +26,7 @@ namespace BECore {
     Color UITextComponent::GetStateColor(const UIStateLook::State& state) const {
         const auto given = [&](const UIColor& stateColor) { return stateColor.a > 0 ? Color(stateColor) : Color(textColor); };
         if (state.disabled) {
-            return given(disabledTextColor);
+            return fadeWhenDisabled && disabledTextColor.a == 0 ? WithAlpha(textColor, kDisabledAlpha) : given(disabledTextColor);
         }
         if (state.pressed) {
             return given(pressedTextColor);

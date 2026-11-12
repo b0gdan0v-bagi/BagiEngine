@@ -386,6 +386,28 @@ namespace BECore::Tests {
         EXPECT_EQ(TextColorDrawn(), Pack(kTextColor));
     }
 
+    TEST_F(UITextComponentTest, FadeWhenDisabledDrawsTheTextAtHalfAlphaUnlessTheStateHasAColourOfItsOwn) {
+        UITextComponent& caption = CaptionOf("Cap");
+        caption.disabledTextColor = UIColor{};
+        UIElement& cap = Get("Cap");
+        cap.groupDisabled = true;
+        Draw();
+        EXPECT_EQ(TextColorDrawn(), Pack(kTextColor)) << "off by default: a button does not fade its caption";
+
+        caption.fadeWhenDisabled = true;
+        Draw();
+        EXPECT_EQ(TextColorDrawn(), Pack(WithAlpha(caption.textColor, kDisabledAlpha)));
+
+        cap.groupDisabled = false;
+        Draw();
+        EXPECT_EQ(TextColorDrawn(), Pack(kTextColor)) << "only while disabled";
+
+        caption.disabledTextColor = UIColor{70, 80, 90, 255};
+        cap.groupDisabled = true;
+        Draw();
+        EXPECT_EQ(TextColorDrawn(), Pack(caption.disabledTextColor)) << "a colour of the state wins";
+    }
+
     TEST_F(UITextComponentTest, ADisabledTextFadesItsOutlineByTheSameShare) {
         Draw();
         const auto outlineAlpha = [this]() {

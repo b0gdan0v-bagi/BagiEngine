@@ -12,7 +12,7 @@
           <children>
             <element type="UIElement" name="DeclareCaption" flex="1" height="100%" fontSize="22">
               <components>
-                <component type="UITextComponent" text="{#button.Declare}" font="fonts/A.ttf" fontFamily="Sans" fontWeight="700" align="Center" verticalAlign="Top" overflow="AutoFit" wrap="true" lineSpacing="1.2" minFontSize="12" textOutline="1,0,0,0,255" textShadow="1,1,#00000080"/>
+                <component type="UITextComponent" text="{#button.Declare}" font="fonts/A.ttf" fontFamily="Sans" fontWeight="700" align="Center" verticalAlign="Top" overflow="AutoFit" wrap="true" lineSpacing="1.2" minFontSize="12" textOutline="1,0,0,0,255" textShadow="1,1,#00000080" fadeWhenDisabled="true"/>
               </components>
             </element>
             <element type="UIElement" name="DeclareSwitch" height="100%" aspectRatio="1.25">

@@ -526,7 +526,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         <children>
           <element type="UIElement" name="SoundCaption" flex="1" height="100%" fontSize="24">
             <components>
-              <component type="UITextComponent" text="{#settings.sound}" verticalAlign="Center" wrap="false"/>
+              <component type="UITextComponent" text="{#settings.sound}" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
             </components>
           </element>
           <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25">

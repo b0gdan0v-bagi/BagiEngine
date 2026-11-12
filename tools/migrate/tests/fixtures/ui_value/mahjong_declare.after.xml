@@ -23,7 +23,7 @@
             <children>
               <element type="UIElement" name="DeclareCaption" flex="1" height="100%" fontSize="22">
                 <components>
-                  <component type="UITextComponent" text="{#button.Declare}" verticalAlign="Center" wrap="false"/>
+                  <component type="UITextComponent" text="{#button.Declare}" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
                 </components>
               </element>
               <element type="UIElement" name="DeclareSwitch" height="100%" aspectRatio="1.25">

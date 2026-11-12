@@ -12,7 +12,7 @@
           <children>
             <element type="UIElement" name="DarkCaption" flex="1" height="100%">
               <components>
-                <component type="UITextComponent" text="Dark" textColor="190,196,190,255" verticalAlign="Center" wrap="false"/>
+                <component type="UITextComponent" text="Dark" textColor="190,196,190,255" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
               </components>
             </element>
             <element type="UIElement" name="DarkSwitch" height="100%" aspectRatio="1.25">
@@ -30,7 +30,7 @@
           <children>
             <element type="UIElement" name="TranslucentCaption" flex="1" height="100%">
               <components>
-                <component type="UITextComponent" text="Translucent" textColor="#20406080" verticalAlign="Center" wrap="false"/>
+                <component type="UITextComponent" text="Translucent" textColor="#20406080" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
               </components>
             </element>
             <element type="UIElement" name="TranslucentSwitch" height="100%" aspectRatio="1.25">
@@ -48,7 +48,7 @@
           <children>
             <element type="UIElement" name="WhiteCaption" flex="1" height="100%">
               <components>
-                <component type="UITextComponent" text="White" textColor="255,255,255,255" verticalAlign="Center" wrap="false"/>
+                <component type="UITextComponent" text="White" textColor="255,255,255,255" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
               </components>
             </element>
             <element type="UIElement" name="WhiteSwitch" height="100%" aspectRatio="1.25">
@@ -66,7 +66,7 @@
           <children>
             <element type="UIElement" name="GivenCaption" flex="1" height="100%">
               <components>
-                <component type="UITextComponent" text="Given" textColor="10,20,30,255" verticalAlign="Center" wrap="false"/>
+                <component type="UITextComponent" text="Given" textColor="10,20,30,255" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
               </components>
             </element>
             <element type="UIElement" name="GivenSwitch" height="100%" aspectRatio="1.25">
@@ -84,7 +84,7 @@
           <children>
             <element type="UIElement" name="TransparentCaption" flex="1" height="100%">
               <components>
-                <component type="UITextComponent" text="Transparent" textColor="10,20,30,255" verticalAlign="Center" wrap="false"/>
+                <component type="UITextComponent" text="Transparent" textColor="10,20,30,255" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
               </components>
             </element>
             <element type="UIElement" name="TransparentSwitch" height="100%" aspectRatio="1.25">

@@ -12,7 +12,7 @@
           <children>
             <element type="UIElement" name="SoundCaption" flex="1" height="100%" fontSize="22">
               <components>
-                <component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false"/>
+                <component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
               </components>
             </element>
             <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25">
@@ -30,7 +30,7 @@
           <children>
             <element type="UIElement" flex="1" height="100%">
               <components>
-                <component type="UITextComponent" text="Music" verticalAlign="Center" wrap="false"/>
+                <component type="UITextComponent" text="Music" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
               </components>
             </element>
             <element type="UIElement" height="100%" aspectRatio="1.25">

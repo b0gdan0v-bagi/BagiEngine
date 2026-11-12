@@ -9,7 +9,7 @@ becomes
       </components>
       <children>
         <element type="UIElement" name="SoundCaption" flex="1" height="100%" fontSize="22">
-          <components><component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false"/></components>
+          <components><component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
         </element>
         <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25">
           <components><component type="UISwitchComponent"/></components>
@@ -28,7 +28,7 @@ becomes
 
 The row of a toggle keeps the attributes of the element (`name`, size, `color`, `box`, `blocksInput`, `visible`, `flex` ...); `disabled` goes to the clicker, `bind`, `action`, `onValue` and
 `offValue` to the toggle component, the text attributes (`text`, `font`, `textColor`, `align`, `overflow` ... and `verticalAlign="Center"`, `wrap="false"`, which `UIToggle` set in its
-constructor) to the text component of the caption, `fontSize` to the caption element, `trackColor`, `fillColor`, `thumbColor` and `partShape` to the switch component. The class derived
+constructor, and `fadeWhenDisabled="true"`: the class faded its caption while disabled) to the text component of the caption, `fontSize` to the caption element, `trackColor`, `fillColor`, `thumbColor` and `partShape` to the switch component. The class derived
 the off track (its `textColor` at 0.35 alpha) and the thumb (its `textColor`) from its own text colour, which the switch child cannot see: when `textColor` is a literal other than white
 the step writes `trackColor` and `thumbColor` (those the file gives stay). A slider's attributes go to its component and its `disabled` to the clicker, whose `stateLook="false"` keeps
 the plate still as the class did.

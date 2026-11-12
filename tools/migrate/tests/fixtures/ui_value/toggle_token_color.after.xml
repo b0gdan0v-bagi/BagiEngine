@@ -12,7 +12,7 @@
           <children>
             <element type="UIElement" name="ThemedCaption" flex="1" height="100%">
               <components>
-                <component type="UITextComponent" text="Themed" textColor="@text" verticalAlign="Center" wrap="false"/>
+                <component type="UITextComponent" text="Themed" textColor="@text" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
               </components>
             </element>
             <element type="UIElement" name="ThemedSwitch" height="100%" aspectRatio="1.25">
@@ -30,7 +30,7 @@
           <children>
             <element type="UIElement" name="ThemedThumbCaption" flex="1" height="100%">
               <components>
-                <component type="UITextComponent" text="Themed" textColor="@text" verticalAlign="Center" wrap="false"/>
+                <component type="UITextComponent" text="Themed" textColor="@text" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
               </components>
             </element>
             <element type="UIElement" name="ThemedThumbSwitch" height="100%" aspectRatio="1.25">

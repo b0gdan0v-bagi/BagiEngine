@@ -52,8 +52,9 @@ namespace BECore {
         constexpr eastl::string_view SliderKeys[] = {"bind", "action", "minValue", "maxValue", "step"};
         constexpr ButtonTextDefault ToggleTextDefaults[] = {{"verticalAlign", "Center"}, {"wrap", "false"}};  // what a `UIToggle` did with its text
         constexpr eastl::string_view SwitchSuffix = "Switch";
-        constexpr const char* ToggleGap = "8";             ///< the air between the caption and the switch (`UIToggle::kCaptionGap`)
-        constexpr Color CaptionWhite{255, 255, 255, 255};  ///< the caption colour the switch component's own fallbacks assume
+        constexpr const char* FadeWhenDisabledKey = "fadeWhenDisabled";  ///< the caption of a toggle fades while it is disabled, as `UIToggle` drew it
+        constexpr const char* ToggleGap = "8";                           ///< the air between the caption and the switch (`UIToggle::kCaptionGap`)
+        constexpr Color CaptionWhite{255, 255, 255, 255};                ///< the caption colour the switch component's own fallbacks assume
 
         template <size_t N>
         bool IsKeyOf(const eastl::string_view (&keys)[N], eastl::string_view key) {
@@ -2200,7 +2201,9 @@ namespace BECore {
                 if (const eastl::string* fontSize = attrs.Find("fontSize")) {
                     caption.append_attribute("fontSize") = fontSize->c_str();
                 }
-                AddTextComponent(caption.append_child("components"), attrs, false, ToggleTextDefaults);
+                pugi::xml_node captionComponents = caption.append_child("components");
+                AddTextComponent(captionComponents, attrs, false, ToggleTextDefaults);
+                captionComponents.last_child().append_attribute(FadeWhenDisabledKey) = "true";
                 pugi::xml_node track = AppendPartChild(children, node, SwitchSuffix);
                 track.append_attribute("height") = "100%";
                 track.append_attribute("aspectRatio") = Number(UISwitchComponent::kAreaAspect).c_str();

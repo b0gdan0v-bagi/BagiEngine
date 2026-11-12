@@ -7,8 +7,8 @@
         <element type="UIStack" name="Plate" x="10" y="10" width="400" height="200" direction="Vertical" spacing="8">
           <children>
             <element type="UILabel" name="Title" height="30" text="Options" />
-            <element type="UIToggle" name="Sound" bind="soundOn" action="SetSound" height="56" text="Sound" />
-            <element type="UISlider" name="Volume" bind="volume" action="SetVolume" height="56" />
+            <element type="UIToggle" name="Sound" bind="soundOn" action="SetSound" width="360" height="56" text="Sound" />
+            <element type="UISlider" name="Volume" bind="volume" action="SetVolume" width="360" height="56" />
           </children>
         </element>
       </elements>

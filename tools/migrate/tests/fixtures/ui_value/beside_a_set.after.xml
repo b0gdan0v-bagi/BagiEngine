@@ -7,7 +7,7 @@
         <element type="UIStack" name="Plate" x="10" y="10" width="400" height="200" direction="Vertical" spacing="8">
           <children>
             <element type="UILabel" name="Title" height="30" text="Options" />
-            <element type="UIElement" name="Sound" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+            <element type="UIElement" name="Sound" width="360" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
               <components>
                 <component type="UIInputClicker"/>
                 <component type="UIToggleComponent" bind="soundOn" action="SetSound"/>
@@ -15,7 +15,7 @@
               <children>
                 <element type="UIElement" name="SoundCaption" flex="1" height="100%">
                   <components>
-                    <component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false"/>
+                    <component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
                   </components>
                 </element>
                 <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25">
@@ -25,7 +25,7 @@
                 </element>
               </children>
             </element>
-            <element type="UIElement" name="Volume" height="56">
+            <element type="UIElement" name="Volume" width="360" height="56">
               <components>
                 <component type="UIInputClicker" stateLook="false"/>
                 <component type="UISliderComponent" bind="volume" action="SetVolume"/>
