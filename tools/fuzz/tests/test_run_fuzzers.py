@@ -13,8 +13,8 @@ import run_fuzzers  # noqa: E402
 
 TARGETS_CPP = """
     static const FuzzTarget targets[] = {
-        {"BinaryDeserializer", &FuzzBinaryDeserializer, "binary"},
-        {"XmlDeserializer", &FuzzXmlDeserializer, "xml"},
+        {"BinaryDeserializer", &FuzzBinaryDeserializer, "binary", 1},
+        {"XmlDeserializer", &FuzzXmlDeserializer, "xml", 2},
     };
 """
 

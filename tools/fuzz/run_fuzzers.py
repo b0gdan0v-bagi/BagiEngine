@@ -27,8 +27,8 @@ RSS_LIMIT_MB = 2048
 TIMEOUT_SECONDS = 10  # one input
 LOG_TAIL_LINES = 12
 
-# A row of FuzzTargetList() in tests/Fuzz/FuzzTargets.cpp: {"Name", &FuzzName, "corpus-folder"}
-TARGET_ROW = re.compile(r'\{\s*"(?P<name>\w+)"\s*,\s*&\w+\s*,\s*"(?P<folder>[\w.-]+)"\s*\}')
+# A row of FuzzTargetList() in tests/Fuzz/FuzzTargets.cpp: {"Name", &FuzzName, "corpus-folder", costWeight}
+TARGET_ROW = re.compile(r'\{\s*"(?P<name>\w+)"\s*,\s*&\w+\s*,\s*"(?P<folder>[\w.-]+)"\s*(?:,\s*\d+\s*)?\}')
 
 
 def repository_root() -> Path:

@@ -1,0 +1,11 @@
+<node name="Panel"><components>
+  <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+    <elements>
+      <element type="UIElement" name="Title" x="8" y="8" width="184" height="30" fontSize="24">
+        <components>
+          <component type="UITextComponent" text="Base"/>
+        </components>
+      </element>
+    </elements>
+  </component>
+</components></node>

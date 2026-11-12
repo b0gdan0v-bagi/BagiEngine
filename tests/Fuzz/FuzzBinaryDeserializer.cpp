@@ -276,13 +276,8 @@ namespace BECore::Fuzz {
     void FuzzBinaryDeserializer(const uint8_t* data, size_t size) {
         CheckBuffer(data, size);
 
-        // Any change of the length breaks the payload size of the header, and the load stops there, before the checks that matter.
-        // The same bytes under a header that is true reach the validation of the entries, which is what is being fuzzed
-        if (size >= BinaryFormat::HeaderSize) {
-            eastl::vector<uint8_t> repaired(data, data + size);
-            std::memcpy(repaired.data(), BinaryFormat::Magic, sizeof(BinaryFormat::Magic));
-            BinaryFormat::Store<uint16_t>(repaired.data() + sizeof(BinaryFormat::Magic), BinaryFormat::CurrentVersion);
-            BinaryFormat::Store<uint32_t>(repaired.data() + BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(size - BinaryFormat::HeaderSize));
+        const eastl::vector<uint8_t> repaired = WithTrueBinaryHeader(data, size);
+        if (!repaired.empty()) {
             CheckBuffer(repaired.data(), repaired.size());
         }
     }

@@ -14,7 +14,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// Mutations per target in an ordinary run: about two seconds in a Debug build (BAGI_FUZZ_ITERATIONS=<n> replaces it)
+        /// Mutations per target in an ordinary run: about two seconds in a Debug build for a target of cost weight 1 (BAGI_FUZZ_ITERATIONS=<n> replaces it)
         constexpr uint64_t kDefaultIterations = 50000;
 
         /// The seed of the generator; mixed with the name of the target so the targets do not mutate the same way
@@ -31,15 +31,17 @@ namespace BECore::Tests {
             FuzzBytes bytes;
         };
 
-        uint64_t IterationCount() {
+        /// BAGI_FUZZ_ITERATIONS as it is for every target; without it the default count, shorter for a target whose input costs more
+        uint64_t IterationCount(const FuzzTarget& target) {
+            const uint64_t byDefault = kDefaultIterations / std::max<uint32_t>(target.costWeight, 1);
             const char* text = std::getenv("BAGI_FUZZ_ITERATIONS");
             if (text == nullptr || *text == '\0') {
-                return kDefaultIterations;
+                return byDefault;
             }
             uint64_t value = 0;
             const char* end = text + std::strlen(text);
             const auto result = std::from_chars(text, end, value);
-            return (result.ec == std::errc() && result.ptr == end) ? value : kDefaultIterations;
+            return (result.ec == std::errc() && result.ptr == end) ? value : byDefault;
         }
 
         uint64_t HashName(std::string_view name) {
@@ -115,7 +117,7 @@ namespace BECore::Tests {
         }
 
         FuzzRandom random(kReplaySeed ^ HashName(target.name));
-        const uint64_t iterations = IterationCount();
+        const uint64_t iterations = IterationCount(target);
         for (uint64_t i = 0; i < iterations; ++i) {
             FuzzBytes input = seeds[i % seeds.size()];
             const uint32_t stacked = 1 + random.Below(kMaxStackedMutations);
