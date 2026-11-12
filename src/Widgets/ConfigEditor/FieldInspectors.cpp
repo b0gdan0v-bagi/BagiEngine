@@ -2,6 +2,7 @@
 
 #include <EASTL/array.h>
 #include <EASTL/unordered_map.h>
+#include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
@@ -46,6 +47,7 @@ namespace BECore {
             std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), value);
             const eastl::string label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
+            const ScopedMonoFont mono;
             if (ImGui::InputInt(label.c_str(), &value, 0, 0)) {
                 return {true, Format("{}", value)};
             }
@@ -57,6 +59,7 @@ namespace BECore {
             std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), value);
             const eastl::string label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
+            const ScopedMonoFont mono;
             if (ImGui::InputFloat(label.c_str(), &value, 0.0f, 0.0f, "%.6g")) {
                 return {true, Format("{}", value)};
             }

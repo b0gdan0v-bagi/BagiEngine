@@ -7,6 +7,9 @@
 #include <BECore/Resource/TextureLibrary.h>
 #include <Generated/TextureEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/Icons/IconsLucide.h>
+#include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
@@ -41,7 +44,7 @@ namespace BECore {
         // Toolbar
         // -----------------------------------------------------------------
         ImGui::BeginDisabled(!_isDirty);
-        if (ImGui::Button("Save")) {
+        if (IconTextButton(ICON_LC_SAVE, "Save", "Write the sprite library to its file")) {
             SaveLibrary();
         }
         ImGui::EndDisabled();
@@ -90,7 +93,7 @@ namespace BECore {
         }
 
         ImGui::Separator();
-        if (ImGui::Button("[+ Add]")) {
+        if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add", "Add a sprite entry to the library", -1.0f)) {
             SpriteEntry newEntry;
             newEntry.name = PoolString::Intern("new_sprite");
             lib.AddOrUpdate(eastl::move(newEntry));
@@ -184,7 +187,7 @@ namespace BECore {
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Refresh##tex")) {
+        if (IconButton(ICON_LC_REFRESH_CW, "Rescan the assets folder for textures", "tex_refresh")) {
             _assetsLoaded = false;
         }
 
@@ -298,25 +301,29 @@ namespace BECore {
         Rect rect = entry.srcRect;
         bool rectChanged = false;
 
-        ImGui::PushItemWidth(70.0f);
-        if (ImGui::DragFloat("X##sr_x", &rect.x, 0.5f, 0.0f)) {
-            rectChanged = true;
-        }
-        ImGui::SameLine();
-        if (ImGui::DragFloat("Y##sr_y", &rect.y, 0.5f, 0.0f)) {
-            rectChanged = true;
-        }
-        ImGui::PopItemWidth();
+        {
+            const ScopedMonoFont mono;
 
-        ImGui::PushItemWidth(70.0f);
-        if (ImGui::DragFloat("W##sr_w", &rect.w, 0.5f, 0.0f)) {
-            rectChanged = true;
+            ImGui::PushItemWidth(70.0f);
+            if (ImGui::DragFloat("X##sr_x", &rect.x, 0.5f, 0.0f)) {
+                rectChanged = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::DragFloat("Y##sr_y", &rect.y, 0.5f, 0.0f)) {
+                rectChanged = true;
+            }
+            ImGui::PopItemWidth();
+
+            ImGui::PushItemWidth(70.0f);
+            if (ImGui::DragFloat("W##sr_w", &rect.w, 0.5f, 0.0f)) {
+                rectChanged = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::DragFloat("H##sr_h", &rect.h, 0.5f, 0.0f)) {
+                rectChanged = true;
+            }
+            ImGui::PopItemWidth();
         }
-        ImGui::SameLine();
-        if (ImGui::DragFloat("H##sr_h", &rect.h, 0.5f, 0.0f)) {
-            rectChanged = true;
-        }
-        ImGui::PopItemWidth();
 
         if (rectChanged) {
             entry.srcRect = rect;
@@ -329,7 +336,7 @@ namespace BECore {
         // -----------------------------------------------------------------
         // Delete button
         // -----------------------------------------------------------------
-        if (ImGui::Button("Delete Entry")) {
+        if (IconTextButton(ICON_LC_TRASH_2, "Delete Entry", "Remove this sprite from the library")) {
             lib.Remove(entry.name);
             _selectedIndex = eastl::min(_selectedIndex, static_cast<int>(lib.GetAll().size()) - 1);
             _isDirty = true;

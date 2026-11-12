@@ -3,6 +3,7 @@
 #include <BECore/UI/UIAnchorPresets.h>
 #include <BECore/UI/UILayout.h>
 #include <BECore/UI/UIRectEdit.h>
+#include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
@@ -26,6 +27,19 @@ namespace BECore {
         constexpr ImU32 kCellHoverColor = IM_COL32(80, 80, 90, 255);
         constexpr ImU32 kCellFrameColor = IM_COL32(150, 150, 160, 255);
         constexpr ImU32 kCellAnchorColor = IM_COL32(240, 200, 80, 255);
+
+        /// Drag fields in the mono font with their name after them in the UI font (ImGui draws the label of a drag field with
+        /// the font of the field, so @p id is hidden: it starts with `##`). One to four floats; the width is the next item width.
+        bool DragFloatsNamed(const char* name, const char* id, float* values, int count, float speed, const char* format) {
+            bool changed = false;
+            {
+                const ScopedMonoFont mono;
+                changed = ImGui::DragScalarN(id, ImGuiDataType_Float, values, count, speed, nullptr, nullptr, format);
+            }
+            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+            ImGui::TextUnformatted(name);
+            return changed;
+        }
 
         const UIElement* FindParent(const UIElement& root, const UIElement& target) {
             for (const auto& child : root.children) {
@@ -109,7 +123,10 @@ namespace BECore {
             ImGui::PushID(label);
             ImGui::SetNextItemWidth(kFieldWidth);
             const float speed = length.unit == UIUnit::Percent ? kPercentDragSpeed : kUnitDragSpeed;
-            changed |= ImGui::DragFloat("##value", &length.value, speed, 0.0f, 0.0f, "%.2f");
+            {
+                const ScopedMonoFont mono;
+                changed |= ImGui::DragFloat("##value", &length.value, speed, 0.0f, 0.0f, "%.2f");
+            }
             ImGui::SameLine(0.0f, kUnitSwitchSpacing);
             const bool percent = length.unit == UIUnit::Percent;
             if (ImGui::SmallButton(percent ? "%" : "px")) {
@@ -127,10 +144,10 @@ namespace BECore {
             return changed;
         }
 
-        bool InspectVec2(const char* label, Vec2& value) {
+        bool InspectVec2(const char* name, const char* id, Vec2& value) {
             float values[2] = {value.x, value.y};
             ImGui::SetNextItemWidth(kPairWidth);
-            if (ImGui::DragFloat2(label, values, kAnchorDragSpeed, 0.0f, 0.0f, "%.3f")) {
+            if (DragFloatsNamed(name, id, values, 2, kAnchorDragSpeed, "%.3f")) {
                 value = Vec2(values[0], values[1]);
                 return true;
             }
@@ -262,7 +279,7 @@ namespace BECore {
             ImGui::TextDisabled("The parent is a stack: the anchors, offsets and margin are ignored");
             changed |= InspectLength("width", spec.width, parent->rect.w);
             changed |= InspectLength("height", spec.height, parent->rect.h);
-            changed |= ImGui::DragFloat("flex", &spec.flex, kFlexDragSpeed, 0.0f, 0.0f, "%.2f");
+            changed |= DragFloatsNamed("flex", "##flex", &spec.flex, 1, kFlexDragSpeed, "%.2f");
             if (changed) {
                 canvas.Invalidate();
             }
@@ -303,9 +320,9 @@ namespace BECore {
         Vec2 pivot = anchors.pivot;
         bool anchorsEdited = false;
         ImGui::BeginDisabled(!hasBox);
-        anchorsEdited |= InspectVec2("Anchor min##anchor_min", anchorMin);
-        anchorsEdited |= InspectVec2("Anchor max##anchor_max", anchorMax);
-        anchorsEdited |= InspectVec2("Pivot##pivot", pivot);
+        anchorsEdited |= InspectVec2("Anchor min", "##anchor_min", anchorMin);
+        anchorsEdited |= InspectVec2("Anchor max", "##anchor_max", anchorMax);
+        anchorsEdited |= InspectVec2("Pivot", "##pivot", pivot);
         ImGui::EndDisabled();
         if (anchorsEdited) {
             const UIRectEditResult result = WithAnchors(box, spec, anchorMin, anchorMax, pivot);
@@ -333,7 +350,7 @@ namespace BECore {
         ImGui::BeginDisabled(!stretchX);
         float horizontal[2] = {spec.margin.left, spec.margin.right};
         ImGui::SetNextItemWidth(kPairWidth);
-        if (ImGui::DragFloat2("Margin left, right##margin_x", horizontal, kUnitDragSpeed, 0.0f, 0.0f, "%.1f")) {
+        if (DragFloatsNamed("Margin left, right", "##margin_x", horizontal, 2, kUnitDragSpeed, "%.1f")) {
             spec.margin.left = horizontal[0];
             spec.margin.right = horizontal[1];
             changed = true;
@@ -342,7 +359,7 @@ namespace BECore {
         ImGui::BeginDisabled(!stretchY);
         float vertical[2] = {spec.margin.top, spec.margin.bottom};
         ImGui::SetNextItemWidth(kPairWidth);
-        if (ImGui::DragFloat2("Margin top, bottom##margin_y", vertical, kUnitDragSpeed, 0.0f, 0.0f, "%.1f")) {
+        if (DragFloatsNamed("Margin top, bottom", "##margin_y", vertical, 2, kUnitDragSpeed, "%.1f")) {
             spec.margin.top = vertical[0];
             spec.margin.bottom = vertical[1];
             changed = true;

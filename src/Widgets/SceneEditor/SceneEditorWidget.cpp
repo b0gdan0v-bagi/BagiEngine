@@ -14,7 +14,10 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/EditorLayout/IconTable.h>
+#include <Widgets/Icons/IconsLucide.h>
+#include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
@@ -23,6 +26,7 @@ namespace BECore {
     namespace {
         constexpr float kUITreeHeight = 160.0f;
         constexpr size_t kComponentLabelSize = 96;
+        constexpr float kPopupButtonWidth = 120.0f;
     }  // namespace
 
     // =========================================================================
@@ -69,7 +73,7 @@ namespace BECore {
         // Toolbar
         // ----------------------------------------------------------------
         ImGui::BeginDisabled(!_isDirty);
-        if (ImGui::Button("Save")) {
+        if (IconTextButton(ICON_LC_SAVE, "Save", "Write the active scene back to its config file")) {
             SaveScene();
         }
         ImGui::EndDisabled();
@@ -94,7 +98,7 @@ namespace BECore {
         RenderHierarchyNode(rootNode);
 
         ImGui::Separator();
-        if (ImGui::Button("[+ Add Node]", ImVec2(-1.0f, 0.0f))) {
+        if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add Node", "Add a node at the root of the scene", -1.0f)) {
             _contextMenuTargetNode = nullptr;
             _showAddNodePopup = true;
             snprintf(_nodeNameBuffer, sizeof(_nodeNameBuffer), "NewNode");
@@ -162,12 +166,12 @@ namespace BECore {
 
         bool nodeDeleted = false;
         if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Add Child")) {
+            if (ImGui::MenuItem(ICON_LC_FOLDER_PLUS " Add Child")) {
                 _contextMenuTargetNode = &node;
                 _showAddNodePopup = true;
                 snprintf(_nodeNameBuffer, sizeof(_nodeNameBuffer), "ChildNode");
             }
-            if (ImGui::MenuItem("Delete")) {
+            if (ImGui::MenuItem(ICON_LC_TRASH_2 " Delete")) {
                 auto* parent = node.GetParent();
                 if (parent) {
                     if (_selectedNode == &node) {
@@ -245,7 +249,12 @@ namespace BECore {
         ImGui::SameLine();
 
         int32_t layer = _selectedNode->GetLayer();
-        if (ImGui::InputInt("##node_layer", &layer)) {
+        bool layerChanged = false;
+        {
+            ScopedMonoFont mono;
+            layerChanged = ImGui::InputInt("##node_layer", &layer);
+        }
+        if (layerChanged) {
             _selectedNode->SetLayer(layer);
             _isDirty = true;
         }
@@ -298,7 +307,7 @@ namespace BECore {
         }
 
         ImGui::Separator();
-        if (ImGui::Button("[+ Add Component]", ImVec2(-1.0f, 0.0f))) {
+        if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add Component", "Add a component to the selected node", -1.0f)) {
             _showAddComponentPopup = true;
         }
     }
@@ -312,7 +321,7 @@ namespace BECore {
             }
             ImGui::InputText("##add_node_name", _nodeNameBuffer, sizeof(_nodeNameBuffer));
 
-            if (ImGui::Button("OK", ImVec2(120.0f, 0.0f))) {
+            if (IconTextButton(ICON_LC_CHECK, "OK", nullptr, kPopupButtonWidth)) {
                 if (_nodeNameBuffer[0] != '\0') {
                     auto* scene = CoreManager::GetSceneManager().GetActiveScene();
                     if (scene) {
@@ -325,7 +334,7 @@ namespace BECore {
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+            if (IconTextButton(ICON_LC_X, "Cancel", nullptr, kPopupButtonWidth)) {
                 ImGui::CloseCurrentPopup();
             }
 
@@ -366,7 +375,7 @@ namespace BECore {
             }
 
             ImGui::Separator();
-            if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+            if (IconTextButton(ICON_LC_X, "Cancel", nullptr, kPopupButtonWidth)) {
                 ImGui::CloseCurrentPopup();
             }
 
