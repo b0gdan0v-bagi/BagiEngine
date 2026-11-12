@@ -2,7 +2,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/em_asm.h>
-#include <thread>
+#include <emscripten/threading.h>
 #endif
 
 namespace BECore {
@@ -33,14 +33,9 @@ namespace BECore {
 #ifdef __EMSCRIPTEN__
     namespace {
 
-        // The thread of the first call: the page's script and its answers live on the main thread (a Worker has no window)
-        std::thread::id postOwner;
-
+        // The page's script and its answers live on the main thread (a Worker has no window)
         void CheckOwner() {
-            if (postOwner == std::thread::id{}) {
-                postOwner = std::this_thread::get_id();
-            }
-            ASSERT(std::this_thread::get_id() == postOwner, "WebPost is used off the main thread");
+            ASSERT(emscripten_is_main_browser_thread(), "WebPost is used off the main thread");
         }
 
         // The JavaScript of EM_ASM is stringized as it stands, so clang-format must not touch it (it splits === into == =)
@@ -89,7 +84,7 @@ namespace BECore {
     }
 #endif
 
-    std::expected<WebPostId, eastl::string> WebPostStart(eastl::string_view path, eastl::string_view body, [[maybe_unused]] eastl::string_view contentType) {
+    std::expected<WebPostId, eastl::string> WebPostStart(eastl::string_view path, eastl::string_view body, eastl::string_view contentType) {
         if (!IsWebPostPathValid(path)) {
             return std::unexpected(eastl::string("bad path"));
         }

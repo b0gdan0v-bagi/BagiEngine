@@ -23,14 +23,16 @@ Access control is optional HTTP Basic: with BASIC_AUTH_USER and BASIC_AUTH_PASSW
 GET /healthz needs them (401 and `WWW-Authenticate` otherwise, the isolation headers included); with neither set the server is open;
 with one only, it does not start. The secret lives in the variables of the service, never in a file of the image.
 
-Match logs (off unless MATCH_STORE names a folder; behind the same Basic auth): a page posts a match log piece by piece,
+Match logs (off unless MATCH_STORE names a folder; behind the same Basic auth when it is set, without it every endpoint below is open
+to anybody, post, list, read and delete, and the start line says so; with it, anyone who holds the shared password may read and delete
+every log): a page posts a match log piece by piece,
 `POST /matches/<id>/<index>` with <id> 32 lower-case hex digits, <index> a decimal number without leading zeros, and the body the
 lines of the piece (JSON objects, one per line, each ending in a newline; at most 1 MiB; the first piece starts with the `start` event
 whose `version` is inside MATCH_LOG_VERSIONS, `N` or `N-M`, which the game owns). The body is stored as it came in
 <MATCH_STORE>/<id>/<index>.jsonl and nothing else is: no address, user agent or time (the mtime of the file is the only time), and the
 access log never prints a /matches/ line. The same bytes again are 200, other bytes for a stored piece are 409.
 At most 60 posts an hour per client address (429 and Retry-After; the address is the socket peer, or with MATCH_FORWARDED_FOR=1 the last
-entry of X-Forwarded-For, which the edge of the platform sets), and the pieces together stay within MATCH_STORE_MAX_MB (default 1024; 507).
+entry of X-Forwarded-For, which the edge of the platform is expected to append; not checked on Railway), and the pieces together stay within MATCH_STORE_MAX_MB (default 1024; 507).
 GET /matches/ lists {"matches": [{"id", "pieces"}]}, GET /matches/<id>/<index>.jsonl returns a piece, DELETE /matches/<id> removes a match;
 a match whose newest piece is 90 days old is removed at start and every hour. The variables are MATCH_STORE, MATCH_STORE_MAX_MB,
 MATCH_LOG_VERSIONS and MATCH_FORWARDED_FOR; without MATCH_STORE the server is as it was.
@@ -182,11 +184,16 @@ def etag_matches(header: str | None, etag: str) -> bool:
     return any(tag.strip().removeprefix("W/") == wanted for tag in header.split(","))
 
 
+def _refuse_constant(name: str) -> None:
+    raise ValueError(name)
+
+
 def check_piece(body: bytes, index: int, versions: tuple[int, int] | None) -> str | None:
     """Why a piece is refused (a short fixed text, nothing of the input), None when it is fine.
 
     The rules: UTF-8; empty, or lines ending in a newline (a line is whatever lies between two "\\n", so a blank line inside is refused);
-    every line a JSON object. An empty piece is fine after the first: the game sends one as the marker of a match given up before any
+    every line a JSON object (NaN, Infinity and -Infinity are not JSON and are refused; a CRLF line ending is accepted, the "\\r" is
+    whitespace to the parser). An empty piece is fine after the first: the game sends one as the marker of a match given up before any
     settlement. The first piece (index 0) starts with the `start` event whose `version` is an int inside `versions`; with no range
     configured every first piece is refused, because the format is the game's and the server does not guess it."""
     try:
@@ -202,7 +209,7 @@ def check_piece(body: bytes, index: int, versions: tuple[int, int] | None) -> st
         if not line:
             return "blank line"
         try:
-            value = json.loads(line)
+            value = json.loads(line, parse_constant=_refuse_constant)
         except (ValueError, RecursionError):
             return "a line is not JSON"
         if not isinstance(value, dict):
@@ -223,8 +230,9 @@ def is_piece_name(name: str) -> bool:
 
 
 def sweep_match(folder: Path, now: float, retention: float) -> int:
-    """One match folder: old `.tmp-*` files go; the whole folder goes when its newest piece is older than `retention`; a folder with
-    nothing in it goes. Returns the bytes of the pieces removed. Files of other names are not ours and are left (they keep the folder)."""
+    """One match folder: old `.tmp-*` files go; the whole folder goes when its newest piece is older than `retention` (with everything
+    in it, files of other names too); a folder with nothing in it goes. Returns the bytes of the pieces removed. In a folder that is
+    not expired, files of other names are not ours and are left (they keep the folder)."""
     pieces = []
     left = 0
     for item in os.scandir(folder):
@@ -272,7 +280,7 @@ class MatchStoreError(Exception):
 class MatchStore:
     """The folder of match logs: `<folder>/<id>/<index>.jsonl`, written whole and never changed. One server process owns the folder; a lock
     serialises every decision, write, delete and sweep (a piece is at most 1 MiB and the posts are rate limited, so it is not a
-    bottleneck), and under it `_bytes` (the size of all pieces, counted once at start) stays equal to what is on disk."""
+    bottleneck; the sweep holds it during the whole walk, so a post waits for it), and under it `_bytes` (the size of all pieces, counted once at start) stays equal to what is on disk."""
 
     def __init__(self, folder: Path, versions: tuple[int, int] | None, max_bytes: int):
         self.folder = folder.resolve()
@@ -875,6 +883,8 @@ def main(argv: list[str] | None = None) -> int:
         store = str(args.match_store)
         if args.match_versions is None:
             store += f" (WARNING: {MATCH_LOG_VERSIONS_VARIABLE} is not set, so every first piece is refused)"
+        if not args.basic_auth:
+            store += " (WARNING: no Basic auth, so anybody can post, list, read and delete match logs)"
     print(f"serve.py: {args.root} on http://{args.host}:{server.server_address[1]} "
           f"(cross-origin isolation {'on' if isolation else 'off'}: {reason}; access: {access}; match store: {store})", flush=True)
     try:

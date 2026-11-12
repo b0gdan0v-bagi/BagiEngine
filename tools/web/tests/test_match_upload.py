@@ -802,7 +802,7 @@ class StartTest(unittest.TestCase):
 
     def test_the_start_line_names_the_store_or_says_off(self):
         self.assertIn("match store: off", self.start_line())
-        line = self.start_line(MATCH_STORE="<temp>/matches", MATCH_LOG_VERSIONS="1-5")
+        line = self.start_line(MATCH_STORE="<temp>/matches", MATCH_LOG_VERSIONS="1-5", BASIC_AUTH_USER="u", BASIC_AUTH_PASSWORD="p")
         self.assertIn("match store: ", line)
         self.assertIn("matches", line)
         self.assertNotIn("WARNING", line)
@@ -812,6 +812,10 @@ class StartTest(unittest.TestCase):
         self.assertIn("WARNING", line)
         self.assertIn("MATCH_LOG_VERSIONS", line)
 
+    def test_a_store_without_basic_auth_warns_that_the_endpoints_are_open(self):
+        line = self.start_line(MATCH_STORE="<temp>/matches", MATCH_LOG_VERSIONS="1-5")
+        self.assertIn("WARNING: no Basic auth", line)
+
     def test_the_store_folder_is_created_at_start(self):
         with tempfile.TemporaryDirectory() as temp:
             serve.make_server(Path(temp), "127.0.0.1", 0, match_store=Path(temp) / "a" / "b").server_close()
@@ -819,6 +823,14 @@ class StartTest(unittest.TestCase):
 
 
 class PieceRulesTest(unittest.TestCase):
+    def test_json_constants_that_are_not_json_are_refused(self):
+        for constant in ("NaN", "Infinity", "-Infinity"):
+            body = b'{"event": "end", "x": ' + constant.encode() + b"}\n"
+            self.assertEqual(serve.check_piece(body, 7, None), "a line is not JSON", constant)
+
+    def test_a_crlf_line_ending_is_accepted(self):
+        self.assertIsNone(serve.check_piece(b'{"event": "end"}\r\n', 7, None))
+
     def test_check_piece_names_a_reason_and_none_when_fine(self):
         self.assertIsNone(serve.check_piece(START, 0, (5, 5)))
         self.assertIsNone(serve.check_piece(START, 0, (1, 5)))
