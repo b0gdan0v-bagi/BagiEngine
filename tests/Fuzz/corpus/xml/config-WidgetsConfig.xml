@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<root>
+  <widgets>
+    <widget
+      type="ImGuiWidget" />
+    <widget
+      type="EditorLayoutWidget" />
+    <widget
+      type="ViewportWidget">
+      <clearColor
+        r="50"
+        g="50"
+        b="50"
+        a="255" />
+    </widget>
+    <widget
+      type="ClearScreenWidget">
+      <clearColor
+        r="30"
+        g="30"
+        b="30"
+        a="255" />
+    </widget>
+    <widget
+      type="ConfigEditorWidget" />
+    <widget
+      type="SceneEditorWidget" />
+    <widget
+      type="TextureEditorWidget" />
+    <widget
+      type="ProfilerWidget" />
+  </widgets>
+</root>

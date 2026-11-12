@@ -22,6 +22,12 @@ namespace BECore {
     /// True when the comma-separated list @p value has the token @p token (any case)
     [[nodiscard]] bool HeaderHasToken(eastl::string_view value, eastl::string_view token);
 
+    /// How much of a text of the peer an error message repeats
+    inline constexpr size_t kMaxQuotedBytes = 100;
+
+    /// @p text as an error message may repeat it: printable ASCII only (anything else is `?`), cut to kMaxQuotedBytes with `...` after
+    [[nodiscard]] eastl::string QuoteForMessage(eastl::string_view text);
+
     /// `Sec-WebSocket-Accept` for @p clientKey: base64(SHA-1(key + GUID))
     [[nodiscard]] eastl::string ComputeAcceptKey(eastl::string_view clientKey);
 

@@ -22,7 +22,10 @@ if(ENGINE_UI_RMLUI)
     list(APPEND TESTS_SOURCES ${RMLUI_TESTS_SOURCES})
 endif()
 
-be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule RoomsModule RoomClientModule RoomServerModule RuntimeModule)
+# The fuzz targets: a library of its own, because the libFuzzer executables (cmake/BagiFuzz.cmake) link the same functions
+add_subdirectory(Fuzz)
+
+be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlModule RoomsModule RoomClientModule RoomServerModule RuntimeModule BagiFuzzTargets)
 
 # VulkanSwapchainPolicy.h is header only (<vulkan/vulkan.h>, BECore's EnumUtils.h for SwapchainStatus and
 # SwapchainRecreateResult, and the standard library), so the test needs the headers and the include path but not

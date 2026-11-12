@@ -2,6 +2,30 @@
 
 namespace BECore {
 
+    bool IsJsonNestedDeeperThan(eastl::string_view text, size_t maxDepth) {
+        size_t depth = 0;
+        bool inString = false;
+        for (size_t i = 0; i < text.size(); ++i) {
+            const char c = text[i];
+            if (inString) {
+                if (c == '\\') {
+                    ++i;
+                } else if (c == '"') {
+                    inString = false;
+                }
+            } else if (c == '"') {
+                inString = true;
+            } else if (c == '[' || c == '{') {
+                if (++depth > maxDepth) {
+                    return true;
+                }
+            } else if ((c == ']' || c == '}') && depth > 0) {
+                --depth;
+            }
+        }
+        return false;
+    }
+
     std::expected<Json, ControlError> ParseJson(eastl::string_view text) {
         // allow_exceptions = false: bad input gives a discarded value instead of a throw (an abort in this build)
         Json parsed = Json::parse(text.data(), text.data() + text.size(), nullptr, false);

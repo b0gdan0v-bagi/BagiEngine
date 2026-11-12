@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+<SceneManager contentVersion="5">
+  <scenes>
+    <scene
+      type="Scene"
+      name="MainScene">
+      <nodes>
+        <node
+          name="YellowQuad">
+          <components>
+            <component
+              type="TransformComponent"
+              x="167.300003"
+              y="107.699997"
+              width="42.5"
+              height="71.6999969" />
+            <component
+              type="QuadRendererComponent">
+              <color
+                r="255"
+                g="255"
+                b="0"
+                a="255" />
+            </component>
+            <component
+              type="ClickableComponent"
+              actionName="MyClick" />
+            <component
+              type="ChangeToRandomColorDebugComponent"
+              actionFilter="MyClick" />
+          </components>
+        </node>
+        <node
+          name="NewNode">
+          <components>
+            <component
+              type="TransformComponent"
+              x="86.0999985"
+              y="24.2000008"
+              width="19"
+              height="233" />
+            <component
+              type="QuadRendererComponent">
+              <color
+                r="255"
+                g="0"
+                b="0"
+                a="255" />
+            </component>
+          </components>
+        </node>
+        <node
+          name="try">
+          <components>
+            <component
+              type="TransformComponent"
+              x="182.899994"
+              y="21.3999996"
+              width="20.2000008"
+              height="20.1000004" />
+            <component
+              type="QuadRendererComponent">
+              <color
+                r="255"
+                g="0"
+                b="0"
+                a="255" />
+            </component>
+          </components>
+        </node>
+      </nodes>
+    </scene>
+  </scenes>
+</SceneManager>

@@ -289,8 +289,30 @@ namespace BECore::Tests {
         for (const BadInput& input : table) {
             EXPECT_EQ(ErrorCodeOfText(input.text), eastl::string(input.code)) << input.label;
         }
-        // The deep array inside an ignored member is fine as long as it is valid JSON under the limit
-        EXPECT_EQ(ErrorCodeOfText(bombInsideAMember), "<ok>");
+        // Nesting is bounded whatever member it is in (see TheNestingDepthIsBounded): `options` and `action` are copied, and that recurses
+        EXPECT_EQ(ErrorCodeOfText(bombInsideAMember), "bad_message");
+    }
+
+    TEST(RoomProtocolTest, TheNestingDepthIsBounded) {
+        // A message of 16 KiB can nest 8000 levels; copying `options` or `action` (the hub keeps the first until the start) recurses once per level on the reader thread
+        const auto deep = [](eastl::string_view prefix, size_t levels) {
+            eastl::string text(prefix.data(), prefix.size());
+            text.append(levels, '[');
+            text.append(levels, ']');
+            text += "}}";
+            return text;
+        };
+        // The message object and the member are two levels of their own
+        constexpr size_t kOwnLevels = 2;
+        const eastl::string createPrefix = R"({"v":1,"type":"create_room","game":"demo","name":"Ann","options":{"a":)";
+        const eastl::string actionPrefix = R"({"v":1,"type":"action","version":1,"action":{"a":)";
+        for (const eastl::string& prefix : {createPrefix, actionPrefix}) {
+            EXPECT_EQ(ErrorCodeOfText(deep(prefix, RoomLimits::kMaxClientJsonDepth - kOwnLevels)), "<ok>") << prefix.c_str();
+            EXPECT_EQ(ErrorCodeOfText(deep(prefix, RoomLimits::kMaxClientJsonDepth - kOwnLevels + 1)), "bad_message") << prefix.c_str();
+            EXPECT_EQ(ErrorCodeOfText(deep(prefix, 7000)), "bad_message") << prefix.c_str();
+        }
+        // Brackets inside strings are not levels
+        EXPECT_EQ(ErrorCodeOfText(Message("create_room", Format(R"("game":"demo","name":"Ann","options":{{"a":"{}"}})", Repeat('[', 1000)))), "<ok>");
     }
 
     TEST(RoomProtocolTest, TheSizeLimitIsCheckedBeforeParsing) {

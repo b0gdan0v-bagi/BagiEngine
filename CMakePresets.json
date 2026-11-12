@@ -74,6 +74,23 @@
             }
         },
         {
+            "name": "fuzz",
+            "hidden": true,
+            "description": "Fuzzing (tests/Fuzz/CLAUDE.md): ASan + UBSan on all code and libFuzzer executables, asserts and expects ON (an assertion that input reaches is a finding). Homebrew LLVM, because Apple clang has no libFuzzer runtime; it has no default SDK (CMAKE_OSX_SYSROOT), links the system libc++ only with the -L / rpath below and does not search /usr/local/lib, where the Vulkan SDK puts libvulkan.dylib. Intel Homebrew is /usr/local/opt/llvm: change the paths in a CMakeUserPresets.json",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_C_COMPILER": "/opt/homebrew/opt/llvm/bin/clang",
+                "CMAKE_CXX_COMPILER": "/opt/homebrew/opt/llvm/bin/clang++",
+                "CMAKE_OSX_SYSROOT": "macosx",
+                "CMAKE_EXE_LINKER_FLAGS": "-L/opt/homebrew/opt/llvm/lib/c++ -Wl,-rpath,/opt/homebrew/opt/llvm/lib/c++ -L/usr/local/lib",
+                "ENGINE_ENABLE_ASSERTS": "ON",
+                "ENGINE_ENABLE_EXPECTS": "ON",
+                "ENGINE_FUZZ": "ON",
+                "ENGINE_FUZZ_LIBFUZZER": "ON",
+                "BE_WITH_EDITOR": "OFF"
+            }
+        },
+        {
             "name": "clang",
             "hidden": true,
             "cacheVariables": {
@@ -206,6 +223,11 @@
             "name": "macos-profile-editor",
             "displayName": "macOS Clang Profile with the editor (the ImGui Profiler panel)",
             "inherits": ["ninja", "host-macos", "clang", "editor", "profile"]
+        },
+        {
+            "name": "macos-fuzz",
+            "displayName": "macOS Homebrew LLVM fuzzing (ASan + UBSan, libFuzzer executables)",
+            "inherits": ["ninja", "host-macos", "fuzz"]
         },
         {
             "name": "linux-server-release",
@@ -357,6 +379,12 @@
             "configurePreset": "macos-profile-editor"
         },
         {
+            "name": "macos-fuzz",
+            "displayName": "macOS Homebrew LLVM fuzzing (ASan + UBSan, libFuzzer executables)",
+            "inherits": "build-macos",
+            "configurePreset": "macos-fuzz"
+        },
+        {
             "name": "macos-rmlui-debug",
             "displayName": "macOS Clang Debug with RmlUi",
             "inherits": "build-macos",
@@ -506,6 +534,12 @@
             "displayName": "macOS Clang Release with the editor",
             "inherits": "test-macos",
             "configurePreset": "macos-release-editor"
+        },
+        {
+            "name": "macos-fuzz",
+            "displayName": "macOS Homebrew LLVM fuzzing (ASan + UBSan, libFuzzer executables)",
+            "inherits": "test-macos",
+            "configurePreset": "macos-fuzz"
         },
         {
             "name": "macos-profile",

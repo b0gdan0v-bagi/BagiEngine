@@ -15,6 +15,11 @@ namespace BECore {
      * Building a response (Json::object(), assigning members, dump) is safe.
      */
 
+    /// True when `[` and `{` outside strings nest deeper than @p maxDepth. A scan that builds nothing and does not recurse; it does not judge the syntax (the parser does), only
+    /// bounds what the parser may be given. ParseJson itself accepts any depth (it parses and frees without recursion), but copying, comparing and dumping the value recurse once per
+    /// level: 20 KB of `[` overflows the stack of a reader thread (512 KB on macOS). A reader of text from outside that keeps or copies the value checks the depth first
+    [[nodiscard]] bool IsJsonNestedDeeperThan(eastl::string_view text, size_t maxDepth);
+
     /// Parses @p text. Never throws or aborts: text that is not one complete JSON value is a kParseError.
     [[nodiscard]] std::expected<Json, ControlError> ParseJson(eastl::string_view text);
 

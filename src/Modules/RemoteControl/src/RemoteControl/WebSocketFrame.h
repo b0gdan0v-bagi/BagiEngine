@@ -82,7 +82,9 @@ namespace BECore {
      * The parser reads the frames of a client by default; WebSocketPeer::Server makes it the parser of a client that
      * reads a server: the frames must then be unmasked (a masked one is a protocol error). Everything else is shared.
      *
-     * The first violation is final: every later Pop() returns the same error and the caller closes the connection.
+     * The first violation is final: every later Pop() returns the same error and the caller closes the connection. The parser
+     * drops what it held at that moment and takes no more bytes (Feed() does nothing), so a peer that goes on sending while the
+     * connection closes costs no memory.
      * The parser does not check that text is UTF-8 (RFC 6455 section 5.6 asks for it): the control API answers text
      * that is not valid JSON with a parse_error, which is enough for a development tool.
      */
@@ -95,6 +97,12 @@ namespace BECore {
 
         /// The next complete message, nullopt when more bytes are needed
         [[nodiscard]] std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError> Pop();
+
+        /// The bytes the parser holds for a frame or a message that is not complete: the unread part of what was fed plus the fragments so far. At most
+        /// the limit and one frame header once Pop() has returned nullopt
+        [[nodiscard]] size_t BufferedBytes() const {
+            return (_buffer.size() - _readPosition) + _fragments.size();
+        }
 
     private:
         struct FrameHeader {

@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<root flag="true" i8="-8" u8="200" i16="-1600" u16="60000" i32="-320000" u32="4000000000" i64="-6400000000000" u64="18000000000000000000" f32="1.5" f64="-2.25" text="hello" name="Hero" mode="On">
+  <leaf id="7" weight="0.5" label="nested" />
+  <leaves>
+    <item id="0" weight="0" label="first" />
+    <item id="1" weight="0.25" label="other" />
+    <item id="2" weight="0.5" label="other" />
+  </leaves>
+  <numbers>
+    <item value="10" />
+    <item value="-20" />
+    <item value="30" />
+  </numbers>
+  <words>
+    <item value="one" />
+    <item value="two" />
+  </words>
+  <tree id="1">
+    <children>
+      <item id="2">
+        <children />
+      </item>
+      <item id="3">
+        <children>
+          <item id="4">
+            <children />
+          </item>
+        </children>
+      </item>
+    </children>
+  </tree>
+</root>

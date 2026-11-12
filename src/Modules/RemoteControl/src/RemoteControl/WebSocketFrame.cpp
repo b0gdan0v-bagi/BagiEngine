@@ -87,6 +87,9 @@ namespace BECore {
     }
 
     void WebSocketFrameParser::Feed(eastl::span<const uint8_t> bytes) {
+        if (_error) {
+            return;  // the connection is being closed: what still arrives is not kept
+        }
         if (_readPosition > 0) {
             _buffer.erase(_buffer.begin(), _buffer.begin() + static_cast<ptrdiff_t>(_readPosition));
             _readPosition = 0;
@@ -96,6 +99,12 @@ namespace BECore {
 
     std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError> WebSocketFrameParser::Fail(uint16_t closeCode, eastl::string reason) {
         _error = WebSocketProtocolError{closeCode, std::move(reason)};
+        _buffer.clear();
+        _buffer.set_capacity(0);
+        _readPosition = 0;
+        _fragments.clear();
+        _fragments.set_capacity(0);
+        _inFragmentedMessage = false;
         return std::unexpected(*_error);
     }
 

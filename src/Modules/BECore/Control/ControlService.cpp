@@ -28,6 +28,12 @@ namespace BECore {
             return;
         }
 
+        // Before the parse: a deep value is copied below (and again when it is handled), and that recurses on the stack of the posting thread
+        if (IsJsonNestedDeeperThan(text, kMaxRequestDepth)) {
+            request.error = MakeControlError(ControlErrors::kInvalidRequest, Format("the request nests deeper than {} levels", kMaxRequestDepth));
+            return;
+        }
+
         auto parsed = ParseJson(text);
         if (!parsed) {
             request.error = std::move(parsed.error());

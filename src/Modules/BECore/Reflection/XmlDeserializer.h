@@ -48,6 +48,10 @@ namespace BECore {
 
         /**
          * @brief Load XML from file
+         *
+         * Refused with an error, before the file is read, when the path is not a regular file or the file is over
+         * ReaderLimits::kMaxXmlDocumentBytes. Any load drops the earlier document: after a refusal nothing is readable.
+         *
          * @param path File path to load from
          * @return true on success
          */
@@ -65,6 +69,10 @@ namespace BECore {
 
         /**
          * @brief Load XML from string
+         *
+         * The text is UTF-8 whatever its first bytes are, and at most ReaderLimits::kMaxXmlDocumentBytes. Any load drops the earlier
+         * document: after a refusal nothing is readable.
+         *
          * @param xmlContent XML string content
          * @return true on success
          */
@@ -138,6 +146,16 @@ namespace BECore {
         void AddError(eastl::string_view path, eastl::string_view message, int32_t line) override;
 
     private:
+        /**
+         * @brief Drop the document and every node of it that a stack holds, before another one is loaded
+         */
+        void ResetDocument();
+
+        /**
+         * @brief Whether one more open object, array or element would pass ReaderLimits::kMaxXmlNesting; reports it under @p name when it would
+         */
+        bool IsNestedTooDeep(eastl::string_view name);
+
         /**
          * @brief Get child node for reading
          */

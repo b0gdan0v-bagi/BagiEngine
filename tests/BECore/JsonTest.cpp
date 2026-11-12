@@ -54,6 +54,20 @@ namespace BECore::Tests {
         EXPECT_TRUE(parsed.has_value());
     }
 
+    TEST(JsonTest, NestingScanCountsBracketsOutsideStringsOnly) {
+        EXPECT_FALSE(IsJsonNestedDeeperThan(View(""), 0));
+        EXPECT_FALSE(IsJsonNestedDeeperThan(View("[[[]]]"), 3));
+        EXPECT_TRUE(IsJsonNestedDeeperThan(View("[[[]]]"), 2));
+        EXPECT_TRUE(IsJsonNestedDeeperThan(View(R"({"a":{"b":[1]}})"), 2));
+        EXPECT_FALSE(IsJsonNestedDeeperThan(View(R"({"a":{"b":[1]}})"), 3));
+        // Brackets inside a string, an escaped quote inside a string, and siblings do not add up
+        EXPECT_FALSE(IsJsonNestedDeeperThan(View(R"({"a":"[[[[[[","b":"\"[[[["})"), 1));
+        EXPECT_FALSE(IsJsonNestedDeeperThan(View("[[],[],[],[[]]]"), 3));
+        // Closers with nothing open are ignored, not counted below zero
+        EXPECT_FALSE(IsJsonNestedDeeperThan(View("]]]]][[["), 3));
+        EXPECT_TRUE(IsJsonNestedDeeperThan(View(std::string(1 << 20, '[')), 128));
+    }
+
     TEST(JsonTest, FindsMembersOfObjectsOnly) {
         const Json object = SampleObject();
 

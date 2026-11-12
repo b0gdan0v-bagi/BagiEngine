@@ -219,4 +219,38 @@ namespace BECore::Tests {
         ExpectRefused(response, "too long");
     }
 
+    TEST(WebSocketClientHandshakeTest, ARefusalRepeatsTheStatusLineCutAndAsPrintableText) {
+        Response response;
+        response.statusLine = "HTTP/1.1 503 " + std::string(500, 'x') + "\x1B[2J\x01";
+        const auto result = response.Check();
+        ASSERT_FALSE(result.has_value());
+        EXPECT_NE(std::string(result.error().c_str()).find("HTTP/1.1 503"), std::string::npos);
+        EXPECT_LT(result.error().size(), 200u) << "the line of a hostile server is not echoed whole";
+
+        Response escapes;
+        escapes.statusLine = "HTTP/1.1 404 \x1B[31mred\x07";
+        const auto escaped = escapes.Check();
+        ASSERT_FALSE(escaped.has_value());
+        for (const char letter : escaped.error()) {
+            EXPECT_TRUE(letter >= ' ' && letter <= '~') << "a control character of the server's line reached the log";
+        }
+    }
+
+    TEST(WebSocketClientHandshakeTest, AFullHeadOfRepeatedTokensIsCheapToRead) {
+        constexpr double kLimitMilliseconds = 250.0;  // a linear scan needs a few; the limit is for a Debug build on a loaded machine
+        for (const std::string line : {std::string("Upgrade: a\r\n"), std::string("Connection: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n"), std::string("a:\r\n")}) {
+            Response response;
+            std::string head = response.Text();
+            head.erase(head.size() - 2);
+            while (head.size() + line.size() + 2 <= kMaxHandshakeBytes) {
+                head += line;
+            }
+            head += "\r\n";
+            const auto begin = std::chrono::steady_clock::now();
+            (void)CheckServerHandshakeResponse(eastl::string_view(head.data(), head.size()), kRfcKey);
+            const double elapsed = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - begin).count();
+            EXPECT_LT(elapsed, kLimitMilliseconds) << line;
+        }
+    }
+
 }  // namespace BECore::Tests

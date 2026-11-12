@@ -60,3 +60,6 @@ CMakeLists.txt text eol=lf
 *.spv  binary
 *.zip  binary
 *.7z   binary
+
+# Fuzz seeds are raw bytes (CRLF inside a request head is the input): never normalized
+/tests/Fuzz/corpus/** binary

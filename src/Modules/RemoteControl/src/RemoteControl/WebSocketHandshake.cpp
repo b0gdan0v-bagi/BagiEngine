@@ -15,7 +15,6 @@ namespace BECore {
         constexpr size_t kClientKeyLength = 24;  // 16 random bytes in base64 with padding
         constexpr size_t kMaxPortDigits = 5;
         constexpr uint32_t kMaxPort = 65535;
-        constexpr size_t kMaxQuotedOriginBytes = 100;  // how much of a refused origin an error message repeats
         constexpr int kNoPort = -1;
         constexpr int kDefaultHttpPort = 80;
         constexpr int kDefaultHttpsPort = 443;
@@ -200,19 +199,6 @@ namespace BECore {
             return left.scheme == right.scheme && left.host == right.host && left.port == right.port;
         }
 
-        /// The origin as an error message may repeat it: printable ASCII only, at most kMaxQuotedOriginBytes
-        eastl::string Quoted(eastl::string_view origin) {
-            eastl::string quoted;
-            quoted.reserve(std::min(origin.size(), kMaxQuotedOriginBytes) + 3);
-            for (const char letter : origin.substr(0, kMaxQuotedOriginBytes)) {
-                quoted.push_back(letter >= ' ' && letter <= '~' ? letter : '?');
-            }
-            if (origin.size() > kMaxQuotedOriginBytes) {
-                quoted.append("...");
-            }
-            return quoted;
-        }
-
         bool IsBase64Character(char letter) {
             return (letter >= 'A' && letter <= 'Z') || (letter >= 'a' && letter <= 'z') || (letter >= '0' && letter <= '9') || letter == '+' || letter == '/';
         }
@@ -295,7 +281,19 @@ namespace BECore {
     }
 
     bool EqualsIgnoreCase(eastl::string_view left, eastl::string_view right) {
-        return left.size() == right.size() && LowerAscii(left) == LowerAscii(right);
+        return left.size() == right.size() && std::equal(left.begin(), left.end(), right.begin(), [](char a, char b) { return AsciiLower(a) == AsciiLower(b); });
+    }
+
+    eastl::string QuoteForMessage(eastl::string_view text) {
+        eastl::string quoted;
+        quoted.reserve(std::min(text.size(), kMaxQuotedBytes) + 3);
+        for (const char letter : text.substr(0, kMaxQuotedBytes)) {
+            quoted.push_back(letter >= ' ' && letter <= '~' ? letter : '?');
+        }
+        if (text.size() > kMaxQuotedBytes) {
+            quoted.append("...");
+        }
+        return quoted;
     }
 
     eastl::string_view TrimHeaderValue(eastl::string_view text) {
@@ -386,14 +384,14 @@ namespace BECore {
             return std::unexpected(Refuse(400, "the Host header is missing"));
         }
         if (policy.loopbackOnly && !IsLoopbackAuthority(*host)) {
-            return std::unexpected(Refuse(403, Format("the Host '{}' is not the loopback", *host)));
+            return std::unexpected(Refuse(403, Format("the Host '{}' is not the loopback", QuoteForMessage(*host))));
         }
         if (const eastl::string* origin = FindHeader(headers, HeaderNames::kOrigin)) {
             if (!IsOriginAllowed(*origin, policy)) {
                 if (policy.loopbackOnly) {
-                    return std::unexpected(Refuse(403, Format("the Origin '{}' is not a page of the loopback", *origin)));
+                    return std::unexpected(Refuse(403, Format("the Origin '{}' is not a page of the loopback", QuoteForMessage(*origin))));
                 }
-                return std::unexpected(Refuse(403, Format("the Origin '{}' is not allowed by this server", Quoted(*origin))));
+                return std::unexpected(Refuse(403, Format("the Origin '{}' is not allowed by this server", QuoteForMessage(*origin))));
             }
         } else if (!policy.loopbackOnly && !policy.allowMissingOrigin) {
             return std::unexpected(Refuse(403, "this server accepts only requests that carry an Origin header"));
