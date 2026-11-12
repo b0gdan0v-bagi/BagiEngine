@@ -1,31 +1,46 @@
 #include "UILayout.h"
 
+#include <BECore/UI/UIGeometryBounds.h>
+
 namespace BECore {
 
     namespace {
 
         constexpr float kEpsilon = 1e-3f;  // a line is not broken for rounding noise
 
+        using UIBounds::Bound;
+
+        /// A length in units against the parent's extent, bounded (a file can write 1e38, a percent of 1e38 or NaN)
+        float ResolveLength(const UILength& length, float parentExtent) {
+            return Bound(UILength{Bound(length.value), length.unit}.Resolve(parentExtent));
+        }
+
+        UIEdges BoundEdges(const UIEdges& edges) {
+            return {Bound(edges.left), Bound(edges.top), Bound(edges.right), Bound(edges.bottom)};
+        }
+
         float ClampExtent(float extent, float parentExtent, const std::optional<UILength>& minimum, const std::optional<UILength>& maximum) {
+            extent = Bound(extent);
             if (maximum) {
-                extent = std::min(extent, maximum->Resolve(parentExtent));
+                extent = std::min(extent, ResolveLength(*maximum, parentExtent));
             }
             if (minimum) {
-                extent = std::max(extent, minimum->Resolve(parentExtent));
+                extent = std::max(extent, ResolveLength(*minimum, parentExtent));
             }
             return std::max(extent, 0.0f);
         }
 
         void ApplyAspect(float& width, float& height, const UIRectSpec& spec) {
-            if (spec.aspectRatio <= 0.0f || width <= 0.0f || height <= 0.0f) {
+            const float ratio = Bound(spec.aspectRatio);
+            if (ratio <= 0.0f || width <= 0.0f || height <= 0.0f) {
                 return;
             }
-            const bool boxIsWider = width / height > spec.aspectRatio;
+            const bool boxIsWider = width / height > ratio;
             const bool narrowTheWidth = (spec.aspectMode == UIAspectMode::Fit) == boxIsWider;
             if (narrowTheWidth) {
-                width = height * spec.aspectRatio;
+                width = Bound(height * ratio);
             } else {
-                height = width / spec.aspectRatio;
+                height = Bound(width / ratio);
             }
         }
 
@@ -40,7 +55,7 @@ namespace BECore {
         /// Replaces @p value by @p explicitValue when that is a finite number
         void ReplaceFinite(float& value, float explicitValue) {
             if (std::isfinite(explicitValue)) {
-                value = explicitValue;
+                value = Bound(explicitValue);
             }
         }
 
@@ -61,7 +76,7 @@ namespace BECore {
                 axis.spanExtent = std::max(extent * (anchorMax - anchorMin) - marginStart - marginEnd, 0.0f);
                 size = axis.spanExtent;
             } else {
-                size = length.Resolve(extent);
+                size = ResolveLength(length, extent);
             }
             axis.size = ClampExtent(size, extent, minimum, maximum);
             return axis;
@@ -95,7 +110,9 @@ namespace BECore {
     }  // namespace
 
     Rect UILayout::Inset(const Rect& rect, const UIEdges& edges) {
-        return {rect.x + edges.left, rect.y + edges.top, std::max(rect.w - edges.left - edges.right, 0.0f), std::max(rect.h - edges.top - edges.bottom, 0.0f)};
+        const Rect box = Bound(rect);
+        const UIEdges cut = BoundEdges(edges);
+        return Bound(Rect{box.x + cut.left, box.y + cut.top, std::max(box.w - cut.left - cut.right, 0.0f), std::max(box.h - cut.top - cut.bottom, 0.0f)});
     }
 
     UIEffectiveAnchors UILayout::EffectiveAnchors(const UIRectSpec& spec) {
@@ -120,23 +137,27 @@ namespace BECore {
         return anchors;
     }
 
-    Rect UILayout::ResolveRect(const Rect& parent, const UIRectSpec& spec) {
+    Rect UILayout::ResolveRect(const Rect& givenParent, const UIRectSpec& spec) {
+        const Rect parent = Bound(givenParent);
         const UIEffectiveAnchors anchors = EffectiveAnchors(spec);
-        AxisSize axisX = ResolveAxisSize(parent.x, parent.w, anchors.min.x, anchors.max.x, spec.margin.left, spec.margin.right, spec.width, spec.minWidth, spec.maxWidth);
-        AxisSize axisY = ResolveAxisSize(parent.y, parent.h, anchors.min.y, anchors.max.y, spec.margin.top, spec.margin.bottom, spec.height, spec.minHeight, spec.maxHeight);
+        const UIEdges margin = BoundEdges(spec.margin);
+        AxisSize axisX = ResolveAxisSize(parent.x, parent.w, anchors.min.x, anchors.max.x, margin.left, margin.right, spec.width, spec.minWidth, spec.maxWidth);
+        AxisSize axisY = ResolveAxisSize(parent.y, parent.h, anchors.min.y, anchors.max.y, margin.top, margin.bottom, spec.height, spec.minHeight, spec.maxHeight);
 
         ApplyAspect(axisX.size, axisY.size, spec);
 
-        return {ResolveAxisPosition(axisX, parent.x, parent.w, anchors.min.x, anchors.pivot.x, spec.x.Resolve(parent.w)),
-                ResolveAxisPosition(axisY, parent.y, parent.h, anchors.min.y, anchors.pivot.y, spec.y.Resolve(parent.h)), axisX.size, axisY.size};
+        return Bound(Rect{ResolveAxisPosition(axisX, parent.x, parent.w, anchors.min.x, anchors.pivot.x, ResolveLength(spec.x, parent.w)),
+                          ResolveAxisPosition(axisY, parent.y, parent.h, anchors.min.y, anchors.pivot.y, ResolveLength(spec.y, parent.h)), axisX.size, axisY.size});
     }
 
-    void UILayout::LayoutStack(const Rect& parent, const UIStackSpec& stack, eastl::span<const UIRectSpec> children, eastl::vector<Rect>& rects) {
+    void UILayout::LayoutStack(const Rect& parent, const UIStackSpec& givenStack, eastl::span<const UIRectSpec> children, eastl::vector<Rect>& rects) {
         rects.assign(children.size(), Rect{});
         if (children.empty()) {
             return;
         }
 
+        UIStackSpec stack = givenStack;
+        stack.spacing = Bound(stack.spacing);
         const Rect content = Inset(parent, stack.padding);
         const bool vertical = stack.direction == UIStackDirection::Vertical;
         const float mainExtent = vertical ? content.h : content.w;
@@ -153,19 +174,20 @@ namespace BECore {
             size.maxMain = vertical ? spec.maxHeight : spec.maxWidth;
             size.minCross = vertical ? spec.minWidth : spec.minHeight;
             size.maxCross = vertical ? spec.maxWidth : spec.maxHeight;
-            size.flex = std::max(spec.flex, 0.0f);
-            size.main = ClampExtent(mainLength.Resolve(mainExtent), mainExtent, size.minMain, size.maxMain);
-            size.cross = ClampExtent(crossLength.Resolve(crossExtent), crossExtent, size.minCross, size.maxCross);
+            size.flex = std::max(Bound(spec.flex), 0.0f);
+            size.main = ClampExtent(ResolveLength(mainLength, mainExtent), mainExtent, size.minMain, size.maxMain);
+            size.cross = ClampExtent(ResolveLength(crossLength, crossExtent), crossExtent, size.minCross, size.maxCross);
 
             // A fixed child with an aspect ratio and one side given gets the other (a flex child and a child with both or none are as their spec says)
-            if (spec.aspectRatio > 0.0f && size.flex <= 0.0f && IsGiven(spec.width) != IsGiven(spec.height)) {
+            const float ratio = Bound(spec.aspectRatio);
+            if (ratio > 0.0f && size.flex <= 0.0f && IsGiven(spec.width) != IsGiven(spec.height)) {
                 if (IsGiven(spec.width)) {
                     const float width = vertical ? size.cross : size.main;
-                    const float height = ClampExtent(width / spec.aspectRatio, content.h, spec.minHeight, spec.maxHeight);
+                    const float height = ClampExtent(width / ratio, content.h, spec.minHeight, spec.maxHeight);
                     (vertical ? size.main : size.cross) = height;
                 } else {
                     const float height = vertical ? size.main : size.cross;
-                    const float width = ClampExtent(height * spec.aspectRatio, content.w, spec.minWidth, spec.maxWidth);
+                    const float width = ClampExtent(height * ratio, content.w, spec.minWidth, spec.maxWidth);
                     (vertical ? size.cross : size.main) = width;
                 }
             }
@@ -231,8 +253,8 @@ namespace BECore {
                 }
 
                 const float main = sizes[i].main;
-                rects[i] =
-                    vertical ? Rect{content.x + crossCursor + crossOffset, content.y + mainCursor, cross, main} : Rect{content.x + mainCursor, content.y + crossCursor + crossOffset, main, cross};
+                rects[i] = Bound(vertical ? Rect{content.x + crossCursor + crossOffset, content.y + mainCursor, cross, main}
+                                          : Rect{content.x + mainCursor, content.y + crossCursor + crossOffset, main, cross});
                 mainCursor += main + stack.spacing;
             }
             crossCursor += lineCross + stack.spacing;

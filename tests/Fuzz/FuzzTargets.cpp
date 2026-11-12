@@ -19,6 +19,7 @@ namespace BECore::Fuzz {
             {"ControlRequest", &FuzzControlRequest, "control_request", 1},
             {"WebUi", &FuzzWebUi, "web_ui", 15},
             {"UiTables", &FuzzUiTables, "ui_tables", 2},
+            {"UiGeometry", &FuzzUiGeometry, "ui_geometry", 8},
         };
         return targets;
     }

@@ -1,4 +1,7 @@
 #include "FuzzSeeds.h"
+#include "FuzzUiGeometryInput.h"
+
+#include <limits>
 
 namespace BECore::Fuzz {
 
@@ -6,6 +9,7 @@ namespace BECore::Fuzz {
 
         constexpr const char* kWebUiFolder = "web_ui";
         constexpr const char* kUiTablesFolder = "ui_tables";
+        constexpr const char* kUiGeometryFolder = "ui_geometry";
 
         /// How deep the nesting seed goes: far more than a screen has, and far less than the limit of the compiler
         constexpr size_t kNestingDepth = 64;
@@ -234,6 +238,207 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
     <palette id="p"/>
 </UIThemes>)xml";
 
+        // =============================================================================
+        // ui_geometry: the numbers of the boxes, the nine-slice panels and the layouts of a screen of the games (a 1280 x 720 canvas, a 220 x 48 button, a stack of rows), then the
+        // same rounds with every number replaced by an extreme
+        // =============================================================================
+
+        using namespace UiGeometryInput;
+
+        SpecCase PinnedSpec(UIAnchor anchor, float x, float y, float width, float height) {
+            SpecCase spec;
+            const auto& anchors = EnumUtils<UIAnchor>::Values();
+            for (size_t i = 0; i < anchors.size(); ++i) {
+                if (anchors[i] == anchor) {
+                    spec.anchor = static_cast<uint8_t>(i);
+                }
+            }
+            spec.x = UILength::Px(x);
+            spec.y = UILength::Px(y);
+            spec.width = UILength::Px(width);
+            spec.height = UILength::Px(height);
+            return spec;
+        }
+
+        /// A stretched element with a margin, limits and an aspect ratio: every optional field of a spec set to a number a screen could use
+        SpecCase StretchedSpec() {
+            SpecCase spec = PinnedSpec(UIAnchor::Stretch, 0.0f, 0.0f, 0.0f, 0.0f);
+            spec.optionals = 0x7F;
+            spec.anchorMin = {0.1f, 0.0f};
+            spec.anchorMax = {0.9f, 0.5f};
+            spec.pivot = {0.5f, 0.5f};
+            spec.minWidth = UILength::Px(100.0f);
+            spec.maxWidth = UILength::Percent(80.0f);
+            spec.minHeight = UILength::Px(40.0f);
+            spec.maxHeight = UILength::Percent(50.0f);
+            spec.unitBits = 0xB0;
+            spec.aspectRatio = 1.5f;
+            spec.margin = {8.0f, 8.0f, 8.0f, 8.0f};
+            return spec;
+        }
+
+        BoxCase ButtonBox() {
+            BoxCase box;
+            box.rect = {16.0f, 16.0f, 220.0f, 48.0f};
+            box.corners = UICorners::Uniform(12.0f);
+            box.borderWidth = 2.0f;
+            box.color = Color{40, 90, 160, 255};
+            box.gradientEnd = Color{20, 50, 110, 255};
+            box.gradientDirection = 1;
+            box.shadow = UIShadowSpec{0.0f, 4.0f, 8.0f, 0.0f, Color{0, 0, 0, 120}};
+            box.pixelsPerUnit = 1.5f;
+            box.radiusPixels = 18.0f;
+            box.inset = 2.0f;
+            return box;
+        }
+
+        StackCase RowsStack() {
+            StackCase stack;
+            stack.parent = {0.0f, 0.0f, 320.0f, 480.0f};
+            stack.spacing = 8.0f;
+            stack.padding = {12.0f, 12.0f, 12.0f, 12.0f};
+            stack.childCount = 4;
+            stack.children[0] = PinnedSpec(UIAnchor::TopLeft, 0.0f, 0.0f, 0.0f, 40.0f);
+            stack.children[1] = PinnedSpec(UIAnchor::TopLeft, 0.0f, 0.0f, 200.0f, 48.0f);
+            stack.children[2] = PinnedSpec(UIAnchor::TopLeft, 0.0f, 0.0f, 0.0f, 0.0f);
+            stack.children[2].flex = 1.0f;
+            stack.children[3] = PinnedSpec(UIAnchor::TopLeft, 0.0f, 0.0f, 120.0f, 0.0f);
+            stack.children[3].aspectRatio = 2.0f;
+            return stack;
+        }
+
+        CanvasCase HudCanvas() {
+            CanvasCase canvas;
+            canvas.flags = 0x01;
+            canvas.referenceWidth = 1280.0f;
+            canvas.referenceHeight = 720.0f;
+            canvas.match = 0.5f;
+            canvas.minScale = 0.25f;
+            canvas.maxScale = 8.0f;
+            canvas.context.outputWidth = 1280.0f;
+            canvas.context.outputHeight = 720.0f;
+            canvas.context.safeArea = {0.0f, 44.0f, 1280.0f, 676.0f};
+            canvas.context.sceneViewWidth = 1280.0f;
+            canvas.context.sceneViewHeight = 720.0f;
+            canvas.context.worldBox = {100.0f, 100.0f, 400.0f, 300.0f};
+            canvas.childCount = 3;
+            canvas.grandChildCount = 3;
+            canvas.stackBits = 0x01;
+            canvas.children[0] = PinnedSpec(UIAnchor::TopLeft, 16.0f, 16.0f, 220.0f, 96.0f);
+            canvas.children[1] = PinnedSpec(UIAnchor::BottomRight, -16.0f, -16.0f, 96.0f, 48.0f);
+            canvas.children[2] = StretchedSpec();
+            canvas.grandChildren[0] = PinnedSpec(UIAnchor::TopLeft, 12.0f, 10.0f, 120.0f, 28.0f);
+            canvas.grandChildren[1] = PinnedSpec(UIAnchor::TopLeft, 0.0f, 0.0f, 100.0f, 24.0f);
+            canvas.grandChildren[2] = PinnedSpec(UIAnchor::Center, 0.0f, 0.0f, 50.0f, 50.0f);
+            canvas.stack = RowsStack();
+            canvas.pointX = 40.0f;
+            canvas.pointY = 40.0f;
+            return canvas;
+        }
+
+        RoundCase ScreenRound() {
+            RoundCase round;
+            round.box = ButtonBox();
+            round.slice = {{0.0f, 0.0f, 64.0f, 64.0f}, {16.0f, 16.0f, 16.0f, 16.0f}, {0.0f, 0.0f, 220.0f, 48.0f}};
+            round.parent = {0.0f, 0.0f, 1280.0f, 720.0f};
+            round.spec = StretchedSpec();
+            round.stack = RowsStack();
+            round.canvas = HudCanvas();
+            return round;
+        }
+
+        /// A stream that replaces every float field it passes by one value
+        struct FloatFiller {
+            float value;
+
+            void Float(float& field) const {
+                field = value;
+            }
+            void Byte(uint8_t&) const {}
+        };
+
+        /// A stream that gives the float fields the values in turn, so a round has several extremes at once
+        struct FloatCycler {
+            const float* values;
+            size_t count;
+            size_t next = 0;
+
+            void Float(float& field) {
+                field = values[next++ % count];
+            }
+            void Byte(uint8_t&) const {}
+        };
+
+        FuzzBytes WriteRounds(std::initializer_list<RoundCase> rounds) {
+            FuzzBytes bytes;
+            Writer writer(bytes);
+            for (RoundCase round : rounds) {
+                Transfer(writer, round);
+            }
+            return bytes;
+        }
+
+        void AddGeometrySeeds(eastl::vector<FuzzSeedFile>& seeds) {
+            const RoundCase screen = ScreenRound();
+            seeds.push_back({kUiGeometryFolder, "screen.bin", WriteRounds({screen})});
+
+            RoundCase small = screen;
+            small.box.rect = {0.0f, 0.0f, 6.0f, 4.0f};
+            small.box.corners = UICorners::Uniform(40.0f);
+            small.box.borderWidth = 30.0f;
+            small.box.shadow.blur = 32.0f;
+            small.box.pixelsPerUnit = 4.0f;
+            small.slice.destination = {0.0f, 0.0f, 20.0f, 10.0f};
+            small.canvas.context.outputWidth = 320.0f;
+            small.canvas.context.outputHeight = 568.0f;
+            small.canvas.space = 1;
+            small.canvas.flags = 0x02;
+            seeds.push_back({kUiGeometryFolder, "small-box.bin", WriteRounds({small, screen})});
+
+            RoundCase percent = screen;
+            percent.spec.unitBits = 0xFF;
+            percent.spec.x = UILength::Percent(25.0f);
+            percent.spec.width = UILength::Percent(50.0f);
+            percent.stack.wrap = 1;
+            percent.stack.align = 3;
+            percent.canvas.scaleMode = 2;
+            percent.canvas.space = 2;
+            percent.canvas.stackBits = 0x03;
+            seeds.push_back({kUiGeometryFolder, "percent-wrap-stretch.bin", WriteRounds({percent})});
+
+            // The extremes, one kind for every number of a round, and all of them in turn
+            constexpr float kInfinity = std::numeric_limits<float>::infinity();
+            constexpr float kNan = std::numeric_limits<float>::quiet_NaN();
+            constexpr float kLargest = std::numeric_limits<float>::max();
+            constexpr float kSmallest = std::numeric_limits<float>::denorm_min();
+            constexpr float kJustOverTheBound = 1.0e8f;
+            const struct {
+                const char* name;
+                float value;
+            } extremes[] = {{"nan", kNan},
+                            {"infinity", kInfinity},
+                            {"minus-infinity", -kInfinity},
+                            {"largest", kLargest},
+                            {"minus-largest", -kLargest},
+                            {"denormal", kSmallest},
+                            {"over-the-bound", kJustOverTheBound},
+                            {"minus-denormal", -kSmallest}};
+            for (const auto& extreme : extremes) {
+                RoundCase round = screen;
+                FloatFiller filler{extreme.value};
+                Transfer(filler, round);
+                seeds.push_back({kUiGeometryFolder, Format("every-number-{}.bin", extreme.name).c_str(), WriteRounds({round})});
+            }
+            constexpr float kMixed[] = {kNan, kInfinity, kLargest, -kLargest, kSmallest, 0.0f, -1.0f, 1.0f, kJustOverTheBound, -kInfinity, 1.0e-3f, 1.0e7f};
+            RoundCase mixed = screen;
+            FloatCycler cycler{kMixed, std::size(kMixed)};
+            Transfer(cycler, mixed);
+            RoundCase shifted = screen;
+            FloatCycler shiftedCycler{kMixed, std::size(kMixed), 5};
+            Transfer(shiftedCycler, shifted);
+            seeds.push_back({kUiGeometryFolder, "mixed-extremes.bin", WriteRounds({mixed, shifted})});
+        }
+
     }  // namespace
 
     void AddUiSeeds(eastl::vector<FuzzSeedFile>& seeds) {
@@ -265,6 +470,8 @@ div { margin: 1em; width: calc(100% - 4px); opacity: .5; transform: rotate(3deg)
         seeds.push_back({kUiTablesFolder, "strings-with-faults.xml", TextBytes(kStringsWithFaultsXml)});
         seeds.push_back({kUiTablesFolder, "themes.xml", TextBytes(kThemesXml)});
         seeds.push_back({kUiTablesFolder, "themes-with-faults.xml", TextBytes(kThemesWithFaultsXml)});
+
+        AddGeometrySeeds(seeds);
     }
 
 }  // namespace BECore::Fuzz
