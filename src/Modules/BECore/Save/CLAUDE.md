@@ -49,6 +49,16 @@ save
 
 **Version policy.** Added fields need no version: storage is name-keyed, so a field missing from an old file keeps the default of the new type. Raise `version` when the meaning of existing data changes or a field is removed, and raise `minVersion` when the old shape can no longer be read. An older but accepted file loads and `Load` returns its version in `SaveInfo`, so the game can fix the data up after the load (`if (info->version < 2) { state.lives = 3; }`). A newer file is refused rather than guessed at.
 
+## What a consumer does with a refused save
+
+The file is input nobody trusts: a player edits it, a disk damages it, an update changes the game. A consumer (the code that turns a `Load` into a live game) keeps these rules; `LoadMatch3` and `Match3SaveDamageTest` are the model.
+
+- **Load into a temporary, apply after a success.** The live state changes only when `Load` and the game's own checks have both passed, and the apply step cannot fail halfway: a refused save leaves the game exactly as it was.
+- **One message, one log line, never a crash.** Every refusal is a `SaveError` whose `detail` is one short sentence; the game shows or logs it once and goes on. A check the consumer makes after `Load` (a board of 63 letters) is worded by the consumer as `Corrupt`, with its reason in the `detail`.
+- **The game starts clean** (a new game, the menu) when there is nothing usable to load.
+- **The damaged file is left alone** until the player chooses to save again, so a mistaken refusal (a save of a newer build, a rule too strict) loses nothing. A consumer does not delete or rewrite a file it refused.
+- **A secret never reaches a message or a log**: a `detail` names the slot and the reason, not the contents. The engine caps the quoted text of a reader error (`ReaderLimits`).
+
 ## How a game uses it
 
 ```cpp
