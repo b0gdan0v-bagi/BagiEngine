@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<!--
+  The toggle Declare of Mahjong (config/nodes/MahjongActions.xml): the last element of the row of action buttons, which sit beside it as composed buttons. The variants set its size
+  (portrait: 124 x 68) and nothing the step moves.
+-->
+<node name="Actions" layer="10" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="SceneView" useSafeArea="true">
+      <elements>
+        <element type="UIStack" name="ActionRow" anchor="TopLeft" ignoreSafeArea="true" x="720" y="440" width="440" height="120" direction="Horizontal" spacing="8" wrapChildren="true">
+          <children>
+          <element type="UIElement" name="Pass" visible="false" width="104" height="56" fontSize="22" color="70,70,100,255">
+            <components>
+              <component type="UITextComponent" text="{#button.Pass}" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="MahjongPass"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Declare" visible="false" width="104" height="56" color="70,70,100,255" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+            <components>
+              <component type="UIInputClicker"/>
+              <component type="UIToggleComponent" bind="declareNext" action="MahjongDeclare" onValue="on" offValue="off"/>
+            </components>
+            <children>
+              <element type="UIElement" name="DeclareCaption" flex="1" height="100%" fontSize="22">
+                <components>
+                  <component type="UITextComponent" text="{#button.Declare}" verticalAlign="Center" wrap="false"/>
+                </components>
+              </element>
+              <element type="UIElement" name="DeclareSwitch" height="100%" aspectRatio="1.25">
+                <components>
+                  <component type="UISwitchComponent"/>
+                </components>
+              </element>
+            </children>
+          </element>
+          </children>
+        </element>
+      </elements>
+      <variants>
+        <variant when="orientation:portrait">
+          <overrides>
+            <set element="Pass" width="92" height="68" />
+            <set element="Declare" width="124" height="68" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

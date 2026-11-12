@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!-- A plain toggle: a caption, a variable and an action. The class had verticalAlign Center and wrap off from its constructor; the caption child says them. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIToggle" name="Sound" bind="soundOn" action="SetSound" x="10" y="10" width="300" height="56" text="Sound" fontSize="22" color="70,70,100,255" />
+        <element type="UIToggle" x="10" y="80" width="300" height="56" bind="musicOn" action="SetMusic" text="Music" />
+      </elements>
+    </component>
+  </components>
+</node>

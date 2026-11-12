@@ -6,7 +6,7 @@ Rewrites the content files of a game to the format the engine reads now. Standar
 |------|---------|
 | `migrate.py` | the command, the step API (`step`), the registry, the scan; `main(argv, engine_steps)` and the pieces are importable (the tests call them without a subprocess) |
 | `xmltext.py` | the lossless XML model the steps edit: the contract is its module docstring |
-| `steps/` | the engine track: one module per step, `s0001_<name>.py` (a module starting with `_` is not loaded: `_ui_button.py` is the mapping `UIButton` to components that steps 1 and 2 share; a step finds it by putting its own folder on `sys.path`) |
+| `steps/` | the engine track: one module per step, `s0001_<name>.py` (a module starting with `_` is not loaded: `_ui_button.py` is the mapping `UIButton` to components that steps 1 and 2 share, `_ui_value.py` that of `UIToggle` and `UISlider` for step 3; a step finds it by putting its own folder on `sys.path`) |
 | `tests/` | pytest: `.venv/bin/python -m pytest tools/migrate/tests`; the step fixtures are `tests/fixtures/<step>/<case>.before.xml` and `.after.xml` |
 
 ## The format version
@@ -32,7 +32,7 @@ def run(doc, ctx):                                              # doc: xmltext.D
 - A step is a plain function over the model, never reads another file, and says in its module docstring what it rewrites and what it **refuses**. A step that cannot give the same behaviour for a shape fails on it (`ctx.fail`) instead of guessing: a migration never changes how a game looks silently.
 - A step raising an exception is an error of that file only (the file is left, the run goes on, exit 2).
 - Idempotent: what a step already rewrote must not match it again.
-- The steps so far: 1 `ui-button-to-components` (every `UIButton` that is no group child), 2 `ui-group-children-to-components` (the `UIButton` segments of a `UISegmented` and options of a `UIDropdown`; a file already at 2 never meets step 1 again, which is why the group needed a step of its own). A file at 1 runs both.
+- The steps so far: 1 `ui-button-to-components` (every `UIButton` that is no group child), 2 `ui-group-children-to-components` (the `UIButton` segments of a `UISegmented` and options of a `UIDropdown`; a file already at 2 never meets step 1 again, which is why the group needed a step of its own), 3 `ui-toggle-slider-to-components` (every `UIToggle` and `UISlider`, at any depth; the off track and the thumb derived from a literal `textColor` are written out, a token `textColor` needs a `trackColor`). A file at 1 runs all three.
 
 ## The command
 

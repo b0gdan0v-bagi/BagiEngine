@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!-- A toggle with every attribute that is not a text colour: disabled, onValue and offValue, the round shape, the three colours of the switch and a caption with its own look. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIElement" name="Declare" visible="false" x="10" y="10" width="104" height="56" color="70,70,100,255" blocksInput="true" flex="1" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker" disabled="true"/>
+            <component type="UIToggleComponent" bind="declareNext" action="Declare" onValue="on" offValue="off"/>
+          </components>
+          <children>
+            <element type="UIElement" name="DeclareCaption" flex="1" height="100%" fontSize="22">
+              <components>
+                <component type="UITextComponent" text="{#button.Declare}" font="fonts/A.ttf" fontFamily="Sans" fontWeight="700" align="Center" verticalAlign="Top" overflow="AutoFit" wrap="true" lineSpacing="1.2" minFontSize="12" textOutline="1,0,0,0,255" textShadow="1,1,#00000080"/>
+              </components>
+            </element>
+            <element type="UIElement" name="DeclareSwitch" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent" trackColor="30,30,30,255" fillColor="20,200,90,255" thumbColor="250,250,250,255" partShape="Round"/>
+              </components>
+            </element>
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

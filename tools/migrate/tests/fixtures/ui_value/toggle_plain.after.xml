@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!-- A plain toggle: a caption, a variable and an action. The class had verticalAlign Center and wrap off from its constructor; the caption child says them. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIElement" name="Sound" x="10" y="10" width="300" height="56" color="70,70,100,255" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker"/>
+            <component type="UIToggleComponent" bind="soundOn" action="SetSound"/>
+          </components>
+          <children>
+            <element type="UIElement" name="SoundCaption" flex="1" height="100%" fontSize="22">
+              <components>
+                <component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false"/>
+              </components>
+            </element>
+            <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIElement" x="10" y="80" width="300" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker"/>
+            <component type="UIToggleComponent" bind="musicOn" action="SetMusic"/>
+          </components>
+          <children>
+            <element type="UIElement" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="Music" verticalAlign="Center" wrap="false"/>
+              </components>
+            </element>
+            <element type="UIElement" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent"/>
+              </components>
+            </element>
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

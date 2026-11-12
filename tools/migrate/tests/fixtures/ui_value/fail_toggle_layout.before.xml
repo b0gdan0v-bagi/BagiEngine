@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- A toggle with a padding of its own: the row becomes a stack of its own. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIToggle" name="Padded" bind="a" action="A" width="300" height="56" text="Padded" padding="4" spacing="2" />
+      </elements>
+    </component>
+  </components>
+</node>

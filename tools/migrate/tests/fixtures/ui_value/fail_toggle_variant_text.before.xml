@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- A variant sets the text of a toggle: after the move the element has no text. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIToggle" name="Sound" bind="a" action="A" width="300" height="56" text="Sound" />
+      </elements>
+      <variants>
+        <variant when="maxWidth:480">
+          <overrides>
+            <set element="Sound" text="Snd" height="68" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>
