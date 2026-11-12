@@ -10,7 +10,7 @@ file(GLOB_RECURSE TESTS_SOURCES
 
 # Tests of the editor panels exist only when the editor is built (BE_WITH_EDITOR, cmake/BagiEngine.cmake)
 if(NOT BE_EDITOR_ENABLED)
-    list(FILTER TESTS_SOURCES EXCLUDE REGEX "/BECore/(ConfigEditorSaveTest|SceneEditorSaveTest|ConfigFieldSchemaTest|KeyChordTest|HotkeyMapTest|CommandFilterTest|EditorSettingsTest|ViewportInputTest|LayoutStoreTest|IconTableTest|EditorPlayModelTest|StatusBarModelTest|GitBranchTest|EditorBarsTest|HierarchyModelTest)\\.")
+    list(FILTER TESTS_SOURCES EXCLUDE REGEX "/BECore/(ConfigEditorSaveTest|SceneEditorSaveTest|ConfigFieldSchemaTest|KeyChordTest|HotkeyMapTest|CommandFilterTest|EditorSettingsTest|ViewportInputTest|LayoutStoreTest|IconTableTest|EditorPlayModelTest|StatusBarModelTest|GitBranchTest|EditorBarsTest|HierarchyModelTest|ScenePickTest)\\.")
 endif()
 
 # Tests of the RmlUi host exist only when the host is built
