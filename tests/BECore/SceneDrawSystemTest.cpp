@@ -6,6 +6,7 @@
 #include <BECore/Scene/Components/TransformComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneDrawSystem.h>
+#include <BECore/Scene/SceneRenderData.h>
 #include <Common/RecordingRenderer.h>
 #include <Generated/SceneDrawSystemTest.gen.hpp>
 #include <gtest/gtest.h>
@@ -498,6 +499,73 @@ namespace BECore::Tests {
         EXPECT_EQ(_renderer->calls[0].color.r, 200);
         EXPECT_EQ(_renderer->calls[0].color.g, 100);
         EXPECT_EQ(_renderer->calls[0].color.b, 50);
+    }
+
+    TEST_F(SceneDrawSystemTest, AHiddenNodeDrawsNothingAndTheOthersKeepTheirOrder) {
+        AddQuad(*_scene, nullptr, "A", 1.0f);
+        auto b = AddQuad(*_scene, nullptr, "B", 2.0f);
+        AddQuad(*_scene, nullptr, "C", 3.0f);
+        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 2.0f, 3.0f}));
+
+        b->SetEditorFlags(EditorFlags::Hidden);
+        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 3.0f}));
+
+        b->SetEditorFlags(EditorFlags::None);
+        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 2.0f, 3.0f}));
+    }
+
+    TEST_F(SceneDrawSystemTest, AHiddenNodeHidesItsDescendantsAndOnDrawToo) {
+        auto a = AddQuad(*_scene, nullptr, "A", 1.0f);
+        auto aChild = AddQuad(*_scene, a.Get(), "AChild", 2.0f);
+        auto marker = BECore::New<DrawMarkerComponent>();
+        marker->marker = kMarkerId;
+        aChild->AddComponent(marker);
+        AddQuad(*_scene, nullptr, "B", 3.0f);
+        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 2.0f, kMarkerId, 3.0f}));
+
+        a->SetEditorFlags(EditorFlags::Hidden);
+        EXPECT_EQ(Draw(), (eastl::vector<float>{3.0f}));
+
+        // A hidden child alone leaves its parent and its siblings visible
+        a->SetEditorFlags(EditorFlags::None);
+        aChild->SetEditorFlags(EditorFlags::Hidden);
+        EXPECT_EQ(Draw(), (eastl::vector<float>{1.0f, 3.0f}));
+    }
+
+    TEST_F(SceneDrawSystemTest, AHiddenNodeKeepsItsItemAndItsRank) {
+        auto a = AddQuad(*_scene, nullptr, "A", 1.0f);
+        auto aChild = AddQuad(*_scene, a.Get(), "AChild", 2.0f);
+        auto b = AddQuad(*_scene, nullptr, "B", 3.0f, -1);
+        _scene->Draw();
+        const eastl::vector<PoolString> before = ViewNames(*_scene);
+        const int32_t rankA = _scene->GetDrawRank(*a);
+        const int32_t rankChild = _scene->GetDrawRank(*aChild);
+        const int32_t rankB = _scene->GetDrawRank(*b);
+
+        a->SetEditorFlags(EditorFlags::Hidden);
+        _scene->Draw();
+
+        EXPECT_EQ(ViewNames(*_scene), before);
+        EXPECT_EQ(_scene->GetDrawRank(*a), rankA);
+        EXPECT_EQ(_scene->GetDrawRank(*aChild), rankChild);
+        EXPECT_EQ(_scene->GetDrawRank(*b), rankB);
+        const auto& registry = _scene->GetRegistry();
+        EXPECT_TRUE(registry.get<SceneDrawItem>(a->GetEntity()).hidden);
+        EXPECT_TRUE(registry.get<SceneDrawItem>(aChild->GetEntity()).hidden);
+        EXPECT_FALSE(registry.get<SceneDrawItem>(b->GetEntity()).hidden);
+    }
+
+    TEST_F(SceneDrawSystemTest, TheMirrorOfAHiddenNodeIsStillSynced) {
+        auto node = AddQuad(*_scene, nullptr, "A", 1.0f);
+        node->SetEditorFlags(EditorFlags::Hidden);
+
+        // The mirror of a hidden node is synced as before, so showing it again needs no extra frame
+        node->GetComponent<TransformComponent>()->_x = 7.0f;
+        Draw();
+        EXPECT_EQ(_scene->GetRegistry().get<TransformData>(node->GetEntity()).x, 7.0f);
+
+        node->SetEditorFlags(EditorFlags::None);
+        EXPECT_EQ(Draw(), (eastl::vector<float>{7.0f}));
     }
 
 }  // namespace BECore::Tests

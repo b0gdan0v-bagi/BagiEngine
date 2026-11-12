@@ -17,6 +17,14 @@ namespace BECore {
     IntrusivePtr<SceneNode> DeserializeNode(pugi::xml_node nodeEl, eastl::string_view what);
 
     /**
+     * @brief Appends to @p parent the `<node>` element of @p node and, in `<children>`, of every node below it: the inline form of a scene file
+     *
+     * `name`, `layer`, `<components>` (each with its serialized fields) and `<children>`, the last two only when there are any; the order is
+     * the tree's. `sourceRef` is not written (a node file link is the writer's business, BuildNodeReference). DeserializeNode reads it back.
+     */
+    void AppendNodeElement(pugi::xml_node parent, const SceneNode& node);
+
+    /**
      * @brief Appends to @p nodesEl the `<node ref="..">` that stands for @p live: its node file and the smallest overrides
      *
      * The reference is the node's SceneNode::GetSourceRef(). What differs from the node file is the override; what equals it is

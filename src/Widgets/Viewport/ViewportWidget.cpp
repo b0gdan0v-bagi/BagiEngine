@@ -102,8 +102,12 @@ namespace BECore {
             return kAspectLabels[static_cast<size_t>(shape.aspect)];
         }
 
-        // The canvases of a subtree in the order of the scene (the walk of CollectCanvases in UIControl.cpp)
+        // The canvases of a subtree in the order of the scene (the walk of CollectCanvases in UIControl.cpp), without the subtree of a
+        // node hidden in the editor: it draws nothing, so it gets no overlay
         void CollectCanvases(const SceneNode& node, eastl::vector<IntrusivePtr<UICanvasComponent>>& out) {
+            if (node.HasEditorFlag(EditorFlags::Hidden)) {
+                return;
+            }
             if (auto canvas = node.GetComponent<UICanvasComponent>()) {
                 out.push_back(std::move(canvas));
             }

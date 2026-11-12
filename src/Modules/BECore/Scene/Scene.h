@@ -145,10 +145,40 @@ namespace BECore {
         /// InstantiateNode() of a reference element with overrides, the node file found through the FileSystem of CoreManager
         IntrusivePtr<SceneNode> InstantiateNode(const XmlNode& reference, SceneNode* parent = nullptr, size_t index = kAppend);
 
+        /**
+         * @brief Moves @p node under @p newParent (the root when null) at @p index among its children, in this scene
+         *
+         * @p index counts the children of the new parent **after @p node has left its old place**, so moving a node down inside one parent to
+         * index `n` puts it behind `n` of the others; it is clamped, kAppend is the last. The node keeps its entity, its components and its
+         * subtree (no second `OnAttached`), and the draw order follows the tree, so nothing else is updated.
+         *
+         * Refused, with nothing changed, and false returned: the root, a node of another scene, a parent of another scene, and a parent that
+         * is the node itself or below it.
+         */
+        bool MoveNode(SceneNode& node, SceneNode* newParent, size_t index = kAppend);
+
+        /**
+         * @brief Copies @p node and everything below it, placed right after it among the children of its parent
+         *
+         * The copy is read from the node's inline XML (AppendNodeElement, DeserializeNode) and wired as InstantiateNode wires a node (entity,
+         * `OnAttached` of every component), so it shares nothing with the original. Its name is `Name (copy)`, or `Name (copy 2)` and up while
+         * a sibling has it. The top node keeps SceneNode::GetSourceRef(), so a copied instance is an instance.
+         *
+         * @return The copy, empty for the root and for a node that is not in this scene (nothing changed)
+         */
+        IntrusivePtr<SceneNode> DuplicateNode(const SceneNode& node);
+
+        /// @p base when no child of @p parent is called so, else `base 2`, `base 3`, ... the first one that is free
+        PoolString MakeUniqueSiblingName(const SceneNode& parent, eastl::string_view base) const;
+
+        /// Clears the editor flags (SceneNode::GetEditorFlags()) of every node of the tree, the root included. The scene editor calls it when it goes away
+        void ClearEditorFlags();
+
         /// Called by SceneNode::RemoveChild() only: destroys the entity of @p node and of its descendants and resets their GetEntity() to entt::null.
         void DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>);
 
     private:
+        bool IsLiveNode(const SceneNode& node) const;
         void DestroyEntities(SceneNode& node);
         void PickView(float outputWidth, float outputHeight);
 

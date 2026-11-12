@@ -184,6 +184,51 @@ namespace BECore::Tests {
             return node;
         }
 
+        constexpr const char* kNestedScenesXml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Main"><nodes>
+    <node name="Left"><children>
+      <node name="Inner" layer="2"><components>
+        <component type="TransformComponent" x="123.5" y="6" width="7" height="8"/>
+      </components><children>
+        <node name="Deep"/>
+      </children></node>
+      <node name="Last"/>
+    </children></node>
+    <node name="Right"/>
+  </nodes></scene>
+</scenes></SceneManager>)";
+
+        /// The names of the tree below @p node, depth first, each followed by one dot per level ("Left Inner. Deep.. Last. Right")
+        void AppendTree(const SceneNode& node, size_t depth, eastl::string& out) {
+            for (const auto& child : node.GetChildren()) {
+                if (!out.empty()) {
+                    out.append(" ");
+                }
+                out.append(child->GetName().CStr());
+                out.append(depth, '.');
+                AppendTree(*child, depth + 1, out);
+            }
+        }
+
+        eastl::string TreeOf(const SceneNode& root) {
+            eastl::string out;
+            AppendTree(root, 0, out);
+            return out;
+        }
+
+        const SceneNode* FindNodeByName(const SceneNode& from, PoolString name) {
+            for (const auto& child : from.GetChildren()) {
+                if (child->GetName() == name) {
+                    return child.Get();
+                }
+                if (const SceneNode* found = FindNodeByName(*child, name)) {
+                    return found;
+                }
+            }
+            return nullptr;
+        }
+
         SceneNode* FindTopLevelNode(Scene& scene, PoolString name) {
             for (const auto& node : scene.GetRootNode().GetChildren()) {
                 if (node->GetName() == name) {
@@ -854,6 +899,135 @@ namespace BECore::Tests {
 
         EXPECT_EQ(Print(ConfigRoot()), once);
         EXPECT_EQ(CountScenes(ConfigRoot()), 2u);
+    }
+
+    TEST_F(SceneEditorSaveTest, ChildNodesAreSavedNestedInFileOrder) {
+        ASSERT_NO_FATAL_FAILURE(LoadScenes());
+        _manager->SetActiveScene("Game"_intern);
+        Scene& game = *_manager->GetActiveScene();
+        SceneNode* board = FindTopLevelNode(game, "Board"_intern);
+        ASSERT_NE(board, nullptr);
+
+        // A runtime AddChild (the editor's "Add Child"), a grandchild with a component and a sibling after it
+        auto first = board->AddChild("First"_intern);
+        auto grandchild = first->AddChild("Grand"_intern);
+        auto quad = New<QuadRendererComponent>();
+        quad->_color = Color{4, 5, 6, 255};
+        grandchild->AddComponent(quad);
+        board->AddChild("Second"_intern)->SetLayer(kPieceLayer);
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), game));
+
+        const pugi::xml_node boardEl = SavedNode(ConfigRoot(), "Game", 0);
+        const pugi::xml_node childrenEl = boardEl.child("children");
+        ASSERT_TRUE(childrenEl);
+        EXPECT_TRUE(boardEl.child("components"));
+        EXPECT_TRUE(boardEl.child("components").next_sibling() == childrenEl);
+        EXPECT_STREQ(childrenEl.first_child().attribute("name").as_string(), "First");
+        EXPECT_STREQ(childrenEl.first_child().next_sibling().attribute("name").as_string(), "Second");
+        EXPECT_EQ(childrenEl.first_child().next_sibling().attribute("layer").as_int(), kPieceLayer);
+        EXPECT_FALSE(childrenEl.first_child().child("components"));
+        EXPECT_STREQ(childrenEl.first_child().child("children").first_child().attribute("name").as_string(), "Grand");
+        // A node without children writes no <children>
+        EXPECT_FALSE(SavedNode(ConfigRoot(), "Game", 1).child("children"));
+
+        ASSERT_NO_FATAL_FAILURE(SaveAndReload());
+        SceneNode* savedBoard = FindTopLevelNode(Reloaded("Game"), "Board"_intern);
+        ASSERT_NE(savedBoard, nullptr);
+        ASSERT_EQ(savedBoard->GetChildren().size(), 2u);
+        EXPECT_EQ(savedBoard->GetChildren()[0]->GetName(), "First"_intern);
+        EXPECT_EQ(savedBoard->GetChildren()[1]->GetName(), "Second"_intern);
+        EXPECT_EQ(savedBoard->GetChildren()[1]->GetLayer(), kPieceLayer);
+        ASSERT_EQ(savedBoard->GetChildren()[0]->GetChildren().size(), 1u);
+        const auto& savedGrand = savedBoard->GetChildren()[0]->GetChildren()[0];
+        EXPECT_EQ(savedGrand->GetParent(), savedBoard->GetChildren()[0].Get());
+        ASSERT_TRUE(savedGrand->GetComponent<QuadRendererComponent>());
+        EXPECT_EQ(savedGrand->GetComponent<QuadRendererComponent>()->_color.g, 5);
+    }
+
+    TEST_F(SceneEditorSaveTest, ALoadedNestedTreeSurvivesASaveUnchanged) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kNestedScenesXml));
+        Scene& main = GetScene("Main");
+
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
+        ASSERT_NO_FATAL_FAILURE(SaveAndReload());
+
+        EXPECT_EQ(TreeOf(Reloaded("Main").GetRootNode()), TreeOf(main.GetRootNode()));
+        EXPECT_EQ(TreeOf(main.GetRootNode()), "Left Inner. Deep.. Last. Right");
+        const SceneNode* inner = FindNodeByName(Reloaded("Main").GetRootNode(), "Inner"_intern);
+        ASSERT_NE(inner, nullptr);
+        EXPECT_EQ(inner->GetLayer(), kPieceLayer);
+        ASSERT_TRUE(inner->GetComponent<TransformComponent>());
+        EXPECT_FLOAT_EQ(inner->GetComponent<TransformComponent>()->_x, kMovedX);
+        // A second save of the reloaded scene writes the same document
+        const eastl::string once = Print(ConfigRoot());
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
+        EXPECT_EQ(Print(ConfigRoot()), once);
+    }
+
+    TEST_F(SceneEditorSaveTest, TheEditorFlagsAreNotSaved) {
+        ASSERT_NO_FATAL_FAILURE(LoadOwnScenes(kNestedScenesXml));
+        Scene& main = GetScene("Main");
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
+        const eastl::string plain = Print(ConfigRoot());
+
+        // Tree: Left (Inner (Deep), Last), Right
+        ASSERT_FALSE(main.GetRootNode().GetChildren().empty());
+        SceneNode& left = *main.GetRootNode().GetChildren()[0];
+        ASSERT_FALSE(left.GetChildren().empty());
+        SceneNode* inner = left.GetChildren()[0].Get();
+        ASSERT_EQ(inner->GetName(), "Inner"_intern);
+        inner->SetEditorFlags(EditorFlags::Hidden | EditorFlags::Locked);
+        ASSERT_TRUE(WriteSceneToConfig(ConfigRoot(), main));
+
+        EXPECT_EQ(Print(ConfigRoot()), plain);
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, AnInstanceWithChildrenIsWrittenInlineWithANote) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+        SceneNode& box = Child("Main", 0);
+        box.AddChild("Kid"_intern);
+
+        ASSERT_TRUE(Save(GetScene("Main")));
+
+        ASSERT_EQ(_notes.size(), 1u);
+        EXPECT_NE(_notes[0].find("node 'Box'"), eastl::string::npos) << _notes[0].c_str();
+        EXPECT_NE(_notes[0].find("it has child nodes"), eastl::string::npos) << _notes[0].c_str();
+        const pugi::xml_node saved = SavedNode(ConfigRoot(), "Main", 0);
+        EXPECT_FALSE(saved.attribute("ref"));
+        EXPECT_STREQ(saved.child("children").first_child().attribute("name").as_string(), "Kid");
+        // The other instances stay references
+        EXPECT_TRUE(SavedNode(ConfigRoot(), "Main", 2).attribute("ref"));
+
+        ASSERT_NO_FATAL_FAILURE(SaveAndReloadSplit());
+        const auto& loaded = Reloaded("Main").GetRootNode().GetChildren();
+        EXPECT_TRUE(loaded[0]->GetSourceRef().Empty());
+        ASSERT_EQ(loaded[0]->GetChildren().size(), 1u);
+        EXPECT_EQ(ComponentTexts(*loaded[0]), ComponentTexts(box));
+    }
+
+    TEST_F(SceneEditorSaveReferencesTest, ANestedInstanceIsWrittenInlineWithANote) {
+        ASSERT_NO_FATAL_FAILURE(LoadSplitScenes());
+        Scene& main = GetScene("Main");
+        pugi::xml_document reference;
+        reference.append_child("node").append_attribute("ref").set_value("nodes/Box");
+        ASSERT_TRUE(main.InstantiateNode(reference.document_element(), _loader, &Child("Main", 1)));
+
+        ASSERT_TRUE(Save(main));
+
+        ASSERT_EQ(_notes.size(), 1u);
+        EXPECT_NE(_notes[0].find("node 'Box'"), eastl::string::npos) << _notes[0].c_str();
+        EXPECT_NE(_notes[0].find("nested"), eastl::string::npos) << _notes[0].c_str();
+        const pugi::xml_node nested = SavedNode(ConfigRoot(), "Main", 1).child("children").first_child();
+        EXPECT_FALSE(nested.attribute("ref"));
+        EXPECT_STREQ(nested.attribute("name").as_string(), "Box");
+        EXPECT_FALSE(HasAttributeBelow(ConfigRoot(), "sourceRef"));
+
+        ASSERT_NO_FATAL_FAILURE(SaveAndReloadSplit());
+        const auto& loadedNested = Reloaded("Main").GetRootNode().GetChildren()[1]->GetChildren();
+        ASSERT_EQ(loadedNested.size(), 1u);
+        EXPECT_TRUE(loadedNested[0]->GetSourceRef().Empty());
+        EXPECT_EQ(ComponentTexts(*loadedNested[0]), ComponentTexts(*Child("Main", 1).GetChildren()[0]));
     }
 
     TEST_F(SceneEditorSaveTest, AnInvalidRootIsRejected) {

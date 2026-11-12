@@ -1,5 +1,8 @@
 #pragma once
 
+#include "HierarchyPanel.h"
+#include "SceneSelectionEvents.h"
+
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/Widgets/IWidget.h>
@@ -17,7 +20,7 @@ namespace BECore {
      * @brief ImGui widget for real-time scene editing
      *
      * Displays a two-panel layout:
-     *   Left panel  - Hierarchy tree of scene nodes
+     *   Left panel  - HierarchyPanel: tree of scene nodes
      *   Right panel - Inspector for selected node and its components
      *
      * All edits are applied live without staging.
@@ -26,7 +29,8 @@ namespace BECore {
         BE_CLASS(SceneEditorWidget)
     public:
         SceneEditorWidget() = default;
-        ~SceneEditorWidget() override = default;
+        /// Clears the editor flags (hidden, locked) of every scene, so Game mode is never left with a hidden node. A switch of the active scene clears nothing by itself
+        ~SceneEditorWidget() override;
 
         BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
         BE_FUNCTION void Update() override;
@@ -50,11 +54,14 @@ namespace BECore {
          */
         void OnCommand(const EditorCommandEvent& event);
 
-        /**
-         * @brief Recursively render the hierarchy tree starting from a node.
-         *        Uses the node pointer as the ImGui tree node ID.
-         */
-        void RenderHierarchyNode(SceneNode& node);
+        /// Answers SelectSceneNodeRequestEvent: selects and reveals the node when it is alive in the active scene, else does nothing
+        void OnSelectRequest(const SelectSceneNodeRequestEvent& event);
+
+        /// Sends SceneNodeSelectedEvent when the selection (or the scene it belongs to) differs from the last one announced
+        void AnnounceSelection(const Scene* scene);
+
+        /// Takes what the hierarchy panel asked for in the last Draw(): the dirty mark, the forgotten UI selection of a removed subtree, the "Add Node" popup
+        void ApplyHierarchyAnswers();
 
         /**
          * @brief Render the inspector panel for the selected node
@@ -78,12 +85,13 @@ namespace BECore {
          */
         void SaveScene();
 
-        SceneNode* _selectedNode = nullptr;
-        Scene* _lastScene = nullptr;                  // the scene the selection belongs to: a replaced scene drops it
-        SceneNode* _uiSelectionNode = nullptr;        // the node whose canvas `_selectedUIElement` belongs to
-        IntrusivePtr<UIElement> _selectedUIElement;   // held, so that a tree edit cannot leave it dangling
-        IntrusivePtr<UIElement> _inexactUIElement;    // the element whose last edit the layout limits kept from being exact (the inspector warns)
-        SceneNode* _contextMenuTargetNode = nullptr;  // node to add a child to (null = root)
+        HierarchyState _hierarchy;                             // the selected node, the rename and the pending tree edit of the hierarchy panel
+        HierarchyModel::SelectionTracker _announcedSelection;  // what SceneNodeSelectedEvent last told
+        Scene* _lastScene = nullptr;                           // the scene the selection belongs to: a replaced scene drops it
+        SceneNode* _uiSelectionNode = nullptr;                 // the node whose canvas `_selectedUIElement` belongs to
+        IntrusivePtr<UIElement> _selectedUIElement;            // held, so that a tree edit cannot leave it dangling
+        IntrusivePtr<UIElement> _inexactUIElement;             // the element whose last edit the layout limits kept from being exact (the inspector warns)
+        SceneNode* _contextMenuTargetNode = nullptr;           // node to add a child to (null = root)
         char _nodeNameBuffer[256] = {};
         bool _showAddNodePopup = false;
         bool _showAddComponentPopup = false;

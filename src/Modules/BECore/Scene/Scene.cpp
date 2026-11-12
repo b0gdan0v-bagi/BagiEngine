@@ -223,6 +223,84 @@ namespace BECore {
         return InstantiateNode(reference.GetPugiNode(), MakeFileSystemNodeLoader(CoreManager::GetFileSystem()), parent, index);
     }
 
+    bool Scene::IsLiveNode(const SceneNode& node) const {
+        return node._scene == this && _registry.valid(node._entity);
+    }
+
+    bool Scene::MoveNode(SceneNode& node, SceneNode* newParent, size_t index) {
+        SceneNode* const target = newParent ? newParent : _rootNode.Get();
+        if (!_rootNode || &node == _rootNode.Get() || !IsLiveNode(node) || node._parent == nullptr || !IsLiveNode(*target)) {
+            return false;
+        }
+        if (target == &node || target->IsDescendantOf(node)) {
+            return false;
+        }
+
+        auto& oldSiblings = node._parent->_children;
+        const auto it = eastl::find_if(oldSiblings.begin(), oldSiblings.end(), [&node](const IntrusivePtr<SceneNode>& child) { return child.Get() == &node; });
+        if (it == oldSiblings.end()) {
+            return false;
+        }
+        IntrusivePtr<SceneNode> held = *it;  // keeps the node alive between the two lists
+        oldSiblings.erase(it);
+
+        const size_t place = eastl::min(index, target->_children.size());
+        target->_children.insert(target->_children.begin() + static_cast<ptrdiff_t>(place), held);
+        node._parent = target;
+        return true;
+    }
+
+    namespace {
+
+        /// The first of `<prefix><postfix>`, `<prefix> 2<postfix>`, `<prefix> 3<postfix>`, ... that no child of @p parent is called
+        PoolString FreeSiblingName(const SceneNode& parent, const eastl::string& prefix, const char* postfix) {
+            const auto taken = [&parent](PoolString name) {
+                return eastl::any_of(parent.GetChildren().begin(), parent.GetChildren().end(), [name](const IntrusivePtr<SceneNode>& child) { return child->GetName() == name; });
+            };
+            PoolString name = PoolString::Intern(Format("{}{}", prefix.c_str(), postfix).c_str());
+            for (uint32_t number = 2; taken(name); ++number) {
+                name = PoolString::Intern(Format("{} {}{}", prefix.c_str(), number, postfix).c_str());
+            }
+            return name;
+        }
+
+    }  // namespace
+
+    PoolString Scene::MakeUniqueSiblingName(const SceneNode& parent, eastl::string_view base) const {
+        return FreeSiblingName(parent, eastl::string(base.data(), base.size()), "");
+    }
+
+    IntrusivePtr<SceneNode> Scene::DuplicateNode(const SceneNode& node) {
+        SceneNode* const parent = node.GetParent();
+        if (!_rootNode || &node == _rootNode.Get() || parent == nullptr || !IsLiveNode(node) || !IsLiveNode(*parent)) {
+            return {};
+        }
+
+        pugi::xml_document document;
+        AppendNodeElement(document, node);
+        auto copy = DeserializeNode(document.document_element(), Format("{} copy of {}", _name.CStr(), node.GetName().CStr()));
+        copy->SetName(FreeSiblingName(*parent, Format("{} (copy", node.GetName().CStr()), ")"));
+        copy->SetSourceRef(node.GetSourceRef());
+
+        copy->WireToScene(this, parent);
+        const auto at = eastl::find_if(parent->_children.begin(), parent->_children.end(), [&node](const IntrusivePtr<SceneNode>& child) { return child.Get() == &node; });
+        parent->_children.insert(at == parent->_children.end() ? at : at + 1, copy);
+        return copy;
+    }
+
+    void Scene::ClearEditorFlags() {
+        if (!_rootNode) {
+            return;
+        }
+        const auto clear = [](auto&& self, SceneNode& node) -> void {
+            node.SetEditorFlags(EditorFlags::None);
+            for (const auto& child : node.GetChildren()) {
+                self(self, *child);
+            }
+        };
+        clear(clear, *_rootNode);
+    }
+
     void Scene::DestroyNodeEntities(SceneNode& node, PassKey<SceneNode>) {
         DestroyEntities(node);
     }
