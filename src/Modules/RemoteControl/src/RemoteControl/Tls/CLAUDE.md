@@ -26,6 +26,10 @@ Why not Secure Transport: deprecated since macOS 10.15 and TLS 1.2 at most; Netw
 - **Receive:** one `nw_connection_receive` stays pending across a `Receive()` that timed out, its data waits in the inbox; end of stream is `is_complete` without content (or a final context). `SendAll()` returns when the send completion ran (data is copied, so a wake-up by `ShutdownBoth()` may leave early).
 - `connectTimeout` is the TCP connection timeout option (whole seconds, at least 1); `handshakeDeadline` is the caller's clock for ready.
 
+## Tests against a real handshake
+
+`tests/BECore/Tls/tls_local_check.py` (Python standard library; ctest entry `BagiTlsLocalEndpoint`, skipped with 77 when `ssl` or the executable is missing) starts three local servers on free ports (a TLS WebSocket echo with the valid leaf, one with an expired leaf, a plain one that never answers) and runs `TlsLocalEndpointTest` of `BagiEngineTests` with their ports and the test CA (DER) in the environment: trusted open and echo, no anchor, wrong host name (`127.0.0.1`), expired, handshake deadline against a plain server. The cases skip themselves without that environment or without a backend, so a plain `ctest` shows them skipped and only `BagiTlsLocalEndpoint` runs them. Fixtures are in `data/` (how they were made: the head of the script); the leaf's notBefore is 2019 because Apple refuses a longer-than-398-days TLS leaf issued later, also under a test anchor.
+
 ## The fake backend
 
 `tests/BECore/Tls/FakeTlsStream.h` is a scripted backend over a real loopback `Socket`, so everything that uses an `ITlsStream` runs on every platform without a certificate. The client sends `FAKE-HELLO <serverName> <anchor count>\n`; the test server answers `FAKE-OK\n` or `FAKE-REJECT <reason>\n`; then every byte is XOR-ed with `kFakeTlsMask` both ways. `FakeTlsServerSide` is the other end for a hand-written server on an accepted `Socket`. `WebSocketClientSettings::tls.factory` takes `FakeTlsFactory()`.

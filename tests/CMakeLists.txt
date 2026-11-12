@@ -29,3 +29,14 @@ be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlMod
 # VulkanModule: its loader library is not deployed next to the test executable (BagiEngineTests links BECore).
 target_link_libraries(BagiEngineTests PRIVATE Vulkan::Headers)
 target_include_directories(BagiEngineTests PRIVATE ${BAGI_ENGINE_DIR}/src/Modules/Vulkan/src)
+
+# A real TLS handshake of the platform's backend against local servers: tls_local_check.py starts a Python `ssl` WebSocket echo server
+# (fixtures in BECore/Tls/data) and runs TlsLocalEndpointTest of BagiEngineTests with their ports in the environment. Skipped (77) when
+# Python has no `ssl`; the cases themselves skip on a platform without a TLS backend. Own port per run (port 0), so it runs beside the others.
+if(Python3_FOUND)
+    add_test(NAME BagiTlsLocalEndpoint
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/BECore/Tls/tls_local_check.py --exe $<TARGET_FILE:BagiEngineTests>)
+    set_tests_properties(BagiTlsLocalEndpoint PROPERTIES
+        SKIP_RETURN_CODE 77
+        TIMEOUT 120)
+endif()
