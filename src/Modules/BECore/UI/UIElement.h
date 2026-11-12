@@ -163,12 +163,13 @@ namespace BECore {
             return *component;
         }
 
-        /// The pointer and the owner's flags as the state look reads them: `pressed` only while the pointer is still over the element, `disabled` is `IsDisabled()`. An element that has no
-        /// `UIInputClicker` of its own but was drawn inside one that has (`SetInheritedState`) answers with that ancestor's state: the image and the text of a button's children follow it
+        /// The pointer and the owner's flags as the state look reads them: `pressed` only while the pointer is still over the element, `disabled` is `IsDisabled()`, `checked` is what a component says
+        /// (`UIComponent::IsChecked`). An element that has no `UIInputClicker` of its own but was drawn inside one that has (`SetInheritedState`) answers with that ancestor's state: the image and the
+        /// text of a button's children follow it
         [[nodiscard]] UIStateLook::State GetVisualState() const;
 
         /// The element is the owner of the state its descendants without an owner are drawn in, and is itself drawn in its own: it has a `UIInputClicker`, or is a control that reacts to the
-        /// pointer by itself (`UIButton` answers true, so a button below an element with a clicker shows its own state, not the ancestor's)
+        /// pointer by itself (`UIButton`, `UIToggle`, `UISlider` and `UIDropdown` answer true, so such a control below an element with a clicker shows its own state, not the ancestor's)
         [[nodiscard]] virtual bool OwnsState() const;
 
         /// Runtime, called by the canvas before it draws the element: the state of the nearest ancestor that `OwnsState()`, null for none. Ignored by an element that `OwnsState()`. Not
@@ -182,6 +183,14 @@ namespace BECore {
         /// The text of the tooltip the canvas shows after a hover or a long touch press, empty for none: the `UITooltipComponent` text (a control with a tooltip of its own overrides it); it may hold
         /// `{#key}` and `{var}`
         [[nodiscard]] virtual const eastl::string& GetTooltipText() const;
+
+        /**
+         * Draws one part of a control (a track, a fill, a thumb) in @p area with @p fill. `Square` is the plain `DrawFilledRect` of the part, the call the control always made.
+         * `Round` is a box whose only setting is a corner radius of half the shorter side: a pill for a track, a circle for a square thumb. A part shorter than the track is a
+         * smaller pill (the fill of a progress bar at 2 % is a short capsule, not a track-high slice), which is accepted. Nothing for an empty @p area in the round shape.
+         * Public because the components of a control call it on their owner (a switch's track and thumb, a slider's parts).
+         */
+        void DrawPart(IRenderer& renderer, const Rect& area, const Color& fill, UIPartShape shape);
 
         /// The box, the fill and the gradient end for the state the element is in now (pure: reads the state and changes nothing)
         [[nodiscard]] UIStateLook::Look GetStateLook() const;
@@ -230,13 +239,6 @@ namespace BECore {
 
         /// `DrawBox` for any rect: draws the box in @p area instead of `rect` (a part of a control). `DrawBox` is this call with `rect`
         void DrawBoxIn(IRenderer& renderer, const Rect& area, const UIBoxStyle& boxStyle, const Color& fill, const Color& gradientEnd);
-
-        /**
-         * Draws one part of a control (a track, a fill, a thumb) in @p area with @p fill. `Square` is the plain `DrawFilledRect` of the part, the call the control always made.
-         * `Round` is a box whose only setting is a corner radius of half the shorter side: a pill for a track, a circle for a square thumb. A part shorter than the track is a
-         * smaller pill (the fill of a progress bar at 2 % is a short capsule, not a track-high slice), which is accepted. Nothing for an empty @p area in the round shape.
-         */
-        void DrawPart(IRenderer& renderer, const Rect& area, const Color& fill, UIPartShape shape);
 
     private:
         bool _hasInheritedState = false;  ///< runtime: `_inheritedState` was passed down by the canvas at the last draw

@@ -6,8 +6,8 @@
 namespace BECore {
 
     /**
-     * @brief The rules that turn the state of a control (hover, press, disabled, selected) into what it draws. Pure: it reads its arguments and nothing else, so a test pins every
-     * number and a button, a composed element and a component all agree on what a state looks like.
+     * @brief The rules that turn the state of a control (hover, press, disabled, selected; `checked` is read by the controls, not here) into what it draws. Pure: it reads its arguments and nothing
+     * else, so a test pins every number and a button, a composed element and a component all agree on what a state looks like.
      *
      * `ResolveBox` is the look of a box: the shifts of the fill and the gradient end, the border, shadow, glow and highlight (a box with no effect keeps only the fill shifts).
      * `ResolveTint` is the tint of a picture or a text colour with the same shifts. The colour of a state that is given replaces the derived one; the derived ones are lighter
@@ -22,6 +22,9 @@ namespace BECore {
             bool pressed = false;
             bool disabled = false;
             bool selected = false;
+            /// A toggle that is on. Only the components of the toggle itself read it (the switch puts its thumb at the on end); no `ResolveBox`, `ResolveTint` or text colour does, so the
+            /// plate of a toggle does not light up for being on. A state owner hands it down to its children like `hovered`
+            bool checked = false;
         };
 
         /// The authored fill of each state; a transparent colour means "derive it from the plain one"

@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- A variant sets the range of a slider: after the move the element has no maxValue. -->
+<node name="Sliders" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UISlider" name="Volume" bind="volume" action="SetVolume" width="300" height="56" />
+      </elements>
+      <variants>
+        <variant when="maxWidth:480">
+          <overrides>
+            <set element="Volume" maxValue="5" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

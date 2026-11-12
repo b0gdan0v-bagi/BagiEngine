@@ -222,7 +222,7 @@ def test_the_lists_of_the_step_are_the_reflected_fields_of_the_classes():
     assert "textEffects" in label and "textEffects" in text_component
     assert set(shared.TEXT_ATTRIBUTES) == (label - {"textEffects"}) | effects
     assert set(shared.TEXT_ATTRIBUTES) <= (text_component - {"textEffects"}) | effects
-    assert set(shared.CLICKER_ATTRIBUTES) == clicker
+    assert set(shared.CLICKER_ATTRIBUTES) == clicker - {"stateLook"}  # no button had it: only step 3 writes it, for a slider
     assert "text" in reflected("UITooltipComponent.h") and shared.TOOLTIP_ATTRIBUTE == "tooltip"
     # every field the button adds to its label is accounted for: a clicker field, the tooltip or the icon
     assert button == set(shared.CLICKER_ATTRIBUTES) | {shared.TOOLTIP_ATTRIBUTE} | set(shared.ICON_ATTRIBUTES)

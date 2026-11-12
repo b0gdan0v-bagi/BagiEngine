@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- A toggle with children: the row is made of a caption and a switch and has no room for them. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIToggle" name="Parent" bind="a" action="A" width="300" height="56" text="Parent">
+          <children>
+            <element type="UILabel" name="Badge" width="10" height="10" text="!" />
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

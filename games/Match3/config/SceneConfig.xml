@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<SceneManager contentVersion="3">
+<SceneManager contentVersion="4">
   <scenes>
     <!-- The first screen: a title and two buttons on a Screen canvas. Match3MenuComponent answers Match3Play and Match3Quit. -->
     <scene

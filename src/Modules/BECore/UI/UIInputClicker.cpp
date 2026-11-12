@@ -18,7 +18,7 @@ namespace BECore {
     }
 
     bool UIInputClicker::GivesStateLook() const {
-        return true;
+        return stateLook;
     }
 
 }  // namespace BECore

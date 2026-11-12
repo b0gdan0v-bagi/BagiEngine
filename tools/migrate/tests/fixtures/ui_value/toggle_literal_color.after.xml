@@ -1,0 +1,100 @@
+<?xml version="1.0"?>
+<!-- The class derived the off track (textColor at 0.35 alpha) and the thumb (textColor) from its own text colour; the switch child cannot see the caption, so the step writes them. A white textColor writes nothing; a given trackColor stays and only the thumb is derived. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIElement" name="Dark" x="10" y="10" width="300" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker"/>
+            <component type="UIToggleComponent" bind="a" action="A"/>
+          </components>
+          <children>
+            <element type="UIElement" name="DarkCaption" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="Dark" textColor="190,196,190,255" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
+              </components>
+            </element>
+            <element type="UIElement" name="DarkSwitch" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent" trackColor="190,196,190,89" thumbColor="190,196,190,255"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIElement" name="Translucent" x="10" y="80" width="300" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker"/>
+            <component type="UIToggleComponent" bind="b" action="B"/>
+          </components>
+          <children>
+            <element type="UIElement" name="TranslucentCaption" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="Translucent" textColor="#20406080" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
+              </components>
+            </element>
+            <element type="UIElement" name="TranslucentSwitch" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent" trackColor="32,64,96,44" thumbColor="32,64,96,128"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIElement" name="White" x="10" y="150" width="300" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker"/>
+            <component type="UIToggleComponent" bind="c" action="C"/>
+          </components>
+          <children>
+            <element type="UIElement" name="WhiteCaption" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="White" textColor="255,255,255,255" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
+              </components>
+            </element>
+            <element type="UIElement" name="WhiteSwitch" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIElement" name="Given" x="10" y="220" width="300" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker"/>
+            <component type="UIToggleComponent" bind="d" action="D"/>
+          </components>
+          <children>
+            <element type="UIElement" name="GivenCaption" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="Given" textColor="10,20,30,255" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
+              </components>
+            </element>
+            <element type="UIElement" name="GivenSwitch" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent" trackColor="1,2,3,255" thumbColor="10,20,30,255"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIElement" name="Transparent" x="10" y="290" width="300" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker"/>
+            <component type="UIToggleComponent" bind="e" action="E"/>
+          </components>
+          <children>
+            <element type="UIElement" name="TransparentCaption" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="Transparent" textColor="10,20,30,255" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
+              </components>
+            </element>
+            <element type="UIElement" name="TransparentSwitch" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent" trackColor="10,20,30,89" thumbColor="10,20,30,255"/>
+              </components>
+            </element>
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

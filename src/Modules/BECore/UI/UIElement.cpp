@@ -70,7 +70,8 @@ namespace BECore {
             return _inheritedState;
         }
         // A press that moved off the element is not shown as pressed: letting go there does nothing
-        return {hovered, pressed && hovered, IsDisabled(), selected};
+        const bool checked = std::any_of(components.begin(), components.end(), [this](const auto& component) { return component->IsChecked(*this); });
+        return {hovered, pressed && hovered, IsDisabled(), selected, checked};
     }
 
     bool UIElement::IsDisabled() const {

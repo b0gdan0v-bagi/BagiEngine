@@ -35,9 +35,12 @@ namespace BECore::Tests {
         // 56
         //   and 150 x 56 at x = 100, 252, y = 100), and Plain (100, 300, 80 x 40) is a button without a value.
         // "Values": 800 x 600 in window pixels. Sound is a UIToggle (100, 100, 300 x 56, `uiApiSound`, custom values "on" / "off"), Volume a UISlider (100, 200, 400 x 56, `uiApiVolume`, range 0..1
-        //   in steps of 0.1), Quiet a disabled UISlider (100, 400, 400 x 56), Loading a UIProgressBar (100, 300, 400 x 24, `uiApiLoad`, range 0..100).
+        //   in steps of 0.1), Quiet a disabled UISlider (100, 400, 400 x 56), Loading a UIProgressBar (100, 300, 400 x 24, `uiApiLoad`, range 0..100). The composed forms sit beside them: CSound a
+        //   toggle row (100, 500, 300 x 56; `uiApiCSound`, values "on" / "off", the caption child CSoundCaption and the switch child CSoundSwitch), CLocked a disabled one (520, 300, 240 x 56),
+        //   CVolume a slider (450, 100, 340 x 56; `uiApiCVolume`, range 0..1, steps of 0.1) and CQuiet a disabled one (450, 500, 300 x 56).
         // "Pick": 800 x 600 in window pixels. Level is a UIDropdown (100, 100, 240 x 56, `uiApiLevel`, action UIControlApiLevel, options 56 high: Easy, Normal, Hard and Locked, a
-        //   disabled option), Below (500, 200, 80 x 40) is a button the open list does not cover, Frozen (100, 450, 240 x 56) a disabled dropdown with one option.
+        //   disabled option), Below (500, 200, 80 x 40) is a button the open list does not cover, PickToggle (500, 300, 200 x 56) a composed toggle and PickSlide (500, 400, 200 x 56) a composed
+        //   slider, Frozen (100, 450, 240 x 56) a disabled dropdown with one option.
         // "Icons": 800 x 600 in window pixels. Gear is an icon button with a tooltip that holds a key and a variable, Quiet an icon button without a tooltip, Words a button with a caption only.
         // "Composed": 800 x 600 in window pixels, buttons made of components. Play (10, 10, 120 x 48) has a clicker, an image, a text and a tooltip, Dead (150, 10, 100 x 48) a disabled clicker and
         //   a text, Shade (10, 100, 100 x 40) a clicker with Cover (0, 90, 120 x 60) drawn over it, Wide (10, 200, 300 x 40) a clicker, Badge (300, 10, 48 x 48) an image and a tooltip but no clicker,
@@ -130,6 +133,46 @@ namespace BECore::Tests {
           <element type="UISlider" name="Volume" bind="uiApiVolume" action="UIControlApiVolume" minValue="0" maxValue="1" step="0.1" x="100" y="200" width="400" height="56"/>
           <element type="UIProgressBar" name="Loading" bind="uiApiLoad" minValue="0" maxValue="100" x="100" y="300" width="400" height="24"/>
           <element type="UISlider" name="Quiet" bind="uiApiQuiet" action="UIControlApiQuiet" disabled="true" x="100" y="400" width="400" height="56"/>
+          <element type="UIElement" name="CSound" x="100" y="500" width="300" height="56" color="30,30,30,255" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+            <components>
+              <component type="UIInputClicker"/>
+              <component type="UIToggleComponent" bind="uiApiCSound" action="UIControlApiCSound" onValue="on" offValue="off"/>
+            </components>
+            <children>
+              <element type="UIElement" name="CSoundCaption" flex="1" height="100%">
+                <components><component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false"/></components>
+              </element>
+              <element type="UIElement" name="CSoundSwitch" height="100%" aspectRatio="1.25">
+                <components><component type="UISwitchComponent"/></components>
+              </element>
+            </children>
+          </element>
+          <element type="UIElement" name="CLocked" x="520" y="300" width="240" height="56" color="30,30,30,255" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+            <components>
+              <component type="UIInputClicker" disabled="true"/>
+              <component type="UIToggleComponent" bind="uiApiCLocked" action="UIControlApiCLocked"/>
+            </components>
+            <children>
+              <element type="UIElement" name="CLockedCaption" flex="1" height="100%">
+                <components><component type="UITextComponent" text="Locked" verticalAlign="Center" wrap="false"/></components>
+              </element>
+              <element type="UIElement" name="CLockedSwitch" height="100%" aspectRatio="1.25">
+                <components><component type="UISwitchComponent"/></components>
+              </element>
+            </children>
+          </element>
+          <element type="UIElement" name="CVolume" x="450" y="100" width="340" height="56">
+            <components>
+              <component type="UIInputClicker" stateLook="false"/>
+              <component type="UISliderComponent" bind="uiApiCVolume" action="UIControlApiCVolume" minValue="0" maxValue="1" step="0.1"/>
+            </components>
+          </element>
+          <element type="UIElement" name="CQuiet" x="450" y="500" width="300" height="56">
+            <components>
+              <component type="UIInputClicker" stateLook="false" disabled="true"/>
+              <component type="UISliderComponent" bind="uiApiCQuiet" action="UIControlApiCQuiet"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -147,6 +190,26 @@ namespace BECore::Tests {
             </children>
           </element>
           <element type="UIButton" name="Below" x="500" y="200" width="80" height="40" text="Below" action="UIControlApiBelow" color="40,90,60,255"/>
+          <element type="UIElement" name="PickToggle" x="500" y="300" width="200" height="56" color="30,30,30,255" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+            <components>
+              <component type="UIInputClicker"/>
+              <component type="UIToggleComponent" action="UIControlApiPickToggle"/>
+            </components>
+            <children>
+              <element type="UIElement" name="PickToggleCaption" flex="1" height="100%">
+                <components><component type="UITextComponent" text="Toggle" verticalAlign="Center" wrap="false"/></components>
+              </element>
+              <element type="UIElement" name="PickToggleSwitch" height="100%" aspectRatio="1.25">
+                <components><component type="UISwitchComponent"/></components>
+              </element>
+            </children>
+          </element>
+          <element type="UIElement" name="PickSlide" x="500" y="400" width="200" height="56">
+            <components>
+              <component type="UIInputClicker" stateLook="false"/>
+              <component type="UISliderComponent" action="UIControlApiPickSlide"/>
+            </components>
+          </element>
           <element type="UIDropdown" name="Frozen" bind="uiApiFrozen" action="UIControlApiFrozen" disabled="true" x="100" y="450" width="240" height="56" optionHeight="56" color="30,30,30,255">
             <children>
               <element type="UIButton" name="Only" text="Only" value="only" color="70,70,100,255"/>
@@ -1497,6 +1560,180 @@ namespace BECore::Tests {
         EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "UIControlApiQuiet");
         EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
         EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    // ---- the composed toggle and slider ------------------------------------------------------------------------------------
+
+    TEST_F(UIControlApiTest, ATreeShowsTheFieldsOfAComposedToggleAndSliderAsOfTheClasses) {
+        CoreManager::GetUIVars().Set("uiApiCSound"_intern, "on");
+        CoreManager::GetUIVars().Set("uiApiCVolume"_intern, "0.3");
+        Show("Values");
+
+        const Json tree = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(tree)) << ErrorMessage(tree);
+        const Json* canvas = FindCanvas(*Member(tree, "result"), "Settings");
+        ASSERT_NE(canvas, nullptr);
+
+        const Json* sound = FindElement(*canvas, "CSound");
+        ASSERT_NE(sound, nullptr);
+        EXPECT_EQ(StringMember(*sound, "type"), "UIElement");
+        EXPECT_EQ(StringMember(*sound, "bind"), "uiApiCSound");
+        EXPECT_EQ(StringMember(*sound, "onValue"), "on");
+        EXPECT_EQ(StringMember(*sound, "offValue"), "off");
+        EXPECT_TRUE(BoolMember(*sound, "checked"));
+        EXPECT_EQ(StringMember(*sound, "action"), "UIControlApiCSound") << "the toggle's action replaces the empty one of the clicker";
+        EXPECT_FALSE(BoolMember(*sound, "disabled"));
+        EXPECT_EQ(StringMember(*sound, "text"), "Sound") << "the caption child";
+        EXPECT_TRUE(BoolMember(*sound, "interactive"));
+        ExpectRect(Member(*sound, "rect"), 100.0f, 500.0f, 300.0f, 56.0f);
+        const Json* types = Member(*sound, "components");
+        ASSERT_NE(types, nullptr);
+        EXPECT_EQ(types->size(), 2u);
+
+        const Json* locked = FindElement(*canvas, "CLocked");
+        ASSERT_NE(locked, nullptr);
+        EXPECT_TRUE(BoolMember(*locked, "disabled"));
+        EXPECT_FALSE(BoolMember(*locked, "checked"));
+        EXPECT_EQ(StringMember(*locked, "onValue"), "true") << "the defaults of the component";
+        EXPECT_EQ(StringMember(*locked, "offValue"), "false");
+
+        const Json* volume = FindElement(*canvas, "CVolume");
+        ASSERT_NE(volume, nullptr);
+        EXPECT_EQ(StringMember(*volume, "type"), "UIElement");
+        EXPECT_EQ(StringMember(*volume, "bind"), "uiApiCVolume");
+        EXPECT_NEAR(NumberMember(*volume, "minValue"), 0.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "maxValue"), 1.0, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "step"), 0.1, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "value"), 0.3, kTolerance);
+        EXPECT_NEAR(NumberMember(*volume, "fraction"), 0.3, kTolerance);
+        EXPECT_EQ(StringMember(*volume, "action"), "UIControlApiCVolume");
+        EXPECT_FALSE(BoolMember(*volume, "disabled"));
+        EXPECT_EQ(Member(*volume, "text"), nullptr);
+        EXPECT_TRUE(BoolMember(*volume, "interactive"));
+        EXPECT_TRUE(BoolMember(*FindElement(*canvas, "CQuiet"), "disabled"));
+    }
+
+    TEST_F(UIControlApiTest, TheComposedValuesFollowTheVariablesBetweenTwoTreeCallsWithNoDraw) {
+        Show("Values");
+        const Json before = Call("ui_tree");
+        ASSERT_TRUE(IsOk(before));
+        const Json* canvas = FindCanvas(*Member(before, "result"), "Settings");
+        EXPECT_FALSE(BoolMember(*FindElement(*canvas, "CSound"), "checked"));
+        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "CVolume"), "value"), 0.0, kTolerance);
+
+        CoreManager::GetUIVars().Set("uiApiCSound"_intern, "on");
+        CoreManager::GetUIVars().Set("uiApiCVolume"_intern, "0.7");
+        const Json after = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(after));
+        canvas = FindCanvas(*Member(after, "result"), "Settings");
+        EXPECT_TRUE(BoolMember(*FindElement(*canvas, "CSound"), "checked"));
+        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "CVolume"), "value"), 0.7, kTolerance);
+        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "CVolume"), "fraction"), 0.7, kTolerance);
+    }
+
+    TEST_F(UIControlApiTest, AClickOnAComposedToggleAnswersWithTheValueItAsksForAndTheListenerGetsIt) {
+        Show("Values");
+        Recorder recorder;
+
+        const Json turnOn = Call("ui_click", Click("CSound"));
+
+        ASSERT_TRUE(IsOk(turnOn)) << ErrorMessage(turnOn);
+        EXPECT_EQ(StringMember(*Member(turnOn, "result"), "action"), "UIControlApiCSound");
+        EXPECT_EQ(StringMember(*Member(turnOn, "result"), "value"), "on");
+        EXPECT_EQ(recorder.Count("UIControlApiCSound"), 1);
+        EXPECT_EQ(recorder.LastValue(), "on");
+
+        CoreManager::GetUIVars().Set("uiApiCSound"_intern, "on");
+        const Json turnOff = Call("ui_click", Click("CSound"));
+
+        ASSERT_TRUE(IsOk(turnOff));
+        EXPECT_EQ(StringMember(*Member(turnOff, "result"), "value"), "off");
+        EXPECT_EQ(recorder.Count("UIControlApiCSound"), 2);
+        EXPECT_EQ(recorder.LastValue(), "off");
+
+        const Json tree = Call("ui_tree");
+        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Settings"), "CSound"), "checked")) << "a click changes nothing by itself";
+    }
+
+    TEST_F(UIControlApiTest, TheCaptionAndTheSwitchOfAComposedToggleBothClickTheRow) {
+        Show("Values");
+        Recorder recorder;
+
+        // The row is the target the control API names; a press on the caption's or the switch's middle lands on the row's clicker and toggles
+        CoreManager::GetUIInput().DispatchMouseButtonDown(Button(120.0f, 528.0f, true));
+        CoreManager::GetUIInput().DispatchMouseButtonUp(Button(120.0f, 528.0f, false));
+        CoreManager::GetUIInput().DispatchMouseButtonDown(Button(380.0f, 528.0f, true));
+        CoreManager::GetUIInput().DispatchMouseButtonUp(Button(380.0f, 528.0f, false));
+
+        EXPECT_EQ(recorder.Count("UIControlApiCSound"), 2);
+        EXPECT_EQ(recorder.LastValue(), "on");
+    }
+
+    TEST_F(UIControlApiTest, ADisabledComposedToggleTakesTheClickAndEmitsNothing) {
+        Show("Values");
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("CLocked"));
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
+        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "UIControlApiCLocked");
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, AClickOnAComposedSliderWithAtAsksForTheMinimumTheMiddleAndTheMaximum) {
+        Show("Values");
+        Recorder recorder;
+        const struct {
+            double at;
+            const char* value;
+        } cases[] = {{0.0, "0"}, {0.5, "0.5"}, {1.0, "1"}, {0.25, "0.2"}};
+
+        for (const auto& item : cases) {
+            Json params = Click("CVolume");
+            params["at"] = item.at;
+            const Json response = Call("ui_click", params);
+
+            ASSERT_TRUE(IsOk(response)) << "at " << item.at << ": " << ErrorMessage(response);
+            const Json& result = *Member(response, "result");
+            EXPECT_TRUE(BoolMember(result, "consumed")) << "at " << item.at;
+            EXPECT_EQ(StringMember(result, "action"), "UIControlApiCVolume");
+            EXPECT_EQ(StringMember(result, "value"), item.value) << "at " << item.at;
+            EXPECT_EQ(recorder.LastValue(), item.value) << "at " << item.at;
+        }
+        EXPECT_EQ(recorder.Count("UIControlApiCVolume"), 4);
+    }
+
+    TEST_F(UIControlApiTest, ADisabledComposedSliderTakesThePressAndAnswersWithNothingEmitted) {
+        Show("Values");
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("CQuiet"));
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
+        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "UIControlApiCQuiet");
+        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, AClickElsewhereWhileTheListIsOpenAnswersNothingForAComposedToggleAndSlider) {
+        for (const char* name : {"PickToggle", "PickSlide"}) {
+            Show("Pick");
+            ASSERT_TRUE(IsOk(Call("ui_click", Click("Level"))));
+            Show("Pick");
+            Recorder recorder;
+
+            const Json clicked = Call("ui_click", Click(name));
+
+            ASSERT_TRUE(IsOk(clicked)) << name << ": " << ErrorMessage(clicked);
+            EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed")) << name;
+            EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "") << name;
+            EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "") << name;
+            EXPECT_EQ(recorder.Total(), 0u) << name << ": the press only closed the list";
+        }
     }
 
     TEST_F(UIControlApiTest, AProgressBarCannotBeClicked) {

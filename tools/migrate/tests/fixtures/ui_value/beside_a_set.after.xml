@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<!-- A variant that sets attributes the controls keep (size, position) is not a reason to refuse. A toggle inside a stack, and the elements next to it, stay as they are. -->
+<node name="Row" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIStack" name="Plate" x="10" y="10" width="400" height="200" direction="Vertical" spacing="8">
+          <children>
+            <element type="UILabel" name="Title" height="30" text="Options" />
+            <element type="UIElement" name="Sound" width="360" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+              <components>
+                <component type="UIInputClicker"/>
+                <component type="UIToggleComponent" bind="soundOn" action="SetSound"/>
+              </components>
+              <children>
+                <element type="UIElement" name="SoundCaption" flex="1" height="100%">
+                  <components>
+                    <component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
+                  </components>
+                </element>
+                <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25">
+                  <components>
+                    <component type="UISwitchComponent"/>
+                  </components>
+                </element>
+              </children>
+            </element>
+            <element type="UIElement" name="Volume" width="360" height="56">
+              <components>
+                <component type="UIInputClicker" stateLook="false"/>
+                <component type="UISliderComponent" bind="volume" action="SetVolume"/>
+              </components>
+            </element>
+          </children>
+        </element>
+      </elements>
+      <variants>
+        <variant when="maxWidth:480">
+          <overrides>
+            <set element="Sound" height="68" width="300" />
+            <set element="Volume" height="68" />
+            <set element="Plate" spacing="4" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- A toggle with every attribute that is not a text colour: disabled, onValue and offValue, the round shape, the three colours of the switch and a caption with its own look. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIToggle" name="Declare" visible="false" bind="declareNext" onValue="on" offValue="off" disabled="true" action="Declare" x="10" y="10" width="104" height="56" text="{#button.Declare}" font="fonts/A.ttf" fontFamily="Sans" fontWeight="700" align="Center" overflow="AutoFit" lineSpacing="1.2" minFontSize="12" textOutline="1,0,0,0,255" textShadow="1,1,#00000080" verticalAlign="Top" wrap="true" fontSize="22" partShape="Round" trackColor="30,30,30,255" fillColor="20,200,90,255" thumbColor="250,250,250,255" color="70,70,100,255" blocksInput="true" flex="1" />
+      </elements>
+    </component>
+  </components>
+</node>

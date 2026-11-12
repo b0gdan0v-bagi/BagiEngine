@@ -2,6 +2,7 @@
 
 #include <BECore/UI/UICssParser.h>
 #include <BECore/UI/UIHtmlParser.h>
+#include <BECore/UI/UISwitchComponent.h>
 #include <BECore/UI/UIValueText.h>
 #include <BECore/UI/UIWebText.h>
 #include <EASTL/hash_set.h>
@@ -32,7 +33,7 @@ namespace BECore {
         constexpr eastl::string_view ClickerKeys[] = {"action", "value", "disabled"};
         constexpr eastl::string_view IconKeys[] = {"icon", "iconTint"};
         constexpr eastl::string_view StackKeys[] = {"layout", "direction", "spacing", "padding", "crossAlign", "wrapChildren"};
-        // What a `UIButton` does with its text and a `UITextComponent` does not
+        // What a `UIButton` (or a `UIToggle`) does with its text and a `UITextComponent` does not
         struct ButtonTextDefault {
             eastl::string_view key;
             eastl::string_view value;
@@ -44,6 +45,16 @@ namespace BECore {
         constexpr const char* IconGap = "6";
         constexpr eastl::string_view IconSuffix = "Icon";
         constexpr eastl::string_view CaptionSuffix = "Caption";
+
+        // The composed toggle and slider (`ui-controls.md`, "Components"): the attributes of their components and the row of a toggle, which `tools/migrate/steps/_ui_value.py` writes the same
+        constexpr eastl::string_view ToggleKeys[] = {"bind", "action", "onValue", "offValue"};
+        constexpr eastl::string_view SwitchKeys[] = {"trackColor", "fillColor", "thumbColor", "partShape"};  // the switch of a toggle and the slider have them under the same names
+        constexpr eastl::string_view SliderKeys[] = {"bind", "action", "minValue", "maxValue", "step"};
+        constexpr ButtonTextDefault ToggleTextDefaults[] = {{"verticalAlign", "Center"}, {"wrap", "false"}};  // what a `UIToggle` did with its text
+        constexpr eastl::string_view SwitchSuffix = "Switch";
+        constexpr const char* FadeWhenDisabledKey = "fadeWhenDisabled";  ///< the caption of a toggle fades while it is disabled, as `UIToggle` drew it
+        constexpr const char* ToggleGap = "8";                           ///< the air between the caption and the switch (`UIToggle::kCaptionGap`)
+        constexpr Color CaptionWhite{255, 255, 255, 255};                ///< the caption colour the switch component's own fallbacks assume
 
         template <size_t N>
         bool IsKeyOf(const eastl::string_view (&keys)[N], eastl::string_view key) {
@@ -63,20 +74,18 @@ namespace BECore {
                     return "UIImage";
                 case WebKind::Segmented:
                     return "UISegmented";
-                case WebKind::Toggle:
-                    return "UIToggle";
-                case WebKind::Slider:
-                    return "UISlider";
                 case WebKind::Progress:
                     return "UIProgressBar";
                 case WebKind::Group:
                 case WebKind::Button:  // written by `WriteButton`, a composed `UIElement`
+                case WebKind::Toggle:  // by `WriteToggle`
+                case WebKind::Slider:  // by `WriteSlider`
                     break;
             }
             return "UIElement";
         }
 
-        /// A kind whose caption is its text (a toggle's is the label it is made of)
+        /// A kind whose caption is its text (a toggle's is the text of its caption child)
         bool IsTextKind(WebKind kind) {
             return kind == WebKind::Label || kind == WebKind::Button || kind == WebKind::Toggle;
         }
@@ -1586,6 +1595,9 @@ namespace BECore {
                         break;
                 }
                 AddWidgetColors(attrs, r, node.kind, report);
+                if (node.kind == WebKind::Toggle) {
+                    AddDerivedSwitchColors(attrs, r, report);
+                }
                 return attrs;
             }
 
@@ -1685,6 +1697,33 @@ namespace BECore {
                     } else {
                         Note(report, "-be-thumb-color applies to a toggle or slider only (a progress bar has no thumb)");
                     }
+                }
+            }
+
+            /// The off track and the thumb of a toggle followed the colour of its own text; the switch is a child that cannot see the caption, so the colours are written when the text
+            /// is not white (`tools/migrate/steps/_ui_value.py` does the same). A colour the author gave stays; a theme token cannot be given an alpha, so it is the thumb only
+            static void AddDerivedSwitchColors(Attrs& attrs, const Resolved& r, UIWebReport* report) {
+                if (!r.textColor) {
+                    return;
+                }
+                const auto given = [](const std::optional<UIWebText::WebColor>& color) { return color && color->IsVisible(); };
+                if (r.textColor->IsToken()) {
+                    if (!given(r.trackColor)) {
+                        Note(report, "a toggle whose text color is a theme token needs -be-track-color: its off track cannot be derived from a token");
+                    }
+                    if (!given(r.thumbColor)) {
+                        attrs.Set("thumbColor", UIWebText::FormatWebColor(*r.textColor));
+                    }
+                    return;
+                }
+                if (ColorsEqual(*r.textColor, CaptionWhite)) {
+                    return;
+                }
+                if (!given(r.trackColor)) {
+                    attrs.Set("trackColor", UIText::FormatColor(WithAlpha(*r.textColor, UISwitchComponent::kOffTrackAlpha)));
+                }
+                if (!given(r.thumbColor)) {
+                    attrs.Set("thumbColor", UIWebText::FormatWebColor(*r.textColor));
                 }
             }
 
@@ -1991,8 +2030,10 @@ namespace BECore {
                 }
             }
 
-            /// The text of a button as a `UITextComponent`, with the centring a `UIButton` has by itself; @p colorOnly writes the colour alone (the bar of a selected icon-only button takes it)
-            static void AddTextComponent(pugi::xml_node components, const Attrs& attrs, bool colorOnly) {
+            /// The text of a control as a `UITextComponent`, with what the class had by itself (@p defaults: a `UIButton` centred its text, a `UIToggle` centred it vertically and did not wrap);
+            /// @p colorOnly writes the colour alone (the bar of a selected icon-only button takes it)
+            template <size_t N>
+            static void AddTextComponent(pugi::xml_node components, const Attrs& attrs, bool colorOnly, const ButtonTextDefault (&defaults)[N]) {
                 if (colorOnly && attrs.Find("textColor") == nullptr) {
                     return;
                 }
@@ -2006,11 +2047,15 @@ namespace BECore {
                         AddComponentAttribute(component, attrs, key);
                         continue;
                     }
-                    const auto* centring = std::find_if(std::begin(ButtonTextDefaults), std::end(ButtonTextDefaults), [&](const ButtonTextDefault& entry) { return entry.key == key; });
-                    if (!colorOnly && centring != std::end(ButtonTextDefaults)) {
+                    const auto* centring = std::find_if(std::begin(defaults), std::end(defaults), [&](const ButtonTextDefault& entry) { return entry.key == key; });
+                    if (!colorOnly && centring != std::end(defaults)) {
                         component.append_attribute(eastl::string(key).c_str()) = eastl::string(centring->value).c_str();
                     }
                 }
+            }
+
+            static void AddTextComponent(pugi::xml_node components, const Attrs& attrs, bool colorOnly) {
+                AddTextComponent(components, attrs, colorOnly, ButtonTextDefaults);
             }
 
             /// One child element that holds one component; its name is the button's with @p suffix, or none when the button has none
@@ -2109,10 +2154,110 @@ namespace BECore {
                 }
             }
 
+            /// A toggle as a row: an element with a clicker (`disabled`) and the toggle component (`bind`, `action`, `onValue`, `offValue`), laid out as a horizontal stack of the caption and the
+            /// switch, each a child. `ui-controls.md` ("Components") has the form; `tools/migrate/steps/s0003_ui_toggle_slider_to_components.py` writes the same one
+            void WriteToggle(pugi::xml_node parent, int index) {
+                const WebNode& node = _nodes[index];
+                const Attrs& attrs = _baseAttrs[index];
+
+                pugi::xml_node element = parent.append_child("element");
+                element.append_attribute("type") = TypeName(WebKind::Group);
+                if (!node.name.empty()) {
+                    element.append_attribute("name") = node.name.c_str();
+                }
+                bool ownStack = false;
+                for (const auto& [key, value] : attrs.Entries()) {
+                    const bool moved = IsKeyOf(TextComponentKeys, key) || IsKeyOf(ToggleKeys, key) || IsKeyOf(SwitchKeys, key) || key == "disabled" || key == "fontSize";
+                    const bool stack = IsKeyOf(StackKeys, key);  // the row is a stack of its own
+                    ownStack |= stack;
+                    if (!moved && !stack) {
+                        element.append_attribute(key.c_str()) = value.c_str();
+                    }
+                }
+                if (ownStack) {
+                    _report.AddOnce(HtmlSource, _document.nodes[node.html].line,
+                                    "a toggle lays its caption and switch out itself: display: flex, gap, padding, flex-direction, flex-wrap and align-items on it are left out");
+                }
+                element.append_attribute("layout") = "Stack";
+                element.append_attribute("direction") = "Horizontal";
+                element.append_attribute("spacing") = ToggleGap;
+                element.append_attribute("crossAlign") = "Center";
+                ++_report.elements;
+
+                pugi::xml_node components = element.append_child("components");
+                pugi::xml_node clicker = components.append_child("component");
+                clicker.append_attribute("type") = "UIInputClicker";
+                AddComponentAttribute(clicker, attrs, "disabled");
+                pugi::xml_node toggle = components.append_child("component");
+                toggle.append_attribute("type") = "UIToggleComponent";
+                for (const eastl::string_view key : ToggleKeys) {
+                    AddComponentAttribute(toggle, attrs, key);
+                }
+
+                pugi::xml_node children = element.append_child("children");
+                pugi::xml_node caption = AppendPartChild(children, node, CaptionSuffix);
+                caption.append_attribute("flex") = "1";
+                caption.append_attribute("height") = "100%";
+                if (const eastl::string* fontSize = attrs.Find("fontSize")) {
+                    caption.append_attribute("fontSize") = fontSize->c_str();
+                }
+                pugi::xml_node captionComponents = caption.append_child("components");
+                AddTextComponent(captionComponents, attrs, false, ToggleTextDefaults);
+                captionComponents.last_child().append_attribute(FadeWhenDisabledKey) = "true";
+                pugi::xml_node track = AppendPartChild(children, node, SwitchSuffix);
+                track.append_attribute("height") = "100%";
+                track.append_attribute("aspectRatio") = Number(UISwitchComponent::kAreaAspect).c_str();
+                pugi::xml_node look = track.append_child("components").append_child("component");
+                look.append_attribute("type") = "UISwitchComponent";
+                for (const eastl::string_view key : SwitchKeys) {
+                    AddComponentAttribute(look, attrs, key);
+                }
+            }
+
+            /// A slider as one element with a clicker that leaves its plate still (`disabled`) and the slider component. The same form as the step
+            void WriteSlider(pugi::xml_node parent, int index) {
+                const WebNode& node = _nodes[index];
+                const Attrs& attrs = _baseAttrs[index];
+
+                pugi::xml_node element = parent.append_child("element");
+                element.append_attribute("type") = TypeName(WebKind::Group);
+                if (!node.name.empty()) {
+                    element.append_attribute("name") = node.name.c_str();
+                }
+                for (const auto& [key, value] : attrs.Entries()) {
+                    if (!IsKeyOf(SliderKeys, key) && !IsKeyOf(SwitchKeys, key) && key != "disabled") {
+                        element.append_attribute(key.c_str()) = value.c_str();
+                    }
+                }
+                ++_report.elements;
+
+                pugi::xml_node components = element.append_child("components");
+                pugi::xml_node clicker = components.append_child("component");
+                clicker.append_attribute("type") = "UIInputClicker";
+                clicker.append_attribute("stateLook") = "false";
+                AddComponentAttribute(clicker, attrs, "disabled");
+                pugi::xml_node slider = components.append_child("component");
+                slider.append_attribute("type") = "UISliderComponent";
+                for (const eastl::string_view key : SliderKeys) {
+                    AddComponentAttribute(slider, attrs, key);
+                }
+                for (const eastl::string_view key : SwitchKeys) {
+                    AddComponentAttribute(slider, attrs, key);
+                }
+            }
+
             void WriteNode(pugi::xml_node parent, int index) {
                 const WebNode& node = _nodes[index];
                 if (node.kind == WebKind::Button) {
                     WriteButton(parent, index);
+                    return;
+                }
+                if (node.kind == WebKind::Toggle) {
+                    WriteToggle(parent, index);
+                    return;
+                }
+                if (node.kind == WebKind::Slider) {
+                    WriteSlider(parent, index);
                     return;
                 }
                 pugi::xml_node element = parent.append_child("element");
@@ -2162,8 +2307,8 @@ namespace BECore {
                         for (const Override& entry : variant.overrides) {
                             pugi::xml_node set = overrides.append_child("set");
                             set.append_attribute("element") = _nodes[entry.node].name.c_str();
-                            // The font size of an icon-left button is the caption's
-                            const bool captionHolds = IsIconLeft(entry.node);
+                            // The font size of an icon-left button and of a toggle is the caption's
+                            const bool captionHolds = IsIconLeft(entry.node) || _nodes[entry.node].kind == WebKind::Toggle;
                             pugi::xml_node captionSet;
                             for (const auto& [key, value] : entry.values) {
                                 if (captionHolds && key == "fontSize") {

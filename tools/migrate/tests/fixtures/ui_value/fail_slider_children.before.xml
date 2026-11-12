@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- A slider with <children>: write the composed form by hand. -->
+<node name="Sliders" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UISlider" name="Volume" bind="volume" action="SetVolume" width="300" height="56">
+          <children>
+            <element type="UILabel" name="Value" width="40" height="20" text="0" />
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

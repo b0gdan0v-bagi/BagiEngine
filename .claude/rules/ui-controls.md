@@ -75,29 +75,31 @@ Each derives from `UIElement`, draws itself in `DrawSelf` in canvas units; `colo
 | `UIPanel` | `sprite`, `sliceBorder`, `spriteTint` | fill then sprite, nine-sliced with `sliceBorder`; `blocksInput` by default |
 | `UIImage` | `sprite`, `tint`, `stretch` | sprite fitted, centered, proportional |
 | `UILabel` | `text`, `font` (a file path, wins), `fontFamily` + `fontWeight` (a face of the `families` table of `TextConfig.xml`; the layout check measures with it), `textColor`, `align`, `verticalAlign`, `overflow` (`Ellipsis` default, `Clip`, `AutoFit`), `wrap`, `lineSpacing`, `minFontSize`, `textOutline` (`width,color`), `textShadow` (`offsetX,offsetY,color`) | text at `fontSize` (24 when 0) x canvas scale in whole pixels. The outline and the hard shadow are UI units x scale, paint only (never measured, cut by `Clip`); every control that draws its caption through `UILabel::DrawText` has them, faded with a disabled caption |
-| `UIButton` | (**old content only**: a button is the components below and `tools/migrate` moves the old file; no group needs a `UIButton` any more, a group still accepts one until the class is removed) `action`, `value`, `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, `disabled`, `icon`, `iconTint`, `iconPlacement`, `iconSize`, `tooltip` | a click emits `ActionEvent(action, value)`; state colors derived when transparent; `selected` adds a bar so selection is not colour alone; disabled still consumes the click; the states shift the box too. `icon` (a sprite name) alone in the rect, or `Left` / `Above` the caption (`GetParts`; `CheckContent` measures the caption in what the icon leaves); tinted by `iconTint` or `textColor`, shifted by hover / press / disabled (`GetCurrentIconColor`); the rect stays the touch target. `tooltip` is held here and shown by the canvas |
+| `UIButton` | (**old content only**: a button is the components below and `tools/migrate` moves the old file; no group needs a `UIButton` any more, a group still accepts one until the class is removed) `action`, `value`, `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, `disabled`, `icon`, `iconTint`, `iconPlacement`, `iconSize`, `tooltip` | a click emits `ActionEvent(action, value)`; state colors derived when transparent; `selected` adds a bar so selection is not colour alone; disabled still consumes the click; the states shift the box too. `icon` alone in the rect, or `Left` / `Above` the caption (`GetParts`), tinted by `iconTint` or `textColor`; the rect stays the touch target. `tooltip` is shown by the canvas |
 | `UIStack` | — | a stack container |
 | `UISegmented` | `bind`, `disabled` | radio group over direct children that are options (`UIChoice::IsOption`: an element with a `UIInputClicker`, or an old `UIButton`): the segment whose `value` equals the variable is `selected`. **Every segment needs an explicit `height`**, also with `flex` (else it is a 0-high rect: not drawn, not clickable, skipped by the validator) |
-| `UIToggle` | `bind`, `action`, `onValue`, `offValue`, `disabled`, track / fill / thumb colors, `partShape` | a caption with a switch at the right; on when the variable equals `onValue`; a click emits the opposite value. `partShape="Round"`: pill track, round thumb; its own plate is the `box` of any element |
+| `UIToggle` | (**old content only**: step 3 of `tools/migrate` writes the toggle row of "Components"; the class owns its `disabled`) `bind`, `action`, `onValue`, `offValue`, `disabled`, colors, `partShape` | a caption with a switch at the right; on when the variable equals `onValue`; a click emits the opposite value; `partShape="Round"`: pill track, round thumb |
 | `UIDropdown` | `bind`, `action`, `disabled`, `optionHeight`, `arrowColor` | a `UILabel` header (the box of any element, with the shifts of a button) over direct options (a popup; elements with a `UIInputClicker`, or old `UIButton`s): the header shows the `text` of the option whose `value` equals the variable (else its own `text`); a click on an option emits `ActionEvent(action, option value)` and closes the list. **Every option needs a height**: its own, else `optionHeight`, else the header's. The list opens under the header, above when it does not fit, else shifted into `contentBounds`; no scrolling |
 | `UIProgressBar` | `bind`, `minValue`, `maxValue`, track / fill colors, `partShape` | read-only fraction of the width; anything that is not a number in range is 0; takes no input. `partShape="Round"`: pill track and fill |
-| `UISlider` | `bind`, `action`, `minValue`, `maxValue`, `step`, `disabled`, colors, `partShape` | horizontal; press and drag emit the value text under the pointer (only when the text changes), snapped to `step`. The thumb is as high as the element, so height decides the touch check. `partShape="Round"`: pill track and fill, round thumb |
+| `UISlider` | (**old content only**: step 3 writes the `UISliderComponent` form) `bind`, `action`, `minValue`, `maxValue`, `step`, `disabled`, colors, `partShape` | horizontal; press and drag emit the value text under the pointer (only when it changes), snapped to `step`. The thumb is as high as the element, so height decides the touch check. `Round`: pill track and fill, round thumb |
 
 - **A tooltip** is the `tooltip` text of an old `UIButton` or a `UITooltipComponent`, shown by its canvas (`UITooltip`, not an element of the tree): a mouse resting on the button `kHoverDelay`, or a finger held on it `kLongPress`, which is then no click; it may hold `{#key}` and `{var}`. Give an icon-only button one so it says what it does.
-- **A choice panel**: one `UISegmented` per choice in a modal canvas started hidden (`visible="false" modal="true"`): a dim, a plate, a row per choice, an OK button; a HUD button opens it with `SetVisibleByName`. A hidden canvas is not drawn, so its groups read the variables on the first draw after it is shown. Five values and up, or long words: a `UIDropdown`.
-- **Adding a control:** derive from `UIElement` (or `UILabel`), `BE_CLASS` with `BE_REFLECT_FIELD`s, override `DrawSelf`, include the `.gen.hpp`; add it to `UIControlsTest`'s round trip.
-- **Trying the widgets live:** no shipped scene uses the toggle, slider, progress bar or strings: copy `kSettingsXml` and `kStringsXml` of the tests into scratch `config/` files, run `--control --headless --manual-clock`, drive with `ui_tree`, `ui_click`, `step`, `screenshot`.
+- **A choice panel**: one `UISegmented` per choice in a modal canvas started hidden (`visible="false" modal="true"`): a dim, a plate, a row per choice, an OK button; a HUD button opens it with `SetVisibleByName`. Its groups read the variables on the first draw after it is shown. Five values and up, or long words: a `UIDropdown`.
+- **Adding a control:** a `UIComponent` (`BE_CLASS`, `DrawSelf(renderer, owner)`, include the `.gen.hpp`), added to `UIComponentTest`'s round trip; a class is for old content only.
 
 ## Components
 
-A button is no class but a set of components on one `UIElement` (`<components><component type="..."/></components>`, `UIElement::components`, factory base `UIComponent`). Icon-only, captioned and icon-left buttons are all this. The HTML compiler (`ui-web.md`) and `tools/migrate` (steps 1 and 2) write the forms below; new content is written in them.
+A button is no class but a set of components on one `UIElement` (`<components><component type="..."/></components>`, `UIElement::components`, factory base `UIComponent`). Icon-only, captioned and icon-left buttons are all this. The HTML compiler (`ui-web.md`) and `tools/migrate` (steps 1 to 3) write the forms below; new content is written in them.
 
 | Component | Fields | Does |
 |-----------|--------|------|
 | `UIImageComponent` | `sprite`, `tint`, `hoverTint`, `pressedTint`, `disabledTint`, `stretch` | the sprite fitted and centred in the owner's rect (`UISprite::FitInto`); a transparent state tint is derived (`UIStateLook::ResolveTint`) |
-| `UITextComponent` | the text fields of `UILabel` under the same names, `hoverTextColor`, `pressedTextColor`, `disabledTextColor`, `selectedTextColor` | the text in the owner's rect, at the owner's `fontSize`; a transparent state colour leaves `textColor`; measured by `CheckContent` |
-| `UIInputClicker` | `action`, `value`, `disabled` | a click emits `ActionEvent(action, value)`; makes the element `IsInteractive()` (hit target, touch size, `ui_click`) and gives its box the state look; a disabled one still takes the click |
+| `UITextComponent` | the text fields of `UILabel` under the same names, `hoverTextColor`, `pressedTextColor`, `disabledTextColor`, `selectedTextColor`, `fadeWhenDisabled` (the caption of a toggle: half alpha while disabled) | the text in the owner's rect, at the owner's `fontSize`; a transparent state colour leaves `textColor`; measured by `CheckContent` |
+| `UIInputClicker` | `action`, `value`, `disabled`, `stateLook` | a click emits `ActionEvent(action, value)`; makes the element `IsInteractive()` (hit target, touch size, `ui_click`) and gives its box the state look (`stateLook="false"`: the box stays still); a disabled one still takes the click |
 | `UITooltipComponent` | `text` | the tooltip of a hit-testable element (a clicker or `blocksInput`), not only of a clicker |
+| `UIToggleComponent` | `bind`, `action`, `onValue`, `offValue` | on the row of a toggle: on when the variable equals `onValue` (`IsOn()`, the row's state `checked`); a click emits the opposite value (its own `action`: the clicker's stays empty) |
+| `UISwitchComponent` | `trackColor`, `fillColor`, `thumbColor`, `partShape` | the track and the thumb in the rect of its element, on / off from the row's `checked`; the element is `height="100%" aspectRatio="1.25"` (`kAreaAspect`) |
+| `UISliderComponent` | `bind`, `action`, `minValue`, `maxValue`, `step`, colors, `partShape` | a whole slider on one element with a clicker `stateLook="false"` (the plate stays still): press and drag emit the value text under the pointer |
 
 - **One component of each type per element:** `GetComponent<T>()` is the first, `AddComponent<T>()` returns the existing one, a second in a file is logged and dropped.
 - **Order:** the element draws its box, then its components in list order, then its children. `OnClick` / `OnPress` / `OnDrag` and `CheckContent` reach the components with the owner as the argument; a subclass that overrides them is unchanged.
@@ -128,6 +130,21 @@ A button is no class but a set of components on one `UIElement` (`<components><c
   </children>
 </element>
 ```
+
+A toggle is a row of a caption and a switch, the whole row the touch target; a slider is one element. Both carry their own `action`; the clicker is there for `disabled`, hover and press:
+
+```xml
+<element type="UIElement" name="Sound" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+  <components><component type="UIInputClicker"/><component type="UIToggleComponent" bind="soundOn" action="SetSound"/></components>
+  <children>
+    <element type="UIElement" name="SoundCaption" flex="1" height="100%"><components><component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components></element>
+    <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25"><components><component type="UISwitchComponent"/></components></element>
+  </children>
+</element>
+<element type="UIElement" name="Volume" height="56"><components><component type="UIInputClicker" stateLook="false"/><component type="UISliderComponent" bind="vol" action="SetVolume" maxValue="10" step="0.5"/></components></element>
+```
+
+A caption colour other than white comes with an explicit `trackColor` / `thumbColor` (the switch cannot see the caption; the step and the compiler write them). `State::checked` reaches the row's children like `hovered`; no box or tint reads it.
 
 ## Variables and strings
 

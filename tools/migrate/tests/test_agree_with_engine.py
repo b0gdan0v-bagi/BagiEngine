@@ -2,6 +2,9 @@
 The two languages cannot share the number, so this test fails when only one of them was bumped."""
 
 import re
+import sys
+
+import pytest
 
 import migrate
 from conftest import ENGINE_ROOT
@@ -26,3 +29,45 @@ def test_the_cpp_version_is_the_highest_step_of_the_engine_track():
 def test_the_attribute_names_agree():
     text = HEADER.read_text(encoding="utf-8")
     assert f'kContentVersionAttribute = "{migrate.VERSION_ATTRIBUTE}"' in text
+
+
+UI_SOURCES = ENGINE_ROOT / "src" / "Modules" / "BECore" / "UI"
+
+
+def cpp_constant(header: str, name: str) -> float:
+    match = re.search(rf"\b{name}\s*(?:=|\{{)\s*(-?[\d.]+)f?\s*[;}}]", (UI_SOURCES / header).read_text(encoding="utf-8"))
+    assert match, f"no `{name} = N;` in {header}"
+    return float(match.group(1))
+
+
+def value_module():
+    import importlib.util
+
+    from conftest import TOOL_DIR
+
+    sys.path.insert(0, str(TOOL_DIR / "steps"))
+    spec = importlib.util.spec_from_file_location("ui_value_under_test", TOOL_DIR / "steps" / "_ui_value.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_toggle_step_writes_the_numbers_of_the_headers():
+    value = value_module()
+    assert float(value.SWITCH_AREA_ASPECT) == cpp_constant("UISwitchComponent.h", "kAreaAspect") == 1.25
+    assert float(value.CAPTION_GAP) == cpp_constant("UIToggle.h", "kCaptionGap")
+    assert value.OFF_TRACK_ALPHA == pytest.approx(cpp_constant("UISwitchComponent.h", "kOffTrackAlpha"))
+    # the track is kSwitchHeightRatio x kSwitchAspect of the height, plus the air of a quarter of the height at the right end: the area is that much wider than high
+    ratio = cpp_constant("UISwitchComponent.h", "kSwitchHeightRatio")
+    aspect = cpp_constant("UISwitchComponent.h", "kSwitchAspect")
+    assert ratio * aspect + (1 - ratio) / 2 == pytest.approx(float(value.SWITCH_AREA_ASPECT))
+    for name in ("kSwitchHeightRatio", "kSwitchAspect", "kThumbInset"):
+        assert cpp_constant("UISwitchComponent.h", name) == cpp_constant("UIToggle.h", name)
+
+
+def test_the_alpha_of_the_derived_track_is_cut_like_with_alpha_of_the_cpp_source():
+    source = (UI_SOURCES / "UIColor.h").read_text(encoding="utf-8")
+    assert "static_cast<unsigned char>(static_cast<float>(color.a) * factor)" in source  # single precision, truncated: what `with_alpha` mirrors
+    value = value_module()
+    assert [value.with_alpha((0, 0, 0, a), value.OFF_TRACK_ALPHA)[3] for a in (255, 128, 100, 1, 0)] == [89, 44, 35, 0, 0]
+

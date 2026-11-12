@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- The class derived the off track (textColor at 0.35 alpha) and the thumb (textColor) from its own text colour; the switch child cannot see the caption, so the step writes them. A white textColor writes nothing; a given trackColor stays and only the thumb is derived. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIToggle" name="Dark" bind="a" action="A" x="10" y="10" width="300" height="56" text="Dark" textColor="190,196,190,255" />
+        <element type="UIToggle" name="Translucent" bind="b" action="B" x="10" y="80" width="300" height="56" text="Translucent" textColor="#20406080" />
+        <element type="UIToggle" name="White" bind="c" action="C" x="10" y="150" width="300" height="56" text="White" textColor="255,255,255,255" />
+        <element type="UIToggle" name="Given" bind="d" action="D" x="10" y="220" width="300" height="56" text="Given" textColor="10,20,30,255" trackColor="1,2,3,255" />
+        <element type="UIToggle" name="Transparent" bind="e" action="E" x="10" y="290" width="300" height="56" text="Transparent" textColor="10,20,30,255" trackColor="0,0,0,0" thumbColor="0,0,0,0" />
+      </elements>
+    </component>
+  </components>
+</node>

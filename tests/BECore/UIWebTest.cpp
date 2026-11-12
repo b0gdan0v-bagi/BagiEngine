@@ -18,10 +18,13 @@
 #include <BECore/UI/UIScreenContent.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISlider.h>
+#include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UISwitchComponent.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIToggle.h>
+#include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UITooltipComponent.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <BECore/UI/UIWebText.h>
@@ -515,11 +518,33 @@ button   { width: 124px; height: 48px; font-size: 24px; }
   <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
     <children>
       <element type="UILabel" name="Title" height="44" text="{#settings.title}" fontSize="30" align="Center"/>
-      <element type="UIToggle" name="Sound" bind="soundOn" action="SettingsSound" height="56" text="{#settings.sound}" fontSize="24" verticalAlign="Center"/>
+      <element type="UIElement" name="Sound" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+        <components>
+          <component type="UIInputClicker"/>
+          <component type="UIToggleComponent" bind="soundOn" action="SettingsSound"/>
+        </components>
+        <children>
+          <element type="UIElement" name="SoundCaption" flex="1" height="100%" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="{#settings.sound}" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
+            </components>
+          </element>
+          <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25">
+            <components>
+              <component type="UISwitchComponent"/>
+            </components>
+          </element>
+        </children>
+      </element>
       <element type="UIStack" name="MusicRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
         <children>
           <element type="UILabel" name="MusicCaption" width="220" height="56" text="{#settings.music}" fontSize="24" verticalAlign="Center"/>
-          <element type="UISlider" name="Volume" bind="volume" action="SettingsVolume" minValue="0" maxValue="1" step="0.1" flex="1" height="56"/>
+          <element type="UIElement" name="Volume" flex="1" height="56">
+            <components>
+              <component type="UIInputClicker" stateLook="false"/>
+              <component type="UISliderComponent" bind="volume" action="SettingsVolume" minValue="0" maxValue="1" step="0.1"/>
+            </components>
+          </element>
         </children>
       </element>
       <element type="UIStack" name="DownloadRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
@@ -1287,16 +1312,20 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->report.variants, 1u);
 
         // The types and the fields the tree comparison does not look at
-        const auto* sound = compiled->Element("Sound")->Cast<UIToggle>();
-        ASSERT_NE(sound, nullptr) << "a data-widget=\"toggle\" div is a UIToggle";
+        const auto* sound = compiled->Element("Sound")->GetComponent<UIToggleComponent>();
+        ASSERT_NE(sound, nullptr) << "a data-widget=\"toggle\" div is a row with a UIToggleComponent";
+        EXPECT_EQ(compiled->Element("Sound")->Cast<UIToggle>(), nullptr) << "no UIToggle is written any more";
         EXPECT_EQ(sound->bind.ToStringView(), "soundOn");
         EXPECT_EQ(sound->action.ToStringView(), "SettingsSound");
         EXPECT_EQ(sound->onValue.ToStringView(), "true") << "data-on and data-off were not written, so the defaults stand";
         EXPECT_EQ(sound->offValue.ToStringView(), "false");
-        EXPECT_EQ(sound->text, "{#settings.sound}") << "the caption of a toggle is its text";
-        EXPECT_TRUE(sound->interactive);
-        const auto* volume = compiled->Element("Volume")->Cast<UISlider>();
-        ASSERT_NE(volume, nullptr) << "a data-widget=\"slider\" div is a UISlider";
+        EXPECT_EQ(compiled->Element("SoundCaption")->GetComponent<UITextComponent>()->text, "{#settings.sound}") << "the caption of a toggle is its text";
+        EXPECT_NE(compiled->Element("SoundSwitch")->GetComponent<UISwitchComponent>(), nullptr);
+        EXPECT_TRUE(compiled->Element("Sound")->IsInteractive());
+        const auto* volume = compiled->Element("Volume")->GetComponent<UISliderComponent>();
+        ASSERT_NE(volume, nullptr) << "a data-widget=\"slider\" div is an element with a UISliderComponent";
+        EXPECT_EQ(compiled->Element("Volume")->Cast<UISlider>(), nullptr) << "no UISlider is written any more";
+        EXPECT_FALSE(compiled->Element("Volume")->GetComponent<UIInputClicker>()->stateLook) << "the plate of a slider stays still";
         EXPECT_EQ(volume->bind.ToStringView(), "volume");
         EXPECT_EQ(volume->action.ToStringView(), "SettingsVolume");
         EXPECT_FLOAT_EQ(volume->minValue, 0.0f);
@@ -1352,10 +1381,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         UIStrings& strings = CoreManager::GetUIStrings();
         strings.Set("en"_intern, "settings.sound", "Sound");
         strings.Set("de"_intern, "settings.sound", "Geraeuscheffekte");
-        auto* sound = compiled->Element("Sound")->Cast<UIToggle>();
-        auto* volume = compiled->Element("Volume")->Cast<UISlider>();
+        auto* sound = compiled->Element("Sound")->GetComponent<UIToggleComponent>();
+        auto* caption = compiled->Element("SoundCaption")->GetComponent<UITextComponent>();
+        auto* volume = compiled->Element("Volume")->GetComponent<UISliderComponent>();
         auto* progress = compiled->Element("Progress")->Cast<UIProgressBar>();
-        ASSERT_TRUE(sound != nullptr && volume != nullptr && progress != nullptr);
+        ASSERT_TRUE(sound != nullptr && caption != nullptr && volume != nullptr && progress != nullptr);
 
         EXPECT_FALSE(sound->IsOn());
         EXPECT_FLOAT_EQ(progress->GetFraction(), 0.0f);
@@ -1367,9 +1397,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FLOAT_EQ(volume->GetFraction(), 0.5f);
         EXPECT_FLOAT_EQ(progress->GetFraction(), 0.25f);
 
-        EXPECT_EQ(sound->GetDisplayText(), "Sound");
+        EXPECT_EQ(caption->GetDisplayText(), "Sound");
         strings.SetLanguage("de"_intern);
-        EXPECT_EQ(sound->GetDisplayText(), "Geraeuscheffekte") << "a {#key} caption of a toggle follows the language";
+        EXPECT_EQ(caption->GetDisplayText(), "Geraeuscheffekte") << "a {#key} caption of a toggle follows the language";
     }
 
     TEST_F(UIWebTest, TheWidgetsTakeTheirAttributesAndColors) {
@@ -1387,25 +1417,32 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         EXPECT_TRUE(compiled->report.issues.empty()) << compiled->report.issues[0].message.c_str();
 
-        EXPECT_EQ(compiled->Find("t").attribute("type").as_string(), std::string("UIToggle")) << "the widget name is not case sensitive";
-        EXPECT_EQ(compiled->Attr("t", "bind"), "muted");
-        EXPECT_EQ(compiled->Attr("t", "action"), "Mute") << "the plain `action` attribute is accepted as on a button";
-        EXPECT_EQ(compiled->Attr("t", "onValue"), "1");
-        EXPECT_EQ(compiled->Attr("t", "offValue"), "0");
-        EXPECT_EQ(compiled->Attr("t", "disabled"), "true");
-        EXPECT_EQ(compiled->Attr("t", "text"), "Mute");
+        EXPECT_FALSE(compiled->Component("t", "UIToggleComponent").empty()) << "the widget name is not case sensitive";
+        EXPECT_EQ(compiled->Find("t").attribute("type").as_string(), std::string("UIElement"));
+        EXPECT_EQ(compiled->ComponentAttr("t", "UIToggleComponent", "bind"), "muted");
+        EXPECT_EQ(compiled->ComponentAttr("t", "UIToggleComponent", "action"), "Mute") << "the plain `action` attribute is accepted as on a button";
+        EXPECT_EQ(compiled->ComponentAttr("t", "UIToggleComponent", "onValue"), "1");
+        EXPECT_EQ(compiled->ComponentAttr("t", "UIToggleComponent", "offValue"), "0");
+        EXPECT_EQ(compiled->ComponentAttr("t", "UIInputClicker", "disabled"), "true");
+        EXPECT_EQ(compiled->ComponentAttr("tCaption", "UITextComponent", "text"), "Mute");
         EXPECT_EQ(compiled->Attr("t", "color"), "1,2,3,255") << "the background is the fill behind the caption";
-        EXPECT_EQ(compiled->Attr("t", "trackColor"), "32,32,32,128");
-        EXPECT_EQ(compiled->Attr("t", "fillColor"), "10,200,30,255");
-        EXPECT_EQ(compiled->Attr("t", "thumbColor"), "255,238,221,255");
+        EXPECT_EQ(compiled->ComponentAttr("tSwitch", "UISwitchComponent", "trackColor"), "32,32,32,128");
+        EXPECT_EQ(compiled->ComponentAttr("tSwitch", "UISwitchComponent", "fillColor"), "10,200,30,255");
+        EXPECT_EQ(compiled->ComponentAttr("tSwitch", "UISwitchComponent", "thumbColor"), "255,238,221,255");
+        for (const char* moved : {"bind", "action", "onValue", "offValue", "disabled", "text", "trackColor", "fillColor", "thumbColor"}) {
+            EXPECT_FALSE(compiled->Has("t", moved)) << moved << " lives on a component";
+        }
         EXPECT_FALSE(compiled->Has("t", "blocksInput")) << "a toggle takes input by itself, whatever its background";
 
-        EXPECT_EQ(compiled->Attr("s", "minValue"), "-5");
-        EXPECT_EQ(compiled->Attr("s", "maxValue"), "5.5");
-        EXPECT_EQ(compiled->Attr("s", "step"), "0.5");
-        EXPECT_EQ(compiled->Attr("s", "disabled"), "true");
-        EXPECT_EQ(compiled->Attr("s", "thumbColor"), "255,238,221,255");
-        EXPECT_EQ(compiled->Attr("s", "fillColor"), "10,200,30,255");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "bind"), "v");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "action"), "Set");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "minValue"), "-5");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "maxValue"), "5.5");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "step"), "0.5");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UIInputClicker", "disabled"), "true");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UIInputClicker", "stateLook"), "false");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "thumbColor"), "255,238,221,255");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "fillColor"), "10,200,30,255");
 
         EXPECT_EQ(compiled->Attr("p", "maxValue"), "200");
         EXPECT_FALSE(compiled->Has("p", "minValue"));
@@ -1414,26 +1451,27 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_FALSE(compiled->Has("p", "thumbColor"));
         EXPECT_FALSE(compiled->Has("p", "blocksInput")) << "a progress bar never takes input, a background or not";
 
-        EXPECT_FALSE(compiled->Has("d", "minValue")) << "nothing written, nothing invented";
-        EXPECT_FALSE(compiled->Has("d", "step"));
+        EXPECT_FALSE(compiled->Component("d", "UISliderComponent").attribute("minValue")) << "nothing written, nothing invented";
+        EXPECT_FALSE(compiled->Component("d", "UISliderComponent").attribute("step"));
 
         // and what the controls read from it
-        const auto* toggle = compiled->Element("t")->Cast<UIToggle>();
-        const auto* slider = compiled->Element("s")->Cast<UISlider>();
-        ASSERT_TRUE(toggle != nullptr && slider != nullptr);
-        EXPECT_TRUE(toggle->disabled);
+        const auto* toggle = compiled->Element("t")->GetComponent<UIToggleComponent>();
+        const auto* look = compiled->Element("tSwitch")->GetComponent<UISwitchComponent>();
+        const auto* slider = compiled->Element("s")->GetComponent<UISliderComponent>();
+        ASSERT_TRUE(toggle != nullptr && look != nullptr && slider != nullptr);
+        EXPECT_TRUE(compiled->Element("t")->IsDisabled());
         EXPECT_EQ(toggle->onValue.ToStringView(), "1");
-        EXPECT_EQ(toggle->fillColor.g, 200);
+        EXPECT_EQ(look->fillColor.g, 200);
         EXPECT_FLOAT_EQ(slider->minValue, -5.0f);
         EXPECT_FLOAT_EQ(slider->step, 0.5f);
-        EXPECT_TRUE(slider->disabled);
+        EXPECT_TRUE(compiled->Element("s")->IsDisabled());
     }
 
     TEST_F(UIWebTest, NumbersOfTheWidgetsAreWrittenAsNumbers) {
         const auto compiled = Compile(R"(<div id="s" data-widget="slider" data-min=" 0.0 " data-max="1e2" data-step="1.50"></div>)");
-        EXPECT_EQ(compiled->Attr("s", "minValue"), "0");
-        EXPECT_EQ(compiled->Attr("s", "maxValue"), "100");
-        EXPECT_EQ(compiled->Attr("s", "step"), "1.5");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "minValue"), "0");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "maxValue"), "100");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "step"), "1.5");
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
@@ -1532,7 +1570,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const auto compiled =
             Compile(R"(<div id="t" data-widget="toggle" data-bind="a">T</div><div id="s" data-widget="slider" data-bind="b"></div><div id="p" data-widget="progress" data-bind="c"></div>)",
                     "div { height: 56px; -be-fill-color: #00ff00 }");
-        EXPECT_EQ(compiled->report.elements, 3u);
+        EXPECT_EQ(compiled->report.elements, 5u) << "the toggle is a row and two children, the slider and the bar one element each";
         EXPECT_EQ(compiled->report.rules, 1u);
         EXPECT_EQ(compiled->report.declarations, 2u);
         EXPECT_EQ(compiled->report.declarationsUnsupported, 0u);
@@ -1541,7 +1579,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
 
     TEST_F(UIWebTest, AToggleCaptionKeepsItsStringReferenceAndVariables) {
         const auto compiled = Compile(R"(<div id="t" data-widget="toggle" data-bind="a">{#settings.sound}: <b>{state}</b></div>)");
-        EXPECT_EQ(compiled->Attr("t", "text"), "{#settings.sound}: {state}") << "inline elements are part of the caption";
+        EXPECT_EQ(compiled->ComponentAttr("tCaption", "UITextComponent", "text"), "{#settings.sound}: {state}") << "inline elements are part of the caption";
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
@@ -2015,17 +2053,63 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         const auto compiled = Compile(
             R"(<div id="t" data-widget="toggle">T</div><div id="s" data-widget="slider"></div><div id="p" data-widget="progress"></div><div id="d"></div><div id="sq" data-widget="toggle">T</div>)",
             "#t, #s, #p, #d { -be-shape: round } #sq { -be-shape: Square }");
-        for (const char* name : {"t", "s", "p"}) {
-            EXPECT_EQ(compiled->Attr(name, "partShape"), "Round") << name;
-        }
+        EXPECT_EQ(compiled->ComponentAttr("tSwitch", "UISwitchComponent", "partShape"), "Round");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UISliderComponent", "partShape"), "Round");
+        EXPECT_EQ(compiled->Attr("p", "partShape"), "Round");
         EXPECT_FALSE(compiled->Has("d", "partShape"));
-        EXPECT_FALSE(compiled->Has("sq", "partShape")) << "Square is the default";
+        EXPECT_FALSE(compiled->Component("sqSwitch", "UISwitchComponent").attribute("partShape")) << "Square is the default";
         EXPECT_EQ(compiled->IssuesMentioning("-be-shape applies to a toggle, slider or progress bar only"), 1u);
         EXPECT_EQ(compiled->report.issues.size(), 1u);
         EXPECT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Element("t")->Cast<UIToggle>()->partShape, UIPartShape::Round);
-        EXPECT_EQ(compiled->Element("s")->Cast<UISlider>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(compiled->Element("tSwitch")->GetComponent<UISwitchComponent>()->partShape, UIPartShape::Round);
+        EXPECT_EQ(compiled->Element("s")->GetComponent<UISliderComponent>()->partShape, UIPartShape::Round);
         EXPECT_EQ(compiled->Element("p")->Cast<UIProgressBar>()->partShape, UIPartShape::Round);
+    }
+
+    TEST_F(UIWebTest, AToggleWithATextColorGetsTheTrackAndThumbTheClassDerivedFromIt) {
+        const auto compiled = Compile(R"(<div id="dark" data-widget="toggle">A</div><div id="white" data-widget="toggle">B</div><div id="given" data-widget="toggle">C</div>
+<div id="themed" data-widget="toggle">D</div><div id="plain" data-widget="toggle">E</div>)",
+                                      R"(
+#dark   { color: rgb(190, 196, 190); }
+#white  { color: #ffffff; }
+#given  { color: rgb(10, 20, 30); -be-track-color: rgb(1, 2, 3); }
+#themed { color: var(--text); -be-track-color: var(--muted); }
+)");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_TRUE(compiled->report.issues.empty()) << compiled->report.issues[0].message.c_str();
+        // The same numbers as tools/migrate/steps/_ui_value.py: the text colour at the alpha of UISwitchComponent::kOffTrackAlpha (cut, not rounded), and the text colour
+        EXPECT_EQ(compiled->ComponentAttr("darkSwitch", "UISwitchComponent", "trackColor"), "190,196,190,89");
+        EXPECT_EQ(compiled->ComponentAttr("darkSwitch", "UISwitchComponent", "thumbColor"), "190,196,190,255");
+        EXPECT_EQ(compiled->ComponentAttr("darkCaption", "UITextComponent", "textColor"), "190,196,190,255");
+        EXPECT_TRUE(compiled->Component("whiteSwitch", "UISwitchComponent").attribute("trackColor").empty()) << "a white caption is what the switch assumes";
+        EXPECT_TRUE(compiled->Component("whiteSwitch", "UISwitchComponent").attribute("thumbColor").empty());
+        EXPECT_EQ(compiled->ComponentAttr("givenSwitch", "UISwitchComponent", "trackColor"), "1,2,3,255") << "the author's colour stays";
+        EXPECT_EQ(compiled->ComponentAttr("givenSwitch", "UISwitchComponent", "thumbColor"), "10,20,30,255");
+        EXPECT_EQ(compiled->ComponentAttr("themedSwitch", "UISwitchComponent", "trackColor"), "@muted");
+        EXPECT_EQ(compiled->ComponentAttr("themedSwitch", "UISwitchComponent", "thumbColor"), "@text") << "a token is copied to the thumb";
+        EXPECT_TRUE(compiled->Component("plainSwitch", "UISwitchComponent").attribute("thumbColor").empty());
+    }
+
+    TEST_F(UIWebTest, AThemeTokenTextColorOfAToggleNeedsATrackColor) {
+        const auto compiled = Compile(R"(<div id="t" data-widget="toggle">A</div>)", "#t { color: var(--text); }");
+        EXPECT_EQ(compiled->IssuesMentioning("needs -be-track-color"), 1u);
+        EXPECT_EQ(compiled->ComponentAttr("tSwitch", "UISwitchComponent", "thumbColor"), "@text");
+    }
+
+    TEST_F(UIWebTest, ALayoutOnAToggleIsLeftOutAndAFontSizeVariantMovesToTheCaption) {
+        const auto compiled = Compile(R"(<div id="t" data-widget="toggle">A</div>)", R"(
+#t { display: flex; gap: 20px; height: 50px; font-size: 20px; }
+@media (max-width: 480px) { #t { font-size: 14px; } }
+)");
+        EXPECT_EQ(compiled->IssuesMentioning("lays its caption and switch out itself"), 1u);
+        EXPECT_EQ(compiled->Attr("t", "spacing"), "8");
+        EXPECT_EQ(compiled->Attr("t", "direction"), "Horizontal");
+        EXPECT_EQ(compiled->Attr("tCaption", "fontSize"), "20");
+        EXPECT_FALSE(compiled->Has("t", "fontSize"));
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        const std::string xml = compiled->xml.c_str();
+        EXPECT_NE(xml.find(R"(<set element="tCaption" fontSize="14")"), std::string::npos) << xml;
+        EXPECT_EQ(xml.find(R"(<set element="t" fontSize)"), std::string::npos) << xml;
     }
 
     // ---- the icon and the tooltip of a button ----------------------------------------------------------------------------------
@@ -2623,7 +2707,7 @@ button  { height: 56px; font-size: 28px; }
         EXPECT_EQ(compiled->Attr("text", "textOutline"), "2,@accent");
         EXPECT_EQ(compiled->Attr("bar", "trackColor"), "@panel");
         EXPECT_EQ(compiled->Attr("bar", "fillColor"), "@accent");
-        EXPECT_EQ(compiled->Attr("knob", "thumbColor"), "@line");
+        EXPECT_EQ(compiled->ComponentAttr("knob", "UISliderComponent", "thumbColor"), "@line");
         EXPECT_EQ(compiled->ComponentAttr("iconIcon", "UIImageComponent", "tint"), "@accent");
 
         // The XML front-end reads it back into the fields, as tokens

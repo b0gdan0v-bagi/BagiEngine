@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!-- A textColor that is a theme token: the thumb follows it (the token is copied), the off track cannot be derived from a token, so the author gives trackColor. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIElement" name="Themed" x="10" y="10" width="300" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker"/>
+            <component type="UIToggleComponent" bind="a" action="A"/>
+          </components>
+          <children>
+            <element type="UIElement" name="ThemedCaption" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="Themed" textColor="@text" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
+              </components>
+            </element>
+            <element type="UIElement" name="ThemedSwitch" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent" trackColor="@muted" thumbColor="@text"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIElement" name="ThemedThumb" x="10" y="80" width="300" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker"/>
+            <component type="UIToggleComponent" bind="b" action="B"/>
+          </components>
+          <children>
+            <element type="UIElement" name="ThemedThumbCaption" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="Themed" textColor="@text" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
+              </components>
+            </element>
+            <element type="UIElement" name="ThemedThumbSwitch" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent" trackColor="@muted" thumbColor="@accent"/>
+              </components>
+            </element>
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!-- A disabled slider, and a toggle that is disabled by the other spelling of true. -->
+<node name="Sliders" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIElement" name="Locked" x="10" y="10" width="300" height="56">
+          <components>
+            <component type="UIInputClicker" stateLook="false" disabled="true"/>
+            <component type="UISliderComponent" bind="volume" action="SetVolume" minValue="0" maxValue="1" step="0.1"/>
+          </components>
+        </element>
+        <element type="UIElement" name="LockedToggle" x="10" y="80" width="300" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+          <components>
+            <component type="UIInputClicker" disabled="1"/>
+            <component type="UIToggleComponent" bind="a" action="A"/>
+          </components>
+          <children>
+            <element type="UIElement" name="LockedToggleCaption" flex="1" height="100%">
+              <components>
+                <component type="UITextComponent" text="Locked" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>
+              </components>
+            </element>
+            <element type="UIElement" name="LockedToggleSwitch" height="100%" aspectRatio="1.25">
+              <components>
+                <component type="UISwitchComponent"/>
+              </components>
+            </element>
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

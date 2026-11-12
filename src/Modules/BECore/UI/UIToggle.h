@@ -7,6 +7,8 @@ namespace BECore {
     /**
      * @brief One labeled on/off switch: the caption (the text of a `UILabel`) on the left, a switch at the right end of the rect.
      *
+     * **Old content only:** the composed toggle (`UIToggleComponent` + `UISwitchComponent`) is the form; `tools/migrate` step 3 rewrites this one and slice 5 removes the class.
+     *
      * `<element type="UIToggle" name="Sound" bind="soundOn" action="SetSound" text="Sound" height="56" .../>`
      *
      * `bind` names a `UIVars` variable; the toggle is *on* when the variable equals `onValue` (default `"true"`) and off otherwise: any other value, an unset variable, an
@@ -63,6 +65,15 @@ namespace BECore {
 
         void DrawSelf(IRenderer& renderer) override;
         void OnClick() override;
+
+        /// `disabled` or the group's: the control answers for itself, whatever it sits in
+        [[nodiscard]] bool IsDisabled() const override {
+            return disabled || groupDisabled;
+        }
+        /// The control has its own state (hover, press), not that of an ancestor with a clicker
+        [[nodiscard]] bool OwnsState() const override {
+            return true;
+        }
 
         /// The caption against the area left of the switch, not the whole rect
         [[nodiscard]] UIContentFit CheckContent(float width, float height, float scale) const override;

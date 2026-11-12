@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!-- A variant that sets attributes the controls keep (size, position) is not a reason to refuse. A toggle inside a stack, and the elements next to it, stay as they are. -->
+<node name="Row" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIStack" name="Plate" x="10" y="10" width="400" height="200" direction="Vertical" spacing="8">
+          <children>
+            <element type="UILabel" name="Title" height="30" text="Options" />
+            <element type="UIToggle" name="Sound" bind="soundOn" action="SetSound" width="360" height="56" text="Sound" />
+            <element type="UISlider" name="Volume" bind="volume" action="SetVolume" width="360" height="56" />
+          </children>
+        </element>
+      </elements>
+      <variants>
+        <variant when="maxWidth:480">
+          <overrides>
+            <set element="Sound" height="68" width="300" />
+            <set element="Volume" height="68" />
+            <set element="Plate" spacing="4" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

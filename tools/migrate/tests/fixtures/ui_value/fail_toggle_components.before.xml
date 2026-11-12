@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- A toggle that has <components> already. -->
+<node name="Toggles" layer="5" contentVersion="3">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIToggle" name="Mixed" bind="a" action="A" width="300" height="56" text="Mixed">
+          <components>
+            <component type="UITooltipComponent" text="Tip"/>
+          </components>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

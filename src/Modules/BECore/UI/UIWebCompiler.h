@@ -19,8 +19,8 @@ namespace BECore {
      * | `button` with `data-icon` | the same, the icon in a child `<N>Icon` (and `<N>Caption` with text); `-be-icon-color` is its `tint` (`ui-controls.md`) |
      * | `img` | `UIImage` (`src` is the sprite name) |
      * | any element with `data-widget="segmented"` | `UISegmented` (`data-bind` is `bind`; its `<button data-value>` children are the segments, composed like any button) |
-     * | any element with `data-widget="toggle"` | `UIToggle` (`data-bind`, `data-action`, `data-on` / `data-off` are `onValue` / `offValue`; the text is the caption) |
-     * | any element with `data-widget="slider"` | `UISlider` (`data-bind`, `data-action`, `data-min`, `data-max`, `data-step`) |
+     * | any element with `data-widget="toggle"` | a row `UIElement` with a clicker and `UIToggleComponent`, children `<N>Caption` and `<N>Switch` (`ui-controls.md`) |
+     * | any element with `data-widget="slider"` | `UIElement` with `UIInputClicker` (`stateLook="false"`) and `UISliderComponent` |
      * | any element with `data-widget="progress"` | `UIProgressBar` (`data-bind`, `data-min`, `data-max`) |
      * | `id` | `name` |
      *
@@ -29,7 +29,8 @@ namespace BECore {
      * `text-shadow`, `-be-text-outline`, `text-align` and `line-height` are inherited. `@media` blocks become responsive variants: for each block the cascade is run again with its rules
      * and what changed becomes the overrides of the variant, so a variant can change only what UIElementOverride can (visibility, anchor, offset, size, stack
      * direction, font size). The engine-only `-be-track-color`, `-be-fill-color` and `-be-thumb-color` set `trackColor`, `fillColor` and `thumbColor` of the three widgets, `-be-icon-color` the
-     * `tint` of the icon of a button; the states of the widgets are derived, so a state rule on them is reported. `:hover`, `:active`, `:disabled` and `:checked` on a button set its four fills
+     * `tint` of the icon of a button (a toggle's `trackColor` and `thumbColor` that the author left out are written from its text colour, as the migration step does, because the switch cannot see the
+     * caption); the states of the widgets are derived, so a state rule on them is reported. `:hover`, `:active`, `:disabled` and `:checked` on a button set its four fills
      * (`hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`).
      *
      * The box (`UIBoxStyle`): `border-radius` and its four longhands (px, one value per corner), `border` / `border-width` / `border-color` / `border-style` (`solid`, `none`; a border is

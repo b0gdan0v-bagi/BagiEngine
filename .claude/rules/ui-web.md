@@ -34,8 +34,8 @@ button:hover { background: #3a6; }
 |------|---------|
 | `button` | a composed `UIElement` (`ui-controls.md`, "Components"): `data-action` (or `action`), `data-value`, `disabled` are its `UIInputClicker`, the text its `UITextComponent`, `title` a `UITooltipComponent` (`{#key}` allowed). `data-icon` (a sprite name; an empty button is icon-only) is a child with a `UIImageComponent`: alone `<id>Icon` centred, with text `<id>Icon` and `<id>Caption` in a stack (the forms are in `ui-controls.md`); `data-icon-position="above"` is **reported and left is used** (no composed form yet). A button directly inside `data-widget="segmented"` is composed too (a segment). `data-icon`, `data-icon-position`, `title` on anything else are reported |
 | container with `data-widget="segmented"` | `UISegmented`: `data-bind`, `disabled`, `<button data-value data-action>` children, composed like any button (the group finds them by the clicker). Needs `display: flex` (reported otherwise) |
-| `data-widget="toggle"` | `UIToggle`: text = caption, `data-bind`, `data-action`, `data-on` / `data-off` |
-| `data-widget="slider"` | `UISlider`: `data-bind`, `data-action`, `data-min` / `data-max` / `data-step` |
+| `data-widget="toggle"` | the composed row (`ui-controls.md`, "Components"): text = the caption child, `data-bind`, `data-action`, `data-on` / `data-off` on `UIToggleComponent`, `disabled` on the clicker, the `-be-*` colours and shape on the switch child. A caption colour other than white also writes `trackColor` and `thumbColor` (the colour at 0.35 alpha, the colour), unless given |
+| `data-widget="slider"` | one element with a clicker (`stateLook="false"`) and `UISliderComponent`: `data-bind`, `data-action`, `data-min` / `data-max` / `data-step` |
 | `data-widget="progress"` | `UIProgressBar`: `data-bind`, `data-min`, `data-max`; never takes input |
 | `img` | `UIImage`: `src` = sprite name, `object-fit: fill` = `stretch` |
 | element with only text / inline elements (`span`, `p`, `h1`-`h6`, `label`, `b`, `br`...) | `UILabel` (white space collapsed, `<br>` a line break) |

@@ -25,6 +25,7 @@ namespace BECore::Tests {
         BE_REFLECT_FIELD bool hasContent = false;
         BE_REFLECT_FIELD bool fits = true;
         BE_REFLECT_FIELD bool canShrink = false;
+        BE_REFLECT_FIELD bool checked = false;  ///< what `IsChecked` answers
 
         void DrawSelf(IRenderer& renderer, UIElement& owner) override;
         [[nodiscard]] UIContentFit CheckContent(const UIElement& owner, float width, float height, float scale) const override;
@@ -36,6 +37,9 @@ namespace BECore::Tests {
         }
         [[nodiscard]] bool GivesStateLook() const override {
             return takesClicks;
+        }
+        [[nodiscard]] bool IsChecked(const UIElement& /*owner*/) const override {
+            return checked;
         }
     };
 

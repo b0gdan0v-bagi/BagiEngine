@@ -109,6 +109,15 @@ namespace BECore {
         void DrawSelf(IRenderer& renderer) override;
         void OnClick() override;
 
+        /// `disabled` or the group's: the header answers for itself, whatever it sits in
+        [[nodiscard]] bool IsDisabled() const override {
+            return disabled || groupDisabled;
+        }
+        /// The header has its own state (hover, press), not that of an ancestor with a clicker
+        [[nodiscard]] bool OwnsState() const override {
+            return true;
+        }
+
         [[nodiscard]] bool HasPopupChildren() const override {
             return true;
         }
