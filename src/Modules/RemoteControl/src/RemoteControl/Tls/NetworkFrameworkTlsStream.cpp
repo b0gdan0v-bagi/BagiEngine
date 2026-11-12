@@ -318,12 +318,14 @@ namespace BECore {
                         return std::unexpected(Format("TLS: connect to {} cancelled", state->target));
                     }
                     state->connection = connection;
+                    // Set up and started under the lock: from the moment the connection is published a Close() may release it, and the
+                    // handler runs on the queue, so it only waits for the lock
+                    nw_connection_set_state_changed_handler(connection, ^(nw_connection_state_t newState, nw_error_t error) {
+                      state->OnState(newState, error);
+                    });
+                    nw_connection_set_queue(connection, queue);
+                    nw_connection_start(connection);
                 }
-                nw_connection_set_state_changed_handler(connection, ^(nw_connection_state_t newState, nw_error_t error) {
-                  state->OnState(newState, error);
-                });
-                nw_connection_set_queue(connection, queue);
-                nw_connection_start(connection);
 
                 return WaitUntilReady(*state, params);
             }
@@ -439,6 +441,10 @@ namespace BECore {
             static std::expected<void, eastl::string> WaitUntilReady(StreamState& state, const TlsConnectParams& params) {
                 std::unique_lock lock(state.mutex);
                 for (;;) {
+                    if (state.closing && state.phase != Phase::Failed && state.phase != Phase::Cancelled) {
+                        state.phase = Phase::Failed;
+                        state.failure = Format("TLS: connect to {} cancelled", state.target);
+                    }
                     if (state.phase == Phase::Ready) {
                         break;
                     }
@@ -461,19 +467,21 @@ namespace BECore {
                     const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(params.handshakeDeadline - now) + std::chrono::milliseconds(1);
                     state.changed.wait_for(lock, std::min(Socket::kWakeInterval, left));
                 }
-                LogNegotiatedVersion(state);
+                OsOwned<nw_connection_t> held(state.connection != nullptr ? static_cast<nw_connection_t>(nw_retain(state.connection)) : nullptr);  // a Close() may release it meanwhile
+                lock.unlock();
+                LogNegotiatedVersion(held.get(), state.target);
                 return {};
             }
 
-            static void LogNegotiatedVersion(const StreamState& state) {
+            static void LogNegotiatedVersion(nw_connection_t connection, const eastl::string& target) {
                 OsOwned<nw_protocol_definition_t> tlsDefinition(nw_protocol_copy_tls_definition());
-                OsOwned<nw_protocol_metadata_t> metadata(state.connection != nullptr ? nw_connection_copy_protocol_metadata(state.connection, tlsDefinition.get()) : nullptr);
+                OsOwned<nw_protocol_metadata_t> metadata(connection != nullptr ? nw_connection_copy_protocol_metadata(connection, tlsDefinition.get()) : nullptr);
                 if (!metadata || !nw_protocol_metadata_is_tls(metadata.get())) {
                     return;
                 }
                 OsOwned<sec_protocol_metadata_t> secMetadata(nw_tls_copy_sec_protocol_metadata(metadata.get()));
                 if (secMetadata) {
-                    LOG_INFO("TLS to {}: TLS {}"_format(state.target, TlsVersionName(sec_protocol_metadata_get_negotiated_tls_protocol_version(secMetadata.get()))));
+                    LOG_INFO("TLS to {}: TLS {}"_format(target, TlsVersionName(sec_protocol_metadata_get_negotiated_tls_protocol_version(secMetadata.get()))));
                 }
             }
 

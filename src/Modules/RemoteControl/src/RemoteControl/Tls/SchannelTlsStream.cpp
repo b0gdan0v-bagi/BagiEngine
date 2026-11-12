@@ -39,7 +39,7 @@ namespace BECore {
 
         /// The flags of every InitializeSecurityContext call of this stream. ISC_REQ_MANUAL_CRED_VALIDATION is added only on the
         /// extra-anchors path (a test): the default path lets Schannel check the chain and the name itself
-        constexpr ULONG kContextRequests = ISC_REQ_SEQUENCE_DETECT | ISC_REQ_REPLAY_DETECT | ISC_REQ_CONFIDENTIALITY | ISC_RET_EXTENDED_ERROR | ISC_REQ_ALLOCATE_MEMORY | ISC_REQ_STREAM;
+        constexpr ULONG kContextRequests = ISC_REQ_SEQUENCE_DETECT | ISC_REQ_REPLAY_DETECT | ISC_REQ_CONFIDENTIALITY | ISC_REQ_EXTENDED_ERROR | ISC_REQ_ALLOCATE_MEMORY | ISC_REQ_STREAM;
 
         struct ContextBufferFreer {
             void operator()(void* buffer) const {
@@ -349,16 +349,18 @@ namespace BECore {
             }
 
             void Close() override {
-                if (_phase.load() == Phase::Ready && !_closing.load()) {
+                // _closing first: a Receive() that sees the server's answer to our close_notify must not record it as a failure
+                const bool wasOpen = !_closing.exchange(true);
+                if (wasOpen && _phase.load() == Phase::Ready) {
                     std::shared_lock life(_lifetime);
                     SendCloseNotify();
                 }
                 ShutdownBoth();
                 // Nobody is inside a call any more once this lock is ours: the woken ones leave within Socket::kWakeInterval
                 std::unique_lock exclusive(_lifetime);
-                if (_hasContext) {
+                if (_hasContext.load()) {
                     DeleteSecurityContext(&_context);
-                    _hasContext = false;
+                    _hasContext.store(false);
                 }
                 if (_hasCredentials) {
                     FreeCredentialsHandle(&_credentials);
@@ -471,7 +473,7 @@ namespace BECore {
                                                             &_context, &outDescription, &attributes, &expiry);
                     }
                     if (status >= 0) {
-                        _hasContext = true;
+                        _hasContext.store(true);
                     }
                     first = false;
                     ContextBufferOwned token(outBuffer.pvBuffer);
@@ -605,7 +607,7 @@ namespace BECore {
             /// gives is the close_notify alert). Skipped when a sender holds the send lock; the caller holds the lifetime lock
             void SendCloseNotify() {
                 std::unique_lock sendOrder(_sendMutex, std::try_to_lock);
-                if (!sendOrder.owns_lock() || !_hasContext) {
+                if (!sendOrder.owns_lock() || !_hasContext.load()) {
                     return;
                 }
                 DWORD shutdownType = SCHANNEL_SHUTDOWN;
@@ -630,6 +632,7 @@ namespace BECore {
                 }
                 ContextBufferOwned token(outBuffer.pvBuffer);
                 if (status >= 0 && outBuffer.cbBuffer > 0 && outBuffer.pvBuffer != nullptr) {
+                    // Best effort: the connection ends either way, so a failed send of the alert is not reported
                     (void)_socket.SendAll(eastl::span<const uint8_t>(static_cast<const uint8_t*>(outBuffer.pvBuffer), outBuffer.cbBuffer));
                 }
             }
@@ -729,7 +732,7 @@ namespace BECore {
             CredHandle _credentials = {};
             CtxtHandle _context = {};
             bool _hasCredentials = false;
-            bool _hasContext = false;
+            std::atomic<bool> _hasContext{false};  // set by the handshake, read by a concurrent Close()
             SecPkgContext_StreamSizes _sizes = {};
 
             // Touched by the receiving thread only (and by Connect() before there is one)

@@ -232,8 +232,8 @@ namespace BECore {
     }
 
     bool WebSocketClient::Connect() {
-        // A TLS stream connects and does its handshake inside Connect(), so the one deadline of the opening starts before the TCP connect
-        // (counted from the connect, as handshakeTimeout says); a plain socket's starts when it is connected
+        // A TLS stream connects and does its handshake inside Connect(), so with wss:// the one deadline of the opening starts before the
+        // name lookup and the TCP connect, and they count against handshakeTimeout; with ws:// it starts when the socket is connected
         const auto started = std::chrono::steady_clock::now();
         _handshakeDeadline = started + _settings.handshakeTimeout;
         auto connected = ClientStream::Connect(_url, _settings.tls, _settings.connectTimeout, _handshakeDeadline, &_cancel);

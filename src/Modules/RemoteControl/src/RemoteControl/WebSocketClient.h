@@ -18,7 +18,8 @@ namespace BECore {
         /// How long the TCP connect may take (the name lookup before it is not bounded)
         std::chrono::milliseconds connectTimeout{10000};
 
-        /// How long the opening may take, counted from the connect: with `wss://` the TLS handshake and the server's answer to the opening request share it
+        /// How long the opening may take. With `ws://` it counts from the connected socket (the server's answer to the opening request); with `wss://` it counts from the start
+        /// of the connect, so the name lookup, the TCP connect, the TLS handshake and the answer share it
         std::chrono::milliseconds handshakeTimeout{10000};
 
         /// After Close() or after answering the server's close: how long to wait for the other side before the connection is aborted
@@ -154,7 +155,7 @@ namespace BECore {
         std::atomic<uint64_t> _bytesReceived{0};
 
         ClientStream _stream;                                      // published by the reader under _mutex once connected; closed only after the threads were joined
-        std::chrono::steady_clock::time_point _handshakeDeadline;  // the reader's: the end of the opening (the TLS handshake and the answer to the request)
+        std::chrono::steady_clock::time_point _handshakeDeadline;  // the reader's: the end of the opening (with wss:// since the start of the connect)
 
         mutable std::mutex _mutex;            // guards everything below
         std::condition_variable _wake;        // the writer: a frame was queued, the connection was aborted, the reader ended

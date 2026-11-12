@@ -232,4 +232,37 @@ namespace BECore::Tests {
         EXPECT_FALSE(stream->IsValid());
     }
 
+    TEST_F(TlsLocalEndpointTest, CloseRacingConnectIsSafeAtEveryMoment) {
+        constexpr int kAttempts = 150;
+        constexpr int kDelaySteps = 12;
+        constexpr std::chrono::microseconds kDelayStep{40};
+        const auto trusted = ReadFile(Env(kEnvCaFile));
+        int connected = 0;
+        for (int attempt = 0; attempt < kAttempts; ++attempt) {
+            auto stream = MakeTlsStream();
+            TlsConnectParams params;
+            params.host = "localhost";
+            params.port = static_cast<uint16_t>(std::stoi(Env(kEnvPort)));
+            params.handshakeDeadline = std::chrono::steady_clock::now() + kClientWaitLimit;
+            params.additionalTrustAnchorsDer = eastl::span<const eastl::vector<uint8_t>>(&trusted, 1);
+            std::atomic<bool> started{false};
+            std::expected<void, eastl::string> result;
+            std::thread connecting([&] {
+                started = true;
+                result = stream->Connect(params);
+            });
+            while (!started) {
+                std::this_thread::yield();
+            }
+            std::this_thread::sleep_for(kDelayStep * (attempt % kDelaySteps));  // the close lands at every point from before the connect to after it
+            stream->Close();
+            connecting.join();  // whatever the moment, Connect() ends (a win or a cancel) and nothing is touched after it was freed
+            if (result.has_value()) {
+                ++connected;
+            }
+            EXPECT_FALSE(stream->IsValid());
+        }
+        EXPECT_LT(connected, kAttempts) << "no Close() ever ended a Connect(): the test did not hit the window";
+    }
+
 }  // namespace BECore::Tests

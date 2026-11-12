@@ -10,7 +10,7 @@
 - **The check is never off.** The chain against the system trust store and the host name (SNI) are always verified. The one knob is `TlsClientOptions::additionalTrustAnchorsDer`: extra CA certificates trusted *in addition* (the chain, the validity and the host name are still checked); it exists so a test can trust its own CA. No "insecure" option, no environment variable, no `#ifdef` in a release build.
 - `IsTlsSupported()` is false on a platform without a backend (the stub of `TlsStream.cpp`: `Connect()` fails with `tls_unsupported: ...`). `WebSocketClient::Open()` refuses `wss://` at once only when the factory is the default and `!IsTlsSupported()`.
 
-`ClientStream` is what `WebSocketClient` holds: a move-only value that is a plain `Socket` (`ws`) or an `ITlsStream` (`wss`, made by `TlsClientOptions::factory` or `MakeTlsStream()`), so the client's reader and writer keep their shape. A TLS failure is the reader's `Closed` 1006 with `GetLastError()` as the reason; `handshakeTimeout` is one deadline for the TLS handshake and the opening request (the stream gets it as `handshakeDeadline`).
+`ClientStream` is what `WebSocketClient` holds: a move-only value that is a plain `Socket` (`ws`) or an `ITlsStream` (`wss`, made by `TlsClientOptions::factory` or `MakeTlsStream()`), so the client's reader and writer keep their shape. A TLS failure is the reader's `Closed` 1006 with `GetLastError()` as the reason; `handshakeTimeout` is one deadline for the name lookup, the TCP connect, the TLS handshake and the opening request (the stream gets it as `handshakeDeadline`).
 
 ## Adding a backend
 
