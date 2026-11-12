@@ -8,6 +8,8 @@ namespace BECore {
     /**
      * @brief A horizontal slider for a number: a thin track with a square thumb on it. A press or a drag asks for a value; the game answers by setting the variable.
      *
+     * **Old content only:** the composed slider (`UISliderComponent`) is the form; `tools/migrate` step 3 rewrites this one and slice 5 removes the class.
+     *
      * `<element type="UISlider" name="Volume" bind="volume" action="SetVolume" minValue="0" maxValue="1" step="0.1" height="56" .../>`
      *
      * `bind` names a `UIVars` variable that holds the number; `minValue` (0) and `maxValue` (1) are the ends of the range and `step` (0 = continuous) the grid a value is snapped to.

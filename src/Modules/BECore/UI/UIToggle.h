@@ -7,6 +7,8 @@ namespace BECore {
     /**
      * @brief One labeled on/off switch: the caption (the text of a `UILabel`) on the left, a switch at the right end of the rect.
      *
+     * **Old content only:** the composed toggle (`UIToggleComponent` + `UISwitchComponent`) is the form; `tools/migrate` step 3 rewrites this one and slice 5 removes the class.
+     *
      * `<element type="UIToggle" name="Sound" bind="soundOn" action="SetSound" text="Sound" height="56" .../>`
      *
      * `bind` names a `UIVars` variable; the toggle is *on* when the variable equals `onValue` (default `"true"`) and off otherwise: any other value, an unset variable, an
