@@ -3,6 +3,7 @@
 #include <BECore/Control/Json.h>
 #include <BECore/UI/UIPreview.h>
 #include <Widgets/EditorLayout/HotkeyMap.h>
+#include <Widgets/Viewport/ViewportInput.h>
 
 namespace BECore {
 
@@ -19,6 +20,8 @@ namespace BECore {
         int32_t viewportGridStep = 32;
         /// The viewport's size, rotation, safe area and overlays: the user's choice, kept between runs (never part of a scene)
         PreviewSettings viewportPreview;
+        /// Whether a press in the viewport goes to the game (Play) or to the editor (Edit); stored as "play" or "edit"
+        ViewportInputMode viewportInputMode = ViewportInputMode::Play;
 
         [[nodiscard]] bool operator==(const EditorPreferences& other) const = default;
     };
@@ -53,7 +56,8 @@ namespace BECore {
      * and written back; an entry with a bad chord, for a fixed command, or that conflicts is dropped with a warning.
      *
      * The viewport's preview choice is one object, `viewportPreview`, in `preferences.json`; its device is stored by name, and a
-     * name this build lacks gives the Free shape, never another device.
+     * name this build lacks gives the Free shape, never another device. `viewportInputMode` is `"play"` or `"edit"`; a file without
+     * the key (an older build) or with another text reads Play.
      *
      * Save writes atomically (UserFileIo.h). On failure it keeps the old file, logs the error and returns false; the
      * text is in GetLastSaveError().

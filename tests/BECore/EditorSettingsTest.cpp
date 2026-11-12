@@ -327,7 +327,7 @@ namespace BECore::Tests {
         EXPECT_EQ(file["viewportPreview"]["overlayViewBounds"], true);
     }
 
-    TEST_F(EditorSettingsTest, AnOldFileGainsOnlyThePreviewKey) {
+    TEST_F(EditorSettingsTest, AnOldFileGainsOnlyThePreviewAndInputModeKeys) {
         WriteFile("preferences.json", R"({"version":1,"theme":"Classic","fontScale":1.5,"viewportGrid":true,"viewportGridStep":16,"futureOption":7})");
         EditorSettings settings(_directory);
         settings.Load();
@@ -341,8 +341,42 @@ namespace BECore::Tests {
         Json file = ReadJsonFile("preferences.json");
         ASSERT_TRUE(file.contains("viewportPreview"));
         file.erase("viewportPreview");
+        EXPECT_EQ(file["viewportInputMode"], "play");
+        file.erase("viewportInputMode");
         const Json oldFile = *ParseJson(R"({"version":1,"theme":"Classic","fontScale":1.5,"viewportGrid":true,"viewportGridStep":16,"futureOption":7})");
         EXPECT_EQ(file, oldFile);
+    }
+
+    TEST_F(EditorSettingsTest, TheViewportInputModeIsPlayWhenTheKeyIsMissing) {
+        WriteFile("preferences.json", R"({"version":1,"fontScale":1.5})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EXPECT_EQ(settings.GetPreferences().viewportInputMode, ViewportInputMode::Play);
+    }
+
+    TEST_F(EditorSettingsTest, TheViewportInputModeRoundTripsAsAWord) {
+        EditorPreferences changed;
+        changed.viewportInputMode = ViewportInputMode::Edit;
+        EditorSettings writer(_directory);
+        writer.SetPreferences(changed);
+        ASSERT_TRUE(writer.SavePreferences());
+        EXPECT_EQ(ReadJsonFile("preferences.json")["viewportInputMode"], "edit");
+
+        EditorSettings reader(_directory);
+        reader.Load();
+        EXPECT_EQ(reader.GetPreferences().viewportInputMode, ViewportInputMode::Edit);
+        EXPECT_EQ(reader.GetPreferences(), changed);
+        EXPECT_NE(reader.GetPreferences(), EditorPreferences{});
+    }
+
+    TEST_F(EditorSettingsTest, AnUnknownViewportInputModeGivesPlayAndTheOtherFieldsStay) {
+        for (const char* text : {R"("fly")", R"("")", "3", "true", R"("Edit")"}) {
+            WriteFile("preferences.json", std::string(R"({"version":1,"fontScale":1.5,"viewportInputMode":)") + text + "}");
+            EditorSettings settings(_directory);
+            settings.Load();
+            EXPECT_EQ(settings.GetPreferences().viewportInputMode, ViewportInputMode::Play) << text;
+            EXPECT_EQ(settings.GetPreferences().fontScale, 1.5f) << text;
+        }
     }
 
     TEST_F(EditorSettingsTest, BadHotkeyEntriesAreDropped) {

@@ -41,6 +41,8 @@ namespace BECore {
         void OnCommand(const EditorCommandEvent& event);
         /// Keeps the preview choice of the viewport in the preferences and saves them
         void OnViewportPreviewChanged(const ViewportPreviewChangedEvent& event);
+        /// Keeps the viewport's input mode (Play or Edit) in the preferences and saves them
+        void OnViewportInputModeChanged(const ViewportInputModeChangedEvent& event);
         /// Runs before ImGui::NewFrame (RenderEvents::ImGuiNewFrameEvent): the only safe moment to load an ini
         void OnImGuiNewFrame();
 

@@ -4,6 +4,7 @@
 #include <BECore/UI/UIPreview.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/Viewport/ViewportInput.h>
 
 struct ImVec2;
 
@@ -26,6 +27,11 @@ namespace BECore {
     // An "Overlays" popup toggles what is drawn over the image: the safe area, the view bounds, the canvas bounds, the touch targets
     // and the regions a game published for its canvases (UIPreviewOverlay; the touch rule is the validator's).
     // A third combo forces one of the scene's view variants (Scene::SetViewOverride) around the viewport's own pass only.
+    // The image is covered by an InvisibleButton (a real item with an id: a press on it is always seen and never moves the window)
+    // and its mouse is the game's input as the window's (ViewportPointer). The input mode (ViewportInputMode, a toolbar toggle and
+    // the viewport.inputMode command) says whether a press goes to the game (Play) or is kept for the editor (Edit: the game gets
+    // nothing and ViewportEditClickEvent is emitted); Alt held flips it for one click. A badge in the image corner shows the
+    // effective mode, and Edit adds an outline around the image.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
     public:
@@ -45,6 +51,12 @@ namespace BECore {
 
         // The grid over the image: a line every _gridStep image pixels (zoom screen units per pixel), clipped to the image
         void DrawGrid(float minX, float minY, float maxX, float maxY, float zoom) const;
+
+        // The command of the input mode (viewport.inputMode) flips it
+        void OnCommand(const EditorCommandEvent& event);
+
+        // Tells EditorLayoutWidget (ViewportInputModeChangedEvent) when the mode differs from what it was last told or told us
+        void EmitInputModeIfChanged();
 
         // Tells EditorLayoutWidget (ViewportPreviewChangedEvent) when the size, rotation, safe area or an overlay differs from what it was last told or told us (not while a custom W / H field is
         // being typed in)
@@ -79,9 +91,15 @@ namespace BECore {
         // The simulated safe area (in target pixels) as an outline over the image, so it is clear what the canvases were given
         void DrawSafeAreaOutline(float minX, float minY, float zoom, const Rect& safeArea) const;
 
-        // Mouse input of the image as the scene's input: origin is the image's top-left corner on the screen, the image is
-        // shown at `zoom` screen units per target pixel
+        // The Play / Edit toggle of the toolbar
+        void DrawInputModeToggle();
+
+        // Mouse input of the image as the scene's input (or an edit click): origin is the image's top-left corner on the screen,
+        // the image is shown at `zoom` screen units per target pixel, @p hovered is the hover of the hit area
         void ForwardMouse(float originX, float originY, float zoom, bool hovered);
+
+        // The badge of the effective input mode in the top-right corner of the image, and in Edit an outline around the image
+        void DrawInputModeMark(const ImVec2& imageMin, const ImVec2& imageMax, ViewportInputTarget target) const;
 
         BE_REFLECT_FIELD BECore::Color _clearColor{30, 30, 30, 255};
         IntrusivePtr<IRenderTarget> _renderTarget;
@@ -102,7 +120,9 @@ namespace BECore {
         PoolString _viewPreviewName;
         bool _gridEnabled = false;
         int32_t _gridStep = 0;
-        bool _pressedInViewport[3] = {false, false, false};  // left, right, middle: pressed over the image and not yet released
+        ViewportPointer _pointer;  // the held presses and where each goes
+        ViewportInputMode _inputMode = ViewportInputMode::Play;
+        ViewportInputMode _storedInputMode = ViewportInputMode::Play;  // the mode the editor last stored (applied from a preferences event, or sent by us)
     };
 
 }  // namespace BECore

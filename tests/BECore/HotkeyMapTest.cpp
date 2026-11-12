@@ -42,6 +42,19 @@ namespace BECore::Tests {
         EXPECT_TRUE(FindEditorCommand(kGameStep)->repeats);
     }
 
+    TEST(HotkeyMapTest, TheViewportInputModeCommandIsRebindableOnF8) {
+        const HotkeyMap map;
+        const EditorCommand* command = FindEditorCommand(kViewportInputMode);
+        ASSERT_NE(command, nullptr);
+        EXPECT_TRUE(command->rebindable);
+        EXPECT_FALSE(command->repeats);
+        ASSERT_TRUE(command->defaultChord.has_value());
+        EXPECT_EQ(*command->defaultChord, (KeyChord{ImGuiKey_F8, 0}));
+        EXPECT_TRUE(IsAllowedAsHotkey(*command->defaultChord));
+        EXPECT_FALSE(IsReservedChord(*command->defaultChord));
+        EXPECT_EQ(map.Find(*command->defaultChord), PoolString(kViewportInputMode));
+    }
+
     TEST(HotkeyMapTest, NoTwoCommandsShareADefaultChord) {
         const eastl::span<const EditorCommand> commands = GetEditorCommands();
         for (size_t i = 0; i < commands.size(); ++i) {
