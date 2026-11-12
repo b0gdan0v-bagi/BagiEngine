@@ -20,13 +20,24 @@ def read_shell() -> str:
     return SHELL_FILE.read_text(encoding="utf-8")
 
 
+POST_SCRIPT_ID = "bagi-web-post"
+
+
 def inline_scripts(html: str) -> list:
-    """The bodies of the <script> elements without a src (the template that holds the emcc script is not one of them)."""
+    """The bodies of the <script> elements without a src and without an id: the shell's own script (the template that holds the
+    emcc script is not one of them; the post script has an id, `post_script`)."""
     bodies = []
     for attributes, body in re.findall(r"<script([^>]*)>(.*?)</script>", html, flags=re.DOTALL):
-        if "src=" not in attributes:
+        if "src=" not in attributes and "id=" not in attributes:
             bodies.append(body)
     return bodies
+
+
+def post_script(html: str) -> str:
+    """The body of the script that defines window.bagiWebPost, found by its id."""
+    found = re.findall(rf'<script id="{POST_SCRIPT_ID}">(.*?)</script>', html, flags=re.DOTALL)
+    assert len(found) == 1, "the shell has exactly one post script"
+    return found[0]
 
 
 def strip_comments(html: str) -> str:
@@ -307,6 +318,197 @@ class ShellScriptTest(unittest.TestCase):
             path.write_text(self.script, encoding="utf-8")
             result = subprocess.run([NODE, "--check", str(path)], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+
+# The prelude of the node cases: the script runs as the body of a function whose parameters shadow the globals it uses, so
+# `fetch`, `Date` and `TextEncoder` are the test's. `fetch` records the call and returns a promise that the case settles by hand.
+NODE_PRELUDE = r"""
+const assert = require("assert");
+const fs = require("fs");
+const source = fs.readFileSync(process.argv[2], "utf8");
+function load(fetchOverride) {
+    const world = {window: {}, calls: [], clock: {t: 1000000, now() { return this.t; }}};
+    world.fetch = (path, options) => {
+        const call = {path, options, resolve: null, reject: null};
+        call.promise = new Promise((resolve, reject) => { call.resolve = resolve; call.reject = reject; });
+        world.calls.push(call);
+        return call.promise;
+    };
+    new Function("window", "fetch", "Date", "TextEncoder", source)(world.window, fetchOverride || world.fetch, world.clock, TextEncoder);
+    world.post = world.window.bagiWebPost;
+    return world;
+}
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+(async () => {
+"""
+NODE_EPILOGUE = "\n})().catch((error) => { console.error(error); process.exit(1); });\n"
+
+
+class ShellWebPostTest(unittest.TestCase):
+    def setUp(self):
+        self.html = read_shell()
+        self.markup = strip_comments(self.html)
+        self.script = post_script(self.html)
+
+    def test_the_post_script_is_outside_the_template_and_before_the_webgl_gate(self):
+        self.assertEqual(self.html.count("{{{"), 1)
+        self.assertEqual(self.markup.count("{{{ SCRIPT }}}"), 1)
+        template_end = self.markup.index("</template>")
+        self.assertLess(template_end, self.markup.index(f'<script id="{POST_SCRIPT_ID}">'))
+        # a script of its own that comes before the shell's, whose first act is the WebGL test
+        self.assertLess(self.markup.index(f'<script id="{POST_SCRIPT_ID}">'), self.markup.index("hasWebGL()"))
+        self.assertNotIn("template", self.script)
+
+    def test_it_is_a_property_of_window_with_start_and_poll_and_names_no_game(self):
+        self.assertRegex(self.script, r"window\.bagiWebPost\s*=\s*\{start:\s*start,\s*poll:\s*poll\}")
+        self.assertNotRegex(self.script, r"(?i)mahjong|match3")
+        self.assertNotIn("console.", self.script)  # neither paths nor bodies are logged
+
+    def test_the_numbers_of_the_contract(self):
+        for text in ("1048576", "2048", "= 64;", "60000", "x-ndjson", 'credentials: "same-origin"', 'method: "POST"'):
+            with self.subTest(text):
+                self.assertIn(text, self.script)
+
+    def run_node(self, cases: str):
+        with tempfile.TemporaryDirectory(prefix="bagi_post_") as scratch:
+            script_path = Path(scratch) / "post_script.js"
+            script_path.write_text(self.script, encoding="utf-8")
+            driver = Path(scratch) / "driver.js"
+            driver.write_text(NODE_PRELUDE + cases + NODE_EPILOGUE, encoding="utf-8")
+            result = subprocess.run([NODE, str(driver), str(script_path)], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_a_post_sends_method_path_body_content_type_and_credentials(self):
+        self.run_node(r"""
+            const w = load();
+            const id = w.post.start("/matches/abc/0", "{\"a\":1}\n", "text/plain");
+            assert.ok(id > 0);
+            assert.strictEqual(w.calls.length, 1);
+            const call = w.calls[0];
+            assert.strictEqual(call.path, "/matches/abc/0");
+            assert.strictEqual(call.options.method, "POST");
+            assert.strictEqual(call.options.body, "{\"a\":1}\n");
+            assert.strictEqual(call.options.headers["Content-Type"], "text/plain");
+            assert.strictEqual(call.options.credentials, "same-origin");
+            assert.strictEqual(call.options.cache, "no-store");
+            assert.strictEqual(call.options.keepalive, true);
+            w.post.start("/x", "", undefined);
+            assert.strictEqual(w.calls[1].options.headers["Content-Type"], "application/x-ndjson");
+            assert.strictEqual(w.calls[1].options.body, "");
+        """)
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_keepalive_is_set_up_to_60000_bytes_and_a_non_ascii_body_counts_in_bytes(self):
+        self.run_node(r"""
+            const w = load();
+            w.post.start("/a", "x".repeat(60000), "t");
+            w.post.start("/a", "x".repeat(60001), "t");
+            assert.strictEqual(w.calls[0].options.keepalive, true);
+            assert.strictEqual(w.calls[1].options.keepalive, false);
+            // 30000 two-byte characters are 60000 bytes, 30001 are 60002
+            w.post.start("/a", "\u00e9".repeat(30000), "t");
+            w.post.start("/a", "\u00e9".repeat(30001), "t");
+            assert.strictEqual(w.calls[2].options.keepalive, true);
+            assert.strictEqual(w.calls[3].options.keepalive, false);
+        """)
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_poll_is_pending_then_the_status_once_then_unknown(self):
+        self.run_node(r"""
+            const w = load();
+            const id = w.post.start("/a", "x", "t");
+            assert.strictEqual(w.post.poll(id), -1);
+            w.calls[0].resolve({status: 409});
+            assert.strictEqual(w.post.poll(id), -1);  // the promise has not run its handlers yet
+            await tick();
+            assert.strictEqual(w.post.poll(id), 409);
+            assert.strictEqual(w.post.poll(id), 0);
+            assert.strictEqual(w.post.poll(99999), 0);
+            assert.strictEqual(w.post.poll(0), 0);
+            assert.strictEqual(w.post.poll("__proto__"), 0);
+        """)
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_a_rejecting_fetch_or_one_that_throws_polls_as_zero_and_nothing_is_unhandled(self):
+        self.run_node(r"""
+            process.on("unhandledRejection", (reason) => { throw reason; });
+            const w = load();
+            const id = w.post.start("/a", "x", "t");
+            w.calls[0].reject(new TypeError("Failed to fetch"));
+            await tick();
+            assert.strictEqual(w.post.poll(id), 0);
+            // a fetch that throws at once (a bad header value) is a refusal, and its slot is free again
+            const throwing = load(() => { throw new TypeError("bad header"); });
+            for (let i = 0; i < 100; ++i) {
+                assert.strictEqual(throwing.post.start("/a", "x", "bad\\nvalue"), 0);
+            }
+        """)
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_a_path_that_is_not_of_this_origin_is_refused(self):
+        self.run_node(r"""
+            const w = load();
+            const refused = ["http://example.com/x", "https://example.com/x", "//host/x", "matches/x", "", "/a b", "/a\tb", "/a\nb",
+                             "/a\\b", "/a/../b", "/..", "/\u00e9", "/a\u007f", "javascript:alert(1)", 42, null, undefined, "/" + "a".repeat(2048)];
+            for (const path of refused) {
+                assert.strictEqual(w.post.start(path, "x", "t"), 0, String(path));
+            }
+            assert.strictEqual(w.calls.length, 0);
+            assert.ok(w.post.start("/" + "a".repeat(2047), "x", "t") > 0);
+            assert.ok(w.post.start("/matches/0123456789abcdef0123456789abcdef/0", "x", "t") > 0);
+            assert.ok(w.post.start("/a.b/c?d=1", "x", "t") > 0);
+        """)
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_a_body_above_one_mebibyte_or_not_a_string_is_refused(self):
+        self.run_node(r"""
+            const w = load();
+            assert.ok(w.post.start("/a", "x".repeat(1048576), "t") > 0);
+            assert.strictEqual(w.post.start("/a", "x".repeat(1048577), "t"), 0);
+            // under the limit in characters, over it in bytes
+            assert.strictEqual(w.post.start("/a", "\u00e9".repeat(524289), "t"), 0);
+            assert.ok(w.post.start("/a", "\u00e9".repeat(524288), "t") > 0);
+            assert.strictEqual(w.post.start("/a", 5, "t"), 0);
+            assert.strictEqual(w.post.start("/a", null, "t"), 0);
+            assert.strictEqual(w.calls.length, 2);
+        """)
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_the_65th_concurrent_post_is_refused_and_a_finished_one_frees_its_slot(self):
+        self.run_node(r"""
+            const w = load();
+            const ids = [];
+            for (let i = 0; i < 64; ++i) {
+                ids.push(w.post.start("/a", "x", "t"));
+                assert.ok(ids[i] > 0);
+            }
+            assert.strictEqual(w.post.start("/a", "x", "t"), 0);
+            w.calls[0].resolve({status: 200});
+            await tick();
+            assert.ok(w.post.start("/a", "x", "t") > 0);   // finished, though not yet polled
+            assert.strictEqual(w.post.start("/a", "x", "t"), 0);
+        """)
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_an_id_nobody_polls_expires_after_a_minute_and_a_polled_one_does_not(self):
+        self.run_node(r"""
+            const w = load();
+            const lost = w.post.start("/a", "x", "t");
+            const kept = w.post.start("/a", "x", "t");
+            w.clock.t += 50000;
+            assert.strictEqual(w.post.poll(kept), -1);       // touching it keeps it
+            w.clock.t += 50000;
+            w.post.start("/a", "x", "t");                    // the purge runs on use
+            assert.strictEqual(w.post.poll(lost), 0);
+            assert.strictEqual(w.post.poll(kept), -1);
+            // a lost pending post also frees its slot
+            const w2 = load();
+            for (let i = 0; i < 64; ++i) { w2.post.start("/a", "x", "t"); }
+            assert.strictEqual(w2.post.start("/a", "x", "t"), 0);
+            w2.clock.t += 60001;
+            assert.ok(w2.post.start("/a", "x", "t") > 0);
+        """)
 
 
 if __name__ == "__main__":

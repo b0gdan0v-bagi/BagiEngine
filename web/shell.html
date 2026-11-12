@@ -224,6 +224,135 @@
 
     <template id="module-script">{{{ SCRIPT }}}</template>
 
+    <!--
+        window.bagiWebPost: how the game sends a text body (a piece of a match log) to its own server. It has a script of its own,
+        before the one below, so it exists whatever the WebGL test says, and it runs on the main thread (the game calls it from
+        there: a Worker has no window). start(path, body, contentType) returns a positive id, or 0 when it refuses; poll(id) returns -1
+        while the answer is pending, 0 for a network failure or an unknown id, otherwise the HTTP status (and forgets the id). The game
+        polls instead of being called back, so no C function has to be exported. The path is a path of this origin and the page's Basic
+        credentials ride along. keepalive lets a post outlive a closing tab, but Chromium refuses a keepalive body above 64 KiB, so it
+        is used up to 60000 bytes only. The rules for the path and the size are the same as in CoreSDL/SDLWebPost.cpp. The script knows
+        no game and logs neither paths nor bodies.
+    -->
+    <script id="bagi-web-post">
+        (function () {
+            "use strict";
+
+            var kMaxBodyBytes = 1048576;
+            var kMaxPathBytes = 2048;
+            var kMaxInFlight = 64;
+            var kKeepaliveMaxBytes = 60000;
+            var kExpireMs = 60000;  // an id that nobody polled for this long is dropped, so a lost game cannot leak
+            var kDefaultContentType = "application/x-ndjson";
+            var kFirstPrintable = 0x21;
+            var kLastPrintable = 0x7e;
+            var kBackslash = 0x5c;
+
+            var entries = Object.create(null);  // id -> {status: -1 while pending, touched: ms}
+            var inFlight = 0;
+            var nextId = 1;
+
+            // A path of this origin: one leading "/", not "//", printable ASCII only (no space, control character or non-ASCII,
+            // which also makes the length the byte count), no backslash, no ".."
+            function isPathValid(path) {
+                if (typeof path !== "string" || path.length === 0 || path.length > kMaxPathBytes) {
+                    return false;
+                }
+                if (path.charAt(0) !== "/" || path.charAt(1) === "/" || path.indexOf("..") !== -1) {
+                    return false;
+                }
+                for (var i = 0; i < path.length; ++i) {
+                    var code = path.charCodeAt(i);
+                    if (code < kFirstPrintable || code > kLastPrintable || code === kBackslash) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            function forget(id) {
+                var entry = entries[id];
+                if (entry) {
+                    if (entry.status === -1) {
+                        --inFlight;
+                    }
+                    delete entries[id];
+                }
+            }
+
+            function dropExpired(time) {
+                for (var id in entries) {
+                    if (time - entries[id].touched > kExpireMs) {
+                        forget(id);
+                    }
+                }
+            }
+
+            function start(path, body, contentType) {
+                try {
+                    if (!isPathValid(path) || typeof body !== "string" || body.length > kMaxBodyBytes) {
+                        return 0;
+                    }
+                    var bytes = new TextEncoder().encode(body).length;
+                    if (bytes > kMaxBodyBytes) {
+                        return 0;
+                    }
+                    var time = Date.now();
+                    dropExpired(time);
+                    if (inFlight >= kMaxInFlight) {
+                        return 0;
+                    }
+                    var id = nextId++;
+                    var entry = {status: -1, touched: time};
+                    entries[id] = entry;
+                    ++inFlight;
+                    var finish = function (status) {
+                        if (entries[id] === entry && entry.status === -1) {
+                            entry.status = status;
+                            --inFlight;
+                        }
+                    };
+                    try {
+                        fetch(path, {
+                            method: "POST",
+                            body: body,
+                            headers: {"Content-Type": typeof contentType === "string" && contentType !== "" ? contentType : kDefaultContentType},
+                            credentials: "same-origin",
+                            cache: "no-store",
+                            keepalive: bytes <= kKeepaliveMaxBytes
+                        }).then(function (response) {
+                            finish(response.status);
+                        }, function () {
+                            finish(0);
+                        });
+                    } catch (error) {
+                        forget(id);
+                        return 0;
+                    }
+                    return id;
+                } catch (error) {
+                    return 0;
+                }
+            }
+
+            function poll(id) {
+                var entry = entries[id];
+                if (!entry) {
+                    return 0;
+                }
+                entry.touched = Date.now();
+                if (entry.status === -1) {
+                    return -1;
+                }
+                var status = entry.status;
+                forget(id);
+                return status;
+            }
+
+            window.bagiWebPost = {start: start, poll: poll};
+        })();
+    </script>
+
     <script>
         (function () {
             "use strict";
