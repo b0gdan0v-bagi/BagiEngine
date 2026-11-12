@@ -299,6 +299,7 @@ class CodeGenerator:
                 ],
                 'is_factory_base': cls.is_factory_base,
                 'is_event': cls.is_event,
+                'icon': cls.icon,
                 'parent_class': cls.parent_class,
                 'parent_has_be_class': parent_has_be_class,
                 'parent_full_qualified_name': parent_full_qualified_name,

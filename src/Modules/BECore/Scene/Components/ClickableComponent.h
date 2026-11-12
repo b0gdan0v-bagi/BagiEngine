@@ -9,7 +9,7 @@ namespace BECore {
     }  // namespace SDLEvents
 
     class ClickableComponent : public IComponent {
-        BE_CLASS(ClickableComponent)
+        BE_CLASS(ClickableComponent, ICON = mouse - pointer - click)
     public:
         ClickableComponent() = default;
         ~ClickableComponent() override = default;

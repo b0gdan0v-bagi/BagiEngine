@@ -43,6 +43,7 @@ Separate interfaces for writing and reading, sharing the structural base `IArchi
 |-------|---------|
 | `BE_CLASS(Name)` | Reflection + `Serialize` / `Deserialize` + `AcceptPropertyVisitor` + `Is<T>()` / `Cast<T>()` |
 | `BE_CLASS(Name, FACTORY_BASE)` | Also generates the type enum and `AbstractFactory` registration for the hierarchy |
+| `BE_CLASS(Name, ICON=<lucide-name>)` | `ClassMeta::icon` (empty by default): a Lucide name in kebab case, `[a-z0-9-]+`, no prefix. The core knows no font; the editor maps the name to a glyph (`IconTable`, `.claude/rules/widgets-module.md`). Combines with the other options; an empty or malformed value warns (`ICON=... ignored`) and is dropped (clang-format writes `ICON = layout - dashboard`; the parser takes the blanks around a hyphen out). Classes only: `BE_EVENT` has none |
 | `BE_EVENT(Name)` | Lightweight variant for events (`.claude/rules/reflection-events.md`) |
 | `BE_REFLECT_FIELD` | Mark a field for serialization (same line as the field) |
 | `BE_FUNCTION` | Mark a method for reflection |

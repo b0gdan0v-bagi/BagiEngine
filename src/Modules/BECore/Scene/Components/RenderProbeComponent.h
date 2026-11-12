@@ -17,7 +17,7 @@ namespace BECore {
      * and multiply. Put it on a node with a TransformComponent: `<component type="RenderProbeComponent"/>`.
      */
     class RenderProbeComponent : public IComponent {
-        BE_CLASS(RenderProbeComponent)
+        BE_CLASS(RenderProbeComponent, ICON = scan)
     public:
         RenderProbeComponent() = default;
         ~RenderProbeComponent() override = default;

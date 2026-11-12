@@ -2,6 +2,8 @@
 
 import pytest
 
+from core.models import ClassData
+
 
 def only(classes):
     assert len(classes) == 1
@@ -409,3 +411,82 @@ def test_if_0_block_is_still_parsed(parse):
 def test_file_without_a_final_newline(parse, trailer):
     classes, _ = parse("struct Foo { BE_CLASS(Foo) };" + trailer)
     assert [c.name for c in classes] == ["Foo"]
+
+
+# ---------------------------------------------------------------------------
+# ICON= option
+# ---------------------------------------------------------------------------
+
+def test_icon_option_alone(parse):
+    classes, warnings = parse("""
+        struct Foo {
+            BE_CLASS(Foo, ICON=image)
+        };
+    """)
+    assert only(classes).icon == "image"
+    assert warnings == []
+
+
+def test_icon_option_with_other_options_and_element(parse):
+    classes, warnings = parse("""
+        struct UIElement {
+            BE_CLASS(UIElement, FACTORY_BASE, ELEMENT=item, ICON=grid-3x3)
+        };
+    """)
+    cls = only(classes)
+    assert (cls.is_factory_base, cls.element_name, cls.icon) == (True, "item", "grid-3x3")
+    assert warnings == []
+
+
+def test_icon_key_is_case_insensitive_and_the_value_is_stripped(parse):
+    classes, warnings = parse("""
+        struct Foo {
+            BE_CLASS( Foo ,  icon = mouse-pointer-click )
+        };
+    """)
+    assert only(classes).icon == "mouse-pointer-click"
+    assert warnings == []
+
+
+def test_icon_as_clang_format_writes_it(parse):
+    classes, warnings = parse("""
+        struct Foo {
+            BE_CLASS(Foo, ICON = mouse - pointer - click)
+        };
+    """)
+    assert only(classes).icon == "mouse-pointer-click"
+    assert warnings == []
+
+
+def test_a_class_without_icon_has_an_empty_one(parse):
+    classes, _ = parse("""
+        struct Foo {
+            BE_CLASS(Foo)
+        };
+    """)
+    assert only(classes).icon == ""
+
+
+@pytest.mark.parametrize("value", ["", "Image", "file code", "layout_dashboard", "lc.image"])
+def test_an_invalid_icon_warns_and_is_ignored(parse, value):
+    classes, warnings = parse(f"""
+        struct Foo {{
+            BE_CLASS(Foo, ICON={value})
+        }};
+    """)
+    assert only(classes).icon == ""
+    assert kinds_and_lines(warnings) == [("class", 2)]
+    assert "ICON=" in warnings[0].message and "'Foo'" in warnings[0].message
+
+
+def test_icon_survives_the_cache_round_trip(parse):
+    classes, _ = parse("""
+        struct Foo {
+            BE_CLASS(Foo, ICON=bug)
+        };
+    """)
+    restored = ClassData.from_dict(only(classes).to_dict())
+    assert restored.icon == "bug"
+    old_entry = only(classes).to_dict()
+    del old_entry["icon"]
+    assert ClassData.from_dict(old_entry).icon == ""

@@ -163,8 +163,8 @@ def test_warnings_do_not_stop_the_generation(run_cli, tmp_path, source):
 # the cache file
 # ---------------------------------------------------------------------------
 
-def test_cache_version_is_2_3_or_later():
-    assert tuple(int(p) for p in CACHE_VERSION.split(".")) >= (2, 3)
+def test_cache_version_is_2_4_or_later():
+    assert tuple(int(p) for p in CACHE_VERSION.split(".")) >= (2, 4)
 
 
 def test_old_cache_version_is_discarded_without_an_error_and_the_warnings_come_back(run_cli, tmp_path, source):
@@ -224,6 +224,26 @@ def test_inline_body_method_and_the_next_one_are_both_in_the_generated_table(run
     for name in ("Update", "DrawScreen", "Draw"):
         assert f'eastl::string_view{{"{name}"}}, &IFoo::{name}' in generated
     assert "BE_FUNCTION" not in generated
+
+
+# ---------------------------------------------------------------------------
+# generated ClassMeta of a class with ICON=
+# ---------------------------------------------------------------------------
+
+def test_icon_reaches_the_generated_class_meta(run_cli, tmp_path, source):
+    (source / "Pic.h").write_text(textwrap.dedent("""\
+        struct Pic {
+            BE_CLASS(Pic, ICON=image)
+        };
+        struct Plain {
+            BE_CLASS(Plain)
+        };
+    """), encoding="utf-8")
+    code, _, err = run_cli(source, "--warnings-as-errors")
+    assert (code, warning_lines(err)) == (0, [])
+    generated = (tmp_path / "out" / "Pic.gen.hpp").read_text(encoding="utf-8")
+    assert 'eastl::string_view{"Pic"},\n        eastl::string_view{"image"}' in generated
+    assert 'eastl::string_view{"Plain"},\n        eastl::string_view{""}' in generated
 
 
 # ---------------------------------------------------------------------------

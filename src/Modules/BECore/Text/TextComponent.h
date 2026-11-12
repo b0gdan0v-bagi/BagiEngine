@@ -21,7 +21,7 @@ namespace BECore {
      * The outline and the hard shadow (`_outlineWidth` / `_outlineColor`, `_shadowOffsetX/Y` / `_shadowColor`, scene units) are paint: the layout never counts them, and a Clip box cuts them.
      */
     class TextComponent : public IComponent {
-        BE_CLASS(TextComponent)
+        BE_CLASS(TextComponent, ICON = type)
     public:
         TextComponent() = default;
         ~TextComponent() override = default;

@@ -219,7 +219,8 @@ size_t {{ cls.full_qualified_name }}::GetStaticFieldCount() {
 const ::BECore::ClassMeta& {{ cls.full_qualified_name }}::GetStaticTypeMeta() {
     static const ::BECore::ClassMeta meta{
         ::BECore::String::GetHash(eastl::string_view{"{{ cls.name }}"}),
-        eastl::string_view{"{{ cls.name }}"}
+        eastl::string_view{"{{ cls.name }}"},
+        eastl::string_view{"{{ cls.icon }}"}
     };
     return meta;
 }

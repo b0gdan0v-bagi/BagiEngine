@@ -61,6 +61,8 @@ namespace BECore {
 //   BE_CLASS(ClassName)                                 - Standard reflection
 //   BE_CLASS(ClassName, FACTORY_BASE)                   - Mark as factory base for enum generation
 //   BE_CLASS(ClassName, FACTORY_BASE, SERIALIZABLE)     - Multiple options
+//   BE_CLASS(ClassName, ICON=image)                     - Lucide icon name for the editor, read into ClassMeta::icon
+//                                                         (kebab case [a-z0-9-]+; other values warn and are ignored)
 //
 // @param ClassName The name of the containing class (required for static methods)
 // @param ...       Optional: Comma-separated options (FACTORY_BASE, SERIALIZABLE, etc.)

@@ -42,7 +42,7 @@ namespace BECore {
      * Not reloaded: images and fonts, and a document from SetMarkup().
      */
     class RmlUiDocumentComponent : public IComponent, public IUIInputHandler {
-        BE_CLASS(RmlUiDocumentComponent)
+        BE_CLASS(RmlUiDocumentComponent, ICON = file - code)
     public:
         RmlUiDocumentComponent() = default;
         ~RmlUiDocumentComponent() override;

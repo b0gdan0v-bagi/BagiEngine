@@ -7,7 +7,7 @@ namespace BECore {
 
     /// A filled rect at the node's transform. It holds the field; SceneDrawSystem draws it from the registry (SceneRenderData.h).
     class QuadRendererComponent : public IComponent {
-        BE_CLASS(QuadRendererComponent)
+        BE_CLASS(QuadRendererComponent, ICON = square)
     public:
         QuadRendererComponent() = default;
         ~QuadRendererComponent() override = default;
