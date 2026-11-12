@@ -185,6 +185,10 @@ class WebThreadsTextTest(unittest.TestCase):
     def cmake_text(self, name: str) -> str:
         return (ENGINE_DIR / "cmake" / name).read_text(encoding="utf-8")
 
+    def test_an_edit_of_the_saves_script_relinks(self):
+        text = self.cmake_text("BagiWeb.cmake")
+        self.assertRegex(text, r'LINK_DEPENDS "\$\{BE_WEB_SAVES_JS\}"')
+
     def test_threads_are_not_forced_on_the_web(self):
         text = self.cmake_text("BagiPlatformOptions.cmake")
         self.assertNotRegex(text, r"set\(ENGINE_SINGLE_THREAD [^)]*FORCE\)")

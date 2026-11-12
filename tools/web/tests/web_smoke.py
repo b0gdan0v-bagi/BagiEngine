@@ -31,6 +31,14 @@ The checks, in this order:
      and the file in the store holds the same bytes. A page without `bagiWebPost` fails. --no-upload-check leaves it out (a dist built
      before the call existed). The --selftest page carries the real script, cut out of web/shell.html by its id.
 
+  8. the save folder survives a reload (web/saves.js, web/CLAUDE.md), in three runs of a browser of their own, each in a fresh profile.
+     (a) The page's `Module.bagiSaves.state` is "persistent"; `/bagi/saves/smoke.save` is written through `Module.FS`, `Module.bagiSaves.flush`
+     answers with no error, the page is reloaded, the game draws again, and the file is read back byte for byte. (b) and (c): the page
+     with IndexedDB made to throw on `open`, and with `open` that never answers (the start then waits for the time-out of saves.js):
+     the page still starts (a drawn frame), the state is "memory", a file can still be written, and the console has no error outside the
+     allow-list. A dist whose page has no `Module.bagiSaves` or no `Module.FS` (built before saves.js, or without it) fails. The
+     --selftest page has no module, and --no-saves-check leaves the check out.
+
 The page is opened with `?fullscreen=0` (the switch of the shell, web/shell.html): without it the first tap of --touch would ask for
 fullscreen and resize the canvas under checks 3 and 5. So the smoke does not exercise the first-tap request, the toggle button or the
 orientation lock (a real phone does).
@@ -110,6 +118,16 @@ CANVAS_SIZE_TOLERANCE_PIXELS = 1  # check 5: the backing store may differ from C
 # the selftest page in Chromium 158 and Edge 157 (the WebGL warnings of SwiftShader are warnings, not errors); the game's own
 # allowed messages are named by the run that needs them (--allow-console)
 DEFAULT_CONSOLE_ALLOW = (r"favicon\.ico",)
+# Check 8: the file written and read back, the longest wait for the flush to be answered, the two ways IndexedDB is made to fail (an
+# init script of the page replaces IDBFactory.open), and how long the game may need to start after the time-out of saves.js (5 s there)
+SAVES_FILE_PATH = "/bagi/saves/smoke.save"
+SAVES_FILE_SIZE = 32
+SAVES_FLUSH_TIMEOUT_SECONDS = 15.0
+SAVES_REFUSED_MODES = ("throws", "silent")
+SAVES_REFUSED_SCRIPTS = {
+    "throws": "IDBFactory.prototype.open = function () { throw new DOMException('refused on purpose', 'SecurityError'); };",
+    "silent": "IDBFactory.prototype.open = function () { return {}; };",
+}
 SELFTEST_FAULTS = ("none", "flat", "console-error", "page-error", "deaf", "moving", "upload")
 SELFTEST_THREADED = False  # the generated dist/ is single-thread: its manifest.json says so, and serve.py then sends no isolation headers
 # Check 7: the version a smoke piece names (the smoke's store accepts exactly it), the wait for the answer, the poll step in the page
@@ -138,6 +156,41 @@ UPLOAD_PAGE_SCRIPT = """async ([path, body, timeoutMs, pollMs]) => {
             return {error: "no answer within " + timeoutMs / 1000 + " s"};
         }
         await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+}"""
+# Run in the page (page.evaluate): the state of the save folder and, when it is persistent, a write through Module.FS and a flush
+SAVES_WRITE_SCRIPT = """async ([path, bytes, timeoutMs]) => {
+    const saves = window.Module && window.Module.bagiSaves;
+    if (!saves) {
+        return {error: "the page has no Module.bagiSaves (built without web/saves.js?)"};
+    }
+    if (!window.Module.FS) {
+        return {error: "Module.FS is not exported (-sEXPORTED_RUNTIME_METHODS=FS)"};
+    }
+    const state = saves.state;
+    try {
+        window.Module.FS.writeFile(path, new Uint8Array(bytes));
+    } catch (error) {
+        return {state: state, error: "the file could not be written: " + error};
+    }
+    if (state !== "persistent") {
+        return {state: state, flush: null};
+    }
+    const flush = await new Promise((resolve) => {
+        const timer = setTimeout(() => resolve("no answer within " + timeoutMs / 1000 + " s"), timeoutMs);
+        saves.flush((error) => { clearTimeout(timer); resolve(error); });
+    });
+    return {state: state, flush: flush};
+}"""
+SAVES_READ_SCRIPT = """(path) => {
+    const saves = window.Module && window.Module.bagiSaves;
+    if (!saves || !window.Module.FS) {
+        return {error: "the page has no Module.bagiSaves or Module.FS after the reload"};
+    }
+    try {
+        return {state: saves.state, bytes: Array.from(window.Module.FS.readFile(path))};
+    } catch (error) {
+        return {state: saves.state, error: "the file is not there: " + error};
     }
 }"""
 # What the page tells about itself (page.evaluate); read after the first frame
@@ -203,6 +256,34 @@ class BrowserRun:
     touch: bool = False  # the click of check 3 was a tap
     web_manifest_problems: list[str] | None = None  # check 6, made by check_web_manifest (None: not made)
     upload_problems: list[str] | None = None  # check 7, made by check_upload (None: not made)
+    saves_problems: list[str] | None = None  # check 8, made by check_saves (None: not made)
+
+
+@dataclass
+class SavesPersistRun:
+    """Check 8 (a): what the page showed across a write, a flush and a reload."""
+
+    written: list[int] = field(default_factory=list)
+    state: str | None = None  # Module.bagiSaves.state before the reload
+    flush: str | None = None  # None: the flush answered with no error, else why not
+    restarted: bool = False  # the game drew a frame after the reload
+    state_after: str | None = None
+    read_back: list[int] | None = None
+    error: str | None = None  # the page could not be driven (no Module.bagiSaves, Module.FS, file)
+    console: list[ConsoleEntry] = field(default_factory=list)
+    page_errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SavesRefusedRun:
+    """Check 8 (b), (c): the page started with IndexedDB made to fail in the way `mode` names."""
+
+    mode: str
+    started: bool = False  # the game drew a frame
+    state: str | None = None
+    error: str | None = None
+    console: list[ConsoleEntry] = field(default_factory=list)
+    page_errors: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -222,6 +303,7 @@ class Options:
     touch: bool = False
     expect_console: list[str] = field(default_factory=list)
     upload_check: bool = True
+    saves_check: bool = True
 
 
 # ----- command line -----
@@ -270,6 +352,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="fail unless a console message (any level) matching this appears within --timeout (repeatable)")
     parser.add_argument("--no-upload-check", action="store_true",
                         help="leave out check 7 (the page posts a match log piece): for a dist built before window.bagiWebPost existed")
+    parser.add_argument("--no-saves-check", action="store_true",
+                        help="leave out check 8 (the save folder survives a reload): for a dist built without web/saves.js; the --selftest page has no module")
     return parser
 
 
@@ -295,7 +379,7 @@ def parse_options(argv: list[str] | None = None) -> Options:
                 parser.error(f"{option} '{pattern}' is not a regular expression: {error}")
     return Options(args.dist, args.selftest, args.click, args.viewport, args.timeout, args.settle, args.allow_console,
                    args.chromium_arg, args.selftest_fault, args.browser_channel, args.executable_path, args.device_scale_factor,
-                   args.touch, args.expect_console, not args.no_upload_check)
+                   args.touch, args.expect_console, not args.no_upload_check, not args.no_saves_check and not args.selftest)
 
 
 # ----- judging: no browser needed -----
@@ -393,6 +477,52 @@ def evaluate(run: BrowserRun, allow_console: list[str] | None = None, expect_con
         problems.extend(run.web_manifest_problems)
     if run.upload_problems:
         problems.extend(run.upload_problems)
+    if run.saves_problems:
+        problems.extend(run.saves_problems)
+    return problems
+
+
+def console_error_problems(prefix: str, console: list[ConsoleEntry], page_errors: list[str], allow: list[str]) -> list[str]:
+    problems = [f"{prefix} uncaught error in the page: {error}" for error in page_errors]
+    for entry in console:
+        if entry.kind == "error" and not console_error_allowed(entry, allow):
+            where = f" ({entry.url})" if entry.url else ""
+            problems.append(f"{prefix} console error: {entry.text}{where}")
+    return problems
+
+
+def check_saves(persist: SavesPersistRun, refused: list[SavesRefusedRun], allow_console: list[str] | None = None) -> list[str]:
+    """Check 8 on what the three browser runs showed: the reasons, empty when the file written before the reload is there after it and
+    the page starts, in state "memory", with IndexedDB refused in each of the ways."""
+    allow = allow_console or []
+    problems = []
+    label = "(8a) reload"
+    if persist.error:
+        problems.append(f"{label}: {persist.error}")
+    elif persist.state != "persistent":
+        problems.append(f"{label}: Module.bagiSaves.state is {persist.state!r}, not 'persistent': IndexedDB was refused in this browser, "
+                        "or did not answer in time")
+    elif persist.flush is not None:
+        problems.append(f"{label}: Module.bagiSaves.flush did not succeed: {persist.flush}")
+    elif not persist.restarted:
+        problems.append(f"{label}: the game did not draw a frame after the reload")
+    elif persist.state_after != "persistent":
+        problems.append(f"{label}: Module.bagiSaves.state is {persist.state_after!r} after the reload, not 'persistent'")
+    elif persist.read_back is None:
+        problems.append(f"{label}: the file written before the reload is not there after it")
+    elif persist.read_back != persist.written:
+        problems.append(f"{label}: the file after the reload differs from the one written ({len(persist.read_back)} bytes, "
+                        f"{len(persist.written)} written)")
+    problems.extend(console_error_problems(label + ":", persist.console, persist.page_errors, allow))
+    for run in refused:
+        label = f"(8, IndexedDB {run.mode})"
+        if run.error:
+            problems.append(f"{label}: {run.error}")
+        elif not run.started:
+            problems.append(f"{label}: the page did not start (no frame was drawn): a refused IndexedDB must not stop the game")
+        elif run.state != "memory":
+            problems.append(f"{label}: Module.bagiSaves.state is {run.state!r}, not 'memory'")
+        problems.extend(console_error_problems(label + ":", run.console, run.page_errors, allow))
     return problems
 
 
@@ -754,6 +884,84 @@ def run_browser(playwright_api, url: str, options: Options, upload_store: Path |
     return run
 
 
+def open_game_page(browser, url: str, options: Options, console: list[ConsoleEntry], page_errors: list[str], init_script: str | None = None):
+    """A page in a context of its own (a fresh profile, so no IndexedDB of an earlier run), console and errors collected into the
+    lists. Returns (page, canvas)."""
+    width, height = options.viewport
+    context = browser.new_context(viewport={"width": width, "height": height}, device_scale_factor=options.device_scale_factor)
+    if init_script:
+        context.add_init_script(init_script)
+    page = context.new_page()
+    page.on("console", lambda message: console.append(ConsoleEntry(message.type, message.text, (message.location or {}).get("url", ""))))
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.on("crash", lambda *_: page_errors.append("the page crashed"))
+    page.goto(url + PAGE_QUERY, wait_until="load", timeout=options.timeout * 1000)
+    return page, page.locator(CANVAS_SELECTOR).first
+
+
+def game_draws(page, canvas, timeout: float) -> bool:
+    """Waits (with the page's timer) for a frame that is not one flat color."""
+    try:
+        canvas.wait_for(state="visible", timeout=timeout * 1000)
+    except Exception:
+        return False
+    _, drawn = poll(canvas.screenshot, png_is_drawn, timeout, sleep=lambda seconds: page.wait_for_timeout(seconds * 1000))
+    return drawn
+
+
+def run_saves_persistence(browser, url: str, options: Options) -> SavesPersistRun:
+    """Check 8 (a): write a file, flush, reload, read it back."""
+    run = SavesPersistRun(written=list(secrets.token_bytes(SAVES_FILE_SIZE)))
+    page, canvas = open_game_page(browser, url, options, run.console, run.page_errors)
+    if not game_draws(page, canvas, options.timeout):
+        run.error = "the game did not draw a frame, so the save folder was not tried"
+        return run
+    answer = page.evaluate(SAVES_WRITE_SCRIPT, [SAVES_FILE_PATH, run.written, SAVES_FLUSH_TIMEOUT_SECONDS * 1000])
+    if "error" in answer:
+        run.error = answer["error"]
+        return run
+    run.state = answer.get("state")
+    run.flush = answer.get("flush")
+    if run.state != "persistent" or run.flush is not None:
+        return run
+    page.reload(wait_until="load", timeout=options.timeout * 1000)
+    run.restarted = game_draws(page, canvas, options.timeout)
+    if not run.restarted:
+        return run
+    answer = page.evaluate(SAVES_READ_SCRIPT, SAVES_FILE_PATH)
+    run.state_after = answer.get("state")
+    if "bytes" in answer:
+        run.read_back = answer["bytes"]
+    elif run.state_after is None:
+        run.error = answer.get("error")
+    return run
+
+
+def run_saves_refused(browser, url: str, options: Options, mode: str) -> SavesRefusedRun:
+    """Check 8 (b), (c): the page starts with IndexedDB failing as `mode` says and keeps its saves in memory."""
+    run = SavesRefusedRun(mode)
+    page, canvas = open_game_page(browser, url, options, run.console, run.page_errors, SAVES_REFUSED_SCRIPTS[mode])
+    run.started = game_draws(page, canvas, options.timeout)
+    if not run.started:
+        return run
+    answer = page.evaluate(SAVES_WRITE_SCRIPT, [SAVES_FILE_PATH, list(range(SAVES_FILE_SIZE)), SAVES_FLUSH_TIMEOUT_SECONDS * 1000])
+    run.state = answer.get("state")
+    run.error = answer.get("error")
+    return run
+
+
+def run_saves_checks(playwright_api, url: str, options: Options) -> list[str]:
+    """Check 8: runs the three browsers of the module comment against the page at `url` and judges them."""
+    with playwright_api.sync_playwright() as playwright:
+        browser = launch_browser(playwright, options)
+        try:
+            persist = run_saves_persistence(browser, url, options)
+            refused = [run_saves_refused(browser, url, options, mode) for mode in SAVES_REFUSED_MODES]
+        finally:
+            browser.close()
+    return check_saves(persist, refused, options.allow_console)
+
+
 def shot_ends_idle_wait(idle: PngImage, png: bytes) -> bool:
     """True for a shot that ends the wait with no click: a different picture, or one that cannot be read (the caller tells them apart)."""
     try:
@@ -802,6 +1010,8 @@ def run_smoke(options: Options, playwright_api) -> int:
             try:
                 run = run_browser(playwright_api, url, options, store if options.upload_check else None)
                 run.web_manifest_problems = check_web_manifest(fetch_from(url))
+                if options.saves_check:
+                    run.saves_problems = run_saves_checks(playwright_api, url, options)
             except BrowserMissing as error:
                 named = options.browser_channel or options.executable_path
                 print(f"SKIP: the browser is not installed ({'the one you named' if named else 'playwright install chromium'}): {error}")
@@ -833,6 +1043,10 @@ def run_smoke(options: Options, playwright_api) -> int:
         print("ok: (7) the page posted a match log piece through window.bagiWebPost and the server stored it byte for byte")
     else:
         print("skip: (7) the match log post (--no-upload-check)")
+    if options.saves_check:
+        print("ok: (8) a file written, flushed and reloaded is read back; with IndexedDB refused the page still starts, in state memory")
+    else:
+        print("skip: (8) the save folder (--no-saves-check, or the --selftest page, which has no module)")
     print("PASS")
     return EXIT_PASSED
 
