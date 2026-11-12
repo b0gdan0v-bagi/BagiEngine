@@ -1,6 +1,7 @@
 #pragma once
 
 #include <RemoteControl/Socket.h>
+#include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClientHandshake.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <condition_variable>
@@ -9,8 +10,8 @@
 
 namespace BECore {
 
-    /// The error text of WebSocketClient::Open() for a `wss://` address starts with this (the desktop client has no TLS)
-    inline constexpr eastl::string_view kWebSocketTlsUnsupported = "tls_unsupported";
+    /// The old name of kTlsUnsupported (Tls/TlsStream.h): the error text of a `wss://` address on a platform without a TLS backend starts with it
+    inline constexpr eastl::string_view kWebSocketTlsUnsupported = kTlsUnsupported;
 
     /// The limits, timeouts and names of one client
     struct WebSocketClientSettings {
