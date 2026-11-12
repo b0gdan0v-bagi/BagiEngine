@@ -3,11 +3,11 @@
 
 namespace BECore::Tests {
 
-    TEST(EditorPlayModelTest, StartsStopped) {
+    TEST(EditorPlayModelTest, StartsStoppedAndCanPause) {
         const EditorPlayModel model;
         EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
         EXPECT_EQ(model.GetStepCount(), 0u);
-        EXPECT_FALSE(model.CanPause());
+        EXPECT_TRUE(model.CanPause());
         EXPECT_FALSE(model.CanStep());
     }
 
@@ -29,6 +29,21 @@ namespace BECore::Tests {
         ASSERT_EQ(model.GetState(), EditorPlayState::Paused);
         model.PressPlay();
         EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
+
+        // The pause that was left behind does not come back: the next pause starts from Stopped
+        model.PressPause();
+        model.PressPause();
+        EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
+    }
+
+    TEST(EditorPlayModelTest, PauseWorksFromStoppedAndReturnsThere) {
+        EditorPlayModel model;
+        model.PressPause();
+        EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
+        EXPECT_TRUE(model.CanStep());
+
+        model.PressPause();
+        EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
     }
 
     TEST(EditorPlayModelTest, PauseTogglesPlayingAndPaused) {
@@ -43,30 +58,24 @@ namespace BECore::Tests {
         EXPECT_EQ(model.GetState(), EditorPlayState::Playing);
     }
 
-    TEST(EditorPlayModelTest, PauseIsIgnoredWhileStopped) {
+    TEST(EditorPlayModelTest, StepCountsOnlyWhilePausedAndSaysIfItIsDue) {
         EditorPlayModel model;
-        model.PressPause();
-        EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
-    }
-
-    TEST(EditorPlayModelTest, StepCountsOnlyWhilePaused) {
-        EditorPlayModel model;
-        model.PressStep();
+        EXPECT_FALSE(model.PressStep());
         EXPECT_EQ(model.GetStepCount(), 0u);
 
         model.PressPlay();
-        model.PressStep();
+        EXPECT_FALSE(model.PressStep());
         EXPECT_EQ(model.GetStepCount(), 0u);
         EXPECT_EQ(model.GetState(), EditorPlayState::Playing);
 
         model.PressPause();
-        model.PressStep();
-        model.PressStep();
+        EXPECT_TRUE(model.PressStep());
+        EXPECT_TRUE(model.PressStep());
         EXPECT_EQ(model.GetStepCount(), 2u);
         EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
 
         model.PressPause();
-        model.PressStep();
+        EXPECT_FALSE(model.PressStep());
         EXPECT_EQ(model.GetStepCount(), 2u);
         EXPECT_EQ(model.GetState(), EditorPlayState::Playing);
     }
@@ -75,11 +84,36 @@ namespace BECore::Tests {
         EditorPlayModel model;
         model.PressPlay();
         model.PressPause();
-        model.PressStep();
+        EXPECT_TRUE(model.PressStep());
         ASSERT_EQ(model.GetStepCount(), 1u);
 
         model.PressPlay();
         EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
+        EXPECT_EQ(model.GetStepCount(), 0u);
+    }
+
+    TEST(EditorPlayModelTest, SetPausedCopiesThePauseOfTheEngineBothWays) {
+        EditorPlayModel model;
+        model.SetPaused(true);
+        EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
+        model.SetPaused(true);
+        EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
+        model.SetPaused(false);
+        EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
+        model.SetPaused(false);
+        EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
+
+        model.PressPlay();
+        model.SetPaused(true);
+        ASSERT_EQ(model.GetState(), EditorPlayState::Paused);
+        model.SetPaused(false);
+        EXPECT_EQ(model.GetState(), EditorPlayState::Playing);
+    }
+
+    TEST(EditorPlayModelTest, SetPausedDoesNotCountSteps) {
+        EditorPlayModel model;
+        model.SetPaused(true);
+        model.SetPaused(false);
         EXPECT_EQ(model.GetStepCount(), 0u);
     }
 

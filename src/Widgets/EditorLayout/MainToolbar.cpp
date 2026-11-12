@@ -14,8 +14,8 @@ namespace BECore {
 
         constexpr const char* kPlayTooltip = "Play: the editor does not run the game from here yet";
         constexpr const char* kStopTooltip = "Stop: the editor does not run the game from here yet";
-        constexpr const char* kPauseTooltip = "Pause or resume: the editor does not run the game from here yet";
-        constexpr const char* kStepTooltip = "Step one frame while paused: the editor does not run the game from here yet";
+        constexpr const char* kPauseTooltip = "Pause or resume the game";
+        constexpr const char* kStepTooltip = "Step one frame while paused; hold to repeat";
 
         /// Fills the button with the accent while the scope lives
         class ScopedAccentButton {
@@ -45,7 +45,8 @@ namespace BECore {
         return ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
     }
 
-    void MainToolbar::Draw(EditorPlayModel& model) {
+    MainToolbar::Presses MainToolbar::Draw(EditorPlayModel& model) {
+        Presses presses;
         const ImGuiPalette& palette = GetImGuiPalette();
         const ImGuiStyle& style = ImGui::GetStyle();
 
@@ -64,6 +65,7 @@ namespace BECore {
                 const ScopedAccentButton accent(stopped, palette.accent, palette.accentHover, palette.accentActive);
                 if (IconButton(stopped ? ICON_LC_PLAY : ICON_LC_SQUARE, stopped ? kPlayTooltip : kStopTooltip, "play")) {
                     model.PressPlay();
+                    presses.play = true;
                 }
             }
             ImGui::SameLine();
@@ -72,19 +74,23 @@ namespace BECore {
                 const ScopedAccentButton muted(state == EditorPlayState::Paused, palette.accentMuted, palette.accentHover, palette.accentActive);
                 if (IconButton(ICON_LC_PAUSE, kPauseTooltip, "pause")) {
                     model.PressPause();
+                    presses.pause = true;
                 }
                 ImGui::EndDisabled();
             }
             ImGui::SameLine();
             {
                 ImGui::BeginDisabled(!model.CanStep());
+                ImGui::PushItemFlag(ImGuiItemFlags_ButtonRepeat, true);
                 if (IconButton(ICON_LC_STEP_FORWARD, kStepTooltip, "step")) {
-                    model.PressStep();
+                    presses.step = model.PressStep();
                 }
+                ImGui::PopItemFlag();
                 ImGui::EndDisabled();
             }
         }
         ImGui::EndChild();
+        return presses;
     }
 
 }  // namespace BECore

@@ -25,6 +25,34 @@ namespace BECore::Tests {
         EXPECT_TRUE(map.Find(kCtrlK).Empty());
     }
 
+    TEST(HotkeyMapTest, TheGameCommandsAreListedWithAllowedUniqueChords) {
+        const HotkeyMap map;
+        for (const PoolString id : {PoolString(kGamePause), PoolString(kGameStep)}) {
+            const EditorCommand* command = FindEditorCommand(id);
+            ASSERT_NE(command, nullptr) << id.CStr();
+            EXPECT_TRUE(command->rebindable) << id.CStr();
+            ASSERT_TRUE(command->defaultChord.has_value()) << id.CStr();
+            EXPECT_TRUE(IsAllowedAsHotkey(*command->defaultChord)) << id.CStr();
+            EXPECT_FALSE(IsReservedChord(*command->defaultChord)) << id.CStr();
+            // The map finds the command by its chord, so no other command holds the same one
+            EXPECT_EQ(map.Find(*command->defaultChord), id);
+        }
+        // Only the step repeats while held
+        EXPECT_FALSE(FindEditorCommand(kGamePause)->repeats);
+        EXPECT_TRUE(FindEditorCommand(kGameStep)->repeats);
+    }
+
+    TEST(HotkeyMapTest, NoTwoCommandsShareADefaultChord) {
+        const eastl::span<const EditorCommand> commands = GetEditorCommands();
+        for (size_t i = 0; i < commands.size(); ++i) {
+            for (size_t j = i + 1; j < commands.size(); ++j) {
+                if (commands[i].defaultChord && commands[j].defaultChord) {
+                    EXPECT_NE(*commands[i].defaultChord, *commands[j].defaultChord) << commands[i].id.CStr() << " and " << commands[j].id.CStr();
+                }
+            }
+        }
+    }
+
     TEST(HotkeyMapTest, AssignChangesTheChord) {
         HotkeyMap map;
         const AssignResult result = map.Assign(kSceneSave, kCtrlK);

@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/IDeserializer.h>
+#include <BECore/Time/GamePause.h>
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/EditorLayoutWidget.gen.hpp>
@@ -34,6 +35,13 @@ namespace BECore {
         }
 
     }  // namespace
+
+    EditorLayoutWidget::~EditorLayoutWidget() {
+        GamePause& pause = CoreManager::GetPause();
+        if (pause.IsPaused() && !CoreManager::GetControlService().IsManualClock()) {
+            pause.SetPaused(false);
+        }
+    }
 
     bool EditorLayoutWidget::Initialize(IDeserializer& /*deserializer*/) {
         const std::filesystem::path userDirectory = EditorUserDirectory();
@@ -71,7 +79,31 @@ namespace BECore {
             _palette.Open();
         } else if (event.commandId == kViewPreferences) {
             _preferencesWindow.Open();
+        } else if (event.commandId == kGamePause) {
+            TogglePause();
+        } else if (event.commandId == kGameStep) {
+            StepOnce();
         }
+    }
+
+    void EditorLayoutWidget::TogglePause() {
+        _playModel.PressPause();
+        WritePauseToEngine();
+    }
+
+    void EditorLayoutWidget::StepOnce() {
+        if (_playModel.PressStep()) {
+            CoreManager::GetPause().RequestSteps(1, kDefaultStepSeconds);
+        }
+    }
+
+    void EditorLayoutWidget::WritePauseToEngine() {
+        const bool paused = _playModel.GetState() == EditorPlayState::Paused;
+        // A manual clock is a pause that only `step` advances: the model catches up with it on the next frame
+        if (!paused && CoreManager::GetControlService().IsManualClock()) {
+            return;
+        }
+        CoreManager::GetPause().SetPaused(paused);
     }
 
     void EditorLayoutWidget::OnViewportPreviewChanged(const ViewportPreviewChangedEvent& event) {
@@ -94,6 +126,9 @@ namespace BECore {
     }
 
     void EditorLayoutWidget::Update() {
+        // The control API and the manual clock can pause too
+        _playModel.SetPaused(CoreManager::GetPause().IsPaused());
+
         // Cover the entire OS window work-area with a borderless, decoration-less host.
         ImGuiViewport* mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
@@ -110,7 +145,13 @@ namespace BECore {
         ImGui::PopStyleVar(3);
 
         DrawMenuBar();
-        _toolbar.Draw(_playModel);
+        const MainToolbar::Presses presses = _toolbar.Draw(_playModel);
+        if (presses.play || presses.pause) {
+            WritePauseToEngine();
+        }
+        if (presses.step) {
+            CoreManager::GetPause().RequestSteps(1, kDefaultStepSeconds);
+        }
         CloseItemGap();
         DispatchHotkeys();
         DrawSaveLayoutPopup();
@@ -162,6 +203,11 @@ namespace BECore {
         }
         if (ImGui::BeginMenu("File")) {
             CommandMenuItem(kFileQuit, "Quit");
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Game")) {
+            CommandMenuItem(kGamePause, "Pause / Resume");
+            CommandMenuItem(kGameStep, "Step One Frame", _playModel.CanStep());
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
@@ -228,7 +274,8 @@ namespace BECore {
                 continue;
             }
             const std::optional<KeyChord> chord = hotkeys.GetChord(command.id);
-            if (chord && ImGui::Shortcut(chord->ToImGui(), ImGuiInputFlags_RouteGlobal)) {
+            const ImGuiInputFlags flags = command.repeats ? ImGuiInputFlags_RouteGlobal | ImGuiInputFlags_Repeat : ImGuiInputFlags_RouteGlobal;
+            if (chord && ImGui::Shortcut(chord->ToImGui(), flags)) {
                 EditorCommandEvent::Emit(command.id);
             }
         }
