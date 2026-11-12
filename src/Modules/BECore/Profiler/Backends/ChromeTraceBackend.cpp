@@ -1,5 +1,7 @@
 #include "ChromeTraceBackend.h"
 
+#include "ChromeTraceJson.h"
+
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerClock.h>
 #include <bit>
@@ -21,34 +23,6 @@ namespace BECore {
         constinit thread_local void* t_cachedBuffer = nullptr;
 
         constexpr double kNanosecondsPerMicrosecond = 1000.0;
-
-        void AppendJsonString(eastl::string& out, const char* text) {
-            out.push_back('"');
-            for (const char* c = text != nullptr ? text : ""; *c != '\0'; ++c) {
-                const auto byte = static_cast<unsigned char>(*c);
-                switch (*c) {
-                    case '"':
-                        out.append("\\\"");
-                        break;
-                    case '\\':
-                        out.append("\\\\");
-                        break;
-                    case '\n':
-                        out.append("\\n");
-                        break;
-                    case '\t':
-                        out.append("\\t");
-                        break;
-                    default:
-                        if (byte < 0x20) {
-                            out.append(Format("\\u{:04x}", byte));
-                        } else {
-                            out.push_back(*c);
-                        }
-                }
-            }
-            out.push_back('"');
-        }
 
     }  // namespace
 

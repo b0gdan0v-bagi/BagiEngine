@@ -1,7 +1,9 @@
 #include "Profiler.h"
 
 #include <BECore/Profiler/Backends/ChromeTraceBackend.h>
+#include <BECore/Profiler/Backends/FanOutBackend.h>
 #include <BECore/Profiler/ProfilerSettings.h>
+#include <BECore/Profiler/Ring/FrameRingBackend.h>
 #if BE_PROFILER_TRACY
 #include <BECore/Profiler/Backends/TracyProfilerBackend.h>
 #endif
@@ -20,6 +22,10 @@ namespace BECore {
         // The sort index + 1 of a thread, 0: none (so the zero-initialised table means "none")
         constinit std::atomic<uint32_t> g_threadSortIndex[Profiler::kMaxThreads]{};
         constinit std::mutex g_backendMutex;
+        // One fan-out per distinct primary, made with std::malloc and never freed (a zone may still end on it); under g_backendMutex
+        constinit FanOutBackend* g_fanOuts[Profiler::kMaxFanOuts]{};
+        constinit uint32_t g_fanOutCount = 0;
+        constinit bool g_fanOutTableFullReported = false;
 
         /// The file Start was asked to write at Finish (main thread only)
         eastl::string& TracePath() {
@@ -29,20 +35,58 @@ namespace BECore {
 
     }  // namespace
 
+    IProfilerBackend* Profiler::ResolveEffective(IProfilerBackend* primary, bool ringEnabled) {
+        if (!ringEnabled) {
+            return primary;
+        }
+        FrameRingBackend& ring = GetFrameRing();
+        if (primary == nullptr || primary == &ring) {
+            return &ring;
+        }
+        for (uint32_t i = 0; i < g_fanOutCount; ++i) {
+            if (&g_fanOuts[i]->GetPrimary() == primary) {
+                return g_fanOuts[i];
+            }
+        }
+        void* memory = g_fanOutCount < kMaxFanOuts ? std::malloc(sizeof(FanOutBackend)) : nullptr;
+        if (memory == nullptr) {
+            if (!g_fanOutTableFullReported) {
+                g_fanOutTableFullReported = true;
+                LOG_WARNING("Profiler: too many different backends ran beside the frame ring; this one runs without it");
+            }
+            return primary;
+        }
+        g_fanOuts[g_fanOutCount] = new (memory) FanOutBackend(*primary, ring);
+        return g_fanOuts[g_fanOutCount++];
+    }
+
     bool Profiler::SetBackend(IProfilerBackend* backend) {
         std::lock_guard lock(g_backendMutex);
-        IProfilerBackend* old = _backend.load(std::memory_order_acquire);
+        IProfilerBackend* old = _primary.load(std::memory_order_acquire);
         if (old == backend) {
             return true;
         }
         if (backend != nullptr && !backend->Start()) {
             return false;
         }
-        _backend.store(backend, std::memory_order_release);
+        _primary.store(backend, std::memory_order_release);
+        _backend.store(ResolveEffective(backend, _ringEnabled.load(std::memory_order_relaxed)), std::memory_order_release);
         if (old != nullptr) {
             old->Stop();
         }
         return true;
+    }
+
+    void Profiler::SetRingEnabled(bool enabled) {
+        std::lock_guard lock(g_backendMutex);
+        if (_ringEnabled.load(std::memory_order_relaxed) == enabled) {
+            return;
+        }
+        if (enabled) {
+            GetFrameRing().Start();  // zones that began before the ring was on are not its own
+        }
+        _ringEnabled.store(enabled, std::memory_order_release);
+        _backend.store(ResolveEffective(_primary.load(std::memory_order_relaxed), enabled), std::memory_order_release);
     }
 
     void Profiler::FrameMark() {
@@ -104,6 +148,13 @@ namespace BECore {
         alignas(ChromeTraceBackend) static unsigned char storage[sizeof(ChromeTraceBackend)];
         static ChromeTraceBackend* const recorder = new (storage) ChromeTraceBackend();
         return *recorder;
+    }
+
+    FrameRingBackend& Profiler::GetFrameRing() {
+        // Never destroyed, like the recorder: a zone of another thread may still end on it while the process exits
+        alignas(FrameRingBackend) static unsigned char storage[sizeof(FrameRingBackend)];
+        static FrameRingBackend* const ring = new (storage) FrameRingBackend();
+        return *ring;
     }
 
     std::expected<void, eastl::string> Profiler::Start(const ProfilerSettings& settings) {

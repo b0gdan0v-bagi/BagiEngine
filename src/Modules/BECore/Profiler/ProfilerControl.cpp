@@ -98,7 +98,7 @@ namespace BECore {
                 path = *given;
             }
             ChromeTraceBackend& recorder = Profiler::GetChromeTrace();
-            if (Profiler::GetBackend() != &recorder) {
+            if (Profiler::GetPrimaryBackend() != &recorder) {
                 call.Fail(kNotRecording, "the Chrome trace is not recording: start the game with --trace=<file> or --profiler=chrome (a build with ENGINE_PROFILER)");
                 return;
             }

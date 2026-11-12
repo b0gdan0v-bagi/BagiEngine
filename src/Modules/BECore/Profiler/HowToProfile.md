@@ -27,6 +27,15 @@ A headless run with the manual clock gives a trace of exactly N frames: `--headl
 
 `--profiler=chrome` without `--trace` records without writing at the end. Flags in a build without the profiler stop the start-up with a message.
 
+## In the editor
+
+Ctrl+Shift+E to the editor, then Ctrl+Shift+P opens the Profiler panel. Zones need a build with `ENGINE_PROFILER` (`macos-profile-editor`); without it the panel says so. The panel records into a ring only while it is open, so it shows frames since it was last opened (a reopened panel starts clean; the time it was closed is in no frame).
+
+- **Frame bars:** one bar per recent frame against a budget line (16.6 ms, 33.3 ms or custom); "Bars" switches to the stage split; a click opens that frame. Counters (draw calls, allocations, ...) can be picked as graphs.
+- **Timeline:** a lane per thread with nested zone bars of the opened frame; wheel zooms, drag pans, hover shows name, `file:line`, duration and allocations; Pause freezes the view.
+- **Zone table:** calls, total, self, mean, max, p95 and allocations over the frame, the last 60 frames or the ring; sortable, filterable, "Timeline" jumps to the slowest call.
+- **Spikes:** frames above a threshold (ms or times the median) are frozen with their zones; open one in the timeline. "Write frozen frames" writes them (or, with none, the selected frame) as a Chrome trace that Perfetto and `tools/perf/trace_summary.py` read.
+
 ## A trace of a tool without a window
 
 ```cpp
