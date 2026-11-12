@@ -171,6 +171,22 @@ namespace BECore::Tests {
         ExpectColor(Resolve(plain, kDisabled).fill, WithAlpha(kFill, kDisabledAlpha), "disabled");
     }
 
+    TEST(UIStateLookTest, CheckedChangesNoBoxAndNoTintInAnyState) {
+        // A toggle's plate does not light up for being on: only the controls that read `checked` themselves care
+        const UIBoxStyle box = StyledBox();
+        const UIStateLook::Tints tints{Color{1, 2, 3, 255}, Color{4, 5, 6, 255}, Color{7, 8, 9, 255}};
+        for (const UIStateLook::State& plain : {kNormal, kHover, kPressed, kSelected, kDisabled}) {
+            UIStateLook::State checked = plain;
+            checked.checked = true;
+            const auto without = Resolve(box, plain);
+            const auto with = Resolve(box, checked);
+            EXPECT_TRUE(with.box == without.box);
+            ExpectColor(with.fill, without.fill, "fill");
+            ExpectColor(with.gradientEnd, without.gradientEnd, "gradient end");
+            ExpectColor(UIStateLook::ResolveTint(kFill, tints, checked), UIStateLook::ResolveTint(kFill, tints, plain), "tint");
+        }
+    }
+
     // ---- ResolveTint ------------------------------------------------------------------------------------------------------
 
     TEST(UIStateLookTest, ATintIsDerivedFromTheBaseInEachState) {
@@ -242,6 +258,13 @@ namespace BECore::Tests {
         const auto state = element.GetVisualState();
         EXPECT_TRUE(state.disabled);
         EXPECT_TRUE(state.selected);
+    }
+
+    TEST(UIStateLookTest, AnElementIsCheckedOnlyWhenAComponentSaysSo) {
+        UIElement element;
+        element.hovered = true;
+        element.selected = true;
+        EXPECT_FALSE(element.GetVisualState().checked);
     }
 
     TEST(UIStateLookTest, AnElementWithNoComponentIsDrawnWithItsOwnFillWhateverItsState) {

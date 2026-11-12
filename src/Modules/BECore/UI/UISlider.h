@@ -83,6 +83,15 @@ namespace BECore {
 
         void DrawSelf(IRenderer& renderer) override;
         void OnPress(float x, float y) override;
+
+        /// `disabled` or the group's: the control answers for itself, whatever it sits in
+        [[nodiscard]] bool IsDisabled() const override {
+            return disabled || groupDisabled;
+        }
+        /// The control has its own state (hover, press), not that of an ancestor with a clicker
+        [[nodiscard]] bool OwnsState() const override {
+            return true;
+        }
         void OnDrag(float x, float y) override;
 
     protected:

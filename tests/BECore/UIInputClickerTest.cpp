@@ -1,5 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -28,6 +29,8 @@ namespace BECore::Tests {
         //   Hide     (300, 10, 100 x 40)   the tests hide it
         //   NoAction (300, 100, 100 x 40)  no action
         //   Plain    (300, 200, 100 x 40)  a panel with no clicker
+        //   Still    (300, 300, 100 x 40)  `stateLook="false"`: the fills of the states are given and never drawn
+        //   StillOff (300, 350, 100 x 40)  `stateLook="false"` and disabled
         constexpr const char* kClickerXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -70,6 +73,13 @@ namespace BECore::Tests {
             <components><component type="UIInputClicker"/></components>
           </element>
           <element type="UIElement" name="Plain" x="300" y="200" width="100" height="40" color="40,40,40,255" hoverColor="60,70,80,255" blocksInput="true"/>
+          <element type="UIElement" name="Still" x="300" y="300" width="100" height="40" color="40,40,40,255" hoverColor="60,70,80,255" pressedColor="20,30,40,255"
+                   disabledColor="90,91,92,255" selectedColor="30,90,30,255">
+            <components><component type="UIInputClicker" action="StillAction" stateLook="false"/></components>
+          </element>
+          <element type="UIElement" name="StillOff" x="300" y="350" width="100" height="40" color="40,40,40,255" disabledColor="90,91,92,255">
+            <components><component type="UIInputClicker" action="StillOffAction" stateLook="false" disabled="true"/></components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -453,6 +463,63 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(plain.hovered);
         EXPECT_EQ(FillOf(plain), Pack(kBoxColor));
+    }
+
+    TEST_F(UIInputClickerTest, WithStateLookOffTheBoxIsPlainInEveryState) {
+        UIElement& still = Get("Still");
+        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
+
+        Hover(still);
+        ASSERT_TRUE(still.GetVisualState().hovered) << "the state is there, only the box ignores it";
+        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
+
+        const Vec2 at = CenterOf(still);
+        Press(at.x, at.y);
+        Draw();
+        ASSERT_TRUE(still.GetVisualState().pressed);
+        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
+        Release(at.x, at.y);
+
+        still.selected = true;
+        Draw();
+        EXPECT_EQ(FillOf(still), Pack(kBoxColor));
+        EXPECT_EQ(FillOf(Get("StillOff")), Pack(kBoxColor)) << "disabled, still plain";
+    }
+
+    TEST_F(UIInputClickerTest, WithStateLookOffTheElementIsStillAClickerAndDisabledWorks) {
+        EXPECT_FALSE(Get("Still").GivesStateLook());
+        EXPECT_TRUE(Get("Still").IsInteractive());
+        EXPECT_TRUE(Get("Box").GivesStateLook()) << "the default is as before";
+        EXPECT_TRUE(Get("StillOff").IsDisabled());
+        EXPECT_TRUE(Get("StillOff").GetVisualState().disabled);
+
+        ActionRecorder actions;
+        Click(Get("Still"));
+        ASSERT_EQ(actions.Total(), 1u);
+        EXPECT_EQ(actions.All()[0].action, PoolString::Intern("StillAction"));
+        Click(Get("StillOff"));
+        EXPECT_EQ(actions.Total(), 1u);
+    }
+
+    TEST_F(UIInputClickerTest, TheStateLookFlagRoundTripsThroughXml) {
+        const UIInputClicker* clicker = Get("Still").GetComponent<UIInputClicker>();
+        ASSERT_NE(clicker, nullptr);
+        EXPECT_FALSE(clicker->stateLook);
+        EXPECT_TRUE(Get("Box").GetComponent<UIInputClicker>()->stateLook);
+
+        XmlSerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("element"));
+        Get("Still").Serialize(serializer);
+        serializer.EndObject();
+        const eastl::string xml = serializer.SaveToString();
+        EXPECT_NE(xml.find("stateLook=\"false\""), eastl::string::npos) << xml.c_str();
+
+        XmlSerializer plain;
+        ASSERT_TRUE(plain.BeginObject("element"));
+        Get("Box").Serialize(plain);
+        plain.EndObject();
+        const eastl::string plainXml = plain.SaveToString();
+        EXPECT_NE(plainXml.find("stateLook=\"true\""), eastl::string::npos) << plainXml.c_str();
     }
 
     TEST_F(UIInputClickerTest, ThePictureTakesTheTintOfTheState) {

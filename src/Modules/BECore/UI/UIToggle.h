@@ -64,6 +64,15 @@ namespace BECore {
         void DrawSelf(IRenderer& renderer) override;
         void OnClick() override;
 
+        /// `disabled` or the group's: the control answers for itself, whatever it sits in
+        [[nodiscard]] bool IsDisabled() const override {
+            return disabled || groupDisabled;
+        }
+        /// The control has its own state (hover, press), not that of an ancestor with a clicker
+        [[nodiscard]] bool OwnsState() const override {
+            return true;
+        }
+
         /// The caption against the area left of the switch, not the whole rect
         [[nodiscard]] UIContentFit CheckContent(float width, float height, float scale) const override;
 

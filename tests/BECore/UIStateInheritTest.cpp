@@ -1,3 +1,5 @@
+#include "UIComponentTest.h"
+
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/Scene.h>
@@ -5,10 +7,13 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
+#include <BECore/UI/UISlider.h>
 #include <BECore/UI/UIStateLook.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIToggle.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -28,6 +33,8 @@ namespace BECore::Tests {
         //   Bare     (300, 200, 200 x 60)  a clicker; a text child BareCap only, so the selected bar takes its colour
         //   Plain    (300, 300, 200 x 60)  a clicker and no children, no text: the bar is white
         //   Holder   (550, 10, 200 x 60)   a clicker; HolderButton, a UIButton with a fill per state, is its child
+        //   Holder2  (550, 100, 200 x 60)  a clicker; a UIDropdown, a UIToggle and a UISlider are its children, a strip at its right edge is bare
+        //   Checked  (550, 200, 200 x 60)  a clicker and a probe component that says checked; a child CheckedIcon
         constexpr const char* kInheritXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -118,6 +125,23 @@ namespace BECore::Tests {
             <children>
               <element type="UIButton" name="HolderButton" x="0" y="0" width="100" height="60" text="In" color="40,40,40,255" hoverColor="60,70,80,255"
                        pressedColor="20,30,40,255" disabledColor="90,91,92,255" selectedColor="30,90,30,255"/>
+            </children>
+          </element>
+          <element type="UIElement" name="Holder2" x="550" y="100" width="200" height="60" color="40,40,40,255">
+            <components><component type="UIInputClicker" action="Holder2"/></components>
+            <children>
+              <element type="UIDropdown" name="HolderDrop" x="0" y="0" width="100" height="60" text="Pick"/>
+              <element type="UIToggle" name="HolderToggle" x="100" y="0" width="90" height="30" text="On"/>
+              <element type="UISlider" name="HolderSlider" x="100" y="30" width="90" height="30"/>
+            </children>
+          </element>
+          <element type="UIElement" name="Checked" x="550" y="200" width="200" height="60" color="40,40,40,255">
+            <components>
+              <component type="UIInputClicker" action="Checked"/>
+              <component type="UITestProbe" tag="on" checked="true"/>
+            </components>
+            <children>
+              <element type="UIElement" name="CheckedIcon" x="0" y="10" width="40" height="40"/>
             </children>
           </element>
         </elements>
@@ -448,6 +472,70 @@ namespace BECore::Tests {
 
         EXPECT_TRUE(holder.GetVisualState().disabled);
         EXPECT_FALSE(button.GetVisualState().disabled) << "an ancestor's state is not the button's";
+    }
+
+    TEST_F(UIStateInheritTest, ADropdownAToggleAndASliderBelowAnElementWithAClickerAreInTheirOwnState) {
+        auto& holder = Get("Holder2");
+        for (const char* name : {"HolderDrop", "HolderToggle", "HolderSlider"}) {
+            EXPECT_TRUE(Get(name).OwnsState()) << name;
+        }
+
+        // The pointer is over the holder and over none of the three: each is at rest
+        MoveTo(holder.rect.x + 195.0f, holder.rect.y + 59.0f);
+        Draw();
+        ASSERT_TRUE(holder.hovered);
+        for (const char* name : {"HolderDrop", "HolderToggle", "HolderSlider"}) {
+            EXPECT_FALSE(Get(name).GetVisualState().hovered) << name;
+        }
+
+        Hover(Get("HolderDrop"));
+        EXPECT_TRUE(Get("HolderDrop").GetVisualState().hovered);
+        EXPECT_FALSE(Get("HolderToggle").GetVisualState().hovered);
+        Hold(Get("HolderDrop"));
+        EXPECT_TRUE(Get("HolderDrop").GetVisualState().pressed);
+        EXPECT_FALSE(Get("HolderSlider").GetVisualState().pressed);
+    }
+
+    TEST_F(UIStateInheritTest, TheDisabledOfTheHolderIsNotTheDisabledOfADropdownAToggleOrASliderAndTheirOwnIs) {
+        auto& holder = Get("Holder2");
+        holder.GetComponent<UIInputClicker>()->disabled = true;
+        Draw();
+
+        ASSERT_TRUE(holder.IsDisabled());
+        EXPECT_FALSE(Get("HolderDrop").GetVisualState().disabled);
+        EXPECT_FALSE(Get("HolderToggle").GetVisualState().disabled);
+        EXPECT_FALSE(Get("HolderSlider").GetVisualState().disabled);
+
+        Get("HolderDrop").Cast<UIDropdown>()->disabled = true;
+        Get("HolderToggle").Cast<UIToggle>()->disabled = true;
+        Get("HolderSlider").Cast<UISlider>()->disabled = true;
+        for (const char* name : {"HolderDrop", "HolderToggle", "HolderSlider"}) {
+            EXPECT_TRUE(Get(name).IsDisabled()) << name;
+            EXPECT_TRUE(Get(name).GetVisualState().disabled) << name;
+        }
+        Get("HolderToggle").groupDisabled = true;
+        Get("HolderToggle").Cast<UIToggle>()->disabled = false;
+        EXPECT_TRUE(Get("HolderToggle").IsDisabled()) << "the group's too";
+    }
+
+    TEST_F(UIStateInheritTest, ACheckedComponentGivesCheckedToTheOwnerAndItsChildren) {
+        EXPECT_TRUE(Get("Checked").GetVisualState().checked);
+        EXPECT_TRUE(Get("CheckedIcon").GetVisualState().checked) << "handed down like hovered";
+        EXPECT_FALSE(Get("Btn").GetVisualState().checked);
+        EXPECT_FALSE(Get("Icon").GetVisualState().checked);
+        EXPECT_FALSE(Get("Holder").GetVisualState().checked);
+    }
+
+    TEST_F(UIStateInheritTest, CheckedFollowsTheComponentAtRunTimeAndDoesNotTouchTheOtherFlags) {
+        auto* probe = Get("Checked").GetComponent<UITestProbe>();
+        ASSERT_NE(probe, nullptr);
+        probe->checked = false;
+        Draw();
+
+        const UIStateLook::State state = Get("CheckedIcon").GetVisualState();
+        EXPECT_FALSE(state.checked);
+        EXPECT_FALSE(state.hovered || state.pressed || state.disabled || state.selected);
+        EXPECT_FALSE(Get("Checked").GetVisualState().checked);
     }
 
 }  // namespace BECore::Tests

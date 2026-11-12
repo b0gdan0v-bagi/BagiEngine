@@ -389,6 +389,19 @@ namespace BECore::Tests {
 
     // ---- the state look of the box ----------------------------------------------------------------------------------------
 
+    TEST_F(UIComponentTest, AComponentIsNotCheckedUnlessItSaysSo) {
+        UIElement& host = Get("Host");
+        const UIElement& passive = Get("Passive");
+        EXPECT_FALSE(host.components[0]->IsChecked(host));
+        EXPECT_FALSE(host.GetVisualState().checked);
+        EXPECT_FALSE(passive.GetVisualState().checked);
+
+        host.GetComponent<UITestProbe>()->checked = true;
+        EXPECT_TRUE(host.components[0]->IsChecked(host));
+        EXPECT_TRUE(host.GetVisualState().checked) << "any component of the element is enough";
+        EXPECT_FALSE(passive.GetVisualState().checked);
+    }
+
     TEST_F(UIComponentTest, TheBoxTakesTheStateLookOnlyWhenAComponentGivesIt) {
         Draw();
         UIElement& host = Get("Host");        // a component that takes clicks gives the state look

@@ -44,6 +44,10 @@ namespace BECore {
         /// The component shows the pointer state (hover, press, disabled, selected) in the owner's own box, which then draws with the state look. A panel that only blocks input says
         /// no: it is hovered too and must not light up
         [[nodiscard]] virtual bool GivesStateLook() const;
+
+        /// The component says its owner is *on* (a toggle's variable holds its on value): `UIElement::GetVisualState` puts it in `UIStateLook::State::checked` of an element that owns its state,
+        /// and the children of that element are drawn with it (the switch of a toggle row). Nothing else reads it
+        [[nodiscard]] virtual bool IsChecked(const UIElement& owner) const;
     };
 
 }  // namespace BECore

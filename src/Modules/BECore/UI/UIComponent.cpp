@@ -27,4 +27,8 @@ namespace BECore {
         return false;
     }
 
+    bool UIComponent::IsChecked(const UIElement& /*owner*/) const {
+        return false;
+    }
+
 }  // namespace BECore
