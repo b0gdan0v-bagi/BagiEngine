@@ -87,6 +87,21 @@ namespace BECore::Tests {
             }
         };
 
+        /// Counts the raw events the provider hands out before it converts them (ImGui and the editor chords read these)
+        class RawRecorder : public SubscriptionHolder {
+        public:
+            RawRecorder() {
+                Subscribe<SDLEvents::SDLEventWrapper, &RawRecorder::OnRaw>(this);
+            }
+
+            eastl::vector<uint32_t> types;
+
+        private:
+            void OnRaw(const SDLEvents::SDLEventWrapper& e) {
+                types.push_back(e.event.type);
+            }
+        };
+
         /// Consumes every mouse event it is offered
         class ConsumingHandler : public IUIInputHandler {
         public:
@@ -208,6 +223,7 @@ namespace BECore::Tests {
         }
 
         void TearDown() override {
+            CoreManager::GetPause().SetPaused(false);
             CoreManager::GetMainWindowManager().SetMainWindow(IntrusivePtr<IMainWindow>());
             if (ImGui::GetCurrentContext() != nullptr) {
                 ImGui::DestroyContext();
@@ -476,6 +492,96 @@ namespace BECore::Tests {
 
         EXPECT_EQ(recorder.keyDowns.size(), 1u);
         EXPECT_TRUE(recorder.motions.empty());
+    }
+
+    TEST_F(SDLEventsProviderTest, APausedGameGetsNoMouseKeyOrText) {
+        CoreManager::GetPause().SetPaused(true);
+        InputRecorder recorder;
+        MouseRecorder clicks;
+
+        ASSERT_NO_FATAL_FAILURE(PushLeftClick(1.0f, 2.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_UP, 1.0f, 2.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseMotion(3.0f, 4.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseWheel(1.0f));
+        ASSERT_NO_FATAL_FAILURE(PushKey(SDL_EVENT_KEY_DOWN, SDLK_A));
+        ASSERT_NO_FATAL_FAILURE(PushKey(SDL_EVENT_KEY_UP, SDLK_A));
+        ASSERT_NO_FATAL_FAILURE(PushText("a"));
+        _provider.ProcessEvents();
+
+        EXPECT_TRUE(clicks.clicks.empty());
+        EXPECT_TRUE(recorder.ups.empty());
+        EXPECT_TRUE(recorder.motions.empty());
+        EXPECT_TRUE(recorder.wheels.empty());
+        EXPECT_TRUE(recorder.keyDowns.empty());
+        EXPECT_TRUE(recorder.keyUps.empty());
+        EXPECT_TRUE(recorder.texts.empty());
+    }
+
+    TEST_F(SDLEventsProviderTest, APausedGameStillGetsTheRawEventsAndTheWindowEvents) {
+        CoreManager::GetPause().SetPaused(true);
+        RawRecorder raw;
+        InputRecorder recorder;
+
+        ASSERT_NO_FATAL_FAILURE(PushLeftClick(1.0f, 2.0f));
+        ASSERT_NO_FATAL_FAILURE(PushKey(SDL_EVENT_KEY_DOWN, SDLK_A));
+        SDL_Event resized{};
+        resized.type = SDL_EVENT_WINDOW_RESIZED;
+        ASSERT_NO_FATAL_FAILURE(PushEvent(resized));
+        _provider.ProcessEvents();
+
+        const eastl::vector<uint32_t> expected = {SDL_EVENT_MOUSE_BUTTON_DOWN, SDL_EVENT_KEY_DOWN, SDL_EVENT_WINDOW_RESIZED};
+        EXPECT_EQ(raw.types, expected);
+        // A viewport resize re-lays the scene while paused
+        ASSERT_EQ(recorder.windowEvents.size(), 1u);
+    }
+
+    TEST_F(SDLEventsProviderTest, InputPassesAgainAfterTheResumeAndNothingWasKept) {
+        CoreManager::GetPause().SetPaused(true);
+        InputRecorder recorder;
+        MouseRecorder clicks;
+
+        // A click made in the pause: the press is dropped, and the release after the resume is only a release, no click
+        ASSERT_NO_FATAL_FAILURE(PushLeftClick(1.0f, 2.0f));
+        ASSERT_NO_FATAL_FAILURE(PushKey(SDL_EVENT_KEY_DOWN, SDLK_A));
+        _provider.ProcessEvents();
+        CoreManager::GetPause().SetPaused(false);
+        ASSERT_NO_FATAL_FAILURE(PushMouseButton(SDL_EVENT_MOUSE_BUTTON_UP, 1.0f, 2.0f));
+        _provider.ProcessEvents();
+
+        EXPECT_TRUE(clicks.clicks.empty());
+        EXPECT_TRUE(recorder.keyDowns.empty());
+        EXPECT_EQ(recorder.ups.size(), 1u);
+
+        ASSERT_NO_FATAL_FAILURE(PushLeftClick(5.0f, 6.0f));
+        ASSERT_NO_FATAL_FAILURE(PushKey(SDL_EVENT_KEY_DOWN, SDLK_B));
+        ASSERT_NO_FATAL_FAILURE(PushText("b"));
+        _provider.ProcessEvents();
+
+        ASSERT_EQ(clicks.clicks.size(), 1u);
+        EXPECT_FLOAT_EQ(clicks.clicks[0].x, 5.0f);
+        ASSERT_EQ(recorder.keyDowns.size(), 1u);
+        EXPECT_EQ(recorder.keyDowns[0].key, SDLK_B);
+        EXPECT_EQ(recorder.texts.size(), 1u);
+    }
+
+    TEST_F(SDLEventsProviderTest, APausedGameDoesNotReachAUIHandlerEither) {
+        CoreManager::GetPause().SetPaused(true);
+        ConsumingHandler ui;
+        CoreManager::GetUIInput().Register(ui, 0);
+
+        ASSERT_NO_FATAL_FAILURE(PushLeftClick(30.0f, 40.0f));
+        ASSERT_NO_FATAL_FAILURE(PushMouseMotion(1.0f, 1.0f));
+        _provider.ProcessEvents();
+
+        // The control API's injected input goes to UIInput directly and is not gated
+        SDL_MouseButtonEvent injected{};
+        injected.button = SDL_BUTTON_LEFT;
+        injected.down = true;
+        CoreManager::GetUIInput().DispatchMouseButtonDown(injected);
+        CoreManager::GetUIInput().Unregister(ui);
+
+        EXPECT_EQ(ui.motions, 0);
+        EXPECT_EQ(ui.downs, 1);
     }
 
     TEST_F(SDLEventsProviderTest, WindowEventsAreForwardedWithTheirType) {

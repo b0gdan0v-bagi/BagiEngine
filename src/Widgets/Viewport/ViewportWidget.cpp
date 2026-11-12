@@ -566,6 +566,13 @@ namespace BECore {
     }
 
     void ViewportWidget::ForwardMouse(float originX, float originY, float zoom, bool hovered) {
+        // A paused game gets no mouse: nothing is sent or kept, and a press that began before the pause is forgotten, so the
+        // first event after the resume is not a stray button-up
+        if (CoreManager::GetPause().IsPaused()) {
+            std::fill(std::begin(_pressedInViewport), std::end(_pressedInViewport), false);
+            return;
+        }
+
         const ImGuiIO& io = ImGui::GetIO();
         UIInput& uiInput = CoreManager::GetUIInput();
 

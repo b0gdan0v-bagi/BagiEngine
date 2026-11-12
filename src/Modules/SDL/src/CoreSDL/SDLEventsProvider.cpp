@@ -23,6 +23,20 @@ namespace BECore {
             return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard;
         }
 
+        // A paused game gets no input of the window: dropped here, never queued, so a click made in the pause does not fire on resume.
+        // The raw SDLEventWrapper is not affected (ImGui and the editor chords read it), nor is injected input (the control API).
+        bool DropsGameInput() {
+            return CoreManager::GetPause().IsPaused();
+        }
+
+        bool MouseReachesGame() {
+            return !DropsGameInput() && !IsMouseCapturedByUI();
+        }
+
+        bool KeyboardReachesGame() {
+            return !DropsGameInput() && !IsKeyboardCapturedByUI();
+        }
+
         /// Output pixels per window unit; read per event, since the window can move to a display of another density.
         float PixelDensity() {
             const IntrusivePtr<IMainWindow>& window = CoreManager::GetMainWindow();
@@ -89,47 +103,47 @@ namespace BECore {
                 break;
 
             // The mouse goes to the engine's own UI first (UIInput) and reaches game code only when no UI consumed it,
-            // and only when ImGui is not consuming it either.
+            // and only when ImGui is not consuming it either and the game is not paused.
             // Editor: ViewportWidget re-emits with viewport-local coords when the image is hovered.
             // Game: no ImGui, the positions are the output pixels (window units times the pixel density).
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                if (!IsMouseCapturedByUI()) {
+                if (MouseReachesGame()) {
                     CoreManager::GetUIInput().DispatchMouseButtonDown(InOutputPixels(sdlEvent.button));
                 }
                 break;
 
             case SDL_EVENT_MOUSE_BUTTON_UP:
-                if (!IsMouseCapturedByUI()) {
+                if (MouseReachesGame()) {
                     CoreManager::GetUIInput().DispatchMouseButtonUp(InOutputPixels(sdlEvent.button));
                 }
                 break;
 
             case SDL_EVENT_MOUSE_MOTION:
-                if (!IsMouseCapturedByUI()) {
+                if (MouseReachesGame()) {
                     CoreManager::GetUIInput().DispatchMouseMotion(InOutputPixels(sdlEvent.motion));
                 }
                 break;
 
             case SDL_EVENT_MOUSE_WHEEL:
-                if (!IsMouseCapturedByUI()) {
+                if (MouseReachesGame()) {
                     CoreManager::GetUIInput().DispatchMouseWheel(InOutputPixels(sdlEvent.wheel));
                 }
                 break;
 
             case SDL_EVENT_KEY_DOWN:
-                if (!IsKeyboardCapturedByUI()) {
+                if (KeyboardReachesGame()) {
                     SDLEvents::KeyDownEvent::Emit(sdlEvent.key.key, sdlEvent.key.mod, sdlEvent.key.repeat);
                 }
                 break;
 
             case SDL_EVENT_KEY_UP:
-                if (!IsKeyboardCapturedByUI()) {
+                if (KeyboardReachesGame()) {
                     SDLEvents::KeyUpEvent::Emit(sdlEvent.key.key, sdlEvent.key.mod);
                 }
                 break;
 
             case SDL_EVENT_TEXT_INPUT:
-                if (!IsKeyboardCapturedByUI()) {
+                if (KeyboardReachesGame()) {
                     SDLEvents::TextInputEvent::Emit(eastl::string_view(sdlEvent.text.text != nullptr ? sdlEvent.text.text : ""));
                 }
                 break;
