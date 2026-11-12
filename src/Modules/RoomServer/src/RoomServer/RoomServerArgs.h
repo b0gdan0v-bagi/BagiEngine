@@ -23,6 +23,16 @@ namespace BECore {
         /// Open sockets of one client address; 0 is off (behind a proxy every client has the proxy's address)
         size_t maxConnectionsPerAddress = 32;
 
+        /// Rooms that clients of one address may have at once; 0 is off (RoomHubSettings::maxRoomsPerAddress). Works with `maxConnectionsPerAddress` above 0 or
+        /// `trustedProxyHops` above 0, which give the hub the address; with both off no per-address rule applies
+        size_t maxRoomsPerAddress = RoomLimits::kMaxRoomsPerAddress;
+
+        /// A lobby with no message but `ping` for this long is closed; 0 is off (RoomHubSettings::lobbyTimeout)
+        std::chrono::milliseconds lobbyTimeout = RoomLimits::kLobbyTimeout;
+
+        /// How many proxies of the host append to `X-Forwarded-For`: 0 reads the address of the socket, N takes the entry N places from the right (HandshakePolicy::trustedProxyHops)
+        size_t trustedProxyHops = 0;
+
         std::chrono::milliseconds computerDelay = RoomLimits::kComputerDelay;
         std::chrono::milliseconds reconnectGrace = RoomLimits::kReconnectGrace;
 

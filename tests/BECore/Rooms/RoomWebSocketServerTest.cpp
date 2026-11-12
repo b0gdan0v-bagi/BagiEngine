@@ -874,4 +874,100 @@ namespace BECore::Tests {
         EXPECT_TRUE(lines.Lines().empty());
     }
 
+    // ---- Per-address rules: rooms, the lobby timeout, an address behind a proxy -----------------------------------------------------
+
+    TEST_F(RoomWebSocketServerTest, FifthRoomFromOneAddressIsRefusedAndTheFourStayIntact) {
+        RoomServerSettings settings = MakeSettings();
+        settings.hub.maxRoomsPerAddress = 4;
+        const uint16_t port = StartServer(settings);
+
+        std::vector<RoomSocketClient> hosts;
+        for (int i = 0; i < 4; ++i) {
+            auto host = MakeHost(port);
+            ASSERT_TRUE(host.has_value());
+            hosts.push_back(std::move(*host));
+        }
+        auto fifth = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(fifth.has_value());
+        fifth->Create("Host");
+        const auto refused = fifth->WaitFor(RoomMessageTypes::kError);
+        ASSERT_TRUE(refused.has_value());
+        EXPECT_EQ(refused->GetString("code"), RoomErrors::kTooManyRooms);
+        EXPECT_NE(refused->GetString("message").find("your address"), eastl::string::npos);
+
+        for (RoomSocketClient& host : hosts) {
+            RoundTrip(host);
+            EXPECT_FALSE(host.GetCloseFrame().has_value());
+        }
+        fifth->JoinByName(hosts[0].roomCode, "Guest");
+        EXPECT_TRUE(fifth->WaitFor(RoomMessageTypes::kJoined).has_value()) << "the connection that was refused a room can still join one";
+    }
+
+    TEST_F(RoomWebSocketServerTest, WithNoPerAddressLimitAndNoProxyTheHubSeesNoAddress) {
+        RoomServerSettings settings = MakeSettings();
+        settings.maxConnectionsPerAddress = 0;
+        settings.hub.maxRoomsPerAddress = 1;
+        const uint16_t port = StartServer(settings);
+        std::vector<RoomSocketClient> hosts;
+        for (int i = 0; i < 3; ++i) {
+            auto host = MakeHost(port);
+            ASSERT_TRUE(host.has_value()) << "the image's --max-per-address 0 keeps every per-address rule off";
+            hosts.push_back(std::move(*host));
+        }
+    }
+
+    TEST_F(RoomWebSocketServerTest, ASilentLobbyIsClosedAfterTheTimeoutAndTheSocketsStayOpen) {
+        ManualClock clock;
+        RoomServerSettings settings = MakeSettings();
+        settings.clock = clock.AsFunction();
+        settings.pingInterval = 0ms;
+        settings.hub.lobbyTimeout = 1min;
+        const uint16_t port = StartServer(settings);
+        auto host = MakeHost(port);
+        ASSERT_TRUE(host.has_value());
+        auto guest = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(guest.has_value());
+        guest->JoinByName(host->roomCode, "Guest");
+        ASSERT_TRUE(guest->WaitFor(RoomMessageTypes::kLobby).has_value());
+
+        clock.Advance(59s);
+        RoundTrip(*host);
+        clock.Advance(2s);
+        for (RoomSocketClient* client : {&*host, &*guest}) {
+            const auto left = client->WaitFor(RoomMessageTypes::kLeft);
+            ASSERT_TRUE(left.has_value());
+            EXPECT_EQ(left->GetString("reason"), "lobby_timeout");
+        }
+        // Both sockets are open and in no room, so the idle rule (30 s) is theirs now
+        RoundTrip(*host);
+        RoundTrip(*guest);
+        EXPECT_FALSE(host->GetCloseFrame().has_value());
+        EXPECT_FALSE(guest->GetCloseFrame().has_value());
+    }
+
+    TEST_F(RoomWebSocketServerTest, BehindATrustedProxyEachForwardedAddressHasItsOwnRooms) {
+        RoomServerSettings settings = MakeSettings();
+        settings.policy.trustedProxyHops = 1;
+        settings.hub.maxRoomsPerAddress = 4;
+        const uint16_t port = StartServer(settings);
+
+        std::vector<RoomSocketClient> hosts;
+        for (const char* header : {"X-Forwarded-For: 203.0.113.1\r\n", "X-Forwarded-For: 203.0.113.2\r\n"}) {
+            for (int i = 0; i < 4; ++i) {
+                auto client = RoomSocketClient::Connect(port, header);
+                ASSERT_TRUE(client.has_value());
+                client->Create("Host");
+                ASSERT_TRUE(client->WaitFor(RoomMessageTypes::kJoined).has_value()) << header;
+                hosts.push_back(std::move(*client));
+            }
+        }
+        // A fifth room of the first address is refused, also when the client puts another address to the left of the one the proxy appended
+        auto forged = RoomSocketClient::Connect(port, "X-Forwarded-For: 1.1.1.1, 203.0.113.1\r\n");
+        ASSERT_TRUE(forged.has_value());
+        forged->Create("Host");
+        const auto refused = forged->WaitFor(RoomMessageTypes::kError);
+        ASSERT_TRUE(refused.has_value());
+        EXPECT_EQ(refused->GetString("code"), RoomErrors::kTooManyRooms);
+    }
+
 }  // namespace BECore::Tests

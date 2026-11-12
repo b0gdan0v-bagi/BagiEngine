@@ -7,11 +7,27 @@ namespace BECore {
         constexpr size_t kMaxConnectionsLimit = 4096;
         constexpr int64_t kMaxMillisecondsLimit = 24 * 60 * 60 * 1000;
         constexpr int64_t kMaxShutdownGraceMs = 60'000;  // a platform kills a process that takes longer to stop
+        constexpr int64_t kMaxRoomsPerAddressLimit = 64;
+        constexpr int64_t kMaxTrustedProxyHopsLimit = 4;
         constexpr size_t kMaxOriginBytes = 200;
         constexpr const char* kTestGamesVariable = "BAGI_ROOMS_TEST_GAMES";
 
         /// The settings that take a value, by the flag and the environment variable that set them
-        enum class Option : uint8_t { Port, Bind, Origin, MaxConnections, MaxPerAddress, ComputerDelay, ReconnectGrace, PingInterval, StatsInterval, ShutdownGrace };
+        enum class Option : uint8_t {
+            Port,
+            Bind,
+            Origin,
+            MaxConnections,
+            MaxPerAddress,
+            MaxRoomsPerAddress,
+            LobbyTimeout,
+            TrustedProxyHops,
+            ComputerDelay,
+            ReconnectGrace,
+            PingInterval,
+            StatsInterval,
+            ShutdownGrace
+        };
 
         struct OptionInfo {
             Option option;
@@ -25,6 +41,9 @@ namespace BECore {
             OptionInfo{Option::Origin, "--origin", "BAGI_ROOMS_ORIGINS"},
             OptionInfo{Option::MaxConnections, "--max-connections", "BAGI_ROOMS_MAX_CONNECTIONS"},
             OptionInfo{Option::MaxPerAddress, "--max-per-address", "BAGI_ROOMS_MAX_PER_ADDRESS"},
+            OptionInfo{Option::MaxRoomsPerAddress, "--max-rooms-per-address", "BAGI_ROOMS_MAX_ROOMS_PER_ADDRESS"},
+            OptionInfo{Option::LobbyTimeout, "--lobby-timeout-ms", "BAGI_ROOMS_LOBBY_TIMEOUT_MS"},
+            OptionInfo{Option::TrustedProxyHops, "--trusted-proxy-hops", "BAGI_ROOMS_TRUSTED_PROXY_HOPS"},
             OptionInfo{Option::ComputerDelay, "--computer-delay-ms", "BAGI_ROOMS_COMPUTER_DELAY_MS"},
             OptionInfo{Option::ReconnectGrace, "--reconnect-grace-ms", "BAGI_ROOMS_RECONNECT_GRACE_MS"},
             OptionInfo{Option::PingInterval, "--ping-interval-ms", "BAGI_ROOMS_PING_INTERVAL_MS"},
@@ -103,6 +122,7 @@ namespace BECore {
                     args.origins.emplace_back(value);
                     return {};
                 case Option::ComputerDelay:
+                case Option::LobbyTimeout:
                 case Option::ReconnectGrace:
                 case Option::PingInterval:
                 case Option::StatsInterval:
@@ -113,6 +133,8 @@ namespace BECore {
                     }
                     if (option == Option::ComputerDelay) {
                         args.computerDelay = *milliseconds;
+                    } else if (option == Option::LobbyTimeout) {
+                        args.lobbyTimeout = *milliseconds;
                     } else if (option == Option::ReconnectGrace) {
                         args.reconnectGrace = *milliseconds;
                     } else if (option == Option::PingInterval) {
@@ -122,6 +144,16 @@ namespace BECore {
                     } else {
                         args.shutdownGrace = *milliseconds;
                     }
+                    return {};
+                }
+                case Option::MaxRoomsPerAddress:
+                case Option::TrustedProxyHops: {
+                    const bool isRooms = option == Option::MaxRoomsPerAddress;
+                    const auto number = ParseNumber(name, value, 0, isRooms ? kMaxRoomsPerAddressLimit : kMaxTrustedProxyHopsLimit);
+                    if (!number) {
+                        return std::unexpected(number.error());
+                    }
+                    (isRooms ? args.maxRoomsPerAddress : args.trustedProxyHops) = static_cast<size_t>(*number);
                     return {};
                 }
                 case Option::Port:
@@ -243,6 +275,10 @@ namespace BECore {
                       "                           (development only). Without it browsers are refused and programs are let in\n"
                       "  --max-connections N      connections the hub admits (default {})\n"
                       "  --max-per-address N      open sockets of one client address, 0 is off (default {})\n"
+                      "  --max-rooms-per-address N rooms one client address may have at once, 0 is off (default {})\n"
+                      "  --lobby-timeout-ms N     close a lobby with no message but ping for this long, 0 is off (default {})\n"
+                      "  --trusted-proxy-hops N   proxies in front that append to X-Forwarded-For: the client is the entry N places from the right,\n"
+                      "                           0 reads the socket's address (default {}). Only behind a proxy that appends the header\n"
                       "  --computer-delay-ms N    pause between two moves of computers (default {})\n"
                       "  --reconnect-grace-ms N   how long a dropped player keeps the seat (default {})\n"
                       "  --ping-interval-ms N     a ping after this much silence, a drop after twice that, 0 is off (default {})\n"
@@ -253,12 +289,14 @@ namespace BECore {
                       "\n"
                       "Environment (a flag wins over its variable, a variable over the default; an empty variable is unset):\n"
                       "  PORT=N  BAGI_ROOMS_BIND  BAGI_ROOMS_ORIGINS (comma-separated)  BAGI_ROOMS_MAX_CONNECTIONS  BAGI_ROOMS_MAX_PER_ADDRESS\n"
+                      "  BAGI_ROOMS_MAX_ROOMS_PER_ADDRESS  BAGI_ROOMS_LOBBY_TIMEOUT_MS  BAGI_ROOMS_TRUSTED_PROXY_HOPS\n"
                       "  BAGI_ROOMS_COMPUTER_DELAY_MS  BAGI_ROOMS_RECONNECT_GRACE_MS  BAGI_ROOMS_PING_INTERVAL_MS  BAGI_ROOMS_STATS_INTERVAL_MS\n"
                       "  BAGI_ROOMS_SHUTDOWN_GRACE_MS\n"
                       "  {}=1  the --test-games flag\n"
                       "GET {} answers 200 ok (a hosting platform's health check).\n",
-                      defaults.port, defaults.maxConnections, defaults.maxConnectionsPerAddress, defaults.computerDelay.count(), defaults.reconnectGrace.count(), defaults.pingInterval.count(),
-                      defaults.statsInterval.count(), defaults.shutdownGrace.count(), kTestGamesVariable, kRoomServerHealthPath);
+                      defaults.port, defaults.maxConnections, defaults.maxConnectionsPerAddress, defaults.maxRoomsPerAddress, defaults.lobbyTimeout.count(), defaults.trustedProxyHops,
+                      defaults.computerDelay.count(), defaults.reconnectGrace.count(), defaults.pingInterval.count(), defaults.statsInterval.count(), defaults.shutdownGrace.count(),
+                      kTestGamesVariable, kRoomServerHealthPath);
     }
 
     RoomServerSettings ToSettings(const RoomServerArgs& args) {
@@ -271,6 +309,9 @@ namespace BECore {
         settings.hub.maxConnections = args.maxConnections;
         settings.maxConnections = args.maxConnections + kHandshakeConnectionReserve;
         settings.maxConnectionsPerAddress = args.maxConnectionsPerAddress;
+        settings.policy.trustedProxyHops = args.trustedProxyHops;
+        settings.hub.maxRoomsPerAddress = args.maxRoomsPerAddress;
+        settings.hub.lobbyTimeout = args.lobbyTimeout;
         settings.hub.timings.computerDelay = args.computerDelay;
         settings.hub.timings.reconnectGrace = args.reconnectGrace;
         settings.pingInterval = args.pingInterval;
