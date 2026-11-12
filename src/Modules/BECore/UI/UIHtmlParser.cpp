@@ -12,6 +12,8 @@ namespace BECore {
         constexpr int HexBase = 16;
         constexpr int DecimalBase = 10;
         constexpr uint32_t MaxCodePoint = 0x10FFFF;
+        constexpr uint32_t FirstSurrogate = 0xD800;  // not characters: UTF-8 has no form for them
+        constexpr uint32_t LastSurrogate = 0xDFFF;
 
         const char* const VoidElements[] = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"};
         const char* const RawTextElements[] = {"style", "script"};
@@ -42,7 +44,7 @@ namespace BECore {
         }
 
         void AppendCodePoint(eastl::string& out, uint32_t codePoint) {
-            if (codePoint == 0 || codePoint > MaxCodePoint) {
+            if (codePoint == 0 || codePoint > MaxCodePoint || (codePoint >= FirstSurrogate && codePoint <= LastSurrogate)) {
                 out.push_back('?');
             } else if (codePoint < 0x80) {
                 out.push_back(static_cast<char>(codePoint));
@@ -118,6 +120,7 @@ namespace BECore {
                 UIHtmlNode root;
                 _document.nodes.push_back(std::move(root));
                 _current = UIHtmlDocument::RootIndex;
+                _depths.push_back(0);
                 while (_pos < _html.size()) {
                     if (_html[_pos] != '<') {
                         ReadText();
@@ -135,12 +138,19 @@ namespace BECore {
                         Advance(1);
                     }
                 }
-                if (_current != UIHtmlDocument::RootIndex) {
+                if (!_stopped && _current != UIHtmlDocument::RootIndex) {
                     _report.AddOnce(HtmlSource, _document.nodes[_current].line, Format("<{}> is never closed", _document.nodes[_current].tag.c_str()));
                 }
             }
 
         private:
+            /// Reports @p why at the current line and ends the read: the rest of the document is left out
+            void Stop(eastl::string why) {
+                _report.AddOnce(HtmlSource, _line, std::move(why));
+                _pos = _html.size();
+                _stopped = true;
+            }
+
             [[nodiscard]] bool StartsWith(eastl::string_view prefix) const {
                 return _html.substr(_pos, prefix.size()) == prefix;
             }
@@ -169,11 +179,16 @@ namespace BECore {
                 }
             }
 
+            /// The index of the new child of the open element, or NoNode when the document has too many nodes (the read has stopped)
             int AddNode(UIHtmlNode node) {
+                if (_document.nodes.size() > UIHtmlParser::kMaxNodes) {
+                    Stop(Format("the document has more than {} elements and pieces of text: the rest is left out", UIHtmlParser::kMaxNodes));
+                    return UIHtmlNode::NoNode;
+                }
                 node.parent = _current;
-                node.line = _line;
                 const int index = static_cast<int>(_document.nodes.size());
                 _document.nodes.push_back(std::move(node));
+                _depths.push_back(_depths[_current] + 1);
                 _document.nodes[_current].children.push_back(index);
                 return index;
             }
@@ -184,6 +199,7 @@ namespace BECore {
                 }
                 UIHtmlNode text;
                 text.text = decode ? DecodeEntities(raw) : eastl::string(raw);
+                text.line = _line;
                 AddNode(std::move(text));
             }
 
@@ -218,6 +234,7 @@ namespace BECore {
             }
 
             void ReadStartTag() {
+                const uint32_t startLine = _line;
                 Advance(1);
                 const size_t nameStart = _pos;
                 while (_pos < _html.size() && IsNameChar(_html[_pos])) {
@@ -228,9 +245,14 @@ namespace BECore {
                 bool selfClosing = false;
                 ReadAttributes(element, selfClosing);
 
+                element.line = startLine;
+                if (_depths[_current] >= UIHtmlParser::kMaxDepth) {
+                    Stop(Format("elements are nested deeper than {}: the rest of the document is left out", UIHtmlParser::kMaxDepth));
+                    return;
+                }
                 const eastl::string tag = element.tag;
                 const int index = AddNode(std::move(element));
-                if (selfClosing || IsVoidElement(tag)) {
+                if (index == UIHtmlNode::NoNode || selfClosing || IsVoidElement(tag)) {
                     return;
                 }
                 if (IsRawTextElement(tag)) {
@@ -269,7 +291,13 @@ namespace BECore {
                         attribute.value = ReadAttributeValue();
                     }
                     if (!attribute.name.empty()) {
-                        element.attributes.push_back(std::move(attribute));
+                        if (element.attributes.size() >= UIHtmlParser::kMaxAttributes) {
+                            _report.AddOnce(HtmlSource, _line, Format("<{}> has more than {} attributes: the rest are left out", element.tag.c_str(), UIHtmlParser::kMaxAttributes));
+                        } else if (attribute.name.size() > UIHtmlParser::kMaxAttributeBytes || attribute.value.size() > UIHtmlParser::kMaxAttributeBytes) {
+                            _report.AddOnce(HtmlSource, _line, Format("an attribute of <{}> is longer than {} bytes: it is left out", element.tag.c_str(), UIHtmlParser::kMaxAttributeBytes));
+                        } else {
+                            element.attributes.push_back(std::move(attribute));
+                        }
                     } else {
                         Advance(1);  // a character that is no name: skip it so the loop moves on
                     }
@@ -332,6 +360,8 @@ namespace BECore {
             size_t _pos = 0;
             uint32_t _line = 1;
             int _current = UIHtmlDocument::RootIndex;
+            bool _stopped = false;            ///< a limit ended the read: what is still open is not "never closed"
+            eastl::vector<uint32_t> _depths;  ///< per node, the number of elements open around it (the document node: 0)
         };
 
     }  // namespace
@@ -350,8 +380,18 @@ namespace BECore {
         if (value == nullptr) {
             return false;
         }
-        for (const eastl::string_view word : UIWebText::SplitWords(*value)) {
-            if (word == className) {
+        // No list of the words is made: the compile asks this for every element and every class of every rule
+        const eastl::string_view classes(value->data(), value->size());
+        size_t pos = 0;
+        while (pos < classes.size()) {
+            while (pos < classes.size() && UIWebText::IsSpace(classes[pos])) {
+                ++pos;
+            }
+            const size_t start = pos;
+            while (pos < classes.size() && !UIWebText::IsSpace(classes[pos])) {
+                ++pos;
+            }
+            if (pos > start && classes.substr(start, pos - start) == className) {
                 return true;
             }
         }
@@ -360,6 +400,10 @@ namespace BECore {
 
     UIHtmlDocument UIHtmlParser::Parse(eastl::string_view html, UIWebReport& report) {
         UIHtmlDocument document;
+        if (html.size() > kMaxDocumentBytes) {
+            report.AddOnce(HtmlSource, 1, Format("the document is longer than {} bytes: the rest is left out", kMaxDocumentBytes));
+            html = html.substr(0, kMaxDocumentBytes);
+        }
         Reader(html, document, report).Run();
         return document;
     }

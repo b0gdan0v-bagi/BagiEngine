@@ -86,7 +86,7 @@ namespace BECore::UIWebText {
                 percent = true;
                 text.remove_suffix(1);
             }
-            const auto value = UIText::ParseFloat(text);
+            const auto value = UIText::ParseFiniteFloat(text);
             if (!value) {
                 return std::nullopt;
             }
@@ -102,7 +102,7 @@ namespace BECore::UIWebText {
                 percent = true;
                 text.remove_suffix(1);
             }
-            const auto value = UIText::ParseFloat(text);
+            const auto value = UIText::ParseFiniteFloat(text);
             if (!value) {
                 return std::nullopt;
             }
@@ -355,7 +355,7 @@ namespace BECore::UIWebText {
         if (text.size() > 2 && text.substr(text.size() - 2) == "px") {
             text.remove_suffix(2);
         }
-        return UIText::ParseFloat(text);
+        return UIText::ParseFiniteFloat(text);
     }
 
     eastl::string FormatWebColor(const WebColor& color) {

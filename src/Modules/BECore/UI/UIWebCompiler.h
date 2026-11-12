@@ -41,9 +41,17 @@ namespace BECore {
      *
      * Everything outside the subset is an issue in the UIWebReport and is left out; the supported properties are listed in `.claude/rules/ui-web.md`.
      * The conversion is pure: no resource, window or renderer is touched, so it is tested with strings.
+     *
+     * **Limits.** The parsers keep the size of the input within bounds (`UIHtmlParser`, `UICssParser`); the cost of matching is a product of the two (elements, rules,
+     * declarations, once for the base and again for every `@media` block and every state), so the cascades of one compile together may take `kMaxCascadeWork` steps. Past it
+     * the report says so and the rest of the elements are styled by what they inherit and their `style=""` only.
      */
     class UIWebCompiler {
     public:
+        /// Steps of matching a rule against an element (and of listing what matched) that all cascades of one compile may take together. The largest screen of the engine
+        /// takes a few thousand
+        static constexpr size_t kMaxCascadeWork = 2'000'000;
+
         /// Gives the text of the style sheet at @p href (relative to the document), or nothing when it cannot be read
         using StylesheetLoader = eastl::function<std::optional<eastl::string>(eastl::string_view href)>;
 

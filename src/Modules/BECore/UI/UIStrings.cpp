@@ -1,6 +1,7 @@
 #include "UIStrings.h"
 
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/UI/UITidyMessage.h>
 
 namespace BECore {
 
@@ -266,6 +267,10 @@ namespace BECore {
             } else {
                 problems.push_back(Format("the default language '{}' has no strings", *defaultId));
             }
+        }
+        // The messages repeat ids, keys and values of the file
+        for (eastl::string& problem : problems) {
+            problem = UIText::TidyMessage(eastl::string_view(problem.data(), problem.size()));
         }
         return problems;
     }

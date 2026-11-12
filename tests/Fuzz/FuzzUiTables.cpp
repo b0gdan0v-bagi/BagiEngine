@@ -11,15 +11,31 @@ namespace BECore::Fuzz {
 
     namespace {
 
+        /// What a complaint of a loader may be: the game logs each of them
+        constexpr size_t kMaxComplaintBytes = 300;
+
         /// Most entries (a string, a colour) whose lookups are checked in one input: a table can hold thousands in 64 KiB, and the lookups are not what is under test
         constexpr size_t kMaxCheckedEntries = 512;
 
         constexpr eastl::string_view kStringsRoot = "UIStrings";
         constexpr eastl::string_view kThemesRoot = "UIThemes";
 
+        /// Whether @p text has a control character (a line break included): a log line made of it is more than one line
+        bool HasControlCharacter(eastl::string_view text) {
+            for (const char c : text) {
+                const auto byte = static_cast<uint8_t>(c);
+                if (byte < 0x20 || byte == 0x7F) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         void CheckComplaints(const eastl::vector<eastl::string>& complaints) {
             for (const eastl::string& complaint : complaints) {
                 FUZZ_CHECK(!complaint.empty());
+                FUZZ_CHECK(complaint.size() <= kMaxComplaintBytes);
+                FUZZ_CHECK(!HasControlCharacter(eastl::string_view(complaint.data(), complaint.size())));
             }
         }
 
@@ -217,7 +233,7 @@ namespace BECore::Fuzz {
      * The input is an XML text. A root named `UIStrings` goes to the string table, `UIThemes` to the theme table, anything else to both (the loaders say what
      * they do with a file of the wrong kind). The tables are local instances: they are pure data and need no service.
      *
-     * What is checked: a load gives no empty complaint; the table has what the file says (read from the document by
+     * What is checked: the complaints of a load are short sentences with no control character; the table has what the file says (read from the document by
      * pugixml alone: the first occurrence of a good key wins), no empty key, token or language, and no duplicate; a reference to a key resolves to its text; the same
      * file loaded again changes nothing, and a fresh table gives the same answers.
      */

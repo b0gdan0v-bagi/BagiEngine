@@ -64,9 +64,26 @@ namespace BECore {
      * `:disabled` / `:checked` on the last one, and the descendant (space) and child (`>`) combinators. Everything else (attribute selectors, `+`, `~`, other pseudo-classes
      * and pseudo-elements, `@import`, `@font-face`, `@keyframes`, nested `@media`) is reported as an issue and left out. A declaration is kept as text; the
      * compiler decides whether it can apply it.
+     *
+     * **Limits** (the same reason as the ones of `UIHtmlParser`: a style sheet is content that can be made as large as one likes). A sheet over its size, rules or
+     * declarations over theirs are one entry in the report and the rest of the sheet is left out (what was read stays); a block, a selector or a media query over its limit is
+     * left out with an entry, and the sheet goes on after it.
      */
     class UICssParser {
     public:
+        /// Bytes of one style sheet read; the rest of a longer one is left out
+        static constexpr size_t kMaxSheetBytes = 1024 * 1024;
+        /// Rules of one sheet (an `@media` block counts its own rules too), and declarations of all rules of one sheet
+        static constexpr size_t kMaxRules = 1024;
+        static constexpr size_t kMaxDeclarations = 16 * 1024;
+        static constexpr size_t kMaxDeclarationsPerRule = 256;
+        static constexpr size_t kMaxMediaBlocks = 16;
+        static constexpr size_t kMaxMediaAlternatives = 8;
+        /// Selectors of a rule's list, parts of a selector (`a > b c` has three) and bytes of one selector
+        static constexpr size_t kMaxSelectorsPerRule = 32;
+        static constexpr size_t kMaxSelectorParts = 16;
+        static constexpr size_t kMaxSelectorBytes = 1024;
+
         /// Reads @p css and adds its rules to @p sheet after the ones already there. @p sourceName names the text in the issues, @p firstLine is the line of its first character in the file
         static void ParseInto(UICssSheet& sheet, eastl::string_view css, eastl::string_view sourceName, uint32_t firstLine, UIWebReport& report);
 

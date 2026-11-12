@@ -92,8 +92,8 @@ namespace BECore {
         /**
          * @brief Adds the themes of a `<UIThemes>` node on top of what the table holds
          * @return the problems it found, as text for the log: a theme without an id, a colour without a name, with an illegal name or without a `value`, a `value` that is not a
-         *         colour, a duplicate token in one theme (the first stays), a theme with no colours, a `default` that names no theme, an unknown element. The rest is loaded. An
-         *         empty node adds nothing
+         *         colour, a duplicate token in one theme (the first stays), a theme with no colours, a `default` that names no theme, an unknown element. The rest is loaded. Each problem is one line
+         * of at most `UIText::kMaxMessageBytes` (it repeats text of the file, which is cut). An empty node adds nothing
          */
         eastl::vector<eastl::string> LoadFromXml(const XmlNode& node);
 

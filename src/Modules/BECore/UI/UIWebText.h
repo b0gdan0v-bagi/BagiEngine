@@ -17,7 +17,7 @@ namespace BECore::UIWebText {
     /// The words of @p text: runs of non-space characters, where a space inside parentheses or quotes does not end a word (`rgba(0, 0, 0, .5)` is one)
     [[nodiscard]] eastl::vector<eastl::string_view> SplitWords(eastl::string_view text);
 
-    /// A CSS number with an optional `px` (`12`, `12px`, `.5`, `-3`). Other units give nullopt
+    /// A CSS number with an optional `px` (`12`, `12px`, `.5`, `-3`). Other units give nullopt, and so do `inf` and `nan` (which the C++ parser reads)
     [[nodiscard]] std::optional<float> ParsePixels(eastl::string_view text);
 
     /// A colour of a style sheet: a literal, or a reference to a theme token (`var(--name)`, written `@name` in the generated XML, `UIThemes`). For a token the channels are

@@ -17,7 +17,7 @@ namespace BECore::Fuzz {
             {"RoomProtocol", &FuzzRoomProtocol, "room_protocol", 1},
             {"RoomHub", &FuzzRoomHub, "room_hub", 15},
             {"ControlRequest", &FuzzControlRequest, "control_request", 1},
-            {"WebUi", &FuzzWebUi, "web_ui", 3},
+            {"WebUi", &FuzzWebUi, "web_ui", 15},
             {"UiTables", &FuzzUiTables, "ui_tables", 2},
         };
         return targets;

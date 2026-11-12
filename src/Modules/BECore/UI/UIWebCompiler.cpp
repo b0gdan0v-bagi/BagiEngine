@@ -228,7 +228,7 @@ namespace BECore {
                 return true;
             }
             const auto length = UIText::ParseLength(value);
-            if (!length) {
+            if (!length || !std::isfinite(length->value)) {
                 return false;
             }
             out = *length;
@@ -285,7 +285,7 @@ namespace BECore {
             if (words.empty()) {
                 return false;
             }
-            const auto grow = UIText::ParseFloat(words[0]);
+            const auto grow = UIText::ParseFiniteFloat(words[0]);
             if (!grow) {
                 return false;
             }
@@ -404,8 +404,8 @@ namespace BECore {
                      return true;
                  }
                  const size_t slash = v.find('/');
-                 const auto numerator = UIText::ParseFloat(slash == eastl::string_view::npos ? v : v.substr(0, slash));
-                 const auto denominator = slash == eastl::string_view::npos ? std::optional<float>{1.0f} : UIText::ParseFloat(v.substr(slash + 1));
+                 const auto numerator = UIText::ParseFiniteFloat(slash == eastl::string_view::npos ? v : v.substr(0, slash));
+                 const auto denominator = slash == eastl::string_view::npos ? std::optional<float>{1.0f} : UIText::ParseFiniteFloat(v.substr(slash + 1));
                  if (!numerator || !denominator || *denominator <= 0.0f || *numerator <= 0.0f) {
                      return false;
                  }
@@ -890,7 +890,7 @@ namespace BECore {
                      r.lineHeightRatio.reset();
                      return true;
                  }
-                 const auto ratio = UIText::ParseFloat(trimmed);
+                 const auto ratio = UIText::ParseFiniteFloat(trimmed);
                  if (!ratio || *ratio <= 0.0f) {
                      return false;
                  }
@@ -1098,7 +1098,8 @@ namespace BECore {
                 const ApplyResult result = ApplyDeclaration(scratch, declaration);
                 if (result == ApplyResult::Applied && !scratch.note.empty()) {
                     // Understood, with a caveat: the value counts and the declaration is still reported once
-                    if (_report.AddOnce(SourceOf(declaration), declaration.line, Format("'{}: {}': {}", declaration.property.c_str(), declaration.value.c_str(), scratch.note.c_str()))) {
+                    if (_report.AddOnce(SourceOf(declaration), declaration.line,
+                                        Format("'{}: {}': {}", UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str(), scratch.note.c_str()))) {
                         ++_report.declarationsUnsupported;
                     }
                 }
@@ -1114,10 +1115,11 @@ namespace BECore {
                     return;
                 }
                 const bool hasVar = UIWebText::ToLower(declaration.value).find("var(") != eastl::string::npos;
-                const eastl::string message = result == ApplyResult::UnknownProperty ? Format("property '{}' is not supported", declaration.property.c_str())
-                                              : hasVar ? Format("'{}: {}': var() is read only as var(--name) of a theme token, with no fallback value, where a color is read",
-                                                                declaration.property.c_str(), declaration.value.c_str())
-                                                       : Format("'{}: {}' is not understood or not supported", declaration.property.c_str(), declaration.value.c_str());
+                const eastl::string message = result == ApplyResult::UnknownProperty ? Format("property '{}' is not supported", UIText::Excerpt(declaration.property).c_str())
+                                              : hasVar
+                                                  ? Format("'{}: {}': var() is read only as var(--name) of a theme token, with no fallback value, where a color is read",
+                                                           UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str())
+                                                  : Format("'{}: {}' is not understood or not supported", UIText::Excerpt(declaration.property).c_str(), UIText::Excerpt(declaration.value).c_str());
                 if (_report.AddOnce(SourceOf(declaration), declaration.line, message)) {
                     ++_report.declarationsUnsupported;
                 }
@@ -1139,7 +1141,20 @@ namespace BECore {
                 return std::all_of(compound.classes.begin(), compound.classes.end(), [&](const eastl::string& className) { return element.HasClass(className); });
             }
 
-            [[nodiscard]] bool MatchesSelector(int node, const UICssSelector& selector, size_t index) const {
+            /// Which (part of the selector, level above the element) pairs were tried and did not match. A selector is `a b c` and an ancestor chain is a path, so the same pair is
+            /// asked again by every way down to it: without this memory `a a a a a a a b` over a chain of `a` costs the number of ways to choose its parts
+            struct SelectorMemory {
+                uint64_t failed[UICssParser::kMaxSelectorParts] = {};
+            };
+            static_assert(UIHtmlParser::kMaxDepth <= 64, "a level above the element is a bit of a 64-bit mask");
+
+            [[nodiscard]] bool MatchesSelector(int node, const UICssSelector& selector) const {
+                SelectorMemory memory;
+                return MatchesPart(node, 0, selector, selector.compounds.size() - 1, memory);
+            }
+
+            /// Whether @p node, @p level steps above the element, matches part @p index of @p selector and the parts to the left of it match above it
+            [[nodiscard]] bool MatchesPart(int node, size_t level, const UICssSelector& selector, size_t index, SelectorMemory& memory) const {
                 if (!MatchesCompound(node, selector.compounds[index])) {
                     return false;
                 }
@@ -1147,14 +1162,37 @@ namespace BECore {
                     return true;
                 }
                 const int parent = _document.nodes[node].parent;
+                const auto matchesAbove = [&](int ancestor, size_t ancestorLevel) {
+                    const uint64_t bit = uint64_t{1} << ancestorLevel;
+                    if ((memory.failed[index - 1] & bit) != 0) {
+                        return false;
+                    }
+                    if (MatchesPart(ancestor, ancestorLevel, selector, index - 1, memory)) {
+                        return true;
+                    }
+                    memory.failed[index - 1] |= bit;
+                    return false;
+                };
                 if (selector.compounds[index].combinator == UICssCombinator::Child) {
-                    return parent != UIHtmlDocument::RootIndex && MatchesSelector(parent, selector, index - 1);
+                    return parent != UIHtmlDocument::RootIndex && matchesAbove(parent, level + 1);
                 }
-                for (int ancestor = parent; ancestor != UIHtmlDocument::RootIndex; ancestor = _document.nodes[ancestor].parent) {
-                    if (MatchesSelector(ancestor, selector, index - 1)) {
+                size_t ancestorLevel = level + 1;
+                for (int ancestor = parent; ancestor != UIHtmlDocument::RootIndex; ancestor = _document.nodes[ancestor].parent, ++ancestorLevel) {
+                    if (matchesAbove(ancestor, ancestorLevel)) {
                         return true;
                     }
                 }
+                return false;
+            }
+
+            /// Takes @p steps from the work the cascades of this compile may do (UIWebCompiler::kMaxCascadeWork). False, with one entry in the report, once it is spent
+            [[nodiscard]] bool SpendCascadeWork(size_t steps) {
+                _cascadeWork += steps;
+                if (_cascadeWork <= UIWebCompiler::kMaxCascadeWork) {
+                    return true;
+                }
+                _report.AddOnce(CssSource, 0,
+                                Format("the style sheets are too large for this document (more than {} steps of matching): the rest of the styling is left out", UIWebCompiler::kMaxCascadeWork));
                 return false;
             }
 
@@ -1172,7 +1210,7 @@ namespace BECore {
             };
 
             /// The declarations in effect for every HTML node when the rules of @p media apply (-1: only those outside `@media`) and every button is in @p state
-            [[nodiscard]] eastl::vector<DeclarationList> Cascade(int media, CascadeState state) const {
+            [[nodiscard]] eastl::vector<DeclarationList> Cascade(int media, CascadeState state) {
                 eastl::vector<DeclarationList> styles(_document.nodes.size());
                 for (size_t i = 1; i < _document.nodes.size(); ++i) {
                     const UIHtmlNode& node = _document.nodes[i];
@@ -1191,7 +1229,9 @@ namespace BECore {
                     }
 
                     eastl::vector<Match> matches;
-                    for (const UICssRule& rule : _sheet.rules) {
+                    const size_t ruleCount = SpendCascadeWork(_sheet.rules.size() + list.size()) ? _sheet.rules.size() : 0;
+                    for (size_t r = 0; r < ruleCount; ++r) {
+                        const UICssRule& rule = _sheet.rules[r];
                         if (rule.media != -1 && rule.media != media) {
                             continue;
                         }
@@ -1201,7 +1241,7 @@ namespace BECore {
                             if (pseudo != UICssPseudo::None && pseudo != ToPseudo(state)) {
                                 continue;
                             }
-                            if (MatchesSelector(static_cast<int>(i), selector, selector.compounds.size() - 1)) {
+                            if (MatchesSelector(static_cast<int>(i), selector)) {
                                 specificity = std::max(specificity.value_or(0), selector.specificity);
                             }
                         }
@@ -1212,6 +1252,9 @@ namespace BECore {
                             const UICssDeclaration& declaration = rule.declarations[d];
                             matches.push_back({&declaration, declaration.important, false, *specificity, rule.order, static_cast<uint32_t>(d)});
                         }
+                    }
+                    if (!SpendCascadeWork(matches.size())) {
+                        matches.clear();
                     }
                     for (size_t d = 0; d < _inlineStyles[i].size(); ++d) {
                         const UICssDeclaration& declaration = _inlineStyles[i][d];
@@ -2008,8 +2051,11 @@ namespace BECore {
             // ---- the output ----
 
             [[nodiscard]] eastl::string UniqueName(const eastl::string& tag) {
-                for (int suffix = 1;; ++suffix) {
-                    eastl::string candidate = Format("{}-{}", tag.c_str(), suffix);
+                // The names tried before are taken (an id of the document may be `div-7`), so counting goes on where the last call stopped: one call per element must not
+                // start at 1 again
+                int& suffix = _nextNameSuffix[tag];
+                while (true) {
+                    eastl::string candidate = Format("{}-{}", tag.c_str(), ++suffix);
                     if (_usedNames.insert(candidate).second) {
                         return candidate;
                     }
@@ -2364,6 +2410,8 @@ namespace BECore {
             eastl::vector<WebNode> _nodes;
             eastl::vector<Attrs> _baseAttrs;
             eastl::hash_set<eastl::string> _usedNames;
+            eastl::hash_map<eastl::string, int> _nextNameSuffix;  ///< per tag, where UniqueName goes on counting
+            size_t _cascadeWork = 0;
         };
 
     }  // namespace
