@@ -15,14 +15,45 @@ namespace BECore {
         inline constexpr eastl::string_view kConnectFailed = "connect_failed";
         /// An event: a text from the server that is not a well-formed message (it is dropped)
         inline constexpr eastl::string_view kBadServerMessage = "bad_server_message";
+        /// Resume() was given a session that cannot be one (no room, no token, a malformed code or token)
+        inline constexpr eastl::string_view kInvalidSession = "invalid_session";
     }  // namespace RoomClientErrors
+
+    /// Why a connection ended for good, as the `code` of the event `Closed` (empty: an ordinary close, the message says what the transport saw)
+    namespace RoomClientCloseReasons {
+        /// The server does not know the room or the token any more (`unknown_room`, `bad_token`): it was closed, or the player left
+        inline constexpr eastl::string_view kRoomGone = "room_gone";
+        /// Another device took the seat (`left {replaced}`); this one does not fight for it
+        inline constexpr eastl::string_view kReplaced = "replaced";
+        /// The server closed with 1008 (the code is the server's own reason, `rate_limited` or `too_many_failed_joins`, when it gave one):
+        /// the client broke its limits, and trying again would be the same abuse
+        inline constexpr eastl::string_view kRateLimited = "rate_limited";
+        /// The connection was not back within `reconnectGiveUp`
+        inline constexpr eastl::string_view kGaveUp = "gave_up";
+        /// The first connection did not open within `connectTimeout`
+        inline constexpr eastl::string_view kConnectTimeout = "connect_timeout";
+    }  // namespace RoomClientCloseReasons
 
     /// How many events wait for DrainEvents() before the oldest is dropped
     inline constexpr size_t kMaxQueuedRoomClientEvents = 256;
 
+    /// The defaults are the numbers of the design (Decisions of slice 3); a test passes small ones
     struct RoomClientSettings {
         /// Makes the transport of a connection; empty uses MakeDefaultRoomTransport()
         RoomTransportFactory transportFactory;
+        /// Nothing came for this long: a `ping` goes out (one at a time). 0 turns the heartbeat off
+        std::chrono::milliseconds pingInterval = std::chrono::seconds(10);
+        /// Nothing at all came for this long: the connection is lost. 0 turns the check off
+        std::chrono::milliseconds silenceLimit = std::chrono::seconds(35);
+        /// A transport that has not opened after this long counts as lost (or as a failed connect, outside a room)
+        std::chrono::milliseconds connectTimeout = std::chrono::seconds(15);
+        /// The wait before the first new connection after a loss; it doubles for every attempt that fails, up to backoffMax
+        std::chrono::milliseconds backoffStart = std::chrono::milliseconds(500);
+        std::chrono::milliseconds backoffMax = std::chrono::seconds(4);
+        /// The client stops trying this long after the first loss (the server's abandoned-room time)
+        std::chrono::milliseconds reconnectGiveUp = std::chrono::minutes(10);
+        /// Whether a connection lost in a room is brought back by itself
+        bool reconnect = true;
     };
 
     /// Where the client is in its life
@@ -30,30 +61,35 @@ namespace BECore {
               Disconnected,  // no connection
               Connecting,    // the transport is opening
               Connected,     // the connection is open, no room (before `joined`, after `left`, after an error of a Host / Join)
-              InRoom         // `joined` came: the lobby and the view follow
+              InRoom,        // `joined` came: the lobby and the view follow
+              Reconnecting   // the connection of a room was lost (or Resume() is under way): waiting to retry, or the new one is opening
     )
 
     CORE_ENUM(RoomClientEventKind, uint8_t,
-              Connected,     // the transport opened
-              Joined,        // `joined`: a room was created or entered
-              LobbyChanged,  // GetLobby() changed
-              ViewChanged,   // GetView() / GetActions() changed
-              Error,         // `error` from the server, or a bad server message: code, message, ref
-              Left,          // `left`: no longer in the room, code is the reason
-              Closed         // the connection ended: closeCode, message is the reason
+              Connected,       // the transport opened
+              Joined,          // `joined`: a room was created or entered
+              LobbyChanged,    // GetLobby() changed
+              ViewChanged,     // GetView() / GetActions() changed
+              Error,           // `error` from the server, or a bad server message: code, message, ref
+              Left,            // `left`: no longer in the room, code is the reason
+              ConnectionLost,  // the connection of a room ended: willRetry says whether the client will bring it back (else Closed follows)
+              Resumed,         // the new connection is in the room again (`joined` by token); the lobby and the view follow
+              Closed           // the connection ended for good: code is the reason (RoomClientCloseReasons), closeCode, message
     )
 
     /// One thing the game may want to show or react to
     struct RoomClientEvent {
         RoomClientEventKind kind = RoomClientEventKind::Closed;
-        /// Error: the code. Left: the reason
+        /// Error: the code. Left: the reason. Closed: why it ended for good (RoomClientCloseReasons or an error code of the server), empty for an ordinary close
         eastl::string code;
-        /// Error: the server's text. Closed: the reason of the close
+        /// Error: the server's text. Closed, ConnectionLost: the reason of the close
         eastl::string message;
         /// Error: the type of the message it answers; empty when the server gave none
         eastl::string ref;
-        /// Closed: the code of the close
+        /// Closed, ConnectionLost: the code of the close
         uint16_t closeCode = kRoomTransportAbnormalClosure;
+        /// ConnectionLost: the client will reconnect by itself
+        bool willRetry = false;
     };
 
     /// What it takes to come back into a room after the client was closed: plain data the game can save. **The token is the player's
@@ -78,8 +114,15 @@ namespace BECore {
      *
      * One connection at a time. Host() and Join() open it (or use the open one, after an error or `left`, when the address is the same).
      * After the first message the state goes Connecting, Connected, InRoom. A `left` from the server leaves the connection open
-     * (Connected); the end of the connection is the event `Closed` and the state Disconnected, with the room forgotten but the session
-     * kept. Leave() asks to leave the room, Disconnect() closes.
+     * (Connected). Leave() asks to leave the room, Disconnect() closes.
+     *
+     * **Heartbeat and reconnect.** The client sends `ping` after pingInterval of silence and counts the connection lost after silenceLimit
+     * of nothing at all (any text is life; the room protocol is used because a browser shows a script no WebSocket ping). A connection
+     * lost in a room (closed, failed, silent) goes to Reconnecting: after a backoff a new connection is opened and `join_room` goes out
+     * with the token, until `joined` (the event Resumed, then the lobby and the view again), a rule that says stop (RoomClientCloseReasons) or
+     * reconnectGiveUp. The old room, lobby and view stay readable while it waits (the game may show them frozen); commands that need the
+     * room are `wrong_state` until Resumed. Resume() does the same for a session saved by an earlier run. The end of all this is one event
+     * `Closed` and the state Disconnected.
      *
      * Not thread-safe: use it from one thread.
      */
@@ -112,16 +155,24 @@ namespace BECore {
         /// on). `wrong_state` without a room and a view. The client never sends an action again by itself
         [[nodiscard]] std::expected<void, ControlError> SendAction(const Json& action);
 
-        /// Asks to leave the room; the connection stays open and `left` follows. The session is forgotten at once. In a room only
+        /// Asks to leave the room; the connection stays open and `left` follows. The session is forgotten at once. In a room only; while
+        /// Reconnecting there is no connection to ask on, so it is Disconnect() plus the forgotten session
         [[nodiscard]] std::expected<void, ControlError> Leave();
 
-        /// Closes the connection (gracefully) in any state and forgets the room but not the session. `Closed` is queued at once, the
-        /// state is Disconnected, and a new Host() may follow without waiting for the old connection to finish
+        /// Comes back into the room of a session saved by an earlier run (GetSession()): connects to its address and joins by token. The
+        /// state is Reconnecting at once, so the retry and give-up rules of a lost connection apply; `Resumed` is the success and
+        /// `Closed {room_gone}` the answer of a server that no longer has the room or the token. Only Disconnected; `invalid_session`
+        /// for a session that cannot be one, and the errors of Host() for a connection that cannot start
+        [[nodiscard]] std::expected<void, ControlError> Resume(const RoomSession& session);
+
+        /// Closes the connection (gracefully) in any state, stops any retry, and forgets the room but not the session. `Closed` is queued
+        /// at once, the state is Disconnected, and a new Host() may follow without waiting for the old connection to finish
         void Disconnect();
 
         // ---- Polling ----
 
-        /// Takes everything the transport has: parses it, updates the state and queues events. @p now is the time of the frame
+        /// Takes everything the transport has: parses it, updates the state and queues events, and runs the clocks (heartbeat, connect
+        /// timeout, backoff, give-up) against @p now, the time of the frame
         void Poll(RoomTime now);
 
         /// Poll() with the steady clock
@@ -189,7 +240,8 @@ namespace BECore {
             return _finished;
         }
 
-        /// The room, the token and the address, valid from `joined` until `left` or Leave(); not valid before. The game saves it
+        /// The room, the token and the address, valid from `joined` until `left` or Leave(); not valid before. It survives a lost connection
+        /// and Disconnect() (that is its use). The game saves it to Resume() later; it is a secret
         [[nodiscard]] const RoomSession& GetSession() const {
             return _session;
         }
@@ -201,6 +253,8 @@ namespace BECore {
 
     private:
         [[nodiscard]] std::expected<void, ControlError> BeginRequest(eastl::string_view url, eastl::string firstMessage);
+        /// Makes and opens a transport for @p url; @p firstMessage goes out when it opens
+        [[nodiscard]] std::expected<void, ControlError> StartConnection(eastl::string_view url, eastl::string firstMessage);
         [[nodiscard]] std::expected<void, ControlError> RequireRoom() const;
         std::expected<void, ControlError> SendToServer(const ClientMessage& message);
 
@@ -212,10 +266,26 @@ namespace BECore {
         void OnError(ErrorMessage&& message);
         void OnLeft(LeftMessage&& message);
         void OnTransportClosed(const RoomTransportEvent& event);
+        /// The connection is over (the transport is gone or on its way out): reconnect, or end for good
+        void OnConnectionEnded(uint16_t closeCode, eastl::string_view reason, eastl::string_view endCode = {});
+        void ScheduleRetry();
+        void StartAttempt();
+        /// Ends the client for good: forgets the room, Disconnected, the event Closed
+        void GiveUp(eastl::string_view code, eastl::string_view message, bool forgetSession, uint16_t closeCode = kRoomTransportAbnormalClosure);
+        void CheckTimers();
+        /// Forgets what belongs to the transport that is gone (the first message, the clocks of the connection)
+        void ResetConnection();
+        /// Forgets the retry state: the first loss, the next attempt, the failures
+        void ClearReconnect();
         void ForgetRoom();
+        /// Hands the transport to _retired after a graceful Close()
         void Retire();
+        /// Hands the transport to _retired after Abort()
+        void RetireAborted();
+        [[nodiscard]] std::chrono::milliseconds GetBackoff() const;
 
-        void Emit(RoomClientEventKind kind, eastl::string_view code = {}, eastl::string_view message = {}, eastl::string_view ref = {}, uint16_t closeCode = kRoomTransportAbnormalClosure);
+        void Emit(RoomClientEventKind kind, eastl::string_view code = {}, eastl::string_view message = {}, eastl::string_view ref = {}, uint16_t closeCode = kRoomTransportAbnormalClosure,
+                  bool willRetry = false);
 
         RoomClientSettings _settings;
 
@@ -228,6 +298,22 @@ namespace BECore {
         eastl::string _firstMessage;
         /// A create_room or join_room was sent and has no answer (`joined` or `error`) yet
         bool _awaitingJoin = false;
+        /// The transport has reported Opened
+        bool _transportOpened = false;
+
+        // The clocks, all against the `now` of Poll(); an empty one is armed by the next Poll(), since a command knows no time
+        RoomTime _now{};
+        /// Since when the transport has been opening
+        std::optional<RoomTime> _connectStart;
+        /// The last time anything came from the server, and whether a `ping` since then is still unanswered
+        RoomTime _lastReceived{};
+        bool _pingOutstanding = false;
+        /// Reconnecting: when the connection was first lost, when the next attempt is due (empty while one is under way), how many failed
+        std::optional<RoomTime> _lostAt;
+        std::optional<RoomTime> _retryAt;
+        int _failedAttempts = 0;
+        /// Why the connection will end for good when the transport's Closed arrives (`replaced`); the code of that Closed event
+        eastl::string _endReason;
 
         eastl::string _room;
         PlayerId _player = 0;

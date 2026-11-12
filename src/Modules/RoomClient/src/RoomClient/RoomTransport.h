@@ -8,6 +8,9 @@ namespace BECore {
     /// The code of a close that the client asks for on purpose: RFC 6455, 1000
     inline constexpr uint16_t kRoomTransportNormalClosure = 1000;
 
+    /// The close the server answers a client that broke its limits with (`rate_limited`, `too_many_failed_joins`): RFC 6455, 1008
+    inline constexpr uint16_t kRoomTransportPolicyViolation = 1008;
+
     CORE_ENUM(RoomTransportEventKind, uint8_t, Opened, Text, Closed)
 
     /// One thing that happened on a connection

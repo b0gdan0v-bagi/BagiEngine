@@ -4,13 +4,13 @@
 
 The client of the rooms (the entry `network-rooms` of the todo store, slice 3 of 4): what a game links to host or join a room on a room server (`Rooms/CLAUDE.md`, `RoomServer/CLAUDE.md`) and to play its seat. Two layers: `IRoomTransport`, one polled connection (the desktop and the browser each have one), and `RoomClient`, the protocol client over it. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomClientModule`). Built in **every** configuration, the web build included; with `ENGINE_WITH_REMOTE_CONTROL` it links `RemoteControlModule` for the desktop transport.
 
-**How a game uses it:** a component owns one `RoomClient`, calls `Poll()` once per frame on the main thread, then `DrainEvents(events)` (a member vector, so it keeps its capacity) and redraws from `GetState()`, `GetLobby()`, `GetView()` and `GetActions()` when an event says they changed. Commands (`Host`, `Join`, `ChooseSeat`, `Start`, `SendAction`, `Leave`, `Disconnect`) are asked of the server; the outcome is an event. A command returns an error itself only when it cannot be sent (`wrong_state`, `transport_unavailable`, `connect_failed`, `unknown_room` for a code that cannot exist). The game saves `GetSession()` (room, token, address; **the token is the player's secret**) to come back later. The client keeps `view` and `actions` as the server sent them and reads no game.
+**How a game uses it:** a component owns one `RoomClient`, calls `Poll()` once per frame on the main thread, then `DrainEvents(events)` (a member vector, so it keeps its capacity) and redraws from `GetState()`, `GetLobby()`, `GetView()` and `GetActions()` when an event says they changed. Commands (`Host`, `Join`, `Resume`, `ChooseSeat`, `Start`, `SendAction`, `Leave`, `Disconnect`) are asked of the server; the outcome is an event. A command returns an error itself only when it cannot be sent (`wrong_state`, `transport_unavailable`, `connect_failed`, `unknown_room` for a code that cannot exist, `invalid_session`). The game saves `GetSession()` (room, token, address; **the token is the player's secret**) and calls `Resume()` with it to come back later (see "The session"). The client keeps `view` and `actions` as the server sent them and reads no game.
 
 | File | Purpose |
 |------|---------|
 | `RoomTransport.h` | `IRoomTransport` (`Open`, `SendText`, `Close`, `Abort`, `PollEvent`), `RoomTransportEvent` (`Opened`, `Text`, `Closed`), `RoomTransportFactory`, `MakeDefaultRoomTransport()` |
 | `RoomTransportFactory.cpp` | `MakeDefaultRoomTransport()`: the transport of this platform, nullptr where there is none |
-| `RoomClient.h/.cpp` | `RoomClient`, `RoomClientSettings`, `RoomClientState`, `RoomClientEvent`, `RoomSession`, `RoomClientErrors` |
+| `RoomClient.h/.cpp` | `RoomClient`, `RoomClientSettings`, `RoomClientState`, `RoomClientEvent`, `RoomSession`, `RoomClientErrors`, `RoomClientCloseReasons` |
 
 ## The transport contract
 
@@ -24,17 +24,43 @@ Everything is delivered on the calling thread by `PollEvent()`; **no callback ev
 | `Connecting` | the transport is opening; the first message (`create_room` or `join_room`) goes out when it opens |
 | `Connected` | open, no room: before `joined`, after `left`, after an `error` that answered `create_room` / `join_room` (the same connection serves another `Host` / `Join` to the same address) |
 | `InRoom` | `joined` came; `lobby` and `view` follow |
+| `Reconnecting` | the connection of a room was lost, or `Resume()` is under way: waiting for the backoff, or a new connection is opening or waiting for `joined` |
 
-Events (`DrainEvents`): `Connected`, `Joined`, `LobbyChanged`, `ViewChanged`, `Error {code, message, ref}`, `Left {code = reason}`, `Closed {closeCode, message}`. A `lobby` or `view` that is announced and not yet taken is not announced again (the getters hold the latest); the queue holds at most `kMaxQueuedRoomClientEvents`, the oldest is dropped. A text that is not a well-formed server message is dropped with a log line and an `Error bad_server_message`; a message of a type this client does not know is ignored (a newer server). A `lobby` or `view` outside the room, or for another room code, is dropped.
+Events (`DrainEvents`): `Connected`, `Joined`, `LobbyChanged`, `ViewChanged`, `Error {code, message, ref}`, `Left {code = reason}`, `ConnectionLost {closeCode, message, willRetry}`, `Resumed`, `Closed {code, closeCode, message}`. A `lobby` or `view` that is announced and not yet taken is not announced again (the getters hold the latest); the queue holds at most `kMaxQueuedRoomClientEvents`, the oldest is dropped. A text that is not a well-formed server message is dropped with a log line and an `Error bad_server_message`; a message of a type this client does not know is ignored (a newer server). A `lobby` or `view` outside the room, or for another room code, is dropped.
 
 - **Which seat is mine.** `joined` names it, and after the start every `view` does; the `lobby` message does not say who the receiver is. So `ChooseSeat(n)` takes seat `n` at once and goes back to the old seat if the server answers with an error that has `ref: choose_seat`; the next `view` is the truth. `IsHost()` is `lobby.host == my seat`.
 - **Stale actions.** `SendAction` stamps the version of the last `view`; a `stale_action` error and the fresh `view` come as events and the client never resends.
-- **Leave and Disconnect.** `Leave()` asks the server (`left` follows, the connection stays, the session is forgotten at once). `Disconnect()` closes in any state, queues `Closed` at once and lets the transport finish in the background (it is polled until its own `Closed`, then freed); a new `Host` does not wait for it. A connection that ends keeps the session (the seat is held for the grace) but forgets the room, lobby and view.
+- **Leave and Disconnect.** `Leave()` asks the server (`left` follows, the connection stays open, the session is forgotten at once); while Reconnecting there is no connection to ask on, so it is `Disconnect()` plus the forgotten session. `Disconnect()` closes in any state, stops any retry, queues `Closed` at once and lets the transport finish in the background (it is polled until its own `Closed`, then freed); a new `Host` does not wait for it. It keeps the session. A connection that ends and is not brought back keeps the session (the seat is held for the grace) but forgets the room, lobby and view.
+
+## Heartbeat and reconnect
+
+Time is the `now` of `Poll(now)`; a command knows no time, so a clock that a command starts (the connect timeout, the first loss of a `Resume`) is armed by the next `Poll`. The numbers are `RoomClientSettings` (a test passes small ones).
+
+- **Heartbeat.** The room protocol `ping` / `pong`, not WebSocket's: a browser answers the server's pings itself and shows a script nothing of them. After `pingInterval` (10 s) without any text a `ping` goes out, one at a time (the next waits for something to arrive); after `silenceLimit` (35 s) without any text the connection is lost and aborted. **Any** text is life, one that does not parse too. Both run whenever the transport is open, also while an attempt waits for `joined`. 0 turns either off.
+- **Lost.** The transport's `Closed` outside our own `Disconnect()`, silence, or a connect that did not open within `connectTimeout` (15 s). In a room it is `ConnectionLost {willRetry}` and the state `Reconnecting`; the room, lobby and view stay readable (the game may show them frozen) while commands that need the room are `wrong_state`. Without a room (`Connecting`, `Connected`) there is no reconnect: the attempt ends with `Closed` (`connect_timeout` for the timeout), and the game shows it.
+- **Attempts.** After a loss the first new connection is `backoffStart` (0.5 s) later, then it doubles per failed attempt up to `backoffMax` (4 s) and stays there; the transport is made by the factory again and `join_room {code, token}` goes out when it opens. No `Connected` event: the player was told once with `ConnectionLost`. `joined` is `Resumed` and the lobby and view are replaced by the ones that follow (a returning client gets `joined`, `lobby`, `view`). A seat that was held is the same seat; one a computer played comes back to the player at once (`Rooms/CLAUDE.md`).
+- **Where it stops** (event `Closed`, state `Disconnected`; the code is in `RoomClientCloseReasons`):
+
+| Cause | `Closed.code` | Session | Why it stops |
+|-------|---------------|---------|--------------|
+| `error` `bad_token` / `unknown_room` as the answer to the join | `room_gone` | forgotten | the server has no such room or member; asking again gives the same answer |
+| any other `error` as the answer to the join | the error's code | kept | not a thing waiting can mend |
+| `left {replaced}` (then the server's close) | `replaced` | forgotten | another device took the seat; two devices must not fight over it |
+| close code 1008 | the server's reason (`rate_limited`, `too_many_failed_joins`) | kept | the client broke the limits; retrying is the same abuse |
+| `reconnectGiveUp` (10 min = the server's abandoned-room time) after the first loss | `gave_up` | forgotten | the room is gone by now |
+| an address or platform that cannot connect (`Open` fails) | `connect_failed` or `transport_unavailable` | kept | it does not get better by waiting |
+| `Disconnect()`, `Leave()` | empty | `Disconnect` keeps, `Leave` forgets | the player's own decision |
+
+Every other close retries, 1013 (server full) and a normal 1000 from the server included. `reconnect = false` in the settings turns the retry off: a lost connection is `ConnectionLost {willRetry = false}` then `Closed`.
+
+## The session
+
+`RoomSession {url, room, token}` is plain data, valid from `joined` and kept through losses and `Disconnect()`; the game saves it where its platform keeps things (the token is a secret of the player) and forgets it on `Closed` with `room_gone`, `replaced` or `gave_up` (the client has already cleared its own copy). `Resume(session)` makes the state `Reconnecting` at once, so the retry and stop rules above apply to a restart as they do to a drop, and a server that is not up yet is waited for. A session that cannot be one (no address, a code that is not a room code, a token that is not 32 hex characters) is `invalid_session` and makes no connection; a server that no longer has the room gives `Closed {room_gone}`. A second device that resumes the same session replaces the first (`replaced` above).
 
 ## Allocations
 
-`Poll()` with nothing to do allocates nothing: the polled event is a member, the event queue keeps its capacity, and the transports' `PollEvent` does not allocate when empty. A message that arrives allocates, as any parse does.
+`Poll()` with nothing to do allocates nothing: the polled event is a member, the event queue keeps its capacity, the clocks are plain values, and the transports' `PollEvent` does not allocate when empty. A message that arrives allocates, as any parse does, and so does the `ping` that goes out every ten quiet seconds. `RoomClientTest.PollingWithNothingToDoAllocatesNothing` counts the allocations of the thread in the profile build (`ENGINE_PROFILER_ALLOC`, where the global `operator new` is replaced); the other builds keep the capacity check.
 
 ## Tests
 
-`tests/BECore/Rooms/FakeRoomTransport.h` is the scripted transport (a link the test pushes server texts into and reads what was sent from); `RoomClientTest.cpp` drives the client over it.
+`tests/BECore/Rooms/FakeRoomTransport.h` is the scripted transport (a link the test pushes server texts into and reads what was sent from); `RoomClientTest.cpp` drives the client over it on a `ManualClock`, so the heartbeat, the backoff times and every stop rule are exact to the millisecond. `HubTransport.h` is an `IRoomTransport` that talks to a real `RoomHub` in memory (`HubWorld`: the demo games, a manual clock, `Sever`, `SetRefusing`, a `blackhole` for a silent network) and `JudgedTransport.h` runs the wire judge on every text a client receives; `RoomClientHubTest.cpp` plays whole hands of `DemoCardGame` with four clients, drops one inside and past the grace, and has the negative control on `cards-leaky`.

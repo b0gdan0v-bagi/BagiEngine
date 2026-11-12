@@ -1,5 +1,7 @@
 #include "FakeRoomTransport.h"
+#include "ManualClock.h"
 
+#include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <Common/Printers.h>
 #include <RoomClient/RoomClient.h>
 #include <Rooms/RoomErrors.h>
@@ -8,6 +10,9 @@
 namespace BECore::Tests {
 
     namespace {
+
+        using std::chrono::milliseconds;
+        using std::chrono::seconds;
 
         constexpr eastl::string_view kUrl = "ws://127.0.0.1:9000";
         constexpr eastl::string_view kRoom = "ABCDE";
@@ -39,15 +44,38 @@ namespace BECore::Tests {
         class RoomClientTest : public ::testing::Test {
         protected:
             RoomClientTest() {
-                RoomClientSettings settings;
+                MakeClient({});
+            }
+
+            /// A new client over the fake transports; @p settings has the numbers a test wants to change (its factory is replaced)
+            void MakeClient(RoomClientSettings settings) {
                 settings.transportFactory = _transports.Factory();
                 _client = std::make_unique<RoomClient>(std::move(settings));
             }
 
             /// Polls once and takes the events
             void Pump() {
-                _client->Poll(RoomTime{});
+                _client->Poll(_clock.Now());
                 _client->DrainEvents(_events);
+            }
+
+            /// Moves the clock and polls
+            void Advance(milliseconds step) {
+                _clock.Advance(step);
+                Pump();
+            }
+
+            /// The connection breaks while in the room
+            void Lose(FakeLink& link, uint16_t code = kRoomTransportAbnormalClosure, eastl::string_view reason = "connection lost") {
+                link.PushClosed(code, reason);
+                Pump();
+            }
+
+            /// The kinds of the events since the last Forget(), then forgets them
+            [[nodiscard]] eastl::vector<RoomClientEventKind> TakeKinds() {
+                auto kinds = Kinds();
+                _events.clear();
+                return kinds;
             }
 
             void Receive(FakeLink& link, eastl::string_view text) {
@@ -85,6 +113,7 @@ namespace BECore::Tests {
                 return parsed ? std::get_if<T>(&*parsed) : nullptr;
             }
 
+            ManualClock _clock;
             FakeTransports _transports;
             std::unique_ptr<RoomClient> _client;
             eastl::vector<RoomClientEvent> _events;
@@ -452,7 +481,10 @@ namespace BECore::Tests {
         EXPECT_TRUE(_transports.Last().destroyed);
     }
 
-    TEST_F(RoomClientTest, AConnectionThatEndsInTheRoomForgetsTheRoomAndKeepsTheSession) {
+    TEST_F(RoomClientTest, AConnectionThatEndsInTheRoomWithoutReconnectForgetsTheRoomAndKeepsTheSession) {
+        RoomClientSettings settings;
+        settings.reconnect = false;
+        MakeClient(settings);
         FakeLink& link = EnterAsHost();
         Receive(link, View(2));
         link.PushClosed(1006, "the server went away");
@@ -462,6 +494,9 @@ namespace BECore::Tests {
         EXPECT_FALSE(_client->HasView());
         EXPECT_TRUE(_client->GetSession().IsValid());
         EXPECT_EQ(_client->GetSession().token, kToken);
+        ASSERT_GE(_events.size(), 2u);
+        EXPECT_EQ(_events[_events.size() - 2].kind, Kind::ConnectionLost);
+        EXPECT_FALSE(_events[_events.size() - 2].willRetry);
         EXPECT_EQ(_events.back().kind, Kind::Closed);
         EXPECT_EQ(_events.back().closeCode, 1006);
         EXPECT_TRUE(link.destroyed);
@@ -620,5 +655,523 @@ namespace BECore::Tests {
         _client->DrainEvents(again);
         EXPECT_TRUE(again.empty());
     }
+
+    // ---- Heartbeat ----------------------------------------------------------------------------------------------------------------
+
+    TEST_F(RoomClientTest, APingGoesOutAfterTenSecondsOfSilenceAndNotBefore) {
+        FakeLink& link = EnterAsHost();
+        const size_t sent = link.sent.size();
+        Advance(milliseconds(9999));
+        EXPECT_EQ(link.sent.size(), sent);
+        Advance(milliseconds(1));
+        ASSERT_EQ(link.sent.size(), sent + 1);
+        const auto parsed = SentParsed(link, sent);
+        EXPECT_NE(AsSent<PingMessage>(parsed), nullptr);
+    }
+
+    TEST_F(RoomClientTest, OnlyOnePingIsOutstandingUntilSomethingArrives) {
+        FakeLink& link = EnterAsHost();
+        const size_t sent = link.sent.size();
+        Advance(seconds(10));
+        Advance(seconds(20));
+        EXPECT_EQ(link.sent.size(), sent + 1);
+        EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
+
+        // The answer is life: the next ping is ten seconds after it
+        Receive(link, MakePongMessage());
+        Advance(milliseconds(9999));
+        EXPECT_EQ(link.sent.size(), sent + 1);
+        Advance(milliseconds(1));
+        EXPECT_EQ(link.sent.size(), sent + 2);
+    }
+
+    TEST_F(RoomClientTest, NoPingWhileMessagesKeepArriving) {
+        FakeLink& link = EnterAsHost();
+        const size_t sent = link.sent.size();
+        for (int i = 0; i < 40; ++i) {
+            Advance(seconds(5));
+            Receive(link, i % 2 == 0 ? eastl::string(MakePongMessage()) : View(static_cast<uint64_t>(i) + 1));
+        }
+        EXPECT_EQ(link.sent.size(), sent);
+        EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
+    }
+
+    TEST_F(RoomClientTest, AnyTextIsLifeEvenOneThatDoesNotParse) {
+        FakeLink& link = EnterAsHost();
+        Advance(seconds(30));
+        Receive(link, "this is not json");
+        Advance(seconds(30));
+        EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
+    }
+
+    TEST_F(RoomClientTest, ThirtyFiveSecondsOfNothingLosesTheConnection) {
+        FakeLink& link = EnterAsHost();
+        Receive(link, View(4));
+        _events.clear();
+        Advance(milliseconds(34999));
+        EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
+        Advance(milliseconds(1));
+        EXPECT_EQ(_client->GetState(), RoomClientState::Reconnecting);
+        EXPECT_TRUE(link.aborted);
+        EXPECT_FALSE(link.closeCalled);
+        ASSERT_EQ(_events.size(), 1u);
+        EXPECT_EQ(_events[0].kind, Kind::ConnectionLost);
+        EXPECT_TRUE(_events[0].willRetry);
+        // The abandoned connection is let go of when it says it is over
+        EXPECT_FALSE(link.destroyed);
+        Pump();
+        EXPECT_TRUE(link.destroyed);
+    }
+
+    // ---- Reconnect ----------------------------------------------------------------------------------------------------------------
+
+    TEST_F(RoomClientTest, ALostConnectionIsRetriedAfterTheBackoffThatGrowsToItsLimit) {
+        FakeLink& first = EnterAsHost();
+        Receive(first, View(4));
+        _events.clear();
+        Lose(first);
+        EXPECT_EQ(_client->GetState(), RoomClientState::Reconnecting);
+        ASSERT_EQ(_events.size(), 1u);
+        EXPECT_EQ(_events[0].kind, Kind::ConnectionLost);
+        EXPECT_TRUE(_events[0].willRetry);
+        EXPECT_EQ(_events[0].closeCode, kRoomTransportAbnormalClosure);
+
+        const milliseconds waits[] = {milliseconds(500), seconds(1), seconds(2), seconds(4), seconds(4), seconds(4)};
+        for (const milliseconds wait : waits) {
+            const size_t count = _transports.Count();
+            Advance(wait - milliseconds(1));
+            ASSERT_EQ(_transports.Count(), count) << "too early after " << wait.count() << " ms";
+            Advance(milliseconds(1));
+            ASSERT_EQ(_transports.Count(), count + 1) << "no attempt after " << wait.count() << " ms";
+            EXPECT_EQ(_client->GetState(), RoomClientState::Reconnecting);
+            Lose(_transports.Last(), kRoomTransportAbnormalClosure, "connection refused");
+        }
+        // A failed attempt is not announced again: the player was told once
+        EXPECT_EQ(_events.size(), 1u);
+    }
+
+    TEST_F(RoomClientTest, TheRoomStaysReadableWhileReconnecting) {
+        FakeLink& link = EnterAsHost();
+        Receive(link, View(4));
+        Lose(link);
+        EXPECT_EQ(_client->GetRoom(), kRoom);
+        EXPECT_TRUE(_client->HasView());
+        EXPECT_EQ(_client->GetViewVersion(), 4u);
+        EXPECT_EQ(_client->GetLobby().seats.size(), 4u);
+        EXPECT_FALSE(_client->IsInRoom());
+        // But nothing can be sent into a room that is not there
+        EXPECT_EQ(_client->SendAction(OneAction()).error().code, RoomClientErrors::kWrongState);
+        EXPECT_EQ(_client->ChooseSeat(1).error().code, RoomClientErrors::kWrongState);
+        EXPECT_EQ(_client->Start().error().code, RoomClientErrors::kWrongState);
+        EXPECT_TRUE(_client->GetSession().IsValid());
+    }
+
+    TEST_F(RoomClientTest, TheNewConnectionJoinsWithTheTokenAndNotTheNameAndIsResumed) {
+        FakeLink& first = EnterAsHost();
+        Receive(first, View(4));
+        Lose(first);
+        _events.clear();
+        Advance(milliseconds(500));
+        ASSERT_EQ(_transports.Count(), 2u);
+        FakeLink& second = _transports.Last();
+        EXPECT_EQ(second.url, kUrl);
+        EXPECT_TRUE(second.sent.empty());
+
+        second.PushOpened();
+        Pump();
+        ASSERT_EQ(second.sent.size(), 1u);
+        const auto parsed = SentParsed(second, 0);
+        const auto* join = AsSent<JoinRoomMessage>(parsed);
+        ASSERT_NE(join, nullptr);
+        EXPECT_TRUE(join->IsReconnect());
+        EXPECT_EQ(join->token, kToken);
+        EXPECT_EQ(join->code, kRoom);
+        EXPECT_TRUE(join->name.empty());
+        // Not a new connection to the player: no Connected event, still Reconnecting until the server says so
+        EXPECT_EQ(_client->GetState(), RoomClientState::Reconnecting);
+        EXPECT_TRUE(_events.empty());
+
+        second.PushText(MakeJoinedMessage(kRoom, 1, kToken, 0, true));
+        second.PushText(Lobby(0, RoomPhase::Playing));
+        second.PushText(View(9, 0));
+        Pump();
+        EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
+        EXPECT_EQ(_client->GetViewVersion(), 9u);
+        EXPECT_EQ(_client->GetLobby().phase, RoomPhase::Playing);
+        EXPECT_EQ(_client->GetSession().token, kToken);
+        const eastl::vector<RoomClientEventKind> expected = {Kind::Resumed, Kind::LobbyChanged, Kind::ViewChanged};
+        EXPECT_EQ(Kinds(), expected);
+        EXPECT_TRUE(first.destroyed);
+
+        // A second loss starts from the first backoff again
+        _events.clear();
+        Lose(second);
+        const size_t count = _transports.Count();
+        Advance(milliseconds(499));
+        EXPECT_EQ(_transports.Count(), count);
+        Advance(milliseconds(1));
+        EXPECT_EQ(_transports.Count(), count + 1);
+    }
+
+    TEST_F(RoomClientTest, ACloseWithAnyOtherCodeIsRetried) {
+        for (const uint16_t code : {uint16_t(1000), uint16_t(1001), uint16_t(1011), uint16_t(1013)}) {
+            MakeClient({});
+            _events.clear();
+            FakeLink& link = EnterAsHost();
+            Lose(link, code, "closed");
+            EXPECT_EQ(_client->GetState(), RoomClientState::Reconnecting) << "code " << code;
+            const size_t count = _transports.Count();
+            Advance(milliseconds(500));
+            EXPECT_EQ(_transports.Count(), count + 1) << "code " << code;
+            // The attempt itself is closed with a try-again as well
+            Lose(_transports.Last(), 1013, "the server is full");
+            Advance(seconds(1));
+            EXPECT_EQ(_transports.Count(), count + 2) << "code " << code;
+        }
+    }
+
+    TEST_F(RoomClientTest, ATransportThatNeverOpensIsLostAfterTheConnectTimeout) {
+        FakeLink& first = EnterAsHost();
+        Lose(first);
+        Advance(milliseconds(500));
+        ASSERT_EQ(_transports.Count(), 2u);
+        FakeLink& attempt = _transports.Last();
+        Advance(milliseconds(14999));
+        EXPECT_FALSE(attempt.aborted);
+        Advance(milliseconds(1));
+        EXPECT_TRUE(attempt.aborted);
+        EXPECT_EQ(_client->GetState(), RoomClientState::Reconnecting);
+        // A failed attempt: the next one is one backoff step later
+        const size_t count = _transports.Count();
+        Advance(milliseconds(999));
+        EXPECT_EQ(_transports.Count(), count);
+        Advance(milliseconds(1));
+        EXPECT_EQ(_transports.Count(), count + 1);
+    }
+
+    TEST_F(RoomClientTest, AFirstConnectThatNeverOpensEndsWithAClosedEvent) {
+        ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann").has_value());
+        FakeLink& link = _transports.Last();
+        Pump();
+        Advance(milliseconds(14999));
+        EXPECT_EQ(_client->GetState(), RoomClientState::Connecting);
+        Advance(milliseconds(1));
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        EXPECT_TRUE(link.aborted);
+        ASSERT_FALSE(_events.empty());
+        EXPECT_EQ(_events.back().kind, Kind::Closed);
+        EXPECT_EQ(_events.back().code, RoomClientCloseReasons::kConnectTimeout);
+        // Without a room there is nothing to bring back
+        Advance(seconds(60));
+        EXPECT_EQ(_transports.Count(), 1u);
+    }
+
+    TEST_F(RoomClientTest, AnAttemptThatIsNeverAnsweredIsLostByTheSilenceRule) {
+        FakeLink& first = EnterAsHost();
+        Lose(first);
+        Advance(milliseconds(500));
+        FakeLink& attempt = _transports.Last();
+        attempt.PushOpened();
+        Pump();
+        ASSERT_EQ(attempt.sent.size(), 1u);
+        Advance(milliseconds(34999));
+        EXPECT_FALSE(attempt.aborted);
+        EXPECT_EQ(attempt.sent.size(), 2u) << "a ping went out in the meantime";
+        Advance(milliseconds(1));
+        EXPECT_TRUE(attempt.aborted);
+        const size_t count = _transports.Count();
+        Advance(seconds(1));
+        EXPECT_EQ(_transports.Count(), count + 1);
+    }
+
+    // ---- Where it stops -----------------------------------------------------------------------------------------------------------
+
+    TEST_F(RoomClientTest, ATokenThatTheServerRefusesEndsItForGood) {
+        for (const eastl::string_view code : {RoomErrors::kBadToken, RoomErrors::kUnknownRoom}) {
+            MakeClient({});
+            _events.clear();
+            FakeLink& first = EnterAsHost();
+            Lose(first);
+            Advance(milliseconds(500));
+            FakeLink& attempt = _transports.Last();
+            attempt.PushOpened();
+            attempt.PushText(MakeErrorMessage(code, "no", RoomMessageTypes::kJoinRoom));
+            _events.clear();
+            Pump();
+            EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected) << code.data();
+            ASSERT_EQ(_events.size(), 1u);
+            EXPECT_EQ(_events[0].kind, Kind::Closed);
+            EXPECT_EQ(_events[0].code, RoomClientCloseReasons::kRoomGone);
+            EXPECT_FALSE(_client->GetSession().IsValid());
+            EXPECT_TRUE(_client->GetRoom().empty());
+            EXPECT_TRUE(attempt.closeCalled);
+            const size_t count = _transports.Count();
+            Advance(std::chrono::minutes(1));
+            EXPECT_EQ(_transports.Count(), count);
+        }
+    }
+
+    TEST_F(RoomClientTest, AnotherAnswerToTheJoinIsFinalToo) {
+        FakeLink& first = EnterAsHost();
+        Lose(first);
+        Advance(milliseconds(500));
+        FakeLink& attempt = _transports.Last();
+        attempt.PushOpened();
+        attempt.PushText(MakeErrorMessage(RoomErrors::kRateLimited, "slow down", RoomMessageTypes::kJoinRoom));
+        _events.clear();
+        Pump();
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        ASSERT_EQ(_events.size(), 1u);
+        EXPECT_EQ(_events[0].code, RoomErrors::kRateLimited);
+        // The token was not refused, so it is kept
+        EXPECT_TRUE(_client->GetSession().IsValid());
+    }
+
+    TEST_F(RoomClientTest, TakenOverByAnotherDeviceEndsItAndDoesNotFightForTheSeat) {
+        FakeLink& link = EnterAsHost();
+        _events.clear();
+        link.PushText(MakeLeftMessage("replaced"));
+        link.PushClosed(1000, "replaced");
+        Pump();
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        const eastl::vector<RoomClientEventKind> expected = {Kind::Left, Kind::Closed};
+        EXPECT_EQ(Kinds(), expected);
+        EXPECT_EQ(_events[0].code, "replaced");
+        EXPECT_EQ(_events[1].code, RoomClientCloseReasons::kReplaced);
+        EXPECT_FALSE(_client->GetSession().IsValid());
+        Advance(std::chrono::minutes(1));
+        EXPECT_EQ(_transports.Count(), 1u);
+    }
+
+    TEST_F(RoomClientTest, ACloseForBreakingTheLimitsIsNotRetried) {
+        for (const eastl::string_view reason : {"rate_limited", "too_many_failed_joins"}) {
+            MakeClient({});
+            FakeLink& link = EnterAsHost();
+            _events.clear();
+            Lose(link, 1008, reason);
+            EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+            ASSERT_EQ(_events.size(), 2u);
+            EXPECT_EQ(_events[0].kind, Kind::ConnectionLost);
+            EXPECT_FALSE(_events[0].willRetry);
+            EXPECT_EQ(_events[1].kind, Kind::Closed);
+            EXPECT_EQ(_events[1].code, reason);
+            EXPECT_EQ(_events[1].closeCode, 1008);
+            const size_t count = _transports.Count();
+            Advance(std::chrono::minutes(1));
+            EXPECT_EQ(_transports.Count(), count);
+        }
+    }
+
+    TEST_F(RoomClientTest, ABreakOfTheLimitsOnAnAttemptStopsTheAttempts) {
+        FakeLink& first = EnterAsHost();
+        Lose(first);
+        Advance(milliseconds(500));
+        _events.clear();
+        Lose(_transports.Last(), 1008, "too_many_failed_joins");
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        ASSERT_EQ(_events.size(), 1u);
+        EXPECT_EQ(_events[0].kind, Kind::Closed);
+        EXPECT_EQ(_events[0].code, "too_many_failed_joins");
+        const size_t count = _transports.Count();
+        Advance(std::chrono::minutes(1));
+        EXPECT_EQ(_transports.Count(), count);
+    }
+
+    TEST_F(RoomClientTest, TheClientGivesUpWhenTheConnectionDoesNotComeBackInTime) {
+        RoomClientSettings settings;
+        settings.reconnectGiveUp = seconds(5);
+        MakeClient(settings);
+        FakeLink& first = EnterAsHost();
+        Lose(first);
+        // Attempts at 0.5 s, 1.5 s and 3.5 s all fail; the next would be at 7.5 s
+        for (const milliseconds step : {milliseconds(500), milliseconds(1000), milliseconds(2000)}) {
+            Advance(step);
+            Lose(_transports.Last(), kRoomTransportAbnormalClosure, "connection refused");
+        }
+        ASSERT_EQ(_transports.Count(), 4u);
+        _events.clear();
+        Advance(milliseconds(1499));
+        EXPECT_EQ(_client->GetState(), RoomClientState::Reconnecting);
+        Advance(milliseconds(1));
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        ASSERT_EQ(_events.size(), 1u);
+        EXPECT_EQ(_events[0].kind, Kind::Closed);
+        EXPECT_EQ(_events[0].code, RoomClientCloseReasons::kGaveUp);
+        EXPECT_FALSE(_client->GetSession().IsValid());
+        Advance(std::chrono::minutes(1));
+        EXPECT_EQ(_transports.Count(), 4u);
+    }
+
+    TEST_F(RoomClientTest, TheGiveUpTimeAlsoCutsAnAttemptThatIsUnderWay) {
+        RoomClientSettings settings;
+        settings.reconnectGiveUp = seconds(5);
+        MakeClient(settings);
+        FakeLink& first = EnterAsHost();
+        Lose(first);
+        Advance(seconds(4));
+        FakeLink& last = _transports.Last();
+        Advance(seconds(1));
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        EXPECT_TRUE(last.closeCalled);
+    }
+
+    TEST_F(RoomClientTest, LeaveWhileWaitingToRetryIsADisconnectAndForgetsTheSession) {
+        FakeLink& first = EnterAsHost();
+        Lose(first);
+        _events.clear();
+        ASSERT_TRUE(_client->Leave().has_value());
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        EXPECT_FALSE(_client->GetSession().IsValid());
+        EXPECT_TRUE(_client->GetRoom().empty());
+        _client->DrainEvents(_events);
+        ASSERT_EQ(_events.size(), 1u);
+        EXPECT_EQ(_events[0].kind, Kind::Closed);
+        Advance(std::chrono::minutes(1));
+        EXPECT_EQ(_transports.Count(), 1u);
+    }
+
+    TEST_F(RoomClientTest, DisconnectDuringAnAttemptClosesItAndStopsTheRetries) {
+        FakeLink& first = EnterAsHost();
+        Lose(first);
+        Advance(milliseconds(500));
+        FakeLink& attempt = _transports.Last();
+        _events.clear();
+        _client->Disconnect();
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        EXPECT_TRUE(attempt.closeCalled);
+        _client->DrainEvents(_events);
+        ASSERT_EQ(_events.size(), 1u);
+        EXPECT_EQ(_events[0].kind, Kind::Closed);
+        // Disconnect keeps the session: the game may Resume() later
+        EXPECT_TRUE(_client->GetSession().IsValid());
+        Advance(std::chrono::minutes(1));
+        EXPECT_EQ(_transports.Count(), 2u);
+    }
+
+    // ---- Resume -------------------------------------------------------------------------------------------------------------------
+
+    TEST_F(RoomClientTest, ASessionThatCannotBeOneIsRefusedWithoutAConnection) {
+        RoomSession session{eastl::string(kUrl), eastl::string(kRoom), eastl::string(kToken)};
+        RoomSession noRoom = session;
+        noRoom.room.clear();
+        RoomSession noToken = session;
+        noToken.token.clear();
+        RoomSession badCode = session;
+        badCode.room = "AB0DE";
+        RoomSession badToken = session;
+        badToken.token = "NOT-A-TOKEN";
+        RoomSession noUrl = session;
+        noUrl.url.clear();
+        for (const RoomSession& bad : {noRoom, noToken, badCode, badToken, noUrl}) {
+            const auto resumed = _client->Resume(bad);
+            ASSERT_FALSE(resumed.has_value());
+            EXPECT_EQ(resumed.error().code, RoomClientErrors::kInvalidSession);
+        }
+        EXPECT_EQ(_transports.Count(), 0u);
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+    }
+
+    TEST_F(RoomClientTest, ResumeConnectsAndJoinsByTokenAndAnswersWithResumed) {
+        RoomClient& fresh = *_client;
+        const RoomSession session{eastl::string(kUrl), "abcde", eastl::string(kToken)};
+        ASSERT_TRUE(fresh.Resume(session).has_value());
+        EXPECT_EQ(fresh.GetState(), RoomClientState::Reconnecting);
+        EXPECT_EQ(fresh.GetRoom(), kRoom);
+        ASSERT_EQ(_transports.Count(), 1u);
+        FakeLink& link = _transports.Last();
+        EXPECT_EQ(link.url, kUrl);
+        EXPECT_EQ(fresh.Resume(session).error().code, RoomClientErrors::kWrongState);
+
+        link.PushOpened();
+        Pump();
+        ASSERT_EQ(link.sent.size(), 1u);
+        const auto parsed = SentParsed(link, 0);
+        const auto* join = AsSent<JoinRoomMessage>(parsed);
+        ASSERT_NE(join, nullptr);
+        EXPECT_EQ(join->code, kRoom);
+        EXPECT_EQ(join->token, kToken);
+        EXPECT_TRUE(join->name.empty());
+
+        link.PushText(MakeJoinedMessage(kRoom, 2, kToken, 1, false));
+        link.PushText(Lobby(0, RoomPhase::Playing));
+        link.PushText(View(3, 1));
+        Pump();
+        EXPECT_EQ(fresh.GetState(), RoomClientState::InRoom);
+        EXPECT_EQ(fresh.GetSeat(), 1);
+        EXPECT_EQ(fresh.GetPlayer(), 2u);
+        EXPECT_FALSE(fresh.IsHost());
+        EXPECT_TRUE(fresh.HasView());
+        const eastl::vector<RoomClientEventKind> expected = {Kind::Resumed, Kind::LobbyChanged, Kind::ViewChanged};
+        EXPECT_EQ(Kinds(), expected);
+        EXPECT_EQ(fresh.GetSession().url, kUrl);
+    }
+
+    TEST_F(RoomClientTest, ResumeWithAStaleSessionEndsWithRoomGone) {
+        const RoomSession session{eastl::string(kUrl), eastl::string(kRoom), eastl::string(kToken)};
+        ASSERT_TRUE(_client->Resume(session).has_value());
+        FakeLink& link = _transports.Last();
+        link.PushOpened();
+        link.PushText(MakeErrorMessage(RoomErrors::kBadToken, "no such member", RoomMessageTypes::kJoinRoom));
+        Pump();
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        ASSERT_EQ(_events.size(), 1u);
+        EXPECT_EQ(_events[0].kind, Kind::Closed);
+        EXPECT_EQ(_events[0].code, RoomClientCloseReasons::kRoomGone);
+        EXPECT_FALSE(_client->GetSession().IsValid());
+        EXPECT_TRUE(_client->GetRoom().empty());
+        EXPECT_TRUE(link.closeCalled);
+    }
+
+    TEST_F(RoomClientTest, ResumeRetriesWhenTheServerIsNotThereYet) {
+        const RoomSession session{eastl::string(kUrl), eastl::string(kRoom), eastl::string(kToken)};
+        ASSERT_TRUE(_client->Resume(session).has_value());
+        Pump();
+        Lose(_transports.Last(), kRoomTransportAbnormalClosure, "connection refused");
+        EXPECT_EQ(_client->GetState(), RoomClientState::Reconnecting);
+        Advance(milliseconds(499));
+        EXPECT_EQ(_transports.Count(), 1u);
+        Advance(milliseconds(1));
+        ASSERT_EQ(_transports.Count(), 2u);
+
+        FakeLink& second = _transports.Last();
+        second.PushOpened();
+        second.PushText(MakeJoinedMessage(kRoom, 1, kToken, 0, true));
+        Pump();
+        EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
+        EXPECT_EQ(Kinds().back(), Kind::Resumed);
+    }
+
+    TEST_F(RoomClientTest, ResumeThatCannotStartIsAnErrorOfTheCommand) {
+        _transports.FailNextOpen("tls_unsupported: use the browser build");
+        const RoomSession session{"wss://example.org", eastl::string(kRoom), eastl::string(kToken)};
+        const auto resumed = _client->Resume(session);
+        ASSERT_FALSE(resumed.has_value());
+        EXPECT_EQ(resumed.error().code, RoomClientErrors::kConnectFailed);
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        EXPECT_FALSE(_client->GetSession().IsValid());
+    }
+
+    // ---- Allocations --------------------------------------------------------------------------------------------------------------
+
+#if BE_PROFILER_ALLOC
+    TEST_F(RoomClientTest, PollingWithNothingToDoAllocatesNothing) {
+        FakeLink& link = EnterAsHost();
+        Receive(link, View(1));
+        _events.clear();
+        _events.reserve(16);
+        // Warm up: whatever the first polls make once
+        for (int i = 0; i < 10; ++i) {
+            Pump();
+        }
+        const uint64_t before = AllocTracker::GetThreadCounters().count;
+        // Five seconds of frames: inside the ping interval, so no ping is built
+        for (int i = 0; i < 5000; ++i) {
+            Advance(milliseconds(1));
+        }
+        const uint64_t after = AllocTracker::GetThreadCounters().count;
+        EXPECT_EQ(after, before);
+        EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
+    }
+#endif
 
 }  // namespace BECore::Tests
