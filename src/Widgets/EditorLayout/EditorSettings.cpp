@@ -19,6 +19,9 @@ namespace BECore {
         constexpr eastl::string_view kViewportGridStepKey = "viewportGridStep";
         constexpr eastl::string_view kBindingsKey = "bindings";
         constexpr eastl::string_view kViewportPreviewKey = "viewportPreview";
+        constexpr eastl::string_view kViewportInputModeKey = "viewportInputMode";
+        constexpr eastl::string_view kInputModePlayName = "play";
+        constexpr eastl::string_view kInputModeEditName = "edit";
 
         // The members of the "viewportPreview" object
         constexpr eastl::string_view kPreviewAspectKey = "aspect";
@@ -165,6 +168,27 @@ namespace BECore {
             }
         }
 
+        // The input mode as it is written in the file: a lower-case word, so the file reads like a setting and not like a C++ name
+        eastl::string_view InputModeName(ViewportInputMode mode) {
+            return mode == ViewportInputMode::Edit ? kInputModeEditName : kInputModePlayName;
+        }
+
+        // The input mode of the file: left in @p mode when absent, a warning and left when the text is not one of the two names
+        void ReadInputMode(const Json& object, eastl::string_view key, ViewportInputMode& mode) {
+            if (!object.contains(ToStdString(key))) {
+                return;
+            }
+            const std::optional<eastl::string> name = GetJsonString(object, key);
+            const eastl::string_view text = name ? eastl::string_view(name->data(), name->size()) : eastl::string_view();
+            if (text == kInputModePlayName) {
+                mode = ViewportInputMode::Play;
+            } else if (text == kInputModeEditName) {
+                mode = ViewportInputMode::Edit;
+            } else {
+                WarnWrongType(kPreferencesFileName, key, "play or edit");
+            }
+        }
+
         Json ViewportPreviewToJson(const PreviewSettings& preview, const Json& extra) {
             Json object = extra;
             const PreviewShape& shape = preview.shape;
@@ -233,7 +257,7 @@ namespace BECore {
         if (!ReadJsonObject(_directory / ToStdString(kPreferencesFileName), content, _preferencesUnreadable)) {
             return;
         }
-        _extraPreferences = UnknownMembers(content, {kVersionKey, kFontScaleKey, kViewportGridKey, kViewportGridStepKey, kViewportPreviewKey});
+        _extraPreferences = UnknownMembers(content, {kVersionKey, kFontScaleKey, kViewportGridKey, kViewportGridStepKey, kViewportPreviewKey, kViewportInputModeKey});
 
         EditorPreferences preferences;
         if (content.contains(ToStdString(kFontScaleKey))) {
@@ -265,6 +289,7 @@ namespace BECore {
                 WarnWrongType(kPreferencesFileName, kViewportPreviewKey, "an object");
             }
         }
+        ReadInputMode(content, kViewportInputModeKey, preferences.viewportInputMode);
         _preferences = ClampPreferences(preferences);
     }
 
@@ -384,6 +409,7 @@ namespace BECore {
         content[ToStdString(kViewportGridKey)] = _preferences.viewportGrid;
         content[ToStdString(kViewportGridStepKey)] = _preferences.viewportGridStep;
         content[ToStdString(kViewportPreviewKey)] = ViewportPreviewToJson(_preferences.viewportPreview, _extraViewportPreview);
+        content[ToStdString(kViewportInputModeKey)] = ToStdString(InputModeName(_preferences.viewportInputMode));
         return Save(_directory / ToStdString(kPreferencesFileName), content, _preferencesUnreadable);
     }
 

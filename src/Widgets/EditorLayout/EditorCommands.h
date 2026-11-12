@@ -3,6 +3,7 @@
 #include <BECore/UI/UIPreview.h>
 #include <Events/EventBase.h>
 #include <Widgets/EditorLayout/KeyChord.h>
+#include <Widgets/Viewport/ViewportInput.h>
 
 namespace BECore {
 
@@ -40,6 +41,8 @@ namespace BECore {
         inline constexpr auto kGamePause = "game.pause"_intern;
         /// One stepped frame while the game is paused; repeats while its hotkey is held
         inline constexpr auto kGameStep = "game.step"_intern;
+        /// Flips what a press in the viewport is for, Play (the game gets it) or Edit (the editor does). ViewportWidget owns the action.
+        inline constexpr auto kViewportInputMode = "viewport.inputMode"_intern;
         /// Switches Game and Editor. Application reads Ctrl+Shift+E from the raw SDL event (RunMode.h), before ImGui, so
         /// this command is fixed: the map lists it, the palette runs it through WidgetManager::RequestToggle().
         inline constexpr auto kModeToggle = "mode.toggle"_intern;
@@ -77,13 +80,14 @@ namespace BECore {
         BE_REFLECT_FIELD bool overlayCanvasBounds = false;
         BE_REFLECT_FIELD bool overlayTouchTargets = false;
         BE_REFLECT_FIELD bool overlayRegions = false;
+        BE_REFLECT_FIELD ViewportInputMode viewportInputMode = ViewportInputMode::Play;
 
         EditorPreferencesChangedEvent() = default;
-        EditorPreferencesChangedEvent(bool grid, int32_t step, const PreviewSettings& preview)
+        EditorPreferencesChangedEvent(bool grid, int32_t step, const PreviewSettings& preview, ViewportInputMode inputMode)
             : viewportGrid(grid), viewportGridStep(step), previewAspect(preview.shape.aspect), previewDevice(preview.shape.device), previewCustom(preview.shape.custom),
               previewWidth(preview.shape.customWidth), previewHeight(preview.shape.customHeight), previewRotated(preview.shape.rotated), previewSafeArea(preview.safeArea),
               overlaySafeArea(preview.overlays.safeArea), overlayViewBounds(preview.overlays.viewBounds), overlayCanvasBounds(preview.overlays.canvasBounds),
-              overlayTouchTargets(preview.overlays.touchTargets), overlayRegions(preview.overlays.regions) {}
+              overlayTouchTargets(preview.overlays.touchTargets), overlayRegions(preview.overlays.regions), viewportInputMode(inputMode) {}
 
         /// The viewport preview choice carried by the event
         [[nodiscard]] PreviewSettings GetPreview() const {
@@ -123,6 +127,17 @@ namespace BECore {
                     previewSafeArea,
                     {overlaySafeArea, overlayViewBounds, overlayCanvasBounds, overlayTouchTargets, overlayRegions}};
         }
+    };
+
+    /// The viewport's input mode changed (the toolbar toggle or the command): sent by ViewportWidget only on a real change, not for what it
+    /// just applied from EditorPreferencesChangedEvent. EditorLayoutWidget stores and saves it and does not answer with another
+    /// EditorPreferencesChangedEvent.
+    struct ViewportInputModeChangedEvent : public EventBase<ViewportInputModeChangedEvent> {
+        BE_EVENT(ViewportInputModeChangedEvent)
+        BE_REFLECT_FIELD ViewportInputMode mode = ViewportInputMode::Play;
+
+        ViewportInputModeChangedEvent() = default;
+        explicit ViewportInputModeChangedEvent(ViewportInputMode inputMode) : mode(inputMode) {}
     };
 
 }  // namespace BECore

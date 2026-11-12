@@ -14,6 +14,7 @@ namespace BECore {
         constexpr KeyChord kCtrlShiftP{ImGuiKey_P, kChordModCtrl | kChordModShift};
         constexpr KeyChord kF6{ImGuiKey_F6, 0};
         constexpr KeyChord kF7{ImGuiKey_F7, 0};
+        constexpr KeyChord kF8{ImGuiKey_F8, 0};
 
         const eastl::vector<EditorCommand>& CommandTable() {
             using namespace EditorCommandIds;
@@ -28,6 +29,7 @@ namespace BECore {
                 {kTextureSave, "Save Texture", std::nullopt, true},
                 {kGamePause, "Pause / Resume Game", kF6, true},
                 {kGameStep, "Step One Frame", kF7, true, true},
+                {kViewportInputMode, "Toggle Viewport Input: Edit / Play", kF8, true},
                 {kModeToggle, "Switch Game and Editor", kCtrlShiftE, false},
                 {kViewProfiler, "Profiler", kCtrlShiftP, false},
             };
