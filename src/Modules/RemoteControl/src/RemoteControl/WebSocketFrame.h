@@ -21,6 +21,7 @@ namespace BECore {
         inline constexpr uint16_t kProtocolError = 1002;
         inline constexpr uint16_t kUnsupportedData = 1003;
         inline constexpr uint16_t kNoStatusReceived = 1005;  // never sent: the value of a close frame that has no code
+        inline constexpr uint16_t kAbnormalClosure = 1006;   // never sent: the connection ended without a close frame
         inline constexpr uint16_t kPolicyViolation = 1008;
         inline constexpr uint16_t kMessageTooBig = 1009;
         inline constexpr uint16_t kTryAgainLater = 1013;  // the server is full or busy: connect again later
