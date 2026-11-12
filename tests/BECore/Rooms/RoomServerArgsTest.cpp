@@ -234,6 +234,62 @@ namespace BECore::Tests {
         EXPECT_EQ(settings.pingInterval, 1500ms);
     }
 
+    TEST(RoomServerArgsTest, PerAddressRulesAndTheLobbyTimeoutHaveDefaultsFlagsAndVariables) {
+        const RoomServerArgs defaults;
+        EXPECT_EQ(defaults.maxRoomsPerAddress, RoomLimits::kMaxRoomsPerAddress);
+        EXPECT_EQ(defaults.lobbyTimeout, RoomLimits::kLobbyTimeout);
+        EXPECT_EQ(defaults.trustedProxyHops, 0u);
+        const RoomServerSettings settings = ToSettings(defaults);
+        EXPECT_EQ(settings.hub.maxRoomsPerAddress, RoomLimits::kMaxRoomsPerAddress);
+        EXPECT_EQ(settings.hub.lobbyTimeout, RoomLimits::kLobbyTimeout);
+        EXPECT_EQ(settings.policy.trustedProxyHops, 0u);
+
+        const auto flags = Parse({"--max-rooms-per-address", "2", "--lobby-timeout-ms", "500", "--trusted-proxy-hops", "1"});
+        ASSERT_TRUE(flags.has_value());
+        EXPECT_EQ(flags->maxRoomsPerAddress, 2u);
+        EXPECT_EQ(flags->lobbyTimeout, 500ms);
+        EXPECT_EQ(flags->trustedProxyHops, 1u);
+        const RoomServerSettings mapped = ToSettings(*flags);
+        EXPECT_EQ(mapped.hub.maxRoomsPerAddress, 2u);
+        EXPECT_EQ(mapped.hub.lobbyTimeout, 500ms);
+        EXPECT_EQ(mapped.policy.trustedProxyHops, 1u);
+
+        const auto variables = ReadEnvironment({{"BAGI_ROOMS_MAX_ROOMS_PER_ADDRESS", "3"}, {"BAGI_ROOMS_LOBBY_TIMEOUT_MS", "0"}, {"BAGI_ROOMS_TRUSTED_PROXY_HOPS", "2"}});
+        ASSERT_TRUE(variables.has_value());
+        EXPECT_EQ(variables->maxRoomsPerAddress, 3u);
+        EXPECT_EQ(variables->lobbyTimeout, 0ms) << "0 turns the lobby timeout off";
+        EXPECT_EQ(variables->trustedProxyHops, 2u);
+
+        const auto over = ParseOver({{"BAGI_ROOMS_TRUSTED_PROXY_HOPS", "2"}}, {"--trusted-proxy-hops", "3"});
+        ASSERT_TRUE(over.has_value());
+        EXPECT_EQ(over->trustedProxyHops, 3u) << "the flag wins over the variable";
+    }
+
+    TEST(RoomServerArgsTest, PerAddressRulesAreRangeChecked) {
+        for (const char* ok : {"0", "64"}) {
+            EXPECT_TRUE(Parse({"--max-rooms-per-address", ok}).has_value()) << ok;
+        }
+        for (const char* bad : {"-1", "65", "many"}) {
+            EXPECT_NE(ErrorOf({"--max-rooms-per-address", bad}).find("--max-rooms-per-address"), std::string::npos) << bad;
+        }
+        for (const char* ok : {"0", "86400000"}) {
+            EXPECT_TRUE(Parse({"--lobby-timeout-ms", ok}).has_value()) << ok;
+        }
+        for (const char* bad : {"-1", "86400001", "soon"}) {
+            EXPECT_NE(ErrorOf({"--lobby-timeout-ms", bad}).find("--lobby-timeout-ms"), std::string::npos) << bad;
+        }
+        for (const char* ok : {"0", "4"}) {
+            EXPECT_TRUE(Parse({"--trusted-proxy-hops", ok}).has_value()) << ok;
+        }
+        for (const char* bad : {"-1", "5", "one"}) {
+            EXPECT_NE(ErrorOf({"--trusted-proxy-hops", bad}).find("--trusted-proxy-hops"), std::string::npos) << bad;
+        }
+        const auto bad = ReadEnvironment({{"BAGI_ROOMS_TRUSTED_PROXY_HOPS", "9"}});
+        ASSERT_FALSE(bad.has_value());
+        EXPECT_NE(std::string(bad.error().c_str()).find("BAGI_ROOMS_TRUSTED_PROXY_HOPS"), std::string::npos);
+        EXPECT_FALSE(ErrorOf({"--lobby-timeout-ms"}).empty()) << "a flag without its value";
+    }
+
     TEST(RoomServerArgsTest, ToSettingsCarriesTheHealthPath) {
         const RoomServerSettings settings = ToSettings(RoomServerArgs{});
         EXPECT_EQ(settings.policy.healthPath, "/healthz");
@@ -382,8 +438,10 @@ namespace BECore::Tests {
 
     TEST(RoomServerArgsTest, UsageNamesTheVariablesAndTheHealthPath) {
         const std::string usage = GetRoomServerUsage().c_str();
-        for (const char* name : {"PORT", "BAGI_ROOMS_BIND", "BAGI_ROOMS_ORIGINS", "BAGI_ROOMS_MAX_CONNECTIONS", "BAGI_ROOMS_MAX_PER_ADDRESS", "BAGI_ROOMS_COMPUTER_DELAY_MS",
-                                 "BAGI_ROOMS_RECONNECT_GRACE_MS", "BAGI_ROOMS_PING_INTERVAL_MS", "BAGI_ROOMS_STATS_INTERVAL_MS", "BAGI_ROOMS_SHUTDOWN_GRACE_MS", "BAGI_ROOMS_TEST_GAMES", "/healthz"}) {
+        for (const char* name :
+             {"PORT", "BAGI_ROOMS_BIND", "BAGI_ROOMS_ORIGINS", "BAGI_ROOMS_MAX_CONNECTIONS", "BAGI_ROOMS_MAX_PER_ADDRESS", "BAGI_ROOMS_COMPUTER_DELAY_MS", "BAGI_ROOMS_RECONNECT_GRACE_MS",
+              "BAGI_ROOMS_PING_INTERVAL_MS", "BAGI_ROOMS_STATS_INTERVAL_MS", "BAGI_ROOMS_SHUTDOWN_GRACE_MS", "BAGI_ROOMS_TEST_GAMES", "/healthz", "--max-rooms-per-address", "--lobby-timeout-ms",
+              "--trusted-proxy-hops", "BAGI_ROOMS_MAX_ROOMS_PER_ADDRESS", "BAGI_ROOMS_LOBBY_TIMEOUT_MS", "BAGI_ROOMS_TRUSTED_PROXY_HOPS"}) {
             EXPECT_NE(usage.find(name), std::string::npos) << name;
         }
     }

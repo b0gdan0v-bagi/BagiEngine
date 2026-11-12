@@ -45,8 +45,9 @@ namespace BECore {
     }
 
     RoomWebSocketServer::RoomWebSocketServer(const SeatedGameRegistry& registry, RoomServerSettings settings)
-        : _registry(registry), _settings(std::move(settings)), _clock(_settings.clock ? _settings.clock : std::function<RoomTime()>([] { return std::chrono::steady_clock::now(); })),
-          _random(_settings.random ? _settings.random : MakeSecureRandom()), _listener(MakeListenerSettings(_settings), MakeHandler()) {}
+        : _registry(registry), _settings(std::move(settings)), _passAddress(_settings.maxConnectionsPerAddress != 0 || _settings.policy.trustedProxyHops != 0),
+          _clock(_settings.clock ? _settings.clock : std::function<RoomTime()>([] { return std::chrono::steady_clock::now(); })), _random(_settings.random ? _settings.random : MakeSecureRandom()),
+          _listener(MakeListenerSettings(_settings), MakeHandler()) {}
 
     RoomWebSocketServer::~RoomWebSocketServer() {
         Stop();
@@ -65,7 +66,7 @@ namespace BECore {
             if (draining) {
                 connection->QueueClose(WebSocketCloseCode::kGoingAway, kStoppingReason);
             }
-            PushEvent(EventKind::Opened, connection->GetId(), {});
+            PushEvent(EventKind::Opened, connection->GetId(), _passAddress ? connection->GetClientAddress() : eastl::string());
         };
         handler.onMessage = [this](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
             return PushEvent(EventKind::Message, connection->GetId(), eastl::string(message.GetText()));
@@ -219,7 +220,7 @@ namespace BECore {
                         if (const auto opened = FindConnection(event.connection)) {
                             liveness[event.connection] = Liveness{opened->GetBytesReceived(), now, false};
                         }
-                        hub.OnConnected(event.connection, now);
+                        hub.OnConnected(event.connection, now, event.text);
                         break;
                     }
                     case EventKind::Message:

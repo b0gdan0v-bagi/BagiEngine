@@ -22,7 +22,9 @@ namespace BECore {
         /// Open connections, handshakes included; the next client gets a 503
         size_t maxConnections = 64;
 
-        /// The same for one client address; 0 turns the limit off (behind a proxy every client has the proxy's address)
+        /// The same for one client address; 0 turns the limit off (behind a proxy every client has the proxy's address, unless
+        /// policy.trustedProxyHops says whose word to take: then the limit counts the addresses the proxies report, checked once
+        /// the handshake is accepted)
         size_t maxConnectionsPerAddress = 0;
 
         /// A longer message closes the connection with 1009, at the frame header, before it is buffered
@@ -104,6 +106,7 @@ namespace BECore {
 
         void AcceptLoop();
         void AddConnection(Socket socket, eastl::string peerAddress);
+        bool AdmitByClientAddress(WebSocketConnection& connection, const eastl::string& clientAddress);
         void ReapFinishedConnections();
         void RunConnection(const ConnectionPtr& connection);
         void ReadMessages(const ConnectionPtr& connection, eastl::vector<uint8_t> pendingBytes);

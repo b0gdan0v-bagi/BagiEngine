@@ -516,4 +516,86 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.ConnectionAt(0)->GetPeerAddress(), "127.0.0.1");
     }
 
+    TEST_F(WebSocketListenerTest, ClientAddressIsThePeerAddressWithoutTrustedProxies) {
+        const uint16_t port = Start();
+        auto client = Connect(port, "X-Forwarded-For: 203.0.113.9\r\n");
+        ASSERT_TRUE(client.has_value());
+        ASSERT_TRUE(WaitForEvents("open:", 1));
+        EXPECT_EQ(recorder.ConnectionAt(0)->GetClientAddress(), "127.0.0.1") << "hops 0 never reads the header";
+    }
+
+    TEST_F(WebSocketListenerTest, TrustedProxyHopsAdmitsDifferentForwardedAddressesUnderALimitOfOne) {
+        WebSocketListenerSettings settings;
+        settings.maxConnectionsPerAddress = 1;
+        settings.policy.trustedProxyHops = 1;
+        settings.busyMessage = "too many from you";
+        const uint16_t port = Start(settings);
+
+        auto first = Connect(port, "X-Forwarded-For: 203.0.113.1\r\n");
+        auto second = Connect(port, "X-Forwarded-For: 203.0.113.2\r\n");
+        ASSERT_TRUE(first && second) << "the socket address is the proxy's: it is not what the limit counts";
+        ASSERT_TRUE(WaitForEvents("open:", 2));
+        EXPECT_EQ(recorder.ConnectionAt(0)->GetClientAddress(), "203.0.113.1");
+        EXPECT_EQ(recorder.ConnectionAt(0)->GetPeerAddress(), "127.0.0.1");
+        EXPECT_EQ(recorder.ConnectionAt(1)->GetClientAddress(), "203.0.113.2");
+
+        // The same forwarded address again is refused after its handshake, before the handler hears of it
+        const std::string refused = TryHandshake(port, "X-Forwarded-For: 203.0.113.1\r\n");
+        EXPECT_TRUE(refused.starts_with("HTTP/1.1 503 Service Unavailable\r\n")) << refused;
+        EXPECT_NE(refused.find("too many from you"), std::string::npos);
+        EXPECT_EQ(recorder.CountPrefix("open:"), 2u);
+
+        // A forged left entry changes nothing: the rightmost one is the client
+        const std::string forged = TryHandshake(port, "X-Forwarded-For: 203.0.113.2, 203.0.113.1\r\n");
+        EXPECT_TRUE(forged.starts_with("HTTP/1.1 503 ")) << forged;
+
+        // The slot of a client that leaves is free again
+        first->Send(AsBytes(EncodeCloseFrame(WebSocketCloseCode::kNormal, {}, kClientMask)));
+        ASSERT_TRUE(first->WaitForEndOfStream());
+        bool connected = false;
+        for (int attempt = 0; attempt < 200 && !connected; ++attempt) {
+            connected = TryHandshake(port, "X-Forwarded-For: 203.0.113.1\r\n").starts_with("HTTP/1.1 101 ");
+            if (!connected) {
+                std::this_thread::sleep_for(10ms);
+            }
+        }
+        EXPECT_TRUE(connected);
+    }
+
+    TEST_F(WebSocketListenerTest, TrustedProxyHopsFallsBackToThePeerAddressWithoutAUsableEntry) {
+        WebSocketListenerSettings settings;
+        settings.maxConnectionsPerAddress = 1;
+        settings.policy.trustedProxyHops = 2;
+        const uint16_t port = Start(settings);
+
+        auto first = Connect(port, "X-Forwarded-For: 203.0.113.9\r\n");  // one entry for two hops
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(WaitForEvents("open:", 1));
+        EXPECT_EQ(recorder.ConnectionAt(0)->GetClientAddress(), "127.0.0.1");
+        EXPECT_TRUE(TryHandshake(port, "X-Forwarded-For: not an address, 203.0.113.9\r\n").starts_with("HTTP/1.1 503 ")) << "the peer address is now in use";
+        EXPECT_TRUE(TryHandshake(port).starts_with("HTTP/1.1 503 "));
+        EXPECT_TRUE(TryHandshake(port, "X-Forwarded-For: 203.0.113.5, 203.0.113.9\r\n").starts_with("HTTP/1.1 101 ")) << "a client with two entries is the first of them";
+    }
+
+    TEST_F(WebSocketListenerTest, TrustedProxyHopsWithoutALimitStillTellsTheClientAddress) {
+        WebSocketListenerSettings settings;
+        settings.policy.trustedProxyHops = 1;
+        const uint16_t port = Start(settings);
+        auto first = Connect(port, "X-Forwarded-For: 203.0.113.1\r\n");
+        auto second = Connect(port, "X-Forwarded-For: 203.0.113.1\r\n");
+        ASSERT_TRUE(first && second);
+        ASSERT_TRUE(WaitForEvents("open:", 2));
+        EXPECT_EQ(recorder.ConnectionAt(1)->GetClientAddress(), "203.0.113.1");
+    }
+
+    TEST_F(WebSocketListenerTest, ForwardedHeaderDoesNotSidestepThePerAddressLimitWithoutTrustedProxies) {
+        WebSocketListenerSettings settings;
+        settings.maxConnectionsPerAddress = 1;
+        const uint16_t port = Start(settings);
+        auto first = Connect(port, "X-Forwarded-For: 203.0.113.1\r\n");
+        ASSERT_TRUE(first.has_value());
+        const std::string refused = TryHandshake(port, "X-Forwarded-For: 203.0.113.2\r\n");
+        EXPECT_TRUE(refused.starts_with("HTTP/1.1 503 ")) << refused;
+    }
+
 }  // namespace BECore::Tests

@@ -77,6 +77,8 @@ namespace BECore {
         struct Event {
             EventKind kind = EventKind::Opened;
             ConnectionId connection = 0;
+            /// The text of a message; for `Opened` the client's address (empty when the hub is not to apply per-address rules), so the queue's
+            /// byte count covers it
             eastl::string text;
         };
 
@@ -113,6 +115,7 @@ namespace BECore {
 
         const SeatedGameRegistry& _registry;
         const RoomServerSettings _settings;
+        const bool _passAddress;  // the hub applies per-address rules: a limit of sockets per address, or an address behind trusted proxies
         const std::function<RoomTime()> _clock;
         const RandomFn _random;
 

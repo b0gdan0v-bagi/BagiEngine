@@ -27,9 +27,11 @@ namespace BECore {
                 origins += origins.empty() ? "" : ", ";
                 origins += origin;
             }
-            return Format("Room server settings: port {}, bind {}, origins {} [{}], max connections {} (+{} in the handshake), max per address {}, computer delay {} ms, reconnect grace {} ms, "
+            return Format("Room server settings: port {}, bind {}, origins {} [{}], max connections {} (+{} in the handshake), max per address {}, per-address rules {}, max rooms per address {}, "
+                          "lobby timeout {} ms, trusted proxy hops {}, computer delay {} ms, reconnect grace {} ms, "
                           "ping interval {} ms, stats interval {} ms, shutdown grace {} ms",
                           port, args.bind == SocketBind::AnyAddress ? "any" : "loopback", args.origins.size(), origins, args.maxConnections, kHandshakeConnectionReserve, args.maxConnectionsPerAddress,
+                          args.maxConnectionsPerAddress != 0 || args.trustedProxyHops != 0 ? "on" : "off", args.maxRoomsPerAddress, args.lobbyTimeout.count(), args.trustedProxyHops,
                           args.computerDelay.count(), args.reconnectGrace.count(), args.pingInterval.count(), args.statsInterval.count(), args.shutdownGrace.count());
         }
 

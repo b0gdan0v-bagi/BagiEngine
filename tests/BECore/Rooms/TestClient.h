@@ -125,12 +125,13 @@ namespace BECore::Tests {
             _hub.Tick(_now);
         }
 
-        ConnectionId Connect() {
+        /// @param address The client's address handed to the hub ("" is unknown: no per-address rule)
+        ConnectionId Connect(eastl::string_view address = {}) {
             const ConnectionId id = _nextConnection++;
             TestClient client;
             client.id = id;
             _clients.emplace(id, std::move(client));
-            _hub.OnConnected(id, _now);
+            _hub.OnConnected(id, _now, address);
             return id;
         }
 

@@ -6,6 +6,7 @@ namespace BECore {
 
         constexpr eastl::string_view kHandshakeHeadEnd = "\r\n\r\n";
         constexpr int kHeaderTooLarge = 431;
+        constexpr int kServiceUnavailable = 503;
 
     }  // namespace
 
@@ -17,6 +18,21 @@ namespace BECore {
         return _open && !_closing && !_aborted;
     }
 
+    eastl::string WebSocketConnection::GetClientAddress() const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return _clientAddress.empty() ? _peerAddress : _clientAddress;
+    }
+
+    bool WebSocketConnection::HasClientAddress() const {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return !_clientAddress.empty();
+    }
+
+    void WebSocketConnection::SetClientAddress(eastl::string address) {
+        std::lock_guard<std::mutex> lock(_mutex);
+        _clientAddress = std::move(address);
+    }
+
     std::expected<size_t, SocketError> WebSocketConnection::Receive(eastl::span<uint8_t> buffer) {
         const auto received = _socket.Receive(buffer);
         if (received) {
@@ -25,7 +41,7 @@ namespace BECore {
         return received;
     }
 
-    bool WebSocketConnection::Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, eastl::vector<uint8_t>& pendingBytes) {
+    bool WebSocketConnection::Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, eastl::vector<uint8_t>& pendingBytes, const AdmitClientFn& admit) {
         // One deadline for the whole head: a timeout per Receive() would let a client that sends a byte every few seconds hold the slot for ever
         const auto deadline = std::chrono::steady_clock::now() + timeout;
 
@@ -72,6 +88,19 @@ namespace BECore {
             const eastl::string response = BuildRejectResponse(key.error());
             (void)_socket.SendAll(AsBytes(response));
             return false;
+        }
+
+        if (policy.trustedProxyHops != 0) {
+            eastl::string clientAddress = ParseForwardedClientAddress(head, policy.trustedProxyHops);
+            if (clientAddress.empty()) {
+                clientAddress = _peerAddress;  // no usable entry: the proxy's own address, which is all there is to tell
+            }
+            if (!admit) {
+                SetClientAddress(std::move(clientAddress));
+            } else if (!admit(clientAddress)) {
+                (void)_socket.SendAll(AsBytes(BuildRejectResponse(HandshakeError{kServiceUnavailable, _settings.busyMessage})));
+                return false;
+            }
         }
 
         const eastl::string response = BuildAcceptResponse(*key);

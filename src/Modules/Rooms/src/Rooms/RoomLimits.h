@@ -52,6 +52,20 @@ namespace BECore {
         /// A connection is closed after this many failed `join_room` in a row (an unknown code or a bad token: guessing)
         inline constexpr int kMaxFailedJoinsInRow = 5;
 
+        /// Rooms that connections of one address may have at once (0 in the settings: no limit)
+        inline constexpr size_t kMaxRoomsPerAddress = 4;
+
+        /// The failed-join budget of one address (a wrong code, a bad token, a code or token that cannot exist): this many at once, then one per refill
+        inline constexpr int kAddressJoinBurst = 10;
+        inline constexpr std::chrono::seconds kAddressJoinRefill{30};
+
+        /// The same for the whole server, whatever the addresses
+        inline constexpr int kServerJoinBurst = 100;
+        inline constexpr std::chrono::seconds kServerJoinRefill{6};
+
+        /// A room in the lobby that has had no message but `ping` for this long is closed (0 in the settings: never)
+        inline constexpr std::chrono::minutes kLobbyTimeout{15};
+
         /// A connection that is in no room is closed after this long without a message
         inline constexpr std::chrono::seconds kIdleTimeout{30};
 
@@ -85,6 +99,15 @@ namespace BECore {
         int maxRateLimitedInRow = RoomLimits::kMaxRateLimitedInRow;
         int maxFailedJoinsInRow = RoomLimits::kMaxFailedJoinsInRow;
         std::chrono::milliseconds idleTimeout = RoomLimits::kIdleTimeout;
+        /// Rooms created by connections of one address that still exist; 0 is no limit. Needs the address given to OnConnected
+        size_t maxRoomsPerAddress = RoomLimits::kMaxRoomsPerAddress;
+        /// The failed-join budgets: one per address (needs the address) and one for the server; a refill of zero never refills
+        int addressJoinBurst = RoomLimits::kAddressJoinBurst;
+        std::chrono::milliseconds addressJoinRefill = RoomLimits::kAddressJoinRefill;
+        int serverJoinBurst = RoomLimits::kServerJoinBurst;
+        std::chrono::milliseconds serverJoinRefill = RoomLimits::kServerJoinRefill;
+        /// A lobby with no message but `ping` for this long is closed (`left {lobby_timeout}`); 0 is never
+        std::chrono::milliseconds lobbyTimeout = RoomLimits::kLobbyTimeout;
         /// The times of every room of the hub
         RoomTimings timings;
     };

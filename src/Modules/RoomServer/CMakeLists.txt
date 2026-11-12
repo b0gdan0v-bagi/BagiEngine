@@ -32,4 +32,12 @@ if(ENGINE_BUILD_TESTS AND Python3_FOUND)
         TIMEOUT 120
         RESOURCE_LOCK bagi_room_server_smoke
     )
+    # ctest entry BagiRoomServerHostile: tools/rooms/hostile.py attacks the executable with hand-built frames while a good table plays. The same skip
+    # rule and lock as the smoke test; a run takes about 15 s, TIMEOUT 180 is the stuck-server bound
+    add_test(NAME BagiRoomServerHostile COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/rooms/hostile.py --exe $<TARGET_FILE:BagiRoomServer>)
+    set_tests_properties(BagiRoomServerHostile PROPERTIES
+        SKIP_RETURN_CODE 77
+        TIMEOUT 180
+        RESOURCE_LOCK bagi_room_server_smoke
+    )
 endif()

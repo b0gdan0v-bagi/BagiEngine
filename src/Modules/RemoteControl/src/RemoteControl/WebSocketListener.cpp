@@ -118,11 +118,13 @@ namespace BECore {
                     fromAddress += other->GetPeerAddress() == peerAddress ? 1 : 0;
                 }
             }
-            perAddressLimit = _settings.maxConnectionsPerAddress != 0 && fromAddress >= _settings.maxConnectionsPerAddress;
+            // Behind trusted proxies every socket has a proxy's address: the limit is checked after the handshake, by the client's
+            perAddressLimit = _settings.policy.trustedProxyHops == 0 && _settings.maxConnectionsPerAddress != 0 && fromAddress >= _settings.maxConnectionsPerAddress;
             if (open < _settings.maxConnections && !perAddressLimit) {
                 WebSocketConnectionSettings connectionSettings;
                 connectionSettings.maxOutboxBytes = _settings.maxOutboxBytes;
                 connectionSettings.logName = _settings.logName;
+                connectionSettings.busyMessage = _settings.busyMessage;
                 connectionSettings.writerThreadName = MakeThreadName(_settings, "writer");
                 connectionSettings.writerThreadOrder = _settings.threadOrder + 2;
 
@@ -141,6 +143,25 @@ namespace BECore {
             LOG_WARNING("{}: a client was refused, {} connections are open"_format(_settings.logName, _settings.maxConnections));
         }
         RejectBusy(std::move(socket), _settings.busyMessage);
+    }
+
+    bool WebSocketListener::AdmitByClientAddress(WebSocketConnection& connection, const eastl::string& clientAddress) {
+        // Counting the others and setting the address are one step under the lock, so two clients of one address that shake hands at
+        // the same moment cannot both pass a limit of one. A connection that has not been admitted yet (still shaking hands, or just
+        // refused) has no client address and counts for nobody
+        std::lock_guard<std::mutex> lock(_connectionsMutex);
+        size_t fromAddress = 0;
+        for (const auto& other : _connections) {
+            if (other.get() != &connection && !other->IsFinished() && other->HasClientAddress() && other->GetClientAddress() == clientAddress) {
+                ++fromAddress;
+            }
+        }
+        if (_settings.maxConnectionsPerAddress != 0 && fromAddress >= _settings.maxConnectionsPerAddress) {
+            LOG_WARNING("{}: a client was refused, {} connections are open from {}"_format(_settings.logName, _settings.maxConnectionsPerAddress, clientAddress));
+            return false;
+        }
+        connection.SetClientAddress(clientAddress);
+        return true;
     }
 
     void WebSocketListener::ReapFinishedConnections() {
@@ -163,7 +184,11 @@ namespace BECore {
 
     void WebSocketListener::RunConnection(const ConnectionPtr& connection) {
         eastl::vector<uint8_t> pendingBytes;
-        if (connection->Handshake(_settings.policy, _settings.handshakeTimeout, pendingBytes)) {
+        AdmitClientFn admit;
+        if (_settings.policy.trustedProxyHops != 0) {
+            admit = [this, &connection](const eastl::string& clientAddress) { return AdmitByClientAddress(*connection, clientAddress); };
+        }
+        if (connection->Handshake(_settings.policy, _settings.handshakeTimeout, pendingBytes, admit)) {
             LOG_INFO("{}: a client connected"_format(_settings.logName));
             connection->StartWriter();
             if (_handler.onOpen) {

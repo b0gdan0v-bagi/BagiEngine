@@ -19,10 +19,18 @@ namespace BECore {
         /// The prefix of the log lines of this connection
         eastl::string logName = "WebSocket";
 
+        /// The text of the 503 a client gets when AdmitClientFn refuses it
+        eastl::string busyMessage = "the server has too many connections";
+
         /// Name and sort index of the writer thread in the profiler
         eastl::string writerThreadName = "WebSocket writer";
         uint32_t writerThreadOrder = 202;
     };
+
+    /// Asked once per handshake of a server behind trusted proxies (HandshakePolicy::trustedProxyHops), after the request is accepted
+    /// and before the 101, with the client address the proxies report. False: the client is answered with a 503 and no connection
+    /// opens. It runs on the reader thread, and it has to call SetClientAddress() itself (so the check and the address are one step)
+    using AdmitClientFn = std::function<bool(const eastl::string& clientAddress)>;
 
     /**
      * @brief One client of a WebSocketListener: its socket, the two threads that serve it and the queue of frames waiting to be sent.
@@ -43,10 +51,20 @@ namespace BECore {
             return _id;
         }
 
-        /// The IPv4 address of the client as dotted text ("?" when it is unknown)
+        /// The IPv4 address of the socket's peer as dotted text ("?" when it is unknown); a proxy's, for a server behind one
         [[nodiscard]] const eastl::string& GetPeerAddress() const {
             return _peerAddress;
         }
+
+        /// The address of the client for the per-address rules: the peer address until the handshake of a server behind trusted
+        /// proxies has set the one they report. Any thread
+        [[nodiscard]] eastl::string GetClientAddress() const;
+
+        /// True once SetClientAddress() was called: the handshake of a server behind trusted proxies has settled who the client is
+        [[nodiscard]] bool HasClientAddress() const;
+
+        /// Sets the address that GetClientAddress() returns (see AdmitClientFn); once, by the reader thread during the handshake
+        void SetClientAddress(eastl::string address);
 
         /// How many bytes arrived from the client so far, the handshake included. Grows with every receive, so a caller that
         /// reads it twice learns whether the client sent anything in between (a pong counts)
@@ -60,8 +78,10 @@ namespace BECore {
         /// Reads what has arrived (reader thread only); counts it in GetBytesReceived()
         [[nodiscard]] std::expected<size_t, SocketError> Receive(eastl::span<uint8_t> buffer);
 
-        /// Reads the HTTP request, answers it and leaves in @p pendingBytes what came after it. False: no WebSocket connection (the client was answered with an error or is gone)
-        bool Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, eastl::vector<uint8_t>& pendingBytes);
+        /// Reads the HTTP request, answers it and leaves in @p pendingBytes what came after it. With policy.trustedProxyHops > 0 the
+        /// client address the proxies report is found first and passed to @p admit (when there is one; otherwise it is simply set).
+        /// False: no WebSocket connection (the client was answered with an error or is gone)
+        bool Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, eastl::vector<uint8_t>& pendingBytes, const AdmitClientFn& admit = {});
 
         void StartReader(std::thread reader) {
             _reader = std::move(reader);
@@ -135,6 +155,7 @@ namespace BECore {
         bool _open = false;     // handshake done, the writer runs
         bool _closing = false;  // a close frame is queued: nothing may follow it
         bool _aborted = false;
+        eastl::string _clientAddress;  // empty: the peer address
     };
 
 }  // namespace BECore

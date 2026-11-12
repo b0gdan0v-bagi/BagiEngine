@@ -38,7 +38,9 @@ namespace BECore {
         RoomHub(const SeatedGameRegistry& registry, RoomHubSettings settings, RandomFn random, HubSink sink);
 
         /// A transport connection opened. Over the connection limit it is closed at once (`server_full`).
-        void OnConnected(ConnectionId connection, RoomTime now);
+        /// @param address The client's address as an opaque string, empty when unknown (then no per-address rule applies to the
+        /// connection). It is only compared, never logged or sent.
+        void OnConnected(ConnectionId connection, RoomTime now, eastl::string_view address = {});
 
         /// A text message of a connection (untrusted, any bytes). An unknown connection is ignored.
         void OnMessage(ConnectionId connection, eastl::string_view text, RoomTime now);
@@ -50,6 +52,11 @@ namespace BECore {
         /// Time passes: idle connections are closed, computers move (at most one move per room per call, and per `computerDelay`),
         /// rooms that are abandoned or have been finished for the abandoned timeout are closed, and what changed is sent.
         void Tick(RoomTime now);
+
+        /// The addresses the hub keeps a failed-join budget for (for tests: it must not grow without bound)
+        [[nodiscard]] size_t GetAddressCount() const {
+            return _addresses.size();
+        }
 
         [[nodiscard]] size_t GetRoomCount() const {
             return _rooms.size();
@@ -64,6 +71,8 @@ namespace BECore {
     private:
         struct Connection {
             RateLimiter limiter;
+            /// The client's address, empty when unknown
+            eastl::string address;
             RoomTime lastActivity{};
             int rateLimitedInRow = 0;
             int failedJoinsInRow = 0;
@@ -83,6 +92,10 @@ namespace BECore {
             Json options = Json::object();
             /// The connections of the members that are connected, in the order they joined
             eastl::vector<ConnectionId> connections;
+            /// The address of the connection that created the room (empty: unknown)
+            eastl::string address;
+            /// The last message of a member other than `ping`, or the creation (the lobby timeout)
+            RoomTime lastActivity{};
             /// Since when the game is finished (valid when finished is true)
             bool finished = false;
             RoomTime finishedAt{};
@@ -99,8 +112,14 @@ namespace BECore {
         void SendError(ConnectionId id, const ControlError& error, eastl::string_view ref);
         void SendError(ConnectionId id, eastl::string_view code, eastl::string_view message, eastl::string_view ref);
         void SendText(ConnectionId id, eastl::string text);
-        /// Sends `error` for a failed join, counts it and closes the connection when the limit is reached
-        void FailJoin(ConnectionId id, Connection& connection, const ControlError& error, RoomTime now);
+        /// Sends `error` for a failed join, counts it and closes the connection when the limit is reached. @p spendBudget takes a
+        /// token of the failed-join budgets (false for the answer that an empty budget gave).
+        void FailJoin(ConnectionId id, Connection& connection, const ControlError& error, RoomTime now, bool spendBudget = true);
+        /// Whether the failed-join budgets of the connection's address and of the server both hold a token
+        [[nodiscard]] bool JoinBudgetOpen(const Connection& connection, RoomTime now) const;
+        void SpendJoinBudget(const Connection& connection, RoomTime now);
+        /// Rooms that still exist and were created from @p address
+        [[nodiscard]] size_t CountRoomsOf(eastl::string_view address) const;
 
         /// Sends `lobby` and `view` to every connection of the room whose copy is out of date
         void Flush(RoomEntry& entry, RoomTime now);
@@ -122,6 +141,14 @@ namespace BECore {
         RoomHubSettings _settings;
         RandomFn _random;
         HubSink _sink;
+        /// What the hub keeps per client address while it has connections or a budget not yet refilled
+        struct AddressState {
+            RateLimiter joinBudget;
+            size_t connections = 0;
+        };
+
+        RateLimiter _serverJoinBudget;
+        eastl::hash_map<eastl::string, AddressState> _addresses;
         eastl::hash_map<ConnectionId, Connection> _connections;
         eastl::hash_map<eastl::string, eastl::unique_ptr<RoomEntry>> _rooms;
     };

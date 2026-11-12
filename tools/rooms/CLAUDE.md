@@ -25,6 +25,18 @@ A hand of two humans and two computers; a human that drops mid-hand (reconnect g
 
 With the probe (`BagiRoomClientProbe --url ws://127.0.0.1:<port> --game cards`, prints `PROBE OK finished version=<n>` and exits 0): the probe plays a hand to the end; the same against a server whose `--origin` names only a web page (the probe sends no `Origin`, so it gets in); and a server that is killed (no close frames) after the probe's `PROBE first view` line, slowed by `--computer-delay-ms` so the hand is still running: the probe must exit non-zero with `PROBE FAILED` within 10 s (it ends on the first lost connection, it does not reconnect).
 
+## The hostile client
+
+`hostile.py` attacks the real executable with frames **written by hand** (it is the one place that does: `BagiControlClient` refuses to send an unmasked, oversized or fragmented frame, a byte at a time, or a handshake that never ends). The honest players, the judge and the server process are the ones of `smoke.py`; in each scenario a good table (`cards`, two humans and two computers, judged on every text) plays while the attack goes on, and at the end it must be finished with no error and no hidden card, the server must answer a new client and exit 0 on SIGTERM.
+
+```bash
+python3 tools/rooms/hostile.py --preset macos-debug          # or --exe <BagiRoomServer>; --list shows the scenarios
+python3 tools/rooms/hostile.py --preset macos-debug --only address-cap --server-arg=--max-per-address --server-arg=0   # a limit switched off: the scenario has to fail
+ctest --preset macos-debug -R BagiRoomServerHostile          # about 15 s; exit 77 (skipped) without the executable
+```
+
+Scenarios, each on a fresh server (`--port 0`): wrong seat numbers; wrong and malformed room codes; tokens (a third socket takes a seat over, a token with another room's code is `bad_token`); actions out of turn, stale, replayed, of another seat's card or of a card that never existed; frames (over the limit in one frame and in three fragments, a message at the limit, one byte per write, a ping between fragments, no mask, binary, a stray continuation, invalid UTF-8); stalled handshakes and 40 silent sockets cut by the deadline, a 100 KiB head; floods of `ping` and `create_room` closed with 1008, 100 sockets dropped; the per-address socket cap (a forged `X-Forwarded-For` changes nothing at hops 0); `--max-rooms-per-address 2`; `--lobby-timeout-ms 500` (pings do not keep the lobby; the socket stays); guessing codes across reconnects (the address bucket, no oracle, a member's token still works); `--trusted-proxy-hops 1` (forwarded addresses do not limit each other, a forged left entry counts as the real one). `tests/test_hostile.py` covers the frame builder and the writers. The demo game's error text repeats a card id the player named: `scenario_actions` forgives exactly those ids.
+
 ## The Docker check
 
 `docker_check.py` checks the image of `tools/rooms/Dockerfile` the way a platform runs it. **Manual**, not a ctest entry: a cold build takes minutes (a warm one, a minute); the Linux preset builds no tests, so this is also the only run of the server on Linux.
