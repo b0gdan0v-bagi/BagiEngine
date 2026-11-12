@@ -38,6 +38,11 @@ namespace BECore {
 
         /// Public mode: false refuses a request without `Origin` too, which keeps programs out
         bool allowMissingOrigin = true;
+
+        /// Public mode: the path of a plain `GET` that a hosting platform's health check sends (`/healthz`); IsHealthCheckRequest()
+        /// answers it with a 200 instead of a handshake error. Empty is off. Not used when loopbackOnly is true, so the control API
+        /// server never answers it
+        eastl::string healthPath;
     };
 
     /**
@@ -77,6 +82,19 @@ namespace BECore {
      * names the origin, cut to 100 bytes), 426 for another protocol version, 431 for a head over kMaxHandshakeBytes.
      */
     [[nodiscard]] std::expected<eastl::string, HandshakeError> ParseHandshakeRequest(eastl::string_view requestText, const HandshakePolicy& policy = HandshakePolicy{});
+
+    /**
+     * @brief Whether the request head @p requestText is a health check under @p policy: `GET <healthPath>` (an optional
+     * `?query` is ignored) over HTTP/1.1 or HTTP/1.0, with no `Upgrade` header.
+     *
+     * A request with `Upgrade` is a handshake like any other ("any path opens the same endpoint"), so a client that asks for a
+     * WebSocket on the health path still gets one. False when the policy is loopback-only or has no health path. `Host` and
+     * `Origin` are not looked at: a platform's probe sends no page origin and its own host name.
+     */
+    [[nodiscard]] bool IsHealthCheckRequest(eastl::string_view requestText, const HandshakePolicy& policy);
+
+    /// The `200 OK` answer to a health check: body `ok`, not cacheable, and the connection is closed after it
+    [[nodiscard]] eastl::string BuildHealthResponse();
 
     /// The 101 response that completes the handshake for @p clientKey
     [[nodiscard]] eastl::string BuildAcceptResponse(eastl::string_view clientKey);

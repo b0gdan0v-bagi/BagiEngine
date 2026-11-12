@@ -93,6 +93,16 @@ namespace BECore::Tests {
             EXPECT_FALSE(result.error().message.empty());
         }
 
+        HandshakePolicy HealthPolicy() {
+            HandshakePolicy policy = PublicPolicy();
+            policy.healthPath = "/healthz";
+            return policy;
+        }
+
+        bool IsHealth(const std::string& text, const HandshakePolicy& policy) {
+            return IsHealthCheckRequest(View(text), policy);
+        }
+
     }  // namespace
 
     TEST(WebSocketHandshakeTest, AcceptKeyOfRfc6455) {
@@ -471,6 +481,66 @@ namespace BECore::Tests {
         EXPECT_TRUE(std::string(BuildRejectResponse(HandshakeError{400, "x"}).c_str()).starts_with("HTTP/1.1 400 Bad Request\r\n"));
         EXPECT_TRUE(std::string(BuildRejectResponse(HandshakeError{431, "x"}).c_str()).starts_with("HTTP/1.1 431 Request Header Fields Too Large\r\n"));
         EXPECT_TRUE(std::string(BuildRejectResponse(HandshakeError{503, "x"}).c_str()).starts_with("HTTP/1.1 503 Service Unavailable\r\n"));
+    }
+
+    TEST(WebSocketHandshakeTest, HealthCheckIsAPlainGetOfTheHealthPath) {
+        const HandshakePolicy policy = HealthPolicy();
+        EXPECT_TRUE(IsHealth("GET /healthz HTTP/1.1\r\nHost: game.example.net\r\n\r\n", policy));
+        EXPECT_TRUE(IsHealth("GET /healthz HTTP/1.1\r\n\r\n", policy)) << "a probe may send no Host";
+        EXPECT_TRUE(IsHealth("GET /healthz HTTP/1.1\nHost: a\n\n", policy));
+        EXPECT_TRUE(IsHealth("GET /healthz HTTP/1.1\r\nHost: a\r\nOrigin: https://evil.example\r\n\r\n", policy)) << "Origin is not checked";
+    }
+
+    TEST(WebSocketHandshakeTest, HealthCheckIgnoresTheQueryAndAcceptsHttp10) {
+        const HandshakePolicy policy = HealthPolicy();
+        EXPECT_TRUE(IsHealth("GET /healthz?probe=1 HTTP/1.1\r\nHost: a\r\n\r\n", policy));
+        EXPECT_TRUE(IsHealth("GET /healthz? HTTP/1.1\r\nHost: a\r\n\r\n", policy));
+        EXPECT_TRUE(IsHealth("GET /healthz HTTP/1.0\r\n\r\n", policy));
+    }
+
+    TEST(WebSocketHandshakeTest, HealthCheckNeedsTheExactPathAndMethod) {
+        const HandshakePolicy policy = HealthPolicy();
+        for (const char* line : {"GET / HTTP/1.1", "GET /healthz/ HTTP/1.1", "GET /health HTTP/1.1", "GET /healthzz HTTP/1.1", "GET /HEALTHZ HTTP/1.1", "GET /control HTTP/1.1",
+                                 "POST /healthz HTTP/1.1", "HEAD /healthz HTTP/1.1", "GET /healthz HTTP/2", "GET /healthz", "GET  HTTP/1.1", ""}) {
+            EXPECT_FALSE(IsHealth(std::string(line) + "\r\nHost: a\r\n\r\n", policy)) << line;
+        }
+    }
+
+    TEST(WebSocketHandshakeTest, HealthCheckWithUpgradeIsAHandshakeLikeAnyOther) {
+        const HandshakePolicy policy = HealthPolicy();
+        Request request;
+        request.requestLine = "GET /healthz HTTP/1.1";
+        request.Set("Host", "game.example.net");
+        EXPECT_FALSE(IsHealth(request.Text(), policy));
+        EXPECT_TRUE(Parse(request, policy).has_value()) << "any path opens the same endpoint";
+        EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nHost: a\r\nUpgrade: h2c\r\n\r\n", policy));
+    }
+
+    TEST(WebSocketHandshakeTest, HealthCheckIsOffForLoopbackAndForAnEmptyPath) {
+        const std::string request = "GET /healthz HTTP/1.1\r\nHost: a\r\n\r\n";
+        HandshakePolicy loopback = HealthPolicy();
+        loopback.loopbackOnly = true;
+        EXPECT_FALSE(IsHealth(request, loopback));
+        EXPECT_FALSE(IsHealth(request, HandshakePolicy{}));
+        EXPECT_FALSE(IsHealth(request, PublicPolicy()));
+        EXPECT_FALSE(IsHealth("GET  HTTP/1.1\r\n\r\n", PublicPolicy())) << "an empty path is not a health path";
+    }
+
+    TEST(WebSocketHandshakeTest, HealthCheckWithAMalformedHeadIsLeftToTheHandshake) {
+        const HandshakePolicy policy = HealthPolicy();
+        EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nHost: a\r\n folded\r\n\r\n", policy));
+        EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nno colon here\r\n\r\n", policy));
+        EXPECT_FALSE(IsHealth("GET /healthz HTTP/1.1\r\nHost: a\r\n\r\n" + std::string(kMaxHandshakeBytes, 'x'), policy));
+    }
+
+    TEST(WebSocketHandshakeTest, HealthResponseIsAnOkThatClosesTheConnection) {
+        const std::string response = BuildHealthResponse().c_str();
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n"));
+        EXPECT_NE(response.find("Content-Type: text/plain\r\n"), std::string::npos);
+        EXPECT_NE(response.find("Cache-Control: no-store\r\n"), std::string::npos);
+        EXPECT_NE(response.find("Connection: close\r\n"), std::string::npos);
+        EXPECT_NE(response.find("Content-Length: 2\r\n"), std::string::npos);
+        EXPECT_TRUE(response.ends_with("\r\n\r\nok"));
     }
 
 }  // namespace BECore::Tests

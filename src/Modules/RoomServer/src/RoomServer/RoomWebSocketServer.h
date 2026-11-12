@@ -9,6 +9,18 @@ namespace BECore {
 
     class SeatedGameRegistry;
 
+    /// What the periodic `Room server: <n> connections, <m> rooms` line says: the hub's own counts
+    struct RoomServerStats {
+        size_t connections = 0;
+        size_t rooms = 0;
+
+        [[nodiscard]] bool operator==(const RoomServerStats&) const = default;
+    };
+
+    /// Whether the hub thread logs the stats line now: the numbers differ from the ones last logged, and @p interval has passed since that line (or since the start).
+    /// A zero or negative @p interval is off
+    [[nodiscard]] bool ShouldLogRoomServerStats(const RoomServerStats& current, const RoomServerStats& lastLogged, RoomTime now, RoomTime lastLoggedAt, std::chrono::milliseconds interval);
+
     /**
      * @brief The Rooms hub on the network: a WebSocket server whose every text message is a message of the room protocol.
      *
@@ -25,6 +37,9 @@ namespace BECore {
      *
      * The queue holds at most kMaxQueuedEvents events and kMaxQueuedBytes of text: a reader that finds it full waits, so TCP slows
      * the fast sender and the memory stays bounded.
+     *
+     * Stop() with `shutdownGrace` first tells every client (close 1001 `server_stopping`) and waits, on the real clock, until the connections
+     * have ended or the grace has passed; the hub thread runs meanwhile.
      *
      * Start() and Stop() belong to one thread. See RoomServer/CLAUDE.md for the limits and the close codes.
      */
@@ -43,7 +58,8 @@ namespace BECore {
         /// Starts listening on `settings.port` and runs the hub thread; returns the port in use. The error code is `listen_failed` (a port that is taken, for example)
         [[nodiscard]] std::expected<uint16_t, ControlError> Start();
 
-        /// Ends every connection, joins every thread. Safe to call twice and when never started. After it returns no callback runs and nothing is sent
+        /// Ends every connection (after `shutdownGrace`, if any, for the clients to take the close 1001), joins every thread. Safe to call twice and when never started. After it returns no callback
+        /// runs and nothing is sent
         void Stop();
 
         [[nodiscard]] bool IsRunning() const {
@@ -78,6 +94,13 @@ namespace BECore {
         [[nodiscard]] WebSocketHandler MakeHandler();
         void RunHub();
 
+        /// The first part of Stop() with a grace: queues close 1001 `server_stopping` on every open connection (and, through `_draining`, on one that opens meanwhile)
+        /// and waits until all have ended or `shutdownGrace` has passed
+        void DrainConnections();
+
+        /// Logs the stats line when ShouldLogRoomServerStats() says so (hub thread, on the tick)
+        void LogStats(const RoomHub& hub, RoomServerStats& lastLogged, RoomTime& lastLoggedAt, RoomTime now) const;
+
         /// Pings the connections that went quiet and drops the ones that did not answer (hub thread, on the tick)
         void CheckLiveness(LivenessMap& liveness, RoomTime now);
 
@@ -95,6 +118,8 @@ namespace BECore {
 
         std::mutex _connectionsMutex;
         eastl::hash_map<ConnectionId, eastl::shared_ptr<WebSocketConnection>> _connections;  // open connections by id; guarded by _connectionsMutex
+        bool _draining = false;                                                              // Stop() is telling the clients; guarded by _connectionsMutex
+        std::condition_variable _connectionsChanged;                                         // a connection ended (with _connectionsMutex); Stop() waits here during the drain
 
         std::mutex _queueMutex;            // guards the queue, its byte count and _stopping
         std::condition_variable _hubWake;  // the hub thread waits here for an event, the tick or the stop

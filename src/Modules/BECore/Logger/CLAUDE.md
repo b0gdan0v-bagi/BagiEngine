@@ -25,7 +25,7 @@ Event-based logging. `Logger` pushes entries into a lock-free ring buffer, `LogE
 
 | Sink | Output | Options |
 |------|--------|---------|
-| `ConsoleSink` | stdout/stderr with ANSI colors | `colorEnabled` |
+| `ConsoleSink` | stdout/stderr with ANSI colors (only when that stream is a terminal) | `colorEnabled` |
 | `FileSink` | Thread-safe file logging | `filename`, `append` |
 | `OutputSink` | Platform debug output (`OutputDebugString` on Windows, stderr on macOS; nothing on the web) | none |
 

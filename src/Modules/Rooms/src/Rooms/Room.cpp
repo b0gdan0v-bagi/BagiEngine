@@ -262,7 +262,8 @@ namespace BECore {
                 continue;
             }
             if (auto performed = _game->PerformSeatAction(seat, *action); !performed) {
-                LOG_ERROR(Format("Room {}: the game refused the computer's action for seat {}: {} ({})", _code.c_str(), seat, performed.error().code.c_str(), performed.error().message.c_str()));
+                // No room code, name or game message in the log: the platform's log is not a place for them (RoomServer/CLAUDE.md, "Log")
+                LOG_ERROR(Format("Room: the game refused the computer's action for seat {}: {}", seat, performed.error().code.c_str()));
                 return false;
             }
             _lastComputerMove = now;

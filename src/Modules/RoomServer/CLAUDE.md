@@ -8,16 +8,16 @@ Built only with `ENGINE_WITH_REMOTE_CONTROL` (the web build has no sockets). Mod
 
 | File | Purpose |
 |------|---------|
-| `RoomServerSettings.h` | `RoomServerSettings`: port, bind scope, handshake policy, transport limits, the hub's `RoomHubSettings`, the tick interval, the ping interval, the injected clock and `RandomFn` |
+| `RoomServerSettings.h` | `RoomServerSettings` and `kRoomServerHealthPath`: port, bind scope, handshake policy, transport limits, the hub's `RoomHubSettings`, the tick interval, the ping interval, the injected clock and `RandomFn` |
 | `RoomWebSocketServer.h/.cpp` | `RoomWebSocketServer(registry, settings)`: `Start()`, `Stop()`, `GetPort()`, `IsRunning()` |
-| `RoomServerArgs.h/.cpp` | `RoomServerArgs` (what a server is started with: a plain struct), `ParseRoomServerArgs(argc, argv)`, `GetRoomServerUsage()`, `ToSettings(args)` |
+| `RoomServerArgs.h/.cpp` | `RoomServerArgs` (what a server is started with: a plain struct), `LoadRoomServerArgs(argc, argv)` (environment, then flags), `ParseRoomServerArgs(argc, argv, base)`, `ReadRoomServerEnvironment(lookup)`, `GetRoomServerUsage()`, `ToSettings(args)` |
 | `RoomServerMain.h/.cpp` | `RunRoomServer(registry, args)`: logging, the server, the listening line, the loop until SIGINT / SIGTERM |
 | `DemoCardGame.h/.cpp` | `DemoCardGame`, the card game of the tests and of `--test-games` (not for a product), `LeakyDemoCardGame` (negative control), `FindHiddenCards` |
 | `server/main.cpp` | the executable `BagiRoomServer`; outside `src/`, so the module glob does not take it |
 
 ## A server main
 
-A game's own server is a `main` that fills a `SeatedGameRegistry` and calls `RunRoomServer(registry, args)`; `server/main.cpp` is the model (`be_add_headless_executable(<Name> SOURCES main.cpp LINK RoomServerModule ...)`: the engine core, no window, no `Application`). `args` comes from `ParseRoomServerArgs(argc, argv)` or is filled by hand (the environment, in the hosting slice). `RunRoomServer` makes a console log sink in code (a server has no `LoggerConfig.xml`), prints `BagiRoomServer listening on ws://0.0.0.0:<port>` to stdout (flushed: a program that starts the server waits for that line; `127.0.0.1` with `--bind loopback`), drains the log every 50 ms on the calling thread, and ends with exit code 0 on SIGINT or SIGTERM (1 when it cannot listen, the message on stderr). `BagiRoomServer` registers `cards` and `cards-leaky` only with `--test-games`; without it the registry is empty and it exits 1.
+A game's own server is a `main` that fills a `SeatedGameRegistry` and calls `RunRoomServer(registry, args)`; `server/main.cpp` is the model (`be_add_headless_executable(<Name> SOURCES main.cpp LINK RoomServerModule ...)`: the engine core, no window, no `Application`). `args` comes from `LoadRoomServerArgs(argc, argv)` (the environment of a hosting platform, then the command line over it) or is filled by hand. `RunRoomServer` makes a console log sink in code (a server has no `LoggerConfig.xml`), prints `BagiRoomServer listening on ws://0.0.0.0:<port>` to stdout (flushed: a program that starts the server waits for that line; `127.0.0.1` with `--bind loopback`), drains the log every 50 ms on the calling thread, and ends with exit code 0 on SIGINT or SIGTERM (1 when it cannot listen, the message on stderr). `BagiRoomServer` registers `cards` and `cards-leaky` only with `--test-games`; without it the registry is empty and it exits 1.
 
 Run: `build/<preset>/bin/BagiRoomServer --test-games --port 0`.
 
@@ -30,9 +30,17 @@ Run: `build/<preset>/bin/BagiRoomServer --test-games --port 0`.
 | `--max-per-address N` | open sockets of one address, 0 is off (32) |
 | `--computer-delay-ms N`, `--reconnect-grace-ms N` | the hub's times (800, 30000) |
 | `--ping-interval-ms N` | liveness pings, 0 is off (20000) |
+| `--stats-interval-ms N` | the connections-and-rooms log line at most this often, 0 is off (30000) |
+| `--shutdown-grace-ms N` | on SIGTERM how long to wait for the clients to end after close 1001, 0..60000, 0 sends no close frame (1000; `RoomServerSettings` itself has 0 so tests do not wait) |
 | `--test-games`, `--help` | |
 
-Numbers are range-checked; an unknown flag or a bad number is an error with a message and exit code 1.
+**Environment** (a hosting platform sets no flags): `PORT` and `BAGI_ROOMS_BIND`, `_ORIGINS` (comma-separated, items trimmed, empty ones skipped), `_MAX_CONNECTIONS`, `_MAX_PER_ADDRESS`, `_COMPUTER_DELAY_MS`, `_RECONNECT_GRACE_MS`, `_PING_INTERVAL_MS`, `_STATS_INTERVAL_MS`, `_SHUTDOWN_GRACE_MS` and `_TEST_GAMES` (`1|0|true|false`; the first live check of the demo server only), each with the range of its flag. The order is default, then variable, then flag (`--origin` on the command line replaces the list of the variable); an empty variable is unset. `ReadRoomServerEnvironment` takes the lookup as a function so a test needs no real environment.
+
+Numbers are range-checked; an unknown flag or a bad number or variable is an error with a message (naming the flag or the variable) and exit code 1.
+
+**Log** (what a hosting platform shows): `RunRoomServer` makes stdout line-buffered first, since a piped stdout is block-buffered and the platform would see the lines in chunks or at exit. Lines: the listening line, `Room server settings: ...` (the effective values, nothing secret), a line per connection, refusal and close, and `Room server: <n> connections, <m> rooms` from the hub thread when the pair changed and `statsLogInterval` (the server's `clock`) has passed since the last such line. No name, code or token is ever logged.
+
+**Health:** `ToSettings` sets `policy.healthPath` to `/healthz`, so a plain `GET /healthz` gets 200 `ok` (`RemoteControl/CLAUDE.md`, "Security"); the platform's health check needs it.
 
 ## Threads
 
@@ -42,7 +50,7 @@ Numbers are range-checked; an unknown flag or a bad number is an error with a me
 - The `HubSink` runs on the hub thread. `send` looks the connection up (a map under a mutex of the server) and queues a text frame: it never writes to a socket, so a slow client cannot stall the hub, and a client whose queue passes `maxOutboxBytes` is dropped by its connection (the hub learns it from the `Closed` event). `close` queues a close frame. For one connection the frames go out in the order the hub produced them. A message for a connection that is gone is dropped.
 - A connection is reported to the hub (`Opened`) **after** its handshake succeeded; a socket that never completes it is cut when the handshake timeout (5 s, one deadline for the whole request head, not per read) runs out, and the hub never hears of it. The hub's `Closed` handling ignores a connection it closed itself.
 - **Liveness** (`pingInterval`, 20 s; 0 is off). On every tick the hub thread compares the byte counter of each open connection (`GetBytesReceived()`) with the one it saw last. A change is life (any byte: a message, a pong); a connection silent for `pingInterval` gets one WebSocket ping, and one silent for twice that is aborted, which the hub learns as a `Closed` event, so the seat goes through the reconnect rules. Without it a half-open connection (a cable pulled, a phone out of range) would keep a seat "connected" for ever and the table would wait for a dead player. The time is `settings.clock`, so a test moves it by hand. **A client has to answer pings** (a browser does by itself; the desktop `WebSocketClient` does, and `RoomClient` leaves the WebSocket pings to its transport and keeps its own `ping` / `pong` heartbeat, `RoomClient/CLAUDE.md`).
-- `Stop()`: wake the readers, stop the listener (which ends every connection and joins the readers, so every `onClosed` has run), stop and join the hub thread. After it returns no callback runs and nothing is sent. Safe twice and when never started; the server can be started again (it makes a new hub, so the rooms are gone).
+- `Stop()`: with `shutdownGrace` > 0 it first **drains**: it sets `_draining`, queues close 1001 `server_stopping` on every open connection and waits on the real clock (a condition variable that `onClosed` signals) until the map of connections is empty or the grace has passed. The hub thread and the readers run meanwhile, so the hub takes the `Closed` events. A connection that opens during the drain is closed the same way (`onOpen` sets it under the lock of the map, so it is either in the snapshot or sees the flag). The client's answer is not awaited: after the close frame the connection shuts its socket and ends; the grace only matters for a client that does not read (its writer is stuck in a full send buffer), which is then cut. Then the old sequence: wake the readers, stop the listener (which ends every connection and joins the readers, so every `onClosed` has run), stop and join the hub thread. After it returns no callback runs and nothing is sent. Safe twice and when never started; the server can be started again (it makes a new hub, so the rooms are gone). A restart loses the rooms: the client reconnects and gets `room_gone` (`RoomClient` handles it).
 
 ## Close codes
 
@@ -52,6 +60,7 @@ What `HubSink::close(reason)` becomes on the wire (the reason is the text of the
 |--------|------|
 | `rate_limited`, `too_many_failed_joins` | 1008 (policy violation) |
 | `server_full` | 1013 (try again later) |
+| the server is stopping (`Stop()`, not the hub: `server_stopping`) | 1001 (going away) |
 | anything else (`idle`, `replaced`) | 1000 |
 
 The transport adds its own: 1009 for a message over `hub.maxMessageBytes` (checked at the frame header, before the message is buffered; the hub's check is the second line), 1003 for a binary message, 1002 for a protocol error.
@@ -75,13 +84,13 @@ In public mode (`policy.loopbackOnly = false`) `Origin` keeps foreign **web page
 
 ## For later slices
 
-- Hosting (slice 4: Docker, the settings from the environment into `RoomServerArgs`).
-- **TLS is not here**: the server speaks plain `ws://`; `wss://` is the proxy's job (a hosting platform terminates it). Behind a proxy every client has the proxy's address, so `--max-per-address 0`, and `X-Forwarded-For` is not read: the per-address limit has nothing better to count until it is.
-- IPv4 only (`Socket`). Windows and Linux are not run for this module on the development machine: the POSIX code is the macOS code, the Winsock branch of `Socket.cpp` is written and unchecked.
+- **Hosting** is the Docker image of `tools/rooms/Dockerfile` (a Linux build of the target, `nobody`, no `CMD`) and the platform notes (the variables in a table, Railway's settings) in the README, "Hosting the room server"; `tools/rooms/docker_check.py` is its check. A game reuses the file with `--build-arg SERVER_TARGET`. The image sets `BAGI_ROOMS_BIND=any` and `BAGI_ROOMS_MAX_PER_ADDRESS=0`.
+- **TLS is not here**: the server speaks plain `ws://`; `wss://` is the proxy's job (a hosting platform terminates it). Behind a proxy every client has the proxy's address, so `--max-per-address 0`, and `X-Forwarded-For` is not read: a header any client can send is a lie unless the proxy is known to set it, so a trusted-proxy setting (entry `net-security-fuzzing`) must come first; until then the global caps hold.
+- IPv4 only (`Socket`). Linux is built and run in the Docker image (`docker_check.py`; the gtest executables are not built there, so the stuck-client shutdown tests rely on macOS socket buffer sizes and are unchecked on Linux). Windows is not run: the Winsock branch of `Socket.cpp` is written and unchecked.
 - The lobby has no timeout of its own (`Rooms/CLAUDE.md`).
 
 ## Tests
 
-`tests/BECore/Rooms/RoomServerArgsTest.cpp`: the flags and `ToSettings`. `tests/BECore/Rooms/RoomWebSocketServerTest.cpp`: the server on port 0 against real sockets (`RoomSocketClient.h`: the raw client of `WebSocketTestClient.h` plus the messages of the protocol, with a cursor to read forward) and `FakeSeatedGame`. Covers the exchange (create, join by code, order of replies), what the hub's close and the transport's limits look like on the wire, an abrupt drop, the origin and per-address checks, `Stop()` under load, a client that never reads, the liveness pings on a manual clock, two servers. The bounded queue itself has no test of its own.
+`tests/BECore/Rooms/RoomServerArgsTest.cpp`: the flags, the environment (a fake lookup) and `ToSettings`. `tests/BECore/Rooms/RoomWebSocketServerTest.cpp`: the server on port 0 against real sockets (`RoomSocketClient.h`: the raw client of `WebSocketTestClient.h` plus the messages of the protocol, with a cursor to read forward) and `FakeSeatedGame`. Covers the exchange (create, join by code, order of replies), what the hub's close and the transport's limits look like on the wire, an abrupt drop, the origin and per-address checks, `Stop()` under load and its drain (close 1001, the grace, a connection opening meanwhile), a client that never reads, the liveness pings on a manual clock, two servers. The bounded queue itself has no test of its own.
 
 `tests/BECore/Rooms/RoomServerScenarioTest.cpp`: the scenarios of `RoomsScenarioTest` over real sockets and the real server on port 0 with `DemoCardGame` (`cards`) and `LeakyDemoCardGame` (`cards-leaky`): two humans and two computers, four humans, a human that drops mid-hand (manual clock: nothing is played inside the grace, a computer plays past it, the token brings the human back with `joined`, `lobby`, `view`; a second socket with the token replaces the first with `replaced`; the token is refused after `leave`), two rooms at once, and hostile clients (garbage bytes, junk text, an oversize message, a flood, a half-open handshake) while another room's hand finishes. **The wire judge** (`WireJudge.h`) is the test's only eye, since the game is inside the server: a message to seat S may name the card ids `c<S>_*` and those of its own `view.table`, any other id is a leak. It judges every text frame of every client, and the clients also count masked and binary frames from the server (there must be none). The negative control plays the same hand on `cards-leaky` and fails if the judge finds nothing; the judge's own rule is tested on hand-made texts. The half-open case waits for the handshake timeout (5 s), so that test takes that long. `tools/rooms/smoke.py` plays the same kinds of hands against the executable from another process, with the judge ported to Python (`tools/rooms/CLAUDE.md`).

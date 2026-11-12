@@ -1,0 +1,15 @@
+.git
+build/
+dist/
+.venv
+.pytest_cache
+# The Emscripten SDK of the web presets, about 2 GB when installed
+external/emsdk
+# The same inside a game root (the engine is its engine/ folder)
+engine/build/
+engine/dist/
+engine/external/emsdk
+engine/.venv
+engine/.pytest_cache
+**/__pycache__
+*.log

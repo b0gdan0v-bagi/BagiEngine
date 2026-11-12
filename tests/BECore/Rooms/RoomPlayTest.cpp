@@ -387,6 +387,27 @@ namespace BECore::Tests {
             mutable int proposals = 0;
         };
 
+        /// Collects what LogEvent::Flush() delivers, as copies (the views point into the ring buffer)
+        class LogRecorder : public SubscriptionHolder {
+        public:
+            LogRecorder() {
+                Subscribe<LogEvent, &LogRecorder::OnLog>(this);
+            }
+
+            const eastl::vector<eastl::string>& Errors() const {
+                return _errors;
+            }
+
+        private:
+            void OnLog(const LogEvent& event) {
+                if (event.level == LogLevel::Error) {
+                    _errors.emplace_back(event.message.data(), event.message.size());
+                }
+            }
+
+            eastl::vector<eastl::string> _errors;
+        };
+
     }  // namespace
 
     TEST(RoomPlayTest, ARefusedComputerMoveIsNotRetriedAndChangesNothing) {
@@ -402,7 +423,12 @@ namespace BECore::Tests {
         ASSERT_TRUE(room.Start(joined->player, kNow, FirstSeatOptions(1)).has_value());
         const uint64_t version = room.GetGameVersion();
         // Seat 1 is a computer and has the turn; its proposal is refused: logged, no move, no loop
+        LogRecorder log;
         EXPECT_FALSE(room.StepComputers(kNow));
+        LogEvent::Flush();
+        ASSERT_EQ(log.Errors().size(), 1u);
+        EXPECT_NE(log.Errors()[0].find("seat 1"), eastl::string::npos) << log.Errors()[0].c_str();
+        EXPECT_EQ(log.Errors()[0].find("ABCDE"), eastl::string::npos) << "the room code is not logged: " << log.Errors()[0].c_str();
         EXPECT_EQ((*game)->proposals, 1);
         EXPECT_EQ(room.GetGameVersion(), version);
         EXPECT_EQ(room.GetPhase(), RoomPhase::Playing);

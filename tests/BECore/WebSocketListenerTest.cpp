@@ -359,6 +359,65 @@ namespace BECore::Tests {
         EXPECT_TRUE(TryHandshake(port, "", "game.example.net").starts_with("HTTP/1.1 403 Forbidden\r\n"));
     }
 
+    TEST_F(WebSocketListenerTest, PublicListenerAnswersTheHealthCheckAndFreesTheSlot) {
+        WebSocketListenerSettings settings;
+        settings.bind = SocketBind::AnyAddress;
+        settings.policy.loopbackOnly = false;
+        settings.policy.healthPath = "/healthz";
+        settings.maxConnectionsPerAddress = 1;
+        const uint16_t port = Start(settings);
+
+        for (int probe = 0; probe < 3; ++probe) {
+            auto client = WebSocketTestClient::Open(port);
+            ASSERT_TRUE(client.has_value());
+            client->Send(std::string("GET /healthz HTTP/1.1\r\nHost: game.example.net\r\n\r\n"));
+            const std::string response = client->ReadHttpResponse();
+            EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n")) << response;
+            EXPECT_TRUE(response.ends_with("\r\n\r\nok")) << response;
+            EXPECT_TRUE(client->WaitForEndOfStream());
+        }
+        EXPECT_TRUE(recorder.Events().empty()) << "the handler must never hear of a health check";
+
+        // Each probe freed its slot (one connection per address is allowed): a client can still connect
+        bool connected = false;
+        for (int attempt = 0; attempt < 200 && !connected; ++attempt) {
+            connected = TryHandshake(port, "", "game.example.net").starts_with("HTTP/1.1 101 ");
+            if (!connected) {
+                std::this_thread::sleep_for(10ms);  // the accept thread reaps finished connections every 50 ms
+            }
+        }
+        EXPECT_TRUE(connected);
+    }
+
+    TEST_F(WebSocketListenerTest, OtherRequestsOfAPublicListenerWithAHealthPathAreJudgedAsBefore) {
+        WebSocketListenerSettings settings;
+        settings.bind = SocketBind::AnyAddress;
+        settings.policy.loopbackOnly = false;
+        settings.policy.healthPath = "/healthz";
+        const uint16_t port = Start(settings);
+
+        auto other = WebSocketTestClient::Open(port);
+        ASSERT_TRUE(other.has_value());
+        other->Send(std::string("GET /other HTTP/1.1\r\nHost: game.example.net\r\n\r\n"));
+        const std::string refused = other->ReadHttpResponse();
+        EXPECT_TRUE(refused.starts_with("HTTP/1.1 400 Bad Request\r\n")) << refused;
+        EXPECT_NE(refused.find("expected 'Upgrade: websocket'"), std::string::npos);
+
+        EXPECT_TRUE(TryHandshake(port, "", "game.example.net").starts_with("HTTP/1.1 101 ")) << "a handshake on any path still opens";
+    }
+
+    TEST_F(WebSocketListenerTest, LoopbackListenerDoesNotAnswerTheHealthCheck) {
+        WebSocketListenerSettings settings;
+        settings.policy.healthPath = "/healthz";  // ignored while loopbackOnly is true
+        const uint16_t port = Start(settings);
+
+        auto client = WebSocketTestClient::Open(port);
+        ASSERT_TRUE(client.has_value());
+        client->Send(std::string("GET /healthz HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"));
+        const std::string response = client->ReadHttpResponse();
+        EXPECT_TRUE(response.starts_with("HTTP/1.1 400 Bad Request\r\n")) << response;
+    }
+
     TEST_F(WebSocketListenerTest, ForEachOpenConnectionVisitsOnlyConnectionsWithADoneHandshake) {
         const uint16_t port = Start();
         auto first = Connect(port);

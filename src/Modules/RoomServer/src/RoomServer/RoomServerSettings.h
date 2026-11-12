@@ -9,6 +9,9 @@ namespace BECore {
     /// The transport allows this many sockets above the hub's own limit, for connections that are still in their handshake
     inline constexpr size_t kHandshakeConnectionReserve = 64;
 
+    /// The path a plain `GET` answers 200 `ok` on, for the health check of a hosting platform (HandshakePolicy::healthPath)
+    inline constexpr const char* kRoomServerHealthPath = "/healthz";
+
     /// Everything a RoomWebSocketServer is configured with. The defaults are the limits of the room server (RoomServer/CLAUDE.md);
     /// a test overrides what it needs, and a server executable fills the struct from its arguments or its environment
     struct RoomServerSettings {
@@ -41,6 +44,14 @@ namespace BECore {
         /// (the hub then sees it leave). It finds half-open connections, which would keep a seat "connected" for ever. 0 turns it off. Judged
         /// with `clock`. A client has to answer pings (a browser does by itself)
         std::chrono::milliseconds pingInterval{20'000};
+
+        /// How often the hub thread may log `Room server: <n> connections, <m> rooms`, and only when the numbers changed since the last such line. 0 turns it off.
+        /// Judged with `clock`
+        std::chrono::milliseconds statsLogInterval{0};
+
+        /// How long Stop() waits, on the real clock, for the connections to end after it queued the close 1001 `server_stopping` on each of them (a connection that opens
+        /// meanwhile gets it too). 0 sends no close frame: every connection is cut at once
+        std::chrono::milliseconds shutdownGrace{0};
 
         /// What the hub is told the time is. Empty: the real clock (`steady_clock`). A test moves a manual clock instead of sleeping
         std::function<RoomTime()> clock;

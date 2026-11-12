@@ -16,3 +16,37 @@ ctest --preset macos-debug
 ```
 
 Presets, the editor option and the browser builds: `cmake/CLAUDE.md`. The architecture, the code style and the contracts of every module are in `CLAUDE.md` and the nested `CLAUDE.md` files under `src/`. The launcher for the workspace: `WORKSPACE_README.md`.
+
+## Hosting the room server
+
+`BagiRoomServer` (`src/Modules/RoomServer/CLAUDE.md`) is the server of the online rooms: a headless program that speaks WebSocket and keeps the rooms in memory. The image of `tools/rooms/Dockerfile` builds it for Linux (Clang, static SDL, no window) and runs it as `nobody`. The engine's own server registers only the demo card game, so it starts with `BAGI_ROOMS_TEST_GAMES=1` and is meant for the first check; a game builds its own server target (a `main` that fills a `SeatedGameRegistry`) into the same image.
+
+```bash
+docker build -f tools/rooms/Dockerfile -t bagi-room-server .      # from the engine root
+docker run --rm -e PORT=9090 -e BAGI_ROOMS_TEST_GAMES=1 -p 127.0.0.1:9090:9090 bagi-room-server
+curl -i http://127.0.0.1:9090/healthz                             # 200 ok
+```
+
+A game that carries the engine builds from its own root, with its server target and a preset that includes the engine's `linux-server-release`: `docker build -f engine/tools/rooms/Dockerfile --build-arg SERVER_TARGET=<target> --build-arg PRESET=<preset> -t <name> .`. The build reads `external/` (SDL, SDL_image, Vulkan-Headers), so the context must hold the checked-out submodules. The image is built for the architecture of the machine; a host that runs amd64 needs `docker buildx build --platform linux/amd64`.
+
+**Settings.** The order is the default, then the variable, then the command-line flag (the image has no `CMD`: flags go after the image name). An empty variable is unset; a bad value stops the server with exit code 1 naming the variable.
+
+| Variable | Flag | Default | Meaning |
+|----------|------|---------|---------|
+| `PORT` | `--port` | 8080 | the port to listen on (the platform sets it) |
+| `BAGI_ROOMS_BIND` | `--bind` | `any` (the image sets it too) | `any` is every address, `loopback` the machine's own |
+| `BAGI_ROOMS_ORIGINS` | `--origin` (repeatable) | none | the web pages that may connect, comma-separated (`https://game.example`); `*` is every page. With none, browsers are refused and programs (no `Origin`) are let in |
+| `BAGI_ROOMS_MAX_CONNECTIONS` | `--max-connections` | 512 | connections the hub admits |
+| `BAGI_ROOMS_MAX_PER_ADDRESS` | `--max-per-address` | 32 (the image sets 0) | open sockets of one address, 0 is off |
+| `BAGI_ROOMS_COMPUTER_DELAY_MS` | `--computer-delay-ms` | 800 | the pause before a computer player moves |
+| `BAGI_ROOMS_RECONNECT_GRACE_MS` | `--reconnect-grace-ms` | 30000 | how long a dropped human keeps the seat before a computer plays it |
+| `BAGI_ROOMS_PING_INTERVAL_MS` | `--ping-interval-ms` | 20000 | liveness pings, 0 is off |
+| `BAGI_ROOMS_STATS_INTERVAL_MS` | `--stats-interval-ms` | 30000 | the log line with connections and rooms, at most this often, 0 is off |
+| `BAGI_ROOMS_SHUTDOWN_GRACE_MS` | `--shutdown-grace-ms` | 1000 | after SIGTERM, how long to wait for the clients to end (0..60000) |
+| `BAGI_ROOMS_TEST_GAMES` | `--test-games` | off | registers the demo games `cards` and `cards-leaky`; for the first live check only |
+
+**Behind a platform's proxy.** The platform terminates TLS: clients use `wss://<domain>`, the process speaks plain `ws://`. Every client then arrives from the proxy's address, so the per-address limit would cut everybody off together; the image sets `BAGI_ROOMS_MAX_PER_ADDRESS=0` and the global limits hold. `X-Forwarded-For` is not read. A plain `GET /healthz` is answered `200 ok` without a WebSocket handshake. The log goes to stdout, line by line: the listening line, the settings, one line per connection and per refusal, the stats line; it never names a player, a room code or a token.
+
+**Railway.** The service builds from the Dockerfile `tools/rooms/Dockerfile` (for a game: `engine/tools/rooms/Dockerfile` with the build arguments above); health check path `/healthz`; `PORT` is set by Railway; set `BAGI_ROOMS_ORIGINS` to the `https://` origin of the web service that serves the game, or browsers are refused. If the GitHub build does not clone submodules, deploy with `railway up` from a checkout that has them (`tools/web/build_and_deploy.py` does this for the web service). On a redeploy Railway sends SIGTERM: the server closes every connection with 1001 `server_stopping`, waits up to `BAGI_ROOMS_SHUTDOWN_GRACE_MS` and exits 0. **A restart loses the rooms** (they live in memory); a client that reconnects is told `room_gone`. A longer drain is a larger grace together with Railway's `RAILWAY_DEPLOYMENT_DRAINING_SECONDS`.
+
+**Check.** `python3 tools/rooms/docker_check.py` builds the image, runs it and plays against it (the listening and settings lines, `/healthz`, the Origin rules, a room, `docker stop` with a client connected); manual, it needs Docker (`tools/rooms/CLAUDE.md`).
