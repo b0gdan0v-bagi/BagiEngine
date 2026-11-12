@@ -45,6 +45,8 @@ namespace BECore {
         Subscribe<EditorCommandEvent, &SceneEditorWidget::OnCommand>(this);
         Subscribe<SelectSceneNodeRequestEvent, &SceneEditorWidget::OnSelectRequest>(this);
         Subscribe<ViewportEditClickEvent, &SceneEditorWidget::OnViewportClick>(this);
+        Subscribe<ViewportBoxSelectEvent, &SceneEditorWidget::OnViewportBoxSelect>(this);
+        Subscribe<NodeTransformEditEvent, &SceneEditorWidget::OnTransformEdit>(this);
         return true;
     }
 
@@ -59,6 +61,7 @@ namespace BECore {
         if (Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
             if (HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node)) {
                 _focusRequested = true;
+                SyncSelection(*scene);
             }
         }
     }
@@ -70,14 +73,20 @@ namespace BECore {
             return;
         }
         const ScenePick::Hit hit = ScenePick::PickAt(*scene, event.x, event.y);
-        if (!hit.node || !HierarchyPanel::Reveal(*scene, _hierarchy, scene, hit.node)) {
+        ApplyClick(_selection, hit.node, event.modifiers);
+        _hierarchy.selected = _selection.Primary();
+        if (!hit.node || !_selection.Contains(hit.node)) {
+            return;  // a click on nothing, or a Ctrl+click that took the node out of the selection
+        }
+        if (!HierarchyPanel::Reveal(*scene, _hierarchy, scene, hit.node)) {
             return;
         }
+        _hierarchy.selected = _selection.Primary();
         _focusRequested = true;
-        if (!hit.element) {
+        if (!hit.element || hit.node != _selection.Primary()) {
             return;
         }
-        // The node is the selection now: show the element in the "UI elements" section (RenderInspector keeps a UI selection of the selected node)
+        // The node is the primary now: show the element in the "UI elements" section (RenderInspector keeps a UI selection of the selected node)
         if (const IntrusivePtr<UICanvasComponent> canvas = hit.node->GetComponent<UICanvasComponent>()) {
             if (UIElement* const element = ScenePick::FindElement(*canvas, hit.element)) {
                 ResetUISelection();
@@ -87,9 +96,55 @@ namespace BECore {
         }
     }
 
+    void SceneEditorWidget::OnViewportBoxSelect(const ViewportBoxSelectEvent& event) {
+        Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
+        if (!scene) {
+            return;
+        }
+        ScenePick::PickInRect(*scene, event.x0, event.y0, event.x1, event.y1, _boxHits);
+        if (event.modifiers == 0) {
+            _selection.Clear();
+        }
+        for (SceneNode* const node : _boxHits) {
+            _selection.Add(node);
+        }
+        _hierarchy.selected = _selection.Primary();
+        if (_hierarchy.selected && HierarchyPanel::Reveal(*scene, _hierarchy, scene, _hierarchy.selected)) {
+            _focusRequested = true;
+        }
+    }
+
+    void SceneEditorWidget::OnTransformEdit(const NodeTransformEditEvent& event) {
+        if (event.phase == NodeTransformEditPhase::Commit && !event.edits.empty()) {
+            _isDirty = true;
+        }
+    }
+
+    void SceneEditorWidget::SyncSelection(Scene& scene) {
+        if (_hierarchy.clickedNode != nullptr) {
+            ApplyClick(_selection, _hierarchy.clickedNode, _hierarchy.clickModifiers);
+            _hierarchy.clickedNode = nullptr;
+            _hierarchy.clickModifiers = 0;
+            _selection.Prune(scene);
+        } else {
+            _selection.Prune(scene);
+            SceneNode* const selected = _hierarchy.selected;
+            if (selected != nullptr && selected != _selection.Primary() && HierarchyModel::FindNode(scene.GetRootNode(), selected) != nullptr) {
+                _selection.Set(selected);
+            }
+        }
+        _hierarchy.selected = _selection.Primary();
+    }
+
     void SceneEditorWidget::AnnounceSelection(const Scene* scene) {
         if (_announcedSelection.Changed(scene, _hierarchy.selected)) {
             SceneNodeSelectedEvent::Emit(scene, _hierarchy.selected);
+        }
+        const eastl::span<SceneNode* const> nodes = _selection.Nodes();
+        if (scene != _announcedNodesScene || nodes.size() != _announcedNodes.size() || !eastl::equal(nodes.begin(), nodes.end(), _announcedNodes.begin())) {
+            _announcedNodesScene = scene;
+            _announcedNodes.assign(nodes.begin(), nodes.end());
+            SceneSelectionChangedEvent::Emit(scene, nodes);
         }
     }
 
@@ -110,6 +165,7 @@ namespace BECore {
         if (scene != _lastScene) {
             // A replaced scene frees its nodes: the selection would dangle
             _hierarchy.Reset();
+            _selection.Clear();
             _contextMenuTargetNode = nullptr;
             ResetUISelection();
             _lastScene = scene;
@@ -144,9 +200,10 @@ namespace BECore {
         const float leftPanelWidth = 300.0f;
         ImGui::BeginChild("##hierarchy", ImVec2(leftPanelWidth, 0.0f), true);
 
-        HierarchyPanel::Draw(*scene, _hierarchy);
+        HierarchyPanel::Draw(*scene, _hierarchy, _selection);
 
         ImGui::EndChild();
+        SyncSelection(*scene);
         ApplyHierarchyAnswers();
         AnnounceSelection(scene);
 
@@ -239,6 +296,9 @@ namespace BECore {
         if (!_hierarchy.selected) {
             EmptyState(ICON_LC_MOUSE_POINTER_CLICK, "Select a node to inspect");
             return;
+        }
+        if (_selection.Count() > 1) {
+            ImGui::TextDisabled("%zu nodes selected; showing the last one", _selection.Count());
         }
 
         if (_uiSelectionNode != _hierarchy.selected) {

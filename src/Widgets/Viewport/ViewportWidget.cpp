@@ -722,7 +722,8 @@ namespace BECore {
                 break;
         }
 
-        _pointer.Forward(frame, _inputMode, modifier, CoreManager::GetUIInput(), [](const ViewportEditClickEvent& click) { ViewportEditClickEvent::Emit(click.x, click.y, click.button); });
+        _pointer.Forward(frame, _inputMode, modifier, CoreManager::GetUIInput(),
+                         [](const ViewportEditClickEvent& click) { ViewportEditClickEvent::Emit(click.x, click.y, click.button, click.modifiers); });
     }
 
 }  // namespace BECore

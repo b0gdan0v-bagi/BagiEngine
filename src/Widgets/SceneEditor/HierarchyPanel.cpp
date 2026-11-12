@@ -171,14 +171,14 @@ namespace BECore {
             ImGui::EndDragDropTarget();
         }
 
-        void DrawNode(HierarchyState& state, SceneNode& node, bool filterOn, bool ancestorHidden) {
+        void DrawNode(HierarchyState& state, const SceneSelection& selection, SceneNode& node, bool filterOn, bool ancestorHidden) {
             const auto& children = node.GetChildren();
 
             ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap;
             if (children.empty()) {
                 flags |= ImGuiTreeNodeFlags_Leaf;
             }
-            if (state.selected == &node) {
+            if (state.selected == &node || selection.Contains(&node)) {
                 flags |= ImGuiTreeNodeFlags_Selected;
             }
             // A filter opens the path to its matches; an ancestor that is not a match and a hidden node (its own flag or an ancestor's) are dimmed
@@ -204,6 +204,8 @@ namespace BECore {
             const float rowTop = ImGui::GetItemRectMin().y;
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
                 state.selected = &node;
+                state.clickedNode = &node;
+                state.clickModifiers = ImGui::GetIO().KeyCtrl ? kSelectionModifierCtrl : 0;
             }
             if (renaming) {
                 DrawRenameField(state, node);
@@ -217,7 +219,7 @@ namespace BECore {
                 // No copy of the child list: every change of the tree waits in state.pending until the walk is over
                 for (const auto& child : children) {
                     if (!filterOn || HierarchyModel::SubtreeMatchesFilter(*child, state.searchBuffer, state.componentType)) {
-                        DrawNode(state, *child.Get(), filterOn, hidden);
+                        DrawNode(state, selection, *child.Get(), filterOn, hidden);
                     }
                 }
                 ImGui::TreePop();
@@ -343,7 +345,7 @@ namespace BECore {
             snprintf(state.renameBuffer, sizeof(state.renameBuffer), "%s", node.GetName().CStr());
         }
 
-        void Draw(Scene& scene, HierarchyState& state) {
+        void Draw(Scene& scene, HierarchyState& state, const SceneSelection& selection) {
             ImGui::TextUnformatted("Hierarchy");
             ImGui::Separator();
 
@@ -364,7 +366,7 @@ namespace BECore {
             if (filterOn && !HierarchyModel::SubtreeMatchesFilter(scene.GetRootNode(), state.searchBuffer, state.componentType)) {
                 EmptyState(ICON_LC_SEARCH, "No node matches the filter");
             } else {
-                DrawNode(state, scene.GetRootNode(), filterOn, false);
+                DrawNode(state, selection, scene.GetRootNode(), filterOn, false);
             }
             state.revealNode = nullptr;
             state.openNodes.clear();

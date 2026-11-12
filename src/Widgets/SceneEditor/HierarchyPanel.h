@@ -1,6 +1,7 @@
 #pragma once
 
 #include "HierarchyModel.h"
+#include "SceneSelection.h"
 
 namespace BECore {
 
@@ -11,7 +12,7 @@ namespace BECore {
      * @c dirty are the answers the widget reads after Draw() and clears.
      */
     struct HierarchyState {
-        SceneNode* selected = nullptr;
+        SceneNode* selected = nullptr;      ///< the primary node of the selection; the widget keeps it equal to SceneSelection::Primary() after each Draw()
         SceneNode* renameTarget = nullptr;  ///< the row that shows a text field instead of its name
         char renameBuffer[HierarchyModel::kMaxNodeNameLength + 1] = {};
         bool renameFocus = false;  ///< the text field takes the keyboard focus on its first frame
@@ -29,6 +30,8 @@ namespace BECore {
         SceneNode* dragNode = nullptr;  ///< the node being dragged, once found alive in the tree (the payload holds only a pointer)
 
         // Answers to the widget
+        SceneNode* clickedNode = nullptr;    ///< a row was clicked: the widget applies the click to its SceneSelection (@c clickModifiers) and clears this
+        uint32_t clickModifiers = 0;         ///< the kSelectionModifier* bits held with that click
         bool dirty = false;                  ///< the scene changed
         bool nodeRemoved = false;            ///< a subtree is gone: the widget drops what it kept of the nodes (the UI selection)
         bool addNodeRequested = false;       ///< the widget opens its "Add Node" popup
@@ -41,8 +44,9 @@ namespace BECore {
     namespace HierarchyPanel {
 
         /// Draws the "Hierarchy" section into the current ImGui window: the tree, its context menu, F2 / Delete / Ctrl+D while the window is focused, and the Add Node button. Needs a frame in
-        /// progress
-        void Draw(Scene& scene, HierarchyState& state);
+        /// progress. Every row of @p selection is highlighted; a click on a row only sets state.selected, clickedNode and clickModifiers (Ctrl or Cmd toggles), the widget changes the selection.
+        /// F2, Delete, Ctrl+D, the context menu and a drag act on state.selected, the primary node, alone
+        void Draw(Scene& scene, HierarchyState& state, const SceneSelection& selection);
 
         /**
          * @brief Selects @p node and prepares the next Draw() to show it: its ancestors open, its row scrolls into view, a filter that hides it is cleared
