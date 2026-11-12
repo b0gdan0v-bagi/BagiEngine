@@ -1,0 +1,24 @@
+# tests/Fuzz: fuzz targets for input nobody trusts
+
+Library `BagiFuzzTargets`: one plain function per kind of untrusted input, `void Fuzz<Name>(const uint8_t* data, size_t size)` in `BECore::Fuzz` (`FuzzTargets.h`), the deterministic mutator (`FuzzMutator.h`) and the writer of the generated seeds (`FuzzSeeds.h`). Two ways run the same functions:
+
+- **`FuzzCorpusTest`** (`tests/BECore`, part of `BagiEngineTests`, so of every `ctest`): replays every file of `corpus/<folder>/` through its target, then `BAGI_FUZZ_ITERATIONS` (default 50000, about 2 s in Debug) mutations of the seeds taken in turn, with the generator of `FuzzMutator` (xorshift64*, fixed seed per target): the same bytes on every platform and every run. `BAGI_FUZZ_ITERATIONS=2000000 ctest --preset macos-debug -R FuzzCorpus` is a longer run with no libFuzzer. An engine `ASSERT` reached by input is a gtest failure (`AssertBridge`), a `FUZZ_CHECK` or a sanitizer report kills the process.
+- **libFuzzer**, for long runs: option `ENGINE_FUZZ_LIBFUZZER`, one executable per target (the commands are in `.claude/rules/build-project.md`, "Fuzzing").
+
+## A target
+
+- Feeds the bytes to the real code and checks properties inside (`FUZZ_CHECK(cond)`: prints and `std::abort()`s in every build; not the engine `ASSERT`, which compiles out in Release). It is exception free like the engine: a malformed input is a refusal or undefined behaviour, and the second is the finding.
+- Reads no file and no clock, uses no service that needs the repository directory, and never sizes an allocation by a number read from the input unless the code under test checked it. State is local to the call: the same input twice gives the same result.
+- Bounded work: the cost of one input is limited by a budget in the target (`FuzzBinaryDeserializer`: 48 entries per document, four array elements), because a reader that finds a name by scanning its scope costs scope-size per read.
+- To add one: `Fuzz<Name>.cpp` (picked up by the glob), the declaration and a row in `FuzzTargetList()` (`FuzzTargets.h/.cpp`), a folder `corpus/<folder>/` with seeds, and, with libFuzzer, a line in `CMakeLists.txt`.
+- `FuzzBinaryDeserializer` also feeds the input again under a header that is true (magic, version, payload size), because any change of length breaks the payload size and the load stops before the validation of the entries. It walks the loaded document by parsing the bytes itself (`BinaryFormat::ParseEntry`) and reads every name with all 26 overloads: only the overload of the entry's own type may succeed and it returns the bytes of the entry. It then loads the same buffer into a fresh reader and again into the walked one: equal digests. It does not cover `LoadFromFile`.
+
+## The corpus
+
+- `corpus/<folder>/`, small files (a corpus file over 64 KiB, `kMaxFuzzInputSize`, fails the replay), real inputs where a real one exists (a file copied from `config/`, a message made by the real builders), no hand-typed hex.
+- Generated seeds come from `MakeGeneratedSeeds()` (`FuzzSeeds.cpp`), made with the engine's own writers. After a format changes, `FuzzCorpusTest.GeneratedSeedsAreTheCommittedFiles` fails: write them again with `BAGI_FUZZ_WRITE_SEEDS=<repo>/tests/Fuzz/corpus build/<preset>/bin/BagiEngineTests --gtest_filter=FuzzCorpusTest.WriteSeeds` and commit the files.
+- A finding becomes a regression seed `fix-<what>` in the folder of its target, committed with the fix and a test next to the fixed code. Seeds are never deleted to make a run pass.
+
+## The mutator
+
+`Mutate` / `ApplyMutation` (`FuzzMutation`): flip a bit, set a byte to 0 / 0x7F / 0x80 / 0xFF, set four bytes to `0xFFFFFFFF` / `0x7FFFFFFF` / `0x80000000` / 0 (length and count fields), insert, delete and duplicate a block, truncate, splice from another seed; at most 64 KiB. A kind the input cannot take (an empty input, three bytes for a word, no other seed) does the nearest one that fits and says which. Own generator only: the `<random>` distributions and `std::random_device` differ between platforms. A change of the generator or of a mutation changes every corpus run: `FuzzMutatorTest.SameSeedGivesTheSameBytes` pins a hash, update it on purpose.
