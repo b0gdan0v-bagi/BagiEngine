@@ -25,6 +25,19 @@ A hand of two humans and two computers; a human that drops mid-hand (reconnect g
 
 With the probe (`BagiRoomClientProbe --url ws://127.0.0.1:<port> --game cards`, prints `PROBE OK finished version=<n>` and exits 0): the probe plays a hand to the end; the same against a server whose `--origin` names only a web page (the probe sends no `Origin`, so it gets in); and a server that is killed (no close frames) after the probe's `PROBE first view` line, slowed by `--computer-delay-ms` so the hand is still running: the probe must exit non-zero with `PROBE FAILED` within 10 s (it ends on the first lost connection, it does not reconnect).
 
+## The Docker check
+
+`docker_check.py` checks the image of `tools/rooms/Dockerfile` the way a platform runs it. **Manual**, not a ctest entry: a cold build takes minutes (a warm one, a minute); the Linux preset builds no tests, so this is also the only run of the server on Linux.
+
+```bash
+python3 tools/rooms/docker_check.py                       # from the engine root: builds the image bagi-room-server-check, runs, checks
+python3 tools/rooms/docker_check.py --image bagi-room-server   # an image that exists: no build
+python3 tools/rooms/docker_check.py --context . --dockerfile engine/tools/rooms/Dockerfile   # from a game's root
+python3 -m unittest discover tools/rooms/tests            # the unit test: a fake runner, no docker
+```
+
+It runs the container with `PORT=9090`, `BAGI_ROOMS_TEST_GAMES=1`, `BAGI_ROOMS_ORIGINS` and `BAGI_ROOMS_SHUTDOWN_GRACE_MS`, publishes the port on a free one of 127.0.0.1, and checks: the listening line for `PORT` and the settings line in `docker logs`; `/healthz`; the Origin rules; a `cards` room (`joined`); `docker stop` ends with exit code 0 and the connected client is closed with 1001. Exit codes as `smoke.py` (77: no `docker` or no daemon). The container is always removed, the image stays. It reuses `Human` and `http_get` of `smoke.py`; every `docker` call goes through `run_docker`, which the unit test replaces.
+
 ## The judge
 
 A card id is `c<digit>_<digit>`, a whole token. A message to the client of seat S may name `c<S>_*` and the ids in its own `view.table`; any other id is a leak. Every text the client receives goes through it. The rule is also in `tests/BECore/Rooms/WireJudge.h`: **change both together**. The `cards-leaky` hand is the negative control: the smoke test fails when the judge finds nothing there. Binary and masked frames are not checked here (the gtest scenarios do).
