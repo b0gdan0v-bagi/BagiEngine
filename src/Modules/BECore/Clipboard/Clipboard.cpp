@@ -66,6 +66,9 @@ namespace BECore {
             return;  // called from a callback: the outer Update goes on by itself
         }
         if (!IsAvailable()) {
+            if (_backend != nullptr) {
+                EmitPasted();  // a page over plain http:// has no clipboard API, but its paste event still comes
+            }
             if (_readInFlight || !_waiting.empty()) {
                 _readInFlight = false;
                 _result.status = ClipboardStatus::Unavailable;

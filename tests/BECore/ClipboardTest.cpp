@@ -215,6 +215,16 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.pastes, (eastl::vector<eastl::string>{"from the page"}));
     }
 
+    TEST_F(ClipboardTest, APasteTheBackendAnnouncesComesEvenWhenTheApiIsNotAvailable) {
+        PasteRecorder recorder;
+        Fake().SetAvailable(false);
+        Fake().QueuePasted("from the page");
+
+        Board().Update();
+
+        EXPECT_EQ(recorder.pastes, (eastl::vector<eastl::string>{"from the page"}));
+    }
+
     TEST_F(ClipboardTest, AnnouncedPastesAreDroppedWhilePaused) {
         PasteRecorder recorder;
         {

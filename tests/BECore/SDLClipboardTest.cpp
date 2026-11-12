@@ -103,6 +103,47 @@ namespace BECore::Tests {
         EXPECT_FALSE(backend.IsAvailable());
     }
 
+    TEST(SDLClipboardTest, TheWebCodesMapToTheirStatuses) {
+        EXPECT_EQ(StatusFromWebCode(kWebCodeOk), ClipboardStatus::Ok);
+        EXPECT_EQ(StatusFromWebCode(kWebCodeEmpty), ClipboardStatus::Empty);
+        EXPECT_EQ(StatusFromWebCode(kWebCodeRefused), ClipboardStatus::Refused);
+        EXPECT_EQ(StatusFromWebCode(kWebCodeUnavailable), ClipboardStatus::Unavailable);
+    }
+
+    TEST(SDLClipboardTest, AnUnknownWebCodeIsRefused) {
+        EXPECT_EQ(StatusFromWebCode(-1), ClipboardStatus::Refused);
+        EXPECT_EQ(StatusFromWebCode(4), ClipboardStatus::Refused);
+        EXPECT_EQ(StatusFromWebCode(1000000), ClipboardStatus::Refused);
+    }
+
+    TEST(SDLClipboardTest, AGestureReadIsFreshInsideTheWindow) {
+        EXPECT_TRUE(IsGestureReadFresh(5000.0, 5000.0, kGestureReadWindowMs));
+        EXPECT_TRUE(IsGestureReadFresh(5500.0, 5000.0, kGestureReadWindowMs));
+        EXPECT_TRUE(IsGestureReadFresh(5000.0 + kGestureReadWindowMs, 5000.0, kGestureReadWindowMs));  // exactly at the window
+    }
+
+    TEST(SDLClipboardTest, AGestureReadIsNotFreshWhenOldFutureOrNotANumber) {
+        EXPECT_FALSE(IsGestureReadFresh(5000.0 + kGestureReadWindowMs + 0.5, 5000.0, kGestureReadWindowMs));
+        EXPECT_FALSE(IsGestureReadFresh(5000.0, 5000.5, kGestureReadWindowMs));  // started in the future
+        EXPECT_FALSE(IsGestureReadFresh(5000.0, std::numeric_limits<double>::quiet_NaN(), kGestureReadWindowMs));
+        EXPECT_FALSE(IsGestureReadFresh(std::numeric_limits<double>::quiet_NaN(), 5000.0, kGestureReadWindowMs));
+        EXPECT_FALSE(IsGestureReadFresh(5000.0, 5000.0, std::numeric_limits<double>::quiet_NaN()));
+        EXPECT_FALSE(IsGestureReadFresh(std::numeric_limits<double>::infinity(), 5000.0, kGestureReadWindowMs));
+        EXPECT_FALSE(IsGestureReadFresh(5000.0, 5000.0, -1.0));
+    }
+
+    TEST(SDLClipboardTest, AWebTextIsKeptOnlyForOk) {
+        const ClipboardText ok = MakeWebClipboardText(kWebCodeOk, "room 4711");
+        EXPECT_EQ(ok.status, ClipboardStatus::Ok);
+        EXPECT_EQ(ok.text, "room 4711");
+
+        for (const int code : {kWebCodeEmpty, kWebCodeRefused, kWebCodeUnavailable, 42}) {
+            const ClipboardText other = MakeWebClipboardText(code, "leaked");
+            EXPECT_NE(other.status, ClipboardStatus::Ok);
+            EXPECT_TRUE(other.text.empty()) << code;
+        }
+    }
+
     TEST(SDLClipboardTest, ThePlatformBackendExists) {
         EXPECT_NE(MakePlatformClipboardBackend().Get(), nullptr);
     }
