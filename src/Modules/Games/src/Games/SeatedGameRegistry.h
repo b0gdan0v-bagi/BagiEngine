@@ -8,6 +8,9 @@ namespace BECore {
     struct SeatedGameInfo {
         eastl::string name;
         int seatCount = 0;
+        /// The keys of the `options` of `create_room` that every member of a room may see before the start (the `lobby` message
+        /// carries them, `Room::SetLobbyOptions`): only these, and only with a boolean or integer value. The others stay the game's.
+        eastl::vector<eastl::string> publicOptions;
     };
 
     using SeatedGameFactory = std::function<eastl::unique_ptr<ISeatedGame>()>;

@@ -40,7 +40,7 @@ JSON text, one message per WebSocket text message, `{"v":1,"type":"...", ...}` (
 | `type` | Members | When |
 |--------|---------|------|
 | `joined` | `room`, `player`, `token`, `seat`, `host` | to the new member, or to a returning one. The **token is a secret and goes to its owner only** |
-| `lobby` | `room`, `game`, `phase` (`lobby`, `playing`, `finished`), `host` (the host's seat, -1 when no human is left), `seats: [{seat, kind: human\|computer\|empty, name?, connected?}]` | to every member when it changes. `name` and `connected` only for a human |
+| `lobby` | `room`, `game`, `phase` (`lobby`, `playing`, `finished`), `host` (the host's seat, -1 when no human is left), `seats: [{seat, kind: human\|computer\|empty, name?, connected?}]`, `options?` | to every member when it changes. `name` and `connected` only for a human. `options`: the public options of the room (`Room::SetLobbyOptions`, the keys of `SeatedGameInfo::publicOptions` with a boolean or integer value, at most `kMaxLobbyOptions`), absent when none; a reader keeps only booleans and integers |
 | `view` | `room`, `seat`, `version`, `finished`, `view`, `actions` | to a member when the game version moves or its seat changes. `view` is `ISeatedGame::GetSeatView`, `actions` is `GetSeatActions` |
 | `error` | `code`, `message`, `ref?` | `ref` is the type of the message it answers |
 | `left` | `reason` | the receiver is no longer in the room |
@@ -103,7 +103,7 @@ The host matters in the lobby (only the host starts). After the start it is only
 
 | Message | What the hub does |
 |---------|-------------------|
-| `create_room` | `already_in_room`, `unknown_game`, `too_many_rooms`, `internal_error` (no free room code in 16 draws); else a room with a new code, the sender is host on the lowest seat; `joined`, then `lobby`. The `options` are kept and handed to the game at `start` |
+| `create_room` | `already_in_room`, `unknown_game`, `too_many_rooms`, `internal_error` (no free room code in 16 draws); else a room with a new code, the sender is host on the lowest seat; `joined`, then `lobby`. The `options` are kept and handed to the game at `start`; their public part goes to the lobby |
 | `join_room` by code and name | `unknown_room` (a failed join), `room_full`, `game_started`, `bad_name`; else `joined`, then `lobby` to everybody |
 | `join_room` by token | `bad_token` (a failed join); else the member returns: a live connection of the same member is sent `left {replaced}` and closed with reason `replaced`, then `joined`, `lobby`, and `view` (only once the game has started) to the new one |
 | `choose_seat`, `start`, `action`, `leave` | `not_in_room` without a room; else the room's errors (`seat_taken`, `not_host`, `stale_action`, ...). A `stale_action` is followed by the current `view`. `leave` answers `left {left}`; the seat is freed (lobby) or played by a computer for good (game) |

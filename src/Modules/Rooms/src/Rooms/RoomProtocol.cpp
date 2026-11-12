@@ -295,6 +295,17 @@ namespace BECore {
             return ServerMessage(std::move(message));
         }
 
+        /// The boolean and integer members of `options`, at most kMaxLobbyOptions (what a `lobby` message may carry)
+        [[nodiscard]] Json PublicOptionValues(const Json& options) {
+            Json kept = Json::object();
+            for (auto it = options.begin(); it != options.end() && kept.size() < RoomLimits::kMaxLobbyOptions; ++it) {
+                if (it.value().is_boolean() || it.value().is_number_integer()) {
+                    kept[it.key()] = it.value();
+                }
+            }
+            return kept;
+        }
+
         [[nodiscard]] std::expected<ServerMessage, ControlError> ParseLobby(const Json& root) {
             LobbyMessage message;
             auto room = RequireString(root, "room");
@@ -332,6 +343,12 @@ namespace BECore {
                     return std::unexpected(seat.error());
                 }
                 message.seats.push_back(std::move(*seat));
+            }
+            if (const Json* options = FindJsonMember(root, "options"); options != nullptr) {
+                if (!options->is_object() || options->size() > RoomLimits::kMaxLobbyOptions) {
+                    return BadMessage(Format("'options' must be an object of at most {} members", RoomLimits::kMaxLobbyOptions));
+                }
+                message.options = PublicOptionValues(*options);
             }
             return ServerMessage(std::move(message));
         }
@@ -548,6 +565,9 @@ namespace BECore {
             seats.push_back(std::move(entry));
         }
         root["seats"] = std::move(seats);
+        if (lobby.options.is_object() && !lobby.options.empty()) {
+            root["options"] = lobby.options;
+        }
         return DumpJson(root);
     }
 

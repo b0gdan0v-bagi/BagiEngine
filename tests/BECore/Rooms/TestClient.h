@@ -98,6 +98,8 @@ namespace BECore::Tests {
                 return eastl::make_unique<Tracked<FakeSeatedGame>>(this, room);
             };
             EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake", FakeSeatedGame::kSeatCount}, factory));
+            // The same game with public options: the lobby shows `open` and `count` of `create_room`
+            EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake-public", FakeSeatedGame::kSeatCount, {"open", "count"}}, factory));
         }
 
         /// Small times for tests: no computer delay, the usual grace and timeouts
@@ -154,8 +156,8 @@ namespace BECore::Tests {
             SendText(id, SerializeClientMessage(message));
         }
 
-        void Create(ConnectionId id, eastl::string_view name, eastl::string_view game = "fake") {
-            Send(id, CreateRoomMessage{eastl::string(game), eastl::string(name), Json::object()});
+        void Create(ConnectionId id, eastl::string_view name, eastl::string_view game = "fake", Json options = Json::object()) {
+            Send(id, CreateRoomMessage{eastl::string(game), eastl::string(name), std::move(options)});
         }
 
         void JoinByName(ConnectionId id, eastl::string_view code, eastl::string_view name) {

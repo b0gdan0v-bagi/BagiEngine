@@ -268,6 +268,7 @@ namespace BECore {
         auto entry = eastl::make_unique<RoomEntry>();
         entry->room = eastl::make_unique<Room>(code, *info, _random, [registry, gameName]() { return registry->Create(gameName); }, _settings.timings);
         entry->options = message.options;
+        entry->room->SetLobbyOptions(message.options);
         entry->address = connection.address;
         entry->lastActivity = now;
         auto joined = entry->room->AddMember(message.name, now);

@@ -128,6 +128,13 @@ namespace BECore {
         /// What a `lobby` message says now
         [[nodiscard]] LobbySnapshot GetLobbySnapshot() const;
 
+        /**
+         * @brief Keeps the public part of the room's `options` (from `create_room`, untrusted) for the lobby: the members whose key is
+         *        in `SeatedGameInfo::publicOptions` and whose value is a boolean or an integer, at most kMaxLobbyOptions. Anything
+         *        else is left out, never refused (the game judges the options at `Start`). Bumps the lobby revision when it changed.
+         */
+        void SetLobbyOptions(const Json& options);
+
         /// Grows with every change that GetLobbySnapshot shows (a join, a leave, a seat, the host, the phase, an away or a return); a call
         /// that changes nothing leaves it as it is. Never goes back.
         [[nodiscard]] uint64_t GetLobbyRevision() const {
@@ -188,6 +195,8 @@ namespace BECore {
         /// 0 when no human is left
         PlayerId _host = 0;
         uint64_t _lobbyRevision = 1;
+        /// The public options the lobby shows (SetLobbyOptions)
+        Json _lobbyOptions = Json::object();
     };
 
 }  // namespace BECore

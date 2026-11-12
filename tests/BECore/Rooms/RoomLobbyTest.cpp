@@ -27,6 +27,35 @@ namespace BECore::Tests {
 
     }  // namespace
 
+    TEST(RoomLobbyTest, TheLobbyKeepsOnlyThePublicBooleanAndIntegerOptions) {
+        Room room("ABCDE", SeatedGameInfo{"fake", 4, {"hints", "hands", "name", "nested"}}, MakeSequence(7));
+        EXPECT_TRUE(room.GetLobbySnapshot().options.empty());
+        const uint64_t before = room.GetLobbyRevision();
+
+        Json options = Json::object();
+        options["hints"] = true;
+        options["hands"] = 8;
+        options["name"] = "a string is never shown";
+        options["nested"] = Json::object();
+        options["other"] = 1;  // not public
+        room.SetLobbyOptions(options);
+
+        Json expected = Json::object();
+        expected["hints"] = true;
+        expected["hands"] = 8;
+        EXPECT_EQ(room.GetLobbySnapshot().options, expected);
+        EXPECT_GT(room.GetLobbyRevision(), before);
+
+        // The same options again change nothing
+        const uint64_t after = room.GetLobbyRevision();
+        room.SetLobbyOptions(options);
+        EXPECT_EQ(room.GetLobbyRevision(), after);
+
+        // Not an object: nothing is public
+        room.SetLobbyOptions(Json::array());
+        EXPECT_TRUE(room.GetLobbySnapshot().options.empty());
+    }
+
     TEST(RoomLobbyTest, JoinFillsSeatsInOrderAndTheFirstIsHost) {
         Room room = MakeRoom();
         EXPECT_TRUE(room.IsEmpty());
