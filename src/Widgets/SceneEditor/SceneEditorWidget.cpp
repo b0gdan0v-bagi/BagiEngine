@@ -3,6 +3,7 @@
 #include "ComponentInspectors.h"
 #include "HierarchyPanel.h"
 #include "SceneConfigWriter.h"
+#include "ScenePick.h"
 #include "UIRectInspector.h"
 
 #include <BECore/Config/ConfigManager.h>
@@ -43,6 +44,7 @@ namespace BECore {
     bool SceneEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &SceneEditorWidget::OnCommand>(this);
         Subscribe<SelectSceneNodeRequestEvent, &SceneEditorWidget::OnSelectRequest>(this);
+        Subscribe<ViewportEditClickEvent, &SceneEditorWidget::OnViewportClick>(this);
         return true;
     }
 
@@ -55,7 +57,33 @@ namespace BECore {
 
     void SceneEditorWidget::OnSelectRequest(const SelectSceneNodeRequestEvent& event) {
         if (Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
-            HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node);
+            if (HierarchyPanel::Reveal(*scene, _hierarchy, event.scene, event.node)) {
+                _focusRequested = true;
+            }
+        }
+    }
+
+    void SceneEditorWidget::OnViewportClick(const ViewportEditClickEvent& event) {
+        constexpr uint8_t kLeftButton = 0;
+        Scene* scene = CoreManager::GetSceneManager().GetActiveScene();
+        if (event.button != kLeftButton || !scene) {
+            return;
+        }
+        const ScenePick::Hit hit = ScenePick::PickAt(*scene, event.x, event.y);
+        if (!hit.node || !HierarchyPanel::Reveal(*scene, _hierarchy, scene, hit.node)) {
+            return;
+        }
+        _focusRequested = true;
+        if (!hit.element) {
+            return;
+        }
+        // The node is the selection now: show the element in the "UI elements" section (RenderInspector keeps a UI selection of the selected node)
+        if (const IntrusivePtr<UICanvasComponent> canvas = hit.node->GetComponent<UICanvasComponent>()) {
+            if (UIElement* const element = ScenePick::FindElement(*canvas, hit.element)) {
+                ResetUISelection();
+                _uiSelectionNode = hit.node;
+                _selectedUIElement = IntrusivePtr<UIElement>(element);
+            }
         }
     }
 
@@ -67,6 +95,10 @@ namespace BECore {
 
     void SceneEditorWidget::Update() {
         ImGui::SetNextWindowSize(ImVec2(1000.0f, 600.0f), ImGuiCond_FirstUseEver);
+        if (_focusRequested) {
+            ImGui::SetNextWindowFocus();
+            _focusRequested = false;
+        }
         if (!ImGui::Begin("Scene Editor")) {
             ImGui::End();
             return;
