@@ -9,7 +9,7 @@
 int main(int argc, char* argv[]) {
     using namespace BECore;
 
-    const auto args = ParseRoomServerArgs(argc, argv);
+    const auto args = LoadRoomServerArgs(argc, argv);
     if (!args) {
         std::fprintf(stderr, "BagiRoomServer: %s\n", args.error().c_str());
         return 1;

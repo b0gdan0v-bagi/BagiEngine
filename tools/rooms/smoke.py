@@ -8,7 +8,9 @@ Scenarios, on a server with --test-games --computer-delay-ms 0 --reconnect-grace
   * a room of two humans and two computers plays a hand to the end;
   * a human drops mid-hand, a computer plays its seat once the grace has passed, the human returns with its token and plays on;
   * the same hand on `cards-leaky` must make the judge report a leak (the negative control: a judge that cannot fail proves nothing);
-  * a server started with --origin https://good.example answers 403 to another Origin and takes the listed one.
+  * a server started with --origin https://good.example answers 403 to another Origin and takes the listed one;
+  * a server started with PORT=0 in the environment and no --port listens on a port of its own and takes a client (the variable is read);
+  * a plain GET /healthz gets 200 and `ok`, GET / gets 400.
 With the probe (the C++ client of RoomClient, a process of its own; its scenarios are skipped with a line when there is none):
   * the probe hosts a room, plays it to the end and prints `PROBE OK`;
   * the same against a server whose --origin list names only a web page: the probe sends no Origin and gets in;
@@ -21,7 +23,9 @@ Exit code: 0 passed, 1 failed, 77 skipped (the executable does not exist; ctest 
 
 import argparse
 import json
+import os
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -55,6 +59,10 @@ TOTAL_PLAYS = 12
 GOOD_ORIGIN = "https://good.example"
 EVIL_ORIGIN = "https://evil.example"
 HTTP_FORBIDDEN = 403
+HTTP_OK = 200
+HTTP_BAD_REQUEST = 400
+HEALTH_PATH = "/healthz"
+DEFAULT_PORT = 8080  # what a server without --port and PORT would listen on
 PROBE_EXE_NAME = "BagiRoomClientProbe"
 PROBE_OK = "PROBE OK"
 PROBE_FIRST_VIEW = "PROBE first view"
@@ -96,8 +104,11 @@ def find_leaked_card_ids(text: str, seat: int) -> list[str]:
 class RoomServer:
     """One BagiRoomServer process on a port it picked itself (--port 0), its output in a temporary file."""
 
-    def __init__(self, exe: Path, extra_args: list[str]):
-        self.command = [str(exe), "--test-games", "--port", "0", "--computer-delay-ms", "0", "--reconnect-grace-ms", str(RECONNECT_GRACE_MS), "--bind", "loopback", *extra_args]
+    def __init__(self, exe: Path, extra_args: list[str], environment: dict[str, str] | None = None):
+        # A server given PORT in its environment gets no --port: the variable is what is tried
+        port_flags = [] if environment and "PORT" in environment else ["--port", "0"]
+        self.command = [str(exe), "--test-games", *port_flags, "--computer-delay-ms", "0", "--reconnect-grace-ms", str(RECONNECT_GRACE_MS), "--bind", "loopback", *extra_args]
+        self.environment = {**os.environ, **(environment or {})}
         self.exe = exe
         self.port = 0
         self._log_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
@@ -107,7 +118,7 @@ class RoomServer:
 
     def __enter__(self) -> "RoomServer":
         with open(self.log_path, "wb") as log:
-            self._process = subprocess.Popen(self.command, cwd=self.exe.parent, stdout=log, stderr=subprocess.STDOUT)
+            self._process = subprocess.Popen(self.command, cwd=self.exe.parent, env=self.environment, stdout=log, stderr=subprocess.STDOUT)
         self.port = self._wait_for_listening()
         return self
 
@@ -386,6 +397,35 @@ def scenario_origin(port: int) -> None:
         human.close()
 
 
+def scenario_environment_port(port: int) -> None:
+    check(port != DEFAULT_PORT, f"the server listens on {port}, the default: PORT=0 in its environment was not read")
+    human = Human(port)
+    human.send({"type": "ping"})
+    human.wait_for("pong")
+    human.close()
+
+
+def http_get(port: int, path: str) -> tuple[int, str]:
+    """A plain request over a raw socket (no Upgrade): the status of the answer and its text, read to the end of the stream."""
+    with socket.create_connection(("127.0.0.1", port), timeout=IO_TIMEOUT_SECONDS) as connection:
+        connection.sendall(f"GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n".encode())
+        chunks = []
+        while chunk := connection.recv(4096):
+            chunks.append(chunk)
+    text = b"".join(chunks).decode(errors="replace")
+    status_line = text.split("\r\n", 1)[0].split(" ")
+    check(len(status_line) >= 2 and status_line[1].isdigit(), f"GET {path} got no HTTP answer: {text!r}")
+    return int(status_line[1]), text
+
+
+def scenario_health(port: int) -> None:
+    status, text = http_get(port, HEALTH_PATH)
+    check(status == HTTP_OK, f"GET {HEALTH_PATH} got {status}, not {HTTP_OK}: {text!r}")
+    check(text.endswith("\r\n\r\nok"), f"the health answer has no body `ok`: {text!r}")
+    status, text = http_get(port, "/")
+    check(status == HTTP_BAD_REQUEST, f"a plain GET / got {status}, not {HTTP_BAD_REQUEST}: {text!r}")
+
+
 def scenario_probe(server: RoomServer, probe: Path | None) -> None:
     assert probe is not None
     with Probe(probe, server.port) as running:
@@ -407,16 +447,18 @@ def by_port(scenario: Callable[[int], None]) -> Callable[[RoomServer, Path | Non
     return lambda server, _probe: scenario(server.port)
 
 
-# (name, server arguments, scenario, whether it needs the probe)
-SCENARIOS: list[tuple[str, list[str], Callable[[RoomServer, Path | None], None], bool]] = [
-    ("hand", [], by_port(scenario_hand), False),
-    ("reconnect", [], by_port(scenario_reconnect), False),
-    ("leaky", [], by_port(scenario_leaky), False),
-    ("origin", ["--origin", GOOD_ORIGIN], by_port(scenario_origin), False),
-    ("probe", [], scenario_probe, True),
+# (name, server arguments, scenario, whether it needs the probe, the server's extra environment)
+SCENARIOS: list[tuple[str, list[str], Callable[[RoomServer, Path | None], None], bool, dict[str, str]]] = [
+    ("hand", [], by_port(scenario_hand), False, {}),
+    ("reconnect", [], by_port(scenario_reconnect), False, {}),
+    ("leaky", [], by_port(scenario_leaky), False, {}),
+    ("origin", ["--origin", GOOD_ORIGIN], by_port(scenario_origin), False, {}),
+    ("environment-port", [], by_port(scenario_environment_port), False, {"PORT": "0"}),
+    ("health", [], by_port(scenario_health), False, {}),
+    ("probe", [], scenario_probe, True, {}),
     # The probe sends no Origin, and a server that lists only a web page lets a program in
-    ("probe-no-origin", ["--origin", GOOD_ORIGIN], scenario_probe, True),
-    ("probe-server-gone", ["--computer-delay-ms", str(PROBE_GONE_COMPUTER_DELAY_MS)], scenario_probe_gone, True),
+    ("probe-no-origin", ["--origin", GOOD_ORIGIN], scenario_probe, True, {}),
+    ("probe-server-gone", ["--computer-delay-ms", str(PROBE_GONE_COMPUTER_DELAY_MS)], scenario_probe_gone, True, {}),
 ]
 
 
@@ -442,13 +484,13 @@ def main() -> int:
     if probe is None:
         print("no probe: the probe scenarios are skipped")
 
-    for name, flags, scenario, needs_probe in SCENARIOS:
+    for name, flags, scenario, needs_probe, environment in SCENARIOS:
         if needs_probe and probe is None:
             print(f"{name}: skipped (no probe)", flush=True)
             continue
         print(f"{name}: running", flush=True)
         try:
-            with RoomServer(exe.resolve(), flags) as server:
+            with RoomServer(exe.resolve(), flags, environment) as server:
                 scenario(server, probe.resolve() if probe else None)
         except (SmokeFailure, OSError, ConnectionClosed, HandshakeError, ValueError) as error:
             print(f"FAILED ({name}): {error}")

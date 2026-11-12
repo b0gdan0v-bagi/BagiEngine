@@ -9,6 +9,9 @@ namespace BECore {
     /// The transport allows this many sockets above the hub's own limit, for connections that are still in their handshake
     inline constexpr size_t kHandshakeConnectionReserve = 64;
 
+    /// The path a plain `GET` answers 200 `ok` on, for the health check of a hosting platform (HandshakePolicy::healthPath)
+    inline constexpr const char* kRoomServerHealthPath = "/healthz";
+
     /// Everything a RoomWebSocketServer is configured with. The defaults are the limits of the room server (RoomServer/CLAUDE.md);
     /// a test overrides what it needs, and a server executable fills the struct from its arguments or its environment
     struct RoomServerSettings {

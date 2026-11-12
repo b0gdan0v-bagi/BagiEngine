@@ -8,16 +8,16 @@ Built only with `ENGINE_WITH_REMOTE_CONTROL` (the web build has no sockets). Mod
 
 | File | Purpose |
 |------|---------|
-| `RoomServerSettings.h` | `RoomServerSettings`: port, bind scope, handshake policy, transport limits, the hub's `RoomHubSettings`, the tick interval, the ping interval, the injected clock and `RandomFn` |
+| `RoomServerSettings.h` | `RoomServerSettings` and `kRoomServerHealthPath`: port, bind scope, handshake policy, transport limits, the hub's `RoomHubSettings`, the tick interval, the ping interval, the injected clock and `RandomFn` |
 | `RoomWebSocketServer.h/.cpp` | `RoomWebSocketServer(registry, settings)`: `Start()`, `Stop()`, `GetPort()`, `IsRunning()` |
-| `RoomServerArgs.h/.cpp` | `RoomServerArgs` (what a server is started with: a plain struct), `ParseRoomServerArgs(argc, argv)`, `GetRoomServerUsage()`, `ToSettings(args)` |
+| `RoomServerArgs.h/.cpp` | `RoomServerArgs` (what a server is started with: a plain struct), `LoadRoomServerArgs(argc, argv)` (environment, then flags), `ParseRoomServerArgs(argc, argv, base)`, `ReadRoomServerEnvironment(lookup)`, `GetRoomServerUsage()`, `ToSettings(args)` |
 | `RoomServerMain.h/.cpp` | `RunRoomServer(registry, args)`: logging, the server, the listening line, the loop until SIGINT / SIGTERM |
 | `DemoCardGame.h/.cpp` | `DemoCardGame`, the card game of the tests and of `--test-games` (not for a product), `LeakyDemoCardGame` (negative control), `FindHiddenCards` |
 | `server/main.cpp` | the executable `BagiRoomServer`; outside `src/`, so the module glob does not take it |
 
 ## A server main
 
-A game's own server is a `main` that fills a `SeatedGameRegistry` and calls `RunRoomServer(registry, args)`; `server/main.cpp` is the model (`be_add_headless_executable(<Name> SOURCES main.cpp LINK RoomServerModule ...)`: the engine core, no window, no `Application`). `args` comes from `ParseRoomServerArgs(argc, argv)` or is filled by hand (the environment, in the hosting slice). `RunRoomServer` makes a console log sink in code (a server has no `LoggerConfig.xml`), prints `BagiRoomServer listening on ws://0.0.0.0:<port>` to stdout (flushed: a program that starts the server waits for that line; `127.0.0.1` with `--bind loopback`), drains the log every 50 ms on the calling thread, and ends with exit code 0 on SIGINT or SIGTERM (1 when it cannot listen, the message on stderr). `BagiRoomServer` registers `cards` and `cards-leaky` only with `--test-games`; without it the registry is empty and it exits 1.
+A game's own server is a `main` that fills a `SeatedGameRegistry` and calls `RunRoomServer(registry, args)`; `server/main.cpp` is the model (`be_add_headless_executable(<Name> SOURCES main.cpp LINK RoomServerModule ...)`: the engine core, no window, no `Application`). `args` comes from `LoadRoomServerArgs(argc, argv)` (the environment of a hosting platform, then the command line over it) or is filled by hand. `RunRoomServer` makes a console log sink in code (a server has no `LoggerConfig.xml`), prints `BagiRoomServer listening on ws://0.0.0.0:<port>` to stdout (flushed: a program that starts the server waits for that line; `127.0.0.1` with `--bind loopback`), drains the log every 50 ms on the calling thread, and ends with exit code 0 on SIGINT or SIGTERM (1 when it cannot listen, the message on stderr). `BagiRoomServer` registers `cards` and `cards-leaky` only with `--test-games`; without it the registry is empty and it exits 1.
 
 Run: `build/<preset>/bin/BagiRoomServer --test-games --port 0`.
 
@@ -32,7 +32,11 @@ Run: `build/<preset>/bin/BagiRoomServer --test-games --port 0`.
 | `--ping-interval-ms N` | liveness pings, 0 is off (20000) |
 | `--test-games`, `--help` | |
 
-Numbers are range-checked; an unknown flag or a bad number is an error with a message and exit code 1.
+**Environment** (a hosting platform sets no flags): `PORT` and `BAGI_ROOMS_BIND`, `_ORIGINS` (comma-separated, items trimmed, empty ones skipped), `_MAX_CONNECTIONS`, `_MAX_PER_ADDRESS`, `_COMPUTER_DELAY_MS`, `_RECONNECT_GRACE_MS`, `_PING_INTERVAL_MS` and `_TEST_GAMES` (`1|0|true|false`; the first live check of the demo server only), each with the range of its flag. The order is default, then variable, then flag (`--origin` on the command line replaces the list of the variable); an empty variable is unset. `ReadRoomServerEnvironment` takes the lookup as a function so a test needs no real environment.
+
+Numbers are range-checked; an unknown flag or a bad number or variable is an error with a message (naming the flag or the variable) and exit code 1.
+
+**Health:** `ToSettings` sets `policy.healthPath` to `/healthz`, so a plain `GET /healthz` gets 200 `ok` (`RemoteControl/CLAUDE.md`, "Security"); the platform's health check needs it.
 
 ## Threads
 
@@ -75,13 +79,13 @@ In public mode (`policy.loopbackOnly = false`) `Origin` keeps foreign **web page
 
 ## For later slices
 
-- Hosting (slice 4: Docker, the settings from the environment into `RoomServerArgs`).
+- Hosting (slice 4): the Docker image and the log and drain work are still to come in this slice.
 - **TLS is not here**: the server speaks plain `ws://`; `wss://` is the proxy's job (a hosting platform terminates it). Behind a proxy every client has the proxy's address, so `--max-per-address 0`, and `X-Forwarded-For` is not read: the per-address limit has nothing better to count until it is.
 - IPv4 only (`Socket`). Windows and Linux are not run for this module on the development machine: the POSIX code is the macOS code, the Winsock branch of `Socket.cpp` is written and unchecked.
 - The lobby has no timeout of its own (`Rooms/CLAUDE.md`).
 
 ## Tests
 
-`tests/BECore/Rooms/RoomServerArgsTest.cpp`: the flags and `ToSettings`. `tests/BECore/Rooms/RoomWebSocketServerTest.cpp`: the server on port 0 against real sockets (`RoomSocketClient.h`: the raw client of `WebSocketTestClient.h` plus the messages of the protocol, with a cursor to read forward) and `FakeSeatedGame`. Covers the exchange (create, join by code, order of replies), what the hub's close and the transport's limits look like on the wire, an abrupt drop, the origin and per-address checks, `Stop()` under load, a client that never reads, the liveness pings on a manual clock, two servers. The bounded queue itself has no test of its own.
+`tests/BECore/Rooms/RoomServerArgsTest.cpp`: the flags, the environment (a fake lookup) and `ToSettings`. `tests/BECore/Rooms/RoomWebSocketServerTest.cpp`: the server on port 0 against real sockets (`RoomSocketClient.h`: the raw client of `WebSocketTestClient.h` plus the messages of the protocol, with a cursor to read forward) and `FakeSeatedGame`. Covers the exchange (create, join by code, order of replies), what the hub's close and the transport's limits look like on the wire, an abrupt drop, the origin and per-address checks, `Stop()` under load, a client that never reads, the liveness pings on a manual clock, two servers. The bounded queue itself has no test of its own.
 
 `tests/BECore/Rooms/RoomServerScenarioTest.cpp`: the scenarios of `RoomsScenarioTest` over real sockets and the real server on port 0 with `DemoCardGame` (`cards`) and `LeakyDemoCardGame` (`cards-leaky`): two humans and two computers, four humans, a human that drops mid-hand (manual clock: nothing is played inside the grace, a computer plays past it, the token brings the human back with `joined`, `lobby`, `view`; a second socket with the token replaces the first with `replaced`; the token is refused after `leave`), two rooms at once, and hostile clients (garbage bytes, junk text, an oversize message, a flood, a half-open handshake) while another room's hand finishes. **The wire judge** (`WireJudge.h`) is the test's only eye, since the game is inside the server: a message to seat S may name the card ids `c<S>_*` and those of its own `view.table`, any other id is a leak. It judges every text frame of every client, and the clients also count masked and binary frames from the server (there must be none). The negative control plays the same hand on `cards-leaky` and fails if the judge finds nothing; the judge's own rule is tested on hand-made texts. The half-open case waits for the handshake timeout (5 s), so that test takes that long. `tools/rooms/smoke.py` plays the same kinds of hands against the executable from another process, with the judge ported to Python (`tools/rooms/CLAUDE.md`).

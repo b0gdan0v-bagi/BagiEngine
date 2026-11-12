@@ -7,23 +7,62 @@ namespace BECore {
         constexpr size_t kMaxConnectionsLimit = 4096;
         constexpr int64_t kMaxMillisecondsLimit = 24 * 60 * 60 * 1000;
         constexpr size_t kMaxOriginBytes = 200;
+        constexpr const char* kTestGamesVariable = "BAGI_ROOMS_TEST_GAMES";
 
-        std::expected<int64_t, eastl::string> ParseNumber(eastl::string_view flag, eastl::string_view text, int64_t min, int64_t max) {
+        /// The settings that take a value, by the flag and the environment variable that set them
+        enum class Option : uint8_t { Port, Bind, Origin, MaxConnections, MaxPerAddress, ComputerDelay, ReconnectGrace, PingInterval };
+
+        struct OptionInfo {
+            Option option;
+            const char* flag;
+            const char* variable;
+        };
+
+        constexpr std::array kOptions{
+            OptionInfo{Option::Port, "--port", "PORT"},
+            OptionInfo{Option::Bind, "--bind", "BAGI_ROOMS_BIND"},
+            OptionInfo{Option::Origin, "--origin", "BAGI_ROOMS_ORIGINS"},
+            OptionInfo{Option::MaxConnections, "--max-connections", "BAGI_ROOMS_MAX_CONNECTIONS"},
+            OptionInfo{Option::MaxPerAddress, "--max-per-address", "BAGI_ROOMS_MAX_PER_ADDRESS"},
+            OptionInfo{Option::ComputerDelay, "--computer-delay-ms", "BAGI_ROOMS_COMPUTER_DELAY_MS"},
+            OptionInfo{Option::ReconnectGrace, "--reconnect-grace-ms", "BAGI_ROOMS_RECONNECT_GRACE_MS"},
+            OptionInfo{Option::PingInterval, "--ping-interval-ms", "BAGI_ROOMS_PING_INTERVAL_MS"},
+        };
+
+        const OptionInfo* FindOptionByFlag(eastl::string_view flag) {
+            for (const OptionInfo& info : kOptions) {
+                if (flag == info.flag) {
+                    return &info;
+                }
+            }
+            return nullptr;
+        }
+
+        eastl::string_view Trim(eastl::string_view text) {
+            constexpr eastl::string_view kBlanks = " \t\r\n";
+            const size_t first = text.find_first_not_of(kBlanks);
+            if (first == eastl::string_view::npos) {
+                return {};
+            }
+            return text.substr(first, text.find_last_not_of(kBlanks) - first + 1);
+        }
+
+        std::expected<int64_t, eastl::string> ParseNumber(eastl::string_view name, eastl::string_view text, int64_t min, int64_t max) {
             int64_t value = 0;
             const char* begin = text.data();
             const char* end = text.data() + text.size();
             const auto [stop, error] = std::from_chars(begin, end, value);
             if (text.empty() || error != std::errc() || stop != end) {
-                return std::unexpected(Format("{} needs a number, got '{}'", flag, text));
+                return std::unexpected(Format("{} needs a number, got '{}'", name, text));
             }
             if (value < min || value > max) {
-                return std::unexpected(Format("{} has to be from {} to {}, got {}", flag, min, max, value));
+                return std::unexpected(Format("{} has to be from {} to {}, got {}", name, min, max, value));
             }
             return value;
         }
 
-        std::expected<std::chrono::milliseconds, eastl::string> ParseMilliseconds(eastl::string_view flag, eastl::string_view text) {
-            const auto value = ParseNumber(flag, text, 0, kMaxMillisecondsLimit);
+        std::expected<std::chrono::milliseconds, eastl::string> ParseMilliseconds(eastl::string_view name, eastl::string_view text) {
+            const auto value = ParseNumber(name, text, 0, kMaxMillisecondsLimit);
             if (!value) {
                 return std::unexpected(value.error());
             }
@@ -42,10 +81,68 @@ namespace BECore {
             return IsOriginAllowed(origin, policy);
         }
 
+        /// Sets one value of @p args; @p name (a flag or a variable) is what the error message names, so both ways in share the ranges
+        std::expected<void, eastl::string> ApplyOption(RoomServerArgs& args, Option option, eastl::string_view name, eastl::string_view value) {
+            switch (option) {
+                case Option::Bind:
+                    if (value == "loopback") {
+                        args.bind = SocketBind::Loopback;
+                    } else if (value == "any") {
+                        args.bind = SocketBind::AnyAddress;
+                    } else {
+                        return std::unexpected(Format("{} is 'loopback' or 'any', got '{}'", name, value));
+                    }
+                    return {};
+                case Option::Origin:
+                    if (!IsUsableOrigin(value)) {
+                        return std::unexpected(Format("{} needs an origin such as https://example.com:8443 (scheme, host and optional port, no path; or *), got '{}'", name, value));
+                    }
+                    args.origins.emplace_back(value);
+                    return {};
+                case Option::ComputerDelay:
+                case Option::ReconnectGrace:
+                case Option::PingInterval: {
+                    const auto milliseconds = ParseMilliseconds(name, value);
+                    if (!milliseconds) {
+                        return std::unexpected(milliseconds.error());
+                    }
+                    if (option == Option::ComputerDelay) {
+                        args.computerDelay = *milliseconds;
+                    } else if (option == Option::ReconnectGrace) {
+                        args.reconnectGrace = *milliseconds;
+                    } else {
+                        args.pingInterval = *milliseconds;
+                    }
+                    return {};
+                }
+                case Option::Port:
+                case Option::MaxConnections:
+                case Option::MaxPerAddress: {
+                    const bool isPort = option == Option::Port;
+                    const bool hasZero = isPort || option == Option::MaxPerAddress;
+                    const int64_t max = isPort ? std::numeric_limits<uint16_t>::max() : static_cast<int64_t>(kMaxConnectionsLimit);
+                    const auto number = ParseNumber(name, value, hasZero ? 0 : 1, max);
+                    if (!number) {
+                        return std::unexpected(number.error());
+                    }
+                    if (isPort) {
+                        args.port = static_cast<uint16_t>(*number);
+                    } else if (option == Option::MaxConnections) {
+                        args.maxConnections = static_cast<size_t>(*number);
+                    } else {
+                        args.maxConnectionsPerAddress = static_cast<size_t>(*number);
+                    }
+                    return {};
+                }
+            }
+            return {};
+        }
+
     }  // namespace
 
-    std::expected<RoomServerArgs, eastl::string> ParseRoomServerArgs(int argc, const char* const* argv) {
-        RoomServerArgs args;
+    std::expected<RoomServerArgs, eastl::string> ParseRoomServerArgs(int argc, const char* const* argv, RoomServerArgs base) {
+        RoomServerArgs args = std::move(base);
+        bool hasFlagOrigins = false;
         for (int i = 1; i < argc; ++i) {
             const eastl::string_view flag = argv[i];
             if (flag == "--help" || flag == "-h") {
@@ -57,9 +154,8 @@ namespace BECore {
                 continue;
             }
 
-            const bool isKnown = flag == "--port" || flag == "--bind" || flag == "--origin" || flag == "--max-connections" || flag == "--max-per-address" || flag == "--computer-delay-ms" ||
-                                 flag == "--reconnect-grace-ms" || flag == "--ping-interval-ms";
-            if (!isKnown) {
+            const OptionInfo* option = FindOptionByFlag(flag);
+            if (option == nullptr) {
                 return std::unexpected(Format("unknown argument '{}' (see --help)", flag));
             }
             if (i + 1 >= argc) {
@@ -67,49 +163,66 @@ namespace BECore {
             }
             const eastl::string_view value = argv[++i];
 
-            if (flag == "--bind") {
-                if (value == "loopback") {
-                    args.bind = SocketBind::Loopback;
-                } else if (value == "any") {
-                    args.bind = SocketBind::AnyAddress;
-                } else {
-                    return std::unexpected(Format("--bind is 'loopback' or 'any', got '{}'", value));
-                }
-            } else if (flag == "--origin") {
-                if (!IsUsableOrigin(value)) {
-                    return std::unexpected(Format("--origin needs an origin such as https://example.com:8443 (scheme, host and optional port, no path; or *), got '{}'", value));
-                }
-                args.origins.emplace_back(value);
-            } else if (flag == "--computer-delay-ms" || flag == "--reconnect-grace-ms" || flag == "--ping-interval-ms") {
-                const auto milliseconds = ParseMilliseconds(flag, value);
-                if (!milliseconds) {
-                    return std::unexpected(milliseconds.error());
-                }
-                if (flag == "--computer-delay-ms") {
-                    args.computerDelay = *milliseconds;
-                } else if (flag == "--reconnect-grace-ms") {
-                    args.reconnectGrace = *milliseconds;
-                } else {
-                    args.pingInterval = *milliseconds;
-                }
-            } else {
-                const bool isPort = flag == "--port";
-                const bool hasZero = isPort || flag == "--max-per-address";
-                const int64_t max = isPort ? std::numeric_limits<uint16_t>::max() : static_cast<int64_t>(kMaxConnectionsLimit);
-                const auto number = ParseNumber(flag, value, hasZero ? 0 : 1, max);
-                if (!number) {
-                    return std::unexpected(number.error());
-                }
-                if (isPort) {
-                    args.port = static_cast<uint16_t>(*number);
-                } else if (flag == "--max-connections") {
-                    args.maxConnections = static_cast<size_t>(*number);
-                } else {
-                    args.maxConnectionsPerAddress = static_cast<size_t>(*number);
-                }
+            if (option->option == Option::Origin && !hasFlagOrigins) {
+                // The origins of the command line replace those of the environment
+                hasFlagOrigins = true;
+                args.origins.clear();
+            }
+            if (auto applied = ApplyOption(args, option->option, flag, value); !applied) {
+                return std::unexpected(applied.error());
             }
         }
         return args;
+    }
+
+    std::expected<RoomServerArgs, eastl::string> ReadRoomServerEnvironment(const RoomServerEnvironmentLookup& lookup) {
+        RoomServerArgs args;
+        const auto read = [&lookup](const char* name) -> eastl::string_view {
+            const char* text = lookup(name);
+            return text != nullptr ? eastl::string_view(text) : eastl::string_view();
+        };
+
+        for (const OptionInfo& info : kOptions) {
+            const eastl::string_view value = read(info.variable);
+            if (value.empty()) {
+                continue;
+            }
+            if (info.option == Option::Origin) {
+                // A comma-separated list: items trimmed, empty items skipped
+                eastl::string_view rest = value;
+                while (!rest.empty()) {
+                    const size_t comma = rest.find(',');
+                    const eastl::string_view item = Trim(rest.substr(0, comma));
+                    rest = comma == eastl::string_view::npos ? eastl::string_view() : rest.substr(comma + 1);
+                    if (item.empty()) {
+                        continue;
+                    }
+                    if (auto applied = ApplyOption(args, info.option, info.variable, item); !applied) {
+                        return std::unexpected(applied.error());
+                    }
+                }
+            } else if (auto applied = ApplyOption(args, info.option, info.variable, value); !applied) {
+                return std::unexpected(applied.error());
+            }
+        }
+
+        const eastl::string_view testGames = read(kTestGamesVariable);
+        if (!testGames.empty()) {
+            if (testGames == "1" || testGames == "true") {
+                args.testGames = true;
+            } else if (testGames != "0" && testGames != "false") {
+                return std::unexpected(Format("{} is 1, 0, true or false, got '{}'", kTestGamesVariable, testGames));
+            }
+        }
+        return args;
+    }
+
+    std::expected<RoomServerArgs, eastl::string> LoadRoomServerArgs(int argc, const char* const* argv) {
+        auto environment = ReadRoomServerEnvironment([](const char* name) { return std::getenv(name); });
+        if (!environment) {
+            return std::unexpected(environment.error());
+        }
+        return ParseRoomServerArgs(argc, argv, std::move(*environment));
     }
 
     eastl::string GetRoomServerUsage() {
@@ -125,12 +238,20 @@ namespace BECore {
                       "  --reconnect-grace-ms N   how long a dropped player keeps the seat (default {})\n"
                       "  --ping-interval-ms N     a ping after this much silence, a drop after twice that, 0 is off (default {})\n"
                       "  --test-games             register the test games (cards-leaky) next to cards\n"
-                      "  --help                   this text\n",
-                      defaults.port, defaults.maxConnections, defaults.maxConnectionsPerAddress, defaults.computerDelay.count(), defaults.reconnectGrace.count(), defaults.pingInterval.count());
+                      "  --help                   this text\n"
+                      "\n"
+                      "Environment (a flag wins over its variable, a variable over the default; an empty variable is unset):\n"
+                      "  PORT=N  BAGI_ROOMS_BIND  BAGI_ROOMS_ORIGINS (comma-separated)  BAGI_ROOMS_MAX_CONNECTIONS  BAGI_ROOMS_MAX_PER_ADDRESS\n"
+                      "  BAGI_ROOMS_COMPUTER_DELAY_MS  BAGI_ROOMS_RECONNECT_GRACE_MS  BAGI_ROOMS_PING_INTERVAL_MS\n"
+                      "  {}=1  the --test-games flag\n"
+                      "GET {} answers 200 ok (a hosting platform's health check).\n",
+                      defaults.port, defaults.maxConnections, defaults.maxConnectionsPerAddress, defaults.computerDelay.count(), defaults.reconnectGrace.count(), defaults.pingInterval.count(),
+                      kTestGamesVariable, kRoomServerHealthPath);
     }
 
     RoomServerSettings ToSettings(const RoomServerArgs& args) {
         RoomServerSettings settings;
+        settings.policy.healthPath = kRoomServerHealthPath;
         settings.port = args.port;
         settings.bind = args.bind;
         settings.policy.loopbackOnly = false;

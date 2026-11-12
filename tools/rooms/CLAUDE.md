@@ -21,7 +21,7 @@ Exit code 0 passed, 1 failed (the message says what and, for a server that died,
 
 ## Scenarios
 
-A hand of two humans and two computers; a human that drops mid-hand (reconnect grace 300 ms) and returns with its token; the same hand on `cards-leaky`; a server with `--origin` (a foreign `Origin` gets 403, the listed one and a program without one get in).
+A hand of two humans and two computers; a human that drops mid-hand (reconnect grace 300 ms) and returns with its token; the same hand on `cards-leaky`; a server with `--origin` (a foreign `Origin` gets 403, the listed one and a program without one get in); a server started with `PORT=0` in its environment and no `--port` (the variable is read: it listens on a port of its own and takes a client); a plain `GET /healthz` over a raw socket gets 200 and `ok`, `GET /` gets 400.
 
 With the probe (`BagiRoomClientProbe --url ws://127.0.0.1:<port> --game cards`, prints `PROBE OK finished version=<n>` and exits 0): the probe plays a hand to the end; the same against a server whose `--origin` names only a web page (the probe sends no `Origin`, so it gets in); and a server that is killed (no close frames) after the probe's `PROBE first view` line, slowed by `--computer-delay-ms` so the hand is still running: the probe must exit non-zero with `PROBE FAILED` within 10 s (it ends on the first lost connection, it does not reconnect).
 
