@@ -5,14 +5,16 @@ caller's transaction; a write that changes what a Vikunja task shows queues the 
 
 import json
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from psycopg import Connection
 from psycopg.types.json import Jsonb
 
 from todo_markdown import ID_RE, PLAN_NAME_RE, STATUSES, checklist_progress, extract_summary, read_checklist
 
-PLAN_KINDS = ("owner", "slice", "review")
-ENTRY_FIELDS = ("title", "body", "status", "status_date", "status_note", "branch", "base", "origin", "stage", "plan")
+PLAN_KINDS = ("owner", "slice", "review", "stages", "remarks")
+SLICINGS = ("through",)
+ENTRY_FIELDS = ("title", "body", "status", "status_date", "status_note", "branch", "base", "origin", "stage", "plan", "slicing", "cost_cap")
 MIRRORED_FIELDS = ("title", "body", "status", "status_date", "status_note", "branch", "stage", "plan")
 
 
@@ -96,27 +98,43 @@ def status_line(entry: dict) -> str:
 
 
 def plan_progress(conn: Connection, entries: list[dict]) -> dict[str, dict]:
-    """entry id -> {plan, progress}: the owner's plan when the entry names one, else its newest slice plan."""
+    """entry id -> {plan, progress, slices, stages}: the owner's plan when the entry names one, else its newest slice
+    plan; `slices` sums the boxes of every slice plan of the entry (`count`, `done`, `total`), `stages` names its stage
+    plan (kind 'stages') or None."""
     if not entries:
         return {}
     ids = [entry["id"] for entry in entries]
     names = [entry["plan"] for entry in entries if entry["plan"]]
     rows = conn.execute(
         """SELECT name, entry_id, kind, content, updated_at FROM plans
-           WHERE name = ANY(%s) OR (entry_id = ANY(%s) AND kind = 'slice') ORDER BY updated_at DESC""",
+           WHERE name = ANY(%s) OR (entry_id = ANY(%s) AND kind IN ('slice', 'stages')) ORDER BY updated_at DESC""",
         (names, ids),
     ).fetchall()
     by_name = {row["name"]: row for row in rows}
     newest_slice: dict[str, dict] = {}
+    slices: dict[str, dict] = {}
+    stages: dict[str, str] = {}
     for row in rows:
-        if row["kind"] == "slice" and row["entry_id"] not in newest_slice:
+        if row["kind"] == "stages" and row["entry_id"] not in stages:
+            stages[row["entry_id"]] = row["name"]
+        if row["kind"] != "slice":
+            continue
+        if row["entry_id"] not in newest_slice:
             newest_slice[row["entry_id"]] = row
+        done = checklist_progress(read_checklist(row["content"], row["name"])) or {"done": 0, "total": 0}
+        total = slices.setdefault(row["entry_id"], {"count": 0, "done": 0, "total": 0})
+        total["count"] += 1
+        total["done"] += done["done"]
+        total["total"] += done["total"]
     result = {}
     for entry in entries:
         plan = by_name.get(entry["plan"]) if entry["plan"] else newest_slice.get(entry["id"])
+        shown = {"slices": slices.get(entry["id"]), "stages": stages.get(entry["id"])}
         if plan is not None:
             checklist = read_checklist(plan["content"], plan["name"])
-            result[entry["id"]] = {"name": plan["name"], "checklist": checklist, "progress": checklist_progress(checklist)}
+            shown.update(name=plan["name"], checklist=checklist, progress=checklist_progress(checklist))
+        if plan is not None or shown["slices"] or shown["stages"]:
+            result[entry["id"]] = shown
     return result
 
 
@@ -135,8 +153,12 @@ def to_json(entry: dict, plan: dict | None = None, with_body: bool = True, links
         "origin": entry["origin"],
         "stage": entry["stage"],
         "plan": entry["plan"],
-        "planShown": plan["name"] if plan else None,
-        "planProgress": plan["progress"] if plan else None,
+        "planShown": plan.get("name") if plan else None,
+        "planProgress": plan.get("progress") if plan else None,
+        "slices": plan.get("slices") if plan else None,
+        "stagesPlan": plan.get("stages") if plan else None,
+        "slicing": entry["slicing"],
+        "costCap": float(entry["cost_cap"]) if entry["cost_cap"] is not None else None,
         "summary": extract_summary(entry["body"]),
         "version": entry["version"],
         "createdAt": entry["created_at"].isoformat(),
@@ -201,6 +223,10 @@ def _check_fields(changes: dict) -> None:
         raise StoreError(422, f"plan '{changes['plan']}' must be a bare file name like 'my-plan.md'")
     if changes.get("stage") is not None and not isinstance(changes["stage"], int):
         raise StoreError(422, "stage must be a number")
+    if changes.get("slicing") is not None and changes["slicing"] not in SLICINGS:
+        raise StoreError(422, f"slicing must be one of {', '.join(SLICINGS)} (or cleared)")
+    if changes.get("cost_cap") is not None and not (isinstance(changes["cost_cap"], (int, float)) and changes["cost_cap"] > 0):
+        raise StoreError(422, "costCap must be a positive number of dollars (or cleared)")
 
 
 def create_entry(conn: Connection, data: dict, actor: str) -> dict:
@@ -233,6 +259,8 @@ def create_entry(conn: Connection, data: dict, actor: str) -> dict:
 
 
 def _jsonable(value):
+    if isinstance(value, Decimal):
+        return float(value)
     return value.isoformat() if isinstance(value, date) else value
 
 

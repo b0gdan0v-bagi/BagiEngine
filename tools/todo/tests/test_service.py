@@ -130,7 +130,7 @@ def test_an_entry_from_before_migration_003_survives_it_with_no_base(clean_datab
         conn.execute("INSERT INTO areas (id, title) VALUES ('engine', 'Engine')")
         conn.execute("INSERT INTO entries (id, area, title, status, branch) VALUES ('old', 'engine', 'Old', 'in progress', 'todo/old')")
         conn.commit()
-        assert db.migrate(conn) == ["003_branch_origin.sql", "004_dependencies.sql"]
+        assert db.migrate(conn) == ["003_branch_origin.sql", "004_dependencies.sql", "005_slicing.sql"]
         row = conn.execute("SELECT branch, base, origin FROM entries WHERE id = 'old'").fetchone()
     assert row == {"branch": "todo/old", "base": None, "origin": None}
 
@@ -188,6 +188,34 @@ def test_plans_belong_to_an_entry_and_give_its_progress(api):
     assert api.get("/dashboard/plan/todo-loop-no-ci.md", auth=("x", TOKEN), headers={"Authorization": ""}).status_code == 200
 
 
+def test_slicing_and_the_cost_cap_are_set_cleared_and_checked(api):
+    entry = add(api)
+    assert entry["slicing"] is None and entry["costCap"] is None
+    through = api.patch("/api/v1/entries/no-ci", json={"slicing": "through", "costCap": 12.5}).json()
+    assert through["slicing"] == "through" and through["costCap"] == 12.5
+    same = api.patch("/api/v1/entries/no-ci", json={"costCap": 12.5}).json()
+    assert same["version"] == through["version"]  # the same cap is no change
+    assert api.patch("/api/v1/entries/no-ci", json={"slicing": "sometimes"}).status_code == 422
+    assert api.patch("/api/v1/entries/no-ci", json={"costCap": -1}).status_code == 422
+    cleared = api.patch("/api/v1/entries/no-ci", json={"clear": ["slicing", "costCap"]}).json()
+    assert cleared["slicing"] is None and cleared["costCap"] is None
+    created = add(api, id="through-from-start", slicing="through", costCap=3)
+    assert created["slicing"] == "through" and created["costCap"] == 3
+
+
+def test_an_entry_sums_its_slice_plans_and_names_its_stage_plan(api):
+    add(api)
+    assert api.get("/api/v1/entries/no-ci").json()["slices"] is None
+    api.put("/api/v1/plans/todo-loop-no-ci.md", json={"content": "- [x] a\n- [x] b\n", "entry": "no-ci", "kind": "slice"}).raise_for_status()
+    api.put("/api/v1/plans/todo-loop-no-ci-s2.md", json={"content": "- [x] c\n- [ ] d\n- [ ] e\n", "entry": "no-ci", "kind": "slice"}).raise_for_status()
+    api.put("/api/v1/plans/todo-loop-no-ci-stages.md", json={"content": "- [x] 1\n- [ ] 2\n", "entry": "no-ci", "kind": "stages"}).raise_for_status()
+    api.put("/api/v1/plans/todo-loop-no-ci-remarks-1.md", json={"content": "fix the name", "entry": "no-ci", "kind": "remarks"}).raise_for_status()
+    entry = api.get("/api/v1/entries/no-ci").json()
+    assert entry["planShown"] == "todo-loop-no-ci-s2.md" and entry["planProgress"] == {"done": 1, "total": 3}
+    assert entry["slices"] == {"count": 2, "done": 3, "total": 5}
+    assert entry["stagesPlan"] == "todo-loop-no-ci-stages.md"
+
+
 def test_every_write_queues_the_entry_for_the_mirror_once(api, clean_database):
     add(api)
     api.patch("/api/v1/entries/no-ci", json={"title": "Changed"}).raise_for_status()
@@ -202,5 +230,5 @@ def test_the_migrations_run_once(clean_database):
 
     with psycopg.connect(clean_database) as conn:
         conn.row_factory = psycopg.rows.dict_row
-        assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql", "003_branch_origin.sql", "004_dependencies.sql"]
+        assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql", "003_branch_origin.sql", "004_dependencies.sql", "005_slicing.sql"]
         assert db.migrate(conn) == []

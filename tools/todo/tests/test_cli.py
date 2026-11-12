@@ -168,6 +168,19 @@ def test_edit_clears_and_sets_fields(cli):
     assert "HTTP 409" in err
 
 
+def test_slicing_cost_cap_and_note(cli):
+    cli("add", "sample", "--area", "engine", "--title", "A sample")
+    cli("edit", "sample", "--slicing", "through", "--cost-cap", "20")
+    out, _ = cli("show", "sample")
+    assert "slicing: through, cap $20" in out
+    cli("claim", "sample", "--branch", "todo/sample")
+    out, _ = cli("note", "sample", "--note", "through: slice 1 of 3 approved at abc123")
+    assert "in progress" in out and "slice 1 of 3 approved" in out
+    cli("edit", "sample", "--slicing", "none", "--cost-cap", "none")
+    out, _ = cli("show", "sample", "--json")
+    assert '"slicing": null' in out and '"costCap": null' in out
+
+
 def test_plans_go_through_a_folder_outside_git(cli, plans_dir, tmp_path):
     cli("add", "sample", "--area", "engine", "--title", "A sample")
     plan = plans_dir / "todo-loop-sample.md"

@@ -6,10 +6,22 @@
     let payload = { loading: true };
     const saved = vscode.getState() || {};
     const openSteps = new Set(saved.openSteps || []);
-    const collapsed = new Set(saved.collapsed || []); // worker cards folded to their status lines
+    // Worker cards are folded to a few lines by default; this set holds the ones the owner unfolded.
+    const expanded = new Set(saved.expanded || []);
+    const isFolded = (name) => !expanded.has(name);
 
     function save() {
-        vscode.setState({ openSteps: [...openSteps], collapsed: [...collapsed], feedOpen: saved.feedOpen });
+        vscode.setState({ openSteps: [...openSteps], expanded: [...expanded], feedOpen: saved.feedOpen });
+    }
+
+    // The secondary buttons of a card behind "...": the main ones stay in sight.
+    function more(buttons) {
+        const box = el("details", "more");
+        box.appendChild(el("summary", "", "\u2026"));
+        const list = el("div", "more-list");
+        buttons.filter(Boolean).forEach((b) => list.appendChild(b));
+        box.appendChild(list);
+        return box;
     }
 
     function el(tag, className, text) {
@@ -79,16 +91,37 @@
         return badge;
     }
 
+    // The bar is the whole entry when it has several slice plans ("slice 3: 120/190 over 3 slices"), else its plan.
     function progress(entry) {
         const p = entry && entry.planProgress;
-        if (!p || !p.total) return null;
+        const all = entry && entry.slices && entry.slices.count > 1 ? entry.slices : null;
+        const shown = all || p;
+        if (!shown || !shown.total) return null;
         const box = el("div", "progress");
         const bar = el("div", "bar");
         const fill = el("div", "fill");
-        fill.style.width = `${Math.round((100 * p.done) / p.total)}%`;
+        fill.style.width = `${Math.round((100 * shown.done) / shown.total)}%`;
         bar.appendChild(fill);
-        box.append(bar, el("span", "muted", `plan ${p.done}/${p.total}`));
+        const text = all ? `${all.count} slices ${all.done}/${all.total}${p && p.total ? ` · this slice ${p.done}/${p.total}` : ""}` : `plan ${p.done}/${p.total}`;
+        box.append(bar, el("span", "muted", text));
         return box;
+    }
+
+    // Through (one branch, slices without a merge between) and the money against the entry's cap.
+    function throughLine(entry) {
+        if (!entry) return null;
+        const line = el("div", "through-line");
+        const on = entry.slicing === "through";
+        const cost = entryCost(entry.id);
+        const toggle = button(on ? "through" : "slice by slice", { cmd: "through", entry: entry.id, on: !on }, on
+            ? "Through: the next slice starts on the same branch as soon as this one is approved; you merge once. Click to turn it off."
+            : "Each slice waits for your merge. Click to turn on through (an optional cost cap is asked).", on ? "toggle on" : "toggle");
+        line.appendChild(toggle);
+        if (cost !== null || entry.costCap) {
+            const over = entry.costCap && cost !== null && cost >= entry.costCap;
+            line.appendChild(el("span", over ? "warn-text" : "muted", `${dollars(cost || 0)}${entry.costCap ? ` of $${entry.costCap}` : ""}`));
+        }
+        return line;
     }
 
     function head(label, h) {
@@ -206,13 +239,13 @@
 
     function workerCard(worker) {
         const entry = worker.entry;
-        const folded = collapsed.has(worker.name);
+        const folded = isFolded(worker.name);
         const card = el("section", (worker.waiting ? "card waiting" : worker.limited ? "card limited" : "card") + (folded ? " collapsed" : ""));
         const top = el("div", "card-top");
         const fold = el("button", "fold", folded ? "\u25B8" : "\u25BE");
         fold.title = folded ? "Expand: every detail of the worker" : "Collapse: only the status lines";
         fold.addEventListener("click", () => {
-            folded ? collapsed.delete(worker.name) : collapsed.add(worker.name);
+            folded ? expanded.add(worker.name) : expanded.delete(worker.name);
             save();
             render();
         });
@@ -261,16 +294,25 @@
             const events = (worker.activity && worker.activity.events) || [];
             const said = [...events].reverse().find((e) => e.kind === "say");
             if (said) {
-                const now = el("div", "now");
-                now.append(el("span", "label", worker.active && !worker.endedTurn ? "Now" : "Last"), el("span", "time", ago(said.time)), el("div", "said", plain(said.text)));
+                const now = el("div", "now one-line");
+                now.append(el("span", "label", worker.active && !worker.endedTurn ? "Now" : "Last"), el("span", "time", ago(said.time)), el("span", "said", plain(said.text)));
                 card.appendChild(now);
+            }
+            const main = mainAction(worker);
+            if (main) {
+                const actions = el("div", "actions");
+                actions.appendChild(main);
+                card.appendChild(actions);
             }
             return card;
         }
         if (entry) {
             if (entry.status === "review") card.appendChild(el("div", "note ok", "in review" + (entry.statusNote ? `: ${entry.statusNote}` : "")));
+            else if (entry.statusNote) card.appendChild(el("div", "note", entry.statusNote));
             const bar = progress(entry);
             if (bar) card.appendChild(bar);
+            const through = throughLine(entry);
+            if (through) card.appendChild(through);
         }
         const heads = el("div", "heads");
         [head("game", worker.head), head("engine", worker.engine)].forEach((h) => h && heads.appendChild(h));
@@ -311,24 +353,30 @@
         }
 
         const actions = el("div", "actions");
-        if (worker.session) {
-            if (!worker.waiting) actions.append(button("Attach", { cmd: "attach", worker: worker.k }, "claude attach: open the session"));
-            actions.append(button("Log", { cmd: "logs", worker: worker.k }, "claude logs"));
-        }
-        actions.append(button("Folder", { cmd: "folder", worker: worker.k }, "open the worker in a new window"), button("Terminal", { cmd: "terminal", worker: worker.k }));
-        if (entry) actions.append(button("Plan", { cmd: "plan", entry: entry.id }, "~/.claude/plans/todo-loop-<branch>.md"));
-        if (entry && entry.branch) actions.append(button("Build & run", { cmd: "run", worker: worker.k }, "configure, build the product and start it in this worker folder (its branch as it is now)"));
+        if (worker.session && !worker.waiting) actions.append(button("Attach", { cmd: "attach", worker: worker.k }, "claude attach: open the session"));
         if (worker.session && !worker.limited && worker.session.status !== "busy" && entry && entry.status !== "review")
             actions.append(button("Relaunch", { cmd: "relaunch", worker: worker.k }, "worker.py relaunch <k>: continue this session's conversation in the background (a loop that ended before its entry reached review)"));
         if (worker.active) actions.append(button("Stop", { cmd: "stop", worker: worker.k }, "worker.py stop", true));
-        else {
-            actions.append(
-                button("Update", { cmd: "update", worker: worker.k }, "worker.py update: detach the game and engine/ at the tips of their base branches (main, games/...); the branch it held is kept; refused with uncommitted changes"),
-                button("Fast start", { cmd: "fastStart", worker: worker.k }, "worker.py start <k> now: /todo-loop with the slices, loop arguments and report session of the settings (todoWorkers.*)", "primary")
-            );
-        }
+        else actions.append(button("Fast start", { cmd: "fastStart", worker: worker.k }, "worker.py start <k> now: /todo-loop with the slices, loop arguments and report session of the settings (todoWorkers.*)", "primary"));
+        actions.append(more([
+            worker.session && button("Log", { cmd: "logs", worker: worker.k }, "claude logs"),
+            entry && button("Plan", { cmd: "plan", entry: entry.id }, "the plan the entry shows (its newest slice plan)"),
+            entry && entry.branch && button("Build & run", { cmd: "run", worker: worker.k }, "configure, build the product and start it in this worker folder (its branch as it is now)"),
+            !worker.active && button("Update", { cmd: "update", worker: worker.k }, "worker.py update: detach the game and engine/ at the tips of their base branches (main, games/...); the branch it held is kept; refused with uncommitted changes"),
+            button("Folder", { cmd: "folder", worker: worker.k }, "open the worker in a new window"),
+            button("Terminal", { cmd: "terminal", worker: worker.k }),
+        ]));
         card.appendChild(actions);
         return card;
+    }
+
+    // The one action a folded card offers: what the worker needs from the owner, else what it can do next.
+    function mainAction(worker) {
+        if (worker.waiting || worker.limited) return null; // their own lines carry Answer and Relaunch
+        const entry = worker.entry;
+        if (entry && entry.status === "review") return button("Review", { cmd: "review", entry: entry.id }, "the changes of the branch against its base, in one diff editor", "primary");
+        if (worker.active) return null;
+        return button("Fast start", { cmd: "fastStart", worker: worker.k }, "worker.py start <k> now", "primary");
     }
 
     function reviewCard(entry, state) {
@@ -340,8 +388,12 @@
         card.append(top, el("div", "title", entry.title));
         if (entry.statusNote) card.appendChild(el("div", "note", entry.statusNote));
         card.appendChild(head("branch", { branch: entry.branch }));
-        const cost = entryCost(entry.id);
-        if (cost !== null) card.appendChild(el("div", "muted", `cost so far ${dollars(cost)} (every loop session that held it, at API prices)`));
+        const bar = progress(entry);
+        if (bar) card.appendChild(bar);
+        const through = throughLine(entry);
+        if (through) card.appendChild(through);
+        const first = (entry.blockedBy || []).filter((b) => b.status !== "closed").map((b) => b.id);
+        if (first.length) card.appendChild(el("div", "warn soft", `merge first: ${first.join(", ")} (it waits for them; worker.py merge refuses it until they are closed)`));
         // worker.py list --store: what a merge meets (review_checks)
         if (entry.conflicts && entry.conflicts.length) card.appendChild(el("div", "warn", `conflicts with ${entry.base}: ${entry.conflicts.join(", ")}`));
         (entry.conflictsWith || []).forEach((c) => card.appendChild(el("div", "warn", `conflicts with ${c.id} (also in review): ${c.files.join(", ")}; the second to merge needs a hand`)));
@@ -372,17 +424,20 @@
             card.appendChild(el("div", "warn", warning));
         }
         const actions = el("div", "actions");
-        const gated = [
+        const main = [
             button("Review", { cmd: "review", entry: entry.id }, "the changes of the branch against its base, in one diff editor"),
+            button("Merge + test", { cmd: "mergeTest", entry: entry.id }, "Quick merge, then configure, build and ctest the main checkout in a task terminal; the result lands on the panel", away || (entry.conflicts && entry.conflicts.length) || first.length ? "" : "primary"),
+            button("Return with remarks", { cmd: "remarks", entry: entry.id }, "write what to change; the worker that holds the branch fixes it on the same branch, gets it reviewed and brings it back to review"),
+        ];
+        const rest = [
             button("Review with Claude", { cmd: "claudeReview", entry: entry.id }, "a terminal in the main checkout runs claude with a read-only review of the branch against its base: findings with file:line and a verdict"),
-            button("Merge + test", { cmd: "mergeTest", entry: entry.id }, "Quick merge, then configure, build and ctest the main checkout in a task terminal; the result lands on the panel", away || (entry.conflicts && entry.conflicts.length) ? "" : "primary"),
             button("Quick merge", { cmd: "quickMerge", entry: entry.id }, "worker.py merge: a dialog with the commits, then merge --no-ff, close the entry, delete the branch (and the engine pointer); no build"),
             button("Build & run", { cmd: "run", entry: entry.id }, "configure, build and start the product in the worker folder that holds the branch"),
             button("Merge with Claude", { cmd: "merge", entry: entry.id }, "a terminal in the main checkout runs claude '/todo-merge <branch>': it reports, asks, and builds when the base moved"),
-        ];
-        if (payload.shotsTool) gated.push(button("Shots", { cmd: "shots", entry: entry.id }, "screenshots of the branch (its worker) and of the base (the main checkout) with the repository's tools/ui_shots.py, side by side in a tab"));
-        if (away) gated.forEach((b) => (b.disabled = true));
-        actions.append(...gated, button("Plan", { cmd: "plan", entry: entry.id }));
+            payload.shotsTool ? button("Shots", { cmd: "shots", entry: entry.id }, "screenshots of the branch (its worker) and of the base (the main checkout) with the repository's tools/ui_shots.py, side by side in a tab") : null,
+        ].filter(Boolean);
+        if (away) [...main, ...rest].forEach((b) => (b.disabled = true));
+        actions.append(...main, more([...rest, button("Plan", { cmd: "plan", entry: entry.id })]));
         card.appendChild(actions);
         return card;
     }
@@ -395,11 +450,11 @@
         if (limited) bar.append(button(`Relaunch all (${limited})`, { cmd: "relaunchAll" }, "worker.py relaunch: continue every session the usage limit stopped (press it after the reset)", "primary"));
         const names = payload.state ? payload.state.workers.map((w) => w.name) : [];
         if (names.length) {
-            const all = names.every((n) => collapsed.has(n));
+            const all = names.every((n) => isFolded(n));
             const toggle = el("button", "", all ? "Expand all" : "Collapse all");
             toggle.title = all ? "every detail of every worker" : "every worker card folded to its status lines";
             toggle.addEventListener("click", () => {
-                names.forEach((n) => (all ? collapsed.delete(n) : collapsed.add(n)));
+                names.forEach((n) => (all ? expanded.add(n) : expanded.delete(n)));
                 save();
                 render();
             });
@@ -443,7 +498,8 @@
 
         root.appendChild(el("h2", "", `Workers (${state.workers.length})`));
         if (!state.workers.length) root.appendChild(el("p", "muted", "No worker folders. Make them with: python3 engine/tools/todo/worker.py create 3"));
-        state.workers.forEach((w) => root.appendChild(workerCard(w)));
+        const rank = (w) => (w.waiting ? 0 : w.limited ? 1 : 2);
+        [...state.workers].sort((a, b) => rank(a) - rank(b) || a.k - b.k).forEach((w) => root.appendChild(workerCard(w)));
 
         root.appendChild(el("h2", "", `Review: ${state.review.length} to merge`));
         if (!state.review.length) root.appendChild(el("p", "muted", "Nothing waits for /todo-merge."));
@@ -454,7 +510,7 @@
         box.open = saved.feedOpen !== false;
         box.addEventListener("toggle", () => {
             saved.feedOpen = box.open;
-            vscode.setState({ ...saved, openSteps: [...openSteps], collapsed: [...collapsed] });
+            vscode.setState({ ...saved, openSteps: [...openSteps], expanded: [...expanded] });
         });
         box.appendChild(el("summary", "", `Feed (${items.length})`));
         items.slice(0, 40).forEach((item) => {
