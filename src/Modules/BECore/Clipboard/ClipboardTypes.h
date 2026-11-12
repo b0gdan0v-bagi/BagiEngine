@@ -5,13 +5,10 @@ namespace BECore {
     /// The longest text the clipboard service moves in either direction: a longer one is Refused, so a hostile clipboard cannot make the game copy megabytes
     inline constexpr size_t kMaxClipboardBytes = 1024 * 1024;
 
-    /// The outcome of a clipboard call; none of them is an assert or a crash
-    enum class ClipboardStatus : uint8_t {
-        Ok,           ///< the text is there (a write: the platform took it)
-        Empty,        ///< the clipboard holds no text
-        Refused,      ///< the platform or the user said no, or the text is longer than kMaxClipboardBytes
-        Unavailable,  ///< no clipboard API at all: no backend, a page over plain http://
-    };
+    /// The outcome of a clipboard call; none of them is an assert or a crash.
+    /// Ok: the text is there (a write: the platform took it). Empty: the clipboard holds no text. Refused: the platform or the user said no, or the text is longer than
+    /// kMaxClipboardBytes. Unavailable: no clipboard API at all (no backend, a page over plain http://).
+    CORE_ENUM(ClipboardStatus, uint8_t, Ok, Empty, Refused, Unavailable)
 
     /// `ok`, `empty`, `refused` or `unavailable`: the word of the control API
     constexpr eastl::string_view ToString(ClipboardStatus status) {

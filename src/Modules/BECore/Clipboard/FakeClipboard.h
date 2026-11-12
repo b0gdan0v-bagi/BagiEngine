@@ -2,6 +2,7 @@
 
 #include <BECore/Clipboard/Clipboard.h>
 #include <BECore/GameManager/CoreManager.h>
+#include <Events/ClipboardEvents.h>
 
 namespace BECore {
 
@@ -100,6 +101,21 @@ namespace BECore {
         int _pollsLeft = 0;
         int _writeCount = 0;
         int _readCount = 0;
+    };
+
+    /// Collects the pastes that reach the game while it is alive
+    class PasteRecorder : public SubscriptionHolder {
+    public:
+        PasteRecorder() {
+            Subscribe<ClipboardEvents::PasteEvent, &PasteRecorder::OnPaste>(this);
+        }
+
+        eastl::vector<eastl::string> pastes;
+
+    private:
+        void OnPaste(const ClipboardEvents::PasteEvent& event) {
+            pastes.push_back(event.text);
+        }
     };
 
     /// Installs a backend on the clipboard of CoreManager and puts the old one back, so a test never leaks a fake into the next

@@ -9,21 +9,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// Collects the pastes that reach the game while it is alive
-        class PasteRecorder : public SubscriptionHolder {
-        public:
-            PasteRecorder() {
-                Subscribe<ClipboardEvents::PasteEvent, &PasteRecorder::OnPaste>(this);
-            }
-
-            eastl::vector<eastl::string> pastes;
-
-        private:
-            void OnPaste(const ClipboardEvents::PasteEvent& event) {
-                pastes.push_back(event.text);
-            }
-        };
-
         /// Pauses the game for the length of a test and gives it back
         class ScopedPause {
         public:
@@ -63,14 +48,13 @@ namespace BECore::Tests {
 
         eastl::vector<ClipboardText> answers;
 
-    private:
-        IntrusivePtr<FakeClipboard> _fake;
-        std::optional<ScopedClipboardBackend> _scope;
-
-    protected:
         FakeClipboard& Fake() {
             return *_fake;
         }
+
+    private:
+        IntrusivePtr<FakeClipboard> _fake;
+        std::optional<ScopedClipboardBackend> _scope;
     };
 
     TEST_F(ClipboardTest, ATextWrittenIsReadBack) {
@@ -146,7 +130,7 @@ namespace BECore::Tests {
         EXPECT_EQ(answers.size(), 1u);
     }
 
-    TEST_F(ClipboardTest, ARequestsDuringOneDeferredReadShareItsResultInOrder) {
+    TEST_F(ClipboardTest, RequestsDuringOneDeferredReadShareItsResultInOrder) {
         Fake().SetContent("shared");
         Fake().SetDeferred(2);
         eastl::vector<int> order;

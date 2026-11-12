@@ -23,6 +23,7 @@ The text clipboard of the game: `CoreManager::GetClipboard()` (`Clipboard`), wit
 
 - **A callback never runs inside `RequestText`.** Every read is answered from `Update()`, which `CoreManager::OnGameCycle` calls right after `ProcessEvents()` (inside "Input") for every `FrameKind`, a Held frame too. A browser read is asynchronous, and one rule is simpler than two. No backend or `IsAvailable() == false` is answered with `Unavailable` at the next `Update()`.
 - **One read in flight.** Requests that arrive while it runs share its result. Callbacks run in the order of the requests.
+- **No cancel.** `RequestText` cannot be withdrawn and a read on the web may wait up to 60 s: a callback that captures an object must be sure the object outlives the answer (a handle or a guard, never a bare `this` of something that can die first).
 - **A callback may ask again.** The new request is answered at the next `Update()` (no unbounded loop in one `Update()`). A callback must not call `Update()` (ignored).
 - **`SetBackend` during a read** asks the new backend again for the requests of the old read, first in line.
 - **Pastes.** `RequestPaste()` is a `RequestText` whose `Ok` answer is emitted as `PasteEvent` (the shortcut of the SDL backend uses it); `Empty` and `Refused` emit nothing. `Update()` also asks `TakePasted` (up to a few per call; also when `IsAvailable()` is false: a page over plain `http://` has no API but its `paste` event comes) and emits `PasteEvent` for each, but **drops a paste while `CoreManager::GetPause().IsPaused()`**: a paste the game was not running for is not kept for later. An answer to a request is not dropped by a pause.
@@ -43,7 +44,7 @@ The Emscripten half of `SDLClipboard.cpp` (`WebClipboardBackend`, made by `MakeP
 - **`PollRead`** costs one `EM_ASM_INT` only while a read is pending; a read that has not finished after `kReadTimeoutMs` (a prompt nobody answers) or was lost is `Refused`, so the facade never waits for ever. The text is copied in two steps (`lengthBytesUTF8`, then `stringToUTF8` into a buffer the C++ side sized) and a text over `kMaxClipboardBytes` is `Refused` before it is copied.
 - **`TakePasted`**: the `paste` listener of the window queues `clipboardData.getData('text/plain')` (a short queue, the oldest dropped); an empty one is `Empty` and the facade ignores it. One `EM_ASM_INT` per frame.
 - A refusal or a missing API is a value everywhere: one `LOG_WARNING` per reason per page load, no log per call.
-- **Not checked:** the Emscripten half is compiled and run by nobody here (no emsdk in this checkout). Its text was compiled to an object with the emsdk of another checkout (no errors), the JavaScript parsed and run against a mock `navigator.clipboard`; a real browser (Chrome, Safari desktop and iOS with the paste bubble and a write inside a tap, Firefox, a denied permission, plain `http://`) is the owner's look, best with a game that has `Copy` / `Paste` buttons.
+- **Not checked:** no real browser has run it (Chrome, Safari desktop and iOS with the paste bubble and a write inside a tap, Firefox, a denied permission, plain `http://`): the owner's look, best with a game that has `Copy` / `Paste` buttons.
 
 ## Control API
 

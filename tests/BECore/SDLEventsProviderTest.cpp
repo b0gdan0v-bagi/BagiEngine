@@ -104,21 +104,6 @@ namespace BECore::Tests {
             }
         };
 
-        /// Collects the pastes that reach the game while it is alive
-        class PasteRecorder : public SubscriptionHolder {
-        public:
-            PasteRecorder() {
-                Subscribe<ClipboardEvents::PasteEvent, &PasteRecorder::OnPaste>(this);
-            }
-
-            eastl::vector<eastl::string> pastes;
-
-        private:
-            void OnPaste(const ClipboardEvents::PasteEvent& e) {
-                pastes.push_back(e.text);
-            }
-        };
-
         /// Consumes every mouse event it is offered
         class ConsumingHandler : public IUIInputHandler {
         public:

@@ -11,21 +11,6 @@ namespace BECore::Tests {
 
     namespace {
 
-        /// Collects the pastes that reach the game while it is alive
-        class PasteRecorder : public SubscriptionHolder {
-        public:
-            PasteRecorder() {
-                Subscribe<ClipboardEvents::PasteEvent, &PasteRecorder::OnPaste>(this);
-            }
-
-            eastl::vector<eastl::string> pastes;
-
-        private:
-            void OnPaste(const ClipboardEvents::PasteEvent& event) {
-                pastes.push_back(event.text);
-            }
-        };
-
         eastl::string MakeRequest(int64_t id, std::string_view method, const Json& params = Json()) {
             Json request = Json::object();
             request["id"] = id;
