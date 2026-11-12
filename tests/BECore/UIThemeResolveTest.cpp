@@ -4,18 +4,16 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIDropdown.h>
-#include <BECore/UI/UIImage.h>
 #include <BECore/UI/UIImageComponent.h>
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIPanel.h>
 #include <BECore/UI/UIProgressBar.h>
-#include <BECore/UI/UISlider.h>
+#include <BECore/UI/UISliderComponent.h>
+#include <BECore/UI/UISwitchComponent.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
-#include <BECore/UI/UIToggle.h>
 #include <BECore/UI/UIVars.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -35,9 +33,9 @@ namespace BECore::Tests {
         constexpr Color kLightShadow{0, 0, 0, 120};
         constexpr Color kDarkShadow{0, 0, 0, 220};
 
-        // A Screen canvas in window pixels (output 800 x 600, scale 1). Plate (10, 10, 100 x 40) is filled by a token; Hovered and Twin (10, 60 and 10, 110) are buttons whose hover
-        // fill is a token and the same colour written out; Bar and Switch (300, 10 and 300, 60) are parts of controls with token colours; Menu (10, 160) is a dropdown whose options (its popup) have a
-        // token fill; Hidden is not shown; Ghost has a token the table lacks
+        // A Screen canvas in window pixels (output 800 x 600, scale 1). Plate (10, 10, 100 x 40) is filled by a token; Hovered and Twin (10, 60 and 10, 110) are buttons (elements with a clicker)
+        // whose hover fill is a token and the same colour written out; Bar and Switch (300, 10 and 300, 60) are a bar and a switch with token colours; Menu (10, 160) is a dropdown whose options (its
+        // popup) have a token fill; Hidden is not shown; Ghost has a token the table lacks
         constexpr const char* kThemeScreenXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -45,18 +43,20 @@ namespace BECore::Tests {
       <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
         <elements>
           <element type="UIElement" name="Plate" x="10" y="10" width="100" height="40" color="@panel"/>
-          <element type="UIButton" name="Hovered" x="10" y="60" width="100" height="40" color="@panel" hoverColor="@hover"/>
-          <element type="UIButton" name="Twin" x="10" y="110" width="100" height="40" color="240,240,230,255" hoverColor="200,220,255,255"/>
+          <element type="UIElement" name="Hovered" x="10" y="60" width="100" height="40" color="@panel" hoverColor="@hover"><components><component type="UIInputClicker"/></components></element>
+          <element type="UIElement" name="Twin" x="10" y="110" width="100" height="40" color="240,240,230,255" hoverColor="200,220,255,255"><components><component type="UIInputClicker"/></components></element>
           <element type="UIDropdown" name="Menu" bind="menu" x="10" y="160" width="100" height="40" optionHeight="40" color="@panel">
             <components><component type="UITextComponent" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
-              <element type="UIButton" name="OptionA" value="a" color="@panel"/>
+              <element type="UIElement" name="OptionA" color="@panel"><components><component type="UIInputClicker" value="a"/></components></element>
             </children>
           </element>
           <element type="UIElement" name="Hidden" x="150" y="10" width="40" height="40" color="@panel" visible="false"/>
           <element type="UIElement" name="Ghost" x="150" y="60" width="40" height="40" color="@nowhere"/>
           <element type="UIProgressBar" name="Bar" bind="barValue" minValue="0" maxValue="1" x="300" y="10" width="100" height="20" trackColor="@panel" fillColor="@hover"/>
-          <element type="UIToggle" name="Switch" bind="switchOn" onValue="1" offValue="0" x="300" y="60" width="160" height="40" trackColor="@panel" fillColor="@hover" thumbColor="@line"/>
+          <element type="UIElement" name="Switch" x="300" y="60" width="100" height="40">
+            <components><component type="UISwitchComponent" trackColor="@panel" fillColor="@hover" thumbColor="@line"/></components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -255,8 +255,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIThemeResolveTest, AHoverTokenShiftsLikeALiteralOne) {
-        Get<UIButton>("Hovered").hovered = true;
-        Get<UIButton>("Twin").hovered = true;
+        Get("Hovered").hovered = true;
+        Get("Twin").hovered = true;
         Draw();
         const Color token = FillAt(10.0f, 60.0f);
         const Color literal = FillAt(10.0f, 110.0f);
@@ -326,7 +326,7 @@ namespace BECore::Tests {
     TEST_F(UIThemeResolveTest, ThePopupChildrenOfAnOpenDropdownResolveToo) {
         Draw();
         auto& menu = Get<UIDropdown>("Menu");
-        UIElement& option = Get<UIButton>("OptionA");
+        UIElement& option = Get("OptionA");
         menu.Open();
         CoreManager::GetUIThemes().SetTheme("dark"_intern);
         Draw();
@@ -446,11 +446,6 @@ namespace BECore::Tests {
             return {attribute, "", [member](UIElement& element) -> const Color& { return static_cast<T&>(element).*member; }};
         }
 
-        template <typename T>
-        ColorField Effect(const char* attribute, const char* prefix, UIColor UITextEffects::* member) {
-            return {attribute, prefix, [member](UIElement& element) -> const Color& { return static_cast<T&>(element).textEffects.*member; }};
-        }
-
         template <typename C>
         ColorField OfComponent(const char* attribute, UIColor C::* member) {
             return {attribute, "", [member](UIElement& element) -> const Color& { return element.GetComponent<C>()->*member; }};
@@ -475,12 +470,6 @@ namespace BECore::Tests {
                     {"glow", "0,0,5,0,", [](UIElement& element) -> const Color& { return element.box.glow.color; }}};
         }
 
-        // The colours of a label's text and of its effects
-        template <typename T>
-        eastl::vector<ColorField> TextColors() {
-            return {Field<T>("textColor", &T::textColor), Effect<T>("textOutline", "2,", &UITextEffects::outlineColor), Effect<T>("textShadow", "1,1,", &UITextEffects::shadowColor)};
-        }
-
         template <typename... Parts>
         eastl::vector<ColorField> Join(eastl::vector<ColorField> first, Parts... rest) {
             (first.insert(first.end(), rest.begin(), rest.end()), ...);
@@ -494,19 +483,9 @@ namespace BECore::Tests {
                 {"UIStack", nullptr, ElementColors()},
                 {"UISegmented", nullptr, ElementColors()},
                 {"UIPanel", nullptr, Join(ElementColors(), eastl::vector<ColorField>{Field<UIPanel>("spriteTint", &UIPanel::spriteTint)})},
-                {"UIImage", nullptr, Join(ElementColors(), eastl::vector<ColorField>{Field<UIImage>("tint", &UIImage::tint)})},
-                {"UILabel", nullptr, Join(ElementColors(), TextColors<UILabel>())},
-                {"UIButton", nullptr, Join(ElementColors(), TextColors<UIButton>(), eastl::vector<ColorField>{Field<UIButton>("iconTint", &UIButton::iconTint)})},
-                {"UIToggle", nullptr,
-                 Join(ElementColors(), TextColors<UIToggle>(),
-                      eastl::vector<ColorField>{Field<UIToggle>("trackColor", &UIToggle::trackColor), Field<UIToggle>("fillColor", &UIToggle::fillColor),
-                                                Field<UIToggle>("thumbColor", &UIToggle::thumbColor)})},
-                {"UISlider", nullptr,
-                 Join(ElementColors(), eastl::vector<ColorField>{Field<UISlider>("trackColor", &UISlider::trackColor), Field<UISlider>("fillColor", &UISlider::fillColor),
-                                                                 Field<UISlider>("thumbColor", &UISlider::thumbColor)})},
                 {"UIProgressBar", nullptr,
                  Join(ElementColors(), eastl::vector<ColorField>{Field<UIProgressBar>("trackColor", &UIProgressBar::trackColor), Field<UIProgressBar>("fillColor", &UIProgressBar::fillColor)})},
-                // The header text is a UITextComponent (the row below)
+                // The header text is a UITextComponent (the rows below)
                 {"UIDropdown", nullptr, Join(ElementColors(), eastl::vector<ColorField>{Field<UIDropdown>("arrowColor", &UIDropdown::arrowColor)})},
                 {"UIElement",
                  "UIImageComponent",
@@ -518,6 +497,14 @@ namespace BECore::Tests {
                   OfComponent<UITextComponent>("pressedTextColor", &UITextComponent::pressedTextColor), OfComponent<UITextComponent>("disabledTextColor", &UITextComponent::disabledTextColor),
                   OfComponent<UITextComponent>("selectedTextColor", &UITextComponent::selectedTextColor), EffectOfComponent<UITextComponent>("textOutline", "2,", &UITextEffects::outlineColor),
                   EffectOfComponent<UITextComponent>("textShadow", "1,1,", &UITextEffects::shadowColor)}},
+                {"UIElement",
+                 "UISwitchComponent",
+                 {OfComponent<UISwitchComponent>("trackColor", &UISwitchComponent::trackColor), OfComponent<UISwitchComponent>("fillColor", &UISwitchComponent::fillColor),
+                  OfComponent<UISwitchComponent>("thumbColor", &UISwitchComponent::thumbColor)}},
+                {"UIElement",
+                 "UISliderComponent",
+                 {OfComponent<UISliderComponent>("trackColor", &UISliderComponent::trackColor), OfComponent<UISliderComponent>("fillColor", &UISliderComponent::fillColor),
+                  OfComponent<UISliderComponent>("thumbColor", &UISliderComponent::thumbColor)}},
             };
         }
 
