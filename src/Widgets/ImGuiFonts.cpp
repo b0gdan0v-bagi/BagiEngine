@@ -12,6 +12,11 @@ namespace BECore {
         /// The Lucide range of the header, zero-terminated; ImGui reads it while the font lives
         const ImWchar kIconGlyphRanges[] = {ICON_MIN_LC, ICON_MAX_16_LC, 0};
 
+        /// The same span, kept out of Inter. Inter has glyphs of its own in the private use area, on codepoints of Lucide, and
+        /// ImGui 1.92 does not filter a source by GlyphRanges: the first source that has a codepoint wins, and Inter is first.
+        /// ImGui copies the list at AddFont.
+        const ImWchar kTextExcludedGlyphRanges[] = {ICON_MIN_LC, ICON_MAX_LC, 0};
+
         ImGuiFonts activeFonts;
 
         bool ReadFontFile(const char* virtualPath, eastl::vector<uint8_t>& bytes) {
@@ -62,7 +67,8 @@ namespace BECore {
         const ImWchar* textRanges = io.Fonts->GetGlyphRangesCyrillic();
 
         if (ReadFontFile(paths.ui, buffers.ui)) {
-            const ImFontConfig textConfig = MakeSourceConfig("Inter");
+            ImFontConfig textConfig = MakeSourceConfig("Inter");
+            textConfig.GlyphExcludeRanges = kTextExcludedGlyphRanges;
             fonts.ui = AddFontSource(io, buffers.ui, kUiFontSize, textConfig, textRanges);
 
             // Lucide goes into the same font: a label can hold a glyph and a word

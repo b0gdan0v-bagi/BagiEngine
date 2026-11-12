@@ -11,6 +11,9 @@ namespace BECore::Tests {
     namespace {
 
         constexpr float kNaN = std::numeric_limits<float>::quiet_NaN();
+        /// The order of the sources of the UI font: Inter first, Lucide merged after it
+        constexpr unsigned int kTextSourceIdx = 0;
+        constexpr unsigned int kIconSourceIdx = 1;
 
         /// A context of its own, with no backend: the atlas takes the fonts and nothing rasterizes them
         class ImGuiFontsTest : public ::testing::Test {
@@ -72,14 +75,48 @@ namespace BECore::Tests {
         EXPECT_EQ(ImGui::GetIO().Fonts->Fonts[0], fonts.ui);
     }
 
-    TEST_F(ImGuiFontsTest, TheIconFontHasTheGlyphsOfTheHeaderAndTheTextFontHasCyrillic) {
+    TEST_F(ImGuiFontsTest, EveryLucideCodepointOfTheHeaderIsDrawnFromTheIconSource) {
+        ImGuiIO& io = ImGui::GetIO();
+        const ImGuiFonts fonts = LoadImGuiFonts(io, buffers);
+
+        ASSERT_NE(fonts.ui, nullptr);
+        ASSERT_NE(fonts.mono, nullptr);
+
+        // A font of its own with only the icon file says which codepoints Lucide has
+        ImFontConfig iconOnlyConfig;
+        iconOnlyConfig.FontDataOwnedByAtlas = false;
+        ImFont* iconOnly = io.Fonts->AddFontFromMemoryTTF(buffers.icons.data(), static_cast<int>(buffers.icons.size()), kUiFontSize, &iconOnlyConfig);
+        ASSERT_NE(iconOnly, nullptr);
+
+        // Inter has glyphs of its own in the private use area, on the codepoints of Lucide: the first source that has a
+        // codepoint wins, so the merge must keep Inter away from the span
+        ImFontBaked* baked = fonts.ui->GetFontBaked(kUiFontSize);
+        ASSERT_NE(baked, nullptr);
+        int lucideCodepoints = 0;
+        for (unsigned int codepoint = ICON_MIN_LC; codepoint <= ICON_MAX_LC; ++codepoint) {
+            if (!iconOnly->IsGlyphInFont(static_cast<ImWchar>(codepoint))) {
+                continue;
+            }
+            ++lucideCodepoints;
+            const ImFontGlyph* glyph = baked->FindGlyph(static_cast<ImWchar>(codepoint));
+            ASSERT_NE(glyph, nullptr) << "U+" << std::hex << codepoint;
+            EXPECT_EQ(glyph->SourceIdx, kIconSourceIdx) << "U+" << std::hex << codepoint << " is not drawn from Lucide";
+        }
+        EXPECT_GT(lucideCodepoints, 1000);
+    }
+
+    TEST_F(ImGuiFontsTest, TheTextOfTheUiFontStaysWithInterAndTheMonoFontHasNoIcons) {
         const ImGuiFonts fonts = LoadImGuiFonts(ImGui::GetIO(), buffers);
 
         ASSERT_NE(fonts.ui, nullptr);
         ASSERT_NE(fonts.mono, nullptr);
-        EXPECT_TRUE(fonts.ui->IsGlyphInFont(static_cast<ImWchar>(ICON_MIN_LC)));
-        EXPECT_TRUE(fonts.ui->IsGlyphInFont(static_cast<ImWchar>(ICON_MAX_16_LC)));
-        EXPECT_TRUE(fonts.ui->IsGlyphInFont(static_cast<ImWchar>(0x0416)));
+        ImFontBaked* baked = fonts.ui->GetFontBaked(kUiFontSize);
+        ASSERT_NE(baked, nullptr);
+        for (const unsigned int codepoint : {0x0041u, 0x0061u, 0x0416u, 0x0436u}) {
+            const ImFontGlyph* glyph = baked->FindGlyph(static_cast<ImWchar>(codepoint));
+            ASSERT_NE(glyph, nullptr) << "U+" << std::hex << codepoint;
+            EXPECT_EQ(glyph->SourceIdx, kTextSourceIdx) << "U+" << std::hex << codepoint;
+        }
         EXPECT_TRUE(fonts.mono->IsGlyphInFont(static_cast<ImWchar>(0x0416)));
         EXPECT_FALSE(fonts.mono->IsGlyphInFont(static_cast<ImWchar>(ICON_MIN_LC)));
     }
