@@ -197,6 +197,14 @@ def test_an_unnamed_button_is_composed():
 
 # ---- the lists against the C++ classes --------------------------------------------------------------------------------------
 
+# The reflected fields of `UILabel` and of what `UIButton` added to it, taken from the classes when they were removed (slice 5 of `ui-button-composition`); the component headers are still read
+LABEL_FIELDS = {
+    "text", "font", "fontFamily", "fontWeight", "textColor", "align", "verticalAlign", "overflow", "wrap", "lineSpacing", "minFontSize", "textEffects",
+}  # fmt: skip
+BUTTON_ADDED_FIELDS = {"action", "value", "disabled", "icon", "iconTint", "iconPlacement", "iconSize", "tooltip"}
+# The numbers of `UIButton` at the removal: the forms of an icon (now the constants of `UIImageComponent`) and the defaults of its constructor
+BUTTON_CONSTRUCTOR_DEFAULTS = {"align": "Center", "verticalAlign": "Center", "wrap": "false"}
+
 _FIELD = re.compile(r"BE_REFLECT_FIELD\s+([^;]*?)\s*(?:=|\{|;)", re.DOTALL)
 
 
@@ -210,8 +218,8 @@ def reflected(header: str) -> set:
 
 
 def test_the_lists_of_the_step_are_the_reflected_fields_of_the_classes():
-    label = reflected("UILabel.h")
-    button = reflected("UIButton.h")
+    label = LABEL_FIELDS
+    button = BUTTON_ADDED_FIELDS
     text_component = reflected("UITextComponent.h")
     clicker = reflected("UIInputClicker.h")
     element = reflected("UIElement.h")
@@ -232,8 +240,8 @@ def test_the_lists_of_the_step_are_the_reflected_fields_of_the_classes():
     assert {n for n, _ in shared.BUTTON_TEXT_DEFAULTS} <= set(shared.TEXT_ATTRIBUTES)
 
 
-def test_the_forms_of_an_icon_are_the_constants_of_uibutton():
-    header = (UI_SOURCES / "UIButton.h").read_text(encoding="utf-8")
+def test_the_forms_of_an_icon_are_the_constants_of_the_image_component():
+    header = (UI_SOURCES / "UIImageComponent.h").read_text(encoding="utf-8")
 
     def constant(name: str) -> float:
         return float(re.search(rf"{name}\s*=\s*([0-9.]+)f", header).group(1))
@@ -244,10 +252,5 @@ def test_the_forms_of_an_icon_are_the_constants_of_uibutton():
     assert float(shared.ICON_GAP) == constant("kIconGap")
 
 
-def test_the_defaults_written_are_those_of_the_constructor_of_uibutton():
-    source = (UI_SOURCES / "UIButton.cpp").read_text(encoding="utf-8")
-    constructor = source[source.index("UIButton::UIButton()") :].split("}", 1)[0]
-    assert "align = TextAlign::Center" in constructor
-    assert "verticalAlign = UIVerticalAlign::Center" in constructor
-    assert "wrap = false" in constructor
-    assert dict(shared.BUTTON_TEXT_DEFAULTS) == {"align": "Center", "verticalAlign": "Center", "wrap": "false"}
+def test_the_defaults_written_are_those_the_constructor_of_uibutton_had():
+    assert dict(shared.BUTTON_TEXT_DEFAULTS) == BUTTON_CONSTRUCTOR_DEFAULTS

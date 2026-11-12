@@ -12,7 +12,7 @@ namespace BECore {
      * the canvas already sets (`hovered`, `pressed`) and draws nothing, so the image and the text beside it follow the state by their own `hoverTint` / `hoverTextColor` ...
      *
      * `disabled` is this component's flag; `groupDisabled` and `selected` are the element's (set by whoever owns a choice). A disabled element still takes the press and the release
-     * (what is below does not get the click) and emits nothing, like a disabled `UIButton`. The target is the rect of the element, never of its image.
+     * (what is below does not get the click) and emits nothing, like any disabled button. The target is the rect of the element, never of its image.
      */
     class UIInputClicker : public UIComponent {
         BE_CLASS(UIInputClicker)

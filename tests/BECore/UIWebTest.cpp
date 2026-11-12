@@ -4,7 +4,6 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UICssParser.h>
 #include <BECore/UI/UIDocument.h>
@@ -2232,7 +2231,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("Only", "UIInputClicker", "action"), "Opt");
         EXPECT_EQ(compiled->ComponentAttr("Only", "UITooltipComponent", "text"), "Options");
         EXPECT_TRUE(compiled->Component("Only", "UITextComponent").empty()) << "no caption, no text component";
-        EXPECT_EQ(static_cast<float>(UIButton::kIconOnlyShare), 0.6f) << "the 60% above is the share of UIButton";
+        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconOnlyShare), 0.6f) << "the 60% above is the share of UIImageComponent";
 
         // Icon left of a caption: a horizontal stack of the icon and the caption, the caption holds the text and the font size
         EXPECT_EQ(compiled->Attr("Left", "layout"), "Stack");
@@ -2252,9 +2251,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(compiled->Component("Left", "UITextComponent").empty()) << "the text is the caption's";
         EXPECT_TRUE(compiled->Component("Left", "UITooltipComponent").empty());
         EXPECT_FALSE(compiled->Component("LeftIcon", "UIImageComponent").attribute("tint")) << "no tint: the icon follows the text colour";
-        EXPECT_EQ(static_cast<float>(UIButton::kIconWithTextShare), 0.5f);
-        EXPECT_EQ(static_cast<float>(UIButton::kIconPadding), 8.0f);
-        EXPECT_EQ(static_cast<float>(UIButton::kIconGap), 6.0f);
+        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconWithTextShare), 0.5f);
+        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconPadding), 8.0f);
+        EXPECT_EQ(static_cast<float>(UIImageComponent::kIconGap), 6.0f);
 
         // Above is left, with the tooltip kept
         EXPECT_EQ(compiled->Attr("Above", "layout"), "Stack");

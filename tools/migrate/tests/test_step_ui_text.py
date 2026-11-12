@@ -168,9 +168,15 @@ def test_the_tool_runs_step_4_on_a_file_stamped_4_stamps_it_5_and_a_second_run_f
     assert migrate.main([str(game), "--check"]) == 0
 
 
-# ---- the lists against the C++ classes (the classes go in a later work package; the lists are pinned there) -----------------
+# ---- the lists against the C++ classes (`UILabel` and `UIImage` were removed; their fields are pinned from the classes at the removal) --------------------------------
 
 _FIELD = re.compile(r"BE_REFLECT_FIELD\s+([^;]*?)\s*(?:=|\{|;)", re.DOTALL)
+
+
+LABEL_FIELDS = {
+    "text", "font", "fontFamily", "fontWeight", "textColor", "align", "verticalAlign", "overflow", "wrap", "lineSpacing", "minFontSize", "textEffects",
+}  # fmt: skip
+IMAGE_FIELDS = {"sprite", "tint", "stretch"}
 
 
 def reflected(header: str) -> set:
@@ -183,8 +189,8 @@ def reflected(header: str) -> set:
 
 
 def test_every_reflected_field_of_the_three_classes_is_moved_by_the_step_or_listed_as_staying():
-    label = reflected("UILabel.h")
-    image = reflected("UIImage.h")
+    label = LABEL_FIELDS
+    image = IMAGE_FIELDS
     dropdown = reflected("UIDropdown.h")
     text_component = reflected("UITextComponent.h")
     image_component = reflected("UIImageComponent.h")
@@ -196,9 +202,8 @@ def test_every_reflected_field_of_the_three_classes_is_moved_by_the_step_or_list
     assert set(shared.TEXT_ATTRIBUTES) <= (text_component - {"textEffects"}) | effects
     assert set(shared.IMAGE_ATTRIBUTES) == image
     assert set(shared.IMAGE_ATTRIBUTES) <= image_component
-    # the dropdown: the fields of its label part move, the ones of its own stay (the file holds both until the work package that makes it a plain element)
-    own = dropdown - label
-    assert own == set(shared.DROPDOWN_ATTRIBUTES)
+    # the dropdown is a plain element with a text component now: all its own fields stay on it
+    assert dropdown == set(shared.DROPDOWN_ATTRIBUTES)
     element = reflected("UIElement.h")
     assert (set(shared.TEXT_ATTRIBUTES) | set(shared.IMAGE_ATTRIBUTES)) & element == set()
 

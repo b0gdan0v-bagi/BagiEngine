@@ -22,7 +22,8 @@ namespace BECore {
     };
 
     /**
-     * @brief A node of a canvas's UI tree: a rect in the UI units of its canvas and children. The controls (panel, label, button) derive from it.
+     * @brief A node of a canvas's UI tree: a rect in the UI units of its canvas and children. The controls that stay classes (panel, stack, group, dropdown, progress bar) derive from it; a text, a
+     * picture, a button, a toggle and a slider are an element with components.
      *
      * `style` is what was authored. `active` is what is in effect after the variants of the canvas matched (UIVariants::Apply): layout reads
      * `active`, and a canvas that goes back to a shape no variant touches gets `style` again. `rect` is the result of the layout,
@@ -40,8 +41,8 @@ namespace BECore {
      *
      * **State.** `hovered` and `pressed` are set by the canvas, `selected` and `groupDisabled` by whoever owns a choice; `GetVisualState()` is what they add up to and `UIStateLook` (the pure
      * rules) turns it into a look. The element's own box takes that look (the fills `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, or the derived shifts) only when a
-     * component says `GivesStateLook()`; a panel that merely `blocksInput` is hovered too and must not light up. A control that is its own class (`UIButton`) draws the state look itself.
-     * An element that does not `OwnsState()` (no `UIInputClicker`, not a `UIButton`) is drawn in the state of its nearest ancestor that does (`GetVisualState`), so the `UIImageComponent` and the
+     * component says `GivesStateLook()`; a panel that merely `blocksInput` is hovered too and must not light up. A control that is its own class (`UIDropdown`) draws the state look itself.
+     * An element that does not `OwnsState()` (no `UIInputClicker`) is drawn in the state of its nearest ancestor that does (`GetVisualState`), so the `UIImageComponent` and the
      * `UITextComponent` of the children of a composed button follow its hover, press and disabled state; the child itself is not hovered (its flags, the hit test and `ui_tree` are its own).
      *
      * **Theme tokens.** A colour field may be a token (`color="@primary"`, UIThemes). The canvas calls `ResolveTheme()` before it draws the element: the token's colour is written into the
@@ -169,7 +170,7 @@ namespace BECore {
         [[nodiscard]] UIStateLook::State GetVisualState() const;
 
         /// The element is the owner of the state its descendants without an owner are drawn in, and is itself drawn in its own: it has a `UIInputClicker`, or is a control that reacts to the
-        /// pointer by itself (`UIButton`, `UIToggle`, `UISlider` and `UIDropdown` answer true, so such a control below an element with a clicker shows its own state, not the ancestor's)
+        /// pointer by itself (`UIDropdown` answers true, so it below an element with a clicker shows its own state, not the ancestor's)
         [[nodiscard]] virtual bool OwnsState() const;
 
         /// Runtime, called by the canvas before it draws the element: the state of the nearest ancestor that `OwnsState()`, null for none. Ignored by an element that `OwnsState()`. Not

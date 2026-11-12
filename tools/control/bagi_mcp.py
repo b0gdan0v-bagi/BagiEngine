@@ -161,11 +161,11 @@ def ui_tree() -> dict[str, Any]:
 
     A canvas has node, space, visible, modal, inputEnabled, takesInput, laidOut, scale, bounds and its elements (a tree) and the `issues` that the
     layout validator found (TouchTargetTooSmall, OutsideCanvas, TextDoesNotFit...). An element has type, name, visible, interactive, rect (UI units of
-    the canvas) and outputRect (the pixels of a screenshot), text for a label or a button, and children. A button also has action, disabled (its own or its
+    the canvas) and outputRect (the pixels of a screenshot), text for an element with a text component (a label or a button), and children. A button (an element with a clicker) also has action, disabled (its own or its
     group's: whether a click does anything), value (sent with the action; "" for a plain button) and selected (the segment of a choice group that the
     bound variable names). A choice group (type UISegmented) has bind (the variable), selectedValue and disabled; its segments are its children. A toggle
-    (UIToggle, with its caption as text) has bind, onValue, offValue, checked, action and disabled; a progress bar (UIProgressBar) bind, minValue, maxValue and
-    fraction (0..1); a slider (UISlider) bind, minValue, maxValue, step, value (a number), fraction (0..1), action and disabled. The selection, checked, value and
+    (a toggle row, with its caption as text) has bind, onValue, offValue, checked, action and disabled; a progress bar (UIProgressBar) bind, minValue, maxValue and
+    fraction (0..1); a slider bind, minValue, maxValue, step, value (a number), fraction (0..1), action and disabled. The selection, checked, value and
     fraction are those of the moment of the call, the rects those of the last drawn frame.
     Not shown: the documents of RmlUi screens.
     """

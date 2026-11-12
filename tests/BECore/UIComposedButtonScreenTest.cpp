@@ -4,13 +4,13 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UILayoutMatrix.h>
 #include <gtest/gtest.h>
-#include <string>
 
 namespace BECore::Tests {
 
@@ -32,10 +32,10 @@ namespace BECore::Tests {
         constexpr float kSmallSide = 40.0f;  // a button that is a hair too small
         constexpr float kEpsilon = 1e-3f;
         // What the HTML compiler and the migration step write for an icon button: a picture child of this share of the button, or of this share of its height next to a caption
-        constexpr float kIconOnlyShare = 0.6f;
-        constexpr float kIconWithTextShare = 0.5f;
-        constexpr float kIconPadding = 8.0f;
-        constexpr float kIconGap = 6.0f;
+        constexpr float kIconOnlyShare = UIImageComponent::kIconOnlyShare;
+        constexpr float kIconWithTextShare = UIImageComponent::kIconWithTextShare;
+        constexpr float kIconPadding = UIImageComponent::kIconPadding;
+        constexpr float kIconGap = UIImageComponent::kIconGap;
 
         // Row one (y 10): an icon-only button (@SIDE@ units, `aspectRatio` 1), one with a tooltip, a disabled one.
         // Row two (y 100): a captioned button with rounded corners (120 x @SIDE@). Row three (y 160): the icon-left button, a stack (200 x @SIDE@).

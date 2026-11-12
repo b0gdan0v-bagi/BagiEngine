@@ -6,6 +6,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UIDocument.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Generated/UICanvasComponent.gen.hpp>
 
 namespace BECore {
@@ -207,24 +208,25 @@ namespace BECore {
             return;
         }
         const eastl::string& tooltipText = target->GetTooltipText();
-        if (!_tooltipLabel) {
-            _tooltipLabel = New<UILabel>();
-            _tooltipLabel->active.fontSize = UITooltip::kFontSize;
-            _tooltipLabel->textColor = UITooltip::kTextColor;
+        if (!_tooltipPlate) {
+            _tooltipPlate = New<UIElement>();
+            _tooltipPlate->active.fontSize = UITooltip::kFontSize;
+            _tooltipPlate->AddComponent<UITextComponent>().textColor = UITooltip::kTextColor;
         }
-        if (_tooltipLabel->text != tooltipText) {
-            _tooltipLabel->text = tooltipText;
+        UITextComponent& tooltipLabel = *_tooltipPlate->GetComponent<UITextComponent>();
+        if (tooltipLabel.text != tooltipText) {
+            tooltipLabel.text = tooltipText;
         }
         const float scale = renderer.GetViewTransform().scale;
-        const Vec2 text = _tooltipLabel->MeasureText(UITooltip::kMaxWidth, scale);
+        const Vec2 text = tooltipLabel.MeasureText(*_tooltipPlate, UITooltip::kMaxWidth, scale);
         if (text.x <= 0.0f || text.y <= 0.0f) {
             return;
         }
         const Rect plate = UITooltip::Place(target->rect, {text.x + 2.0f * UITooltip::kPadding, text.y + 2.0f * UITooltip::kPadding}, _layout.GetResolved().contentBounds);
         renderer.DrawFilledRect(plate.x, plate.y, plate.w, plate.h, UITooltip::kPlateColor);
         // The text is laid out against the width it was measured with, so it wraps where the measure did; the plate (its left edge and its size) is what shows
-        _tooltipLabel->rect = {plate.x + UITooltip::kPadding, plate.y + UITooltip::kPadding, UITooltip::kMaxWidth, text.y};
-        _tooltipLabel->DrawSelf(renderer);
+        _tooltipPlate->rect = {plate.x + UITooltip::kPadding, plate.y + UITooltip::kPadding, UITooltip::kMaxWidth, text.y};
+        tooltipLabel.DrawSelf(renderer, *_tooltipPlate);
     }
 
     bool UICanvasComponent::SyncPopups() {

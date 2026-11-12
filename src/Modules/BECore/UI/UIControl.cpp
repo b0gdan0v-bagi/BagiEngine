@@ -6,7 +6,6 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Scene/SceneNode.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIChoice.h>
 #include <BECore/UI/UIDropdown.h>
@@ -14,10 +13,8 @@
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
-#include <BECore/UI/UISlider.h>
 #include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UITextComponent.h>
-#include <BECore/UI/UIToggle.h>
 #include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UITooltipComponent.h>
 #include <BECore/UI/UIValueText.h>
@@ -111,7 +108,7 @@ namespace BECore {
         }
 
         /// The button-like facts of an element that is composed (a button is not a class there): the type names of its components and what its text, clicker, image and tooltip say, under
-        /// the names and with the meaning they have for a `UIButton`. Only what the element has: a plain element gets nothing. A clicker element with no text or image of its own answers
+        /// the names a button always had. Only what the element has: a plain element gets nothing. A clicker element with no text or image of its own answers
         /// `text` and `icon` from the first descendant that has one (the caption and the icon child of a button made of children)
         void DescribeComponents(const UIElement& element, Json& json) {
             if (element.components.empty()) {
@@ -122,13 +119,12 @@ namespace BECore {
                 types.push_back(MakeJsonString(component->GetTypeMeta().typeName));
             }
             json["components"] = std::move(types);
-            const bool isLabel = dynamic_cast<const UILabel*>(&element) != nullptr;
             const bool hasClicker = element.GetComponent<UIInputClicker>() != nullptr;
             const UITextComponent* caption = element.GetComponent<UITextComponent>();
-            if (caption == nullptr && hasClicker && !isLabel) {
+            if (caption == nullptr && hasClicker) {
                 caption = FindInDescendants<UITextComponent>(element, [](const UITextComponent&) { return true; });
             }
-            if (caption != nullptr && !isLabel) {
+            if (caption != nullptr) {
                 json["text"] = MakeJsonString(caption->GetDisplayText(element));  // as shown: a dropdown's header says the chosen caption
             }
             if (const auto* clicker = element.GetComponent<UIInputClicker>()) {
@@ -171,24 +167,7 @@ namespace BECore {
             if (!(element.box == UIBoxStyle{})) {
                 json["box"] = DescribeBox(element.box);
             }
-            if (const auto* label = dynamic_cast<const UILabel*>(&element)) {
-                json["text"] = MakeJsonString(label->GetDisplayText());
-            }
-            if (const auto* button = dynamic_cast<const UIButton*>(&element)) {
-                json["action"] = MakeJsonString(button->action.ToStringView());
-                json["disabled"] = button->disabled || button->groupDisabled;
-                json["value"] = MakeJsonString(button->value.ToStringView());
-                json["selected"] = button->selected;
-                // Only when set: the sprite name and the tooltip source (`{#key}` and `{var}` not expanded), so a plain button's entry does not change
-                if (!button->icon.Empty()) {
-                    json["icon"] = MakeJsonString(button->icon.ToStringView());
-                }
-                if (!button->tooltip.empty()) {
-                    json["tooltip"] = MakeJsonString(eastl::string_view(button->tooltip.data(), button->tooltip.size()));
-                }
-            } else {
-                DescribeComponents(element, json);
-            }
+            DescribeComponents(element, json);
             if (auto* group = element.Cast<UISegmented>()) {
                 // The segments take `selected` and `groupDisabled` at the draw; apply them now so the tree shows the variable as it is, not as of the last draw
                 group->SyncChildren();
@@ -205,33 +184,14 @@ namespace BECore {
                 json["action"] = MakeJsonString(dropdown->action.ToStringView());
                 json["disabled"] = dropdown->disabled;
             }
-            // The three value controls read the variable now, not as of the last draw
-            if (const auto* toggle = element.Cast<UIToggle>()) {
-                json["bind"] = MakeJsonString(toggle->bind.ToStringView());
-                json["onValue"] = MakeJsonString(toggle->onValue.ToStringView());
-                json["offValue"] = MakeJsonString(toggle->offValue.ToStringView());
-                json["checked"] = toggle->IsOn();
-                json["action"] = MakeJsonString(toggle->action.ToStringView());
-                json["disabled"] = toggle->disabled;
-            }
             if (const auto* bar = element.Cast<UIProgressBar>()) {
                 json["bind"] = MakeJsonString(bar->bind.ToStringView());
                 json["minValue"] = bar->minValue;
                 json["maxValue"] = bar->maxValue;
                 json["fraction"] = bar->GetFraction();
             }
-            if (const auto* slider = element.Cast<UISlider>()) {
-                json["bind"] = MakeJsonString(slider->bind.ToStringView());
-                json["minValue"] = slider->minValue;
-                json["maxValue"] = slider->maxValue;
-                json["step"] = slider->step;
-                json["value"] = slider->GetValue();
-                json["fraction"] = slider->GetFraction();
-                json["action"] = MakeJsonString(slider->action.ToStringView());
-                json["disabled"] = slider->disabled;
-            }
-            // The composed toggle and slider: after `DescribeComponents`, so the `action` they carry replaces the empty one of the clicker beside them. A toggle's `text` is its caption,
-            // found by `DescribeComponents` below the row's clicker
+            // The toggle and the slider read the variable now, not as of the last draw. After `DescribeComponents`, so the `action` they carry replaces the empty one of the clicker beside
+            // them. A toggle's `text` is its caption, found by `DescribeComponents` below the row's clicker
             if (const auto* toggle = element.GetComponent<UIToggleComponent>()) {
                 json["bind"] = MakeJsonString(toggle->bind.ToStringView());
                 json["onValue"] = MakeJsonString(toggle->onValue.ToStringView());
@@ -537,30 +497,20 @@ namespace BECore {
                 const float outputX = pressX * resolved.transform.scale + resolved.transform.offsetX;
                 const float outputY = pressY * resolved.transform.scale + resolved.transform.offsetY;
                 const PoolString canvasNode = target.canvasNode;
-                const auto* button = dynamic_cast<const UIButton*>(target.element.Get());
-                const bool isButton = button != nullptr;
-                const PoolString action = isButton ? button->action : PoolString{};
-                const PoolString value = isButton ? button->value : PoolString{};
-                // A composed button answers as a button; a disabled one emits nothing, so the answer carries nothing (`UIButton` answers its own pair, as it always did)
-                const auto* clicker = isButton ? nullptr : target.element->GetComponent<UIInputClicker>();
+                // A composed button answers as a button; a disabled one emits nothing, so the answer carries nothing
+                const auto* clicker = target.element->GetComponent<UIInputClicker>();
                 const bool clickerEmits = clicker != nullptr && !target.element->IsDisabled();
                 const PoolString clickerAction = clickerEmits ? clicker->action : PoolString{};
                 const PoolString clickerValue = clickerEmits ? clicker->value : PoolString{};
-                // A toggle (the class or the composed row) reports the value it asks for, read before the click (a handler may set the variable at once)
-                const auto* toggle = target.element->Cast<UIToggle>();
+                // A toggle reports the value it asks for, read before the click (a handler may set the variable at once)
                 const auto* toggleComponent = target.element->GetComponent<UIToggleComponent>();
-                const bool isToggle = toggle != nullptr || toggleComponent != nullptr;
                 PoolString toggleAction;
                 PoolString toggleValue;
-                if (toggle != nullptr) {
-                    toggleAction = toggle->action;
-                    toggleValue = toggle->IsOn() ? toggle->offValue : toggle->onValue;
-                } else if (toggleComponent != nullptr) {
+                if (toggleComponent != nullptr) {
                     toggleAction = toggleComponent->action;
                     toggleValue = toggleComponent->IsOn() ? toggleComponent->offValue : toggleComponent->onValue;
                 }
-                // The slider, the class or the composed element: what the press emitted is read after the click
-                const auto* slider = target.element->Cast<UISlider>();
+                // The slider: what the press emitted is read after the click
                 const auto* sliderComponent = target.element->GetComponent<UISliderComponent>();
                 // An option of a dropdown emits the dropdown's action with its own value (the option's `action` is empty), nothing when the choice is refused; the header emits nothing
                 const UIDropdown* owner = UIChoice::IsOption(*target.element) ? FindDropdownOf(*target.canvas->GetLayout().root, target.element.Get()) : nullptr;
@@ -587,16 +537,9 @@ namespace BECore {
                 if (owner != nullptr) {
                     result["action"] = MakeJsonString(optionAction.ToStringView());
                     result["value"] = MakeJsonString(optionValue.ToStringView());
-                } else if (isButton) {
-                    result["action"] = MakeJsonString(action.ToStringView());
-                    result["value"] = MakeJsonString(value.ToStringView());
-                } else if (isToggle) {
+                } else if (toggleComponent != nullptr) {
                     result["action"] = MakeJsonString(toggleAction.ToStringView());
                     result["value"] = MakeJsonString(toggleValue.ToStringView());
-                } else if (slider != nullptr) {
-                    // What the press emitted: empty when the slider is disabled or has no action (the element stays alive through `target`)
-                    result["action"] = MakeJsonString(slider->action.ToStringView());
-                    result["value"] = MakeJsonString(slider->GetLastEmittedValue().ToStringView());
                 } else if (sliderComponent != nullptr) {
                     result["action"] = MakeJsonString(sliderComponent->action.ToStringView());
                     result["value"] = MakeJsonString(sliderComponent->GetLastEmittedValue().ToStringView());

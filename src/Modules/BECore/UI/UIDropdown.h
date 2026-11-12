@@ -11,13 +11,12 @@ namespace BECore {
      *
      * `<element type="UIDropdown" name="Level" bind="level" action="SetLevel" x="20" y="20" width="240" height="56" optionHeight="56">` with a `<components>` of one
      * `<component type="UITextComponent" text="Pick one" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>` (the header text) and `<children>` of an option per child:
-     * `<element type="UIElement" value="easy" ...>` with a `UITextComponent` and a `UIInputClicker` (the composed button; an icon is a child) or the old
-     * `<element type="UIButton" value="easy" text="{#level.easy}" .../>`. The two forms may be mixed (`UIChoice`: an option is a `UIButton` or an element with a `UIInputClicker`). `bind` names
-     * a `UIVars` variable, like `UISegmented`: the option (a direct child) whose `value` equals the variable is the chosen one. The header text is that option's caption (`UIChoice::GetText`:
-     * any `{#key}` or `{name}` in it is expanded as in the option itself, so a language switch rewords the header); with no option chosen it is the `text` of the component, a placeholder or
-     * empty. The font, the colour and the size (`fontSize` of the element) are the component's; it draws in `GetComponentArea()` and shows `GetTextOverride()`, the two hooks of `UIElement`
-     * that this class answers. Only the options are children of interest, anything else is ignored. An option has no `action` (the dropdown emits it): the clicker of a composed option carries `value`
-     * only.
+     * `<element type="UIElement" value="easy" ...>` with a `UITextComponent` and a `UIInputClicker` (the composed button; an icon is a child) (`UIChoice`: an option is an element with a
+     * `UIInputClicker`). `bind` names a `UIVars` variable, like `UISegmented`: the option (a direct child) whose `value` equals the variable is the chosen one. The header text is that option's
+     * caption (`UIChoice::GetText`: any `{#key}` or `{name}` in it is expanded as in the option itself, so a language switch rewords the header); with no option chosen it is the `text` of the
+     * component, a placeholder or empty. The font, the colour and the size (`fontSize` of the element) are the component's; it draws in `GetComponentArea()` and shows `GetTextOverride()`, the two
+     * hooks of `UIElement` that this class answers. Only the options are children of interest, anything else is ignored. An option has no `action` (the dropdown emits it): the clicker of a composed
+     * option carries `value` only.
      *
      * **The dropdown owns no choice.** A click on an option emits `ActionEvent(action, value)` with the option's `value` and changes nothing else; the game answers by setting the
      * variable (game -> `UIVars` -> widget). That the list is open is runtime UI state (like `hovered`), neither reflected nor saved.

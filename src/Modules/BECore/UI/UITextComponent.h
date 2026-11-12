@@ -11,9 +11,9 @@ namespace BECore {
     /**
      * @brief A text in the rect of its element, as a component: `<component type="UITextComponent" text="Play" align="Center" verticalAlign="Center"/>`.
      *
-     * It has the fields of a `UILabel` under the same attribute names (`text`, `font`, `fontFamily`, `fontWeight`, `textColor`, `align`, `verticalAlign`, `overflow`, `wrap`,
-     * `lineSpacing`, `minFontSize`, `textOutline`, `textShadow`) and draws with the same `UITextPainter`, so the two draw the same quads. The size is not a field: it is `fontSize` of the
-     * owner's style in UI units (24 when it is 0, so a responsive variant of the element can change it). The text may name `{variables}` and `{#strings}`.
+     * Its fields (`text`, `font`, `fontFamily`, `fontWeight`, `textColor`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing`, `minFontSize`, `textOutline`,
+     * `textShadow`) go to the `UITextPainter`, which lays out, measures, checks and draws the text. A plain text, a caption and a dropdown header are this component. The size is not a field: it is
+     * `fontSize` of the owner's style in UI units (24 when it is 0, so a responsive variant of the element can change it). The text may name `{variables}` and `{#strings}`.
      *
      * **State.** The text takes the colour of the owner's state (a child of a button has the state of the button: `UIElement::GetVisualState`): `disabledTextColor`, `pressedTextColor`,
      * `selectedTextColor`, `hoverTextColor`, in that order of priority; a transparent one leaves `textColor` as it is (a button does not tint its caption), except that `fadeWhenDisabled` fades it

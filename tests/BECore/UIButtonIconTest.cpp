@@ -24,10 +24,10 @@ namespace BECore::Tests {
         constexpr float kEpsilon = 1e-3f;
         constexpr float kTolerance = 1e-2f;
         constexpr uint32_t kIconPixels = 32;
-        constexpr float kIconOnlyShare = 0.6f;      // width and height of the icon of a button with no caption, of the shorter side
-        constexpr float kIconWithTextShare = 0.5f;  // height of the icon of a button with a caption
-        constexpr float kIconPadding = 8.0f;        // left of the icon of a button with a caption
-        constexpr float kIconGap = 6.0f;            // between the icon and the caption
+        constexpr float kIconOnlyShare = UIImageComponent::kIconOnlyShare;          // width and height of the icon of a button with no caption, of the shorter side
+        constexpr float kIconWithTextShare = UIImageComponent::kIconWithTextShare;  // height of the icon of a button with a caption
+        constexpr float kIconPadding = UIImageComponent::kIconPadding;              // left of the icon of a button with a caption
+        constexpr float kIconGap = UIImageComponent::kIconGap;                      // between the icon and the caption
 
         // A Screen canvas in window pixels (output 800 x 600, scale 1); every icon is the sprite "TestIcon", whose texture the fixture hands over:
         //   Only      (10, 10, 48 x 48)     no caption: the icon alone, in the middle

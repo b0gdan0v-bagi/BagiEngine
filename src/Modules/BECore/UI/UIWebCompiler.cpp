@@ -26,7 +26,7 @@ namespace BECore {
         constexpr size_t TextShadowMaxNumbers = 3;  // ... and the blur
         constexpr size_t TextShadowBlurIndex = 2;
 
-        // The composed button (`ui-controls.md`, "Components"): the attributes that live on its components, the forms of an icon (`UIButton::kIconOnlyShare`, `kIconWithTextShare`,
+        // The composed button (`ui-controls.md`, "Components"): the attributes that live on its components, the forms of an icon (`UIImageComponent::kIconOnlyShare`, `kIconWithTextShare`,
         // `kIconPadding`, `kIconGap`, which the tests hold these to) and the name suffixes of its children. A plain text element carries the same text component, a picture the image one
         constexpr eastl::string_view TextComponentKeys[] = {"text",     "font", "fontFamily",  "fontWeight",  "textColor",   "align",     "verticalAlign",
                                                             "overflow", "wrap", "lineSpacing", "minFontSize", "textOutline", "textShadow"};
@@ -54,7 +54,7 @@ namespace BECore {
         constexpr ButtonTextDefault ToggleTextDefaults[] = {{"verticalAlign", "Center"}, {"wrap", "false"}};  // what the caption of a toggle does with its text
         constexpr eastl::string_view SwitchSuffix = "Switch";
         constexpr const char* FadeWhenDisabledKey = "fadeWhenDisabled";  ///< the caption of a toggle fades while it is disabled
-        constexpr const char* ToggleGap = "8";                           ///< the air between the caption and the switch (`UIToggle::kCaptionGap`)
+        constexpr const char* ToggleGap = "8";                           ///< the air between the caption and the switch (`UISwitchComponent::kCaptionGap`)
         constexpr Color CaptionWhite{255, 255, 255, 255};                ///< the caption colour the switch component's own fallbacks assume
 
         template <size_t N>
