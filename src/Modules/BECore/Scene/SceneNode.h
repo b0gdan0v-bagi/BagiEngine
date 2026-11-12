@@ -6,7 +6,7 @@ namespace BECore {
 
     class Scene;
 
-    /// Editor-only state of a node (a bit set): never serialized, never saved, never copied by Scene::DuplicateNode
+    /// Editor-only state of a node (a bit set, so a plain enum with operators, not CORE_ENUM): never serialized, never saved, never copied by Scene::DuplicateNode
     enum class EditorFlags : uint8_t {
         None = 0,
         Hidden = 1,  ///< the node and its descendants draw nothing; they keep their draw rank and still update

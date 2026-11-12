@@ -2,18 +2,15 @@
 
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
+#include <BECore/Utils/EnumUtils.h>
 
 namespace BECore::HierarchyModel {
 
     /// A name the user types for a node is at most this many characters (the panel's rename buffer is one more, for the terminator)
     inline constexpr size_t kMaxNodeNameLength = 255;
 
-    /// Where a dragged row lands on the row under the pointer
-    enum class DropPlace : uint8_t {
-        Before,  ///< as the sibling right above the target
-        Into,    ///< as the last child of the target
-        After,   ///< as the sibling right below the target
-    };
+    /// Where a dragged row lands on the row under the pointer: Before = the sibling right above the target, Into = the last child of the target, After = the sibling right below it
+    CORE_ENUM(DropPlace, uint8_t, Before, Into, After)
 
     /// The new place of a dragged node, as the arguments of Scene::MoveNode: @c index counts the children of @c parent after the node left its old place
     struct DropTarget {
@@ -22,13 +19,8 @@ namespace BECore::HierarchyModel {
     };
 
     /// The one change of the tree a frame of the panel asks for. The panel walks the tree, notes the request and applies it after the walk (ApplyOperation), because Delete and Move change the child
-    /// lists being walked
-    enum class OperationKind : uint8_t {
-        None,
-        Delete,     ///< remove @c node with its subtree
-        Duplicate,  ///< a copy of @c node right after it
-        Move,       ///< @c node to @c parent at @c index (the arguments of Scene::MoveNode)
-    };
+    /// lists being walked. Delete removes @c node with its subtree, Duplicate makes a copy right after it, Move puts @c node at @c index under @c parent (the arguments of Scene::MoveNode)
+    CORE_ENUM(OperationKind, uint8_t, None, Delete, Duplicate, Move)
 
     struct Operation {
         OperationKind kind = OperationKind::None;

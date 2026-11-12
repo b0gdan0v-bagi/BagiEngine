@@ -35,7 +35,9 @@ namespace BECore {
     // =========================================================================
 
     SceneEditorWidget::~SceneEditorWidget() {
-        CoreManager::GetSceneManager().ClearEditorFlags();
+        if (SceneManager* const sceneManager = CoreManager::FindSceneManager()) {
+            sceneManager->ClearEditorFlags();
+        }
     }
 
     bool SceneEditorWidget::Initialize(IDeserializer& /*deserializer*/) {

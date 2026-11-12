@@ -83,18 +83,6 @@ namespace BECore::HierarchyModel {
 
     }  // namespace
 
-    bool ContainsNode(const SceneNode& root, const SceneNode* node) {
-        if (&root == node) {
-            return true;
-        }
-        for (const auto& child : root.GetChildren()) {
-            if (ContainsNode(*child, node)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     SceneNode* FindNode(SceneNode& root, const SceneNode* wanted) {
         if (&root == wanted) {
             return &root;
@@ -105,6 +93,11 @@ namespace BECore::HierarchyModel {
             }
         }
         return nullptr;
+    }
+
+    bool ContainsNode(const SceneNode& root, const SceneNode* node) {
+        // FindNode takes a mutable root only to hand back a mutable node; this one never writes through it
+        return FindNode(const_cast<SceneNode&>(root), node) != nullptr;
     }
 
     void AncestorsOf(const SceneNode& node, eastl::vector<SceneNode*>& out) {

@@ -91,6 +91,11 @@ namespace BECore {
             return *GetInstance()._sceneManager;
         }
 
+        /// The scene manager, or null while there is none (before the init, after the deinit, in a test that gave none)
+        static SceneManager* FindSceneManager() {
+            return GetInstance()._sceneManager.Get();
+        }
+
         static TextureLibrary& GetTextureLibrary() {
             return GetInstance()._textureLibrary;
         }
