@@ -1,3 +1,5 @@
+Lucide 1.17.0 (lucide-font 1.17.0). src/Widgets/Icons/IconsLucide.h is IconFontCppHeaders commit 780f044 generated for that release; the font and the header are replaced together.
+
 ISC License
 
 Copyright (c) 2026 Lucide Icons and Contributors
