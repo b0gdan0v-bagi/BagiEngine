@@ -6,7 +6,6 @@
 -->
 <root>
   <window
-    title="BagiEngine"
     width="1280"
     height="720"
     windowFlags="SDL_WINDOW_RESIZABLE|SDL_WINDOW_OPENGL|SDL_WINDOW_HIGH_PIXEL_DENSITY" />

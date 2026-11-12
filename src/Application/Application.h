@@ -39,6 +39,9 @@ namespace BECore {
 #endif
         void Cleanup();
 
+        /// Sets the window title when the active game or the run mode differs from the ones of the last call (a compare per frame)
+        void UpdateWindowTitle();
+
 #if BE_WITH_REMOTE_CONTROL
         /// Starts the WebSocket server of the control API on @p port. False, with the reason in the log, when it cannot listen
         bool StartControlServer(uint16_t port);
@@ -47,6 +50,10 @@ namespace BECore {
         bool _isRunning = false;
         bool _finished = false;  // Finish() has run: it must run once
         bool _headless = false;  // there is no window to show an editor in: the switch chord is ignored
+        // The key of the title last applied: the active game's name and the editor mode
+        PoolString _titleGame;
+        bool _titleEditor = false;
+        bool _titleApplied = false;
         eastl::vector<eastl::string> _arguments;
 #if BE_WITH_REMOTE_CONTROL
         eastl::unique_ptr<WebSocketServer> _controlServer;

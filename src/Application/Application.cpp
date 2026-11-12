@@ -6,6 +6,7 @@
 #include <BECore/Control/ControlSettings.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
+#include <BECore/MainWindow/WindowTitle.h>
 #include <BECore/Profiler/Alloc/AllocTracker.h>
 #include <BECore/Profiler/Profiler.h>
 #include <BECore/Profiler/ProfilerSettings.h>
@@ -107,6 +108,7 @@ namespace BECore {
 
         // Boot the game layer once core systems (config, scenes, widgets) are up.
         GameManager::GetInstance().Initialize();
+        UpdateWindowTitle();
 
         // Last, so that the methods of the game layer are registered before the first client can ask for them
 #if BE_WITH_REMOTE_CONTROL
@@ -159,10 +161,28 @@ namespace BECore {
         // The manual-clock idle branch above never gets here, because no frame is open there either
         CoreManager::GetWidgetManager().ApplyPendingMode();
 #endif
+        UpdateWindowTitle();  // after ApplyPendingMode: the mode and a game switch both show here
         LogEvent::Flush();
         control.EndFrame();
         BE_PROFILE_FRAME();
         return _isRunning;
+    }
+
+    void Application::UpdateWindowTitle() {
+        const IntrusivePtr<IMainWindow>& window = CoreManager::GetMainWindow();
+        if (!window) {
+            return;
+        }
+        const IGame* game = GameManager::GetInstance().GetActive();
+        const PoolString gameName = game != nullptr ? game->GetName() : PoolString();
+        const bool editorMode = CoreManager::GetWidgetManager().GetMode() == RunMode::Editor;
+        if (_titleApplied && gameName == _titleGame && editorMode == _titleEditor) {
+            return;
+        }
+        _titleApplied = true;
+        _titleGame = gameName;
+        _titleEditor = editorMode;
+        window->SetTitle(ComposeWindowTitle(window->GetConfiguredTitle(), gameName.ToStringView(), editorMode));
     }
 
     void Application::Finish() {
