@@ -23,7 +23,7 @@ ctest --preset macos-debug                 # every test in its own process, 8 at
 
 **Module order** (bottom → top; every module links `BECoreModule`, which provides the PCH):
 ```
-BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Rooms → RoomServer → Runtime (src/Application, src/Widgets) → games/<Name> → executable
+BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Rooms → RoomClient → RoomServer → Runtime (src/Application, src/Widgets) → games/<Name> → executable
 ```
 
 **Stack:** CMake 3.31+ / Ninja, SDL3 + SDL_image, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb_truetype, fmt, magic_enum, GoogleTest.
@@ -32,12 +32,12 @@ BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games �
 cmake/            engine setup, be_* functions, build options (cmake/CLAUDE.md)
 src/Application/  the application loop (RuntimeModule)
 src/Widgets/      editor panels and frame widgets — no game UI (.claude/rules/widgets-module.md)
-src/Modules/      BECore, Events, TaskSystem, RemoteControl, SDL, Vulkan, Games, Rooms (online rooms by code, pure code), RoomServer (the room server over WebSocket, only with ENGINE_WITH_REMOTE_CONTROL; executable BagiRoomServer), RmlUiHost (only with ENGINE_UI_RMLUI)
+src/Modules/      BECore, Events, TaskSystem, RemoteControl, SDL, Vulkan, Games, Rooms (online rooms by code, pure code), RoomClient (the client of the rooms: `RoomClient` over a native or a browser transport; built everywhere, the web build included), RoomServer (the room server over WebSocket, only with ENGINE_WITH_REMOTE_CONTROL; executable BagiRoomServer), RmlUiHost (only with ENGINE_UI_RMLUI)
                   vendored, never edited, left out of broad searches: EABase, EnTT, fmt, imgui, nlohmann, pugixml, RmlUi, stb, tracy
 config/, assets/  engine content; a game's files of the same name replace the engine's (FileSystem/CLAUDE.md)
 games/Match3/     the engine's own game
 tests/            BagiEngineTests + Common (BagiEngineTestSupport)
-tools/            todo (the todo store), control (control API client, smoke test, MCP server), rooms (smoke test of BagiRoomServer), perf (benchmarks, trace summary), migrate (rewrites the content files of a game to the engine's format), web, vscode/todo-workers
+tools/            todo (the todo store), control (control API client, smoke test, MCP server), rooms (smoke test of BagiRoomServer, which also runs the client probe BagiRoomClientProbe), perf (benchmarks, trace summary), migrate (rewrites the content files of a game to the engine's format), web, vscode/todo-workers
 ```
 
 **BECore subsystems** (each has a `CLAUDE.md`): `GameManager/CoreManager` (the service locator), `Scene/`, `UI/` (canvases, scaler, layout, validator), `Text/`, `Animation/` (tweens, timelines), `Control/` (the control API core; transport in `RemoteControl`), `Save/`, `Config/`, `FileSystem/`, `Resource/`, `Renderer/` (`IRenderer`, SDL or Vulkan backend by `renderer` in `ApplicationConfig.xml`), `Reflection/`, `Logger/`, `Profiler/` (the `BE_PROFILE_*` macros; `ENGINE_PROFILER`, preset `macos-profile`).

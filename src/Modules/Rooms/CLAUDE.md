@@ -117,7 +117,7 @@ The host matters in the lobby (only the host starts). After the start it is only
 
 ## For later slices
 
-- **Slice 4, hosting** (Dockerfile, settings from the environment: the values of `RoomHubSettings`).
+- **Slice 4, hosting** (Dockerfile, settings from the environment: the values of `RoomHubSettings`). The Mahjong adapter and its screens are entries of the `mahjong` area.
 - A lobby has no timeout of its own: a room whose members stay connected and silent is kept (their connections are closed by the idle rule only while in no room). The transport or a later change may add one.
 - The Mahjong adapter and screens are entries of the `mahjong` area.
 

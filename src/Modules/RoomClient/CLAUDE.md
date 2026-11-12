@@ -73,3 +73,26 @@ Every other close retries, 1013 (server full) and a normal 1000 from the server 
 `tests/BECore/Rooms/FakeRoomTransport.h` is the scripted transport (a link the test pushes server texts into and reads what was sent from); `RoomClientTest.cpp` drives the client over it on a `ManualClock`, so the heartbeat, the backoff times and every stop rule are exact to the millisecond. `HubTransport.h` is an `IRoomTransport` that talks to a real `RoomHub` in memory (`HubWorld`: the demo games, a manual clock, `Sever`, `SetRefusing`, a `blackhole` for a silent network) and `JudgedTransport.h` runs the wire judge on every text a client receives; `RoomClientHubTest.cpp` plays whole hands of `DemoCardGame` with four clients, drops one inside and past the grace, and has the negative control on `cards-leaky`.
 
 `RoomClientSocketTest.cpp` is the same over the native transport and a real `RoomWebSocketServer` on port 0: hands with two and with four humans, the negative control, a connection aborted mid-hand (the client reconnects by itself), a client kept away past the grace (the server's clock is manual: a computer plays the seat, the client takes it back with its token), `Resume` from a new object, a server that stops (the client retries and gives up at a small `reconnectGiveUp`), `wss://`, a port nobody listens on, a server that admits only a web page's `Origin`, and the heartbeat `ping` answered by `pong`. The clients run on the real clock with a short backoff, so a test waits for the real reconnect (the server's computers use the server's clock: with a manual one a `computerDelay` above 0 never elapses, so only the test that needs the grace uses it). The suite is run 20 times in a row when it changes (`--gtest_repeat=20`).
+
+## A component in ten lines
+
+```cpp
+// member: RoomClient _client; eastl::vector<RoomClientEvent> _events;   (one per game, made once)
+// per frame, on the main thread:
+_client.Poll();
+_events.clear();
+_client.DrainEvents(_events);
+for (const RoomClientEvent& event : _events) {
+    // Joined / Resumed: save _client.GetSession() (secret); LobbyChanged: redraw GetLobby(); ViewChanged: redraw GetView() / GetActions();
+    // Error: show event.message; ConnectionLost: show "reconnecting" (willRetry); Closed: show it, forget the saved session on room_gone / replaced / gave_up
+}
+// a click: _client.ChooseSeat(n) / Start() / SendAction(GetActions()[i]); at start-up with a saved session: _client.Resume(session)
+```
+
+`probe/main.cpp` is the same in a loop. A frame in which nothing came allocates nothing (above); redraw only on an event.
+
+## Limits and what is left
+
+- **Desktop `wss://`** is not built: TLS needs the platform's API (Secure Transport, Schannel, OpenSSL) or a vendored library, and the choice is the owner's. Until then a desktop client reaches a hosted server only through a proxy that speaks plain `ws://`; the browser build speaks `wss://` by itself.
+- **Not run:** Windows (`Socket::Connect` with `getaddrinfo`, the client threads) and Linux are written and not run on the development machine; the browser transport is checked by compile and link only. The first real page that uses `RoomClient` is its first run.
+- IPv6 (the `Socket` is IPv4), a proxy setting, spectators, chat and accounts are not in scope. The Mahjong adapter and screens are entries of the `mahjong` area; hosting is slice 4 (`Rooms/CLAUDE.md`).
