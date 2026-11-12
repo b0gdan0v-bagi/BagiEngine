@@ -72,6 +72,7 @@ add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/SDL)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Vulkan)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Rooms)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RoomClient)   # unconditional: the web build has it
 if(ENGINE_WITH_REMOTE_CONTROL)
     add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RoomServer)
 endif()
@@ -136,7 +137,7 @@ BECoreModule must be first (provides PCH):
 3. `TaskSystem`
 4. `RemoteControl` (`be_add_module`; links `ws2_32` on Windows; has no static initializers, so it is linked plainly: `RuntimeModule` links it for the executables and `BagiEngineTests` takes it through `LINK RemoteControlModule`)
 5. `SDL`
-6. `Vulkan`, `Games`, `Rooms` (`be_add_module`, links `GamesModule`; pure code, no static initializers, so it is linked plainly: `BagiEngineTests` takes it through `LINK RoomsModule`), `RoomServer` (only with `ENGINE_WITH_REMOTE_CONTROL`; links `RoomsModule` and `RemoteControlModule`, also linked plainly; its `CMakeLists.txt` builds the executable `BagiRoomServer` and registers the ctest entry `BagiRoomServerSmoke`), `RmlUiHost` (only with `ENGINE_UI_RMLUI`), `Runtime` (`src/`), then the games in `games/`
+6. `Vulkan`, `Games`, `Rooms` (`be_add_module`, links `GamesModule`; pure code, no static initializers, so it is linked plainly: `BagiEngineTests` takes it through `LINK RoomsModule`), `RoomClient` (links `RoomsModule`, and `RemoteControlModule` with `ENGINE_WITH_REMOTE_CONTROL`; built in every configuration, the web build included; linked plainly), `RoomServer` (only with `ENGINE_WITH_REMOTE_CONTROL`; links `RoomsModule` and `RemoteControlModule`, also linked plainly; its `CMakeLists.txt` builds the executable `BagiRoomServer` and registers the ctest entry `BagiRoomServerSmoke`), `RmlUiHost` (only with `ENGINE_UI_RMLUI`), `Runtime` (`src/`), then the games in `games/`
 
 ## Tests (GoogleTest)
 
