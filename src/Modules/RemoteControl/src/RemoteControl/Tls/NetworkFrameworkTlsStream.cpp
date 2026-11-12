@@ -193,8 +193,9 @@ namespace BECore {
                 LOG_WARNING("{} (error domain {}, code {})"_format(failure, EnumUtils<NetworkErrorDomain>::ToString(domain), code));
             }
 
-            /// Called with the mutex held; starts the one pending receive
-            void StartReceiveLocked(const std::shared_ptr<StreamState>& self) {
+            /// Called with the mutex held; starts the one pending receive. @p self is a copy on purpose: a block captures a reference
+            /// parameter as a reference, and the completion runs after the caller has returned
+            void StartReceiveLocked(std::shared_ptr<StreamState> self) {
                 if (receiveInFlight || connection == nullptr) {
                     return;
                 }
