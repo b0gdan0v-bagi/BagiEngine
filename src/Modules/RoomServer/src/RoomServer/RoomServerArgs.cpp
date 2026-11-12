@@ -6,11 +6,12 @@ namespace BECore {
 
         constexpr size_t kMaxConnectionsLimit = 4096;
         constexpr int64_t kMaxMillisecondsLimit = 24 * 60 * 60 * 1000;
+        constexpr int64_t kMaxShutdownGraceMs = 60'000;  // a platform kills a process that takes longer to stop
         constexpr size_t kMaxOriginBytes = 200;
         constexpr const char* kTestGamesVariable = "BAGI_ROOMS_TEST_GAMES";
 
         /// The settings that take a value, by the flag and the environment variable that set them
-        enum class Option : uint8_t { Port, Bind, Origin, MaxConnections, MaxPerAddress, ComputerDelay, ReconnectGrace, PingInterval, StatsInterval };
+        enum class Option : uint8_t { Port, Bind, Origin, MaxConnections, MaxPerAddress, ComputerDelay, ReconnectGrace, PingInterval, StatsInterval, ShutdownGrace };
 
         struct OptionInfo {
             Option option;
@@ -28,6 +29,7 @@ namespace BECore {
             OptionInfo{Option::ReconnectGrace, "--reconnect-grace-ms", "BAGI_ROOMS_RECONNECT_GRACE_MS"},
             OptionInfo{Option::PingInterval, "--ping-interval-ms", "BAGI_ROOMS_PING_INTERVAL_MS"},
             OptionInfo{Option::StatsInterval, "--stats-interval-ms", "BAGI_ROOMS_STATS_INTERVAL_MS"},
+            OptionInfo{Option::ShutdownGrace, "--shutdown-grace-ms", "BAGI_ROOMS_SHUTDOWN_GRACE_MS"},
         };
 
         const OptionInfo* FindOptionByFlag(eastl::string_view flag) {
@@ -62,8 +64,8 @@ namespace BECore {
             return value;
         }
 
-        std::expected<std::chrono::milliseconds, eastl::string> ParseMilliseconds(eastl::string_view name, eastl::string_view text) {
-            const auto value = ParseNumber(name, text, 0, kMaxMillisecondsLimit);
+        std::expected<std::chrono::milliseconds, eastl::string> ParseMilliseconds(eastl::string_view name, eastl::string_view text, int64_t max = kMaxMillisecondsLimit) {
+            const auto value = ParseNumber(name, text, 0, max);
             if (!value) {
                 return std::unexpected(value.error());
             }
@@ -103,8 +105,9 @@ namespace BECore {
                 case Option::ComputerDelay:
                 case Option::ReconnectGrace:
                 case Option::PingInterval:
-                case Option::StatsInterval: {
-                    const auto milliseconds = ParseMilliseconds(name, value);
+                case Option::StatsInterval:
+                case Option::ShutdownGrace: {
+                    const auto milliseconds = ParseMilliseconds(name, value, option == Option::ShutdownGrace ? kMaxShutdownGraceMs : kMaxMillisecondsLimit);
                     if (!milliseconds) {
                         return std::unexpected(milliseconds.error());
                     }
@@ -114,8 +117,10 @@ namespace BECore {
                         args.reconnectGrace = *milliseconds;
                     } else if (option == Option::PingInterval) {
                         args.pingInterval = *milliseconds;
-                    } else {
+                    } else if (option == Option::StatsInterval) {
                         args.statsInterval = *milliseconds;
+                    } else {
+                        args.shutdownGrace = *milliseconds;
                     }
                     return {};
                 }
@@ -242,16 +247,18 @@ namespace BECore {
                       "  --reconnect-grace-ms N   how long a dropped player keeps the seat (default {})\n"
                       "  --ping-interval-ms N     a ping after this much silence, a drop after twice that, 0 is off (default {})\n"
                       "  --stats-interval-ms N    log the connections and rooms at most this often, when they changed, 0 is off (default {})\n"
+                      "  --shutdown-grace-ms N    on SIGTERM, how long to wait for the clients to answer the close 1001 before stopping, 0 is off (default {})\n"
                       "  --test-games             register the test games (cards-leaky) next to cards\n"
                       "  --help                   this text\n"
                       "\n"
                       "Environment (a flag wins over its variable, a variable over the default; an empty variable is unset):\n"
                       "  PORT=N  BAGI_ROOMS_BIND  BAGI_ROOMS_ORIGINS (comma-separated)  BAGI_ROOMS_MAX_CONNECTIONS  BAGI_ROOMS_MAX_PER_ADDRESS\n"
                       "  BAGI_ROOMS_COMPUTER_DELAY_MS  BAGI_ROOMS_RECONNECT_GRACE_MS  BAGI_ROOMS_PING_INTERVAL_MS  BAGI_ROOMS_STATS_INTERVAL_MS\n"
+                      "  BAGI_ROOMS_SHUTDOWN_GRACE_MS\n"
                       "  {}=1  the --test-games flag\n"
                       "GET {} answers 200 ok (a hosting platform's health check).\n",
                       defaults.port, defaults.maxConnections, defaults.maxConnectionsPerAddress, defaults.computerDelay.count(), defaults.reconnectGrace.count(), defaults.pingInterval.count(),
-                      defaults.statsInterval.count(), kTestGamesVariable, kRoomServerHealthPath);
+                      defaults.statsInterval.count(), defaults.shutdownGrace.count(), kTestGamesVariable, kRoomServerHealthPath);
     }
 
     RoomServerSettings ToSettings(const RoomServerArgs& args) {
@@ -268,6 +275,7 @@ namespace BECore {
         settings.hub.timings.reconnectGrace = args.reconnectGrace;
         settings.pingInterval = args.pingInterval;
         settings.statsLogInterval = args.statsInterval;
+        settings.shutdownGrace = args.shutdownGrace;
         return settings;
     }
 

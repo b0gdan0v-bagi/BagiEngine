@@ -49,6 +49,10 @@ namespace BECore {
         /// Judged with `clock`
         std::chrono::milliseconds statsLogInterval{0};
 
+        /// How long Stop() waits, on the real clock, for the connections to end after it queued the close 1001 `server_stopping` on each of them (a connection that opens
+        /// meanwhile gets it too). 0 sends no close frame: every connection is cut at once
+        std::chrono::milliseconds shutdownGrace{0};
+
         /// What the hub is told the time is. Empty: the real clock (`steady_clock`). A test moves a manual clock instead of sleeping
         std::function<RoomTime()> clock;
 

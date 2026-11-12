@@ -9,6 +9,7 @@ namespace BECore {
 
         constexpr eastl::string_view kLogName = "Room server";
         constexpr eastl::string_view kBusyMessage = "the server is full, try again later";
+        constexpr eastl::string_view kStoppingReason = "server_stopping";
         constexpr uint32_t kThreadOrder = 210;  // the listener's threads take this and the next two, the hub thread the one after
 
         /// What the client is told when the hub ends its connection
@@ -54,9 +55,15 @@ namespace BECore {
     WebSocketHandler RoomWebSocketServer::MakeHandler() {
         WebSocketHandler handler;
         handler.onOpen = [this](const WebSocketHandler::ConnectionPtr& connection) {
+            bool draining = false;
             {
+                // The flag and the map change under one lock, so a connection is either in the snapshot Stop() closes or sees the flag here
                 std::lock_guard<std::mutex> lock(_connectionsMutex);
                 _connections[connection->GetId()] = connection;
+                draining = _draining;
+            }
+            if (draining) {
+                connection->QueueClose(WebSocketCloseCode::kGoingAway, kStoppingReason);
             }
             PushEvent(EventKind::Opened, connection->GetId(), {});
         };
@@ -68,6 +75,7 @@ namespace BECore {
                 std::lock_guard<std::mutex> lock(_connectionsMutex);
                 _connections.erase(connection->GetId());
             }
+            _connectionsChanged.notify_all();
             PushEvent(EventKind::Closed, connection->GetId(), {});
         };
         return handler;
@@ -83,6 +91,10 @@ namespace BECore {
             _stopping = false;
             _queue.clear();
             _queueBytes = 0;
+        }
+        {
+            std::lock_guard<std::mutex> lock(_connectionsMutex);
+            _draining = false;
         }
         const auto started = _listener.Start(_settings.port);
         if (!started) {
@@ -101,6 +113,11 @@ namespace BECore {
             return;
         }
 
+        // The hub thread and the readers go on working while the clients are told: the hub takes the `Closed` events, so its rooms see the players leave
+        if (_settings.shutdownGrace > std::chrono::milliseconds::zero()) {
+            DrainConnections();
+        }
+
         // A reader that waits for room in the queue would never end, and the listener joins the readers: wake them first
         {
             std::lock_guard<std::mutex> lock(_queueMutex);
@@ -116,8 +133,41 @@ namespace BECore {
         {
             std::lock_guard<std::mutex> lock(_connectionsMutex);
             _connections.clear();
+            _draining = false;
         }
         LOG_INFO("{}: stopped"_format(kLogName));
+    }
+
+    void RoomWebSocketServer::DrainConnections() {
+        eastl::vector<eastl::shared_ptr<WebSocketConnection>> open;
+        {
+            std::lock_guard<std::mutex> lock(_connectionsMutex);
+            _draining = true;
+            open.reserve(_connections.size());
+            for (const auto& entry : _connections) {
+                open.push_back(entry.second);
+            }
+        }
+        if (open.empty()) {
+            return;
+        }
+
+        LOG_INFO("{}: stopping, {} connections are told"_format(kLogName, open.size()));
+        for (const auto& connection : open) {
+            connection->QueueClose(WebSocketCloseCode::kGoingAway, kStoppingReason);  // false for one that is closing or gone already: it ends by itself
+        }
+
+        // The client's answer is not waited for as such: after its close frame a connection shuts its socket and ends. What can take longer is a client that
+        // does not read (its writer is stuck in a full send buffer), and the grace bounds that. The real clock: this is the process's wait, not the hub's time
+        size_t left = 0;
+        {
+            std::unique_lock<std::mutex> lock(_connectionsMutex);
+            _connectionsChanged.wait_for(lock, _settings.shutdownGrace, [this] { return _connections.empty(); });
+            left = _connections.size();
+        }
+        if (left > 0) {
+            LOG_INFO("{}: {} connections did not end within {} ms and are cut"_format(kLogName, left, _settings.shutdownGrace.count()));
+        }
     }
 
     bool RoomWebSocketServer::PushEvent(EventKind kind, ConnectionId connection, eastl::string text) {

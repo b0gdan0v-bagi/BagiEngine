@@ -32,6 +32,9 @@ namespace BECore {
         /// How often the server may log its number of connections and rooms when they changed (RoomServerSettings::statsLogInterval); 0 is off
         std::chrono::milliseconds statsInterval{30'000};
 
+        /// On SIGTERM how long the server waits for its clients to end after the close 1001 before it stops anyway (RoomServerSettings::shutdownGrace); 0..60000, 0 is off
+        std::chrono::milliseconds shutdownGrace{1000};
+
         /// Registers the test games (`cards-leaky`, the negative control) next to `cards`
         bool testGames = false;
 

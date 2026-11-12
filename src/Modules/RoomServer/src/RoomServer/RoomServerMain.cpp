@@ -32,9 +32,9 @@ namespace BECore {
                 origins += origin;
             }
             return Format("Room server settings: port {}, bind {}, origins {} [{}], max connections {} (+{} in the handshake), max per address {}, computer delay {} ms, reconnect grace {} ms, "
-                          "ping interval {} ms, stats interval {} ms",
+                          "ping interval {} ms, stats interval {} ms, shutdown grace {} ms",
                           port, args.bind == SocketBind::AnyAddress ? "any" : "loopback", args.origins.size(), origins, args.maxConnections, kHandshakeConnectionReserve, args.maxConnectionsPerAddress,
-                          args.computerDelay.count(), args.reconnectGrace.count(), args.pingInterval.count(), args.statsInterval.count());
+                          args.computerDelay.count(), args.reconnectGrace.count(), args.pingInterval.count(), args.statsInterval.count(), args.shutdownGrace.count());
         }
 
     }  // namespace

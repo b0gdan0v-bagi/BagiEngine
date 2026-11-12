@@ -379,6 +379,185 @@ namespace BECore::Tests {
 
     namespace {
 
+        constexpr std::chrono::milliseconds kShutdownGrace{600};
+
+        /// Settings of a server that tells its clients on Stop() and waits @p grace for them
+        RoomServerSettings MakeShutdownSettings(std::chrono::milliseconds grace = kShutdownGrace) {
+            RoomServerSettings settings = MakeSettings();
+            settings.shutdownGrace = grace;
+            return settings;
+        }
+
+        /// How long Stop() takes
+        std::chrono::milliseconds TimeStop(RoomWebSocketServer& server) {
+            const auto before = std::chrono::steady_clock::now();
+            server.Stop();
+            return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - before);
+        }
+
+        /// Asks the server for so many answers without ever reading one: its send buffer and the client's receive buffer fill, the writer of the
+        /// connection blocks in the socket and the rest of the answers wait in the outbox (`maxOutboxBytes` of the settings has to be above them)
+        void FloodWithoutReading(RoomSocketClient& client) {
+            // About 80 bytes of answer for 50 sent, 13 MB in all: above the 4 MB the system lets a send buffer and a receive buffer grow to, together
+            constexpr int kChunks = 80;
+            const eastl::vector<uint8_t> chunk = RepeatText("{\"v\":1,\"type\":\"join\",\"room\":\"ZZZZ\",\"name\":\"x\"}", 2000);
+            for (int i = 0; i < kChunks; ++i) {
+                ASSERT_TRUE(client.Raw().TrySend(AsBytes(chunk)));
+            }
+        }
+
+        /// Settings for FloodWithoutReading(): no rate limit, no end after failed joins, an outbox that holds every answer
+        RoomServerSettings MakeStuckClientSettings(std::chrono::milliseconds grace) {
+            RoomServerSettings settings = MakeShutdownSettings(grace);
+            settings.maxOutboxBytes = 512 * 1024 * 1024;
+            settings.hub.rateBurst = 100'000'000;
+            settings.hub.ratePerSecond = 100'000'000.0;
+            settings.hub.maxFailedJoinsInRow = std::numeric_limits<int>::max();
+            return settings;
+        }
+
+    }  // namespace
+
+    TEST_F(RoomWebSocketServerTest, StopTellsEveryClientWithCloseGoingAwayBeforeTheEndOfTheStream) {
+        const uint16_t port = StartServer(MakeShutdownSettings());
+        auto host = MakeHost(port);
+        auto guest = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(host && guest);
+        guest->Send(PingMessage{});
+        ASSERT_TRUE(guest->WaitFor(RoomMessageTypes::kPong).has_value());
+
+        server->Stop();
+
+        for (RoomSocketClient* client : {&*host, &*guest}) {
+            const auto close = client->WaitForClose();
+            ASSERT_TRUE(close.has_value());
+            EXPECT_EQ(close->opcode, WebSocketOpcode::kClose);
+            EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kGoingAway);
+            EXPECT_EQ(CloseReasonOf(*close), "server_stopping");
+            EXPECT_TRUE(client->Raw().WaitForEndOfStream());
+        }
+    }
+
+    TEST_F(RoomWebSocketServerTest, StopReturnsWellBeforeTheGraceWhenTheClientsAnswer) {
+        constexpr std::chrono::milliseconds kLongGrace{10'000};
+        const uint16_t port = StartServer(MakeShutdownSettings(kLongGrace));
+        auto host = MakeHost(port);
+        ASSERT_TRUE(host.has_value());
+
+        // The client reads the close frame and answers it, as a browser does
+        std::thread answering([&] {
+            if (const auto close = host->WaitForClose(); close.has_value()) {
+                (void)host->Raw().TrySend(AsBytes(EncodeCloseFrame(CloseCodeOf(*close), "", kClientMask)));
+            }
+        });
+        const auto elapsed = TimeStop(*server);
+        answering.join();
+
+        EXPECT_LT(elapsed, 2s) << "Stop() waited for the grace although the client had answered";
+        EXPECT_TRUE(host->Raw().WaitForEndOfStream());
+    }
+
+    TEST_F(RoomWebSocketServerTest, StopWithNoConnectionsDoesNotWaitForTheGrace) {
+        StartServer(MakeShutdownSettings(10'000ms));
+        EXPECT_LT(TimeStop(*server), 2s);
+    }
+
+    TEST_F(RoomWebSocketServerTest, StopWaitsForTheGraceForAClientThatDoesNotReadAndThenCutsIt) {
+        const uint16_t port = StartServer(MakeStuckClientSettings(kShutdownGrace));
+        auto stuck = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(stuck.has_value());
+        FloodWithoutReading(*stuck);
+
+        const auto elapsed = TimeStop(*server);
+
+        // Not before the grace: the close frame is behind the answers that the client does not take
+        EXPECT_GE(elapsed, kShutdownGrace - 50ms);
+        EXPECT_LT(elapsed, kShutdownGrace + 3s);
+        EXPECT_FALSE(server->IsRunning());
+        EXPECT_TRUE(stuck->Raw().WaitForEndOfStream());
+    }
+
+    TEST_F(RoomWebSocketServerTest, GraceZeroSendsNoCloseFrameAndReturnsAtOnce) {
+        const uint16_t port = StartServer(MakeShutdownSettings(0ms));
+        auto host = MakeHost(port);
+        ASSERT_TRUE(host.has_value());
+
+        EXPECT_LT(TimeStop(*server), 2s);
+
+        EXPECT_FALSE(host->WaitForClose(kShortWait).has_value());
+        EXPECT_TRUE(host->Raw().WaitForEndOfStream());
+    }
+
+    TEST_F(RoomWebSocketServerTest, AConnectionThatOpensDuringTheDrainIsClosedWithGoingAwayToo) {
+        constexpr std::chrono::milliseconds kDrainGrace{2000};
+        const uint16_t port = StartServer(MakeStuckClientSettings(kDrainGrace));
+        auto stuck = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(stuck.has_value());
+        FloodWithoutReading(*stuck);
+
+        // The stuck client holds the drain open for the whole grace
+        std::chrono::milliseconds elapsed{0};
+        std::thread stopping([&] { elapsed = TimeStop(*server); });
+        std::this_thread::sleep_for(150ms);
+
+        auto late = RoomSocketClient::Connect(port);
+        std::optional<ServerFrame> close;
+        if (late) {
+            close = late->WaitForClose();
+        }
+        stopping.join();
+
+        ASSERT_TRUE(late.has_value());
+        ASSERT_TRUE(close.has_value());
+        EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kGoingAway);
+        EXPECT_EQ(CloseReasonOf(*close), "server_stopping");
+        EXPECT_GE(elapsed, kDrainGrace - 50ms);
+    }
+
+    TEST_F(RoomWebSocketServerTest, StopTwiceAfterADrainAndTheDestructorAreSafeAndTheServerStartsAgain) {
+        const uint16_t port = StartServer(MakeShutdownSettings());
+        auto host = MakeHost(port);
+        ASSERT_TRUE(host.has_value());
+
+        server->Stop();
+        server->Stop();
+        EXPECT_FALSE(server->IsRunning());
+
+        // A new run is not draining: the client stays connected and is answered
+        const auto again = server->Start();
+        ASSERT_TRUE(again.has_value());
+        auto next = MakeHost(*again);
+        ASSERT_TRUE(next.has_value());
+        next->Send(PingMessage{});
+        ASSERT_TRUE(next->WaitFor(RoomMessageTypes::kPong).has_value());
+        EXPECT_FALSE(next->WaitForClose(kShortWait).has_value());
+
+        // The destructor stops a running server, with a drain
+        server.reset();
+        const auto close = next->WaitForClose();
+        ASSERT_TRUE(close.has_value());
+        EXPECT_EQ(CloseCodeOf(*close), WebSocketCloseCode::kGoingAway);
+    }
+
+    TEST_F(RoomWebSocketServerTest, StopRepeatedWithClientsComingAndGoingNeverHangs) {
+        for (int round = 0; round < 5; ++round) {
+            const uint16_t port = StartServer(MakeShutdownSettings(300ms));
+            eastl::vector<RoomSocketClient> clients;
+            for (int i = 0; i < 4; ++i) {
+                auto client = RoomSocketClient::Connect(port);
+                ASSERT_TRUE(client.has_value());
+                clients.push_back(std::move(*client));
+            }
+            clients[0].Raw().Drop();  // leaves at about the moment the server stops
+            EXPECT_LT(TimeStop(*server), 3s);
+            for (size_t i = 1; i < clients.size(); ++i) {
+                EXPECT_TRUE(clients[i].Raw().WaitForEndOfStream());
+            }
+        }
+    }
+
+    namespace {
+
         constexpr std::chrono::milliseconds kPingInterval{1000};
         constexpr std::chrono::milliseconds kClockStep{250};
 

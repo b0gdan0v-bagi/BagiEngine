@@ -12,7 +12,9 @@ Scenarios, on a server with --test-games --computer-delay-ms 0 --reconnect-grace
   * a server started with PORT=0 in the environment and no --port listens on a port of its own and takes a client (the variable is read);
   * a plain GET /healthz gets 200 and `ok`, GET / gets 400;
   * the log reaches a piped stdout while the server runs: the settings line, the line of a refused connection and a stats line (--stats-interval-ms 200);
-    output that is block-buffered fails this.
+    output that is block-buffered fails this;
+  * SIGTERM with a client connected (--shutdown-grace-ms 3000): the client is closed with 1001 `server_stopping` and the process exits 0 well inside the grace
+    (not on Windows, where a process is terminated without a signal handler).
 With the probe (the C++ client of RoomClient, a process of its own; its scenarios are skipped with a line when there is none):
   * the probe hosts a room, plays it to the end and prints `PROBE OK`;
   * the same against a server whose --origin list names only a web page: the probe sends no Origin and gets in;
@@ -69,6 +71,9 @@ LOG_LIMIT_SECONDS = 5.0  # a log line has to be on the pipe this soon, not at 4 
 SETTINGS_LINE = "Room server settings:"
 REFUSED_LINE = "a connection was refused"
 STATS_LINE = re.compile(r"Room server: \d+ connections, \d+ rooms")
+SHUTDOWN_GRACE_MS = 3000
+CLOSE_GOING_AWAY = 1001
+STOPPING_REASON = "server_stopping"
 DEFAULT_PORT = 8080  # what a server without --port and PORT would listen on
 PROBE_EXE_NAME = "BagiRoomClientProbe"
 PROBE_OK = "PROBE OK"
@@ -145,6 +150,23 @@ class RoomServer:
         self._killed = True
         self._process.kill()
         self._process.wait()
+
+    def terminate(self) -> None:
+        """Sends SIGTERM and returns at once: the scenario watches what the server does about it, then calls wait_for_exit()."""
+        assert self._process is not None
+        self._process.terminate()
+
+    def wait_for_exit(self, limit: float) -> int:
+        """The exit code of the process after terminate(); it is no longer stopped by __exit__."""
+        process = self._process
+        assert process is not None
+        self._process = None
+        try:
+            return process.wait(timeout=limit)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            raise SmokeFailure(f"the server did not end within {limit} s of SIGTERM\n--- server log (tail) ---\n{log_tail(self.log_path)}") from None
 
     def _wait_for_listening(self) -> int:
         assert self._process is not None
@@ -459,6 +481,25 @@ def scenario_logs(server: RoomServer) -> None:
     human.close()
 
 
+def scenario_shutdown(server: RoomServer) -> None:
+    human = Human(server.port)
+    human.send({"type": "ping"})
+    human.wait_for("pong")
+    started = time.monotonic()
+    server.terminate()
+    # The client reads on: the close frame comes before the end of the stream (a close frame raises ConnectionClosed with its code)
+    while human.closed is None and time.monotonic() - started < SHUTDOWN_SECONDS:
+        human.poll(0.05)
+    check(human.closed is not None, "the client was not closed after SIGTERM")
+    check(human.closed.code == CLOSE_GOING_AWAY, f"the client was closed with {human.closed.code}, not {CLOSE_GOING_AWAY}: {human.closed}")
+    check(human.closed.reason == STOPPING_REASON, f"the close frame has no reason {STOPPING_REASON}: {human.closed}")
+    code = server.wait_for_exit(SHUTDOWN_SECONDS)
+    elapsed = time.monotonic() - started
+    check(code == 0, f"the server exited with {code} after SIGTERM, not 0\n--- server log (tail) ---\n{log_tail(server.log_path)}")
+    check(elapsed < SHUTDOWN_GRACE_MS / 1000.0, f"the server took {elapsed:.1f} s to end with a client that left at once, the grace is {SHUTDOWN_GRACE_MS} ms")
+    human.close()
+
+
 def scenario_probe(server: RoomServer, probe: Path | None) -> None:
     assert probe is not None
     with Probe(probe, server.port) as running:
@@ -489,6 +530,7 @@ SCENARIOS: list[tuple[str, list[str], Callable[[RoomServer, Path | None], None],
     ("environment-port", [], by_port(scenario_environment_port), False, {"PORT": "0"}),
     ("health", [], by_port(scenario_health), False, {}),
     ("logs", ["--origin", GOOD_ORIGIN, "--stats-interval-ms", str(STATS_INTERVAL_MS)], lambda server, _probe: scenario_logs(server), False, {}),
+    ("shutdown", ["--shutdown-grace-ms", str(SHUTDOWN_GRACE_MS)], lambda server, _probe: scenario_shutdown(server), False, {}),
     ("probe", [], scenario_probe, True, {}),
     # The probe sends no Origin, and a server that lists only a web page lets a program in
     ("probe-no-origin", ["--origin", GOOD_ORIGIN], scenario_probe, True, {}),
@@ -519,6 +561,9 @@ def main() -> int:
         print("no probe: the probe scenarios are skipped")
 
     for name, flags, scenario, needs_probe, environment in SCENARIOS:
+        if name == "shutdown" and sys.platform == "win32":
+            print(f"{name}: skipped (Windows has no SIGTERM)", flush=True)
+            continue
         if needs_probe and probe is None:
             print(f"{name}: skipped (no probe)", flush=True)
             continue
