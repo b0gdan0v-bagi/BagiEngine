@@ -145,6 +145,7 @@ compile_shader(vert texture kTextureVertSpv)
 compile_shader(frag texture kTextureFragSpv)
 compile_shader(vert geometry kGeometryVertSpv)
 compile_shader(frag geometry kGeometryFragSpv)
+compile_shader(vert imgui kImGuiVertSpv)
 
 add_custom_target(VulkanShaders
     DEPENDS
@@ -154,6 +155,7 @@ add_custom_target(VulkanShaders
         "${_SHADER_BIN_DIR}/texture_frag_spv.h"
         "${_SHADER_BIN_DIR}/geometry_vert_spv.h"
         "${_SHADER_BIN_DIR}/geometry_frag_spv.h"
+        "${_SHADER_BIN_DIR}/imgui_vert_spv.h"
 )
 set_target_properties(VulkanShaders PROPERTIES FOLDER "Modules")
 add_dependencies(VulkanModule VulkanShaders)

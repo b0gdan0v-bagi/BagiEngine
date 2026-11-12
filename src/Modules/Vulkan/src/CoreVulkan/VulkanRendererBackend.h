@@ -159,6 +159,10 @@ namespace BECore {
 
         VkSurfaceKHR _surface = VK_NULL_HANDLE;
 
+        // The surface format the floating ImGui windows ask for (ImGuiViewportFormat); the backend reads it through
+        // a pointer when it makes such a window, so it has to live as long as ImGui does
+        VkFormat _imguiViewportFormat = VK_FORMAT_UNDEFINED;
+
         // The window the surface belongs to (owned by SDLMainWindow, not destroyed here); its pixel size is read every frame
         SDL_Window* _window = nullptr;
         // The pixel size the swapchain was last created for: what the window is compared with, not the extent the

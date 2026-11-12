@@ -1,5 +1,7 @@
 #include "VulkanRendererBackend.h"
 
+#include "imgui_vert_spv.h"
+
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Logger/LogEvent.h>
 #include <BECore/MainWindow/IMainWindow.h>
@@ -715,6 +717,21 @@ namespace BECore {
         vulkanInfo.DescriptorPoolSize = 1000;
         vulkanInfo.PipelineInfoMain.RenderPass = _swapchain.GetRenderPass();
         vulkanInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+        // ImGui's vertex colours are sRGB values and the swapchain is an sRGB attachment, so the vertex shader turns
+        // them linear. The backend has one shader pair for the main window and the floating ones, so those ask for an
+        // sRGB swapchain too: the backend reads the format from PipelineRenderingCreateInfo even without dynamic
+        // rendering (UseDynamicRendering stays false, the render pass is made from the chosen format).
+        const ImGuiColorMode colorMode = ChooseImGuiColorMode(_swapchain.GetImageFormat());
+        if (colorMode == ImGuiColorMode::Linearize) {
+            vulkanInfo.CustomShaderVertCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            vulkanInfo.CustomShaderVertCreateInfo.codeSize = kImGuiVertSpvSize;
+            vulkanInfo.CustomShaderVertCreateInfo.pCode = kImGuiVertSpv;
+            _imguiViewportFormat = ImGuiViewportFormat(colorMode);
+            vulkanInfo.PipelineInfoForViewports.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+            vulkanInfo.PipelineInfoForViewports.PipelineRenderingCreateInfo.pColorAttachmentFormats = &_imguiViewportFormat;
+        }
+        LOG_INFO("VulkanRendererBackend: ImGui colour mode {}"_format(EnumUtils<ImGuiColorMode>::ToString(colorMode)));
         ImGui_ImplVulkan_Init(&vulkanInfo);
     }
 
