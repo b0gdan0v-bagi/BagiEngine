@@ -83,7 +83,7 @@ Drawing is not an event. `Scene::Draw()` hands the pass to `SceneDrawSystem`: a 
 - Only the active scene draws, so `OnDraw()` needs no `IsSceneActive()` check. `RemoveChild()` destroys the entities of the removed subtree.
 - **Override `OnDraw()`, never subscribe to draw.** `OnDraw()` only reads state and issues renderer calls: it must not add or remove nodes or components, and must not write a `TransformComponent` or a renderer field (the mirror was copied before the pass: the change shows a frame late and a released texture would dangle).
 - `Scene::GetDrawRank(node)` is a node's position in this order without a draw (input handlers use it to ask the topmost first).
-- **Editor flags** (`SceneNode::GetEditorFlags()`: `Hidden`, `Locked`) are a plain member: no file, `Serialize` or `DuplicateNode` sees it, `Scene::ClearEditorFlags()` resets the tree. A hidden node and its subtree draw nothing (quad, sprite, `OnDraw()`) but keep item and rank and still update.
+- **Editor flags** (`SceneNode::GetEditorFlags()`: `Hidden`, `Locked`) are a plain member: no file, `Serialize` or `DuplicateNode` sees it, `Scene::ClearEditorFlags()` resets a tree, `SceneManager::ClearEditorFlags()` every loaded scene (the scene editor calls it when it dies). A hidden node and its subtree draw nothing (quad, sprite, `OnDraw()`) but keep item and rank and still update.
 
 **Rotation, flip and blend** (renderer side: `.claude/rules/rendering-module.md`): `TransformComponent::_rotation` (degrees, clockwise) about `_pivotX` / `_pivotY`, **normalized in the node's rect** (0.5 = center), also for a `Contain` sprite; `_flipX` / `_flipY` mirror the UVs. `_blend` (`Alpha`, `Add`, `Multiply`) is scoped to that one draw (Vulkan: non-`Alpha` draws as `Alpha`, one warning). Not rotated: `ClickableComponent`'s hit rect, `TextComponent`, UI canvases.
 
@@ -96,7 +96,7 @@ Tests: `SceneDrawSystemTest`, `SceneRenderDataTest` (the mirror).
 The object model stays `SceneNode` + `IComponent` (reflection, the XML and the inspector build on it). The `entt::registry` of a `Scene` holds the data **systems** work on, sorted: `SceneDrawItem` (the order) and the mirror of the two built-in renderers ("Draw order"; the components stay the truth), whose `IRenderer` calls `SceneDrawSystem` issues.
 
 - It is **not** a pure ECS: the components are not stored in EnTT pools; the registry holds one entity per node and the data of the systems only. The other drawing components still draw through `OnDraw()`.
-- The direction is a system that hands a **batch** to `IRenderer` (entries `rendering-2d`, `renderer-backends`). Today: one call per quad or sprite, nothing batched (`.claude/rules/rendering-module.md`).
+- Today one `IRenderer` call per quad or sprite, nothing batched (`.claude/rules/rendering-module.md`).
 
 ## View size
 
