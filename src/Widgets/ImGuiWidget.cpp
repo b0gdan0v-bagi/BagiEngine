@@ -44,6 +44,10 @@ namespace BECore {
 
         ImGui::StyleColorsDark();
 
+        _fonts = LoadImGuiFonts(io, _fontBuffers);
+        SetActiveImGuiFonts(_fonts);
+        _appliedWindowScale = 0.0f;
+
         RenderEvents::ImGuiInitEvent::Emit();
 
         Subscribe<SDLEvents::SDLEventWrapper, &ImGuiWidget::OnSDLEvent>(this);
@@ -107,18 +111,35 @@ namespace BECore {
         RenderEvents::ImGuiShutdownEvent::Emit();
 
         ImGui_ImplSDL3_Shutdown();
+        SetActiveImGuiFonts({});
         ImGui::DestroyContext();
+        _fonts = {};
+        _fontBuffers = {};
 
         _isInitialized = false;
     }
 
-    void ImGuiWidget::OnNewFrame() const {
+    void ImGuiWidget::ApplyWindowScale() {
+        const auto& window = CoreManager::GetMainWindow();
+        if (!window) {
+            return;
+        }
+        const float scale = FontScaleFor(window->GetDisplayScale(), window->GetPixelDensity());
+        if (scale == _appliedWindowScale) {
+            return;
+        }
+        _appliedWindowScale = scale;
+        ImGui::GetStyle().FontScaleDpi = scale;
+    }
+
+    void ImGuiWidget::OnNewFrame() {
         BE_PROFILE_SCOPE("ImGuiWidget::NewFrame");
         if (!_isInitialized) {
             return;
         }
 
         RenderEvents::ImGuiNewFrameEvent::Emit();
+        ApplyWindowScale();
         ImGui::NewFrame();
     }
 

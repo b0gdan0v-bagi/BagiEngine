@@ -70,6 +70,14 @@ Code in `src/Widgets/EditorLayout/`. The logic (`KeyChord`, `HotkeyMap`, `Filter
 - **Preferences reach other panels by event.** `EditorLayoutWidget` owns the settings and emits `EditorPreferencesChangedEvent{viewportGrid, viewportGridStep, the preview fields}` on its first `Update` (the panels subscribed in `Initialize`) and on each change; a panel never reads the files. `ViewportWidget` draws the grid and restores its preview choice from it, and tells a change of that choice with `ViewportPreviewChangedEvent` (on a real change only), which `EditorLayoutWidget` stores and saves without announcing it again.
 - **Layouts.** The dock layout of the last session is restored by ImGui's own ini (`config/imgui.ini`, `ImGuiWidget`), so nothing of ours restores it. The named layouts (`LayoutStore`, names `[A-Za-z0-9_ -]`, 1..64, not a Windows device name) hold the text of `ImGui::SaveIniSettingsToMemory`. A chosen layout is kept as pending text and loaded in the handler of `RenderEvents::ImGuiNewFrameEvent` (emitted right before `ImGui::NewFrame`); `LoadIniSettingsFromMemory` in the middle of a frame can assert, and it clears the dock tree even for a bad text, so a text without the `[Docking][Data]` section is refused and the current layout stays. A window the loaded layout does not mention floats at its default place; "Reset to Defaults" rebuilds the default tree.
 
+## Editor look
+
+`ImGuiWidget` (every build) sets up the look of the ImGui context; the code is in `src/Widgets/ImGuiFonts.*`.
+
+- **Fonts.** The default font is Inter Regular with Lucide merged into it (a label can hold an icon glyph, `ICON_LC_*` of `Icons/IconsLucide.h`, and a word); the second font is JetBrains Mono, for numbers (`ScopedMonoFont`; null-safe, so a missing file costs the look, not the start). The files are `assets/fonts/` read through the layered file system (a game's file with the same name replaces ours) into `ImGuiFontBuffers`, which `ImGuiWidget` keeps until after `DestroyContext` (ImGui 1.92 reads the bytes while its atlas lives). Sizes are the named `k*FontSize` constants of `ImGuiFonts.h`. No bold or second weight. `IconsLucide.h` is vendored (kept out of clang-format).
+- **Scale.** ImGui's backend sets the rasterizer density from the framebuffer scale, so a Retina display needs nothing from us. What is left is `FontScaleFor(displayScale, pixelDensity)` (the display scale the user set over the pixel density; 2/2 is 1, 1.5/1 is 1.5), kept in `style.FontScaleDpi` and re-read every frame, so moving the window to another display needs no rebuild. `FontScaleMain` stays the user's preference (`EditorPreferences::fontScale`); the two multiply.
+- **Owner's note.** Text is rasterized by stb_truetype and may look soft at 13..15 px. The fix is `imgui_freetype`, which lives in the vendored `src/Modules/imgui/` and needs the owner's yes.
+
 ## Scene Editor Conventions
 
 Scene editor code is split across focused layers:
