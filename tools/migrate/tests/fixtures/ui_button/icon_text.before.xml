@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- A button with an icon and a caption (the icon on the left): a horizontal stack of an image child and a caption child that takes the rest. The caption gets the text attributes
+     and the fontSize, the button the clicker, the tooltip and the stack. -->
+<node name="IconText" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIButton" name="Play" x="10" y="10" width="200" height="56" icon="icons.play" text="Play" fontSize="22" overflow="Ellipsis" tooltip="{#tip.play}: {level}" action="Play" value="easy" color="40,90,60,255" />
+        <element type="UIButton" name="Off" x="10" y="80" width="200" height="56" icon="icons.stop" iconPlacement="Left" text="Stop" disabled="true" action="Stop" color="40,90,60,255" disabledColor="60,60,60,255" />
+        <element type="UIButton" name="Styled" x="10" y="150" width="240" height="64" icon="icons.gear" iconSize="28" iconTint="255,200,0,255" text="A long caption for the rest" textColor="250,240,200,255" fontSize="20" overflow="AutoFit" minFontSize="12" action="Gear" />
+        <element type="UIButton" icon="icons.play" text="Go" x="10" y="230" width="120" height="56" action="Anonymous" />
+        <element type="UIButton" name="Narrow" anchor="TopRight" x="-10" y="10" width="72" height="48" icon="icons.play" text="Narrow caption" fontSize="18" action="Play" />
+      </elements>
+      <variants>
+        <variant when="orientation:portrait">
+          <overrides>
+            <set element="Play" x="0" width="90%" visible="true" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

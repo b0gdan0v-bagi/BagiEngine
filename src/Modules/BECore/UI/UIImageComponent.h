@@ -12,8 +12,9 @@ namespace BECore {
      *
      * Like `UIImage` the picture keeps its proportions: as large as fits the rect, centred (`UISprite::FitInto`), and `stretch="true"` fills the rect instead. `tint` multiplies
      * the picture and a transparent `tint` draws nothing. The tint follows the state of the owner: `hoverTint`, `pressedTint` and `disabledTint` when they are set, else the shifts
-     * of `UIStateLook::ResolveTint` (lighter under the pointer, darker pressed, half transparent disabled); a selected picture is left alone. To put an icon beside a caption, make
-     * two children of a stack: this component has no geometry of its own beyond the owner's rect.
+     * of `UIStateLook::ResolveTint` (lighter under the pointer, darker pressed, half transparent disabled); a selected picture is left alone. The state is the owner's, or, when the owner has no
+     * `UIInputClicker`, that of the nearest ancestor that has one (`UIElement::GetVisualState`): the picture in a child of a button follows the button. To put an icon beside a caption, make two
+     * children of a stack: this component has no geometry of its own beyond the owner's rect.
      */
     class UIImageComponent : public UIComponent {
         BE_CLASS(UIImageComponent)

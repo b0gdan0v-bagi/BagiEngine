@@ -2,11 +2,12 @@
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasLayout.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
 #include <BECore/UI/UIScreenContent.h>
+#include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -55,7 +56,9 @@ namespace BECore::Tests {
                 text += Format("<element type=\"UIPanel\" name=\"c{0}\" x=\"{1}\" y=\"{2}\" width=\"140\" height=\"80\" color=\"30,30,40,255\"/>\n"
                                "<element type=\"UILabel\" name=\"t{0}\" x=\"{3}\" y=\"{4}\" width=\"124\" height=\"22\" text=\"Card {0}\" fontSize=\"18\"/>\n"
                                "<element type=\"UILabel\" name=\"v{0}\" x=\"{3}\" y=\"{5}\" width=\"124\" height=\"20\" text=\"Price {0}\" fontSize=\"14\" textColor=\"190,190,190,255\"/>\n"
-                               "<element type=\"UIButton\" name=\"b{0}\" x=\"{3}\" y=\"{6}\" width=\"56\" height=\"24\" text=\"Buy\" fontSize=\"14\" action=\"Buy\" color=\"40,90,60,255\"/>\n",
+                               "<element type=\"UIElement\" name=\"b{0}\" x=\"{3}\" y=\"{6}\" width=\"56\" height=\"24\" fontSize=\"14\" color=\"40,90,60,255\"><components>"
+                               "<component type=\"UITextComponent\" text=\"Buy\" align=\"Center\" verticalAlign=\"Center\" wrap=\"false\"/><component type=\"UIInputClicker\" "
+                               "action=\"Buy\"/></components></element>\n",
                                i, x, y, x + 8, y + 6, y + 30, y + 52)
                             .c_str();
             }

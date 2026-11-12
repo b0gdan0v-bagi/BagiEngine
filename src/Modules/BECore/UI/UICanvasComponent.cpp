@@ -157,18 +157,25 @@ namespace BECore {
         _layout.Update(MakeContext(outputWidth, outputHeight));
     }
 
-    void UICanvasComponent::DrawElement(IRenderer& renderer, UIElement& element) const {
+    void UICanvasComponent::DrawElement(IRenderer& renderer, UIElement& element, const UIStateLook::State* inheritedState) const {
         if (!element.active.visible) {
             return;
         }
         element.ResolveTheme(CoreManager::GetUIThemes());
+        // An element with a clicker is drawn in its own state and hands it to its descendants; one without is drawn in the state it was given
+        element.SetInheritedState(inheritedState);
+        UIStateLook::State ownState;
+        if (element.OwnsState()) {
+            ownState = element.GetVisualState();
+            inheritedState = &ownState;
+        }
         element.DrawSelf(renderer);
         element.DrawComponents(renderer);
         if (element.HasPopupChildren()) {
             return;  // drawn by DrawPopups() after the whole tree
         }
         for (const auto& child : element.children) {
-            DrawElement(renderer, *child);
+            DrawElement(renderer, *child, inheritedState);
         }
     }
 

@@ -145,7 +145,7 @@ namespace BECore {
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;
         void SyncParams();
         void AdoptDocument();
-        void DrawElement(IRenderer& renderer, UIElement& element) const;
+        void DrawElement(IRenderer& renderer, UIElement& element, const UIStateLook::State* inheritedState = nullptr) const;
         void DrawPopups(IRenderer& renderer) const;
         void DrawTooltip(IRenderer& renderer);
         void RefreshInputOrder();

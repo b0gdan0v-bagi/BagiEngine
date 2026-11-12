@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- Failure: an icon above the caption has no composed form (the share of the height cannot be written while the top padding changes the base of a percent); the file stays as it is. -->
+<node name="IconAbove" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIButton" name="Stacked" x="10" y="10" width="120" height="72" icon="icons.play" iconPlacement="Above" text="Go" action="Play" />
+      </elements>
+    </component>
+  </components>
+</node>

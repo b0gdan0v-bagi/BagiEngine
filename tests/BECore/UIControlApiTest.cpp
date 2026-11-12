@@ -42,6 +42,8 @@ namespace BECore::Tests {
         // "Composed": 800 x 600 in window pixels, buttons made of components. Play (10, 10, 120 x 48) has a clicker, an image, a text and a tooltip, Dead (150, 10, 100 x 48) a disabled clicker and
         //   a text, Shade (10, 100, 100 x 40) a clicker with Cover (0, 90, 120 x 60) drawn over it, Wide (10, 200, 300 x 40) a clicker, Badge (300, 10, 48 x 48) an image and a tooltip but no clicker,
         //   Bare (400, 10, 48 x 48) no components, Loud (500, 10, 120 x 48) a UIToggle with the text "Loud" that also carries a text component saying "Caption".
+        //   Buttons with children (y = 300, 48 high): Pad (10, 60 wide) a clicker with the icon child PadIcon, Mix (100, 160 wide) a clicker with a tooltip whose icon MixIcon and caption MixCaption
+        //   are in a plain Row, Hollow (300, 100 wide) a clicker with nothing below it, Outer (450, 160 wide) a clicker whose only child Inner is a clicker with a text and an icon.
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -204,6 +206,44 @@ namespace BECore::Tests {
           <element type="UIElement" name="Bare" x="400" y="10" width="48" height="48" color="40,90,60,255"/>
           <element type="UIToggle" name="Loud" bind="uiApiLoud" text="Loud" x="500" y="10" width="120" height="48" color="30,30,30,255">
             <components><component type="UITextComponent" text="Caption"/></components>
+          </element>
+          <element type="UIElement" name="Pad" x="10" y="300" width="60" height="48" color="40,90,60,255">
+            <components><component type="UIInputClicker" action="UIControlApiPad"/></components>
+            <children>
+              <element type="UIElement" name="PadIcon" anchor="Center" width="60%" height="60%">
+                <components><component type="UIImageComponent" sprite="PadSprite"/></components>
+              </element>
+            </children>
+          </element>
+          <element type="UIElement" name="Mix" x="100" y="300" width="160" height="48" color="40,90,60,255">
+            <components><component type="UIInputClicker" action="UIControlApiMix" value="m"/><component type="UITooltipComponent" text="Mix tip"/></components>
+            <children>
+              <element type="UIElement" name="Row" width="100%" height="100%">
+                <children>
+                  <element type="UIElement" name="MixIcon" x="4" y="4" width="40" height="40">
+                    <components><component type="UIImageComponent" sprite="MixSprite"/></components>
+                  </element>
+                  <element type="UIElement" name="MixCaption" x="50" y="4" width="100" height="40">
+                    <components><component type="UITextComponent" text="Mix {user}"/></components>
+                  </element>
+                </children>
+              </element>
+            </children>
+          </element>
+          <element type="UIElement" name="Hollow" x="300" y="300" width="100" height="48" color="40,90,60,255">
+            <components><component type="UIInputClicker" action="UIControlApiHollow"/></components>
+          </element>
+          <element type="UIElement" name="Outer" x="450" y="300" width="160" height="48" color="40,90,60,255">
+            <components><component type="UIInputClicker" action="UIControlApiOuter"/></components>
+            <children>
+              <element type="UIElement" name="Inner" x="4" y="4" width="100" height="40">
+                <components>
+                  <component type="UIInputClicker" action="UIControlApiInner"/>
+                  <component type="UITextComponent" text="Inner"/>
+                  <component type="UIImageComponent" sprite="InnerSprite"/>
+                </components>
+              </element>
+            </children>
           </element>
         </elements>
       </component>
@@ -1701,6 +1741,90 @@ namespace BECore::Tests {
         EXPECT_TRUE(BoolMember(*play, "selected"));
         EXPECT_EQ(StringMember(*play, "icon"), "PlayIcon");
         EXPECT_EQ(StringMember(*play, "tooltip"), "Start {#tip.play}") << "the source text";
+    }
+
+    TEST_F(UIControlApiTest, AButtonMadeOfChildrenAnswersTheTextAndTheIconOfItsChildren) {
+        CoreManager::GetUIVars().Set("user"_intern, "Ann");
+        Show("Composed");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        ASSERT_NE(bar, nullptr);
+
+        const Json* pad = FindElement(*bar, "Pad");
+        ASSERT_NE(pad, nullptr);
+        EXPECT_EQ(StringMember(*pad, "icon"), "PadSprite") << "the icon-only form: the icon child";
+        EXPECT_FALSE(pad->contains("text"));
+        EXPECT_EQ(StringMember(*pad, "action"), "UIControlApiPad");
+        const Json* padIcon = FindElement(*pad, "PadIcon");
+        ASSERT_NE(padIcon, nullptr) << "the children are still listed";
+        EXPECT_EQ(StringMember(*padIcon, "icon"), "PadSprite");
+        EXPECT_FALSE(padIcon->contains("action"));
+        EXPECT_FALSE(BoolMember(*padIcon, "interactive"));
+
+        const Json* mix = FindElement(*bar, "Mix");
+        ASSERT_NE(mix, nullptr);
+        EXPECT_EQ(StringMember(*mix, "text"), "Mix Ann") << "found below a plain child";
+        EXPECT_EQ(StringMember(*mix, "icon"), "MixSprite");
+        EXPECT_EQ(StringMember(*mix, "value"), "m");
+        EXPECT_EQ(StringMember(*mix, "tooltip"), "Mix tip");
+        EXPECT_FALSE(BoolMember(*mix, "disabled"));
+        EXPECT_EQ(StringMember(*FindElement(*mix, "MixCaption"), "text"), "Mix Ann");
+        EXPECT_EQ(StringMember(*FindElement(*mix, "MixIcon"), "icon"), "MixSprite");
+        EXPECT_FALSE(FindElement(*mix, "MixCaption")->contains("icon"));
+        EXPECT_FALSE(FindElement(*mix, "MixIcon")->contains("text"));
+    }
+
+    TEST_F(UIControlApiTest, AClickerWithNothingBelowItAnswersNeitherTextNorIcon) {
+        Show("Composed");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        ASSERT_NE(bar, nullptr);
+        const Json* hollow = FindElement(*bar, "Hollow");
+        ASSERT_NE(hollow, nullptr);
+        EXPECT_EQ(StringMember(*hollow, "action"), "UIControlApiHollow");
+        EXPECT_FALSE(hollow->contains("text"));
+        EXPECT_FALSE(hollow->contains("icon"));
+    }
+
+    TEST_F(UIControlApiTest, ANestedClickersTextAndIconAreNotTakenByItsParent) {
+        Show("Composed");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
+        ASSERT_NE(bar, nullptr);
+        const Json* outer = FindElement(*bar, "Outer");
+        ASSERT_NE(outer, nullptr);
+        EXPECT_FALSE(outer->contains("text"));
+        EXPECT_FALSE(outer->contains("icon"));
+        const Json* inner = FindElement(*outer, "Inner");
+        ASSERT_NE(inner, nullptr);
+        EXPECT_EQ(StringMember(*inner, "text"), "Inner");
+        EXPECT_EQ(StringMember(*inner, "icon"), "InnerSprite");
+        EXPECT_EQ(StringMember(*inner, "action"), "UIControlApiInner");
+    }
+
+    TEST_F(UIControlApiTest, AClickOnAButtonMadeOfChildrenFindsTheClickerNotTheIcon) {
+        Show("Composed");
+        Recorder recorder;
+
+        const Json response = Call("ui_click", Click("Mix"));
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json& result = *Member(response, "result");
+        EXPECT_TRUE(BoolMember(result, "consumed"));
+        EXPECT_EQ(StringMember(result, "action"), "UIControlApiMix");
+        EXPECT_EQ(StringMember(result, "value"), "m");
+        EXPECT_EQ(recorder.Count("UIControlApiMix"), 1);
+
+        EXPECT_EQ(ErrorCode(Call("ui_click", Click("MixIcon"))), "not_clickable") << "the icon child is no button";
     }
 
     TEST_F(UIControlApiTest, AComposedButtonIsDisabledByItsClickerAndByItsGroup) {

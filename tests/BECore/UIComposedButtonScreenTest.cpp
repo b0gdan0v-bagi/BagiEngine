@@ -5,6 +5,7 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIWebCompiler.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -92,6 +93,34 @@ namespace BECore::Tests {
           </element>
           <element type="UIButton" name="NarrowTwin" text="A caption far too long for its rect" wrap="false" overflow="Clip" x="110" y="220" width="80" height="48" action="NarrowBar"
                    color="40,60,90,255"/>)";
+
+        // The scene around a list of elements, for the screens that are not written in XML here
+        constexpr const char* kSceneHead = R"(<SceneManager><scenes>
+  <scene type="Scene" name="Main" viewWidth="480" viewHeight="300"><nodes>
+    <node name="Bar" layer="10"><components>
+      <component type="UICanvasComponent" space="SceneView"><elements>)";
+        constexpr const char* kSceneTail = R"(</elements></component>
+    </components></node>
+  </nodes></scene>
+</scenes></SceneManager>)";
+
+        // Two buttons written in HTML + CSS (an icon-only one and an icon-left one) and a `UIButton` twin of each, at the same size in the row below
+        std::string HtmlBarXml(float side) {
+            const std::string sideUnits = std::to_string(static_cast<int>(side));
+            const std::string sidePx = sideUnits + "px";
+            const std::string source = "<style>#Icon { left: 10px; top: 10px; width: " + sidePx + "; height: " + sidePx +
+                                       "; background: #283c5a } #Left { left: 70px; top: 10px; width: 200px; height: " + sidePx + "; background: #283c5a }</style>" +
+                                       R"(<button id="Icon" data-icon="BarIcon" data-action="IconBar"></button><button id="Left" data-icon="BarIcon" data-action="LeftBar">Go</button>)";
+            UIWebReport report;
+            const eastl::string compiled = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), {}, report);
+            EXPECT_TRUE(report.issues.empty());
+            const std::string xml(compiled.c_str());
+            const size_t begin = xml.find("<elements>") + std::string("<elements>").size();
+            const size_t end = xml.find("</elements>");
+            return kSceneHead + xml.substr(begin, end - begin) + R"(<element type="UIButton" name="IconTwin" icon="BarIcon" x="10" y="100" width=")" + sideUnits + R"(" height=")" + sideUnits +
+                   R"(" action="IconBar" color="40,60,90,255"/><element type="UIButton" name="LeftTwin" icon="BarIcon" text="Go" x="70" y="100" width="200" height=")" + sideUnits +
+                   R"(" action="LeftBar" color="40,60,90,255"/>)" + kSceneTail;
+        }
 
         void ReplaceAll(std::string& text, const std::string& what, const std::string& with) {
             for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + with.size())) {
@@ -192,8 +221,11 @@ namespace BECore::Tests {
         }
 
         void Load(float side, bool narrow = false) {
+            LoadXml(BarXml(side, narrow));
+        }
+
+        void LoadXml(const std::string& xml) {
             XmlDeserializer deserializer;
-            const std::string xml = BarXml(side, narrow);
             ASSERT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
             _manager = New<SceneManager>();
             _manager->Deserialize(deserializer);
@@ -253,6 +285,38 @@ namespace BECore::Tests {
                 EXPECT_EQ(issue.kind, UILayoutIssueKind::TouchTargetTooSmall) << failure.label.c_str() << " " << issue.element.CStr() << ": the image and the text add no finding";
             }
         }
+    }
+
+    TEST_F(UIComposedButtonScreenTest, TheButtonsOfAnHtmlDocumentAreReportedByTheMatrixLikeTheirTwins) {
+        for (const float side : {kTouchSize, kSmallSide}) {
+            SCOPED_TRACE(side);
+            ASSERT_NO_FATAL_FAILURE(LoadXml(HtmlBarXml(side)));
+            const auto failures = OnMatrix();
+            const std::set<std::string> composed = Findings(failures, false);
+            const std::set<std::string> twins = Findings(failures, true);
+            EXPECT_EQ(composed, twins) << Describe(composed, twins) << " / " << DescribeMatrixFailures(failures).c_str();
+            EXPECT_EQ(composed.empty(), side >= kTouchSize) << DescribeMatrixFailures(failures).c_str();
+            if (side < kTouchSize) {
+                EXPECT_TRUE(Reports(failures, UILayoutIssueKind::TouchTargetTooSmall, "Icon"));
+                EXPECT_TRUE(Reports(failures, UILayoutIssueKind::TouchTargetTooSmall, "Left"));
+            }
+        }
+    }
+
+    TEST_F(UIComposedButtonScreenTest, TheIconAndTheCaptionOfAnHtmlButtonLieWhereTheyDoInAUIButton) {
+        ASSERT_NO_FATAL_FAILURE(LoadXml(HtmlBarXml(kTouchSize)));
+        const auto expectRect = [](const Rect& expected, const Rect& actual, const char* what) {
+            EXPECT_NEAR(expected.x, actual.x, 1.0f) << what;
+            EXPECT_NEAR(expected.y, actual.y, 1.0f) << what;
+            EXPECT_NEAR(expected.w, actual.w, 1.0f) << what;
+            EXPECT_NEAR(expected.h, actual.h, 1.0f) << what;
+        };
+        const UIElement& left = Get("Left");
+        const UIButton::Parts leftParts = UIButton::GetParts(left.rect, true, true, UIIconPlacement::Left, 0.0f);
+        expectRect(leftParts.icon, Get("LeftIcon").rect, "the icon of the icon-left button");
+        expectRect(leftParts.text, Get("LeftCaption").rect, "the caption of the icon-left button");
+        const UIButton::Parts iconParts = UIButton::GetParts(Get("Icon").rect, true, false, UIIconPlacement::Left, 0.0f);
+        expectRect(iconParts.icon, Get("IconIcon").rect, "the icon of the icon-only button");
     }
 
     TEST_F(UIComposedButtonScreenTest, ACaptionThatDoesNotFitIsReportedLikeThatOfAButton) {

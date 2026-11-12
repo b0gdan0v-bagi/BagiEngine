@@ -54,7 +54,21 @@ namespace BECore {
         return std::any_of(components.begin(), components.end(), [](const auto& component) { return component->MakesInteractive(); });
     }
 
+    bool UIElement::OwnsState() const {
+        return GetComponent<UIInputClicker>() != nullptr;
+    }
+
+    void UIElement::SetInheritedState(const UIStateLook::State* state) {
+        _hasInheritedState = state != nullptr;
+        if (state) {
+            _inheritedState = *state;
+        }
+    }
+
     UIStateLook::State UIElement::GetVisualState() const {
+        if (_hasInheritedState && !OwnsState()) {
+            return _inheritedState;
+        }
         // A press that moved off the element is not shown as pressed: letting go there does nothing
         return {hovered, pressed && hovered, IsDisabled(), selected};
     }
@@ -80,6 +94,11 @@ namespace BECore {
     Color UIElement::GetStateAccent() const {
         if (const UITextComponent* caption = GetComponent<UITextComponent>()) {
             return caption->textColor;
+        }
+        for (const auto& child : children) {
+            if (const UITextComponent* caption = child->GetComponent<UITextComponent>()) {
+                return caption->textColor;
+            }
         }
         return kDefaultStateAccent;
     }

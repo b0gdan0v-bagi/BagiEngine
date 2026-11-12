@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- A button with an icon and no caption: one image child that is the square that fits (0.6 of the shorter side), or `iconSize` clamped to the button. The tint is the iconTint, else
+     the textColor as written (a literal or a token), else white. A button without a name has children without one. -->
+<node name="IconOnly" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIButton" name="Settings" x="10" y="10" width="56" height="56" icon="icons.settings" tooltip="{#tip.settings}" action="Settings" color="40,60,90,255" />
+        <element type="UIButton" name="Sized" x="70" y="10" width="96" height="48" icon="icons.play" iconSize="32" iconPlacement="Above" iconTint="255,200,0,255" action="Play" />
+        <element type="UIButton" name="Tinted" x="176" y="10" width="56" height="56" icon="icons.gear" textColor="240,220,100,255" action="Gear" value="1" />
+        <element type="UIButton" name="Tokened" x="10" y="80" width="56" height="56" icon="icons.gear" textColor="@accent" iconSize="64" action="Gear" value="2" />
+        <element type="UIButton" name="Off" x="80" y="80" width="56" height="56" icon="icons.stop" action="Stop" disabled="true" color="40,60,90,255" disabledColor="60,60,60,255" />
+        <element type="UIButton" icon="icons.settings" x="150" y="80" width="56" height="56" action="Anonymous" />
+      </elements>
+    </component>
+  </components>
+</node>

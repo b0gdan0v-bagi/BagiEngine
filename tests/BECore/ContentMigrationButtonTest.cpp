@@ -5,8 +5,10 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
+#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
+#include <BECore/UI/UIImageComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -33,6 +35,10 @@ namespace BECore::Tests {
      * it (`type` and `components` differ by design), the `ActionEvent` of a click (none when disabled), its tooltip, and the findings of the layout validator on the size matrix.
      * When a case differs the mapping of the step is wrong and the step is fixed, not this test.
      *
+     * A button with an icon becomes an image child (and a caption child): the sprite of every `UIButton` icon and of every `UIImageComponent` is the one texture of the test, so the
+     * icon quad is in the draws, and an icon case (`icon_only`, `icon_text`) compares the draws within `kIconTolerance` (the icon and the caption are other elements now and may land
+     * on a rounding of the layout) with the colours and the number of calls exact.
+     *
      * The two forms are loaded one after the other, never together: both would register their canvases with the one `UIInput` and answer the same pointer.
      */
 
@@ -45,6 +51,9 @@ namespace BECore::Tests {
         constexpr float kDefaultViewWidth = 1280.0f;  // the view of the scene a node file is put into
         constexpr float kDefaultViewHeight = 720.0f;
         constexpr float kTolerance = 1e-3f;
+        constexpr float kIconTolerance = 1.0f;                            // the quad of an icon or of its caption, in output pixels
+        constexpr const char* kIconCases[] = {"icon_only", "icon_text"};  // the pairs whose buttons have an icon
+        constexpr int kIconPixels = 16;
         constexpr float kTouchSize = 48.0f;
         constexpr float kOutside = -100.0f;  // a point on no element, to park the pointer
         constexpr const char* kStateNormal = "normal";
@@ -171,11 +180,11 @@ namespace BECore::Tests {
         }
 
         /// The first difference between two draws of a scene, empty when they are the same
-        std::string DrawDifference(const eastl::vector<DrawCall>& before, const eastl::vector<DrawCall>& after) {
+        std::string DrawDifference(const eastl::vector<DrawCall>& before, const eastl::vector<DrawCall>& after, float tolerance) {
             if (before.size() != after.size()) {
                 return "the draws have " + std::to_string(before.size()) + " and " + std::to_string(after.size()) + " calls";
             }
-            const auto differs = [](float a, float b) { return std::abs(a - b) > kTolerance; };
+            const auto differs = [tolerance](float a, float b) { return std::abs(a - b) > tolerance; };
             for (size_t i = 0; i < before.size(); ++i) {
                 const DrawCall& a = before[i];
                 const DrawCall& b = after[i];
@@ -235,7 +244,7 @@ namespace BECore::Tests {
         /// What `ui_tree` says about an element that a migration must keep: a missing key and an empty or false one are the same answer
         std::string TreeFields(const Json& element) {
             std::string fields;
-            for (const char* key : {"text", "action", "value", "tooltip"}) {
+            for (const char* key : {"text", "icon", "action", "value", "tooltip"}) {
                 fields += std::string(key) + "=" + JsonText(element, key) + "; ";
             }
             for (const char* key : {"disabled", "selected", "interactive", "visible", "blocksInput"}) {
@@ -274,6 +283,8 @@ namespace BECore::Tests {
             _renderer->height = kLargeHeight;
             CoreManager::GetRendererManager().SetRenderer(_renderer);
             RegisterUIControl(_service);
+            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
+            _icon = _renderer->CreateTexture(pixels.data(), kIconPixels, kIconPixels);
         }
 
         void TearDown() override {
@@ -281,6 +292,7 @@ namespace BECore::Tests {
             CoreManager::GetUIStrings().Clear();
             EngineEnvironment::UseSceneManager({});
             _manager.Reset();
+            _icon.Reset();
             CoreManager::GetRendererManager().SetRenderer({});
             CoreManager::GetFontAtlasLibrary().Clear();
         }
@@ -300,12 +312,37 @@ namespace BECore::Tests {
             }
             _manager->Initialize();
             EngineEnvironment::UseSceneManager(_manager);
+            GiveTheIconsATexture(xml);
             for (const std::string& scene : SceneNames(xml)) {
                 CaptureScene(scene, snapshot);
             }
             EngineEnvironment::UseSceneManager({});
             _manager.Reset();
             return true;
+        }
+
+        /// The sprite of every icon, whatever its name, is the texture of the test: the icon quad is then in the draws of both forms
+        void GiveTheIconsATexture(const std::string& xml) {
+            for (const std::string& sceneName : SceneNames(xml)) {
+                Scene* scene = _manager->GetSceneByName(PoolString::Intern(sceneName.c_str()));
+                if (scene == nullptr) {
+                    continue;
+                }
+                for (const auto& node : scene->GetRootNode().GetChildren()) {
+                    const auto canvas = node->GetComponent<UICanvasComponent>();
+                    if (!canvas) {
+                        continue;
+                    }
+                    WalkElements(canvas->GetRoot(), [this](UIElement& element) {
+                        if (auto* button = element.Cast<UIButton>(); button != nullptr && !button->icon.Empty()) {
+                            button->GetIconSprite().SetTexture(_icon);
+                        }
+                        if (auto* image = element.GetComponent<UIImageComponent>(); image != nullptr && !image->sprite.Empty()) {
+                            image->GetSprite().SetTexture(_icon);
+                        }
+                    });
+                }
+            }
         }
 
         struct CanvasRef {
@@ -497,6 +534,7 @@ namespace BECore::Tests {
 
         ControlService _service;
         IntrusivePtr<RecordingRenderer> _renderer;
+        IntrusivePtr<ITexture> _icon;
         IntrusivePtrAtomic<SceneManager> _manager;
         int64_t _nextId = 0;
     };
@@ -505,7 +543,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(std::filesystem::is_directory(FixtureFolder())) << FixtureFolder().string();
         const std::vector<std::string> names = CaseNames();
         for (const char* required : {"mahjong_hints_button", "mahjong_hand_over_action", "mahjong_setup", "match3_menu_hud", "blocker", "text_attributes", "disabled_tooltip", "with_children",
-                                     "already_composed", "icon_attributes_without_icon", "long_caption"}) {
+                                     "already_composed", "icon_attributes_without_icon", "long_caption", "icon_only", "icon_text"}) {
             EXPECT_TRUE(std::find(names.begin(), names.end(), required) != names.end()) << "no pair for " << required;
         }
     }
@@ -517,6 +555,8 @@ namespace BECore::Tests {
         ASSERT_FALSE(before.empty());
         ASSERT_FALSE(after.empty());
 
+        const bool iconCase = std::find(std::begin(kIconCases), std::end(kIconCases), name) != std::end(kIconCases);
+        const float tolerance = iconCase ? kIconTolerance : kTolerance;
         Snapshot old;
         Snapshot now;
         ASSERT_TRUE(Capture(before, old));
@@ -537,11 +577,21 @@ namespace BECore::Tests {
         }
 
         EXPECT_FALSE(old.draws.empty()) << name << ": no element that takes clicks, nothing to draw in a state";
+        if (iconCase) {
+            // The test would pass without an icon quad in either form: every button of an icon case draws the icon in its normal state
+            for (const Snapshot* form : {&old, &now}) {
+                for (const auto& [key, states] : form->draws) {
+                    const bool drawsIcon = std::any_of(states.at(kStateNormal).begin(), states.at(kStateNormal).end(),
+                                                       [this](const DrawCall& call) { return call.kind == DrawKind::Texture && call.texture == _icon.Get(); });
+                    EXPECT_TRUE(drawsIcon) << name << " " << key << " draws no icon quad" << (form == &old ? " as a UIButton" : " composed");
+                }
+            }
+        }
         for (const auto& [key, states] : old.draws) {
             const auto found = now.draws.find(key);
             ASSERT_NE(found, now.draws.end()) << name << ": " << key << " no longer takes clicks";
             for (const auto& [state, calls] : states) {
-                const std::string difference = DrawDifference(calls, found->second.at(state));
+                const std::string difference = DrawDifference(calls, found->second.at(state), tolerance);
                 EXPECT_TRUE(difference.empty()) << name << " " << key << " " << state << ": " << difference;
             }
         }

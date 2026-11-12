@@ -25,6 +25,31 @@ namespace BECore {
         constexpr size_t TextShadowMaxNumbers = 3;  // ... and the blur
         constexpr size_t TextShadowBlurIndex = 2;
 
+        // The composed button (`ui-controls.md`, "Components"): the attributes that live on its components, the forms of an icon (`UIButton::kIconOnlyShare`, `kIconWithTextShare`,
+        // `kIconPadding`, `kIconGap`, which the tests hold these to) and the name suffixes of its children
+        constexpr eastl::string_view TextComponentKeys[] = {"text",     "font", "fontFamily",  "fontWeight",  "textColor",   "align",     "verticalAlign",
+                                                            "overflow", "wrap", "lineSpacing", "minFontSize", "textOutline", "textShadow"};
+        constexpr eastl::string_view ClickerKeys[] = {"action", "value", "disabled"};
+        constexpr eastl::string_view IconKeys[] = {"icon", "iconTint", "iconPlacement"};
+        constexpr eastl::string_view StackKeys[] = {"layout", "direction", "spacing", "padding", "crossAlign", "wrapChildren"};
+        // What a `UIButton` does with its text and a `UITextComponent` does not
+        struct ButtonTextDefault {
+            eastl::string_view key;
+            eastl::string_view value;
+        };
+        constexpr ButtonTextDefault ButtonTextDefaults[] = {{"align", "Center"}, {"verticalAlign", "Center"}, {"wrap", "false"}};
+        constexpr const char* IconOnlySide = "60%";     ///< width and height of the icon of a button with no caption
+        constexpr const char* IconCaptionSide = "50%";  ///< height of the icon of a button with a caption
+        constexpr const char* IconPadding = "8,0,0,0";
+        constexpr const char* IconGap = "6";
+        constexpr eastl::string_view IconSuffix = "Icon";
+        constexpr eastl::string_view CaptionSuffix = "Caption";
+
+        template <size_t N>
+        bool IsKeyOf(const eastl::string_view (&keys)[N], eastl::string_view key) {
+            return std::find(std::begin(keys), std::end(keys), key) != std::end(keys);
+        }
+
         // The kinds of element the compile writes
         CORE_ENUM(WebKind, uint8_t, Group, Panel, Label, Button, Image, Segmented, Toggle, Slider, Progress)
 
@@ -35,7 +60,7 @@ namespace BECore {
                 case WebKind::Label:
                     return "UILabel";
                 case WebKind::Button:
-                    return "UIButton";
+                    return "UIButton";  // a segment of a group; any other button is composed (`WriteButton`)
                 case WebKind::Image:
                     return "UIImage";
                 case WebKind::Segmented:
@@ -950,6 +975,7 @@ namespace BECore {
             int parent = -1;
             eastl::vector<int> children;
             eastl::string text;
+            bool composed = false;  ///< a button that is not a segment of a group: written as a `UIElement` with components, not as a `UIButton`
         };
 
         enum class CascadeState { None, Hover, Active, Disabled, Checked };
@@ -1323,7 +1349,7 @@ namespace BECore {
             }
 
             /// The icon and the tooltip of a button: `data-icon`, `data-icon-position` and `title` anywhere else, or with a value that is not understood, are reported
-            void CheckIconAttributes(const UIHtmlNode& html, WebKind kind) {
+            void CheckIconAttributes(const UIHtmlNode& html, WebKind kind, bool composed) {
                 const auto report = [&](eastl::string message) { _report.AddOnce(HtmlSource, html.line, std::move(message)); };
                 const bool button = kind == WebKind::Button;
                 if (!button) {
@@ -1348,6 +1374,8 @@ namespace BECore {
                     }
                     if (!IconPlacementOf(*position)) {
                         report(Format("data-icon-position=\"{}\" is not supported (\"left\" or \"above\"): the default (left) is kept", position->c_str()));
+                    } else if (composed && icon != nullptr && !icon->empty() && eastl::string_view(IconPlacementOf(*position)) == "Above") {
+                        report("data-icon-position=\"above\" is not supported on a <button> yet: the icon is put left of the caption");
                     }
                 }
             }
@@ -1362,7 +1390,7 @@ namespace BECore {
             }
 
             /// `data-widget` and the `data-*` attributes of the widgets outside the places that understand them are reported, never dropped in silence
-            void CheckWidgetAttributes(int htmlIndex, WebKind kind) {
+            void CheckWidgetAttributes(int htmlIndex, WebKind kind, bool composed) {
                 const UIHtmlNode& html = _document.nodes[htmlIndex];
                 const auto report = [&](eastl::string message) { _report.AddOnce(HtmlSource, html.line, std::move(message)); };
                 const bool widget = IsWidgetKind(kind);
@@ -1381,7 +1409,7 @@ namespace BECore {
                 if (html.HasAttribute("data-action") && kind != WebKind::Button && kind != WebKind::Toggle && kind != WebKind::Slider) {
                     report("data-action only applies to a <button> or an element with data-widget=\"toggle\" or \"slider\"");
                 }
-                CheckIconAttributes(html, kind);
+                CheckIconAttributes(html, kind, composed);
                 if (kind != WebKind::Toggle) {
                     for (const char* attribute : {"data-on", "data-off"}) {
                         if (html.HasAttribute(attribute)) {
@@ -1441,7 +1469,9 @@ namespace BECore {
                         _report.AddOnce(HtmlSource, html.line, Format("<{}> is not supported, it is read as a <div>", html.tag.c_str()));
                     }
                 }
-                CheckWidgetAttributes(htmlIndex, node.kind);
+                // A segment of a group stays a `UIButton`: the group finds its segments by that class
+                node.composed = node.kind == WebKind::Button && !(parent != -1 && _nodes[parent].kind == WebKind::Segmented);
+                CheckWidgetAttributes(htmlIndex, node.kind, node.composed);
                 if (IsTextKind(node.kind)) {
                     GatherText(htmlIndex, node.text);
                     node.text = CollapseWhitespace(node.text);
@@ -1821,17 +1851,17 @@ namespace BECore {
                         attrs.Set("value", *value);
                     }
                     AddDisabled(attrs, html);
-                    AddIcon(attrs, r, html, report);
+                    AddIcon(attrs, r, html, node.composed, report);
                 }
             }
 
             /// The icon, its placement and its colour, and the tooltip of a button; each only when set (a bad placement was reported when the node was added; a colour without an icon is reported
-            /// here)
-            static void AddIcon(Attrs& attrs, const Resolved& r, const UIHtmlNode& html, UIWebReport* report) {
+            /// here). A composed button has no placement: its icon is always left of the caption
+            static void AddIcon(Attrs& attrs, const Resolved& r, const UIHtmlNode& html, bool composed, UIWebReport* report) {
                 const eastl::string* icon = html.FindAttribute("data-icon");
                 if (icon != nullptr && !icon->empty()) {
                     attrs.Set("icon", *icon);
-                    if (const eastl::string* position = html.FindAttribute("data-icon-position")) {
+                    if (const eastl::string* position = html.FindAttribute("data-icon-position"); position != nullptr && !composed) {
                         if (const char* placement = IconPlacementOf(*position); placement != nullptr && eastl::string_view(placement) != "Left") {
                             attrs.Set("iconPlacement", placement);
                         }
@@ -1957,8 +1987,143 @@ namespace BECore {
                 }
             }
 
+            /// A button with an icon and a text: the icon is left of the caption, in a child each
+            [[nodiscard]] bool IsIconLeft(int index) const {
+                const Attrs& attrs = _baseAttrs[index];
+                const eastl::string* text = attrs.Find("text");
+                return _nodes[index].composed && attrs.Find("icon") != nullptr && text != nullptr && !text->empty();
+            }
+
+            static void AddComponentAttribute(pugi::xml_node component, const Attrs& attrs, eastl::string_view key) {
+                if (const eastl::string* value = attrs.Find(key)) {
+                    component.append_attribute(eastl::string(key).c_str()) = value->c_str();
+                }
+            }
+
+            /// The text of a button as a `UITextComponent`, with the centring a `UIButton` has by itself; @p colorOnly writes the colour alone (the bar of a selected icon-only button takes it)
+            static void AddTextComponent(pugi::xml_node components, const Attrs& attrs, bool colorOnly) {
+                if (colorOnly && attrs.Find("textColor") == nullptr) {
+                    return;
+                }
+                pugi::xml_node component = components.append_child("component");
+                component.append_attribute("type") = "UITextComponent";
+                for (const eastl::string_view key : TextComponentKeys) {
+                    if (colorOnly && key != "textColor") {
+                        continue;
+                    }
+                    if (attrs.Find(key) != nullptr) {
+                        AddComponentAttribute(component, attrs, key);
+                        continue;
+                    }
+                    const auto* centring = std::find_if(std::begin(ButtonTextDefaults), std::end(ButtonTextDefaults), [&](const ButtonTextDefault& entry) { return entry.key == key; });
+                    if (!colorOnly && centring != std::end(ButtonTextDefaults)) {
+                        component.append_attribute(eastl::string(key).c_str()) = eastl::string(centring->value).c_str();
+                    }
+                }
+            }
+
+            /// One child element that holds one component; its name is the button's with @p suffix, or none when the button has none
+            pugi::xml_node AppendPartChild(pugi::xml_node children, const WebNode& node, eastl::string_view suffix) {
+                pugi::xml_node element = children.append_child("element");
+                element.append_attribute("type") = "UIElement";
+                if (!node.name.empty()) {
+                    element.append_attribute("name") = Format("{}{}", node.name.c_str(), eastl::string(suffix).c_str()).c_str();
+                }
+                ++_report.elements;
+                return element;
+            }
+
+            /// A button as an element with the components of a button: the text, always a clicker, a tooltip, and for an icon one child (the image) or two (the image and the caption).
+            /// `ui-controls.md` ("Components") has the forms; `tools/migrate/steps/s0001_ui_button_to_components.py` writes the same ones
+            void WriteButton(pugi::xml_node parent, int index) {
+                const WebNode& node = _nodes[index];
+                const Attrs& attrs = _baseAttrs[index];
+                const bool hasIcon = attrs.Find("icon") != nullptr;
+                const bool iconLeft = IsIconLeft(index);
+
+                pugi::xml_node element = parent.append_child("element");
+                element.append_attribute("type") = TypeName(WebKind::Group);
+                if (!node.name.empty()) {
+                    element.append_attribute("name") = node.name.c_str();
+                }
+                bool ownStack = false;
+                for (const auto& [key, value] : attrs.Entries()) {
+                    const bool moved = IsKeyOf(TextComponentKeys, key) || IsKeyOf(ClickerKeys, key) || IsKeyOf(IconKeys, key) || key == "tooltip" || (iconLeft && key == "fontSize");
+                    // The children of an icon button are a stack of their own, so its own stack attributes would fight them
+                    const bool stack = hasIcon && IsKeyOf(StackKeys, key);
+                    ownStack |= stack;
+                    if (!moved && !stack) {
+                        element.append_attribute(key.c_str()) = value.c_str();
+                    }
+                }
+                if (ownStack) {
+                    _report.AddOnce(HtmlSource, _document.nodes[node.html].line,
+                                    "a <button> with data-icon lays its icon and caption out itself: display: flex, gap, padding, flex-direction, flex-wrap and align-items on it are left out");
+                }
+                if (iconLeft) {
+                    element.append_attribute("layout") = "Stack";
+                    element.append_attribute("direction") = "Horizontal";
+                    element.append_attribute("padding") = IconPadding;
+                    element.append_attribute("spacing") = IconGap;
+                    element.append_attribute("crossAlign") = "Center";
+                }
+                ++_report.elements;
+
+                pugi::xml_node components = element.append_child("components");
+                if (!hasIcon) {
+                    AddTextComponent(components, attrs, false);
+                } else if (!iconLeft) {
+                    AddTextComponent(components, attrs, true);
+                }
+                pugi::xml_node clicker = components.append_child("component");
+                clicker.append_attribute("type") = "UIInputClicker";
+                for (const eastl::string_view key : ClickerKeys) {
+                    AddComponentAttribute(clicker, attrs, key);
+                }
+                if (const eastl::string* tooltip = attrs.Find("tooltip")) {
+                    pugi::xml_node component = components.append_child("component");
+                    component.append_attribute("type") = "UITooltipComponent";
+                    component.append_attribute("text") = tooltip->c_str();
+                }
+                if (!hasIcon) {
+                    return;
+                }
+
+                // The tint of the icon is `-be-icon-color`, else the colour of the text
+                const eastl::string* tint = attrs.Find("iconTint") != nullptr ? attrs.Find("iconTint") : attrs.Find("textColor");
+                pugi::xml_node children = element.append_child("children");
+                pugi::xml_node icon = AppendPartChild(children, node, IconSuffix);
+                if (iconLeft) {
+                    icon.append_attribute("height") = IconCaptionSide;
+                } else {
+                    icon.append_attribute("anchor") = "Center";
+                    icon.append_attribute("width") = IconOnlySide;
+                    icon.append_attribute("height") = IconOnlySide;
+                }
+                icon.append_attribute("aspectRatio") = "1";
+                pugi::xml_node image = icon.append_child("components").append_child("component");
+                image.append_attribute("type") = "UIImageComponent";
+                image.append_attribute("sprite") = attrs.Find("icon")->c_str();
+                if (tint != nullptr) {
+                    image.append_attribute("tint") = tint->c_str();
+                }
+                if (iconLeft) {
+                    pugi::xml_node caption = AppendPartChild(children, node, CaptionSuffix);
+                    caption.append_attribute("flex") = "1";
+                    caption.append_attribute("height") = "100%";
+                    if (const eastl::string* fontSize = attrs.Find("fontSize")) {
+                        caption.append_attribute("fontSize") = fontSize->c_str();
+                    }
+                    AddTextComponent(caption.append_child("components"), attrs, false);
+                }
+            }
+
             void WriteNode(pugi::xml_node parent, int index) {
                 const WebNode& node = _nodes[index];
+                if (node.composed) {
+                    WriteButton(parent, index);
+                    return;
+                }
                 pugi::xml_node element = parent.append_child("element");
                 element.append_attribute("type") = TypeName(node.kind);
                 if (!node.name.empty()) {
@@ -2006,8 +2171,22 @@ namespace BECore {
                         for (const Override& entry : variant.overrides) {
                             pugi::xml_node set = overrides.append_child("set");
                             set.append_attribute("element") = _nodes[entry.node].name.c_str();
+                            // The font size of an icon-left button is the caption's
+                            const bool captionHolds = IsIconLeft(entry.node);
+                            pugi::xml_node captionSet;
                             for (const auto& [key, value] : entry.values) {
-                                set.append_attribute(key.c_str()) = value.c_str();
+                                if (captionHolds && key == "fontSize") {
+                                    if (!captionSet) {
+                                        captionSet = overrides.append_child("set");
+                                        captionSet.append_attribute("element") = Format("{}{}", _nodes[entry.node].name.c_str(), eastl::string(CaptionSuffix).c_str()).c_str();
+                                    }
+                                    captionSet.append_attribute(key.c_str()) = value.c_str();
+                                } else {
+                                    set.append_attribute(key.c_str()) = value.c_str();
+                                }
+                            }
+                            if (captionSet && set.attributes_begin() != set.attributes_end() && ++set.attributes_begin() == set.attributes_end()) {
+                                overrides.remove_child(set);
                             }
                         }
                     }

@@ -42,9 +42,9 @@ def id_of(path: Path) -> str:
 
 def test_every_fixture_is_a_pair_or_a_failure_and_the_cases_are_there():
     names = {id_of(p) for p in BEFORE_FILES}
-    for case in ("mahjong_hints_button", "mahjong_hand_over_action", "mahjong_setup", "match3_menu_hud", "blocker", "text_attributes", "disabled_tooltip", "with_children", "already_composed", "icon_attributes_without_icon", "long_caption"):
+    for case in ("mahjong_hints_button", "mahjong_hand_over_action", "mahjong_setup", "match3_menu_hud", "blocker", "text_attributes", "disabled_tooltip", "with_children", "already_composed", "icon_attributes_without_icon", "long_caption", "icon_only", "icon_text"):
         assert case in names
-    assert {id_of(p) for p in FAILURES} == {"fail_icon_with_text", "fail_icon_only", "fail_set_text", "fail_interactive_off", "fail_has_components"}
+    assert {id_of(p) for p in FAILURES} == {"fail_icon_above", "fail_icon_with_children", "fail_icon_variant_font_size", "fail_set_text", "fail_interactive_off", "fail_has_components"}
     assert not list(FIXTURES.glob("fail_*.after.xml"))
 
 
@@ -74,8 +74,9 @@ def test_nothing_of_a_button_is_left_where_it_was_but_the_buttons(before):
 
 
 EXPECTED_REASONS = {
-    "fail_icon_with_text": ['button "Play"', 'icon="icons.play"', "by hand"],
-    "fail_icon_only": ['button "Settings"', 'icon="icons.settings"', "by hand"],
+    "fail_icon_above": ['button "Stacked"', 'iconPlacement="Above"', "by hand"],
+    "fail_icon_with_children": ['button "Badged"', "has an icon and <children>", "by hand"],
+    "fail_icon_variant_font_size": ['button "Play"', "variant sets fontSize"],
     "fail_set_text": ['button "Go"', "variant sets text"],
     "fail_interactive_off": ['button "Dead"', 'interactive="false"'],
     "fail_has_components": ['button "Mixed"', "<components> already"],
@@ -86,7 +87,7 @@ EXPECTED_REASONS = {
 def test_a_failure_names_the_element_and_the_line(before):
     text = before.read_text(encoding="utf-8")
     _, ctx = apply(text)
-    assert len(ctx.failures) == (2 if id_of(before) == "fail_icon_only" else 1)  # every refused button is reported
+    assert len(ctx.failures) == (2 if id_of(before) == "fail_icon_with_children" else 1)  # every refused button is reported
     failure = ctx.failures[0]
     for part in EXPECTED_REASONS[id_of(before)]:
         assert part in failure.text
@@ -150,6 +151,43 @@ def test_a_set_of_the_layout_on_a_button_is_fine_and_a_set_of_another_canvas_is_
     assert not ctx.failures and len(ctx.notes) == 1
 
 
+def test_a_set_of_the_layout_on_an_icon_button_is_fine_and_a_set_of_its_font_size_is_only_fine_without_a_caption():
+    def overrides(attributes: str, button: str) -> str:
+        return (
+            f'<node><components><component type="UICanvasComponent"><elements><element type="UIButton" name="Go" {button}/></elements>'
+            f'<variants><variant><overrides><set element="Go" {attributes}/></overrides></variant></variants></component></components></node>'
+        )
+
+    _, ctx = apply(overrides('x="1" width="50%" visible="false" anchor="Center"', 'icon="i" text="Go"'))
+    assert not ctx.failures and len(ctx.notes) == 1
+    _, ctx = apply(overrides('fontSize="30"', 'icon="i"'))
+    assert not ctx.failures
+    for attributes in ('fontSize="30"', 'text="Go!"', 'icon="j"', 'iconTint="1,2,3,4"', 'disabled="true"'):
+        _, ctx = apply(overrides(attributes, 'icon="i" text="Go"'))
+        assert len(ctx.failures) == 1, attributes
+
+
+def test_an_icon_only_button_with_a_placement_above_is_composed_but_one_with_a_caption_is_not():
+    _, ctx = apply('<node><element type="UIButton" name="B" icon="i" iconPlacement="Above"/></node>')
+    assert not ctx.failures
+    _, ctx = apply('<node><element type="UIButton" name="B" icon="i" iconPlacement="Above" text="x"/></node>')
+    assert len(ctx.failures) == 1
+
+
+def test_an_empty_text_is_no_caption_and_the_children_of_an_unnamed_button_have_no_name():
+    output, ctx = apply('<node><element type="UIButton" icon="i" text=""/></node>')
+    assert not ctx.failures
+    assert "UITextComponent" not in output and "Caption" not in output and "name=" not in output
+
+
+def test_the_layout_attributes_of_an_icon_button_are_refused_one_by_one():
+    for attribute in ("layout", "direction", "spacing", "padding", "crossAlign", "wrapChildren"):
+        _, ctx = apply(f'<node><element type="UIButton" name="B" icon="i" {attribute}="x"/></node>')
+        assert len(ctx.failures) == 1 and attribute in ctx.failures[0].text, attribute
+    _, ctx = apply('<node><element type="UIButton" name="B" text="x" spacing="4" padding="2"/></node>')
+    assert not ctx.failures  # a button without an icon keeps them on the element as before
+
+
 def test_an_unnamed_button_is_composed():
     output, ctx = apply('<node><element type="UIButton" width="48" height="48"/></node>')
     assert not ctx.failures
@@ -191,6 +229,18 @@ def test_the_lists_of_the_step_are_the_reflected_fields_of_the_classes():
     assert moved & element == set()
     assert set(step_module.DROPPED_ATTRIBUTES) == {"interactive"} and "interactive" in element
     assert {n for n, _ in step_module.BUTTON_TEXT_DEFAULTS} <= set(step_module.TEXT_ATTRIBUTES)
+
+
+def test_the_forms_of_an_icon_are_the_constants_of_uibutton():
+    header = (UI_SOURCES / "UIButton.h").read_text(encoding="utf-8")
+
+    def constant(name: str) -> float:
+        return float(re.search(rf"{name}\s*=\s*([0-9.]+)f", header).group(1))
+
+    assert step_module.ICON_ONLY_SHARE == f"{round(constant('kIconOnlyShare') * 100)}%"
+    assert step_module.ICON_WITH_TEXT_SHARE == f"{round(constant('kIconWithTextShare') * 100)}%"
+    assert float(step_module.ICON_PADDING) == constant("kIconPadding")
+    assert float(step_module.ICON_GAP) == constant("kIconGap")
 
 
 def test_the_defaults_written_are_those_of_the_constructor_of_uibutton():
