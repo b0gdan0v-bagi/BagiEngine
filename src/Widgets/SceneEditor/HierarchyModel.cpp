@@ -82,6 +82,18 @@ namespace BECore::HierarchyModel {
 
     }  // namespace
 
+    bool ContainsNode(const SceneNode& root, const SceneNode* node) {
+        if (&root == node) {
+            return true;
+        }
+        for (const auto& child : root.GetChildren()) {
+            if (ContainsNode(*child, node)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool IsFilterActive(eastl::string_view query, eastl::string_view componentType) {
         return !query.empty() || !componentType.empty();
     }

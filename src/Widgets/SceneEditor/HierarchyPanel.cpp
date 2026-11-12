@@ -5,6 +5,7 @@
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/EditorLayout/IconTable.h>
 #include <Widgets/Icons/IconsLucide.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -12,6 +13,13 @@ namespace BECore {
     namespace {
 
         constexpr size_t kComponentLabelSize = 96;
+        constexpr const char* kNodePayload = "BE_SCENE_NODE";
+        constexpr float kDropLineThickness = 2.0f;
+        constexpr float kDropBoxRounding = 3.0f;
+
+        bool FilterIsOn(const HierarchyState& state) {
+            return HierarchyModel::IsFilterActive(state.searchBuffer, state.componentType);
+        }
 
         void DrawRenameField(HierarchyState& state, SceneNode& node) {
             ImGui::SameLine();
@@ -72,7 +80,61 @@ namespace BECore {
             ImGui::EndPopup();
         }
 
-        void DrawNode(HierarchyState& state, SceneNode& node) {
+        // The drop line (before, after) or box (into) of a drag over the row just drawn, in the accent colour
+        void DrawDropMark(HierarchyModel::DropPlace place) {
+            const ImVec2 min = ImGui::GetItemRectMin();
+            const ImVec2 max = ImGui::GetItemRectMax();
+            const ImU32 color = ImGui::GetColorU32(GetImGuiPalette().accent);
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            switch (place) {
+                case HierarchyModel::DropPlace::Before:
+                    drawList->AddLine(ImVec2(min.x, min.y), ImVec2(max.x, min.y), color, kDropLineThickness);
+                    break;
+                case HierarchyModel::DropPlace::After:
+                    drawList->AddLine(ImVec2(min.x, max.y), ImVec2(max.x, max.y), color, kDropLineThickness);
+                    break;
+                case HierarchyModel::DropPlace::Into:
+                    drawList->AddRect(min, max, color, kDropBoxRounding, ImDrawFlags_None, kDropLineThickness);
+                    break;
+            }
+        }
+
+        // The row just drawn as the source and the target of a drag. A move waits in state.pending
+        void HandleDragDrop(HierarchyState& state, SceneNode& node, bool filterOn) {
+            if (filterOn) {
+                // The shown order is not the real one, so a drop could not mean what the line says
+                if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                    ImGui::SetTooltip("Drag and drop is off while a filter is on");
+                }
+                return;
+            }
+            if (node.GetParent() != nullptr && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers)) {
+                SceneNode* dragged = &node;
+                ImGui::SetDragDropPayload(kNodePayload, &dragged, sizeof(dragged));
+                ImGui::Text("%s %s", IconOfNode(node), node.GetName().CStr());
+                ImGui::EndDragDropSource();
+            }
+            if (state.dragNode == nullptr || !ImGui::BeginDragDropTarget()) {
+                return;
+            }
+            const ImVec2 min = ImGui::GetItemRectMin();
+            const float height = ImGui::GetItemRectMax().y - min.y;
+            const float fraction = height > 0.0f ? (ImGui::GetMousePos().y - min.y) / height : 0.0f;
+            const HierarchyModel::DropPlace place = HierarchyModel::ClassifyDropPlace(fraction);
+            if (HierarchyModel::CanDrop(*state.dragNode, node, place)) {
+                const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kNodePayload, ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+                if (payload != nullptr) {
+                    DrawDropMark(place);
+                    if (payload->IsDelivery()) {
+                        const HierarchyModel::DropTarget target = HierarchyModel::ResolveDrop(*state.dragNode, node, place);
+                        state.pending = {HierarchyModel::OperationKind::Move, state.dragNode, target.parent, target.index};
+                    }
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        void DrawNode(HierarchyState& state, SceneNode& node, bool filterOn) {
             const auto& children = node.GetChildren();
 
             ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap;
@@ -82,28 +144,81 @@ namespace BECore {
             if (state.selected == &node) {
                 flags |= ImGuiTreeNodeFlags_Selected;
             }
-            if (state.revealNode == &node) {
+            // A filter opens the path to its matches; an ancestor that is not a match is dimmed
+            const bool dimmed = filterOn && !HierarchyModel::NodeMatchesFilter(node, state.searchBuffer, state.componentType);
+            if (state.revealNode == &node || (filterOn && !children.empty())) {
                 ImGui::SetNextItemOpen(true);
             }
 
             const bool renaming = state.renameTarget == &node;
+            if (dimmed) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+            }
             const bool isOpen = renaming ? ImGui::TreeNodeEx(&node, flags, "%s", IconOfNode(node)) : ImGui::TreeNodeEx(&node, flags, "%s %s", IconOfNode(node), node.GetName().CStr());
+            if (dimmed) {
+                ImGui::PopStyleColor();
+            }
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
                 state.selected = &node;
             }
             if (renaming) {
                 DrawRenameField(state, node);
             } else {
+                HandleDragDrop(state, node, filterOn);
                 DrawContextMenu(state, node);
             }
 
             if (isOpen) {
                 // No copy of the child list: every change of the tree waits in state.pending until the walk is over
                 for (const auto& child : children) {
-                    DrawNode(state, *child.Get());
+                    if (!filterOn || HierarchyModel::SubtreeMatchesFilter(*child, state.searchBuffer, state.componentType)) {
+                        DrawNode(state, *child.Get(), filterOn);
+                    }
                 }
                 ImGui::TreePop();
             }
+        }
+
+        void DrawTypeCombo(HierarchyState& state, Scene& scene) {
+            char preview[kComponentLabelSize];
+            snprintf(preview, sizeof(preview), "%s %s", ICON_LC_FILTER, state.componentType.empty() ? "Any component" : state.componentType.data());
+            ImGui::SetNextItemWidth(-1.0f);
+            if (!ImGui::BeginCombo("##component_type", preview)) {
+                state.typeComboOpen = false;
+                ItemTooltip("Show only the nodes that have this component");
+                return;
+            }
+            if (!state.typeComboOpen) {
+                // Collected when the combo opens, not every frame
+                HierarchyModel::CollectComponentTypes(scene.GetRootNode(), state.componentTypes);
+                state.typeComboOpen = true;
+            }
+            if (ImGui::Selectable("Any component", state.componentType.empty())) {
+                state.componentType = {};
+            }
+            for (const eastl::string_view type : state.componentTypes) {
+                if (ImGui::Selectable(type.data(), type == state.componentType)) {
+                    state.componentType = type;
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        void DrawFilterBar(HierarchyState& state, Scene& scene) {
+            if (state.focusSearch) {
+                ImGui::SetKeyboardFocusHere();
+                state.focusSearch = false;
+            }
+            const float clearWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+            ImGui::SetNextItemWidth(-clearWidth);
+            ImGui::InputTextWithHint("##search", ICON_LC_SEARCH " Search (Ctrl+F)", state.searchBuffer, sizeof(state.searchBuffer));
+            ImGui::SameLine();
+            ImGui::BeginDisabled(state.searchBuffer[0] == '\0');
+            if (IconButton(ICON_LC_X, "Clear the search text", "##clear_search")) {
+                state.searchBuffer[0] = '\0';
+            }
+            ImGui::EndDisabled();
+            DrawTypeCombo(state, scene);
         }
 
         // Keys of the focused panel; a text field (rename, later the search box) keeps them to itself
@@ -165,8 +280,25 @@ namespace BECore {
             ImGui::TextUnformatted("Hierarchy");
             ImGui::Separator();
 
+            if (ImGui::IsWindowFocused() && ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_F)) {
+                state.focusSearch = true;
+            }
+            // The payload of a drag holds a pointer: it is used only when the node is found in the tree
+            state.dragNode = nullptr;
+            if (const ImGuiPayload* payload = ImGui::GetDragDropPayload(); payload != nullptr && payload->IsDataType(kNodePayload)) {
+                SceneNode* dragged = *static_cast<SceneNode* const*>(payload->Data);
+                state.dragNode = HierarchyModel::ContainsNode(scene.GetRootNode(), dragged) ? dragged : nullptr;
+            }
+
+            DrawFilterBar(state, scene);
             HandleKeys(state);
-            DrawNode(state, scene.GetRootNode());
+
+            const bool filterOn = FilterIsOn(state);
+            if (filterOn && !HierarchyModel::SubtreeMatchesFilter(scene.GetRootNode(), state.searchBuffer, state.componentType)) {
+                EmptyState(ICON_LC_SEARCH, "No node matches the filter");
+            } else {
+                DrawNode(state, scene.GetRootNode(), filterOn);
+            }
             state.revealNode = nullptr;
             ApplyPending(scene, state);
 

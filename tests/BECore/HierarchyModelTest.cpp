@@ -348,4 +348,15 @@ namespace BECore::Tests {
         EXPECT_FALSE(IsSelfOrAncestorOf(&Node("Leaf"), nullptr));
     }
 
+    TEST_F(HierarchyModelTest, ContainsNodeComparesPointersOnly) {
+        EXPECT_TRUE(ContainsNode(Root(), &Node("Leaf")));
+        EXPECT_TRUE(ContainsNode(Root(), &Root()));
+        EXPECT_FALSE(ContainsNode(Node("Branch"), &Node("A")));
+        EXPECT_FALSE(ContainsNode(Root(), nullptr));
+
+        SceneNode* removed = &Node("B2");
+        Node("Branch").RemoveChild(removed);
+        EXPECT_FALSE(ContainsNode(Root(), removed));
+    }
+
 }  // namespace BECore::Tests

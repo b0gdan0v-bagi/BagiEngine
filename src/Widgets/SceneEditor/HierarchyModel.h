@@ -53,6 +53,9 @@ namespace BECore::HierarchyModel {
     /// True when @p node is @p ancestor or lies below it. Null on either side gives false
     bool IsSelfOrAncestorOf(const SceneNode* ancestor, const SceneNode* node);
 
+    /// True when @p node is @p root or lies in its tree. Compares pointers only, so a node that is already gone is safe to ask about
+    bool ContainsNode(const SceneNode& root, const SceneNode* node);
+
     /// True when a search text or a component type is set, so the tree shows only what the filter keeps
     bool IsFilterActive(eastl::string_view query, eastl::string_view componentType);
 
