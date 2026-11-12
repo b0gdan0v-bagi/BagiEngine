@@ -553,4 +553,286 @@ namespace BECore::Tests {
         EXPECT_TRUE(GetJsonBool(host.Last(RoomMessageTypes::kView)->json, "finished").value_or(false));
     }
 
+    // ---- Limits per address, the failed-join budgets, the lobby timeout ------------------------------------------------------------
+
+    TEST(RoomHubTest, RoomsPerAddressAreLimitedAndFollowTheRoomsLife) {
+        RoomHubSettings settings = HubHarness::MakeSettings();
+        settings.maxRoomsPerAddress = 2;
+        HubHarness harness(settings);
+        const ConnectionId first = harness.Connect("10.0.0.1");
+        const ConnectionId second = harness.Connect("10.0.0.1");
+        const ConnectionId third = harness.Connect("10.0.0.1");
+        harness.Create(first, "A");
+        harness.Create(second, "B");
+        harness.Create(third, "C");
+        EXPECT_EQ(harness.Client(third).LastErrorCode(), RoomErrors::kTooManyRooms);
+        EXPECT_NE(harness.Client(third).Last(RoomMessageTypes::kError)->GetString("message").find("your address"), eastl::string::npos);
+        EXPECT_EQ(harness.Hub().GetRoomCount(), 2u);
+
+        // Another address, and a connection with no address, are not counted
+        const ConnectionId other = harness.Connect("10.0.0.2");
+        harness.Create(other, "D");
+        EXPECT_EQ(harness.Client(other).Count(RoomMessageTypes::kJoined), 1u);
+        const ConnectionId unknown = harness.Connect();
+        harness.Create(unknown, "E");
+        EXPECT_EQ(harness.Client(unknown).Count(RoomMessageTypes::kJoined), 1u);
+
+        // A room stays the address's while it exists, also when its creator is gone
+        const ConnectionId guest = harness.Connect("10.0.0.3");
+        harness.JoinByName(guest, harness.Client(first).roomCode, "G");
+        harness.Disconnect(first);
+        harness.Create(third, "C");
+        EXPECT_EQ(harness.Client(third).LastErrorCode(), RoomErrors::kTooManyRooms);
+        // A closed room frees the place
+        harness.Leave(guest);
+        harness.Create(third, "C");
+        EXPECT_EQ(harness.Client(third).Count(RoomMessageTypes::kJoined), 1u);
+    }
+
+    TEST(RoomHubTest, NoAddressMeansNoPerAddressLimit) {
+        RoomHubSettings settings = HubHarness::MakeSettings();
+        settings.maxRoomsPerAddress = 1;
+        HubHarness harness(settings);
+        for (int i = 0; i < 4; ++i) {
+            const ConnectionId id = harness.Connect();
+            harness.Create(id, "A");
+            EXPECT_EQ(harness.Client(id).Count(RoomMessageTypes::kJoined), 1u);
+        }
+        EXPECT_EQ(harness.Hub().GetAddressCount(), 0u);
+        // 0 is off for an address too
+        settings.maxRoomsPerAddress = 0;
+        HubHarness unlimited(settings);
+        for (int i = 0; i < 5; ++i) {
+            const ConnectionId id = unlimited.Connect("10.0.0.1");
+            unlimited.Create(id, "A");
+            EXPECT_EQ(unlimited.Client(id).Count(RoomMessageTypes::kJoined), 1u);
+        }
+    }
+
+    TEST(RoomHubTest, GuessingAcrossReconnectsFromOneAddressIsStoppedByTheBudget) {
+        RoomHubSettings settings = HubHarness::MakeSettings();
+        settings.addressJoinBurst = 6;
+        settings.addressJoinRefill = seconds(30);
+        HubHarness harness(settings);
+        const ConnectionId host = harness.Connect("10.0.0.9");
+        harness.Create(host, "Ann");
+        const eastl::string code = harness.Client(host).roomCode;
+
+        // Five guesses close a connection, and the next one starts at zero: the budget of the address is what counts
+        const ConnectionId one = harness.Connect("10.0.0.1");
+        for (int i = 0; i < 5; ++i) {
+            harness.JoinByName(one, "ZZZZZ", "Mal");
+        }
+        EXPECT_TRUE(harness.Client(one).closed);
+        const ConnectionId two = harness.Connect("10.0.0.1");
+        harness.JoinByName(two, "ZZZZZ", "Mal");
+        EXPECT_EQ(harness.Client(two).LastErrorCode(), RoomErrors::kUnknownRoom);
+
+        // The budget is empty: the answer is the same for a code that exists and for one that does not
+        harness.JoinByName(two, "YYYYY", "Mal");
+        const eastl::string absent = harness.Client(two).Last(RoomMessageTypes::kError)->text;
+        harness.JoinByName(two, code, "Mal");
+        const eastl::string present = harness.Client(two).Last(RoomMessageTypes::kError)->text;
+        EXPECT_EQ(harness.Client(two).LastErrorCode(), RoomErrors::kRateLimited);
+        EXPECT_EQ(absent, present);
+        EXPECT_EQ(harness.Client(two).roomCode, "");
+
+        // Another address is unaffected
+        const ConnectionId neighbour = harness.Connect("10.0.0.2");
+        harness.JoinByName(neighbour, "ZZZZZ", "Bob");
+        EXPECT_EQ(harness.Client(neighbour).LastErrorCode(), RoomErrors::kUnknownRoom);
+        harness.JoinByName(neighbour, code, "Bob");
+        EXPECT_EQ(harness.Client(neighbour).Count(RoomMessageTypes::kJoined), 1u);
+
+        // A refused join counts for the connection like a failed one: it is closed after the fifth in a row
+        const ConnectionId three = harness.Connect("10.0.0.1");
+        for (int i = 0; i < 4; ++i) {
+            harness.JoinByName(three, code, "Mal");
+        }
+        EXPECT_FALSE(harness.Client(three).closed);
+        harness.JoinByName(three, code, "Mal");
+        EXPECT_TRUE(harness.Client(three).closed);
+
+        // The budget refills with the clock: one guess per 30 s
+        harness.Advance(seconds(30));
+        const ConnectionId four = harness.Connect("10.0.0.1");
+        harness.JoinByName(four, "ZZZZZ", "Mal");
+        EXPECT_EQ(harness.Client(four).LastErrorCode(), RoomErrors::kUnknownRoom);
+        harness.JoinByName(four, "ZZZZZ", "Mal");
+        EXPECT_EQ(harness.Client(four).LastErrorCode(), RoomErrors::kRateLimited);
+    }
+
+    TEST(RoomHubTest, TheServerWideBudgetStopsGuessingFromManyAddresses) {
+        RoomHubSettings settings = HubHarness::MakeSettings();
+        settings.serverJoinBurst = 6;
+        settings.serverJoinRefill = seconds(6);
+        HubHarness harness(settings);
+        const ConnectionId host = harness.Connect("10.0.0.99");
+        harness.Create(host, "Ann");
+        const eastl::string code = harness.Client(host).roomCode;
+        for (int i = 0; i < 6; ++i) {
+            const ConnectionId guesser = harness.Connect(Format("10.0.1.{}", i).c_str());
+            harness.JoinByName(guesser, "ZZZZZ", "Mal");
+            EXPECT_EQ(harness.Client(guesser).LastErrorCode(), RoomErrors::kUnknownRoom);
+        }
+        const ConnectionId next = harness.Connect("10.0.2.1");
+        harness.JoinByName(next, code, "Mal");
+        EXPECT_EQ(harness.Client(next).LastErrorCode(), RoomErrors::kRateLimited);
+        // Also a connection with no address
+        const ConnectionId unknown = harness.Connect();
+        harness.JoinByName(unknown, "ZZZZZ", "Mal");
+        EXPECT_EQ(harness.Client(unknown).LastErrorCode(), RoomErrors::kRateLimited);
+        // create_room and ping are not touched
+        harness.Ping(next);
+        EXPECT_EQ(harness.Client(next).Count(RoomMessageTypes::kPong), 1u);
+        harness.Create(next, "Mal");
+        EXPECT_EQ(harness.Client(next).Count(RoomMessageTypes::kJoined), 1u);
+        // One token comes back after 6 s
+        harness.Advance(seconds(6));
+        const ConnectionId later = harness.Connect("10.0.2.2");
+        harness.JoinByName(later, code, "Bob");
+        EXPECT_EQ(harness.Client(later).Count(RoomMessageTypes::kJoined), 1u);
+    }
+
+    TEST(RoomHubTest, ATypoAndARetryNeverTripTheBudgets) {
+        HubHarness harness;
+        const ConnectionId host = harness.Connect("10.0.0.9");
+        harness.Create(host, "Ann");
+        eastl::string typo = harness.Client(host).roomCode;
+        typo[0] = typo[0] == 'A' ? 'B' : 'A';
+        const ConnectionId guest = harness.Connect("10.0.0.1");
+        harness.JoinByName(guest, typo, "Bob");
+        EXPECT_EQ(harness.Client(guest).LastErrorCode(), RoomErrors::kUnknownRoom);
+        harness.JoinByName(guest, harness.Client(host).roomCode, "Bob");
+        EXPECT_EQ(harness.Client(guest).Count(RoomMessageTypes::kJoined), 1u);
+    }
+
+    TEST(RoomHubTest, AMemberWithItsTokenGetsBackWhileTheBudgetIsEmpty) {
+        RoomHubSettings settings = HubHarness::MakeSettings();
+        settings.serverJoinBurst = 2;
+        settings.serverJoinRefill = std::chrono::hours(1);
+        HubHarness harness(settings);
+        const auto ids = harness.MakeLobby(2);
+        harness.Start(ids[0]);
+        const eastl::string code = harness.Client(ids[1]).roomCode;
+        const eastl::string token = harness.Client(ids[1]).token;
+        harness.Disconnect(ids[1]);
+        for (int i = 0; i < 2; ++i) {
+            const ConnectionId guesser = harness.Connect("10.0.5.1");
+            harness.JoinByName(guesser, "ZZZZZ", "Mal");
+        }
+        // Empty now: a wrong token to this room and any join to an unknown room are the same answer
+        const ConnectionId thief = harness.Connect("10.0.5.2");
+        harness.JoinByToken(thief, code, eastl::string(RoomLimits::kTokenLength, 'a'));
+        EXPECT_EQ(harness.Client(thief).LastErrorCode(), RoomErrors::kRateLimited);
+        harness.JoinByToken(thief, "ZZZZZ", eastl::string(RoomLimits::kTokenLength, 'a'));
+        EXPECT_EQ(harness.Client(thief).LastErrorCode(), RoomErrors::kRateLimited);
+        // The member itself returns
+        const ConnectionId back = harness.Connect("10.0.5.3");
+        harness.JoinByToken(back, code, token);
+        EXPECT_EQ(harness.Client(back).Count(RoomMessageTypes::kJoined), 1u);
+        EXPECT_NE(harness.Client(back).Last(RoomMessageTypes::kView), nullptr);
+    }
+
+    TEST(RoomHubTest, TheAddressMapDoesNotGrow) {
+        RoomHubSettings settings = HubHarness::MakeSettings();
+        settings.addressJoinBurst = 4;
+        settings.addressJoinRefill = seconds(1);
+        HubHarness harness(settings);
+        const ConnectionId open = harness.Connect("10.0.0.1");
+        harness.Tick(seconds(10));
+        // An address with a connection is kept
+        EXPECT_EQ(harness.Hub().GetAddressCount(), 1u);
+        harness.Ping(open);
+        harness.Disconnect(open);
+        harness.Tick();
+        EXPECT_EQ(harness.Hub().GetAddressCount(), 0u);
+
+        // An address with a budget not yet refilled is kept until it is
+        const ConnectionId guesser = harness.Connect("10.0.0.2");
+        harness.JoinByName(guesser, "ZZZZZ", "Mal");
+        harness.Disconnect(guesser);
+        harness.Tick(milliseconds(500));
+        EXPECT_EQ(harness.Hub().GetAddressCount(), 1u);
+        harness.Tick(seconds(1));
+        EXPECT_EQ(harness.Hub().GetAddressCount(), 0u);
+
+        for (int i = 0; i < 50; ++i) {
+            harness.Disconnect(harness.Connect(Format("10.1.0.{}", i).c_str()));
+        }
+        harness.Tick();
+        EXPECT_EQ(harness.Hub().GetAddressCount(), 0u);
+    }
+
+    TEST(RoomHubTest, ASilentLobbyIsClosedAndItsMembersFallToTheIdleRule) {
+        RoomHubSettings settings = HubHarness::MakeSettings();
+        settings.lobbyTimeout = std::chrono::minutes(1);
+        HubHarness harness(settings);
+        const auto ids = harness.MakeLobby(2);
+        harness.Tick(seconds(59));
+        EXPECT_EQ(harness.Hub().GetRoomCount(), 1u);
+        harness.Tick(seconds(1));
+        EXPECT_EQ(harness.Hub().GetRoomCount(), 0u);
+        for (const ConnectionId id : ids) {
+            const TestClient& client = harness.Client(id);
+            ASSERT_NE(client.Last(RoomMessageTypes::kLeft), nullptr);
+            EXPECT_EQ(client.Last(RoomMessageTypes::kLeft)->GetString("reason"), "lobby_timeout");
+            EXPECT_FALSE(client.closed);
+            EXPECT_EQ(client.roomCode, "");
+        }
+        // The connections are in no room now: the idle rule counts from the close
+        harness.Tick(seconds(29));
+        EXPECT_FALSE(harness.Client(ids[0]).closed);
+        harness.Tick(seconds(1));
+        EXPECT_TRUE(harness.Client(ids[0]).closed);
+        EXPECT_EQ(harness.Client(ids[0]).closeReason, "idle");
+    }
+
+    TEST(RoomHubTest, OnlyARealMessageKeepsALobbyOpen) {
+        RoomHubSettings settings = HubHarness::MakeSettings();
+        settings.lobbyTimeout = std::chrono::minutes(1);
+        HubHarness harness(settings);
+        const ConnectionId host = harness.Connect();
+        harness.Create(host, "Ann");
+        // A ping does not count
+        for (int i = 0; i < 5; ++i) {
+            harness.Tick(seconds(10));
+            harness.Ping(host);
+        }
+        harness.Tick(seconds(10));
+        EXPECT_EQ(harness.Hub().GetRoomCount(), 0u);
+
+        // choose_seat does, and so does a join
+        const ConnectionId second = harness.Connect();
+        harness.Create(second, "Bob");
+        harness.Tick(seconds(50));
+        harness.Send(second, ChooseSeatMessage{2});
+        harness.Tick(seconds(50));
+        const ConnectionId guest = harness.Connect();
+        harness.JoinByName(guest, harness.Client(second).roomCode, "Cy");
+        EXPECT_EQ(harness.Hub().GetRoomCount(), 1u);
+        harness.Tick(seconds(50));
+        EXPECT_EQ(harness.Hub().GetRoomCount(), 1u);
+        harness.Tick(seconds(10));
+        EXPECT_EQ(harness.Hub().GetRoomCount(), 0u);
+    }
+
+    TEST(RoomHubTest, AStartedRoomIsNotTouchedByTheLobbyTimeoutAndZeroSwitchesItOff) {
+        RoomHubSettings settings = HubHarness::MakeSettings();
+        settings.lobbyTimeout = std::chrono::minutes(1);
+        HubHarness harness(settings);
+        const auto ids = harness.MakeLobby(2);
+        harness.Start(ids[0]);
+        harness.Tick(std::chrono::minutes(5));
+        EXPECT_EQ(harness.Hub().GetRoomCount(), 1u);
+        EXPECT_EQ(harness.Client(ids[0]).Count(RoomMessageTypes::kLeft), 0u);
+
+        settings.lobbyTimeout = milliseconds(0);
+        HubHarness off(settings);
+        const ConnectionId host = off.Connect();
+        off.Create(host, "Ann");
+        off.Tick(std::chrono::hours(5));
+        EXPECT_EQ(off.Hub().GetRoomCount(), 1u);
+    }
+
 }  // namespace BECore::Tests

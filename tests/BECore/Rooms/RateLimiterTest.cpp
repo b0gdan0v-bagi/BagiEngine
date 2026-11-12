@@ -124,6 +124,20 @@ namespace BECore::Tests {
         EXPECT_NEAR(limiter.PeekTokens(kStart + milliseconds(500)), 3.0, 1e-9);
     }
 
+    TEST(RateLimiterTest, CanTakeLooksWithoutTaking) {
+        RateLimiter limiter(2, 1.0);
+        EXPECT_TRUE(limiter.CanTake(kStart));
+        EXPECT_TRUE(limiter.CanTake(kStart));
+        EXPECT_TRUE(limiter.TryTake(kStart));
+        EXPECT_TRUE(limiter.TryTake(kStart));
+        EXPECT_FALSE(limiter.CanTake(kStart));
+        EXPECT_FALSE(limiter.CanTake(kStart + milliseconds(900)));
+        EXPECT_TRUE(limiter.CanTake(kStart + milliseconds(1000)));
+        // Looking did not move the clock of the bucket
+        EXPECT_FALSE(limiter.TryTake(kStart));
+        EXPECT_TRUE(limiter.TryTake(kStart + milliseconds(1000)));
+    }
+
     TEST(RateLimiterTest, LimitersAreIndependent) {
         RateLimiter first(1, 1.0);
         RateLimiter second(1, 1.0);

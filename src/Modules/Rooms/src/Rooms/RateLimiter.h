@@ -20,6 +20,9 @@ namespace BECore {
         /// Takes one token if there is one. False means: refuse this message.
         [[nodiscard]] bool TryTake(RoomTime now);
 
+        /// Whether TryTake would succeed at @p now, taking nothing (for a check that has to come before the take)
+        [[nodiscard]] bool CanTake(RoomTime now) const;
+
         /// The tokens the bucket holds at @p now (without taking any), for tests and logs
         [[nodiscard]] double PeekTokens(RoomTime now) const;
 

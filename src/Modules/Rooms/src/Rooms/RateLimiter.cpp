@@ -13,6 +13,10 @@ namespace BECore {
         return true;
     }
 
+    bool RateLimiter::CanTake(RoomTime now) const {
+        return PeekTokens(now) >= 1.0;
+    }
+
     double RateLimiter::PeekTokens(RoomTime now) const {
         RateLimiter copy = *this;
         copy.Refill(now);
