@@ -1,0 +1,81 @@
+{
+    "name": "bagi-dev",
+    "displayName": "Bagi Dev",
+    "description": "Build and run the products of a BagiEngine repository: presets, flags (CMakeUserPresets.json), the game, tests, web build, server, chains and tools of its dev.json, through engine/tools/dev/dev.py.",
+    "version": "0.1.0",
+    "publisher": "bagiengine",
+    "license": "UNLICENSED",
+    "private": true,
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "main": "./extension.js",
+    "activationEvents": [
+        "workspaceContains:tools/dev/dev.py",
+        "workspaceContains:engine/tools/dev/dev.py"
+    ],
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "bagiDev",
+                    "title": "Bagi Dev",
+                    "icon": "media/dev.svg"
+                }
+            ]
+        },
+        "views": {
+            "bagiDev": [
+                {
+                    "id": "bagiDev.tree",
+                    "name": "Build and run"
+                }
+            ]
+        },
+        "commands": [
+            { "command": "bagiDev.refresh", "title": "Refresh", "icon": "$(refresh)", "category": "Bagi Dev" },
+            { "command": "bagiDev.openManifest", "title": "Open dev.json", "icon": "$(go-to-file)", "category": "Bagi Dev" },
+            { "command": "bagiDev.pickPreset", "title": "Pick the preset", "category": "Bagi Dev" },
+            { "command": "bagiDev.toggleFlag", "title": "Toggle the flag", "category": "Bagi Dev" },
+            { "command": "bagiDev.build", "title": "Build", "icon": "$(tools)", "category": "Bagi Dev" },
+            { "command": "bagiDev.run", "title": "Build and run", "icon": "$(play)", "category": "Bagi Dev" },
+            { "command": "bagiDev.configure", "title": "Configure again (cmake --preset)", "icon": "$(gear)", "category": "Bagi Dev" },
+            { "command": "bagiDev.chain", "title": "Run the chain", "icon": "$(play)", "category": "Bagi Dev" },
+            { "command": "bagiDev.tool", "title": "Run the tool", "icon": "$(play)", "category": "Bagi Dev" }
+        ],
+        "menus": {
+            "view/title": [
+                { "command": "bagiDev.openManifest", "when": "view == bagiDev.tree", "group": "navigation" },
+                { "command": "bagiDev.refresh", "when": "view == bagiDev.tree", "group": "navigation" }
+            ],
+            "view/item/context": [
+                { "command": "bagiDev.build", "when": "view == bagiDev.tree && viewItem == product", "group": "inline@1" },
+                { "command": "bagiDev.run", "when": "view == bagiDev.tree && viewItem == product", "group": "inline@2" },
+                { "command": "bagiDev.configure", "when": "view == bagiDev.tree && viewItem == product", "group": "more@1" },
+                { "command": "bagiDev.chain", "when": "view == bagiDev.tree && viewItem == chain", "group": "inline" },
+                { "command": "bagiDev.tool", "when": "view == bagiDev.tree && viewItem == tool", "group": "inline" }
+            ],
+            "commandPalette": [
+                { "command": "bagiDev.toggleFlag", "when": "false" },
+                { "command": "bagiDev.build", "when": "false" },
+                { "command": "bagiDev.run", "when": "false" },
+                { "command": "bagiDev.configure", "when": "false" },
+                { "command": "bagiDev.chain", "when": "false" },
+                { "command": "bagiDev.tool", "when": "false" }
+            ]
+        },
+        "configuration": {
+            "title": "Bagi Dev",
+            "properties": {
+                "bagiDev.python": {
+                    "type": "string",
+                    "default": "python3",
+                    "description": "The Python that runs dev.py (3.9 or newer)."
+                }
+            }
+        }
+    }
+}
