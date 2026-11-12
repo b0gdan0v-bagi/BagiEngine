@@ -14,9 +14,10 @@ Two layers in one class:
 | File | Holds |
 |------|-------|
 | `SaveGame.h` | `SaveGameService`, `SaveSchema {game, version, minVersion}`, `SaveInfo {game, version}`, `SaveErrorKind` (`CORE_ENUM`), `SaveError {kind, detail}`, the constants `kSaveMountPoint`, `kSaveExtension`, `kSaveTempExtension`, `kMaxSlotNameLength`; the thin templates `Save(slot, schema, const State&)` and `Load(slot, schema, State&)` |
+| `SaveStorage.{h,cpp}` | `kWebSaveDirectory`, `SaveStorageState` (`CORE_ENUM`), `PersistentSaveDirectory()`, `GetSaveStorageState()`, `NotifySaveChanged()`, `SetSaveChangedHandler()` (test seam): the browser's side of the folder, see "In the browser" |
 | `SaveGame.cpp` | the implementation (the non-template `Save` / `Load` / `Peek` take `eastl::function` callbacks, so the binary serializer stays out of the header) |
 
-Tests: `tests/BECore/Save/SaveGameFilesTest.cpp` (slot files; a local `FileSystem` on a `TestTempDirectory`, no global services) and `tests/BECore/Save/SaveGameTest.{h,cpp}` (the envelope; `SaveGameTest.h` holds the reflected test states, its `.gen.hpp` is included in the `.cpp` only).
+Tests: `tests/BECore/Save/SaveStorageTest.cpp` (the notifications, with a fake handler), `tests/BECore/Save/SaveGameFilesTest.cpp` (slot files; a local `FileSystem` on a `TestTempDirectory`, no global services) and `tests/BECore/Save/SaveGameTest.{h,cpp}` (the envelope; `SaveGameTest.h` holds the reflected test states, its `.gen.hpp` is included in the `.cpp` only).
 
 ## Slot files
 
@@ -48,6 +49,15 @@ save
 **What a failed `Load` leaves.** A failure before the reader (every kind but `Corrupt` from the state itself) leaves the target untouched. A `Corrupt` from the reader may leave the state partly filled, so a game with something to protect loads into a temporary object and applies it after a success (the Match3 consumer does).
 
 **Version policy.** Added fields need no version: storage is name-keyed, so a field missing from an old file keeps the default of the new type. Raise `version` when the meaning of existing data changes or a field is removed, and raise `minVersion` when the old shape can no longer be read. An older but accepted file loads and `Load` returns its version in `SaveInfo`, so the game can fix the data up after the load (`if (info->version < 2) { state.lives = 3; }`). A newer file is refused rather than guessed at.
+
+## In the browser
+
+A game calls `SaveGameService::Initialize(PersistentSaveDirectory())`: the path is `kWebSaveDirectory` (`/bagi/saves`) in a browser build and **empty elsewhere** (a game that gets an empty path keeps its own real folder; desktop is unchanged). The service mounts it as `saves` like any folder. The page half is `web/saves.js` (`web/CLAUDE.md`): it mounts IndexedDB (IDBFS) on that path and loads it **before** `main()`, so the first `Initialize` already sees the files; if IndexedDB is refused or silent the folder stays plain memory.
+
+- **`GetSaveStorageState()`** says what the page made of it: `Persistent`, `NotRemembered` (memory only: gone at reload; also a page without `saves.js`), `NotApplicable` (desktop). A game that wants to warn the player reads it after the start; the engine shows nothing.
+- **`NotifySaveChanged()`** is called by `WriteSlot` and `Delete` after a **success** only. In the browser it asks the page to flush the folder to IndexedDB soon (a debounced sync, also at once when the tab is hidden); it cannot run inside the write, the sync is a timer callback after it, so the rename of a save still holds. Elsewhere the default does nothing. A game that writes into the folder by other means calls it itself.
+- **Main thread only** (asserted in the browser): the build has no `PROXY_TO_PTHREAD`, so the game and the mount are on the browser's main thread. A write from a worker thread is forwarded to it by the syscall layer and would reach the mount, but only the main thread is supported, like the rest of the service.
+- **Where the data is:** the site's IndexedDB. Clearing the site data clears the saves; one origin's tabs share it (a tab does not see another's writes until reload, and the last flush wins); the quota is the browser's, a failed flush is logged once and retried by the next change. The slot limit (16 MiB) is the only limit the engine adds.
 
 ## How a game uses it
 
