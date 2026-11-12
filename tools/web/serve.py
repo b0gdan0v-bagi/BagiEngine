@@ -29,6 +29,11 @@ lines of the piece (JSON objects, one per line, each ending in a newline; at mos
 whose `version` is inside MATCH_LOG_VERSIONS, `N` or `N-M`, which the game owns). The body is stored as it came in
 <MATCH_STORE>/<id>/<index>.jsonl and nothing else is: no address, user agent or time (the mtime of the file is the only time), and the
 access log never prints a /matches/ line. The same bytes again are 200, other bytes for a stored piece are 409.
+At most 60 posts an hour per client address (429 and Retry-After; the address is the socket peer, or with MATCH_FORWARDED_FOR=1 the last
+entry of X-Forwarded-For, which the edge of the platform sets), and the pieces together stay within MATCH_STORE_MAX_MB (default 1024; 507).
+GET /matches/ lists {"matches": [{"id", "pieces"}]}, GET /matches/<id>/<index>.jsonl returns a piece, DELETE /matches/<id> removes a match;
+a match whose newest piece is 90 days old is removed at start and every hour. The variables are MATCH_STORE, MATCH_STORE_MAX_MB,
+MATCH_LOG_VERSIONS and MATCH_FORWARDED_FOR; without MATCH_STORE the server is as it was.
 """
 
 import argparse
@@ -36,7 +41,9 @@ import base64
 import binascii
 import contextlib
 import hmac
+import ipaddress
 import json
+import math
 import os
 import posixpath
 import re
@@ -44,6 +51,8 @@ import secrets
 import shutil
 import sys
 import threading
+import time
+from collections import deque
 from email.utils import formatdate
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -70,6 +79,7 @@ STATIC_ALLOW = "GET, HEAD"
 MATCH_STORE_VARIABLE = "MATCH_STORE"
 MATCH_STORE_MAX_MB_VARIABLE = "MATCH_STORE_MAX_MB"
 MATCH_LOG_VERSIONS_VARIABLE = "MATCH_LOG_VERSIONS"
+MATCH_FORWARDED_FOR_VARIABLE = "MATCH_FORWARDED_FOR"
 MATCH_STORE_MAX_MB_DEFAULT = 1024
 MATCH_SEGMENT = "matches"
 MATCH_PREFIX = "/" + MATCH_SEGMENT
@@ -82,6 +92,16 @@ MATCH_BODY_MAX_BYTES = 1 << 20
 MATCH_BODY_TIMEOUT_SECONDS = 30
 MATCH_TMP_PREFIX = ".tmp-"
 MATCH_PIECE_SUFFIX = ".jsonl"
+MATCH_CONTENT_TYPE = "application/x-ndjson"
+# Posts per client address and window; the sliding window is in memory only
+MATCH_RATE_LIMIT = 60
+MATCH_RATE_WINDOW_SECONDS = 3600
+# Addresses the limiter remembers; beyond it the expired ones go, then the oldest quarter
+MATCH_RATE_MAX_ADDRESSES = 10000
+# A match whose newest piece is older goes; the sweep runs at start and every hour; a .tmp-* file older than an hour is a crash's leftover
+MATCH_RETENTION_SECONDS = 90 * 24 * 3600
+MATCH_SWEEP_INTERVAL_SECONDS = 3600
+MATCH_TMP_RETENTION_SECONDS = 3600
 
 # Named here, not left to mimetypes: on Windows it reads the registry and has answered text/plain for .js
 CONTENT_TYPES = {
@@ -198,13 +218,61 @@ def check_piece(body: bytes, index: int, versions: tuple[int, int] | None) -> st
     return None
 
 
+def is_piece_name(name: str) -> bool:
+    return name.endswith(MATCH_PIECE_SUFFIX) and MATCH_INDEX_PATTERN.fullmatch(name[:-len(MATCH_PIECE_SUFFIX)]) is not None
+
+
+def sweep_match(folder: Path, now: float, retention: float) -> int:
+    """One match folder: old `.tmp-*` files go; the whole folder goes when its newest piece is older than `retention`; a folder with
+    nothing in it goes. Returns the bytes of the pieces removed. Files of other names are not ours and are left (they keep the folder)."""
+    pieces = []
+    left = 0
+    for item in os.scandir(folder):
+        info = item.stat(follow_symlinks=False)
+        if not item.is_file(follow_symlinks=False):
+            left += 1
+        elif item.name.startswith(MATCH_TMP_PREFIX):
+            if now - info.st_mtime > MATCH_TMP_RETENTION_SECONDS:
+                os.unlink(item.path)
+            else:
+                left += 1
+        elif is_piece_name(item.name):
+            pieces.append((info.st_size, info.st_mtime))
+        else:
+            left += 1
+    if pieces and now - max(mtime for _, mtime in pieces) > retention:
+        shutil.rmtree(folder)
+        return sum(size for size, _ in pieces)
+    if not pieces and not left:
+        folder.rmdir()
+    return 0
+
+
+def sweep_matches(store: Path, now: float, retention: float = MATCH_RETENTION_SECONDS) -> int:
+    """Removes what is out of date from the match store (`now` is a time in seconds like the mtime of a file): matches whose newest
+    piece is older than `retention`, `.tmp-*` files older than an hour (also in the folder of the store), empty match folders.
+    A folder that does not look like an id is not touched. Returns the bytes of the pieces removed; the caller keeps its counter."""
+    freed = 0
+    for entry in sorted(os.scandir(store), key=lambda item: item.name):
+        try:
+            if entry.is_file(follow_symlinks=False) and entry.name.startswith(MATCH_TMP_PREFIX):
+                if now - entry.stat(follow_symlinks=False).st_mtime > MATCH_TMP_RETENTION_SECONDS:
+                    os.unlink(entry.path)
+            elif entry.is_dir(follow_symlinks=False) and MATCH_ID_PATTERN.fullmatch(entry.name):
+                freed += sweep_match(Path(entry.path), now, retention)
+        except OSError:
+            continue  # one folder that cannot be cleaned does not stop the rest
+    return freed
+
+
 class MatchStoreError(Exception):
     """The match store cannot be used (the server then does not start)."""
 
 
 class MatchStore:
     """The folder of match logs: `<folder>/<id>/<index>.jsonl`, written whole and never changed. One server process owns the folder; a lock
-    serialises the decisions and the writes (a piece is at most 1 MiB and the posts are rate limited, so the lock is not a bottleneck)."""
+    serialises every decision, write, delete and sweep (a piece is at most 1 MiB and the posts are rate limited, so it is not a
+    bottleneck), and under it `_bytes` (the size of all pieces, counted once at start) stays equal to what is on disk."""
 
     def __init__(self, folder: Path, versions: tuple[int, int] | None, max_bytes: int):
         self.folder = folder.resolve()
@@ -216,19 +284,45 @@ class MatchStore:
             probe = self.folder / f"{MATCH_TMP_PREFIX}probe-{secrets.token_hex(4)}"
             probe.write_bytes(b"")
             probe.unlink()
+            self._bytes = self._count_bytes()
         except OSError as error:
             raise MatchStoreError(f"match store is not writable: {folder} ({error.strerror or error})") from error
 
+    def _count_bytes(self) -> int:
+        total = 0
+        for name, _ in self._match_folders():
+            for item in os.scandir(self.folder / name):
+                if is_piece_name(item.name) and item.is_file(follow_symlinks=False):
+                    total += item.stat(follow_symlinks=False).st_size
+        return total
+
+    def _match_folders(self) -> list[tuple[str, list[str]]]:
+        """(id, names of its pieces) of every folder named like an id, sorted by id; a folder that vanishes meanwhile is skipped."""
+        found = []
+        for name in sorted(os.listdir(self.folder)):
+            if MATCH_ID_PATTERN.fullmatch(name):
+                try:
+                    found.append((name, [piece for piece in os.listdir(self.folder / name) if is_piece_name(piece)]))
+                except OSError:
+                    continue
+        return found
+
     def put(self, match_id: str, index: int, body: bytes) -> tuple[HTTPStatus, str]:
         """Stores a checked piece. The first write and a repeat of the same bytes are both 200 (a client that lost the answer posts again
-        and must get the same one); other bytes for a stored piece are 409, the stored file stays. Two equal posts at once give two 200s:
-        under the lock the second one finds the file the first one has finished (the rename is atomic, a reader never sees half a file)."""
+        and must get the same one, and a repeat never counts against the cap); other bytes for a stored piece are 409, the stored file
+        stays. A new piece that would take the store over its cap is 507. Two equal posts at once give two 200s: under the lock the
+        second one finds the file the first one has finished (the rename is atomic, a reader never sees half a file)."""
         target = self.folder / match_id / f"{index}{MATCH_PIECE_SUFFIX}"
         with self._lock:
             try:
                 stored = target.read_bytes()
             except FileNotFoundError:
-                return self._write(target, body)
+                if self._bytes + len(body) > self.max_bytes:
+                    return HTTPStatus.INSUFFICIENT_STORAGE, "the store is full"
+                status = self._write(target, body)
+                if status[0] == HTTPStatus.OK:
+                    self._bytes += len(body)
+                return status
             except OSError:
                 return HTTPStatus.INSUFFICIENT_STORAGE, "store failed"
             if stored == body:
@@ -254,6 +348,104 @@ class MatchStore:
             return HTTPStatus.INSUFFICIENT_STORAGE, "store failed"
         return HTTPStatus.OK, "stored"
 
+    def list_matches(self) -> list[dict]:
+        """[{"id", "pieces"}] sorted by id; a folder with no piece is not a match."""
+        try:
+            return [{"id": name, "pieces": len(pieces)} for name, pieces in self._match_folders() if pieces]
+        except OSError:
+            return []
+
+    def read_piece(self, match_id: str, index: int) -> bytes | None:
+        try:
+            return (self.folder / match_id / f"{index}{MATCH_PIECE_SUFFIX}").read_bytes()
+        except OSError:
+            return None
+
+    def delete(self, match_id: str) -> bool | None:
+        """Removes a match. True when it was there, False when not, None when the folder could not be removed (the counter is then
+        counted again from the disk)."""
+        folder = self.folder / match_id
+        with self._lock:
+            try:
+                if not folder.is_dir() or folder.is_symlink():
+                    return False
+                freed = sum(item.stat().st_size for item in os.scandir(folder) if is_piece_name(item.name))
+                shutil.rmtree(folder)
+            except OSError:
+                with contextlib.suppress(OSError):
+                    self._bytes = self._count_bytes()
+                return None
+            self._bytes -= freed
+            return True
+
+    def sweep(self, now: float, retention: float = MATCH_RETENTION_SECONDS):
+        with self._lock:
+            try:
+                self._bytes -= sweep_matches(self.folder, now, retention)
+            except OSError:
+                pass  # tried again at the next sweep
+
+
+class RateLimiter:
+    """At most `limit` events per key (a client address) in any `window` seconds: a sliding window of the times, in memory only and never
+    written. A key's times are purged when it is used; when too many keys are held the expired ones go, then the oldest quarter."""
+
+    def __init__(self, limit: int, window: float, clock, max_keys: int = MATCH_RATE_MAX_ADDRESSES):
+        self.limit = limit
+        self.window = window
+        self.max_keys = max_keys
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._times: dict[str, deque] = {}
+
+    def check(self, key: str) -> int:
+        """0 when the event is allowed (and counted), else the whole seconds to wait for the next free place (at least 1)."""
+        with self._lock:
+            now = self._clock()
+            times = self._times.get(key)
+            if times is None:
+                if len(self._times) >= self.max_keys:
+                    self._make_room(now)
+                times = self._times[key] = deque()
+            while times and times[0] <= now - self.window:
+                times.popleft()
+            if len(times) >= self.limit:
+                return max(1, math.ceil(times[0] + self.window - now))
+            times.append(now)
+            return 0
+
+    def _make_room(self, now: float):
+        for key in [key for key, times in self._times.items() if not times or times[-1] <= now - self.window]:
+            del self._times[key]
+        if len(self._times) >= self.max_keys:
+            for key in list(self._times)[:max(1, self.max_keys // 4)]:
+                del self._times[key]
+
+
+def sweep_loop(store: MatchStore, clock, stop: threading.Event, interval: float = MATCH_SWEEP_INTERVAL_SECONDS):
+    """Sweeps the store every `interval` seconds until `stop` is set; wait() returns True then, and is the only sleep."""
+    while not stop.wait(interval):
+        store.sweep(clock())
+
+
+class MatchServer(ThreadingHTTPServer):
+    """The server; with a match store a daemon thread sweeps it, and server_close() stops that thread."""
+
+    daemon_threads = True
+    sweeper: threading.Thread | None = None
+    sweeper_stop: threading.Event | None = None
+
+    def start_sweeper(self, store: MatchStore, clock):
+        self.sweeper_stop = threading.Event()
+        self.sweeper = threading.Thread(target=sweep_loop, args=(store, clock, self.sweeper_stop), name="match-sweep", daemon=True)
+        self.sweeper.start()
+
+    def server_close(self):
+        if self.sweeper_stop is not None:
+            self.sweeper_stop.set()
+            self.sweeper.join(timeout=10)
+        super().server_close()
+
 
 class StaticHandler(BaseHTTPRequestHandler):
     """GET and HEAD of the files below `root`, and with a match store the /matches/ endpoint; `root`, `cross_origin_isolation`, `quiet`
@@ -265,6 +457,8 @@ class StaticHandler(BaseHTTPRequestHandler):
     # b"user:password" a request must present as Basic credentials; None leaves the server open
     basic_credentials: bytes | None = None
     match_store: MatchStore | None = None
+    rate_limiter: RateLimiter | None = None
+    forwarded_for = False
     protocol_version = "HTTP/1.1"
     server_version = "BagiWebServe"
     # The Server header names the program and not the Python version
@@ -350,8 +544,9 @@ class StaticHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         """POST /matches/<id>/<index>: one piece of a match log (check_piece(), MatchStore.put()). The answers are 200 (stored, or the same
         bytes again), 400 (path or body), 401, 409 (the piece is stored with other bytes), 411 (no Content-Length, or chunked), 413 (above
-        MATCH_BODY_MAX_BYTES, refused before the body is read), 507 (the store could not write). A refusal that leaves the body unread
-        closes the connection, as a 405 does. Anything else is as for any other method."""
+        MATCH_BODY_MAX_BYTES, refused before the body is read), 429 (the address posted MATCH_RATE_LIMIT times in the window), 507 (the
+        cap is reached, or the store could not write). A refusal that leaves the body unread closes the connection, as a 405 does.
+        Anything else is as for any other method."""
         segments = self.match_segments()
         if segments is None:
             self.do_unsupported()
@@ -361,6 +556,11 @@ class StaticHandler(BaseHTTPRequestHandler):
             return
         if len(segments) != 2 or not MATCH_ID_PATTERN.fullmatch(segments[0]) or not MATCH_INDEX_PATTERN.fullmatch(segments[1]):
             self.send_text(HTTPStatus.BAD_REQUEST, "bad path", True, close=True)
+            return
+        # Every post with a good path counts, whatever its body: a flood of bad bodies is limited too
+        wait = self.rate_limiter.check(self.client_key())
+        if wait:
+            self.send_text(HTTPStatus.TOO_MANY_REQUESTS, "too many posts", True, close=True, headers=(("Retry-After", str(wait)),))
             return
         body = self.read_body()
         if body is None:
@@ -372,6 +572,53 @@ class StaticHandler(BaseHTTPRequestHandler):
             return
         status, text = self.match_store.put(segments[0], index, body)
         self.send_text(status, text, True)
+
+    def do_DELETE(self):
+        """DELETE /matches/<id>: removes the match, 200 when it was there, 404 when not, 400 for a malformed id. Any other path below
+        /matches/ (a piece, the list) is 405. The connection closes after the answer: a body sent with it is not read."""
+        segments = self.match_segments()
+        if segments is None or len(segments) != 1 or not segments[0]:
+            self.do_unsupported()
+            return
+        if not self.authorized():
+            self.send_unauthorized(send_body=True, close=True)
+            return
+        if not MATCH_ID_PATTERN.fullmatch(segments[0]):
+            self.send_text(HTTPStatus.BAD_REQUEST, "bad path", True, close=True)
+            return
+        removed = self.match_store.delete(segments[0])
+        if removed is None:
+            self.send_text(HTTPStatus.INSUFFICIENT_STORAGE, "store failed", True, close=True)
+        elif removed:
+            self.send_text(HTTPStatus.OK, "deleted", True, close=True)
+        else:
+            self.send_text(HTTPStatus.NOT_FOUND, "not found", True, close=True)
+
+    def client_key(self) -> str:
+        """The address the rate limit counts: the socket peer, or with MATCH_FORWARDED_FOR=1 the last entry of X-Forwarded-For when it is
+        an address (the edge of the platform appends the client; an entry before it is whatever the client wrote, and a client that
+        reaches the server directly would dodge the limit if the first one counted)."""
+        if self.forwarded_for:
+            hops = self.headers.get_all("X-Forwarded-For", [])
+            try:
+                return str(ipaddress.ip_address(hops[-1].split(",")[-1].strip())) if hops else self.client_address[0]
+            except ValueError:
+                pass
+        return self.client_address[0]
+
+    def serve_match(self, segments: list[str], send_body: bool):
+        """GET and HEAD below /matches/: the list `/matches/` and a piece `/matches/<id>/<index>.jsonl`; any other name is 404."""
+        store = self.match_store
+        if segments == [""]:
+            self.send_bytes(json.dumps({"matches": store.list_matches()}).encode("utf-8"), "application/json", send_body)
+            return
+        body = None
+        if len(segments) == 2 and MATCH_ID_PATTERN.fullmatch(segments[0]) and is_piece_name(segments[1]):
+            body = store.read_piece(segments[0], int(segments[1][:-len(MATCH_PIECE_SUFFIX)]))
+        if body is None:
+            self.send_text(HTTPStatus.NOT_FOUND, "not found", send_body)
+            return
+        self.send_bytes(body, MATCH_CONTENT_TYPE, send_body)
 
     def read_body(self) -> bytes | None:
         """The body of the request, or None after the refusal was sent (or the client left). Exactly Content-Length bytes are read."""
@@ -408,6 +655,10 @@ class StaticHandler(BaseHTTPRequestHandler):
             return
         if not self.authorized():
             self.send_unauthorized(send_body)
+            return
+        segments = self.match_segments()
+        if segments is not None:
+            self.serve_match(segments, send_body)
             return
         path = resolve_path(self.root, url_path)
         if path is not None and path.is_dir():
@@ -467,12 +718,17 @@ class StaticHandler(BaseHTTPRequestHandler):
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     self.close_connection = True
 
-    def send_text(self, status: HTTPStatus, text: str, send_body: bool, close: bool = False):
-        body = text.encode("utf-8")
+    def send_text(self, status: HTTPStatus, text: str, send_body: bool, close: bool = False, headers: tuple = ()):
+        self.send_bytes(text.encode("utf-8"), "text/plain; charset=utf-8", send_body, status, close, headers)
+
+    def send_bytes(self, body: bytes, content_type: str, send_body: bool, status: HTTPStatus = HTTPStatus.OK, close: bool = False,
+                   headers: tuple = ()):
         self.send_response(status)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for name, value in headers:
+            self.send_header(name, value)
         if close:
             self.send_header("Connection", "close")
         self.end_headers()
@@ -483,20 +739,27 @@ class StaticHandler(BaseHTTPRequestHandler):
 def make_server(root: Path, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, cross_origin_isolation: bool = False,
                 quiet: bool = False, basic_auth: tuple[str, str] | None = None, match_store: Path | None = None,
                 match_versions: tuple[int, int] | None = None,
-                match_store_max_bytes: int = MATCH_STORE_MAX_MB_DEFAULT << 20) -> ThreadingHTTPServer:
+                match_store_max_bytes: int = MATCH_STORE_MAX_MB_DEFAULT << 20, match_forwarded_for: bool = False,
+                clock=time.time) -> ThreadingHTTPServer:
     """A server for `root`; port 0 takes a free one (server.server_address[1]). `basic_auth` is (user, password) or None for an open
     server. `match_store` is the folder of the /matches/ endpoint (None: the endpoint is off), `match_versions` the (lowest, highest)
-    `version` a match log may start with. The folder is created; MatchStoreError when it cannot be written. The caller runs
-    serve_forever() and shutdown()."""
+    `version` a match log may start with, `match_store_max_bytes` the cap of all pieces, `match_forwarded_for` whether the rate limit
+    trusts X-Forwarded-For, `clock` the time of the rate limit and of the sweep (seconds). The folder is created and swept at once;
+    MatchStoreError when it cannot be written. The caller runs serve_forever() and shutdown(), then server_close()."""
+    store = MatchStore(match_store, match_versions, match_store_max_bytes) if match_store is not None else None
     handler = type("Handler", (StaticHandler,), {
         "root": root.resolve(),
         "cross_origin_isolation": cross_origin_isolation,
         "quiet": quiet,
         "basic_credentials": f"{basic_auth[0]}:{basic_auth[1]}".encode("utf-8") if basic_auth else None,
-        "match_store": MatchStore(match_store, match_versions, match_store_max_bytes) if match_store is not None else None,
+        "match_store": store,
+        "rate_limiter": RateLimiter(MATCH_RATE_LIMIT, MATCH_RATE_WINDOW_SECONDS, clock) if store is not None else None,
+        "forwarded_for": match_forwarded_for,
     })
-    server = ThreadingHTTPServer((host, port), handler)
-    server.daemon_threads = True
+    server = MatchServer((host, port), handler)
+    if store is not None:
+        store.sweep(clock())
+        server.start_sweeper(store, clock)
     return server
 
 
@@ -581,6 +844,7 @@ def parse_args(argv: list[str] | None = None, environ=None) -> argparse.Namespac
     if not re.fullmatch(r"[0-9]{1,9}", megabytes) or int(megabytes) < 1:
         parser.error(f"{MATCH_STORE_MAX_MB_VARIABLE} must be a whole number of megabytes, 1 or more, not {megabytes!r}")
     args.match_store_max_bytes = int(megabytes) << 20
+    args.match_forwarded_for = bool(env_flag(environ, MATCH_FORWARDED_FOR_VARIABLE))
     args.match_versions = match_versions_from(environ.get(MATCH_LOG_VERSIONS_VARIABLE, ""), parser.error)
     args.isolation_source = None
     if args.cross_origin_isolation is not None:
@@ -600,7 +864,7 @@ def main(argv: list[str] | None = None) -> int:
     isolation, reason = decide_cross_origin_isolation(args.cross_origin_isolation, args.isolation_source, args.root)
     try:
         server = make_server(args.root, args.host, args.port, isolation, args.quiet, args.basic_auth, args.match_store,
-                             args.match_versions, args.match_store_max_bytes)
+                             args.match_versions, args.match_store_max_bytes, args.match_forwarded_for)
     except MatchStoreError as error:
         print(f"serve.py: {error}", file=sys.stderr)
         return 1

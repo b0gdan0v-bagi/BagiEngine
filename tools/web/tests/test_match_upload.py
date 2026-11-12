@@ -24,10 +24,22 @@ OTHER_ID = "fedcba9876543210fedcba9876543210"
 START = b'{"event":"start","version":5,"seat":"East"}\n'
 SETTLEMENT = b'{"event":"settlement","points":[1,2,3,4]}\n{"event":"end"}\n'
 PIECE_LIMIT = 1 << 20
+DAY = 24 * 3600
+START_TIME = 1_700_000_000.0
 
 
 def piece_path(id_: str = MATCH_ID, index: int | str = 0) -> str:
     return f"/matches/{id_}/{index}"
+
+
+class FakeClock:
+    """The clock of the server: the tests move it by hand, so nothing sleeps."""
+
+    def __init__(self, now: float = START_TIME):
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
 
 
 class MatchStoreTestCase(ServerTestCase):
@@ -36,7 +48,8 @@ class MatchStoreTestCase(ServerTestCase):
 
     def server_options(self, root: Path) -> dict:
         self.store = root / "store"
-        return dict(match_store=self.store, match_versions=self.versions, **self.store_options)
+        self.clock = FakeClock()
+        return dict(match_store=self.store, match_versions=self.versions, clock=self.clock, **self.store_options)
 
     def post(self, path: str, body: bytes, headers: dict | None = None):
         return self.request(path, method="POST", headers=headers, body=body)
@@ -317,12 +330,410 @@ class AccessLogTest(MatchStoreTestCase):
             self.post(piece_path(), START + b"x\n")
             self.post("/matches/" + OTHER_ID, START)
             self.request(piece_path(), method="GET")
+            self.request("/matches/")
+            self.request(f"/matches/{MATCH_ID}", method="DELETE")
             self.exchange(f"POST {piece_path(OTHER_ID)} HTTP/1.1 junk junk\r\n\r\n".encode())
             self.request("/nothing")
         text = log.getvalue()
         self.assertIn("/nothing", text)
         for secret in (MATCH_ID, OTHER_ID, marker, "/matches"):
             self.assertNotIn(secret, text)
+
+
+class RateLimitTest(MatchStoreTestCase):
+    def post_ok(self):
+        return self.post(piece_path(), START)
+
+    def test_sixty_posts_an_hour_pass_and_the_next_is_429_with_retry_after(self):
+        for _ in range(60):
+            self.assertEqual(self.post_ok().status, 200)
+        response = self.post_ok()
+        self.assertEqual((response.status, response.headers["retry-after"], response.headers["connection"]), (429, "3600", "close"))
+        self.clock.now += 1800
+        self.assertEqual(self.post_ok().headers["retry-after"], "1800")
+        self.assertEqual(self.stored(), {f"{MATCH_ID}/0.jsonl": START})
+
+    def test_the_window_slides(self):
+        self.assertEqual(self.post_ok().status, 200)
+        self.clock.now += 1000
+        for _ in range(59):
+            self.assertEqual(self.post_ok().status, 200)
+        self.assertEqual(self.post_ok().status, 429)
+        self.clock.now = START_TIME + 3600  # the first one is out of the window, the others are not
+        self.assertEqual(self.post_ok().status, 200)
+        response = self.post_ok()
+        self.assertEqual((response.status, response.headers["retry-after"]), (429, "1000"))
+
+    def test_every_post_with_a_good_path_counts_a_bad_path_does_not(self):
+        for _ in range(100):
+            self.assertEqual(self.post("/matches/nope/0", START).status, 400)
+        for _ in range(60):
+            self.assertEqual(self.post(piece_path(), b"nonsense").status, 400)
+        self.assertEqual(self.post(piece_path(), START).status, 429)
+        self.assertEqual(self.stored(), {})
+
+    def test_reading_and_deleting_are_not_limited(self):
+        for _ in range(60):
+            self.post_ok()
+        self.assertEqual(self.request("/matches/").status, 200)
+        self.assertEqual(self.request(piece_path() + ".jsonl").status, 200)
+        self.assertEqual(self.request(f"/matches/{MATCH_ID}", method="DELETE").status, 200)
+
+    def test_the_forwarded_address_is_ignored_unless_the_switch_is_on(self):
+        for number in range(60):
+            self.assertEqual(self.post(piece_path(), START, {"X-Forwarded-For": f"10.0.0.{number}"}).status, 200)
+        self.assertEqual(self.post(piece_path(), START, {"X-Forwarded-For": "10.1.1.1"}).status, 429)
+
+
+class ForwardedLimitTest(MatchStoreTestCase):
+    store_options = {"match_forwarded_for": True}
+
+    def forwarded(self, value: str):
+        return self.post(piece_path(), START, {"X-Forwarded-For": value})
+
+    def test_the_last_entry_is_the_client_and_another_address_is_free(self):
+        for _ in range(60):
+            self.assertEqual(self.forwarded("6.6.6.6, 10.0.0.1").status, 200)
+        self.assertEqual(self.forwarded("10.0.0.1").status, 429)
+        self.assertEqual(self.forwarded("7.7.7.7, 10.0.0.1").status, 429)  # what the client wrote before the edge does not count
+        self.assertEqual(self.forwarded("10.0.0.2").status, 200)
+        self.assertEqual(self.forwarded("2001:db8::1").status, 200)
+        self.assertEqual(self.forwarded("2001:0db8:0:0:0:0:0:1").status, 200)
+
+    def test_a_missing_or_malformed_header_counts_for_the_peer(self):
+        for _ in range(30):
+            self.assertEqual(self.post(piece_path(), START).status, 200)
+        for _ in range(30):
+            self.assertEqual(self.forwarded("not an address").status, 200)
+        self.assertEqual(self.post(piece_path(), START).status, 429)
+        self.assertEqual(self.forwarded("10.0.0.9").status, 200)
+
+
+class RateLimiterTest(unittest.TestCase):
+    def test_keys_are_independent_and_the_wait_is_whole_seconds(self):
+        clock = FakeClock(100.0)
+        limiter = serve.RateLimiter(2, 10, clock)
+        self.assertEqual([limiter.check("a"), limiter.check("a"), limiter.check("b")], [0, 0, 0])
+        self.assertEqual(limiter.check("a"), 10)
+        clock.now = 104.5
+        self.assertEqual(limiter.check("a"), 6)
+        clock.now = 110.0
+        self.assertEqual([limiter.check("a"), limiter.check("a")], [0, 0])
+
+    def test_the_memory_is_bounded(self):
+        clock = FakeClock(0.0)
+        limiter = serve.RateLimiter(5, 3600, clock, max_keys=100)
+        for number in range(1000):
+            self.assertEqual(limiter.check(f"key{number}"), 0)
+            self.assertLessEqual(len(limiter._times), 100)
+        clock.now = 7200  # every key is out of its window: the next new key clears them
+        limiter.check("late")
+        self.assertEqual(list(limiter._times), ["late"])
+
+    def test_a_key_that_posts_a_lot_holds_at_most_the_limit_in_memory(self):
+        limiter = serve.RateLimiter(3, 3600, FakeClock())
+        for _ in range(1000):
+            limiter.check("a")
+        self.assertEqual(len(limiter._times["a"]), 3)
+
+
+class CapTest(MatchStoreTestCase):
+    store_options = {"match_store_max_bytes": 100}
+
+    def test_a_new_piece_over_the_cap_is_507_and_not_stored(self):
+        self.assertEqual(self.post(piece_path(index=0), START).status, 200)
+        self.assertEqual(self.post(piece_path(index=1), START).status, 200)
+        response = self.post(piece_path(index=2), START)
+        self.assertEqual(response.status, 507)
+        self.assertEqual(sorted(self.stored()), [f"{MATCH_ID}/0.jsonl", f"{MATCH_ID}/1.jsonl"])
+
+    def test_a_repeat_of_a_stored_piece_is_200_even_when_the_store_is_full(self):
+        self.post(piece_path(index=0), START)
+        self.post(piece_path(index=1), START)
+        self.assertEqual(self.post(piece_path(index=2), START).status, 507)
+        self.assertEqual(self.post(piece_path(index=0), START).status, 200)
+        self.assertEqual(self.post(piece_path(index=1), START).status, 200)
+        self.assertEqual(self.post(piece_path(index=1), START + b"{}\n").status, 409)
+
+    def test_a_piece_of_no_bytes_fits_and_a_delete_makes_room(self):
+        self.post(piece_path(index=0), START)
+        self.post(piece_path(index=1), START)
+        self.assertEqual(self.post(piece_path(index=5), b"").status, 200)
+        self.assertEqual(self.post(piece_path(OTHER_ID, 1), START).status, 507)
+        self.assertEqual(self.request(f"/matches/{MATCH_ID}", method="DELETE").status, 200)
+        self.assertEqual(self.post(piece_path(OTHER_ID, 1), START).status, 200)
+
+    def test_the_size_is_counted_again_at_start(self):
+        store = serve.MatchStore(self.store, None, 100)
+        self.assertEqual(store.put(OTHER_ID, 1, START)[0], 200)
+        self.assertEqual(store.put(OTHER_ID, 2, START)[0], 200)
+        restarted = serve.MatchStore(self.store, None, 100)
+        self.assertEqual(restarted.put(MATCH_ID, 1, START)[0], 507)
+        self.assertEqual(restarted.put(OTHER_ID, 1, START)[0], 200)
+
+
+class ReadingTest(MatchStoreTestCase):
+    def send_match(self, id_: str = MATCH_ID):
+        pieces = [START, SETTLEMENT, b"", b'{"event":"end","text":"\xc3\xa4"}\n']
+        for index, body in enumerate(pieces):
+            self.assertEqual(self.post(piece_path(id_, index), body).status, 200)
+        return pieces
+
+    def test_an_empty_store_lists_no_matches(self):
+        response = self.request("/matches/")
+        self.assertEqual((response.status, response.headers["content-type"], response.headers["cache-control"]),
+                         (200, "application/json", "no-store"))
+        self.assertEqual(json.loads(response.body), {"matches": []})
+
+    def test_the_list_is_sorted_and_counts_the_pieces(self):
+        self.send_match(OTHER_ID)
+        self.assertEqual(self.post(piece_path(MATCH_ID, 0), START).status, 200)
+        self.assertEqual(json.loads(self.request("/matches/").body),
+                         {"matches": [{"id": MATCH_ID, "pieces": 1}, {"id": OTHER_ID, "pieces": 4}]})
+
+    def test_a_match_sent_in_pieces_is_read_back_byte_for_byte_empty_piece_included(self):
+        pieces = self.send_match()
+        for index, body in enumerate(pieces):
+            with self.subTest(index):
+                response = self.request(piece_path(index=f"{index}.jsonl"))
+                self.assertEqual((response.status, response.body), (200, body))
+                self.assertEqual((response.headers["content-type"], response.headers["cache-control"]),
+                                 ("application/x-ndjson", "no-store"))
+                self.assertEqual(int(response.headers["content-length"]), len(body))
+
+    def test_head_has_the_headers_and_no_body(self):
+        self.send_match()
+        response = self.request(piece_path(index="1.jsonl"), method="HEAD")
+        self.assertEqual((response.status, response.body, int(response.headers["content-length"])), (200, b"", len(SETTLEMENT)))
+        self.assertEqual(self.request("/matches/", method="HEAD").body, b"")
+        self.assertEqual(self.request(piece_path(index="9.jsonl"), method="HEAD").status, 404)
+
+    def test_a_missing_piece_and_a_malformed_name_are_404(self):
+        self.send_match()
+        for path in (piece_path(index="9.jsonl"), piece_path(OTHER_ID, "0.jsonl"), piece_path(index=0), piece_path(index="0.json"),
+                     piece_path(index="01.jsonl"), piece_path(index="-1.jsonl"), piece_path(index=".jsonl"), piece_path(index="1.jsonl/x"),
+                     piece_path(MATCH_ID.upper(), "0.jsonl"), f"/matches/{MATCH_ID}", f"/matches/{MATCH_ID}/", "/matches",
+                     "/matches/x/y/z", "/matches/../index.html", f"/matches/{MATCH_ID}/..%2f..%2findex.html", f"/matches/{MATCH_ID}/%30.jsonl",
+                     f"/matches/{MATCH_ID}/0.jsonl%00", "/matches//"):
+            with self.subTest(path):
+                self.assertEqual(self.request(path).status, 404)
+
+    def test_strangers_are_not_listed_and_leftovers_are_never_served(self):
+        self.send_match()
+        (self.store / "junk").mkdir()
+        (self.store / "junk" / "0.jsonl").write_bytes(b"x")
+        (self.store / "stray.txt").write_bytes(b"x")
+        (self.store / OTHER_ID).mkdir()
+        (self.store / MATCH_ID / ".tmp-abc").write_bytes(b"half")
+        (self.store / MATCH_ID / "notes.txt").write_bytes(b"x")
+        (self.store / MATCH_ID / "7.json").write_bytes(b"x")
+        self.assertEqual(json.loads(self.request("/matches/").body), {"matches": [{"id": MATCH_ID, "pieces": 4}]})
+        for path in (f"/matches/{MATCH_ID}/.tmp-abc", f"/matches/{MATCH_ID}/.tmp-abc.jsonl", f"/matches/{MATCH_ID}/notes.txt",
+                     f"/matches/{OTHER_ID}/0.jsonl", "/matches/junk/0.jsonl"):
+            with self.subTest(path):
+                self.assertEqual(self.request(path).status, 404)
+
+
+class IsolatedReadingTest(MatchStoreTestCase):
+    cross_origin_isolation = True
+
+    def test_the_isolation_headers_are_on_every_answer(self):
+        self.post(piece_path(), START)
+        for path, method in (("/matches/", "GET"), (piece_path(index="0.jsonl"), "GET"), (piece_path(index="0.jsonl"), "HEAD"),
+                             (piece_path(index="5.jsonl"), "GET"), (f"/matches/{MATCH_ID}", "DELETE"), (f"/matches/{MATCH_ID}", "DELETE"),
+                             (piece_path(index=0), "POST"), (piece_path(index=0), "PUT")):
+            with self.subTest(path=path, method=method):
+                headers = self.request(path, method=method, body=START if method == "POST" else None).headers
+                self.assertEqual(headers["cross-origin-opener-policy"], "same-origin")
+                self.assertEqual(headers["cross-origin-embedder-policy"], "require-corp")
+
+
+class DeleteTest(MatchStoreTestCase):
+    def delete(self, path: str):
+        return self.request(path, method="DELETE")
+
+    def test_a_stored_match_is_removed_and_then_gone(self):
+        self.post(piece_path(index=0), START)
+        self.post(piece_path(index=1), SETTLEMENT)
+        self.post(piece_path(OTHER_ID, 0), START)
+        response = self.delete(f"/matches/{MATCH_ID}")
+        self.assertEqual((response.status, response.headers["connection"]), (200, "close"))
+        self.assertEqual(sorted(self.stored()), [f"{OTHER_ID}/0.jsonl"])
+        self.assertEqual(self.delete(f"/matches/{MATCH_ID}").status, 404)
+        self.assertEqual(self.request(piece_path(index="0.jsonl")).status, 404)
+        self.assertEqual(json.loads(self.request("/matches/").body), {"matches": [{"id": OTHER_ID, "pieces": 1}]})
+
+    def test_a_malformed_id_is_400_and_nothing_is_touched(self):
+        self.post(piece_path(index=0), START)
+        outside = self.store.parent / "outside.txt"
+        outside.write_bytes(b"keep")
+        for path in ("/matches/..", "/matches/..%2f..", "/matches/..%2fstore", f"/matches/{MATCH_ID.upper()}", f"/matches/{MATCH_ID[:31]}",
+                     "/matches/.", "/matches/%2e%2e", "/matches/*", f"/matches/{MATCH_ID}%00"):
+            with self.subTest(path):
+                self.assertEqual(self.delete(path).status, 400)
+        self.assertEqual(self.stored(), {f"{MATCH_ID}/0.jsonl": START})
+        self.assertEqual(outside.read_bytes(), b"keep")
+
+    def test_a_piece_the_list_and_the_bare_path_are_405(self):
+        self.post(piece_path(index=0), START)
+        for path in (piece_path(index=0), piece_path(index="0.jsonl"), f"/matches/{MATCH_ID}/", "/matches/", "/matches", f"/matches/{MATCH_ID}/0/0"):
+            with self.subTest(path):
+                response = self.delete(path)
+                self.assertEqual((response.status, response.headers["allow"]), (405, "GET, HEAD, POST, DELETE"))
+        self.assertEqual(list(self.stored()), [f"{MATCH_ID}/0.jsonl"])
+
+    def test_a_folder_that_is_a_link_is_not_followed(self):
+        outside = self.store.parent / "elsewhere"
+        outside.mkdir()
+        (outside / "0.jsonl").write_bytes(b"keep")
+        try:
+            (self.store / MATCH_ID).symlink_to(outside, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("no symbolic links here")
+        self.assertEqual(self.delete(f"/matches/{MATCH_ID}").status, 404)
+        self.assertEqual((outside / "0.jsonl").read_bytes(), b"keep")
+
+
+class AuthOverTheNewPathsTest(MatchStoreTestCase):
+    basic_auth = ("tester", "s3cret")
+
+    def test_every_new_path_and_method_needs_the_credentials(self):
+        self.post(piece_path(), START, basic(*self.basic_auth))
+        for path, method in (("/matches/", "GET"), ("/matches/", "HEAD"), (piece_path(index="0.jsonl"), "GET"),
+                             (piece_path(index="0.jsonl"), "HEAD"), (piece_path(index="9.jsonl"), "GET"), (f"/matches/{MATCH_ID}", "DELETE"),
+                             (piece_path(index=0), "DELETE"), ("/matches/x", "DELETE"), ("/matches", "GET")):
+            with self.subTest(path=path, method=method):
+                response = self.request(path, method=method)
+                self.assertEqual(response.status, 401)
+                self.assertTrue(response.headers["www-authenticate"].startswith("Basic realm="))
+        self.assertEqual(list(self.stored()), [f"{MATCH_ID}/0.jsonl"])
+
+    def test_with_the_credentials_the_answers_are_the_real_ones(self):
+        headers = basic(*self.basic_auth)
+        self.post(piece_path(), START, headers)
+        self.assertEqual(json.loads(self.request("/matches/", headers=headers).body), {"matches": [{"id": MATCH_ID, "pieces": 1}]})
+        self.assertEqual(self.request(piece_path(index="0.jsonl"), headers=headers).body, START)
+        self.assertEqual(self.request(f"/matches/{MATCH_ID}", method="DELETE", headers=headers).status, 200)
+
+
+def make_old_store(folder: Path, now: float) -> dict[str, int]:
+    """Matches of every age in `folder`; returns the bytes of the pieces of each."""
+    def piece(match: str, index: int, size: int, age_days: float):
+        path = folder / match / f"{index}.jsonl"
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(b"x" * size)
+        os.utime(path, (now - age_days * DAY, now - age_days * DAY))
+
+    piece("a" * 32, 0, 10, 89)
+    piece("b" * 32, 0, 20, 91)
+    piece("b" * 32, 1, 5, 120)
+    piece("c" * 32, 0, 7, 200)
+    piece("c" * 32, 1, 3, 1)
+    return {"a": 10, "b": 25, "c": 10}
+
+
+class SweepTest(unittest.TestCase):
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.store = Path(self._temp.name)
+        self.now = START_TIME
+        self.sizes = make_old_store(self.store, self.now)
+
+    def names(self) -> list[str]:
+        return sorted(path.name for path in self.store.iterdir())
+
+    def test_a_match_is_kept_until_its_newest_piece_is_90_days_old(self):
+        freed = serve.sweep_matches(self.store, self.now, 90 * DAY)
+        self.assertEqual(self.names(), ["a" * 32, "c" * 32])
+        self.assertEqual(freed, self.sizes["b"])
+        self.assertEqual(sorted(path.name for path in (self.store / ("c" * 32)).iterdir()), ["0.jsonl", "1.jsonl"])
+
+    def test_the_default_retention_is_90_days(self):
+        self.assertEqual(serve.MATCH_RETENTION_SECONDS, 90 * DAY)
+        serve.sweep_matches(self.store, self.now)
+        self.assertEqual(self.names(), ["a" * 32, "c" * 32])
+
+    def test_a_later_sweep_takes_the_rest(self):
+        serve.sweep_matches(self.store, self.now + 2 * DAY, 90 * DAY)
+        self.assertEqual(self.names(), ["c" * 32])
+        self.assertEqual(serve.sweep_matches(self.store, self.now + 100 * DAY, 90 * DAY), self.sizes["c"])
+        self.assertEqual(self.names(), [])
+
+    def test_old_temp_files_and_empty_folders_go_young_temp_files_and_strangers_stay(self):
+        old, young = self.now - 2 * 3600, self.now - 600
+        (self.store / ("d" * 32)).mkdir()
+        (self.store / ("e" * 32)).mkdir()
+        (self.store / ("e" * 32) / ".tmp-old").write_bytes(b"half")
+        (self.store / ("a" * 32) / ".tmp-old").write_bytes(b"half")
+        (self.store / ("a" * 32) / ".tmp-young").write_bytes(b"half")
+        (self.store / ".tmp-probe-old").write_bytes(b"")
+        (self.store / ".tmp-probe-young").write_bytes(b"")
+        (self.store / "notes").mkdir()
+        (self.store / "readme.txt").write_bytes(b"x")
+        (self.store / ("f" * 32)).mkdir()
+        (self.store / ("f" * 32) / "readme.txt").write_bytes(b"x")
+        for path, when in (("e" * 32 + "/.tmp-old", old), ("a" * 32 + "/.tmp-old", old), (".tmp-probe-old", old),
+                           ("a" * 32 + "/.tmp-young", young), (".tmp-probe-young", young)):
+            os.utime(self.store / path, (when, when))
+        serve.sweep_matches(self.store, self.now, 90 * DAY)
+        self.assertEqual(self.names(), [".tmp-probe-young", "a" * 32, "c" * 32, "f" * 32, "notes", "readme.txt"])
+        self.assertEqual(sorted(path.name for path in (self.store / ("a" * 32)).iterdir()), [".tmp-young", "0.jsonl"])
+
+    def test_a_missing_store_is_left_to_the_caller(self):
+        with self.assertRaises(OSError):
+            serve.sweep_matches(self.store / "nothing", self.now, 90 * DAY)
+
+    def test_the_store_keeps_its_counter_right(self):
+        store = serve.MatchStore(self.store, None, 30)
+        # on disk: 10 + 25 + 10 = 45 bytes, over the cap of 30, so nothing new fits
+        self.assertEqual(store.put("1" * 32, 0, b"x")[0], 507)
+        store.sweep(self.now)  # match b goes: 20 bytes are left
+        self.assertEqual(store.put("1" * 32, 0, b"y" * 10)[0], 200)  # 30
+        self.assertEqual(store.put("1" * 32, 1, b"y" * 10)[0], 507)
+        self.assertIs(store.delete("c" * 32), True)  # 20
+        self.assertEqual(store.put("1" * 32, 1, b"y" * 10)[0], 200)
+
+    def test_the_sweep_runs_at_start(self):
+        clock = FakeClock(self.now)
+        server = serve.make_server(self.store, "127.0.0.1", 0, quiet=True, match_store=self.store, clock=clock)
+        self.addCleanup(server.server_close)
+        self.assertEqual(self.names(), ["a" * 32, "c" * 32])
+
+    def test_the_sweep_runs_again_every_interval_and_stops_when_asked(self):
+        class Stop:
+            """An Event that lets two intervals pass, 100 seconds each."""
+
+            def __init__(self):
+                self.waits = []
+
+            def wait(self, interval):
+                self.waits.append(interval)
+                clock.now += 100
+                return len(self.waits) > 2
+
+        class Store:
+            def __init__(self):
+                self.swept = []
+
+            def sweep(self, now):
+                self.swept.append(now)
+
+        clock, stop, store = FakeClock(10.0), Stop(), Store()
+        serve.sweep_loop(store, clock, stop, 3600)
+        self.assertEqual((store.swept, stop.waits), ([110.0, 210.0], [3600, 3600, 3600]))
+
+    def test_the_thread_stops_with_the_server(self):
+        server = serve.make_server(self.store, "127.0.0.1", 0, quiet=True, match_store=self.store)
+        self.assertTrue(server.sweeper.is_alive())
+        self.assertTrue(server.sweeper.daemon)
+        server.server_close()
+        self.assertFalse(server.sweeper.is_alive())
+
+    def test_there_is_no_thread_without_a_store(self):
+        server = serve.make_server(self.store, "127.0.0.1", 0, quiet=True)
+        self.addCleanup(server.server_close)
+        self.assertIsNone(server.sweeper)
 
 
 class ConfigurationTest(unittest.TestCase):
@@ -332,6 +743,11 @@ class ConfigurationTest(unittest.TestCase):
     def test_the_defaults_are_a_store_that_is_off_and_a_gigabyte(self):
         args = self.parse()
         self.assertEqual((args.match_store, args.match_versions, args.match_store_max_bytes), (None, None, 1024 << 20))
+
+    def test_the_forwarded_for_switch_is_off_unless_asked(self):
+        self.assertIs(self.parse().match_forwarded_for, False)
+        self.assertIs(self.parse(MATCH_FORWARDED_FOR="1").match_forwarded_for, True)
+        self.assertIs(self.parse(MATCH_FORWARDED_FOR="0").match_forwarded_for, False)
 
     def test_the_variables_are_read(self):
         args = self.parse(MATCH_STORE="/data/matches", MATCH_STORE_MAX_MB="64", MATCH_LOG_VERSIONS="1-5")
