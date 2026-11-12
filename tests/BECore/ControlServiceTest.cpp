@@ -322,6 +322,30 @@ namespace BECore::Tests {
         EXPECT_EQ(ErrorCode(responses[1]), "parse_error");  // within the limit, so it is parsed (and is not JSON)
     }
 
+    TEST_F(ControlServiceTest, DeeplyNestedRequestIsRefusedBeforeItIsCopied) {
+        RegisterRecording("ping");
+        // A request is copied while it is handled, and that recurses once per level: 15000 levels overflow the stack of a debug build
+        const auto nested = [](size_t levels) {
+            eastl::string text = R"({"id":7,"method":"ping","params":{"a":)";
+            text.append(levels, '[');
+            text.append(levels, ']');
+            text += "}}";
+            return text;
+        };
+        // The request object and `params` are two levels of their own
+        constexpr size_t kOwnLevels = 2;
+        Post(nested(ControlService::kMaxRequestDepth - kOwnLevels));
+        Post(nested(ControlService::kMaxRequestDepth - kOwnLevels + 1));
+        Post(nested(15000));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 3u);
+        EXPECT_TRUE(IsOk(responses[0])) << "a request at the limit is handled";
+        EXPECT_EQ(ErrorCode(responses[1]), "invalid_request");
+        EXPECT_EQ(ErrorCode(responses[2]), "invalid_request");
+        EXPECT_EQ(IdOf(responses[2]), -1) << "refused before the id was read: the answer has no id";
+    }
+
     TEST_F(ControlServiceTest, GarbageGetsAnAnswerAndNeverAbortsTheProcess) {
         RegisterRecording("ping");
         const std::string deepArray(200000, '[');

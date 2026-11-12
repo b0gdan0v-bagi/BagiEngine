@@ -14,8 +14,12 @@ namespace BECore::Fuzz {
         /// Frames the target lets a deferred call (`step`) wait for its answer; the rest is answered by Shutdown()
         constexpr int kFramesToWait = 4;
 
-        /// The id the answer has to carry: the request's own when the request is an object with an integer or a string id, otherwise null
+        /// The id the answer has to carry: the request's own when the request is an object with an integer or a string id, otherwise null (a request nested too deeply is
+        /// refused before anything is read from it, the id included)
         Json ExpectedId(eastl::string_view text) {
+            if (IsJsonNestedDeeperThan(text, ControlService::kMaxRequestDepth)) {
+                return Json();
+            }
             const auto request = ParseJson(text);
             if (!request.has_value() || !request->is_object()) {
                 return Json();

@@ -398,32 +398,6 @@ namespace BECore {
             return ServerMessage(LeftMessage{std::move(*reason)});
         }
 
-        /// True when `[` and `{` outside strings nest deeper than @p maxDepth. A cheap scan that does not build anything; it does not
-        /// judge the syntax (the parser does), only bounds what the parser may be given.
-        [[nodiscard]] bool IsNestedDeeperThan(eastl::string_view text, size_t maxDepth) {
-            size_t depth = 0;
-            bool inString = false;
-            for (size_t i = 0; i < text.size(); ++i) {
-                const char c = text[i];
-                if (inString) {
-                    if (c == '\\') {
-                        ++i;
-                    } else if (c == '"') {
-                        inString = false;
-                    }
-                } else if (c == '"') {
-                    inString = true;
-                } else if (c == '[' || c == '{') {
-                    if (++depth > maxDepth) {
-                        return true;
-                    }
-                } else if ((c == ']' || c == '}') && depth > 0) {
-                    --depth;
-                }
-            }
-            return false;
-        }
-
     }  // namespace
 
     std::expected<ClientMessage, ControlError> ParseClientMessage(eastl::string_view text, size_t maxBytes) {
@@ -433,6 +407,9 @@ namespace BECore {
         // The JSON lexer takes a NUL byte for the end of the input and would ignore what follows it
         if (text.find('\0') != eastl::string_view::npos) {
             return BadMessage("the message must not contain a NUL byte");
+        }
+        if (IsJsonNestedDeeperThan(text, RoomLimits::kMaxClientJsonDepth)) {
+            return BadMessage(Format("the message nests deeper than {} levels", RoomLimits::kMaxClientJsonDepth));
         }
         const auto parsed = ParseJson(text);
         if (!parsed) {
@@ -612,7 +589,7 @@ namespace BECore {
         if (text.find('\0') != eastl::string_view::npos) {
             return BadMessage("the message must not contain a NUL byte");
         }
-        if (IsNestedDeeperThan(text, RoomLimits::kMaxServerJsonDepth)) {
+        if (IsJsonNestedDeeperThan(text, RoomLimits::kMaxServerJsonDepth)) {
             return BadMessage(Format("the message nests deeper than {} levels", RoomLimits::kMaxServerJsonDepth));
         }
         const auto parsed = ParseJson(text);

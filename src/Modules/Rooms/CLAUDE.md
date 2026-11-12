@@ -115,6 +115,8 @@ The host matters in the lobby (only the host starts). After the start it is only
 - **Limits** (`RoomHubSettings`): `rate_limited` is the answer to a message over the token bucket of the connection, and after `maxRateLimitedInRow` in a row the connection is closed (`rate_limited`); a code or token that cannot exist counts as a failed join like an unknown code or a wrong token, `maxFailedJoinsInRow` in a row close the connection (`too_many_failed_joins`; a successful join, and a `create_room` that succeeds, resets the count; any other message does not); a connection over `maxConnections` is closed on arrival (`server_full`); the size limit is checked by the parser first. A close is reported through `sink.close` and the connection is forgotten at once, so the later `OnDisconnected` is ignored.
 - **When a computer takes over an absent seat** (decision of the review of WP 4): the lobby revision does not move on time alone, and the hub sends nothing extra at the end of the grace. The clients already know the seat's player is gone (`connected: false` since the drop) and learn that a computer plays it from the next `view`, which the computer's move produces. A message of its own would need a new field of the protocol; it can be added with the Mahjong screens if they need it.
 
+The protocol and the hub are fuzzed (`tests/Fuzz/CLAUDE.md`: `FuzzRoomProtocol`, `FuzzRoomHub`).
+
 ## For later slices
 
 - **Slice 4, hosting** (Dockerfile, settings from the environment: the values of `RoomHubSettings`). The Mahjong adapter and its screens are entries of the `mahjong` area.
@@ -132,7 +134,7 @@ Constants in `RoomLimits.h`; `RoomHubSettings` repeats them as defaults for the 
 
 | Limit | Value |
 |-------|-------|
-| client message | 16 KiB (`kMaxMessageBytes`) |
+| client message | 16 KiB (`kMaxMessageBytes`), JSON nesting 32 (`kMaxClientJsonDepth`: `options` and `action` are copied, a 16 KiB message could be 8000 levels deep) |
 | server message a client reads | 1 MiB, JSON nesting 128 (`kMaxServerMessageBytes`, `kMaxServerJsonDepth`: copying a deep `view` recurses) |
 | player name | 1 to 24 UTF-8 bytes |
 | game name | 1 to 64 bytes |

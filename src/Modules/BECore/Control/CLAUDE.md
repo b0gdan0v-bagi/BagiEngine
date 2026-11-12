@@ -48,7 +48,7 @@ The engine builds without exceptions, so nlohmann/json is built with `JSON_NOEXC
 - Include `BECore/Control/Json.h` in `.cpp` files and in headers that really need the complete type (`ControlCall.h`, a game's adapter). Headers that only mention the type include `JsonFwd.h`. `CoreManager.h` must not pull in the full header (about 900 KB); it is not in the PCH either.
 - Parse client text with `ParseJson()` only (it uses `allow_exceptions = false`). Read members with `FindJsonMember()`, `GetJsonString/Int/Number/Bool()`, which check the type. `GetJsonInt` rejects `1.5`, `"3"` and numbers that do not fit `int64_t`.
 - Never call `at()`, `get<T>()`, `value()` or the const `operator[]` on client data. Building a response (`Json::object()`, `result["x"] = ...`) and `DumpJson()` are safe; `DumpJson()` replaces invalid UTF-8 instead of aborting.
-- Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport: it bounds the nesting that a client can send.
+- Keep the 1 MiB request limit (`ControlService::kMaxRequestBytes`) at every transport. `ParseJson` itself takes any depth (it parses and frees without recursion), but copying a value recurses once per level, so a reader that keeps client JSON checks `IsJsonNestedDeeperThan` first: a request nested deeper than `ControlService::kMaxRequestDepth` (128) is `invalid_request`, answered without an `id`. The control API is fuzzed: `tests/Fuzz/CLAUDE.md`.
 - nlohmann uses `std::string` inside; convert to `eastl::string` at the edge, which the helpers do.
 
 ## Manual clock and `step`

@@ -39,6 +39,9 @@ namespace BECore {
         /// Longest request text Post() accepts, in bytes; a longer one is answered with request_too_large
         static constexpr size_t kMaxRequestBytes = 1024 * 1024;
 
+        /// Deepest nesting of arrays and objects in a request; a deeper one is answered with invalid_request. The request is copied while it is handled, which recurses once per level
+        static constexpr size_t kMaxRequestDepth = 128;
+
         /// Version of the request and response format, reported by the "ping" method
         static constexpr int kProtocolVersion = 1;
 
