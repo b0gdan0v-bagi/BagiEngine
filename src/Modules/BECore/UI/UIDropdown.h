@@ -10,9 +10,11 @@ namespace BECore {
      * @brief A choice of many values behind one row: the header shows the chosen option and an arrow, a click opens a list of the options above everything of the canvas.
      *
      * `<element type="UIDropdown" name="Level" bind="level" action="SetLevel" text="Pick one" x="20" y="20" width="240" height="56" optionHeight="56">` with `<children>` of
-     * `<element type="UIButton" value="easy" text="{#level.easy}" .../>`. `bind` names a `UIVars` variable, like `UISegmented`: the option (a direct child that is a `UIButton`) whose
-     * `value` equals the variable is the chosen one. The header shows that option's `text` (any `{#key}` or `{name}` in it is expanded as in the option itself, so a language switch
-     * rewords the header); with no option chosen it shows the dropdown's own `text`, a placeholder or empty. Only the options are children of interest, anything else is ignored.
+     * an option per child: `<element type="UIElement" value="easy" ...>` with a `UITextComponent` and a `UIInputClicker` (the composed button; an icon is a child) or the old
+     * `<element type="UIButton" value="easy" text="{#level.easy}" .../>`. The two forms may be mixed (`UIChoice`: an option is a `UIButton` or an element with a `UIInputClicker`). `bind` names
+     * a `UIVars` variable, like `UISegmented`: the option (a direct child) whose `value` equals the variable is the chosen one. The header shows that option's caption (`UIChoice::GetText`:
+     * any `{#key}` or `{name}` in it is expanded as in the option itself, so a language switch rewords the header); with no option chosen it shows the dropdown's own `text`, a placeholder or
+     * empty. Only the options are children of interest, anything else is ignored. An option has no `action` (the dropdown emits it): the clicker of a composed option carries `value` only.
      *
      * **The dropdown owns no choice.** A click on an option emits `ActionEvent(action, value)` with the option's `value` and changes nothing else; the game answers by setting the
      * variable (game -> `UIVars` -> widget). That the list is open is runtime UI state (like `hovered`), neither reflected nor saved.
@@ -24,9 +26,9 @@ namespace BECore {
      * it); a `disabled` option takes the click and does nothing, the list stays open; a press anywhere else closes the list and is consumed (`UICanvasComponent`).
      *
      * The header is the touch target (`interactive`). It is the box of any element (`box`: rounded corners, border, gradient, shadow; with the default style one rect of `color`), its
-     * fill and gradient end with the hover, press and disabled shifts of a button (`GetCurrentBox`); the options are `UIButton`s with a box of their own. The text is laid out left of
-     * the arrow, and `CheckContent()` measures it there. `arrowColor` is derived from `textColor` when left transparent; the arrow points down closed and up open, so the state does not rest on color
-     * alone.
+     * fill and gradient end with the hover, press and disabled shifts of a button (`GetCurrentBox`); the options have a box of their own (an option is drawn by the canvas in its own state, the
+     * children of a composed option in the state of the option). The text is laid out left of the arrow, and `CheckContent()` measures it there. `arrowColor` is derived from `textColor` when left
+     * transparent; the arrow points down closed and up open, so the state does not rest on color alone.
      */
     class UIDropdown : public UILabel {
         BE_CLASS(UIDropdown)
@@ -88,11 +90,11 @@ namespace BECore {
         /// The value of the bound variable; empty when `bind` is empty or the variable is not set
         [[nodiscard]] eastl::string_view GetSelectedValue() const;
 
-        /// Whether a click on @p option emits `ActionEvent(action, option value)`: not when the dropdown or the option is `disabled`, or `action` is empty
-        [[nodiscard]] bool EmitsOnChoice(const UIButton& option) const;
+        /// Whether a click on @p option emits `ActionEvent(action, option value)`: not when the dropdown or the option is disabled (`IsDisabled()`), or `action` is empty
+        [[nodiscard]] bool EmitsOnChoice(const UIElement& option) const;
 
         /// The option whose `value` equals the variable; null when there is none
-        [[nodiscard]] UIButton* FindChosenOption() const;
+        [[nodiscard]] UIElement* FindChosenOption() const;
 
         /// The header fill for the state now: `color`, shifted by hover and press, half alpha when `disabled`
         [[nodiscard]] Color GetCurrentFill() const;
@@ -126,7 +128,7 @@ namespace BECore {
         /// Resolves the colour fields of this control (UIElement::ApplyTheme): `arrowColor`, after the label's
         void ApplyTheme(UIThemes& themes) override;
 
-        /// The chosen option's text, or the dropdown's own when none is chosen
+        /// The chosen option's caption (`UIChoice::GetText`), or the dropdown's own text when none is chosen
         [[nodiscard]] const eastl::string& GetSourceText() const override;
 
     private:

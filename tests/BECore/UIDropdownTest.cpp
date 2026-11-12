@@ -7,6 +7,9 @@
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIDropdown.h>
+#include <BECore/UI/UIImageComponent.h>
+#include <BECore/UI/UIInputClicker.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -26,6 +29,8 @@ namespace BECore::Tests {
         //   Off   (300, 200) disabled
         //   Silent (300, 300) no action
         //   Mixed (500, 20) holds a label between its options
+        //   Comp  (520, 200) bound to `comp`, composed options (an element with a clicker): a caption on the element, an icon-left one (an image child and a caption child), a disabled one
+        //   Both  (520, 450) bound to `both`: a UIButton and a composed option in one list (it opens above, the list does not fit below)
         constexpr const char* kDropdownXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -66,6 +71,42 @@ namespace BECore::Tests {
             <children>
               <element type="UILabel" name="Caption" text="Caption" value="x"/>
               <element type="UIButton" name="MixedA" text="A" value="a"/>
+            </children>
+          </element>
+          <element type="UIDropdown" name="Comp" bind="comp" action="DdTestComp" text="Pick" x="520" y="200" width="240" height="56" optionHeight="56" color="40,40,70,255">
+            <children>
+              <element type="UIElement" name="CompEasy" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="{#lvl.easy}" align="Center" verticalAlign="Center" textColor="10,200,30,255"/>
+                  <component type="UIInputClicker" value="easy"/>
+                </components>
+              </element>
+              <element type="UIElement" name="CompHard" color="70,70,100,255" layout="Stack" direction="Horizontal" spacing="6" padding="8,0,0,0" crossAlign="Center">
+                <components><component type="UIInputClicker" value="hard"/></components>
+                <children>
+                  <element type="UIElement" name="CompHardIcon" width="24" height="24"><components><component type="UIImageComponent"/></components></element>
+                  <element type="UIElement" name="CompHardCaption" flex="1" height="100%">
+                    <components><component type="UITextComponent" text="{#lvl.hard}" align="Center" verticalAlign="Center"/></components>
+                  </element>
+                </children>
+              </element>
+              <element type="UIElement" name="CompLocked" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Locked" align="Center" verticalAlign="Center"/>
+                  <component type="UIInputClicker" value="locked" disabled="true"/>
+                </components>
+              </element>
+            </children>
+          </element>
+          <element type="UIDropdown" name="Both" bind="both" action="DdTestBoth" text="Pick" x="520" y="450" width="240" height="56" optionHeight="56" color="40,40,70,255">
+            <children>
+              <element type="UIButton" name="BothButton" text="{#lvl.medium}" value="button" color="70,70,100,255"/>
+              <element type="UIElement" name="BothComposed" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Composed" align="Center" verticalAlign="Center"/>
+                  <component type="UIInputClicker" value="composed"/>
+                </components>
+              </element>
             </children>
           </element>
         </elements>
@@ -189,6 +230,25 @@ namespace BECore::Tests {
             T* typed = element ? element->Cast<T>() : nullptr;
             EXPECT_NE(typed, nullptr) << name << " is not the expected control";
             return *typed;
+        }
+
+        /// Any element by name, whatever its class (`Get<T>` wants the exact type)
+        UIElement& Element(const char* name) const {
+            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
+            EXPECT_NE(element, nullptr) << name;
+            return *element;
+        }
+
+        /// The textured quads (the glyphs of a caption) drawn inside @p area in the last draw
+        size_t GlyphQuadsIn(const Rect& area) const {
+            size_t count = 0;
+            for (const DrawCall& call : _renderer->calls) {
+                if (call.kind == DrawKind::Texture && call.rect.x >= area.x - 1e-2f && call.rect.y >= area.y - 1e-2f && call.rect.x + call.rect.w <= area.x + area.w + 1e-2f &&
+                    call.rect.y + call.rect.h <= area.y + area.h + 1e-2f) {
+                    ++count;
+                }
+            }
+            return count;
         }
 
         /// A press and a release at the middle of the element, by the layout of the last draw; false when either was not consumed
@@ -737,6 +797,228 @@ namespace BECore::Tests {
         Draw();
         EXPECT_EQ(CallsIn(*_renderer, DrawKind::Geometry, easy.rect).size(), 1u);
         EXPECT_EQ(Get<UIDropdown>("Level").box, UIBoxStyle{}) << "the header's own box is untouched";
+    }
+
+    // ---- composed options: an element with a clicker is an option as a UIButton is ----------------------------------------
+
+    TEST_F(UIDropdownTest, TheHeaderShowsTheCaptionOfAChosenComposedOption) {
+        EXPECT_EQ(Get<UIDropdown>("Comp").GetDisplayText(), "Pick") << "the placeholder while nothing is chosen";
+
+        SetVar("comp", "easy");
+        Draw();
+        EXPECT_EQ(Get<UIDropdown>("Comp").GetDisplayText(), "Easy") << "the text component of the option itself";
+        EXPECT_EQ(Get<UIDropdown>("Comp").FindChosenOption(), &Element("CompEasy"));
+        EXPECT_TRUE(Element("CompEasy").selected);
+        EXPECT_FALSE(Element("CompHard").selected);
+
+        SetVar("comp", "hard");
+        Draw();
+        EXPECT_EQ(Get<UIDropdown>("Comp").GetDisplayText(), "Hard") << "the caption child of an icon-left option";
+        EXPECT_EQ(Get<UIDropdown>("Comp").FindChosenOption(), &Element("CompHard"));
+
+        SetVar("comp", "nothing like it");
+        EXPECT_EQ(Get<UIDropdown>("Comp").GetDisplayText(), "Pick");
+    }
+
+    TEST_F(UIDropdownTest, ALanguageSwitchRewordsTheHeaderOfAComposedChoice) {
+        SetVar("comp", "hard");
+        EXPECT_EQ(Get<UIDropdown>("Comp").GetDisplayText(), "Hard");
+
+        ASSERT_TRUE(CoreManager::GetUIStrings().SetLanguage("ru"_intern));
+        EXPECT_EQ(Get<UIDropdown>("Comp").GetDisplayText(), "Сложно");
+        SetVar("comp", "easy");
+        EXPECT_EQ(Get<UIDropdown>("Comp").GetDisplayText(), "Легко");
+    }
+
+    TEST_F(UIDropdownTest, ClosedTheComposedOptionsAndTheirChildrenHaveNoRectAndDrawNothing) {
+        for (const char* name : {"CompEasy", "CompHard", "CompHardIcon", "CompHardCaption", "CompLocked"}) {
+            EXPECT_TRUE(Element(name).rect.IsEmpty()) << name;
+        }
+        EXPECT_TRUE(_canvas->GetLayout().OpenPopups().empty());
+        EXPECT_EQ(GlyphQuadsIn({0.0f, 256.0f, 800.0f, 168.0f}), 0u) << "where the list would be";
+    }
+
+    TEST_F(UIDropdownTest, OpenTheComposedOptionsLieInAColumnWithTheGeometryOfUIButtons) {
+        Get<UIDropdown>("Comp").Open();
+        Draw();
+
+        const float tops[] = {256.0f, 312.0f, 368.0f};
+        const char* const names[] = {"CompEasy", "CompHard", "CompLocked"};
+        for (size_t i = 0; i < 3; ++i) {
+            const Rect& rect = Element(names[i]).rect;
+            EXPECT_FLOAT_EQ(rect.x, 520.0f) << names[i];
+            EXPECT_FLOAT_EQ(rect.y, tops[i]) << names[i];
+            EXPECT_FLOAT_EQ(rect.w, 240.0f) << names[i];
+            EXPECT_FLOAT_EQ(rect.h, 56.0f) << names[i] << ": optionHeight";
+        }
+
+        // The children of the icon-left option follow the rect the list gave it
+        const Rect& hard = Element("CompHard").rect;
+        const Rect& icon = Element("CompHardIcon").rect;
+        const Rect& caption = Element("CompHardCaption").rect;
+        EXPECT_FALSE(icon.IsEmpty());
+        EXPECT_FALSE(caption.IsEmpty());
+        EXPECT_GE(icon.x, hard.x);
+        EXPECT_LE(icon.x + icon.w, caption.x + 1e-2f) << "the icon is left of the caption";
+        EXPECT_LE(caption.x + caption.w, hard.x + hard.w + 1e-2f);
+        EXPECT_GE(caption.y, hard.y - 1e-2f);
+        EXPECT_LE(caption.y + caption.h, hard.y + hard.h + 1e-2f);
+    }
+
+    TEST_F(UIDropdownTest, AComposedListNearTheBottomEdgeOpensAbove) {
+        Get<UIDropdown>("Both").Open();
+        Draw();
+
+        EXPECT_FLOAT_EQ(Element("BothButton").rect.y, 338.0f);
+        EXPECT_FLOAT_EQ(Element("BothComposed").rect.y, 394.0f);
+    }
+
+    TEST_F(UIDropdownTest, TheCaptionsOfTheComposedOptionsAreInTheOpenDrawOfTheirOptions) {
+        Get<UIDropdown>("Comp").Open();
+        Draw();
+
+        EXPECT_GT(GlyphQuadsIn(Element("CompEasy").rect), 0u);
+        EXPECT_GT(GlyphQuadsIn(Element("CompHardCaption").rect), 0u);
+        EXPECT_GT(GlyphQuadsIn(Element("CompLocked").rect), 0u);
+
+        Get<UIDropdown>("Comp").Close();
+        Draw();
+        EXPECT_EQ(GlyphQuadsIn({0.0f, 256.0f, 800.0f, 168.0f}), 0u);
+    }
+
+    TEST_F(UIDropdownTest, ThePopupDrawsAComposedOptionInItsOwnState) {
+        auto& comp = Get<UIDropdown>("Comp");
+        SetVar("comp", "easy");
+        comp.Open();
+        Draw();
+        EXPECT_TRUE(Element("CompEasy").GetVisualState().selected);
+        EXPECT_FALSE(Element("CompHard").GetVisualState().selected);
+        EXPECT_TRUE(Element("CompHardCaption").GetVisualState().selected == false) << "a child follows the option it is in";
+
+        comp.disabled = true;
+        Draw();
+        EXPECT_TRUE(Element("CompEasy").groupDisabled) << "a disabled dropdown greys its options";
+        EXPECT_FALSE(comp.IsOpen());
+    }
+
+    TEST_F(UIDropdownTest, AClickOnAComposedOptionEmitsTheActionOfTheDropdownWithTheValueOfTheClicker) {
+        ActionLog log;
+        Get<UIDropdown>("Comp").Open();
+        Draw();
+
+        EXPECT_TRUE(Click("CompHard"));
+
+        ASSERT_EQ(log.Total(), 1u);
+        EXPECT_EQ(log.LastAction(), "DdTestComp"_intern);
+        EXPECT_EQ(log.LastValue(), "hard"_intern);
+        EXPECT_FALSE(Get<UIDropdown>("Comp").IsOpen());
+        Draw();
+        EXPECT_TRUE(Element("CompHard").rect.IsEmpty());
+        EXPECT_TRUE(Element("CompHardCaption").rect.IsEmpty());
+    }
+
+    TEST_F(UIDropdownTest, AClickOnTheCaptionChildOfAnOptionChoosesTheOption) {
+        ActionLog log;
+        Get<UIDropdown>("Comp").Open();
+        Draw();
+
+        EXPECT_TRUE(Click("CompHardCaption"));
+
+        ASSERT_EQ(log.Total(), 1u);
+        EXPECT_EQ(log.LastValue(), "hard"_intern);
+    }
+
+    TEST_F(UIDropdownTest, AChoiceChangesNoVariableOnAComposedList) {
+        Get<UIDropdown>("Comp").Open();
+        Draw();
+        EXPECT_TRUE(Click("CompEasy"));
+        EXPECT_FALSE(CoreManager::GetUIVars().Has("comp"_intern));
+    }
+
+    TEST_F(UIDropdownTest, ADisabledComposedOptionTakesTheClickAndTheListStaysOpen) {
+        ActionLog log;
+        Get<UIDropdown>("Comp").Open();
+        Draw();
+
+        EXPECT_TRUE(Click("CompLocked"));
+
+        EXPECT_EQ(log.Total(), 0u);
+        EXPECT_TRUE(Get<UIDropdown>("Comp").IsOpen());
+        EXPECT_TRUE(Click("CompEasy"));
+        EXPECT_EQ(log.Total(), 1u) << "the option beside it still works";
+    }
+
+    TEST_F(UIDropdownTest, ADisabledDropdownOfComposedOptionsNeverOpensAndAnOpenOneCloses) {
+        auto& comp = Get<UIDropdown>("Comp");
+        comp.disabled = true;
+        EXPECT_TRUE(Click("Comp"));
+        EXPECT_FALSE(comp.IsOpen());
+
+        comp.disabled = false;
+        comp.Open();
+        Draw();
+        ASSERT_TRUE(comp.IsOpen());
+        comp.disabled = true;
+        Draw();
+        EXPECT_FALSE(comp.IsOpen());
+        EXPECT_TRUE(Element("CompEasy").rect.IsEmpty());
+    }
+
+    TEST_F(UIDropdownTest, EmitsOnChoiceAsksTheDisabledStateOfAnyOption) {
+        const auto& comp = Get<UIDropdown>("Comp");
+        EXPECT_TRUE(comp.EmitsOnChoice(Element("CompEasy")));
+        EXPECT_FALSE(comp.EmitsOnChoice(Element("CompLocked")));
+        EXPECT_FALSE(Get<UIDropdown>("Silent").EmitsOnChoice(Get<UIButton>("SilentA"))) << "no action";
+        EXPECT_FALSE(Get<UIDropdown>("Level").EmitsOnChoice(Get<UIButton>("Locked")));
+        EXPECT_TRUE(Get<UIDropdown>("Level").EmitsOnChoice(Get<UIButton>("Easy")));
+    }
+
+    TEST_F(UIDropdownTest, APressOutsideAComposedListClosesItAndEmitsNothing) {
+        ActionLog log;
+        Get<UIDropdown>("Comp").Open();
+        Draw();
+
+        EXPECT_TRUE(ClickAt(100.0f, 580.0f));
+
+        EXPECT_FALSE(Get<UIDropdown>("Comp").IsOpen());
+        EXPECT_EQ(log.Total(), 0u);
+    }
+
+    TEST_F(UIDropdownTest, AListOfAButtonAndAComposedOptionChoosesAndShowsBoth) {
+        ActionLog log;
+        auto& both = Get<UIDropdown>("Both");
+        SetVar("both", "button");
+        Draw();
+        EXPECT_EQ(both.GetDisplayText(), "Medium");
+        SetVar("both", "composed");
+        EXPECT_EQ(both.GetDisplayText(), "Composed");
+        EXPECT_EQ(both.FindChosenOption(), &Element("BothComposed"));
+
+        both.Open();
+        Draw();
+        EXPECT_TRUE(Click("BothButton"));
+        EXPECT_EQ(log.LastValue(), "button"_intern);
+        both.Open();
+        Draw();
+        EXPECT_TRUE(Click("BothComposed"));
+        EXPECT_EQ(log.LastAction(), "DdTestBoth"_intern);
+        EXPECT_EQ(log.LastValue(), "composed"_intern);
+        EXPECT_EQ(log.Total(), 2u);
+    }
+
+    TEST_F(UIDropdownTest, AnOpenComposedListIsValidatedLikeAUIButtonList) {
+        Get<UIDropdown>("Comp").Open();
+        Draw();
+        EXPECT_TRUE(_canvas->GetLayout().Validate({}).empty());
+
+        Get<UIDropdown>("Comp").optionHeight = 20.0f;
+        _canvas->Invalidate();  // an edit of the tree is not noticed by the cache
+        Draw();
+        size_t small = 0;
+        for (const auto& issue : _canvas->GetLayout().Validate({})) {
+            small += issue.kind == UILayoutIssueKind::TouchTargetTooSmall ? 1u : 0u;
+        }
+        EXPECT_GE(small, 3u) << "the three composed options are under a touch target";
     }
 
 }  // namespace BECore::Tests

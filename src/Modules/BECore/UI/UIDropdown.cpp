@@ -2,6 +2,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <BECore/UI/UIChoice.h>
 #include <BECore/UI/UIThemes.h>
 #include <Events/InputEvents.h>
 #include <Generated/UIDropdown.gen.hpp>
@@ -94,15 +95,14 @@ namespace BECore {
         return CoreManager::GetUIVars().Get(bind);
     }
 
-    UIButton* UIDropdown::FindChosenOption() const {
+    UIElement* UIDropdown::FindChosenOption() const {
         const eastl::string_view chosen = GetSelectedValue();
         if (chosen.empty()) {
             return nullptr;
         }
         for (const auto& child : children) {
-            auto* option = child->Cast<UIButton>();
-            if (option && option->value.ToStringView() == chosen) {
-                return option;
+            if (UIChoice::IsOption(*child) && UIChoice::GetValue(*child).ToStringView() == chosen) {
+                return child.Get();
             }
         }
         return nullptr;
@@ -112,20 +112,19 @@ namespace BECore {
         if (disabled) {
             _open = false;  // a list never stays open behind a dropdown that got disabled
         }
-        const UIButton* chosen = FindChosenOption();
+        const UIElement* chosen = FindChosenOption();
         for (const auto& child : children) {
-            auto* option = child->Cast<UIButton>();
-            if (!option) {
+            if (!UIChoice::IsOption(*child)) {
                 continue;
             }
-            option->selected = option == chosen;
-            option->groupDisabled = disabled;
+            child->selected = child.Get() == chosen;
+            child->groupDisabled = disabled;
         }
     }
 
     const eastl::string& UIDropdown::GetSourceText() const {
-        const UIButton* chosen = FindChosenOption();
-        return chosen ? chosen->text : text;
+        const UIElement* chosen = FindChosenOption();
+        return chosen ? UIChoice::GetText(*chosen) : text;
     }
 
     Color UIDropdown::GetCurrentFill() const {
@@ -193,11 +192,11 @@ namespace BECore {
 
     void UIDropdown::LayoutPopup(const Rect& contentBounds) {
         // An option that is not shown takes no room: the layout gives it an empty rect afterwards
-        eastl::vector<UIButton*> shown;
+        eastl::vector<UIElement*> shown;
         eastl::vector<OptionSize> sizes;
         for (const auto& child : children) {
-            auto* option = child->Cast<UIButton>();
-            if (!option || !option->active.visible) {
+            UIElement* option = child.Get();
+            if (!UIChoice::IsOption(*option) || !option->active.visible) {
                 continue;
             }
             const UIRectSpec& spec = option->active.rect;
@@ -216,20 +215,19 @@ namespace BECore {
         }
     }
 
-    bool UIDropdown::EmitsOnChoice(const UIButton& option) const {
-        return !disabled && !action.Empty() && !option.disabled && !option.groupDisabled;
+    bool UIDropdown::EmitsOnChoice(const UIElement& option) const {
+        return !disabled && !action.Empty() && !option.IsDisabled();
     }
 
     void UIDropdown::OnPopupChoice(UIElement& child) {
-        auto* option = child.Cast<UIButton>();
-        if (!option) {
+        if (!UIChoice::IsOption(child)) {
             return;
         }
-        if (option->disabled || option->groupDisabled) {
+        if (child.IsDisabled()) {
             return;  // takes the click and does nothing; the list stays open
         }
-        const bool emit = EmitsOnChoice(*option);
-        const PoolString value = option->value;
+        const bool emit = EmitsOnChoice(child);
+        const PoolString value = UIChoice::GetValue(child);
         Close();
         if (emit) {
             InputEvents::ActionEvent::Emit(action, value);
