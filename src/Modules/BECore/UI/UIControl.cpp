@@ -8,6 +8,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIChoice.h>
 #include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
@@ -342,7 +343,7 @@ namespace BECore {
             }
         }
 
-        /// The dropdown that has @p option among its children, searched in @p root; null when @p option is not an option of any
+        /// The dropdown that has @p option among its children (an option: `UIChoice::IsOption`), searched in @p root; null when @p option is not a child of any
         UIDropdown* FindDropdownOf(UIElement& root, const UIElement* option) {
             if (auto* dropdown = root.Cast<UIDropdown>()) {
                 for (const auto& child : dropdown->children) {
@@ -530,10 +531,10 @@ namespace BECore {
                 const PoolString toggleValue = isToggle ? (toggle->IsOn() ? toggle->offValue : toggle->onValue) : PoolString{};
                 const auto* slider = target.element->Cast<UISlider>();
                 // An option of a dropdown emits the dropdown's action with its own value (the option's `action` is empty), nothing when the choice is refused; the header emits nothing
-                const UIDropdown* owner = isButton ? FindDropdownOf(*target.canvas->GetLayout().root, target.element.Get()) : nullptr;
-                const bool optionEmits = owner != nullptr && owner->EmitsOnChoice(*button);
+                const UIDropdown* owner = UIChoice::IsOption(*target.element) ? FindDropdownOf(*target.canvas->GetLayout().root, target.element.Get()) : nullptr;
+                const bool optionEmits = owner != nullptr && owner->EmitsOnChoice(*target.element);
                 const PoolString optionAction = optionEmits ? owner->action : PoolString{};
-                const PoolString optionValue = optionEmits ? value : PoolString{};
+                const PoolString optionValue = optionEmits ? UIChoice::GetValue(*target.element) : PoolString{};
                 const bool onlyClosesList = PressOnlyClosesList(target.canvas->GetLayout(), *target.element);
 
                 UIInput& input = CoreManager::GetUIInput();
