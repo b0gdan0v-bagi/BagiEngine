@@ -17,6 +17,7 @@ def make_tree(root: Path, rows: str) -> None:
     (root / "src" / "Modules" / "BECore" / "CLAUDE.md").write_text("own")
     (root / "src" / "Modules" / "fmt").mkdir(parents=True)
     (root / "src" / "Modules" / "fmt" / "LICENSE").write_text("MIT")
+    (root / "src" / "Modules" / "fmt" / "format.h").write_text("// fmt")
     (root / "assets" / "fonts").mkdir(parents=True)
     (root / "assets" / "fonts" / "A.ttf").write_bytes(b"\0")
     (root / "assets" / "fonts" / "A-OFL.txt").write_text("OFL")
@@ -67,4 +68,12 @@ def test_a_row_whose_path_or_licence_file_is_gone_is_named(tmp_path):
 
 def test_a_row_without_a_licence_file_is_allowed(tmp_path):
     make_tree(tmp_path, FULL + "| `src/Modules/BECore` | own | - | - | none: see notes | - |\n")
+    assert notices.check(tmp_path) == []
+
+
+def test_a_row_inside_a_submodule_that_is_not_checked_out_is_left_alone(tmp_path):
+    make_tree(tmp_path, FULL + "| `external/emsdk` | emsdk | 4 | MIT | `external/emsdk/LICENSE` | build only |\n"
+              "| `external/SDL/external/libwebp` | libwebp | 1 | BSD | `external/SDL/external/libwebp/COPYING` | ships |\n")
+    (tmp_path / "external" / "emsdk").mkdir()
+    (tmp_path / "external" / "SDL" / "external" / "libwebp").mkdir(parents=True)
     assert notices.check(tmp_path) == []
