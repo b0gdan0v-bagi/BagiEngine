@@ -4,6 +4,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/AbstractFactory.h>
 #include <BECore/Renderer/IRenderer.h>
+#include <CoreSDL/SDLClipboard.h>
 #include <CoreSDL/SDLEventsProvider.h>
 #include <CoreSDL/SDLMainWindow.h>
 #include <CoreSDL/SDLScreenshot.h>
@@ -55,6 +56,8 @@ namespace BECore {
             return false;
         }
         CoreManager::GetEventsProviderManager().RegisterProvider(sdlEventsProvider);
+        // A headless run (the dummy driver) keeps the clipboard in the memory of SDL, so a control smoke does not touch the system one
+        CoreManager::GetClipboard().SetBackend(MakePlatformClipboardBackend());
 
         return true;
     }

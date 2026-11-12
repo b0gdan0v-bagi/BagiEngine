@@ -1,6 +1,7 @@
 #include "CoreManager.h"
 
 #include <BECore/Assert/CRTDebugHook.h>
+#include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Logger/OutputSink.h>
@@ -88,6 +89,7 @@ namespace BECore {
         RegisterControlBuiltins(_controlService);
         RegisterUIControl(_controlService);
         RegisterProfilerControl(_controlService);
+        RegisterClipboardControl(_controlService);
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {
@@ -105,6 +107,7 @@ namespace BECore {
             {
                 BE_PROFILE_SCOPE("Input");
                 _eventsProviderManager.ProcessEvents();
+                _clipboard.Update();  // the answers of the reads and the pastes of the page, after the input that asked for them
             }
             _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
             UpdateGame(kind);

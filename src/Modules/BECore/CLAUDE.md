@@ -16,7 +16,7 @@ Central service locator (`GameManager/CoreManager.h`): one static getter per sub
 
 `Application::Cleanup` runs before `OnApplicationDeinit`, in this order: stop the control server (when `--control` started one), `GameManager::Shutdown`, `FontAtlasLibrary::Clear()`, `WidgetManager::DestroyAll()`, then `ApplicationCleanUpEvent` (its handlers: the renderer and the window, and the other cleanup handlers such as `RmlUiRuntime::Shutdown` and `RenderProbeComponent`), then `OnApplicationDeinit`. The font atlas and the widgets own GPU objects (glyph pages, the viewport's target, ImGui's descriptors), so they are direct calls and not handlers of `ApplicationCleanUpEvent`: EnTT calls the handlers in the reverse order of the subscription, so the renderer's `Destroy` would run first and free the device under them. `DestroyAll` waits for the GPU, then destroys the widgets last-created-first (the viewport's target needs the ImGui context of `ImGuiWidget`, which is created before it).
 
-**`InitializeCoreServices()` order:** CRT debug hooks → temporary `OutputSink` + `StackTraceHandler` → `FileSystem` → `TaskManager` → `ConfigManager` → `LoggerManager` → `AssertHandlerManager` → `ResourceManager` → `TextureLibrary` → `FontAtlasLibrary` → `UIEnvironment` → `UIStrings` (loads `config/UIStrings.xml` when a game ships one) → the builtin control methods (`RegisterControlBuiltins`, `RegisterUIControl`, `RegisterProfilerControl`).
+**`InitializeCoreServices()` order:** CRT debug hooks → temporary `OutputSink` + `StackTraceHandler` → `FileSystem` → `TaskManager` → `ConfigManager` → `LoggerManager` → `AssertHandlerManager` → `ResourceManager` → `TextureLibrary` → `FontAtlasLibrary` → `UIEnvironment` → `UIStrings` (loads `config/UIStrings.xml` when a game ships one) → the builtin control methods (`RegisterControlBuiltins`, `RegisterUIControl`, `RegisterProfilerControl`, `RegisterClipboardControl`).
 
 ## Run mode
 
@@ -50,7 +50,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 | # | Stage | Where | Does |
 |---|-------|-------|------|
 | 0 | Clock | `GamePause::BeginFrame` decides the kind; then `Time::Tick` (Running), `Time::Advance(step seconds)` (Stepped, the manual clock) or `Time::Hold` (Held) | Measures or sets the frame time; every value below is fixed for the rest of the frame |
-| 1 | Input | `EventsProviderManager::ProcessEvents` | Window, mouse and keyboard events become `SDLEvents`, the mouse through `UIInput` first; `InputEvents::ActionEvent` comes from components such as `ClickableComponent` |
+| 1 | Input | `EventsProviderManager::ProcessEvents`, then `Clipboard::Update` | Window, mouse and keyboard events become `SDLEvents`, the mouse through `UIInput` first; `InputEvents::ActionEvent` comes from components such as `ClickableComponent`; the clipboard answers its reads and emits `PasteEvent` (`Clipboard/CLAUDE.md`) |
 | 1b | Commands | `ControlService::Drain` | Requests of the external control API run here, so they see this frame's input (`Control/CLAUDE.md`) |
 | 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread (not in a Held frame, nor the tweens and the logic below) |
 | 2b | Tweens | `TweenManager::Advance(dt)` | Every running tween moves by the frame time and its setters write the values, so the logic below reads them (`Animation/CLAUDE.md`) |
@@ -73,7 +73,7 @@ The GoogleTest executable (`tests/`) brings up the same services through `OnTest
 
 ## Subsystem guides
 
-Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManager`, `Timeline`, `co_await` of a tween), `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `Control/` (external control API core, JSON rules), `FileSystem/` (virtual paths and mount points), `Save/` (save games: slots, the game id and version envelope), `Scene/` (scene graph and components), `Logger/`, `Profiler/` (zones, frame marks, counters, the Chrome trace, allocation counts; `HowToProfile.md`), `Resource/`, `Text/` (fonts, layout, glyph atlases, `TextComponent`), `UI/` (in-game UI: canvases, adaptive layout, validator). Always read configs through `ConfigManager`, never by creating loaders by hand.
+Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManager`, `Timeline`, `co_await` of a tween), `Clipboard/` (the text clipboard service, its backends and `PasteEvent`), `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `Control/` (external control API core, JSON rules), `FileSystem/` (virtual paths and mount points), `Save/` (save games: slots, the game id and version envelope), `Scene/` (scene graph and components), `Logger/`, `Profiler/` (zones, frame marks, counters, the Chrome trace, allocation counts; `HowToProfile.md`), `Resource/`, `Text/` (fonts, layout, glyph atlases, `TextComponent`), `UI/` (in-game UI: canvases, adaptive layout, validator). Always read configs through `ConfigManager`, never by creating loaders by hand.
 
 ## Assert (CRTDebugHook, StackTrace)
 

@@ -4,6 +4,7 @@
 
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
+#include <CoreSDL/SDLClipboard.h>
 #include <CoreSDL/SDLEvents.h>
 #include <Events/ApplicationEvents.h>
 #include <imgui.h>
@@ -133,6 +134,9 @@ namespace BECore {
             case SDL_EVENT_KEY_DOWN:
                 if (KeyboardReachesGame()) {
                     SDLEvents::KeyDownEvent::Emit(sdlEvent.key.key, sdlEvent.key.mod, sdlEvent.key.repeat);
+                    if (IsPasteShortcut(sdlEvent.key.key, sdlEvent.key.mod, sdlEvent.key.repeat)) {
+                        CoreManager::GetClipboard().RequestPaste();  // answered by Clipboard::Update() after this frame's input
+                    }
                 }
                 break;
 

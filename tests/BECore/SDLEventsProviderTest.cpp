@@ -1,8 +1,10 @@
+#include <BECore/Clipboard/FakeClipboard.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/MainWindow/IMainWindow.h>
 #include <Common/Printers.h>
 #include <CoreSDL/SDLEvents.h>
 #include <CoreSDL/SDLEventsProvider.h>
+#include <Events/ClipboardEvents.h>
 #include <imgui.h>
 
 namespace BECore::Tests {
@@ -154,6 +156,12 @@ namespace BECore::Tests {
             float _density;
         };
 
+#if defined(__APPLE__)
+        constexpr SDL_Keymod kPasteModifier = SDL_KMOD_LGUI;
+#else
+        constexpr SDL_Keymod kPasteModifier = SDL_KMOD_LCTRL;
+#endif
+
         void PushEvent(SDL_Event event) {
             ASSERT_TRUE(SDL_PushEvent(&event)) << SDL_GetError();
         }
@@ -191,6 +199,15 @@ namespace BECore::Tests {
             event.key.mod = SDL_KMOD_LSHIFT;
             event.key.down = type == SDL_EVENT_KEY_DOWN;
             event.key.repeat = repeat;
+            ASSERT_NO_FATAL_FAILURE(PushEvent(event));
+        }
+
+        void PushKeyWithMod(SDL_Keycode key, SDL_Keymod mod) {
+            SDL_Event event{};
+            event.type = SDL_EVENT_KEY_DOWN;
+            event.key.key = key;
+            event.key.mod = mod;
+            event.key.down = true;
             ASSERT_NO_FATAL_FAILURE(PushEvent(event));
         }
 
@@ -621,6 +638,64 @@ namespace BECore::Tests {
         ASSERT_EQ(recorder.orientations.size(), 1u);
         EXPECT_EQ(recorder.orientations[0].display, 7u);
         EXPECT_EQ(recorder.orientations[0].orientation, SDL_ORIENTATION_PORTRAIT);
+    }
+
+    TEST_F(SDLEventsProviderTest, ThePasteShortcutGivesOnePasteEventAndStillTheKeyDown) {
+        auto fake = New<FakeClipboard>("ABC");
+        const ScopedClipboardBackend clipboard{IntrusivePtr<IClipboardBackend>(fake)};
+        InputRecorder keys;
+        PasteRecorder pastes;
+
+        ASSERT_NO_FATAL_FAILURE(PushKeyWithMod(SDLK_V, kPasteModifier));
+        _provider.ProcessEvents();
+        EXPECT_TRUE(pastes.pastes.empty());  // the answer comes from Clipboard::Update()
+        CoreManager::GetClipboard().Update();
+
+        EXPECT_EQ(pastes.pastes, (eastl::vector<eastl::string>{"ABC"}));
+        ASSERT_EQ(keys.keyDowns.size(), 1u);
+        EXPECT_EQ(keys.keyDowns[0].key, SDLK_V);
+    }
+
+    TEST_F(SDLEventsProviderTest, APlainVIsNoPaste) {
+        auto fake = New<FakeClipboard>("ABC");
+        const ScopedClipboardBackend clipboard{IntrusivePtr<IClipboardBackend>(fake)};
+        PasteRecorder pastes;
+
+        ASSERT_NO_FATAL_FAILURE(PushKeyWithMod(SDLK_V, SDL_KMOD_NONE));
+        _provider.ProcessEvents();
+        CoreManager::GetClipboard().Update();
+
+        EXPECT_TRUE(pastes.pastes.empty());
+        EXPECT_EQ(fake->ReadCount(), 0);
+    }
+
+    TEST_F(SDLEventsProviderTest, NoPasteWhilePaused) {
+        auto fake = New<FakeClipboard>("ABC");
+        const ScopedClipboardBackend clipboard{IntrusivePtr<IClipboardBackend>(fake)};
+        PasteRecorder pastes;
+        CoreManager::GetPause().SetPaused(true);
+
+        ASSERT_NO_FATAL_FAILURE(PushKeyWithMod(SDLK_V, kPasteModifier));
+        _provider.ProcessEvents();
+        CoreManager::GetClipboard().Update();
+
+        EXPECT_TRUE(pastes.pastes.empty());
+        EXPECT_EQ(fake->ReadCount(), 0);
+    }
+
+    TEST_F(SDLEventsProviderTest, NoPasteWhileImGuiWantsTheKeyboard) {
+        ImGui::CreateContext();
+        ImGui::GetIO().WantCaptureKeyboard = true;
+        auto fake = New<FakeClipboard>("ABC");
+        const ScopedClipboardBackend clipboard{IntrusivePtr<IClipboardBackend>(fake)};
+        PasteRecorder pastes;
+
+        ASSERT_NO_FATAL_FAILURE(PushKeyWithMod(SDLK_V, kPasteModifier));
+        _provider.ProcessEvents();
+        CoreManager::GetClipboard().Update();
+
+        EXPECT_TRUE(pastes.pastes.empty());
+        EXPECT_EQ(fake->ReadCount(), 0);
     }
 
 }  // namespace BECore::Tests
