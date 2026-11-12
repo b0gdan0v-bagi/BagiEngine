@@ -5,7 +5,32 @@
 #include <cstdio>
 #include <fmt/core.h>
 
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
 namespace BECore {
+
+    namespace {
+
+        bool IsTerminal(FILE* stream) {
+#ifdef _WIN32
+            return _isatty(_fileno(stream)) != 0;
+#else
+            return isatty(fileno(stream)) != 0;
+#endif
+        }
+
+        // The colour codes are for a person at a terminal; a pipe or a file (a container's log, a test's capture) gets plain text
+        bool ColorsStream(FILE* stream) {
+            static const bool stdoutIsTerminal = IsTerminal(stdout);
+            static const bool stderrIsTerminal = IsTerminal(stderr);
+            return stream == stderr ? stderrIsTerminal : stdoutIsTerminal;
+        }
+
+    }  // namespace
 
     void ConsoleSink::Initialize() {
         if (_initialized) {
@@ -43,7 +68,7 @@ namespace BECore {
         FILE* stream = (level >= LogLevel::Error) ? stderr : stdout;
 
         // Format and output (the time is written out, not {:%H:%M:%S}: the Emscripten build cannot use fmt/chrono.h)
-        if (_colorEnabled) {
+        if (_colorEnabled && ColorsStream(stream)) {
             const char* color = LogLevelColor(level);
             const char* reset = LogColorReset;
 

@@ -1,0 +1,9 @@
+.git
+build/
+dist/
+.venv
+.pytest_cache
+# The Emscripten SDK of the web presets, about 2 GB when installed
+external/emsdk
+**/__pycache__
+*.log

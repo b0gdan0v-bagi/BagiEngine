@@ -159,6 +159,15 @@
             }
         },
         {
+            "name": "host-linux",
+            "hidden": true,
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
             "name": "macos-debug",
             "displayName": "macOS Clang Debug",
             "inherits": ["ninja", "host-macos", "clang", "debug"]
@@ -197,6 +206,19 @@
             "name": "macos-profile-editor",
             "displayName": "macOS Clang Profile with the editor (the ImGui Profiler panel)",
             "inherits": ["ninja", "host-macos", "clang", "editor", "profile"]
+        },
+        {
+            "name": "linux-server-release",
+            "displayName": "Linux Clang Release for the room server (headless, static SDL, no tests; the Docker image of tools/rooms)",
+            "inherits": ["ninja", "host-linux", "clang", "no-module-scan", "release"],
+            "cacheVariables": {
+                "ENGINE_WITH_VULKAN": "OFF",
+                "ENGINE_BUILD_TESTS": "OFF",
+                "ENGINE_STATIC_SDL": "ON",
+                "BE_WITH_EDITOR": "OFF",
+                "SDL_UNIX_CONSOLE_BUILD": "ON",
+                "CMAKE_POSITION_INDEPENDENT_CODE": "OFF"
+            }
         },
         {
             "name": "windows-msvc-debug",
@@ -274,6 +296,16 @@
             }
         },
         {
+            "name": "build-linux",
+            "hidden": true,
+            "inherits": "build-base",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
             "name": "build-windows",
             "hidden": true,
             "inherits": "build-base",
@@ -335,6 +367,12 @@
             "displayName": "macOS Clang Release with RmlUi",
             "inherits": "build-macos",
             "configurePreset": "macos-rmlui-release"
+        },
+        {
+            "name": "linux-server-release",
+            "displayName": "Linux Clang Release for the room server",
+            "inherits": "build-linux",
+            "configurePreset": "linux-server-release"
         },
         {
             "name": "windows-msvc-debug",
