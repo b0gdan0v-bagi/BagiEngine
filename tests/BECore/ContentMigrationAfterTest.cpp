@@ -17,9 +17,9 @@ namespace BECore::Tests {
     using namespace MigrationTwin;
 
     /*
-     * The final form of the content that the migration steps 1 to 3 (`tools/migrate/steps/s0001..s0003`) write: a button, a segment, a toggle and a slider are an element with
-     * components. Every `<case>.after.xml` of `tools/migrate/tests/fixtures/ui_button/`, `ui_group/` and `ui_value/` is loaded into canvases on a `RecordingRenderer` and the test
-     * checks the composed form on its own:
+     * The final form of the content that the migration steps 1 to 4 (`tools/migrate/steps/s0001..s0004`) write: a button, a segment, a toggle, a slider, a text, a picture and the
+     * header of a dropdown are an element with components. Every `<case>.after.xml` of `tools/migrate/tests/fixtures/ui_button/`, `ui_group/`, `ui_value/` and `ui_text/` is loaded into canvases on a
+     * `RecordingRenderer` and the test checks the composed form on its own:
      *   - the layout validator finds nothing on the size matrix but what `kExpectedIssues` names (the touch size is not checked there), and every control of the case has a rect at
      *     two output sizes;
      *   - `ui_tree` answers every named control with the fields its fixture says (`text`, `icon`, `action`, `value`, `tooltip`, `bind`, `checked`, the range of a slider,
@@ -30,7 +30,9 @@ namespace BECore::Tests {
      * (`tools/migrate/tests/`) and the composed controls by their component tests (`UIToggleComponentTest`, `UISliderComponentTest`, `UIComposedButtonScreenTest`), which hold the
      * geometry and the draw. A test that compared a migrated screen with the class's draw would need the class.
      *
-     * A fixture that still holds an element of a type later steps rewrite or the entry removes is not loaded here (`kSkipped`): step 5's fixtures cover those shapes.
+     * A fixture that still holds an element of a type a later step rewrites (the old header of a `UIDropdown`, a `UILabel`, a `UIImage`) is not loaded here (`kSkipped`): the
+     * `ui_text/` fixtures (step 4, 4 to 5) are those shapes in their final form. The ones with no control to click (labels, pictures) are loaded for the validator and the draw
+     * only; `picture_under_clicker` has a test of its own, which holds that a picture under a clicker keeps its colour in every state.
      */
 
     namespace {
@@ -108,11 +110,22 @@ namespace BECore::Tests {
                 {"ui_value", "toggle_options", {Toggle("Declare", "declareNext", "Declare", "button.Declare", true, "on", "off")}},
                 {"ui_value", "toggle_plain", {Toggle("Sound", "soundOn", "SetSound", "Sound")}},
                 {"ui_value", "toggle_token_color", {Toggle("Themed", "a", "A", "Themed")}},
+                // Texts, pictures and the header of a dropdown: no control to click here (the dropdown tests hold the options); loaded for the validator and the draw
+                {"ui_text", "already_composed", {}},
+                {"ui_text", "dropdown_mahjong", {}},
+                {"ui_text", "dropdown_placeholder", {}},
+                {"ui_text", "label_all_attributes", {}},
+                {"ui_text", "label_no_attributes", {}},
+                {"ui_text", "label_token_color", {}},
+                {"ui_text", "nested", {}},
+                {"ui_text", "picture", {}},
+                {"ui_text", "picture_under_clicker", {}},
+                {"ui_text", "scene_config", {}},
             };
             return all;
         }
 
-        /// The cases that are not loaded, with the reason: each has an element of a type that a later step (4 to 5) rewrites or the entry removes
+        /// The cases that are not loaded, with the reason: each has an element of a type that a later step (step 4, 4 to 5) rewrites
         constexpr const char* kSkipped[] = {
             "ui_button/already_composed",            // a UISegmented with UIButton segments beside a composed button
             "ui_button/match3_menu_hud",             // a UILabel
@@ -133,6 +146,9 @@ namespace BECore::Tests {
         const std::set<std::string> kExpectedIssues = {
             "ui_group/segmented_icon | OutsideCanvas | Mode | ",
             "ui_group/segmented_icon | OutsideCanvas |  | ",
+            "ui_text/nested | OutsideCanvas | Badge | ",
+            "ui_text/scene_config | OutsideCanvas | Score | ",
+            "ui_text/scene_config | OutsideCanvas | Seed | ",
             "ui_value/toggle_literal_color | OutsideCanvas | Transparent | ",
             "ui_value/toggle_literal_color | OutsideCanvas | TransparentCaption | ",
             "ui_value/toggle_literal_color | OutsideCanvas | TransparentSwitch | ",
@@ -179,9 +195,11 @@ namespace BECore::Tests {
     protected:
         void LoadCase(const std::string& xml) {
             ASSERT_TRUE(Load(xml));
-            _scene = _manager->GetSceneByName(PoolString::Intern(kNodeSceneName));
+            const std::vector<std::string> sceneNames = SceneNames(xml);  // a node file is put into a scene of its own, a SceneConfig names its scenes
+            ASSERT_FALSE(sceneNames.empty());
+            _scene = _manager->GetSceneByName(PoolString::Intern(sceneNames.front().c_str()));
             ASSERT_NE(_scene, nullptr);
-            _manager->SetActiveScene(PoolString::Intern(kNodeSceneName));
+            _manager->SetActiveScene(PoolString::Intern(sceneNames.front().c_str()));
             _canvases = CanvasesOf(*_scene);
             ShowEverything(*_scene, _canvases);
             Draw(kLargeWidth, kLargeHeight);
@@ -332,7 +350,7 @@ namespace BECore::Tests {
 
     TEST(ContentMigrationAfterFixtures, EveryFixtureIsLoadedOrSkippedWithAReason) {
         std::set<std::string> found;
-        for (const char* folder : {"ui_button", "ui_group", "ui_value"}) {
+        for (const char* folder : {"ui_button", "ui_group", "ui_value", "ui_text"}) {
             ASSERT_TRUE(std::filesystem::is_directory(FixtureFolder(folder))) << FixtureFolder(folder).string();
             for (const std::string& name : CaseNames(FixtureFolder(folder))) {
                 found.insert(Key(folder, name.c_str()));
@@ -350,6 +368,7 @@ namespace BECore::Tests {
 
     TEST(ContentMigrationAfterFixtures, ASkippedFixtureHoldsATypeALaterStepRewrites) {
         static const std::regex removed(R"re(type="(UIButton|UILabel|UIImage|UIToggle|UISlider|UIDropdown)")re");
+        static const std::regex removedInText(R"re(type="(UIButton|UILabel|UIImage|UIToggle|UISlider)")re");
         for (const char* skipped : kSkipped) {
             const std::string key = skipped;
             const std::string folder = key.substr(0, key.find('/'));
@@ -361,7 +380,9 @@ namespace BECore::Tests {
         for (const Expectation& expectation : Expectations()) {
             const std::string xml = ReadFile(FixtureFolder(expectation.folder) / (std::string(expectation.name) + ".after.xml"));
             ASSERT_FALSE(xml.empty()) << expectation.name;
-            EXPECT_FALSE(std::regex_search(xml, removed)) << Key(expectation.folder, expectation.name) << " holds an element of a class that is removed: skip it";
+            // The dropdown stays a class: in `ui_text/` it is the final form, with its header as a text component
+            const bool isText = std::string(expectation.folder) == "ui_text";
+            EXPECT_FALSE(std::regex_search(xml, isText ? removedInText : removed)) << Key(expectation.folder, expectation.name) << " holds an element of a class that is removed: skip it";
         }
     }
 
@@ -392,6 +413,59 @@ namespace BECore::Tests {
         }
         CheckGroupDisabled(label, expectation);
     }
+
+    /// The pictures of a claim button (`ui_text/picture_under_clicker`): a picture component follows the state of the clicker above it, and the step writes its three state tints equal
+    /// to its tint so that it keeps the colour the `UIImage` had; the tints of every picture drawn are the same at rest, under the pointer, pressed and disabled
+    class ContentMigrationPictureTest : public ContentMigrationAfterTest {
+    protected:
+        /// The tints of the pictures drawn in the last frame (the test gives every sprite the same texture), in draw order
+        std::vector<uint32_t> PictureTints() const {
+            std::vector<uint32_t> tints;
+            for (const DrawCall& call : _renderer->calls) {
+                if (call.kind == DrawKind::Texture && call.texture == _icon.Get()) {
+                    tints.push_back((static_cast<uint32_t>(call.color.r) << 24) | (static_cast<uint32_t>(call.color.g) << 16) | (static_cast<uint32_t>(call.color.b) << 8) | call.color.a);
+                }
+            }
+            return tints;
+        }
+    };
+
+    TEST_P(ContentMigrationPictureTest, APictureUnderAClickerKeepsItsColourInEveryState) {
+        LoadCase(SceneManagerXml(ReadFile(FixtureFolder("ui_text") / "picture_under_clicker.after.xml")));
+        ASSERT_NE(_scene, nullptr);
+        Draw(kLargeWidth, kLargeHeight);
+        const std::vector<uint32_t> atRest = PictureTints();
+        ASSERT_EQ(atRest.size(), 4u) << "three tiles on two buttons and one picture beside them";
+
+        for (const char* name : {"Pung", "Chow0"}) {
+            const UICanvasComponent* canvas = nullptr;
+            UIElement* button = Find(name, &canvas);
+            ASSERT_NE(button, nullptr) << name;
+            const Vec2 centre = OutputCenter(*canvas, *button);
+
+            CoreManager::GetUIInput().DispatchMouseMotion(Motion(centre.x, centre.y));
+            Draw(kLargeWidth, kLargeHeight);
+            EXPECT_TRUE(button->hovered) << name;
+            EXPECT_EQ(PictureTints(), atRest) << name << " hovered";
+
+            CoreManager::GetUIInput().DispatchMouseButtonDown(Button(centre.x, centre.y, true));
+            Draw(kLargeWidth, kLargeHeight);
+            EXPECT_TRUE(button->pressed) << name;
+            EXPECT_EQ(PictureTints(), atRest) << name << " pressed";
+            CoreManager::GetUIInput().DispatchMouseButtonUp(Button(centre.x, centre.y, false));
+            Park();
+
+            UIInputClicker* clicker = button->GetComponent<UIInputClicker>();
+            ASSERT_NE(clicker, nullptr) << name;
+            clicker->disabled = true;
+            Draw(kLargeWidth, kLargeHeight);
+            EXPECT_EQ(PictureTints(), atRest) << name << " disabled";
+            clicker->disabled = false;
+            Draw(kLargeWidth, kLargeHeight);
+        }
+    }
+
+    INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationPictureTest, ::testing::Values(std::string("picture_under_clicker")));
 
     INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationAfterTest, ::testing::ValuesIn([] {
                                  std::vector<std::string> indices;

@@ -108,6 +108,7 @@ namespace BECore {
         /// The arrow color: `arrowColor`, else the `textColor` of the text component, else white; half alpha when `disabled`
         [[nodiscard]] Color GetCurrentArrow() const;
 
+        /// The box, then the arrow. The header text is the `UITextComponent`, which the canvas draws right after this, in the area left of the arrow (the two never overlap)
         void DrawSelf(IRenderer& renderer) override;
         void OnClick() override;
 

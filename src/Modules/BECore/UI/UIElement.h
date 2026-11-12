@@ -181,8 +181,8 @@ namespace BECore {
         /// does nothing with it
         [[nodiscard]] virtual bool IsDisabled() const;
 
-        /// The area the components draw in: the rect, unless the element keeps part of it for something else. A dropdown answers the part left of its arrow, so its `UITextComponent` is
-        /// laid out and drawn there (`UITextComponent::DrawSelf`)
+        /// The area the `UITextComponent` of this element draws and measures its text in: the rect, unless the element keeps part of it for something else. A dropdown answers the part
+        /// left of its arrow. Only the text component asks; the other components (a picture, a switch, a slider) work in the rect
         [[nodiscard]] virtual Rect GetComponentArea() const {
             return rect;
         }

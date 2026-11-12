@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<!-- A picture below an element with a clicker (the tile pictures of a claim button, as in Mahjong): it would follow the state of the clicker, so the three state tints are written equal to its tint (a token too) and the picture keeps its colour. A picture beside a clicker, not under it, is left alone. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIStack" name="ActionRow" direction="Horizontal" spacing="8">
+          <children>
+            <element type="UIElement" name="Pung" width="104" height="56" fontSize="18" color="45,75,120,255">
+              <components>
+                <component type="UITextComponent" text="{#button.ClaimPung}" align="Center" verticalAlign="Top" wrap="false"/>
+                <component type="UIInputClicker" action="MahjongClaimPung"/>
+              </components>
+              <children>
+                <element type="UIImage" name="PungTile0" visible="false" anchor="Bottom" y="-3" width="21" height="28" sprite="tiles.bamboo0" />
+              </children>
+            </element>
+            <element type="UIElement" name="Chow0" width="104" height="56" fontSize="18" color="45,75,120,255">
+              <components>
+                <component type="UIInputClicker" action="MahjongClaimChow" value="0"/>
+              </components>
+              <children>
+                <element type="UIImage" name="Chow0Tile0" anchor="Bottom" x="-23" y="-3" width="21" height="28" sprite="tiles.bamboo1" tint="255,240,200,255" />
+                <element type="UIStack" name="Row" width="100%" height="28">
+                  <children>
+                    <element type="UIImage" name="Chow0Tile1" width="21" height="28" sprite="tiles.bamboo2" tint="@text" stretch="true" />
+                  </children>
+                </element>
+              </children>
+            </element>
+            <element type="UIImage" name="Beside" width="21" height="28" sprite="tiles.bamboo3" />
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

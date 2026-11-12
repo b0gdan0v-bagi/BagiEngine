@@ -14,6 +14,10 @@ CLICKER_COMPONENT = "UIInputClicker"
 
 TEXT_ATTRIBUTES = shared.TEXT_ATTRIBUTES  # the fields of UILabel, which UITextComponent has under the same names
 IMAGE_ATTRIBUTES = ("sprite", "tint", "stretch")
+# A picture component follows the state of the nearest clicker above it and derives a shift from its tint; the class did not. Under a clicker these three are written equal to `tint`
+# (a token too), which UIStateLook::ResolveTint takes as given, so the picture keeps its colour in every state
+STATE_TINTS = ("hoverTint", "pressedTint", "disabledTint")
+DEFAULT_TINT = "255,255,255,255"  # the tint of a UIImage that names none (the same default as UIImageComponent)
 # What stays on a dropdown: its own fields; the rest of the attributes are the element's
 DROPDOWN_ATTRIBUTES = ("bind", "action", "disabled", "arrowColor", "optionHeight")
 # What the constructor of UIDropdown set and a UITextComponent does not (the dropdown no longer sets them: the component says them)
@@ -62,11 +66,6 @@ def refusal(element: xmltext.Element, name: str, doc: xmltext.Document):
     label = f'{kind} "{name}"' if name else f"a {kind} without a name"
     if element.child("components") is not None:
         return f"{label} has <components> already: write the composed form by hand"
-    if element.get("type") == IMAGE_TYPE:
-        owner = _clicker_ancestor(element)
-        if owner is not None:
-            holder = f'"{owner.get("name")}"' if owner.get("name") else "an element without a name"
-            return f"{label} sits under {holder}, which has a UIInputClicker: a picture component follows the state of the clicker and derives a hover tint, the class did not: write it by hand"
     moved = _moved_overrides(element, name, doc) if name else []
     if moved:
         return f'{label} is composed, and a variant sets {", ".join(sorted(set(moved)))} on it: after the move that override names an attribute the element no longer has'
@@ -97,9 +96,13 @@ def compose_label(label: xmltext.Element) -> str:
 
 def compose_image(image: xmltext.Element) -> str:
     picture = _pairs(image, IMAGE_ATTRIBUTES)
+    under_clicker = _clicker_ancestor(image) is not None
+    if under_clicker:
+        tint = shared._text_of(image, "tint") if image.has("tint") else DEFAULT_TINT
+        picture.extend((name, tint) for name in STATE_TINTS)
     _remove_moved(image)
     image.set("type", COMPOSED_TYPE)
-    return _compose(image, (IMAGE_COMPONENT, picture), "UIElement + UIImageComponent")
+    return _compose(image, (IMAGE_COMPONENT, picture), "UIElement + UIImageComponent" + (" (state tints = tint: it sits under a clicker)" if under_clicker else ""))
 
 
 def compose_dropdown(dropdown: xmltext.Element) -> str:

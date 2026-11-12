@@ -27,9 +27,12 @@ constructor set `verticalAlign="Center"` and `wrap="false"` and faded the header
 
 It matches `element type="UILabel"`, `"UIImage"` and `"UIDropdown"` at any depth. A dropdown that has a `UITextComponent` already is not matched again (the step is idempotent).
 
-Refused, with the reason (the file stays as it was): `<components>` already (other than a dropdown's `UITextComponent`), a variant `<set element="NAME" .../>` of the same canvas that sets an
-attribute that moved on a migrated element NAME (after the move it names an attribute the element no longer has), and a `UIImage` with an ancestor that has a `UIInputClicker` in the same
-file (a picture component follows the state of the clicker and derives a hover tint; the class did not). The mapping is `_ui_text.py`.
+A `UIImage` with an ancestor that has a `UIInputClicker` in the same file (a tile picture on a claim button) is given `hoverTint`, `pressedTint` and `disabledTint` equal to its `tint`
+(`255,255,255,255` when it names none; a theme token is copied as written): a picture component follows the state of the clicker above it and would derive a lighter, darker or
+half transparent tint, the class never did, and a tint that is given replaces the derived one.
+
+Refused, with the reason (the file stays as it was): `<components>` already (other than a dropdown's `UITextComponent`), and a variant `<set element="NAME" .../>` of the same canvas
+that sets an attribute that moved on a migrated element NAME (after the move it names an attribute the element no longer has). The mapping is `_ui_text.py`.
 """
 
 import sys

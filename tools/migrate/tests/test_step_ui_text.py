@@ -31,7 +31,7 @@ EXPECTED_REASONS = {
     "fail_set_text": ['label "Title"', "variant sets text"],
     "fail_set_sprite": ['picture "Star"', "variant sets sprite"],
     "fail_set_dropdown_text": ['dropdown "Level"', "variant sets overflow"],
-    "fail_picture_under_clicker": ['picture "PlayIcon"', 'under "Play"', "UIInputClicker"],
+    "fail_set_tint_under_clicker": ['picture "PlayIcon"', "variant sets tint"],
 }
 
 
@@ -56,7 +56,7 @@ def read(case: str, side: str = "before") -> str:
 
 def test_every_fixture_is_a_pair_or_a_failure_and_the_cases_are_there():
     names = {id_of(p) for p in BEFORE_FILES}
-    for case in ("label_all_attributes", "label_no_attributes", "label_token_color", "picture", "dropdown_mahjong", "dropdown_placeholder", "nested", "scene_config", "already_composed"):
+    for case in ("label_all_attributes", "label_no_attributes", "label_token_color", "picture", "dropdown_mahjong", "dropdown_placeholder", "nested", "scene_config", "already_composed", "picture_under_clicker"):
         assert case in names
     assert {id_of(p) for p in FAILURES} == set(EXPECTED_REASONS)
     assert not list(FIXTURES.glob("fail_*.after.xml"))
@@ -100,6 +100,18 @@ def test_the_text_attributes_move_in_one_fixed_order_with_the_values_as_written(
     assert component.get("textShadow") == "2,2,0,0,0,200" and component.get("lineSpacing") == "1.2"
     element = xmltext.parse(output).find_all(lambda e: e.get("name") == "Full")[0]
     assert element.attribute_names() == ["type", "name", "x", "y", "width", "height", "color", "visible", "flex", "fontSize"]
+
+
+def test_a_picture_under_a_clicker_gets_its_state_tints_equal_to_its_tint_and_one_beside_it_does_not():
+    out = xmltext.parse(apply(read("picture_under_clicker"))[0])
+    components = {e.parent.parent.get("name"): e for e in out.find_all(lambda e: e.get("type") == "UIImageComponent")}
+    states = list(shared.STATE_TINTS)
+    expected = {"PungTile0": "255,255,255,255", "Chow0Tile0": "255,240,200,255", "Chow0Tile1": "@text"}  # no tint written: the default; a literal; a theme token, through a stack
+    for name, tint in expected.items():
+        assert [components[name].get(n) for n in states] == [tint] * 3
+        assert components[name].get("tint") in (None, tint)
+    assert [components["Beside"].has(n) for n in states] == [False] * 3
+    assert len(apply(read("picture_under_clicker"))[1].notes) == 4
 
 
 def test_a_label_without_any_text_attribute_is_still_given_its_component():
