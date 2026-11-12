@@ -23,7 +23,7 @@ namespace BECore {
     eastl::vector<eastl::string> FormatOverlayLines(const FrameStats& stats, const AllocTotals& totals, bool allocTracking) {
         eastl::vector<eastl::string> lines;
         const double fps = stats.frameMs > 0.0 ? kMillisecondsPerSecond / stats.frameMs : 0.0;
-        lines.push_back(Format("Frame {}  {:.2f} ms ({:.0f} fps)  CPU {:.2f} ms", stats.frame, stats.frameMs, fps, stats.cpuMs));
+        lines.push_back(Format("Frame {}  {:.2f} ms ({:.0f} fps)  CPU {:.2f} ms{}", stats.frame, stats.frameMs, fps, stats.cpuMs, stats.paused ? "  paused" : ""));
         lines.push_back(Format("Update {:.2f} (scene {:.2f})  Render {:.2f} (scene {:.2f})  Present {:.2f} ms", stats.GetStageMs(FrameStage::Update), stats.GetStageMs(FrameStage::SceneUpdate),
                                stats.GetStageMs(FrameStage::Render), stats.GetStageMs(FrameStage::SceneDraw), stats.GetStageMs(FrameStage::Present)));
         lines.push_back(Format("Draw calls {}  Triangles {}  Texture switches {}", stats.draws.drawCalls, stats.draws.triangles, stats.draws.textureSwitches));

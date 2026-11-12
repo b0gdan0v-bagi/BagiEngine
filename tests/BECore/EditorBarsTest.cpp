@@ -19,6 +19,8 @@ namespace BECore::Tests {
         constexpr float kFrameSeconds = 1.0f / 60.0f;
         constexpr int kWarmUpFrames = 3;
         constexpr int kSteadyFrames = 10;
+        /// Long enough at the frame time of the fixture for ImGui's key repeat to start and fire
+        constexpr int kHoldFrames = 60;
 
         /// A context of its own with no backend: the atlas takes the fonts, nothing rasterizes them, and the bars draw into a host window
         class EditorBarsTest : public ::testing::Test {
@@ -61,7 +63,8 @@ namespace BECore::Tests {
                 ImGui::SetNextWindowSize(kDisplaySize);
                 constexpr ImGuiWindowFlags hostFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground;
                 ImGui::Begin("##Host", nullptr, hostFlags);
-                toolbar.Draw(model);
+                const MainToolbar::Presses presses = toolbar.Draw(model);
+                stepPresses += presses.step ? 1 : 0;
                 statusBar.Draw();
                 ImGui::End();
                 ImGui::Render();
@@ -94,6 +97,7 @@ namespace BECore::Tests {
             ImGuiFontBuffers buffers;
             ImGuiFonts fonts;
             EditorPlayModel model;
+            uint32_t stepPresses = 0;  // frames in which the Step button asked for a step
             MainToolbar toolbar;
             StatusBar statusBar;
         };
@@ -120,16 +124,21 @@ namespace BECore::Tests {
         EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
     }
 
-    TEST_F(EditorBarsTest, PauseAndStepWorkOnlyWhenTheModelAllowsThem) {
+    TEST_F(EditorBarsTest, PauseWorksInEveryStateAndStepOnlyWhilePaused) {
         RunFrame();
         const ImVec2 center = ToolbarCenter();
         const float step = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
 
-        // Stopped: Pause and Step are disabled
-        Click(center.x, center.y);
+        // Stopped: Step is disabled
         Click(center.x + step, center.y);
         EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
         EXPECT_EQ(model.GetStepCount(), 0u);
+
+        // Pause works from Stopped and from Playing
+        Click(center.x, center.y);
+        EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
+        Click(center.x, center.y);
+        EXPECT_EQ(model.GetState(), EditorPlayState::Stopped);
 
         model.PressPlay();
         Click(center.x + step, center.y);
@@ -141,6 +150,26 @@ namespace BECore::Tests {
         Click(center.x + step, center.y);
         EXPECT_EQ(model.GetState(), EditorPlayState::Paused);
         EXPECT_EQ(model.GetStepCount(), 1u);
+    }
+
+    TEST_F(EditorBarsTest, HoldingTheStepButtonRepeatsTheStep) {
+        model.PressPause();
+        RunFrame();
+        const ImVec2 center = ToolbarCenter();
+        const float step = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x;
+
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddMousePosEvent(center.x + step, center.y);
+        RunFrame();
+        io.AddMouseButtonEvent(0, true);
+        for (int i = 0; i < kHoldFrames; ++i) {
+            RunFrame();
+        }
+        io.AddMouseButtonEvent(0, false);
+        RunFrame();
+
+        EXPECT_GT(stepPresses, 1u);
+        EXPECT_EQ(model.GetStepCount(), stepPresses);
     }
 
     TEST_F(EditorBarsTest, ASteadyFrameAllocatesNothing) {

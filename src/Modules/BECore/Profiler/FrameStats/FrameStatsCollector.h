@@ -20,6 +20,7 @@ namespace BECore {
     /// What one frame cost
     struct FrameStats {
         uint64_t frame = 0;                                // 1, 2, ... in the order the collector saw them
+        bool paused = false;                               // a held frame: the game did not advance (a stepped frame is a game frame)
         double frameMs = 0.0;                              // from the end of the frame before to the end of this one (the first frame: its cpuMs)
         double cpuMs = 0.0;                                // from BeginFrame to EndFrame
         eastl::array<double, kFrameStageCount> stageMs{};  // by FrameStage; SceneUpdate is inside Update, SceneDraw inside Render
@@ -55,7 +56,8 @@ namespace BECore {
         /// Times StageScope with @p now instead of the real clock (tests); nullptr: the real clock
         void SetClock(NowFn now);
 
-        void BeginFrame();
+        /// Opens a frame; @p held marks one in which the game stood still (FrameKind::Held), so tools do not average it with game frames
+        void BeginFrame(bool held = false);
         void BeginStage(FrameStage stage);
         void EndStage(FrameStage stage);
         /// Sets @p name to @p value for the open frame (the last value wins); dropped past kMaxFrameCounters names

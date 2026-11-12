@@ -17,6 +17,7 @@ namespace BECore {
         eastl::string_view title;  // shown in the palette and in the hotkey table
         std::optional<KeyChord> defaultChord;
         bool rebindable = true;  // false: the chord is fixed and not in the map's reach (mode.toggle)
+        bool repeats = false;    // the hotkey fires again while the chord is held (game.step)
     };
 
     /// Every command of the editor in the order the palette lists them when the query is empty
@@ -35,6 +36,10 @@ namespace BECore {
         inline constexpr auto kSceneSave = "scene.save"_intern;
         inline constexpr auto kConfigSave = "config.save"_intern;
         inline constexpr auto kTextureSave = "texture.save"_intern;
+        /// Pauses or resumes the game through the engine's GamePause (the same state as the toolbar's Pause button and the control API)
+        inline constexpr auto kGamePause = "game.pause"_intern;
+        /// One stepped frame while the game is paused; repeats while its hotkey is held
+        inline constexpr auto kGameStep = "game.step"_intern;
         /// Switches Game and Editor. Application reads Ctrl+Shift+E from the raw SDL event (RunMode.h), before ImGui, so
         /// this command is fixed: the map lists it, the palette runs it through WidgetManager::RequestToggle().
         inline constexpr auto kModeToggle = "mode.toggle"_intern;

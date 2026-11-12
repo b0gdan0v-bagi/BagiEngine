@@ -22,12 +22,14 @@ namespace BECore {
     //
     // It also owns the per-user editor state (EditorSettings, LayoutStore) and runs the commands it is in charge of
     // (EditorCommandEvent): quit, switch mode, reset and save the layout, open the palette and the preferences. It also turns the chords
-    // of the hotkey map into those events.
+    // of the hotkey map into those events. The toolbar's Pause and Step and the commands game.pause and game.step drive the engine's
+    // GamePause, which is the single truth: the model copies its flag every frame.
     class EditorLayoutWidget : public IWidget {
         BE_CLASS(EditorLayoutWidget)
     public:
         EditorLayoutWidget() = default;
-        ~EditorLayoutWidget() override = default;
+        /// Resumes a pause set from the editor (unless the manual clock holds it), so Game mode is never left frozen without a button
+        ~EditorLayoutWidget() override;
 
         BE_FUNCTION bool Initialize(IDeserializer& deserializer) override;
         BE_FUNCTION void Update() override;
@@ -50,6 +52,12 @@ namespace BECore {
         void DrawSaveLayoutPopup();
         /// Emits the command of every chord pressed this frame
         void DispatchHotkeys();
+        /// Pause / Resume through the model, written to the engine's GamePause (the pause of a manual clock is not lifted)
+        void TogglePause();
+        /// One stepped frame of kDefaultStepSeconds, only while the model is paused
+        void StepOnce();
+        /// Writes whether the model is Paused to GamePause
+        void WritePauseToEngine();
         /// Tells the panels the preferences they read (EditorPreferencesChangedEvent)
         void AnnouncePreferences() const;
         /// A menu item that emits the command @p id, with its chord shown right-aligned

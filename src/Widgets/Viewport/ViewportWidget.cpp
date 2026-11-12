@@ -14,6 +14,7 @@
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -48,6 +49,8 @@ namespace BECore {
         constexpr ImU32 kRegionFill = IM_COL32(0, 215, 215, 30);
         constexpr float kRegionLabelInset = 3.0f;  // the gap between the outline of a region and its name, in screen units
         // Bars thinner than this (output pixels) are not tinted
+        constexpr const char* kPausedMark = ICON_LC_PAUSE " Paused";
+
         constexpr float kMinBarSize = 0.5f;
         // Two bounds closer than this (output pixels) are the same rect
         constexpr float kSameRectTolerance = 0.5f;
@@ -240,6 +243,9 @@ namespace BECore {
             const bool imageHovered = ImGui::IsItemHovered();
             DrawGrid(imageMin.x, imageMin.y, imageMax.x, imageMax.y, zoom);
             DrawOverlays(activeScene, imageMin, imageMax, zoom, size, safeArea, imageHovered);
+            if (CoreManager::GetPause().IsPaused()) {
+                DrawPausedMark(imageMin, imageMax);
+            }
         }
 
         ImGui::End();
@@ -557,6 +563,21 @@ namespace BECore {
         DrawSafeAreaOutline(imageMin.x, imageMin.y, zoom, safeArea);
     }
 
+    void ViewportWidget::DrawPausedMark(const ImVec2& imageMin, const ImVec2& imageMax) const {
+        const ImGuiPalette& palette = GetImGuiPalette();
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const ImVec2 textSize = ImGui::CalcTextSize(kPausedMark);
+        const ImVec2 pad = style.FramePadding;
+        const ImVec2 min(imageMin.x + style.WindowPadding.x, imageMin.y + style.WindowPadding.y);
+        const ImVec2 max(min.x + textSize.x + pad.x * 2.0f, min.y + textSize.y + pad.y * 2.0f);
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->PushClipRect(imageMin, imageMax, true);
+        drawList->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(palette.accentMuted), style.FrameRounding);
+        drawList->AddText(ImVec2(min.x + pad.x, min.y + pad.y), ImGui::ColorConvertFloat4ToU32(palette.text), kPausedMark);
+        drawList->PopClipRect();
+    }
+
     void ViewportWidget::DrawSafeAreaOutline(float minX, float minY, float zoom, const Rect& safeArea) const {
         if (!_overlays.safeArea || _safeAreaSimulation == SafeAreaSimulation::None) {
             return;
@@ -566,6 +587,13 @@ namespace BECore {
     }
 
     void ViewportWidget::ForwardMouse(float originX, float originY, float zoom, bool hovered) {
+        // A paused game gets no mouse: nothing is sent or kept, and a press that began before the pause is forgotten, so the
+        // first event after the resume is not a stray button-up
+        if (CoreManager::GetPause().IsPaused()) {
+            std::fill(std::begin(_pressedInViewport), std::end(_pressedInViewport), false);
+            return;
+        }
+
         const ImGuiIO& io = ImGui::GetIO();
         UIInput& uiInput = CoreManager::GetUIInput();
 

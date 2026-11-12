@@ -37,4 +37,8 @@ namespace BECore::Tests {
         CoreManager::GetInstance().SetSceneManagerForTest(std::move(manager), PassKey<EngineEnvironment>{});
     }
 
+    void EngineEnvironment::UpdateGame(FrameKind kind) {
+        CoreManager::GetInstance().UpdateGameForTest(kind, PassKey<EngineEnvironment>{});
+    }
+
 }  // namespace BECore::Tests

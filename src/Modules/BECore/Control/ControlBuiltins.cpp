@@ -30,6 +30,8 @@ namespace BECore {
         void HandleStatus(ControlCall& call, const ControlService& service) {
             Json result = DescribeClock();
             result["manualClock"] = service.IsManualClock();
+            const GamePause* pause = service.GetPause();
+            result["paused"] = pause != nullptr && pause->IsPaused();
             call.Reply(std::move(result));
         }
 
@@ -56,7 +58,7 @@ namespace BECore {
             return *seconds;
         }
 
-        void HandleStep(ControlCall& call) {
+        void HandleStep(ControlCall& call, const ControlService& service) {
             const auto frames = ReadStepFrames(call.Params());
             if (!frames) {
                 call.Fail(frames.error());
@@ -67,7 +69,44 @@ namespace BECore {
                 call.Fail(seconds.error());
                 return;
             }
-            call.DeferFrames(*frames, *seconds, [](ControlCall& done) { done.Reply(DescribeClock()); });
+            // A paused real clock: the step makes `frames` stepped frames of dt. The frame that runs this handler is a held (or running) one that the call counts too, hence the
+            // one more. The manual clock asks for its frames when the call is deferred and runs no frame meanwhile; a game that is running just counts frames
+            GamePause* pause = service.GetPause();
+            const bool stepsPausedGame = pause != nullptr && pause->IsPaused() && !service.IsManualClock();
+            if (stepsPausedGame) {
+                pause->RequestSteps(*frames, *seconds);
+            }
+            const uint32_t countedFrames = stepsPausedGame ? *frames + 1 : *frames;
+            call.DeferFrames(countedFrames, *seconds, [](ControlCall& done) { done.Reply(DescribeClock()); });
+        }
+
+        /// `pause` and `resume`: the pause is the one the editor drives too. The manual clock is a pause that only `step` lifts frames out of, so it is always paused
+        void HandlePause(ControlCall& call, const ControlService& service) {
+            GamePause* pause = service.GetPause();
+            if (pause == nullptr) {
+                call.Fail(ControlErrors::kInternalError, "this service has no pause to drive");
+                return;
+            }
+            pause->SetPaused(true);
+            Json result = Json::object();
+            result["paused"] = true;
+            call.Reply(std::move(result));
+        }
+
+        void HandleResume(ControlCall& call, const ControlService& service) {
+            GamePause* pause = service.GetPause();
+            if (pause == nullptr) {
+                call.Fail(ControlErrors::kInternalError, "this service has no pause to drive");
+                return;
+            }
+            if (service.IsManualClock()) {
+                call.Fail(ControlErrors::kManualClock, "the manual clock is a pause that only `step` advances; it cannot be resumed");
+                return;
+            }
+            pause->SetPaused(false);
+            Json result = Json::object();
+            result["paused"] = false;
+            call.Reply(std::move(result));
         }
 
         void HandleQuit(ControlCall& call) {
@@ -81,7 +120,9 @@ namespace BECore {
     void RegisterControlBuiltins(ControlService& service) {
         service.RegisterHandler("ping", HandlePing);
         service.RegisterHandler("status", [&service](ControlCall& call) { HandleStatus(call, service); });
-        service.RegisterHandler("step", HandleStep);
+        service.RegisterHandler("step", [&service](ControlCall& call) { HandleStep(call, service); });
+        service.RegisterHandler("pause", [&service](ControlCall& call) { HandlePause(call, service); });
+        service.RegisterHandler("resume", [&service](ControlCall& call) { HandleResume(call, service); });
         service.RegisterHandler("quit", HandleQuit, /*bypassBarrier=*/true);
     }
 

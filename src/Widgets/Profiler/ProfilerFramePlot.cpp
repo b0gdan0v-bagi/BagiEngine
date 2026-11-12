@@ -3,6 +3,7 @@
 #include <BECore/Profiler/Ring/TimelineView.h>
 #include <EASTL/algorithm.h>
 #include <EASTL/sort.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -46,6 +47,11 @@ namespace BECore {
         const char* const kBudgetLabels = "16.6 ms (60 fps)\0"
                                           "33.3 ms (30 fps)\0"
                                           "Custom\0";
+
+        /// A held frame (the game stood still) is drawn in the theme's muted fill, so it is not read as a cheap game frame
+        ImU32 PausedBarColor() {
+            return ImGui::ColorConvertFloat4ToU32(GetImGuiPalette().accentMuted);
+        }
 
         ImU32 BarColor(double frameMs, double budgetMs) {
             if (frameMs <= budgetMs) {
@@ -125,7 +131,9 @@ namespace BECore {
             }
             ImVec2 min(x, yOf(history[bar].frameMs));
             const ImVec2 max(x + eastl::max(barWidth - kBarGap, 1.0f), bottom);
-            if (_barMode == BarMode::StageSplit) {
+            if (history[bar].paused) {
+                drawList->AddRectFilled(min, max, PausedBarColor());
+            } else if (_barMode == BarMode::StageSplit) {
                 // The stack is as high as the frame's cpu time, the segments from the bottom up
                 float segmentBottom = bottom;
                 for (size_t segment = 0; segment < kExclusiveStageCount; ++segment) {
@@ -152,8 +160,8 @@ namespace BECore {
             const float x = origin.x + static_cast<float>(bar) * barWidth;
             drawList->AddRectFilled(ImVec2(x, origin.y), ImVec2(x + barWidth, bottom), kHoverColor);
             const std::optional<size_t> position = RingFramePosition(bar, barCount, snapshot.frames.size());
-            ImGui::SetTooltip("Frame %llu: %.2f ms (cpu %.2f ms)%s", static_cast<unsigned long long>(history[bar].frame), history[bar].frameMs, history[bar].cpuMs,
-                              position ? "" : "\nnot in the ring");
+            ImGui::SetTooltip("Frame %llu: %.2f ms (cpu %.2f ms)%s%s", static_cast<unsigned long long>(history[bar].frame), history[bar].frameMs, history[bar].cpuMs,
+                              history[bar].paused ? "\npaused: the game stood still" : "", position ? "" : "\nnot in the ring");
             if (clicked && position) {
                 result = snapshot.frames[*position].index;
             }

@@ -35,9 +35,10 @@ namespace BECore {
         return _now != nullptr ? _now() : static_cast<uint64_t>(ProfilerClock::ToNanoseconds(ProfilerClock::Now()));
     }
 
-    void FrameStatsCollector::BeginFrame() {
+    void FrameStatsCollector::BeginFrame(bool held) {
         _open = true;
         _current = FrameStats{};
+        _current.paused = held;
         _frameBegin = Now();
         _stageBegin = {};
         _allocsAtBegin = AllocTracker::GetTotals();

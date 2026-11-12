@@ -18,9 +18,12 @@ namespace BECore {
      *
      * Frame time is clamped to kMaxFrameTime, so a pause in a debugger or a window drag does not make the game
      * jump ahead and does not queue hundreds of fixed steps. The clamped value is what GetTotalTime() adds up.
+     * A paused game holds the clock (Hold()) instead of advancing it.
      */
     class Time {
     public:
+        using Clock = std::chrono::steady_clock;
+
         /// Fixed step of logic that must be deterministic, in seconds
         static constexpr double kDefaultFixedDeltaTime = 1.0 / 60.0;
 
@@ -34,12 +37,26 @@ namespace BECore {
          */
         void Tick(PassKey<Application>);
 
+        /// Tick() at the moment @p now; tests pass their own, so the wall clock does not have to pass
+        void TickAt(Clock::time_point now);
+
         /**
          * @brief Advance by @p seconds of frame time (negative values count as zero, long ones are clamped).
          *
-         * Tick() calls this; tests call it directly with a fake clock.
+         * Tests call it directly with a fake clock; a stepped frame of a paused game (GamePause) uses it too. It also
+         * moves the wall-clock mark of Tick() to now when the clock has started, so a Tick() after the step measures
+         * from the step and not from the last real frame.
          */
         void Advance(double seconds);
+
+        /**
+         * @brief A frame in which the game does not move (GamePause, Held): nothing advances.
+         *
+         * Total time and frame count stand still, the frame time and the fixed steps read zero (the fixed-step
+         * remainder is kept), and the wall-clock mark of Tick() moves to now, so the first Tick() after the pause
+         * measures one frame and not the time spent paused. @p now is the moment of the frame (tests pass their own).
+         */
+        void Hold(Clock::time_point now = Clock::now());
 
         /// Back to the state before the first frame; keeps the fixed step
         void Reset();
@@ -63,7 +80,7 @@ namespace BECore {
         uint32_t GetFixedStepCount() const;
 
     private:
-        using Clock = std::chrono::steady_clock;
+        void AdvanceBy(double seconds);
 
         std::optional<Clock::time_point> _lastTick;
         double _fixedDeltaTime = kDefaultFixedDeltaTime;

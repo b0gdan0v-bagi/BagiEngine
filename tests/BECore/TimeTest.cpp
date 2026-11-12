@@ -159,6 +159,74 @@ namespace BECore::Tests {
         EXPECT_EQ(time.GetFixedStepCount(), static_cast<uint32_t>(Time::kMaxFrameTime / kFixedStep));
     }
 
+    TEST(TimeTest, HoldLeavesTotalTimeAndFrameCountAndZeroesTheFrame) {
+        Time time;
+        time.SetFixedDeltaTime(kFixedStep);
+        time.Advance(kFixedStep * 2.5);
+        ASSERT_EQ(time.GetFixedStepCount(), 2u);
+
+        time.Hold();
+
+        EXPECT_EQ(time.GetDeltaTime(), 0.0f);
+        EXPECT_EQ(time.GetFixedStepCount(), 0u);
+        EXPECT_EQ(time.GetFrameCount(), 1u);
+        EXPECT_EQ(time.GetTotalTime(), kFixedStep * 2.5);
+    }
+
+    TEST(TimeTest, HoldKeepsTheFixedStepRemainder) {
+        Time time;
+        time.SetFixedDeltaTime(kFixedStep);
+        time.Advance(kFixedStep / 2);
+
+        time.Hold();
+        time.Advance(kFixedStep / 2);
+
+        EXPECT_EQ(time.GetFixedStepCount(), 1u);
+    }
+
+    TEST(TimeTest, TickAfterALongHoldMeasuresOneFrame) {
+        constexpr auto kFrame = std::chrono::milliseconds(16);
+        constexpr auto kLongHold = std::chrono::hours(1);
+        const Time::Clock::time_point start = Time::Clock::now();
+        Time time;
+        time.TickAt(start);
+
+        time.Hold(start + kLongHold);
+        time.TickAt(start + kLongHold + kFrame);
+
+        EXPECT_NEAR(time.GetDeltaTime(), 0.016, 1e-6);
+        EXPECT_EQ(time.GetFrameCount(), 2u);
+    }
+
+    TEST(TimeTest, TickWithoutAHoldJumpsByTheClampedGap) {
+        const Time::Clock::time_point start = Time::Clock::now();
+        Time time;
+        time.TickAt(start);
+
+        time.TickAt(start + std::chrono::hours(1));
+
+        EXPECT_EQ(time.GetDeltaTime(), static_cast<float>(Time::kMaxFrameTime));
+    }
+
+    TEST(TimeTest, AdvanceMovesTheWallClockMarkOfAStartedClock) {
+        Time time;
+        time.TickAt(Time::Clock::now() - std::chrono::hours(1));
+
+        time.Advance(kFixedStep);
+        time.TickAt(Time::Clock::now());
+
+        EXPECT_LT(time.GetDeltaTime(), 0.1f);
+    }
+
+    TEST(TimeTest, AdvanceDoesNotStartTheWallClock) {
+        Time time;
+
+        time.Advance(kFixedStep);
+        time.TickAt(Time::Clock::now() + std::chrono::hours(1));
+
+        EXPECT_EQ(time.GetDeltaTime(), 0.0f);
+    }
+
     /// Components read the frame from CoreManager::GetTime(), driven here by a fake clock instead of the game loop.
     class TimeSceneTest : public ::testing::Test {
     protected:

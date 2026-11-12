@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Time/GamePause.h>
 #include <Common/AssertBridge.h>
 #include <gtest/gtest.h>
 
@@ -30,6 +31,10 @@ namespace BECore::Tests {
         /// Makes @p manager the scene manager of CoreManager::GetSceneManager() until it is called again, for a test of a component that switches scenes. Call it with an empty
         /// pointer in TearDown, before the manager is released.
         static void UseSceneManager(IntrusivePtrAtomic<SceneManager> manager);
+
+        /// The part of a game frame that a pause skips (the game time of the tasks, the tasks, the tweens, the scene update; nothing for FrameKind::Held), on the scene
+        /// manager given to UseSceneManager. The window, the widgets and the drawing are not part of it
+        static void UpdateGame(FrameKind kind);
 
     private:
         AssertBridge _assertBridge;

@@ -15,6 +15,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Tests/TestManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
+#include <BECore/Time/GamePause.h>
 #include <BECore/Time/Time.h>
 #include <BECore/UI/UIEnvironment.h>
 #include <BECore/UI/UIStrings.h>
@@ -102,6 +103,11 @@ namespace BECore {
             return GetInstance()._time;
         }
 
+        /// Whether the game runs, is paused or steps: the single truth for the editor, the control API and the manual clock (`Time/GamePause.h`). Main thread only
+        static GamePause& GetPause() {
+            return GetInstance()._pause;
+        }
+
         /// The tweens of the game, ticked once per frame from the frame time (`Animation/CLAUDE.md`). Main thread only
         static TweenManager& GetTweens() {
             return GetInstance()._tweenManager;
@@ -151,11 +157,15 @@ namespace BECore {
         // empty in the gtest executable, so the test hands its manager over here (and an empty pointer back at the end)
         void SetSceneManagerForTest(IntrusivePtrAtomic<SceneManager> manager, PassKey<Tests::EngineEnvironment>);
 
+        // The part of OnGameCycle that a pause skips (game time of the tasks, tasks, tweens, scene update), so a test can run it without a window and the widgets
+        void UpdateGameForTest(FrameKind kind, PassKey<Tests::EngineEnvironment>);
+
         // Application initialization function
         void OnApplicationInit(PassKey<Application>);
 
-        // Функция игрового цикла
-        void OnGameCycle(PassKey<Application>);
+        // The game cycle of one frame; @p kind is what GamePause decided. A Held frame still polls input, answers the control API, updates the widgets and draws,
+        // but advances neither game time, tasks, tweens nor the scene
+        void OnGameCycle(PassKey<Application>, FrameKind kind);
 
         // Idle cycle of the manual clock: no frame runs, the window stays alive and control requests are answered (Control/CLAUDE.md)
         void OnIdleCycle(PassKey<Application>);
@@ -166,6 +176,9 @@ namespace BECore {
     private:
         // FileSystem, TaskManager, ConfigManager, Logger, AssertHandlers, ResourceManager, TextureLibrary, FontAtlasLibrary, UIEnvironment, UIStrings, UIThemes, the builtin control methods
         void InitializeCoreServices();
+
+        // Game time of the delayed tasks, tasks, tweens and the scene update: everything a Held frame leaves out. Does nothing for FrameKind::Held
+        void UpdateGame(FrameKind kind);
 
         FileSystem _fileSystem;
         ConfigManager _configManager;
@@ -187,6 +200,7 @@ namespace BECore {
         TextureLibrary _textureLibrary;
         FontAtlasLibrary _fontAtlasLibrary;
         Time _time;
+        GamePause _pause;
         // A setter may point into a scene: OnApplicationDeinit and OnTestEnvironmentDeinit Clear() it first. Declared after _sceneManager on purpose: the
         // destructor then drops the tweens before the scenes go, a second guarantee besides Clear(); moving it above _sceneManager could break that silently
         TweenManager _tweenManager;

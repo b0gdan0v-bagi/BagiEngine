@@ -12,6 +12,8 @@ namespace BECore {
         constexpr KeyChord kCtrlShiftS{ImGuiKey_S, kChordModCtrl | kChordModShift};
         constexpr KeyChord kCtrlShiftE{ImGuiKey_E, kChordModCtrl | kChordModShift};
         constexpr KeyChord kCtrlShiftP{ImGuiKey_P, kChordModCtrl | kChordModShift};
+        constexpr KeyChord kF6{ImGuiKey_F6, 0};
+        constexpr KeyChord kF7{ImGuiKey_F7, 0};
 
         const eastl::vector<EditorCommand>& CommandTable() {
             using namespace EditorCommandIds;
@@ -24,6 +26,8 @@ namespace BECore {
                 {kSceneSave, "Save Scene", kCtrlS, true},
                 {kConfigSave, "Save Config", kCtrlShiftS, true},
                 {kTextureSave, "Save Texture", std::nullopt, true},
+                {kGamePause, "Pause / Resume Game", kF6, true},
+                {kGameStep, "Step One Frame", kF7, true, true},
                 {kModeToggle, "Switch Game and Editor", kCtrlShiftE, false},
                 {kViewProfiler, "Profiler", kCtrlShiftP, false},
             };

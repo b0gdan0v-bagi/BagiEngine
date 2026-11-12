@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Time/GamePause.h>  // kDefaultStepSeconds: the frame time of a deferred call that does not say how long its frame is
+
 namespace BECore {
 
     /// Why a control request failed: a stable code for programs and a message for people
@@ -22,9 +24,6 @@ namespace BECore {
         [[nodiscard]] bool operator==(const ControlServerStatus& other) const = default;
     };
 
-    /// Frame time of a frame that a deferred call asks for when it does not say how long the frame is: one frame at 60 fps
-    inline constexpr double kDefaultStepSeconds = 1.0 / 60.0;
-
     /// Error codes of the control protocol. They are part of the protocol: clients match on them.
     namespace ControlErrors {
         inline constexpr eastl::string_view kParseError = "parse_error";
@@ -34,6 +33,7 @@ namespace BECore {
         inline constexpr eastl::string_view kRequestTooLarge = "request_too_large";
         inline constexpr eastl::string_view kInternalError = "internal_error";
         inline constexpr eastl::string_view kShuttingDown = "shutting_down";
+        inline constexpr eastl::string_view kManualClock = "manual_clock";
     }  // namespace ControlErrors
 
     [[nodiscard]] inline ControlError MakeControlError(eastl::string_view code, eastl::string message) {

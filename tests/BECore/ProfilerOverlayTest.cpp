@@ -56,6 +56,13 @@ namespace BECore::Tests {
         EXPECT_TRUE(Contains(lines, "ImGui draw calls 9"));
     }
 
+    TEST(FrameStatsTextTest, OnlyAHeldFrameSaysPaused) {
+        FrameStats frame = SampleFrame();
+        EXPECT_FALSE(Contains(FormatOverlayLines(frame, AllocTotals{}, true), "paused"));
+        frame.paused = true;
+        EXPECT_TRUE(Contains(FormatOverlayLines(frame, AllocTotals{}, true), "paused"));
+    }
+
     TEST(FrameStatsTextTest, WithoutTrackingTheLineSaysSo) {
         const eastl::vector<eastl::string> lines = FormatOverlayLines(SampleFrame(), AllocTotals{}, false);
         EXPECT_TRUE(Contains(lines, "ENGINE_PROFILER_ALLOC=OFF"));
