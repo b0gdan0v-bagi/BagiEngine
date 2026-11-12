@@ -9,7 +9,6 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIPreviewOverlay.h>
 #include <Generated/ViewportWidget.gen.hpp>
-#include <SDL3/SDL.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/EditorLayout/EditorControls.h>
 #include <Widgets/Icons/IconsLucide.h>
@@ -21,9 +20,11 @@ namespace BECore {
 
     namespace {
 
-        constexpr int kMouseButtonCount = 3;
-        // The ImGui button index (0 left, 1 right, 2 middle) to the SDL button
-        constexpr Uint8 kSDLButtons[kMouseButtonCount] = {SDL_BUTTON_LEFT, SDL_BUTTON_RIGHT, SDL_BUTTON_MIDDLE};
+        constexpr float kEditOutlineThickness = 2.0f;  // the accent outline of the image in the Edit input mode, in screen units
+        constexpr const char* kPlayMark = ICON_LC_GAMEPAD_2 " Play";
+        constexpr const char* kEditMark = ICON_LC_MOUSE_POINTER_2 " Edit";
+        constexpr const char* kInputModeTooltip = "Where a click on the image goes: Play sends it to the game as the window would, Edit keeps it for the editor (the game gets "
+                                                  "nothing). Hold Alt (Option) for the other one for one click. Hotkey: F8 by default";
 
         constexpr float kSizeComboWidth = 170.0f;
         constexpr float kSizeFieldWidth = 60.0f;
@@ -57,6 +58,7 @@ namespace BECore {
         // The viewport pass runs at density 1: a window unit is an output pixel, what UISettings::minTouchSize is measured in
         constexpr float kViewportPixelDensity = 1.0f;
         constexpr const char* kOverlaysPopup = "##ViewportOverlays";
+        constexpr const char* kImageHitArea = "##ViewportImage";
 
         // In the order of the enums (ViewportAspect, SafeAreaSimulation). The icon names the control (the shape of the image, the
         // safe area), so a combo that shows the current value tells what it is; the labels are literals, nothing is built per frame
@@ -144,7 +146,22 @@ namespace BECore {
 
     bool ViewportWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorPreferencesChangedEvent, &ViewportWidget::OnPreferencesChanged>(this);
+        Subscribe<EditorCommandEvent, &ViewportWidget::OnCommand>(this);
         return true;
+    }
+
+    void ViewportWidget::OnCommand(const EditorCommandEvent& event) {
+        if (event.commandId == EditorCommandIds::kViewportInputMode) {
+            _inputMode = _inputMode == ViewportInputMode::Play ? ViewportInputMode::Edit : ViewportInputMode::Play;
+        }
+    }
+
+    void ViewportWidget::EmitInputModeIfChanged() {
+        if (_inputMode == _storedInputMode) {
+            return;
+        }
+        _storedInputMode = _inputMode;
+        ViewportInputModeChangedEvent::Emit(_inputMode);
     }
 
     void ViewportWidget::OnPreferencesChanged(const EditorPreferencesChangedEvent& event) {
@@ -156,6 +173,9 @@ namespace BECore {
         _shape = _storedPreview.shape;
         _safeAreaSimulation = _storedPreview.safeArea;
         _overlays = _storedPreview.overlays;
+
+        _storedInputMode = event.viewportInputMode;
+        _inputMode = _storedInputMode;
     }
 
     void ViewportWidget::EmitPreviewIfChanged() {
@@ -180,6 +200,7 @@ namespace BECore {
 
         DrawPreviewToolbar();
         EmitPreviewIfChanged();
+        EmitInputModeIfChanged();
 
         // The target is the shape's size (the largest rect of a preset's ratio that fits what is left of the panel, or the exact size
         // of a device or custom size) and is shown at `zoom`, centered in the panel
@@ -238,18 +259,24 @@ namespace BECore {
             const ImVec2 cursor = ImGui::GetCursorPos();
             ImGui::SetCursorPos({cursor.x + (available.x - shown.x) * 0.5f, cursor.y + (available.y - shown.y) * 0.5f});
             ImGui::Image(reinterpret_cast<ImTextureID>(_renderTarget->GetImGuiTextureId()), shown);
+            const ImVec2 imageMin = ImGui::GetItemRectMin();
+            const ImVec2 imageMax = ImGui::GetItemRectMax();
+
+            // A hit area over the image: an item with an id of its own, so the press is always seen (an Image has no id, its hover is
+            // fragile) and never starts a window move
+            ImGui::SetCursorScreenPos(imageMin);
+            ImGui::InvisibleButton(kImageHitArea, shown, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
+            const bool imageHovered = ImGui::IsItemHovered();
 
             // Hand the mouse to the scene with viewport-local coordinates, so it can map them to scene units
             // (Scene::ScreenToSceneX/Y) with the fit of its last draw.
-            const ImVec2 imageMin = ImGui::GetItemRectMin();
-            ForwardMouse(imageMin.x, imageMin.y, zoom, ImGui::IsItemHovered());
-            const ImVec2 imageMax = ImGui::GetItemRectMax();
-            const bool imageHovered = ImGui::IsItemHovered();
+            ForwardMouse(imageMin.x, imageMin.y, zoom, imageHovered);
             DrawGrid(imageMin.x, imageMin.y, imageMax.x, imageMax.y, zoom);
             DrawOverlays(activeScene, imageMin, imageMax, zoom, size, safeArea, imageHovered);
             if (CoreManager::GetPause().IsPaused()) {
                 DrawPausedMark(imageMin, imageMax);
             }
+            DrawInputModeMark(imageMin, imageMax, ResolveTarget(_inputMode, ImGui::GetIO().KeyAlt));
         }
 
         ImGui::End();
@@ -348,6 +375,9 @@ namespace BECore {
 
         ImGui::SameLine();
         DrawOverlaysPopup();
+
+        ImGui::SameLine();
+        DrawInputModeToggle();
 
         if (const Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
             DrawViewCombo(*scene);
@@ -590,74 +620,76 @@ namespace BECore {
                                             kSafeAreaOutlineColor);
     }
 
-    void ViewportWidget::ForwardMouse(float originX, float originY, float zoom, bool hovered) {
-        // A paused game gets no mouse: nothing is sent or kept, and a press that began before the pause is forgotten, so the
-        // first event after the resume is not a stray button-up
-        if (CoreManager::GetPause().IsPaused()) {
-            std::fill(std::begin(_pressedInViewport), std::end(_pressedInViewport), false);
-            return;
+    void ViewportWidget::DrawInputModeToggle() {
+        const bool play = _inputMode == ViewportInputMode::Play;
+        if (IconTextButton(play ? ICON_LC_GAMEPAD_2 : ICON_LC_MOUSE_POINTER_2, play ? "Play##ViewportInputMode" : "Edit##ViewportInputMode", kInputModeTooltip)) {
+            _inputMode = play ? ViewportInputMode::Edit : ViewportInputMode::Play;
         }
+    }
 
+    void ViewportWidget::DrawInputModeMark(const ImVec2& imageMin, const ImVec2& imageMax, ViewportInputTarget target) const {
+        const bool edit = target == ViewportInputTarget::Editor;
+        const char* mark = edit ? kEditMark : kPlayMark;
+        const ImGuiPalette& palette = GetImGuiPalette();
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const ImVec2 textSize = ImGui::CalcTextSize(mark);
+        const ImVec2 pad = style.FramePadding;
+        const float width = textSize.x + pad.x * 2.0f;
+        const ImVec2 min(imageMax.x - style.WindowPadding.x - width, imageMin.y + style.WindowPadding.y);
+        const ImVec2 max(min.x + width, min.y + textSize.y + pad.y * 2.0f);
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->PushClipRect(imageMin, imageMax, true);
+        if (edit) {
+            // Inside the image: the outline is half of its thickness in from the edge
+            const float inset = kEditOutlineThickness * 0.5f;
+            drawList->AddRect({imageMin.x + inset, imageMin.y + inset}, {imageMax.x - inset, imageMax.y - inset}, ImGui::ColorConvertFloat4ToU32(palette.accent), 0.0f, 0, kEditOutlineThickness);
+        }
+        drawList->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(palette.accentMuted), style.FrameRounding);
+        drawList->AddText(ImVec2(min.x + pad.x, min.y + pad.y), ImGui::ColorConvertFloat4ToU32(palette.text), mark);
+        drawList->PopClipRect();
+    }
+
+    void ViewportWidget::ForwardMouse(float originX, float originY, float zoom, bool hovered) {
         const ImGuiIO& io = ImGui::GetIO();
-        UIInput& uiInput = CoreManager::GetUIInput();
+        const bool modifier = io.KeyAlt;
+
+        // A paused game gets no mouse: nothing is sent or kept, and a press that began before the pause is forgotten, so the
+        // first event after the resume is not a stray button-up. An edit click is the editor's, so it still goes through
+        if (CoreManager::GetPause().IsPaused()) {
+            _pointer.Reset();
+            if (ResolveTarget(_inputMode, modifier) == ViewportInputTarget::Game) {
+                return;
+            }
+        }
 
         // The scene lives in target pixels, the image on screen is zoom times that
-        const float localX = (io.MousePos.x - originX) / zoom;
-        const float localY = (io.MousePos.y - originY) / zoom;
-
-        // A press that began in the viewport is followed to its release even when the pointer has left the image
-        const bool buttonHeld = std::any_of(std::begin(_pressedInViewport), std::end(_pressedInViewport), [](bool pressed) { return pressed; });
-
-        if ((hovered || buttonHeld) && (io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
-            SDL_MouseMotionEvent motion{};
-            motion.type = SDL_EVENT_MOUSE_MOTION;
-            motion.x = localX;
-            motion.y = localY;
-            motion.xrel = io.MouseDelta.x / zoom;
-            motion.yrel = io.MouseDelta.y / zoom;
-            for (int i = 0; i < kMouseButtonCount; ++i) {
-                if (io.MouseDown[i]) {
-                    motion.state |= SDL_BUTTON_MASK(kSDLButtons[i]);
-                }
-            }
-            uiInput.DispatchMouseMotion(motion);
+        ViewportPointerFrame frame;
+        frame.x = (io.MousePos.x - originX) / zoom;
+        frame.y = (io.MousePos.y - originY) / zoom;
+        frame.deltaX = io.MouseDelta.x / zoom;
+        frame.deltaY = io.MouseDelta.y / zoom;
+        frame.hovered = hovered;
+        for (int i = 0; i < kViewportButtonCount; ++i) {
+            frame.down[i] = io.MouseDown[i];
+            frame.clicked[i] = ImGui::IsMouseClicked(i);
+            frame.released[i] = ImGui::IsMouseReleased(i);
+            frame.clicks[i] = static_cast<uint8_t>(io.MouseClickedCount[i]);
+        }
+        frame.wheelX = io.MouseWheelH;
+        frame.wheelY = io.MouseWheel;
+        switch (io.MouseSource) {
+            case ImGuiMouseSource_TouchScreen:
+                frame.source = ViewportPointerSource::Touch;
+                break;
+            case ImGuiMouseSource_Pen:
+                frame.source = ViewportPointerSource::Pen;
+                break;
+            default:
+                break;
         }
 
-        for (int i = 0; i < kMouseButtonCount; ++i) {
-            const bool pressed = hovered && ImGui::IsMouseClicked(i);
-            const bool released = _pressedInViewport[i] && ImGui::IsMouseReleased(i);
-            if (!pressed && !released) {
-                continue;
-            }
-
-            SDL_MouseButtonEvent button{};
-            button.button = kSDLButtons[i];
-            button.x = localX;
-            button.y = localY;
-            if (pressed) {
-                button.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
-                button.down = true;
-                button.clicks = static_cast<Uint8>(io.MouseClickedCount[i]);
-                _pressedInViewport[i] = true;
-                uiInput.DispatchMouseButtonDown(button);
-            } else {
-                button.type = SDL_EVENT_MOUSE_BUTTON_UP;
-                button.down = false;
-                _pressedInViewport[i] = false;
-                uiInput.DispatchMouseButtonUp(button);
-            }
-        }
-
-        if (hovered && (io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f)) {
-            SDL_MouseWheelEvent wheel{};
-            wheel.type = SDL_EVENT_MOUSE_WHEEL;
-            wheel.x = io.MouseWheelH;
-            wheel.y = io.MouseWheel;
-            wheel.direction = SDL_MOUSEWHEEL_NORMAL;
-            wheel.mouse_x = localX;
-            wheel.mouse_y = localY;
-            uiInput.DispatchMouseWheel(wheel);
-        }
+        _pointer.Forward(frame, _inputMode, modifier, CoreManager::GetUIInput(), [](const ViewportEditClickEvent& click) { ViewportEditClickEvent::Emit(click.x, click.y, click.button); });
     }
 
 }  // namespace BECore
