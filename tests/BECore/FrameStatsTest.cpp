@@ -224,6 +224,29 @@ namespace BECore::Tests {
         EXPECT_EQ(collector.GetHistory(10000).front().frame, frames - FrameStatsCollector::kFrameHistory + 1);
     }
 
+    TEST(FrameStatsCollectorTest, AHeldFrameIsMarkedPausedAndTheHistoryKeepsIt) {
+        FrameStatsCollector collector;
+        collector.SetClock(FakeNow);
+
+        collector.BeginFrame();
+        collector.EndFrame({}, AllocTotals{});
+        EXPECT_FALSE(collector.GetLast()->paused) << "a frame is a game frame by default";
+
+        collector.BeginFrame(true);
+        collector.EndFrame({}, AllocTotals{});
+        EXPECT_TRUE(collector.GetLast()->paused);
+
+        collector.BeginFrame(false);  // a stepped frame is a game frame
+        collector.EndFrame({}, AllocTotals{});
+        EXPECT_FALSE(collector.GetLast()->paused) << "the flag of one frame does not leak into the next";
+
+        const eastl::vector<FrameStats> history = collector.GetHistory(3);
+        ASSERT_EQ(history.size(), 3u);
+        EXPECT_FALSE(history[0].paused);
+        EXPECT_TRUE(history[1].paused);
+        EXPECT_FALSE(history[2].paused);
+    }
+
     TEST(FrameStatsCollectorTest, StagesAndCountersOutsideAFrameAreIgnored) {
         FrameStatsCollector collector;
         collector.SetClock(FakeNow);
@@ -283,11 +306,28 @@ namespace BECore::Tests {
         const Json& last = (*frames)[1];
         EXPECT_EQ(GetJsonInt(last, "drawCalls"), 4);
         EXPECT_EQ(GetJsonInt(last, "triangles"), 8);
-        for (const char* key : {"frame", "frameMs", "cpuMs", "stagesMs", "textureSwitches", "allocCount", "allocBytes", "liveBytes", "counters"}) {
+        for (const char* key : {"frame", "paused", "frameMs", "cpuMs", "stagesMs", "textureSwitches", "allocCount", "allocBytes", "liveBytes", "counters"}) {
             EXPECT_NE(FindJsonMember(last, key), nullptr) << key;
         }
         EXPECT_NE(FindJsonMember(*FindJsonMember(last, "stagesMs"), "SceneDraw"), nullptr);
         EXPECT_EQ(GetJsonBool(*result, "allocTracking"), AllocTracker::kEnabled);
+    }
+
+    TEST_F(ProfilerControlTest, FrameStatsCarryThePausedFlagOfEveryFrame) {
+        FrameStatsCollector& collector = CoreManager::GetFrameStats();
+        collector.BeginFrame(false);
+        collector.EndFrame({}, AllocTracker::GetTotals());
+        collector.BeginFrame(true);
+        collector.EndFrame({}, AllocTracker::GetTotals());
+
+        Json params = Json::object();
+        params["frames"] = 2;
+        const Json response = Call("frame_stats", params);
+        const Json* frames = FindJsonMember(*FindJsonMember(response, "result"), "frames");
+        ASSERT_NE(frames, nullptr);
+        ASSERT_EQ(frames->size(), 2u);
+        EXPECT_EQ(GetJsonBool((*frames)[0], "paused"), false);
+        EXPECT_EQ(GetJsonBool((*frames)[1], "paused"), true);
     }
 
     TEST_F(ProfilerControlTest, InvalidParamsAreRejected) {

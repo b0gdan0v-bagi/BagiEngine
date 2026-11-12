@@ -1071,6 +1071,79 @@ namespace BECore::Tests {
         EXPECT_EQ(GetJsonNumber(*ResultOf(0), "totalTime").value_or(0.0), 3 * kRealFrameSeconds);
     }
 
+    TEST_F(ControlServiceTest, PauseAndResumeToggleTheStatus) {
+        GamePause pause;
+        service.SetPause(&pause);
+        RegisterControlBuiltins(service);
+
+        Post(MakeRequest(1, "status"));
+        Post(MakeRequest(2, "pause"));
+        Post(MakeRequest(3, "status"));
+        Post(MakeRequest(4, "resume"));
+        Post(MakeRequest(5, "status"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 5u);
+        EXPECT_FALSE(GetJsonBool(*ResultOf(0), "paused").value_or(true));
+        EXPECT_TRUE(GetJsonBool(*ResultOf(1), "paused").value_or(false));
+        EXPECT_TRUE(GetJsonBool(*ResultOf(2), "paused").value_or(false));
+        EXPECT_FALSE(GetJsonBool(*ResultOf(3), "paused").value_or(true));
+        EXPECT_FALSE(GetJsonBool(*ResultOf(4), "paused").value_or(true));
+        EXPECT_FALSE(pause.IsPaused());
+    }
+
+    TEST_F(ControlServiceTest, StatusOfAServiceWithoutAPauseIsNotPaused) {
+        RegisterControlBuiltins(service);
+        Post(MakeRequest(1, "status"));
+        Post(MakeRequest(2, "pause"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 2u);
+        EXPECT_FALSE(GetJsonBool(*ResultOf(0), "paused").value_or(true));
+        EXPECT_EQ(ErrorCode(responses[1]), "internal_error");
+    }
+
+    TEST_F(ControlServiceTest, ResumeWithTheManualClockFailsAndPauseAnswersOk) {
+        GamePause pause;
+        service.SetPause(&pause);
+        service.SetManualClock(true);
+        pause.SetPaused(true);
+        RegisterControlBuiltins(service);
+
+        Post(MakeRequest(1, "resume"));
+        Post(MakeRequest(2, "pause"));
+        Post(MakeRequest(3, "status"));
+        service.Drain();
+
+        ASSERT_EQ(responses.size(), 3u);
+        EXPECT_EQ(ErrorCode(responses[0]), "manual_clock");
+        EXPECT_TRUE(GetJsonBool(*ResultOf(1), "paused").value_or(false));
+        EXPECT_TRUE(GetJsonBool(*ResultOf(2), "paused").value_or(false));
+        EXPECT_TRUE(pause.IsPaused());
+    }
+
+    TEST_F(ControlServiceTest, StepWhilePausedAdvancesTheFrameByNAndStaysPaused) {
+        GamePause pause;
+        service.SetPause(&pause);
+        RegisterControlBuiltins(service);
+        CoreManager::GetTime().Reset();
+
+        Post(MakeRequest(1, "pause"));
+        service.Drain();
+        ASSERT_TRUE(pause.IsPaused());
+
+        Json params = Json::object();
+        params["frames"] = 4;
+        Post(MakeRequest(2, "step", params));
+        Post(MakeRequest(3, "status"));
+        RunFramesUntilAnswered(pause, 3);
+
+        ASSERT_EQ(responses.size(), 3u);
+        EXPECT_EQ(GetJsonInt(*ResultOf(1), "frame").value_or(0), 4);
+        EXPECT_EQ(GetJsonInt(*ResultOf(2), "frame").value_or(0), 4);
+        EXPECT_TRUE(GetJsonBool(*ResultOf(2), "paused").value_or(false));
+    }
+
     TEST_F(ControlServiceTest, ManualClockStepsThroughThePause) {
         GamePause pause;
         service.SetPause(&pause);

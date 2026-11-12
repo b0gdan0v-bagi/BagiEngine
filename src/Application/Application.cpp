@@ -158,7 +158,7 @@ namespace BECore {
         }
         BE_PROFILE_SCOPE("Frame");
         FrameStatsCollector& frameStats = CoreManager::GetFrameStats();
-        frameStats.BeginFrame();
+        frameStats.BeginFrame(frame.kind == FrameKind::Held);
         RenderEvents::NewFrameEvent::Emit();
         CoreManager::GetInstance().OnGameCycle({}, frame.kind);
         {

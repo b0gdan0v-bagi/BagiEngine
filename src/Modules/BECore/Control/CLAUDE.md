@@ -8,7 +8,7 @@ The core of the external control API: a program or a model sends commands, the e
 |------|---------|
 | `ControlService` | Thread-safe FIFO queue of requests, handler table, barrier, deferred answers, push events. One instance: `CoreManager::GetControlService()` |
 | `ControlCall` | One request being handled: `Params()`, `Reply()`, `Fail()`, `DeferFrames()` |
-| `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `quit` |
+| `ControlBuiltins` | `RegisterControlBuiltins()`: `ping`, `status`, `step`, `pause`, `resume`, `quit` |
 | `ControlSettings` | `ResolveControlSettings(args, ApplicationConfigLoad)`: the start-up flags and the settings of the reflected `ApplicationConfig` (`Application/ApplicationConfig.h`), the manual clock included (see "Starting the API"), a pure function |
 | `ControlTypes.h` | `ControlError`, `ControlErrors::k*` (error codes), `ControlReplyFn`, `ControlServerStatus` (listening, port, clients; see "Starting the API") |
 | `Json.h`, `JsonFwd.h` | nlohmann/json behind checked helpers (see "JSON rules") |
@@ -25,7 +25,7 @@ response  {"id": 1, "ok": true,  "result": {...}}
 push      {"event": "state_changed", "data": {"game": "Match3", "version": 12, "state": {...}}}
 ```
 
-Error codes are strings and part of the protocol (`ControlErrors`): `parse_error`, `invalid_request`, `invalid_params`, `unknown_method`, `request_too_large`, `internal_error`, `shutting_down`. A method adds its own (`illegal_action`, ...). A request that cannot be parsed gets `"id": null`. `ping` reports `ControlService::kProtocolVersion`; change it when the format changes incompatibly.
+Error codes are strings and part of the protocol (`ControlErrors`): `parse_error`, `invalid_request`, `invalid_params`, `unknown_method`, `request_too_large`, `internal_error`, `shutting_down`, `manual_clock`. A method adds its own (`illegal_action`, ...). A request that cannot be parsed gets `"id": null`. `ping` reports `ControlService::kProtocolVersion`; change it when the format changes incompatibly.
 
 `state_changed` is the only push so far (`GameControl` publishes it, `Games/CLAUDE.md`). It is sent at the end of the frame in which the state version of the active game moved, whoever moved it: a client, a reset, a click of a person. `data` is what `get_state` answers (`game`, `version`, `state`; `state` is left out when the game cannot give it). The first frame only records the version, so nothing is pushed for the state a client connects to. An action that a client makes with the manual clock waits for the next frame like everything else (see "Manual clock and `step`").
 
@@ -65,7 +65,7 @@ The two clocks differ in who runs the frames:
 
 While a step runs it is the barrier, so a pipelined `step` + `get_state` gives the state after the frames. `quit` bypasses the barrier and ends even a step of `kMaxStepFrames`. A call that defers frames for another reason (`screenshot` asks for one frame of `dt` 0) uses the same machinery: `IsStepDue()` is true while any deferred call is pending, so the next frame runs and its `EndFrame()` counts it down. All of this state lives in `ControlService`, so `ControlServiceTest` plays the application loop (`RunDueFrames`) without an application.
 
-**The manual clock is a pause** (`CoreManager::GetPause()`, `Time/GamePause.h`; there is no second mechanism): `--manual-clock` starts with the pause set, and a deferred call on the manual clock requests its frames from it when `ControlService::Settle` takes it in (`SetPause` attaches the pause; a service without one, as in most tests, only counts). `Application::RunFrame` asks the pause for the kind of the frame: `Stepped` frames advance the clock by the step's seconds, and the idle cycle runs while nothing is due. On a real clock that is paused (the editor's Pause), `step` requests `N` steps itself and the call waits for `N + 1` frames: the frame that drains the request ends too and counts. A **held** frame (paused, no step) runs the window, input polling, the control API (`Drain`, so `status`, `ui_click`, `screenshot` answer), the widgets and the drawing, and skips game time, tasks, tweens and the scene update; `EndFrame` still counts the deferred calls down, so a `screenshot` on a paused game is answered by a held frame.
+**The manual clock is a pause** (`CoreManager::GetPause()`, `Time/GamePause.h`; there is no second mechanism): `--manual-clock` starts with the pause set, and a deferred call on the manual clock requests its frames from it when `ControlService::Settle` takes it in (`SetPause` attaches the pause; a service without one, as in most tests, only counts). `Application::RunFrame` asks the pause for the kind of the frame: `Stepped` frames advance the clock by the step's seconds, and the idle cycle runs while nothing is due. On a real clock that is paused (the editor's Pause), `step` requests `N` steps itself and the call waits for `N + 1` frames: the frame that drains the request ends too and counts. `pause` and `resume` drive the same object from the control API (the answer is `{paused}`, the effect starts with the next frame; `status` and every frame of `frame_stats` carry `paused`). With the manual clock, which is always paused, `pause` is a no-op that answers ok and `resume` fails with `manual_clock`. A **held** frame (paused, no step) runs the window, input polling, the control API (`Drain`, so `status`, `ui_click`, `screenshot` answer), the widgets and the drawing, and skips game time, tasks, tweens and the scene update; `EndFrame` still counts the deferred calls down, so a `screenshot` on a paused game is answered by a held frame.
 
 What the manual clock means for a client:
 
@@ -93,7 +93,7 @@ The file half is the reflected `ApplicationConfig` read with strict values (`IDe
 
 | Where | Methods |
 |-------|---------|
-| `BECore/Control/ControlBuiltins` | `ping`, `status`, `step`, `quit` |
+| `BECore/Control/ControlBuiltins` | `ping`, `status` (the clock, `manualClock`, `paused`), `step`, `pause` / `resume` (`{paused}`; see "Manual clock and `step`"), `quit` |
 | `SDL/CoreSDL/SDLScreenshot` | `screenshot` (`{maxSize}` to `{width, height, png_base64}`; `capture_failed` where the renderer cannot capture; `SDL/CLAUDE.md`) |
 | `BECore/UI/UIControl` | `ui_tree` (the canvases and elements of the active scene with rects and the validator's findings), `ui_click` (`{name, canvas?, at?}`: a real mouse click on a visible button, toggle or slider, `at` 0..1 the horizontal position, which also sets a slider; the answer has its `action` and `value`; codes `no_scene`, `not_found`, `not_clickable`, `invalid_params`; `UI/CLAUDE.md`, "Control API") |
 | `BECore/Profiler/ProfilerControl` | `frame_stats` (`{frames?}` 1..240: the last frames, oldest first, with stage times, draws, allocations, named counters), `profiler_dump` (`{path?}` relative, no `..`: writes the Chrome trace; `not_recording` unless the game runs with `--trace=` or `--profiler=chrome`), `zone_allocs` (`{top?, reset?}`: allocations per zone and the totals; `enabled` false without `ENGINE_PROFILER_ALLOC`); `Profiler/CLAUDE.md` |

@@ -19,6 +19,7 @@ namespace BECore {
         Json DescribeFrame(const FrameStats& stats) {
             Json frame = Json::object();
             frame["frame"] = stats.frame;
+            frame["paused"] = stats.paused;
             frame["frameMs"] = stats.frameMs;
             frame["cpuMs"] = stats.cpuMs;
             Json stages = Json::object();

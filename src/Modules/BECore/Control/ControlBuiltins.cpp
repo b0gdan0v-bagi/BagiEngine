@@ -30,6 +30,8 @@ namespace BECore {
         void HandleStatus(ControlCall& call, const ControlService& service) {
             Json result = DescribeClock();
             result["manualClock"] = service.IsManualClock();
+            const GamePause* pause = service.GetPause();
+            result["paused"] = pause != nullptr && pause->IsPaused();
             call.Reply(std::move(result));
         }
 
@@ -78,6 +80,35 @@ namespace BECore {
             call.DeferFrames(countedFrames, *seconds, [](ControlCall& done) { done.Reply(DescribeClock()); });
         }
 
+        /// `pause` and `resume`: the pause is the one the editor drives too. The manual clock is a pause that only `step` lifts frames out of, so it is always paused
+        void HandlePause(ControlCall& call, const ControlService& service) {
+            GamePause* pause = service.GetPause();
+            if (pause == nullptr) {
+                call.Fail(ControlErrors::kInternalError, "this service has no pause to drive");
+                return;
+            }
+            pause->SetPaused(true);
+            Json result = Json::object();
+            result["paused"] = true;
+            call.Reply(std::move(result));
+        }
+
+        void HandleResume(ControlCall& call, const ControlService& service) {
+            GamePause* pause = service.GetPause();
+            if (pause == nullptr) {
+                call.Fail(ControlErrors::kInternalError, "this service has no pause to drive");
+                return;
+            }
+            if (service.IsManualClock()) {
+                call.Fail(ControlErrors::kManualClock, "the manual clock is a pause that only `step` advances; it cannot be resumed");
+                return;
+            }
+            pause->SetPaused(false);
+            Json result = Json::object();
+            result["paused"] = false;
+            call.Reply(std::move(result));
+        }
+
         void HandleQuit(ControlCall& call) {
             // The answer first: it is queued for the transport before the application starts to stop
             call.Reply(Json::object());
@@ -90,6 +121,8 @@ namespace BECore {
         service.RegisterHandler("ping", HandlePing);
         service.RegisterHandler("status", [&service](ControlCall& call) { HandleStatus(call, service); });
         service.RegisterHandler("step", [&service](ControlCall& call) { HandleStep(call, service); });
+        service.RegisterHandler("pause", [&service](ControlCall& call) { HandlePause(call, service); });
+        service.RegisterHandler("resume", [&service](ControlCall& call) { HandleResume(call, service); });
         service.RegisterHandler("quit", HandleQuit, /*bypassBarrier=*/true);
     }
 

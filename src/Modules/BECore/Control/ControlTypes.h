@@ -33,6 +33,7 @@ namespace BECore {
         inline constexpr eastl::string_view kRequestTooLarge = "request_too_large";
         inline constexpr eastl::string_view kInternalError = "internal_error";
         inline constexpr eastl::string_view kShuttingDown = "shutting_down";
+        inline constexpr eastl::string_view kManualClock = "manual_clock";
     }  // namespace ControlErrors
 
     [[nodiscard]] inline ControlError MakeControlError(eastl::string_view code, eastl::string message) {
