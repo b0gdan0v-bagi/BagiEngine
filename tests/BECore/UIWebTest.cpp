@@ -9,21 +9,17 @@
 #include <BECore/UI/UICssParser.h>
 #include <BECore/UI/UIDocument.h>
 #include <BECore/UI/UIHtmlParser.h>
-#include <BECore/UI/UIImage.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
-#include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UIScreenContent.h>
 #include <BECore/UI/UISegmented.h>
-#include <BECore/UI/UISlider.h>
 #include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UIStrings.h>
 #include <BECore/UI/UISwitchComponent.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
-#include <BECore/UI/UIToggle.h>
 #include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UITooltipComponent.h>
 #include <BECore/UI/UIWebCompiler.h>
@@ -72,6 +68,11 @@ namespace BECore::Tests {
             /// An attribute of a component of the element of that name; "" when there is none
             [[nodiscard]] std::string ComponentAttr(const char* name, const char* type, const char* attribute) const {
                 return Component(name, type).attribute(attribute).as_string();
+            }
+
+            /// Whether a component of that type of the element of that name says that attribute
+            [[nodiscard]] bool HasComponentAttr(const char* name, const char* type, const char* attribute) const {
+                return !Component(name, type).attribute(attribute).empty();
             }
 
             [[nodiscard]] bool Has(const char* name, const char* attribute) const {
@@ -204,7 +205,11 @@ button:hover { background: #3a6; }
   <elements>
     <element type="UIElement" name="Hud" x="16" y="16" width="220" height="96" color="0,0,0,160" blocksInput="true">
       <children>
-        <element type="UILabel" name="Score" x="12" y="10" width="150" height="32" text="Score: {score}" fontSize="28"/>
+        <element type="UIElement" name="Score" x="12" y="10" width="150" height="32" fontSize="28">
+          <components>
+            <component type="UITextComponent" text="Score: {score}"/>
+          </components>
+        </element>
         <element type="UIElement" name="Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" fontSize="24" color="40,90,60,255" hoverColor="51,170,102,255">
           <components>
             <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
@@ -226,9 +231,23 @@ button:hover { background: #3a6; }
         constexpr const char* kMenuXml = R"(<ui><elements>
   <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
     <children>
-      <element type="UILabel" name="Title" height="88" text="Match 3" fontSize="56" align="Center" verticalAlign="Center" />
-      <element type="UIButton" name="Play" height="56" text="Play" fontSize="28" action="Match3Play" color="40,90,60,255" />
-      <element type="UIButton" name="Quit" height="56" text="Quit" fontSize="28" action="Match3Quit" color="90,50,50,255" />
+      <element type="UIElement" name="Title" height="88" fontSize="56">
+        <components>
+          <component type="UITextComponent" text="Match 3" align="Center" verticalAlign="Center"/>
+        </components>
+      </element>
+      <element type="UIElement" name="Play" height="56" fontSize="28" color="40,90,60,255">
+        <components>
+          <component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="Match3Play"/>
+        </components>
+      </element>
+      <element type="UIElement" name="Quit" height="56" fontSize="28" color="90,50,50,255">
+        <components>
+          <component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="Match3Quit"/>
+        </components>
+      </element>
     </children>
   </element>
 </elements></ui>)";
@@ -250,14 +269,32 @@ button  { height: 56px; font-size: 28px; }
 
         // The HUD of Match3 as the game shipped it before its buttons became composed (same note as the menu), and the same HUD in HTML + CSS
         constexpr const char* kMatch3HudXml = R"(<ui><elements>
-  <element type="UILabel" name="Score" x="96" y="12" width="250" height="40" text="Score: {score}" fontSize="28" verticalAlign="Center" />
+  <element type="UIElement" name="Score" x="96" y="12" width="250" height="40" fontSize="28">
+    <components>
+      <component type="UITextComponent" text="Score: {score}" verticalAlign="Center"/>
+    </components>
+  </element>
   <element type="UIStack" name="Buttons" anchor="TopRight" x="-96" y="12" width="260" height="48" direction="Horizontal" spacing="12" crossAlign="Stretch">
     <children>
-      <element type="UIButton" name="Reset" width="124" height="48" text="Reset" fontSize="24" action="Match3Reset" color="40,90,60,255" />
-      <element type="UIButton" name="Menu" width="124" height="48" text="Menu" fontSize="24" action="Match3Menu" color="70,70,100,255" />
+      <element type="UIElement" name="Reset" width="124" height="48" fontSize="24" color="40,90,60,255">
+        <components>
+          <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="Match3Reset"/>
+        </components>
+      </element>
+      <element type="UIElement" name="Menu" width="124" height="48" fontSize="24" color="70,70,100,255">
+        <components>
+          <component type="UITextComponent" text="Menu" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="Match3Menu"/>
+        </components>
+      </element>
     </children>
   </element>
-  <element type="UILabel" name="Seed" anchor="BottomLeft" x="96" y="-26" width="300" height="24" text="seed {seed}" fontSize="16" textColor="190,190,190,255" />
+  <element type="UIElement" name="Seed" anchor="BottomLeft" x="96" y="-26" width="300" height="24" fontSize="16">
+    <components>
+      <component type="UITextComponent" text="seed {seed}" textColor="190,190,190,255"/>
+    </components>
+  </element>
 </elements></ui>)";
 
         constexpr const char* kMatch3HudHtml = R"(
@@ -282,10 +319,18 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         constexpr const char* kPanelXml = R"(<ui><elements>
   <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
     <children>
-      <element type="UILabel" name="Title" height="44" text="Opponent" fontSize="30" align="Center" />
+      <element type="UIElement" name="Title" height="44" fontSize="30">
+        <components>
+          <component type="UITextComponent" text="Opponent" align="Center"/>
+        </components>
+      </element>
       <element type="UIStack" name="ModeRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
         <children>
-          <element type="UILabel" name="ModeCaption" width="150" height="56" text="Opponent" fontSize="24" verticalAlign="Center" />
+          <element type="UIElement" name="ModeCaption" width="150" height="56" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="Opponent" verticalAlign="Center"/>
+            </components>
+          </element>
           <element type="UISegmented" name="Mode" bind="opponentMode" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
             <children>
               <element type="UIElement" name="ModeTwo" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
@@ -306,7 +351,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
       </element>
       <element type="UIStack" name="ColorRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
         <children>
-          <element type="UILabel" name="ColorCaption" width="150" height="56" text="Play as" fontSize="24" verticalAlign="Center" />
+          <element type="UIElement" name="ColorCaption" width="150" height="56" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="Play as" verticalAlign="Center"/>
+            </components>
+          </element>
           <element type="UISegmented" name="Color" bind="opponentColor" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
             <children>
               <element type="UIElement" name="ColorWhite" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
@@ -327,7 +376,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
       </element>
       <element type="UIStack" name="EngineRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
         <children>
-          <element type="UILabel" name="EngineCaption" width="150" height="56" text="Engine" fontSize="24" verticalAlign="Center" />
+          <element type="UIElement" name="EngineCaption" width="150" height="56" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="Engine" verticalAlign="Center"/>
+            </components>
+          </element>
           <element type="UISegmented" name="Engine" bind="opponentEngine" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
             <children>
               <element type="UIElement" name="EngineStockfish" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
@@ -348,7 +401,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
       </element>
       <element type="UIStack" name="LevelRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
         <children>
-          <element type="UILabel" name="LevelCaption" width="150" height="56" text="Level" fontSize="24" verticalAlign="Center" />
+          <element type="UIElement" name="LevelCaption" width="150" height="56" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="Level" verticalAlign="Center"/>
+            </components>
+          </element>
           <element type="UISegmented" name="Level" bind="opponentLevel" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
             <children>
               <element type="UIElement" name="LevelEasy" flex="1" height="56" fontSize="24" color="70,70,100,255" selectedColor="110,130,200,255">
@@ -517,7 +574,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         constexpr const char* kSettingsPanelXml = R"(<ui><elements>
   <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
     <children>
-      <element type="UILabel" name="Title" height="44" text="{#settings.title}" fontSize="30" align="Center"/>
+      <element type="UIElement" name="Title" height="44" fontSize="30">
+        <components>
+          <component type="UITextComponent" text="{#settings.title}" align="Center"/>
+        </components>
+      </element>
       <element type="UIElement" name="Sound" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
         <components>
           <component type="UIInputClicker"/>
@@ -538,7 +599,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
       </element>
       <element type="UIStack" name="MusicRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
         <children>
-          <element type="UILabel" name="MusicCaption" width="220" height="56" text="{#settings.music}" fontSize="24" verticalAlign="Center"/>
+          <element type="UIElement" name="MusicCaption" width="220" height="56" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="{#settings.music}" verticalAlign="Center"/>
+            </components>
+          </element>
           <element type="UIElement" name="Volume" flex="1" height="56">
             <components>
               <component type="UIInputClicker" stateLook="false"/>
@@ -549,14 +614,26 @@ button   { width: 124px; height: 48px; font-size: 24px; }
       </element>
       <element type="UIStack" name="DownloadRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
         <children>
-          <element type="UILabel" name="DownloadCaption" width="220" height="56" text="{#settings.download}" fontSize="24" verticalAlign="Center"/>
+          <element type="UIElement" name="DownloadCaption" width="220" height="56" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="{#settings.download}" verticalAlign="Center"/>
+            </components>
+          </element>
           <element type="UIProgressBar" name="Progress" bind="progress" minValue="0" maxValue="100" flex="1" height="24"/>
-          <element type="UILabel" name="Percent" width="64" height="56" text="{progress}%" fontSize="24" align="Right" verticalAlign="Center"/>
+          <element type="UIElement" name="Percent" width="64" height="56" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="{progress}%" align="Right" verticalAlign="Center"/>
+            </components>
+          </element>
         </children>
       </element>
       <element type="UIStack" name="LanguageRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
         <children>
-          <element type="UILabel" name="LanguageCaption" width="220" height="56" text="{#settings.language}" fontSize="24" verticalAlign="Center"/>
+          <element type="UIElement" name="LanguageCaption" width="220" height="56" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="{#settings.language}" verticalAlign="Center"/>
+            </components>
+          </element>
           <element type="UISegmented" name="Language" bind="language" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255" blocksInput="true">
             <children>
               <element type="UIElement" name="LanguageEn" flex="1" height="56" fontSize="24" color="70,70,100,255">
@@ -1029,7 +1106,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(expected.variants == compiled->content.variants) << compiled->xml.c_str();
 
         // The fields the tree comparison does not look at
-        const auto* score = dynamic_cast<UILabel*>(compiled->Element("Score"));
+        const auto* score = compiled->Element("Score")->GetComponent<UITextComponent>();
         ASSERT_NE(score, nullptr);
         EXPECT_EQ(score->text, "Score: {score}");
         const UIElement* reset = compiled->Element("Reset");
@@ -1076,7 +1153,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                 ExpectSameRect(xml.Find(name), web.Find(name), name);
             }
         }
-        const auto* title = dynamic_cast<UILabel*>(compiled->Element("Title"));
+        const auto* title = compiled->Element("Title")->GetComponent<UITextComponent>();
         ASSERT_NE(title, nullptr);
         EXPECT_EQ(title->align, TextAlign::Center);
         EXPECT_EQ(title->verticalAlign, UIVerticalAlign::Center);
@@ -1110,7 +1187,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                 ExpectSameRect(xml.Find(name), web.Find(name), name);
             }
         }
-        EXPECT_EQ(dynamic_cast<UILabel*>(compiled->Element("Seed"))->textColor.r, 190);
+        EXPECT_EQ(compiled->Element("Seed")->GetComponent<UITextComponent>()->textColor.r, 190);
     }
 
     TEST_F(UIWebTest, TheMatch3HudInHtmlPassesTheSizeMatrixInTheMarginsOfItsView) {
@@ -1314,7 +1391,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         // The types and the fields the tree comparison does not look at
         const auto* sound = compiled->Element("Sound")->GetComponent<UIToggleComponent>();
         ASSERT_NE(sound, nullptr) << "a data-widget=\"toggle\" div is a row with a UIToggleComponent";
-        EXPECT_EQ(compiled->Element("Sound")->Cast<UIToggle>(), nullptr) << "no UIToggle is written any more";
         EXPECT_EQ(sound->bind.ToStringView(), "soundOn");
         EXPECT_EQ(sound->action.ToStringView(), "SettingsSound");
         EXPECT_EQ(sound->onValue.ToStringView(), "true") << "data-on and data-off were not written, so the defaults stand";
@@ -1324,7 +1400,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_TRUE(compiled->Element("Sound")->IsInteractive());
         const auto* volume = compiled->Element("Volume")->GetComponent<UISliderComponent>();
         ASSERT_NE(volume, nullptr) << "a data-widget=\"slider\" div is an element with a UISliderComponent";
-        EXPECT_EQ(compiled->Element("Volume")->Cast<UISlider>(), nullptr) << "no UISlider is written any more";
         EXPECT_FALSE(compiled->Element("Volume")->GetComponent<UIInputClicker>()->stateLook) << "the plate of a slider stays still";
         EXPECT_EQ(volume->bind.ToStringView(), "volume");
         EXPECT_EQ(volume->action.ToStringView(), "SettingsVolume");
@@ -1515,7 +1590,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(onButton->IssuesMentioning("data-widget=\"slider\" on a <img> is left out"), 1u);
         EXPECT_EQ(onButton->IssuesMentioning("disabled does not apply to a progress bar"), 1u);
         EXPECT_EQ(onButton->Find("b").attribute("type").as_string(), std::string("UIElement")) << "a button that is no segment is composed";
-        EXPECT_EQ(onButton->Find("i").attribute("type").as_string(), std::string("UIImage"));
+        EXPECT_EQ(onButton->Find("i").attribute("type").as_string(), std::string("UIElement")) << "an image is an element with a UIImageComponent";
+        EXPECT_FALSE(onButton->Component("i", "UIImageComponent").empty());
         EXPECT_FALSE(onButton->Has("p", "disabled"));
 
         // content inside a slider or a progress bar has nowhere to go
@@ -1612,12 +1688,12 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, TextPropertiesAreInheritedAndAButtonKeepsItsOwnAlignment) {
         const auto compiled = Compile(R"(<div class="box"><span id="s">a</span><button id="b">b</button><div id="g"><span id="deep">c</span></div></div>)",
                                       ".box { color: #ff0000; font-size: 20px; text-align: right } #g { font-size: 30px }");
-        EXPECT_EQ(compiled->Attr("s", "textColor"), "255,0,0,255");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UITextComponent", "textColor"), "255,0,0,255");
         EXPECT_EQ(compiled->Attr("s", "fontSize"), "20");
-        EXPECT_EQ(compiled->Attr("s", "align"), "Right");
+        EXPECT_EQ(compiled->ComponentAttr("s", "UITextComponent", "align"), "Right");
         EXPECT_EQ(compiled->Attr("deep", "fontSize"), "30") << "a nearer declaration wins";
         EXPECT_EQ(compiled->Attr("b", "fontSize"), "20");
-        EXPECT_FALSE(compiled->Has("b", "align")) << "text-align does not reach a button";
+        EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "align"), "Center") << "text-align does not reach a button";
         EXPECT_FALSE(compiled->Has("g", "fontSize")) << "a group has no text to size";
     }
 
@@ -1671,9 +1747,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                                                                                                                                "#p { background-image: url('Panel9'); border-image-slice: 12 8 }\n"
                                                                                                                                "#q { background: #112233 url(Plate) no-repeat }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Find("i").attribute("type").as_string(), std::string("UIImage"));
-        EXPECT_EQ(compiled->Attr("i", "sprite"), "Hero");
-        EXPECT_EQ(compiled->Attr("s", "stretch"), "true");
+        EXPECT_EQ(compiled->Find("i").attribute("type").as_string(), std::string("UIElement")) << "a picture is an element with a UIImageComponent";
+        EXPECT_EQ(compiled->ComponentAttr("i", "UIImageComponent", "sprite"), "Hero");
+        EXPECT_FALSE(compiled->Has("i", "sprite")) << "the sprite lives on the component";
+        EXPECT_EQ(compiled->ComponentAttr("s", "UIImageComponent", "stretch"), "true");
         EXPECT_NEAR(std::stof(compiled->Attr("s", "aspectRatio")), 16.0f / 9.0f, 1e-4f);
         EXPECT_EQ(compiled->Find("p").attribute("type").as_string(), std::string("UIPanel"));
         EXPECT_EQ(compiled->Attr("p", "sprite"), "Panel9");
@@ -1689,29 +1766,30 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             <b>big</b> world &amp; co<br>second line </div><p id="e"></p>)",
                                       ".tag { background: rgba(0, 0, 0, 0.5); white-space: nowrap; text-overflow: clip; line-height: 1.5; font-family: sans-serif }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Find("t").attribute("type").as_string(), std::string("UILabel"));
-        EXPECT_EQ(compiled->Attr("t", "text"), "Hello, big world & co\nsecond line");
+        EXPECT_EQ(compiled->Find("t").attribute("type").as_string(), std::string("UIElement")) << "a text is an element with a UITextComponent";
+        EXPECT_EQ(compiled->ComponentAttr("t", "UITextComponent", "text"), "Hello, big world & co\nsecond line");
+        EXPECT_FALSE(compiled->Has("t", "text")) << "the text lives on the component";
         EXPECT_EQ(compiled->Attr("t", "color"), "0,0,0,128");
         EXPECT_EQ(compiled->Attr("t", "blocksInput"), "true") << "a visible plate takes clicks";
-        EXPECT_EQ(compiled->Attr("t", "wrap"), "false");
-        EXPECT_EQ(compiled->Attr("t", "overflow"), "Clip");
-        EXPECT_EQ(compiled->Attr("t", "lineSpacing"), "1.5");
-        EXPECT_FALSE(compiled->Has("t", "font")) << "a generic family is the default font";
-        EXPECT_EQ(compiled->Find("e").attribute("type").as_string(), std::string("UILabel")) << "an empty <p> is a label that a variable can fill";
+        EXPECT_EQ(compiled->ComponentAttr("t", "UITextComponent", "wrap"), "false");
+        EXPECT_EQ(compiled->ComponentAttr("t", "UITextComponent", "overflow"), "Clip");
+        EXPECT_EQ(compiled->ComponentAttr("t", "UITextComponent", "lineSpacing"), "1.5");
+        EXPECT_TRUE(compiled->Component("t", "UITextComponent").attribute("font").empty()) << "a generic family is the default font";
+        EXPECT_FALSE(compiled->Component("e", "UITextComponent").empty()) << "an empty <p> is a text that a variable can fill";
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
     TEST_F(UIWebTest, AHeadingTakesAFamilyAWeightAShadowAndAnOutline) {
         const auto compiled = Compile(R"(<h1 id="h">Title</h1>)", R"(h1 { font-family: "Russo One", sans-serif; font-weight: 700; text-shadow: 2px 2px #000000A0; -be-text-outline: 2px #000; })");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Attr("h", "fontFamily"), "Russo One");
-        EXPECT_FALSE(compiled->Has("h", "font"));
-        EXPECT_EQ(compiled->Attr("h", "fontWeight"), "700");
-        EXPECT_EQ(compiled->Attr("h", "textShadow"), "2,2,#000000A0");
-        EXPECT_EQ(compiled->Attr("h", "textOutline"), "2,#000000FF");
+        EXPECT_EQ(compiled->ComponentAttr("h", "UITextComponent", "fontFamily"), "Russo One");
+        EXPECT_TRUE(compiled->Component("h", "UITextComponent").attribute("font").empty());
+        EXPECT_EQ(compiled->ComponentAttr("h", "UITextComponent", "fontWeight"), "700");
+        EXPECT_EQ(compiled->ComponentAttr("h", "UITextComponent", "textShadow"), "2,2,#000000A0");
+        EXPECT_EQ(compiled->ComponentAttr("h", "UITextComponent", "textOutline"), "2,#000000FF");
         EXPECT_TRUE(compiled->report.issues.empty());
 
-        auto* label = compiled->Element("h")->Cast<UILabel>();
+        auto* label = compiled->Element("h")->GetComponent<UITextComponent>();
         ASSERT_NE(label, nullptr);
         EXPECT_EQ(label->fontFamily, PoolString::Intern("Russo One"));
         EXPECT_EQ(label->fontWeight, 700);
@@ -1741,16 +1819,16 @@ button   { width: 124px; height: 48px; font-size: 24px; }
                                       "#box { font-weight: 700; font-family: \"Russo One\"; text-shadow: 1px 1px #000; -be-text-outline: 2px #fff } "
                                       ".plain { font-weight: normal; text-shadow: none; -be-text-outline: none; font-family: sans-serif }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_FALSE(compiled->Has("box", "fontWeight")) << "a group has no text";
-        EXPECT_FALSE(compiled->Has("box", "textShadow"));
-        EXPECT_EQ(compiled->Attr("a", "fontWeight"), "700");
-        EXPECT_EQ(compiled->Attr("a", "fontFamily"), "Russo One");
-        EXPECT_EQ(compiled->Attr("a", "textOutline"), "2,#FFFFFFFF");
+        EXPECT_FALSE(compiled->HasComponentAttr("box", "UITextComponent", "fontWeight")) << "a group has no text";
+        EXPECT_FALSE(compiled->HasComponentAttr("box", "UITextComponent", "textShadow"));
+        EXPECT_EQ(compiled->ComponentAttr("a", "UITextComponent", "fontWeight"), "700");
+        EXPECT_EQ(compiled->ComponentAttr("a", "UITextComponent", "fontFamily"), "Russo One");
+        EXPECT_EQ(compiled->ComponentAttr("a", "UITextComponent", "textOutline"), "2,#FFFFFFFF");
         EXPECT_EQ(compiled->ComponentAttr("c", "UITextComponent", "textShadow"), "1,1,#000000FF") << "a button's text follows the container too";
-        EXPECT_FALSE(compiled->Has("b", "fontWeight"));
-        EXPECT_FALSE(compiled->Has("b", "fontFamily"));
-        EXPECT_FALSE(compiled->Has("b", "textShadow"));
-        EXPECT_FALSE(compiled->Has("b", "textOutline"));
+        EXPECT_FALSE(compiled->HasComponentAttr("b", "UITextComponent", "fontWeight"));
+        EXPECT_FALSE(compiled->HasComponentAttr("b", "UITextComponent", "fontFamily"));
+        EXPECT_FALSE(compiled->HasComponentAttr("b", "UITextComponent", "textShadow"));
+        EXPECT_FALSE(compiled->HasComponentAttr("b", "UITextComponent", "textOutline"));
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
@@ -1759,10 +1837,10 @@ button   { width: 124px; height: 48px; font-size: 24px; }
             Compile(R"(<span id="a" style="font-weight: 300">A</span><span id="b" class="x" style="font-weight: 400">B</span><span id="c" style="font-family: assets/fonts/Other.ttf">C</span>)",
                     ".x { font-weight: 900 !important }");
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
-        EXPECT_EQ(compiled->Attr("a", "fontWeight"), "300");
-        EXPECT_EQ(compiled->Attr("b", "fontWeight"), "900") << "!important beats style=\"\"";
-        EXPECT_EQ(compiled->Attr("c", "font"), "assets/fonts/Other.ttf");
-        EXPECT_FALSE(compiled->Has("c", "fontFamily"));
+        EXPECT_EQ(compiled->ComponentAttr("a", "UITextComponent", "fontWeight"), "300");
+        EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "fontWeight"), "900") << "!important beats style=\"\"";
+        EXPECT_EQ(compiled->ComponentAttr("c", "UITextComponent", "font"), "assets/fonts/Other.ttf");
+        EXPECT_FALSE(compiled->HasComponentAttr("c", "UITextComponent", "fontFamily"));
         EXPECT_TRUE(compiled->report.issues.empty());
     }
 
@@ -1777,11 +1855,11 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->IssuesMentioning("several text shadows"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("text-shadow: 1px 1px'"), 1u) << "no colour is not understood";
         EXPECT_EQ(compiled->IssuesMentioning("-be-text-outline: -1px"), 1u);
-        EXPECT_FALSE(compiled->Has("a", "fontWeight"));
-        EXPECT_EQ(compiled->Attr("b", "textShadow"), "1,1,#000000FF") << "a blurred shadow is drawn hard";
-        EXPECT_EQ(compiled->Attr("c", "textShadow"), "1,1,#000000FF") << "the first of several";
-        EXPECT_FALSE(compiled->Has("e", "textShadow"));
-        EXPECT_FALSE(compiled->Has("e", "textOutline"));
+        EXPECT_FALSE(compiled->HasComponentAttr("a", "UITextComponent", "fontWeight"));
+        EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "textShadow"), "1,1,#000000FF") << "a blurred shadow is drawn hard";
+        EXPECT_EQ(compiled->ComponentAttr("c", "UITextComponent", "textShadow"), "1,1,#000000FF") << "the first of several";
+        EXPECT_FALSE(compiled->HasComponentAttr("e", "UITextComponent", "textShadow"));
+        EXPECT_FALSE(compiled->HasComponentAttr("e", "UITextComponent", "textOutline"));
     }
 
     TEST_F(UIWebTest, AStringReferenceIsTextLikeAVariableAndReachesTheXmlUntouched) {
@@ -1789,9 +1867,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
         EXPECT_EQ(compiled->Find("b").attribute("type").as_string(), std::string("UIElement"));
         EXPECT_EQ(compiled->ComponentAttr("b", "UITextComponent", "text"), "{#menu.start}");
-        EXPECT_EQ(compiled->Find("s").attribute("type").as_string(), std::string("UILabel"));
-        EXPECT_EQ(compiled->Attr("s", "text"), "{#score.title}: {score}");
-        EXPECT_EQ(compiled->Attr("q", "text"), "{{#menu.start}}") << "an escaped brace stays escaped";
+        EXPECT_EQ(compiled->Find("s").attribute("type").as_string(), std::string("UIElement"));
+        EXPECT_EQ(compiled->ComponentAttr("s", "UITextComponent", "text"), "{#score.title}: {score}");
+        EXPECT_EQ(compiled->ComponentAttr("q", "UITextComponent", "text"), "{{#menu.start}}") << "an escaped brace stays escaped";
         EXPECT_TRUE(compiled->report.issues.empty());
 
         // and the control made from it shows the string of the current language
@@ -1802,8 +1880,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         strings.Set("de"_intern, "score.title", "Punkte");
         CoreManager::GetUIVars().Set("score"_intern, 3);
         auto* button = compiled->Element("b")->GetComponent<UITextComponent>();
-        auto* span = compiled->Element("s")->Cast<UILabel>();
-        auto* quoted = compiled->Element("q")->Cast<UILabel>();
+        auto* span = compiled->Element("s")->GetComponent<UITextComponent>();
+        auto* quoted = compiled->Element("q")->GetComponent<UITextComponent>();
         ASSERT_NE(button, nullptr) << compiled->xml.c_str();
         ASSERT_NE(span, nullptr);
         ASSERT_NE(quoted, nullptr);
@@ -1904,7 +1982,6 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->ComponentAttr("a", "UIInputClicker", "value"), "x");
         EXPECT_EQ(compiled->Attr("b", "type"), "UIElement");
         EXPECT_NE(dynamic_cast<UISegmented*>(compiled->Element("g")), nullptr);
-        EXPECT_EQ(dynamic_cast<UIButton*>(compiled->Element("a")), nullptr) << "the compiler writes no UIButton";
         EXPECT_NE(compiled->Element("a")->GetComponent<UIInputClicker>(), nullptr) << "the group finds its segments by the clicker";
         EXPECT_NE(compiled->Element("b")->GetComponent<UIInputClicker>(), nullptr);
         EXPECT_TRUE(compiled->report.issues.empty());
@@ -2544,7 +2621,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     TEST_F(UIWebTest, TextBesideElementsIsReported) {
         const auto compiled = Compile(R"(<div id="a">loose <span>kept</span></div>)");
         EXPECT_EQ(compiled->IssuesMentioning("text next to other elements"), 0u) << "inline text with inline elements is one label";
-        EXPECT_EQ(compiled->Find("a").attribute("type").as_string(), std::string("UILabel"));
+        EXPECT_EQ(compiled->Find("a").attribute("type").as_string(), std::string("UIElement"));
+        EXPECT_FALSE(compiled->Component("a", "UITextComponent").empty());
         const auto mixed = Compile(R"(<div id="a">loose <div id="b"></div></div>)");
         EXPECT_EQ(mixed->IssuesMentioning("text next to other elements"), 1u);
         EXPECT_TRUE(mixed->Find("b"));
@@ -2658,7 +2736,11 @@ button  { height: 56px; font-size: 28px; }
         constexpr const char* kTokenMenuXml = R"(<ui><elements>
   <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
     <children>
-      <element type="UILabel" name="Title" height="88" text="Match 3" fontSize="56" align="Center" verticalAlign="Center" />
+      <element type="UIElement" name="Title" height="88" fontSize="56">
+        <components>
+          <component type="UITextComponent" text="Match 3" align="Center" verticalAlign="Center"/>
+        </components>
+      </element>
       <element type="UIElement" name="Play" height="56" fontSize="28" color="@play">
         <components><component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/><component type="UIInputClicker" action="Match3Play"/></components>
       </element>
@@ -2702,9 +2784,9 @@ button  { height: 56px; font-size: 28px; }
         EXPECT_EQ(compiled->Attr("grad", "gradientDirection"), "Horizontal");
         EXPECT_EQ(compiled->Attr("glow", "glow"), "0,0,6,0,@accent");
         EXPECT_EQ(compiled->Attr("glow", "shadow"), "1,2,0,0,@shade");
-        EXPECT_EQ(compiled->Attr("text", "textColor"), "@line");
-        EXPECT_EQ(compiled->Attr("text", "textShadow"), "1,1,@shade");
-        EXPECT_EQ(compiled->Attr("text", "textOutline"), "2,@accent");
+        EXPECT_EQ(compiled->ComponentAttr("text", "UITextComponent", "textColor"), "@line");
+        EXPECT_EQ(compiled->ComponentAttr("text", "UITextComponent", "textShadow"), "1,1,@shade");
+        EXPECT_EQ(compiled->ComponentAttr("text", "UITextComponent", "textOutline"), "2,@accent");
         EXPECT_EQ(compiled->Attr("bar", "trackColor"), "@panel");
         EXPECT_EQ(compiled->Attr("bar", "fillColor"), "@accent");
         EXPECT_EQ(compiled->ComponentAttr("knob", "UISliderComponent", "thumbColor"), "@line");
@@ -2714,7 +2796,7 @@ button  { height: 56px; font-size: 28px; }
         const auto* card = compiled->Element("card");
         ASSERT_NE(card, nullptr);
         EXPECT_EQ(card->color.token.ToStringView(), "panel");
-        const auto* label = compiled->Element("text")->Cast<UILabel>();
+        const auto* label = compiled->Element("text")->GetComponent<UITextComponent>();
         ASSERT_NE(label, nullptr);
         EXPECT_EQ(label->textColor.token.ToStringView(), "line");
         EXPECT_EQ(label->textEffects.shadowColor.token.ToStringView(), "shade");

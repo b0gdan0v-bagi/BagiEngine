@@ -203,8 +203,7 @@ def test_every_reflected_field_of_the_three_classes_is_moved_by_the_step_or_list
     assert (set(shared.TEXT_ATTRIBUTES) | set(shared.IMAGE_ATTRIBUTES)) & element == set()
 
 
-def test_the_defaults_written_for_a_dropdown_are_those_of_its_constructor_for_now():
-    source = (UI_SOURCES / "UIDropdown.cpp").read_text(encoding="utf-8")
-    constructor = source[source.index("UIDropdown::UIDropdown()") :].split("}", 1)[0]
-    assert "verticalAlign = UIVerticalAlign::Center" in constructor and "wrap = false" in constructor
+def test_the_defaults_written_for_a_dropdown_are_those_its_header_had():
+    # The constructor of `UIDropdown` set these two while the header was a `UILabel`; it no longer does (the header is a `UITextComponent`), so the values are pinned here
+    # and the dropdown tests (`UIDropdownTest`, `UIDropdownScreenTest`) hold the same two in their `<components>`
     assert dict(shared.DROPDOWN_TEXT_DEFAULTS) == {"verticalAlign": "Center", "wrap": "false"}

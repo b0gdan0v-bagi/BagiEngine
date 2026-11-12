@@ -9,15 +9,28 @@ namespace BECore::Tests::RmlUiScreens {
 
     // The three screens that the repository ships, in the engine's XML (games/*/config/SceneConfig.xml) and in RmlUi's HTML + CSS dialect.
     // The XML is the reference: every element of the RML screen must land on the same rect, in every shape of the size matrix.
-    // The XML keeps the `UIButton` form on purpose: the screens only compare rects, and a `UIButton` and the composed form the shipped files and the
-    // HTML compiler write now (a `UIElement` with a text and a clicker) lay out the same (the twin test of step 1 compared them while `UIButton` was built).
+    // The XML is written composed, as the shipped files and the HTML compiler write it (a text is a `UIElement` with a `UITextComponent`, a button one with a text and a clicker).
 
     inline constexpr const char* kMenuXml = R"(<ui><elements>
   <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
     <children>
-      <element type="UILabel" name="Title" height="88" text="Match 3" fontSize="56" align="Center" verticalAlign="Center" />
-      <element type="UIButton" name="Play" height="56" text="Play" fontSize="28" action="Match3Play" color="40,90,60,255" />
-      <element type="UIButton" name="Quit" height="56" text="Quit" fontSize="28" action="Match3Quit" color="90,50,50,255" />
+      <element type="UIElement" name="Title" height="88" fontSize="56">
+        <components>
+          <component type="UITextComponent" text="Match 3" align="Center" verticalAlign="Center"/>
+        </components>
+      </element>
+      <element type="UIElement" name="Play" height="56" fontSize="28" color="40,90,60,255">
+        <components>
+          <component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="Match3Play"/>
+        </components>
+      </element>
+      <element type="UIElement" name="Quit" height="56" fontSize="28" color="90,50,50,255">
+        <components>
+          <component type="UITextComponent" text="Quit" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="Match3Quit"/>
+        </components>
+      </element>
     </children>
   </element>
 </elements></ui>)";
@@ -40,14 +53,32 @@ button { height: 56dp; font-size: 28dp; line-height: 56dp; text-align: center; p
 </body></rml>)";
 
     inline constexpr const char* kMatch3HudXml = R"(<ui><elements>
-  <element type="UILabel" name="Score" x="96" y="12" width="250" height="40" text="Score: {score}" fontSize="28" verticalAlign="Center" />
+  <element type="UIElement" name="Score" x="96" y="12" width="250" height="40" fontSize="28">
+    <components>
+      <component type="UITextComponent" text="Score: {score}" verticalAlign="Center"/>
+    </components>
+  </element>
   <element type="UIStack" name="Buttons" anchor="TopRight" x="-96" y="12" width="260" height="48" direction="Horizontal" spacing="12" crossAlign="Stretch">
     <children>
-      <element type="UIButton" name="Reset" width="124" height="48" text="Reset" fontSize="24" action="Match3Reset" color="40,90,60,255" />
-      <element type="UIButton" name="Menu" width="124" height="48" text="Menu" fontSize="24" action="Match3Menu" color="70,70,100,255" />
+      <element type="UIElement" name="Reset" width="124" height="48" fontSize="24" color="40,90,60,255">
+        <components>
+          <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="Match3Reset"/>
+        </components>
+      </element>
+      <element type="UIElement" name="Menu" width="124" height="48" fontSize="24" color="70,70,100,255">
+        <components>
+          <component type="UITextComponent" text="Menu" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="Match3Menu"/>
+        </components>
+      </element>
     </children>
   </element>
-  <element type="UILabel" name="Seed" anchor="BottomLeft" x="96" y="-26" width="300" height="24" text="seed {seed}" fontSize="16" textColor="190,190,190,255" />
+  <element type="UIElement" name="Seed" anchor="BottomLeft" x="96" y="-26" width="300" height="24" fontSize="16">
+    <components>
+      <component type="UITextComponent" text="seed {seed}" textColor="190,190,190,255"/>
+    </components>
+  </element>
 </elements></ui>)";
 
     inline constexpr const char* kMatch3HudRml = R"(<rml>

@@ -261,6 +261,7 @@ namespace BECore::Tests {
             Draw();
             const Color panel = Find("Card").color;
             const UITextComponent* goText = Find("Action").GetComponent<UITextComponent>();
+            const UITextComponent* noteText = Find("Note").GetComponent<UITextComponent>();  // the compiled part: a text is a component
             const struct {
                 const char* what;
                 Color text;
@@ -268,7 +269,7 @@ namespace BECore::Tests {
             } pairs[] = {{"Title on the card", Get<UILabel>("Title").textColor, panel},
                          {"Sound on the card", Get<UIToggle>("Sound").textColor, panel},
                          {"Go on its button", goText ? Color(goText->textColor) : Color{}, Find("Action").color},
-                         {"Note on its plate", Get<UILabel>("Note").textColor, Find("Note").color}};
+                         {"Note on its plate", noteText ? Color(noteText->textColor) : Color{}, Find("Note").color}};
             eastl::string problems;
             for (const auto& pair : pairs) {
                 const float ratio = ContrastRatio(pair.text, pair.plate);

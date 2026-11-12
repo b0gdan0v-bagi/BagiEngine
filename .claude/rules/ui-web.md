@@ -37,8 +37,8 @@ button:hover { background: #3a6; }
 | `data-widget="toggle"` | the composed row (`ui-controls.md`, "Components"): text = the caption child, `data-bind`, `data-action`, `data-on` / `data-off` on `UIToggleComponent`, `disabled` on the clicker, the `-be-*` colours and shape on the switch child. A caption colour other than white also writes `trackColor` and `thumbColor` (the colour at 0.35 alpha, the colour), unless given |
 | `data-widget="slider"` | one element with a clicker (`stateLook="false"`) and `UISliderComponent`: `data-bind`, `data-action`, `data-min` / `data-max` / `data-step` |
 | `data-widget="progress"` | `UIProgressBar`: `data-bind`, `data-min`, `data-max`; never takes input |
-| `img` | `UIImage`: `src` = sprite name, `object-fit: fill` = `stretch` |
-| element with only text / inline elements (`span`, `p`, `h1`-`h6`, `label`, `b`, `br`...) | `UILabel` (white space collapsed, `<br>` a line break) |
+| `img` | a `UIElement` with a `UIImageComponent`: `src` = its `sprite`, `object-fit: fill` = `stretch` |
+| element with only text / inline elements (`span`, `p`, `h1`-`h6`, `label`, `b`, `br`...) | a `UIElement` with a `UITextComponent` (white space collapsed, `<br>` a line break); its `background` stays the element's `color` |
 | any other with `background-image` | `UIPanel` |
 | any other | `UIElement` (a group) |
 
@@ -61,7 +61,7 @@ CSS's cascade: `!important`, `style=""`, specificity, source order. Selectors: t
 | `linear-gradient([dir,] c1, c2)` in `background` or `background-image` | `color` = c1, `gradientColor` = c2, `gradientDirection` |
 | `box-shadow: x y [blur [spread]] color` (one or two layers), `none` | `shadow`; two layers: the first `glow`, the second `shadow` |
 | `-be-highlight` (engine-only color), `-be-shape: square\|round` | `highlight`; `partShape` (toggle, slider, progress only) |
-| `color`, `font-size`, `font-family` (a font path, else a family name, the first of a list), `font-weight`, `text-align`, `vertical-align`, `text-overflow`, `white-space`, `line-height` | `textColor`, `fontSize`, `font` or `fontFamily`, `fontWeight`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing`. `font-weight`: `normal`, `bold` or 100..900 in steps of 100. A family name is not checked here (the table of `TextConfig.xml` is run-time data): an unknown one is the label's one warning at run time; generic names (`sans-serif`...) mean the default font |
+| `color`, `font-size`, `font-family` (a font path, else a family name, the first of a list), `font-weight`, `text-align`, `vertical-align`, `text-overflow`, `white-space`, `line-height` | `textColor`, `fontSize`, `font` or `fontFamily`, `fontWeight`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing`. `font-weight`: `normal`, `bold` or 100..900 in steps of 100. A family name is not checked here (the table of `TextConfig.xml` is run-time data): an unknown one is the text's one warning at run time; generic names (`sans-serif`...) mean the default font |
 | `text-shadow: <x> <y> [blur] <color>`, `-be-text-outline: <width> <color>` (`none` clears both) | `textShadow`, `textOutline`: a hard shadow and an outline, paint only. A blur and every shadow after the first are reported (drawn hard / left out). Like `color`, they reach only the elements that become a label, button or toggle |
 | `-be-text-fit: shrink`, `-be-min-font-size` | `overflow="AutoFit"`, `minFontSize` |
 | `-be-track-color`, `-be-fill-color`, `-be-thumb-color` | of a toggle, slider, progress bar only |
