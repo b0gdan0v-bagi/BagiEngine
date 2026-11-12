@@ -16,6 +16,39 @@ namespace BECore {
         constexpr const char* kNodePayload = "BE_SCENE_NODE";
         constexpr float kDropLineThickness = 2.0f;
         constexpr float kDropBoxRounding = 3.0f;
+        constexpr int kToggleCount = 2;  // the eye and the lock at the right edge of a row
+
+        bool IsLocked(const SceneNode& node) {
+            return node.HasEditorFlag(EditorFlags::Locked);
+        }
+
+        // The width the eye and the lock take at the right edge of a row (a rename field leaves it free)
+        float ToggleStripWidth() {
+            return static_cast<float>(kToggleCount) * ImGui::GetFrameHeight() + static_cast<float>(kToggleCount - 1) * ImGui::GetStyle().ItemSpacing.x;
+        }
+
+        void ToggleFlag(SceneNode& node, EditorFlags flag) {
+            const EditorFlags flags = node.GetEditorFlags();
+            node.SetEditorFlags(node.HasEditorFlag(flag) ? (flags & ~flag) : (flags | flag));
+        }
+
+        // The eye and the lock of a row, drawn over its right edge. They change editor state only: the scene is not dirty, nothing is saved
+        void DrawToggles(SceneNode& node, float rowRight, float rowTop) {
+            ImGui::SetCursorScreenPos(ImVec2(rowRight - ToggleStripWidth(), rowTop));
+            ImGui::PushID(&node);
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+            const bool hidden = node.HasEditorFlag(EditorFlags::Hidden);
+            if (IconButton(hidden ? ICON_LC_EYE_OFF : ICON_LC_EYE, hidden ? "Show in the editor" : "Hide in the editor", "##hide")) {
+                ToggleFlag(node, EditorFlags::Hidden);
+            }
+            ImGui::SameLine();
+            const bool locked = IsLocked(node);
+            if (IconButton(locked ? ICON_LC_LOCK : ICON_LC_LOCK_OPEN, locked ? "Unlock in the editor" : "Lock in the editor", "##lock")) {
+                ToggleFlag(node, EditorFlags::Locked);
+            }
+            ImGui::PopStyleColor();
+            ImGui::PopID();
+        }
 
         bool FilterIsOn(const HierarchyState& state) {
             return HierarchyModel::IsFilterActive(state.searchBuffer, state.componentType);
@@ -23,7 +56,7 @@ namespace BECore {
 
         void DrawRenameField(HierarchyState& state, SceneNode& node) {
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::SetNextItemWidth(-(ToggleStripWidth() + ImGui::GetStyle().ItemSpacing.x));
             if (state.renameFocus) {
                 ImGui::SetKeyboardFocusHere();
                 state.renameFocus = false;
@@ -62,19 +95,23 @@ namespace BECore {
                 return;
             }
             const bool isRoot = node.GetParent() == nullptr;
-            if (ImGui::MenuItem(ICON_LC_FOLDER_PLUS " Add Child")) {
+            const bool locked = IsLocked(node);
+            // A locked node is read-only: nothing is added to it, renamed or deleted (a copy of it is allowed)
+            if (ImGui::MenuItem(ICON_LC_FOLDER_PLUS " Add Child", nullptr, false, !locked)) {
                 state.addNodeRequested = true;
                 state.addNodeParent = &node;
             }
+            ImGui::BeginDisabled(locked);
             DrawAddComponentMenu(state, node);
+            ImGui::EndDisabled();
             ImGui::Separator();
-            if (ImGui::MenuItem(ICON_LC_PENCIL " Rename", "F2")) {
+            if (ImGui::MenuItem(ICON_LC_PENCIL " Rename", "F2", false, !locked)) {
                 HierarchyPanel::BeginRename(state, node);
             }
             if (ImGui::MenuItem(ICON_LC_COPY " Duplicate", "Ctrl+D", false, !isRoot)) {
                 state.pending = {HierarchyModel::OperationKind::Duplicate, &node, nullptr, 0};
             }
-            if (ImGui::MenuItem(ICON_LC_TRASH_2 " Delete", "Del", false, !isRoot)) {
+            if (ImGui::MenuItem(ICON_LC_TRASH_2 " Delete", "Del", false, !isRoot && !locked)) {
                 state.pending = {HierarchyModel::OperationKind::Delete, &node, nullptr, 0};
             }
             ImGui::EndPopup();
@@ -108,7 +145,7 @@ namespace BECore {
                 }
                 return;
             }
-            if (node.GetParent() != nullptr && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers)) {
+            if (node.GetParent() != nullptr && !IsLocked(node) && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers)) {
                 SceneNode* dragged = &node;
                 ImGui::SetDragDropPayload(kNodePayload, &dragged, sizeof(dragged));
                 ImGui::Text("%s %s", IconOfNode(node), node.GetName().CStr());
@@ -134,7 +171,7 @@ namespace BECore {
             ImGui::EndDragDropTarget();
         }
 
-        void DrawNode(HierarchyState& state, SceneNode& node, bool filterOn) {
+        void DrawNode(HierarchyState& state, SceneNode& node, bool filterOn, bool ancestorHidden) {
             const auto& children = node.GetChildren();
 
             ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap;
@@ -144,8 +181,9 @@ namespace BECore {
             if (state.selected == &node) {
                 flags |= ImGuiTreeNodeFlags_Selected;
             }
-            // A filter opens the path to its matches; an ancestor that is not a match is dimmed
-            const bool dimmed = filterOn && !HierarchyModel::NodeMatchesFilter(node, state.searchBuffer, state.componentType);
+            // A filter opens the path to its matches; an ancestor that is not a match and a hidden node (its own flag or an ancestor's) are dimmed
+            const bool hidden = ancestorHidden || node.HasEditorFlag(EditorFlags::Hidden);
+            const bool dimmed = hidden || (filterOn && !HierarchyModel::NodeMatchesFilter(node, state.searchBuffer, state.componentType));
             if (state.revealNode == &node || (filterOn && !children.empty())) {
                 ImGui::SetNextItemOpen(true);
             }
@@ -158,6 +196,8 @@ namespace BECore {
             if (dimmed) {
                 ImGui::PopStyleColor();
             }
+            const float rowRight = ImGui::GetItemRectMax().x;
+            const float rowTop = ImGui::GetItemRectMin().y;
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
                 state.selected = &node;
             }
@@ -167,12 +207,13 @@ namespace BECore {
                 HandleDragDrop(state, node, filterOn);
                 DrawContextMenu(state, node);
             }
+            DrawToggles(node, rowRight, rowTop);
 
             if (isOpen) {
                 // No copy of the child list: every change of the tree waits in state.pending until the walk is over
                 for (const auto& child : children) {
                     if (!filterOn || HierarchyModel::SubtreeMatchesFilter(*child, state.searchBuffer, state.componentType)) {
-                        DrawNode(state, *child.Get(), filterOn);
+                        DrawNode(state, *child.Get(), filterOn, hidden);
                     }
                 }
                 ImGui::TreePop();
@@ -228,7 +269,7 @@ namespace BECore {
             }
             if (ImGui::IsKeyPressed(ImGuiKey_F2, false)) {
                 HierarchyPanel::BeginRename(state, *state.selected);
-            } else if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
+            } else if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && !IsLocked(*state.selected)) {
                 state.pending = {HierarchyModel::OperationKind::Delete, state.selected, nullptr, 0};
             } else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_D)) {
                 state.pending = {HierarchyModel::OperationKind::Duplicate, state.selected, nullptr, 0};
@@ -271,6 +312,9 @@ namespace BECore {
     namespace HierarchyPanel {
 
         void BeginRename(HierarchyState& state, SceneNode& node) {
+            if (IsLocked(node)) {
+                return;
+            }
             state.renameTarget = &node;
             state.renameFocus = true;
             snprintf(state.renameBuffer, sizeof(state.renameBuffer), "%s", node.GetName().CStr());
@@ -297,16 +341,18 @@ namespace BECore {
             if (filterOn && !HierarchyModel::SubtreeMatchesFilter(scene.GetRootNode(), state.searchBuffer, state.componentType)) {
                 EmptyState(ICON_LC_SEARCH, "No node matches the filter");
             } else {
-                DrawNode(state, scene.GetRootNode(), filterOn);
+                DrawNode(state, scene.GetRootNode(), filterOn, false);
             }
             state.revealNode = nullptr;
             ApplyPending(scene, state);
 
             ImGui::Separator();
+            ImGui::BeginDisabled(IsLocked(scene.GetRootNode()));
             if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add Node", "Add a node at the root of the scene", -1.0f)) {
                 state.addNodeRequested = true;
                 state.addNodeParent = nullptr;
             }
+            ImGui::EndDisabled();
         }
 
     }  // namespace HierarchyPanel

@@ -34,6 +34,10 @@ namespace BECore {
     // IWidget interface
     // =========================================================================
 
+    SceneEditorWidget::~SceneEditorWidget() {
+        CoreManager::GetSceneManager().ClearEditorFlags();
+    }
+
     bool SceneEditorWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorCommandEvent, &SceneEditorWidget::OnCommand>(this);
         return true;
@@ -193,6 +197,13 @@ namespace BECore {
             _uiSelectionNode = _hierarchy.selected;
         }
 
+        // A locked node is read-only: the whole body below is disabled
+        const bool locked = _hierarchy.selected->HasEditorFlag(EditorFlags::Locked);
+        if (locked) {
+            ImGui::TextDisabled(ICON_LC_LOCK " Locked in the editor");
+        }
+        ImGui::BeginDisabled(locked);
+
         // Node name editor
         ImGui::TextUnformatted("Name:");
         ImGui::SameLine();
@@ -270,6 +281,7 @@ namespace BECore {
         if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add Component", "Add a component to the selected node", -1.0f)) {
             _showAddComponentPopup = true;
         }
+        ImGui::EndDisabled();
     }
 
     void SceneEditorWidget::RenderAddNodePopup() {

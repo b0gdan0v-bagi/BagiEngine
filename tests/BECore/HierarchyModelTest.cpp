@@ -327,6 +327,37 @@ namespace BECore::Tests {
         EXPECT_NE(Find(Root(), "Leaf"), nullptr);
     }
 
+    TEST_F(HierarchyModelTest, ALockedNodeIsNotDeletedOrMovedButMayBeDuplicated) {
+        Node("A").SetEditorFlags(EditorFlags::Locked);
+
+        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Delete, &Node("A"), nullptr, 0}).changed);
+        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Move, &Node("A"), &Node("Branch"), 0}).changed);
+        EXPECT_EQ(Root().GetChildren().size(), 3u);
+
+        const OperationResult copy = ApplyOperation(*_scene, {OperationKind::Duplicate, &Node("A"), nullptr, 0});
+        ASSERT_TRUE(copy.changed);
+        EXPECT_EQ(copy.created->GetEditorFlags(), EditorFlags::None);
+    }
+
+    TEST_F(HierarchyModelTest, NothingIsMovedIntoALockedParent) {
+        Node("Branch").SetEditorFlags(EditorFlags::Locked);
+
+        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Move, &Node("A"), &Node("Branch"), 0}).changed);
+        EXPECT_EQ(Node("A").GetParent(), &Root());
+        // The lock of a parent does not stop its children from being deleted: only the node's own lock counts
+        EXPECT_TRUE(ApplyOperation(*_scene, {OperationKind::Delete, &Node("B2"), nullptr, 0}).changed);
+    }
+
+    TEST_F(HierarchyModelTest, TheSceneManagerClearsTheEditorFlagsOfEveryScene) {
+        Node("A").SetEditorFlags(EditorFlags::Hidden);
+        Root().SetEditorFlags(EditorFlags::Locked);
+
+        _manager->ClearEditorFlags();
+
+        EXPECT_EQ(Node("A").GetEditorFlags(), EditorFlags::None);
+        EXPECT_EQ(Root().GetEditorFlags(), EditorFlags::None);
+    }
+
     TEST_F(HierarchyModelTest, ANodeOfAnotherSceneIsRefused) {
         auto other = New<SceneManager>();
         XmlDeserializer deserializer;

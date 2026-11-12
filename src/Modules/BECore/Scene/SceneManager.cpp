@@ -60,4 +60,12 @@ namespace BECore {
         return nullptr;
     }
 
+    void SceneManager::ClearEditorFlags() {
+        for (const auto& scene : _scenes) {
+            if (scene) {
+                scene->ClearEditorFlags();
+            }
+        }
+    }
+
 }  // namespace BECore

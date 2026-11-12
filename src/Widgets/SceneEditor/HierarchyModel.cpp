@@ -153,6 +153,12 @@ namespace BECore::HierarchyModel {
         if (node == nullptr || node->GetParent() == nullptr || !node->IsDescendantOf(scene.GetRootNode())) {
             return result;
         }
+        // A locked node is neither removed nor moved, and nothing is moved into a locked parent (a copy of it is allowed: the copy is unlocked)
+        const bool locked = node->HasEditorFlag(EditorFlags::Locked);
+        const bool parentLocked = operation.parent != nullptr && operation.parent->HasEditorFlag(EditorFlags::Locked);
+        if ((operation.kind == OperationKind::Delete && locked) || (operation.kind == OperationKind::Move && (locked || parentLocked))) {
+            return result;
+        }
         switch (operation.kind) {
             case OperationKind::Delete: {
                 SceneNode* const parent = node->GetParent();

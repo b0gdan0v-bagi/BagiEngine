@@ -42,7 +42,7 @@ namespace BECore {
         /// progress
         void Draw(Scene& scene, HierarchyState& state);
 
-        /// Starts renaming @p node: its row shows a text field with the current name
+        /// Starts renaming @p node: its row shows a text field with the current name. A locked node (EditorFlags::Locked) is not renamed
         void BeginRename(HierarchyState& state, SceneNode& node);
 
     }  // namespace HierarchyPanel

@@ -25,6 +25,9 @@ namespace BECore {
         /// Find a loaded scene by name, or nullptr if missing.
         Scene* GetSceneByName(PoolString name) const;
 
+        /// Scene::ClearEditorFlags() of every loaded scene, the inactive ones too. The scene editor calls it when it goes away
+        void ClearEditorFlags();
+
     private:
         /// Makes @p scene the active one and keeps Scene::IsActive() in step. @p scene may be null.
         void Activate(Scene* scene);

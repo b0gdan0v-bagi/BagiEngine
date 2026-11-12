@@ -46,6 +46,7 @@ namespace BECore::HierarchyModel {
     /**
      * @brief Applies @p operation to @p scene; a request that cannot be done (the root, a node of another scene, a refused move) changes nothing
      *
+     * A locked node (EditorFlags::Locked) is not deleted or moved, and nothing is moved into a locked parent; Duplicate of a locked node is done.
      * After a Delete the node is gone: the caller must note beforehand whether the selection lies in its subtree (IsSelfOrAncestorOf).
      */
     OperationResult ApplyOperation(Scene& scene, const Operation& operation);
