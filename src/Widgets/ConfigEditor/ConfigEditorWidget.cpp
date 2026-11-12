@@ -112,7 +112,7 @@ namespace BECore {
         ImGui::BeginChild("##config_editor", ImVec2(0.0f, 0.0f), true);
 
         if (_selectedConfig.Empty()) {
-            ImGui::TextDisabled("Select a config on the left to start editing.");
+            EmptyState(ICON_LC_FILE_TEXT, "Select a config on the left to start editing.");
             ImGui::EndChild();
             ImGui::End();
             return;
@@ -162,7 +162,7 @@ namespace BECore {
         // XML tree
         const XmlNode rootNode = configManager.GetConfig(_selectedConfig);
         if (!rootNode) {
-            ImGui::TextDisabled("(empty or failed to load)");
+            EmptyState(ICON_LC_CIRCLE_ALERT, "This config is empty or failed to load");
             ImGui::EndChild();
             ImGui::End();
             return;

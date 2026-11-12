@@ -11,6 +11,9 @@
 #include <Generated/ViewportWidget.gen.hpp>
 #include <SDL3/SDL.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/Icons/IconsLucide.h>
+#include <Widgets/ImGuiFonts.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -50,15 +53,31 @@ namespace BECore {
         constexpr float kSameRectTolerance = 0.5f;
         // The viewport pass runs at density 1: a window unit is an output pixel, what UISettings::minTouchSize is measured in
         constexpr float kViewportPixelDensity = 1.0f;
-        constexpr const char* kOverlaysButton = "Overlays";
         constexpr const char* kOverlaysPopup = "##ViewportOverlays";
 
-        // In the order of the enums (ViewportAspect, SafeAreaSimulation)
-        constexpr const char* kAspectLabels[] = {"Free", "16:9", "4:3", "21:9", "9:16"};
-        constexpr const char* kSafeAreaLabels[] = {"No safe area", "Notch", "Side insets", "Device"};
+        // In the order of the enums (ViewportAspect, SafeAreaSimulation). The icon names the control (the shape of the image, the
+        // safe area), so a combo that shows the current value tells what it is; the labels are literals, nothing is built per frame
+        constexpr const char* kAspectLabels[] = {ICON_LC_MAXIMIZE " Free", ICON_LC_PROPORTIONS " 16:9", ICON_LC_PROPORTIONS " 4:3", ICON_LC_PROPORTIONS " 21:9", ICON_LC_PROPORTIONS " 9:16"};
+        constexpr const char* kSafeAreaLabels[] = {ICON_LC_SHIELD_CHECK " No safe area", ICON_LC_SHIELD_CHECK " Notch", ICON_LC_SHIELD_CHECK " Side insets", ICON_LC_SHIELD_CHECK " Device"};
         static_assert(std::size(kAspectLabels) == EnumUtils<ViewportAspect>::Count());
         static_assert(std::size(kSafeAreaLabels) == EnumUtils<SafeAreaSimulation>::Count());
-        constexpr const char* kCustomLabel = "Custom...";
+        constexpr const char* kCustomLabel = ICON_LC_RULER " Custom...";
+        constexpr const char* kViewAutoLabel = ICON_LC_EYE " Auto";
+        constexpr const char* kViewDefaultLabel = ICON_LC_EYE " Default";
+        // A device at least this wide (logical points, portrait) is shown with the tablet icon
+        constexpr uint32_t kTabletMinWidth = 600;
+        constexpr const char* kSizeTooltip = "The shape of the image: free (fills the panel), an aspect ratio, a device or a custom size";
+        constexpr const char* kRotateTooltip = "Swap the width and the height of a device or custom size, turn the ratio of an aspect (not for Free)";
+        constexpr const char* kSafeAreaTooltip = "Simulate a safe area for the canvases: a notch, side insets or the cut-out of the chosen device";
+        constexpr const char* kOverlaysTooltip = "What is drawn over the image: the safe area, the bounds of the view and the canvases, the touch targets, the regions";
+        constexpr const char* kViewTooltip = "Force a view variant of the scene; Auto picks it by the size of the image";
+        constexpr const char* kWidthTooltip = "The width of the image in pixels";
+        constexpr const char* kHeightTooltip = "The height of the image in pixels";
+
+        // The icon and the name of a device in the size combo
+        eastl::string DeviceLabel(const PreviewDevice& device) {
+            return Format("{} {} ({}x{})", device.width >= kTabletMinWidth ? ICON_LC_TABLET : ICON_LC_SMARTPHONE, device.name, device.width, device.height);
+        }
 
         // The device of a shape for the Device safe area; none for a custom or an aspect shape and for an index this build lacks
         const PreviewDevice* DeviceOf(const PreviewShape& shape) {
@@ -75,7 +94,7 @@ namespace BECore {
                 return kCustomLabel;
             }
             if (const PreviewDevice* device = DeviceOf(shape)) {
-                return Format("{} ({}x{})", device->name, device->width, device->height);
+                return DeviceLabel(*device);
             }
             return kAspectLabels[static_cast<size_t>(shape.aspect)];
         }
@@ -240,7 +259,7 @@ namespace BECore {
         };
 
         ImGui::SetNextItemWidth(kSizeComboWidth);
-        if (ImGui::BeginCombo("##ViewportSize", SizeLabel(_shape).c_str())) {
+        if (ImGui::BeginCombo("##ViewportSize", SizePreview())) {
             for (size_t i = 0; i < std::size(kAspectLabels); ++i) {
                 const bool selected = !_shape.custom && !onDevice && static_cast<size_t>(_shape.aspect) == i;
                 if (ImGui::Selectable(kAspectLabels[i], selected)) {
@@ -254,7 +273,7 @@ namespace BECore {
             for (size_t i = 0; i < devices.size(); ++i) {
                 const bool selected = !_shape.custom && _shape.device == static_cast<int32_t>(i);
                 const PreviewDevice& device = devices[i];
-                if (ImGui::Selectable(Format("{} ({}x{})", device.name, device.width, device.height).c_str(), selected)) {
+                if (ImGui::Selectable(DeviceLabel(device).c_str(), selected)) {
                     _shape.device = static_cast<int32_t>(i);
                     _shape.custom = false;
                     _safeAreaSimulation = SafeAreaSimulation::Device;
@@ -267,6 +286,16 @@ namespace BECore {
             }
             ImGui::EndCombo();
         }
+        ItemTooltip(kSizeTooltip);
+    }
+
+    const char* ViewportWidget::SizePreview() {
+        if (!_sizePreviewValid || !(_sizePreviewShape == _shape)) {
+            _sizePreview = SizeLabel(_shape);
+            _sizePreviewShape = _shape;
+            _sizePreviewValid = true;
+        }
+        return _sizePreview.c_str();
     }
 
     void ViewportWidget::DrawPreviewToolbar() {
@@ -275,7 +304,8 @@ namespace BECore {
         _editingSize = false;
         if (_shape.custom) {
             // The sides are clamped to the range once the field is left, not while typing ("1" on the way to "1000" is not 64)
-            const auto sizeField = [this](const char* label, uint32_t& side) {
+            const auto sizeField = [this](const char* label, const char* tooltip, uint32_t& side) {
+                const ScopedMonoFont mono;
                 int value = static_cast<int>(side);
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth(kSizeFieldWidth);
@@ -286,14 +316,16 @@ namespace BECore {
                     side = std::clamp(side, kMinPreviewSide, kMaxPreviewSide);
                 }
                 _editingSize = _editingSize || ImGui::IsItemActive();
+                ItemTooltip(tooltip);
             };
-            sizeField("W", _shape.customWidth);
-            sizeField("H", _shape.customHeight);
+            sizeField("W", kWidthTooltip, _shape.customWidth);
+            sizeField("H", kHeightTooltip, _shape.customHeight);
         }
 
         ImGui::SameLine();
         ImGui::BeginDisabled(IsFree(_shape));
-        ImGui::Checkbox("Rotate", &_shape.rotated);
+        ImGui::Checkbox(ICON_LC_ROTATE_CW " Rotate", &_shape.rotated);
+        ItemTooltip(kRotateTooltip);
         ImGui::EndDisabled();
 
         ImGui::SameLine();
@@ -302,6 +334,7 @@ namespace BECore {
         if (ImGui::Combo("##ViewportSafeArea", &safeArea, kSafeAreaLabels, static_cast<int>(std::size(kSafeAreaLabels)))) {
             _safeAreaSimulation = static_cast<SafeAreaSimulation>(safeArea);
         }
+        ItemTooltip(kSafeAreaTooltip);
 
         ImGui::SameLine();
         DrawOverlaysPopup();
@@ -335,38 +368,51 @@ namespace BECore {
         }
         ValidateForcedView(&scene);
 
-        const auto variantLabel = [&variants](size_t index) {
-            const SceneViewVariant& variant = variants[index];
-            return variant.name.Empty() ? Format("#{}", index) : eastl::string(variant.name.ToStringView());
-        };
-
         int current = kViewComboAuto;
         if (_forcedView) {
             current = *_forcedView < 0 ? kViewComboDefault : kViewComboFirstVariant + *_forcedView;
         }
-        const eastl::string currentLabel = current == kViewComboAuto      ? eastl::string("Auto")
-                                           : current == kViewComboDefault ? eastl::string("Default")
-                                                                          : variantLabel(static_cast<size_t>(*_forcedView));
+        // The text of a variant: its name, or its number when it has none
+        const auto variantText = [&variants](size_t index) {
+            const SceneViewVariant& variant = variants[index];
+            return variant.name.Empty() ? Format("{} #{}", ICON_LC_EYE, index) : Format("{} {}", ICON_LC_EYE, variant.name.ToStringView());
+        };
+
+        // The text of the combo is made again only when the forced variant or its name changes
+        const char* preview = kViewAutoLabel;
+        if (current == kViewComboDefault) {
+            preview = kViewDefaultLabel;
+        } else if (current >= kViewComboFirstVariant) {
+            const size_t index = static_cast<size_t>(*_forcedView);
+            const PoolString name = variants[index].name;
+            if (_viewPreviewRow != current || _viewPreviewName != name) {
+                _viewPreview = variantText(index);
+                _viewPreviewRow = current;
+                _viewPreviewName = name;
+            }
+            preview = _viewPreview.c_str();
+        }
 
         ImGui::SameLine();
         ImGui::SetNextItemWidth(kViewComboWidth);
-        if (ImGui::BeginCombo("##ViewportView", currentLabel.c_str())) {
-            if (ImGui::Selectable("Auto", current == kViewComboAuto)) {
+        if (ImGui::BeginCombo("##ViewportView", preview)) {
+            if (ImGui::Selectable(kViewAutoLabel, current == kViewComboAuto)) {
                 _forcedView = std::nullopt;
             }
-            if (ImGui::Selectable("Default", current == kViewComboDefault)) {
+            if (ImGui::Selectable(kViewDefaultLabel, current == kViewComboDefault)) {
                 _forcedView = -1;
                 _forcedViewScene = scene.GetName();
             }
             for (size_t i = 0; i < variants.size(); ++i) {
                 const int row = kViewComboFirstVariant + static_cast<int>(i);
-                if (ImGui::Selectable(variantLabel(i).c_str(), current == row)) {
+                if (ImGui::Selectable(variantText(i).c_str(), current == row)) {
                     _forcedView = static_cast<int32_t>(i);
                     _forcedViewScene = scene.GetName();
                 }
             }
             ImGui::EndCombo();
         }
+        ItemTooltip(kViewTooltip);
     }
 
     void ViewportWidget::DrawGrid(float minX, float minY, float maxX, float maxY, float zoom) const {
@@ -390,7 +436,7 @@ namespace BECore {
     }
 
     void ViewportWidget::DrawOverlaysPopup() {
-        if (ImGui::Button(kOverlaysButton)) {
+        if (IconTextButton(ICON_LC_LAYERS, "Overlays", kOverlaysTooltip)) {
             ImGui::OpenPopup(kOverlaysPopup);
         }
         if (ImGui::BeginPopup(kOverlaysPopup)) {

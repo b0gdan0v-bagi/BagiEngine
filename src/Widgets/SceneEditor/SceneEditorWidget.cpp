@@ -64,7 +64,7 @@ namespace BECore {
         }
 
         if (!scene) {
-            ImGui::TextDisabled("No active scene");
+            EmptyState(ICON_LC_LAYERS, "No active scene");
             ImGui::End();
             return;
         }
@@ -215,7 +215,7 @@ namespace BECore {
                     changed = InspectUIRect(canvas, *_selectedUIElement, _inexactUIElement);
                 }
             } else {
-                ImGui::TextDisabled("Select an element");
+                EmptyState(ICON_LC_MOUSE_POINTER_CLICK, "Select an element");
             }
             ImGui::TreePop();
         }
@@ -224,7 +224,7 @@ namespace BECore {
 
     void SceneEditorWidget::RenderInspector() {
         if (!_selectedNode) {
-            ImGui::TextDisabled("Select a node to inspect");
+            EmptyState(ICON_LC_MOUSE_POINTER_CLICK, "Select a node to inspect");
             return;
         }
 

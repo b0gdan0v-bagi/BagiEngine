@@ -56,6 +56,9 @@ namespace BECore {
         // The size combo: Free, the aspect presets, the devices, Custom...; keeps the safe-area choice consistent with the size
         void DrawSizeCombo();
 
+        // The text the size combo shows (the icon and the label of _shape), made again only when the shape changes
+        const char* SizePreview();
+
         // The view combo of the active scene (nothing for a scene without variants); keeps the choice as an index
         void DrawViewCombo(const Scene& scene);
 
@@ -89,6 +92,12 @@ namespace BECore {
         std::optional<int32_t> _forcedView;  // the index of the forced view variant, -1 the default, nullopt Auto
         PoolString _forcedViewScene;         // the scene the choice was made for
         bool _editingSize = false;           // a custom W / H field is being typed in: the shape is applied live, the editor is told when the field is left
+        eastl::string _sizePreview;
+        PreviewShape _sizePreviewShape;  // the shape _sizePreview was made for
+        bool _sizePreviewValid = false;
+        eastl::string _viewPreview;  // the view combo's text of a forced variant
+        int _viewPreviewRow = -1;    // the row and the name _viewPreview was made for
+        PoolString _viewPreviewName;
         bool _gridEnabled = false;
         int32_t _gridStep = 0;
         bool _pressedInViewport[3] = {false, false, false};  // left, right, middle: pressed over the image and not yet released

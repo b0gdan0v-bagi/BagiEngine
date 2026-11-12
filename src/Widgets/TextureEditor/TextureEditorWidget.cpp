@@ -112,7 +112,7 @@ namespace BECore {
         const auto& entries = lib.GetAll();
 
         if (_selectedIndex < 0 || _selectedIndex >= static_cast<int>(entries.size())) {
-            ImGui::TextDisabled("Select a sprite from the list");
+            EmptyState(ICON_LC_IMAGE, "Select a sprite from the list");
             return;
         }
 
