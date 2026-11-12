@@ -1119,3 +1119,20 @@ def test_remarks_store_a_plan_reopen_the_work_and_queue_it_on_the_worker_that_ho
     assert json.loads(capsys.readouterr().out) == {"w1": [], "w2": ["g-x"]}
     entries["g-y"] = {**review("g-y", "mahjong", "todo/g-y"), "status": "in progress"}
     assert worker.main(["remarks", "g-y", "--file", str(remarks), "--claude", str(script)]) == 1  # not in review
+
+
+def test_merge_refuses_an_entry_whose_blocker_is_not_closed(game: Path, store, capsys):
+    entries, _calls = store
+    branch_with(game, "todo/g-pair", "main", "pair.txt", "x\n")
+    entries["g-pair"] = {**review("g-pair", "mahjong", "todo/g-pair"), "blockedBy": [{"id": "e-first", "status": "review"}]}
+    capsys.readouterr()
+    assert worker.main(["merge", "g-pair", "--dry-run", "--json"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["first"] == ["e-first"] and plan["problems"] == ["merge e-first first: g-pair waits for it"]
+    assert worker.main(["merge", "g-pair", "--json"]) == 1
+    assert "todo/g-pair" in run("branch", "--list", "todo/g-pair", cwd=game)
+    entries["g-pair"]["blockedBy"][0]["status"] = "closed"
+    capsys.readouterr()
+    assert worker.main(["merge", "g-pair", "--dry-run", "--json"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["first"] == [] and plan["problems"] == []

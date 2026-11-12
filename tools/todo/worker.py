@@ -681,6 +681,10 @@ def merge_plan(layout: Layout, entry_id: str) -> dict:
     base_elsewhere = worktree_of(repo, base)
     if base_elsewhere is not None and base_elsewhere.resolve() != repo:
         problems.append(f"{base} is checked out in {base_elsewhere}, not in {repo}")
+    # a stacked or paired entry waits for its blocker's merge: merging it first brings the blocker's work in unreviewed
+    first = [b["id"] for b in entry.get("blockedBy") or [] if isinstance(b, dict) and b.get("status") != "closed"]
+    if first:
+        problems.append(f"merge {', '.join(first)} first: {entry_id} waits for {'it' if len(first) == 1 else 'them'}")
     return {
         "id": entry_id,
         "area": entry.get("area"),
@@ -697,6 +701,7 @@ def merge_plan(layout: Layout, entry_id: str) -> dict:
         "moved": git("merge-base", base, branch, cwd=repo) != git("rev-parse", base, cwd=repo),
         "reopen": SLICE_REOPEN in (entry.get("statusNote") or ""),
         "blocks": [b["id"] for b in entry.get("blocks") or [] if isinstance(b, dict) and b.get("status") != "closed"],
+        "first": first,
         "pointer": layout.shared is not None and repo == layout.shared.resolve(),
         "heldBy": str(held) if held is not None and held.resolve() != repo else None,
         "problems": problems,
