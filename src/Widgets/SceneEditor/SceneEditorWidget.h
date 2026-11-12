@@ -59,8 +59,9 @@ namespace BECore {
         /// Answers SelectSceneNodeRequestEvent: selects and reveals the node when it is alive in the active scene, else does nothing
         void OnSelectRequest(const SelectSceneNodeRequestEvent& event);
 
-        /// Answers a left click of the viewport in the Edit input mode: picks the topmost node or canvas element under it (ScenePick) and reveals it like a request does. A hit on a canvas
-        /// element also selects that element in the "UI elements" section; a click on nothing changes nothing
+        /// Answers a left click of the viewport in the Edit input mode: picks the topmost node or canvas element under it (ScenePick) and applies it with ApplyClick (Ctrl toggles, Shift
+        /// adds, a plain click replaces the selection; a plain click on nothing clears it, with Ctrl or Shift a click on nothing changes nothing). The primary node is revealed like a
+        /// request does, only if it stays selected. A hit on a canvas element also selects that element in the "UI elements" section
         void OnViewportClick(const ViewportEditClickEvent& event);
 
         /// Answers the end of a rubber-band drag: the nodes the box touches (ScenePick::PickInRect) replace the selection, or are added to it with Ctrl or Shift

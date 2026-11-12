@@ -193,8 +193,9 @@ namespace BECore::Gizmo {
             factorX = std::max(factorX, MinFactor(start));
             factorY = factorX;
         }
-        const float width = std::max(kMinItemSize, start.width * factorX);
-        const float height = std::max(kMinItemSize, start.height * factorY);
+        // An axis the handle does not move keeps its size, even a size under the minimum; with the aspect kept both move
+        const float width = sideX != 0.0f || keepAspect ? std::max(kMinItemSize, start.width * factorX) : start.width;
+        const float height = sideY != 0.0f || keepAspect ? std::max(kMinItemSize, start.height * factorY) : start.height;
         if (width == start.width && height == start.height) {
             return;
         }

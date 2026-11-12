@@ -318,6 +318,13 @@ namespace BECore::Tests {
         ExpectVec({100.0f, 0.0f}, WorldPointOf(edge[0], 1.0f, 0.0f));
     }
 
+    TEST(GizmoDragTest, ScaleAnEdgeLeavesTheUnmovedAxisAloneEvenUnderTheMinimum) {
+        const float thin = kMinItemSize * 0.5f;
+        const auto result = DragOne(Tool::Scale, Handle::Edge3, MakeItem(0.0f, 0.0f, 100.0f, thin), {0.0f, thin * 0.5f}, {-50.0f, thin * 0.5f});
+        EXPECT_NEAR(result[0].width, 150.0f, kTolerance);
+        EXPECT_FLOAT_EQ(result[0].height, thin);
+    }
+
     TEST(GizmoDragTest, ScaleKeepAspectMakesTheChangeUniform) {
         const Item item = kFlat;
         // The corner moves 20 right and not at all down: the wider change decides, 120 x 60

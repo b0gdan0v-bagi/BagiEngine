@@ -31,6 +31,8 @@ namespace BECore {
         constexpr ImU32 kRingColor = IM_COL32(90, 170, 255, 255);
         constexpr ImU32 kScaleColor = IM_COL32(255, 255, 255, 255);
         constexpr ImU32 kScaleBoxColor = IM_COL32(255, 255, 255, 160);
+        constexpr float kScaleBoxThickness = 1.0f;
+        constexpr ImU32 kHandleOutlineColor = IM_COL32(0, 0, 0, 200);
         constexpr ImU32 kHighlightColor = IM_COL32(255, 220, 70, 255);
         constexpr float kRubberBandFillAlpha = 0.18f;
         constexpr float kRubberBandThickness = 1.0f;
@@ -235,7 +237,9 @@ namespace BECore {
     }
 
     bool GizmoEditSession::CanContinue(Scene* activeScene) const {
-        return activeScene != nullptr && activeScene == _scene && AllAlive(*activeScene, {_nodes.data(), _nodes.size()});
+        // A node that lost its TransformComponent has nothing to write to, so the drag ends as it does for a dead node
+        return activeScene != nullptr && activeScene == _scene && AllAlive(*activeScene, {_nodes.data(), _nodes.size()}) &&
+               eastl::all_of(_nodes.begin(), _nodes.end(), [](const SceneNode* node) { return node->GetComponent<TransformComponent>() != nullptr; });
     }
 
     void GizmoEditSession::Update(Scene& scene, Vec2 point, bool snapModifier, bool keepAspect) {
@@ -246,12 +250,15 @@ namespace BECore {
         bool changed = false;
         for (size_t i = 0; i < _edits.size() && i < result.size(); ++i) {
             if (!(_edits[i].after == result[i])) {
-                _edits[i].after = result[i];
                 changed = true;
+                break;
             }
         }
-        if (changed) {
-            WriteItems(scene, {_nodes.data(), _nodes.size()}, result);
+        // Nothing is recorded or told when the write fails, so a Commit never carries values the nodes did not get
+        if (changed && WriteItems(scene, {_nodes.data(), _nodes.size()}, result)) {
+            for (size_t i = 0; i < _edits.size() && i < result.size(); ++i) {
+                _edits[i].after = result[i];
+            }
             Emit(NodeTransformEditPhase::Change);
         }
     }
@@ -442,11 +449,11 @@ namespace BECore {
                 break;
             }
             case Gizmo::Tool::Scale: {
-                ImVec2 box[4];
+                ImVec2 box[Gizmo::Quad{}.size()];
                 for (size_t corner = 0; corner < std::size(box); ++corner) {
                     box[corner] = toScreen(gizmoFrame.box[corner]);
                 }
-                drawList->AddPolyline(box, static_cast<int>(std::size(box)), kScaleBoxColor, ImDrawFlags_Closed, 1.0f);
+                drawList->AddPolyline(box, static_cast<int>(std::size(box)), kScaleBoxColor, ImDrawFlags_Closed, kScaleBoxThickness);
                 const size_t lastHandle = gizmoFrame.isGroup ? static_cast<size_t>(Gizmo::Handle::Corner3) : static_cast<size_t>(Gizmo::Handle::Edge3);
                 for (size_t index = static_cast<size_t>(Gizmo::Handle::Corner0); index <= lastHandle; ++index) {
                     const auto handle = static_cast<Gizmo::Handle>(index);
@@ -454,7 +461,7 @@ namespace BECore {
                     const ImVec2 low{position.x - kHandleDrawHalfSize, position.y - kHandleDrawHalfSize};
                     const ImVec2 high{position.x + kHandleDrawHalfSize, position.y + kHandleDrawHalfSize};
                     drawList->AddRectFilled(low, high, colorOf(handle, kScaleColor));
-                    drawList->AddRect(low, high, IM_COL32(0, 0, 0, 200));
+                    drawList->AddRect(low, high, kHandleOutlineColor);
                 }
                 break;
             }

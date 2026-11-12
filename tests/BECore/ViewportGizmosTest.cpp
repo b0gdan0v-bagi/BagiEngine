@@ -367,6 +367,26 @@ namespace BECore::Tests {
         EXPECT_EQ(cancel.edits[0].node, &Node("Main", "A"));
     }
 
+    TEST_F(ViewportGizmosTest, ANodeThatLostItsTransformEndsTheDragAndNothingFalseIsTold) {
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A", "B"}));
+        session.Update(GetScene("Main"), {10.0f, 0.0f}, false, false);
+        const size_t told = _recorder.entries.size();
+        EXPECT_TRUE(session.CanContinue(&GetScene("Main")));
+
+        Node("Main", "B").RemoveComponent(PoolString::Intern("TransformComponent"));
+        EXPECT_FALSE(session.CanContinue(&GetScene("Main")));
+
+        // Were the drag to go on, the write fails as a whole: no Change is told and the recorded result stays the last written one
+        session.Update(GetScene("Main"), {30.0f, 0.0f}, false, false);
+        EXPECT_EQ(_recorder.entries.size(), told);
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 20.0f);
+
+        session.Abort(&GetScene("Main"));
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 10.0f);
+        EXPECT_EQ(_recorder.entries.back().phase, NodeTransformEditPhase::Cancel);
+    }
+
     TEST_F(ViewportGizmosTest, AbortInAnotherSceneWritesAndTellsNothing) {
         GizmoEditSession session;
         ASSERT_TRUE(BeginMove(session, {"A"}));
