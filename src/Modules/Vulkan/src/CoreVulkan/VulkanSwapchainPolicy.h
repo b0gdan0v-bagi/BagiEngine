@@ -10,8 +10,8 @@
 
 /**
  * The decisions around a swapchain as pure functions: what a Vulkan result means, when the swapchain has to be
- * rebuilt, which extent and surface format to ask for, how ImGui's colours meet the swapchain. Header only and free of any Vulkan call, so a test checks
- * them without a device (`tests/BECore/VulkanSwapchainPolicyTest.cpp`).
+ * rebuilt, which extent and surface format to ask for, how ImGui's colours meet the swapchain. Header only and free of any Vulkan call, so a test
+ * checks them without a device (`tests/BECore/VulkanSwapchainPolicyTest.cpp`).
  */
 namespace BECore::VulkanSwapchainPolicy {
 
