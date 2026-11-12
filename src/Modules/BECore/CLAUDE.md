@@ -67,6 +67,8 @@ With the manual clock (`--manual-clock`, `Control/CLAUDE.md`) `Application::RunF
 
 `Time::Advance(seconds)` takes the frame time as a number, so a test drives a component with a fake clock at any frame rate: `CoreManager::GetTime().Advance(1.0 / 32)` (a power of two keeps the sums exact; `Animation/CLAUDE.md`), then `SceneManager::UpdateAll()`. Reset the clock in `TearDown` (`Time::Reset()`, and `SetFixedDeltaTime` back if the test changed it). Example: `tests/BECore/TimeTest.cpp`.
 
+**Pause** (`CoreManager::GetPause()`, `Time/GamePause.h`): the one object that stops the game; the editor, the control API and the manual clock all drive it, none keeps a pause of its own. `BeginFrame()` decides every frame once, before anything else: `Running` (not paused), `Stepped` (paused and a step is pending: it uses one step up and advances the game by that step's seconds) or `Held` (paused, nothing pending). Resuming drops pending steps, pausing keeps them. A held frame is not a game frame: `Time::Hold()` leaves total time and frame count as they are, reads delta and fixed steps as 0 and moves the wall-clock mark of `Tick()` to now, so the first frame after the pause measures one frame and not the time spent paused. Window, input polling and drawing still run in a held frame (ImGui and the control API need them); game time, tasks, tweens and the scene update do not.
+
 The GoogleTest executable (`tests/`) brings up the same services through `OnTestEnvironmentInit(PassKey<Tests::EngineEnvironment>)`. That path skips `TestManager` and disables `DebugBreakHandler`, so a failed assert is reported by gtest instead of trapping the process. See `.claude/rules/tests-module.md`.
 
 ## Subsystem guides

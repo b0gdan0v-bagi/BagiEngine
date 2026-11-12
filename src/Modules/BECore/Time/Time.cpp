@@ -3,13 +3,29 @@
 namespace BECore {
 
     void Time::Tick(PassKey<Application>) {
-        const Clock::time_point now = Clock::now();
+        TickAt(Clock::now());
+    }
+
+    void Time::TickAt(Clock::time_point now) {
         const double elapsed = _lastTick ? std::chrono::duration<double>(now - *_lastTick).count() : 0.0;
         _lastTick = now;
-        Advance(elapsed);
+        AdvanceBy(elapsed);
     }
 
     void Time::Advance(double seconds) {
+        if (_lastTick) {
+            _lastTick = Clock::now();
+        }
+        AdvanceBy(seconds);
+    }
+
+    void Time::Hold(Clock::time_point now) {
+        _lastTick = now;
+        _deltaTime = 0.0f;
+        _fixedStepCount = 0;
+    }
+
+    void Time::AdvanceBy(double seconds) {
         const double frameTime = std::clamp(seconds, 0.0, kMaxFrameTime);
 
         _deltaTime = static_cast<float>(frameTime);
