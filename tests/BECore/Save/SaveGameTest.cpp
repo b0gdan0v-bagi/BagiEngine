@@ -2,6 +2,7 @@
 
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Reflection/ReaderLimits.h>
 #include <BECore/Save/SaveGame.h>
 #include <Common/Printers.h>
 #include <Common/TempPath.h>
@@ -303,6 +304,28 @@ namespace BECore::Tests {
             ExpectFailure(Service().Load("bad", kSchema, state), SaveErrorKind::Corrupt);
             ExpectUntouched(state);
         }
+    }
+
+    TEST_F(SaveGameTest, AFileOverTheSizeLimitIsNotReadAndNotWritten) {
+        // A sparse file of the size of the limit plus one: the size is checked before a byte is allocated
+        ASSERT_TRUE(Service().WriteSlot("big", ValidBytes()).has_value());
+        const std::filesystem::path file = _saves / "big.save";
+        std::error_code ec;
+        std::filesystem::resize_file(file, ReaderLimits::kMaxBinaryStreamBytes + 1, ec);
+        ASSERT_FALSE(ec) << ec.message();
+
+        GameState state = MakeUntouchedState();
+        ExpectFailure(Service().ReadSlot("big"), SaveErrorKind::ReadFailed);
+        ExpectFailure(Service().Load("big", kSchema, state), SaveErrorKind::ReadFailed);
+        ExpectFailure(Service().Peek("big"), SaveErrorKind::ReadFailed);
+        ExpectUntouched(state);
+
+        // The same size on the way out: the old save stays
+        ASSERT_TRUE(Service().WriteSlot("kept", ValidBytes()).has_value());
+        ExpectFailure(Service().WriteSlot("kept", eastl::vector<uint8_t>(ReaderLimits::kMaxBinaryStreamBytes + 1)), SaveErrorKind::WriteFailed);
+        GameState loaded;
+        EXPECT_TRUE(Service().Load("kept", kSchema, loaded).has_value());
+        EXPECT_FALSE(std::filesystem::exists(_saves / "kept.save.tmp"));
     }
 
     TEST_F(SaveGameTest, MissingSlotIsNotFound) {

@@ -39,6 +39,9 @@ namespace BECore {
 
         /**
          * @brief Load and validate a buffer written by BinarySerializer (the bytes are copied)
+         *
+         * Refused when it is over ReaderLimits::kMaxBinaryStreamBytes or holds an array of more than ReaderLimits::kMaxArrayElements.
+         *
          * @return true if the buffer is valid. On failure an error is recorded and every later read fails.
          */
         bool LoadFromBuffer(const uint8_t* data, size_t size);
@@ -46,6 +49,9 @@ namespace BECore {
 
         /**
          * @brief Load a file written by BinarySerializer::SaveToFile
+         *
+         * Refused with an error, before the file is read, when the path is not a regular file or the file is over the limit of LoadFromBuffer.
+         *
          * @return true on success
          */
         bool LoadFromFile(const std::filesystem::path& path);

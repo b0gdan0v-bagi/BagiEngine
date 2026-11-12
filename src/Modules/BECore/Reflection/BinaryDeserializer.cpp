@@ -14,6 +14,9 @@ namespace BECore {
             }
 
             const size_t count = BinaryFormat::Load<uint32_t>(data + countOffset);
+            if (count > ReaderLimits::kMaxArrayElements) {
+                return false;
+            }
             size_t position = countOffset + sizeof(uint32_t);
             for (size_t i = 0; i < count; ++i) {
                 if (entry.end - position < sizeof(uint32_t)) {
@@ -68,6 +71,7 @@ namespace BECore {
         _buffer.clear();
         _scopeStack.clear();
         _arrayStack.clear();
+        ClearPathSegments();
     }
 
     bool BinaryDeserializer::LoadFromBuffer(const uint8_t* data, size_t size) {
@@ -75,6 +79,10 @@ namespace BECore {
 
         if (data == nullptr || size < BinaryFormat::HeaderSize) {
             AddError("", "Binary data is too small to hold a header", 0);
+            return false;
+        }
+        if (size > ReaderLimits::kMaxBinaryStreamBytes) {
+            AddError("", "Binary data is larger than the limit", 0);
             return false;
         }
         if (std::memcmp(data, BinaryFormat::Magic, sizeof(BinaryFormat::Magic)) != 0) {
@@ -90,7 +98,7 @@ namespace BECore {
             return false;
         }
         if (!ValidateScope(data, BinaryFormat::HeaderSize, size, 0)) {
-            AddError("", "Binary data is corrupt", 0);
+            AddError("", "Binary data is corrupt (or an array has more elements than the limit)", 0);
             return false;
         }
 
@@ -108,20 +116,29 @@ namespace BECore {
     }
 
     bool BinaryDeserializer::LoadFromFile(const std::filesystem::path& path) {
-        std::ifstream file(path, std::ios::binary | std::ios::ate);
+        ResetState();
+
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(path, error)) {
+            // A folder, a pipe or a device has no size to read (tellg() of it is -1)
+            AddError("", std::filesystem::exists(path, error) ? "Binary path is not a regular file" : "Failed to open binary file", 0);
+            return false;
+        }
+        const uintmax_t fileSize = std::filesystem::file_size(path, error);
+        if (error || fileSize > ReaderLimits::kMaxBinaryStreamBytes) {
+            AddError("", error ? "Failed to read the size of the binary file" : "Binary file is larger than the limit", 0);
+            return false;
+        }
+
+        std::ifstream file(path, std::ios::binary);
         if (!file) {
-            ResetState();
             AddError("", "Failed to open binary file", 0);
             return false;
         }
 
-        const std::streamsize fileSize = file.tellg();
-        file.seekg(0, std::ios::beg);
-
         eastl::vector<uint8_t> bytes;
         bytes.resize(static_cast<size_t>(fileSize));
-        if (!file.read(reinterpret_cast<char*>(bytes.data()), fileSize)) {
-            ResetState();
+        if (!file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(fileSize))) {
             AddError("", "Failed to read binary file", 0);
             return false;
         }
@@ -129,11 +146,7 @@ namespace BECore {
     }
 
     void BinaryDeserializer::AddError(eastl::string_view path, eastl::string_view message, int32_t line) {
-        DeserializeError error;
-        error.path = PoolString::Intern(path);
-        error.errorMessage = PoolString::Intern(message);
-        error.line = line;
-        _errors.push_back(error);
+        StoreError(_errors, path, message, line);
     }
 
     // =============================================================================

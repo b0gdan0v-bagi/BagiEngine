@@ -121,6 +121,11 @@ namespace BECore {
             return InvalidSlotNameError(slot);
         }
 
+        if (bytes.size() > ReaderLimits::kMaxBinaryStreamBytes) {
+            // A save the reader would refuse is no save: say so now and keep the old one
+            return MakeError(SaveErrorKind::WriteFailed, Format("The save for slot '{}' is {} bytes, over the limit of {}", slot, bytes.size(), ReaderLimits::kMaxBinaryStreamBytes));
+        }
+
         const std::filesystem::path target = MakePath(slot, kSaveExtension);
         const std::filesystem::path temp = MakePath(slot, Format("{}{}", kSaveExtension, kSaveTempExtension));
 
@@ -170,6 +175,9 @@ namespace BECore {
         const uintmax_t size = std::filesystem::file_size(path, ec);
         if (ec) {
             return MakeError(SaveErrorKind::ReadFailed, Format("Cannot get the size of '{}': {}", path.string(), ec.message()));
+        }
+        if (size > ReaderLimits::kMaxBinaryStreamBytes) {
+            return MakeError(SaveErrorKind::ReadFailed, Format("'{}' is larger than the limit of {} bytes for a save", path.string(), ReaderLimits::kMaxBinaryStreamBytes));
         }
 
         std::ifstream file(path, std::ios::binary);

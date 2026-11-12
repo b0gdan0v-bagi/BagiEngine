@@ -34,12 +34,17 @@ namespace BECore::Fuzz {
             };
         }
 
+        /// The `<node ref>` elements the expansion looks at: those of every `nodes` of every `scene` of every `scenes` of the root
         size_t CountReferences(pugi::xml_node root) {
             size_t count = 0;
-            for (const pugi::xml_node scene : root.child("scenes").children("scene")) {
-                for (const pugi::xml_node node : scene.child("nodes").children("node")) {
-                    if (node.attribute(kNodeRefAttribute.data())) {
-                        ++count;
+            for (const pugi::xml_node scenes : root.children("scenes")) {
+                for (const pugi::xml_node scene : scenes.children("scene")) {
+                    for (const pugi::xml_node nodes : scene.children("nodes")) {
+                        for (const pugi::xml_node node : nodes.children("node")) {
+                            if (node.attribute(kNodeRefAttribute.data())) {
+                                ++count;
+                            }
+                        }
                     }
                 }
             }

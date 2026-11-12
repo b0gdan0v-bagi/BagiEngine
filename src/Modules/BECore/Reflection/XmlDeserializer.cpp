@@ -6,14 +6,35 @@ namespace BECore {
 
     XmlDeserializer::XmlDeserializer() {}
 
+    void XmlDeserializer::ResetDocument() {
+        // The nodes of the stacks belong to the document: they go before it does, so a refused load leaves nothing that points into it
+        _nodeStack.clear();
+        _arrayStack.clear();
+        ClearPathSegments();
+        _document.reset();
+    }
+
     bool XmlDeserializer::LoadFromFile(const std::filesystem::path& path) {
+        ResetDocument();
+
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(path, error)) {
+            // A folder, a pipe or a device is no document, and has no size to check
+            AddError("", std::filesystem::exists(path, error) ? "XML path is not a regular file" : "Failed to parse XML file", 0);
+            return false;
+        }
+        const uintmax_t size = std::filesystem::file_size(path, error);
+        if (error || size > ReaderLimits::kMaxXmlDocumentBytes) {
+            AddError("", error ? "Failed to read the size of the XML file" : "XML file is larger than the limit", 0);
+            return false;
+        }
+
         pugi::xml_parse_result result = _document.load_file(path.c_str());
         if (!result) {
             AddError("", "Failed to parse XML file", 0);
             return false;
         }
 
-        _nodeStack.clear();
         _nodeStack.push_back(_document.document_element());
         return true;
     }
@@ -28,26 +49,45 @@ namespace BECore {
     }
 
     bool XmlDeserializer::LoadFromString(eastl::string_view xmlContent) {
-        pugi::xml_parse_result result = _document.load_buffer(xmlContent.data(), xmlContent.size());
+        ResetDocument();
+
+        if (xmlContent.size() > ReaderLimits::kMaxXmlDocumentBytes) {
+            AddError("", "XML string is larger than the limit", 0);
+            return false;
+        }
+
+        // UTF-8 as the engine's strings are: the automatic detection would read a text that starts like a UTF-16 or a UTF-32 mark as words,
+        // and a view into the middle of a buffer is not aligned for that
+        pugi::xml_parse_result result = _document.load_buffer(xmlContent.data(), xmlContent.size(), pugi::parse_default, pugi::encoding_utf8);
         if (!result) {
             AddError("", "Failed to parse XML string", 0);
             return false;
         }
 
-        _nodeStack.clear();
         _nodeStack.push_back(_document.document_element());
         return true;
     }
 
     bool XmlDeserializer::LoadFromXmlNode(const XmlNode& node) {
+        _nodeStack.clear();
+        _arrayStack.clear();
+        ClearPathSegments();
+
         pugi::xml_node pugiNode = node.GetPugiNode();
         if (!pugiNode) {
             AddError("", "Invalid XmlNode", 0);
             return false;
         }
 
-        _nodeStack.clear();
         _nodeStack.push_back(pugiNode);
+        return true;
+    }
+
+    bool XmlDeserializer::IsNestedTooDeep(eastl::string_view name) {
+        if (_nodeStack.size() < ReaderLimits::kMaxXmlNesting) {
+            return false;
+        }
+        ReportError(name, "Nesting is deeper than the limit");
         return true;
     }
 
@@ -70,11 +110,7 @@ namespace BECore {
     }
 
     void XmlDeserializer::AddError(eastl::string_view path, eastl::string_view message, int32_t line) {
-        DeserializeError error;
-        error.path = PoolString::Intern(path);
-        error.errorMessage = PoolString::Intern(message);
-        error.line = line;
-        _errors.push_back(error);
+        StoreError(_errors, path, message, line);
     }
 
     namespace {
@@ -178,7 +214,9 @@ namespace BECore {
             return true;
         }
         const char* const reason = status == ParseStatus::OutOfRange ? " (out of range)" : "";
-        ReportError(name, Format("Invalid {} value '{}'{}", KindName<T>(), text, reason));
+        const eastl::string_view quoted = CutText(text, ReaderLimits::kMaxQuotedValueBytes);
+        const char* const cut = quoted.size() < text.size() ? "..." : "";
+        ReportError(name, Format("Invalid {} value '{}{}'{}", KindName<T>(), quoted, cut, reason));
         return false;
     }
 
@@ -584,12 +622,15 @@ namespace BECore {
 
     bool XmlDeserializer::BeginObject(eastl::string_view name) {
         pugi::xml_node node = GetChild(name);
-        if (node) {
-            _nodeStack.push_back(node);
-            PushPathSegment(name);
-            return true;
+        if (!node) {
+            return false;
         }
-        return false;
+        if (IsNestedTooDeep(name)) {
+            return false;
+        }
+        _nodeStack.push_back(node);
+        PushPathSegment(name);
+        return true;
     }
 
     void XmlDeserializer::EndObject() {
@@ -605,7 +646,7 @@ namespace BECore {
 
     bool XmlDeserializer::BeginArray(eastl::string_view name, eastl::string_view elementName, size_t& count) {
         pugi::xml_node node = GetChild(name);
-        if (!node) {
+        if (!node || IsNestedTooDeep(name)) {
             return false;
         }
 
@@ -613,6 +654,10 @@ namespace BECore {
         ctx.parentNode = node;
         ctx.currentIndex = 0;
         for (pugi::xml_node child : node.children()) {
+            if (ctx.elements.size() == ReaderLimits::kMaxArrayElements) {
+                ReportError(name, "Array has more elements than the limit");
+                return false;
+            }
             ctx.elements.push_back(child);
         }
         count = ctx.elements.size();
@@ -637,7 +682,7 @@ namespace BECore {
             return false;
         }
         ArrayContext& ctx = _arrayStack.back();
-        if (ctx.currentIndex >= ctx.elements.size()) {
+        if (ctx.currentIndex >= ctx.elements.size() || IsNestedTooDeep("")) {
             return false;
         }
         PushPathArrayIndex(ctx.currentIndex);

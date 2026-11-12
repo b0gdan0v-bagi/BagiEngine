@@ -115,6 +115,8 @@ if (serializer.BeginArray("items", "item", count)) {
 // Reading: BeginArray fills `count`; loop count times over BeginArrayElement() / EndArrayElement().
 ```
 
+**Reader limits** (`Reflection/ReaderLimits.h`, tests `tests/BECore/ReaderLimitsTest.cpp`): both readers refuse input beyond a named limit with an error, never an assertion. A text over 4 MiB or a binary stream over 16 MiB (a file is checked by its size before it is read, and a path that is not a regular file is refused), an array of more than 65536 elements, XML nested more than 256 open entries (a recursive type, such as a UI tree, recurses once per two), and a list of errors that stops at 64 entries and says so in its last one (an error's path and message are cut to 256 bytes, a quoted bad value to 32: they are interned into the `PoolString` table, which never frees). The limits are about 250 times what the content has: a game with more raises the constant. `XmlDeserializer::LoadFromString` reads the text as UTF-8 whatever its first bytes are; any load drops the earlier document, so after a refusal nothing is readable.
+
 ## Binary Format
 
 `BinarySerializer` / `BinaryDeserializer` take the same call sequence as the XML pair, so every type that serializes to XML serializes to binary without changes. Use it for saves and caches where size and speed matter more than readability. A save game goes through `SaveGameService` (slots, game id and version, atomic write; `src/Modules/BECore/Save/CLAUDE.md`), not by hand with `SaveToFile`.

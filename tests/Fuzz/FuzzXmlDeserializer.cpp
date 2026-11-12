@@ -268,6 +268,32 @@ namespace BECore::Fuzz {
             size_t _budget = kWalkEntryBudget;
         };
 
+        /// After a refused load nothing is readable: the names of the earlier document are gone
+        void ExpectNothingReadable(XmlDeserializer& reader, pugi::xml_node earlierRoot) {
+            int32_t number = 0;
+            size_t count = 0;
+            FUZZ_CHECK(!reader.Read("fuzz-no-such-name", number));
+            FUZZ_CHECK(!reader.BeginObject("fuzz-no-such-name"));
+            FUZZ_CHECK(!reader.BeginArray("fuzz-no-such-name", "item", count));
+            size_t checked = 0;
+            for (const pugi::xml_node child : earlierRoot.children()) {
+                if (child.type() == pugi::node_element && checked++ < kWalkArrayElementLimit) {
+                    FUZZ_CHECK(!reader.BeginObject(NameOf(child.name())));
+                }
+            }
+        }
+
+        /// How many bytes the text sits behind the start of its buffer in the unaligned copy
+        constexpr size_t kShift = 1;
+
+        eastl::vector<uint8_t> ShiftedCopy(const uint8_t* data, size_t size) {
+            eastl::vector<uint8_t> buffer(kShift + size);
+            if (size > 0) {
+                std::memcpy(buffer.data() + kShift, data, size);
+            }
+            return buffer;
+        }
+
         uint64_t ReadProbeDigest(XmlDeserializer& reader) {
             ProbeState state;
             state.Deserialize(reader);
@@ -280,7 +306,7 @@ namespace BECore::Fuzz {
 
             // The same text parsed by pugixml alone: the walk follows it, and a document it refuses is refused by the reader too
             pugi::xml_document reference;
-            const bool parses = static_cast<bool>(reference.load_buffer(data, size));
+            const bool parses = static_cast<bool>(reference.load_buffer(data, size, pugi::parse_default, pugi::encoding_utf8));
 
             XmlDeserializer reader;
             reader.SetStrictValues(strict);
@@ -302,6 +328,18 @@ namespace BECore::Fuzz {
             FUZZ_CHECK(fresh.LoadFromString(text));
             FUZZ_CHECK(ReadProbeDigest(fresh) == first);
             FUZZ_CHECK(ReadProbeDigest(reader) == first);
+
+            // The same text in the middle of a buffer, where nothing is aligned: it loads and reads the same
+            const eastl::vector<uint8_t> shifted = ShiftedCopy(data, size);
+            XmlDeserializer unaligned;
+            unaligned.SetStrictValues(strict);
+            FUZZ_CHECK(unaligned.LoadFromString(eastl::string_view(reinterpret_cast<const char*>(shifted.data()) + kShift, size)));
+            FUZZ_CHECK(ReadProbeDigest(unaligned) == first);
+
+            // Loading something that does not parse on top of a good document drops it
+            FUZZ_CHECK(!reader.LoadFromString("<"));
+            ExpectNothingReadable(reader, reference.document_element());
+            FUZZ_CHECK(reader.HasErrors());
         }
 
     }  // namespace

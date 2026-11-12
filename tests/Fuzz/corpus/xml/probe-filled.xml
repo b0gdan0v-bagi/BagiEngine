@@ -15,4 +15,18 @@
     <item value="one" />
     <item value="two" />
   </words>
+  <tree id="1">
+    <children>
+      <item id="2">
+        <children />
+      </item>
+      <item id="3">
+        <children>
+          <item id="4">
+            <children />
+          </item>
+        </children>
+      </item>
+    </children>
+  </tree>
 </root>

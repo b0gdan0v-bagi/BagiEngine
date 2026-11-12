@@ -94,7 +94,7 @@ namespace BECore {
          * @brief Write the bytes as the slot, replacing an existing save
          *
          * The bytes go to `<slot>.save.tmp` first and are renamed over `<slot>.save`. On a failure the old save stays
-         * and the temporary file is removed.
+         * and the temporary file is removed. Bytes over ReaderLimits::kMaxBinaryStreamBytes are refused (ReadSlot would refuse the file).
          *
          * @return InvalidSlotName, NotInitialized or WriteFailed on a failure
          */
@@ -103,7 +103,8 @@ namespace BECore {
         /**
          * @brief Read the whole file of the slot
          *
-         * @return InvalidSlotName, NotInitialized, NotFound (no such slot) or ReadFailed (it exists but cannot be read) on a failure
+         * @return InvalidSlotName, NotInitialized, NotFound (no such slot) or ReadFailed (it exists but cannot be read, or is over
+         *         ReaderLimits::kMaxBinaryStreamBytes) on a failure
          */
         [[nodiscard]] std::expected<eastl::vector<uint8_t>, SaveError> ReadSlot(eastl::string_view slot) const;
 

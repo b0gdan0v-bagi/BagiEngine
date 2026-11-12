@@ -22,12 +22,24 @@ namespace BECore {
             BE_REFLECT_FIELD eastl::string label;
         };
 
+        /// A type that holds its own kind, as a UI tree does: reading it recurses once per level of the document
+        struct ProbeNode {
+            BE_CLASS(ProbeNode)
+
+            BE_REFLECT_FIELD int32_t id = 0;
+            BE_REFLECT_FIELD eastl::vector<ProbeNode> children;
+        };
+
     }  // namespace FuzzProbeData
 
     namespace PropVisit {
 
         /// The property visitor has no general support for a vector of structs or of values by value (the inspector shows none): the fuzz targets edit none
         inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<FuzzProbeData::ProbeLeaf>& /*leaves*/, eastl::string_view /*key*/) {
+            return false;
+        }
+
+        inline bool Visit(IPropertyVisitor& /*v*/, eastl::vector<FuzzProbeData::ProbeNode>& /*children*/, eastl::string_view /*key*/) {
             return false;
         }
 
@@ -65,6 +77,7 @@ namespace BECore {
             BE_REFLECT_FIELD eastl::vector<ProbeLeaf> leaves;
             BE_REFLECT_FIELD eastl::vector<int32_t> numbers;
             BE_REFLECT_FIELD eastl::vector<eastl::string> words;
+            BE_REFLECT_FIELD ProbeNode tree;
         };
 
     }  // namespace FuzzProbeData

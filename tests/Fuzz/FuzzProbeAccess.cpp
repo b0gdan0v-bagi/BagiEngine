@@ -36,6 +36,14 @@ namespace BECore::Fuzz {
             uint64_t _value = kFnvOffset;
         };
 
+        void AddNode(Hasher& hasher, const FuzzProbeData::ProbeNode& node) {
+            hasher.Add(node.id);
+            hasher.Add(node.children.size());
+            for (const FuzzProbeData::ProbeNode& child : node.children) {
+                AddNode(hasher, child);
+            }
+        }
+
         void AddLeaf(Hasher& hasher, const FuzzProbeData::ProbeLeaf& leaf) {
             hasher.Add(leaf.id);
             hasher.Add(leaf.weight);
@@ -73,6 +81,12 @@ namespace BECore::Fuzz {
         }
         state.numbers = {10, -20, 30};
         state.words = {"one", "two"};
+        state.tree.id = 1;
+        state.tree.children.resize(2);
+        state.tree.children[0].id = 2;
+        state.tree.children[1].id = 3;
+        state.tree.children[1].children.resize(1);
+        state.tree.children[1].children[0].id = 4;
         return state;
     }
 
@@ -105,6 +119,7 @@ namespace BECore::Fuzz {
         for (const eastl::string& word : state.words) {
             hasher.AddText(word);
         }
+        AddNode(hasher, state.tree);
         return hasher.Value();
     }
 

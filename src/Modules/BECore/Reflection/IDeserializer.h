@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Reflection/ISerializer.h>
+#include <BECore/Reflection/ReaderLimits.h>
 
 namespace BECore {
 
@@ -221,9 +222,29 @@ namespace BECore {
         /**
          * @brief Store an error -- override in concrete deserializers
          *
-         * Default implementation does nothing; XmlDeserializer overrides.
+         * Both readers store it with StoreError().
          */
         virtual void AddError(eastl::string_view path, eastl::string_view message, int32_t line) = 0;
+
+        /**
+         * @brief Forget the open objects and arrays, for a reader that is about to load another document
+         */
+        void ClearPathSegments() {
+            _pathStack.clear();
+        }
+
+        /**
+         * @brief Append an error to @p errors within the limits of ReaderLimits
+         *
+         * The path and the message are cut to kMaxErrorTextBytes (they are interned into the PoolString table, which is never freed, and
+         * they can hold text of the input). The list holds at most kMaxRecordedErrors: the last place says once that the rest were dropped.
+         */
+        static void StoreError(eastl::vector<DeserializeError>& errors, eastl::string_view path, eastl::string_view message, int32_t line);
+
+        /**
+         * @brief The first @p maxBytes of @p text, or fewer so that no UTF-8 sequence is split
+         */
+        static eastl::string_view CutText(eastl::string_view text, size_t maxBytes);
 
     private:
         struct PathSegment {
