@@ -476,8 +476,11 @@ namespace BECore::Tests {
         ASSERT_TRUE(client.has_value());
         RoundTrip(*client);  // the hub knows the connection
 
-        clock.Advance(kPingInterval);
-        ASSERT_TRUE(WaitForPing(*client)) << "a connection that was silent for pingInterval must be pinged";
+        // Stepped like the second ping: the hub may take its liveness baseline at any tick after the RoundTrip, so one jump of the
+        // clock could land before that tick and the ping would never come
+        const auto first = AdvanceUntilPing(clock, *client);
+        ASSERT_TRUE(first.has_value()) << "a connection that was silent for pingInterval must be pinged";
+        EXPECT_GE(*first, kPingInterval) << "no ping inside the interval";
 
         // The pong is life: the next ping comes only after another interval of silence, counted from the pong
         SendPong(*client);
