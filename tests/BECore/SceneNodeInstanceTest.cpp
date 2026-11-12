@@ -45,8 +45,16 @@ namespace BECore::Tests {
         constexpr const char* kPanelNode = R"(<node name="Panel"><components>
   <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
     <elements>
-      <element type="UILabel" name="Title" x="8" y="8" width="184" height="30" text="Base" fontSize="24"/>
-      <element type="UILabel" name="Note" x="8" y="48" width="184" height="30" text="Note" fontSize="24"/>
+      <element type="UIElement" name="Title" x="8" y="8" width="184" height="30" fontSize="24">
+        <components>
+          <component type="UITextComponent" text="Base"/>
+        </components>
+      </element>
+      <element type="UIElement" name="Note" x="8" y="48" width="184" height="30" fontSize="24">
+        <components>
+          <component type="UITextComponent" text="Note"/>
+        </components>
+      </element>
     </elements>
   </component>
 </components></node>)";

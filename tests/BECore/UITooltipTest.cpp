@@ -1,4 +1,5 @@
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UIElement.h>
+#include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UITooltip.h>
 #include <Common/EngineEnvironment.h>
 #include <gtest/gtest.h>
@@ -250,21 +251,33 @@ namespace BECore::Tests {
 
     // ---- MeasureText ---------------------------------------------------------------------------------------------------------
 
-    class UILabelMeasureTest : public ::testing::Test {
+    class UITextMeasureTest : public ::testing::Test {
     protected:
         static void SetUpTestSuite() {
             EngineEnvironment::EnsureCoreServices();
         }
 
-        static IntrusivePtr<UILabel> MakeLabel(const char* text) {
-            auto label = New<UILabel>();
-            label->text = text;
-            label->active.fontSize = UITooltip::kFontSize;
-            return label;
+        /// A text element at the tooltip's font size
+        struct Text {
+            IntrusivePtr<UIElement> element;
+
+            [[nodiscard]] Vec2 MeasureText(float maxWidth, float scale) const {
+                return element->GetComponent<UITextComponent>()->MeasureText(*element, maxWidth, scale);
+            }
+            const Text* operator->() const {
+                return this;
+            }
+        };
+
+        static Text MakeLabel(const char* text) {
+            auto element = New<UIElement>();
+            element->AddComponent<UITextComponent>().text = text;
+            element->active.fontSize = UITooltip::kFontSize;
+            return {element};
         }
     };
 
-    TEST_F(UILabelMeasureTest, AShortTextIsOneLineNarrowerThanTheLimit) {
+    TEST_F(UITextMeasureTest, AShortTextIsOneLineNarrowerThanTheLimit) {
         const auto label = MakeLabel("Settings");
         const Vec2 size = label->MeasureText(UITooltip::kMaxWidth, 1.0f);
 
@@ -274,7 +287,7 @@ namespace BECore::Tests {
         EXPECT_LT(size.y, UITooltip::kFontSize * 2.0f) << "one line";
     }
 
-    TEST_F(UILabelMeasureTest, ALongTextWrapsAtTheLimitAndGrowsTaller) {
+    TEST_F(UITextMeasureTest, ALongTextWrapsAtTheLimitAndGrowsTaller) {
         const auto shortLabel = MakeLabel("Settings");
         const auto longLabel = MakeLabel("Settings of the game: the sound, the language and the size of everything on the screen");
         const Vec2 shortSize = shortLabel->MeasureText(UITooltip::kMaxWidth, 1.0f);
@@ -285,7 +298,7 @@ namespace BECore::Tests {
         EXPECT_GT(longSize.y, shortSize.y * 1.5f) << "several lines";
     }
 
-    TEST_F(UILabelMeasureTest, ANarrowerLimitMakesItTaller) {
+    TEST_F(UITextMeasureTest, ANarrowerLimitMakesItTaller) {
         const auto label = MakeLabel("Settings of the game and the sound");
         const Vec2 wide = label->MeasureText(400.0f, 1.0f);
         const Vec2 narrow = label->MeasureText(100.0f, 1.0f);
@@ -294,7 +307,7 @@ namespace BECore::Tests {
         EXPECT_GT(narrow.y, wide.y);
     }
 
-    TEST_F(UILabelMeasureTest, TheSizeIsInCanvasUnitsWhateverTheScale) {
+    TEST_F(UITextMeasureTest, TheSizeIsInCanvasUnitsWhateverTheScale) {
         const auto label = MakeLabel("Settings");
         const Vec2 one = label->MeasureText(UITooltip::kMaxWidth, 1.0f);
         const Vec2 two = label->MeasureText(UITooltip::kMaxWidth, 2.0f);
@@ -303,7 +316,7 @@ namespace BECore::Tests {
         EXPECT_NEAR(two.y, one.y, one.y * 0.1f);
     }
 
-    TEST_F(UILabelMeasureTest, AnEmptyTextOrNoRoomIsZero) {
+    TEST_F(UITextMeasureTest, AnEmptyTextOrNoRoomIsZero) {
         const auto empty = MakeLabel("");
         EXPECT_EQ(empty->MeasureText(UITooltip::kMaxWidth, 1.0f), Vec2{});
 

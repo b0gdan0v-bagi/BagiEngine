@@ -407,7 +407,7 @@ namespace BECore::Tests {
     }
 
     TEST(UIBoxStyleTest, ASavedDefaultElementWritesNoBoxAttribute) {
-        for (const char* type : {"UIElement", "UIPanel", "UILabel", "UIButton", "UIImage", "UIStack"}) {
+        for (const char* type : {"UIElement", "UIPanel", "UIStack"}) {
             auto element = AbstractFactory<UIElement>::GetInstance().Create(type);
             ASSERT_TRUE(element) << type;
             const eastl::string xml = ElementToXml(*element);

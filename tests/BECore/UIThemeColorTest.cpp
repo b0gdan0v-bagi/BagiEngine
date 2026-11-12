@@ -3,8 +3,8 @@
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/UI/UIBoxStyle.h>
 #include <BECore/UI/UIColor.h>
-#include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
+#include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -25,9 +25,9 @@ namespace BECore::Tests {
             return serializer.SaveToString();
         }
 
-        /// The element of @p type that the attributes make, and whether the deserializer reported an error
-        IntrusivePtr<UIElement> Load(const char* type, const char* attributes, bool& hadErrors) {
-            const eastl::string xml = Format("<root><element type=\"{}\" {}/></root>", type, attributes);
+        /// The element of @p type that the attributes (and the @p body between its tags) make, and whether the deserializer reported an error
+        IntrusivePtr<UIElement> Load(const char* type, const char* attributes, bool& hadErrors, const char* body = "") {
+            const eastl::string xml = Format("<root><element type=\"{}\" {}>{}</element></root>", type, attributes, body);
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
             auto element = AbstractFactory<UIElement>::GetInstance().Create(type);
@@ -108,22 +108,23 @@ namespace BECore::Tests {
 
     TEST_F(UIThemeColorTest, TheColorOfAShadowAGlowAndTheTextEffectsMayBeATokenToo) {
         bool errors = false;
-        auto element = Load("UILabel", "shadow=\"0,2,4,0,@shade\" glow=\"0,0,6,1,10,20,30,40\" textOutline=\"2,@edge\" textShadow=\"1,3,@drop\"", errors);
+        auto element = Load("UIElement", "shadow=\"0,2,4,0,@shade\" glow=\"0,0,6,1,10,20,30,40\"", errors,
+                            "<components><component type=\"UITextComponent\" textOutline=\"2,@edge\" textShadow=\"1,3,@drop\"/></components>");
         EXPECT_FALSE(errors);
-        auto* label = element->Cast<UILabel>();
-        ASSERT_NE(label, nullptr);
+        auto* text = element->GetComponent<UITextComponent>();
+        ASSERT_NE(text, nullptr);
 
-        EXPECT_EQ(label->box.shadowColorToken, "shade"_intern);
-        EXPECT_EQ(label->box.shadow.color.a, 0);
-        EXPECT_FLOAT_EQ(label->box.shadow.blur, 4.0f);
-        EXPECT_TRUE(label->box.glowColorToken.Empty());
-        EXPECT_EQ(label->box.glow.color.a, 40);
-        EXPECT_EQ(label->textEffects.outlineColor.token, "edge"_intern);
-        EXPECT_FLOAT_EQ(label->textEffects.outlineWidth, 2.0f);
-        EXPECT_EQ(label->textEffects.shadowColor.token, "drop"_intern);
-        EXPECT_FLOAT_EQ(label->textEffects.shadowOffsetY, 3.0f);
+        EXPECT_EQ(element->box.shadowColorToken, "shade"_intern);
+        EXPECT_EQ(element->box.shadow.color.a, 0);
+        EXPECT_FLOAT_EQ(element->box.shadow.blur, 4.0f);
+        EXPECT_TRUE(element->box.glowColorToken.Empty());
+        EXPECT_EQ(element->box.glow.color.a, 40);
+        EXPECT_EQ(text->textEffects.outlineColor.token, "edge"_intern);
+        EXPECT_FLOAT_EQ(text->textEffects.outlineWidth, 2.0f);
+        EXPECT_EQ(text->textEffects.shadowColor.token, "drop"_intern);
+        EXPECT_FLOAT_EQ(text->textEffects.shadowOffsetY, 3.0f);
 
-        const eastl::string xml = ElementToXml(*label);
+        const eastl::string xml = ElementToXml(*element);
         EXPECT_NE(xml.find("shadow=\"0,2,4,0,@shade\""), eastl::string::npos) << xml.c_str();
         EXPECT_NE(xml.find("glow=\"0,0,6,1,#0A141E28\""), eastl::string::npos) << xml.c_str();
         EXPECT_NE(xml.find("textOutline=\"2,@edge\""), eastl::string::npos) << xml.c_str();

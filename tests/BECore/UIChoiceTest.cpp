@@ -1,4 +1,3 @@
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UIChoice.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UITextComponent.h>
@@ -34,23 +33,13 @@ namespace BECore::Tests {
         }
     };
 
-    TEST_F(UIChoiceTest, AUIButtonIsAnOptionWithItsOwnValueAndText) {
-        auto button = New<UIButton>();
-        button->value = PoolString::Intern("easy");
-        button->text = "Easy";
-
-        EXPECT_TRUE(UIChoice::IsOption(*button));
-        EXPECT_EQ(UIChoice::GetValue(*button), PoolString::Intern("easy"));
-        EXPECT_EQ(UIChoice::GetText(*button), "Easy");
-        EXPECT_EQ(&UIChoice::GetText(*button), &button->text) << "a view of the string, not a copy";
-    }
-
     TEST_F(UIChoiceTest, AnElementWithAClickerIsAnOptionWithTheValueOfTheClicker) {
         const auto element = MakeClickerElement("hard", "Hard");
 
         EXPECT_TRUE(UIChoice::IsOption(*element));
         EXPECT_EQ(UIChoice::GetValue(*element), PoolString::Intern("hard"));
         EXPECT_EQ(UIChoice::GetText(*element), "Hard");
+        EXPECT_EQ(&UIChoice::GetText(*element), &element->GetComponent<UITextComponent>()->text) << "a view of the string, not a copy";
     }
 
     TEST_F(UIChoiceTest, APlainElementIsNoOption) {
@@ -99,11 +88,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(UIChoice::GetText(*element).empty());
     }
 
-    TEST_F(UIChoiceTest, DisabledIsTheAnswerOfTheElementForBothForms) {
-        auto button = New<UIButton>();
-        button->disabled = true;
-        EXPECT_TRUE(button->IsDisabled());
-
+    TEST_F(UIChoiceTest, DisabledIsTheAnswerOfTheElement) {
         const auto element = MakeClickerElement("a");
         EXPECT_FALSE(element->IsDisabled());
         element->GetComponent<UIInputClicker>()->disabled = true;

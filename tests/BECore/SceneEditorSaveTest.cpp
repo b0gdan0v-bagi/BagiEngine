@@ -118,7 +118,11 @@ namespace BECore::Tests {
   <component type="TransformComponent" x="10" y="20" width="200" height="100"/>
   <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
     <elements>
-      <element type="UILabel" name="Title" x="8" y="8" width="184" height="30" text="Base" fontSize="24"/>
+      <element type="UIElement" name="Title" x="8" y="8" width="184" height="30" fontSize="24">
+        <components>
+          <component type="UITextComponent" text="Base"/>
+        </components>
+      </element>
     </elements>
   </component>
 </components></node>)";

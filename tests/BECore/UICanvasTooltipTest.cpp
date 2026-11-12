@@ -3,7 +3,6 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UITooltip.h>
 #include <BECore/UI/UITooltipComponent.h>
@@ -34,12 +33,40 @@ namespace BECore::Tests {
     <node name="Hud" layer="10"><components>
       <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
         <elements>
-          <element type="UIButton" name="Icon" action="OpenIcon" tooltip="Settings" x="100" y="100" width="48" height="48" color="30,30,30,255"/>
-          <element type="UIButton" name="Plain" action="OpenPlain" x="300" y="100" width="48" height="48" color="30,30,30,255"/>
-          <element type="UIButton" name="Off" action="OpenOff" tooltip="Not now" disabled="true" x="500" y="100" width="48" height="48" color="30,30,30,255"/>
-          <element type="UIButton" name="Lang" action="OpenLang" tooltip="{#tip.settings}" x="100" y="300" width="48" height="48" color="30,30,30,255"/>
-          <element type="UIButton" name="Edge" action="OpenEdge" tooltip="Settings of the game" x="752" y="540" width="48" height="48" color="30,30,30,255"/>
-          <element type="UIButton" name="Under" action="OpenUnder" x="50" y="170" width="300" height="48" color="30,30,30,255"/>
+          <element type="UIElement" name="Icon" x="100" y="100" width="48" height="48" color="30,30,30,255">
+            <components>
+              <component type="UIInputClicker" action="OpenIcon"/>
+              <component type="UITooltipComponent" text="Settings"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Plain" x="300" y="100" width="48" height="48" color="30,30,30,255">
+            <components>
+              <component type="UIInputClicker" action="OpenPlain"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Off" x="500" y="100" width="48" height="48" color="30,30,30,255">
+            <components>
+              <component type="UIInputClicker" action="OpenOff" disabled="true"/>
+              <component type="UITooltipComponent" text="Not now"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Lang" x="100" y="300" width="48" height="48" color="30,30,30,255">
+            <components>
+              <component type="UIInputClicker" action="OpenLang"/>
+              <component type="UITooltipComponent" text="{#tip.settings}"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Edge" x="752" y="540" width="48" height="48" color="30,30,30,255">
+            <components>
+              <component type="UIInputClicker" action="OpenEdge"/>
+              <component type="UITooltipComponent" text="Settings of the game"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Under" x="50" y="170" width="300" height="48" color="30,30,30,255">
+            <components>
+              <component type="UIInputClicker" action="OpenUnder"/>
+            </components>
+          </element>
           <element type="UIElement" name="Comp" x="100" y="420" width="48" height="48" color="30,30,30,255">
             <components><component type="UIInputClicker" action="OpenComp"/><component type="UITooltipComponent" text="Composed tip"/></components>
           </element>
@@ -61,7 +88,12 @@ namespace BECore::Tests {
     <node name="Modal" layer="20"><components>
       <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize" modal="true" visible="false">
         <elements>
-          <element type="UIButton" name="Ok" action="ModalOk" tooltip="Modal tip" x="400" y="400" width="48" height="48" color="30,30,30,255"/>
+          <element type="UIElement" name="Ok" x="400" y="400" width="48" height="48" color="30,30,30,255">
+            <components>
+              <component type="UIInputClicker" action="ModalOk"/>
+              <component type="UITooltipComponent" text="Modal tip"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -183,12 +215,8 @@ namespace BECore::Tests {
             return CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false, touch));
         }
 
-        UIButton& Get(const char* name) const {
-            UIElement* element = _hud->GetRoot().FindByName(PoolString::Intern(name));
-            EXPECT_NE(element, nullptr) << name;
-            UIButton* button = element ? element->Cast<UIButton>() : nullptr;
-            EXPECT_NE(button, nullptr) << name;
-            return *button;
+        UIElement& Get(const char* name) const {
+            return GetElement(name);
         }
 
         UIElement& GetElement(const char* name) const {
@@ -534,7 +562,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UICanvasTooltipTest, ALongTooltipWrapsOnAPlateNoWiderThanTheLimit) {
-        Get("Lang").tooltip = "Settings of the game: the sound, the language and the size of everything on the screen";
+        Get("Lang").GetComponent<UITooltipComponent>()->text = "Settings of the game: the sound, the language and the size of everything on the screen";
         HoverUntilShown("Lang");
 
         const auto plate = Plate();
@@ -548,7 +576,7 @@ namespace BECore::Tests {
         HoverUntilShown("Icon");
         ASSERT_TRUE(Plate().has_value());
 
-        Get("Icon").tooltip.clear();
+        Get("Icon").GetComponent<UITooltipComponent>()->text.clear();
         Draw();
         EXPECT_FALSE(Plate());
     }

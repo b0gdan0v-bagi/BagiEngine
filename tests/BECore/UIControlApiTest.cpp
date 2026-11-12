@@ -9,9 +9,8 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIDropdown.h>
-#include <BECore/UI/UILabel.h>
 #include <BECore/UI/UISegmented.h>
-#include <BECore/UI/UISlider.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -34,8 +33,7 @@ namespace BECore::Tests {
         // range 0..100). "Choice": 800 x 600 in window pixels. Panel holds Side, a UISegmented bound to `uiApiSide` with the buttons Left and Right (the same action, values "left" and "right"; 150 x
         // 56
         //   and 150 x 56 at x = 100, 252, y = 100), and Plain (100, 300, 80 x 40) is a button without a value.
-        // "Values": 800 x 600 in window pixels. Sound is a UIToggle (100, 100, 300 x 56, `uiApiSound`, custom values "on" / "off"), Volume a UISlider (100, 200, 400 x 56, `uiApiVolume`, range 0..1
-        //   in steps of 0.1), Quiet a disabled UISlider (100, 400, 400 x 56), Loading a UIProgressBar (100, 300, 400 x 24, `uiApiLoad`, range 0..100). The composed forms sit beside them: CSound a
+        // "Values": 800 x 600 in window pixels. Loading is a UIProgressBar (100, 300, 400 x 24, `uiApiLoad`, range 0..100); CSound a
         //   toggle row (100, 500, 300 x 56; `uiApiCSound`, values "on" / "off", the caption child CSoundCaption and the switch child CSoundSwitch), CLocked a disabled one (520, 300, 240 x 56),
         //   CVolume a slider (450, 100, 340 x 56; `uiApiCVolume`, range 0..1, steps of 0.1) and CQuiet a disabled one (450, 500, 300 x 56).
         // "Pick": 800 x 600 in window pixels. Level is a UIDropdown (100, 100, 240 x 56, `uiApiLevel`, action UIControlApiLevel, options 56 high: Easy, Normal, Hard and Locked, a
@@ -44,13 +42,13 @@ namespace BECore::Tests {
         // "Icons": 800 x 600 in window pixels. Gear is an icon button with a tooltip that holds a key and a variable, Quiet an icon button without a tooltip, Words a button with a caption only.
         // "Composed": 800 x 600 in window pixels, buttons made of components. Play (10, 10, 120 x 48) has a clicker, an image, a text and a tooltip, Dead (150, 10, 100 x 48) a disabled clicker and
         //   a text, Shade (10, 100, 100 x 40) a clicker with Cover (0, 90, 120 x 60) drawn over it, Wide (10, 200, 300 x 40) a clicker, Badge (300, 10, 48 x 48) an image and a tooltip but no clicker,
-        //   Bare (400, 10, 48 x 48) no components, Loud (500, 10, 120 x 48) a UIToggle with the text "Loud" that also carries a text component saying "Caption".
+        //   Bare (400, 10, 48 x 48) no components.
         //   Buttons with children (y = 300, 48 high): Pad (10, 60 wide) a clicker with the icon child PadIcon, Mix (100, 160 wide) a clicker with a tooltip whose icon MixIcon and caption MixCaption
         //   are in a plain Row, Hollow (300, 100 wide) a clicker with nothing below it, Outer (450, 160 wide) a clicker whose only child Inner is a clicker with a text and an icon.
         // "Choices": 800 x 600 in window pixels, choice groups made of components. CSide (100, 100, 404 x 56, `uiApiCSide`) has the segments CLeft (a clicker and a text), CRight (a clicker, an
-        //   icon child CRightIcon and a caption child CRightCaption) and CGone (a disabled clicker); Mix (100, 200, 304 x 56, `uiApiMix`) holds a UIButton segment and a composed one; CLevel (100,
-        //   300, 240 x 56, `uiApiCLevel`, action UIControlApiCLevel) is a dropdown of the composed options CEasy, CHard (icon child and caption child) and CLocked (a disabled clicker); CBelow
-        //   (500, 500, 80 x 40) is a button the open list does not cover.
+        //   icon child CRightIcon and a caption child CRightCaption) and CGone (a disabled clicker); Mix (100, 200, 304 x 56, `uiApiMix`) holds a segment with a text and a clicker and one with the
+        //   same parts under other names; CLevel (100, 300, 240 x 56, `uiApiCLevel`, action UIControlApiCLevel) is a dropdown of the composed options CEasy, CHard (icon child and caption child) and
+        //   CLocked (a disabled clicker); CBelow (500, 500, 80 x 40) is a button the open list does not cover.
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -60,13 +58,36 @@ namespace BECore::Tests {
         <elements>
           <element type="UIPanel" name="Plate" x="10" y="10" width="200" height="100" color="10,20,30,200">
             <children>
-              <element type="UILabel" name="Title" x="8" y="8" width="184" height="30" text="Score: {score}" fontSize="24"/>
-              <element type="UIButton" name="Ok" anchor="BottomRight" x="-8" y="-8" width="80" height="40" text="OK" action="UIControlApiOk" color="40,90,60,255"/>
+              <element type="UIElement" name="Title" x="8" y="8" width="184" height="30" fontSize="24">
+                <components>
+                  <component type="UITextComponent" text="Score: {score}"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Ok" anchor="BottomRight" x="-8" y="-8" width="80" height="40" color="40,90,60,255">
+                <components>
+                  <component type="UITextComponent" text="OK" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="UIControlApiOk"/>
+                </components>
+              </element>
             </children>
           </element>
-          <element type="UIButton" name="Off" x="300" y="200" width="80" height="40" text="Off" action="UIControlApiOff" color="40,90,60,255" disabled="true"/>
-          <element type="UILabel" name="Note" x="300" y="300" width="80" height="40" text="Note"/>
-          <element type="UIButton" name="Under" x="500" y="300" width="80" height="40" text="Under" action="UIControlApiUnder" color="40,90,60,255"/>
+          <element type="UIElement" name="Off" x="300" y="200" width="80" height="40" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="Off" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlApiOff" disabled="true"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Note" x="300" y="300" width="80" height="40">
+            <components>
+              <component type="UITextComponent" text="Note"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Under" x="500" y="300" width="80" height="40" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="Under" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlApiUnder"/>
+            </components>
+          </element>
           <element type="UIPanel" name="Cover" x="490" y="290" width="100" height="60" blocksInput="true"/>
         </elements>
       </component>
@@ -74,8 +95,18 @@ namespace BECore::Tests {
     <node name="Debug" layer="5"><components>
       <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
         <elements>
-          <element type="UIButton" name="Tiny" x="400" y="10" width="20" height="20" text="T" action="UIControlApiTiny" color="40,90,60,255"/>
-          <element type="UIButton" name="Ok" x="500" y="100" width="80" height="40" text="OK" action="UIControlApiDebugOk" color="40,90,60,255"/>
+          <element type="UIElement" name="Tiny" x="400" y="10" width="20" height="20" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="T" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlApiTiny"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Ok" x="500" y="100" width="80" height="40" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="OK" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlApiDebugOk"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -87,8 +118,18 @@ namespace BECore::Tests {
     <node name="View"><components>
       <component type="UICanvasComponent" space="SceneView">
         <elements>
-          <element type="UIButton" name="Go" x="10" y="10" width="50" height="40" text="Go" action="UIControlApiGo" color="40,90,60,255"/>
-          <element type="UISlider" name="Slide" action="UIControlApiSlide" minValue="0" maxValue="100" x="10" y="100" width="200" height="40"/>
+          <element type="UIElement" name="Go" x="10" y="10" width="50" height="40" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="Go" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlApiGo"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Slide" x="10" y="100" width="200" height="40">
+            <components>
+              <component type="UIInputClicker" stateLook="false"/>
+              <component type="UISliderComponent" action="UIControlApiSlide" minValue="0" maxValue="100"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -99,7 +140,12 @@ namespace BECore::Tests {
       <node name="View"><components>
         <component type="UICanvasComponent" space="SceneView">
           <elements>
-            <element type="UIButton" name="Go" x="10" y="10" width="50" height="40" text="Go" action="UIControlApiViewGo" color="40,90,60,255"/>
+            <element type="UIElement" name="Go" x="10" y="10" width="50" height="40" color="40,90,60,255">
+              <components>
+                <component type="UITextComponent" text="Go" align="Center" verticalAlign="Center" wrap="false"/>
+                <component type="UIInputClicker" action="UIControlApiViewGo"/>
+              </components>
+            </element>
           </elements>
           <variants>
             <variant when="orientation:portrait">
@@ -116,11 +162,26 @@ namespace BECore::Tests {
         <elements>
           <element type="UISegmented" name="Side" bind="uiApiSide" x="100" y="100" width="302" height="56" direction="Horizontal" spacing="2" color="30,30,30,255">
             <children>
-              <element type="UIButton" name="Left" flex="1" height="56" text="Left" value="left" action="UIControlApiSide" color="70,70,100,255"/>
-              <element type="UIButton" name="Right" flex="1" height="56" text="Right" value="right" action="UIControlApiSide" color="70,70,100,255"/>
+              <element type="UIElement" name="Left" flex="1" height="56" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Left" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="UIControlApiSide" value="left"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Right" flex="1" height="56" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Right" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="UIControlApiSide" value="right"/>
+                </components>
+              </element>
             </children>
           </element>
-          <element type="UIButton" name="Plain" x="100" y="300" width="80" height="40" text="Plain" action="UIControlApiPlain" color="40,90,60,255"/>
+          <element type="UIElement" name="Plain" x="100" y="300" width="80" height="40" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="Plain" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlApiPlain"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -129,10 +190,7 @@ namespace BECore::Tests {
     <node name="Settings"><components>
       <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
         <elements>
-          <element type="UIToggle" name="Sound" bind="uiApiSound" action="UIControlApiSound" onValue="on" offValue="off" text="Sound" x="100" y="100" width="300" height="56" color="30,30,30,255"/>
-          <element type="UISlider" name="Volume" bind="uiApiVolume" action="UIControlApiVolume" minValue="0" maxValue="1" step="0.1" x="100" y="200" width="400" height="56"/>
           <element type="UIProgressBar" name="Loading" bind="uiApiLoad" minValue="0" maxValue="100" x="100" y="300" width="400" height="24"/>
-          <element type="UISlider" name="Quiet" bind="uiApiQuiet" action="UIControlApiQuiet" disabled="true" x="100" y="400" width="400" height="56"/>
           <element type="UIElement" name="CSound" x="100" y="500" width="300" height="56" color="30,30,30,255" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
             <components>
               <component type="UIInputClicker"/>
@@ -184,13 +242,38 @@ namespace BECore::Tests {
           <element type="UIDropdown" name="Level" bind="uiApiLevel" action="UIControlApiLevel" x="100" y="100" width="240" height="56" optionHeight="56" color="30,30,30,255">
             <components><component type="UITextComponent" text="Pick" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
-              <element type="UIButton" name="Easy" text="Easy" value="easy" color="70,70,100,255"/>
-              <element type="UIButton" name="Normal" text="Normal" value="normal" color="70,70,100,255"/>
-              <element type="UIButton" name="Hard" text="Hard" value="hard" color="70,70,100,255"/>
-              <element type="UIButton" name="Locked" text="Locked" value="locked" color="70,70,100,255" disabled="true"/>
+              <element type="UIElement" name="Easy" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Easy" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="easy"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Normal" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Normal" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="normal"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Hard" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Hard" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="hard"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Locked" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Locked" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="locked" disabled="true"/>
+                </components>
+              </element>
             </children>
           </element>
-          <element type="UIButton" name="Below" x="500" y="200" width="80" height="40" text="Below" action="UIControlApiBelow" color="40,90,60,255"/>
+          <element type="UIElement" name="Below" x="500" y="200" width="80" height="40" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="Below" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlApiBelow"/>
+            </components>
+          </element>
           <element type="UIElement" name="PickToggle" x="500" y="300" width="200" height="56" color="30,30,30,255" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
             <components>
               <component type="UIInputClicker"/>
@@ -214,7 +297,12 @@ namespace BECore::Tests {
           <element type="UIDropdown" name="Frozen" bind="uiApiFrozen" action="UIControlApiFrozen" disabled="true" x="100" y="450" width="240" height="56" optionHeight="56" color="30,30,30,255">
             <components><component type="UITextComponent" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
-              <element type="UIButton" name="Only" text="Only" value="only" color="70,70,100,255"/>
+              <element type="UIElement" name="Only" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Only" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="only"/>
+                </components>
+              </element>
             </children>
           </element>
         </elements>
@@ -255,7 +343,12 @@ namespace BECore::Tests {
           </element>
           <element type="UISegmented" name="Mix" bind="uiApiMix" x="100" y="200" width="304" height="56" direction="Horizontal" spacing="4">
             <children>
-              <element type="UIButton" name="MixButton" flex="1" height="56" text="Button" value="button" action="UIControlApiMix" color="70,70,100,255"/>
+              <element type="UIElement" name="MixButton" flex="1" height="56" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Button" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="UIControlApiMix" value="button"/>
+                </components>
+              </element>
               <element type="UIElement" name="MixComposed" flex="1" height="56" color="70,70,100,255" fontSize="24">
                 <components>
                   <component type="UITextComponent" text="Composed" align="Center" verticalAlign="Center"/>
@@ -290,7 +383,12 @@ namespace BECore::Tests {
               </element>
             </children>
           </element>
-          <element type="UIButton" name="CBelow" x="500" y="500" width="80" height="40" text="Below" action="UIControlApiCBelow" color="40,90,60,255"/>
+          <element type="UIElement" name="CBelow" x="500" y="500" width="80" height="40" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="Below" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlApiCBelow"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -302,7 +400,12 @@ namespace BECore::Tests {
           <element type="UIPanel" name="Flat" x="10" y="10" width="100" height="50" color="10,20,30,255"/>
           <element type="UIPanel" name="Fancy" x="10" y="100" width="200" height="100" color="10,20,30,255" cornerRadius="16" borderWidth="2" borderColor="255,255,255,255"
                    gradientDirection="Vertical" gradientColor="50,60,70,255" shadow="0,4,8,0,#00000080" glow="0,0,12,2,#FFD70040" highlight="255,255,255,60"/>
-          <element type="UIButton" name="Round" x="10" y="300" width="80" height="40" text="Round" action="UIControlApiRound" color="40,90,60,255" cornerRadius="4,8,12,0"/>
+          <element type="UIElement" name="Round" x="10" y="300" width="80" height="40" color="40,90,60,255" cornerRadius="4,8,12,0">
+            <components>
+              <component type="UITextComponent" text="Round" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlApiRound"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -311,9 +414,25 @@ namespace BECore::Tests {
     <node name="Bar"><components>
       <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
         <elements>
-          <element type="UIButton" name="Gear" icon="GearIcon" tooltip="Open {#tip.gear} for {user}" x="10" y="10" width="48" height="48" action="UIControlApiGear" color="40,90,60,255"/>
-          <element type="UIButton" name="Quiet" icon="GearIcon" x="70" y="10" width="48" height="48" action="UIControlApiQuiet" color="40,90,60,255"/>
-          <element type="UIButton" name="Words" text="Words" x="130" y="10" width="80" height="48" action="UIControlApiWords" color="40,90,60,255"/>
+          <element type="UIElement" name="Gear" x="10" y="10" width="48" height="48" color="40,90,60,255">
+            <components>
+              <component type="UIInputClicker" action="UIControlApiGear"/>
+              <component type="UIImageComponent" sprite="GearIcon"/>
+              <component type="UITooltipComponent" text="Open {#tip.gear} for {user}"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Quiet" x="70" y="10" width="48" height="48" color="40,90,60,255">
+            <components>
+              <component type="UIInputClicker" action="UIControlApiQuiet"/>
+              <component type="UIImageComponent" sprite="GearIcon"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Words" x="130" y="10" width="80" height="48" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="Words" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlApiWords"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -347,9 +466,6 @@ namespace BECore::Tests {
             <components><component type="UIImageComponent" sprite="BadgeIcon"/><component type="UITooltipComponent" text="Badge"/></components>
           </element>
           <element type="UIElement" name="Bare" x="400" y="10" width="48" height="48" color="40,90,60,255"/>
-          <element type="UIToggle" name="Loud" bind="uiApiLoud" text="Loud" x="500" y="10" width="120" height="48" color="30,30,30,255">
-            <components><component type="UITextComponent" text="Caption"/></components>
-          </element>
           <element type="UIElement" name="Pad" x="10" y="300" width="60" height="48" color="40,90,60,255">
             <components><component type="UIInputClicker" action="UIControlApiPad"/></components>
             <children>
@@ -648,7 +764,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Member(*hud, "bounds"), nullptr);
         const Json* ok = FindElement(*hud, "Ok");
         ASSERT_NE(ok, nullptr);
-        EXPECT_EQ(StringMember(*ok, "type"), "UIButton");
+        EXPECT_EQ(StringMember(*ok, "type"), "UIElement");
         EXPECT_EQ(Member(*ok, "rect"), nullptr);
         EXPECT_EQ(Member(*ok, "visible"), nullptr);
         const Json* issues = Member(*hud, "issues");
@@ -687,7 +803,7 @@ namespace BECore::Tests {
         ExpectRect(Member(*plate, "rect"), 10.0f, 10.0f, 200.0f, 100.0f);
         const Json* ok = FindElement(*plate, "Ok");
         ASSERT_NE(ok, nullptr);
-        EXPECT_EQ(StringMember(*ok, "type"), "UIButton");
+        EXPECT_EQ(StringMember(*ok, "type"), "UIElement");
         ExpectRect(Member(*ok, "rect"), 122.0f, 62.0f, 80.0f, 40.0f);
         ExpectRect(Member(*ok, "outputRect"), 122.0f, 62.0f, 80.0f, 40.0f);
         EXPECT_TRUE(BoolMember(*ok, "visible"));
@@ -702,7 +818,8 @@ namespace BECore::Tests {
 
         const Json* note = FindElement(*hud, "Note");
         ASSERT_NE(note, nullptr);
-        EXPECT_EQ(StringMember(*note, "type"), "UILabel");
+        EXPECT_EQ(StringMember(*note, "type"), "UIElement");
+        EXPECT_EQ(StringMember(*note, "text"), "Note") << "a plain text is an element with a text component";
         EXPECT_FALSE(BoolMember(*note, "interactive"));
         EXPECT_EQ(Member(*note, "action"), nullptr);
 
@@ -814,7 +931,7 @@ namespace BECore::Tests {
         Show("Main");
         auto* title = _manager->GetSceneByName(PoolString::Intern("Main"))->GetRootNode().GetChildren().front()->GetComponent<UICanvasComponent>()->GetRoot().FindByName(PoolString::Intern("Title"));
         ASSERT_NE(title, nullptr);
-        title->Cast<UILabel>()->text = "{#uiApi.title}: {score}";
+        title->GetComponent<UITextComponent>()->text = "{#uiApi.title}: {score}";
 
         const auto shownText = [this]() {
             const Json response = Call("ui_tree");
@@ -1351,11 +1468,9 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.LastValue(), "normal");
     }
 
-    // ---- the toggle, the progress bar and the slider ----------------------------------------------------------------------
+    // ---- the progress bar ------------------------------------------------------------------------
 
-    TEST_F(UIControlApiTest, ATreeShowsTheFieldsOfTheToggleTheProgressBarAndTheSlider) {
-        CoreManager::GetUIVars().Set("uiApiSound"_intern, "on");
-        CoreManager::GetUIVars().Set("uiApiVolume"_intern, "0.3");
+    TEST_F(UIControlApiTest, ATreeShowsTheFieldsOfTheProgressBar) {
         CoreManager::GetUIVars().Set("uiApiLoad"_intern, "25");
         Show("Values");
 
@@ -1364,33 +1479,6 @@ namespace BECore::Tests {
         ASSERT_TRUE(IsOk(tree)) << ErrorMessage(tree);
         const Json* canvas = FindCanvas(*Member(tree, "result"), "Settings");
         ASSERT_NE(canvas, nullptr);
-
-        const Json* sound = FindElement(*canvas, "Sound");
-        ASSERT_NE(sound, nullptr);
-        EXPECT_EQ(StringMember(*sound, "type"), "UIToggle");
-        EXPECT_EQ(StringMember(*sound, "bind"), "uiApiSound");
-        EXPECT_EQ(StringMember(*sound, "onValue"), "on");
-        EXPECT_EQ(StringMember(*sound, "offValue"), "off");
-        EXPECT_TRUE(BoolMember(*sound, "checked"));
-        EXPECT_EQ(StringMember(*sound, "action"), "UIControlApiSound");
-        EXPECT_FALSE(BoolMember(*sound, "disabled"));
-        EXPECT_EQ(StringMember(*sound, "text"), "Sound");
-        EXPECT_TRUE(BoolMember(*sound, "interactive"));
-        ExpectRect(Member(*sound, "rect"), 100.0f, 100.0f, 300.0f, 56.0f);
-
-        const Json* volume = FindElement(*canvas, "Volume");
-        ASSERT_NE(volume, nullptr);
-        EXPECT_EQ(StringMember(*volume, "type"), "UISlider");
-        EXPECT_EQ(StringMember(*volume, "bind"), "uiApiVolume");
-        EXPECT_NEAR(NumberMember(*volume, "minValue"), 0.0, kTolerance);
-        EXPECT_NEAR(NumberMember(*volume, "maxValue"), 1.0, kTolerance);
-        EXPECT_NEAR(NumberMember(*volume, "step"), 0.1, kTolerance);
-        EXPECT_NEAR(NumberMember(*volume, "value"), 0.3, kTolerance);
-        EXPECT_NEAR(NumberMember(*volume, "fraction"), 0.3, kTolerance);
-        EXPECT_EQ(StringMember(*volume, "action"), "UIControlApiVolume");
-        EXPECT_FALSE(BoolMember(*volume, "disabled"));
-        EXPECT_EQ(Member(*volume, "text"), nullptr);
-        EXPECT_TRUE(BoolMember(*FindElement(*canvas, "Quiet"), "disabled"));
 
         const Json* loading = FindElement(*canvas, "Loading");
         ASSERT_NE(loading, nullptr);
@@ -1405,25 +1493,18 @@ namespace BECore::Tests {
         EXPECT_EQ(Member(*loading, "checked"), nullptr);
     }
 
-    TEST_F(UIControlApiTest, TheValuesOfTheControlsFollowTheVariablesBetweenTwoTreeCallsWithNoDraw) {
+    TEST_F(UIControlApiTest, TheFractionOfAProgressBarFollowsTheVariableBetweenTwoTreeCallsWithNoDraw) {
         Show("Values");
         const Json before = Call("ui_tree");
         ASSERT_TRUE(IsOk(before));
         const Json* canvas = FindCanvas(*Member(before, "result"), "Settings");
-        EXPECT_FALSE(BoolMember(*FindElement(*canvas, "Sound"), "checked"));
-        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Volume"), "value"), 0.0, kTolerance);
         EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Loading"), "fraction"), 0.0, kTolerance);
 
-        CoreManager::GetUIVars().Set("uiApiSound"_intern, "on");
-        CoreManager::GetUIVars().Set("uiApiVolume"_intern, "0.7");
         CoreManager::GetUIVars().Set("uiApiLoad"_intern, "50");
         const Json after = Call("ui_tree");
 
         ASSERT_TRUE(IsOk(after));
         canvas = FindCanvas(*Member(after, "result"), "Settings");
-        EXPECT_TRUE(BoolMember(*FindElement(*canvas, "Sound"), "checked"));
-        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Volume"), "value"), 0.7, kTolerance);
-        EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Volume"), "fraction"), 0.7, kTolerance);
         EXPECT_NEAR(NumberMember(*FindElement(*canvas, "Loading"), "fraction"), 0.5, kTolerance);
 
         CoreManager::GetUIVars().Set("uiApiLoad"_intern, "not a number");
@@ -1431,62 +1512,15 @@ namespace BECore::Tests {
         EXPECT_NEAR(NumberMember(*FindElement(*FindCanvas(*Member(bad, "result"), "Settings"), "Loading"), "fraction"), 0.0, kTolerance);
     }
 
-    TEST_F(UIControlApiTest, AClickOnAToggleAnswersWithTheValueItAsksForAndTheListenerGetsIt) {
-        Show("Values");
-        Recorder recorder;
-
-        const Json turnOn = Call("ui_click", Click("Sound"));
-
-        ASSERT_TRUE(IsOk(turnOn)) << ErrorMessage(turnOn);
-        EXPECT_EQ(StringMember(*Member(turnOn, "result"), "action"), "UIControlApiSound");
-        EXPECT_EQ(StringMember(*Member(turnOn, "result"), "value"), "on");
-        EXPECT_EQ(recorder.Count("UIControlApiSound"), 1);
-        EXPECT_EQ(recorder.LastValue(), "on");
-
-        CoreManager::GetUIVars().Set("uiApiSound"_intern, "on");
-        const Json turnOff = Call("ui_click", Click("Sound"));
-
-        ASSERT_TRUE(IsOk(turnOff));
-        EXPECT_EQ(StringMember(*Member(turnOff, "result"), "value"), "off");
-        EXPECT_EQ(recorder.Count("UIControlApiSound"), 2);
-        EXPECT_EQ(recorder.LastValue(), "off");
-
-        const Json tree = Call("ui_tree");
-        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Settings"), "Sound"), "checked")) << "a click changes nothing by itself";
-    }
-
-    TEST_F(UIControlApiTest, AClickOnASliderWithAtAsksForTheMinimumTheMiddleAndTheMaximum) {
-        Show("Values");
-        Recorder recorder;
-        const struct {
-            double at;
-            const char* value;
-        } cases[] = {{0.0, "0"}, {0.5, "0.5"}, {1.0, "1"}, {0.25, "0.2"}};
-
-        for (const auto& item : cases) {
-            Json params = Click("Volume");
-            params["at"] = item.at;
-            const Json response = Call("ui_click", params);
-
-            ASSERT_TRUE(IsOk(response)) << "at " << item.at << ": " << ErrorMessage(response);
-            const Json& result = *Member(response, "result");
-            EXPECT_TRUE(BoolMember(result, "consumed")) << "at " << item.at;
-            EXPECT_EQ(StringMember(result, "action"), "UIControlApiVolume");
-            EXPECT_EQ(StringMember(result, "value"), item.value) << "at " << item.at;
-            EXPECT_EQ(recorder.LastValue(), item.value) << "at " << item.at;
-        }
-        EXPECT_EQ(recorder.Count("UIControlApiVolume"), 4);
-    }
-
     TEST_F(UIControlApiTest, ASliderWithoutAtIsPressedInTheMiddleAndAnIntegerAtIsAccepted) {
         Show("Values");
         Recorder recorder;
 
-        const Json middle = Call("ui_click", Click("Volume"));
+        const Json middle = Call("ui_click", Click("CVolume"));
         ASSERT_TRUE(IsOk(middle)) << ErrorMessage(middle);
         EXPECT_EQ(StringMember(*Member(middle, "result"), "value"), "0.5");
 
-        Json one = Click("Volume");
+        Json one = Click("CVolume");
         one["at"] = 1;  // an integer in the JSON text
         const Json end = Call("ui_click", one);
         ASSERT_TRUE(IsOk(end)) << ErrorMessage(end);
@@ -1495,16 +1529,16 @@ namespace BECore::Tests {
 
     TEST_F(UIControlApiTest, AClientSetsASliderEndToEnd) {
         Show("Values");
-        Json params = Click("Volume");
+        Json params = Click("CVolume");
         params["at"] = 1.0;
         ASSERT_TRUE(IsOk(Call("ui_click", params)));
 
         const Json unchanged = Call("ui_tree");
-        EXPECT_NEAR(NumberMember(*FindElement(*FindCanvas(*Member(unchanged, "result"), "Settings"), "Volume"), "value"), 0.0, kTolerance) << "the game has not answered";
+        EXPECT_NEAR(NumberMember(*FindElement(*FindCanvas(*Member(unchanged, "result"), "Settings"), "CVolume"), "value"), 0.0, kTolerance) << "the game has not answered";
 
-        CoreManager::GetUIVars().Set("uiApiVolume"_intern, "1");
+        CoreManager::GetUIVars().Set("uiApiCVolume"_intern, "1");
         const Json answered = Call("ui_tree");
-        const Json* volume = FindElement(*FindCanvas(*Member(answered, "result"), "Settings"), "Volume");
+        const Json* volume = FindElement(*FindCanvas(*Member(answered, "result"), "Settings"), "CVolume");
         EXPECT_NEAR(NumberMember(*volume, "value"), 1.0, kTolerance);
         EXPECT_NEAR(NumberMember(*volume, "fraction"), 1.0, kTolerance);
     }
@@ -1514,7 +1548,7 @@ namespace BECore::Tests {
         Recorder recorder;
 
         for (const char* json : {"1.5", "-0.1", "\"0.5\"", "null", "true", "[0.5]", "2", "-1"}) {
-            Json params = Click("Volume");
+            Json params = Click("CVolume");
             params["at"] = *ParseJson(json);
             const Json response = Call("ui_click", params);
 
@@ -1550,19 +1584,6 @@ namespace BECore::Tests {
         Json covered = Click("Under");
         covered["at"] = 1.0;
         EXPECT_EQ(ErrorCode(Call("ui_click", covered)), "not_clickable");
-    }
-
-    TEST_F(UIControlApiTest, ADisabledControlTakesTheClickAndAnswersWithNothingEmitted) {
-        Show("Values");
-        Recorder recorder;
-
-        const Json response = Call("ui_click", Click("Quiet"));
-
-        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        EXPECT_TRUE(BoolMember(*Member(response, "result"), "consumed"));
-        EXPECT_EQ(StringMember(*Member(response, "result"), "action"), "UIControlApiQuiet");
-        EXPECT_EQ(StringMember(*Member(response, "result"), "value"), "");
-        EXPECT_EQ(recorder.Total(), 0u);
     }
 
     // ---- the composed toggle and slider ------------------------------------------------------------------------------------
@@ -2184,20 +2205,6 @@ namespace BECore::Tests {
         EXPECT_FALSE(bare->contains("tooltip"));
     }
 
-    TEST_F(UIControlApiTest, AToggleWithATextComponentKeepsTheTextOfTheToggle) {
-        Show("Composed");
-
-        const Json response = Call("ui_tree");
-
-        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
-        const Json* bar = FindCanvas(*Member(response, "result"), "Bar");
-        ASSERT_NE(bar, nullptr);
-        const Json* loud = FindElement(*bar, "Loud");
-        ASSERT_NE(loud, nullptr);
-        EXPECT_EQ(StringMember(*loud, "type"), "UIToggle");
-        EXPECT_EQ(StringMember(*loud, "text"), "Loud") << "the text of the label class, not of the component";
-    }
-
     TEST_F(UIControlApiTest, AClickOnAComposedButtonEmitsAndAnswersItsActionAndValue) {
         Show("Composed");
         Recorder recorder;
@@ -2275,7 +2282,7 @@ namespace BECore::Tests {
         EXPECT_EQ(recorder.Count("UIControlApiWide"), 1);
     }
 
-    // ---- choice groups made of components: a composed segment or option answers like a UIButton one ----------------------
+    // ---- choice groups made of components: a segment or an option made of components ----------------------
 
     TEST_F(UIControlApiTest, ATreeShowsTheSegmentsOfAComposedGroupWithTheFieldsOfAButton) {
         CoreManager::GetUIVars().Set("uiApiCSide"_intern, "right");
@@ -2375,7 +2382,7 @@ namespace BECore::Tests {
         const Json* button = FindElement(*mix, "MixButton");
         const Json* composed = FindElement(*mix, "MixComposed");
         ASSERT_TRUE(button != nullptr && composed != nullptr);
-        EXPECT_EQ(StringMember(*button, "type"), "UIButton");
+        EXPECT_EQ(StringMember(*button, "type"), "UIElement");
         EXPECT_EQ(StringMember(*composed, "type"), "UIElement");
         for (const Json* segment : {button, composed}) {
             EXPECT_EQ(StringMember(*segment, "action"), "UIControlApiMix");

@@ -10,7 +10,7 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -35,8 +35,17 @@ namespace BECore::Tests {
     <elements>
       <element type="UIPanel" name="Plate" x="10" y="10" width="200" height="100" color="10,20,30,200">
         <children>
-          <element type="UILabel" name="Title" x="8" y="8" width="184" height="30" text="Score: {splitScore}" fontSize="24"/>
-          <element type="UIButton" name="Ok" anchor="BottomRight" x="-8" y="-8" width="80" height="40" text="OK" action="SceneSplitOk" color="40,90,60,255"/>
+          <element type="UIElement" name="Title" x="8" y="8" width="184" height="30" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="Score: {splitScore}"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Ok" anchor="BottomRight" x="-8" y="-8" width="80" height="40" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="OK" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="SceneSplitOk"/>
+            </components>
+          </element>
         </children>
       </element>
     </elements>
@@ -46,8 +55,17 @@ namespace BECore::Tests {
         constexpr const char* kMenuNode = R"(<node name="Menu" layer="5"><components>
   <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
     <elements>
-      <element type="UIButton" name="Tiny" x="400" y="10" width="20" height="20" text="T" action="SceneSplitTiny" color="40,90,60,255"/>
-      <element type="UILabel" name="Note" x="300" y="300" width="80" height="40" text="Note"/>
+      <element type="UIElement" name="Tiny" x="400" y="10" width="20" height="20" color="40,90,60,255">
+        <components>
+          <component type="UITextComponent" text="T" align="Center" verticalAlign="Center" wrap="false"/>
+          <component type="UIInputClicker" action="SceneSplitTiny"/>
+        </components>
+      </element>
+      <element type="UIElement" name="Note" x="300" y="300" width="80" height="40">
+        <components>
+          <component type="UITextComponent" text="Note"/>
+        </components>
+      </element>
     </elements>
   </component>
 </components></node>)";
@@ -86,10 +104,13 @@ namespace BECore::Tests {
         // button of 20 units is under the touch size, so the validator has something to find on every instance.
         std::string PanelElements(const std::string& title) {
             return "<elements>"
-                   "<element type=\"UILabel\" name=\"Title\" x=\"8\" y=\"8\" width=\"184\" height=\"30\" text=\"" +
+                   "<element type=\"UIElement\" name=\"Title\" x=\"8\" y=\"8\" width=\"184\" height=\"30\" fontSize=\"24\"><components>"
+                   "<component type=\"UITextComponent\" text=\"" +
                    title +
-                   "\" fontSize=\"24\"/>"
-                   "<element type=\"UIButton\" name=\"Tiny\" x=\"400\" y=\"10\" width=\"20\" height=\"20\" text=\"T\" action=\"SceneSplitTiny\" color=\"40,90,60,255\"/>"
+                   "\"/></components></element>"
+                   "<element type=\"UIElement\" name=\"Tiny\" x=\"400\" y=\"10\" width=\"20\" height=\"20\" color=\"40,90,60,255\"><components>"
+                   "<component type=\"UITextComponent\" text=\"T\" align=\"Center\" verticalAlign=\"Center\" wrap=\"false\"/>"
+                   "<component type=\"UIInputClicker\" action=\"SceneSplitTiny\"/></components></element>"
                    "</elements>";
         }
 
@@ -557,10 +578,10 @@ namespace BECore::Tests {
         const auto canvas = Main(manager).GetRootNode().GetChildren()[0]->GetComponent<UICanvasComponent>();
         ASSERT_TRUE(canvas);
         ASSERT_EQ(canvas->_elements.size(), 2u);
-        const auto* title = canvas->_elements[0]->Cast<UILabel>();
-        ASSERT_NE(title, nullptr);
+        const UIElement* title = canvas->_elements[0].Get();
+        ASSERT_NE(title->GetComponent<UITextComponent>(), nullptr);
         EXPECT_EQ(title->name, PoolString::Intern("Title"));
-        EXPECT_EQ(title->text, "C");
+        EXPECT_EQ(title->GetComponent<UITextComponent>()->text, "C");
     }
 
     // ---- layering ---------------------------------------------------------------------------------------------------------
