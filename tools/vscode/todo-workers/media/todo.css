@@ -31,3 +31,11 @@ button.chip.on { opacity: 1; border-color: currentColor; }
 .todo-entry .badge.busy { margin-left: 0; color: var(--vscode-charts-blue, #3794ff); }
 button:disabled { opacity: 0.5; cursor: default; }
 .todo-entry .badge.away { margin-left: 0; color: var(--vscode-editorWarning-foreground, #cca700); }
+.todo-entry .badge.through { margin-left: 0; color: var(--vscode-testing-iconPassed, #3fb950); }
+.todo-entry .badge.blocked { margin-left: 0; color: var(--vscode-editorWarning-foreground, #cca700); }
+.deps { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 6px; font-size: 12px; }
+.deps .badge.dep { margin-left: 0; }
+button.link { background: none; border: none; padding: 0 4px; color: var(--vscode-textLink-foreground); cursor: pointer; }
+.queues { display: flex; flex-direction: column; gap: 4px; }
+.queue-line { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.badge.drag { cursor: grab; margin-left: 0; }

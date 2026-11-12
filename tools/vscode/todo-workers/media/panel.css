@@ -220,3 +220,13 @@ button.danger { color: var(--vscode-errorForeground, #f14c4c); }
 .feed-item .text { word-break: break-word; }
 .feed-item.broken .kind, .feed-item.error .kind, .feed-item.waiting .kind { color: var(--vscode-errorForeground, #f14c4c); }
 .feed-item.verified .kind, .feed-item.merged .kind { color: var(--vscode-charts-green, #388a34); }
+details.more { display: inline-block; position: relative; }
+details.more > summary { list-style: none; cursor: pointer; padding: 1px 8px; border: 1px solid var(--vscode-button-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35))); border-radius: 2px; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more[open] .more-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.through-line { display: flex; gap: 6px; align-items: center; margin: 4px 0; font-size: 12px; }
+button.toggle { font-size: 11px; padding: 0 6px; opacity: 0.75; }
+button.toggle.on { opacity: 1; color: var(--vscode-testing-iconPassed, #3fb950); border-color: currentColor; }
+.warn-text { color: var(--vscode-editorWarning-foreground, #cca700); }
+.now.one-line .said { display: inline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now.one-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

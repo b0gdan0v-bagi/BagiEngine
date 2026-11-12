@@ -140,8 +140,42 @@
         }
 
         const info = el("span", "muted", payload.loading ? "loading ..." : payload.at ? `updated ${ago(payload.at)}` : "");
-        bar.append(area, search, chips, info, button("Refresh", { cmd: "refresh" }));
+        bar.append(area, search, chips, info, button("New entry", { cmd: "newEntry" }, "add an entry to the store (todo-add format; similar titles are named first)", "primary"), button("Refresh", { cmd: "refresh" }));
         return bar;
+    }
+
+    // The queues of the workers: drag an entry to change the order of its worker's queue.
+    function queues() {
+        const workers = (payload.workers || []).filter((w) => (w.queue || []).length);
+        if (!workers.length) return null;
+        const box = el("div", "card queues");
+        box.appendChild(el("div", "muted", "Queues (drag to reorder; the panel starts the first one when the worker is free)"));
+        for (const w of workers) {
+            const line = box.appendChild(el("div", "queue-line"));
+            line.appendChild(el("span", "entry", w.name));
+            const items = [...w.queue];
+            items.forEach((id, index) => {
+                const chip = line.appendChild(el("span", "badge queued drag", `${index + 1}. ${id}`));
+                chip.draggable = true;
+                chip.addEventListener("dragstart", (event) => event.dataTransfer.setData("text/plain", JSON.stringify({ k: w.k, index })));
+                chip.addEventListener("dragover", (event) => event.preventDefault());
+                chip.addEventListener("drop", (event) => {
+                    event.preventDefault();
+                    let from;
+                    try {
+                        from = JSON.parse(event.dataTransfer.getData("text/plain"));
+                    } catch (error) {
+                        return;
+                    }
+                    if (from.k !== w.k || from.index === index) return;
+                    const order = [...items];
+                    const [moved] = order.splice(from.index, 1);
+                    order.splice(index, 0, moved);
+                    vscode.postMessage({ cmd: "reorderQueue", worker: w.k, ids: order });
+                });
+            });
+        }
+        return box;
     }
 
     function matchesArea(entry) {
@@ -158,7 +192,11 @@
             el("span", `badge status status-${String(entry.status).replace(" ", "-")}`, entry.status)
         );
         if (entry.stage !== null && entry.stage !== undefined) top.appendChild(el("span", "muted", `stage ${entry.stage}`));
-        if (entry.planProgress && entry.planProgress.total) top.appendChild(el("span", "muted", `plan ${entry.planProgress.done}/${entry.planProgress.total}`));
+        if (entry.slices && entry.slices.count > 1) top.appendChild(el("span", "muted", `${entry.slices.count} slices ${entry.slices.done}/${entry.slices.total}`));
+        else if (entry.planProgress && entry.planProgress.total) top.appendChild(el("span", "muted", `plan ${entry.planProgress.done}/${entry.planProgress.total}`));
+        if (entry.slicing === "through") top.appendChild(el("span", "badge through", entry.costCap ? `through · cap $${entry.costCap}` : "through"));
+        const blockers = (entry.blockedBy || []).filter((b) => b.status !== "closed");
+        if (blockers.length) top.appendChild(el("span", "badge blocked", `blocked by ${blockers.map((b) => b.id).join(", ")}`));
         top.appendChild(el("span", "time", ago(entry.updatedAt)));
         item.appendChild(top);
         item.appendChild(inline(el("div", "title"), entry.title || ""));
@@ -194,6 +232,8 @@
             if (plan) actions.appendChild(button("Plan", { cmd: "plan", name: plan }, `the plan ${plan} (the local copy in ~/.claude/plans, else from the store)`));
             actions.appendChild(button("Copy id", { cmd: "copy", text: entry.id }));
             item.appendChild(actions);
+            item.appendChild(editActions(entry));
+            item.appendChild(dependencies(entry));
         } else if (entry.summary) {
             item.appendChild(inline(el("div", "summary muted"), entry.summary));
         }
@@ -206,6 +246,35 @@
             renderList();
         });
         return item;
+    }
+
+    // The owner's writes: every one goes through todo.py (the panel asks first where it matters).
+    function editActions(entry) {
+        const actions = el("div", "actions");
+        if (entry.status === "open") actions.appendChild(button("Defer", { cmd: "setStatus", entry: entry.id, status: "deferred" }, "status deferred: the loop does not take it"));
+        if (entry.status === "deferred") actions.appendChild(button("Open", { cmd: "setStatus", entry: entry.id, status: "open" }, "status open: the loop may take it"));
+        actions.appendChild(button("Stage", { cmd: "setStage", entry: entry.id, area: entry.area }, "the roadmap stage of its area, or none"));
+        actions.appendChild(button("Edit text", { cmd: "editBody", entry: entry.id }, "edit the body in the editor, then store it (refused when the entry changed meanwhile)"));
+        const through = entry.slicing === "through";
+        actions.appendChild(button(through ? "Through: on" : "Through: off", { cmd: "setThrough", entry: entry.id, on: !through }, through
+            ? "the loop starts the next slice on the same branch without waiting for your merge; click to turn it off"
+            : "turn on: slices of this entry go on one branch, each reviewed, and you merge once (an optional cost cap is asked)", through ? "primary" : ""));
+        return actions;
+    }
+
+    function dependencies(entry) {
+        const box = el("div", "deps");
+        const blockedBy = entry.blockedBy || [];
+        box.appendChild(el("span", "muted", blockedBy.length ? "waits for:" : "waits for nothing"));
+        for (const link of blockedBy) {
+            const chip = box.appendChild(el("span", `badge dep status-${String(link.status).replace(" ", "-")}`, `${link.id} (${link.status})`));
+            if (link.title) chip.title = link.title + (link.note ? ` · ${link.note}` : "");
+            chip.appendChild(button("×", { cmd: "depRm", entry: entry.id, blocker: link.id }, `${entry.id} no longer waits for ${link.id}`, "link"));
+        }
+        box.appendChild(button("+ waits for", { cmd: "depAdd", entry: entry.id }, "pick an entry this one waits for (the store refuses a cycle)", "link"));
+        const blocks = entry.blocks || [];
+        if (blocks.length) box.appendChild(el("span", "muted", `blocks: ${blocks.map((b) => `${b.id} (${b.status})`).join(", ")}`));
+        return box;
     }
 
     // Open entries, and ones in progress that no running worker holds (the loop continues their branch).
@@ -239,6 +308,8 @@
         const entries = payload.entries || [];
         root.appendChild(controls(entries));
         if (payload.error) root.appendChild(el("div", "error", payload.error));
+        const queueBox = queues();
+        if (queueBox) root.appendChild(queueBox);
         list = root.appendChild(el("div", "todo-list"));
         if (!payload.entries && payload.loading) list.appendChild(el("p", "muted", "Asking todo.py ..."));
         else renderList();

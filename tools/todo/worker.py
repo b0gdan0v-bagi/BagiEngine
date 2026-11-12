@@ -533,7 +533,7 @@ def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
         entries = json.loads(result.stdout or "[]")
     except json.JSONDecodeError as error:
         return [], f"todo.py list: {error}"
-    keep = ("id", "area", "title", "status", "statusNote", "branch", "planShown", "planProgress", "blocks", "slicing", "costCap", "slices", "stagesPlan")
+    keep = ("id", "area", "title", "status", "statusNote", "branch", "planShown", "planProgress", "blocks", "blockedBy", "slicing", "costCap", "slices", "stagesPlan")
     table = {row["area"]: row for row in rule_area_table(layout.main)}
     shown = []
     for entry in entries:

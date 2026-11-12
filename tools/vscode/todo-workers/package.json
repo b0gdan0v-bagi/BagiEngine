@@ -2,7 +2,7 @@
     "name": "todo-workers",
     "displayName": "Todo Workers",
     "description": "The parallel todo-loop workers of BagiEngine: their sessions, entries and branches, and the entries waiting for /todo-merge.",
-    "version": "0.16.2",
+    "version": "0.17.0",
     "publisher": "bagiengine",
     "license": "UNLICENSED",
     "private": true,
