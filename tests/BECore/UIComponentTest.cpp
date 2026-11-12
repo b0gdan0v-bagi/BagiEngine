@@ -10,6 +10,8 @@
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UILayoutValidator.h>
 #include <BECore/UI/UIPreviewOverlay.h>
+#include <BECore/UI/UISwitchComponent.h>
+#include <BECore/UI/UIToggleComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -732,6 +734,55 @@ namespace BECore::Tests {
         const eastl::string saved = ElementToXml(*loaded);
         EXPECT_NE(saved.find("hoverTint"), eastl::string::npos) << saved.c_str();
         EXPECT_NE(saved.find("stretch"), eastl::string::npos) << saved.c_str();
+    }
+
+    TEST_F(UIComponentTest, TheToggleAndSwitchComponentsComeFromAFileAndSaveBack) {
+        constexpr const char* xml =
+            R"(<root><element type="UIElement" name="Row"><components><component type="UIToggleComponent" bind="mode" action="SetMode" onValue="1" offValue="0"/></components><children><element type="UIElement" name="RowSwitch"><components><component type="UISwitchComponent" trackColor="1,2,3,255" fillColor="4,5,6,255" thumbColor="7,8,9,255" partShape="Round"/></components></element></children></element></root>)";
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(xml));
+        auto loaded = New<UIElement>();
+        ASSERT_TRUE(deserializer.BeginObject("element"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+
+        const UIToggleComponent* toggle = loaded->GetComponent<UIToggleComponent>();
+        ASSERT_NE(toggle, nullptr);
+        EXPECT_EQ(toggle->bind, PoolString::Intern("mode"));
+        EXPECT_EQ(toggle->action, PoolString::Intern("SetMode"));
+        EXPECT_EQ(toggle->onValue, PoolString::Intern("1"));
+        EXPECT_EQ(toggle->offValue, PoolString::Intern("0"));
+        const UISwitchComponent* thumb = loaded->children[0]->GetComponent<UISwitchComponent>();
+        ASSERT_NE(thumb, nullptr);
+        EXPECT_TRUE(ColorsEqual(thumb->trackColor, Color(1, 2, 3, 255)));
+        EXPECT_TRUE(ColorsEqual(thumb->fillColor, Color(4, 5, 6, 255)));
+        EXPECT_TRUE(ColorsEqual(thumb->thumbColor, Color(7, 8, 9, 255)));
+        EXPECT_EQ(thumb->partShape, UIPartShape::Round);
+
+        const eastl::string saved = ElementToXml(*loaded);
+        EXPECT_NE(saved.find("UIToggleComponent"), eastl::string::npos) << saved.c_str();
+        EXPECT_NE(saved.find("partShape=\"Round\""), eastl::string::npos) << saved.c_str();
+
+        XmlDeserializer again;
+        ASSERT_TRUE(again.LoadFromString(eastl::string_view(saved.data(), saved.size())));
+        auto reloaded = New<UIElement>();
+        ASSERT_TRUE(again.BeginObject("element"));
+        reloaded->Deserialize(again);
+        again.EndObject();
+        EXPECT_FALSE(again.HasErrors());
+        EXPECT_STREQ(ElementToXml(*reloaded).c_str(), saved.c_str());
+    }
+
+    TEST_F(UIComponentTest, TheToggleAndSwitchComponentsAreMadeByTheFactoryAndAreNotCheckedOrStateGiving) {
+        for (const char* type : {"UIToggleComponent", "UISwitchComponent"}) {
+            const auto made = AbstractFactory<UIComponent>::GetInstance().Create(type);
+            ASSERT_TRUE(made) << type;
+            EXPECT_FALSE(made->GivesStateLook()) << type << ": the clicker beside it gives the state look";
+        }
+        const auto toggle = New<UIToggleComponent>();
+        EXPECT_TRUE(toggle->MakesInteractive());
+        EXPECT_FALSE(New<UISwitchComponent>()->MakesInteractive());
     }
 
 }  // namespace BECore::Tests
