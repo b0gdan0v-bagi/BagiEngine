@@ -15,7 +15,7 @@ namespace BECore {
      */
 
     /// The version of the content format this engine reads; bumped by every change that needs a migration step
-    inline constexpr uint32_t kContentVersion = 2;
+    inline constexpr uint32_t kContentVersion = 3;
 
     /// The version of a file that has no `contentVersion`
     inline constexpr uint32_t kUnversionedContentVersion = 1;

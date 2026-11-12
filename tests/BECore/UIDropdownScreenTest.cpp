@@ -6,9 +6,11 @@
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIDropdown.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIStack.h>
 #include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -138,6 +140,30 @@ namespace BECore::Tests {
             xml.replace(at, what.size(), with);
         }
 
+        /// The five options as composed elements: a caption on the element and a clicker with the value (an option has no action), the second one icon-left (an image child and a caption child)
+        void ComposeOptions(std::string& xml) {
+            constexpr const char* kValues[] = {"novice", "easy", "normal", "hard", "master"};
+            for (size_t i = 0; i < kOptionCount; ++i) {
+                const std::string button = std::string("<element type=\"UIButton\" name=\"") + kOptionNames[i] + "\" text=\"{#" + kOptionKeys[i] + "}\" fontSize=\"24\" value=\"" + kValues[i] +
+                                           "\" color=\"70,70,100,255\"/>";
+                const std::string caption =
+                    std::string("<component type=\"UITextComponent\" text=\"{#") + kOptionKeys[i] + "}\" align=\"Center\" verticalAlign=\"Center\" overflow=\"Ellipsis\" wrap=\"false\"/>";
+                const std::string clicker = std::string("<component type=\"UIInputClicker\" value=\"") + kValues[i] + "\"/>";
+                std::string composed;
+                if (i == 1) {
+                    composed = std::string("<element type=\"UIElement\" name=\"") + kOptionNames[i] +
+                               "\" fontSize=\"24\" color=\"70,70,100,255\" layout=\"Stack\" direction=\"Horizontal\" padding=\"8,0,0,0\" spacing=\"6\" crossAlign=\"Center\">" + "<components>" +
+                               clicker + "</components><children>" +
+                               "<element type=\"UIElement\" name=\"LevelEasyIcon\" height=\"50%\" aspectRatio=\"1\"><components><component type=\"UIImageComponent\"/></components></element>" +
+                               "<element type=\"UIElement\" name=\"LevelEasyCaption\" flex=\"1\" height=\"100%\"><components>" + caption + "</components></element></children></element>";
+                } else {
+                    composed = std::string("<element type=\"UIElement\" name=\"") + kOptionNames[i] + "\" fontSize=\"24\" color=\"70,70,100,255\"><components>" + caption + clicker +
+                               "</components></element>";
+                }
+                Replace(xml, button, composed);
+            }
+        }
+
         SDL_MouseButtonEvent Button(float x, float y, bool down) {
             SDL_MouseButtonEvent event{};
             event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
@@ -199,7 +225,7 @@ namespace BECore::Tests {
 
         /// Every control of the tree that shows text or takes a press, depth first. The options of a closed list have no rect and are not looked at
         void CollectControls(const UIElement& element, eastl::vector<const UIElement*>& found) {
-            if (element.Cast<UILabel>() || element.Cast<UIButton>() || element.Cast<UIDropdown>()) {
+            if (element.Cast<UILabel>() || element.Cast<UIButton>() || element.Cast<UIDropdown>() || element.GetComponent<UITextComponent>()) {
                 found.push_back(&element);
             }
             if (element.HasPopupChildren() && !element.IsPopupOpen()) {
@@ -211,6 +237,9 @@ namespace BECore::Tests {
         }
 
         eastl::string ShownText(const UIElement& element) {
+            if (const UITextComponent* caption = element.GetComponent<UITextComponent>()) {
+                return eastl::string(caption->GetDisplayText());
+            }
             const UILabel* label = element.Cast<UILabel>();
             if (!label) {
                 label = element.Cast<UIButton>();
@@ -241,7 +270,7 @@ namespace BECore::Tests {
                     problems += Format("{} cuts '{}': {:.1f} units wide with {:.1f} of air each side, at scale {:.3f}\n", control->name.ToStringView(), ShownText(*control).c_str(), control->rect.w,
                                        air, scale);
                 }
-                if (control->interactive && control->rect.h < kRowHeight - 0.01f) {
+                if (control->IsInteractive() && control->rect.h < kRowHeight - 0.01f) {
                     problems += Format("{} is {:.1f} units high, under {:.0f}\n", control->name.ToStringView(), control->rect.h, kRowHeight);
                 }
             }
@@ -361,6 +390,16 @@ namespace BECore::Tests {
             return *typed;
         }
 
+        /// Any element of the panel by name, whatever its class (`Get<T>` wants the exact type)
+        UIElement& Find(const char* name) const {
+            UIElement* element = _levels->GetRoot().FindByName(PoolString::Intern(name));
+            if (element == nullptr) {
+                ADD_FAILURE() << name << " is not in the panel";
+                std::abort();
+            }
+            return *element;
+        }
+
         static std::pair<float, float> CenterOf(const UIElement& element) {
             return {element.rect.x + element.rect.w * 0.5f, element.rect.y + element.rect.h * 0.5f};
         }
@@ -378,7 +417,7 @@ namespace BECore::Tests {
             ASSERT_TRUE(Click(Get<UIDropdown>("Level")));
             Draw();
             ASSERT_TRUE(Get<UIDropdown>("Level").IsOpen());
-            ASSERT_FALSE(Get<UIButton>("LevelMaster").rect.IsEmpty());
+            ASSERT_FALSE(Find("LevelMaster").rect.IsEmpty());
         }
 
         /// The panel on the whole matrix once for every language: the findings of the validator, each case named with its language
@@ -595,6 +634,95 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Show());
         const eastl::string problems = Problems(_levels->GetLayout());
         EXPECT_NE(problems.find("Level 'Grandmaster' has an empty rect"), eastl::string::npos) << problems.c_str();
+    }
+
+    // ---- the options as composed elements: the same panel, the same findings ------------------------------------------------
+
+    TEST_F(UIDropdownScreenTest, ComposedOptionsPassTheSizeMatrixClosedAndOpenInEveryLanguageInBothViews) {
+        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+            ASSERT_NO_FATAL_FAILURE(LoadScene(width, height, ComposeOptions));
+            ASSERT_NO_FATAL_FAILURE(Show());
+            const auto closed = ValidatePanel(*_levels);
+            EXPECT_TRUE(closed.empty()) << width << " closed: " << DescribeMatrixFailures(closed).c_str();
+
+            ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
+            const auto open = ValidatePanel(*_levels);
+            EXPECT_TRUE(open.empty()) << width << " open: " << DescribeMatrixFailures(open).c_str();
+        }
+    }
+
+    TEST_F(UIDropdownScreenTest, NoWordOfAComposedOptionIsCutOnAnyCaseOfTheMatrixInAnyLanguage) {
+        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+            ASSERT_NO_FATAL_FAILURE(LoadScene(width, height, ComposeOptions));
+            ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
+            const eastl::string open = ProblemsOnMatrix(*_levels);
+            EXPECT_TRUE(open.empty()) << width << " open: " << open.c_str();
+        }
+    }
+
+    TEST_F(UIDropdownScreenTest, TheProblemsCheckSeesAComposedOptionAndItsCaptionChild) {
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) {
+            ComposeOptions(xml);
+            Replace(xml, "name=\"LevelNovice\" fontSize=\"24\"", "name=\"LevelNovice\" height=\"30\" fontSize=\"24\"");
+        }));
+        ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
+        EXPECT_FALSE(ValidatePanel(*_levels).empty());
+        EXPECT_NE(Problems(_levels->GetLayout()).find("LevelNovice is 30.0 units high"), eastl::string::npos);
+
+        eastl::vector<const UIElement*> controls;
+        CollectControls(*_levels->GetLayout().root, controls);
+        EXPECT_NE(eastl::find(controls.begin(), controls.end(), &Find("LevelEasyCaption")), controls.end()) << "the caption child is checked on its own";
+    }
+
+    TEST_F(UIDropdownScreenTest, ComposedOptionsHaveTheRectsOfTheOptionsThatAreButtons) {
+        // The same list twice, once as buttons and once as composed elements: every option in the same place, in both views
+        for (const auto [width, height] : {std::pair{kViewWidth, kViewHeight}, std::pair{kPortraitWidth, kPortraitHeight}}) {
+            ASSERT_NO_FATAL_FAILURE(LoadScene(width, height));
+            ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
+            eastl::vector<Rect> buttons;
+            for (const char* name : kOptionNames) {
+                buttons.push_back(Find(name).rect);
+            }
+            const Rect headerOfButtons = Get<UIDropdown>("Level").rect;
+
+            ASSERT_NO_FATAL_FAILURE(LoadScene(width, height, ComposeOptions));
+            ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
+            EXPECT_FLOAT_EQ(Get<UIDropdown>("Level").rect.y, headerOfButtons.y);
+            for (size_t i = 0; i < kOptionCount; ++i) {
+                const Rect& composed = Find(kOptionNames[i]).rect;
+                EXPECT_FLOAT_EQ(composed.x, buttons[i].x) << kOptionNames[i];
+                EXPECT_FLOAT_EQ(composed.y, buttons[i].y) << kOptionNames[i];
+                EXPECT_FLOAT_EQ(composed.w, buttons[i].w) << kOptionNames[i];
+                EXPECT_FLOAT_EQ(composed.h, buttons[i].h) << kOptionNames[i];
+            }
+        }
+    }
+
+    TEST_F(UIDropdownScreenTest, AChoiceOfAComposedOptionIsAnActionTheGameAnswersAndTheHeaderFollowsInEveryLanguage) {
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, ComposeOptions));
+        ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
+        EXPECT_EQ(Get<UIDropdown>("Level").GetDisplayText(), eastl::string("Grandmaster"));
+
+        ASSERT_TRUE(Click(Find("LevelEasy")));
+        EXPECT_EQ(_game->CountOf("SetLevel"), 1u);
+        EXPECT_EQ(_game->LastValue(), "easy"_intern);
+        EXPECT_EQ(_game->CountOf("LevelsClose"), 0u) << "the option took the click, not the OK button under it";
+        EXPECT_FALSE(Get<UIDropdown>("Level").IsOpen());
+
+        Draw();
+        EXPECT_TRUE(Find("LevelEasy").rect.IsEmpty()) << "closed again";
+        EXPECT_TRUE(Find("LevelEasyCaption").rect.IsEmpty());
+        ForEachLanguage(
+            [&](PoolString language) { EXPECT_EQ(Get<UIDropdown>("Level").GetDisplayText(), eastl::string(*CoreManager::GetUIStrings().Find("level.easy"))) << language.ToStringView().data(); });
+    }
+
+    TEST_F(UIDropdownScreenTest, APressOutsideAComposedListClosesItAndNothingElseHappens) {
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, ComposeOptions));
+        ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
+        const size_t before = _game->Total();
+        ASSERT_TRUE(Click(Get<UILabel>("Title")));
+        EXPECT_FALSE(Get<UIDropdown>("Level").IsOpen());
+        EXPECT_EQ(_game->Total(), before);
     }
 
 }  // namespace BECore::Tests

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!-- Failure: a segment with an icon above its caption has no composed form (as for any button); the file stays as it is. -->
+<node name="SegmentAbove" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UISegmented" name="Mode" bind="mode" x="10" y="10" width="240" height="72" direction="Horizontal">
+          <children>
+            <element type="UIButton" name="Stacked" flex="1" icon="icons.grid" iconPlacement="Above" text="Grid" action="SetMode" value="grid" />
+            <element type="UIButton" name="Plain" flex="1" text="Plain" action="SetMode" value="plain" />
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

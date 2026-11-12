@@ -1,7 +1,7 @@
 #include "UISegmented.h"
 
 #include <BECore/GameManager/CoreManager.h>
-#include <BECore/UI/UIButton.h>
+#include <BECore/UI/UIChoice.h>
 #include <Generated/UISegmented.gen.hpp>
 
 namespace BECore {
@@ -16,12 +16,11 @@ namespace BECore {
     void UISegmented::SyncChildren() {
         const eastl::string_view chosen = GetSelectedValue();
         for (const auto& child : children) {
-            auto* segment = child->Cast<UIButton>();
-            if (!segment) {
+            if (!UIChoice::IsOption(*child)) {
                 continue;
             }
-            segment->selected = !chosen.empty() && segment->value.ToStringView() == chosen;
-            segment->groupDisabled = disabled;
+            child->selected = !chosen.empty() && UIChoice::GetValue(*child).ToStringView() == chosen;
+            child->groupDisabled = disabled;
         }
     }
 

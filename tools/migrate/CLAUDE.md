@@ -6,7 +6,7 @@ Rewrites the content files of a game to the format the engine reads now. Standar
 |------|---------|
 | `migrate.py` | the command, the step API (`step`), the registry, the scan; `main(argv, engine_steps)` and the pieces are importable (the tests call them without a subprocess) |
 | `xmltext.py` | the lossless XML model the steps edit: the contract is its module docstring |
-| `steps/` | the engine track: one module per step, `s0001_<name>.py` (a module starting with `_` is not loaded) |
+| `steps/` | the engine track: one module per step, `s0001_<name>.py` (a module starting with `_` is not loaded: `_ui_button.py` is the mapping `UIButton` to components that steps 1 and 2 share; a step finds it by putting its own folder on `sys.path`) |
 | `tests/` | pytest: `.venv/bin/python -m pytest tools/migrate/tests`; the step fixtures are `tests/fixtures/<step>/<case>.before.xml` and `.after.xml` |
 
 ## The format version
@@ -32,6 +32,7 @@ def run(doc, ctx):                                              # doc: xmltext.D
 - A step is a plain function over the model, never reads another file, and says in its module docstring what it rewrites and what it **refuses**. A step that cannot give the same behaviour for a shape fails on it (`ctx.fail`) instead of guessing: a migration never changes how a game looks silently.
 - A step raising an exception is an error of that file only (the file is left, the run goes on, exit 2).
 - Idempotent: what a step already rewrote must not match it again.
+- The steps so far: 1 `ui-button-to-components` (every `UIButton` that is no group child), 2 `ui-group-children-to-components` (the `UIButton` segments of a `UISegmented` and options of a `UIDropdown`; a file already at 2 never meets step 1 again, which is why the group needed a step of its own). A file at 1 runs both.
 
 ## The command
 
@@ -55,7 +56,7 @@ A change that renames or removes a reflected class or field a content file can n
 
 1. A module `steps/sNNNN_<name>.py` with `@step(N, "<name>")`, N the current `kContentVersion`.
 2. A fixture pair `tests/fixtures/<name>/<case>.before.xml` / `.after.xml` per shape (a whole real file where one exists, plus a case per rule and per refusal) and a pytest that checks the output equals the `after` exactly and that the `after` migrates to itself. A failure case has a `before` and no `after`.
-3. When the behaviour must stay the same, a C++ test that loads both fixtures and compares what the user sees (`tests/BECore/ContentMigrationButtonTest.cpp` is the model; a case that rebuilds the shape, such as the icon forms of step 1, compares the quads within a unit and refuses what it cannot make agree).
+3. When the behaviour must stay the same, a C++ test that loads both fixtures and compares what the user sees (`tests/BECore/ContentMigrationButtonTest.cpp` is the model, `ContentMigrationGroupTest.cpp` the one for groups; both build on `tests/Common/MigrationTwin.h`; a case that rebuilds the shape, such as the icon forms of step 1, compares the quads within a unit and refuses what it cannot make agree).
 4. `kContentVersion` becomes N+1.
 5. `python3 tools/migrate/migrate.py --root .` in the engine repository for its own content (`config/`, `games/Match3/config/`); the diff goes in the commit. The games are migrated by their owners after the engine is updated.
 

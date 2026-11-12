@@ -472,7 +472,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, TheExpandedCopyHasNoContentVersion) {
-        WriteFile(_dir / "nodes" / "Stamped.xml", R"(<node name="Stamped" layer="3" contentVersion="2"/>)");
+        WriteFile(_dir / "nodes" / "Stamped.xml", "<node name=\"Stamped\" layer=\"3\" contentVersion=\"" + std::to_string(kContentVersion) + "\"/>");
         pugi::xml_document doc;
         const auto result = Expand(SceneConfigWith(R"(<node ref="nodes/Stamped"/>)"), doc);
 
@@ -811,7 +811,8 @@ namespace BECore::Tests {
     }
 
     TEST_F(SceneNodeFilesTest, MarkSourceSetsOnlyTheSourceRefOnTheCopy) {
-        WriteFile(_dir / "nodes" / "Stamped.xml", R"(<node name="Stamped" layer="3" contentVersion="2"><components><component type="TransformComponent" x="1"/></components></node>)");
+        WriteFile(_dir / "nodes" / "Stamped.xml",
+                  "<node name=\"Stamped\" layer=\"3\" contentVersion=\"" + std::to_string(kContentVersion) + "\"><components><component type=\"TransformComponent\" x=\"1\"/></components></node>");
         pugi::xml_document reference = Parse(R"(<node ref="nodes/Stamped" name="Own"><components><component type="TransformComponent" x="9"/></components></node>)");
         pugi::xml_document plain;
         pugi::xml_document marked;

@@ -12,7 +12,7 @@ namespace BECore {
      * @brief A button: a label on a filled rect that reacts to the pointer and emits an action when it is clicked.
      *
      * New content is the composed form instead (`UIElement` with `UITextComponent` and `UIInputClicker`, the icon in a child: `.claude/rules/ui-controls.md`, "Components"); `tools/migrate` moves the
-     * old files. `UIButton` stays for the segments of `UISegmented` and the options of `UIDropdown`, which look for their buttons by this class.
+     * old files. No group needs a `UIButton` any more (`UIChoice`); the class stays for old content until it is removed.
      *
      * `<element type="UIButton" name="Reset" text="Reset" action="Match3Reset" anchor="BottomRight" x="-12" y="-10" width="96" height="48" color="40,90,60,255"/>`
      *
@@ -75,6 +75,10 @@ namespace BECore {
 
         /// `disabled` or the group's (`selected` and `groupDisabled` are fields of `UIElement`)
         [[nodiscard]] bool IsDisabled() const override;
+        /// A button has its own state (hover, press, selection) whatever it sits in
+        [[nodiscard]] bool OwnsState() const override {
+            return true;
+        }
         [[nodiscard]] const eastl::string& GetTooltipText() const override {
             return tooltip;
         }

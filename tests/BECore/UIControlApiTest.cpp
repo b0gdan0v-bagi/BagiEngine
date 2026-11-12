@@ -44,6 +44,10 @@ namespace BECore::Tests {
         //   Bare (400, 10, 48 x 48) no components, Loud (500, 10, 120 x 48) a UIToggle with the text "Loud" that also carries a text component saying "Caption".
         //   Buttons with children (y = 300, 48 high): Pad (10, 60 wide) a clicker with the icon child PadIcon, Mix (100, 160 wide) a clicker with a tooltip whose icon MixIcon and caption MixCaption
         //   are in a plain Row, Hollow (300, 100 wide) a clicker with nothing below it, Outer (450, 160 wide) a clicker whose only child Inner is a clicker with a text and an icon.
+        // "Choices": 800 x 600 in window pixels, choice groups made of components. CSide (100, 100, 404 x 56, `uiApiCSide`) has the segments CLeft (a clicker and a text), CRight (a clicker, an
+        //   icon child CRightIcon and a caption child CRightCaption) and CGone (a disabled clicker); Mix (100, 200, 304 x 56, `uiApiMix`) holds a UIButton segment and a composed one; CLevel (100,
+        //   300, 240 x 56, `uiApiCLevel`, action UIControlApiCLevel) is a dropdown of the composed options CEasy, CHard (icon child and caption child) and CLocked (a disabled clicker); CBelow
+        //   (500, 500, 80 x 40) is a button the open list does not cover.
         // "Empty": a scene without canvases.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -148,6 +152,79 @@ namespace BECore::Tests {
               <element type="UIButton" name="Only" text="Only" value="only" color="70,70,100,255"/>
             </children>
           </element>
+        </elements>
+      </component>
+    </components></node>
+  </nodes></scene>
+  <scene type="Scene" name="Choices"><nodes>
+    <node name="Panel"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+        <elements>
+          <element type="UISegmented" name="CSide" bind="uiApiCSide" x="100" y="100" width="404" height="56" direction="Horizontal" spacing="4">
+            <children>
+              <element type="UIElement" name="CLeft" flex="1" height="56" color="70,70,100,255" fontSize="24">
+                <components>
+                  <component type="UITextComponent" text="Left" align="Center" verticalAlign="Center"/>
+                  <component type="UIInputClicker" action="UIControlApiCSide" value="left"/>
+                </components>
+              </element>
+              <element type="UIElement" name="CRight" flex="1" height="56" color="70,70,100,255" layout="Stack" direction="Horizontal" spacing="6" crossAlign="Center">
+                <components>
+                  <component type="UIInputClicker" action="UIControlApiCSide" value="right"/>
+                  <component type="UITooltipComponent" text="The right one"/>
+                </components>
+                <children>
+                  <element type="UIElement" name="CRightIcon" width="24" height="24"><components><component type="UIImageComponent" sprite="SideIcon"/></components></element>
+                  <element type="UIElement" name="CRightCaption" flex="1" height="100%" fontSize="24">
+                    <components><component type="UITextComponent" text="Right" align="Center" verticalAlign="Center"/></components>
+                  </element>
+                </children>
+              </element>
+              <element type="UIElement" name="CGone" flex="1" height="56" color="70,70,100,255" fontSize="24">
+                <components>
+                  <component type="UITextComponent" text="Gone" align="Center" verticalAlign="Center"/>
+                  <component type="UIInputClicker" action="UIControlApiCSide" value="gone" disabled="true"/>
+                </components>
+              </element>
+            </children>
+          </element>
+          <element type="UISegmented" name="Mix" bind="uiApiMix" x="100" y="200" width="304" height="56" direction="Horizontal" spacing="4">
+            <children>
+              <element type="UIButton" name="MixButton" flex="1" height="56" text="Button" value="button" action="UIControlApiMix" color="70,70,100,255"/>
+              <element type="UIElement" name="MixComposed" flex="1" height="56" color="70,70,100,255" fontSize="24">
+                <components>
+                  <component type="UITextComponent" text="Composed" align="Center" verticalAlign="Center"/>
+                  <component type="UIInputClicker" action="UIControlApiMix" value="composed"/>
+                </components>
+              </element>
+            </children>
+          </element>
+          <element type="UIDropdown" name="CLevel" bind="uiApiCLevel" action="UIControlApiCLevel" text="Pick" x="100" y="300" width="240" height="56" optionHeight="56" color="30,30,30,255">
+            <children>
+              <element type="UIElement" name="CEasy" color="70,70,100,255" fontSize="24">
+                <components>
+                  <component type="UITextComponent" text="Easy" align="Center" verticalAlign="Center"/>
+                  <component type="UIInputClicker" value="easy"/>
+                </components>
+              </element>
+              <element type="UIElement" name="CHard" color="70,70,100,255" layout="Stack" direction="Horizontal" spacing="6" crossAlign="Center">
+                <components><component type="UIInputClicker" value="hard"/></components>
+                <children>
+                  <element type="UIElement" name="CHardIcon" width="24" height="24"><components><component type="UIImageComponent" sprite="HardIcon"/></components></element>
+                  <element type="UIElement" name="CHardCaption" flex="1" height="100%" fontSize="24">
+                    <components><component type="UITextComponent" text="Hard" align="Center" verticalAlign="Center"/></components>
+                  </element>
+                </children>
+              </element>
+              <element type="UIElement" name="CLocked" color="70,70,100,255" fontSize="24">
+                <components>
+                  <component type="UITextComponent" text="Locked" align="Center" verticalAlign="Center"/>
+                  <component type="UIInputClicker" value="locked" disabled="true"/>
+                </components>
+              </element>
+            </children>
+          </element>
+          <element type="UIButton" name="CBelow" x="500" y="500" width="80" height="40" text="Below" action="UIControlApiCBelow" color="40,90,60,255"/>
         </elements>
       </component>
     </components></node>
@@ -1956,6 +2033,241 @@ namespace BECore::Tests {
         EXPECT_NEAR(NumberMember(result, "x"), 10.0f, 1.0f) << "the left edge, a hair inside";
         EXPECT_EQ(StringMember(result, "action"), "UIControlApiWide");
         EXPECT_EQ(recorder.Count("UIControlApiWide"), 1);
+    }
+
+    // ---- choice groups made of components: a composed segment or option answers like a UIButton one ----------------------
+
+    TEST_F(UIControlApiTest, ATreeShowsTheSegmentsOfAComposedGroupWithTheFieldsOfAButton) {
+        CoreManager::GetUIVars().Set("uiApiCSide"_intern, "right");
+        Show("Choices");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* side = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "CSide");
+        ASSERT_NE(side, nullptr);
+        EXPECT_EQ(StringMember(*side, "type"), "UISegmented");
+        EXPECT_EQ(StringMember(*side, "bind"), "uiApiCSide");
+        EXPECT_EQ(StringMember(*side, "selectedValue"), "right");
+        EXPECT_FALSE(BoolMember(*side, "disabled"));
+
+        const Json* left = FindElement(*side, "CLeft");
+        const Json* right = FindElement(*side, "CRight");
+        const Json* gone = FindElement(*side, "CGone");
+        ASSERT_TRUE(left != nullptr && right != nullptr && gone != nullptr);
+        EXPECT_EQ(StringMember(*left, "text"), "Left");
+        EXPECT_EQ(StringMember(*left, "action"), "UIControlApiCSide");
+        EXPECT_EQ(StringMember(*left, "value"), "left");
+        EXPECT_FALSE(BoolMember(*left, "selected"));
+        EXPECT_FALSE(BoolMember(*left, "disabled"));
+        EXPECT_TRUE(BoolMember(*left, "interactive"));
+        ExpectRect(Member(*left, "rect"), 100.0f, 100.0f, 132.0f, 56.0f);
+
+        EXPECT_TRUE(BoolMember(*right, "selected"));
+        EXPECT_EQ(StringMember(*right, "text"), "Right") << "the caption child";
+        EXPECT_EQ(StringMember(*right, "icon"), "SideIcon") << "the icon child";
+        EXPECT_EQ(StringMember(*right, "tooltip"), "The right one");
+        EXPECT_EQ(StringMember(*right, "value"), "right");
+
+        EXPECT_TRUE(BoolMember(*gone, "disabled"));
+        EXPECT_FALSE(BoolMember(*gone, "selected"));
+    }
+
+    TEST_F(UIControlApiTest, TheSelectionOfAComposedGroupFollowsTheVariableBetweenTwoTreeCalls) {
+        CoreManager::GetUIVars().Set("uiApiCSide"_intern, "left");
+        Show("Choices");
+        const Json first = Call("ui_tree");
+        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(first, "result"), "Panel"), "CLeft"), "selected"));
+
+        CoreManager::GetUIVars().Set("uiApiCSide"_intern, "right");  // no draw in between
+        const Json second = Call("ui_tree");
+        const Json* panel = FindCanvas(*Member(second, "result"), "Panel");
+        EXPECT_FALSE(BoolMember(*FindElement(*panel, "CLeft"), "selected"));
+        EXPECT_TRUE(BoolMember(*FindElement(*panel, "CRight"), "selected"));
+        EXPECT_EQ(StringMember(*FindElement(*panel, "CSide"), "selectedValue"), "right");
+    }
+
+    TEST_F(UIControlApiTest, AClickOnAComposedSegmentAnswersWithItsActionAndValueAndTheListenerGetsThem) {
+        Show("Choices");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("CRight"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        const Json& result = *Member(clicked, "result");
+        EXPECT_TRUE(BoolMember(result, "consumed"));
+        EXPECT_EQ(StringMember(result, "action"), "UIControlApiCSide");
+        EXPECT_EQ(StringMember(result, "value"), "right");
+        EXPECT_EQ(recorder.Count("UIControlApiCSide"), 1);
+        EXPECT_EQ(recorder.LastValue(), "right");
+    }
+
+    TEST_F(UIControlApiTest, AClickOnADisabledComposedSegmentOrOneOfADisabledGroupEmitsNothing) {
+        Show("Choices");
+        Recorder recorder;
+
+        const Json gone = Call("ui_click", Click("CGone"));
+        ASSERT_TRUE(IsOk(gone)) << ErrorMessage(gone);
+        EXPECT_TRUE(BoolMember(*Member(gone, "result"), "consumed"));
+        EXPECT_EQ(StringMember(*Member(gone, "result"), "action"), "");
+        EXPECT_EQ(StringMember(*Member(gone, "result"), "value"), "");
+
+        auto canvas = Canvas("Choices", "Panel");
+        ASSERT_TRUE(canvas);
+        canvas->GetRoot().FindByName("CSide"_intern)->Cast<UISegmented>()->disabled = true;
+        Show("Choices");
+        const Json left = Call("ui_click", Click("CLeft"));
+        ASSERT_TRUE(IsOk(left)) << ErrorMessage(left);
+        EXPECT_EQ(StringMember(*Member(left, "result"), "action"), "");
+        EXPECT_EQ(StringMember(*Member(left, "result"), "value"), "");
+        EXPECT_EQ(recorder.Total(), 0u);
+    }
+
+    TEST_F(UIControlApiTest, AGroupOfAButtonAndAComposedSegmentIsDescribedAndClickedAlike) {
+        CoreManager::GetUIVars().Set("uiApiMix"_intern, "composed");
+        Show("Choices");
+        Recorder recorder;
+
+        const Json tree = Call("ui_tree");
+        const Json* mix = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "Mix");
+        ASSERT_NE(mix, nullptr);
+        EXPECT_EQ(StringMember(*mix, "selectedValue"), "composed");
+        const Json* button = FindElement(*mix, "MixButton");
+        const Json* composed = FindElement(*mix, "MixComposed");
+        ASSERT_TRUE(button != nullptr && composed != nullptr);
+        EXPECT_EQ(StringMember(*button, "type"), "UIButton");
+        EXPECT_EQ(StringMember(*composed, "type"), "UIElement");
+        for (const Json* segment : {button, composed}) {
+            EXPECT_EQ(StringMember(*segment, "action"), "UIControlApiMix");
+            EXPECT_FALSE(StringMember(*segment, "text").empty());
+            EXPECT_FALSE(StringMember(*segment, "value").empty());
+            EXPECT_FALSE(BoolMember(*segment, "disabled"));
+        }
+        EXPECT_FALSE(BoolMember(*button, "selected"));
+        EXPECT_TRUE(BoolMember(*composed, "selected"));
+
+        EXPECT_EQ(StringMember(*Member(Call("ui_click", Click("MixButton")), "result"), "value"), "button");
+        EXPECT_EQ(StringMember(*Member(Call("ui_click", Click("MixComposed")), "result"), "value"), "composed");
+        EXPECT_EQ(recorder.Count("UIControlApiMix"), 2);
+    }
+
+    TEST_F(UIControlApiTest, ATreeShowsAClosedDropdownOfComposedOptionsAndTheOptionsAsHidden) {
+        CoreManager::GetUIVars().Set("uiApiCLevel"_intern, "hard");
+        Show("Choices");
+
+        const Json response = Call("ui_tree");
+
+        ASSERT_TRUE(IsOk(response)) << ErrorMessage(response);
+        const Json* level = FindElement(*FindCanvas(*Member(response, "result"), "Panel"), "CLevel");
+        ASSERT_NE(level, nullptr);
+        EXPECT_EQ(StringMember(*level, "type"), "UIDropdown");
+        EXPECT_EQ(StringMember(*level, "selectedValue"), "hard");
+        EXPECT_EQ(StringMember(*level, "text"), "Hard") << "the header shows the caption child of the chosen option";
+        EXPECT_EQ(StringMember(*level, "action"), "UIControlApiCLevel");
+        EXPECT_FALSE(BoolMember(*level, "open"));
+        for (const char* option : {"CEasy", "CHard", "CLocked"}) {
+            const Json* item = FindElement(*level, option);
+            ASSERT_NE(item, nullptr) << option;
+            EXPECT_FALSE(BoolMember(*item, "visible")) << option << " is hidden while the list is closed";
+        }
+        EXPECT_TRUE(BoolMember(*FindElement(*level, "CHard"), "selected"));
+        EXPECT_FALSE(BoolMember(*FindElement(*level, "CEasy"), "selected"));
+        EXPECT_TRUE(BoolMember(*FindElement(*level, "CLocked"), "disabled"));
+        EXPECT_EQ(StringMember(*FindElement(*level, "CHard"), "value"), "hard");
+        EXPECT_EQ(StringMember(*FindElement(*level, "CHard"), "icon"), "HardIcon");
+        EXPECT_EQ(StringMember(*FindElement(*level, "CEasy"), "text"), "Easy");
+        EXPECT_EQ(StringMember(*FindElement(*level, "CHard"), "action"), "") << "the options keep no action of their own";
+    }
+
+    TEST_F(UIControlApiTest, AClickOnAComposedOptionAnswersWithTheActionOfTheDropdownAndTheListCloses) {
+        CoreManager::GetUIVars().Set("uiApiCLevel"_intern, "easy");
+        Show("Choices");
+        ASSERT_TRUE(IsOk(Call("ui_click", Click("CLevel"))));
+        Show("Choices");
+        const Json open = Call("ui_tree");
+        const Json* openLevel = FindElement(*FindCanvas(*Member(open, "result"), "Panel"), "CLevel");
+        EXPECT_TRUE(BoolMember(*openLevel, "open"));
+        EXPECT_TRUE(BoolMember(*FindElement(*openLevel, "CHard"), "visible"));
+        ExpectRect(Member(*FindElement(*openLevel, "CHard"), "rect"), 100.0f, 412.0f, 240.0f, 56.0f);
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("CHard"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        const Json& result = *Member(clicked, "result");
+        EXPECT_TRUE(BoolMember(result, "consumed"));
+        EXPECT_EQ(StringMember(result, "action"), "UIControlApiCLevel");
+        EXPECT_EQ(StringMember(result, "value"), "hard");
+        EXPECT_EQ(recorder.Count("UIControlApiCLevel"), 1);
+        EXPECT_EQ(recorder.LastValue(), "hard");
+
+        Show("Choices");
+        const Json tree = Call("ui_tree");
+        const Json* level = FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "CLevel");
+        EXPECT_FALSE(BoolMember(*level, "open"));
+        EXPECT_FALSE(BoolMember(*FindElement(*level, "CHard"), "visible"));
+        EXPECT_EQ(StringMember(*level, "selectedValue"), "easy") << "the choice is the game's: a click sets no variable";
+        EXPECT_EQ(Member(*FindElement(*level, "CHard"), "open"), nullptr);
+        EXPECT_EQ(ErrorCode(Call("ui_click", Click("CHard"))), "not_clickable") << "the list is closed again";
+    }
+
+    TEST_F(UIControlApiTest, AComposedOptionIsNotClickableWhileTheListIsClosed) {
+        Show("Choices");
+
+        const Json response = Call("ui_click", Click("CEasy"));
+
+        EXPECT_EQ(ErrorCode(response), "not_clickable");
+        EXPECT_NE(ErrorMessage(response).find("hidden"), std::string::npos) << ErrorMessage(response);
+    }
+
+    TEST_F(UIControlApiTest, ADisabledComposedOptionTakesTheClickAndTheListStaysOpen) {
+        Show("Choices");
+        ASSERT_TRUE(IsOk(Call("ui_click", Click("CLevel"))));
+        Show("Choices");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("CLocked"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "");
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "value"), "");
+        EXPECT_EQ(recorder.Total(), 0u);
+        Show("Choices");
+        const Json tree = Call("ui_tree");
+        EXPECT_TRUE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "CLevel"), "open"));
+    }
+
+    TEST_F(UIControlApiTest, AClickElsewhereWhileAComposedListIsOpenClosesItAndIsConsumed) {
+        Show("Choices");
+        ASSERT_TRUE(IsOk(Call("ui_click", Click("CLevel"))));
+        Show("Choices");
+        Recorder recorder;
+
+        const Json clicked = Call("ui_click", Click("CBelow"));
+
+        ASSERT_TRUE(IsOk(clicked)) << ErrorMessage(clicked);
+        EXPECT_TRUE(BoolMember(*Member(clicked, "result"), "consumed"));
+        EXPECT_EQ(StringMember(*Member(clicked, "result"), "action"), "");
+        EXPECT_EQ(recorder.Total(), 0u) << "the press only closed the list";
+        Show("Choices");
+        const Json tree = Call("ui_tree");
+        EXPECT_FALSE(BoolMember(*FindElement(*FindCanvas(*Member(tree, "result"), "Panel"), "CLevel"), "open"));
+    }
+
+    TEST_F(UIControlApiTest, ADropdownOfComposedOptionsCanBeDrivenEndToEnd) {
+        Show("Choices");
+        Recorder recorder;
+
+        ASSERT_TRUE(IsOk(Call("ui_click", Click("CLevel"))));
+        Show("Choices");  // the "step"
+        const Json picked = Call("ui_click", Click("CEasy"));
+        ASSERT_TRUE(IsOk(picked)) << ErrorMessage(picked);
+        EXPECT_EQ(StringMember(*Member(picked, "result"), "value"), "easy");
+        Show("Choices");
+
+        EXPECT_EQ(recorder.Count("UIControlApiCLevel"), 1);
+        EXPECT_EQ(recorder.LastValue(), "easy");
     }
 
 }  // namespace BECore::Tests

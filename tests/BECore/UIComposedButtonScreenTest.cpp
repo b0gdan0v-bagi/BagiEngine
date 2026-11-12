@@ -122,6 +122,22 @@ namespace BECore::Tests {
                    R"(" action="LeftBar" color="40,60,90,255"/>)" + kSceneTail;
         }
 
+        // A segmented group written in HTML + CSS: an icon-only segment, an icon-left one and a plain one, in a row (the segments are composed like any button)
+        std::string HtmlGroupXml(float side) {
+            const std::string sidePx = std::to_string(static_cast<int>(side)) + "px";
+            const std::string source =
+                "<style>#Seg { display: flex; gap: 4px; left: 10px; top: 10px; width: 400px; height: " + sidePx + "; background: #1e1e1e } #Seg button { flex: 1; height: " + sidePx +
+                "; background: #283c5a }</style>" +
+                R"(<div id="Seg" data-widget="segmented" data-bind="seg"><button id="SegA" data-value="a" data-icon="BarIcon"></button><button id="SegB" data-value="b" data-icon="BarIcon">Go</button><button id="SegC" data-value="c">Plain</button></div>)";
+            UIWebReport report;
+            const eastl::string compiled = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), {}, report);
+            EXPECT_TRUE(report.issues.empty());
+            const std::string xml(compiled.c_str());
+            const size_t begin = xml.find("<elements>") + std::string("<elements>").size();
+            const size_t end = xml.find("</elements>");
+            return kSceneHead + xml.substr(begin, end - begin) + kSceneTail;
+        }
+
         void ReplaceAll(std::string& text, const std::string& what, const std::string& with) {
             for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + with.size())) {
                 text.replace(at, what.size(), with);
@@ -317,6 +333,22 @@ namespace BECore::Tests {
         expectRect(leftParts.text, Get("LeftCaption").rect, "the caption of the icon-left button");
         const UIButton::Parts iconParts = UIButton::GetParts(Get("Icon").rect, true, false, UIIconPlacement::Left, 0.0f);
         expectRect(iconParts.icon, Get("IconIcon").rect, "the icon of the icon-only button");
+    }
+
+    TEST_F(UIComposedButtonScreenTest, TheSegmentsOfAnHtmlGroupAreTargetsOfTheMatrixByTheirClickers) {
+        ASSERT_NO_FATAL_FAILURE(LoadXml(HtmlGroupXml(kTouchSize)));
+        const auto failures = OnMatrix();
+        EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
+        for (const char* segment : {"SegA", "SegB", "SegC"}) {
+            EXPECT_TRUE(Get(segment).IsInteractive()) << segment;
+            EXPECT_EQ(dynamic_cast<UIButton*>(&Get(segment)), nullptr) << segment << " is composed, not a UIButton";
+        }
+
+        ASSERT_NO_FATAL_FAILURE(LoadXml(HtmlGroupXml(kSmallSide)));
+        const auto small = OnMatrix();
+        for (const char* segment : {"SegA", "SegB", "SegC"}) {
+            EXPECT_TRUE(Reports(small, UILayoutIssueKind::TouchTargetTooSmall, segment)) << segment << " is under the touch size of 48";
+        }
     }
 
     TEST_F(UIComposedButtonScreenTest, ACaptionThatDoesNotFitIsReportedLikeThatOfAButton) {

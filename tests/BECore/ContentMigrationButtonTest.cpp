@@ -1,31 +1,15 @@
-#include <BECore/Control/ControlCall.h>
-#include <BECore/Control/ControlService.h>
-#include <BECore/GameManager/CoreManager.h>
-#include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Scene/Scene.h>
-#include <BECore/Scene/SceneManager.h>
-#include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
-#include <BECore/UI/UIImageComponent.h>
-#include <Common/EngineEnvironment.h>
-#include <Common/Printers.h>
-#include <Common/RecordingRenderer.h>
+#include <Common/MigrationTwin.h>
 #include <Common/UILayoutMatrix.h>
-#include <CoreSDL/SDLEvents.h>
-#include <Events/InputEvents.h>
-#include <Events/SubscriptionHolder.h>
-#include <filesystem>
-#include <fstream>
 #include <gtest/gtest.h>
 #include <map>
-#include <regex>
 #include <set>
-#include <sstream>
-#include <string>
 
 namespace BECore::Tests {
+
+    using namespace MigrationTwin;
 
     /*
      * The twin test of the migration step 1 to 2 (`tools/migrate/steps/s0001_ui_button_to_components.py`): a `UIButton` rewritten as a composed element must behave like the
@@ -44,18 +28,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        constexpr float kLargeWidth = 1280.0f;
-        constexpr float kLargeHeight = 720.0f;
-        constexpr float kSmallWidth = 600.0f;  // narrow and tall: the portrait variants apply and a stack of buttons is squeezed
-        constexpr float kSmallHeight = 900.0f;
-        constexpr float kDefaultViewWidth = 1280.0f;  // the view of the scene a node file is put into
-        constexpr float kDefaultViewHeight = 720.0f;
-        constexpr float kTolerance = 1e-3f;
-        constexpr float kIconTolerance = 1.0f;                            // the quad of an icon or of its caption, in output pixels
         constexpr const char* kIconCases[] = {"icon_only", "icon_text"};  // the pairs whose buttons have an icon
-        constexpr int kIconPixels = 16;
-        constexpr float kTouchSize = 48.0f;
-        constexpr float kOutside = -100.0f;  // a point on no element, to park the pointer
         constexpr const char* kStateNormal = "normal";
         constexpr const char* kStateHover = "hovered";
         constexpr const char* kStatePressed = "pressed";
@@ -63,103 +36,6 @@ namespace BECore::Tests {
         constexpr const char* kStateDisabled = "disabled by its group";
         constexpr const char* kTreeNormal = "normal";
         constexpr const char* kTreeFlags = "selected and disabled by the group";
-        constexpr const char* kNodeSceneName = "Main";
-
-        std::filesystem::path FixtureFolder() {
-            return std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "tools" / "migrate" / "tests" / "fixtures" / "ui_button";
-        }
-
-        std::string ReadFile(const std::filesystem::path& path) {
-            std::ifstream file(path, std::ios::binary);
-            std::ostringstream text;
-            text << file.rdbuf();
-            return text.str();
-        }
-
-        /// The names of the cases: every `<case>.before.xml` that has an `<case>.after.xml`
-        std::vector<std::string> CaseNames() {
-            std::vector<std::string> names;
-            const std::string suffix = ".before.xml";
-            std::error_code error;
-            for (const auto& entry : std::filesystem::directory_iterator(FixtureFolder(), error)) {
-                const std::string file = entry.path().filename().string();
-                if (file.size() > suffix.size() && file.compare(file.size() - suffix.size(), suffix.size(), suffix) == 0) {
-                    const std::string name = file.substr(0, file.size() - suffix.size());
-                    if (std::filesystem::exists(FixtureFolder() / (name + ".after.xml"))) {
-                        names.push_back(name);
-                    }
-                }
-            }
-            std::sort(names.begin(), names.end());
-            return names;
-        }
-
-        /// A content file as a scene manager the loader reads: a `SceneManager` is itself, a `node` goes into a scene of its own
-        std::string SceneManagerXml(std::string text) {
-            const size_t declaration = text.find("<?xml");
-            if (declaration != std::string::npos) {
-                text.erase(declaration, text.find("?>", declaration) + 2 - declaration);
-            }
-            static const std::regex root(R"(<([A-Za-z][A-Za-z0-9_]*))");
-            std::string stripped;
-            for (size_t at = 0; at < text.size();) {  // the first element that is not a comment: skip the comments, which may mention tags
-                const size_t comment = text.find("<!--", at);
-                const size_t tag = text.find('<', at);
-                if (comment != std::string::npos && comment == tag) {
-                    at = text.find("-->", comment) + 3;
-                    continue;
-                }
-                stripped = text.substr(tag);
-                break;
-            }
-            std::smatch match;
-            if (std::regex_search(stripped, match, root) && match[1] == "node") {
-                return "<SceneManager><scenes><scene type=\"Scene\" name=\"" + std::string(kNodeSceneName) + "\" viewWidth=\"" + std::to_string(static_cast<int>(kDefaultViewWidth)) +
-                       "\" viewHeight=\"" + std::to_string(static_cast<int>(kDefaultViewHeight)) + "\"><nodes>" + text + "</nodes></scene></scenes></SceneManager>";
-            }
-            return text;
-        }
-
-        std::vector<std::string> SceneNames(const std::string& xml) {
-            std::vector<std::string> names;
-            static const std::regex scene(R"re(<scene\b[^>]*?\bname="([^"]*)")re");
-            for (std::sregex_iterator it(xml.begin(), xml.end(), scene), end; it != end; ++it) {
-                names.push_back((*it)[1]);
-            }
-            return names;
-        }
-
-        SDL_MouseButtonEvent Button(float x, float y, bool down) {
-            SDL_MouseButtonEvent event{};
-            event.type = down ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-            event.button = SDL_BUTTON_LEFT;
-            event.down = down;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        SDL_MouseMotionEvent Motion(float x, float y) {
-            SDL_MouseMotionEvent event{};
-            event.type = SDL_EVENT_MOUSE_MOTION;
-            event.x = x;
-            event.y = y;
-            return event;
-        }
-
-        /// The actions that went out, as "action=value" lines
-        class ActionRecorder : public SubscriptionHolder {
-        public:
-            ActionRecorder() {
-                Subscribe<InputEvents::ActionEvent, &ActionRecorder::OnAction>(this);
-            }
-            std::vector<std::string> emitted;
-
-        private:
-            void OnAction(const InputEvents::ActionEvent& event) {
-                emitted.push_back(std::string(event.action.CStr()) + "=" + std::string(event.value.CStr()));
-            }
-        };
 
         /// What one form of a screen did, by the key "scene|node|element" (the first element of that name in the canvas)
         struct Snapshot {
@@ -170,76 +46,6 @@ namespace BECore::Tests {
             std::map<std::string, std::string> tooltips;
             std::set<std::string> issues;
         };
-
-        std::string Text(const eastl::string& text) {
-            return std::string(text.c_str(), text.size());
-        }
-
-        std::string Where(const std::string& scene, const std::string& node, const std::string& element) {
-            return scene + "|" + node + "|" + element;
-        }
-
-        /// The first difference between two draws of a scene, empty when they are the same
-        std::string DrawDifference(const eastl::vector<DrawCall>& before, const eastl::vector<DrawCall>& after, float tolerance) {
-            if (before.size() != after.size()) {
-                return "the draws have " + std::to_string(before.size()) + " and " + std::to_string(after.size()) + " calls";
-            }
-            const auto differs = [tolerance](float a, float b) { return std::abs(a - b) > tolerance; };
-            for (size_t i = 0; i < before.size(); ++i) {
-                const DrawCall& a = before[i];
-                const DrawCall& b = after[i];
-                const std::string call = "call " + std::to_string(i) + ": ";
-                if (a.kind != b.kind) {
-                    return call + "a different kind of draw";
-                }
-                if (differs(a.rect.x, b.rect.x) || differs(a.rect.y, b.rect.y) || differs(a.rect.w, b.rect.w) || differs(a.rect.h, b.rect.h)) {
-                    return call + "the rect is (" + std::to_string(a.rect.x) + ", " + std::to_string(a.rect.y) + ", " + std::to_string(a.rect.w) + " x " + std::to_string(a.rect.h) + ") and (" +
-                           std::to_string(b.rect.x) + ", " + std::to_string(b.rect.y) + ", " + std::to_string(b.rect.w) + " x " + std::to_string(b.rect.h) + ")";
-                }
-                if (a.color.r != b.color.r || a.color.g != b.color.g || a.color.b != b.color.b || a.color.a != b.color.a) {
-                    return call + "the colour is (" + std::to_string(a.color.r) + "," + std::to_string(a.color.g) + "," + std::to_string(a.color.b) + "," + std::to_string(a.color.a) + ") and (" +
-                           std::to_string(b.color.r) + "," + std::to_string(b.color.g) + "," + std::to_string(b.color.b) + "," + std::to_string(b.color.a) + ")";
-                }
-                if (a.texture != b.texture) {
-                    return call + "another texture";
-                }
-                if (a.source.has_value() != b.source.has_value() ||
-                    (a.source && (differs(a.source->x, b.source->x) || differs(a.source->y, b.source->y) || differs(a.source->w, b.source->w) || differs(a.source->h, b.source->h)))) {
-                    return call + "another source rect";
-                }
-                if (a.blend != b.blend || a.clip.has_value() != b.clip.has_value()) {
-                    return call + "another blend or clip";
-                }
-                if (a.vertices.size() != b.vertices.size() || a.indices != b.indices) {
-                    return call + "another geometry";
-                }
-                for (size_t v = 0; v < a.vertices.size(); ++v) {
-                    const GeometryVertex& p = a.vertices[v];
-                    const GeometryVertex& q = b.vertices[v];
-                    if (differs(p.x, q.x) || differs(p.y, q.y) || differs(p.u, q.u) || differs(p.v, q.v) || p.color.r != q.color.r || p.color.g != q.color.g || p.color.b != q.color.b ||
-                        p.color.a != q.color.a) {
-                        return call + "vertex " + std::to_string(v) + " differs";
-                    }
-                }
-            }
-            return {};
-        }
-
-        void WalkElements(UIElement& parent, const std::function<void(UIElement&)>& visit) {
-            for (const auto& child : parent.children) {
-                visit(*child);
-                WalkElements(*child, visit);
-            }
-        }
-
-        std::string JsonText(const Json& object, eastl::string_view key) {
-            const auto value = GetJsonString(object, key);
-            return value ? Text(*value) : std::string();
-        }
-
-        std::string JsonFlag(const Json& object, eastl::string_view key) {
-            return GetJsonBool(object, key).value_or(false) ? "true" : "false";
-        }
 
         /// What `ui_tree` says about an element that a migration must keep: a missing key and an empty or false one are the same answer
         std::string TreeFields(const Json& element) {
@@ -253,127 +59,20 @@ namespace BECore::Tests {
             return fields;
         }
 
-        void CollectTree(const Json& parent, const std::string& canvasKey, std::set<std::string>& seen, std::map<std::string, std::string>& out) {
-            const Json* list = FindJsonMember(parent, parent.contains("elements") ? "elements" : "children");
-            if (list == nullptr || !list->is_array()) {
-                return;
-            }
-            for (const Json& element : *list) {
-                const std::string name = JsonText(element, "name");
-                const std::string key = canvasKey + "|" + name;
-                if (!name.empty() && seen.insert(key).second) {
-                    out[key] = TreeFields(element);
-                }
-                CollectTree(element, canvasKey, seen, out);
-            }
-        }
-
     }  // namespace
 
-    class ContentMigrationButtonTest : public ::testing::TestWithParam<std::string> {
+    class ContentMigrationButtonTest : public Fixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
-        void SetUp() override {
-            CoreManager::GetFontAtlasLibrary().Clear();
-            _renderer = New<RecordingRenderer>();
-            _renderer->width = kLargeWidth;
-            _renderer->height = kLargeHeight;
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-            RegisterUIControl(_service);
-            const eastl::vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
-            _icon = _renderer->CreateTexture(pixels.data(), kIconPixels, kIconPixels);
-        }
-
-        void TearDown() override {
-            CoreManager::GetUIVars().Clear();
-            CoreManager::GetUIStrings().Clear();
-            EngineEnvironment::UseSceneManager({});
-            _manager.Reset();
-            _icon.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetFontAtlasLibrary().Clear();
-        }
-
         /// Loads a scene manager from @p xml and records what it does into @p snapshot
         bool Capture(const std::string& xml, Snapshot& snapshot) {
-            XmlDeserializer deserializer;
-            if (!deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size()))) {
-                ADD_FAILURE() << "the scene does not parse";
+            if (!Load(xml)) {
                 return false;
             }
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            if (deserializer.HasErrors()) {
-                ADD_FAILURE() << "the scene has errors (the log says which)";
-                return false;
-            }
-            _manager->Initialize();
-            EngineEnvironment::UseSceneManager(_manager);
-            GiveTheIconsATexture(xml);
             for (const std::string& scene : SceneNames(xml)) {
                 CaptureScene(scene, snapshot);
             }
-            EngineEnvironment::UseSceneManager({});
-            _manager.Reset();
+            Unload();
             return true;
-        }
-
-        /// The sprite of every icon, whatever its name, is the texture of the test: the icon quad is then in the draws of both forms
-        void GiveTheIconsATexture(const std::string& xml) {
-            for (const std::string& sceneName : SceneNames(xml)) {
-                Scene* scene = _manager->GetSceneByName(PoolString::Intern(sceneName.c_str()));
-                if (scene == nullptr) {
-                    continue;
-                }
-                for (const auto& node : scene->GetRootNode().GetChildren()) {
-                    const auto canvas = node->GetComponent<UICanvasComponent>();
-                    if (!canvas) {
-                        continue;
-                    }
-                    WalkElements(canvas->GetRoot(), [this](UIElement& element) {
-                        if (auto* button = element.Cast<UIButton>(); button != nullptr && !button->icon.Empty()) {
-                            button->GetIconSprite().SetTexture(_icon);
-                        }
-                        if (auto* image = element.GetComponent<UIImageComponent>(); image != nullptr && !image->sprite.Empty()) {
-                            image->GetSprite().SetTexture(_icon);
-                        }
-                    });
-                }
-            }
-        }
-
-        struct CanvasRef {
-            std::string node;
-            IntrusivePtr<UICanvasComponent> canvas;
-        };
-
-        std::vector<CanvasRef> CanvasesOf(Scene& scene) const {
-            std::vector<CanvasRef> canvases;
-            for (const auto& node : scene.GetRootNode().GetChildren()) {
-                if (auto canvas = node->GetComponent<UICanvasComponent>()) {
-                    canvases.push_back({std::string(node->GetName().CStr()), canvas});
-                }
-            }
-            return canvases;
-        }
-
-        void Draw(float width, float height) {
-            _renderer->width = width;
-            _renderer->height = height;
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        static Vec2 OutputCenter(const UICanvasComponent& canvas, const UIElement& element) {
-            const Rect output = canvas.GetLayout().GetResolved().transform.ToOutput(element.rect.x, element.rect.y, element.rect.w, element.rect.h);
-            return {output.x + output.w * 0.5f, output.y + output.h * 0.5f};
-        }
-
-        static void Park() {
-            CoreManager::GetUIInput().DispatchMouseMotion(Motion(kOutside, kOutside));
         }
 
         void CaptureScene(const std::string& sceneName, Snapshot& snapshot) {
@@ -382,16 +81,7 @@ namespace BECore::Tests {
             ASSERT_NE(scene, nullptr) << sceneName;
             const std::vector<CanvasRef> canvases = CanvasesOf(*scene);
 
-            // Everything is shown: a hidden canvas or element has no rect and nothing to compare
-            for (const CanvasRef& ref : canvases) {
-                UICanvasComponent::SetVisibleByName(*scene, PoolString::Intern(ref.node.c_str()), true);
-                WalkElements(ref.canvas->GetRoot(), [&](UIElement& element) {
-                    if (!element.name.Empty() && !element.style.visible) {
-                        ref.canvas->SetElementVisible(element.name, true);
-                    }
-                });
-                ref.canvas->Invalidate();
-            }
+            ShowEverything(*scene, canvases);
 
             // The rect of every named element at two output sizes
             for (const auto& [width, height] : {std::pair{kLargeWidth, kLargeHeight}, std::pair{kSmallWidth, kSmallHeight}}) {
@@ -436,26 +126,12 @@ namespace BECore::Tests {
         }
 
         void CaptureTree(const std::string& sceneName, const char* state, Snapshot& snapshot) {
-            Json request = Json::object();
-            request["id"] = ++_nextId;
-            request["method"] = "ui_tree";
-            Json response;
-            _service.Post(DumpJson(request), [&response](eastl::string text) {
-                auto parsed = ParseJson(text);
-                response = parsed ? std::move(*parsed) : Json();
-            });
-            _service.Drain();
-            const Json* result = FindJsonMember(response, "result");
-            const Json* list = result != nullptr ? FindJsonMember(*result, "canvases") : nullptr;
-            if (list == nullptr || !list->is_array()) {
-                ADD_FAILURE() << "ui_tree answers no canvases in scene " << sceneName;
-                return;
-            }
+            const Json list = CallTree(sceneName);
             std::map<std::string, std::string> fields;
-            for (const Json& canvas : *list) {
+            for (const Json& canvas : list) {
                 const std::string canvasKey = sceneName + "|" + JsonText(canvas, "node");
                 std::set<std::string> seen;
-                CollectTree(canvas, canvasKey, seen, fields);
+                CollectTree(canvas, canvasKey, seen, fields, TreeFields);
             }
             for (const auto& [key, text] : fields) {
                 snapshot.trees[key][state] = text;
@@ -509,14 +185,6 @@ namespace BECore::Tests {
             }
         }
 
-        std::vector<std::string> Click(const Vec2& at) {
-            ActionRecorder recorder;
-            CoreManager::GetUIInput().DispatchMouseMotion(Motion(at.x, at.y));
-            CoreManager::GetUIInput().DispatchMouseButtonDown(Button(at.x, at.y, true));
-            CoreManager::GetUIInput().DispatchMouseButtonUp(Button(at.x, at.y, false));
-            return recorder.emitted;
-        }
-
         /// What the layout validator finds on the size matrix, as "case | kind | element | other" lines
         void CaptureValidator(Scene& scene, const CanvasRef& ref, const std::string& canvasKey, Snapshot& snapshot) {
             UILayoutValidatorOptions options;
@@ -531,17 +199,11 @@ namespace BECore::Tests {
                 }
             }
         }
-
-        ControlService _service;
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtr<ITexture> _icon;
-        IntrusivePtrAtomic<SceneManager> _manager;
-        int64_t _nextId = 0;
     };
 
     TEST(ContentMigrationButtonFixtures, TheFixturePairsAreThere) {
-        ASSERT_TRUE(std::filesystem::is_directory(FixtureFolder())) << FixtureFolder().string();
-        const std::vector<std::string> names = CaseNames();
+        ASSERT_TRUE(std::filesystem::is_directory(FixtureFolder("ui_button"))) << FixtureFolder("ui_button").string();
+        const std::vector<std::string> names = CaseNames(FixtureFolder("ui_button"));
         for (const char* required : {"mahjong_hints_button", "mahjong_hand_over_action", "mahjong_setup", "match3_menu_hud", "blocker", "text_attributes", "disabled_tooltip", "with_children",
                                      "already_composed", "icon_attributes_without_icon", "long_caption", "icon_only", "icon_text"}) {
             EXPECT_TRUE(std::find(names.begin(), names.end(), required) != names.end()) << "no pair for " << required;
@@ -550,8 +212,8 @@ namespace BECore::Tests {
 
     TEST_P(ContentMigrationButtonTest, TheMigratedButtonsBehaveLikeTheOldOnes) {
         const std::string name = GetParam();
-        const std::string before = SceneManagerXml(ReadFile(FixtureFolder() / (name + ".before.xml")));
-        const std::string after = SceneManagerXml(ReadFile(FixtureFolder() / (name + ".after.xml")));
+        const std::string before = SceneManagerXml(ReadFile(FixtureFolder("ui_button") / (name + ".before.xml")));
+        const std::string after = SceneManagerXml(ReadFile(FixtureFolder("ui_button") / (name + ".after.xml")));
         ASSERT_FALSE(before.empty());
         ASSERT_FALSE(after.empty());
 
@@ -620,6 +282,6 @@ namespace BECore::Tests {
         }
     }
 
-    INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationButtonTest, ::testing::ValuesIn(CaseNames()));
+    INSTANTIATE_TEST_SUITE_P(Fixtures, ContentMigrationButtonTest, ::testing::ValuesIn(CaseNames(FixtureFolder("ui_button"))));
 
 }  // namespace BECore::Tests

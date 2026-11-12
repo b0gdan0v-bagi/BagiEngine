@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- A UISegmented whose segments carry an icon: icon only (with a tooltip), icon left of a caption with the colour of the chosen one, and a disabled segment. A segment without a name has children without one. -->
+<node name="IconSegments" layer="5">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UISegmented" name="Mode" bind="mode" x="10" y="10" width="360" height="56" direction="Horizontal" spacing="4" color="30,34,46,255">
+          <children>
+            <element type="UIButton" name="ModeGrid" flex="1" height="100%" icon="icons.grid" tooltip="{#tip.grid}" action="SetMode" value="grid" color="70,70,100,255" selectedColor="40,110,60,255" textColor="240,240,240,255" />
+            <element type="UIButton" name="ModeList" flex="1" height="100%" icon="icons.list" text="List" fontSize="20" action="SetMode" value="list" color="70,70,100,255" selectedColor="40,110,60,255" />
+            <element type="UIButton" flex="1" height="100%" icon="icons.gear" iconSize="24" iconTint="255,200,0,255" text="Gear" action="SetMode" value="gear" color="70,70,100,255" selectedColor="40,110,60,255" disabled="true" disabledColor="60,60,60,255" />
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>
