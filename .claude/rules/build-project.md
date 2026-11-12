@@ -74,6 +74,18 @@ Engine: `ctest --preset <p>` runs every gtest in its own process (`BagiEngineTes
 
 **Parallel run.** `ctest --preset <p>` runs 8 tests at once (`execution.jobs` 8 in `test-base` of `CMakePresets.json`; the game repositories get it through the included presets). `-j1` runs them one at a time, `-jN` sets another number; `CTEST_PARALLEL_LEVEL` does **not** override a preset. The smoke test takes the `bagi_control_smoke` lock (no other smoke test beside it; unit tests run beside it). Do not start several `ctest`s in one build folder at the same moment right after a build (`gtest_discover_tests` rewrites `<Exe>[1]_tests.cmake` and two writers corrupt it: delete `build/<p>/**/<Exe>*_tests.cmake` and run `ctest -N` once). Rules for a test that runs beside others: `.claude/rules/tests-module.md`.
 
+**Fuzzing** (`tests/Fuzz/CLAUDE.md`). The corpus of every fuzz target is replayed and mutated by `FuzzCorpusTest` in every preset: `ctest --preset <p> -R Fuzz` (`BAGI_FUZZ_ITERATIONS=2000000` makes it longer). Long runs are libFuzzer with ASan + UBSan, which needs Homebrew LLVM (`brew install llvm` once; Apple clang has no libFuzzer runtime). This is the command until the CI entry `no-ci` exists:
+
+```bash
+cmake --preset macos-fuzz                                              # never with Homebrew LLVM on PATH: the preset names the compiler
+cmake --build --preset macos-fuzz --target BagiFuzzers BagiEngineTests # BagiFuzz<Name> go to build/macos-fuzz/bin
+python3 tools/fuzz/run_fuzzers.py --seconds 60                         # every target over a copy of its corpus; exit 1 on a finding, 77 when nothing is built
+ctest --preset macos-fuzz -R Fuzz                                      # the corpus test under the sanitizers
+.venv/bin/python -m pytest tools/fuzz/tests                            # the run script
+```
+
+Findings land in `build/macos-fuzz/fuzz-artifacts/`, never in the repository; the script prints how to minimize one and add it as `fix-<what>`. Running all of `BagiEngineTests` under the sanitizers is not part of this (the entry `sanitizers`).
+
 Timings, `ctest --preset macos-debug` on a warm Debug build, 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs per row, interleaved:
 
 | Set | `-j1` | `-j4` | `-j8` (preset) | `-j14` |

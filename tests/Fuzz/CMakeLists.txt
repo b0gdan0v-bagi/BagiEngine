@@ -35,3 +35,8 @@ target_link_libraries(BagiFuzzTargets PUBLIC BECoreModule)
 if(ENGINE_WITH_REMOTE_CONTROL)
     target_link_libraries(BagiFuzzTargets PUBLIC RemoteControlModule RoomsModule RoomServerModule)
 endif()
+
+# The libFuzzer executables BagiFuzz<Name>, one per target of FuzzTargetList() (name and function as in FuzzTargets.cpp)
+if(ENGINE_FUZZ_LIBFUZZER)
+    be_add_fuzz_executable(BinaryDeserializer FuzzBinaryDeserializer)
+endif()
