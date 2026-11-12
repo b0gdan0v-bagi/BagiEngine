@@ -14,6 +14,7 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/IconTable.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
@@ -21,7 +22,8 @@ namespace BECore {
 
     namespace {
         constexpr float kUITreeHeight = 160.0f;
-    }
+        constexpr size_t kComponentLabelSize = 96;
+    }  // namespace
 
     // =========================================================================
     // IWidget interface
@@ -152,7 +154,7 @@ namespace BECore {
             flags |= ImGuiTreeNodeFlags_Selected;
         }
 
-        const bool isOpen = ImGui::TreeNodeEx(&node, flags, "%s", node.GetName().CStr());
+        const bool isOpen = ImGui::TreeNodeEx(&node, flags, "%s %s", IconOfNode(node), node.GetName().CStr());
 
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
             _selectedNode = &node;
@@ -348,7 +350,10 @@ namespace BECore {
                     }
                     firstItem = false;
                 }
-                if (ImGui::Selectable(meta.typeName.data())) {
+                // A stack buffer: the label is "icon name", and the popup draws it for every registered class
+                char label[kComponentLabelSize];
+                snprintf(label, sizeof(label), "%s %s", IconOfClass(meta), meta.typeName.data());
+                if (ImGui::Selectable(label)) {
                     if (_selectedNode) {
                         auto newComponent = factory.Create(meta);
                         if (newComponent) {
