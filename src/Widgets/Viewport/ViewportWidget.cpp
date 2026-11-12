@@ -14,13 +14,16 @@
 #include <Widgets/Icons/IconsLucide.h>
 #include <Widgets/ImGuiFonts.h>
 #include <Widgets/ImGuiTheme.h>
+#include <Widgets/SceneEditor/HierarchyModel.h>
+#include <Widgets/SceneEditor/ScenePick.h>
 #include <imgui.h>
 
 namespace BECore {
 
     namespace {
 
-        constexpr float kEditOutlineThickness = 2.0f;  // the accent outline of the image in the Edit input mode, in screen units
+        constexpr float kEditOutlineThickness = 2.0f;       // the accent outline of the image in the Edit input mode, in screen units
+        constexpr float kSelectionOutlineThickness = 2.0f;  // the outline of the selected node, in screen units
         constexpr const char* kPlayMark = ICON_LC_GAMEPAD_2 " Play";
         constexpr const char* kEditMark = ICON_LC_MOUSE_POINTER_2 " Edit";
         constexpr const char* kInputModeTooltip = "Where a click on the image goes: Play sends it to the game as the window would, Edit keeps it for the editor (the game gets "
@@ -147,7 +150,13 @@ namespace BECore {
     bool ViewportWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorPreferencesChangedEvent, &ViewportWidget::OnPreferencesChanged>(this);
         Subscribe<EditorCommandEvent, &ViewportWidget::OnCommand>(this);
+        Subscribe<SceneNodeSelectedEvent, &ViewportWidget::OnNodeSelected>(this);
         return true;
+    }
+
+    void ViewportWidget::OnNodeSelected(const SceneNodeSelectedEvent& event) {
+        _selectedScene = event.scene;
+        _selectedNode = event.node;
     }
 
     void ViewportWidget::OnCommand(const EditorCommandEvent& event) {
@@ -273,6 +282,7 @@ namespace BECore {
             ForwardMouse(imageMin.x, imageMin.y, zoom, imageHovered);
             DrawGrid(imageMin.x, imageMin.y, imageMax.x, imageMax.y, zoom);
             DrawOverlays(activeScene, imageMin, imageMax, zoom, size, safeArea, imageHovered);
+            DrawSelectionOutline(activeScene, imageMin, imageMax, zoom);
             if (CoreManager::GetPause().IsPaused()) {
                 DrawPausedMark(imageMin, imageMax);
             }
@@ -595,6 +605,29 @@ namespace BECore {
 
         drawList->PopClipRect();
         DrawSafeAreaOutline(imageMin.x, imageMin.y, zoom, safeArea);
+    }
+
+    void ViewportWidget::DrawSelectionOutline(Scene* scene, const ImVec2& imageMin, const ImVec2& imageMax, float zoom) const {
+        // The pointer is only compared: a deleted node or a replaced scene is never dereferenced
+        if (!scene || scene != _selectedScene || !_selectedNode) {
+            return;
+        }
+        const SceneNode* const node = HierarchyModel::FindNode(scene->GetRootNode(), _selectedNode);
+        if (!node) {
+            return;
+        }
+        const ScenePick::Outlines outlines = ScenePick::SelectionOutlines(*scene, *node);
+        const ImU32 color = ImGui::ColorConvertFloat4ToU32(GetImGuiPalette().accent);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->PushClipRect(imageMin, imageMax, true);
+        for (size_t i = 0; i < outlines.count; ++i) {
+            eastl::array<ImVec2, 4> corners;
+            for (size_t corner = 0; corner < corners.size(); ++corner) {
+                corners[corner] = {imageMin.x + outlines.quads[i][corner].x * zoom, imageMin.y + outlines.quads[i][corner].y * zoom};
+            }
+            drawList->AddPolyline(corners.data(), static_cast<int>(corners.size()), color, ImDrawFlags_Closed, kSelectionOutlineThickness);
+        }
+        drawList->PopClipRect();
     }
 
     void ViewportWidget::DrawPausedMark(const ImVec2& imageMin, const ImVec2& imageMax) const {

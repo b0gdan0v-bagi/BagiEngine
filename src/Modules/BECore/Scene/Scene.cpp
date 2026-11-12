@@ -144,6 +144,10 @@ namespace BECore {
         return _viewTransform.ToViewY(outputY);
     }
 
+    const ViewTransform& Scene::GetViewTransform() const {
+        return _viewTransform;
+    }
+
     bool Scene::IsActive() const {
         return _active;
     }

@@ -7,6 +7,7 @@
 #include <BECore/UI/UIElement.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/Viewport/ViewportEvents.h>
 
 namespace pugi {
     class xml_node;
@@ -57,6 +58,10 @@ namespace BECore {
         /// Answers SelectSceneNodeRequestEvent: selects and reveals the node when it is alive in the active scene, else does nothing
         void OnSelectRequest(const SelectSceneNodeRequestEvent& event);
 
+        /// Answers a left click of the viewport in the Edit input mode: picks the topmost node or canvas element under it (ScenePick) and reveals it like a request does. A hit on a canvas
+        /// element also selects that element in the "UI elements" section; a click on nothing changes nothing
+        void OnViewportClick(const ViewportEditClickEvent& event);
+
         /// Sends SceneNodeSelectedEvent when the selection (or the scene it belongs to) differs from the last one announced
         void AnnounceSelection(const Scene* scene);
 
@@ -96,6 +101,7 @@ namespace BECore {
         bool _showAddNodePopup = false;
         bool _showAddComponentPopup = false;
         bool _isDirty = false;
+        bool _focusRequested = false;  // a reveal was asked for: the window comes to the front on the next Update (never inside the event), so a background dock tab shows the hierarchy
     };
 
 }  // namespace BECore

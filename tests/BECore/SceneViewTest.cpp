@@ -175,6 +175,25 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(GetScene("Fit"_intern).ScreenToSceneY(200.0f), 50.0f);
     }
 
+    TEST_F(SceneViewTest, TheViewTransformIsTheIdentityBeforeTheFirstDrawAndTheFitAfterIt) {
+        const ViewTransform before = GetScene("Fit"_intern).GetViewTransform();
+        EXPECT_FLOAT_EQ(before.scale, 1.0f);
+        EXPECT_FLOAT_EQ(before.offsetX, 0.0f);
+        EXPECT_FLOAT_EQ(before.offsetY, 0.0f);
+
+        _manager->DrawAll();
+
+        // The 400x200 view at 2x with a 100 px bar above (output 800x600): a scene rect takes the same way to output pixels
+        const ViewTransform fit = GetScene("Fit"_intern).GetViewTransform();
+        EXPECT_FLOAT_EQ(fit.scale, 2.0f);
+        EXPECT_FLOAT_EQ(fit.offsetY, 100.0f);
+        const Rect output = fit.ToOutput(50.0f, 50.0f, 10.0f, 20.0f);
+        EXPECT_FLOAT_EQ(output.x, 100.0f);
+        EXPECT_FLOAT_EQ(output.y, 200.0f);
+        EXPECT_FLOAT_EQ(output.w, 20.0f);
+        EXPECT_FLOAT_EQ(output.h, 40.0f);
+    }
+
     TEST_F(SceneViewTest, ClickIsHitTestedInSceneUnits) {
         _manager->DrawAll();
         ActionRecorder recorder;

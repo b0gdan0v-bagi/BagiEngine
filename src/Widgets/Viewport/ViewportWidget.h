@@ -4,6 +4,7 @@
 #include <BECore/UI/UIPreview.h>
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/SceneEditor/SceneSelectionEvents.h>
 #include <Widgets/Viewport/ViewportInput.h>
 
 struct ImVec2;
@@ -12,6 +13,7 @@ namespace BECore {
 
     class IDeserializer;
     class Scene;
+    class SceneNode;
 
     // Renders the active scene into an offscreen texture and displays it as a
     // dockable ImGui window ("Viewport"). The offscreen pass happens BEFORE
@@ -31,7 +33,8 @@ namespace BECore {
     // and its mouse is the game's input as the window's (ViewportPointer). The input mode (ViewportInputMode, a toolbar toggle and
     // the viewport.inputMode command) says whether a press goes to the game (Play) or is kept for the editor (Edit: the game gets
     // nothing and ViewportEditClickEvent is emitted); Alt held flips it for one click. A badge in the image corner shows the
-    // effective mode, and Edit adds an outline around the image.
+    // effective mode, and Edit adds an outline around the image. A left click in Edit is answered by the scene editor (ScenePick), and the node it
+    // selects, from here or from the hierarchy (SceneNodeSelectedEvent), is outlined over the image in the accent colour.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
     public:
@@ -91,6 +94,13 @@ namespace BECore {
         // The simulated safe area (in target pixels) as an outline over the image, so it is clear what the canvases were given
         void DrawSafeAreaOutline(float minX, float minY, float zoom, const Rect& safeArea) const;
 
+        // Keeps the node the scene editor selected (raw pointers, only compared until DrawSelectionOutline finds the node alive)
+        void OnNodeSelected(const SceneNodeSelectedEvent& event);
+
+        // The outline of the selected node (ScenePick::SelectionOutlines: its rect and, for a canvas, the canvas bounds) over the image in the accent colour, clipped to it.
+        // Nothing for no selection, another scene or a node that is no longer in the tree of @p scene; a node hidden by the editor flag is outlined too
+        void DrawSelectionOutline(Scene* scene, const ImVec2& imageMin, const ImVec2& imageMax, float zoom) const;
+
         // The Play / Edit toggle of the toolbar
         void DrawInputModeToggle();
 
@@ -120,6 +130,8 @@ namespace BECore {
         PoolString _viewPreviewName;
         bool _gridEnabled = false;
         int32_t _gridStep = 0;
+        const Scene* _selectedScene = nullptr;  // the selection last told by SceneNodeSelectedEvent: never dereferenced before the node is found in the active scene
+        const SceneNode* _selectedNode = nullptr;
         ViewportPointer _pointer;  // the held presses and where each goes
         ViewportInputMode _inputMode = ViewportInputMode::Play;
         ViewportInputMode _storedInputMode = ViewportInputMode::Play;  // the mode the editor last stored (applied from a preferences event, or sent by us)

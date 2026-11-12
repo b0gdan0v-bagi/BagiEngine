@@ -10,21 +10,23 @@ namespace BECore {
             return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
         }
 
-        UIElement* HitTestIn(UIElement& element, float x, float y) {
+        /// The topmost visible element at a point that @p accepts: a child before its parent, a later sibling before an earlier one
+        template <typename TAccept>
+        UIElement* FindIn(UIElement& element, float x, float y, const TAccept& accept) {
             if (!element.active.visible) {
                 return nullptr;
             }
-            // The children of a popup element are found through the overlay pass of HitTest(), not here
+            // The children of a popup element are found through the overlay pass of FindTopmost(), not here
             if (!element.HasPopupChildren()) {
                 for (auto it = element.children.rbegin(); it != element.children.rend(); ++it) {
-                    if (UIElement* hit = HitTestIn(**it, x, y)) {
+                    if (UIElement* hit = FindIn(**it, x, y, accept)) {
                         return hit;
                     }
                 }
             }
             const Rect& rect = element.rect;
             const bool inside = x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
-            return element.IsHitTestable() && inside ? &element : nullptr;
+            return inside && accept(element) ? &element : nullptr;
         }
 
         void CollectOpenPopups(UIElement& element, eastl::vector<UIElement*>& popups) {
@@ -82,20 +84,36 @@ namespace BECore {
         return popups;
     }
 
-    UIElement* UICanvasLayout::HitTest(float canvasX, float canvasY) const {
-        if (!_hasContext || !root) {
-            return nullptr;
-        }
-        // The open popups are drawn above the whole tree, so they are tested first: the later one, then the later child
-        const eastl::vector<UIElement*> popups = OpenPopups();
-        for (auto popup = popups.rbegin(); popup != popups.rend(); ++popup) {
-            for (auto child = (*popup)->children.rbegin(); child != (*popup)->children.rend(); ++child) {
-                if (UIElement* hit = HitTestIn(**child, canvasX, canvasY)) {
-                    return hit;
+    namespace {
+
+        /// The walk of HitTest() and PickElement(): the open popups first, then the tree; they differ in what @p accept takes
+        template <typename TAccept>
+        UIElement* FindTopmost(const UICanvasLayout& layout, float x, float y, const TAccept& accept) {
+            if (!layout.HasLayout() || !layout.root) {
+                return nullptr;
+            }
+            // The open popups are drawn above the whole tree, so they are tested first: the later one, then the later child
+            const eastl::vector<UIElement*> popups = layout.OpenPopups();
+            for (auto popup = popups.rbegin(); popup != popups.rend(); ++popup) {
+                for (auto child = (*popup)->children.rbegin(); child != (*popup)->children.rend(); ++child) {
+                    if (UIElement* hit = FindIn(**child, x, y, accept)) {
+                        return hit;
+                    }
                 }
             }
+            return FindIn(*layout.root, x, y, accept);
         }
-        return HitTestIn(*root, canvasX, canvasY);
+
+    }  // namespace
+
+    UIElement* UICanvasLayout::HitTest(float canvasX, float canvasY) const {
+        return FindTopmost(*this, canvasX, canvasY, [](const UIElement& element) { return element.IsHitTestable(); });
+    }
+
+    UIElement* UICanvasLayout::PickElement(float canvasX, float canvasY) const {
+        const UIElement* canvasRoot = root.Get();
+        return FindTopmost(*this, canvasX, canvasY,
+                           [canvasRoot](const UIElement& element) { return &element != canvasRoot && (element.IsHitTestable() || element.color.a > 0 || !element.components.empty()); });
     }
 
     eastl::vector<UILayoutIssue> UICanvasLayout::Validate(const UILayoutValidatorOptions& options) const {

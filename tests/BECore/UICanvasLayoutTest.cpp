@@ -1,4 +1,5 @@
 #include <BECore/UI/UICanvasLayout.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/Printers.h>
 #include <Common/UILayoutMatrix.h>
 #include <gtest/gtest.h>
@@ -45,6 +46,25 @@ namespace BECore::Tests {
             reset->style.rect.anchor = UIAnchor::BottomRight;
             reset->interactive = true;
         }
+
+        /// A popup whose list is one row under the header, as wide as it, 40 units high
+        class PickPopup : public UIElement {
+        public:
+            [[nodiscard]] bool HasPopupChildren() const override {
+                return true;
+            }
+            [[nodiscard]] bool IsPopupOpen() const override {
+                return open;
+            }
+            void LayoutPopup(const Rect& /*contentBounds*/) override {
+                for (const auto& child : children) {
+                    child->rect = Rect{rect.x, rect.y + rect.h, rect.w, kRowHeight};
+                }
+            }
+            bool open = false;
+
+            static constexpr float kRowHeight = 40.0f;
+        };
 
     }  // namespace
 
@@ -405,6 +425,118 @@ namespace BECore::Tests {
         canvas.Invalidate();
         canvas.Update(Output(1000.0f, 500.0f));
         EXPECT_EQ(canvas.HitTest(20.0f, 20.0f), nullptr);
+    }
+
+    // ---- picking ----------------------------------------------------------------------------------------------------------
+
+    TEST(UICanvasLayoutTest, PickElementFindsWhatDrawsAndHitTestDoesNot) {
+        UICanvasLayout canvas;
+        canvas.params.scaleMode = CanvasScaleMode::ConstantPixelSize;
+        auto panel = AddBox(*canvas.root, "Panel", 100.0f, 100.0f, 100.0f, 100.0f);
+        panel->color = Color{10, 20, 30, 255};
+        auto label = AddBox(*canvas.root, "Label", 300.0f, 100.0f, 100.0f, 50.0f);
+        label->AddComponent<UITextComponent>();
+        AddBox(*canvas.root, "Container", 500.0f, 100.0f, 100.0f, 100.0f);
+        auto button = AddBox(*canvas.root, "Button", 700.0f, 100.0f, 100.0f, 50.0f);
+        button->interactive = true;
+        canvas.Update(Output(1000.0f, 500.0f));
+
+        EXPECT_EQ(canvas.HitTest(150.0f, 150.0f), nullptr);
+        EXPECT_EQ(canvas.PickElement(150.0f, 150.0f), panel.Get());
+        EXPECT_EQ(canvas.HitTest(350.0f, 120.0f), nullptr);
+        EXPECT_EQ(canvas.PickElement(350.0f, 120.0f), label.Get());
+        EXPECT_EQ(canvas.PickElement(750.0f, 120.0f), button.Get());  // what HitTest finds is found too
+        EXPECT_EQ(canvas.HitTest(750.0f, 120.0f), button.Get());
+        EXPECT_EQ(canvas.HitTest(550.0f, 150.0f), nullptr);
+        EXPECT_EQ(canvas.PickElement(550.0f, 150.0f), nullptr);  // transparent and without components: neither
+    }
+
+    TEST(UICanvasLayoutTest, PickElementNeverReturnsTheRootEvenWhenItBlocksInput) {
+        UICanvasLayout canvas;
+        canvas.params.scaleMode = CanvasScaleMode::ConstantPixelSize;
+        canvas.root->blocksInput = true;
+        canvas.root->color = Color{1, 2, 3, 255};
+        auto panel = AddBox(*canvas.root, "Panel", 100.0f, 100.0f, 100.0f, 100.0f);
+        panel->color = Color{10, 20, 30, 255};
+        canvas.Update(Output(1000.0f, 500.0f));
+
+        EXPECT_EQ(canvas.PickElement(500.0f, 400.0f), nullptr);
+        EXPECT_EQ(canvas.PickElement(150.0f, 150.0f), panel.Get());
+        EXPECT_EQ(canvas.HitTest(500.0f, 400.0f), canvas.root.Get());  // the game's hit test is as it was
+    }
+
+    TEST(UICanvasLayoutTest, PickElementTakesTheTopmostChildBeforeItsParentAndALaterSiblingFirst) {
+        UICanvasLayout canvas;
+        canvas.params.scaleMode = CanvasScaleMode::ConstantPixelSize;
+        auto below = AddBox(*canvas.root, "Below", 100.0f, 100.0f, 200.0f, 200.0f);
+        below->color = Color{1, 1, 1, 255};
+        auto above = AddBox(*canvas.root, "Above", 150.0f, 150.0f, 200.0f, 200.0f);
+        above->color = Color{2, 2, 2, 255};
+        auto child = AddBox(*below, "Child", 10.0f, 10.0f, 50.0f, 50.0f);
+        child->color = Color{3, 3, 3, 255};
+        canvas.Update(Output(1000.0f, 500.0f));
+
+        EXPECT_EQ(canvas.PickElement(120.0f, 120.0f), child.Get());
+        EXPECT_EQ(canvas.PickElement(110.0f, 280.0f), below.Get());
+        EXPECT_EQ(canvas.PickElement(200.0f, 200.0f), above.Get());
+        EXPECT_EQ(canvas.PickElement(320.0f, 320.0f), above.Get());
+        EXPECT_EQ(canvas.PickElement(50.0f, 50.0f), nullptr);
+    }
+
+    TEST(UICanvasLayoutTest, PickElementSkipsAHiddenElementAndItsChildren) {
+        UICanvasLayout canvas;
+        canvas.params.scaleMode = CanvasScaleMode::ConstantPixelSize;
+        auto panel = AddBox(*canvas.root, "Panel", 0.0f, 0.0f, 300.0f, 300.0f);
+        panel->color = Color{1, 1, 1, 255};
+        auto inner = AddBox(*panel, "Inner", 10.0f, 10.0f, 100.0f, 50.0f);
+        inner->color = Color{2, 2, 2, 255};
+        canvas.Update(Output(1000.0f, 500.0f));
+        ASSERT_EQ(canvas.PickElement(20.0f, 20.0f), inner.Get());
+
+        inner->style.visible = false;
+        canvas.Invalidate();
+        canvas.Update(Output(1000.0f, 500.0f));
+        EXPECT_EQ(canvas.PickElement(20.0f, 20.0f), panel.Get());
+
+        panel->style.visible = false;
+        canvas.Invalidate();
+        canvas.Update(Output(1000.0f, 500.0f));
+        EXPECT_EQ(canvas.PickElement(20.0f, 20.0f), nullptr);
+    }
+
+    TEST(UICanvasLayoutTest, PickElementPrefersTheChildOfAnOpenPopup) {
+        UICanvasLayout canvas;
+        canvas.params.scaleMode = CanvasScaleMode::ConstantPixelSize;
+        auto popup = New<PickPopup>();
+        popup->name = "Popup"_intern;
+        popup->style.rect.x = UILength::Px(100.0f);
+        popup->style.rect.y = UILength::Px(100.0f);
+        popup->style.rect.width = UILength::Px(100.0f);
+        popup->style.rect.height = UILength::Px(40.0f);
+        popup->color = Color{1, 1, 1, 255};
+        canvas.root->children.push_back(popup);
+        auto option = New<UIElement>();
+        option->name = "Option"_intern;
+        option->color = Color{2, 2, 2, 255};
+        popup->children.push_back(option);
+        auto cover = AddBox(*canvas.root, "Cover", 100.0f, 140.0f, 300.0f, 300.0f);  // a later sibling over the list
+        cover->color = Color{3, 3, 3, 255};
+        canvas.Update(Output(1000.0f, 500.0f));
+
+        EXPECT_EQ(canvas.PickElement(150.0f, 150.0f), cover.Get());  // closed: the options have no rect
+
+        popup->open = true;
+        canvas.Invalidate();
+        canvas.Update(Output(1000.0f, 500.0f));
+        EXPECT_EQ(canvas.PickElement(150.0f, 150.0f), option.Get());  // open: drawn above the whole tree
+        EXPECT_EQ(canvas.PickElement(150.0f, 120.0f), popup.Get());
+    }
+
+    TEST(UICanvasLayoutTest, PickElementFindsNothingBeforeTheFirstUpdate) {
+        UICanvasLayout canvas;
+        BuildHud(canvas);
+
+        EXPECT_EQ(canvas.PickElement(20.0f, 20.0f), nullptr);
     }
 
     // ---- the size matrix --------------------------------------------------------------------------------------------------
