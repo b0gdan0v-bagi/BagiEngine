@@ -841,7 +841,7 @@ figcaption,.none{opacity:.7;font-size:12px}h3{margin:18px 0 6px;font-size:13px}<
         const loopArgs = [id, c.loopArgs].filter(Boolean).join(" ");
         const label = (w) => (w.entry && w.entry.id !== id ? `${w.name} (leaves ${w.entry.id})` : w.entry ? `${w.name} (holds its branch)` : w.name);
         const overlaps = await overlapWarning(id);
-        const detail = ["It runs as the background session todo-w<k> of that worker; the loop goes to the base itself. Attach opens it when it asks for a permission."];
+        const detail = ["It runs as the background session todo-w<k> of that worker, which worker.py start first moves to the tips of the bases. Attach opens it when it asks for a permission."];
         if (overlaps.length) detail.push("", "Busy entries name the same files (merging both later may conflict):", ...overlaps.map((o) => `  ${o}`));
         const picked = await vscode.window.showInformationMessage(`Start /todo-loop 1 ${loopArgs} in a free worker?`, { modal: true, detail: detail.join("\n") }, ...free.map(label));
         const worker = free.find((w) => label(w) === picked);

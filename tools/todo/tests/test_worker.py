@@ -711,6 +711,33 @@ def test_update_detaches_a_worker_at_the_tips_of_the_bases(game: Path, store, fa
     assert run("status", "--porcelain", cwd=w1) == ""
 
 
+def test_start_moves_an_idle_worker_to_the_tips_of_the_bases_first(game: Path, store, fake_claude, capsys):
+    script, log, _sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    workers = game.parent / "game.workers"
+    run("commit", "-q", "--allow-empty", "-m", "newer game", cwd=game)
+    (workers / "w2" / "engine" / "wip.txt").write_text("wip\n")
+    w2_before = run("rev-parse", "HEAD", cwd=workers / "w2")
+    capsys.readouterr()
+    assert worker.main(["start", "--delay", "0", "--claude", str(script)]) == 0
+    out = capsys.readouterr().out
+    assert run("rev-parse", "HEAD", cwd=workers / "w1") == run("rev-parse", "main", cwd=game)
+    assert "w1: moved to the base: game at main" in out
+    assert run("rev-parse", "HEAD", cwd=workers / "w2") == w2_before
+    assert "w2: not moved to the base" in out and "uncommitted" in out
+    assert len(log.read_text().splitlines()) == 2
+
+
+def test_start_print_moves_nothing(game: Path, store, fake_claude):
+    script, log, _sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    w1 = game.parent / "game.workers" / "w1"
+    before = run("rev-parse", "HEAD", cwd=w1)
+    run("commit", "-q", "--allow-empty", "-m", "newer game", cwd=game)
+    assert worker.main(["start", "--delay", "0", "--claude", str(script), "--print"]) == 0
+    assert run("rev-parse", "HEAD", cwd=w1) == before
+
+
 def test_update_refuses_a_running_session_and_uncommitted_changes(game: Path, store, fake_claude, capsys):
     script, _log, sessions = fake_claude
     worker.main(["create", "2", "--no-configure"])

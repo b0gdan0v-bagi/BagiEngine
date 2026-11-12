@@ -1785,7 +1785,18 @@ def cmd_start(layout: Layout, args) -> None:
             continue
         if is_active(session) and not args.print_only:
             subprocess.run([args.claude, "stop", str(session.get("id") or session["sessionId"])], capture_output=True, text=True)
-        command = [args.claude, "--bg", "--name", session_name(k), *flags, *args.rest, prompt]
+        if not args.print_only:
+            # The loop's own "go to the base" is a step of its conductor and may miss a repository: a game left on an
+            # old commit beside a newer engine base makes a red baseline, and the loop stops without taking anything.
+            # A worker with uncommitted changes holds work the loop continues, so it is started where it stands.
+            try:
+                moved = update_one(layout, k, path, None)
+                parts = [f"{Path(r['repo']).name if Path(r['repo']) != path else 'game'} at {r['base']} ({r['to'][:9]})" for r in moved["repos"] if r["changed"]]
+                if parts:
+                    print(f"w{k}: moved to the base: {', '.join(parts)}")
+            except WorkerError as error:
+                print(f"w{k}: not moved to the base ({error}); started where it stands")
+        command =[args.claude, "--bg", "--name", session_name(k), *flags, *args.rest, prompt]
         if started and args.delay > 0:
             print(f"  waiting {args.delay} s before w{k} (the loops must not choose at the same moment)")
             if not args.print_only:
