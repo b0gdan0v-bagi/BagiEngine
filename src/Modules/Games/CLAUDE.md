@@ -60,7 +60,7 @@ Rules of the adapter:
 - `GetStateVersion()` grows with every committed action and with `Start()` and never goes back; the server compares `action.version` with it to refuse a stale action.
 - The outcome of `PerformSeatAction` may be sent to every seat: public information only. The `message` of an error goes back to the one client that sent the action, but keep it free of hidden information too (it may quote what the client itself sent, as the fake game's "seat 0 does not hold 'c3_1'" does, never what the other seats hold).
 - The module that runs rooms of seated games is `Rooms` (`src/Modules/Rooms/CLAUDE.md`: protocol, room logic, hub).
-- `SeatedGameRegistry` is a plain class that the caller owns and fills (no singleton, no static initializer); names are looked up in a hash map of `eastl::string` and never interned into `PoolString`, because they come from a client.
+- `SeatedGameRegistry` is a plain class that the caller owns and fills (no singleton, no static initializer); names are looked up in a hash map of `eastl::string` and never interned into `PoolString`, because they come from a client. `SeatedGameInfo::publicOptions` names the keys of `create_room`'s options every member may see in the lobby before the start (booleans and integers only; the rest stays the game's).
 - Tests: `tests/BECore/Rooms/` (`FakeSeatedGame` is a four-seat card game with hidden hands (the `DemoCardGame` of `RoomServer`), `LeakyFakeSeatedGame` its negative control, `ExpectNoLeak` the check that a text does not name a hidden card; `SeatedGameTest.cpp`); the scenario tests over the whole hub are `RoomsScenarioTest.cpp`.
 
 ## GameManager

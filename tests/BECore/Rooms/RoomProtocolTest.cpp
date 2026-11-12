@@ -587,6 +587,34 @@ namespace BECore::Tests {
         EXPECT_EQ(GetServerMessageType(*parsed), "lobby");
     }
 
+    TEST(RoomProtocolTest, TheOptionsOfALobbyAreWrittenWhenThereAreAnyAndReadBackAsBooleansAndIntegers) {
+        LobbySnapshot lobby;
+        lobby.room = "ABCDE";
+        lobby.game = "fake";
+        lobby.seats.push_back(LobbySeat{0, SeatKind::Human, "Ann", true});
+        EXPECT_EQ(FindJsonMember(ParseOrNull(MakeLobbyMessage(lobby)), "options"), nullptr);
+
+        lobby.options["hintsAllowed"] = true;
+        lobby.options["hands"] = 8;
+        const auto parsed = ParseServerMessage(MakeLobbyMessage(lobby));
+        const auto* read = ServerAs<LobbyMessage>(parsed);
+        ASSERT_NE(read, nullptr);
+        EXPECT_EQ(read->options, lobby.options);
+        EXPECT_EQ(MakeLobbyMessage(*read), MakeLobbyMessage(lobby));
+
+        // A reader keeps only booleans and integers; options that are not an object are a bad message
+        const eastl::string mixed = R"({"v":1,"type":"lobby","room":"ABCDE","game":"fake","phase":"lobby","host":0,"seats":[],"options":{"a":true,"b":2,"c":"text","d":1.5,"e":[1]}})";
+        const auto mixedParsed = ParseServerMessage(mixed);
+        const auto* kept = ServerAs<LobbyMessage>(mixedParsed);
+        ASSERT_NE(kept, nullptr);
+        Json expected = Json::object();
+        expected["a"] = true;
+        expected["b"] = 2;
+        EXPECT_EQ(kept->options, expected);
+        const eastl::string notAnObject = R"({"v":1,"type":"lobby","room":"ABCDE","game":"fake","phase":"lobby","host":0,"seats":[],"options":[1]})";
+        EXPECT_FALSE(ParseServerMessage(notAnObject).has_value());
+    }
+
     TEST(RoomProtocolTest, ParseServerMessageReadsEveryPhaseAndNoHost) {
         for (const RoomPhase phase : {RoomPhase::Lobby, RoomPhase::Playing, RoomPhase::Finished}) {
             LobbySnapshot lobby;

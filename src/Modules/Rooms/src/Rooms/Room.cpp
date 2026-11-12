@@ -355,6 +355,25 @@ namespace BECore {
         return FindMember(player) != nullptr;
     }
 
+    void Room::SetLobbyOptions(const Json& options) {
+        Json kept = Json::object();
+        if (options.is_object()) {
+            for (const eastl::string& key : _info.publicOptions) {
+                if (kept.size() >= RoomLimits::kMaxLobbyOptions) {
+                    break;
+                }
+                const Json* value = FindJsonMember(options, key);
+                if (value != nullptr && (value->is_boolean() || value->is_number_integer())) {
+                    kept[std::string(key.data(), key.size())] = *value;
+                }
+            }
+        }
+        if (kept != _lobbyOptions) {
+            _lobbyOptions = std::move(kept);
+            BumpLobbyRevision();
+        }
+    }
+
     LobbySnapshot Room::GetLobbySnapshot() const {
         LobbySnapshot lobby;
         lobby.room = _code;
@@ -380,6 +399,7 @@ namespace BECore {
             }
             lobby.seats.push_back(std::move(entry));
         }
+        lobby.options = _lobbyOptions;
         return lobby;
     }
 

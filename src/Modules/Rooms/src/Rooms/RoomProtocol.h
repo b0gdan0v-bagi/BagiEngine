@@ -128,12 +128,15 @@ namespace BECore {
         /// The seat of the host, or -1 when no human is left
         int hostSeat = -1;
         eastl::vector<LobbySeat> seats;
+        /// The public options of the room (`SeatedGameInfo::publicOptions`): an object of booleans and integers, empty when the game
+        /// names none. Not written when empty; a reader keeps only boolean and integer members.
+        Json options = Json::object();
     };
 
     /// `joined {room, player, token, seat, host}`. The token is a secret: this message goes to its owner only.
     [[nodiscard]] eastl::string MakeJoinedMessage(eastl::string_view room, PlayerId player, eastl::string_view token, int seat, bool host);
 
-    /// `lobby {room, game, phase, host, seats:[{seat, kind, name?, connected?}]}`; to every member when it changes
+    /// `lobby {room, game, phase, host, seats:[{seat, kind, name?, connected?}], options?}`; to every member when it changes
     [[nodiscard]] eastl::string MakeLobbyMessage(const LobbySnapshot& lobby);
 
     /// `view {room, seat, version, finished, view, actions}`: what the game says the seat sees and may send now (no hidden information

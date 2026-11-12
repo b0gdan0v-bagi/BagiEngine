@@ -22,6 +22,9 @@ namespace BECore {
         /// would overflow the stack
         inline constexpr size_t kMaxServerJsonDepth = 128;
 
+        /// The most public options a `lobby` message may carry, written by a room or read by a client (a bound on the work)
+        inline constexpr size_t kMaxLobbyOptions = 16;
+
         /// The most seats a `lobby` message may list when a client reads it (a bound on the work, not a limit of any game)
         inline constexpr size_t kMaxLobbySeats = 64;
 
