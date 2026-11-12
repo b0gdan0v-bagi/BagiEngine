@@ -5,6 +5,7 @@
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/EditorLayoutWidget.gen.hpp>
+#include <Widgets/EditorLayout/GitBranch.h>
 #include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -15,6 +16,22 @@ namespace BECore {
 
         constexpr const char* kSaveLayoutPopupId = "Save Layout As";
         constexpr float kSaveLayoutFieldWidth = 280.0f;
+
+        /// Where the search for the engine's repository starts: the folder above the lowest layer of the `config` mount (the engine's own
+        /// content), else the working directory
+        std::filesystem::path BranchSearchStart() {
+            const auto layers = CoreManager::GetFileSystem().GetMountLayers("config"_intern);
+            if (!layers.empty() && layers.front().has_parent_path()) {
+                return layers.front().parent_path();
+            }
+            std::error_code error;
+            return std::filesystem::current_path(error);
+        }
+
+        /// Moves the cursor back over the gap ImGui leaves after an item, so the bars and the dock space touch
+        void CloseItemGap() {
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
+        }
 
     }  // namespace
 
@@ -28,6 +45,7 @@ namespace BECore {
         _settings.emplace(userDirectory);
         _settings->Load();
         ApplyPreferences(_settings->GetPreferences());
+        _statusBar.SetBranch(ReadGitBranch(BranchSearchStart()));
 
         Subscribe<EditorCommandEvent, &EditorLayoutWidget::OnCommand>(this);
         Subscribe<ViewportPreviewChangedEvent, &EditorLayoutWidget::OnViewportPreviewChanged>(this);
@@ -92,6 +110,8 @@ namespace BECore {
         ImGui::PopStyleVar(3);
 
         DrawMenuBar();
+        _toolbar.Draw(_playModel);
+        CloseItemGap();
         DispatchHotkeys();
         DrawSaveLayoutPopup();
         if (const PoolString chosen = _palette.Draw(_settings->GetHotkeys()); !chosen.Empty()) {
@@ -99,6 +119,8 @@ namespace BECore {
         }
 
         // --- DockSpace ---
+        // It takes what the status bar leaves; the bars are children of the host, so no dock node can overlap them
+        const float dockHeight = eastl::max(0.0f, ImGui::GetContentRegionAvail().y - StatusBar::GetHeight());
         const ImGuiID dockspaceId = ImGui::GetID("MainDockSpace");
 
         bool doReset = _forceResetLayout;
@@ -110,10 +132,12 @@ namespace BECore {
         }
 
         if (doReset) {
-            BuildDefaultLayout(dockspaceId, mainViewport->WorkSize);
+            BuildDefaultLayout(dockspaceId, ImVec2(mainViewport->WorkSize.x, dockHeight));
         }
 
-        ImGui::DockSpace(dockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+        ImGui::DockSpace(dockspaceId, ImVec2(0.0f, dockHeight), ImGuiDockNodeFlags_None);
+        CloseItemGap();
+        _statusBar.Draw();
 
         ImGui::End();
 

@@ -140,6 +140,24 @@ namespace BECore::Tests {
         SUCCEED();
     }
 
+    TEST_F(ControlServiceTest, ServerStatusIsNotListeningUntilPublished) {
+        const ControlServerStatus& status = service.GetServerStatus();
+        EXPECT_FALSE(status.listening);
+        EXPECT_EQ(status.port, 0);
+        EXPECT_EQ(status.clients, 0u);
+    }
+
+    TEST_F(ControlServiceTest, ServerStatusRoundTrips) {
+        service.SetServerStatus({true, 8123, 2});
+        EXPECT_TRUE(service.GetServerStatus().listening);
+        EXPECT_EQ(service.GetServerStatus().port, 8123);
+        EXPECT_EQ(service.GetServerStatus().clients, 2u);
+
+        service.SetServerStatus({});
+        EXPECT_FALSE(service.GetServerStatus().listening);
+        EXPECT_EQ(service.GetServerStatus().clients, 0u);
+    }
+
     TEST_F(ControlServiceTest, AnswersOnlyWhenDrained) {
         RegisterRecording("hello");
 

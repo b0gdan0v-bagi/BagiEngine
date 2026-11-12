@@ -42,6 +42,9 @@ namespace BECore {
         /// Sets the window title when the active game or the run mode differs from the ones of the last call (a compare per frame)
         void UpdateWindowTitle();
 
+        /// Copies the state of the control server into ControlService (every frame, a few words), so that the editor can show it
+        void PublishControlStatus() const;
+
 #if BE_WITH_REMOTE_CONTROL
         /// Starts the WebSocket server of the control API on @p port. False, with the reason in the log, when it cannot listen
         bool StartControlServer(uint16_t port);

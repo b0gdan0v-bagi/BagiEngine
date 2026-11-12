@@ -3,16 +3,20 @@
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/CommandPalette.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorPlayModel.h>
 #include <Widgets/EditorLayout/EditorSettings.h>
 #include <Widgets/EditorLayout/LayoutStore.h>
+#include <Widgets/EditorLayout/MainToolbar.h>
 #include <Widgets/EditorLayout/PreferencesWindow.h>
+#include <Widgets/EditorLayout/StatusBar.h>
 #include <imgui.h>
 
 namespace BECore {
 
     class IDeserializer;
 
-    // Full-screen DockSpace host that provides the unified editor layout.
+    // Full-screen DockSpace host that provides the unified editor layout, with the main toolbar under the menu bar and the status bar
+    // at the bottom (both children of the host, so the dock layout and imgui.ini do not know them).
     // Must be registered immediately after ImGuiWidget so all other editor
     // windows dock into this space.
     //
@@ -58,6 +62,10 @@ namespace BECore {
 
         std::optional<EditorSettings> _settings;
         std::optional<LayoutStore> _layouts;  // none when the system gives no per-user folder
+
+        EditorPlayModel _playModel;
+        MainToolbar _toolbar;
+        StatusBar _statusBar;
 
         CommandPalette _palette;
         PreferencesWindow _preferencesWindow;

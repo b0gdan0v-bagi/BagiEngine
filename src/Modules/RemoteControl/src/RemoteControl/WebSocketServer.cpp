@@ -21,8 +21,10 @@ namespace BECore {
 
         /// Every text message is a request; its response is queued by the main thread when the request has run, and the connection
         /// stays alive until then
-        WebSocketHandler MakeControlHandler(ControlService& service) {
+        WebSocketHandler MakeControlHandler(ControlService& service, std::atomic<uint32_t>& clientCount) {
             WebSocketHandler handler;
+            handler.onOpen = [&clientCount](const WebSocketHandler::ConnectionPtr&) { clientCount.fetch_add(1, std::memory_order_relaxed); };
+            handler.onClosed = [&clientCount](const WebSocketHandler::ConnectionPtr&) { clientCount.fetch_sub(1, std::memory_order_relaxed); };
             handler.onMessage = [&service](const WebSocketHandler::ConnectionPtr& connection, WebSocketMessage message) {
                 WebSocketHandler::ConnectionPtr target = connection;
                 service.Post(message.GetText(), [target](eastl::string response) { target->QueueText(response); });
@@ -33,7 +35,7 @@ namespace BECore {
 
     }  // namespace
 
-    WebSocketServer::WebSocketServer(ControlService& service) : _service(service), _listener(MakeControlSettings(), MakeControlHandler(service)) {}
+    WebSocketServer::WebSocketServer(ControlService& service) : _service(service), _listener(MakeControlSettings(), MakeControlHandler(service, _clientCount)) {}
 
     WebSocketServer::~WebSocketServer() {
         Stop();
