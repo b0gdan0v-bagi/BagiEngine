@@ -64,7 +64,7 @@ namespace BECore {
         if (scheme == "wss") {
             url.secure = true;
         } else if (scheme != "ws") {
-            return Refuse(Format("the scheme '{}' is not ws or wss", scheme));
+            return Refuse(Format("the scheme '{}' is not ws or wss", QuoteForMessage(scheme)));
         }
 
         const eastl::string_view rest = text.substr(separator + kSchemeSeparator.size());
@@ -90,6 +90,9 @@ namespace BECore {
         }
         if (host.empty()) {
             return Refuse("the URL has no host");
+        }
+        if (host.size() > kMaxWebSocketHostBytes) {
+            return Refuse(Format("the host is longer than {} bytes", kMaxWebSocketHostBytes));
         }
         if (!std::all_of(host.begin(), host.end(), IsHostCharacter)) {
             return Refuse("the host has a character a name cannot have");

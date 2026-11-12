@@ -88,7 +88,7 @@ namespace BECore {
                     return Refuse("the server's answer is not an HTTP/1.1 response");
                 }
                 if (*status != kStatusSwitchingProtocols) {
-                    return Refuse(Format("the server refused the connection: {}", line));
+                    return Refuse(Format("the server refused the connection: {}", QuoteForMessage(line)));
                 }
                 continue;
             }

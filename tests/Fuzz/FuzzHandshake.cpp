@@ -13,6 +13,14 @@ namespace BECore::Fuzz {
         constexpr eastl::string_view kHealthPath = "/healthz";
         constexpr eastl::string_view kHeadEnd = "\r\n\r\n";
 
+        /// Longest message a refusal may carry: a quoted piece of the peer's text (kMaxQuotedBytes and the three dots) in a sentence of ours
+        constexpr size_t kMaxRefusalBytes = kMaxQuotedBytes + 3 + 100;
+
+        /// A message for a log or a reject body that repeats the peer's text: printable ASCII and short, whatever the peer sent
+        bool IsTidyMessage(eastl::string_view message) {
+            return !message.empty() && message.size() <= kMaxRefusalBytes && std::all_of(message.begin(), message.end(), [](char letter) { return letter >= ' ' && letter <= '~'; });
+        }
+
         /// The statuses ParseHandshakeRequest documents
         bool IsKnownRefusalStatus(int status) {
             return status == 400 || status == 403 || status == 426 || status == 431;
@@ -57,7 +65,7 @@ namespace BECore::Fuzz {
             }
             if (!parsed.has_value()) {
                 FUZZ_CHECK(IsKnownRefusalStatus(parsed.error().httpStatus));
-                FUZZ_CHECK(!parsed.error().message.empty());
+                FUZZ_CHECK(IsTidyMessage(parsed.error().message));
                 const eastl::string reject = BuildRejectResponse(parsed.error());
                 FUZZ_CHECK(eastl::string_view(reject).starts_with("HTTP/1.1 "));
                 FUZZ_CHECK(!CheckServerHandshakeResponse(reject, WebSocketInput::kHandshakeKey).has_value());  // a refusal is never an accepted answer
@@ -79,7 +87,7 @@ namespace BECore::Fuzz {
         void CheckResponse(eastl::string_view text) {
             const auto checked = CheckServerHandshakeResponse(text, WebSocketInput::kHandshakeKey);
             if (!checked.has_value()) {
-                FUZZ_CHECK(!checked.error().empty());
+                FUZZ_CHECK(IsTidyMessage(checked.error()));
                 return;
             }
             // Accepted: nothing but a well-formed 101 for this key can be, so the answer must name the right accept value
@@ -92,7 +100,7 @@ namespace BECore::Fuzz {
         void CheckUrl(eastl::string_view text) {
             const auto parsed = ParseWebSocketUrl(text);
             if (!parsed.has_value()) {
-                FUZZ_CHECK(!parsed.error().empty());
+                FUZZ_CHECK(IsTidyMessage(parsed.error()));
                 return;
             }
             const WebSocketUrl& url = *parsed;

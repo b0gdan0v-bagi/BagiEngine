@@ -115,6 +115,13 @@ namespace BECore::Tests {
         EXPECT_EQ(MustParse(eastl::string_view(atLimit.data(), atLimit.size())).pathAndQuery.size(), kMaxWebSocketUrlBytes - 10);
     }
 
+    TEST(WebSocketUrlTest, RefusesAHostLongerThanADnsName) {
+        const std::string atLimit = "ws://" + std::string(kMaxWebSocketHostBytes, 'a') + "/x";
+        EXPECT_EQ(MustParse(eastl::string_view(atLimit.data(), atLimit.size())).host.size(), kMaxWebSocketHostBytes);
+        const std::string overLimit = "ws://" + std::string(kMaxWebSocketHostBytes + 1, 'a') + ":9/x";
+        ExpectRefused(eastl::string_view(overLimit.data(), overLimit.size()), "host is longer");
+    }
+
     TEST(WebSocketUrlTest, HostHeaderLeavesOutTheDefaultPortOfTheScheme) {
         EXPECT_EQ(GetHostHeader(MustParse("ws://a.com")), "a.com");
         EXPECT_EQ(GetHostHeader(MustParse("ws://a.com:80/x")), "a.com");

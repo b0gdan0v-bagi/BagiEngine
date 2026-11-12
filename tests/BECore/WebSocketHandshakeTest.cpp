@@ -543,4 +543,80 @@ namespace BECore::Tests {
         EXPECT_TRUE(response.ends_with("\r\n\r\nok"));
     }
 
+    // What a head of the largest allowed size costs: heads built to hit a scan that is more than linear
+
+    namespace {
+
+        /// Longest time a head of kMaxHandshakeBytes of one repeated token may take, a Debug build on a loaded machine included (a linear scan needs a few milliseconds)
+        constexpr double kScanLimitMilliseconds = 250.0;
+
+        template <typename TFunction>
+        double ElapsedMilliseconds(TFunction&& work) {
+            const auto begin = std::chrono::steady_clock::now();
+            work();
+            return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - begin).count();
+        }
+
+        /// A request head of about kMaxHandshakeBytes: the valid lines, then @p padding repeated up to the limit
+        std::string FullHead(const std::string& padding, const std::string& fixedLinesBefore = {}) {
+            std::string text = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n" + fixedLinesBefore;
+            const std::string tail = "Connection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
+            while (text.size() + padding.size() + tail.size() <= kMaxHandshakeBytes) {
+                text += padding;
+            }
+            return text + tail;
+        }
+
+    }  // namespace
+
+    TEST(WebSocketHandshakeTest, AFullHeadOfRepeatedTokensIsCheapToRead) {
+        const std::vector<std::string> heads = {
+            FullHead("X-A: b\r\n"),                                        // as many header lines as fit
+            FullHead("Upgrade: a\r\n"),                                    // a list header joined over and over
+            FullHead("Connection: ,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,\r\n"),  // long lists of empty tokens
+            FullHead("a:\r\n"),                                            // the shortest valid line
+        };
+        for (const std::string& head : heads) {
+            ASSERT_LE(head.size(), kMaxHandshakeBytes);
+            const HandshakePolicy policy = PublicPolicy();
+            EXPECT_LT(ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(head), HandshakePolicy{}); }), kScanLimitMilliseconds);
+            EXPECT_LT(ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(head), policy); }), kScanLimitMilliseconds);
+            EXPECT_LT(ElapsedMilliseconds([&] { (void)IsHealthCheckRequest(View(head), HealthPolicy()); }), kScanLimitMilliseconds);
+        }
+        // One header line that is a single list: the token scan is the cost
+        const std::string oneLongList = "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: " + std::string(kMaxHandshakeBytes - 200, ',') + "\r\n\r\n";
+        EXPECT_LT(ElapsedMilliseconds([&] { (void)ParseHandshakeRequest(View(oneLongList), HandshakePolicy{}); }), kScanLimitMilliseconds);
+    }
+
+    TEST(WebSocketHandshakeTest, TokenSearchDoesNotAllocatePerToken) {
+        const std::string commas(kMaxHandshakeBytes, ',');
+        EXPECT_LT(ElapsedMilliseconds([&] { EXPECT_FALSE(HeaderHasToken(View(commas), "upgrade")); }), kScanLimitMilliseconds);
+        EXPECT_TRUE(HeaderHasToken(View(commas + " Upgrade"), "upgrade"));
+        EXPECT_TRUE(EqualsIgnoreCase("WebSocket", "websocket"));
+        EXPECT_FALSE(EqualsIgnoreCase("websockets", "websocket"));
+        EXPECT_FALSE(EqualsIgnoreCase("websocke!", "websocket"));
+    }
+
+    TEST(WebSocketHandshakeTest, RefusalMessagesQuoteWhatThePeerSent) {
+        const std::string longHost = std::string(1000, 'h') + "\x01";
+        const auto refusedHost = Parse(Request().Set("Host", longHost));
+        ExpectRefused(refusedHost, 403);
+        EXPECT_LT(refusedHost.error().message.size(), 200u) << "a loopback refusal repeats the Host cut like a public one repeats the Origin";
+
+        const auto refusedOrigin = Parse(Request().Set("Origin", "http://evil.example\x01\x7F\xC3"));
+        ExpectRefused(refusedOrigin, 403);
+        for (const char letter : refusedOrigin.error().message) {
+            EXPECT_TRUE(letter >= ' ' && letter <= '~') << "only printable ASCII is repeated";
+        }
+    }
+
+    TEST(WebSocketHandshakeTest, QuoteForMessageCutsAndMasks) {
+        EXPECT_EQ(QuoteForMessage("plain"), "plain");
+        EXPECT_EQ(QuoteForMessage("a\r\nb\x7F\xC3"), "a??b??");
+        const eastl::string cut = QuoteForMessage(View(std::string(500, 'x')));
+        EXPECT_EQ(cut.size(), kMaxQuotedBytes + 3);
+        EXPECT_TRUE(eastl::string_view(cut).ends_with("..."));
+        EXPECT_EQ(QuoteForMessage(View(std::string(kMaxQuotedBytes, 'x'))).size(), kMaxQuotedBytes);
+    }
+
 }  // namespace BECore::Tests

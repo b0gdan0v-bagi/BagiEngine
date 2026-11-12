@@ -450,4 +450,81 @@ namespace BECore::Tests {
         ExpectViolation(parser, WebSocketCloseCode::kProtocolError);
     }
 
+    // What the parser keeps: nothing beyond one incomplete frame, and nothing at all after an error
+
+    TEST(WebSocketFrameTest, FramesThatArePoppedLeaveNothingBehind) {
+        constexpr size_t kFrames = 20000;
+        constexpr size_t kPieceFrames = 7;  // frames per Feed(), so a frame is cut by a piece now and then
+        eastl::vector<uint8_t> piece;
+        for (size_t i = 0; i < kPieceFrames; ++i) {
+            const auto frame = EncodeFrame(WebSocketOpcode::kPing, {}, kMask);
+            piece.insert(piece.end(), frame.begin(), frame.end());
+        }
+        WebSocketFrameParser parser;
+        size_t popped = 0;
+        for (size_t fed = 0; fed < kFrames; fed += kPieceFrames) {
+            parser.Feed(Span(piece));
+            while (true) {
+                PopResult result = parser.Pop();
+                ASSERT_TRUE(result.has_value());
+                if (!result->has_value()) {
+                    break;
+                }
+                ++popped;
+            }
+            ASSERT_EQ(parser.BufferedBytes(), 0u);
+        }
+        EXPECT_GE(popped, kFrames);
+    }
+
+    TEST(WebSocketFrameTest, ManyEmptyFragmentsHoldNothingAndTheLimitStopsTheRest) {
+        constexpr size_t kLimit = 100;
+        WebSocketFrameParser parser(kLimit);
+        parser.Feed(Span(EncodeFrame(WebSocketOpcode::kText, {}, kMask, false)));
+        for (size_t i = 0; i < 5000; ++i) {
+            parser.Feed(Span(EncodeFrame(WebSocketOpcode::kContinuation, {}, kMask, false)));
+        }
+        ExpectNothingReady(parser);
+        EXPECT_EQ(parser.BufferedBytes(), 0u);
+
+        // One byte per fragment fills the message up to the limit and the next one is too much
+        const eastl::vector<uint8_t> oneByte = EncodeFrame(WebSocketOpcode::kContinuation, TextBytes("x"), kMask, false);
+        for (size_t i = 0; i < kLimit; ++i) {
+            parser.Feed(Span(oneByte));
+            ExpectNothingReady(parser);
+        }
+        EXPECT_EQ(parser.BufferedBytes(), kLimit);
+        parser.Feed(Span(oneByte));
+        ExpectViolation(parser, WebSocketCloseCode::kMessageTooBig);
+        EXPECT_EQ(parser.BufferedBytes(), 0u) << "the fragments are dropped with the connection";
+    }
+
+    TEST(WebSocketFrameTest, AfterAnErrorNothingIsKeptAndNothingIsAccepted) {
+        WebSocketFrameParser parser(1024);
+        // A violation, then more than the parser would ever hold
+        eastl::vector<uint8_t> stream = Bytes({0xF1, 0x80, 0, 0, 0, 0});  // reserved bits
+        stream.resize(4096, 0x41);
+        parser.Feed(Span(stream));
+        ExpectViolation(parser, WebSocketCloseCode::kProtocolError);
+        EXPECT_EQ(parser.BufferedBytes(), 0u);
+
+        parser.Feed(Span(stream));
+        parser.Feed(Span(EncodeTextFrame("fine", kMask)));
+        EXPECT_EQ(parser.BufferedBytes(), 0u);
+        ExpectViolation(parser, WebSocketCloseCode::kProtocolError);  // still the first error, and no message
+    }
+
+    TEST(WebSocketFrameTest, AnIncompleteFrameIsHeldUpToTheLimitAndNotMore) {
+        constexpr size_t kLimit = 1000;
+        WebSocketFrameParser parser(kLimit);
+        const eastl::vector<uint8_t> frame = EncodeFrame(WebSocketOpcode::kBinary, TextBytes(std::string(kLimit, 'p')), kMask);
+        for (size_t i = 0; i + 1 < frame.size(); ++i) {
+            parser.Feed(Span(Bytes({frame[i]})));
+            ExpectNothingReady(parser);
+            ASSERT_LE(parser.BufferedBytes(), frame.size());
+        }
+        parser.Feed(Span(Bytes({frame.back()})));
+        EXPECT_EQ(PopMessage(parser).payload.size(), kLimit);
+    }
+
 }  // namespace BECore::Tests
