@@ -10,6 +10,15 @@ namespace BECore {
         return _parent;
     }
 
+    bool SceneNode::IsDescendantOf(const SceneNode& ancestor) const {
+        for (const SceneNode* node = _parent; node != nullptr; node = node->_parent) {
+            if (node == &ancestor) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     const eastl::vector<IntrusivePtr<SceneNode>>& SceneNode::GetChildren() const {
         return _children;
     }

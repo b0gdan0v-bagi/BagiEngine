@@ -13,6 +13,9 @@ namespace BECore {
         ~SceneNode() override = default;
 
         SceneNode* GetParent() const;
+
+        /// True when @p ancestor is above this node (its parent, the parent's parent, ...); a node is not its own ancestor
+        bool IsDescendantOf(const SceneNode& ancestor) const;
         const eastl::vector<IntrusivePtr<SceneNode>>& GetChildren() const;
         IntrusivePtr<SceneNode> AddChild(PoolString name);
         void RemoveChild(SceneNode* child);

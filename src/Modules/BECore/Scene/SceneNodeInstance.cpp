@@ -148,6 +148,39 @@ namespace BECore {
         return node;
     }
 
+    void AppendNodeElement(pugi::xml_node parent, const SceneNode& node) {
+        pugi::xml_node nodeEl = parent.append_child(kNodeElementName.data());
+        nodeEl.append_attribute("name").set_value(node.GetName().CStr());
+        if (node.GetLayer() != 0) {
+            nodeEl.append_attribute("layer").set_value(node.GetLayer());
+        }
+
+        if (!node.GetComponents().empty()) {
+            pugi::xml_node componentsEl = nodeEl.append_child(kComponentsElementName.data());
+            for (const auto& component : node.GetComponents()) {
+                pugi::xml_node componentEl = componentsEl.append_child(kComponentElementName.data());
+                componentEl.append_attribute(kComponentTypeAttribute.data()).set_value(component->GetTypeMeta().typeName.data());
+
+                XmlSerializer serializer;
+                component->Serialize(serializer);
+                const pugi::xml_node fields = serializer.GetRootNode();
+                for (pugi::xml_attribute attr = fields.first_attribute(); attr; attr = attr.next_attribute()) {
+                    componentEl.append_attribute(attr.name()).set_value(attr.value());
+                }
+                for (pugi::xml_node child = fields.first_child(); child; child = child.next_sibling()) {
+                    componentEl.append_copy(child);
+                }
+            }
+        }
+
+        if (!node.GetChildren().empty()) {
+            pugi::xml_node childrenEl = nodeEl.append_child("children");
+            for (const auto& child : node.GetChildren()) {
+                AppendNodeElement(childrenEl, *child);
+            }
+        }
+    }
+
     bool BuildNodeReference(const SceneNode& live, const NodeFileLoader& loader, pugi::xml_node nodesEl, eastl::string& reason) {
         const eastl::string ref = live.GetSourceRef().CStr();
         if (ref.empty()) {
