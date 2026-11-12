@@ -147,6 +147,10 @@ namespace BECore {
         // area or the density of the target in Game mode whatever state the widget dies in
         CoreManager::GetUIEnvironment().SetSafeAreaOverride(std::nullopt);
         CoreManager::GetUIEnvironment().SetPixelDensityOverride(std::nullopt);
+        // A gizmo drag in progress gives the nodes their start values back, so the scene is not left half moved
+        if (_gizmos.IsDragging()) {
+            _gizmos.AbortDrag(CoreManager::GetSceneManager().GetActiveScene());
+        }
         // The target's destructor waits for the GPU and gives back its ImGui texture. It needs the device and the ImGui context
         // alive: the widgets die last-first (the viewport before ImGuiWidget) and before the renderer's cleanup
         _renderTarget = {};
@@ -213,6 +217,9 @@ namespace BECore {
         }
 
         DrawPreviewToolbar();
+        ImGui::BeginDisabled(_inputMode != ViewportInputMode::Edit);
+        _gizmos.DrawToolbar();
+        ImGui::EndDisabled();
         EmitPreviewIfChanged();
         EmitInputModeIfChanged();
 
@@ -278,13 +285,14 @@ namespace BECore {
             ImGui::InvisibleButton(kImageHitArea, shown, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
             const bool imageHovered = ImGui::IsItemHovered();
 
-            // Where the pointer goes: the camera and the rubber band belong to the Edit input mode, and work while the Edit target owns the pointer (Alt flips it for one click)
+            // Where the pointer goes: the camera, the gizmo and the rubber band belong to the Edit input mode, and work while the Edit target owns the pointer (Alt flips it for one click)
             const ImGuiIO& io = ImGui::GetIO();
             const bool editing = _inputMode == ViewportInputMode::Edit;
             const bool editorTarget = ResolveTarget(_inputMode, io.KeyAlt) == ViewportInputTarget::Editor;
             bool panTookPress = false;
             if (editing) {
                 panTookPress = _cameraInput.Update(_camera, {imageMin.x, imageMin.y, shown.x, shown.y}, zoom, imageHovered, editorTarget);
+                _gizmos.ReadKeys();
                 if (ViewportKeyPressed(ImGuiKey_F)) {
                     FrameSelection(activeScene, shown, zoom);
                 }
@@ -303,11 +311,15 @@ namespace BECore {
             DrawOverlays(activeScene, frame, size, safeArea, imageHovered);
             DrawSelectionOutlines(activeScene, frame);
 
+            // The gizmo goes before the mouse is forwarded, so a press on a handle is consumed first
             const bool pointerFree = editing && editorTarget && !_cameraInput.IsPanning();
-            _boxSelect.Update(frame, activeScene, pointerFree, imageHovered, false);
+            const eastl::span<SceneNode* const> selection =
+                activeScene && activeScene == _selectedScene ? eastl::span<SceneNode* const>(_selectedNodes.data(), _selectedNodes.size()) : eastl::span<SceneNode* const>();
+            const bool gizmoTookPress = _gizmos.Update({activeScene, selection, &frame, editing, pointerFree, imageHovered});
+            _boxSelect.Update(frame, activeScene, pointerFree, imageHovered, gizmoTookPress);
 
             // Hand the mouse to the scene with target-pixel coordinates, so it can map them to scene units (Scene::ScreenToSceneX/Y) with the fit of its last draw
-            ForwardMouse(frame, imageHovered, panTookPress);
+            ForwardMouse(frame, imageHovered, panTookPress || gizmoTookPress);
             if (CoreManager::GetPause().IsPaused()) {
                 DrawPausedMark(frame.imageMin, frame.imageMax);
             }
@@ -786,7 +798,7 @@ namespace BECore {
                 break;
         }
 
-        // A press that a pan took gets an empty sink: the press is still followed to its release, but it is no click on the node under it
+        // A press that a pan or a gizmo took gets an empty sink: the press is still followed to its release, but no node is picked under the handle
         ViewportPointer::EditClickSink sink;
         if (!pressTaken) {
             sink = [](const ViewportEditClickEvent& click) { ViewportEditClickEvent::Emit(click.x, click.y, click.button, click.modifiers); };

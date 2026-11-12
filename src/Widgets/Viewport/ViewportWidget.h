@@ -36,7 +36,7 @@ namespace BECore {
     // selects, from here or from the hierarchy (SceneSelectionChangedEvent), are outlined over the image (the primary in the accent colour).
     // In Edit the image has an editor camera (ViewportCamera: wheel zoom about the pointer, middle-drag or Space + left-drag pan, F frames the selection, a Reset
     // button and a zoom label): the texture is drawn scaled and shifted under the clip rect of the panel, and everything in target pixels goes through ViewportFrame.
-    // A drag on empty ground draws a rubber band and selects what it touches.
+    // A drag on empty ground draws a rubber band and selects what it touches; the gizmo (ViewportGizmos) moves, turns and scales the selected nodes.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
     public:
@@ -111,7 +111,7 @@ namespace BECore {
         void DrawInputModeToggle();
 
         // Mouse input of the image as the scene's input, or an edit click (with the selection keys held): @p frame says where the image is, @p hovered is the hover of the
-        // hit area, @p pressTaken that a pan took this frame's press, which then is no edit click
+        // hit area, @p pressTaken that a pan or a gizmo took this frame's press, which then is no edit click
         void ForwardMouse(const ViewportFrame& frame, bool hovered, bool pressTaken);
 
         // The badge of the effective input mode in the top-right corner of the image, and in Edit an outline around the image
@@ -140,6 +140,7 @@ namespace BECore {
         eastl::vector<SceneNode*> _selectedNodes;  // in selection order, the primary last
         ViewportCamera _camera;                    // the editor camera; the image is drawn with it while the input mode is Edit
         ViewportCameraInput _cameraInput;
+        ViewportGizmos _gizmos;
         ViewportBoxSelect _boxSelect;
         float _shownScale = 1.0f;  // screen units per target pixel of the last frame, for the zoom label
         ViewportPointer _pointer;  // the held presses and where each goes

@@ -6,6 +6,7 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
+#include <Events/SubscriptionHolder.h>
 #include <Widgets/Viewport/ViewportGizmos.h>
 #include <gtest/gtest.h>
 
@@ -15,6 +16,7 @@ namespace BECore::Tests {
 
         constexpr float kTolerance = 1e-3f;
 
+        // "Main": A and B are movable; Locked is movable once the editor locks it; Hud has a canvas and no transform; Plain has a transform and nothing else.
         // "Fit" shows a 400 x 200 view in the 800 x 600 output (scale 2, a bar of 100 pixels above and below), so a scene rect is not its output rect.
         constexpr const char* kScenesXml = R"(
 <SceneManager><scenes>
@@ -63,6 +65,32 @@ namespace BECore::Tests {
             return nullptr;
         }
 
+        Gizmo::Item Moved(Gizmo::Item item, float dx) {
+            item.x += dx;
+            return item;
+        }
+
+        /// What NodeTransformEditEvent told, with the edits copied (the event's own are valid for the call only)
+        class EditRecorder : public SubscriptionHolder {
+        public:
+            struct Entry {
+                NodeTransformEditPhase phase;
+                const Scene* scene;
+                eastl::vector<NodeTransformEdit> edits;
+            };
+
+            EditRecorder() {
+                Subscribe<NodeTransformEditEvent, &EditRecorder::OnEdit>(this);
+            }
+
+            eastl::vector<Entry> entries;
+
+        private:
+            void OnEdit(const NodeTransformEditEvent& event) {
+                entries.push_back({event.phase, event.scene, eastl::vector<NodeTransformEdit>(event.edits.begin(), event.edits.end())});
+            }
+        };
+
     }  // namespace
 
     class ViewportGizmosTest : public ::testing::Test {
@@ -105,6 +133,25 @@ namespace BECore::Tests {
 
         IntrusivePtr<RecordingRenderer> _renderer;
         IntrusivePtrAtomic<SceneManager> _manager;
+        TransformComponent& TransformOf(const char* name) const {
+            return *Node("Main", name).GetComponent<TransformComponent>();
+        }
+
+        /// A free move of A and B (World axes, no snap) that starts at the origin, so the point of an Update is the offset
+        bool BeginMove(GizmoEditSession& session, std::initializer_list<const char*> names, const Gizmo::SnapSettings& snap = {}) {
+            _nodes.clear();
+            _items.clear();
+            for (const char* name : names) {
+                _nodes.push_back(&Node("Main", name));
+                _items.push_back(ItemOf(TransformOf(name)));
+            }
+            return session.Begin(GetScene("Main"), {_nodes.data(), _nodes.size()}, {_items.data(), _items.size()}, Gizmo::Tool::Translate, Gizmo::Space::World, Gizmo::Handle::Free, {0.0f, 0.0f},
+                                 snap);
+        }
+
+        eastl::vector<SceneNode*> _nodes;
+        eastl::vector<Gizmo::Item> _items;
+        EditRecorder _recorder;
     };
 
     // ---- the frame ------------------------------------------------------------------------------------------------------
@@ -138,6 +185,228 @@ namespace BECore::Tests {
         const ImVec2 byFrame = frame.ToScreen({123.0f, 456.0f});
         EXPECT_NEAR(byFrame.x, byCamera.x, kTolerance);
         EXPECT_NEAR(byFrame.y, byCamera.y, kTolerance);
+    }
+
+    // ---- the targets of a gizmo -----------------------------------------------------------------------------------------
+
+    TEST_F(ViewportGizmosTest, AnItemIsTheFieldsOfTheTransformAndBack) {
+        const auto transform = Node("Main", "A").GetComponent<TransformComponent>();
+        const Gizmo::Item item = ItemOf(*transform);
+
+        EXPECT_EQ(item, (Gizmo::Item{10.0f, 20.0f, 100.0f, 50.0f, 30.0f, 0.25f, 0.75f}));
+
+        ApplyItem(*transform, Gizmo::Item{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 0.1f, 0.2f});
+        EXPECT_EQ(ItemOf(*transform), (Gizmo::Item{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 0.1f, 0.2f}));
+    }
+
+    TEST_F(ViewportGizmosTest, ANodeIsMovableWithATransformAndNotLocked) {
+        EXPECT_TRUE(IsMovable(Node("Main", "A")));
+        EXPECT_FALSE(IsMovable(Node("Main", "Locked")));
+        EXPECT_FALSE(IsMovable(Node("Main", "Hud")));  // a canvas-only node has no gizmo
+    }
+
+    TEST_F(ViewportGizmosTest, CollectKeepsTheMovableAliveNodesInTheOrderOfTheSelection) {
+        SceneNode* const a = &Node("Main", "A");
+        SceneNode* const b = &Node("Main", "B");
+        SceneNode* const stranger = &Node("Other", "Elsewhere");  // a node of another tree is not alive in this one
+        const eastl::vector<SceneNode*> selected{b, &Node("Main", "Locked"), stranger, &Node("Main", "Hud"), a};
+
+        CollectMovable(GetScene("Main"), {selected.data(), selected.size()}, _nodes, _items);
+
+        ASSERT_EQ(_nodes.size(), 2u);
+        EXPECT_EQ(_nodes[0], b);
+        EXPECT_EQ(_nodes[1], a);
+        ASSERT_EQ(_items.size(), 2u);
+        EXPECT_FLOAT_EQ(_items[0].x, 200.0f);
+        EXPECT_FLOAT_EQ(_items[1].x, 10.0f);
+    }
+
+    TEST_F(ViewportGizmosTest, CollectClearsTheVectorsAndKeepsTheirCapacity) {
+        const eastl::vector<SceneNode*> selected{&Node("Main", "A"), &Node("Main", "B")};
+        CollectMovable(GetScene("Main"), {selected.data(), selected.size()}, _nodes, _items);
+        const size_t nodeCapacity = _nodes.capacity();
+        const size_t itemCapacity = _items.capacity();
+
+        CollectMovable(GetScene("Main"), {}, _nodes, _items);
+
+        EXPECT_TRUE(_nodes.empty());
+        EXPECT_TRUE(_items.empty());
+        EXPECT_EQ(_nodes.capacity(), nodeCapacity);
+        EXPECT_EQ(_items.capacity(), itemCapacity);
+    }
+
+    TEST_F(ViewportGizmosTest, WriteItemsSetsTheTransformsOfTheNodes) {
+        SceneNode* const a = &Node("Main", "A");
+        SceneNode* const b = &Node("Main", "B");
+        const eastl::vector<SceneNode*> nodes{a, b};
+        const eastl::vector<Gizmo::Item> items{Moved(ItemOf(*a->GetComponent<TransformComponent>()), 5.0f), Moved(ItemOf(*b->GetComponent<TransformComponent>()), -7.0f)};
+
+        EXPECT_TRUE(WriteItems(GetScene("Main"), {nodes.data(), nodes.size()}, {items.data(), items.size()}));
+
+        EXPECT_FLOAT_EQ(a->GetComponent<TransformComponent>()->_x, 15.0f);
+        EXPECT_FLOAT_EQ(b->GetComponent<TransformComponent>()->_x, 193.0f);
+    }
+
+    TEST_F(ViewportGizmosTest, WriteItemsWritesNothingWhenANodeIsGoneOrTheSizesDiffer) {
+        SceneNode* const a = &Node("Main", "A");
+        SceneNode* const stranger = &Node("Other", "Elsewhere");
+        const eastl::vector<SceneNode*> nodes{a, stranger};
+        const eastl::vector<Gizmo::Item> items{Moved(ItemOf(*a->GetComponent<TransformComponent>()), 5.0f), Gizmo::Item{}};
+
+        EXPECT_FALSE(AllAlive(GetScene("Main"), {nodes.data(), nodes.size()}));
+        EXPECT_FALSE(WriteItems(GetScene("Main"), {nodes.data(), nodes.size()}, {items.data(), items.size()}));
+        EXPECT_FLOAT_EQ(a->GetComponent<TransformComponent>()->_x, 10.0f);  // the live node was not touched either
+
+        EXPECT_FALSE(WriteItems(GetScene("Main"), {nodes.data(), 1}, {items.data(), 2}));
+        EXPECT_FLOAT_EQ(a->GetComponent<TransformComponent>()->_x, 10.0f);
+    }
+
+    // ---- a drag of the gizmo --------------------------------------------------------------------------------------------
+
+    TEST_F(ViewportGizmosTest, ADragTellsBeginChangeAndCommitAndLeavesTheNodesMoved) {
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A", "B"}));
+        ASSERT_EQ(_recorder.entries.size(), 1u);
+        EXPECT_EQ(_recorder.entries[0].phase, NodeTransformEditPhase::Begin);
+        ASSERT_EQ(_recorder.entries[0].edits.size(), 2u);
+        EXPECT_EQ(_recorder.entries[0].edits[0].before, _recorder.entries[0].edits[0].after);
+
+        session.Update(GetScene("Main"), {10.0f, 5.0f}, false, false);
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 20.0f);
+        EXPECT_FLOAT_EQ(TransformOf("A")._y, 25.0f);
+        EXPECT_FLOAT_EQ(TransformOf("B")._x, 210.0f);
+        ASSERT_EQ(_recorder.entries.size(), 2u);
+        EXPECT_EQ(_recorder.entries[1].phase, NodeTransformEditPhase::Change);
+
+        session.Finish(GetScene("Main"));
+        ASSERT_EQ(_recorder.entries.size(), 3u);
+        const EditRecorder::Entry& commit = _recorder.entries[2];
+        EXPECT_EQ(commit.phase, NodeTransformEditPhase::Commit);
+        EXPECT_EQ(commit.scene, &GetScene("Main"));
+        ASSERT_EQ(commit.edits.size(), 2u);
+        EXPECT_EQ(commit.edits[0].node, &Node("Main", "A"));
+        EXPECT_FLOAT_EQ(commit.edits[0].before.x, 10.0f);  // the values of the press against the values of the release
+        EXPECT_FLOAT_EQ(commit.edits[0].after.x, 20.0f);
+        EXPECT_FLOAT_EQ(commit.edits[1].before.x, 200.0f);
+        EXPECT_FLOAT_EQ(commit.edits[1].after.x, 210.0f);
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 20.0f);  // a commit keeps the result
+        EXPECT_FALSE(session.IsActive());
+    }
+
+    TEST_F(ViewportGizmosTest, ChangeIsToldOnlyWhenTheResultDiffers) {
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A"}));
+
+        session.Update(GetScene("Main"), {0.0f, 0.0f}, false, false);  // the pointer did not move
+        session.Update(GetScene("Main"), {4.0f, 0.0f}, false, false);
+        session.Update(GetScene("Main"), {4.0f, 0.0f}, false, false);  // the same again
+
+        EXPECT_EQ(_recorder.entries.size(), 2u);  // Begin and one Change
+    }
+
+    TEST_F(ViewportGizmosTest, AReleaseWithNoMoveEndsAsACancelAndTheNodesAreUntouched) {
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A"}));
+        session.Update(GetScene("Main"), {0.0f, 0.0f}, false, false);
+
+        session.Finish(GetScene("Main"));
+
+        ASSERT_EQ(_recorder.entries.size(), 2u);
+        EXPECT_EQ(_recorder.entries[1].phase, NodeTransformEditPhase::Cancel);
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 10.0f);
+        EXPECT_FALSE(session.IsActive());
+    }
+
+    TEST_F(ViewportGizmosTest, ADragThatComesBackToItsStartCommitsNothing) {
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A"}));
+        session.Update(GetScene("Main"), {30.0f, 0.0f}, false, false);
+        session.Update(GetScene("Main"), {0.0f, 0.0f}, false, false);
+
+        session.Finish(GetScene("Main"));
+
+        EXPECT_EQ(_recorder.entries.back().phase, NodeTransformEditPhase::Cancel);
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 10.0f);
+    }
+
+    TEST_F(ViewportGizmosTest, AbortGivesTheStartValuesBackAndTellsCancelWithTheUndoneValues) {
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A", "B"}));
+        session.Update(GetScene("Main"), {40.0f, 0.0f}, false, false);
+
+        session.Abort(&GetScene("Main"));
+
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 10.0f);
+        EXPECT_FLOAT_EQ(TransformOf("B")._x, 200.0f);
+        const EditRecorder::Entry& cancel = _recorder.entries.back();
+        EXPECT_EQ(cancel.phase, NodeTransformEditPhase::Cancel);
+        ASSERT_EQ(cancel.edits.size(), 2u);
+        EXPECT_FLOAT_EQ(cancel.edits[0].before.x, 10.0f);
+        EXPECT_FLOAT_EQ(cancel.edits[0].after.x, 50.0f);  // the value that was undone
+        EXPECT_FALSE(session.IsActive());
+
+        const size_t told = _recorder.entries.size();
+        session.Abort(&GetScene("Main"));  // no drag: nothing happens, nothing is told
+        EXPECT_EQ(_recorder.entries.size(), told);
+    }
+
+    TEST_F(ViewportGizmosTest, AbortSkipsANodeThatLeftTheTree) {
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A", "B"}));
+        session.Update(GetScene("Main"), {40.0f, 0.0f}, false, false);
+        SceneNode* const gone = &Node("Main", "B");
+        EXPECT_TRUE(session.CanContinue(&GetScene("Main")));
+        GetScene("Main").GetRootNode().RemoveChild(gone);
+        EXPECT_FALSE(session.CanContinue(&GetScene("Main")));
+
+        session.Abort(&GetScene("Main"));
+
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 10.0f);
+        const EditRecorder::Entry& cancel = _recorder.entries.back();
+        ASSERT_EQ(cancel.edits.size(), 1u);  // the node that is gone is neither written to nor told
+        EXPECT_EQ(cancel.edits[0].node, &Node("Main", "A"));
+    }
+
+    TEST_F(ViewportGizmosTest, AbortInAnotherSceneWritesAndTellsNothing) {
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A"}));
+        session.Update(GetScene("Main"), {40.0f, 0.0f}, false, false);
+
+        EXPECT_FALSE(session.CanContinue(&GetScene("Other")));
+        EXPECT_FALSE(session.CanContinue(nullptr));
+        session.Abort(&GetScene("Other"));
+
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 50.0f);  // the scene of the drag was not the active one: it is not touched from here
+        EXPECT_TRUE(_recorder.entries.back().edits.empty());
+        EXPECT_EQ(_recorder.entries.back().phase, NodeTransformEditPhase::Cancel);
+        EXPECT_FALSE(session.IsActive());
+    }
+
+    TEST_F(ViewportGizmosTest, TheSnapSwitchAndItsModifierDecideTheRoundingOfAMove) {
+        Gizmo::SnapSettings snap;
+        snap.position = true;
+        snap.positionStep = 8.0f;
+        GizmoEditSession session;
+        ASSERT_TRUE(BeginMove(session, {"A"}, snap));
+
+        session.Update(GetScene("Main"), {3.0f, 0.0f}, false, false);
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 16.0f);  // 10 + 3 = 13 snaps to the nearest multiple of 8
+
+        session.Update(GetScene("Main"), {3.0f, 0.0f}, true, false);  // Ctrl held: the switch is inverted for this update
+        EXPECT_FLOAT_EQ(TransformOf("A")._x, 13.0f);
+    }
+
+    TEST_F(ViewportGizmosTest, ADragWithNothingToGrabDoesNotStart) {
+        GizmoEditSession session;
+
+        EXPECT_FALSE(BeginMove(session, {}));
+        EXPECT_FALSE(session.IsActive());
+        EXPECT_TRUE(_recorder.entries.empty());
+
+        _nodes = {&Node("Main", "A")};
+        _items = {};
+        EXPECT_FALSE(session.Begin(GetScene("Main"), {_nodes.data(), _nodes.size()}, {}, Gizmo::Tool::Translate, Gizmo::Space::World, Gizmo::Handle::Free, {0.0f, 0.0f}, {}));
+        EXPECT_FALSE(session.Begin(GetScene("Main"), {}, {}, Gizmo::Tool::Translate, Gizmo::Space::World, Gizmo::Handle::None, {0.0f, 0.0f}, {}));
     }
 
     // ---- framing the selection ------------------------------------------------------------------------------------------
