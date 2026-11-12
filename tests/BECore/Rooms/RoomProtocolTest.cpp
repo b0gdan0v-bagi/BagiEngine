@@ -493,4 +493,302 @@ namespace BECore::Tests {
         EXPECT_LT(MakeLobbyMessage(lobby).size(), RoomLimits::kMaxMessageBytes);
     }
 
+    // ---- Server messages read by a client -----------------------------------------------------------------------------------------
+
+    namespace {
+
+        constexpr eastl::string_view kToken = "00112233445566778899aabbccddeeff";
+
+        template <typename T>
+        const T* ServerAs(const std::expected<ServerMessage, ControlError>& parsed) {
+            if (!parsed) {
+                return nullptr;
+            }
+            return std::get_if<T>(&*parsed);
+        }
+
+        eastl::string ServerErrorCodeOf(eastl::string_view text, size_t maxBytes = RoomLimits::kMaxServerMessageBytes) {
+            const auto parsed = ParseServerMessage(text, maxBytes);
+            return parsed ? eastl::string("<ok>") : parsed.error().code;
+        }
+
+        /// A `lobby` message with @p seats as the JSON text of the array
+        eastl::string LobbyWith(eastl::string_view members) {
+            return Message("lobby", members);
+        }
+
+        constexpr eastl::string_view kGoodLobbyMembers = R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[])";
+
+    }  // namespace
+
+    TEST(RoomProtocolTest, ParseServerMessageReadsJoined) {
+        const auto parsed = ParseServerMessage(MakeJoinedMessage("ABCDE", 3, kToken, 2, true));
+        const auto* joined = ServerAs<JoinedMessage>(parsed);
+        ASSERT_NE(joined, nullptr);
+        EXPECT_EQ(joined->room, "ABCDE");
+        EXPECT_EQ(joined->player, 3u);
+        EXPECT_EQ(joined->token, kToken);
+        EXPECT_EQ(joined->seat, 2);
+        EXPECT_TRUE(joined->host);
+        EXPECT_EQ(GetServerMessageType(*parsed), "joined");
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageReadsALobbyWithAllThreeSeatKinds) {
+        LobbySnapshot lobby;
+        lobby.room = "ABCDE";
+        lobby.game = "fake";
+        lobby.phase = RoomPhase::Playing;
+        lobby.hostSeat = 1;
+        lobby.seats.push_back(LobbySeat{0, SeatKind::Computer, {}, false});
+        lobby.seats.push_back(LobbySeat{1, SeatKind::Human, "Ann", true});
+        lobby.seats.push_back(LobbySeat{2, SeatKind::Human, "Bob", false});
+        lobby.seats.push_back(LobbySeat{3, SeatKind::Empty, {}, false});
+
+        const auto parsed = ParseServerMessage(MakeLobbyMessage(lobby));
+        const auto* read = ServerAs<LobbyMessage>(parsed);
+        ASSERT_NE(read, nullptr);
+        EXPECT_EQ(read->room, "ABCDE");
+        EXPECT_EQ(read->game, "fake");
+        EXPECT_EQ(read->phase, RoomPhase::Playing);
+        EXPECT_EQ(read->hostSeat, 1);
+        ASSERT_EQ(read->seats.size(), 4u);
+        EXPECT_EQ(read->seats[0].kind, SeatKind::Computer);
+        EXPECT_EQ(read->seats[1].kind, SeatKind::Human);
+        EXPECT_EQ(read->seats[1].name, "Ann");
+        EXPECT_TRUE(read->seats[1].connected);
+        EXPECT_EQ(read->seats[2].name, "Bob");
+        EXPECT_FALSE(read->seats[2].connected);
+        EXPECT_EQ(read->seats[3].kind, SeatKind::Empty);
+        EXPECT_EQ(read->seats[3].seat, 3);
+        // Built again from what was read, it is the same text
+        EXPECT_EQ(MakeLobbyMessage(*read), MakeLobbyMessage(lobby));
+        EXPECT_EQ(GetServerMessageType(*parsed), "lobby");
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageReadsEveryPhaseAndNoHost) {
+        for (const RoomPhase phase : {RoomPhase::Lobby, RoomPhase::Playing, RoomPhase::Finished}) {
+            LobbySnapshot lobby;
+            lobby.room = "ABCDE";
+            lobby.game = "fake";
+            lobby.phase = phase;
+            lobby.hostSeat = -1;
+            const auto parsed = ParseServerMessage(MakeLobbyMessage(lobby));
+            const auto* read = ServerAs<LobbyMessage>(parsed);
+            ASSERT_NE(read, nullptr);
+            EXPECT_EQ(read->phase, phase);
+            EXPECT_EQ(read->hostSeat, -1);
+        }
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageReadsAViewWithNestedViewAndActions) {
+        Json view = Json::object();
+        view["hand"] = Json::array({1, 2, 3});
+        view["table"] = Json::object({{"top", Json::object({{"card", 7}})}});
+        Json play = Json::object();
+        play["type"] = "play";
+        play["card"] = 2;
+        const Json actions = Json::array({play});
+
+        const auto parsed = ParseServerMessage(MakeViewMessage("ABCDE", 1, 42, true, view, actions));
+        const auto* read = ServerAs<ViewMessage>(parsed);
+        ASSERT_NE(read, nullptr);
+        EXPECT_EQ(read->room, "ABCDE");
+        EXPECT_EQ(read->seat, 1);
+        EXPECT_EQ(read->version, 42u);
+        EXPECT_TRUE(read->finished);
+        EXPECT_EQ(read->view, view);
+        EXPECT_EQ(read->actions, actions);
+        EXPECT_EQ(GetServerMessageType(*parsed), "view");
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageReadsErrorsWithAndWithoutRef) {
+        const auto plain = ParseServerMessage(MakeErrorMessage("bad_message", "nope"));
+        const auto* plainError = ServerAs<ErrorMessage>(plain);
+        ASSERT_NE(plainError, nullptr);
+        EXPECT_EQ(plainError->code, "bad_message");
+        EXPECT_EQ(plainError->message, "nope");
+        EXPECT_TRUE(plainError->ref.empty());
+
+        const auto withRef = ParseServerMessage(MakeErrorMessage("not_host", "only the host starts", "start"));
+        const auto* refError = ServerAs<ErrorMessage>(withRef);
+        ASSERT_NE(refError, nullptr);
+        EXPECT_EQ(refError->ref, "start");
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageReadsLeftAndPong) {
+        const auto left = ParseServerMessage(MakeLeftMessage("replaced"));
+        const auto* leftMessage = ServerAs<LeftMessage>(left);
+        ASSERT_NE(leftMessage, nullptr);
+        EXPECT_EQ(leftMessage->reason, "replaced");
+
+        const auto pong = ParseServerMessage(MakePongMessage());
+        EXPECT_NE(ServerAs<PongMessage>(pong), nullptr);
+        EXPECT_EQ(GetServerMessageType(*pong), "pong");
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageIgnoresUnknownMembersAndTypes) {
+        const auto joined = ParseServerMessage(Message("joined", Format(R"("room":"ABCDE","player":1,"token":"{}","seat":0,"host":false,"extra":[1,{{}}])", kToken)));
+        EXPECT_NE(ServerAs<JoinedMessage>(joined), nullptr);
+
+        const auto unknown = ParseServerMessage(Message("emote", R"("who":3)"));
+        const auto* unknownMessage = ServerAs<UnknownServerMessage>(unknown);
+        ASSERT_NE(unknownMessage, nullptr);
+        EXPECT_EQ(unknownMessage->type, "emote");
+        EXPECT_EQ(GetServerMessageType(*unknown), "emote");
+
+        // A client's type from the server is only unknown to a client
+        EXPECT_NE(ServerAs<UnknownServerMessage>(ParseServerMessage(kPlainPing)), nullptr);
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageRefusesWhatIsNotAWellFormedMessage) {
+        const eastl::string goodJoined = Format(R"("room":"ABCDE","player":1,"token":"{}","seat":0,"host":false)", kToken);
+        const eastl::string goodView = R"("room":"ABCDE","seat":0,"version":1,"finished":false,"view":{},"actions":[])";
+        const eastl::string bomb = Repeat('[', RoomLimits::kMaxServerMessageBytes);
+        eastl::string balancedBomb = Repeat('[', RoomLimits::kMaxServerMessageBytes / 2);
+        balancedBomb.append(RoomLimits::kMaxServerMessageBytes / 2, ']');
+        const eastl::string nulByte = eastl::string("{\"v\":1,\"type\":\"pong\"}\0garbage", 24);
+        const eastl::string invalidUtf8 = Format("{{\"v\":1,\"type\":\"left\",\"reason\":\"{}\"}}", "\xC3\x28");
+
+        const eastl::vector<BadInput> table = {
+            {"empty", "", "bad_message"},
+            {"not json", "hello", "bad_message"},
+            {"truncated", R"({"v":1,"type":"pong")", "bad_message"},
+            {"two values", R"({"v":1,"type":"pong"}{"v":1,"type":"pong"})", "bad_message"},
+            {"nul after the object", nulByte, "bad_message"},
+            {"invalid utf-8", invalidUtf8, "bad_message"},
+            {"array", R"([{"v":1,"type":"pong"}])", "bad_message"},
+            {"null", "null", "bad_message"},
+            {"nesting bomb", bomb, "bad_message"},
+            {"nesting bomb, balanced", balancedBomb, "bad_message"},
+            {"v missing", R"({"type":"pong"})", "bad_message"},
+            {"v string", R"({"v":"1","type":"pong"})", "bad_message"},
+            {"v fractional", R"({"v":1.5,"type":"pong"})", "bad_message"},
+            {"v huge", R"({"v":1e300,"type":"pong"})", "bad_message"},
+            {"v beyond int64", R"({"v":18446744073709551616,"type":"pong"})", "bad_message"},
+            {"v two", R"({"v":2,"type":"pong"})", "unsupported_version"},
+            {"v zero", R"({"v":0,"type":"pong"})", "unsupported_version"},
+            {"type missing", R"({"v":1})", "bad_message"},
+            {"type number", R"({"v":1,"type":5})", "bad_message"},
+            {"type null", R"({"v":1,"type":null})", "bad_message"},
+            {"joined: room missing", Message("joined", Format(R"("player":1,"token":"{}","seat":0,"host":false)", kToken)), "bad_message"},
+            {"joined: room number", Message("joined", Format(R"("room":5,"player":1,"token":"{}","seat":0,"host":false)", kToken)), "bad_message"},
+            {"joined: player fractional", Message("joined", Format(R"("room":"ABCDE","player":1.5,"token":"{}","seat":0,"host":false)", kToken)), "bad_message"},
+            {"joined: player negative", Message("joined", Format(R"("room":"ABCDE","player":-1,"token":"{}","seat":0,"host":false)", kToken)), "bad_message"},
+            {"joined: player over 32 bits", Message("joined", Format(R"("room":"ABCDE","player":4294967296,"token":"{}","seat":0,"host":false)", kToken)), "bad_message"},
+            {"joined: token missing", Message("joined", R"("room":"ABCDE","player":1,"seat":0,"host":false)"), "bad_message"},
+            {"joined: token short", Message("joined", R"("room":"ABCDE","player":1,"token":"0123","seat":0,"host":false)"), "bad_message"},
+            {"joined: token upper case", Message("joined", R"("room":"ABCDE","player":1,"token":"0123456789ABCDEF0123456789ABCDEF","seat":0,"host":false)"), "bad_message"},
+            {"joined: seat negative", Message("joined", Format(R"("room":"ABCDE","player":1,"token":"{}","seat":-1,"host":false)", kToken)), "bad_message"},
+            {"joined: seat huge", Message("joined", Format(R"("room":"ABCDE","player":1,"token":"{}","seat":1e30,"host":false)", kToken)), "bad_message"},
+            {"joined: seat over int", Message("joined", Format(R"("room":"ABCDE","player":1,"token":"{}","seat":2147483648,"host":false)", kToken)), "bad_message"},
+            {"joined: host missing", Message("joined", Format(R"("room":"ABCDE","player":1,"token":"{}","seat":0)", kToken)), "bad_message"},
+            {"joined: host number", Message("joined", Format(R"("room":"ABCDE","player":1,"token":"{}","seat":0,"host":1)", kToken)), "bad_message"},
+            {"lobby: room missing", LobbyWith(R"("game":"g","phase":"lobby","host":0,"seats":[])"), "bad_message"},
+            {"lobby: game missing", LobbyWith(R"("room":"ABCDE","phase":"lobby","host":0,"seats":[])"), "bad_message"},
+            {"lobby: phase missing", LobbyWith(R"("room":"ABCDE","game":"g","host":0,"seats":[])"), "bad_message"},
+            {"lobby: phase unknown", LobbyWith(R"("room":"ABCDE","game":"g","phase":"paused","host":0,"seats":[])"), "bad_message"},
+            {"lobby: phase in other case", LobbyWith(R"("room":"ABCDE","game":"g","phase":"Lobby","host":0,"seats":[])"), "bad_message"},
+            {"lobby: phase number", LobbyWith(R"("room":"ABCDE","game":"g","phase":1,"host":0,"seats":[])"), "bad_message"},
+            {"lobby: host below -1", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":-2,"seats":[])"), "bad_message"},
+            {"lobby: host fractional", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0.5,"seats":[])"), "bad_message"},
+            {"lobby: seats missing", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0)"), "bad_message"},
+            {"lobby: seats object", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":{})"), "bad_message"},
+            {"lobby: seat is a number", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[1])"), "bad_message"},
+            {"lobby: seat kind unknown", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[{"seat":0,"kind":"robot"}])"), "bad_message"},
+            {"lobby: seat kind missing", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[{"seat":0}])"), "bad_message"},
+            {"lobby: seat index fractional", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[{"seat":0.5,"kind":"empty"}])"), "bad_message"},
+            {"lobby: seat index negative", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[{"seat":-1,"kind":"empty"}])"), "bad_message"},
+            {"lobby: human without a name", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[{"seat":0,"kind":"human","connected":true}])"), "bad_message"},
+            {"lobby: human without connected", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[{"seat":0,"kind":"human","name":"Ann"}])"), "bad_message"},
+            {"lobby: human name number", LobbyWith(R"("room":"ABCDE","game":"g","phase":"lobby","host":0,"seats":[{"seat":0,"kind":"human","name":7,"connected":true}])"), "bad_message"},
+            {"view: room missing", Message("view", R"("seat":0,"version":1,"finished":false,"view":{},"actions":[])"), "bad_message"},
+            {"view: seat string", Message("view", R"("room":"ABCDE","seat":"0","version":1,"finished":false,"view":{},"actions":[])"), "bad_message"},
+            {"view: version missing", Message("view", R"("room":"ABCDE","seat":0,"finished":false,"view":{},"actions":[])"), "bad_message"},
+            {"view: version negative", Message("view", R"("room":"ABCDE","seat":0,"version":-1,"finished":false,"view":{},"actions":[])"), "bad_message"},
+            {"view: version fractional", Message("view", R"("room":"ABCDE","seat":0,"version":1.5,"finished":false,"view":{},"actions":[])"), "bad_message"},
+            {"view: version beyond int64", Message("view", R"("room":"ABCDE","seat":0,"version":9223372036854775808,"finished":false,"view":{},"actions":[])"), "bad_message"},
+            {"view: finished string", Message("view", R"("room":"ABCDE","seat":0,"version":1,"finished":"no","view":{},"actions":[])"), "bad_message"},
+            {"view: view missing", Message("view", R"("room":"ABCDE","seat":0,"version":1,"finished":false,"actions":[])"), "bad_message"},
+            {"view: actions missing", Message("view", R"("room":"ABCDE","seat":0,"version":1,"finished":false,"view":{})"), "bad_message"},
+            {"error: code missing", Message("error", R"("message":"x")"), "bad_message"},
+            {"error: code number", Message("error", R"("code":5,"message":"x")"), "bad_message"},
+            {"error: message missing", Message("error", R"("code":"x")"), "bad_message"},
+            {"error: ref number", Message("error", R"("code":"x","message":"y","ref":3)"), "bad_message"},
+            {"left: reason missing", Message("left"), "bad_message"},
+            {"left: reason number", Message("left", R"("reason":1)"), "bad_message"},
+        };
+        for (const BadInput& input : table) {
+            EXPECT_EQ(ServerErrorCodeOf(input.text), eastl::string(input.code)) << input.label;
+        }
+        // The same members, well formed, pass
+        EXPECT_EQ(ServerErrorCodeOf(Message("joined", goodJoined)), "<ok>");
+        EXPECT_EQ(ServerErrorCodeOf(Message("view", goodView)), "<ok>");
+        EXPECT_EQ(ServerErrorCodeOf(LobbyWith(kGoodLobbyMembers)), "<ok>");
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageBoundsTheSeatsOfALobby) {
+        eastl::string seats = "[";
+        for (size_t seat = 0; seat <= RoomLimits::kMaxLobbySeats; ++seat) {
+            seats.append(seat == 0 ? "" : ",");
+            seats.append(Format(R"({{"seat":{},"kind":"empty"}})", seat));
+        }
+        seats.append("]");
+        EXPECT_EQ(ServerErrorCodeOf(LobbyWith(Format(R"("room":"ABCDE","game":"g","phase":"lobby","host":-1,"seats":{})", seats))), "bad_message");
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageChecksTheSizeFirst) {
+        const eastl::string pong = MakePongMessage();
+        EXPECT_EQ(ServerErrorCodeOf(pong, pong.size()), "<ok>");
+        EXPECT_EQ(ServerErrorCodeOf(pong, pong.size() - 1), RoomErrors::kMessageTooLarge);
+        EXPECT_EQ(ServerErrorCodeOf(Repeat('x', RoomLimits::kMaxServerMessageBytes + 1)), RoomErrors::kMessageTooLarge);
+        // A view of almost a megabyte is read, a byte more is not
+        eastl::string big = Message("pong", Format(R"("pad":"{}")", ""));
+        big.erase(big.size() - 1);
+        big.append(R"(,"pad":")");
+        const size_t padding = RoomLimits::kMaxServerMessageBytes - big.size() - 2;
+        big.append(padding, 'x');
+        big.append("\"}");
+        ASSERT_EQ(big.size(), RoomLimits::kMaxServerMessageBytes);
+        EXPECT_EQ(ServerErrorCodeOf(big), "<ok>");
+        big.insert(big.size() - 2, "x");
+        EXPECT_EQ(ServerErrorCodeOf(big), RoomErrors::kMessageTooLarge);
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageNeverAbortsOnAnyByte) {
+        for (int byte = 0; byte < 256; ++byte) {
+            const eastl::string one(1, static_cast<char>(byte));
+            EXPECT_FALSE(ParseServerMessage(one).has_value()) << byte;
+            const eastl::string inside = Format("{{\"v\":1,\"type\":\"error\",\"code\":\"{}\",\"message\":\"{}\"}}", one, one);
+            const auto parsed = ParseServerMessage(inside);
+            EXPECT_TRUE(parsed.has_value() || !parsed.error().code.empty()) << byte;
+        }
+        SUCCEED();
+    }
+
+    TEST(RoomProtocolTest, ParseServerMessageReadsWhatTheServerBuildsForAFullLobbyAndAGameSizedView) {
+        // The biggest honest lobby, and a view of a few hundred KiB: both come back whole
+        LobbySnapshot lobby;
+        lobby.room = "ABCDE";
+        lobby.game = Repeat('g', RoomLimits::kMaxGameNameBytes);
+        for (int seat = 0; seat < 8; ++seat) {
+            lobby.seats.push_back(LobbySeat{seat, SeatKind::Human, Repeat('n', RoomLimits::kMaxNameBytes), true});
+        }
+        const auto parsedLobby = ParseServerMessage(MakeLobbyMessage(lobby));
+        ASSERT_NE(ServerAs<LobbyMessage>(parsedLobby), nullptr);
+
+        Json hand = Json::array();
+        for (int i = 0; i < 20000; ++i) {
+            hand.push_back(i);
+        }
+        Json view = Json::object();
+        view["hand"] = hand;
+        const eastl::string text = MakeViewMessage("ABCDE", 0, 5, false, view, Json::array());
+        ASSERT_GT(text.size(), RoomLimits::kMaxMessageBytes);
+        ASSERT_LT(text.size(), RoomLimits::kMaxServerMessageBytes);
+        const auto parsedView = ParseServerMessage(text);
+        const auto* read = ServerAs<ViewMessage>(parsedView);
+        ASSERT_NE(read, nullptr);
+        EXPECT_EQ(read->view, view);
+    }
+
 }  // namespace BECore::Tests

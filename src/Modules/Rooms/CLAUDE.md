@@ -2,9 +2,9 @@
 
 ## Overview
 
-Online play in rooms by code, with an authoritative server (the entry `network-rooms` of the todo store, slices 1 and 2 of 4). The server owns the game (`ISeatedGame`, `Games/CLAUDE.md`, "Seats"); every client is a seat and sees only what the game says that seat may see. This module is **pure code**: JSON text in, JSON text out, no sockets, no clock, no randomness of its own. A transport feeds it: `RoomServer` (`RoomServer/CLAUDE.md`) on WebSocket. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomsModule`; `BagiEngineTests` links it with `LINK RemoteControlModule RoomsModule RoomServerModule RuntimeModule`).
+Online play in rooms by code, with an authoritative server (the entry `network-rooms` of the todo store, slices 1 to 3 of 4). The server owns the game (`ISeatedGame`, `Games/CLAUDE.md`, "Seats"); every client is a seat and sees only what the game says that seat may see. This module is **pure code**: JSON text in, JSON text out, no sockets, no clock, no randomness of its own. A transport feeds it: `RoomServer` (`RoomServer/CLAUDE.md`) on WebSocket. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomsModule`; `BagiEngineTests` links it with `LINK RemoteControlModule RoomsModule RoomServerModule RuntimeModule`).
 
-Built: the protocol, codes and tokens, the limits, `Room` and `RoomHub` (slice 1), the server over WebSocket (slice 2, `RoomServer`). Slices 3 and 4: "For later slices".
+Built: the protocol, codes and tokens, the limits, `Room` and `RoomHub` (slice 1), the server over WebSocket (slice 2, `RoomServer`), the client (slice 3, `RoomClient`: `RoomClient/CLAUDE.md`). Slice 4: "For later slices".
 
 ## Files
 
@@ -13,7 +13,7 @@ Built: the protocol, codes and tokens, the limits, `Room` and `RoomHub` (slice 1
 | `RoomTypes.h/.cpp` | `ConnectionId`, `PlayerId`, `RoomTime` (`steady_clock::time_point`, always passed in), `RandomFn` (`uint64_t()`, injected), `MakeSecureRandom()` (`std::random_device`), `RoomPhase` (`Lobby`, `Playing`, `Finished`), `SeatKind` (`Human`, `Computer`, `Empty`) and their wire names |
 | `RoomLimits.h` | `RoomLimits::k*` (the constants of the table below), `RoomTimings` (grace, abandoned timeout, computer delay) and `RoomHubSettings` (the same values as defaults, so a test overrides them; the three times are its member `timings`, handed to every room) |
 | `RoomErrors.h` | `RoomErrors::k*`, the stable error codes |
-| `RoomProtocol.h/.cpp` | `ClientMessage` (a `std::variant` of the seven client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, the builders of the server messages, `LobbySnapshot` |
+| `RoomProtocol.h/.cpp` | `ClientMessage` (a `std::variant` of the seven client messages), `ParseClientMessage`, `SerializeClientMessage`, `SanitizePlayerName`, the builders of the server messages, `LobbySnapshot`, `ParseServerMessage` (the inverse of the builders, for clients: `ServerMessage` variant, an unknown `type` is ignorable) |
 | `RoomCode.h/.cpp` | `GenerateRoomCode`, `NormalizeRoomCode`, `GenerateToken`, `IsWellFormedToken` |
 | `RateLimiter.h/.cpp` | a token bucket over `RoomTime` |
 | `Room.h/.cpp` | `Room`: members, seats, host, lobby snapshot and revision, phase, the game (start, actions, views, computers), absence and return (see "Room lifecycle") |
@@ -117,7 +117,7 @@ The host matters in the lobby (only the host starts). After the start it is only
 
 ## For later slices
 
-- **Slice 3, the client** (`RoomClient`), **slice 4, hosting** (Dockerfile, settings from the environment: the values of `RoomHubSettings`).
+- **Slice 4, hosting** (Dockerfile, settings from the environment: the values of `RoomHubSettings`).
 - A lobby has no timeout of its own: a room whose members stay connected and silent is kept (their connections are closed by the idle rule only while in no room). The transport or a later change may add one.
 - The Mahjong adapter and screens are entries of the `mahjong` area.
 

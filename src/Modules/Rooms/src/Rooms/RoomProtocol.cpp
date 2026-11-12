@@ -191,6 +191,213 @@ namespace BECore {
             return root;
         }
 
+        // ---- Reading the server's messages ----
+
+        [[nodiscard]] std::optional<RoomPhase> ParsePhaseName(eastl::string_view name) {
+            for (const RoomPhase phase : {RoomPhase::Lobby, RoomPhase::Playing, RoomPhase::Finished}) {
+                if (GetPhaseName(phase) == name) {
+                    return phase;
+                }
+            }
+            return std::nullopt;
+        }
+
+        [[nodiscard]] std::optional<SeatKind> ParseSeatKindName(eastl::string_view name) {
+            for (const SeatKind kind : {SeatKind::Human, SeatKind::Computer, SeatKind::Empty}) {
+                if (GetSeatKindName(kind) == name) {
+                    return kind;
+                }
+            }
+            return std::nullopt;
+        }
+
+        /// An integer member in [min, max]
+        [[nodiscard]] std::expected<int64_t, ControlError> RequireInt(const Json& root, eastl::string_view key, int64_t min, int64_t max) {
+            const auto value = GetJsonInt(root, key);
+            if (!value || *value < min || *value > max) {
+                return BadMessage(Format("'{}' must be an integer from {} to {}", key, min, max));
+            }
+            return *value;
+        }
+
+        [[nodiscard]] std::expected<bool, ControlError> RequireBool(const Json& root, eastl::string_view key) {
+            const auto value = GetJsonBool(root, key);
+            if (!value) {
+                return BadMessage(Format("'{}' must be a boolean", key));
+            }
+            return *value;
+        }
+
+        [[nodiscard]] std::expected<LobbySeat, ControlError> ParseLobbySeat(const Json& entry) {
+            if (!entry.is_object()) {
+                return BadMessage("a seat of 'seats' must be an object");
+            }
+            LobbySeat seat;
+            const auto index = RequireInt(entry, "seat", 0, std::numeric_limits<int>::max());
+            if (!index) {
+                return std::unexpected(index.error());
+            }
+            seat.seat = static_cast<int>(*index);
+            const auto kindName = RequireString(entry, "kind");
+            if (!kindName) {
+                return std::unexpected(kindName.error());
+            }
+            const auto kind = ParseSeatKindName(*kindName);
+            if (!kind) {
+                return BadMessage("a seat has an unknown 'kind'");
+            }
+            seat.kind = *kind;
+            if (seat.kind == SeatKind::Human) {
+                auto name = RequireString(entry, "name");
+                if (!name) {
+                    return std::unexpected(name.error());
+                }
+                const auto connected = RequireBool(entry, "connected");
+                if (!connected) {
+                    return std::unexpected(connected.error());
+                }
+                seat.name = std::move(*name);
+                seat.connected = *connected;
+            }
+            return seat;
+        }
+
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseJoined(const Json& root) {
+            JoinedMessage message;
+            auto room = RequireString(root, "room");
+            if (!room) {
+                return std::unexpected(room.error());
+            }
+            message.room = std::move(*room);
+            const auto player = RequireInt(root, "player", 0, std::numeric_limits<PlayerId>::max());
+            if (!player) {
+                return std::unexpected(player.error());
+            }
+            message.player = static_cast<PlayerId>(*player);
+            auto token = RequireString(root, "token");
+            if (!token) {
+                return std::unexpected(token.error());
+            }
+            if (!IsWellFormedToken(*token)) {
+                return BadMessage("'token' is not a token");
+            }
+            message.token = std::move(*token);
+            const auto seat = RequireInt(root, "seat", 0, std::numeric_limits<int>::max());
+            if (!seat) {
+                return std::unexpected(seat.error());
+            }
+            message.seat = static_cast<int>(*seat);
+            const auto host = RequireBool(root, "host");
+            if (!host) {
+                return std::unexpected(host.error());
+            }
+            message.host = *host;
+            return ServerMessage(std::move(message));
+        }
+
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseLobby(const Json& root) {
+            LobbyMessage message;
+            auto room = RequireString(root, "room");
+            if (!room) {
+                return std::unexpected(room.error());
+            }
+            message.room = std::move(*room);
+            auto game = RequireString(root, "game");
+            if (!game) {
+                return std::unexpected(game.error());
+            }
+            message.game = std::move(*game);
+            const auto phaseName = RequireString(root, "phase");
+            if (!phaseName) {
+                return std::unexpected(phaseName.error());
+            }
+            const auto phase = ParsePhaseName(*phaseName);
+            if (!phase) {
+                return BadMessage("'phase' is unknown");
+            }
+            message.phase = *phase;
+            const auto host = RequireInt(root, "host", -1, std::numeric_limits<int>::max());
+            if (!host) {
+                return std::unexpected(host.error());
+            }
+            message.hostSeat = static_cast<int>(*host);
+            const Json* seats = FindJsonMember(root, "seats");
+            if (seats == nullptr || !seats->is_array() || seats->size() > RoomLimits::kMaxLobbySeats) {
+                return BadMessage(Format("'seats' must be an array of at most {} seats", RoomLimits::kMaxLobbySeats));
+            }
+            message.seats.reserve(seats->size());
+            for (const Json& entry : *seats) {
+                auto seat = ParseLobbySeat(entry);
+                if (!seat) {
+                    return std::unexpected(seat.error());
+                }
+                message.seats.push_back(std::move(*seat));
+            }
+            return ServerMessage(std::move(message));
+        }
+
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseView(const Json& root) {
+            ViewMessage message;
+            auto room = RequireString(root, "room");
+            if (!room) {
+                return std::unexpected(room.error());
+            }
+            message.room = std::move(*room);
+            const auto seat = RequireInt(root, "seat", 0, std::numeric_limits<int>::max());
+            if (!seat) {
+                return std::unexpected(seat.error());
+            }
+            message.seat = static_cast<int>(*seat);
+            const auto version = RequireInt(root, "version", 0, std::numeric_limits<int64_t>::max());
+            if (!version) {
+                return std::unexpected(version.error());
+            }
+            message.version = static_cast<uint64_t>(*version);
+            const auto finished = RequireBool(root, "finished");
+            if (!finished) {
+                return std::unexpected(finished.error());
+            }
+            message.finished = *finished;
+            const Json* view = FindJsonMember(root, "view");
+            const Json* actions = FindJsonMember(root, "actions");
+            if (view == nullptr || actions == nullptr) {
+                return BadMessage("'view' and 'actions' must be there");
+            }
+            message.view = *view;
+            message.actions = *actions;
+            return ServerMessage(std::move(message));
+        }
+
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseError(const Json& root) {
+            ErrorMessage message;
+            auto code = RequireString(root, "code");
+            if (!code) {
+                return std::unexpected(code.error());
+            }
+            message.code = std::move(*code);
+            auto text = RequireString(root, "message");
+            if (!text) {
+                return std::unexpected(text.error());
+            }
+            message.message = std::move(*text);
+            if (FindJsonMember(root, "ref") != nullptr) {
+                auto ref = RequireString(root, "ref");
+                if (!ref) {
+                    return std::unexpected(ref.error());
+                }
+                message.ref = std::move(*ref);
+            }
+            return ServerMessage(std::move(message));
+        }
+
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseLeft(const Json& root) {
+            auto reason = RequireString(root, "reason");
+            if (!reason) {
+                return std::unexpected(reason.error());
+            }
+            return ServerMessage(LeftMessage{std::move(*reason)});
+        }
+
     }  // namespace
 
     std::expected<ClientMessage, ControlError> ParseClientMessage(eastl::string_view text, size_t maxBytes) {
@@ -370,6 +577,66 @@ namespace BECore {
 
     eastl::string MakePongMessage() {
         return DumpJson(MakeEnvelope(RoomMessageTypes::kPong));
+    }
+
+    std::expected<ServerMessage, ControlError> ParseServerMessage(eastl::string_view text, size_t maxBytes) {
+        if (text.size() > maxBytes) {
+            return Fail(RoomErrors::kMessageTooLarge, Format("a message is at most {} bytes", maxBytes));
+        }
+        if (text.find('\0') != eastl::string_view::npos) {
+            return BadMessage("the message must not contain a NUL byte");
+        }
+        const auto parsed = ParseJson(text);
+        if (!parsed) {
+            return BadMessage("the message is not valid JSON");
+        }
+        const Json& root = *parsed;
+        if (!root.is_object()) {
+            return BadMessage("the message must be a JSON object");
+        }
+        const auto version = GetJsonInt(root, "v");
+        if (!version) {
+            return BadMessage("'v' must be an integer");
+        }
+        if (*version != kRoomProtocolVersion) {
+            return Fail(RoomErrors::kUnsupportedVersion, Format("this client speaks protocol version {}", kRoomProtocolVersion));
+        }
+        auto type = GetJsonString(root, "type");
+        if (!type) {
+            return BadMessage("'type' must be a string");
+        }
+        if (*type == RoomMessageTypes::kJoined) {
+            return ParseJoined(root);
+        }
+        if (*type == RoomMessageTypes::kLobby) {
+            return ParseLobby(root);
+        }
+        if (*type == RoomMessageTypes::kView) {
+            return ParseView(root);
+        }
+        if (*type == RoomMessageTypes::kError) {
+            return ParseError(root);
+        }
+        if (*type == RoomMessageTypes::kLeft) {
+            return ParseLeft(root);
+        }
+        if (*type == RoomMessageTypes::kPong) {
+            return ServerMessage(PongMessage{});
+        }
+        return ServerMessage(UnknownServerMessage{std::move(*type)});
+    }
+
+    eastl::string_view GetServerMessageType(const ServerMessage& message) {
+        return std::visit(overload{
+                              [](const JoinedMessage&) { return RoomMessageTypes::kJoined; },
+                              [](const LobbyMessage&) { return RoomMessageTypes::kLobby; },
+                              [](const ViewMessage&) { return RoomMessageTypes::kView; },
+                              [](const ErrorMessage&) { return RoomMessageTypes::kError; },
+                              [](const LeftMessage&) { return RoomMessageTypes::kLeft; },
+                              [](const PongMessage&) { return RoomMessageTypes::kPong; },
+                              [](const UnknownServerMessage& m) { return eastl::string_view(m.type); },
+                          },
+                          message);
     }
 
 }  // namespace BECore
