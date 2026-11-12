@@ -67,6 +67,14 @@ namespace BECore {
          */
         [[nodiscard]] UIElement* HitTest(float canvasX, float canvasY) const;
 
+        /**
+         * @brief The topmost visible element at a point of the canvas that an editor can pick, or null: the root is never one.
+         *
+         * The same walk and order as HitTest(), but an element counts when it is hit-testable **or draws something** (a `color` that is not transparent, or a non-empty `components`),
+         * so a plain label or a colored panel is found although it takes no input. HitTest() and the game's input are not changed by it.
+         */
+        [[nodiscard]] UIElement* PickElement(float canvasX, float canvasY) const;
+
         /// The elements with `HasPopupChildren()` that are open, in tree order; only visible ones, and a popup inside the children of another is not looked for
         [[nodiscard]] eastl::vector<UIElement*> OpenPopups() const;
 

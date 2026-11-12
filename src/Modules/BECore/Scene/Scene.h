@@ -91,6 +91,13 @@ namespace BECore {
         float ScreenToSceneY(float outputY) const;
 
         /**
+         * @brief The fit of the last Draw(): scene units to render output pixels (`ViewTransform::ToOutput`); the identity before the first draw and for a scene without a view size.
+         *
+         * The inverse of ScreenToSceneX/Y. A tool takes a scene rectangle to the pixels of the pass that drew it.
+         */
+        [[nodiscard]] const ViewTransform& GetViewTransform() const;
+
+        /**
          * @brief True while this is the scene that SceneManager updates and draws.
          *
          * Scene events and input events are global, so every loaded scene's components receive them;
