@@ -15,8 +15,10 @@
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISlider.h>
+#include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIToggle.h>
+#include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UITooltipComponent.h>
 #include <BECore/UI/UIValueText.h>
 #include <SDL3/SDL_mouse.h>
@@ -227,6 +229,26 @@ namespace BECore {
                 json["fraction"] = slider->GetFraction();
                 json["action"] = MakeJsonString(slider->action.ToStringView());
                 json["disabled"] = slider->disabled;
+            }
+            // The composed toggle and slider: after `DescribeComponents`, so the `action` they carry replaces the empty one of the clicker beside them. A toggle's `text` is its caption,
+            // found by `DescribeComponents` below the row's clicker
+            if (const auto* toggle = element.GetComponent<UIToggleComponent>()) {
+                json["bind"] = MakeJsonString(toggle->bind.ToStringView());
+                json["onValue"] = MakeJsonString(toggle->onValue.ToStringView());
+                json["offValue"] = MakeJsonString(toggle->offValue.ToStringView());
+                json["checked"] = toggle->IsOn();
+                json["action"] = MakeJsonString(toggle->action.ToStringView());
+                json["disabled"] = element.IsDisabled();
+            }
+            if (const auto* slider = element.GetComponent<UISliderComponent>()) {
+                json["bind"] = MakeJsonString(slider->bind.ToStringView());
+                json["minValue"] = slider->minValue;
+                json["maxValue"] = slider->maxValue;
+                json["step"] = slider->step;
+                json["value"] = slider->GetValue();
+                json["fraction"] = slider->GetFraction();
+                json["action"] = MakeJsonString(slider->action.ToStringView());
+                json["disabled"] = element.IsDisabled();
             }
             Json children = Json::array();
             for (const auto& child : element.children) {
@@ -524,12 +546,22 @@ namespace BECore {
                 const bool clickerEmits = clicker != nullptr && !target.element->IsDisabled();
                 const PoolString clickerAction = clickerEmits ? clicker->action : PoolString{};
                 const PoolString clickerValue = clickerEmits ? clicker->value : PoolString{};
-                // A toggle reports the value it asks for, read before the click (a handler may set the variable at once)
+                // A toggle (the class or the composed row) reports the value it asks for, read before the click (a handler may set the variable at once)
                 const auto* toggle = target.element->Cast<UIToggle>();
-                const bool isToggle = toggle != nullptr;
-                const PoolString toggleAction = isToggle ? toggle->action : PoolString{};
-                const PoolString toggleValue = isToggle ? (toggle->IsOn() ? toggle->offValue : toggle->onValue) : PoolString{};
+                const auto* toggleComponent = target.element->GetComponent<UIToggleComponent>();
+                const bool isToggle = toggle != nullptr || toggleComponent != nullptr;
+                PoolString toggleAction;
+                PoolString toggleValue;
+                if (toggle != nullptr) {
+                    toggleAction = toggle->action;
+                    toggleValue = toggle->IsOn() ? toggle->offValue : toggle->onValue;
+                } else if (toggleComponent != nullptr) {
+                    toggleAction = toggleComponent->action;
+                    toggleValue = toggleComponent->IsOn() ? toggleComponent->offValue : toggleComponent->onValue;
+                }
+                // The slider, the class or the composed element: what the press emitted is read after the click
                 const auto* slider = target.element->Cast<UISlider>();
+                const auto* sliderComponent = target.element->GetComponent<UISliderComponent>();
                 // An option of a dropdown emits the dropdown's action with its own value (the option's `action` is empty), nothing when the choice is refused; the header emits nothing
                 const UIDropdown* owner = UIChoice::IsOption(*target.element) ? FindDropdownOf(*target.canvas->GetLayout().root, target.element.Get()) : nullptr;
                 const bool optionEmits = owner != nullptr && owner->EmitsOnChoice(*target.element);
@@ -558,9 +590,6 @@ namespace BECore {
                 } else if (isButton) {
                     result["action"] = MakeJsonString(action.ToStringView());
                     result["value"] = MakeJsonString(value.ToStringView());
-                } else if (clicker != nullptr) {
-                    result["action"] = MakeJsonString(clickerAction.ToStringView());
-                    result["value"] = MakeJsonString(clickerValue.ToStringView());
                 } else if (isToggle) {
                     result["action"] = MakeJsonString(toggleAction.ToStringView());
                     result["value"] = MakeJsonString(toggleValue.ToStringView());
@@ -568,6 +597,13 @@ namespace BECore {
                     // What the press emitted: empty when the slider is disabled or has no action (the element stays alive through `target`)
                     result["action"] = MakeJsonString(slider->action.ToStringView());
                     result["value"] = MakeJsonString(slider->GetLastEmittedValue().ToStringView());
+                } else if (sliderComponent != nullptr) {
+                    result["action"] = MakeJsonString(sliderComponent->action.ToStringView());
+                    result["value"] = MakeJsonString(sliderComponent->GetLastEmittedValue().ToStringView());
+                } else if (clicker != nullptr) {
+                    // After the toggle and the slider: their clicker has no action of its own, and must not shadow them
+                    result["action"] = MakeJsonString(clickerAction.ToStringView());
+                    result["value"] = MakeJsonString(clickerValue.ToStringView());
                 }
                 if (onlyClosesList && result.contains("action")) {
                     // The press only closed the open list and reached nothing below it: no action, no value
