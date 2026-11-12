@@ -32,16 +32,16 @@ namespace BECore {
     }
 
     bool ViewportPointer::IsGameHeld() const {
-        return eastl::any_of(std::begin(_held), std::end(_held), [](Held held) { return held == Held::Game; });
+        return eastl::any_of(std::begin(_held), std::end(_held), [](ViewportPressTarget held) { return held == ViewportPressTarget::Game; });
     }
 
     void ViewportPointer::Reset() {
-        eastl::fill(std::begin(_held), std::end(_held), Held::None);
+        eastl::fill(std::begin(_held), std::end(_held), ViewportPressTarget::None);
     }
 
     void ViewportPointer::Forward(const ViewportPointerFrame& frame, ViewportInputMode mode, bool oneOffModifier, UIInput& uiInput, const EditClickSink& editClickSink) {
         const SDL_MouseID which = WhichOf(frame.source);
-        const bool editorHeld = eastl::any_of(std::begin(_held), std::end(_held), [](Held held) { return held == Held::Editor; });
+        const bool editorHeld = eastl::any_of(std::begin(_held), std::end(_held), [](ViewportPressTarget held) { return held == ViewportPressTarget::Editor; });
         const bool hoverReachesGame = !editorHeld && ResolveTarget(mode, oneOffModifier) == ViewportInputTarget::Game;
 
         // A game press is followed to its release even when the pointer has left the image
@@ -65,7 +65,7 @@ namespace BECore {
             if (frame.hovered && frame.clicked[i]) {
                 const ViewportInputTarget target = ResolveTarget(mode, oneOffModifier);
                 if (target == ViewportInputTarget::Game) {
-                    _held[i] = Held::Game;
+                    _held[i] = ViewportPressTarget::Game;
                     SDL_MouseButtonEvent button{};
                     button.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
                     button.which = which;
@@ -76,7 +76,7 @@ namespace BECore {
                     button.y = frame.y;
                     uiInput.DispatchMouseButtonDown(button);
                 } else {
-                    _held[i] = Held::Editor;
+                    _held[i] = ViewportPressTarget::Editor;
                     if (editClickSink) {
                         editClickSink(ViewportEditClickEvent(frame.x, frame.y, static_cast<uint8_t>(i)));
                     }
@@ -84,8 +84,8 @@ namespace BECore {
             }
 
             // After the press: a press and a release in one frame are both seen
-            if (frame.released[i] && _held[i] != Held::None) {
-                if (_held[i] == Held::Game) {
+            if (frame.released[i] && _held[i] != ViewportPressTarget::None) {
+                if (_held[i] == ViewportPressTarget::Game) {
                     SDL_MouseButtonEvent button{};
                     button.type = SDL_EVENT_MOUSE_BUTTON_UP;
                     button.which = which;
@@ -95,7 +95,7 @@ namespace BECore {
                     button.y = frame.y;
                     uiInput.DispatchMouseButtonUp(button);
                 }
-                _held[i] = Held::None;
+                _held[i] = ViewportPressTarget::None;
             }
         }
 

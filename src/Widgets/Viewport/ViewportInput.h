@@ -12,6 +12,9 @@ namespace BECore {
     /// Where one press goes
     CORE_ENUM(ViewportInputTarget, uint8_t, Game, Editor)
 
+    /// Where the press of a button went, kept from the press to its release (None: not held)
+    CORE_ENUM(ViewportPressTarget, uint8_t, None, Game, Editor)
+
     /// What the pointer is: a touch or a pen reaches the game with the `which` of the real window, so a game's touch regime sees it
     CORE_ENUM(ViewportPointerSource, uint8_t, Mouse, Touch, Pen)
 
@@ -63,9 +66,7 @@ namespace BECore {
         [[nodiscard]] bool IsGameHeld() const;
 
     private:
-        enum class Held : uint8_t { None, Game, Editor };
-
-        Held _held[kViewportButtonCount] = {};
+        ViewportPressTarget _held[kViewportButtonCount] = {};
     };
 
 }  // namespace BECore
