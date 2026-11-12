@@ -163,4 +163,73 @@ namespace BECore::Tests {
         EXPECT_NE(second.error().find("0.0.0.0"), eastl::string::npos);
     }
 
+    TEST(SocketTest, ConnectByIPv4LiteralAndByNameReachesTheListener) {
+        auto listener = Socket::Listen(0);
+        ASSERT_TRUE(listener.has_value());
+        const uint16_t port = listener->GetLocalPort();
+
+        for (const char* host : {"127.0.0.1", "localhost"}) {
+            auto client = Socket::Connect(host, port, kWaitLimit);
+            ASSERT_TRUE(client.has_value()) << host << ": " << client.error().c_str();
+            auto accepted = listener->Accept(kWaitLimit);
+            ASSERT_TRUE(accepted.has_value()) << host;
+
+            // The connected socket is the usual blocking one: bytes go through both ways
+            const std::array<uint8_t, 2> bytes = {7, 9};
+            ASSERT_TRUE(client->SendAll(eastl::span<const uint8_t>(bytes.data(), bytes.size())));
+            std::array<uint8_t, 8> buffer;
+            const auto received = accepted->Receive(eastl::span<uint8_t>(buffer.data(), buffer.size()));
+            ASSERT_TRUE(received.has_value()) << host;
+            EXPECT_EQ(*received, 2u);
+        }
+    }
+
+    TEST(SocketTest, ConnectToAClosedPortNamesHostAndPort) {
+        uint16_t closedPort = 0;
+        {
+            auto listener = Socket::Listen(0);
+            ASSERT_TRUE(listener.has_value());
+            closedPort = listener->GetLocalPort();
+        }
+        const auto client = Socket::Connect("127.0.0.1", closedPort, kWaitLimit);
+        ASSERT_FALSE(client.has_value());
+        EXPECT_NE(client.error().find(Format("127.0.0.1:{}", closedPort)), eastl::string::npos) << client.error().c_str();
+    }
+
+    TEST(SocketTest, ConnectToAnUnresolvableNameIsAnErrorThatNamesTheHost) {
+        const auto client = Socket::Connect("nonexistent.invalid", 80, kWaitLimit);
+        ASSERT_FALSE(client.has_value());
+        EXPECT_NE(client.error().find("nonexistent.invalid"), eastl::string::npos) << client.error().c_str();
+    }
+
+    TEST(SocketTest, ConnectWithTheCancelFlagAlreadySetReturnsCancelledAndConnectsNothing) {
+        auto listener = Socket::Listen(0);
+        ASSERT_TRUE(listener.has_value());
+        const std::atomic<bool> cancel{true};
+
+        const auto client = Socket::Connect("127.0.0.1", listener->GetLocalPort(), kWaitLimit, &cancel);
+        ASSERT_FALSE(client.has_value());
+        EXPECT_NE(client.error().find("cancelled"), eastl::string::npos) << client.error().c_str();
+        const auto accepted = listener->Accept(100ms);
+        ASSERT_FALSE(accepted.has_value());
+        EXPECT_EQ(accepted.error(), SocketError::TimedOut);
+    }
+
+    TEST(SocketTest, ConnectWithAClearCancelFlagStillConnects) {
+        auto listener = Socket::Listen(0);
+        ASSERT_TRUE(listener.has_value());
+        const std::atomic<bool> cancel{false};
+
+        const auto client = Socket::Connect("127.0.0.1", listener->GetLocalPort(), kWaitLimit, &cancel);
+        EXPECT_TRUE(client.has_value());
+    }
+
+    TEST(SocketTest, ConnectToTheLoopbackByPortOnlyStillWorks) {
+        auto listener = Socket::Listen(0);
+        ASSERT_TRUE(listener.has_value());
+        auto client = Socket::Connect(listener->GetLocalPort());
+        ASSERT_TRUE(client.has_value());
+        EXPECT_TRUE(listener->Accept(kWaitLimit).has_value());
+    }
+
 }  // namespace BECore::Tests

@@ -21,7 +21,7 @@ namespace BECore {
      * Owns its handle and closes it on destruction; move-only. On POSIX the calls block, so a thread that waits in
      * Accept() or Receive() is woken by ShutdownBoth() from another thread (a connected socket) or by its timeout
      * (a listening socket, see Accept()). A listening socket binds the loopback (the control API is a local tool) or,
-     * for a public server, every address (SocketBind); only IPv4 is supported. Connect() goes to the loopback only.
+     * for a public server, every address (SocketBind); only IPv4 is supported. Connect() reaches any IPv4 host.
      *
      * Winsock does not wake a blocked recv() or send() on shutdown(), so there a connected socket is non-blocking
      * and Receive() / SendAll() wait in slices of kWakeInterval that look for ShutdownBoth(); the interface is the same.
@@ -43,8 +43,14 @@ namespace BECore {
         /// (GetLocalPort() tells which). The error is a message for the log and names the address used
         [[nodiscard]] static std::expected<Socket, eastl::string> Listen(uint16_t port, SocketBind scope = SocketBind::Loopback);
 
-        /// Connects to 127.0.0.1:@p port (clients and tests; the engine only listens)
+        /// Connects to 127.0.0.1:@p port (a loopback client of tests and tools); see the overload below
         [[nodiscard]] static std::expected<Socket, eastl::string> Connect(uint16_t port);
+
+        /// Connects to @p host (a name or an IPv4 literal) and @p port. The name is resolved by the system (blocking, not
+        /// bounded by @p timeout); the connection itself waits in slices of kWakeInterval, so an error "cancelled" follows
+        /// within one slice after @p cancel (read from this thread, set from another) became true, and "timed out" after
+        /// @p timeout. The error is a message for the log and names host:port
+        [[nodiscard]] static std::expected<Socket, eastl::string> Connect(eastl::string_view host, uint16_t port, std::chrono::milliseconds timeout, const std::atomic<bool>* cancel = nullptr);
 
         /// Waits up to @p timeout for a connection: TimedOut when none came, Failed when the socket is broken or was shut down.
         /// @p peerAddress, when given, gets the IPv4 address of the client as dotted text ("?" when it is unknown)
