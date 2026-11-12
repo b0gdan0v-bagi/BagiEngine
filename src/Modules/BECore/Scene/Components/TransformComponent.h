@@ -9,7 +9,7 @@ namespace BECore {
      * (y points down); the pivot is normalized in the node's rect (0.5, 0.5 is the center). Text, UI and hit tests ignore the rotation.
      */
     class TransformComponent : public IComponent {
-        BE_CLASS(TransformComponent)
+        BE_CLASS(TransformComponent, ICON = move)
     public:
         TransformComponent() = default;
         ~TransformComponent() override = default;

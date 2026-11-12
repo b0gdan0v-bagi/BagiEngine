@@ -2,6 +2,8 @@
 
 #include <EASTL/array.h>
 #include <EASTL/unordered_map.h>
+#include <Widgets/ImGuiFonts.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -10,7 +12,6 @@ namespace BECore {
 
         constexpr size_t k_textBufSize = 256;
         constexpr const char* k_unknownValueMarker = "(not a known value)";
-        constexpr ImVec4 k_unknownValueColor{1.0f, 0.8f, 0.0f, 1.0f};
         using TextBuf = eastl::array<char, k_textBufSize>;
 
         // Persistent char buffers for InputText fields, keyed by widgetId
@@ -46,6 +47,7 @@ namespace BECore {
             std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), value);
             const eastl::string label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
+            const ScopedMonoFont mono;
             if (ImGui::InputInt(label.c_str(), &value, 0, 0)) {
                 return {true, Format("{}", value)};
             }
@@ -57,6 +59,7 @@ namespace BECore {
             std::from_chars(currentValue.data(), currentValue.data() + currentValue.size(), value);
             const eastl::string label = Format("##{}", widgetId);
             ImGui::SetNextItemWidth(-1.0f);
+            const ScopedMonoFont mono;
             if (ImGui::InputFloat(label.c_str(), &value, 0.0f, 0.0f, "%.6g")) {
                 return {true, Format("{}", value)};
             }
@@ -101,7 +104,7 @@ namespace BECore {
 
             if (isUnknown) {
                 ImGui::SameLine();
-                ImGui::TextColored(k_unknownValueColor, "%s", k_unknownValueMarker);
+                ImGui::TextColored(GetImGuiPalette().warning, "%s", k_unknownValueMarker);
             }
             return result;
         }

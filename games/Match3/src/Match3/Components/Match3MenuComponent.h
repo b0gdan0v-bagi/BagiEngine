@@ -19,7 +19,7 @@ namespace BECore::Match3 {
      * The screen itself is a UI canvas next to this component in `config/SceneConfig.xml`; this class only knows what its buttons mean.
      */
     class Match3MenuComponent : public IComponent {
-        BE_CLASS(Match3MenuComponent)
+        BE_CLASS(Match3MenuComponent, ICON = list)
     public:
         Match3MenuComponent() = default;
         ~Match3MenuComponent() override = default;

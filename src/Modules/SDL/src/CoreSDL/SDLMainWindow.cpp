@@ -4,6 +4,7 @@
 #include "SDLWebCanvas.h"
 #include "SDLWindowConfig.h"
 
+#include <BECore/MainWindow/WindowTitle.h>
 #include <BECore/Reflection/OpenDeserializer.h>
 #include <CoreSDL/SDLUtils.h>
 #include <Events/ApplicationEvents.h>
@@ -69,13 +70,16 @@ namespace BECore {
         flags = (flags & ~SDL_WINDOW_VULKAN) | SDL_WINDOW_OPENGL;
 #endif
 
-        _window = SDL_CreateWindow(windowConfig._title.c_str(), windowConfig._width, windowConfig._height, flags);
+        // The first title; Application sets the composed one once the game is known
+        const eastl::string firstTitle = ComposeWindowTitle(windowConfig._title, {}, false);
+        _window = SDL_CreateWindow(firstTitle.c_str(), windowConfig._width, windowConfig._height, flags);
         if (!_window) {
             return false;
         }
 
         _width = windowConfig._width;
         _height = windowConfig._height;
+        _configuredTitle = windowConfig._title;
 
 #ifdef __EMSCRIPTEN__
         // The canvas fills the browser window: the size of the config is only the start size
@@ -97,6 +101,7 @@ namespace BECore {
         SDL_ResetHint(SDL_HINT_VIDEO_DRIVER);  // the next window picks its driver again
         _width = 0;
         _height = 0;
+        _configuredTitle.clear();
     }
 
     bool SDLMainWindow::IsValid() const {
@@ -129,6 +134,14 @@ namespace BECore {
     float SDLMainWindow::GetDisplayScale() const {
         const float scale = _window != nullptr ? SDL_GetWindowDisplayScale(_window) : 0.0f;
         return scale > 0.0f ? scale : IMainWindow::GetDisplayScale();
+    }
+
+    void SDLMainWindow::SetTitle(eastl::string_view title) {
+        if (_window == nullptr) {
+            return;
+        }
+        const eastl::string text(title.data(), title.size());  // SDL wants a terminated string
+        SDL_SetWindowTitle(_window, text.c_str());
     }
 
     Rect SDLMainWindow::GetSafeArea() const {

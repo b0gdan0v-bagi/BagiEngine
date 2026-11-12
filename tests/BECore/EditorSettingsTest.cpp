@@ -69,7 +69,6 @@ namespace BECore::Tests {
 
     TEST_F(EditorSettingsTest, PreferencesRoundTrip) {
         EditorPreferences changed;
-        changed.theme = EditorTheme::Light;
         changed.fontScale = 1.25f;
         changed.viewportGrid = true;
         changed.viewportGridStep = 48;
@@ -173,7 +172,7 @@ namespace BECore::Tests {
         settings.Load();
         ASSERT_TRUE(settings.SavePreferences());
         EXPECT_EQ(ReadFile("preferences.json.bad"), garbage);
-        EXPECT_EQ(ReadJsonFile("preferences.json")["theme"], "Dark");
+        EXPECT_FALSE(ReadJsonFile("preferences.json").contains("theme"));
 
         // A second save does not move the good file aside
         WriteFile("preferences.json.bad", "kept");
@@ -182,14 +181,14 @@ namespace BECore::Tests {
     }
 
     TEST_F(EditorSettingsTest, AValueOfTheWrongTypeGivesTheDefaultOfThatFieldOnly) {
-        WriteFile("preferences.json", R"({"theme":3,"fontScale":"big","viewportGrid":true,"viewportGridStep":1.5})");
+        WriteFile("preferences.json", R"({"fontScale":"big","viewportGrid":true,"viewportGridStep":1.5})");
         EditorSettings settings(_directory);
         settings.Load();
         EditorPreferences expected;
         expected.viewportGrid = true;
         EXPECT_EQ(settings.GetPreferences(), expected);
 
-        WriteFile("preferences.json", R"({"theme":"Neon","fontScale":1.5,"viewportGrid":"yes"})");
+        WriteFile("preferences.json", R"({"fontScale":1.5,"viewportGrid":"yes"})");
         settings.Load();
         expected = EditorPreferences{};
         expected.fontScale = 1.5f;
@@ -201,7 +200,7 @@ namespace BECore::Tests {
         WriteFile("hotkeys.json", R"({"version":1,"extra":"x","bindings":{"future.command":"Ctrl+J","scene.save":"Ctrl+K"}})");
         EditorSettings settings(_directory);
         settings.Load();
-        EXPECT_EQ(settings.GetPreferences().theme, EditorTheme::Classic);
+        EXPECT_EQ(settings.GetPreferences(), EditorPreferences{});
         // An unknown command is not applied
         EXPECT_TRUE(settings.GetHotkeys().Find(KeyChord{ImGuiKey_J, kChordModCtrl}).Empty());
 
@@ -212,11 +211,26 @@ namespace BECore::Tests {
         const Json preferences = ReadJsonFile("preferences.json");
         EXPECT_EQ(preferences["futureOption"]["a"][1], 2);
         EXPECT_EQ(preferences["zoom"], 7);
-        EXPECT_EQ(preferences["theme"], "Dark");
+        EXPECT_EQ(preferences["theme"], "Classic");
         const Json hotkeys = ReadJsonFile("hotkeys.json");
         EXPECT_EQ(hotkeys["extra"], "x");
         EXPECT_EQ(hotkeys["bindings"]["future.command"], "Ctrl+J");
         EXPECT_EQ(hotkeys["bindings"]["scene.save"], "Ctrl+K");
+    }
+
+    // The theme setting is gone (one theme, ImGuiTheme.h): an old file loads, the key is kept and written back as it was
+    TEST_F(EditorSettingsTest, AnOldThemeKeyIsKeptAndNeverApplied) {
+        WriteFile("preferences.json", R"({"version":1,"theme":"Classic","fontScale":1.5})");
+        EditorSettings settings(_directory);
+        settings.Load();
+        EditorPreferences expected;
+        expected.fontScale = 1.5f;
+        EXPECT_EQ(settings.GetPreferences(), expected);
+
+        ASSERT_TRUE(settings.SavePreferences());
+        const Json file = ReadJsonFile("preferences.json");
+        EXPECT_EQ(file["theme"], "Classic");
+        EXPECT_EQ(file["fontScale"], 1.5);
     }
 
     // ---- The viewport's preview choice ("viewportPreview" in preferences.json)
@@ -226,7 +240,6 @@ namespace BECore::Tests {
         EditorSettings settings(_directory);
         settings.Load();
         EXPECT_EQ(settings.GetPreferences().viewportPreview, PreviewSettings{});
-        EXPECT_EQ(settings.GetPreferences().theme, EditorTheme::Light);
     }
 
     TEST_F(EditorSettingsTest, ThePreviewChoiceRoundTripsWithTheDeviceStoredByName) {
@@ -319,7 +332,6 @@ namespace BECore::Tests {
         EditorSettings settings(_directory);
         settings.Load();
         EditorPreferences expected;
-        expected.theme = EditorTheme::Classic;
         expected.fontScale = 1.5f;
         expected.viewportGrid = true;
         expected.viewportGridStep = 16;

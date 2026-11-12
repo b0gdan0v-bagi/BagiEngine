@@ -40,7 +40,7 @@ namespace BECore {
      * **Regions.** The game publishes named rectangles with SetRegion() and an element places itself in one with `region="name"` (UIRectSpec::region).
      */
     class UICanvasComponent : public IComponent, public IUIInputHandler {
-        BE_CLASS(UICanvasComponent)
+        BE_CLASS(UICanvasComponent, ICON = layout - dashboard)
     public:
         UICanvasComponent() = default;
         ~UICanvasComponent() override;

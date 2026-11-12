@@ -14,13 +14,20 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/EditorLayout/IconTable.h>
+#include <Widgets/Icons/IconsLucide.h>
+#include <Widgets/ImGuiFonts.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
 
     namespace {
         constexpr float kUITreeHeight = 160.0f;
-    }
+        constexpr size_t kComponentLabelSize = 96;
+        constexpr float kPopupButtonWidth = 120.0f;
+    }  // namespace
 
     // =========================================================================
     // IWidget interface
@@ -57,7 +64,7 @@ namespace BECore {
         }
 
         if (!scene) {
-            ImGui::TextDisabled("No active scene");
+            EmptyState(ICON_LC_LAYERS, "No active scene");
             ImGui::End();
             return;
         }
@@ -66,14 +73,14 @@ namespace BECore {
         // Toolbar
         // ----------------------------------------------------------------
         ImGui::BeginDisabled(!_isDirty);
-        if (ImGui::Button("Save")) {
+        if (IconTextButton(ICON_LC_SAVE, "Save", "Write the active scene back to its config file")) {
             SaveScene();
         }
         ImGui::EndDisabled();
 
         if (_isDirty) {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(unsaved changes)");
+            ImGui::TextColored(GetImGuiPalette().warning, "(unsaved changes)");
         }
 
         ImGui::Separator();
@@ -91,7 +98,7 @@ namespace BECore {
         RenderHierarchyNode(rootNode);
 
         ImGui::Separator();
-        if (ImGui::Button("[+ Add Node]", ImVec2(-1.0f, 0.0f))) {
+        if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add Node", "Add a node at the root of the scene", -1.0f)) {
             _contextMenuTargetNode = nullptr;
             _showAddNodePopup = true;
             snprintf(_nodeNameBuffer, sizeof(_nodeNameBuffer), "NewNode");
@@ -151,7 +158,7 @@ namespace BECore {
             flags |= ImGuiTreeNodeFlags_Selected;
         }
 
-        const bool isOpen = ImGui::TreeNodeEx(&node, flags, "%s", node.GetName().CStr());
+        const bool isOpen = ImGui::TreeNodeEx(&node, flags, "%s %s", IconOfNode(node), node.GetName().CStr());
 
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
             _selectedNode = &node;
@@ -159,12 +166,12 @@ namespace BECore {
 
         bool nodeDeleted = false;
         if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Add Child")) {
+            if (ImGui::MenuItem(ICON_LC_FOLDER_PLUS " Add Child")) {
                 _contextMenuTargetNode = &node;
                 _showAddNodePopup = true;
                 snprintf(_nodeNameBuffer, sizeof(_nodeNameBuffer), "ChildNode");
             }
-            if (ImGui::MenuItem("Delete")) {
+            if (ImGui::MenuItem(ICON_LC_TRASH_2 " Delete")) {
                 auto* parent = node.GetParent();
                 if (parent) {
                     if (_selectedNode == &node) {
@@ -208,7 +215,7 @@ namespace BECore {
                     changed = InspectUIRect(canvas, *_selectedUIElement, _inexactUIElement);
                 }
             } else {
-                ImGui::TextDisabled("Select an element");
+                EmptyState(ICON_LC_MOUSE_POINTER_CLICK, "Select an element");
             }
             ImGui::TreePop();
         }
@@ -217,7 +224,7 @@ namespace BECore {
 
     void SceneEditorWidget::RenderInspector() {
         if (!_selectedNode) {
-            ImGui::TextDisabled("Select a node to inspect");
+            EmptyState(ICON_LC_MOUSE_POINTER_CLICK, "Select a node to inspect");
             return;
         }
 
@@ -242,7 +249,12 @@ namespace BECore {
         ImGui::SameLine();
 
         int32_t layer = _selectedNode->GetLayer();
-        if (ImGui::InputInt("##node_layer", &layer)) {
+        bool layerChanged = false;
+        {
+            ScopedMonoFont mono;
+            layerChanged = ImGui::InputInt("##node_layer", &layer);
+        }
+        if (layerChanged) {
             _selectedNode->SetLayer(layer);
             _isDirty = true;
         }
@@ -295,7 +307,7 @@ namespace BECore {
         }
 
         ImGui::Separator();
-        if (ImGui::Button("[+ Add Component]", ImVec2(-1.0f, 0.0f))) {
+        if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add Component", "Add a component to the selected node", -1.0f)) {
             _showAddComponentPopup = true;
         }
     }
@@ -309,7 +321,7 @@ namespace BECore {
             }
             ImGui::InputText("##add_node_name", _nodeNameBuffer, sizeof(_nodeNameBuffer));
 
-            if (ImGui::Button("OK", ImVec2(120.0f, 0.0f))) {
+            if (IconTextButton(ICON_LC_CHECK, "OK", nullptr, kPopupButtonWidth)) {
                 if (_nodeNameBuffer[0] != '\0') {
                     auto* scene = CoreManager::GetSceneManager().GetActiveScene();
                     if (scene) {
@@ -322,7 +334,7 @@ namespace BECore {
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+            if (IconTextButton(ICON_LC_X, "Cancel", nullptr, kPopupButtonWidth)) {
                 ImGui::CloseCurrentPopup();
             }
 
@@ -347,7 +359,10 @@ namespace BECore {
                     }
                     firstItem = false;
                 }
-                if (ImGui::Selectable(meta.typeName.data())) {
+                // A stack buffer: the label is "icon name", and the popup draws it for every registered class
+                char label[kComponentLabelSize];
+                snprintf(label, sizeof(label), "%s %s", IconOfClass(meta), meta.typeName.data());
+                if (ImGui::Selectable(label)) {
                     if (_selectedNode) {
                         auto newComponent = factory.Create(meta);
                         if (newComponent) {
@@ -360,7 +375,7 @@ namespace BECore {
             }
 
             ImGui::Separator();
-            if (ImGui::Button("Cancel", ImVec2(120.0f, 0.0f))) {
+            if (IconTextButton(ICON_LC_X, "Cancel", nullptr, kPopupButtonWidth)) {
                 ImGui::CloseCurrentPopup();
             }
 

@@ -10,6 +10,9 @@
 #include <BECore/Scene/Components/ClickableComponent.h>
 #include <BECore/Scene/Components/SpriteRendererComponent.h>
 #include <EASTL/unordered_map.h>
+#include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/Icons/IconsLucide.h>
+#include <Widgets/ImGuiFonts.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -104,31 +107,34 @@ namespace BECore {
             }
 
             ImGui::SameLine();
-            if (ImGui::SmallButton("Refresh##tex")) {
+            if (IconButton(ICON_LC_REFRESH_CW, "Rescan the assets folder for textures", "tex_refresh")) {
                 assetsLoaded = false;
             }
 
             ImGui::TextUnformatted("Source Rect:");
 
-            ImGui::PushItemWidth(60.0f);
-            if (ImGui::DragFloat("X##srcRect_x", &s._srcRect.x, 0.5f)) {
-                changed = true;
-            }
-            ImGui::SameLine();
-            if (ImGui::DragFloat("Y##srcRect_y", &s._srcRect.y, 0.5f)) {
-                changed = true;
-            }
-            ImGui::PopItemWidth();
+            {
+                const ScopedMonoFont mono;
+                ImGui::PushItemWidth(60.0f);
+                if (ImGui::DragFloat("X##srcRect_x", &s._srcRect.x, 0.5f)) {
+                    changed = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::DragFloat("Y##srcRect_y", &s._srcRect.y, 0.5f)) {
+                    changed = true;
+                }
+                ImGui::PopItemWidth();
 
-            ImGui::PushItemWidth(60.0f);
-            if (ImGui::DragFloat("W##srcRect_w", &s._srcRect.w, 0.5f, 0.0f)) {
-                changed = true;
+                ImGui::PushItemWidth(60.0f);
+                if (ImGui::DragFloat("W##srcRect_w", &s._srcRect.w, 0.5f, 0.0f)) {
+                    changed = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::DragFloat("H##srcRect_h", &s._srcRect.h, 0.5f, 0.0f)) {
+                    changed = true;
+                }
+                ImGui::PopItemWidth();
             }
-            ImGui::SameLine();
-            if (ImGui::DragFloat("H##srcRect_h", &s._srcRect.h, 0.5f, 0.0f)) {
-                changed = true;
-            }
-            ImGui::PopItemWidth();
 
             if (lockedBySprite) {
                 ImGui::EndDisabled();
@@ -228,7 +234,7 @@ namespace BECore {
                 static char newActionBuf[128] = {};
                 ImGui::InputText("##new_action", newActionBuf, sizeof(newActionBuf));
                 ImGui::SameLine();
-                if (ImGui::SmallButton("Add")) {
+                if (IconTextButton(ICON_LC_PLUS, "Add", "Add the name to the actions library")) {
                     if (newActionBuf[0] != '\0') {
                         ActionsLibrary::GetInstance().Add(PoolString::Intern(newActionBuf));
                         newActionBuf[0] = '\0';

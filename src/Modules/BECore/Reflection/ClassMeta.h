@@ -21,6 +21,9 @@ namespace BECore {
     struct ClassMeta {
         uint64_t typeHash = 0;
         eastl::string_view typeName;
+        /// Lucide icon name from `BE_CLASS(..., ICON=<name>)` (kebab case, no prefix); empty when the class names none.
+        /// The editor maps it to a glyph; the engine core knows no font.
+        eastl::string_view icon{};
 
         /**
          * @brief Compare ClassMeta by hash

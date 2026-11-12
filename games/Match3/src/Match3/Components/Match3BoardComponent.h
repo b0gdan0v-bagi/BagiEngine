@@ -36,7 +36,7 @@ namespace BECore::Match3 {
      * drawn at once. See "Animation" in `games/Match3/CLAUDE.md`.
      */
     class Match3BoardComponent : public IComponent {
-        BE_CLASS(Match3BoardComponent)
+        BE_CLASS(Match3BoardComponent, ICON = grid - 3x3)
     public:
         Match3BoardComponent() = default;
         ~Match3BoardComponent() override;

@@ -14,7 +14,6 @@ namespace BECore {
         constexpr eastl::string_view kBadFileSuffix = ".bad";
 
         constexpr eastl::string_view kVersionKey = "version";
-        constexpr eastl::string_view kThemeKey = "theme";
         constexpr eastl::string_view kFontScaleKey = "fontScale";
         constexpr eastl::string_view kViewportGridKey = "viewportGrid";
         constexpr eastl::string_view kViewportGridStepKey = "viewportGridStep";
@@ -234,18 +233,9 @@ namespace BECore {
         if (!ReadJsonObject(_directory / ToStdString(kPreferencesFileName), content, _preferencesUnreadable)) {
             return;
         }
-        _extraPreferences = UnknownMembers(content, {kVersionKey, kThemeKey, kFontScaleKey, kViewportGridKey, kViewportGridStepKey, kViewportPreviewKey});
+        _extraPreferences = UnknownMembers(content, {kVersionKey, kFontScaleKey, kViewportGridKey, kViewportGridStepKey, kViewportPreviewKey});
 
         EditorPreferences preferences;
-        if (content.contains(ToStdString(kThemeKey))) {
-            const std::optional<eastl::string> name = GetJsonString(content, kThemeKey);
-            const std::optional<EditorTheme> theme = name ? EnumUtils<EditorTheme>::Cast(eastl::string_view(name->data(), name->size())) : std::nullopt;
-            if (theme) {
-                preferences.theme = *theme;
-            } else {
-                WarnWrongType(kPreferencesFileName, kThemeKey, "Dark, Light or Classic");
-            }
-        }
         if (content.contains(ToStdString(kFontScaleKey))) {
             if (const std::optional<double> scale = GetJsonNumber(content, kFontScaleKey)) {
                 preferences.fontScale = static_cast<float>(*scale);
@@ -390,8 +380,6 @@ namespace BECore {
     bool EditorSettings::SavePreferences() {
         Json content = _extraPreferences;
         content[ToStdString(kVersionKey)] = kFileVersion;
-        const eastl::string_view theme = EnumUtils<EditorTheme>::ToString(_preferences.theme);
-        content[ToStdString(kThemeKey)] = ToStdString(theme);
         content[ToStdString(kFontScaleKey)] = _preferences.fontScale;
         content[ToStdString(kViewportGridKey)] = _preferences.viewportGrid;
         content[ToStdString(kViewportGridStepKey)] = _preferences.viewportGridStep;

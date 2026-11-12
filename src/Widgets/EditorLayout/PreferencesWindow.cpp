@@ -1,5 +1,6 @@
 #include "PreferencesWindow.h"
 
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -9,7 +10,6 @@ namespace BECore {
         constexpr const char* kWindowTitle = "Preferences";
         constexpr const char* kRebindPopupId = "Rebind Shortcut";
         constexpr ImVec2 kWindowSize{560.0f, 460.0f};
-        constexpr ImVec4 kMessageColor{1.0f, 0.8f, 0.0f, 1.0f};
         constexpr float kChordColumnEms = 11.0f;
         constexpr float kActionsColumnEms = 17.0f;
         constexpr float kPopupWidthEms = 28.0f;
@@ -88,20 +88,6 @@ namespace BECore {
         bool changed = false;
         bool commit = false;  // save now: a click, or the end of a slider drag
 
-        const eastl::string currentTheme(EnumUtils<EditorTheme>::ToString(preferences.theme));
-        if (ImGui::BeginCombo("Theme", currentTheme.c_str())) {
-            const auto& values = EnumUtils<EditorTheme>::Values();
-            const auto& names = EnumUtils<EditorTheme>::Names();
-            for (size_t index = 0; index < values.size(); ++index) {
-                const eastl::string name(names[index].data(), names[index].size());
-                if (ImGui::Selectable(name.c_str(), values[index] == preferences.theme)) {
-                    preferences.theme = values[index];
-                    changed = commit = true;
-                }
-            }
-            ImGui::EndCombo();
-        }
-
         if (ImGui::SliderFloat("Font scale", &preferences.fontScale, kMinFontScale, kMaxFontScale, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
             changed = true;
         }
@@ -125,7 +111,7 @@ namespace BECore {
             _preferencesError = settings.SavePreferences() ? eastl::string() : settings.GetLastSaveError();
         }
         if (!_preferencesError.empty()) {
-            ImGui::TextColored(kMessageColor, "Not saved: %s", _preferencesError.c_str());
+            ImGui::TextColored(GetImGuiPalette().warning, "Not saved: %s", _preferencesError.c_str());
         }
         return changed;
     }
@@ -196,7 +182,7 @@ namespace BECore {
             SaveHotkeys(settings);
         }
         if (!_hotkeysMessage.empty()) {
-            ImGui::TextColored(kMessageColor, "%s", _hotkeysMessage.c_str());
+            ImGui::TextColored(GetImGuiPalette().warning, "%s", _hotkeysMessage.c_str());
         }
     }
 
@@ -246,7 +232,7 @@ namespace BECore {
         } else {
             ImGui::TextWrapped("Press the new shortcut for %s. Esc cancels.", title.c_str());
             if (!_refusal.empty()) {
-                ImGui::TextColored(kMessageColor, "%s", _refusal.c_str());
+                ImGui::TextColored(GetImGuiPalette().warning, "%s", _refusal.c_str());
             }
             // Enter and Space must reach the chord reader, not press the focused button
             ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);

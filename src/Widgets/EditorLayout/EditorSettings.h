@@ -6,16 +6,14 @@
 
 namespace BECore {
 
-    CORE_ENUM(EditorTheme, uint8_t, Dark, Light, Classic)
-
     inline constexpr float kMinFontScale = 0.75f;
     inline constexpr float kMaxFontScale = 2.0f;
     inline constexpr int32_t kMinViewportGridStep = 4;
     inline constexpr int32_t kMaxViewportGridStep = 256;
 
-    /// The look of the editor, chosen in the preferences window
+    /// The look of the editor, chosen in the preferences window. There is one theme (ImGuiTheme.h) and no setting for it; the
+    /// `theme` key of an older `preferences.json` is kept as an unknown member and written back, never applied.
     struct EditorPreferences {
-        EditorTheme theme = EditorTheme::Dark;
         float fontScale = 1.0f;
         bool viewportGrid = false;
         int32_t viewportGridStep = 32;

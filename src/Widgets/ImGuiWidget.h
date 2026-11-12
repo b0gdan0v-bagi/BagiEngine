@@ -1,7 +1,7 @@
 #pragma once
 
 #include <BECore/Widgets/IWidget.h>
-#include <string>
+#include <Widgets/ImGuiFonts.h>
 
 struct SDL_Window;
 
@@ -29,11 +29,17 @@ namespace BECore {
         static SDL_Window* GetSDLWindow();
 
         void Destroy();
-        void OnNewFrame() const;
+        void OnNewFrame();
+        /// Sets style.FontScaleDpi and the theme (its sizes grow with the scale) when the window's scale differs from the one applied last
+        void ApplyWindowScale();
         void OnSDLEvent(const SDLEvents::SDLEventWrapper& event) const;
 
         bool _isInitialized = false;
         std::string _iniFilePath;
+        /// ImGui reads these bytes while its atlas lives: they are released after the context
+        ImGuiFontBuffers _fontBuffers;
+        ImGuiFonts _fonts;
+        float _appliedWindowScale = 0.0f;
     };
 
 }  // namespace BECore

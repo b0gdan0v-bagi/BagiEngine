@@ -18,6 +18,10 @@ namespace BECore {
         float GetPixelDensity() const override;
         float GetDisplayScale() const override;
         Rect GetSafeArea() const override;
+        void SetTitle(eastl::string_view title) override;
+        eastl::string_view GetConfiguredTitle() const override {
+            return _configuredTitle;
+        }
 
         /**
          * @brief Makes the window a headless one: call it before Initialize().
@@ -44,6 +48,7 @@ namespace BECore {
         // The size of the config: the answer of GetWidth() / GetHeight() while there is no window or SDL cannot tell
         int _width = 0;
         int _height = 0;
+        eastl::string _configuredTitle;
         bool _headless = false;
     };
 

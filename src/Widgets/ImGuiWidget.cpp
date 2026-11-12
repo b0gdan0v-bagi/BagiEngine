@@ -7,6 +7,7 @@
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/ImGuiWidget.gen.hpp>
+#include <Widgets/ImGuiTheme.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <imgui.h>
 
@@ -42,7 +43,11 @@ namespace BECore {
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-        ImGui::StyleColorsDark();
+        ApplyImGuiTheme(ImGui::GetStyle(), 1.0f);
+
+        _fonts = LoadImGuiFonts(io, _fontBuffers);
+        SetActiveImGuiFonts(_fonts);
+        _appliedWindowScale = 0.0f;
 
         RenderEvents::ImGuiInitEvent::Emit();
 
@@ -107,18 +112,37 @@ namespace BECore {
         RenderEvents::ImGuiShutdownEvent::Emit();
 
         ImGui_ImplSDL3_Shutdown();
+        SetActiveImGuiFonts({});
         ImGui::DestroyContext();
+        _fonts = {};
+        _fontBuffers = {};
 
         _isInitialized = false;
     }
 
-    void ImGuiWidget::OnNewFrame() const {
+    void ImGuiWidget::ApplyWindowScale() {
+        const auto& window = CoreManager::GetMainWindow();
+        if (!window) {
+            return;
+        }
+        const float scale = FontScaleFor(window->GetDisplayScale(), window->GetPixelDensity());
+        if (scale == _appliedWindowScale) {
+            return;
+        }
+        _appliedWindowScale = scale;
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.FontScaleDpi = scale;
+        ApplyImGuiTheme(style, scale);
+    }
+
+    void ImGuiWidget::OnNewFrame() {
         BE_PROFILE_SCOPE("ImGuiWidget::NewFrame");
         if (!_isInitialized) {
             return;
         }
 
         RenderEvents::ImGuiNewFrameEvent::Emit();
+        ApplyWindowScale();
         ImGui::NewFrame();
     }
 

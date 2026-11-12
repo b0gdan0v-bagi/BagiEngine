@@ -5,6 +5,7 @@
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/EditorLayoutWidget.gen.hpp>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 
@@ -14,7 +15,6 @@ namespace BECore {
 
         constexpr const char* kSaveLayoutPopupId = "Save Layout As";
         constexpr float kSaveLayoutFieldWidth = 280.0f;
-        constexpr ImVec4 kSaveLayoutWarningColor{1.0f, 0.8f, 0.0f, 1.0f};
 
     }  // namespace
 
@@ -36,17 +36,6 @@ namespace BECore {
     }
 
     void EditorLayoutWidget::ApplyPreferences(const EditorPreferences& preferences) {
-        switch (preferences.theme) {
-            case EditorTheme::Dark:
-                ImGui::StyleColorsDark();
-                break;
-            case EditorTheme::Light:
-                ImGui::StyleColorsLight();
-                break;
-            case EditorTheme::Classic:
-                ImGui::StyleColorsClassic();
-                break;
-        }
         ImGui::GetStyle().FontScaleMain = preferences.fontScale;
     }
 
@@ -248,12 +237,12 @@ namespace BECore {
 
         // The button names what it will do, so replacing a layout is never a surprise
         if (!isEmpty && !isValid) {
-            ImGui::TextColored(kSaveLayoutWarningColor, "Use letters, digits, space, - and _ (no space at the ends)");
+            ImGui::TextColored(GetImGuiPalette().warning, "Use letters, digits, space, - and _ (no space at the ends)");
         } else if (exists) {
-            ImGui::TextColored(kSaveLayoutWarningColor, "A layout with this name exists; saving replaces it");
+            ImGui::TextColored(GetImGuiPalette().warning, "A layout with this name exists; saving replaces it");
         }
         if (!_saveLayoutError.empty()) {
-            ImGui::TextColored(kSaveLayoutWarningColor, "%s", _saveLayoutError.c_str());
+            ImGui::TextColored(GetImGuiPalette().warning, "%s", _saveLayoutError.c_str());
         }
 
         ImGui::BeginDisabled(!isValid);

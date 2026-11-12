@@ -29,6 +29,14 @@ namespace BECore {
             return 1.0f;
         }
 
+        /// Sets the title of the window (ComposeWindowTitle makes it); nothing by default, for a window that has none
+        virtual void SetTitle(eastl::string_view /*title*/) {}
+
+        /// The `title` the window config sets, empty when it sets none: the input of ComposeWindowTitle
+        virtual eastl::string_view GetConfiguredTitle() const {
+            return {};
+        }
+
         /// The part of the window that notches, rounded corners and system bars leave free, in window units; the whole window by default
         virtual Rect GetSafeArea() const {
             return Rect(0.0f, 0.0f, static_cast<float>(GetWidth()), static_cast<float>(GetHeight()));

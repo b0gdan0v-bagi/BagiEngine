@@ -1,13 +1,32 @@
 #include "ImGuiPropertyVisitor.h"
 
+#include <Widgets/ImGuiFonts.h>
 #include <imgui.h>
 
 namespace BECore {
 
     namespace {
 
+        constexpr size_t kHiddenLabelSize = 24;
+
         void MakeLabel(char* buf, size_t bufSize, eastl::string_view name, int id) {
             snprintf(buf, bufSize, "%.*s##%d", static_cast<int>(name.size()), name.data(), id);
+        }
+
+        /// A number field in the mono font, its name after it in the UI font (ImGui draws the label of a drag field with the
+        /// font of the field, so the label is hidden and drawn here). The item width is the same as with the label inside.
+        template <typename Draw>
+        bool DrawNumber(eastl::string_view name, int id, Draw&& draw) {
+            char hiddenLabel[kHiddenLabelSize];
+            snprintf(hiddenLabel, sizeof(hiddenLabel), "##%d", id);
+            bool changed = false;
+            {
+                const ScopedMonoFont mono;
+                changed = draw(hiddenLabel);
+            }
+            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+            ImGui::TextUnformatted(name.data(), name.data() + name.size());
+            return changed;
         }
 
     }  // namespace
@@ -19,63 +38,43 @@ namespace BECore {
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, int8_t& value) {
-        char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
-        return ImGui::DragScalar(label, ImGuiDataType_S8, &value, 1.0f);
+        return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_S8, &value, 1.0f); });
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, uint8_t& value) {
-        char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
-        return ImGui::DragScalar(label, ImGuiDataType_U8, &value, 1.0f);
+        return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_U8, &value, 1.0f); });
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, int16_t& value) {
-        char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
-        return ImGui::DragScalar(label, ImGuiDataType_S16, &value, 1.0f);
+        return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_S16, &value, 1.0f); });
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, uint16_t& value) {
-        char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
-        return ImGui::DragScalar(label, ImGuiDataType_U16, &value, 1.0f);
+        return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_U16, &value, 1.0f); });
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, int32_t& value) {
-        char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
-        return ImGui::DragInt(label, &value);
+        return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragInt(label, &value); });
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, uint32_t& value) {
-        char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
-        return ImGui::DragScalar(label, ImGuiDataType_U32, &value, 1.0f);
+        return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_U32, &value, 1.0f); });
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, int64_t& value) {
-        char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
-        return ImGui::DragScalar(label, ImGuiDataType_S64, &value, 1.0f);
+        return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_S64, &value, 1.0f); });
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, uint64_t& value) {
-        char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
-        return ImGui::DragScalar(label, ImGuiDataType_U64, &value, 1.0f);
+        return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_U64, &value, 1.0f); });
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, float& value) {
-        char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
-        return ImGui::DragFloat(label, &value, 0.1f);
+        return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragFloat(label, &value, 0.1f); });
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, double& value) {
-        char label[128];
-        MakeLabel(label, sizeof(label), name, _idCounter++);
-        return ImGui::DragScalar(label, ImGuiDataType_Double, &value, 0.1);
+        return DrawNumber(name, _idCounter++, [&](const char* label) { return ImGui::DragScalar(label, ImGuiDataType_Double, &value, 0.1); });
     }
 
     bool ImGuiPropertyVisitor::Visit(eastl::string_view name, PoolString& value) {

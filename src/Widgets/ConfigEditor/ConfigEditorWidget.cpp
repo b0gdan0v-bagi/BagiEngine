@@ -9,9 +9,16 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <Generated/ConfigEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/EditorLayout/EditorControls.h>
+#include <Widgets/Icons/IconsLucide.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
+
+    namespace {
+        constexpr float kCancelButtonWidth = 100.0f;
+    }  // namespace
 
     // =========================================================================
     // IWidget interface
@@ -105,7 +112,7 @@ namespace BECore {
         ImGui::BeginChild("##config_editor", ImVec2(0.0f, 0.0f), true);
 
         if (_selectedConfig.Empty()) {
-            ImGui::TextDisabled("Select a config on the left to start editing.");
+            EmptyState(ICON_LC_FILE_TEXT, "Select a config on the left to start editing.");
             ImGui::EndChild();
             ImGui::End();
             return;
@@ -128,7 +135,7 @@ namespace BECore {
         if (!hasStagedChanges) {
             ImGui::BeginDisabled();
         }
-        if (ImGui::Button("Save")) {
+        if (IconTextButton(ICON_LC_SAVE, "Save", "Write the staged changes to the config file")) {
             SaveSelectedConfig();
         }
         if (!hasStagedChanges) {
@@ -136,7 +143,7 @@ namespace BECore {
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Reload")) {
+        if (IconTextButton(ICON_LC_REFRESH_CW, "Reload", "Read the config again from disk")) {
             if (hasStagedChanges) {
                 _showReloadConfirm = true;
             } else {
@@ -147,7 +154,7 @@ namespace BECore {
 
         if (hasStagedChanges) {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(unsaved changes)");
+            ImGui::TextColored(GetImGuiPalette().warning, "(unsaved changes)");
         }
 
         ImGui::Separator();
@@ -155,7 +162,7 @@ namespace BECore {
         // XML tree
         const XmlNode rootNode = configManager.GetConfig(_selectedConfig);
         if (!rootNode) {
-            ImGui::TextDisabled("(empty or failed to load)");
+            EmptyState(ICON_LC_CIRCLE_ALERT, "This config is empty or failed to load");
             ImGui::EndChild();
             ImGui::End();
             return;
@@ -188,14 +195,14 @@ namespace BECore {
             ImGui::Text("You have unsaved changes in '%s'.", _selectedConfig.CStr());
             ImGui::Text("Switch config and discard changes?");
             ImGui::Separator();
-            if (ImGui::Button("Discard & Switch", ImVec2(160.0f, 0.0f))) {
+            if (IconTextButton(ICON_LC_UNDO_2, "Discard & Switch")) {
                 _selectedConfig = _pendingSwitchConfig;
                 _pendingSwitchConfig = PoolString{};
                 ClearTransientState();
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(80.0f, 0.0f))) {
+            if (IconTextButton(ICON_LC_X, "Cancel", nullptr, kCancelButtonWidth)) {
                 _pendingSwitchConfig = PoolString{};
                 ImGui::CloseCurrentPopup();
             }
@@ -247,7 +254,7 @@ namespace BECore {
 
                         ImGui::TableSetColumnIndex(0);
                         if (isStaged) {
-                            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%s*", attr.name());
+                            ImGui::TextColored(GetImGuiPalette().warning, "%s*", attr.name());
                         } else {
                             ImGui::TextUnformatted(attr.name());
                         }
@@ -302,12 +309,12 @@ namespace BECore {
             ImGui::Text("You have unsaved changes in '%s'.", _selectedConfig.CStr());
             ImGui::Text("Reload from disk and discard all changes?");
             ImGui::Separator();
-            if (ImGui::Button("Discard & Reload", ImVec2(140.0f, 0.0f))) {
+            if (IconTextButton(ICON_LC_UNDO_2, "Discard & Reload")) {
                 confirmed = true;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(80.0f, 0.0f))) {
+            if (IconTextButton(ICON_LC_X, "Cancel", nullptr, kCancelButtonWidth)) {
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();

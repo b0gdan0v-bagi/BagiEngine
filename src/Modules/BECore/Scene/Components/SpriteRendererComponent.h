@@ -9,7 +9,7 @@
 namespace BECore {
 
     class SpriteRendererComponent : public IComponent {
-        BE_CLASS(SpriteRendererComponent)
+        BE_CLASS(SpriteRendererComponent, ICON = image)
     public:
         SpriteRendererComponent() = default;
         ~SpriteRendererComponent() override = default;

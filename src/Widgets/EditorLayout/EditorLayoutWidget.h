@@ -38,7 +38,7 @@ namespace BECore {
         /// Runs before ImGui::NewFrame (RenderEvents::ImGuiNewFrameEvent): the only safe moment to load an ini
         void OnImGuiNewFrame();
 
-        /// Sets the theme and the font scale of ImGui. Called at start and when the preferences change, not every frame.
+        /// Sets the font scale of ImGui (the colours and sizes are ImGuiTheme.h's, not a preference). Called at start and when the preferences change, not every frame.
         void ApplyPreferences(const EditorPreferences& preferences);
 
         void DrawMenuBar();
