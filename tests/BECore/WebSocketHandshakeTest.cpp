@@ -103,6 +103,12 @@ namespace BECore::Tests {
             return IsHealthCheckRequest(View(text), policy);
         }
 
+        std::string Forwarded(const Request& request, size_t hops) {
+            const std::string text = request.Text();
+            const eastl::string address = ParseForwardedClientAddress(View(text), hops);
+            return std::string(address.data(), address.size());
+        }
+
     }  // namespace
 
     TEST(WebSocketHandshakeTest, AcceptKeyOfRfc6455) {
@@ -617,6 +623,73 @@ namespace BECore::Tests {
         EXPECT_EQ(cut.size(), kMaxQuotedBytes + 3);
         EXPECT_TRUE(eastl::string_view(cut).ends_with("..."));
         EXPECT_EQ(QuoteForMessage(View(std::string(kMaxQuotedBytes, 'x'))).size(), kMaxQuotedBytes);
+    }
+
+    TEST(WebSocketHandshakeTest, ForwardedClientIsTheEntryFromTheRight) {
+        const Request one = Request().Add("X-Forwarded-For: 203.0.113.9");
+        EXPECT_EQ(Forwarded(one, 1), "203.0.113.9");
+
+        const Request chain = Request().Add("X-Forwarded-For: 198.51.100.7, 203.0.113.9, 10.0.0.2");
+        EXPECT_EQ(Forwarded(chain, 1), "10.0.0.2");
+        EXPECT_EQ(Forwarded(chain, 2), "203.0.113.9");
+        EXPECT_EQ(Forwarded(chain, 3), "198.51.100.7");
+        EXPECT_EQ(Forwarded(chain, 4), "") << "fewer entries than hops";
+    }
+
+    TEST(WebSocketHandshakeTest, ForgedEntriesOnTheLeftAreNeverRead) {
+        const Request forged = Request().Add("X-Forwarded-For: 1.1.1.1, 203.0.113.9");
+        EXPECT_EQ(Forwarded(forged, 1), "203.0.113.9");
+        const Request padded = Request().Add("X-Forwarded-For: 1.1.1.1, 2.2.2.2, 3.3.3.3, 203.0.113.9");
+        EXPECT_EQ(Forwarded(padded, 1), "203.0.113.9");
+        EXPECT_EQ(Forwarded(padded, 2), "3.3.3.3");
+    }
+
+    TEST(WebSocketHandshakeTest, ForwardedClientIsOffWithoutHopsOrHeader) {
+        const Request with = Request().Add("X-Forwarded-For: 203.0.113.9");
+        EXPECT_EQ(Forwarded(with, 0), "");
+        EXPECT_EQ(Forwarded(Request(), 1), "");
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For:"), 1), "");
+    }
+
+    TEST(WebSocketHandshakeTest, ForwardedHeaderNameIsCaseInsensitiveAndSeveralHeadersAreOneList) {
+        EXPECT_EQ(Forwarded(Request().Add("x-FORWARDED-for:   203.0.113.9 \t"), 1), "203.0.113.9");
+
+        const Request two = Request().Add("X-Forwarded-For: 1.1.1.1, 2.2.2.2").Add("x-forwarded-for: 203.0.113.9");
+        EXPECT_EQ(Forwarded(two, 1), "203.0.113.9");
+        EXPECT_EQ(Forwarded(two, 2), "2.2.2.2");
+        EXPECT_EQ(Forwarded(two, 3), "1.1.1.1");
+        EXPECT_EQ(Forwarded(two, 4), "");
+    }
+
+    TEST(WebSocketHandshakeTest, ForwardedEntryThatIsNotAnAddressIsIgnored) {
+        for (const char* entry : {"unknown", "1.2.3", "1.2.3.4.5", "256.1.1.1", "1.2.3.-4", "1.2.3.4:8080", "01234.1.1.1", "1..3.4", "12:34", "gggg::1", "a:b:c:d:e:f:1:2:3", "[::1]", "1.2.3.4 5",
+                                  "<script>", "203.0.113.9\x01"}) {
+            EXPECT_EQ(Forwarded(Request().Add(std::string("X-Forwarded-For: 203.0.113.1, ") + entry), 1), "") << entry;
+        }
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: 203.0.113.1,"), 1), "") << "an empty entry is not an address";
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: 203.0.113.1,,203.0.113.2"), 2), "") << "the empty entry counts as an entry";
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + std::string(1000, '1')), 1), "");
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + std::string(kMaxForwardedAddressBytes + 1, 'a')), 1), "");
+    }
+
+    TEST(WebSocketHandshakeTest, ForwardedClientTakesIpv6AndLowersIt) {
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: 2001:DB8::1"), 1), "2001:db8::1");
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: ::ffff:192.0.2.1"), 1), "::ffff:192.0.2.1");
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: ::1"), 1), "::1");
+        const std::string longest = "0000:0000:0000:0000:0000:ffff:192.168.100.228";
+        ASSERT_EQ(longest.size(), kMaxForwardedAddressBytes);
+        EXPECT_EQ(Forwarded(Request().Add("X-Forwarded-For: " + longest), 1), longest) << "the longest literal fits";
+    }
+
+    TEST(WebSocketHandshakeTest, ForwardedClientOfAMalformedHeadIsEmptyAndTheHandshakeDoesNotNeedIt) {
+        EXPECT_EQ(ParseForwardedClientAddress("", 1), "");
+        EXPECT_EQ(ParseForwardedClientAddress("GET / HTTP/1.1", 1), "");
+        EXPECT_EQ(ParseForwardedClientAddress("GET / HTTP/1.1\r\nno colon\r\n\r\n", 1), "");
+        const std::string huge = std::string(kMaxHandshakeBytes + 1, 'x');
+        EXPECT_EQ(ParseForwardedClientAddress(View(huge), 1), "");
+
+        // The header does not change what the handshake accepts or refuses
+        EXPECT_TRUE(Parse(Request().Add("X-Forwarded-For: garbage"), PublicPolicy()).has_value());
     }
 
 }  // namespace BECore::Tests

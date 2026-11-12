@@ -29,6 +29,7 @@ namespace BECore {
             constexpr eastl::string_view kConnection = "connection";
             constexpr eastl::string_view kKey = "sec-websocket-key";
             constexpr eastl::string_view kVersion = "sec-websocket-version";
+            constexpr eastl::string_view kForwardedFor = "x-forwarded-for";
         }  // namespace HeaderNames
 
         using Headers = eastl::hash_map<eastl::string, eastl::string>;
@@ -211,7 +212,7 @@ namespace BECore {
             return std::all_of(key.begin(), key.end() - 2, IsBase64Character);
         }
 
-        /// Reads the header lines after the request line into @p headers (names in lower case); a repeated header is joined only for the two list headers
+        /// Reads the header lines after the request line into @p headers (names in lower case); a repeated header is joined only for the list headers
         std::optional<HandshakeError> ReadHeaders(eastl::string_view lines, Headers& headers) {
             while (!lines.empty()) {
                 const size_t end = lines.find('\n');
@@ -237,7 +238,7 @@ namespace BECore {
                 auto found = headers.find(name);
                 if (found == headers.end()) {
                     headers.emplace(name, eastl::string(value.data(), value.size()));
-                } else if (name == HeaderNames::kUpgrade || name == HeaderNames::kConnection) {
+                } else if (name == HeaderNames::kUpgrade || name == HeaderNames::kConnection || name == HeaderNames::kForwardedFor) {
                     found->second.append(",");
                     found->second.append(value.data(), value.size());
                 } else if (name == HeaderNames::kHost || name == HeaderNames::kOrigin || name == HeaderNames::kKey || name == HeaderNames::kVersion) {
@@ -250,6 +251,51 @@ namespace BECore {
         const eastl::string* FindHeader(const Headers& headers, eastl::string_view name) {
             const auto found = headers.find(eastl::string(name.data(), name.size()));
             return found == headers.end() ? nullptr : &found->second;
+        }
+
+        constexpr size_t kIpv4Parts = 4;
+        constexpr size_t kMaxIpv4PartDigits = 3;
+        constexpr uint32_t kMaxIpv4Part = 255;
+        constexpr size_t kMinIpv6Colons = 2;
+        constexpr size_t kMaxIpv6Colons = 7;
+
+        bool IsDottedIpv4(eastl::string_view text) {
+            size_t parts = 0;
+            while (true) {
+                const size_t dot = text.find('.');
+                const eastl::string_view part = text.substr(0, dot);
+                if (part.empty() || part.size() > kMaxIpv4PartDigits) {
+                    return false;
+                }
+                uint32_t value = 0;
+                for (const char digit : part) {
+                    if (digit < '0' || digit > '9') {
+                        return false;
+                    }
+                    value = value * 10 + static_cast<uint32_t>(digit - '0');
+                }
+                if (value > kMaxIpv4Part) {
+                    return false;
+                }
+                ++parts;
+                if (dot == eastl::string_view::npos) {
+                    break;
+                }
+                text.remove_prefix(dot + 1);
+            }
+            return parts == kIpv4Parts;
+        }
+
+        /// Hex digits, ':' and an optional dotted tail; the shape of a literal, not a full grammar (it is only a key for a limit)
+        bool IsIpv6Literal(eastl::string_view text) {
+            const auto colons = static_cast<size_t>(std::count(text.begin(), text.end(), ':'));
+            if (colons < kMinIpv6Colons || colons > kMaxIpv6Colons) {
+                return false;
+            }
+            return std::all_of(text.begin(), text.end(), [](char letter) {
+                const char lower = AsciiLower(letter);
+                return (lower >= 'a' && lower <= 'f') || (letter >= '0' && letter <= '9') || letter == ':' || letter == '.';
+            });
         }
 
         eastl::string_view ReasonPhrase(int status) {
@@ -414,6 +460,40 @@ namespace BECore {
             return std::unexpected(Refuse(400, "'Sec-WebSocket-Key' is missing or is not 16 bytes in base64"));
         }
         return *key;
+    }
+
+    eastl::string ParseForwardedClientAddress(eastl::string_view requestText, size_t trustedProxyHops) {
+        if (trustedProxyHops == 0 || requestText.size() > kMaxHandshakeBytes) {
+            return {};
+        }
+        const size_t requestLineEnd = requestText.find('\n');
+        if (requestLineEnd == eastl::string_view::npos) {
+            return {};
+        }
+        Headers headers;
+        if (ReadHeaders(requestText.substr(requestLineEnd + 1), headers)) {
+            return {};
+        }
+        const eastl::string* list = FindHeader(headers, HeaderNames::kForwardedFor);
+        if (list == nullptr) {
+            return {};
+        }
+
+        // From the right: the last entry is the one the nearest proxy appended
+        eastl::string_view rest(list->data(), list->size());
+        for (size_t skipped = 1; skipped < trustedProxyHops; ++skipped) {
+            const size_t comma = rest.rfind(',');
+            if (comma == eastl::string_view::npos) {
+                return {};
+            }
+            rest = rest.substr(0, comma);
+        }
+        const size_t comma = rest.rfind(',');
+        const eastl::string_view entry = TrimHeaderValue(comma == eastl::string_view::npos ? rest : rest.substr(comma + 1));
+        if (entry.empty() || entry.size() > kMaxForwardedAddressBytes || !(IsDottedIpv4(entry) || IsIpv6Literal(entry))) {
+            return {};
+        }
+        return LowerAscii(entry);
     }
 
     bool IsHealthCheckRequest(eastl::string_view requestText, const HandshakePolicy& policy) {

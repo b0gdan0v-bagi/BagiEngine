@@ -49,7 +49,27 @@ namespace BECore {
         /// answers it with a 200 instead of a handshake error. Empty is off. Not used when loopbackOnly is true, so the control API
         /// server never answers it
         eastl::string healthPath;
+
+        /// How many proxies in front of this server append to `X-Forwarded-For`; 0 (the default) is no proxy and the header is never
+        /// read. With N > 0 the client is the N-th entry from the right (ParseForwardedClientAddress()). Set it only for a server that
+        /// is reachable through exactly that many proxies of your own: a client can send any header, and only the entries the proxies
+        /// appended are the proxies' word
+        size_t trustedProxyHops = 0;
     };
+
+    /// The longest text of an address that is taken from `X-Forwarded-For` (an IPv6 literal with an IPv4 tail)
+    inline constexpr size_t kMaxForwardedAddressBytes = 45;
+
+    /**
+     * @brief The client address that @p trustedProxyHops proxies report in the request head @p requestText: the entry that many
+     * places from the right of `X-Forwarded-For` (several headers of that name are one list in the order they came), trimmed and
+     * in lower case.
+     *
+     * The rightmost entries are the ones the trusted proxies appended; what a client put on the left is never read, so it cannot
+     * pick its own address. Empty (the caller keeps the address of the socket) when @p trustedProxyHops is 0, the header is missing,
+     * has fewer entries, the head is malformed, or the entry is not a dotted IPv4 or an IPv6 literal of at most kMaxForwardedAddressBytes.
+     */
+    [[nodiscard]] eastl::string ParseForwardedClientAddress(eastl::string_view requestText, size_t trustedProxyHops);
 
     /**
      * @brief Whether a request that carries the `Origin` header @p origin may connect under @p policy.
