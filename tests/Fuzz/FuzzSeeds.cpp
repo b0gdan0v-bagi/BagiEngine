@@ -2,10 +2,12 @@
 
 #include "FuzzProbeAccess.h"
 #include "FuzzTargets.h"
+#include "FuzzWebSocketInput.h"
 
 #include <BECore/Reflection/BinaryFormat.h>
 #include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
+#include <RemoteControl/WebSocketClientHandshake.h>
 
 namespace BECore::Fuzz {
 
@@ -15,6 +17,8 @@ namespace BECore::Fuzz {
         constexpr const char* kXmlFolder = "xml";
         constexpr const char* kSaveFolder = "save";
         constexpr const char* kSceneFolder = "scene";
+        constexpr const char* kWebSocketFrameFolder = "ws_frame";
+        constexpr const char* kWebSocketHandshakeFolder = "ws_handshake";
 
         /// The game id and the schema versions of the save seeds against the schema of FuzzSaveEnvelope (game "FuzzGame", writes 3, reads 2 and 3)
         constexpr eastl::string_view kSaveGame = "FuzzGame";
@@ -175,6 +179,157 @@ namespace BECore::Fuzz {
             StoreWord(bytes, BinaryFormat::PayloadSizeOffset, static_cast<uint32_t>(bytes.size() - BinaryFormat::HeaderSize));
         }
 
+        // =========================================================================
+        // WebSocket frames and handshakes
+        // =========================================================================
+
+        using WebSocketInput::HandshakePolicyKind;
+        using WebSocketInput::PackFrameInput;
+
+        constexpr WebSocketMask kRfcMask = {0x37, 0xFA, 0x21, 0x3D};  // the key of the examples in RFC 6455, section 5.7
+
+        /// Payload sizes at the edges of the three length forms of a frame
+        constexpr size_t kLongestShortLength = 125;
+        constexpr size_t kShortestMediumLength = 126;
+        constexpr size_t kMediumPayloadBytes = 300;
+        constexpr size_t kLimitIndexOf1024 = 4;
+        constexpr size_t kLimitIndexOf125 = 2;
+        constexpr size_t kLimitIndexOf65536 = 5;
+        constexpr size_t kLimitIndexOf1 = 1;
+        constexpr size_t kLongOriginLabelBytes = 200;
+        constexpr uint8_t kChunkPattern = 3;      // a pattern that feeds a few bytes at a time
+        constexpr uint8_t kLongChunkPattern = 7;  // chunks of up to 128 bytes
+
+        /// The 8-byte length form of a frame that would fit the 2-byte one: the form is legal for any length (RFC 6455 section 5.2 asks for the shortest, parsers accept either)
+        FuzzBytes LongLengthFrame(uint8_t opcode, eastl::string_view payload, const WebSocketMask& mask) {
+            constexpr uint8_t kFin = 0x80;
+            constexpr uint8_t kMaskBit = 0x80;
+            constexpr uint8_t kLength64Marker = 127;
+            FuzzBytes frame;
+            frame.push_back(kFin | opcode);
+            frame.push_back(kMaskBit | kLength64Marker);
+            for (int shift = 56; shift >= 0; shift -= 8) {
+                frame.push_back(static_cast<uint8_t>(static_cast<uint64_t>(payload.size()) >> shift));
+            }
+            frame.insert(frame.end(), mask.data(), mask.data() + mask.size());
+            for (size_t i = 0; i < payload.size(); ++i) {
+                frame.push_back(static_cast<uint8_t>(payload[i]) ^ mask[i % mask.size()]);
+            }
+            return frame;
+        }
+
+        eastl::span<const uint8_t> PayloadOf(eastl::string_view text) {
+            return eastl::span<const uint8_t>(reinterpret_cast<const uint8_t*>(text.data()), text.size());
+        }
+
+        /// A frame input: the selector byte, then the frames in order
+        FuzzBytes FrameInput(WebSocketPeer peer, size_t limitIndex, uint8_t pattern, std::initializer_list<FuzzBytes> frames) {
+            FuzzBytes bytes;
+            bytes.push_back(PackFrameInput(peer, limitIndex, pattern));
+            for (const FuzzBytes& frame : frames) {
+                bytes.insert(bytes.end(), frame.begin(), frame.end());
+            }
+            return bytes;
+        }
+
+        FuzzBytes Frame(uint8_t opcode, eastl::string_view payload, std::optional<WebSocketMask> mask, bool fin = true) {
+            const eastl::vector<uint8_t> frame = EncodeFrame(opcode, PayloadOf(payload), mask, fin);
+            return FuzzBytes(frame.begin(), frame.end());
+        }
+
+        FuzzBytes CloseFrame(uint16_t code, eastl::string_view reason, std::optional<WebSocketMask> mask) {
+            const eastl::vector<uint8_t> frame = EncodeCloseFrame(code, reason, mask);
+            return FuzzBytes(frame.begin(), frame.end());
+        }
+
+        /// A handshake input: the policy byte, then the text
+        FuzzBytes HandshakeInput(HandshakePolicyKind policy, eastl::string_view text) {
+            FuzzBytes bytes;
+            bytes.push_back(static_cast<uint8_t>(policy));
+            const FuzzBytes textBytes = TextBytes(text);
+            bytes.insert(bytes.end(), textBytes.begin(), textBytes.end());
+            return bytes;
+        }
+
+        /// The request head of a browser (the RFC's example, and the header set of a current browser)
+        constexpr eastl::string_view kRfcRequest = "GET /chat HTTP/1.1\r\nHost: server.example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: "
+                                                   "dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: http://example.com\r\nSec-WebSocket-Version: 13\r\n\r\n";
+        constexpr eastl::string_view kBrowserRequest =
+            "GET / HTTP/1.1\r\nHost: rooms.example:8080\r\nConnection: Upgrade\r\nPragma: no-cache\r\nCache-Control: no-cache\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\nUpgrade: websocket\r\nOrigin: https://good.example\r\nSec-WebSocket-Version: 13\r\nAccept-Encoding: gzip, deflate, br\r\n"
+            "Accept-Language: en-US,en;q=0.9\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n\r\n";
+        constexpr eastl::string_view kHealthRequest = "GET /healthz HTTP/1.1\r\nHost: rooms.example\r\nUser-Agent: kube-probe/1.28\r\nAccept: */*\r\nConnection: close\r\n\r\n";
+        constexpr eastl::string_view kDuplicatedHeadersRequest =
+            "GET / HTTP/1.1\r\nHost: a\r\nHost: b\r\nUpgrade: h2c\r\nUpgrade: websocket\r\nConnection: keep-alive\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n";
+        constexpr eastl::string_view kUrlOfARoom = "wss://Rooms.Example.com/room?code=ABCD&name=x";
+        constexpr eastl::string_view kUrlOfTheControlApi = "ws://127.0.0.1:8765/control";
+        constexpr eastl::string_view kUrlWithABadPort = "ws://host:99999/path";
+
+        /// A request head made by the client's own builder
+        eastl::string ProgramRequest(eastl::string_view url, eastl::string_view origin) {
+            const auto parsed = ParseWebSocketUrl(url);
+            return BuildClientHandshakeRequest(*parsed, WebSocketInput::kHandshakeKey, origin);
+        }
+
+        /// A 101 response that also names an extension the request did not ask for: a head with one more header line before the empty line
+        eastl::string WithExtensions(eastl::string response) {
+            response.insert(response.size() - 2, "Sec-WebSocket-Extensions: permessage-deflate\r\n");
+            return response;
+        }
+
+        void AddWebSocketSeeds(eastl::vector<FuzzSeedFile>& seeds) {
+            using enum WebSocketPeer;
+            const std::optional<WebSocketMask> noMask;
+            const std::optional<WebSocketMask> mask = kRfcMask;
+            const eastl::string mediumText(kMediumPayloadBytes, 'm');
+            const eastl::string longestShortText(kLongestShortLength, 's');
+            const eastl::string shortestMediumText(kShortestMediumLength, 'p');
+
+            seeds.push_back({kWebSocketFrameFolder, "client-hello.bin", FrameInput(Client, kLimitIndexOf65536, 0, {Frame(WebSocketOpcode::kText, "Hello", mask)})});
+            seeds.push_back({kWebSocketFrameFolder, "client-hello-chunked.bin", FrameInput(Client, kLimitIndexOf65536, kChunkPattern, {Frame(WebSocketOpcode::kText, "Hello", mask)})});
+            seeds.push_back({kWebSocketFrameFolder, "client-length-forms.bin",
+                             FrameInput(Client, kLimitIndexOf65536, kLongChunkPattern,
+                                        {Frame(WebSocketOpcode::kText, "", mask), Frame(WebSocketOpcode::kText, longestShortText, mask), Frame(WebSocketOpcode::kBinary, shortestMediumText, mask),
+                                         Frame(WebSocketOpcode::kText, mediumText, mask), LongLengthFrame(WebSocketOpcode::kText, "long form", kRfcMask)})});
+            seeds.push_back({kWebSocketFrameFolder, "client-fragments-with-ping.bin",
+                             FrameInput(Client, kLimitIndexOf1024, kChunkPattern,
+                                        {Frame(WebSocketOpcode::kText, "Hel", mask, false), Frame(WebSocketOpcode::kPing, "are you there", mask),
+                                         Frame(WebSocketOpcode::kContinuation, "lo ", mask, false), Frame(WebSocketOpcode::kPong, "", mask), Frame(WebSocketOpcode::kContinuation, "world", mask)})});
+            seeds.push_back({kWebSocketFrameFolder, "client-close.bin",
+                             FrameInput(Client, kLimitIndexOf1024, 0, {Frame(WebSocketOpcode::kText, "bye", mask), CloseFrame(WebSocketCloseCode::kNormal, "done", mask)})});
+            seeds.push_back({kWebSocketFrameFolder, "client-close-without-code.bin", FrameInput(Client, kLimitIndexOf1024, 0, {Frame(WebSocketOpcode::kClose, "", mask)})});
+            seeds.push_back({kWebSocketFrameFolder, "client-close-reserved-code.bin", FrameInput(Client, kLimitIndexOf1024, 0, {CloseFrame(WebSocketCloseCode::kNoStatusReceived, "", mask)})});
+            seeds.push_back({kWebSocketFrameFolder, "client-unmasked.bin", FrameInput(Client, kLimitIndexOf1024, 0, {Frame(WebSocketOpcode::kText, "Hello", noMask)})});
+            seeds.push_back({kWebSocketFrameFolder, "client-over-the-limit.bin", FrameInput(Client, kLimitIndexOf125, 0, {Frame(WebSocketOpcode::kText, shortestMediumText, mask)})});
+            seeds.push_back({kWebSocketFrameFolder, "client-two-tiny-limit.bin",
+                             FrameInput(Client, kLimitIndexOf1, kChunkPattern, {Frame(WebSocketOpcode::kText, "a", mask), Frame(WebSocketOpcode::kText, "bc", mask)})});
+            seeds.push_back({kWebSocketFrameFolder, "server-hello.bin", FrameInput(Server, kLimitIndexOf65536, 0, {Frame(WebSocketOpcode::kText, "Hello", noMask)})});
+            seeds.push_back({kWebSocketFrameFolder, "server-fragments.bin",
+                             FrameInput(Server, kLimitIndexOf1024, kChunkPattern,
+                                        {Frame(WebSocketOpcode::kBinary, "ab", noMask, false), Frame(WebSocketOpcode::kPing, "p", noMask), Frame(WebSocketOpcode::kContinuation, "cd", noMask)})});
+            seeds.push_back({kWebSocketFrameFolder, "server-masked.bin", FrameInput(Server, kLimitIndexOf1024, 0, {Frame(WebSocketOpcode::kText, "Hello", mask)})});
+            seeds.push_back({kWebSocketFrameFolder, "server-close.bin", FrameInput(Server, kLimitIndexOf1024, 0, {CloseFrame(WebSocketCloseCode::kGoingAway, "restart", noMask)})});
+
+            seeds.push_back({kWebSocketHandshakeFolder, "request-rfc-example.bin", HandshakeInput(HandshakePolicyKind::PublicAnyOrigin, kRfcRequest)});
+            seeds.push_back({kWebSocketHandshakeFolder, "request-browser.bin", HandshakeInput(HandshakePolicyKind::PublicWithOrigins, kBrowserRequest)});
+            seeds.push_back({kWebSocketHandshakeFolder, "request-program-loopback.bin", HandshakeInput(HandshakePolicyKind::Loopback, ProgramRequest(kUrlOfTheControlApi, {}))});
+            seeds.push_back({kWebSocketHandshakeFolder, "request-program-public.bin", HandshakeInput(HandshakePolicyKind::PublicNoMissingOrigin, ProgramRequest(kUrlOfARoom, "https://good.example"))});
+            seeds.push_back({kWebSocketHandshakeFolder, "request-health-check.bin", HandshakeInput(HandshakePolicyKind::PublicWithHealthPath, kHealthRequest)});
+            seeds.push_back({kWebSocketHandshakeFolder, "request-duplicated-headers.bin", HandshakeInput(HandshakePolicyKind::PublicAnyOrigin, kDuplicatedHeadersRequest)});
+            seeds.push_back({kWebSocketHandshakeFolder, "request-long-origin.bin",
+                             HandshakeInput(HandshakePolicyKind::PublicWithOrigins, ProgramRequest(kUrlOfARoom, Format("https://{}.example", eastl::string(kLongOriginLabelBytes, 'a'))))});
+            seeds.push_back({kWebSocketHandshakeFolder, "response-accept.bin", HandshakeInput(HandshakePolicyKind::Loopback, BuildAcceptResponse(WebSocketInput::kHandshakeKey))});
+            seeds.push_back({kWebSocketHandshakeFolder, "response-refusal.bin",
+                             HandshakeInput(HandshakePolicyKind::Loopback, BuildRejectResponse(HandshakeError{403, "the Origin 'https://evil.example' is not allowed by this server"}))});
+            seeds.push_back(
+                {kWebSocketHandshakeFolder, "response-with-extensions.bin", HandshakeInput(HandshakePolicyKind::Loopback, WithExtensions(BuildAcceptResponse(WebSocketInput::kHandshakeKey)))});
+            seeds.push_back({kWebSocketHandshakeFolder, "url-room.bin", HandshakeInput(HandshakePolicyKind::Loopback, kUrlOfARoom)});
+            seeds.push_back({kWebSocketHandshakeFolder, "url-control-api.bin", HandshakeInput(HandshakePolicyKind::Loopback, kUrlOfTheControlApi)});
+            seeds.push_back({kWebSocketHandshakeFolder, "url-bad-port.bin", HandshakeInput(HandshakePolicyKind::Loopback, kUrlWithABadPort)});
+        }
+
     }  // namespace
 
     eastl::vector<FuzzSeedFile> MakeGeneratedSeeds() {
@@ -217,6 +372,8 @@ namespace BECore::Fuzz {
         seeds.push_back({kSceneFolder, "scene-reference.bin", SceneAndNode(kSceneWithReference, kCanvasNodeFile)});
         seeds.push_back({kSceneFolder, "node-file-only.xml", TextBytes(kBoxNodeFile)});
         seeds.push_back({kSceneFolder, "node-file-canvas.xml", TextBytes(kCanvasNodeFile)});
+
+        AddWebSocketSeeds(seeds);
         return seeds;
     }
 

@@ -52,6 +52,13 @@ namespace BECore::Fuzz {
     /// The text of a scene node file and of a scene (split at the first NUL byte) through the expansion of node references and the deserialization of the components
     void FuzzSceneNode(const uint8_t* data, size_t size);
 
+    /// WebSocketFrameParser over a stream of frames (the first byte picks the sender, the message limit and the chunking): chunked and whole agree, limits hold, frames re-encoded for the other role
+    /// read back
+    void FuzzWebSocketFrame(const uint8_t* data, size_t size);
+
+    /// The opening handshake from both sides (the first byte picks the policy): a request head, a response head and a URL, with the properties that tie them together
+    void FuzzHandshake(const uint8_t* data, size_t size);
+
     /// A save file as the seeds make it: the bytes SaveGameService::Save writes for the probe state under the given game id and schema version
     eastl::vector<uint8_t> MakeSaveFileBytes(eastl::string_view game, uint32_t version);
 

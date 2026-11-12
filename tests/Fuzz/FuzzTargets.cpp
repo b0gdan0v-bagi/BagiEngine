@@ -12,6 +12,8 @@ namespace BECore::Fuzz {
             {"XmlDeserializer", &FuzzXmlDeserializer, "xml", 2},
             {"SaveEnvelope", &FuzzSaveEnvelope, "save", 10},
             {"SceneNode", &FuzzSceneNode, "scene", 1},
+            {"WebSocketFrame", &FuzzWebSocketFrame, "ws_frame", 1},
+            {"Handshake", &FuzzHandshake, "ws_handshake", 1},
         };
         return targets;
     }
