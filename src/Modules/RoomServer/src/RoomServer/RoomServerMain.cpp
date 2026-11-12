@@ -20,10 +20,6 @@ namespace BECore {
             g_stopRequested.store(true);
         }
 
-    }  // namespace
-
-    namespace {
-
         /// The effective settings, for the log of the platform (nothing secret is in them)
         eastl::string DescribeSettings(const RoomServerArgs& args, uint16_t port) {
             eastl::string origins;
@@ -40,7 +36,8 @@ namespace BECore {
     }  // namespace
 
     int RunRoomServer(const SeatedGameRegistry& registry, const RoomServerArgs& args) {
-        // Piped (a container, a test) stdout is block-buffered: the platform would see the log in chunks or at exit. A size above 1, which MSVC does not take
+        // A piped stdout (a container, a test) is block-buffered by default: the platform would see the log in chunks or at exit.
+        // Line buffering fixes that on POSIX (the hosted server runs on Linux); the Windows CRT treats _IOLBF as full buffering, so there the log still comes in chunks
         std::setvbuf(stdout, nullptr, _IOLBF, kStdoutBufferBytes);
 
         // Sinks come from a config in a game; a server without content files makes its own

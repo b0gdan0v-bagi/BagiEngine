@@ -120,7 +120,9 @@ class RoomServer:
         # A server given PORT in its environment gets no --port: the variable is what is tried
         port_flags = [] if environment and "PORT" in environment else ["--port", "0"]
         self.command = [str(exe), "--test-games", *port_flags, "--computer-delay-ms", "0", "--reconnect-grace-ms", str(RECONNECT_GRACE_MS), "--bind", "loopback", *extra_args]
-        self.environment = {**os.environ, **(environment or {})}
+        # The server's own variables of the machine (PORT, BAGI_ROOMS_*) would change a scenario: only what the scenario sets reaches it
+        inherited = {key: value for key, value in os.environ.items() if key != "PORT" and not key.startswith("BAGI_ROOMS_")}
+        self.environment = {**inherited, **(environment or {})}
         self.exe = exe
         self.port = 0
         self._log_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
