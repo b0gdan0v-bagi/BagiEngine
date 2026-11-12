@@ -14,6 +14,9 @@ namespace BECore::Fuzz {
             {"SceneNode", &FuzzSceneNode, "scene", 1},
             {"WebSocketFrame", &FuzzWebSocketFrame, "ws_frame", 1},
             {"Handshake", &FuzzHandshake, "ws_handshake", 1},
+            {"RoomProtocol", &FuzzRoomProtocol, "room_protocol", 1},
+            {"RoomHub", &FuzzRoomHub, "room_hub", 15},
+            {"ControlRequest", &FuzzControlRequest, "control_request", 1},
         };
         return targets;
     }

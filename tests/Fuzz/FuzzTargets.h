@@ -59,6 +59,16 @@ namespace BECore::Fuzz {
     /// The opening handshake from both sides (the first byte picks the policy): a request head, a response head and a URL, with the properties that tie them together
     void FuzzHandshake(const uint8_t* data, size_t size);
 
+    /// The messages of the room protocol, both directions: size limits, round trips through the builders, stable refusal codes, and the player name sanitizer
+    void FuzzRoomProtocol(const uint8_t* data, size_t size);
+
+    /// A RoomHub over the demo card game fed with a stream of operations (message, connect, disconnect, tick): every text it sends is judged (JSON, tokens, hidden cards), the counts stay in the
+    /// limits
+    void FuzzRoomHub(const uint8_t* data, size_t size);
+
+    /// ControlService::Post of the bytes with the builtins and the game methods registered: one answer per request, with the request's id
+    void FuzzControlRequest(const uint8_t* data, size_t size);
+
     /// A save file as the seeds make it: the bytes SaveGameService::Save writes for the probe state under the given game id and schema version
     eastl::vector<uint8_t> MakeSaveFileBytes(eastl::string_view game, uint32_t version);
 

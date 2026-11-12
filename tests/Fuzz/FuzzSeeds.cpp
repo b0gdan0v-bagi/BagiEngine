@@ -374,6 +374,7 @@ namespace BECore::Fuzz {
         seeds.push_back({kSceneFolder, "node-file-canvas.xml", TextBytes(kCanvasNodeFile)});
 
         AddWebSocketSeeds(seeds);
+        AddRoomAndControlSeeds(seeds);
         return seeds;
     }
 

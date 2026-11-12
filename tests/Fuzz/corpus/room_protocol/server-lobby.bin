@@ -1,0 +1,1 @@
+{"game":"demo","host":0,"phase":"lobby","room":"ABCDE","seats":[{"connected":true,"kind":"human","name":"Ann","seat":0},{"connected":false,"kind":"human","name":"Bob","seat":1},{"kind":"computer","seat":2},{"kind":"empty","seat":3}],"type":"lobby","v":1}
