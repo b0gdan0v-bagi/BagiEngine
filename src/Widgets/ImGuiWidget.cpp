@@ -7,6 +7,7 @@
 #include <Events/ApplicationEvents.h>
 #include <Events/RenderEvents.h>
 #include <Generated/ImGuiWidget.gen.hpp>
+#include <Widgets/ImGuiTheme.h>
 #include <backends/imgui_impl_sdl3.h>
 #include <imgui.h>
 
@@ -42,7 +43,7 @@ namespace BECore {
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-        ImGui::StyleColorsDark();
+        ApplyImGuiTheme(ImGui::GetStyle(), 1.0f);
 
         _fonts = LoadImGuiFonts(io, _fontBuffers);
         SetActiveImGuiFonts(_fonts);
@@ -129,7 +130,9 @@ namespace BECore {
             return;
         }
         _appliedWindowScale = scale;
-        ImGui::GetStyle().FontScaleDpi = scale;
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.FontScaleDpi = scale;
+        ApplyImGuiTheme(style, scale);
     }
 
     void ImGuiWidget::OnNewFrame() {

@@ -9,6 +9,7 @@
 #include <BECore/Reflection/IDeserializer.h>
 #include <Generated/ConfigEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -147,7 +148,7 @@ namespace BECore {
 
         if (hasStagedChanges) {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(unsaved changes)");
+            ImGui::TextColored(GetImGuiPalette().warning, "(unsaved changes)");
         }
 
         ImGui::Separator();
@@ -247,7 +248,7 @@ namespace BECore {
 
                         ImGui::TableSetColumnIndex(0);
                         if (isStaged) {
-                            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "%s*", attr.name());
+                            ImGui::TextColored(GetImGuiPalette().warning, "%s*", attr.name());
                         } else {
                             ImGui::TextUnformatted(attr.name());
                         }

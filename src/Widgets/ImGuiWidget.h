@@ -30,7 +30,7 @@ namespace BECore {
 
         void Destroy();
         void OnNewFrame();
-        /// Sets style.FontScaleDpi from the window when its scale differs from the one applied last
+        /// Sets style.FontScaleDpi and the theme (its sizes grow with the scale) when the window's scale differs from the one applied last
         void ApplyWindowScale();
         void OnSDLEvent(const SDLEvents::SDLEventWrapper& event) const;
 

@@ -2,6 +2,7 @@
 
 #include <EASTL/array.h>
 #include <EASTL/unordered_map.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -10,7 +11,6 @@ namespace BECore {
 
         constexpr size_t k_textBufSize = 256;
         constexpr const char* k_unknownValueMarker = "(not a known value)";
-        constexpr ImVec4 k_unknownValueColor{1.0f, 0.8f, 0.0f, 1.0f};
         using TextBuf = eastl::array<char, k_textBufSize>;
 
         // Persistent char buffers for InputText fields, keyed by widgetId
@@ -101,7 +101,7 @@ namespace BECore {
 
             if (isUnknown) {
                 ImGui::SameLine();
-                ImGui::TextColored(k_unknownValueColor, "%s", k_unknownValueMarker);
+                ImGui::TextColored(GetImGuiPalette().warning, "%s", k_unknownValueMarker);
             }
             return result;
         }

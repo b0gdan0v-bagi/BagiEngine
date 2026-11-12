@@ -8,11 +8,11 @@ namespace BECore {
     CORE_ENUM(RebindStage, uint8_t, Closed, Capturing, Conflict)
 
     /**
-     * @brief The Preferences window: the General tab (theme, font scale, viewport grid) and the Hotkeys tab (rebinding).
+     * @brief The Preferences window: the General tab (font scale, viewport grid) and the Hotkeys tab (rebinding).
      *
      * Owned by EditorLayoutWidget, which calls Open() on view.preferences and Draw() once per frame. A change is applied to
      * EditorSettings at once and saved at once (a slider is saved when the user lets go of it); a failed save is shown as a line
-     * in the window. Draw returns true when the preferences changed, so the caller applies the theme and tells the panels.
+     * in the window. Draw returns true when the preferences changed, so the caller applies the font scale and tells the panels.
      * Rebinding runs in a modal popup that reads the next chord; while it is open the hotkey dispatch is off (any popup stops it).
      */
     class PreferencesWindow {

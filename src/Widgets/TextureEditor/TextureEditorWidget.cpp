@@ -7,6 +7,7 @@
 #include <BECore/Resource/TextureLibrary.h>
 #include <Generated/TextureEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -47,7 +48,7 @@ namespace BECore {
 
         if (_isDirty) {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "(unsaved changes)");
+            ImGui::TextColored(GetImGuiPalette().warning, "(unsaved changes)");
         }
 
         ImGui::Separator();

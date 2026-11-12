@@ -3,6 +3,7 @@
 #include <BECore/UI/UIAnchorPresets.h>
 #include <BECore/UI/UILayout.h>
 #include <BECore/UI/UIRectEdit.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -25,7 +26,6 @@ namespace BECore {
         constexpr ImU32 kCellHoverColor = IM_COL32(80, 80, 90, 255);
         constexpr ImU32 kCellFrameColor = IM_COL32(150, 150, 160, 255);
         constexpr ImU32 kCellAnchorColor = IM_COL32(240, 200, 80, 255);
-        constexpr ImVec4 kWarningColor = ImVec4(1.0f, 0.8f, 0.0f, 1.0f);
 
         const UIElement* FindParent(const UIElement& root, const UIElement& target) {
             for (const auto& child : root.children) {
@@ -255,7 +255,7 @@ namespace BECore {
 
         const size_t variantCount = CountOverridingVariants(canvas, element);
         if (variantCount > 0) {
-            ImGui::TextColored(kWarningColor, "%zu variant(s) of this canvas override this element: the shape in effect may differ from this style", variantCount);
+            ImGui::TextColored(GetImGuiPalette().warning, "%zu variant(s) of this canvas override this element: the shape in effect may differ from this style", variantCount);
         }
 
         if (parent->layout == UILayoutKind::Stack) {
@@ -272,7 +272,7 @@ namespace BECore {
         const Rect box = BoxOf(canvas, *parent, element);
         const bool hasBox = !box.IsEmpty();
         if (!hasBox) {
-            ImGui::TextColored(kWarningColor, "The box of the element has no size now (a hidden parent?): the anchor presets and the unit switch are off");
+            ImGui::TextColored(GetImGuiPalette().warning, "The box of the element has no size now (a hidden parent?): the anchor presets and the unit switch are off");
         }
 
         // ---- Preset ----
@@ -355,7 +355,7 @@ namespace BECore {
         }
 
         if (inexactElement.Get() == &element) {
-            ImGui::TextColored(kWarningColor, "The limits or the aspect ratio keep the element from staying exactly where it was");
+            ImGui::TextColored(GetImGuiPalette().warning, "The limits or the aspect ratio keep the element from staying exactly where it was");
         }
         if (changed) {
             canvas.Invalidate();

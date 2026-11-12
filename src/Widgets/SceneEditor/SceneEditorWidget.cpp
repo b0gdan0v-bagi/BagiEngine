@@ -14,6 +14,7 @@
 #include <BECore/UI/UICanvasComponent.h>
 #include <Generated/SceneEditorWidget.gen.hpp>
 #include <Widgets/EditorLayout/EditorCommands.h>
+#include <Widgets/ImGuiTheme.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -73,7 +74,7 @@ namespace BECore {
 
         if (_isDirty) {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "(unsaved changes)");
+            ImGui::TextColored(GetImGuiPalette().warning, "(unsaved changes)");
         }
 
         ImGui::Separator();
