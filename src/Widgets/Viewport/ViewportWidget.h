@@ -36,7 +36,8 @@ namespace BECore {
     // selects, from here or from the hierarchy (SceneSelectionChangedEvent), are outlined over the image (the primary in the accent colour).
     // In Edit the image has an editor camera (ViewportCamera: wheel zoom about the pointer, middle-drag or Space + left-drag pan, F frames the selection, a Reset
     // button and a zoom label): the texture is drawn scaled and shifted under the clip rect of the panel, and everything in target pixels goes through ViewportFrame.
-    // A drag on empty ground draws a rubber band and selects what it touches; the gizmo (ViewportGizmos) moves, turns and scales the selected nodes.
+    // A drag on empty ground draws a rubber band and selects what it touches; the gizmo (ViewportGizmos) moves, turns and scales the selected nodes (keys W / E / R / X while the panel has the keys;
+    // the commands viewport.tool.*, viewport.gizmoSpace, viewport.snap and viewport.frameSelected do the same from the palette, with no default chord).
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
     public:
@@ -141,6 +142,7 @@ namespace BECore {
         ViewportCamera _camera;                    // the editor camera; the image is drawn with it while the input mode is Edit
         ViewportCameraInput _cameraInput;
         ViewportGizmos _gizmos;
+        bool _frameRequested = false;  // viewport.frameSelected, answered in the next Update (it needs the panel size)
         ViewportBoxSelect _boxSelect;
         float _shownScale = 1.0f;  // screen units per target pixel of the last frame, for the zoom label
         ViewportPointer _pointer;  // the held presses and where each goes

@@ -171,6 +171,18 @@ namespace BECore {
     void ViewportWidget::OnCommand(const EditorCommandEvent& event) {
         if (event.commandId == EditorCommandIds::kViewportInputMode) {
             _inputMode = _inputMode == ViewportInputMode::Play ? ViewportInputMode::Edit : ViewportInputMode::Play;
+        } else if (event.commandId == EditorCommandIds::kViewportToolTranslate) {
+            _gizmos.SetTool(Gizmo::Tool::Translate);
+        } else if (event.commandId == EditorCommandIds::kViewportToolRotate) {
+            _gizmos.SetTool(Gizmo::Tool::Rotate);
+        } else if (event.commandId == EditorCommandIds::kViewportToolScale) {
+            _gizmos.SetTool(Gizmo::Tool::Scale);
+        } else if (event.commandId == EditorCommandIds::kViewportGizmoSpace) {
+            _gizmos.ToggleSpace();
+        } else if (event.commandId == EditorCommandIds::kViewportSnap) {
+            _gizmos.ToggleSnap();
+        } else if (event.commandId == EditorCommandIds::kViewportFrameSelected) {
+            _frameRequested = true;  // the panel size and the base zoom are known in Update
         }
     }
 
@@ -293,12 +305,13 @@ namespace BECore {
             if (editing) {
                 panTookPress = _cameraInput.Update(_camera, {imageMin.x, imageMin.y, shown.x, shown.y}, zoom, imageHovered, editorTarget);
                 _gizmos.ReadKeys();
-                if (ViewportKeyPressed(ImGuiKey_F)) {
+                if (ViewportKeyPressed(ImGuiKey_F) || _frameRequested) {
                     FrameSelection(activeScene, shown, zoom);
                 }
             } else {
                 _cameraInput.Cancel();
             }
+            _frameRequested = false;
 
             const ViewportFrame frame = MakeViewportFrame(editing ? _camera : ViewportCamera{}, imageMin, shown, size, zoom);
             _shownScale = frame.scale;

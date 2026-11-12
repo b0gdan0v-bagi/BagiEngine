@@ -178,6 +178,12 @@ namespace BECore {
             _space = _space == Gizmo::Space::World ? Gizmo::Space::Local : Gizmo::Space::World;
         }
 
+        /// All three snap switches off when any is on, otherwise all on (the steps stay)
+        void ToggleSnap() {
+            const bool anyOn = _snap.position || _snap.angle || _snap.scale;
+            _snap.position = _snap.angle = _snap.scale = !anyOn;
+        }
+
         [[nodiscard]] Gizmo::Tool GetTool() const {
             return _tool;
         }

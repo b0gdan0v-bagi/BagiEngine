@@ -43,6 +43,14 @@ namespace BECore {
         inline constexpr auto kGameStep = "game.step"_intern;
         /// Flips what a press in the viewport is for, Play (the game gets it) or Edit (the editor does). ViewportWidget owns the action.
         inline constexpr auto kViewportInputMode = "viewport.inputMode"_intern;
+        /// The gizmo tool, the World / Local space of the gizmo, the snap switches and the camera frame of the viewport. ViewportWidget owns them. No default chord:
+        /// a bare letter is refused as a hotkey, the keys W / E / R / X / F are read by the viewport itself while it has the keys
+        inline constexpr auto kViewportToolTranslate = "viewport.tool.translate"_intern;
+        inline constexpr auto kViewportToolRotate = "viewport.tool.rotate"_intern;
+        inline constexpr auto kViewportToolScale = "viewport.tool.scale"_intern;
+        inline constexpr auto kViewportGizmoSpace = "viewport.gizmoSpace"_intern;
+        inline constexpr auto kViewportSnap = "viewport.snap"_intern;
+        inline constexpr auto kViewportFrameSelected = "viewport.frameSelected"_intern;
         /// Switches Game and Editor. Application reads Ctrl+Shift+E from the raw SDL event (RunMode.h), before ImGui, so
         /// this command is fixed: the map lists it, the palette runs it through WidgetManager::RequestToggle().
         inline constexpr auto kModeToggle = "mode.toggle"_intern;
