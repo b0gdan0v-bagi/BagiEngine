@@ -1,6 +1,7 @@
 #include "CoreManager.h"
 
 #include <BECore/Assert/CRTDebugHook.h>
+#include <BECore/Clipboard/ClipboardControl.h>
 #include <BECore/Config/ConfigFactory.h>
 #include <BECore/Control/ControlBuiltins.h>
 #include <BECore/Logger/OutputSink.h>
@@ -88,6 +89,7 @@ namespace BECore {
         RegisterControlBuiltins(_controlService);
         RegisterUIControl(_controlService);
         RegisterProfilerControl(_controlService);
+        RegisterClipboardControl(_controlService);
     }
 
     void CoreManager::OnApplicationInit(PassKey<Application>) {

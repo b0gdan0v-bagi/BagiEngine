@@ -32,6 +32,10 @@ The text clipboard of the game: `CoreManager::GetClipboard()` (`Clipboard`), wit
 
 `SDLClipboardBackend` (`SDL/src/CoreSDL/SDLClipboard.h`) runs on `SDL_SetClipboardText` / `SDL_GetClipboardText`; `SDL3ApplicationFabric::Create` installs it (`MakePlatformClipboardBackend()`). It is available once SDL video is initialised, and a read finishes at once (answered at the next `Update()` all the same). A headless run (the `dummy` driver) keeps the clipboard in SDL's memory, so a control smoke never touches the system one. The paste shortcut (`IsPasteShortcut`: V with Cmd on Apple, Ctrl elsewhere, Shift allowed, Alt and the other primary modifier not, no key repeat) is turned into `RequestPaste()` by `SDLEventsProvider` under the rules of keys: not while paused and not while ImGui wants the keyboard; the `KeyDownEvent` is emitted as before.
 
+## Control API
+
+`RegisterClipboardControl` (`ClipboardControl.h`, called by `InitializeCoreServices()`): `clipboard_set {text}` answers `{ok}` (a missing or non-string `text` is `invalid_params`); `clipboard_get` answers `{status, text}` with the words of `ToString`; `clipboard_paste` answers `{}`. The two that wait defer their answer one frame of zero seconds at a time until the clipboard has answered (a read is answered from the next `Update()`), so they work with the manual clock, and fail with `clipboard_timeout` after `kMaxClipboardWaitFrames` frames. `clipboard_paste` answers when no request is pending any more, so the `PasteEvent` has reached the game by then. A browser page cannot reach this API, so the later look in a browser needs a game with `Copy` / `Paste` buttons.
+
 ## Tests
 
 `FakeClipboard`: content as a string, `SetContent`, `Content()`, `SetAvailable(false)`, `SetRefuse(true)` (reads answer `Refused`, writes return false), `SetDeferred(n)` (a read finishes after `n` polls), `QueuePasted(text)`, counters `WriteCount()` / `ReadCount()`. `ScopedClipboardBackend` installs a backend on `CoreManager::GetClipboard()` and puts the old one back, so a test never leaks a fake into the next. The real system clipboard is never touched by ctest.
