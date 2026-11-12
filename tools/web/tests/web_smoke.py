@@ -25,7 +25,11 @@ The checks, in this order:
      pixel (--device-scale-factor N sets the ratio of the browser). Skipped, with the reason printed, for the --selftest page;
   6. the web app manifest: `manifest.webmanifest` is served as `application/manifest+json`, parses, says `display: fullscreen` and
      lists icons, and every icon is served as `image/png` (plain HTTP requests to the same server, no browser; the generated
-     --selftest site has a manifest of its own, so the check runs there too).
+     --selftest site has a manifest of its own, so the check runs there too);
+  7. the page posts a match log: the page's own `window.bagiWebPost` (web/shell.html) posts one piece, `{"event":"start","version":N}`,
+     to /matches/<fresh id>/0 of the smoke's serve.py (which has a temporary match store), polls to HTTP 200 within UPLOAD_TIMEOUT_SECONDS,
+     and the file in the store holds the same bytes. A page without `bagiWebPost` fails. --no-upload-check leaves it out (a dist built
+     before the call existed). The --selftest page carries the real script, cut out of web/shell.html by its id.
 
 The page is opened with `?fullscreen=0` (the switch of the shell, web/shell.html): without it the first tap of --touch would ask for
 fullscreen and resize the canvas under checks 3 and 5. So the smoke does not exercise the first-tap request, the toggle button or the
@@ -37,9 +41,10 @@ makes for a real run (switch, then manifest.json `threads`, then on): a threaded
 
 --selftest serves a page generated in a temp folder (a canvas that redraws the same still pattern on every animation frame and a
 moving one after a click, with a manifest.json of `threads: false`) instead of a build, so the logic of this script runs without a
-wasm build. --selftest-fault breaks that page on purpose (flat, console-error, page-error, deaf, moving): the run has to exit 1, which
-shows each of the four checks can fail and check 3 can fail in both ways (deaf: the click changes nothing; moving: the canvas
-changes by itself, "cannot judge"). Add --timeout 5 for flat, which waits for a frame that never comes.
+wasm build. --selftest-fault breaks that page on purpose (flat, console-error, page-error, deaf, moving, upload): the run has to exit 1,
+which shows each of the checks can fail and check 3 can fail in both ways (deaf: the click changes nothing; moving: the canvas
+changes by itself, "cannot judge"; upload: the server has no match store, so check 7 fails). Add --timeout 5 for flat, which waits for
+a frame that never comes.
 
 The browser: Playwright's Chromium by default (`playwright install chromium`), --browser-channel NAME for an installed one
 (`msedge`, `chrome`), --executable-path FILE for any Chromium-based executable. Exit code: 0 passed, 1 failed (the reason is
@@ -57,6 +62,7 @@ import argparse
 import importlib
 import json
 import re
+import secrets
 import sys
 import tempfile
 import threading
@@ -70,6 +76,7 @@ from pathlib import Path
 from typing import Callable
 
 TOOLS_DIR = Path(__file__).resolve().parents[2]
+SHELL_PATH = TOOLS_DIR.parent / "web" / "shell.html"
 # serve.py is in tools/web, png_reader.py in tools/control/tests
 sys.path.insert(0, str(TOOLS_DIR / "web"))
 sys.path.insert(0, str(TOOLS_DIR / "control" / "tests"))
@@ -103,8 +110,36 @@ CANVAS_SIZE_TOLERANCE_PIXELS = 1  # check 5: the backing store may differ from C
 # the selftest page in Chromium 158 and Edge 157 (the WebGL warnings of SwiftShader are warnings, not errors); the game's own
 # allowed messages are named by the run that needs them (--allow-console)
 DEFAULT_CONSOLE_ALLOW = (r"favicon\.ico",)
-SELFTEST_FAULTS = ("none", "flat", "console-error", "page-error", "deaf", "moving")
+SELFTEST_FAULTS = ("none", "flat", "console-error", "page-error", "deaf", "moving", "upload")
 SELFTEST_THREADED = False  # the generated dist/ is single-thread: its manifest.json says so, and serve.py then sends no isolation headers
+# Check 7: the version a smoke piece names (the smoke's store accepts exactly it), the wait for the answer, the poll step in the page
+SMOKE_LOG_VERSION = 1
+UPLOAD_TIMEOUT_SECONDS = 10.0
+UPLOAD_POLL_MS = 20
+UPLOAD_SCRIPT_ID = "bagi-web-post"  # the id of the page script in web/shell.html
+UPLOAD_SCRIPT_PATTERN = re.compile(r'<script id="' + UPLOAD_SCRIPT_ID + r'">(.*?)</script>', re.DOTALL)
+# Runs in the page (page.evaluate with [path, body, timeoutMs, pollMs]): posts through the page's own call and waits for the status
+UPLOAD_PAGE_SCRIPT = """async ([path, body, timeoutMs, pollMs]) => {
+    const api = window.bagiWebPost;
+    if (!api) {
+        return {error: "the page has no window.bagiWebPost"};
+    }
+    const id = api.start(path, body);
+    if (!id) {
+        return {error: "bagiWebPost.start refused the post"};
+    }
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+        const status = api.poll(id);
+        if (status !== -1) {
+            return {status: status};
+        }
+        if (Date.now() > deadline) {
+            return {error: "no answer within " + timeoutMs / 1000 + " s"};
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+}"""
 # What the page tells about itself (page.evaluate); read after the first frame
 PAGE_INFO_SCRIPT = """() => {
     const canvas = document.querySelector("canvas#canvas");
@@ -167,6 +202,7 @@ class BrowserRun:
     check_canvas_size: bool = False  # check 5 applies (not to the selftest page)
     touch: bool = False  # the click of check 3 was a tap
     web_manifest_problems: list[str] | None = None  # check 6, made by check_web_manifest (None: not made)
+    upload_problems: list[str] | None = None  # check 7, made by check_upload (None: not made)
 
 
 @dataclass
@@ -185,6 +221,7 @@ class Options:
     device_scale_factor: float = 1.0
     touch: bool = False
     expect_console: list[str] = field(default_factory=list)
+    upload_check: bool = True
 
 
 # ----- command line -----
@@ -231,6 +268,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="the click of check 3 is a tap (a touch screen in the browser; the pointer is not moved first)")
     parser.add_argument("--expect-console", action="append", default=[], metavar="REGEX",
                         help="fail unless a console message (any level) matching this appears within --timeout (repeatable)")
+    parser.add_argument("--no-upload-check", action="store_true",
+                        help="leave out check 7 (the page posts a match log piece): for a dist built before window.bagiWebPost existed")
     return parser
 
 
@@ -256,7 +295,7 @@ def parse_options(argv: list[str] | None = None) -> Options:
                 parser.error(f"{option} '{pattern}' is not a regular expression: {error}")
     return Options(args.dist, args.selftest, args.click, args.viewport, args.timeout, args.settle, args.allow_console,
                    args.chromium_arg, args.selftest_fault, args.browser_channel, args.executable_path, args.device_scale_factor,
-                   args.touch, args.expect_console)
+                   args.touch, args.expect_console, not args.no_upload_check)
 
 
 # ----- judging: no browser needed -----
@@ -304,7 +343,7 @@ def canvas_size_problem(info: PageInfo, tolerance: int = CANVAS_SIZE_TOLERANCE_P
 
 
 def evaluate(run: BrowserRun, allow_console: list[str] | None = None, expect_console: list[str] | None = None) -> list[str]:
-    """The reasons the run failed, one line each; empty when it passed. The five checks of the module comment, in order."""
+    """The reasons the run failed, one line each; empty when it passed. The checks of the module comment, in order."""
     allow = allow_console or []
     problems = list(run.problems)
 
@@ -352,6 +391,8 @@ def evaluate(run: BrowserRun, allow_console: list[str] | None = None, expect_con
                 problems.append(problem)
     if run.web_manifest_problems:
         problems.extend(run.web_manifest_problems)
+    if run.upload_problems:
+        problems.extend(run.upload_problems)
     return problems
 
 
@@ -388,6 +429,29 @@ def check_web_manifest(fetch: Callable[[str], tuple[int, str, bytes]]) -> list[s
         elif icon_type.split(";")[0].strip().lower() != ICON_TYPE or not icon_body.startswith(package.PNG_SIGNATURE):
             problems.append(f"(6) icon {source} is not served as a PNG (Content-Type '{icon_type}')")
     return problems
+
+
+def check_upload(post: Callable[[str, str], dict], store: Path, version: int = SMOKE_LOG_VERSION) -> list[str]:
+    """Check 7. `post(path, body)` posts through the page's `bagiWebPost` and answers {"status": N} or {"error": text}. Returns the
+    reasons, empty when the post got HTTP 200 and `store` (the match store of the server) holds the body, byte for byte, as piece 0."""
+    match_id = secrets.token_hex(16)
+    body = json.dumps({"event": "start", "version": version}, separators=(",", ":")) + "\n"
+    try:
+        answer = post(f"/matches/{match_id}/0", body)
+    except Exception as error:  # the page was closed or the script threw
+        return [f"(7) the post could not be run in the page: {str(error).strip().splitlines()[0] if str(error).strip() else type(error).__name__}"]
+    if not isinstance(answer, dict) or "error" in answer:
+        return [f"(7) the page could not post: {answer.get('error') if isinstance(answer, dict) else answer!r}"]
+    if answer.get("status") != 200:
+        return [f"(7) the post was answered with HTTP {answer.get('status')}, not 200: the server has no match store, or the version "
+                "is outside its MATCH_LOG_VERSIONS"]
+    try:
+        stored = (store / match_id / "0.jsonl").read_bytes()
+    except OSError:
+        return ["(7) the post was answered with HTTP 200 but the piece is not in the match store"]
+    if stored != body.encode("utf-8"):
+        return ["(7) the stored piece differs from the body that was posted"]
+    return []
 
 
 def fetch_from(base_url: str) -> Callable[[str], tuple[int, str, bytes]]:
@@ -427,12 +491,21 @@ def png_is_drawn(png: bytes) -> bool:
 
 # ----- the fake page of --selftest -----
 
+def web_post_script() -> str:
+    """The text of the page script `window.bagiWebPost` of web/shell.html, found by its id, so the selftest page cannot drift from it."""
+    found = UPLOAD_SCRIPT_PATTERN.search(SHELL_PATH.read_text(encoding="utf-8"))
+    if not found:
+        raise SmokeFailure(f"{SHELL_PATH} has no <script id=\"{UPLOAD_SCRIPT_ID}\">")
+    return found.group(1)
+
+
 def selftest_page(fault: str = "none") -> str:
     """A page for the checks: a canvas that redraws the same still stripes on every animation frame (so the picture before a click
     does not depend on the frame) and other stripes (another palette, a different direction, moving) after a click. `fault` breaks
     it on purpose: a flat canvas, an error in the console, an uncaught error, a canvas that does not hear the click, a canvas that
-    moves by itself before any click."""
+    moves by itself before any click. The page carries the real bagiWebPost script; the fault `upload` is in the server, not here."""
     flat = "true" if fault == "flat" else "false"
+    post_script = web_post_script()
     deaf = "true" if fault == "deaf" else "false"
     moving = "true" if fault == "moving" else "false"
     console_error = 'console.error("selftest: this error is on purpose");' if fault == "console-error" else ""
@@ -447,6 +520,7 @@ def selftest_page(fault: str = "none") -> str:
 </head>
 <body>
 <canvas id="canvas" width="400" height="300"></canvas>
+<script id="{UPLOAD_SCRIPT_ID}">{post_script}</script>
 <script>
 "use strict";
 var canvas = document.getElementById("canvas");
@@ -512,12 +586,14 @@ def write_selftest_site(folder: Path, fault: str = "none") -> Path:
 # ----- serving -----
 
 @contextmanager
-def served(root: Path):
+def served(root: Path, match_store: Path | None = None):
     """serve.py's server for `root` on a free port of 127.0.0.1 in a thread; yields its base URL and stops it afterwards. The
-    isolation headers are decided like serve.py does with no switch and no variable: manifest.json of `root`, else on."""
+    isolation headers are decided like serve.py does with no switch and no variable: manifest.json of `root`, else on. With
+    `match_store` the match endpoint is on, for the one version SMOKE_LOG_VERSION and with no auth (the smoke does not test it)."""
     isolation, reason = serve.decide_cross_origin_isolation(None, None, root)
     print(f"web_smoke: cross-origin isolation {'on' if isolation else 'off'}: {reason}", flush=True)
-    server = serve.make_server(root, "127.0.0.1", 0, isolation, quiet=True)
+    versions = (SMOKE_LOG_VERSION, SMOKE_LOG_VERSION) if match_store is not None else None
+    server = serve.make_server(root, "127.0.0.1", 0, isolation, quiet=True, match_store=match_store, match_versions=versions)
     thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
     thread.start()
     try:
@@ -592,8 +668,9 @@ def press(page, x: float, y: float, touch: bool) -> None:
         page.mouse.click(x, y)
 
 
-def run_browser(playwright_api, url: str, options: Options) -> BrowserRun:
-    """Opens `url`, takes the screenshots and collects the console; does not judge (evaluate() does).
+def run_browser(playwright_api, url: str, options: Options, upload_store: Path | None = None) -> BrowserRun:
+    """Opens `url`, takes the screenshots and collects the console; does not judge (evaluate() does). `upload_store` is the match
+    store of the server at `url`, where check 7 looks for the piece the page posts (no check without it or with --no-upload-check).
 
     Raises BrowserMissing when the browser the options name is not there; any other failure to start it, like a failure of the
     page, is an ordinary exception (the smoke FAILS)."""
@@ -630,6 +707,9 @@ def run_browser(playwright_api, url: str, options: Options) -> BrowserRun:
             if not drawn:
                 return run  # evaluate() reports the flat or unreadable first frame
             run.page_info = read_page_info(page)
+            if upload_store is not None and options.upload_check:
+                run.upload_problems = check_upload(lambda path, body: page.evaluate(
+                    UPLOAD_PAGE_SCRIPT, [path, body, UPLOAD_TIMEOUT_SECONDS * 1000, UPLOAD_POLL_MS]), upload_store)
             if options.expect_console:
                 wait_for_expected_console(page, run, options.expect_console, options.timeout)
             page.wait_for_timeout(options.settle * 1000)
@@ -709,15 +789,18 @@ def describe_page(run: BrowserRun) -> list[str]:
 
 
 def run_smoke(options: Options, playwright_api) -> int:
-    with tempfile.TemporaryDirectory(prefix="web_smoke_") as temp:
+    with tempfile.TemporaryDirectory(prefix="web_smoke_") as temp, tempfile.TemporaryDirectory(prefix="web_smoke_store_") as store_temp:
         root = write_selftest_site(Path(temp), options.selftest_fault) if options.selftest else options.dist
         if not (root / PAGE_NAME).is_file():
             print(f"FAIL: {root / PAGE_NAME} not found: package a web build first (tools/web/package.py)")
             return EXIT_FAILED
-        with served(root) as url:
+        store = Path(store_temp) / "matches"
+        # The fault `upload`: the server has no store, so the post of check 7 cannot be kept
+        served_store = store if options.upload_check and options.selftest_fault != "upload" else None
+        with served(root, served_store) as url:
             print(f"web_smoke: {root} on {url}", flush=True)
             try:
-                run = run_browser(playwright_api, url, options)
+                run = run_browser(playwright_api, url, options, store if options.upload_check else None)
                 run.web_manifest_problems = check_web_manifest(fetch_from(url))
             except BrowserMissing as error:
                 named = options.browser_channel or options.executable_path
@@ -746,6 +829,10 @@ def run_smoke(options: Options, playwright_api) -> int:
         print(f"ok: (5) the backing store {info.canvas_width}x{info.canvas_height} is the CSS size {info.css_width:g}x{info.css_height:g} "
               f"x devicePixelRatio {info.device_pixel_ratio:g}")
     print(f"ok: (6) {WEB_MANIFEST_NAME} is served with its type, says display fullscreen, and its icons are PNGs")
+    if options.upload_check:
+        print("ok: (7) the page posted a match log piece through window.bagiWebPost and the server stored it byte for byte")
+    else:
+        print("skip: (7) the match log post (--no-upload-check)")
     print("PASS")
     return EXIT_PASSED
 

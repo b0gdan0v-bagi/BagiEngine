@@ -1,0 +1,34 @@
+# The browser smoke and the tests of `tools/web`
+
+Loaded when `web_smoke.py` or a test of `tools/web` is worked on; the tools themselves are in `../CLAUDE.md`. `python -m unittest discover tools/web/tests` runs the tests from the engine root (the path form `unittest tools/web/tests/x.py` fails at import: `web_fixtures` puts `tools/web` on `sys.path`).
+
+## The browser smoke
+
+Playwright is not a dependency of the repository and the tests never install it. Keep it in a venv inside the git-ignored `build/` (the browser cases of `test_web_smoke.py` skip without it):
+
+```bash
+python -m venv build/web-venv
+build/web-venv/Scripts/python -m pip install playwright            # bin/python on macOS and Linux
+build/web-venv/Scripts/python -m playwright install chromium       # about 170 MB, a cache outside the repository
+build/web-venv/Scripts/python -m pip install brotli                # optional: package.py then writes .br copies
+build/web-venv/Scripts/python tools/web/tests/web_smoke.py --selftest                 # the script itself, on its generated page
+python tools/web/package.py build/web-release/bin dist
+build/web-venv/Scripts/python tools/web/tests/web_smoke.py --dist dist                # --click 320,240 aims the click, --viewport 800x600 sizes the window
+build/web-venv/Scripts/python tools/web/tests/web_smoke.py --dist dist --touch --device-scale-factor 2
+build/web-venv/Scripts/python tools/web/tests/web_smoke.py --dist dist --expect-console "Initialized with \d+ worker threads"
+python tools/web/package.py build/web-release-single-thread/bin dist-single --single-thread
+build/web-venv/Scripts/python tools/web/tests/web_smoke.py --dist dist-single --expect-console "single-thread mode"
+# a Debug build prints one error-level line (TaskSystem/CLAUDE.md, "Browser"):
+build/web-venv/Scripts/python tools/web/tests/web_smoke.py --dist <debug dist> --allow-console "Blocking on the main thread is very dangerous"
+build/web-venv/Scripts/python -m unittest discover tools/web/tests -p test_web_smoke.py   # also runs the RealBrowserTest cases
+```
+
+- If `playwright install chromium` cannot download, use an installed browser: `--browser-channel msedge` (or `chrome`) or `--executable-path FILE`; they exit 77 only when it is absent.
+- Run `--selftest` first: if it fails, the browser setup or the script is at fault, not the build. Each `--selftest-fault` has to exit 1 (`flat --timeout 5` with `(2)`, `console-error` with `(4)`, `page-error` with `(1)`, `deaf` with `(3)`, `moving` with `(3) cannot judge`, `upload` with `(7)`: the selftest server has no match store, so the browser is expected to log the 405 as a `(4)` error, unverified). Check (7), `--selftest` with the upload page and the `upload` fault have **not been run in a real browser yet** (no Playwright on the machine of the entry): run them once before trusting them. No Playwright: `SKIP` and 77; a browser that is installed but does not start is a `FAIL`.
+- **`DEFAULT_CHROMIUM_ARGS`** force SwiftShader: headless Edge would otherwise draw on the machine's GPU, and with the flags every run uses the same software renderer, independent of the driver. Its WebGL notices (`GPU stall due to ReadPixels`) are warnings, not check (4) failures.
+- **The console allow-list holds only `favicon.ico`.** The engine's log goes through `printErr` to `console.error` for `Error` and above (`ConsoleSink`; warnings go to stdout), so anything a healthy run writes to stderr fails check (4): a game that logs errors on purpose needs `--allow-console`. The Debug line above is not on the default list on purpose, so a Release build that starts to print it fails.
+
+**What each check proves.** (1) the page was served and no script threw, not that the game started; (2) the renderer, the shaders and the first present work, not that the picture is right; (3) an input reaches the game and changes what is drawn (a tap is judged like a click: SDL turns a touch into a mouse event); (4) no unexpected `console.error`, and with `--expect-console "Initialized with \d+ worker threads"` that the task system's workers started; (5) the backing store is the CSS size times the pixel ratio, so the picture is neither blurred nor half-sized; (6) `manifest.webmanifest` is served as `application/manifest+json`, parses, says `display: fullscreen`, and every icon it lists is served as `image/png` (plain HTTP, no browser); (7) the page's own `window.bagiWebPost` posts a `start` piece to a fresh `/matches/<id>/0` of the smoke's `serve.py` (it has a temporary store, no auth, `MATCH_LOG_VERSIONS` of one version) and the stored file holds the same bytes: the script, `fetch` with the page's origin and the endpoint work together. The `--selftest` page carries the script cut out of `web/shell.html` by its id, so it cannot drift. A dist built before the call needs `--no-upload-check`. The page is opened with `?fullscreen=0`: the first tap of `--touch` would otherwise request fullscreen and resize the canvas under (3) and (5). The report's `crossOriginIsolated` and `typeof SharedArrayBuffer` show whether the headers reached the page.
+
+**What it does not check:** a post while the tab closes (`keepalive`), a phone, Firefox and Safari for the post; the first-tap request, the toggle button and the orientation lock (a phone does); that the game is right; sound; a real device's touch and pixel ratio (emulated); a real GPU; the shell's error messages; Firefox and Safari. The window is small (`--viewport`, 640x480) because the shots are decoded in plain Python by `tools/control/tests/png_reader.py` (imported from there, not copied). Check (3) needs a canvas that stands still, with the pointer on the click point, for `--settle` + `CLICK_TIMEOUT_SECONDS` before the click: an idle animation, a blinking cursor or a long fade-in fails with `(3) cannot judge`, on purpose; a change slower than the window can pass for the click's. For a slow start raise `--settle`; a game that animates while idle has no way out yet (no target needs a `--click-region` switch).
+
