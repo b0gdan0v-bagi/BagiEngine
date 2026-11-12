@@ -50,7 +50,7 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 | # | Stage | Where | Does |
 |---|-------|-------|------|
 | 0 | Clock | `GamePause::BeginFrame` decides the kind; then `Time::Tick` (Running), `Time::Advance(step seconds)` (Stepped, the manual clock) or `Time::Hold` (Held) | Measures or sets the frame time; every value below is fixed for the rest of the frame |
-| 1 | Input | `EventsProviderManager::ProcessEvents` | Window, mouse and keyboard events become `SDLEvents`, the mouse through `UIInput` first; `InputEvents::ActionEvent` comes from components such as `ClickableComponent` |
+| 1 | Input | `EventsProviderManager::ProcessEvents`, then `Clipboard::Update` | Window, mouse and keyboard events become `SDLEvents`, the mouse through `UIInput` first; `InputEvents::ActionEvent` comes from components such as `ClickableComponent`; the clipboard answers its reads and emits `PasteEvent` (`Clipboard/CLAUDE.md`) |
 | 1b | Commands | `ControlService::Drain` | Requests of the external control API run here, so they see this frame's input (`Control/CLAUDE.md`) |
 | 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread (not in a Held frame, nor the tweens and the logic below) |
 | 2b | Tweens | `TweenManager::Advance(dt)` | Every running tween moves by the frame time and its setters write the values, so the logic below reads them (`Animation/CLAUDE.md`) |
@@ -73,7 +73,7 @@ The GoogleTest executable (`tests/`) brings up the same services through `OnTest
 
 ## Subsystem guides
 
-Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManager`, `Timeline`, `co_await` of a tween), `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `Control/` (external control API core, JSON rules), `FileSystem/` (virtual paths and mount points), `Save/` (save games: slots, the game id and version envelope), `Scene/` (scene graph and components), `Logger/`, `Profiler/` (zones, frame marks, counters, the Chrome trace, allocation counts; `HowToProfile.md`), `Resource/`, `Text/` (fonts, layout, glyph atlases, `TextComponent`), `UI/` (in-game UI: canvases, adaptive layout, validator). Always read configs through `ConfigManager`, never by creating loaders by hand.
+Nested `CLAUDE.md` files in `BECore/`: `Animation/` (easing, `Lerp`, `TweenManager`, `Timeline`, `co_await` of a tween), `Clipboard/` (the text clipboard service, its backends and `PasteEvent`), `Config/` (ConfigManager, `XmlNode`, `MakeFromConfig`), `Control/` (external control API core, JSON rules), `FileSystem/` (virtual paths and mount points), `Save/` (save games: slots, the game id and version envelope), `Scene/` (scene graph and components), `Logger/`, `Profiler/` (zones, frame marks, counters, the Chrome trace, allocation counts; `HowToProfile.md`), `Resource/`, `Text/` (fonts, layout, glyph atlases, `TextComponent`), `UI/` (in-game UI: canvases, adaptive layout, validator). Always read configs through `ConfigManager`, never by creating loaders by hand.
 
 ## Assert (CRTDebugHook, StackTrace)
 

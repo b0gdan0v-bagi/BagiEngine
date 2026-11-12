@@ -2,6 +2,7 @@
 
 #include <BECore/Animation/TweenManager.h>
 #include <BECore/Assert/AssertHandlers.h>
+#include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Config/ConfigManager.h>
 #include <BECore/Control/ControlService.h>
 #include <BECore/FileSystem/FileSystem.h>
@@ -127,6 +128,11 @@ namespace BECore {
             return GetInstance()._controlService;
         }
 
+        /// The text clipboard: SetText, RequestText (answered from Update), RequestPaste and ClipboardEvents::PasteEvent; the backend is the platform's (`Clipboard/CLAUDE.md`). Main thread only
+        static Clipboard& GetClipboard() {
+            return GetInstance()._clipboard;
+        }
+
         static UIInput& GetUIInput() {
             return GetInstance()._uiInput;
         }
@@ -193,6 +199,7 @@ namespace BECore {
         ResourceManager _resourceManager;
         WidgetManager _widgetManager;
         EventsProviderManager _eventsProviderManager;
+        Clipboard _clipboard;
         MainWindowManager _mainWindowManager;
         RendererManager _rendererManager;
         // Declared before _sceneManager, so they outlive the scenes: a canvas unregisters from UIInput when its scene is destroyed

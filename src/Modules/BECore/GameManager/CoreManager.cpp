@@ -105,6 +105,7 @@ namespace BECore {
             {
                 BE_PROFILE_SCOPE("Input");
                 _eventsProviderManager.ProcessEvents();
+                _clipboard.Update();  // the answers of the reads and the pastes of the page, after the input that asked for them
             }
             _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
             UpdateGame(kind);
