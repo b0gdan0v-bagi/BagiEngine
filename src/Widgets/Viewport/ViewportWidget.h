@@ -5,9 +5,8 @@
 #include <BECore/Widgets/IWidget.h>
 #include <Widgets/EditorLayout/EditorCommands.h>
 #include <Widgets/SceneEditor/SceneSelectionEvents.h>
+#include <Widgets/Viewport/ViewportGizmos.h>
 #include <Widgets/Viewport/ViewportInput.h>
-
-struct ImVec2;
 
 namespace BECore {
 
@@ -33,8 +32,11 @@ namespace BECore {
     // and its mouse is the game's input as the window's (ViewportPointer). The input mode (ViewportInputMode, a toolbar toggle and
     // the viewport.inputMode command) says whether a press goes to the game (Play) or is kept for the editor (Edit: the game gets
     // nothing and ViewportEditClickEvent is emitted); Alt held flips it for one click. A badge in the image corner shows the
-    // effective mode, and Edit adds an outline around the image. A left click in Edit is answered by the scene editor (ScenePick), and the node it
-    // selects, from here or from the hierarchy (SceneNodeSelectedEvent), is outlined over the image in the accent colour.
+    // effective mode, and Edit adds an outline around the image. A left click in Edit is answered by the scene editor (ScenePick), and the nodes it
+    // selects, from here or from the hierarchy (SceneSelectionChangedEvent), are outlined over the image (the primary in the accent colour).
+    // In Edit the image has an editor camera (ViewportCamera: wheel zoom about the pointer, middle-drag or Space + left-drag pan, F frames the selection, a Reset
+    // button and a zoom label): the texture is drawn scaled and shifted under the clip rect of the panel, and everything in target pixels goes through ViewportFrame.
+    // A drag on empty ground draws a rubber band and selects what it touches.
     class ViewportWidget : public IWidget {
         BE_CLASS(ViewportWidget)
     public:
@@ -52,8 +54,8 @@ namespace BECore {
         // The grid preference and the stored preview choice of the editor (EditorLayoutWidget sends them on its first frame and on every change)
         void OnPreferencesChanged(const EditorPreferencesChangedEvent& event);
 
-        // The grid over the image: a line every _gridStep image pixels (zoom screen units per pixel), clipped to the image
-        void DrawGrid(float minX, float minY, float maxX, float maxY, float zoom) const;
+        // The grid over the image: a line every _gridStep target pixels from its corner, clipped to the panel and to the target
+        void DrawGrid(const ViewportFrame& frame) const;
 
         // The command of the input mode (viewport.inputMode) flips it
         void OnCommand(const EditorCommandEvent& event);
@@ -83,30 +85,34 @@ namespace BECore {
         // The "Overlays" button and its popup of checkboxes (_overlays)
         void DrawOverlaysPopup();
 
-        // The overlays over the image, in target pixels scaled by zoom and clipped to the image: the view bounds (bars tinted), the bounds of
+        // The overlays over the image, in target pixels through @p frame and clipped to the panel: the view bounds (bars tinted), the bounds of
         // every visible canvas, the regions (named outlines, under the touch targets; the name and the canvas-unit rect on hover), the touch targets
         // (red under UISettings::minTouchSize, the element name on hover, which wins over a region), the safe area. The canvases
         // are the ones the pass just laid out for this target. @p outputSize is the target's size, @p hovered the pointer is over the image
         /// The "Paused" mark in the top-left corner of the image while the game is paused (CoreManager::GetPause())
         void DrawPausedMark(const ImVec2& imageMin, const ImVec2& imageMax) const;
-        void DrawOverlays(Scene* scene, const ImVec2& imageMin, const ImVec2& imageMax, float zoom, const ImVec2& outputSize, const Rect& safeArea, bool hovered) const;
+        void DrawOverlays(Scene* scene, const ViewportFrame& frame, const ImVec2& outputSize, const Rect& safeArea, bool hovered) const;
 
         // The simulated safe area (in target pixels) as an outline over the image, so it is clear what the canvases were given
-        void DrawSafeAreaOutline(float minX, float minY, float zoom, const Rect& safeArea) const;
+        void DrawSafeAreaOutline(const ViewportFrame& frame, const Rect& safeArea) const;
 
-        // Keeps the node the scene editor selected (raw pointers, only compared until DrawSelectionOutline finds the node alive)
-        void OnNodeSelected(const SceneNodeSelectedEvent& event);
+        // Keeps the nodes the scene editor selected (raw pointers, only compared until DrawSelectionOutlines finds each node alive)
+        void OnSelectionChanged(const SceneSelectionChangedEvent& event);
 
-        // The outline of the selected node (ScenePick::SelectionOutlines: its rect and, for a canvas, the canvas bounds) over the image in the accent colour, clipped to it.
-        // Nothing for no selection, another scene or a node that is no longer in the tree of @p scene; a node hidden by the editor flag is outlined too
-        void DrawSelectionOutline(Scene* scene, const ImVec2& imageMin, const ImVec2& imageMax, float zoom) const;
+        // The outline of every selected node (ScenePick::SelectionOutlines: its rect and, for a canvas, the canvas bounds) over the image, the primary (the last) in the accent colour and the
+        // others in its muted one, clipped to the panel. Nothing for no selection, another scene, or a node that is no longer in the tree of @p scene; a node hidden by the editor flag is outlined too
+        void DrawSelectionOutlines(Scene* scene, const ViewportFrame& frame) const;
+
+        // The editor camera: the zoom label and the Reset button next to the input mode toggle, and F (frame the selection, or reset when nothing is selected)
+        void DrawCameraControls();
+        void FrameSelection(Scene* scene, const ImVec2& panelSize, float baseZoom);
 
         // The Play / Edit toggle of the toolbar
         void DrawInputModeToggle();
 
-        // Mouse input of the image as the scene's input (or an edit click): origin is the image's top-left corner on the screen,
-        // the image is shown at `zoom` screen units per target pixel, @p hovered is the hover of the hit area
-        void ForwardMouse(float originX, float originY, float zoom, bool hovered);
+        // Mouse input of the image as the scene's input, or an edit click (with the selection keys held): @p frame says where the image is, @p hovered is the hover of the
+        // hit area, @p pressTaken that a pan took this frame's press, which then is no edit click
+        void ForwardMouse(const ViewportFrame& frame, bool hovered, bool pressTaken);
 
         // The badge of the effective input mode in the top-right corner of the image, and in Edit an outline around the image
         void DrawInputModeMark(const ImVec2& imageMin, const ImVec2& imageMax, ViewportInputTarget target) const;
@@ -130,8 +136,12 @@ namespace BECore {
         PoolString _viewPreviewName;
         bool _gridEnabled = false;
         int32_t _gridStep = 0;
-        const Scene* _selectedScene = nullptr;  // the selection last told by SceneNodeSelectedEvent: never dereferenced before the node is found in the active scene
-        const SceneNode* _selectedNode = nullptr;
+        const Scene* _selectedScene = nullptr;     // the selection last told by SceneSelectionChangedEvent: a node is never dereferenced before it is found in the active scene
+        eastl::vector<SceneNode*> _selectedNodes;  // in selection order, the primary last
+        ViewportCamera _camera;                    // the editor camera; the image is drawn with it while the input mode is Edit
+        ViewportCameraInput _cameraInput;
+        ViewportBoxSelect _boxSelect;
+        float _shownScale = 1.0f;  // screen units per target pixel of the last frame, for the zoom label
         ViewportPointer _pointer;  // the held presses and where each goes
         ViewportInputMode _inputMode = ViewportInputMode::Play;
         ViewportInputMode _storedInputMode = ViewportInputMode::Play;  // the mode the editor last stored (applied from a preferences event, or sent by us)

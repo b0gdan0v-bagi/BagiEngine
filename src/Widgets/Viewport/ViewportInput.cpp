@@ -3,6 +3,7 @@
 #include <BECore/Input/UIInput.h>
 #include <EASTL/algorithm.h>
 #include <SDL3/SDL.h>
+#include <Widgets/SceneEditor/SceneSelection.h>
 
 namespace BECore {
 
@@ -29,6 +30,14 @@ namespace BECore {
     ViewportInputTarget ResolveTarget(ViewportInputMode mode, bool oneOffModifier) {
         const bool toGame = (mode == ViewportInputMode::Play) != oneOffModifier;
         return toGame ? ViewportInputTarget::Game : ViewportInputTarget::Editor;
+    }
+
+    bool IsBoxSelectDrag(float startX, float startY, float nowX, float nowY, float threshold) {
+        return std::abs(nowX - startX) >= threshold || std::abs(nowY - startY) >= threshold;
+    }
+
+    uint32_t SelectionModifiersOf(bool ctrl, bool shift) {
+        return (ctrl ? kSelectionModifierCtrl : 0u) | (shift ? kSelectionModifierShift : 0u);
     }
 
     bool ViewportPointer::IsGameHeld() const {
@@ -78,7 +87,7 @@ namespace BECore {
                 } else {
                     _held[i] = ViewportPressTarget::Editor;
                     if (editClickSink) {
-                        editClickSink(ViewportEditClickEvent(frame.x, frame.y, static_cast<uint8_t>(i)));
+                        editClickSink(ViewportEditClickEvent(frame.x, frame.y, static_cast<uint8_t>(i), frame.modifiers));
                     }
                 }
             }

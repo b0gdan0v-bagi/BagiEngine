@@ -22,6 +22,10 @@ namespace BECore {
 
     }  // namespace
 
+    float ViewportCamera::WheelFactor(float notches) {
+        return std::pow(kWheelZoomStep, notches);
+    }
+
     float ViewportCamera::Scale(float baseZoom) const {
         return SafeBase(baseZoom) * zoom;
     }

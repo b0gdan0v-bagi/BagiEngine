@@ -14,6 +14,7 @@ namespace BECore {
     struct ViewportCamera {
         static constexpr float kMinZoom = 0.1f;
         static constexpr float kMaxZoom = 32.0f;
+        static constexpr float kWheelZoomStep = 1.1f;  ///< the factor of one notch of the wheel
 
         float zoom = 1.0f;     ///< a factor on the base zoom, kMinZoom to kMaxZoom
         float centerX = 0.0f;  ///< the point of the target at the middle of the panel, target pixels from the target's centre
@@ -24,6 +25,9 @@ namespace BECore {
 
         /// The point of the target (target pixels) under @p screen
         [[nodiscard]] Vec2 ToTarget(Vec2 screen, const Rect& panel, float baseZoom) const;
+
+        /// The factor of a wheel turn of @p notches (positive zooms in, fractions of a notch from a trackpad scale smoothly)
+        [[nodiscard]] static float WheelFactor(float notches);
 
         /// The size of one target pixel on the screen
         [[nodiscard]] float Scale(float baseZoom) const;

@@ -16,6 +16,7 @@
 #include <Widgets/ImGuiTheme.h>
 #include <Widgets/SceneEditor/HierarchyModel.h>
 #include <Widgets/SceneEditor/ScenePick.h>
+#include <Widgets/Viewport/ViewportGizmos.h>
 #include <imgui.h>
 
 namespace BECore {
@@ -24,6 +25,8 @@ namespace BECore {
 
         constexpr float kEditOutlineThickness = 2.0f;       // the accent outline of the image in the Edit input mode, in screen units
         constexpr float kSelectionOutlineThickness = 2.0f;  // the outline of the selected node, in screen units
+        constexpr float kPercent = 100.0f;
+        constexpr float kFrameMargin = 24.0f;  // the room around the selection that F leaves, in screen units
         constexpr const char* kPlayMark = ICON_LC_GAMEPAD_2 " Play";
         constexpr const char* kEditMark = ICON_LC_MOUSE_POINTER_2 " Edit";
         constexpr const char* kInputModeTooltip = "Where a click on the image goes: Play sends it to the game as the window would, Edit keeps it for the editor (the game gets "
@@ -62,6 +65,8 @@ namespace BECore {
         constexpr float kViewportPixelDensity = 1.0f;
         constexpr const char* kOverlaysPopup = "##ViewportOverlays";
         constexpr const char* kImageHitArea = "##ViewportImage";
+        constexpr const char* kZoomTooltip = "The size of the image on the screen. Wheel: zoom about the pointer, middle button or Space + left button: pan, F: frame the selection (Edit input mode)";
+        constexpr const char* kCameraResetTooltip = "Show the whole image again (zoom 100% of the fit, no pan)";
 
         // In the order of the enums (ViewportAspect, SafeAreaSimulation). The icon names the control (the shape of the image, the
         // safe area), so a combo that shows the current value tells what it is; the labels are literals, nothing is built per frame
@@ -150,13 +155,13 @@ namespace BECore {
     bool ViewportWidget::Initialize(IDeserializer& /*deserializer*/) {
         Subscribe<EditorPreferencesChangedEvent, &ViewportWidget::OnPreferencesChanged>(this);
         Subscribe<EditorCommandEvent, &ViewportWidget::OnCommand>(this);
-        Subscribe<SceneNodeSelectedEvent, &ViewportWidget::OnNodeSelected>(this);
+        Subscribe<SceneSelectionChangedEvent, &ViewportWidget::OnSelectionChanged>(this);
         return true;
     }
 
-    void ViewportWidget::OnNodeSelected(const SceneNodeSelectedEvent& event) {
+    void ViewportWidget::OnSelectionChanged(const SceneSelectionChangedEvent& event) {
         _selectedScene = event.scene;
-        _selectedNode = event.node;
+        _selectedNodes.assign(event.nodes.begin(), event.nodes.end());
     }
 
     void ViewportWidget::OnCommand(const EditorCommandEvent& event) {
@@ -236,6 +241,7 @@ namespace BECore {
             _renderTarget = renderer->CreateRenderTarget(w, h);
             _lastWidth = w;
             _lastHeight = h;
+            _camera.Reset();  // a camera over another shape of target would look at nothing in particular
         }
 
         if (_renderTarget) {
@@ -264,29 +270,48 @@ namespace BECore {
             uiEnvironment.SetPixelDensityOverride(std::nullopt);
             renderer->UnsetRenderTarget();
 
-            // Display the result as an ImGui image, centered when the shape leaves room on one side
+            // The image is drawn by the draw list at the camera's rect, so the item the layout sees is the hit area over the un-zoomed rect, centered when the shape leaves
+            // room on one side. It is an item with an id of its own: the press is always seen (an Image has no id, its hover is fragile) and never starts a window move
             const ImVec2 cursor = ImGui::GetCursorPos();
             ImGui::SetCursorPos({cursor.x + (available.x - shown.x) * 0.5f, cursor.y + (available.y - shown.y) * 0.5f});
-            ImGui::Image(reinterpret_cast<ImTextureID>(_renderTarget->GetImGuiTextureId()), shown);
-            const ImVec2 imageMin = ImGui::GetItemRectMin();
-            const ImVec2 imageMax = ImGui::GetItemRectMax();
-
-            // A hit area over the image: an item with an id of its own, so the press is always seen (an Image has no id, its hover is
-            // fragile) and never starts a window move
-            ImGui::SetCursorScreenPos(imageMin);
+            const ImVec2 imageMin = ImGui::GetCursorScreenPos();
             ImGui::InvisibleButton(kImageHitArea, shown, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
             const bool imageHovered = ImGui::IsItemHovered();
 
-            // Hand the mouse to the scene with viewport-local coordinates, so it can map them to scene units
-            // (Scene::ScreenToSceneX/Y) with the fit of its last draw.
-            ForwardMouse(imageMin.x, imageMin.y, zoom, imageHovered);
-            DrawGrid(imageMin.x, imageMin.y, imageMax.x, imageMax.y, zoom);
-            DrawOverlays(activeScene, imageMin, imageMax, zoom, size, safeArea, imageHovered);
-            DrawSelectionOutline(activeScene, imageMin, imageMax, zoom);
-            if (CoreManager::GetPause().IsPaused()) {
-                DrawPausedMark(imageMin, imageMax);
+            // Where the pointer goes: the camera and the rubber band belong to the Edit input mode, and work while the Edit target owns the pointer (Alt flips it for one click)
+            const ImGuiIO& io = ImGui::GetIO();
+            const bool editing = _inputMode == ViewportInputMode::Edit;
+            const bool editorTarget = ResolveTarget(_inputMode, io.KeyAlt) == ViewportInputTarget::Editor;
+            bool panTookPress = false;
+            if (editing) {
+                panTookPress = _cameraInput.Update(_camera, {imageMin.x, imageMin.y, shown.x, shown.y}, zoom, imageHovered, editorTarget);
+                if (ViewportKeyPressed(ImGuiKey_F)) {
+                    FrameSelection(activeScene, shown, zoom);
+                }
+            } else {
+                _cameraInput.Cancel();
             }
-            DrawInputModeMark(imageMin, imageMax, ResolveTarget(_inputMode, ImGui::GetIO().KeyAlt));
+
+            const ViewportFrame frame = MakeViewportFrame(editing ? _camera : ViewportCamera{}, imageMin, shown, size, zoom);
+            _shownScale = frame.scale;
+            ImDrawList* const drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
+            drawList->AddImage(reinterpret_cast<ImTextureID>(_renderTarget->GetImGuiTextureId()), frame.origin, frame.end);
+            drawList->PopClipRect();
+
+            DrawGrid(frame);
+            DrawOverlays(activeScene, frame, size, safeArea, imageHovered);
+            DrawSelectionOutlines(activeScene, frame);
+
+            const bool pointerFree = editing && editorTarget && !_cameraInput.IsPanning();
+            _boxSelect.Update(frame, activeScene, pointerFree, imageHovered, false);
+
+            // Hand the mouse to the scene with target-pixel coordinates, so it can map them to scene units (Scene::ScreenToSceneX/Y) with the fit of its last draw
+            ForwardMouse(frame, imageHovered, panTookPress);
+            if (CoreManager::GetPause().IsPaused()) {
+                DrawPausedMark(frame.imageMin, frame.imageMax);
+            }
+            DrawInputModeMark(frame.imageMin, frame.imageMax, ResolveTarget(_inputMode, io.KeyAlt));
         }
 
         ImGui::End();
@@ -389,6 +414,9 @@ namespace BECore {
         ImGui::SameLine();
         DrawInputModeToggle();
 
+        ImGui::SameLine();
+        DrawCameraControls();
+
         if (const Scene* scene = CoreManager::GetSceneManager().GetActiveScene()) {
             DrawViewCombo(*scene);
 
@@ -465,22 +493,28 @@ namespace BECore {
         ItemTooltip(kViewTooltip);
     }
 
-    void ViewportWidget::DrawGrid(float minX, float minY, float maxX, float maxY, float zoom) const {
+    void ViewportWidget::DrawGrid(const ViewportFrame& frame) const {
         if (!_gridEnabled || _gridStep <= 0) {
             return;
         }
-        // A line every _gridStep image pixels from the top-left corner; a pixel of the image is zoom ImGui units
-        const float step = static_cast<float>(_gridStep) * zoom;
+        // A line every _gridStep target pixels from the top-left corner of the target, so it moves and scales with the camera
+        const float step = static_cast<float>(_gridStep) * frame.scale;
         if (step < kMinDrawnGridStep) {
             return;
         }
+        const float left = std::max(frame.origin.x, frame.imageMin.x);
+        const float top = std::max(frame.origin.y, frame.imageMin.y);
+        const float right = std::min(frame.end.x, frame.imageMax.x);
+        const float bottom = std::min(frame.end.y, frame.imageMax.y);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->PushClipRect({minX, minY}, {maxX, maxY}, true);
-        for (float x = minX + step; x < maxX; x += step) {
-            drawList->AddLine({x, minY}, {x, maxY}, kGridColor);
+        drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
+        const float firstX = std::max(1.0f, std::ceil((left - frame.origin.x) / step));
+        for (float x = frame.origin.x + firstX * step; x < right; x += step) {
+            drawList->AddLine({x, top}, {x, bottom}, kGridColor);
         }
-        for (float y = minY + step; y < maxY; y += step) {
-            drawList->AddLine({minX, y}, {maxX, y}, kGridColor);
+        const float firstY = std::max(1.0f, std::ceil((top - frame.origin.y) / step));
+        for (float y = frame.origin.y + firstY * step; y < bottom; y += step) {
+            drawList->AddLine({left, y}, {right, y}, kGridColor);
         }
         drawList->PopClipRect();
     }
@@ -499,14 +533,12 @@ namespace BECore {
         }
     }
 
-    void ViewportWidget::DrawOverlays(Scene* scene, const ImVec2& imageMin, const ImVec2& imageMax, float zoom, const ImVec2& outputSize, const Rect& safeArea, bool hovered) const {
+    void ViewportWidget::DrawOverlays(Scene* scene, const ViewportFrame& frame, const ImVec2& outputSize, const Rect& safeArea, bool hovered) const {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->PushClipRect(imageMin, imageMax, true);
+        drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
 
-        // Rects are in target pixels, the image is zoom screen units per pixel
-        const auto toScreen = [&](const Rect& rect) {
-            return std::pair<ImVec2, ImVec2>{{imageMin.x + rect.x * zoom, imageMin.y + rect.y * zoom}, {imageMin.x + (rect.x + rect.w) * zoom, imageMin.y + (rect.y + rect.h) * zoom}};
-        };
+        // Rects are in target pixels, the frame takes them to the screen
+        const auto toScreen = [&](const Rect& rect) { return std::pair<ImVec2, ImVec2>{frame.ToScreen({rect.x, rect.y}), frame.ToScreen({rect.x + rect.w, rect.y + rect.h})}; };
         const auto fill = [&](const Rect& rect, ImU32 color) {
             if (rect.w > kMinBarSize && rect.h > kMinBarSize) {
                 const auto [min, max] = toScreen(rect);
@@ -604,30 +636,58 @@ namespace BECore {
         }
 
         drawList->PopClipRect();
-        DrawSafeAreaOutline(imageMin.x, imageMin.y, zoom, safeArea);
+        DrawSafeAreaOutline(frame, safeArea);
     }
 
-    void ViewportWidget::DrawSelectionOutline(Scene* scene, const ImVec2& imageMin, const ImVec2& imageMax, float zoom) const {
-        // The pointer is only compared: a deleted node or a replaced scene is never dereferenced
-        if (!scene || scene != _selectedScene || !_selectedNode) {
+    void ViewportWidget::DrawSelectionOutlines(Scene* scene, const ViewportFrame& frame) const {
+        // The pointers are only compared: a deleted node or a replaced scene is never dereferenced
+        if (!scene || scene != _selectedScene || _selectedNodes.empty()) {
             return;
         }
-        const SceneNode* const node = HierarchyModel::FindNode(scene->GetRootNode(), _selectedNode);
-        if (!node) {
-            return;
-        }
-        const ScenePick::Outlines outlines = ScenePick::SelectionOutlines(*scene, *node);
-        const ImU32 color = ImGui::ColorConvertFloat4ToU32(GetImGuiPalette().accent);
+        const ImGuiPalette& palette = GetImGuiPalette();
+        const ImU32 primaryColor = ImGui::ColorConvertFloat4ToU32(palette.accent);
+        const ImU32 otherColor = ImGui::ColorConvertFloat4ToU32(palette.accentMuted);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->PushClipRect(imageMin, imageMax, true);
-        for (size_t i = 0; i < outlines.count; ++i) {
-            eastl::array<ImVec2, 4> corners;
-            for (size_t corner = 0; corner < corners.size(); ++corner) {
-                corners[corner] = {imageMin.x + outlines.quads[i][corner].x * zoom, imageMin.y + outlines.quads[i][corner].y * zoom};
+        drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
+        for (size_t index = 0; index < _selectedNodes.size(); ++index) {
+            const SceneNode* const node = HierarchyModel::FindNode(scene->GetRootNode(), _selectedNodes[index]);
+            if (!node) {
+                continue;
             }
-            drawList->AddPolyline(corners.data(), static_cast<int>(corners.size()), color, ImDrawFlags_Closed, kSelectionOutlineThickness);
+            const ImU32 color = index + 1 == _selectedNodes.size() ? primaryColor : otherColor;
+            const ScenePick::Outlines outlines = ScenePick::SelectionOutlines(*scene, *node);
+            for (size_t i = 0; i < outlines.count; ++i) {
+                eastl::array<ImVec2, 4> corners;
+                for (size_t corner = 0; corner < corners.size(); ++corner) {
+                    corners[corner] = frame.ToScreen(outlines.quads[i][corner]);
+                }
+                drawList->AddPolyline(corners.data(), static_cast<int>(corners.size()), color, ImDrawFlags_Closed, kSelectionOutlineThickness);
+            }
         }
         drawList->PopClipRect();
+    }
+
+    void ViewportWidget::DrawCameraControls() {
+        {
+            const ScopedMonoFont mono;
+            ImGui::TextDisabled("%3.0f%%", _shownScale * kPercent);
+        }
+        ItemTooltip(kZoomTooltip);
+        ImGui::SameLine();
+        ImGui::BeginDisabled(_camera.IsIdentity());
+        if (IconTextButton(ICON_LC_FOCUS, "Reset##ViewportCamera", kCameraResetTooltip)) {
+            _camera.Reset();
+        }
+        ImGui::EndDisabled();
+    }
+
+    void ViewportWidget::FrameSelection(Scene* scene, const ImVec2& panelSize, float baseZoom) {
+        Rect bounds;
+        if (scene && scene == _selectedScene && SelectionBounds(*scene, {_selectedNodes.data(), _selectedNodes.size()}, bounds)) {
+            _camera.FrameRect(bounds, {panelSize.x, panelSize.y}, baseZoom, kFrameMargin);
+        } else {
+            _camera.Reset();
+        }
     }
 
     void ViewportWidget::DrawPausedMark(const ImVec2& imageMin, const ImVec2& imageMax) const {
@@ -645,12 +705,14 @@ namespace BECore {
         drawList->PopClipRect();
     }
 
-    void ViewportWidget::DrawSafeAreaOutline(float minX, float minY, float zoom, const Rect& safeArea) const {
+    void ViewportWidget::DrawSafeAreaOutline(const ViewportFrame& frame, const Rect& safeArea) const {
         if (!_overlays.safeArea || _safeAreaSimulation == SafeAreaSimulation::None) {
             return;
         }
-        ImGui::GetWindowDrawList()->AddRect({minX + safeArea.x * zoom, minY + safeArea.y * zoom}, {minX + (safeArea.x + safeArea.w) * zoom, minY + (safeArea.y + safeArea.h) * zoom},
-                                            kSafeAreaOutlineColor);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->PushClipRect(frame.imageMin, frame.imageMax, true);
+        drawList->AddRect(frame.ToScreen({safeArea.x, safeArea.y}), frame.ToScreen({safeArea.x + safeArea.w, safeArea.y + safeArea.h}), kSafeAreaOutlineColor);
+        drawList->PopClipRect();
     }
 
     void ViewportWidget::DrawInputModeToggle() {
@@ -683,7 +745,7 @@ namespace BECore {
         drawList->PopClipRect();
     }
 
-    void ViewportWidget::ForwardMouse(float originX, float originY, float zoom, bool hovered) {
+    void ViewportWidget::ForwardMouse(const ViewportFrame& frame, bool hovered, bool pressTaken) {
         const ImGuiIO& io = ImGui::GetIO();
         const bool modifier = io.KeyAlt;
 
@@ -696,34 +758,40 @@ namespace BECore {
             }
         }
 
-        // The scene lives in target pixels, the image on screen is zoom times that
-        ViewportPointerFrame frame;
-        frame.x = (io.MousePos.x - originX) / zoom;
-        frame.y = (io.MousePos.y - originY) / zoom;
-        frame.deltaX = io.MouseDelta.x / zoom;
-        frame.deltaY = io.MouseDelta.y / zoom;
-        frame.hovered = hovered;
+        // The scene lives in target pixels, the image on screen is `scale` times that
+        ViewportPointerFrame pointer;
+        const Vec2 position = frame.ToTarget(io.MousePos);
+        pointer.x = position.x;
+        pointer.y = position.y;
+        pointer.deltaX = io.MouseDelta.x / frame.scale;
+        pointer.deltaY = io.MouseDelta.y / frame.scale;
+        pointer.hovered = hovered;
         for (int i = 0; i < kViewportButtonCount; ++i) {
-            frame.down[i] = io.MouseDown[i];
-            frame.clicked[i] = ImGui::IsMouseClicked(i);
-            frame.released[i] = ImGui::IsMouseReleased(i);
-            frame.clicks[i] = static_cast<uint8_t>(io.MouseClickedCount[i]);
+            pointer.down[i] = io.MouseDown[i];
+            pointer.clicked[i] = ImGui::IsMouseClicked(i);
+            pointer.released[i] = ImGui::IsMouseReleased(i);
+            pointer.clicks[i] = static_cast<uint8_t>(io.MouseClickedCount[i]);
         }
-        frame.wheelX = io.MouseWheelH;
-        frame.wheelY = io.MouseWheel;
+        pointer.wheelX = io.MouseWheelH;
+        pointer.wheelY = io.MouseWheel;
+        pointer.modifiers = SelectionModifiersOf(io.KeyCtrl, io.KeyShift);
         switch (io.MouseSource) {
             case ImGuiMouseSource_TouchScreen:
-                frame.source = ViewportPointerSource::Touch;
+                pointer.source = ViewportPointerSource::Touch;
                 break;
             case ImGuiMouseSource_Pen:
-                frame.source = ViewportPointerSource::Pen;
+                pointer.source = ViewportPointerSource::Pen;
                 break;
             default:
                 break;
         }
 
-        _pointer.Forward(frame, _inputMode, modifier, CoreManager::GetUIInput(),
-                         [](const ViewportEditClickEvent& click) { ViewportEditClickEvent::Emit(click.x, click.y, click.button, click.modifiers); });
+        // A press that a pan took gets an empty sink: the press is still followed to its release, but it is no click on the node under it
+        ViewportPointer::EditClickSink sink;
+        if (!pressTaken) {
+            sink = [](const ViewportEditClickEvent& click) { ViewportEditClickEvent::Emit(click.x, click.y, click.button, click.modifiers); };
+        }
+        _pointer.Forward(pointer, _inputMode, modifier, CoreManager::GetUIInput(), sink);
     }
 
 }  // namespace BECore

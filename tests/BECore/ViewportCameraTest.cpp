@@ -157,4 +157,12 @@ namespace BECore::Tests {
         EXPECT_TRUE(camera.IsIdentity());
     }
 
+    TEST(ViewportCameraTest, TheWheelFactorIsOneStepPerNotchAndInvertsForTheOtherDirection) {
+        EXPECT_FLOAT_EQ(1.0f, ViewportCamera::WheelFactor(0.0f));
+        EXPECT_NEAR(ViewportCamera::kWheelZoomStep, ViewportCamera::WheelFactor(1.0f), kTolerance);
+        EXPECT_NEAR(1.0f / ViewportCamera::kWheelZoomStep, ViewportCamera::WheelFactor(-1.0f), kTolerance);
+        // Two half notches are one notch
+        EXPECT_NEAR(ViewportCamera::WheelFactor(1.0f), ViewportCamera::WheelFactor(0.5f) * ViewportCamera::WheelFactor(0.5f), kTolerance);
+    }
+
 }  // namespace BECore::Tests
