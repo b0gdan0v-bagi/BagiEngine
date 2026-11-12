@@ -199,7 +199,9 @@ def progress_text(entry: dict) -> str:
     if not entry.get("planShown"):
         return f"plan {entry['plan']} (not in the store)" if entry.get("plan") else ""
     count = f" {progress['done']}/{progress['total']}" if progress else " no checklist"
-    return f"plan {entry['planShown']}{count}"
+    slices = entry.get("slices")
+    over = f", {slices['count']} slices {slices['done']}/{slices['total']}" if slices and slices["count"] > 1 else ""
+    return f"plan {entry['planShown']}{count}{over}"
 
 
 def print_entry(entry: dict, out=None) -> None:
@@ -209,6 +211,9 @@ def print_entry(entry: dict, out=None) -> None:
         facts.append(f"stage: {entry['stage']}")
     if progress_text(entry):
         facts.append(progress_text(entry))
+    if entry.get("slicing"):
+        cap = f", cap ${entry['costCap']:g}" if entry.get("costCap") else ""
+        facts.append(f"slicing: {entry['slicing']}{cap}")
     where = [f"{name}: {entry[name]}" for name in ("base", "origin") if entry.get(name)]
     if where:
         facts.append(" · ".join(where))
@@ -305,7 +310,8 @@ def cmd_edit(api: Api, args) -> None:
         patch["status"] = args.status
     if args.area:
         patch["area"] = args.area
-    for name, value in (("stage", _optional_int(args.stage)), ("plan", args.plan)):
+    cost_cap = None if args.cost_cap is None else "none" if args.cost_cap == "none" else float(args.cost_cap)
+    for name, value in (("stage", _optional_int(args.stage)), ("plan", args.plan), ("slicing", args.slicing), ("costCap", cost_cap)):
         if value == "none":
             patch["clear"].append(name)
         elif value is not None:
@@ -329,6 +335,12 @@ def cmd_claim(api: Api, args) -> None:
 
 def cmd_review(api: Api, args) -> None:
     entry = api.call("POST", f"/entries/{args.id}/review", {"branch": args.branch, "note": args.note})
+    emit(entry, args.json, lambda e: print(f"{e['id']}: {e['statusLine']}"))
+
+
+def cmd_note(api: Api, args) -> None:
+    """The status note of an entry, its status unchanged: the loop's "slice K of M approved" between through slices."""
+    entry = api.call("PATCH", f"/entries/{args.id}", {"statusNote": args.note})
     emit(entry, args.json, lambda e: print(f"{e['id']}: {e['statusLine']}"))
 
 
@@ -590,6 +602,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--plan", help="the owner's plan name or 'none'")
     p.add_argument("--status", choices=["open", "deferred", "in progress", "closed"])
     p.add_argument("--area")
+    p.add_argument("--slicing", choices=["through", "none"], help="through: the next slice starts without waiting for the merge; none: each slice waits")
+    p.add_argument("--cost-cap", help="the dollars a through run may spend on the entry, or 'none'")
     p.add_argument("--expected-version", type=int)
 
     p = sub.add_parser("claim", parents=[common], help="the loop takes an open entry (open -> in progress)")
@@ -601,6 +615,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("review", parents=[common], help="the slice waits for the owner (in progress -> review)")
     p.add_argument("id")
     p.add_argument("--branch", required=True)
+    p.add_argument("--note", required=True)
+
+    p = sub.add_parser("note", parents=[common], help="set the status note, the status unchanged (a through slice approved)")
+    p.add_argument("id")
     p.add_argument("--note", required=True)
 
     p = sub.add_parser("stop", parents=[common], help="the task stopped (stays in progress)")
@@ -629,7 +647,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan_sub = p.add_subparsers(dest="plan_command", required=True)
     q = plan_sub.add_parser("list", parents=[common])
     q.add_argument("--entry")
-    q.add_argument("--kind", choices=["owner", "slice", "review"])
+    q.add_argument("--kind", choices=["owner", "slice", "review", "stages", "remarks"])
     q = plan_sub.add_parser("get", parents=[common], help=f"write the plan to a file outside git (default {DEFAULT_PLANS_DIR}/NAME)")
     q.add_argument("name")
     q.add_argument("--out")
@@ -638,7 +656,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("name")
     q.add_argument("--file", help="the plan file, '-' for stdin")
     q.add_argument("--entry")
-    q.add_argument("--kind", choices=["owner", "slice", "review"])
+    q.add_argument("--kind", choices=["owner", "slice", "review", "stages", "remarks"])
     q = plan_sub.add_parser("url", parents=[common], help="the page of the plan in the browser")
     q.add_argument("name")
     q = plan_sub.add_parser("delete", parents=[common])
@@ -685,6 +703,7 @@ COMMANDS = {
     "edit": cmd_edit,
     "claim": cmd_claim,
     "review": cmd_review,
+    "note": cmd_note,
     "stop": cmd_stop,
     "close": cmd_close,
     "dep": cmd_dep,

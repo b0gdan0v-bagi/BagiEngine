@@ -79,6 +79,8 @@ class EntryIn(BaseModel):
     branch: str | None = None
     stage: int | None = None
     plan: str | None = None
+    slicing: str | None = None
+    costCap: float | None = None
     aliases: list[str] = []
 
 
@@ -92,8 +94,10 @@ class EntryPatch(BaseModel):
     branch: str | None = None
     stage: int | None = None
     plan: str | None = None
+    slicing: str | None = None
+    costCap: float | None = None
     expectedVersion: int | None = None
-    clear: list[str] = []  # fields to set to null: "stage", "plan", "branch"
+    clear: list[str] = []  # fields to set to null: "stage", "plan", "branch", "slicing", "costCap"
 
 
 class ClaimIn(BaseModel):
@@ -135,8 +139,10 @@ _PATCH_COLUMNS = {
     "branch": "branch",
     "stage": "stage",
     "plan": "plan",
+    "slicing": "slicing",
+    "costCap": "cost_cap",
 }
-_CLEARABLE = {"stage", "plan", "branch"}
+_CLEARABLE = {"stage", "plan", "branch", "slicing", "costCap"}
 
 
 # --- the app -----------------------------------------------------------------------------------
@@ -263,7 +269,7 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
         bad = set(body.clear) - _CLEARABLE
         if bad:
             raise HTTPException(422, f"cannot clear {', '.join(sorted(bad))}")
-        changes.update({key: None for key in body.clear})
+        changes.update({_PATCH_COLUMNS[key]: None for key in body.clear})
         if "branch" in body.clear:  # a branch that is gone has no base and no origin
             changes.update(base=None, origin=None)
         return write(lambda conn: store.entry_json(conn, store.update_entry(conn, entry_id, changes, actor, expected_version=body.expectedVersion)))
