@@ -14,3 +14,5 @@ src/Modules/tracy
 src/Modules/Vulkan
 src/Modules/BECore/pch.h
 src/Modules/BECore/Assert/StackTrace.cpp
+# Vendored header of IconFontCppHeaders (the Lucide glyph names)
+src/Widgets/Icons
