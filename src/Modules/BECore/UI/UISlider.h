@@ -80,6 +80,7 @@ namespace BECore {
 
         void DrawSelf(IRenderer& renderer) override;
         void OnPress(float x, float y) override;
+        void OnDrag(float x, float y) override;
 
         /// `disabled` or the group's: the control answers for itself, whatever it sits in
         [[nodiscard]] bool IsDisabled() const override {
@@ -89,7 +90,6 @@ namespace BECore {
         [[nodiscard]] bool OwnsState() const override {
             return true;
         }
-        void OnDrag(float x, float y) override;
 
     protected:
         /// Resolves the colour fields of this control (UIElement::ApplyTheme): `trackColor`, `fillColor`, `thumbColor`

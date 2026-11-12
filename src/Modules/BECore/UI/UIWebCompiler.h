@@ -19,10 +19,10 @@ namespace BECore {
      * | `button` with `data-icon` | the same, the icon in a child `<N>Icon` (and `<N>Caption` with text); `-be-icon-color` is its `tint` (`ui-controls.md`) |
      * | `img` | `UIImage` (`src` is the sprite name) |
      * | any element with `data-widget="segmented"` | `UISegmented` (`data-bind` is `bind`; its `<button data-value>` children are the segments, composed like any button) |
-     * | any element with `data-widget="toggle"` | a row `UIElement` with `UIInputClicker` and `UIToggleComponent` (`data-bind`, `data-action`, `data-on` / `data-off` are `onValue` / `offValue`) and
-     * two children: `<N>Caption` (the text) and `<N>Switch` (`UISwitchComponent`) | | any element with `data-widget="slider"` | `UIElement` with `UIInputClicker` (`stateLook="false"`) and
-     * `UISliderComponent` (`data-bind`, `data-action`, `data-min`, `data-max`, `data-step`) | | any element with `data-widget="progress"` | `UIProgressBar` (`data-bind`, `data-min`, `data-max`) | |
-     * `id` | `name` |
+     * | any element with `data-widget="toggle"` | a row `UIElement` with a clicker and `UIToggleComponent`, children `<N>Caption` and `<N>Switch` (`ui-controls.md`) |
+     * | any element with `data-widget="slider"` | `UIElement` with `UIInputClicker` (`stateLook="false"`) and `UISliderComponent` |
+     * | any element with `data-widget="progress"` | `UIProgressBar` (`data-bind`, `data-min`, `data-max`) |
+     * | `id` | `name` |
      *
      * Styles come from `<style>`, `<link rel="stylesheet" href>` (read through the loader function) and `style=""`, in the order of the document, and the cascade
      * is the CSS one: specificity (ids, classes, tags), then source order, `!important` first and a `style=""` over a rule. `color`, `font-size`, `font-family`, `font-weight`,
