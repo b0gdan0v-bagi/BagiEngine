@@ -49,10 +49,10 @@ A game starts in Game mode by shipping its own `config/ApplicationConfig.xml` wi
 
 | # | Stage | Where | Does |
 |---|-------|-------|------|
-| 0 | Clock | `Time::Tick` (real clock) or `Time::Advance(step seconds)` (manual clock) | Measures or sets the frame time; every value below is fixed for the rest of the frame |
+| 0 | Clock | `GamePause::BeginFrame` decides the kind; then `Time::Tick` (Running), `Time::Advance(step seconds)` (Stepped, the manual clock) or `Time::Hold` (Held) | Measures or sets the frame time; every value below is fixed for the rest of the frame |
 | 1 | Input | `EventsProviderManager::ProcessEvents` | Window, mouse and keyboard events become `SDLEvents`, the mouse through `UIInput` first; `InputEvents::ActionEvent` comes from components such as `ClickableComponent` |
 | 1b | Commands | `ControlService::Drain` | Requests of the external control API run here, so they see this frame's input (`Control/CLAUDE.md`) |
-| 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread |
+| 2 | Tasks | `TaskManager::Update` | Delayed tasks that are due and the tasks queued for the main thread (not in a Held frame, nor the tweens and the logic below) |
 | 2b | Tweens | `TweenManager::Advance(dt)` | Every running tween moves by the frame time and its setters write the values, so the logic below reads them (`Animation/CLAUDE.md`) |
 | 3 | Logic | `SceneManager::UpdateAll` | `SceneFixedUpdateEvent` (zero or more, a constant step), then `SceneUpdateEvent` (once, with the frame time) |
 | 4 | Render | `WidgetManager::UpdateAll`, `DrawScreenAll`, `DrawAll` | Editor: UI and `Scene::Draw()` through `ViewportWidget`, then ImGui render. Game: `Scene::Draw()` through `SceneRenderWidget::DrawScreen`. `Scene::Draw()` draws in layer order: the system draws the quad and the sprite itself from the registry and calls `IComponent::OnDraw()` of the other components (`Scene/CLAUDE.md`). Present at the end of the frame |
@@ -61,7 +61,7 @@ Logic reads input and writes state; render only reads state. Do not draw from `S
 
 After the present and `LogEvent::Flush()` the loop calls `ControlService::EndFrame()`: it runs the frame end hooks and counts down a control call that waits for frames (a `step`, a `screenshot`). Then the profiler's frame mark (`BE_PROFILE_FRAME`); the stages above are profiler zones (`Profiler/CLAUDE.md`).
 
-With the manual clock (`--manual-clock`, `Control/CLAUDE.md`) `Application::RunFrame` skips the whole frame unless a `step` or another deferred control call asks for one, and calls `CoreManager::OnIdleCycle` instead. The frame it does run is the same as above, so game logic cannot tell the clocks apart except that `deltaTime` is what the client asked for.
+With the manual clock (`--manual-clock`, `Control/CLAUDE.md`) `Application::RunFrame` skips the whole frame unless a `step` or another deferred control call asks for one, and calls `CoreManager::OnIdleCycle` instead. The frame it does run is a Stepped frame of the pause, the same as above, so game logic cannot tell the clocks apart except that `deltaTime` is what the client asked for.
 
 **Time** (`CoreManager::GetTime()`, `Time/Time.h`): `GetDeltaTime()` is the seconds the last frame took, `GetTotalTime()` the game time since the first frame, `GetFrameCount()` counts frames from 1. The frame time is clamped to `Time::kMaxFrameTime` (0.25 s), so a pause in the debugger is one long frame, not a jump. Scale movement and animation by `SceneUpdateEvent::deltaTime`, never by "per frame" constants. Logic that must give the same result at any frame rate (physics-like integration, replays) goes into `SceneFixedUpdateEvent`: its `deltaTime` is always `Time::GetFixedDeltaTime()` (1/60 s by default), and the leftover time carries over to the next frame, so the number of steps per second is constant.
 

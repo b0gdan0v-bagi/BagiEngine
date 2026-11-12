@@ -64,6 +64,9 @@ namespace BECore::Tests {
             return DumpJson(request);
         }
 
+        /// What a running frame lasts in the loop of a test that has no real clock
+        constexpr double kRealFrameSeconds = 1.0 / 64;
+
         class ControlServiceTest : public ::testing::Test {
         protected:
             void TearDown() override {
@@ -119,6 +122,37 @@ namespace BECore::Tests {
                     ++frames;
                 }
                 return frames;
+            }
+
+            /// The application loop over a pause: a frame is decided by the pause, the clock follows it, the requests run in it. Ends once @p answers answers are in or the guard
+            /// stops it; returns the kind of every frame that ran. Without the manual clock a frame runs every pass, with it only while a step is due
+            std::vector<FrameKind> RunFramesUntilAnswered(GamePause& pause, size_t answers) {
+                constexpr int kGuard = 1000;
+                std::vector<FrameKind> kinds;
+                while (responses.size() < answers && static_cast<int>(kinds.size()) < kGuard) {
+                    if (service.IsManualClock() && !pause.IsStepDue()) {
+                        service.Drain();  // the idle cycle
+                        if (!pause.IsStepDue()) {
+                            break;
+                        }
+                    }
+                    const FrameDecision frame = pause.BeginFrame();
+                    switch (frame.kind) {
+                        case FrameKind::Running:
+                            CoreManager::GetTime().Advance(kRealFrameSeconds);
+                            break;
+                        case FrameKind::Stepped:
+                            CoreManager::GetTime().Advance(frame.seconds);
+                            break;
+                        case FrameKind::Held:
+                            CoreManager::GetTime().Hold();
+                            break;
+                    }
+                    kinds.push_back(frame.kind);
+                    service.Drain();
+                    service.EndFrame();
+                }
+                return kinds;
             }
 
             const Json* ResultOf(size_t index) const {
@@ -975,6 +1009,124 @@ namespace BECore::Tests {
         ASSERT_EQ(responses.size(), 1u);
         EXPECT_EQ(GetJsonInt(*ResultOf(0), "frame").value_or(0), 2);
         EXPECT_EQ(GetJsonNumber(*ResultOf(0), "totalTime").value_or(-1.0), 0.0);
+    }
+
+    TEST_F(ControlServiceTest, StepOnAPausedRealClockMakesSteppedFramesOfDt) {
+        GamePause pause;
+        service.SetPause(&pause);
+        RegisterControlBuiltins(service);
+        CoreManager::GetTime().Reset();
+        pause.SetPaused(true);
+
+        Json params = Json::object();
+        params["frames"] = 3;
+        params["dt"] = 0.125;
+        Post(MakeRequest(1, "step", params));
+
+        const std::vector<FrameKind> kinds = RunFramesUntilAnswered(pause, 1);
+
+        // The frame that drains the request is a held one; the three after it are the steps
+        EXPECT_EQ(kinds, (std::vector<FrameKind>{FrameKind::Held, FrameKind::Stepped, FrameKind::Stepped, FrameKind::Stepped}));
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(GetJsonInt(*ResultOf(0), "frame").value_or(0), 3);
+        EXPECT_EQ(GetJsonNumber(*ResultOf(0), "totalTime").value_or(0.0), 0.375);
+        EXPECT_EQ(pause.GetPendingSteps(), 0u);
+        EXPECT_TRUE(pause.IsPaused());
+    }
+
+    TEST_F(ControlServiceTest, StepOnAPausedRealClockCountsTheFrameThatDrainsItOnlyOnce) {
+        GamePause pause;
+        service.SetPause(&pause);
+        RegisterControlBuiltins(service);
+        CoreManager::GetTime().Reset();
+        pause.SetPaused(true);
+        Post(MakeRequest(1, "status"));  // an earlier request in the same frame does not matter
+        Post(MakeRequest(2, "step"));
+        Post(MakeRequest(3, "step"));
+
+        RunFramesUntilAnswered(pause, 3);
+
+        ASSERT_EQ(responses.size(), 3u);
+        EXPECT_EQ(GetJsonInt(*ResultOf(1), "frame").value_or(0), 1);
+        EXPECT_EQ(GetJsonInt(*ResultOf(2), "frame").value_or(0), 2);
+        EXPECT_EQ(pause.GetPendingSteps(), 0u);
+    }
+
+    TEST_F(ControlServiceTest, StepOnARunningGameCountsFramesAndIgnoresDt) {
+        GamePause pause;
+        service.SetPause(&pause);
+        RegisterControlBuiltins(service);
+        CoreManager::GetTime().Reset();
+
+        Json params = Json::object();
+        params["frames"] = 3;
+        params["dt"] = 0.125;
+        Post(MakeRequest(1, "step", params));
+
+        const std::vector<FrameKind> kinds = RunFramesUntilAnswered(pause, 1);
+
+        EXPECT_EQ(kinds, (std::vector<FrameKind>{FrameKind::Running, FrameKind::Running, FrameKind::Running}));
+        EXPECT_EQ(pause.GetPendingSteps(), 0u);
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(GetJsonNumber(*ResultOf(0), "totalTime").value_or(0.0), 3 * kRealFrameSeconds);
+    }
+
+    TEST_F(ControlServiceTest, ManualClockStepsThroughThePause) {
+        GamePause pause;
+        service.SetPause(&pause);
+        service.SetManualClock(true);
+        pause.SetPaused(true);
+        RegisterControlBuiltins(service);
+        CoreManager::GetTime().Reset();
+
+        Json params = Json::object();
+        params["frames"] = 2;
+        params["dt"] = 0.125;
+        Post(MakeRequest(1, "step", params));
+        service.Drain();
+
+        EXPECT_TRUE(pause.IsStepDue());
+        EXPECT_EQ(pause.GetPendingSteps(), 2u);
+        EXPECT_EQ(pause.GetStepSeconds(), 0.125);
+
+        const std::vector<FrameKind> kinds = RunFramesUntilAnswered(pause, 1);
+
+        EXPECT_EQ(kinds, (std::vector<FrameKind>{FrameKind::Stepped, FrameKind::Stepped}));
+        ASSERT_EQ(responses.size(), 1u);
+        EXPECT_EQ(GetJsonInt(*ResultOf(0), "frame").value_or(0), 2);
+        EXPECT_EQ(GetJsonNumber(*ResultOf(0), "totalTime").value_or(0.0), 0.25);
+        EXPECT_FALSE(pause.IsStepDue());
+    }
+
+    TEST_F(ControlServiceTest, ManualClockDeferredCallOfZeroSecondsStepsTheFrameCounterOnly) {
+        GamePause pause;
+        service.SetPause(&pause);
+        service.SetManualClock(true);
+        pause.SetPaused(true);
+        CoreManager::GetTime().Reset();
+        service.RegisterHandler("capture", [](ControlCall& call) { call.DeferFrames(1, 0.0, [](ControlCall& done) { done.Reply(Json::object()); }); });
+        Post(MakeRequest(1, "capture"));
+        service.Drain();
+
+        ASSERT_TRUE(pause.IsStepDue());
+        const std::vector<FrameKind> kinds = RunFramesUntilAnswered(pause, 1);
+
+        EXPECT_EQ(kinds, (std::vector<FrameKind>{FrameKind::Stepped}));
+        EXPECT_EQ(CoreManager::GetTime().GetFrameCount(), 1u);
+        EXPECT_EQ(CoreManager::GetTime().GetTotalTime(), 0.0);
+    }
+
+    TEST_F(ControlServiceTest, ADeferredCallOnAPausedRealClockNeedsNoStep) {
+        GamePause pause;
+        service.SetPause(&pause);
+        pause.SetPaused(true);
+        service.RegisterHandler("capture", [](ControlCall& call) { call.DeferFrames(1, 0.0, [](ControlCall& done) { done.Reply(Json::object()); }); });
+        Post(MakeRequest(1, "capture"));
+
+        const std::vector<FrameKind> kinds = RunFramesUntilAnswered(pause, 1);
+
+        EXPECT_EQ(kinds, (std::vector<FrameKind>{FrameKind::Held}));
+        EXPECT_EQ(pause.GetPendingSteps(), 0u);
     }
 
     TEST_F(ControlServiceTest, StepTakesTheLargestFrameCountAndTheLongestFrame) {

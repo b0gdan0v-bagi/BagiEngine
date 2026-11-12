@@ -176,6 +176,9 @@ namespace BECore {
 
         _pendingFramesLeft = call->_deferFrames;
         _pendingSeconds = call->_deferSeconds;
+        if (_manualClock && _pause != nullptr) {
+            _pause->RequestSteps(_pendingFramesLeft, _pendingSeconds);  // no frame runs by itself: the pause steps the frames the call waits for
+        }
         call->_deferFrames = 0;
         _pending = std::move(call);
     }

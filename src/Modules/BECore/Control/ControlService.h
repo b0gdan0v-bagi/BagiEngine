@@ -28,6 +28,9 @@ namespace BECore {
      * IsStepDue() says so, i.e. while a deferred call (a `step`, a `screenshot`) waits for frames, and moves the game
      * clock by GetStepSeconds() per frame. In between it only answers requests (WaitForRequests) and keeps the window
      * alive. Every state of this lives here, so that a test can play the application loop without the application.
+     * The manual clock is a pause stepped by the API (GamePause, `Time/GamePause.h`): with a pause attached
+     * (SetPause) a deferred call on the manual clock also requests its frames from it, and the pause is what decides
+     * the kind and the seconds of every frame.
      *
      * Everything except Post() belongs to the main thread.
      */
@@ -90,6 +93,15 @@ namespace BECore {
             return _manualClock && _pending != nullptr;
         }
 
+        /// The pause of the game that the deferred calls and the `pause` / `resume` / `step` methods drive; CoreManager attaches its own. None by default (a service on its own, as in a test)
+        void SetPause(GamePause* pause) {
+            _pause = pause;
+        }
+
+        [[nodiscard]] GamePause* GetPause() const {
+            return _pause;
+        }
+
         /// Seconds the frame that IsStepDue() asks for lasts (what the pending call gave to DeferFrames)
         [[nodiscard]] double GetStepSeconds() const {
             return _pendingSeconds;
@@ -139,6 +151,7 @@ namespace BECore {
         uint32_t _pendingFramesLeft = 0;
         double _pendingSeconds = kDefaultStepSeconds;
         bool _manualClock = false;
+        GamePause* _pause = nullptr;
         ControlServerStatus _serverStatus;
         EventSink _eventSink;
         eastl::vector<HookEntry> _frameEndHooks;

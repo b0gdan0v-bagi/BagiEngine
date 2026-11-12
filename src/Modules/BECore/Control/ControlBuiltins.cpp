@@ -56,7 +56,7 @@ namespace BECore {
             return *seconds;
         }
 
-        void HandleStep(ControlCall& call) {
+        void HandleStep(ControlCall& call, const ControlService& service) {
             const auto frames = ReadStepFrames(call.Params());
             if (!frames) {
                 call.Fail(frames.error());
@@ -67,7 +67,15 @@ namespace BECore {
                 call.Fail(seconds.error());
                 return;
             }
-            call.DeferFrames(*frames, *seconds, [](ControlCall& done) { done.Reply(DescribeClock()); });
+            // A paused real clock: the step makes `frames` stepped frames of dt. The frame that runs this handler is a held (or running) one that the call counts too, hence the
+            // one more. The manual clock asks for its frames when the call is deferred and runs no frame meanwhile; a game that is running just counts frames
+            GamePause* pause = service.GetPause();
+            const bool stepsPausedGame = pause != nullptr && pause->IsPaused() && !service.IsManualClock();
+            if (stepsPausedGame) {
+                pause->RequestSteps(*frames, *seconds);
+            }
+            const uint32_t countedFrames = stepsPausedGame ? *frames + 1 : *frames;
+            call.DeferFrames(countedFrames, *seconds, [](ControlCall& done) { done.Reply(DescribeClock()); });
         }
 
         void HandleQuit(ControlCall& call) {
@@ -81,7 +89,7 @@ namespace BECore {
     void RegisterControlBuiltins(ControlService& service) {
         service.RegisterHandler("ping", HandlePing);
         service.RegisterHandler("status", [&service](ControlCall& call) { HandleStatus(call, service); });
-        service.RegisterHandler("step", HandleStep);
+        service.RegisterHandler("step", [&service](ControlCall& call) { HandleStep(call, service); });
         service.RegisterHandler("quit", HandleQuit, /*bypassBarrier=*/true);
     }
 

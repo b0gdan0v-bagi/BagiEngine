@@ -85,6 +85,9 @@ namespace BECore {
 
         // Before the first frame: the loop reads it from the start
         CoreManager::GetControlService().SetManualClock(controlSettings->manualClock);
+        if (controlSettings->manualClock) {
+            CoreManager::GetPause().SetPaused(true);  // a manual clock is a pause that only `step` advances
+        }
 
         // The editor draws its viewport into an offscreen target, which the software renderer of a headless run does not have
         // The resolved mode (ResolveRunMode) without its warning: CreateWidgets resolves and warns once
@@ -130,24 +133,34 @@ namespace BECore {
 
         ControlService& control = CoreManager::GetControlService();
 
-        if (control.IsManualClock()) {
+        GamePause& pause = CoreManager::GetPause();
+        Time& time = CoreManager::GetTime();
+        if (control.IsManualClock() && !pause.IsStepDue()) {
             // Game time moves only for the frames that a `step` asks for; in between the window and the requests stay alive
-            if (!control.IsStepDue()) {
-                BE_PROFILE_SCOPE("Idle");
-                CoreManager::GetInstance().OnIdleCycle({});
-                PublishControlStatus();
-                LogEvent::Flush();
-                return _isRunning;
-            }
-            CoreManager::GetTime().Advance(control.GetStepSeconds());
-        } else {
-            CoreManager::GetTime().Tick({});
+            BE_PROFILE_SCOPE("Idle");
+            CoreManager::GetInstance().OnIdleCycle({});
+            PublishControlStatus();
+            LogEvent::Flush();
+            return _isRunning;
+        }
+        // The first thing of a frame: what kind of frame it is decides the clock and, in OnGameCycle, what the game does
+        const FrameDecision frame = pause.BeginFrame();
+        switch (frame.kind) {
+            case FrameKind::Running:
+                time.Tick({});
+                break;
+            case FrameKind::Stepped:
+                time.Advance(frame.seconds);
+                break;
+            case FrameKind::Held:
+                time.Hold();
+                break;
         }
         BE_PROFILE_SCOPE("Frame");
         FrameStatsCollector& frameStats = CoreManager::GetFrameStats();
         frameStats.BeginFrame();
         RenderEvents::NewFrameEvent::Emit();
-        CoreManager::GetInstance().OnGameCycle({});
+        CoreManager::GetInstance().OnGameCycle({}, frame.kind);
         {
             BE_PROFILE_SCOPE("Present");
             const FrameStatsCollector::StageScope present(frameStats, FrameStage::Present);

@@ -52,6 +52,10 @@ namespace BECore {
         _sceneManager = std::move(manager);
     }
 
+    void CoreManager::UpdateGameForTest(FrameKind kind, PassKey<Tests::EngineEnvironment>) {
+        UpdateGame(kind);
+    }
+
     void CoreManager::InitializeCoreServices() {
         // Install CRT debug hooks as early as possible
         InstallCRTDebugHooks();
@@ -80,6 +84,7 @@ namespace BECore {
         _uiStrings.Initialize();
         _uiThemes.Initialize();
 
+        _controlService.SetPause(&_pause);
         RegisterControlBuiltins(_controlService);
         RegisterUIControl(_controlService);
         RegisterProfilerControl(_controlService);
@@ -92,7 +97,7 @@ namespace BECore {
         _sceneManager->Initialize();
     }
 
-    void CoreManager::OnGameCycle(PassKey<Application>) {
+    void CoreManager::OnGameCycle(PassKey<Application>, FrameKind kind) {
         BE_PROFILE_SCOPE("Game cycle");
         {
             // Update: input, commands, tasks, tweens and the logic (FrameStage::Update; the scene's part is SceneUpdate)
@@ -102,23 +107,7 @@ namespace BECore {
                 _eventsProviderManager.ProcessEvents();
             }
             _controlService.Drain();  // commands of the control API see this frame's input and run before the tasks and the logic
-            // The game clock of the delayed tasks gets the same frame delta as the tweens below (the clamp and the manual clock apply)
-            TaskManager::GetInstance().AdvanceGameTime(PassKey<CoreManager>{}, _time.GetDeltaTime());
-            {
-                BE_PROFILE_SCOPE("Tasks");
-                TaskManager::GetInstance().Update(PassKey<CoreManager>{});
-            }
-            // Values are set before the logic of the frame reads them. The frame time is clamped to Time::kMaxFrameTime, so a pause does not finish every tween at once;
-            // the manual clock gives the same ticks, and OnIdleCycle runs no frame and advances nothing
-            {
-                BE_PROFILE_SCOPE("Tweens");
-                _tweenManager.Advance(_time.GetDeltaTime());
-            }
-            {
-                BE_PROFILE_SCOPE("Scene update");
-                const FrameStatsCollector::StageScope sceneUpdate(_frameStats, FrameStage::SceneUpdate);
-                _sceneManager->UpdateAll();  // game logic before UI
-            }
+            UpdateGame(kind);
         }
         // Render: the widgets (Editor: ViewportWidget draws the scene in its update), queued events, the screen draws and ImGui
         const FrameStatsCollector::StageScope render(_frameStats, FrameStage::Render);
@@ -137,6 +126,29 @@ namespace BECore {
         {
             BE_PROFILE_SCOPE("Draw widgets");
             _widgetManager.DrawAll();  // ImGui::Render; the present follows in Application (RenderPresentEvent)
+        }
+    }
+
+    void CoreManager::UpdateGame(FrameKind kind) {
+        if (kind == FrameKind::Held) {
+            return;  // a paused game: a task that finished on a worker reaches the game with the next game frame
+        }
+        // The game clock of the delayed tasks gets the same frame delta as the tweens below (the clamp and the manual clock apply)
+        TaskManager::GetInstance().AdvanceGameTime(PassKey<CoreManager>{}, _time.GetDeltaTime());
+        {
+            BE_PROFILE_SCOPE("Tasks");
+            TaskManager::GetInstance().Update(PassKey<CoreManager>{});
+        }
+        // Values are set before the logic of the frame reads them. The frame time is clamped to Time::kMaxFrameTime, so a pause does not finish every tween at once;
+        // the manual clock gives the same ticks, and OnIdleCycle runs no frame and advances nothing
+        {
+            BE_PROFILE_SCOPE("Tweens");
+            _tweenManager.Advance(_time.GetDeltaTime());
+        }
+        {
+            BE_PROFILE_SCOPE("Scene update");
+            const FrameStatsCollector::StageScope sceneUpdate(_frameStats, FrameStage::SceneUpdate);
+            _sceneManager->UpdateAll();  // game logic before UI
         }
     }
 

@@ -59,11 +59,13 @@ The two clocks differ in who runs the frames:
 
 | | Real clock (default) | Manual clock (`--manual-clock`) |
 |---|---|---|
-| Frames | run all the time; `Time::Tick` measures them | run only while `ControlService::IsStepDue()`; `Time::Advance(GetStepSeconds())` sets their length |
-| `step` | waits for `N` frames; `dt` is ignored | makes `N` frames of `dt` seconds, then answers |
+| Frames | run all the time; `Time::Tick` measures them | run only while the pause has a step due (`GamePause::IsStepDue()`, which `ControlService::IsStepDue()` mirrors); `Time::Advance(step seconds)` sets their length |
+| `step` | waits for `N` frames; `dt` is ignored (a game that is **paused** makes `N` stepped frames of `dt`) | makes `N` frames of `dt` seconds, then answers |
 | Between steps | | `Application::RunFrame` calls `CoreManager::OnIdleCycle`: input, `Drain()`, then `WaitForRequests` (up to 8 ms, woken by `Post`). The window stays alive and `quit` still works |
 
 While a step runs it is the barrier, so a pipelined `step` + `get_state` gives the state after the frames. `quit` bypasses the barrier and ends even a step of `kMaxStepFrames`. A call that defers frames for another reason (`screenshot` asks for one frame of `dt` 0) uses the same machinery: `IsStepDue()` is true while any deferred call is pending, so the next frame runs and its `EndFrame()` counts it down. All of this state lives in `ControlService`, so `ControlServiceTest` plays the application loop (`RunDueFrames`) without an application.
+
+**The manual clock is a pause** (`CoreManager::GetPause()`, `Time/GamePause.h`; there is no second mechanism): `--manual-clock` starts with the pause set, and a deferred call on the manual clock requests its frames from it when `ControlService::Settle` takes it in (`SetPause` attaches the pause; a service without one, as in most tests, only counts). `Application::RunFrame` asks the pause for the kind of the frame: `Stepped` frames advance the clock by the step's seconds, and the idle cycle runs while nothing is due. On a real clock that is paused (the editor's Pause), `step` requests `N` steps itself and the call waits for `N + 1` frames: the frame that drains the request ends too and counts. A **held** frame (paused, no step) runs the window, input polling, the control API (`Drain`, so `status`, `ui_click`, `screenshot` answer), the widgets and the drawing, and skips game time, tasks, tweens and the scene update; `EndFrame` still counts the deferred calls down, so a `screenshot` on a paused game is answered by a held frame.
 
 What the manual clock means for a client:
 
