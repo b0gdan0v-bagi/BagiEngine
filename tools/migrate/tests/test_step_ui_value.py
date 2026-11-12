@@ -1,6 +1,5 @@
 """The step 3 to 4 (steps/s0003_ui_toggle_slider_to_components.py) over the fixture pairs of tests/fixtures/ui_value/: the output is exactly the `after` file, the `after` migrates
-to itself, a failure fixture (a `before` with no `after`) fails with a reason that names the element and leaves the file as it was. The C++ twin test
-(tests/BECore/ContentMigrationValueTest.cpp) reads the same files and compares what the two forms do."""
+to itself, a failure fixture (a `before` with no `after`) fails with a reason that names the element and leaves the file as it was. The C++ test (tests/BECore/ContentMigrationAfterTest.cpp) loads the `after` files and checks the composed form."""
 
 import importlib.util
 from pathlib import Path
