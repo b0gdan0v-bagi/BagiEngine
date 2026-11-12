@@ -9,12 +9,15 @@ The client of the rooms (the entry `network-rooms` of the todo store, slice 3 of
 | File | Purpose |
 |------|---------|
 | `RoomTransport.h` | `IRoomTransport` (`Open`, `SendText`, `Close`, `Abort`, `PollEvent`), `RoomTransportEvent` (`Opened`, `Text`, `Closed`), `RoomTransportFactory`, `MakeDefaultRoomTransport()` |
+| `NativeRoomTransport.h/.cpp` | the desktop transport: a `WebSocketClient` (RemoteControl) behind `IRoomTransport`; empty without `BE_WITH_REMOTE_CONTROL` |
 | `RoomTransportFactory.cpp` | `MakeDefaultRoomTransport()`: the transport of this platform, nullptr where there is none |
 | `RoomClient.h/.cpp` | `RoomClient`, `RoomClientSettings`, `RoomClientState`, `RoomClientEvent`, `RoomSession`, `RoomClientErrors`, `RoomClientCloseReasons` |
 
 ## The transport contract
 
 Everything is delivered on the calling thread by `PollEvent()`; **no callback ever runs on a network thread**. One transport serves one connection; after `Closed` the client makes a new one from the factory. Exactly one `Closed` per `Open()` that returned a value (a refused connect included: code 1006 and a reason), always the last event, after every text that arrived before it. `Open` returning an error means no `Closed` follows. The destructor ends the connection without waiting and is safe in every state. `PollEvent` overwrites the event it is given, so its buffers keep their capacity, and does not allocate when there is nothing to take.
+
+**Desktop (`NativeRoomTransport`).** `ws://host[:port][/path]` only: a `wss://` address makes `Open` fail with an error that starts with `tls_unsupported` and names the browser build as the way to `wss://` today (the command returns it as `connect_failed`). No `Origin` header is sent, so a server whose `allowedOrigins` names only web pages still admits it. The limits and the threads are `WebSocketClientSettings` defaults (`RemoteControl/CLAUDE.md`); `PollEvent` copies into the caller's event. The Windows branch of `Socket::Connect` is written and not run on the development machine.
 
 ## States and events
 
@@ -64,3 +67,5 @@ Every other close retries, 1013 (server full) and a normal 1000 from the server 
 ## Tests
 
 `tests/BECore/Rooms/FakeRoomTransport.h` is the scripted transport (a link the test pushes server texts into and reads what was sent from); `RoomClientTest.cpp` drives the client over it on a `ManualClock`, so the heartbeat, the backoff times and every stop rule are exact to the millisecond. `HubTransport.h` is an `IRoomTransport` that talks to a real `RoomHub` in memory (`HubWorld`: the demo games, a manual clock, `Sever`, `SetRefusing`, a `blackhole` for a silent network) and `JudgedTransport.h` runs the wire judge on every text a client receives; `RoomClientHubTest.cpp` plays whole hands of `DemoCardGame` with four clients, drops one inside and past the grace, and has the negative control on `cards-leaky`.
+
+`RoomClientSocketTest.cpp` is the same over the native transport and a real `RoomWebSocketServer` on port 0: hands with two and with four humans, the negative control, a connection aborted mid-hand (the client reconnects by itself), a client kept away past the grace (the server's clock is manual: a computer plays the seat, the client takes it back with its token), `Resume` from a new object, a server that stops (the client retries and gives up at a small `reconnectGiveUp`), `wss://`, a port nobody listens on, a server that admits only a web page's `Origin`, and the heartbeat `ping` answered by `pong`. The clients run on the real clock with a short backoff, so a test waits for the real reconnect (the server's computers use the server's clock: with a manual one a `computerDelay` above 0 never elapses, so only the test that needs the grace uses it). The suite is run 20 times in a row when it changes (`--gtest_repeat=20`).
