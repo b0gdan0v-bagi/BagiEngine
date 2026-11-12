@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Runs the libFuzzer executables of the fuzz preset (BagiFuzz<Name>, tests/Fuzz/CLAUDE.md) for a fixed time each.
 
-    python3 tools/fuzz/run_fuzzers.py --build-dir build/macos-fuzz --seconds 60 [--target BinaryDeserializer ...]
+    python3 tools/fuzz/run_fuzzers.py [--preset macos-fuzz-shipped] [--build-dir build/macos-fuzz] --seconds 60 [--target BinaryDeserializer ...]
 
 Each target runs over a fresh copy of its corpus folder (the work folder takes the inputs libFuzzer finds), then the corpus of the
 repository. A crash, a timeout or an out-of-memory input is saved as a file in <build-dir>/fuzz-artifacts/, never in the repository.
+The build folder is build/<preset> (--preset, default macos-fuzz); --build-dir names another folder and wins.
 Standard library only.
 
 Exit code: 0 no finding, 1 a finding or a fuzzer that could not run, 77 no BagiFuzz executable (skipped, like the tests that need a build).
@@ -26,6 +27,7 @@ MAX_LEN = 65536  # kMaxFuzzInputSize of tests/Fuzz/FuzzMutator.h
 RSS_LIMIT_MB = 2048
 TIMEOUT_SECONDS = 10  # one input
 LOG_TAIL_LINES = 12
+DEFAULT_PRESET = "macos-fuzz"
 
 # A row of FuzzTargetList() in tests/Fuzz/FuzzTargets.cpp: {"Name", &FuzzName, "corpus-folder", costWeight}
 TARGET_ROW = re.compile(r'\{\s*"(?P<name>\w+)"\s*,\s*&\w+\s*,\s*"(?P<folder>[\w.-]+)"\s*(?:,\s*\d+\s*)?\}')
@@ -129,18 +131,20 @@ def run_target(name: str, executable: Path, corpus_folder: str, args, root: Path
 
 def main(argv=None, runner=subprocess.run) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--build-dir", default="build/macos-fuzz", help="the build folder of the fuzz preset (default build/macos-fuzz)")
+    parser.add_argument("--preset", default=DEFAULT_PRESET, help="the fuzz preset (macos-fuzz, macos-fuzz-shipped): its build folder is build/<preset> (default macos-fuzz)")
+    parser.add_argument("--build-dir", default=None, help="the build folder, when it is not build/<preset>")
     parser.add_argument("--seconds", type=int, default=60, help="seconds per target (-max_total_time)")
     parser.add_argument("--target", action="append", default=[], metavar="NAME", help="only this target (BinaryDeserializer, ...); repeatable")
     parser.add_argument("--root", default=None, help="the repository root (default: the one of this script)")
     args = parser.parse_args(argv)
 
     root = Path(args.root) if args.root else repository_root()
+    args.build_dir = args.build_dir or str(Path("build") / args.preset)
     build_dir = Path(args.build_dir)
     executables = find_executables(build_dir)
     if not executables:
-        print(f"No {EXECUTABLE_PREFIX}<Name> executable in {build_dir / 'bin'}: cmake --preset macos-fuzz && "
-              f"cmake --build --preset macos-fuzz (.claude/rules/build-project.md, \"Fuzzing\")")
+        print(f"No {EXECUTABLE_PREFIX}<Name> executable in {build_dir / 'bin'}: cmake --preset {args.preset} && "
+              f"cmake --build --preset {args.preset} --target BagiFuzzers (.claude/rules/build-project.md, \"Fuzzing\")")
         return EXIT_SKIPPED
 
     table = read_target_table(root)

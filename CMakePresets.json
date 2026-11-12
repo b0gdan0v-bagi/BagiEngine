@@ -76,7 +76,7 @@
         {
             "name": "fuzz",
             "hidden": true,
-            "description": "Fuzzing (tests/Fuzz/CLAUDE.md): ASan + UBSan on all code and libFuzzer executables, asserts and expects ON (an assertion that input reaches is a finding). Homebrew LLVM, because Apple clang has no libFuzzer runtime; it has no default SDK (CMAKE_OSX_SYSROOT), links the system libc++ only with the -L / rpath below and does not search /usr/local/lib, where the Vulkan SDK puts libvulkan.dylib. Intel Homebrew is /usr/local/opt/llvm: change the paths in a CMakeUserPresets.json",
+            "description": "Fuzzing (tests/Fuzz/CLAUDE.md): ASan + UBSan on all code and libFuzzer executables, asserts and expects ON in macos-fuzz (an assertion that input reaches is a finding; macos-fuzz-shipped turns them OFF, as in a shipped build). Homebrew LLVM, because Apple clang has no libFuzzer runtime; it has no default SDK (CMAKE_OSX_SYSROOT), links the system libc++ only with the -L / rpath below and does not search /usr/local/lib, where the Vulkan SDK puts libvulkan.dylib. Intel Homebrew is /usr/local/opt/llvm: change the paths in a CMakeUserPresets.json",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_C_COMPILER": "/opt/homebrew/opt/llvm/bin/clang",
@@ -228,6 +228,16 @@
             "name": "macos-fuzz",
             "displayName": "macOS Homebrew LLVM fuzzing (ASan + UBSan, libFuzzer executables)",
             "inherits": ["ninja", "host-macos", "fuzz"]
+        },
+        {
+            "name": "macos-fuzz-shipped",
+            "displayName": "macOS Homebrew LLVM fuzzing with the flags of a shipped build (Release, asserts and expects OFF)",
+            "inherits": ["ninja", "host-macos", "fuzz"],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "ENGINE_ENABLE_ASSERTS": "OFF",
+                "ENGINE_ENABLE_EXPECTS": "OFF"
+            }
         },
         {
             "name": "linux-server-release",
@@ -385,6 +395,12 @@
             "configurePreset": "macos-fuzz"
         },
         {
+            "name": "macos-fuzz-shipped",
+            "displayName": "macOS Homebrew LLVM fuzzing with the flags of a shipped build (Release, asserts and expects OFF)",
+            "inherits": "build-macos",
+            "configurePreset": "macos-fuzz-shipped"
+        },
+        {
             "name": "macos-rmlui-debug",
             "displayName": "macOS Clang Debug with RmlUi",
             "inherits": "build-macos",
@@ -540,6 +556,12 @@
             "displayName": "macOS Homebrew LLVM fuzzing (ASan + UBSan, libFuzzer executables)",
             "inherits": "test-macos",
             "configurePreset": "macos-fuzz"
+        },
+        {
+            "name": "macos-fuzz-shipped",
+            "displayName": "macOS Homebrew LLVM fuzzing with the flags of a shipped build (Release, asserts and expects OFF)",
+            "inherits": "test-macos",
+            "configurePreset": "macos-fuzz-shipped"
         },
         {
             "name": "macos-profile",

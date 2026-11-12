@@ -114,6 +114,37 @@ def test_the_work_folder_starts_fresh_every_time(layout):
     assert not stale.exists()
 
 
+def test_the_preset_names_the_build_folder_and_the_artifacts_folder(layout, tmp_path, monkeypatch, capsys):
+    root, _ = layout
+    monkeypatch.chdir(tmp_path)
+    shipped = tmp_path / "build" / "macos-fuzz-shipped"
+    (shipped / "bin").mkdir(parents=True)
+    make_executable(shipped, "BinaryDeserializer")
+    runner = fake_runner(returncode=77, artifact="crash-s")
+    assert run_fuzzers.main(["--preset", "macos-fuzz-shipped", "--root", str(root)], runner=runner) == run_fuzzers.EXIT_FINDING
+    command = runner.calls[0]
+    assert command[0] == str(Path("build") / "macos-fuzz-shipped" / "bin" / "BagiFuzzBinaryDeserializer")
+    assert (shipped / "fuzz-artifacts" / "BinaryDeserializer-crash-s").exists()
+    assert (shipped / "fuzz-work" / "BinaryDeserializer").is_dir()
+
+
+def test_the_default_preset_is_macos_fuzz_and_a_missing_build_names_the_preset(layout, tmp_path, monkeypatch, capsys):
+    root, _ = layout
+    monkeypatch.chdir(tmp_path)
+    assert run_fuzzers.main(["--root", str(root)]) == run_fuzzers.EXIT_SKIPPED
+    assert "build/macos-fuzz/bin" in capsys.readouterr().out.replace("\\", "/")
+    assert run_fuzzers.main(["--preset", "macos-fuzz-shipped", "--root", str(root)]) == run_fuzzers.EXIT_SKIPPED
+    assert "cmake --preset macos-fuzz-shipped" in capsys.readouterr().out
+
+
+def test_build_dir_wins_over_the_preset(layout):
+    _, build = layout
+    make_executable(build, "BinaryDeserializer")
+    runner = fake_runner()
+    assert run(layout, runner, "--preset", "macos-fuzz-shipped") == 0
+    assert Path(runner.calls[0][0]).parent == build / "bin"
+
+
 def test_an_artifact_is_a_finding_with_exit_1_and_the_hint(layout, capsys):
     _, build = layout
     make_executable(build, "BinaryDeserializer")
