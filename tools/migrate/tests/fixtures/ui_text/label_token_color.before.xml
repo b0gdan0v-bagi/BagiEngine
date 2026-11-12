@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- A theme token is a colour as written: it moves as it stands. The empty text and a text with quotes are written as the file has them. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UILabel" name="Themed" width="200" height="30" text="{#hud.score}: {score}" textColor="@text" />
+        <element type="UILabel" name="Blank" width="200" height="30" text="" textColor="@accent" />
+        <element type="UILabel" name="Quoted" width="200" height="30" text='Say "hi"' />
+      </elements>
+    </component>
+  </components>
+</node>

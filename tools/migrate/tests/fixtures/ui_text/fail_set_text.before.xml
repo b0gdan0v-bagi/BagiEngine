@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- Failure: a variant sets a text on a label; after the move the element has no `text`. A set of the layout (x, width, fontSize) would have been fine. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UILabel" name="Title" x="10" y="10" width="200" height="30" text="Title" />
+      </elements>
+      <variants>
+        <variant when="orientation:portrait">
+          <overrides>
+            <set element="Title" x="0" width="90%" fontSize="30" text="Short" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

@@ -12,7 +12,6 @@ from conftest import TESTS_DIR, TOOL_DIR
 
 FIXTURES = TESTS_DIR / "fixtures" / "ui_value"
 BUTTON_FIXTURES = TESTS_DIR / "fixtures" / "ui_button"
-GROUP_FIXTURES = TESTS_DIR / "fixtures" / "ui_group"
 
 
 def load(file: str, name: str):
@@ -193,7 +192,7 @@ def test_a_file_at_version_1_runs_steps_1_2_and_3_in_order(tmp_path, capsys):
     out = capsys.readouterr().out
     assert out.index("1 to 2 (ui-button-to-components)") < out.index("2 to 3 (ui-group-children-to-components)") < out.index("3 to 4 (ui-toggle-slider-to-components): 1 element")
     text = (nodes / "One.xml").read_text(encoding="utf-8")
-    assert ' contentVersion="4"' in text and not xmltext.parse(text).find_all(lambda e: e.get("type") in ("UIToggle", "UIButton"))
+    assert ' contentVersion="5"' in text and not xmltext.parse(text).find_all(lambda e: e.get("type") in ("UIToggle", "UIButton"))
     assert migrate.main([str(game), "--check"]) == 0
 
 
@@ -206,17 +205,17 @@ def test_the_tool_runs_step_3_only_on_a_file_stamped_3_and_a_second_run_finds_no
     assert migrate.main([str(game)]) == 0
     out = capsys.readouterr().out
     assert "config/nodes/Three.xml: 3 to 4 (ui-toggle-slider-to-components): 2 elements" in out and "to 3 (" not in out
-    assert ' contentVersion="4"' in target.read_text(encoding="utf-8")
+    assert ' contentVersion="5"' in target.read_text(encoding="utf-8")  # step 4 follows, with nothing to rewrite here
     assert migrate.main([str(game)]) == 0
     assert "Three.xml" not in capsys.readouterr().out
 
 
-def test_a_file_at_3_with_no_toggle_or_slider_only_gets_the_stamp(tmp_path):
+def test_a_file_at_3_with_no_toggle_or_slider_only_gets_the_stamp(tmp_path):  # and none of what step 4 rewrites either
     game = tmp_path / "game"
     target = game / "config" / "nodes" / "Plain.xml"
     target.parent.mkdir(parents=True)
-    source = (GROUP_FIXTURES / "already_composed.after.xml").read_text(encoding="utf-8")
+    source = (FIXTURES / "already_composed.after.xml").read_text(encoding="utf-8")
     stamped = source.replace('layer="5">', 'layer="5" contentVersion="3">', 1) if 'contentVersion="3"' not in source else source
     target.write_text(stamped, encoding="utf-8")
     assert migrate.main([str(game)]) == 0
-    assert target.read_text(encoding="utf-8") == stamped.replace('contentVersion="3"', 'contentVersion="4"', 1)
+    assert target.read_text(encoding="utf-8") == stamped.replace('contentVersion="3"', 'contentVersion="5"', 1)

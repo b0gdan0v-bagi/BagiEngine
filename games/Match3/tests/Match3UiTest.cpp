@@ -6,7 +6,6 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIInputClicker.h>
-#include <BECore/UI/UILabel.h>
 #include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -321,8 +320,8 @@ namespace BECore::Match3::Tests {
         Activate("Match3Scene");
         Draw();
         auto canvas = Canvas("Match3Scene", "Hud");
-        auto* score = canvas->GetRoot().FindByName(PoolString::Intern("Score"))->Cast<UILabel>();
-        auto* seed = canvas->GetRoot().FindByName(PoolString::Intern("Seed"))->Cast<UILabel>();
+        auto* score = canvas->GetRoot().FindByName(PoolString::Intern("Score"))->GetComponent<UITextComponent>();
+        auto* seed = canvas->GetRoot().FindByName(PoolString::Intern("Seed"))->GetComponent<UITextComponent>();
         ASSERT_NE(score, nullptr);
         ASSERT_NE(seed, nullptr);
         EXPECT_EQ(score->GetDisplayText(), "Score: 0");
@@ -449,7 +448,7 @@ namespace BECore::Match3::Tests {
 
         Draw();
         EXPECT_TRUE(Board().IsAnimating()) << "a draw of the same version keeps the run";
-        auto score = Canvas("Match3Scene", "Hud")->GetRoot().FindByName(PoolString::Intern("Score"))->Cast<UILabel>();
+        auto score = Canvas("Match3Scene", "Hud")->GetRoot().FindByName(PoolString::Intern("Score"))->GetComponent<UITextComponent>();
         const eastl::string expected = Format("Score: {}", elsewhere.GetScore());
         EXPECT_EQ(score->GetDisplayText(), eastl::string_view(expected.data(), expected.size())) << "the score shows at once";
     }

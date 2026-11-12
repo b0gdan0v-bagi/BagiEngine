@@ -158,4 +158,4 @@ def test_the_tool_runs_step_2_only_on_a_file_stamped_2_and_both_on_a_file_stampe
     assert "config/nodes/Two.xml: 2 to 3 (ui-group-children-to-components): 5 elements" in out
     assert "config/nodes/One.xml: 1 to 2 (ui-button-to-components)" in out and "config/nodes/One.xml: 2 to 3 (ui-group-children-to-components): 4 elements" in out
     assert migrate.main([str(game), "--check"]) == 0
-    assert ' contentVersion="4"' in (nodes / "Two.xml").read_text(encoding="utf-8")  # step 3 follows, with nothing to rewrite here
+    assert ' contentVersion="5"' in (nodes / "Two.xml").read_text(encoding="utf-8")  # steps 3 and 4 follow, with nothing to rewrite here

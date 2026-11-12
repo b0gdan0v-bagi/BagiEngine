@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!-- A picture: sprite, tint and stretch move to a UIImageComponent; size and the fill colour stay. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIElement" name="Star" x="4" y="4" width="24" height="24" color="0,0,0,40">
+          <components>
+            <component type="UIImageComponent" sprite="icons.star" tint="255,200,0,255" stretch="true"/>
+          </components>
+        </element>
+        <element type="UIElement" name="Slot" visible="false" width="18" height="24">
+          <components>
+            <component type="UIImageComponent"/>
+          </components>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

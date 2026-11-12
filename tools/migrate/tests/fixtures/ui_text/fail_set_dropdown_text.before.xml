@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- Failure: a variant sets the font size (fine) and the overflow (moved) of a dropdown. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIDropdown" name="Level" bind="level" action="SetLevel" text="Pick one" width="240" height="56" />
+      </elements>
+      <variants>
+        <variant when="orientation:portrait">
+          <overrides>
+            <set element="Level" fontSize="18" overflow="AutoFit" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

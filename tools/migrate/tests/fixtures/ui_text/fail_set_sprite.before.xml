@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- Failure: a variant sets the sprite of a picture. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIImage" name="Star" width="24" height="24" sprite="icons.star" />
+      </elements>
+      <variants>
+        <variant when="orientation:portrait">
+          <overrides>
+            <set element="Star" sprite="icons.small" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>
