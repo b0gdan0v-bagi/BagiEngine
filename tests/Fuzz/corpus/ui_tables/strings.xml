@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<UIStrings default="en">
+    <language id="en">
+        <string key="lang.en" text="English"/>
+        <string key="lang.ru" text="Русский"/>
+        <string key="menu.start" text="Start"/>
+        <string key="menu.title" text="{#menu.start}: {score}"/>
+        <string key="settings.title" text="Settings"/>
+    </language>
+    <language id="ru">
+        <string key="lang.en" text="English"/>
+        <string key="lang.ru" text="Русский"/>
+        <string key="menu.start" text="Начать"/>
+        <string key="menu.title" text="{#menu.start}: {score}"/>
+        <string key="settings.title" text="Настройки"/>
+    </language>
+</UIStrings>

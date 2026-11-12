@@ -1,0 +1,16 @@
+<UIStrings default="de">
+    <language id="en">
+        <string key="a" text="one"/>
+        <string key="a" text="two"/>
+        <string key="" text="empty key"/>
+        <string key="b}c" text="brace"/>
+        <string text="no key"/>
+        <string key="no.text"/>
+        <string key="{#a}" text="{#a} {#missing} {#} {{#a}} {#a"/>
+        <other/>
+    </language>
+    <language id="en"><string key="a" text="third"/><string key="c" text="again"/></language>
+    <language><string key="x" text="no id"/></language>
+    <language id="empty"/>
+    <country id="en"/>
+</UIStrings>

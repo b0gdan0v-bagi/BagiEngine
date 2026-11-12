@@ -25,6 +25,9 @@ namespace BECore::Fuzz {
     /// The seeds of room_protocol, room_hub and control_request (FuzzRoomSeeds.cpp); MakeGeneratedSeeds adds them to its own
     void AddRoomAndControlSeeds(eastl::vector<FuzzSeedFile>& seeds);
 
+    /// The seeds of web_ui and ui_tables (FuzzUiSeeds.cpp); MakeGeneratedSeeds adds them to its own
+    void AddUiSeeds(eastl::vector<FuzzSeedFile>& seeds);
+
     /// Writes every generated seed under @p corpusRoot (<corpusRoot>/<folder>/<name>); returns false if a file cannot be written
     bool WriteGeneratedSeeds(const std::filesystem::path& corpusRoot);
 

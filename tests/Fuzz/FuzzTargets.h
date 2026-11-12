@@ -69,6 +69,12 @@ namespace BECore::Fuzz {
     /// ControlService::Post of the bytes with the builtins and the game methods registered: one answer per request, with the request's id
     void FuzzControlRequest(const uint8_t* data, size_t size);
 
+    /// The web-style UI front end: `html, NUL, css` through UIWebCompiler::Compile (twice), the report judged, the compiled XML read by XmlDeserializer and UIScreenContent
+    void FuzzWebUi(const uint8_t* data, size_t size);
+
+    /// UIStrings::LoadFromXml and UIThemes::LoadFromXml over an XML text (the root picks the table): the complaints, what the table holds, loading twice
+    void FuzzUiTables(const uint8_t* data, size_t size);
+
     /// A save file as the seeds make it: the bytes SaveGameService::Save writes for the probe state under the given game id and schema version
     eastl::vector<uint8_t> MakeSaveFileBytes(eastl::string_view game, uint32_t version);
 
