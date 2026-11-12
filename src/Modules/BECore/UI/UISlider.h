@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/UI/UIElement.h>
+#include <BECore/UI/UISliderComponent.h>
 
 namespace BECore {
 
@@ -46,17 +47,11 @@ namespace BECore {
         BE_REFLECT_FIELD UIColor thumbColor;                           ///< the thumb; transparent is a near white
         BE_REFLECT_FIELD UIPartShape partShape = UIPartShape::Square;  ///< `Round`: a pill track and fill and a round thumb; `Square` (the default) the plain rectangles
 
-        static constexpr float kTrackHeight = 6.0f;                 ///< the track is this high in canvas units (less for a slider lower than that), centered
-        static constexpr Color kThumbFallback{240, 240, 240, 255};  ///< the thumb when `thumbColor` is left transparent
+        static constexpr float kTrackHeight = UISliderComponent::kTrackHeight;      ///< the track is this high in canvas units (less for a slider lower than that), centered
+        static constexpr Color kThumbFallback = UISliderComponent::kThumbFallback;  ///< the thumb when `thumbColor` is left transparent
 
-        /// Where the parts are in a rect for a value at @p fraction (0..1). Pure geometry, so a test and the drawing use the same numbers
-        struct Parts {
-            Rect track;                ///< the whole track
-            Rect filled;               ///< the part of it before the thumb's centre
-            Rect thumb;                ///< a square of the height of the rect (the width when that is smaller), inside the rect
-            float travelStart = 0.0f;  ///< the x of the thumb's centre at the minimum
-            float travelEnd = 0.0f;    ///< ... and at the maximum
-        };
+        /// Where the parts are in a rect for a value at @p fraction (0..1). Pure geometry, so a test and the drawing use the same numbers (`UISliderComponent::Parts`)
+        using Parts = UISliderComponent::Parts;
         [[nodiscard]] static Parts GetParts(const Rect& area, float fraction);
 
         /// The variable as a number in `minValue..maxValue`, read now: the minimum when it is unset or malformed

@@ -10,6 +10,7 @@
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UILayoutValidator.h>
 #include <BECore/UI/UIPreviewOverlay.h>
+#include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UISwitchComponent.h>
 #include <BECore/UI/UIToggleComponent.h>
 #include <Common/EngineEnvironment.h>
@@ -783,6 +784,42 @@ namespace BECore::Tests {
         const auto toggle = New<UIToggleComponent>();
         EXPECT_TRUE(toggle->MakesInteractive());
         EXPECT_FALSE(New<UISwitchComponent>()->MakesInteractive());
+    }
+
+    TEST_F(UIComponentTest, TheSliderComponentComesFromAFileAndSavesBack) {
+        constexpr const char* xml =
+            R"(<root><element type="UIElement" name="Volume"><components><component type="UIInputClicker" stateLook="false"/><component type="UISliderComponent" bind="volume" action="SetVolume" minValue="-1" maxValue="3" step="0.5" trackColor="1,2,3,255" fillColor="4,5,6,255" thumbColor="7,8,9,255" partShape="Round"/></components></element></root>)";
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(xml));
+        auto loaded = New<UIElement>();
+        ASSERT_TRUE(deserializer.BeginObject("element"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+
+        const UISliderComponent* slider = loaded->GetComponent<UISliderComponent>();
+        ASSERT_NE(slider, nullptr);
+        EXPECT_EQ(slider->bind, PoolString::Intern("volume"));
+        EXPECT_EQ(slider->action, PoolString::Intern("SetVolume"));
+        EXPECT_FLOAT_EQ(slider->minValue, -1.0f);
+        EXPECT_FLOAT_EQ(slider->maxValue, 3.0f);
+        EXPECT_FLOAT_EQ(slider->step, 0.5f);
+        EXPECT_TRUE(ColorsEqual(slider->trackColor, Color(1, 2, 3, 255)));
+        EXPECT_TRUE(ColorsEqual(slider->fillColor, Color(4, 5, 6, 255)));
+        EXPECT_TRUE(ColorsEqual(slider->thumbColor, Color(7, 8, 9, 255)));
+        EXPECT_EQ(slider->partShape, UIPartShape::Round);
+        EXPECT_TRUE(loaded->IsInteractive());
+        EXPECT_FALSE(loaded->GivesStateLook());
+
+        const eastl::string saved = ElementToXml(*loaded);
+        XmlDeserializer again;
+        ASSERT_TRUE(again.LoadFromString(eastl::string_view(saved.data(), saved.size())));
+        auto reloaded = New<UIElement>();
+        ASSERT_TRUE(again.BeginObject("element"));
+        reloaded->Deserialize(again);
+        again.EndObject();
+        EXPECT_FALSE(again.HasErrors());
+        EXPECT_STREQ(ElementToXml(*reloaded).c_str(), saved.c_str());
     }
 
 }  // namespace BECore::Tests
