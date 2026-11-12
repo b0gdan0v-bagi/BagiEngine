@@ -1,0 +1,20 @@
+# The runtime image of a room server built beforehand (tools/rooms/build_and_deploy.py): it compiles nothing. The script stages this file as
+# `Dockerfile` next to app/, which holds the executable `room-server` and any shared library the build stage of tools/rooms/Dockerfile put
+# in /out. Keep everything from FROM on equal to the last stage of tools/rooms/Dockerfile (a test compares the settings).
+
+FROM debian:trixie-slim
+
+# libstdc++6: the only library the static-SDL server needs besides libc
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY app/ /app/
+
+# Behind the platform's proxy every client has the proxy's address, so a per-address limit would cut everyone off together
+ENV BAGI_ROOMS_MAX_PER_ADDRESS=0 BAGI_ROOMS_BIND=any
+EXPOSE 8080
+USER nobody
+# Exec form and no CMD: the server is PID 1 and gets SIGTERM itself (it drains its connections and exits 0). Flags go after the image name
+ENTRYPOINT ["/app/room-server"]

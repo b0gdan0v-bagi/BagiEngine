@@ -38,6 +38,21 @@ python3 -m unittest discover tools/rooms/tests            # the unit test: a fak
 
 It runs the container with `PORT=9090`, `BAGI_ROOMS_TEST_GAMES=1`, `BAGI_ROOMS_ORIGINS` and `BAGI_ROOMS_SHUTDOWN_GRACE_MS`, publishes the port on a free one of 127.0.0.1, and checks: the listening line for `PORT` and the settings line in `docker logs`; `/healthz`; the Origin rules; a `cards` room (`joined`); `docker stop` ends with exit code 0 and the connected client is closed with 1001. Exit codes as `smoke.py` (77: no `docker` or no daemon). The container is always removed, the image stays. It reuses `Human` and `http_get` of `smoke.py`; every `docker` call goes through `run_docker`, which the unit test replaces.
 
+## The deploy without a build on Railway
+
+`build_and_deploy.py` builds the server on this machine and uploads only the binary, so Railway compiles nothing (the build from source takes minutes and the upload of a whole checkout with its submodules is large). From the engine root or a game root (`--source-dir`, `--server-target`, `--preset` as for the Dockerfile):
+
+```bash
+python3 tools/rooms/build_and_deploy.py --dry-run                     # print the commands, run nothing
+python3 tools/rooms/build_and_deploy.py --deploy --service bagi-rooms # build, stage build/rooms-deploy/, railway up
+python3 engine/tools/rooms/build_and_deploy.py --server-target BagiMahjongServer --deploy --service <name>   # from a game
+python3 -m unittest discover tools/rooms/tests                         # the unit test: a fake runner, no docker, no railway
+```
+
+It runs the `build` stage of `Dockerfile` (`docker build --platform linux/amd64 --target build`), takes `/out` out of it with `docker create` / `cp` / `rm`, and stages `app/` (the executable `room-server` and its shared libraries) beside `Dockerfile.prebuilt` copied as `Dockerfile` (debian-slim, `libstdc++6`); `railway up <stage> --path-as-root --service <name> --detach` uploads that folder only (a few MB). `linux/amd64` is Railway's architecture: on an arm machine the compiler runs in emulation and is slow. Its model is `tools/web/build_and_deploy.py`; it reads and writes no secret (the Railway CLI has its own login or `RAILWAY_TOKEN`). **Manual:** the real build and deploy are not run by any test.
+
+`Dockerfile.prebuilt` and the last stage of `Dockerfile` run the same binary the same way: change one, change the other (a test compares `WORKDIR`, `ENV`, `EXPOSE`, `USER`, `ENTRYPOINT`; `libstdc++6` and the base image stay equal by hand). Both `Dockerfile` stage names (`build`) and `/out/room-server` are a contract with the script.
+
 ## The judge
 
 A card id is `c<digit>_<digit>`, a whole token. A message to the client of seat S may name `c<S>_*` and the ids in its own `view.table`; any other id is a leak. Every text the client receives goes through it. The rule is also in `tests/BECore/Rooms/WireJudge.h`: **change both together**. The `cards-leaky` hand is the negative control: the smoke test fails when the judge finds nothing there. Binary and masked frames are not checked here (the gtest scenarios do).

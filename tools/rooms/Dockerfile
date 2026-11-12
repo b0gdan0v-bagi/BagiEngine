@@ -31,6 +31,7 @@ RUN mkdir /out \
 
 FROM debian:trixie-slim
 
+# Dockerfile.prebuilt (tools/rooms/build_and_deploy.py) is this stage without the build: change both together
 # libstdc++6: the only library the static-SDL server needs besides libc
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libstdc++6 \
