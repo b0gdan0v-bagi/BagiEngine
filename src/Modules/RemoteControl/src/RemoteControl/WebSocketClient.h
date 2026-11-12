@@ -1,7 +1,7 @@
 #pragma once
 
 #include <RemoteControl/Socket.h>
-#include <RemoteControl/Tls/TlsStream.h>
+#include <RemoteControl/Tls/ClientStream.h>
 #include <RemoteControl/WebSocketClientHandshake.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <condition_variable>
@@ -18,7 +18,7 @@ namespace BECore {
         /// How long the TCP connect may take (the name lookup before it is not bounded)
         std::chrono::milliseconds connectTimeout{10000};
 
-        /// How long the server has to answer the opening request, counted from the connect
+        /// How long the opening may take, counted from the connect: with `wss://` the TLS handshake and the server's answer to the opening request share it
         std::chrono::milliseconds handshakeTimeout{10000};
 
         /// After Close() or after answering the server's close: how long to wait for the other side before the connection is aborted
@@ -43,6 +43,9 @@ namespace BECore {
         /// The names of the threads in the profiler: `<threadName> reader` and `writer`, sorted from `threadOrder`
         eastl::string threadName = "WebSocket client";
         uint32_t threadOrder = 220;
+
+        /// `wss://`: the extra trust anchors and, for a test, the backend (empty: this platform's)
+        TlsClientOptions tls;
     };
 
     CORE_ENUM(WebSocketClientEventKind, uint8_t, Opened, Text, Closed)
@@ -61,7 +64,7 @@ namespace BECore {
     CORE_ENUM(WebSocketClientState, uint8_t, Idle, Connecting, Open, Closing, Ended)
 
     /**
-     * @brief A WebSocket client over a plain TCP socket (`ws://`): the transport of a game that talks to a server.
+     * @brief A WebSocket client over a plain TCP socket (`ws://`) or a TLS stream (`wss://`, Tls/): the transport of a game that talks to a server.
      *
      * Open() starts a reader thread that connects, does the opening handshake and then reads; a writer thread sends from a
      * queue, so SendText() never waits for the network. **Nothing is called back from these threads**: everything that
@@ -76,7 +79,8 @@ namespace BECore {
      *
      * The client masks every frame with a fresh key, answers pings, answers a close with a close, and closes the connection
      * with 1002 on a protocol error (a masked frame of the server included), 1009 on a message over the limit, 1003 on a
-     * binary message. `wss://` is refused (kWebSocketTlsUnsupported). Only the thread that calls Open(), SendText(), Close(),
+     * binary message. `wss://` goes through ITlsStream (the certificate is always checked: Tls/CLAUDE.md); a failed TLS connect is a Closed 1006 whose
+     * reason says what failed, and on a platform without a backend Open() refuses it at once (kTlsUnsupported). Only the thread that calls Open(), SendText(), Close(),
      * Abort() and PollEvent() may do so (one thread, the owner's); IsOpen() and GetBytesReceived() are safe from any.
      */
     class WebSocketClient {
@@ -88,7 +92,7 @@ namespace BECore {
         WebSocketClient& operator=(const WebSocketClient&) = delete;
 
         /// Starts connecting to @p url. The error is a message for the log and means no thread was started and no Closed will
-        /// come: a URL that does not parse, `wss://` (starts with kWebSocketTlsUnsupported), a previous connection that has not
+        /// come: a URL that does not parse, `wss://` on a platform without a TLS backend (starts with kTlsUnsupported), a previous connection that has not
         /// ended yet. Events of a previous connection that were not taken are dropped
         [[nodiscard]] std::expected<void, eastl::string> Open(eastl::string_view url, WebSocketClientSettings settings = {});
 
@@ -128,6 +132,8 @@ namespace BECore {
         void SetEndLocked(uint16_t code, eastl::string_view reason);
         void SetEnd(uint16_t code, eastl::string_view reason);
         void PushEvent(WebSocketClientEvent event);
+        /// @p what, with the reason the stream gives (a TLS failure) after a colon when it has one
+        eastl::string WithStreamError(eastl::string_view what) const;
 
         void ReaderMain();
         bool Connect();
@@ -144,10 +150,11 @@ namespace BECore {
         std::thread _reader;               // started by Open(), joined by the next Open() or the destructor
         std::thread _writer;               // started and joined by the reader
         std::random_device _random;        // the reader draws the handshake key, then the writer the masks: never both at once
-        std::atomic<bool> _cancel{false};  // wakes Socket::Connect()
+        std::atomic<bool> _cancel{false};  // wakes the connect and the TLS handshake
         std::atomic<uint64_t> _bytesReceived{0};
 
-        Socket _socket;  // published by the reader under _mutex once connected; closed only after the threads were joined
+        ClientStream _stream;                                      // published by the reader under _mutex once connected; closed only after the threads were joined
+        std::chrono::steady_clock::time_point _handshakeDeadline;  // the reader's: the end of the opening (the TLS handshake and the answer to the request)
 
         mutable std::mutex _mutex;            // guards everything below
         std::condition_variable _wake;        // the writer: a frame was queued, the connection was aborted, the reader ended

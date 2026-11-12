@@ -11,8 +11,9 @@ namespace BECore {
     /**
      * @brief The desktop transport: a WebSocketClient (RemoteControl) behind IRoomTransport.
      *
-     * `ws://` only; `wss://` is refused by Open() with an error that starts with `tls_unsupported` (the browser build is the way to
-     * `wss://` today). No `Origin` header: a program is not a page. The client's threads call nothing back; PollEvent() copies what
+     * `ws://`, and `wss://` through the system TLS (RemoteControl `Tls/`: the certificate and the host name are always checked, a
+     * failure arrives as a Closed event with the reason). On a platform without a TLS backend Open() refuses `wss://` with an error that
+     * starts with `tls_unsupported`. No `Origin` header: a program is not a page. The client's threads call nothing back; PollEvent() copies what
      * they queued, so the events arrive on the owner's thread. One object serves one connection.
      */
     class NativeRoomTransport final : public IRoomTransport {

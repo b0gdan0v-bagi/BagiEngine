@@ -43,8 +43,8 @@ namespace BECore {
         if (!parsed) {
             return std::unexpected(parsed.error());
         }
-        if (parsed->secure) {
-            return std::unexpected(Format("{}: wss:// needs TLS, which the desktop client does not have (use ws://, or the browser build for wss://)", kWebSocketTlsUnsupported));
+        if (parsed->secure && !settings.tls.factory && !IsTlsSupported()) {
+            return std::unexpected(Format("{}: wss:// needs TLS, and this platform has no TLS backend (use ws://, or the browser build for wss://)", kTlsUnsupported));
         }
 
         if (_reader.joinable()) {
@@ -56,7 +56,7 @@ namespace BECore {
             }
             _reader.join();  // the reader only has to leave its function; the writer was joined before the state became Ended
         }
-        _socket.Close();
+        _stream.Close();
 
         _settings = std::move(settings);
         _url = std::move(*parsed);
@@ -158,13 +158,18 @@ namespace BECore {
             _aborted = true;
             _outbox.clear();
             _outboxBytes = 0;
-            if (_socket.IsValid()) {
-                _socket.ShutdownBoth();  // wakes the reader and the writer where they wait on the socket
+            if (_stream.IsValid()) {
+                _stream.ShutdownBoth();  // wakes the reader and the writer where they wait on the stream
             }
         }
         _cancel = true;  // wakes a connect in progress
         _wake.notify_all();
         _inboxSpace.notify_all();
+    }
+
+    eastl::string WebSocketClient::WithStreamError(eastl::string_view what) const {
+        const eastl::string detail = _stream.GetLastError();
+        return detail.empty() ? eastl::string(what.data(), what.size()) : Format("{}: {}", what, detail);
     }
 
     void WebSocketClient::SetEndLocked(uint16_t code, eastl::string_view reason) {
@@ -227,15 +232,22 @@ namespace BECore {
     }
 
     bool WebSocketClient::Connect() {
-        auto connected = Socket::Connect(_url.host, _url.port, _settings.connectTimeout, &_cancel);
+        // A TLS stream connects and does its handshake inside Connect(), so the one deadline of the opening starts before the TCP connect
+        // (counted from the connect, as handshakeTimeout says); a plain socket's starts when it is connected
+        const auto started = std::chrono::steady_clock::now();
+        _handshakeDeadline = started + _settings.handshakeTimeout;
+        auto connected = ClientStream::Connect(_url, _settings.tls, _settings.connectTimeout, _handshakeDeadline, &_cancel);
         if (!connected) {
             SetEnd(WebSocketCloseCode::kAbnormalClosure, connected.error());
             return false;
         }
+        if (!_url.secure) {
+            _handshakeDeadline = std::chrono::steady_clock::now() + _settings.handshakeTimeout;
+        }
         std::lock_guard<std::mutex> lock(_mutex);
-        _socket = std::move(*connected);
+        _stream = std::move(*connected);
         if (_aborted) {
-            _socket.ShutdownBoth();  // Abort() came while connecting: the handshake then ends at once
+            _stream.ShutdownBoth();  // Abort() came while connecting: the handshake then ends at once
             return false;
         }
         return true;
@@ -244,13 +256,14 @@ namespace BECore {
     bool WebSocketClient::Handshake(eastl::vector<uint8_t>& pendingBytes) {
         const eastl::string key = GenerateClientKey(_random);
         const eastl::string request = BuildClientHandshakeRequest(_url, key, _settings.origin);
-        if (!_socket.SendAll(AsBytes(request))) {
-            SetEnd(WebSocketCloseCode::kAbnormalClosure, "sending the opening request failed");
+        if (!_stream.SendAll(AsBytes(request))) {
+            SetEnd(WebSocketCloseCode::kAbnormalClosure, WithStreamError("sending the opening request failed"));
             return false;
         }
 
-        // One deadline for the whole answer, as on the server's side: a timeout per Receive() would let a server that sends a byte now and then hold us
-        const auto deadline = std::chrono::steady_clock::now() + _settings.handshakeTimeout;
+        // One deadline for the whole answer, as on the server's side: a timeout per Receive() would let a server that sends a byte now and then hold us.
+        // With TLS it is the deadline of the TLS handshake as well
+        const auto deadline = _handshakeDeadline;
         eastl::vector<uint8_t> received;
         std::array<uint8_t, kHandshakeChunkSize> chunk;
         size_t headSize = 0;
@@ -261,8 +274,8 @@ namespace BECore {
                 SetEnd(WebSocketCloseCode::kAbnormalClosure, Format("the server did not answer the opening request within {} ms", _settings.handshakeTimeout.count()));
                 return false;
             }
-            _socket.SetReceiveTimeout(left);
-            const auto count = _socket.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+            _stream.SetReceiveTimeout(left);
+            const auto count = _stream.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
             if (!count) {
                 switch (count.error()) {
                     case SocketError::TimedOut:
@@ -272,7 +285,7 @@ namespace BECore {
                         SetEnd(WebSocketCloseCode::kAbnormalClosure, "the connection was closed during the opening handshake");
                         break;
                     case SocketError::Failed:
-                        SetEnd(WebSocketCloseCode::kAbnormalClosure, "the connection failed during the opening handshake");
+                        SetEnd(WebSocketCloseCode::kAbnormalClosure, WithStreamError("the connection failed during the opening handshake"));
                         break;
                 }
                 return false;
@@ -298,7 +311,7 @@ namespace BECore {
             SetEnd(WebSocketCloseCode::kAbnormalClosure, accepted.error());
             return false;
         }
-        _socket.SetReceiveTimeout(std::chrono::milliseconds::zero());
+        _stream.SetReceiveTimeout(std::chrono::milliseconds::zero());
         pendingBytes.assign(received.begin() + static_cast<ptrdiff_t>(headSize), received.end());
 
         {
@@ -338,10 +351,11 @@ namespace BECore {
                 }
             }
 
-            const auto received = _socket.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
+            const auto received = _stream.Receive(eastl::span<uint8_t>(chunk.data(), chunk.size()));
             if (!received) {
                 // An Abort() has set its reason before it shut the socket down, and the first reason stays
-                SetEnd(WebSocketCloseCode::kAbnormalClosure, received.error() == SocketError::Closed ? "the server closed the connection without a close frame" : "the connection failed");
+                SetEnd(WebSocketCloseCode::kAbnormalClosure,
+                       received.error() == SocketError::Closed ? eastl::string("the server closed the connection without a close frame") : WithStreamError("the connection failed"));
                 return;
             }
             _bytesReceived.fetch_add(*received, std::memory_order_relaxed);
@@ -412,8 +426,8 @@ namespace BECore {
                 mask[i] = static_cast<uint8_t>((random >> (kBitsPerByte * i)) & kByteMask);
             }
             const eastl::vector<uint8_t> bytes = EncodeFrame(frame.opcode, eastl::span<const uint8_t>(frame.payload.data(), frame.payload.size()), mask);
-            if (!_socket.SendAll(eastl::span<const uint8_t>(bytes.data(), bytes.size()))) {
-                AbortConnection(WebSocketCloseCode::kAbnormalClosure, "sending to the server failed");
+            if (!_stream.SendAll(eastl::span<const uint8_t>(bytes.data(), bytes.size()))) {
+                AbortConnection(WebSocketCloseCode::kAbnormalClosure, WithStreamError("sending to the server failed"));
                 break;
             }
             if (frame.isClose) {
@@ -426,7 +440,7 @@ namespace BECore {
                 if (!answered) {
                     AbortConnection(WebSocketCloseCode::kAbnormalClosure, "the server did not answer the close frame");
                 }
-                _socket.ShutdownBoth();  // the server sees the end of the stream after the close frame
+                _stream.ShutdownBoth();  // the server sees the end of the stream after the close frame
                 break;
             }
         }

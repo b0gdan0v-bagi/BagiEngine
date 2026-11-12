@@ -1,3 +1,4 @@
+#include "Tls/FakeTlsStream.h"
 #include "WebSocketTestClient.h"
 
 #include <RemoteControl/WebSocketClient.h>
@@ -110,8 +111,13 @@ namespace BECore::Tests {
                 return "ws://127.0.0.1:" + std::to_string(GetPort()) + path;
             }
 
-            /// Takes the connection of the client and reads its opening request; the head is in Request()
-            bool AcceptAndReadRequest() {
+            /// A `wss://` address of this server; @p host is the name in it (localhost reaches the same loopback)
+            [[nodiscard]] std::string TlsUrl(const std::string& host = "127.0.0.1", const std::string& path = "/") const {
+                return "wss://" + host + ":" + std::to_string(GetPort()) + path;
+            }
+
+            /// Takes the connection of the client (no byte is read)
+            bool AcceptConnection() {
                 auto accepted = _listener.Accept(kClientWaitLimit);
                 if (!accepted) {
                     ADD_FAILURE() << "no client connected";
@@ -119,6 +125,28 @@ namespace BECore::Tests {
                 }
                 _peer = std::move(*accepted);
                 _peer.SetReceiveTimeout(5ms);
+                return true;
+            }
+
+            /// The server's end of the fake TLS handshake (FakeTlsStream.h): from here on every byte is masked both ways when the
+            /// client was accepted; @p rejectReason refuses it. What the hello said is in TlsHello()
+            bool FakeTlsHandshake(const std::string& rejectReason = {}) {
+                _fakeTls = _tlsHello.Handshake(_peer, rejectReason);
+                _peer.SetReceiveTimeout(5ms);  // the handshake changed it
+                return _fakeTls;
+            }
+
+            [[nodiscard]] const FakeTlsServerSide& TlsHello() const {
+                return _tlsHello;
+            }
+
+            /// Takes the connection of the client and reads its opening request; the head is in Request()
+            bool AcceptAndReadRequest() {
+                return AcceptConnection() && ReadRequest();
+            }
+
+            /// Reads the opening request (after the fake TLS handshake, when there is one)
+            bool ReadRequest() {
                 const bool read = WaitUntil({}, [&] {
                     Fill();
                     return _buffer.find("\r\n\r\n") != std::string::npos;
@@ -160,7 +188,7 @@ namespace BECore::Tests {
             }
 
             void SendRaw(const std::string& bytes) {
-                EXPECT_TRUE(_peer.SendAll(AsBytes(bytes)));
+                Send(eastl::vector<uint8_t>(bytes.data(), bytes.data() + bytes.size()));
             }
 
             void SendFrame(uint8_t opcode, const std::string& payload, std::optional<WebSocketMask> mask = std::nullopt) {
@@ -203,7 +231,10 @@ namespace BECore::Tests {
             }
 
         private:
-            void Send(const eastl::vector<uint8_t>& bytes) {
+            void Send(eastl::vector<uint8_t> bytes) {
+                if (_fakeTls) {
+                    FakeTlsMask(bytes.data(), bytes.size());
+                }
                 EXPECT_TRUE(_peer.SendAll(eastl::span<const uint8_t>(bytes.data(), bytes.size())));
             }
 
@@ -216,6 +247,9 @@ namespace BECore::Tests {
                             _ended = true;
                         }
                         return;
+                    }
+                    if (_fakeTls) {
+                        FakeTlsMask(chunk.data(), *received);
                     }
                     _buffer.append(reinterpret_cast<const char*>(chunk.data()), *received);
                 }
@@ -269,6 +303,8 @@ namespace BECore::Tests {
             std::string _buffer;
             std::string _request;
             bool _ended = false;
+            bool _fakeTls = false;  // the fake handshake was accepted: the bytes are masked both ways
+            FakeTlsServerSide _tlsHello;
         };
 
         [[nodiscard]] uint16_t CloseCodeOfFrame(const ClientFrame& frame) {
@@ -344,6 +380,18 @@ namespace BECore::Tests {
             settings.handshakeTimeout = kShortTimeout;
             settings.closeTimeout = kShortTimeout;
             return settings;
+        }
+
+        /// Settings that reach a `wss://` server through the fake backend of FakeTlsStream.h
+        [[nodiscard]] WebSocketClientSettings FakeTlsSettings() {
+            WebSocketClientSettings settings = QuickSettings();
+            settings.tls.factory = FakeTlsFactory();
+            return settings;
+        }
+
+        /// Walks a server through the fake TLS handshake and the opening request of the client that was opened on it
+        [[nodiscard]] bool AcceptFakeTlsAndRequest(ScriptedServer& server) {
+            return server.AcceptConnection() && server.FakeTlsHandshake() && server.ReadRequest();
         }
 
     }  // namespace
@@ -779,9 +827,9 @@ namespace BECore::Tests {
         {  // never opened
             WebSocketClient client;
         }
-        {  // opened and the Open() refused
+        {  // Open() refused (no backend) or a connect that fails
             WebSocketClient client;
-            EXPECT_FALSE(client.Open("wss://127.0.0.1:1/").has_value());
+            EXPECT_EQ(client.Open("wss://127.0.0.1:1/").has_value(), IsTlsSupported());
         }
         {  // connecting: the server accepts and says nothing
             ScriptedServer server;
@@ -883,9 +931,11 @@ namespace BECore::Tests {
 
     TEST(WebSocketClientTest, WssAndBadUrlsAreRefusedAtOnceWithoutEvents) {
         Session session;
-        const auto tls = session.client.Open("wss://example.com/rooms");
-        ASSERT_FALSE(tls.has_value());
-        EXPECT_TRUE(ToStd(tls.error()).starts_with("tls_unsupported"));
+        if (!IsTlsSupported()) {  // with a backend `wss://` is accepted and fails later (the TLS tests)
+            const auto tls = session.client.Open("wss://example.com/rooms");
+            ASSERT_FALSE(tls.has_value());
+            EXPECT_TRUE(ToStd(tls.error()).starts_with("tls_unsupported"));
+        }
 
         for (const char* url : {"http://example.com", "ws://", "ws://host:99999", "ws://[::1]:80/", "ws://a b/"}) {
             SCOPED_TRACE(url);
@@ -969,6 +1019,266 @@ namespace BECore::Tests {
             EXPECT_NE(ToStd(session.Closed().reason).find("403"), std::string::npos) << ToStd(session.Closed().reason);
             EXPECT_EQ(session.Count(WebSocketClientEventKind::Opened), 0u);
         }
+    }
+
+    TEST(WebSocketClientTest, WssOverTheFakeBackendOpensAndExchangesText) {
+        ScriptedServer server;
+        Session session;
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), FakeTlsSettings()).has_value());
+        ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+        EXPECT_EQ(server.RequestHeader("Host"), "127.0.0.1:" + std::to_string(server.GetPort()));
+        server.Accept();
+        ASSERT_TRUE(session.WaitForOpened());
+        EXPECT_TRUE(session.client.IsOpen());
+
+        ASSERT_TRUE(session.client.SendText("to the server"));
+        const auto frame = server.ReadFrame();
+        ASSERT_TRUE(frame.has_value());
+        EXPECT_EQ(frame->opcode, WebSocketOpcode::kText);
+        EXPECT_TRUE(frame->masked);
+        EXPECT_EQ(frame->payload, "to the server");
+
+        server.SendText("to the client");
+        server.SendText("and again");
+        ASSERT_TRUE(session.WaitForCount(WebSocketClientEventKind::Text, 2));
+        EXPECT_EQ(session.Texts(), (std::vector<std::string>{"to the client", "and again"}));
+    }
+
+    TEST(WebSocketClientTest, PingPongAndTheCloseHandshakeWorkOverTheFakeBackend) {
+        ScriptedServer server;
+        Session session;
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), FakeTlsSettings()).has_value());
+        ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+        server.Accept();
+        ASSERT_TRUE(session.WaitForOpened());
+
+        server.SendFrame(WebSocketOpcode::kPing, "are you there");
+        const auto pong = server.ReadFrame();
+        ASSERT_TRUE(pong.has_value());
+        EXPECT_EQ(pong->opcode, WebSocketOpcode::kPong);
+        EXPECT_EQ(pong->payload, "are you there");
+
+        session.client.Close(WebSocketCloseCode::kNormal, "done");
+        const auto close = server.ReadFrame();
+        ASSERT_TRUE(close.has_value());
+        EXPECT_EQ(close->opcode, WebSocketOpcode::kClose);
+        EXPECT_EQ(CloseCodeOfFrame(*close), WebSocketCloseCode::kNormal);
+        server.SendClose(WebSocketCloseCode::kNormal, "");
+        session.ExpectSingleClosed();
+        EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kNormal);
+    }
+
+    TEST(WebSocketClientTest, TheCloseOfTheServerEndsAWssConnection) {
+        ScriptedServer server;
+        Session session;
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), FakeTlsSettings()).has_value());
+        ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+        server.Accept();
+        ASSERT_TRUE(session.WaitForOpened());
+
+        server.SendClose(WebSocketCloseCode::kGoingAway, "restart");
+        const auto echoed = server.ReadFrame();
+        ASSERT_TRUE(echoed.has_value());
+        EXPECT_EQ(echoed->opcode, WebSocketOpcode::kClose);
+        session.ExpectSingleClosed();
+        EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kGoingAway);
+        EXPECT_EQ(ToStd(session.Closed().reason), "restart");
+    }
+
+    TEST(WebSocketClientTest, ARejectedTlsHandshakeIsClosed1006WithTheReason) {
+        ScriptedServer server;
+        Session session;
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), FakeTlsSettings()).has_value());
+        ASSERT_TRUE(server.AcceptConnection());
+        EXPECT_FALSE(server.FakeTlsHandshake("certificate is not trusted for 127.0.0.1"));
+        session.ExpectSingleClosed();
+        EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
+        EXPECT_NE(ToStd(session.Closed().reason).find("certificate is not trusted for 127.0.0.1"), std::string::npos) << ToStd(session.Closed().reason);
+        EXPECT_EQ(session.Count(WebSocketClientEventKind::Opened), 0u);
+        EXPECT_FALSE(session.client.IsOpen());
+    }
+
+    TEST(WebSocketClientTest, ATlsConnectionRefusedIsClosed1006) {
+        uint16_t closedPort = 0;
+        {
+            ScriptedServer server;  // its port is free again when it is gone
+            closedPort = server.GetPort();
+        }
+        Session session;
+        ASSERT_TRUE(session.client.Open(("wss://127.0.0.1:" + std::to_string(closedPort) + "/").c_str(), FakeTlsSettings()).has_value());
+        session.ExpectSingleClosed();
+        EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
+        EXPECT_NE(ToStd(session.Closed().reason).find("127.0.0.1:" + std::to_string(closedPort)), std::string::npos) << ToStd(session.Closed().reason);
+    }
+
+    TEST(WebSocketClientTest, TheStreamGetsTheHostOfTheUrlAsItsServerName) {
+        ScriptedServer server;
+        Session session;
+        ASSERT_TRUE(session.client.Open(server.TlsUrl("localhost").c_str(), FakeTlsSettings()).has_value());
+        ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+        EXPECT_EQ(server.TlsHello().serverName, "localhost");
+        EXPECT_EQ(server.TlsHello().anchorCount, 0u);
+        server.Accept();
+        ASSERT_TRUE(session.WaitForOpened());
+    }
+
+    TEST(WebSocketClientTest, TheAdditionalTrustAnchorsReachTheStream) {
+        ScriptedServer server;
+        Session session;
+        WebSocketClientSettings settings = FakeTlsSettings();
+        settings.tls.additionalTrustAnchorsDer = {{0x30, 0x01}, {0x30, 0x02}, {0x30, 0x03}};
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+        ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+        EXPECT_EQ(server.TlsHello().anchorCount, 3u);
+        server.Accept();
+        ASSERT_TRUE(session.WaitForOpened());
+    }
+
+    TEST(WebSocketClientTest, ATlsHandshakeThatNeverAnswersEndsAtTheHandshakeTimeout) {
+        ScriptedServer server;
+        Session session;
+        WebSocketClientSettings settings = FakeTlsSettings();
+        settings.handshakeTimeout = 150ms;
+        settings.connectTimeout = kNeverTimeout;
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+        ASSERT_TRUE(server.AcceptConnection());  // and then it says nothing to the hello
+        session.ExpectSingleClosed();
+        EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
+        EXPECT_NE(ToStd(session.Closed().reason).find("timed out"), std::string::npos) << ToStd(session.Closed().reason);
+    }
+
+    TEST(WebSocketClientTest, TheTlsHandshakeAndTheOpeningRequestShareOneDeadline) {
+        // The server finishes the TLS handshake after 1 s and then never answers the request. With the deadline of 1.2 s for both the
+        // client gives up 0.2 s later; a second 1.2 s for the request would end it after 2.2 s
+        constexpr auto kHandshakeTimeout = 1200ms;
+        constexpr auto kTlsDelay = 1000ms;
+        ScriptedServer server;
+        Session session;
+        WebSocketClientSettings settings = FakeTlsSettings();
+        settings.handshakeTimeout = kHandshakeTimeout;
+        const auto started = std::chrono::steady_clock::now();
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+        ASSERT_TRUE(server.AcceptConnection());
+        std::this_thread::sleep_for(kTlsDelay);
+        ASSERT_TRUE(server.FakeTlsHandshake());
+        ASSERT_TRUE(server.ReadRequest());
+        session.ExpectSingleClosed();
+        EXPECT_LT(std::chrono::steady_clock::now() - started, kHandshakeTimeout + 700ms);
+        EXPECT_NE(ToStd(session.Closed().reason).find("did not answer"), std::string::npos) << ToStd(session.Closed().reason);
+    }
+
+    TEST(WebSocketClientTest, AbortEndsAWssConnectionInEveryState) {
+        {  // in the TLS handshake: the server accepted the connection and says nothing
+            ScriptedServer server;
+            Session session;
+            WebSocketClientSettings settings = FakeTlsSettings();
+            settings.handshakeTimeout = kNeverTimeout;
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(server.AcceptConnection());
+            const auto started = std::chrono::steady_clock::now();
+            session.client.Abort();
+            session.ExpectSingleClosed();
+            EXPECT_LT(std::chrono::steady_clock::now() - started, 5s);
+            EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
+            EXPECT_TRUE(server.WaitForEndOfStream());
+        }
+        {  // in the opening request: the TLS handshake is done
+            ScriptedServer server;
+            Session session;
+            WebSocketClientSettings settings = FakeTlsSettings();
+            settings.handshakeTimeout = kNeverTimeout;
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+            session.client.Abort();
+            session.ExpectSingleClosed();
+            EXPECT_TRUE(server.WaitForEndOfStream());
+        }
+        {  // open
+            ScriptedServer server;
+            Session session;
+            WebSocketClientSettings settings = FakeTlsSettings();
+            settings.closeTimeout = kNeverTimeout;
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+            server.Accept();
+            ASSERT_TRUE(session.WaitForOpened());
+            session.client.Abort();
+            session.ExpectSingleClosed();
+            EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
+            EXPECT_TRUE(server.WaitForEndOfStream());
+        }
+        {  // before anything is accepted, racing with the connect
+            for (int round = 0; round < 10; ++round) {
+                ScriptedServer server;
+                Session session;
+                WebSocketClientSettings settings = FakeTlsSettings();
+                settings.handshakeTimeout = kNeverTimeout;
+                ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+                session.client.Abort();
+                session.ExpectSingleClosed();
+            }
+        }
+    }
+
+    TEST(WebSocketClientTest, TheDestructorEndsAWssClientInEveryState) {
+        {  // in the TLS handshake
+            ScriptedServer server;
+            WebSocketClient client;
+            WebSocketClientSettings settings = FakeTlsSettings();
+            settings.handshakeTimeout = kNeverTimeout;
+            ASSERT_TRUE(client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(server.AcceptConnection());
+        }
+        {  // in the opening request
+            ScriptedServer server;
+            WebSocketClient client;
+            WebSocketClientSettings settings = FakeTlsSettings();
+            settings.handshakeTimeout = kNeverTimeout;
+            ASSERT_TRUE(client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+        }
+        {  // open, a read is blocked
+            ScriptedServer server;
+            Session session;
+            WebSocketClientSettings settings = FakeTlsSettings();
+            settings.closeTimeout = kNeverTimeout;
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+            server.Accept();
+            ASSERT_TRUE(session.WaitForOpened());
+        }
+        {  // closing: our close frame is sent and the server never answers
+            ScriptedServer server;
+            Session session;
+            WebSocketClientSettings settings = FakeTlsSettings();
+            settings.closeTimeout = kNeverTimeout;
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+            ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+            server.Accept();
+            ASSERT_TRUE(session.WaitForOpened());
+            session.client.Close();
+            ASSERT_TRUE(server.ReadFrame().has_value());
+        }
+        {  // ended
+            ScriptedServer server;
+            Session session;
+            ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), FakeTlsSettings()).has_value());
+            ASSERT_TRUE(AcceptFakeTlsAndRequest(server));
+            server.Accept();
+            ASSERT_TRUE(session.WaitForOpened());
+            server.Drop();
+            ASSERT_TRUE(session.WaitForClosed());
+        }
+    }
+
+    TEST(WebSocketClientTest, AFactoryThatGivesNothingEndsWithAReason) {
+        ScriptedServer server;
+        Session session;
+        WebSocketClientSettings settings = QuickSettings();
+        settings.tls.factory = [] { return eastl::unique_ptr<ITlsStream>(); };
+        ASSERT_TRUE(session.client.Open(server.TlsUrl().c_str(), settings).has_value());
+        session.ExpectSingleClosed();
+        EXPECT_EQ(session.Closed().closeCode, WebSocketCloseCode::kAbnormalClosure);
     }
 
     TEST(WebSocketClientTest, PollingWithNothingToDoDoesNotAllocateOrBlock) {
