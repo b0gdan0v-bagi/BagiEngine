@@ -12,6 +12,14 @@ be_add_module(RoomClient LINK
 
 if(ENGINE_WITH_REMOTE_CONTROL)
     target_link_libraries(RoomClientModule PUBLIC RemoteControlModule)
+
+    # The smallest client of the rooms, a console program: hosts a room on a room server and plays it to the end. tools/rooms/smoke.py runs it
+    # against BagiRoomServer (the ctest entry BagiRoomServerSmoke, RoomServer/CMakeLists.txt). probe/ is outside src/, so the module glob does
+    # not take main.cpp. Desktop only (it needs the sockets): the browser build of a client is a game's page, not this program
+    be_add_headless_executable(BagiRoomClientProbe
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/probe/main.cpp
+        LINK RoomClientModule RoomsModule RemoteControlModule
+    )
 endif()
 
 if(EMSCRIPTEN)

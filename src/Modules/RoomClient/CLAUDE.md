@@ -12,6 +12,7 @@ The client of the rooms (the entry `network-rooms` of the todo store, slice 3 of
 | `NativeRoomTransport.h/.cpp` | the desktop transport: a `WebSocketClient` (RemoteControl) behind `IRoomTransport`; empty without `BE_WITH_REMOTE_CONTROL` |
 | `EmscriptenRoomTransport.h/.cpp` | the browser transport: the page's WebSocket (`emscripten_websocket_*`) behind `IRoomTransport`; empty without `PLATFORM_WEB` |
 | `RoomTransportFactory.cpp` | `MakeDefaultRoomTransport()`: the transport of this platform, nullptr where there is none |
+| `probe/main.cpp` | `BagiRoomClientProbe` (desktop only, outside `src/`): the smallest client, a console loop that hosts a room, starts it, plays the first action of every turn and prints `PROBE OK` when the game is over; read it as the minimal example of the use below. Exits 1 on the first `Error`, `ConnectionLost` or `Closed` (it sets `reconnect = false`) and after 30 s. `tools/rooms/smoke.py` runs it against `BagiRoomServer` |
 | `RoomClient.h/.cpp` | `RoomClient`, `RoomClientSettings`, `RoomClientState`, `RoomClientEvent`, `RoomSession`, `RoomClientErrors`, `RoomClientCloseReasons` |
 
 ## The transport contract

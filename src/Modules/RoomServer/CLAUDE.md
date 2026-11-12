@@ -4,7 +4,7 @@
 
 The `Rooms` hub on the network (the entry `network-rooms` of the todo store, slice 2 of 4): a WebSocket server that feeds every text message of a client to `RoomHub` and sends what the hub says back. `Rooms` is the logic and the protocol (`Rooms/CLAUDE.md`), `RemoteControl` the transport (`WebSocketListener`, `RemoteControl/CLAUDE.md`); this module is the glue between them and knows no game. Namespace `BECore`; no static initializers, so it is linked as an ordinary static library (`RoomServerModule`; `BagiEngineTests` links it).
 
-Built only with `ENGINE_WITH_REMOTE_CONTROL` (the web build has no sockets). Module order: after `Rooms`. Its `CMakeLists.txt` also builds the executable `BagiRoomServer` and registers the ctest entry `BagiRoomServerSmoke` (`tools/rooms/CLAUDE.md`); in a game's build, which does not build the executable, `ctest` lists it as skipped (exit code 77): expected.
+Built only with `ENGINE_WITH_REMOTE_CONTROL` (the web build has no sockets). Module order: after `Rooms`. Its `CMakeLists.txt` also builds the executable `BagiRoomServer` and registers the ctest entry `BagiRoomServerSmoke` (`tools/rooms/CLAUDE.md`; it plays from Python and also runs the C++ client `BagiRoomClientProbe` of `RoomClient` against the real executable); in a game's build, which does not build the executable, `ctest` lists it as skipped (exit code 77): expected.
 
 | File | Purpose |
 |------|---------|
