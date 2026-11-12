@@ -4,6 +4,7 @@
 #include "TestRandom.h"
 
 #include <Common/Printers.h>
+#include <RemoteControl/Tls/TlsStream.h>
 #include <RemoteControl/WebSocketClient.h>
 #include <RoomClient/RoomClient.h>
 #include <RoomServer/DemoCardGame.h>
@@ -412,7 +413,10 @@ namespace BECore::Tests {
 
     // ---- Addresses, policies and the heartbeat ---------------------------------------------------------------------------------
 
-    TEST_F(RoomClientSocketTest, WssIsRefusedAndTheMessageNamesTheBrowserBuild) {
+    TEST_F(RoomClientSocketTest, WssIsRefusedAtOnceWithoutATlsBackendAndTheMessageNamesTheBrowserBuild) {
+        if (IsTlsSupported()) {
+            GTEST_SKIP() << "this build has a TLS backend: WssToAPlainServerEndsWithATlsFailureNotAHang covers wss://";
+        }
         Player& player = AddPlayer();
         const auto hosted = player.client->Host("wss://127.0.0.1:9", "cards", "P0");
         ASSERT_FALSE(hosted.has_value());
@@ -421,6 +425,20 @@ namespace BECore::Tests {
         EXPECT_NE(std::string(hosted.error().message.c_str()).find("browser"), std::string::npos);
         EXPECT_EQ(player.client->GetState(), RoomClientState::Disconnected);
         EXPECT_EQ(player.tap.connections, 1u);
+    }
+
+    TEST_F(RoomClientSocketTest, WssToAPlainServerEndsWithATlsFailureNotAHang) {
+        if (!IsTlsSupported()) {
+            GTEST_SKIP() << "no TLS backend in this build: WssIsRefusedAtOnceWithoutATlsBackendAndTheMessageNamesTheBrowserBuild covers wss://";
+        }
+        StartServer();
+        Player& player = AddPlayer();
+        // The address is accepted (there is a backend); the plain server does not speak TLS, so the handshake fails
+        ASSERT_TRUE(player.client->Host(Format("wss://127.0.0.1:{}", port), "cards", "P0").has_value());
+        ASSERT_TRUE(WaitFor([&] { return player.client->GetState() == RoomClientState::Disconnected; }, kShortLimit)) << "the TLS handshake never ended";
+        ASSERT_EQ(player.Count(Kind::Closed), 1u);
+        EXPECT_EQ(player.Find(Kind::Closed)->closeCode, kRoomTransportAbnormalClosure);
+        EXPECT_NE(player.Find(Kind::Closed)->message.find("TLS"), eastl::string::npos) << player.Find(Kind::Closed)->message.c_str();
     }
 
     TEST_F(RoomClientSocketTest, AWrongPortGivesAClosedEventAndNoHang) {

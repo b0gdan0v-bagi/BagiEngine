@@ -11,7 +11,7 @@ namespace BECore {
         inline constexpr eastl::string_view kWrongState = "wrong_state";
         /// No transport can be made here (no factory in the settings and no default one)
         inline constexpr eastl::string_view kTransportUnavailable = "transport_unavailable";
-        /// The transport refused to start connecting (a bad address, `wss://` on the desktop); the message says why
+        /// The transport refused to start connecting (a bad address, `wss://` on a desktop platform without a TLS backend); the message says why
         inline constexpr eastl::string_view kConnectFailed = "connect_failed";
         /// An event: a text from the server that is not a well-formed message (it is dropped)
         inline constexpr eastl::string_view kBadServerMessage = "bad_server_message";

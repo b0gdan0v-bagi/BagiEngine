@@ -8,5 +8,11 @@ be_add_module(RemoteControl LINK
 )
 
 if(WIN32)
-    target_link_libraries(RemoteControlModule PUBLIC ws2_32)
+    # ws2_32: Socket; secur32 (SSPI) and crypt32 (certificate chains): the TLS backend of Windows (Tls/SchannelTlsStream.cpp)
+    target_link_libraries(RemoteControlModule PUBLIC ws2_32 secur32 crypt32)
+endif()
+
+if(APPLE)
+    # The TLS backend of macOS (Tls/NetworkFrameworkTlsStream.cpp): Network.framework with the trust evaluation of Security
+    target_link_libraries(RemoteControlModule PUBLIC "-framework Network" "-framework Security" "-framework CoreFoundation")
 endif()
