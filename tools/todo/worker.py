@@ -533,7 +533,7 @@ def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
         entries = json.loads(result.stdout or "[]")
     except json.JSONDecodeError as error:
         return [], f"todo.py list: {error}"
-    keep = ("id", "area", "title", "status", "statusNote", "branch", "planProgress", "blocks")
+    keep = ("id", "area", "title", "status", "statusNote", "branch", "planShown", "planProgress", "blocks", "slicing", "costCap", "slices", "stagesPlan")
     table = {row["area"]: row for row in rule_area_table(layout.main)}
     shown = []
     for entry in entries:
@@ -565,12 +565,12 @@ MERGE_ACTOR = "quick-merge"
 SLICE_REOPEN = "after the merge set the status back to open"
 
 
-def todo_cli(layout: Layout, *args: str) -> str:
+def todo_cli(layout: Layout, *args: str, actor: str = MERGE_ACTOR) -> str:
     """todo.py (next to this file) run from the main checkout; its error as a WorkerError."""
     todo = Path(__file__).resolve().parent / "todo.py"
     try:
         result = subprocess.run(
-            [sys.executable, str(todo), "--actor", MERGE_ACTOR, *args], cwd=layout.main, capture_output=True, text=True, timeout=60
+            [sys.executable, str(todo), "--actor", actor, *args], cwd=layout.main, capture_output=True, text=True, timeout=60
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise WorkerError(f"todo.py {args[0]}: {error}") from error
@@ -1174,6 +1174,140 @@ def pointer_state(layout: Layout) -> dict | None:
     }
 
 
+# --- cost: what an entry cost so far against its cap (todo-loop/SKILL.md, "Through") -----------------------
+
+# API list prices in dollars per million tokens, the same table as the panel's `todoWorkers.prices` default; the
+# first key that is part of a model id wins. `~/.claude/todo/prices.json` (same shape) replaces it.
+DEFAULT_PRICES = {
+    "fable": {"input": 8, "output": 40, "cacheWrite": 10, "cacheRead": 0.2},
+    "mythos": {"input": 8, "output": 40, "cacheWrite": 10, "cacheRead": 0.2},
+    "opus": {"input": 4, "output": 20, "cacheWrite": 5, "cacheRead": 0.2},
+    "sonnet": {"input": 2, "output": 10, "cacheWrite": 2.5, "cacheRead": 0.1},
+    "haiku": {"input": 0.1, "output": 0.5, "cacheWrite": 0.125, "cacheRead": 0.01},
+}
+
+
+def prices() -> dict:
+    try:
+        own = json.loads((claude_home() / "todo" / "prices.json").read_text())
+        return own if isinstance(own, dict) and own else DEFAULT_PRICES
+    except (OSError, ValueError):
+        return DEFAULT_PRICES
+
+
+def dollars_of(models: dict, table: dict | None = None) -> float:
+    """The tokens by model (`entryUsage[id]`) at the prices; a model no key names costs nothing (said by `unpriced`)."""
+    table = table or prices()
+    total = 0.0
+    for model, counts in models.items():
+        price = next((value for key, value in table.items() if key in str(model)), None)
+        if price:
+            total += sum(counts.get(key, 0) * price.get(key, 0) for key in USAGE_KEYS) / 1_000_000
+    return round(total, 2)
+
+
+def entry_cost(layout: Layout, entry_id: str, claude: str = "claude") -> dict:
+    """The entry's cost over every loop session that held it: the ledger brought up to date with the sessions of
+    the workers now (a session counts for the entry whose branch its worker has checked out at this moment)."""
+    state = list_json(layout, argparse.Namespace(claude=claude, store=False, usage=True, activity=False))
+    models = (state.get("entryUsage") or {}).get(entry_id) or {}
+    table = prices()
+    entry = json.loads(todo_cli(layout, "show", entry_id, "--json", actor="worker"))
+    cap = entry.get("costCap")
+    spent = dollars_of(models, table)
+    unpriced = sorted(model for model in models if not any(key in str(model) for key in table))
+    return {"entry": entry_id, "dollars": spent, "cap": cap, "over": cap is not None and spent >= cap, "models": models, "unpriced": unpriced}
+
+
+def cmd_cost(layout: Layout, args) -> None:
+    cost = entry_cost(layout, args.id, args.claude)
+    if args.json:
+        print(json.dumps(cost))
+        return
+    cap = f" of the cap ${cost['cap']:g}{' (over)' if cost['over'] else ''}" if cost["cap"] is not None else " (no cap)"
+    print(f"{cost['entry']}: ${cost['dollars']:.2f}{cap}" + (f"; no price for {', '.join(cost['unpriced'])}" if cost["unpriced"] else ""))
+
+
+# --- remarks: the owner sends a review branch back (todo-loop/SKILL.md, "Remarks") -------------------------
+
+REMARKS_ACTOR = "owner"
+
+
+def free_worker(layout: Layout, sessions: list[dict] | None) -> tuple[int, Path] | None:
+    """A worker with no running session and a clean tree, the ones that hold no `todo/*` branch first."""
+    free = []
+    for k, path in layout.workers():
+        if is_running(session_in(sessions or [], path)):
+            continue
+        if dirty(path, ignore_submodules=True) or (layout.shared is not None and (path / SHARED_SUBMODULE / ".git").exists() and dirty(path / SHARED_SUBMODULE)):
+            continue
+        heads = [head_json(path)] + ([head_json(path / SHARED_SUBMODULE)] if layout.shared is not None and (path / SHARED_SUBMODULE / ".git").exists() else [])
+        holds = any(str(h.get("branch") or "").startswith("todo/") for h in heads)
+        free.append((holds, k, path))
+    if not free:
+        return None
+    _holds, k, path = min(free, key=lambda item: (item[0], item[1]))
+    return k, path
+
+
+def cmd_remarks(layout: Layout, args) -> None:
+    """Store the owner's remarks on an entry in review as a plan of kind `remarks`, set the entry back to
+    `in progress` and queue it first on the worker that holds its branch (or a free one); `--start` starts it."""
+    entry = json.loads(todo_cli(layout, "show", args.id, "--json", actor=REMARKS_ACTOR))
+    branch = entry.get("branch")
+    if entry.get("status") != "review" or not branch:
+        raise WorkerError(f"{args.id} is {entry.get('status')}, not in review with a branch")
+    table = {row["area"]: row for row in rule_area_table(layout.main)}
+    area = table.get(entry.get("area"))
+    if area is None:
+        raise WorkerError(f"{args.id} is of the area {entry.get('area')}, not of this checkout")
+    repo = (layout.main / area["repo"]).resolve()
+    if not git_ok("rev-parse", "--verify", "--quiet", f"refs/heads/{branch}", cwd=repo):
+        raise WorkerError(f"no branch {branch} in {repo}: it was made in another checkout")
+    text = (sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8")).strip()
+    if not text:
+        raise WorkerError("the remarks are empty")
+    branch_id = branch.split("/", 1)[1]
+    plans = json.loads(todo_cli(layout, "plan", "list", "--entry", args.id, "--kind", "remarks", "--json", actor=REMARKS_ACTOR) or "[]")
+    round_no = len(plans) + 1
+    name = f"todo-loop-{branch_id}-remarks-{round_no}.md"
+    local = claude_home() / "plans" / name
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_text(f"# Remarks of the owner, round {round_no}: {entry['title']}\n\nBranch `{branch}`, entry `{args.id}`.\n\n{text}\n", encoding="utf-8")
+    todo_cli(layout, "plan", "put", name, "--file", str(local), "--entry", args.id, "--kind", "remarks", actor=REMARKS_ACTOR)
+    todo_cli(layout, "edit", args.id, "--status", "in progress", actor=REMARKS_ACTOR)
+    todo_cli(layout, "note", args.id, "--note", f"returned with remarks, round {round_no} ({name})", actor=REMARKS_ACTOR)
+    sessions = list_sessions(args.claude)
+    holder = worktree_of(repo, branch)
+    chosen = None
+    for k, path in layout.workers():
+        if holder is not None and (holder.resolve() == path.resolve() or holder.resolve() == (path / SHARED_SUBMODULE).resolve()):
+            chosen = (k, path)
+    chosen = chosen or free_worker(layout, sessions)
+    result = {"entry": args.id, "plan": name, "round": round_no, "worker": None, "started": False}
+    if chosen is not None:
+        queues = read_queues(layout)
+        key = f"{WORKER_PREFIX}{chosen[0]}"
+        for items in queues.values():
+            if args.id in items:
+                items.remove(args.id)
+        queues.setdefault(key, []).insert(0, args.id)
+        write_queues(layout, queues)
+        result["worker"] = key
+        if args.start and not is_running(session_in(sessions or [], chosen[1])):
+            start_args = argparse.Namespace(
+                workers=[chosen[0]], slices=1, loop_args="", report_to=args.report_to, delay=0, model=DEFAULT_LOOP_MODEL,
+                effort=DEFAULT_LOOP_EFFORT, claude=args.claude, print_only=False, rest=[], queued_only=True, wait_free=0, detach=False,
+            )
+            cmd_start(layout, start_args)
+            result["started"] = True
+    if args.json:
+        print(json.dumps(result))
+        return
+    where = f"queued first on {result['worker']}" + (", started" if result["started"] else "") if result["worker"] else "no free worker: start it with `/todo-loop " + args.id + "`"
+    print(f"{args.id}: remarks round {round_no} stored as {name}, back to in progress; {where}")
+
+
 def queue_file() -> Path:
     """The entries the panel starts next in each worker: `{"<root>": {"w1": [ids]}}`, by the workers' root."""
     return claude_home() / "todo" / "worker-queues.json"
@@ -1751,14 +1885,46 @@ def tool_command(layout: Layout) -> str:
         return f"python3 {here}"
 
 
-def loop_prompt(args) -> str:
-    """The prompt of a worker's session: `/todo-loop N [loop args] [report-to=<session>]`."""
+def loop_prompt(args, entry: str | None = None) -> str:
+    """The prompt of a worker's session: `/todo-loop N [entry] [loop args] [report-to=<session>]`."""
     report = ""
     if args.report_to:
         if not REPORT_TO_NAME.fullmatch(args.report_to):
             raise WorkerError(f"--report-to {args.report_to!r}: a session name (letters, digits, '.', '_', '-')")
         report = f"report-to={args.report_to}"
-    return " ".join(part for part in ("/todo-loop", str(args.slices), args.loop_args, report) if part)
+    return " ".join(part for part in ("/todo-loop", str(args.slices), entry, args.loop_args, report) if part)
+
+
+WAIT_POLL_S = 15
+
+
+def wait_until_free(args, k: int, path: Path) -> bool:
+    """Poll `claude agents` until the worker's session no longer runs (a loop that just ended its turn counts as
+    finished), at most `args.wait_free` seconds."""
+    deadline = time.time() + args.wait_free
+    while True:
+        if not is_running(session_in(list_sessions(args.claude) or [], path)):
+            return True
+        if time.time() >= deadline:
+            print(f"w{k}: its session still runs after {args.wait_free} s; not started")
+            return False
+        time.sleep(WAIT_POLL_S)
+
+
+def start_detached(args) -> None:
+    """Run the same `start` again in a process of its own (without `--detach`) and return at once: a loop that
+    queues its own next slice starts it this way and then ends, and the child waits for that end (`--wait-free`)."""
+    argv = [part for part in args.argv if part != "--detach"]
+    log = claude_home() / "todo" / f"start-{'-'.join(map(str, args.workers)) or 'all'}.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open("a", encoding="utf-8") as out:
+        out.write(f"\n--- {datetime.now().isoformat(timespec='seconds')} worker.py {' '.join(argv)}\n")
+        out.flush()
+        child = subprocess.Popen(
+            [sys.executable, str(Path(__file__).resolve()), *argv], cwd=Path.cwd(), stdout=out, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL, start_new_session=True,
+        )
+    print(f"detached: pid {child.pid}, log {log}")
 
 
 def cmd_start(layout: Layout, args) -> None:
@@ -1769,6 +1935,9 @@ def cmd_start(layout: Layout, args) -> None:
     if problems:
         raise WorkerError(problems[0])
     workers = chosen_workers(layout, args.workers)
+    if args.detach and not args.print_only:
+        start_detached(args)
+        return
     sessions = list_sessions(args.claude)
     if sessions is None and not args.print_only:
         raise WorkerError(f"`{args.claude} agents --json` did not answer; is Claude Code installed and new enough for --bg?")
@@ -1779,10 +1948,26 @@ def cmd_start(layout: Layout, args) -> None:
     started = 0
     failed = False
     for k, path in workers:
+        if args.wait_free and not args.print_only:
+            if not wait_until_free(args, k, path):
+                failed = True
+                continue
+            sessions = list_sessions(args.claude)
         session = session_in(sessions or [], path)
         if is_running(session):
             print(f"w{k}: already runs ({describe(session)}), left alone")
             continue
+        worker_prompt = prompt
+        if args.queued_only:
+            queues = read_queues(layout)
+            items = queues.get(f"{WORKER_PREFIX}{k}", [])
+            if not items:
+                print(f"w{k}: its queue is empty, not started")
+                continue
+            entry = items[0] if args.print_only else items.pop(0)
+            if not args.print_only:
+                write_queues(layout, queues)
+            worker_prompt = loop_prompt(args, entry)
         if is_active(session) and not args.print_only:
             subprocess.run([args.claude, "stop", str(session.get("id") or session["sessionId"])], capture_output=True, text=True)
         if not args.print_only:
@@ -1796,12 +1981,12 @@ def cmd_start(layout: Layout, args) -> None:
                     print(f"w{k}: moved to the base: {', '.join(parts)}")
             except WorkerError as error:
                 print(f"w{k}: not moved to the base ({error}); started where it stands")
-        command =[args.claude, "--bg", "--name", session_name(k), *flags, *args.rest, prompt]
+        command = [args.claude, "--bg", "--name", session_name(k), *flags, *args.rest, worker_prompt]
         if started and args.delay > 0:
             print(f"  waiting {args.delay} s before w{k} (the loops must not choose at the same moment)")
             if not args.print_only:
                 time.sleep(args.delay)
-        print(f"w{k}: cd {path} && CMAKE_BUILD_PARALLEL_LEVEL={env['CMAKE_BUILD_PARALLEL_LEVEL']} {' '.join(command[:-1])} '{prompt}'")
+        print(f"w{k}: cd {path} && CMAKE_BUILD_PARALLEL_LEVEL={env['CMAKE_BUILD_PARALLEL_LEVEL']} {' '.join(command[:-1])} '{worker_prompt}'")
         if args.print_only:
             started += 1
             continue
@@ -1992,6 +2177,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--effort", default=DEFAULT_LOOP_EFFORT, help=f"the effort of the loop sessions (default {DEFAULT_LOOP_EFFORT}; '' leaves Claude Code's default)")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--print", dest="print_only", action="store_true", help="only print the commands")
+    p.add_argument("--queued-only", action="store_true", help="start only workers with a queue, each on the first entry of its queue (taken out)")
+    p.add_argument("--wait-free", type=int, default=0, metavar="S", help="wait up to S seconds for each worker's session to end before starting it")
+    p.add_argument("--detach", action="store_true", help="do it in a background process and return at once (a loop starts its own next slice so)")
     p = sub.add_parser("merge", help="merge the branch of an entry in review into its base, close the entry, delete the branch (the quick merge of the VS Code panel)")
     p.add_argument("id")
     p.add_argument("--dry-run", action="store_true", help="only say what it would do and what stops it")
@@ -2035,6 +2223,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--record", help="store a classifier answer (a JSON file, or - for stdin) and exit")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
     p.add_argument("--json", action="store_true")
+    p = sub.add_parser("cost", help="what an entry cost so far (every loop session that held it, at API prices) against its cap")
+    p.add_argument("id")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("remarks", help="send an entry in review back with the owner's remarks: a remarks plan, in progress again, queued first on its worker")
+    p.add_argument("id")
+    p.add_argument("--file", required=True, help="the remarks (markdown), '-' for stdin")
+    p.add_argument("--start", action="store_true", help="start the worker at once when it is free")
+    p.add_argument("--report-to", help="the session the loop reports to")
+    p.add_argument("--claude", default="claude", help="the command (default claude)")
+    p.add_argument("--json", action="store_true")
     p = sub.add_parser("build-info", help="the product, tests, preset and screenshot tool of this checkout (for the panel)")
     p.add_argument("--preset", help="this preset instead of the platform's debug one")
     p.add_argument("--json", action="store_true")
@@ -2050,9 +2249,10 @@ def main(argv: list[str] | None = None) -> int:
     argv = argv[: argv.index("--")] if "--" in argv else argv
     args = build_parser().parse_args(argv)
     args.rest = rest
+    args.argv = argv + (["--", *rest] if rest else [])
     try:
         layout = find_layout(Path.cwd())
-        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session, "queue": cmd_queue, "overlap": cmd_overlap, "prefs": cmd_prefs, "dispatch": cmd_dispatch, "build-info": cmd_build_info}
+        commands = {"create": cmd_create, "list": cmd_list, "check": cmd_check, "remove": cmd_remove, "run": cmd_run, "start": cmd_start, "stop": cmd_stop, "relaunch": cmd_relaunch, "merge": cmd_merge, "update": cmd_update, "attach": cmd_session, "logs": cmd_session, "queue": cmd_queue, "overlap": cmd_overlap, "prefs": cmd_prefs, "dispatch": cmd_dispatch, "build-info": cmd_build_info, "cost": cmd_cost, "remarks": cmd_remarks}
         commands[args.command](layout, args)
     except WorkerError as error:
         print(f"error: {error}", file=sys.stderr)

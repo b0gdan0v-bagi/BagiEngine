@@ -1024,3 +1024,98 @@ def test_configure_shares_ccache_between_the_workers(game: Path, monkeypatch):
     monkeypatch.setattr(worker.subprocess, "run", lambda command, **kw: calls.append(command) or subprocess.CompletedProcess(command, 0, "", ""))
     worker.configure(layout, layout.worker(1), "macos-debug")
     assert calls == [["cmake", "--preset", "macos-debug", f"-DENGINE_CCACHE_BASE_DIR={layout.root}"]]
+
+
+def test_start_queued_only_takes_the_head_of_each_queue_and_skips_an_empty_one(game: Path, fake_claude, capsys):
+    script, log, _sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    assert worker.main(["queue", "1", "--add", "big-entry"]) == 0
+    assert worker.main(["queue", "1", "--add", "next-one"]) == 0
+    assert worker.main(["start", "--delay", "0", "--queued-only", "--claude", str(script), "--report-to", "boss"]) == 0
+    calls = log.read_text().splitlines()
+    assert len(calls) == 1 and "--name todo-w1" in calls[0] and calls[0].endswith("/todo-loop 1 big-entry report-to=boss")
+    assert "w2: its queue is empty, not started" in capsys.readouterr().out
+    capsys.readouterr()
+    worker.main(["queue", "--json"])
+    assert json.loads(capsys.readouterr().out) == {"w1": ["next-one"], "w2": []}
+
+
+def test_start_wait_free_starts_once_the_session_ends(game: Path, fake_claude, monkeypatch):
+    script, log, sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    w1 = game.parent / "game.workers" / "w1"
+    sessions.write_text(json.dumps([session(w1, "working", "a")]))
+    waits = []
+
+    def end_the_session(seconds):
+        waits.append(seconds)
+        sessions.write_text(json.dumps([session(w1, "done", "a")]))
+
+    monkeypatch.setattr(worker.time, "sleep", end_the_session)
+    assert worker.main(["start", "1", "--delay", "0", "--wait-free", "600", "--claude", str(script)]) == 0
+    assert len(waits) == 1 and "--name todo-w1" in log.read_text()
+
+
+def test_start_wait_free_gives_up_after_its_time(game: Path, fake_claude, monkeypatch):
+    script, log, sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    sessions.write_text(json.dumps([session(game.parent / "game.workers" / "w1", "working", "a")]))
+    clock = [1000.0]
+    monkeypatch.setattr(worker.time, "time", lambda: clock[0])
+    monkeypatch.setattr(worker.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + s))
+    assert worker.main(["start", "1", "--delay", "0", "--wait-free", "30", "--claude", str(script)]) == 1
+    assert not log.exists() or "todo-w1" not in log.read_text()
+
+
+def test_start_detach_runs_the_same_start_in_a_process_of_its_own(game: Path, fake_claude, monkeypatch, capsys):
+    script, _log, _sessions = fake_claude
+    worker.main(["create", "1", "--no-configure"])
+    started = []
+    real_popen = subprocess.Popen
+
+    class Detached:
+        pid = 4242
+
+    def fake_popen(command, *args, **kwargs):
+        if not kwargs.get("start_new_session"):
+            return real_popen(command, *args, **kwargs)  # git and claude, through subprocess.run
+        started.append((command, kwargs))
+        return Detached()
+
+    monkeypatch.setattr(worker.subprocess, "Popen", fake_popen)
+    assert worker.main(["start", "1", "--detach", "--queued-only", "--wait-free", "900", "--claude", str(script)]) == 0
+    command, kwargs = started[0]
+    assert command[1].endswith("worker.py") and "--detach" not in command
+    assert command[2:] == ["start", "1", "--queued-only", "--wait-free", "900", "--claude", str(script)]
+    assert kwargs["start_new_session"] is True
+    assert "detached: pid 4242" in capsys.readouterr().out
+
+
+def test_dollars_take_the_first_price_key_in_the_model_id():
+    models = {"claude-opus-5-5": {"input": 1_000_000, "output": 100_000}, "claude-haiku-5-5": {"cacheRead": 1_000_000}, "mystery": {"output": 5}}
+    assert worker.dollars_of(models, worker.DEFAULT_PRICES) == 6.01  # 4 + 2 + 0.01
+
+
+def test_remarks_store_a_plan_reopen_the_work_and_queue_it_on_the_worker_that_holds_the_branch(game: Path, store, fake_claude, tmp_path, capsys):
+    entries, calls = store
+    script, log, _sessions = fake_claude
+    worker.main(["create", "2", "--no-configure"])
+    w2 = game.parent / "game.workers" / "w2"
+    run("switch", "-q", "-c", "todo/g-x", cwd=w2)
+    entries["g-x"] = review("g-x", "mahjong", "todo/g-x")
+    remarks = tmp_path / "remarks.md"
+    remarks.write_text("The button is too small.\n")
+    capsys.readouterr()
+    assert worker.main(["remarks", "g-x", "--file", str(remarks), "--claude", str(script), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result == {"entry": "g-x", "plan": "todo-loop-g-x-remarks-1.md", "round": 1, "worker": "w2", "started": False}
+    put = next(call for call in calls if call[:2] == ["plan", "put"])
+    assert put[2] == "todo-loop-g-x-remarks-1.md" and put[-2:] == ["--kind", "remarks"]
+    assert "The button is too small." in Path(put[put.index("--file") + 1]).read_text()
+    assert ["edit", "g-x", "--status", "in progress"] in calls
+    assert any(call[:2] == ["note", "g-x"] and "round 1" in call[-1] for call in calls)
+    capsys.readouterr()
+    worker.main(["queue", "--json"])
+    assert json.loads(capsys.readouterr().out) == {"w1": [], "w2": ["g-x"]}
+    entries["g-y"] = {**review("g-y", "mahjong", "todo/g-y"), "status": "in progress"}
+    assert worker.main(["remarks", "g-y", "--file", str(remarks), "--claude", str(script)]) == 1  # not in review
