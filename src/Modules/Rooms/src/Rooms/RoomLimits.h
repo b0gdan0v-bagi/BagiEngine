@@ -9,6 +9,18 @@ namespace BECore {
         /// A client message longer than this is refused before it is parsed. It also bounds the nesting of a JSON bomb.
         inline constexpr size_t kMaxMessageBytes = 16 * 1024;
 
+        /// A message from the server that a client reads: its views are small, but a game's view may grow (the opposite direction is
+        /// bounded by kMaxMessageBytes, which a client's `action` has to fit)
+        inline constexpr size_t kMaxServerMessageBytes = 1024 * 1024;
+
+        /// The deepest nesting of arrays and objects a client accepts in a message from the server. The parser reads a deeper one
+        /// without recursion, but copying the game's `view` or `actions` out of it recurses once per level and a bomb in 1 MiB
+        /// would overflow the stack
+        inline constexpr size_t kMaxServerJsonDepth = 128;
+
+        /// The most seats a `lobby` message may list when a client reads it (a bound on the work, not a limit of any game)
+        inline constexpr size_t kMaxLobbySeats = 64;
+
         /// A player name: 1 to 24 UTF-8 bytes (after trimming) of printable text
         inline constexpr size_t kMinNameBytes = 1;
         inline constexpr size_t kMaxNameBytes = 24;

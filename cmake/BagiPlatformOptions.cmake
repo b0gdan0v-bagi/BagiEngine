@@ -4,7 +4,9 @@
 # Included once by cmake/BagiEngine.cmake after the C++ standard block and before the SDL block.
 #
 #   ENGINE_WITH_VULKAN          ON   VulkanModule: the Vulkan renderer backend and its loader library.
-#   ENGINE_WITH_REMOTE_CONTROL  ON   RemoteControlModule (the WebSocket server of the control API) and its start in Application.
+#   ENGINE_WITH_REMOTE_CONTROL  ON   The sockets of the engine: RemoteControlModule (the WebSocket server of the control API and the WebSocket
+#                                    client) with its start in Application, RoomServer, and the desktop transport of RoomClient. RoomClient
+#                                    itself is built without it (the browser transport is its web half). Forced OFF on the web.
 #   ENGINE_STATIC_SDL           OFF  SDL3 and SDL3_image as static libraries. The target name SDL3-shared stays (an INTERFACE
 #                                    shim over SDL3::SDL3-static, made in cmake/BagiEngine.cmake), because the vendored imgui
 #                                    CMake file and our modules link that name.
@@ -29,7 +31,7 @@ else()
 endif()
 
 option(ENGINE_WITH_VULKAN "Build the Vulkan renderer backend (VulkanModule)" ON)
-option(ENGINE_WITH_REMOTE_CONTROL "Build the WebSocket server of the control API (RemoteControlModule)" ON)
+option(ENGINE_WITH_REMOTE_CONTROL "Build the sockets of the engine: RemoteControlModule (the control API server, the WebSocket client) and RoomServer" ON)
 option(ENGINE_STATIC_SDL "Build SDL3 and SDL3_image as static libraries" OFF)
 option(ENGINE_SINGLE_THREAD "Run the task system without worker threads" OFF)
 option(ENGINE_PROFILER "Record the BE_PROFILE_* zones, frames and counters" OFF)
@@ -38,7 +40,7 @@ option(ENGINE_PROFILER_TRACY "Build the vendored Tracy client and its profiler b
 
 if(ENGINE_TARGET_WEB)
     set(ENGINE_WITH_VULKAN OFF CACHE BOOL "Build the Vulkan renderer backend (VulkanModule)" FORCE)
-    set(ENGINE_WITH_REMOTE_CONTROL OFF CACHE BOOL "Build the WebSocket server of the control API (RemoteControlModule)" FORCE)
+    set(ENGINE_WITH_REMOTE_CONTROL OFF CACHE BOOL "Build the sockets of the engine: RemoteControlModule (the control API server, the WebSocket client) and RoomServer" FORCE)
     set(ENGINE_STATIC_SDL ON CACHE BOOL "Build SDL3 and SDL3_image as static libraries" FORCE)
     set(ENGINE_PROFILER OFF CACHE BOOL "Record the BE_PROFILE_* zones, frames and counters" FORCE)
     set(ENGINE_PROFILER_ALLOC OFF CACHE BOOL "Replace the global operator new / delete to count allocations (needs ENGINE_PROFILER)" FORCE)

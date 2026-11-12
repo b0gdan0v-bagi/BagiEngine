@@ -626,8 +626,12 @@ add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
 # Rooms of an online game by code: protocol, room logic, hub (pure code over Games' ISeatedGame; no sockets yet)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Rooms)
 
+# The client of the rooms: the protocol client and the transports under it. Unconditional, unlike RoomServer: the web build has the browser's
+# transport (it links RemoteControlModule by itself when the sockets are built)
+add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RoomClient)
+
 # The Rooms hub on the network. It needs the sockets of RemoteControl, which the web build does not have, so it exists only with them
-# (Rooms stays unconditional: the browser client of a later slice speaks its protocol)
+# (Rooms stays unconditional: the browser's RoomClient speaks its protocol)
 if(ENGINE_WITH_REMOTE_CONTROL)
     add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RoomServer)
 endif()

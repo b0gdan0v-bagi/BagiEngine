@@ -21,6 +21,7 @@ namespace BECore {
         inline constexpr uint16_t kProtocolError = 1002;
         inline constexpr uint16_t kUnsupportedData = 1003;
         inline constexpr uint16_t kNoStatusReceived = 1005;  // never sent: the value of a close frame that has no code
+        inline constexpr uint16_t kAbnormalClosure = 1006;   // never sent: the connection ended without a close frame
         inline constexpr uint16_t kPolicyViolation = 1008;
         inline constexpr uint16_t kMessageTooBig = 1009;
         inline constexpr uint16_t kTryAgainLater = 1013;  // the server is full or busy: connect again later
@@ -48,7 +49,7 @@ namespace BECore {
 
     CORE_ENUM(WebSocketMessageKind, uint8_t, Text, Binary, Ping, Pong, Close)
 
-    /// A complete message of a client: a text or binary message put together from its fragments, or a control frame
+    /// A complete message of the peer: a text or binary message put together from its fragments, or a control frame
     struct WebSocketMessage {
         WebSocketMessageKind kind = WebSocketMessageKind::Text;
         eastl::vector<uint8_t> payload;                              // Close: the reason, without the code
@@ -59,6 +60,9 @@ namespace BECore {
             return eastl::string_view(reinterpret_cast<const char*>(payload.data()), payload.size());
         }
     };
+
+    /// Who sends the frames a parser reads: the frames of a client are masked, those of a server are not (RFC 6455, section 5.1)
+    CORE_ENUM(WebSocketPeer, uint8_t, Client, Server)
 
     /// A client broke the protocol: the connection has to be closed with @p closeCode
     struct WebSocketProtocolError {
@@ -75,13 +79,17 @@ namespace BECore {
      * message may not exceed the limit: the length in the frame header is checked before the payload is stored, so a
      * client cannot make the server buffer more than the limit.
      *
+     * The parser reads the frames of a client by default; WebSocketPeer::Server makes it the parser of a client that
+     * reads a server: the frames must then be unmasked (a masked one is a protocol error). Everything else is shared.
+     *
      * The first violation is final: every later Pop() returns the same error and the caller closes the connection.
      * The parser does not check that text is UTF-8 (RFC 6455 section 5.6 asks for it): the control API answers text
      * that is not valid JSON with a parse_error, which is enough for a development tool.
      */
     class WebSocketFrameParser {
     public:
-        explicit WebSocketFrameParser(size_t maxMessageBytes = ControlService::kMaxRequestBytes) : _maxMessageBytes(maxMessageBytes) {}
+        /// @p sender is who sent the bytes that are fed
+        explicit WebSocketFrameParser(size_t maxMessageBytes = ControlService::kMaxRequestBytes, WebSocketPeer sender = WebSocketPeer::Client) : _maxMessageBytes(maxMessageBytes), _sender(sender) {}
 
         void Feed(eastl::span<const uint8_t> bytes);
 
@@ -103,6 +111,7 @@ namespace BECore {
         [[nodiscard]] std::expected<std::optional<WebSocketMessage>, WebSocketProtocolError> Fail(uint16_t closeCode, eastl::string reason);
 
         size_t _maxMessageBytes;
+        WebSocketPeer _sender;
         eastl::vector<uint8_t> _buffer;
         size_t _readPosition = 0;  // what is before it has been consumed; Feed() drops it
         std::optional<WebSocketProtocolError> _error;

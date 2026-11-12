@@ -12,6 +12,8 @@
 #else
 #include <arpa/inet.h>
 #include <cerrno>
+#include <fcntl.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
@@ -25,6 +27,7 @@ namespace BECore {
 
         constexpr int kLoopbackListenBacklog = 8;
         constexpr int kPublicListenBacklog = 128;
+        constexpr std::chrono::milliseconds kLoopbackConnectTimeout{10'000};
         constexpr const char* kUnknownPeerAddress = "?";
 
 #ifdef PLATFORM_WINDOWS
@@ -63,6 +66,19 @@ namespace BECore {
             return ioctlsocket(handle, FIONBIO, &enable) == 0;
         }
 
+        /// A connecting socket is non-blocking on every system; on Windows it stays so afterwards
+        bool EnterConnectRegime(NativeSocket handle) {
+            return MakeNonBlocking(handle);
+        }
+
+        bool LeaveConnectRegime(NativeSocket) {
+            return true;
+        }
+
+        bool IsConnectInProgress(int error) {
+            return error == WSAEWOULDBLOCK;
+        }
+
         constexpr int kSendFlags = 0;
         constexpr int kShutdownBoth = SD_BOTH;
 #else
@@ -90,6 +106,21 @@ namespace BECore {
 
         void CloseNative(NativeSocket handle) {
             close(handle);
+        }
+
+        /// connect() with a deadline needs a non-blocking socket; Receive() and SendAll() want the blocking one back
+        bool EnterConnectRegime(NativeSocket handle) {
+            const int flags = fcntl(handle, F_GETFL, 0);
+            return flags >= 0 && fcntl(handle, F_SETFL, flags | O_NONBLOCK) == 0;
+        }
+
+        bool LeaveConnectRegime(NativeSocket handle) {
+            const int flags = fcntl(handle, F_GETFL, 0);
+            return flags >= 0 && fcntl(handle, F_SETFL, flags & ~O_NONBLOCK) == 0;
+        }
+
+        bool IsConnectInProgress(int error) {
+            return error == EINPROGRESS || IsInterrupted(error);
         }
 
 #ifdef PLATFORM_MACOS
@@ -160,6 +191,87 @@ namespace BECore {
             return WaitFor(handle, POLLIN, timeout);
         }
 
+        struct AddrInfoDeleter {
+            void operator()(addrinfo* list) const {
+                freeaddrinfo(list);
+            }
+        };
+
+        /// The text of a getaddrinfo status: gai_strerror on POSIX (its codes are not errno values), the number on Windows
+        eastl::string DescribeResolveError(int status) {
+#ifdef PLATFORM_WINDOWS
+            return Format("error {}", status);
+#else
+            return eastl::string(gai_strerror(status));
+#endif
+        }
+
+        /// The IPv4 addresses of @p host with @p port in them, in the order the system prefers
+        std::expected<eastl::vector<sockaddr_in>, eastl::string> ResolveIPv4(const eastl::string& host, uint16_t port) {
+            EnsureSocketLibrary();
+            addrinfo hints{};
+            hints.ai_family = AF_INET;
+            hints.ai_socktype = SOCK_STREAM;
+            addrinfo* found = nullptr;
+            const int status = getaddrinfo(host.c_str(), nullptr, &hints, &found);
+            std::unique_ptr<addrinfo, AddrInfoDeleter> list(found);
+            if (status != 0 || list == nullptr) {
+                return std::unexpected(Format("cannot resolve host \"{}\" ({})", host, DescribeResolveError(status != 0 ? status : EAI_NONAME)));
+            }
+            eastl::vector<sockaddr_in> addresses;
+            for (const addrinfo* item = list.get(); item != nullptr; item = item->ai_next) {
+                if (item->ai_family == AF_INET && item->ai_addrlen >= sizeof(sockaddr_in)) {
+                    sockaddr_in address{};
+                    std::memcpy(&address, item->ai_addr, sizeof(address));
+                    address.sin_port = htons(port);
+                    addresses.push_back(address);
+                }
+            }
+            if (addresses.empty()) {
+                return std::unexpected(Format("host \"{}\" has no IPv4 address", host));
+            }
+            return addresses;
+        }
+
+        enum class ConnectOutcome : uint8_t { Connected, Failed, TimedOut, Cancelled };
+
+        /// One connect() on the non-blocking @p handle, waited for in slices until @p deadline; @p error gets the system error of a failure
+        ConnectOutcome ConnectNative(NativeSocket handle, const sockaddr_in& address, std::chrono::steady_clock::time_point deadline, const std::atomic<bool>* cancel, int& error) {
+            if (connect(handle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0) {
+                return ConnectOutcome::Connected;
+            }
+            error = LastError();
+            if (!IsConnectInProgress(error)) {
+                return ConnectOutcome::Failed;
+            }
+            for (;;) {
+                if (cancel != nullptr && cancel->load()) {
+                    return ConnectOutcome::Cancelled;
+                }
+                const auto now = std::chrono::steady_clock::now();
+                if (now >= deadline) {
+                    return ConnectOutcome::TimedOut;
+                }
+                const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now) + std::chrono::milliseconds(1);
+                if (!WaitFor(handle, POLLOUT, std::min(Socket::kWakeInterval, left))) {
+                    continue;  // not yet (or an interrupted poll): the loop looks at the flag and the deadline again
+                }
+                int pending = 0;
+#ifdef PLATFORM_WINDOWS
+                int size = sizeof(pending);
+                if (getsockopt(handle, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&pending), &size) != 0) {
+#else
+                socklen_t size = sizeof(pending);
+                if (getsockopt(handle, SOL_SOCKET, SO_ERROR, &pending, &size) != 0) {
+#endif
+                    error = LastError();
+                    return ConnectOutcome::Failed;
+                }
+                error = pending;
+                return pending == 0 ? ConnectOutcome::Connected : ConnectOutcome::Failed;
+            }
+        }
+
     }  // namespace
 
     Socket::~Socket() {
@@ -206,20 +318,48 @@ namespace BECore {
     }
 
     std::expected<Socket, eastl::string> Socket::Connect(uint16_t port) {
-        const NativeSocket handle = CreateTcpSocket();
-        if (handle == kNativeInvalid) {
-            return std::unexpected(DescribeError("socket()", LastError()));
-        }
-        Socket socketGuard(static_cast<intptr_t>(handle));
+        return Connect("127.0.0.1", port, kLoopbackConnectTimeout);
+    }
 
-        const sockaddr_in address = LoopbackAddress(port);
-        if (connect(handle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
-            return std::unexpected(DescribeError(Format("connect() to 127.0.0.1:{}", port), LastError()));
+    std::expected<Socket, eastl::string> Socket::Connect(eastl::string_view host, uint16_t port, std::chrono::milliseconds timeout, const std::atomic<bool>* cancel) {
+        const eastl::string target = Format("{}:{}", host, port);
+        if (cancel != nullptr && cancel->load()) {
+            return std::unexpected(Format("connect() to {} cancelled", target));
         }
-        if (!MakeNonBlocking(handle)) {
-            return std::unexpected(DescribeError("ioctlsocket()", LastError()));
+        const auto addresses = ResolveIPv4(eastl::string(host), port);
+        if (!addresses) {
+            return std::unexpected(addresses.error());
         }
-        return std::move(socketGuard);
+
+        const auto deadline = std::chrono::steady_clock::now() + timeout;
+        eastl::string lastError;
+        for (const sockaddr_in& address : *addresses) {
+            const NativeSocket handle = CreateTcpSocket();
+            if (handle == kNativeInvalid) {
+                return std::unexpected(DescribeError("socket()", LastError()));
+            }
+            Socket socketGuard(static_cast<intptr_t>(handle));
+            if (!EnterConnectRegime(handle)) {
+                return std::unexpected(DescribeError("fcntl() or ioctlsocket()", LastError()));
+            }
+
+            int error = 0;
+            switch (ConnectNative(handle, address, deadline, cancel, error)) {
+                case ConnectOutcome::Connected:
+                    if (!LeaveConnectRegime(handle)) {
+                        return std::unexpected(DescribeError("fcntl()", LastError()));
+                    }
+                    return std::move(socketGuard);
+                case ConnectOutcome::Cancelled:
+                    return std::unexpected(Format("connect() to {} cancelled", target));
+                case ConnectOutcome::TimedOut:
+                    return std::unexpected(Format("connect() to {} timed out after {} ms", target, timeout.count()));
+                case ConnectOutcome::Failed:
+                    lastError = DescribeError(Format("connect() to {}", target), error);
+                    break;  // the next address, if the name has another
+            }
+        }
+        return std::unexpected(lastError);
     }
 
     std::expected<Socket, SocketError> Socket::Accept(std::chrono::milliseconds timeout, eastl::string* peerAddress) {

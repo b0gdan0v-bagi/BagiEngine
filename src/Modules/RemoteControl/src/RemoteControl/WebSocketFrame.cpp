@@ -150,8 +150,12 @@ namespace BECore {
         if (!IsKnownOpcode(header.opcode)) {
             return Violation(WebSocketCloseCode::kProtocolError, Format("unknown opcode {}", static_cast<unsigned>(header.opcode)));
         }
-        if ((data[1] & kMaskBit) == 0) {
+        const bool isMasked = (data[1] & kMaskBit) != 0;
+        if (_sender == WebSocketPeer::Client && !isMasked) {
             return Violation(WebSocketCloseCode::kProtocolError, "the frames of a client have to be masked");
+        }
+        if (_sender == WebSocketPeer::Server && isMasked) {
+            return Violation(WebSocketCloseCode::kProtocolError, "the frames of a server must not be masked");
         }
 
         const uint8_t lengthCode = data[1] & kLengthMask;
@@ -179,11 +183,14 @@ namespace BECore {
             return Violation(WebSocketCloseCode::kMessageTooBig, Format("a message is longer than {} bytes", _maxMessageBytes));
         }
 
-        if (available < position + kMaskSize) {
-            return std::optional<FrameHeader>();
-        }
-        std::memcpy(header.mask.data(), data + position, kMaskSize);
-        header.headerSize = position + kMaskSize;
+        if (isMasked) {
+            if (available < position + kMaskSize) {
+                return std::optional<FrameHeader>();
+            }
+            std::memcpy(header.mask.data(), data + position, kMaskSize);
+            position += kMaskSize;
+        }  // an unmasked frame keeps the all-zero key, which leaves the payload as it is
+        header.headerSize = position;
         return std::optional<FrameHeader>(header);
     }
 

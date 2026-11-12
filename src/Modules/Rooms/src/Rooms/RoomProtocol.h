@@ -149,4 +149,66 @@ namespace BECore {
     /// `pong {}`
     [[nodiscard]] eastl::string MakePongMessage();
 
+    // ---- Server to client, read by a client -------------------------------------------------------------------------------------
+
+    /// `joined`, as the client reads it
+    struct JoinedMessage {
+        eastl::string room;
+        PlayerId player = 0;
+        /// A secret of this player; well-formed (IsWellFormedToken)
+        eastl::string token;
+        int seat = 0;
+        bool host = false;
+    };
+
+    /// `lobby`, as the client reads it
+    using LobbyMessage = LobbySnapshot;
+
+    /// `view`, as the client reads it. @c view and @c actions are the game's own JSON, kept as the server sent them.
+    struct ViewMessage {
+        eastl::string room;
+        int seat = 0;
+        uint64_t version = 0;
+        bool finished = false;
+        Json view = Json::object();
+        Json actions = Json::array();
+    };
+
+    /// `error`
+    struct ErrorMessage {
+        eastl::string code;
+        eastl::string message;
+        /// The type of the message it answers; empty when the server gave none
+        eastl::string ref;
+    };
+
+    /// `left`
+    struct LeftMessage {
+        eastl::string reason;
+    };
+
+    /// `pong`
+    struct PongMessage {};
+
+    /// A message with a good `v` and a `type` this client does not know (a newer server may add some); the client ignores it
+    struct UnknownServerMessage {
+        eastl::string type;
+    };
+
+    using ServerMessage = std::variant<JoinedMessage, LobbyMessage, ViewMessage, ErrorMessage, LeftMessage, PongMessage, UnknownServerMessage>;
+
+    /**
+     * @brief Reads one text message of the server (the inverse of the Make*Message builders). Never throws, aborts or asserts.
+     *
+     * Checks in this order: the size (@p maxBytes; `message_too_large`), no raw NUL byte, nesting not deeper than kMaxServerJsonDepth (`bad_message`), a JSON object, `v` an integer
+     * (`bad_message`; another number than kRoomProtocolVersion is `unsupported_version`), `type` a string, then the fields of that
+     * type. A missing or wrong-typed field, a fractional or out-of-range number, an unknown `phase` or seat `kind`, a token that is
+     * not well formed, more than kMaxLobbySeats seats are `bad_message`. Members the type does not define are ignored. An unknown
+     * `type` is UnknownServerMessage. A string is copied, never interned into a PoolString.
+     */
+    [[nodiscard]] std::expected<ServerMessage, ControlError> ParseServerMessage(eastl::string_view text, size_t maxBytes = RoomLimits::kMaxServerMessageBytes);
+
+    /// The `type` of a parsed server message (for the log)
+    [[nodiscard]] eastl::string_view GetServerMessageType(const ServerMessage& message);
+
 }  // namespace BECore

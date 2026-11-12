@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """Smoke test of the room server: starts BagiRoomServer and plays hands against it from this process, over real sockets.
 
-    python tools/rooms/smoke.py --exe <path of the built BagiRoomServer>
-    python tools/rooms/smoke.py --preset macos-debug            # build/macos-debug/bin/BagiRoomServer
+    python tools/rooms/smoke.py --exe <path of the built BagiRoomServer> [--probe <path of the built BagiRoomClientProbe>]
+    python tools/rooms/smoke.py --preset macos-debug            # build/macos-debug/bin/BagiRoomServer and BagiRoomClientProbe
 
 Scenarios, on a server with --test-games --computer-delay-ms 0 --reconnect-grace-ms 300:
   * a room of two humans and two computers plays a hand to the end;
   * a human drops mid-hand, a computer plays its seat once the grace has passed, the human returns with its token and plays on;
   * the same hand on `cards-leaky` must make the judge report a leak (the negative control: a judge that cannot fail proves nothing);
   * a server started with --origin https://good.example answers 403 to another Origin and takes the listed one.
+With the probe (the C++ client of RoomClient, a process of its own; its scenarios are skipped with a line when there is none):
+  * the probe hosts a room, plays it to the end and prints `PROBE OK`;
+  * the same against a server whose --origin list names only a web page: the probe sends no Origin and gets in;
+  * the server is killed after the probe's first view: the probe fails by itself, fast and non-zero, without waiting for its 30 s.
 The process is ended with SIGTERM and has to exit 0 in time (on Windows it is terminated, and its exit code is not checked).
 
 The judge is the rule of tests/BECore/Rooms/WireJudge.h, ported: change both together (tools/rooms/CLAUDE.md).
@@ -51,6 +55,13 @@ TOTAL_PLAYS = 12
 GOOD_ORIGIN = "https://good.example"
 EVIL_ORIGIN = "https://evil.example"
 HTTP_FORBIDDEN = 403
+PROBE_EXE_NAME = "BagiRoomClientProbe"
+PROBE_OK = "PROBE OK"
+PROBE_FIRST_VIEW = "PROBE first view"
+PROBE_FAILED = "PROBE FAILED"
+PROBE_LIMIT_SECONDS = 40.0  # the probe stops itself after 30 s
+PROBE_GONE_LIMIT_SECONDS = 10.0  # a probe whose server is gone has to notice at once
+PROBE_GONE_COMPUTER_DELAY_MS = 1500  # slow computers keep the hand running while the server is taken away
 
 # A card id is c<digit>_<digit>, a whole token (WireJudge.h, FindCardIds)
 CARD_ID = re.compile(r"(?<![A-Za-z0-9_])c\d_\d(?![A-Za-z0-9_])")
@@ -92,6 +103,7 @@ class RoomServer:
         self._log_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.log_path = Path(self._log_dir.name) / "server.log"
         self._process: subprocess.Popen | None = None
+        self._killed = False
 
     def __enter__(self) -> "RoomServer":
         with open(self.log_path, "wb") as log:
@@ -105,6 +117,13 @@ class RoomServer:
         self._log_dir.cleanup()
         if exc_type is None and code is not None:
             raise SmokeFailure(code)
+
+    def kill(self) -> None:
+        """Takes the server away without a word (no close frames); its exit code is then no longer checked."""
+        assert self._process is not None
+        self._killed = True
+        self._process.kill()
+        self._process.wait()
 
     def _wait_for_listening(self) -> int:
         assert self._process is not None
@@ -125,6 +144,8 @@ class RoomServer:
         if process is None:
             return None
         self._process = None
+        if self._killed:
+            return None
         process.terminate()
         try:
             process.wait(timeout=SHUTDOWN_SECONDS)
@@ -132,9 +153,50 @@ class RoomServer:
             process.kill()
             process.wait()
             return f"the server did not end within {SHUTDOWN_SECONDS} s of SIGTERM" if report else None
-        if report and sys.platform != "win32" and process.returncode != 0:
+        if report and not self._killed and sys.platform != "win32" and process.returncode != 0:
             return f"the server exited with code {process.returncode} after SIGTERM, not 0\n--- server log (tail) ---\n{log_tail(self.log_path)}"
         return None
+
+
+class Probe:
+    """One BagiRoomClientProbe process against a server, its output in a temporary file."""
+
+    def __init__(self, exe: Path, port: int):
+        self.command = [str(exe), "--url", f"ws://127.0.0.1:{port}", "--game", "cards"]
+        self.exe = exe
+        self._log_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.log_path = Path(self._log_dir.name) / "probe.log"
+        self._process: subprocess.Popen | None = None
+
+    def __enter__(self) -> "Probe":
+        with open(self.log_path, "wb") as log:
+            self._process = subprocess.Popen(self.command, cwd=self.exe.parent, stdout=log, stderr=subprocess.STDOUT)
+        return self
+
+    def __exit__(self, *rest: object) -> None:
+        if self._process is not None and self._process.poll() is None:
+            self._process.kill()
+            self._process.wait()
+        self._log_dir.cleanup()
+
+    def output(self) -> str:
+        return self.log_path.read_text(errors="replace")
+
+    def wait_for_line(self, text: str, limit: float = STEP_LIMIT_SECONDS) -> None:
+        assert self._process is not None
+        deadline = time.monotonic() + limit
+        while text not in self.output():
+            check(self._process.poll() is None, f"the probe ended before it printed '{text}'\n--- probe output ---\n{self.output()}")
+            check(time.monotonic() < deadline, f"the probe did not print '{text}' in {limit} s\n--- probe output ---\n{self.output()}")
+            time.sleep(STARTUP_POLL_SECONDS)
+
+    def finish(self, limit: float) -> int:
+        """Waits for the probe to end by itself and returns its exit code."""
+        assert self._process is not None
+        try:
+            return self._process.wait(timeout=limit)
+        except subprocess.TimeoutExpired:
+            raise SmokeFailure(f"the probe did not end within {limit} s\n--- probe output ---\n{self.output()}") from None
 
 
 class Human:
@@ -324,11 +386,37 @@ def scenario_origin(port: int) -> None:
         human.close()
 
 
-SCENARIOS: list[tuple[str, list[str], Callable[[int], None]]] = [
-    ("hand", [], scenario_hand),
-    ("reconnect", [], scenario_reconnect),
-    ("leaky", [], scenario_leaky),
-    ("origin", ["--origin", GOOD_ORIGIN], scenario_origin),
+def scenario_probe(server: RoomServer, probe: Path | None) -> None:
+    assert probe is not None
+    with Probe(probe, server.port) as running:
+        code = running.finish(PROBE_LIMIT_SECONDS)
+        check(code == 0 and PROBE_OK in running.output(), f"the probe exited with {code}\n--- probe output ---\n{running.output()}")
+
+
+def scenario_probe_gone(server: RoomServer, probe: Path | None) -> None:
+    assert probe is not None
+    with Probe(probe, server.port) as running:
+        running.wait_for_line(PROBE_FIRST_VIEW)
+        server.kill()
+        code = running.finish(PROBE_GONE_LIMIT_SECONDS)
+        check(code != 0 and PROBE_FAILED in running.output(), f"the probe exited with {code} after its server was killed\n--- probe output ---\n{running.output()}")
+        check(PROBE_OK not in running.output(), "the probe reported a finished game although its server was killed")
+
+
+def by_port(scenario: Callable[[int], None]) -> Callable[[RoomServer, Path | None], None]:
+    return lambda server, _probe: scenario(server.port)
+
+
+# (name, server arguments, scenario, whether it needs the probe)
+SCENARIOS: list[tuple[str, list[str], Callable[[RoomServer, Path | None], None], bool]] = [
+    ("hand", [], by_port(scenario_hand), False),
+    ("reconnect", [], by_port(scenario_reconnect), False),
+    ("leaky", [], by_port(scenario_leaky), False),
+    ("origin", ["--origin", GOOD_ORIGIN], by_port(scenario_origin), False),
+    ("probe", [], scenario_probe, True),
+    # The probe sends no Origin, and a server that lists only a web page lets a program in
+    ("probe-no-origin", ["--origin", GOOD_ORIGIN], scenario_probe, True),
+    ("probe-server-gone", ["--computer-delay-ms", str(PROBE_GONE_COMPUTER_DELAY_MS)], scenario_probe_gone, True),
 ]
 
 
@@ -336,6 +424,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--exe", type=Path, help="the BagiRoomServer executable (or --preset)")
     parser.add_argument("--preset", help="the CMake preset that built it: the executable is build/<preset>/bin/BagiRoomServer")
+    parser.add_argument("--probe", type=Path, help="the BagiRoomClientProbe executable; without it (or with --preset, when it is not built) the probe scenarios are skipped")
     parser.add_argument("--root", type=Path, help="the repository whose build/ folder --preset means (default: the one holding these tools)")
     args = parser.parse_args()
 
@@ -346,11 +435,21 @@ def main() -> int:
         print(f"SKIPPED: {exe} does not exist")
         return EXIT_SKIPPED
 
-    for name, flags, scenario in SCENARIOS:
+    probe = args.probe or (preset_executable(args.preset, PROBE_EXE_NAME, args.root) if args.preset else None)
+    if probe is not None and not probe.is_file():
+        print(f"the probe {probe} does not exist")
+        probe = None
+    if probe is None:
+        print("no probe: the probe scenarios are skipped")
+
+    for name, flags, scenario, needs_probe in SCENARIOS:
+        if needs_probe and probe is None:
+            print(f"{name}: skipped (no probe)", flush=True)
+            continue
         print(f"{name}: running", flush=True)
         try:
             with RoomServer(exe.resolve(), flags) as server:
-                scenario(server.port)
+                scenario(server, probe.resolve() if probe else None)
         except (SmokeFailure, OSError, ConnectionClosed, HandshakeError, ValueError) as error:
             print(f"FAILED ({name}): {error}")
             return EXIT_FAILED

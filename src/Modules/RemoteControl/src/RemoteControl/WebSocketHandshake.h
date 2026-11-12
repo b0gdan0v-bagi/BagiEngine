@@ -14,6 +14,14 @@ namespace BECore {
         eastl::string message;
     };
 
+    /// Small helpers for the text of HTTP headers, shared by the server's handshake and the client's (ASCII only)
+    [[nodiscard]] eastl::string LowerAscii(eastl::string_view text);
+    [[nodiscard]] bool EqualsIgnoreCase(eastl::string_view left, eastl::string_view right);
+    /// @p text without the spaces and tabs at both ends
+    [[nodiscard]] eastl::string_view TrimHeaderValue(eastl::string_view text);
+    /// True when the comma-separated list @p value has the token @p token (any case)
+    [[nodiscard]] bool HeaderHasToken(eastl::string_view value, eastl::string_view token);
+
     /// `Sec-WebSocket-Accept` for @p clientKey: base64(SHA-1(key + GUID))
     [[nodiscard]] eastl::string ComputeAcceptKey(eastl::string_view clientKey);
 

@@ -17,11 +17,16 @@ be_add_headless_executable(BagiRoomServer
 )
 
 # ctest entry BagiRoomServerSmoke: tools/rooms/smoke.py starts the executable (it picks a free port itself, --port 0) and plays hands from a client in
-# another process. Does not build the executable (a missing one is a skip, exit code 77). The RESOURCE_LOCK keeps it apart from the other
+# another process, and runs BagiRoomClientProbe (RoomClient) against it. Does not build the executables (a missing server is a skip, exit code
+# 77; a missing probe skips its scenarios). The RESOURCE_LOCK keeps it apart from the other
 # smoke tests of one ctest run; it is not RUN_SERIAL, which would stop every other test while it runs. TIMEOUT 120 is far above the few seconds a
 # run takes; a stuck server is cut off by the script's own limits first
 if(ENGINE_BUILD_TESTS AND Python3_FOUND)
-    add_test(NAME BagiRoomServerSmoke COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/rooms/smoke.py --exe $<TARGET_FILE:BagiRoomServer>)
+    set(ROOM_SMOKE_PROBE_ARGS "")
+    if(TARGET BagiRoomClientProbe)
+        set(ROOM_SMOKE_PROBE_ARGS --probe $<TARGET_FILE:BagiRoomClientProbe>)
+    endif()
+    add_test(NAME BagiRoomServerSmoke COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/tools/rooms/smoke.py --exe $<TARGET_FILE:BagiRoomServer> ${ROOM_SMOKE_PROBE_ARGS})
     set_tests_properties(BagiRoomServerSmoke PROPERTIES
         SKIP_RETURN_CODE 77
         TIMEOUT 120
