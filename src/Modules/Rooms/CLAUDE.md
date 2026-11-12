@@ -133,6 +133,7 @@ Constants in `RoomLimits.h`; `RoomHubSettings` repeats them as defaults for the 
 | Limit | Value |
 |-------|-------|
 | client message | 16 KiB (`kMaxMessageBytes`) |
+| server message a client reads | 1 MiB, JSON nesting 128 (`kMaxServerMessageBytes`, `kMaxServerJsonDepth`: copying a deep `view` recurses) |
 | player name | 1 to 24 UTF-8 bytes |
 | game name | 1 to 64 bytes |
 | rooms, connections | 64, 512 |

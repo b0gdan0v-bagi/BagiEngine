@@ -631,7 +631,7 @@ add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Rooms)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RoomClient)
 
 # The Rooms hub on the network. It needs the sockets of RemoteControl, which the web build does not have, so it exists only with them
-# (Rooms stays unconditional: the browser client of a later slice speaks its protocol)
+# (Rooms stays unconditional: the browser's RoomClient speaks its protocol)
 if(ENGINE_WITH_REMOTE_CONTROL)
     add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RoomServer)
 endif()

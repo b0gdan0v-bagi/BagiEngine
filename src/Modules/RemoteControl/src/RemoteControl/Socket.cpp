@@ -197,6 +197,15 @@ namespace BECore {
             }
         };
 
+        /// The text of a getaddrinfo status: gai_strerror on POSIX (its codes are not errno values), the number on Windows
+        eastl::string DescribeResolveError(int status) {
+#ifdef PLATFORM_WINDOWS
+            return Format("error {}", status);
+#else
+            return eastl::string(gai_strerror(status));
+#endif
+        }
+
         /// The IPv4 addresses of @p host with @p port in them, in the order the system prefers
         std::expected<eastl::vector<sockaddr_in>, eastl::string> ResolveIPv4(const eastl::string& host, uint16_t port) {
             EnsureSocketLibrary();
@@ -207,7 +216,7 @@ namespace BECore {
             const int status = getaddrinfo(host.c_str(), nullptr, &hints, &found);
             std::unique_ptr<addrinfo, AddrInfoDeleter> list(found);
             if (status != 0 || list == nullptr) {
-                return std::unexpected(Format("cannot resolve host \"{}\" ({})", host, status != 0 ? status : EAI_NONAME));
+                return std::unexpected(Format("cannot resolve host \"{}\" ({})", host, DescribeResolveError(status != 0 ? status : EAI_NONAME)));
             }
             eastl::vector<sockaddr_in> addresses;
             for (const addrinfo* item = list.get(); item != nullptr; item = item->ai_next) {

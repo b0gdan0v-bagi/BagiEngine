@@ -30,8 +30,9 @@ namespace BECore {
      * Everything is delivered on the calling thread by PollEvent(): no callback ever runs on a network thread, so the owner needs no
      * lock. A transport serves one connection: after Closed it is finished and the owner makes a new one. Exactly one Closed follows
      * every Open() that returned a value (a refused connect included, with kRoomTransportAbnormalClosure and a reason), and it is the
-     * last event; every text that arrived before it is delivered before it. The destructor ends the connection without waiting and
-     * is safe in every state.
+     * last event; every text that arrived before it is delivered before it. The destructor ends the connection and is safe in every
+     * state; it does not wait for the network, except that the native transport joins its reader thread, which may still be inside
+     * getaddrinfo (the system call cannot be cancelled), so it can take as long as one name lookup.
      *
      * The implementations: NativeRoomTransport (sockets, desktop) and EmscriptenRoomTransport (the browser's WebSocket).
      */

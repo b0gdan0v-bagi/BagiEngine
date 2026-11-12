@@ -200,7 +200,7 @@ namespace BECore {
     /**
      * @brief Reads one text message of the server (the inverse of the Make*Message builders). Never throws, aborts or asserts.
      *
-     * Checks in this order: the size (@p maxBytes; `message_too_large`), no raw NUL byte, a JSON object, `v` an integer
+     * Checks in this order: the size (@p maxBytes; `message_too_large`), no raw NUL byte, nesting not deeper than kMaxServerJsonDepth (`bad_message`), a JSON object, `v` an integer
      * (`bad_message`; another number than kRoomProtocolVersion is `unsupported_version`), `type` a string, then the fields of that
      * type. A missing or wrong-typed field, a fractional or out-of-range number, an unknown `phase` or seat `kind`, a token that is
      * not well formed, more than kMaxLobbySeats seats are `bad_message`. Members the type does not define are ignored. An unknown

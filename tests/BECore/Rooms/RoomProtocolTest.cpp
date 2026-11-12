@@ -648,6 +648,17 @@ namespace BECore::Tests {
         balancedBomb.append(RoomLimits::kMaxServerMessageBytes / 2, ']');
         const eastl::string nulByte = eastl::string("{\"v\":1,\"type\":\"pong\"}\0garbage", 24);
         const eastl::string invalidUtf8 = Format("{{\"v\":1,\"type\":\"left\",\"reason\":\"{}\"}}", "\xC3\x28");
+        // Valid JSON in the size limit, nested far deeper than a game's view is: the copy of "view" or "actions" would recurse
+        const size_t bombDepth = (RoomLimits::kMaxServerMessageBytes - 256) / 2;
+        const auto bombIn = [&](eastl::string_view member, size_t levels) {
+            eastl::string open = Repeat('[', levels);
+            open.append(levels, ']');
+            const eastl::string others = member == "view" ? R"("actions":[])" : R"("view":{})";
+            return Message("view", Format(R"("room":"ABCDE","seat":0,"version":1,"finished":false,{},"{}":{})", others, member, open));
+        };
+        const eastl::string bombInsideView = bombIn("view", bombDepth);
+        const eastl::string bombInsideActions = bombIn("actions", bombDepth);
+        const eastl::string justOverTheDepth = bombIn("view", RoomLimits::kMaxServerJsonDepth);
 
         const eastl::vector<BadInput> table = {
             {"empty", "", "bad_message"},
@@ -660,6 +671,9 @@ namespace BECore::Tests {
             {"null", "null", "bad_message"},
             {"nesting bomb", bomb, "bad_message"},
             {"nesting bomb, balanced", balancedBomb, "bad_message"},
+            {"nesting bomb inside view", bombInsideView, "bad_message"},
+            {"nesting bomb inside actions", bombInsideActions, "bad_message"},
+            {"one level over the depth bound", justOverTheDepth, "bad_message"},
             {"v missing", R"({"type":"pong"})", "bad_message"},
             {"v string", R"({"v":"1","type":"pong"})", "bad_message"},
             {"v fractional", R"({"v":1.5,"type":"pong"})", "bad_message"},
@@ -724,6 +738,9 @@ namespace BECore::Tests {
         EXPECT_EQ(ServerErrorCodeOf(Message("joined", goodJoined)), "<ok>");
         EXPECT_EQ(ServerErrorCodeOf(Message("view", goodView)), "<ok>");
         EXPECT_EQ(ServerErrorCodeOf(LobbyWith(kGoodLobbyMembers)), "<ok>");
+        // The bound counts the message object too: a view that nests to exactly the bound is read
+        EXPECT_EQ(ServerErrorCodeOf(bombIn("view", RoomLimits::kMaxServerJsonDepth - 1)), "<ok>");
+        EXPECT_EQ(ServerErrorCodeOf(bombIn("actions", RoomLimits::kMaxServerJsonDepth - 1)), "<ok>");
     }
 
     TEST(RoomProtocolTest, ParseServerMessageBoundsTheSeatsOfALobby) {

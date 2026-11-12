@@ -70,7 +70,8 @@ namespace BECore {
      * Exactly one Closed event follows every Open() that returned a value, whatever ends the connection (a refused connect
      * and a failed handshake included, with code 1006), and it is the last event: every message that arrived before is
      * delivered first. The threads are joined by the next Open() or the destructor, which aborts, wakes every wait and joins
-     * (safe in any state, also for an object that never opened). One object serves one connection at a time.
+     * (safe in any state, also for an object that never opened; a reader still inside getaddrinfo cannot be woken, so the join may
+     * wait for that one name lookup). One object serves one connection at a time.
      *
      * The client masks every frame with a fresh key, answers pings, answers a close with a close, and closes the connection
      * with 1002 on a protocol error (a masked frame of the server included), 1009 on a message over the limit, 1003 on a

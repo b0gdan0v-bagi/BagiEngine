@@ -13,6 +13,11 @@ namespace BECore {
         /// bounded by kMaxMessageBytes, which a client's `action` has to fit)
         inline constexpr size_t kMaxServerMessageBytes = 1024 * 1024;
 
+        /// The deepest nesting of arrays and objects a client accepts in a message from the server. The parser reads a deeper one
+        /// without recursion, but copying the game's `view` or `actions` out of it recurses once per level and a bomb in 1 MiB
+        /// would overflow the stack
+        inline constexpr size_t kMaxServerJsonDepth = 128;
+
         /// The most seats a `lobby` message may list when a client reads it (a bound on the work, not a limit of any game)
         inline constexpr size_t kMaxLobbySeats = 64;
 

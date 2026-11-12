@@ -264,9 +264,9 @@ namespace BECore {
         if (_socket <= 0) {
             return;
         }
-        // close() with no status ends a connection that is still open (a no-op on one that has ended); delete detaches every callback,
-        // so nothing of this socket reaches the object afterwards
-        emscripten_websocket_close(_socket, 0, nullptr);
+        // close(1000) ends a connection that is open or still connecting (a no-op on one that has ended), and the server sees the
+        // normal closure, not "no status"; delete detaches every callback, so nothing of this socket reaches the object afterwards
+        emscripten_websocket_close(_socket, kRoomTransportNormalClosure, nullptr);
         emscripten_websocket_delete(_socket);
         _socket = 0;
     }

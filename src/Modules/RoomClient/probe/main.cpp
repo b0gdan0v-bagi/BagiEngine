@@ -43,7 +43,13 @@ namespace {
                 return false;
             }
             const eastl::string value = argv[++i];
-            (flag == "--url" ? args.url : flag == "--game" ? args.game : args.name) = value;
+            if (flag == "--url") {
+                args.url = value;
+            } else if (flag == "--game") {
+                args.game = value;
+            } else {
+                args.name = value;
+            }
         }
         if (args.url.empty()) {
             std::fprintf(stderr, "BagiRoomClientProbe: --url is required\n");
