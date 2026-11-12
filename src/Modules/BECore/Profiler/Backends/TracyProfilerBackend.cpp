@@ -1,8 +1,12 @@
 // Compiled only with ENGINE_PROFILER_TRACY, with the Tracy definitions of BECore/CMakeLists.txt and without the PCH
 #include "TracyProfilerBackend.h"
 
-#include <BECore/Profiler/Profiler.h>
+// clang-format off: what Profiler.h takes from the PCH in every other file has to come before it
+#include <EASTL/string.h>
 #include <atomic>
+#include <expected>
+#include <BECore/Profiler/Profiler.h>
+// clang-format on
 #include <cstddef>
 #include <new>
 #include <tracy/TracyC.h>
