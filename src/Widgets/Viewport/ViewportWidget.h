@@ -72,6 +72,8 @@ namespace BECore {
         // every visible canvas, the regions (named outlines, under the touch targets; the name and the canvas-unit rect on hover), the touch targets
         // (red under UISettings::minTouchSize, the element name on hover, which wins over a region), the safe area. The canvases
         // are the ones the pass just laid out for this target. @p outputSize is the target's size, @p hovered the pointer is over the image
+        /// The "Paused" mark in the top-left corner of the image while the game is paused (CoreManager::GetPause())
+        void DrawPausedMark(const ImVec2& imageMin, const ImVec2& imageMax) const;
         void DrawOverlays(Scene* scene, const ImVec2& imageMin, const ImVec2& imageMax, float zoom, const ImVec2& outputSize, const Rect& safeArea, bool hovered) const;
 
         // The simulated safe area (in target pixels) as an outline over the image, so it is clear what the canvases were given

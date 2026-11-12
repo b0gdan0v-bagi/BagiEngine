@@ -28,9 +28,9 @@ namespace BECore {
      * @brief The frame time and FPS of the status bar: the mean of the last kMeterWindow frames, rounded.
      *
      * Fed once per frame with the last finished frame of the FrameStatsCollector. A frame it has seen already (the idle pass of the
-     * manual clock finishes none) is ignored, and so is a frame with a zero, negative or non-finite time. FPS is `1000 / mean`
-     * rounded to an integer, the frame time is rounded to one decimal; Version() moves only when one of these two changes, so a
-     * caller makes its text again only then. Plain data without an ImGui context.
+     * manual clock finishes none) is ignored, and so are a frame with a zero, negative or non-finite time and a paused (held) frame, which is not a game frame (the numbers stand as they were while
+     * the game is paused). FPS is `1000 / mean` rounded to an integer, the frame time is rounded to one decimal; Version() moves only when one of these two changes, so a caller makes its text again
+     * only then. Plain data without an ImGui context.
      */
     class FrameMeter {
     public:

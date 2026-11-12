@@ -55,6 +55,23 @@ namespace BECore::Tests {
         EXPECT_DOUBLE_EQ(meter.GetFrameMs(), 16.5);
     }
 
+    TEST(StatusBarModelTest, MeterLeavesOutPausedFrames) {
+        FrameMeter meter;
+        EXPECT_TRUE(meter.Feed(Frame(1, 20.0)));
+        const uint32_t version = meter.Version();
+
+        FrameStats held = Frame(2, 1.0);
+        held.paused = true;
+        EXPECT_TRUE(meter.Feed(held));
+        EXPECT_DOUBLE_EQ(meter.GetFrameMs(), 20.0);
+        EXPECT_EQ(meter.Version(), version);
+
+        // The held frame was seen: it is not fed twice, and the next game frame counts on its own
+        EXPECT_FALSE(meter.Feed(held));
+        EXPECT_TRUE(meter.Feed(Frame(3, 30.0)));
+        EXPECT_DOUBLE_EQ(meter.GetFrameMs(), 25.0);
+    }
+
     TEST(StatusBarModelTest, MeterKeepsTheLastWindowOnly) {
         FrameMeter meter;
         for (uint64_t i = 1; i <= kMeterWindow; ++i) {

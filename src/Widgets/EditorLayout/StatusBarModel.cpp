@@ -29,7 +29,8 @@ namespace BECore {
             return false;
         }
         _lastFrame = stats.frame;
-        if (!(stats.frameMs > 0.0) || !std::isfinite(stats.frameMs)) {
+        // A held frame costs next to nothing because the game stood still: it would pull the mean of the game's frames down
+        if (stats.paused || !(stats.frameMs > 0.0) || !std::isfinite(stats.frameMs)) {
             return true;
         }
 
