@@ -75,6 +75,10 @@ namespace BECore {
 
         /// `disabled` or the group's (`selected` and `groupDisabled` are fields of `UIElement`)
         [[nodiscard]] bool IsDisabled() const override;
+        /// A button has its own state (hover, press, selection) whatever it sits in
+        [[nodiscard]] bool OwnsState() const override {
+            return true;
+        }
         [[nodiscard]] const eastl::string& GetTooltipText() const override {
             return tooltip;
         }

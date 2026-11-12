@@ -3,6 +3,7 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
+#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
@@ -26,6 +27,7 @@ namespace BECore::Tests {
         //   Off      (300, 100, 200 x 60)  a clicker, disabled; an image child OffIcon
         //   Bare     (300, 200, 200 x 60)  a clicker; a text child BareCap only, so the selected bar takes its colour
         //   Plain    (300, 300, 200 x 60)  a clicker and no children, no text: the bar is white
+        //   Holder   (550, 10, 200 x 60)   a clicker; HolderButton, a UIButton with a fill per state, is its child
         constexpr const char* kInheritXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -109,6 +111,14 @@ namespace BECore::Tests {
           </element>
           <element type="UIElement" name="Plain" x="300" y="300" width="200" height="60" color="40,40,40,255">
             <components><component type="UIInputClicker" action="Plain"/></components>
+          </element>
+          <element type="UIElement" name="Holder" x="550" y="10" width="200" height="60" color="40,40,40,255" hoverColor="1,2,3,255" pressedColor="1,2,4,255"
+                   disabledColor="1,2,5,255" selectedColor="1,2,6,255">
+            <components><component type="UIInputClicker" action="Holder"/></components>
+            <children>
+              <element type="UIButton" name="HolderButton" x="0" y="0" width="100" height="60" text="In" color="40,40,40,255" hoverColor="60,70,80,255"
+                       pressedColor="20,30,40,255" disabledColor="90,91,92,255" selectedColor="30,90,30,255"/>
+            </children>
           </element>
         </elements>
       </component>
@@ -388,6 +398,56 @@ namespace BECore::Tests {
 
         EXPECT_EQ(PictureTint(Get("Icon")), Pack(kWhite));
         EXPECT_FALSE(Get("Icon").GetVisualState().hovered);
+    }
+
+    TEST_F(UIStateInheritTest, AUIButtonBelowAnElementWithAClickerDrawsItsOwnState) {
+        auto& holder = Get("Holder");
+        auto& button = *Get("HolderButton").Cast<UIButton>();
+        ASSERT_TRUE(button.OwnsState());
+        EXPECT_FALSE(Get("Icon").OwnsState());
+        EXPECT_TRUE(holder.OwnsState());
+
+        // The pointer is over the holder but not over the button: the button is at rest
+        MoveTo(holder.rect.x + 150.0f, holder.rect.y + 30.0f);
+        Draw();
+        ASSERT_TRUE(holder.hovered);
+        ASSERT_FALSE(button.hovered);
+        EXPECT_FALSE(button.GetVisualState().hovered);
+        EXPECT_EQ(Pack(button.GetCurrentFill()), Pack(Color{40, 40, 40, 255}));
+
+        // Over the button both are hovered: its own look, not the holder's fill
+        Hover(button);
+        EXPECT_TRUE(button.GetVisualState().hovered);
+        EXPECT_EQ(Pack(button.GetCurrentFill()), Pack(Color{60, 70, 80, 255}));
+
+        Hold(button);
+        EXPECT_TRUE(button.GetVisualState().pressed);
+        EXPECT_EQ(Pack(button.GetCurrentFill()), Pack(Color{20, 30, 40, 255}));
+        MoveTo(700.0f, 500.0f);
+        CoreManager::GetUIInput().DispatchMouseButtonUp(Button(700.0f, 500.0f, false));
+        Draw();
+
+        button.disabled = true;
+        Draw();
+        EXPECT_TRUE(button.GetVisualState().disabled);
+        EXPECT_EQ(Pack(button.GetCurrentFill()), Pack(Color{90, 91, 92, 255}));
+        button.disabled = false;
+
+        button.selected = true;
+        Draw();
+        EXPECT_TRUE(button.GetVisualState().selected);
+        EXPECT_FALSE(holder.GetVisualState().selected) << "the holder's flags are its own";
+        EXPECT_EQ(Pack(button.GetCurrentFill()), Pack(Color{30, 90, 30, 255}));
+    }
+
+    TEST_F(UIStateInheritTest, ADisabledAncestorDoesNotDisableAUIButton) {
+        auto& holder = Get("Holder");
+        auto& button = *Get("HolderButton").Cast<UIButton>();
+        holder.GetComponent<UIInputClicker>()->disabled = true;
+        Draw();
+
+        EXPECT_TRUE(holder.GetVisualState().disabled);
+        EXPECT_FALSE(button.GetVisualState().disabled) << "an ancestor's state is not the button's";
     }
 
 }  // namespace BECore::Tests

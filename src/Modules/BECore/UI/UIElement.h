@@ -41,8 +41,8 @@ namespace BECore {
      * **State.** `hovered` and `pressed` are set by the canvas, `selected` and `groupDisabled` by whoever owns a choice; `GetVisualState()` is what they add up to and `UIStateLook` (the pure
      * rules) turns it into a look. The element's own box takes that look (the fills `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, or the derived shifts) only when a
      * component says `GivesStateLook()`; a panel that merely `blocksInput` is hovered too and must not light up. A control that is its own class (`UIButton`) draws the state look itself.
-     * An element with no `UIInputClicker` is drawn in the state of its nearest ancestor that has one (`GetVisualState`), so the `UIImageComponent` and the `UITextComponent` of the children of
-     * a composed button follow its hover, press and disabled state; the child itself is not hovered (its flags, the hit test and `ui_tree` are its own).
+     * An element that does not `OwnsState()` (no `UIInputClicker`, not a `UIButton`) is drawn in the state of its nearest ancestor that does (`GetVisualState`), so the `UIImageComponent` and the
+     * `UITextComponent` of the children of a composed button follow its hover, press and disabled state; the child itself is not hovered (its flags, the hit test and `ui_tree` are its own).
      *
      * **Theme tokens.** A colour field may be a token (`color="@primary"`, UIThemes). The canvas calls `ResolveTheme()` before it draws the element: the token's colour is written into the
      * channels of every colour field (the element's own, the box's, its controls' and components'), so every reader of a colour keeps reading channels. `_themeVersion` is the version of
@@ -167,8 +167,9 @@ namespace BECore {
         /// `UIInputClicker` of its own but was drawn inside one that has (`SetInheritedState`) answers with that ancestor's state: the image and the text of a button's children follow it
         [[nodiscard]] UIStateLook::State GetVisualState() const;
 
-        /// The element has a `UIInputClicker`: it is the owner of the state its descendants without a clicker are drawn in
-        [[nodiscard]] bool OwnsState() const;
+        /// The element is the owner of the state its descendants without an owner are drawn in, and is itself drawn in its own: it has a `UIInputClicker`, or is a control that reacts to the
+        /// pointer by itself (`UIButton` answers true, so a button below an element with a clicker shows its own state, not the ancestor's)
+        [[nodiscard]] virtual bool OwnsState() const;
 
         /// Runtime, called by the canvas before it draws the element: the state of the nearest ancestor that `OwnsState()`, null for none. Ignored by an element that `OwnsState()`. Not
         /// reflected and not saved; the element's own flags, `ui_tree` and the hit test never read it

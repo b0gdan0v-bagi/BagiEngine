@@ -8,6 +8,8 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIChoice.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UILabel.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStack.h>
@@ -28,6 +30,8 @@ namespace BECore::Tests {
         //   Mixed   (10, 200, 500 x 48) bound to `mode`: a label, a segment and a nested group `Inner` bound to `inner` (its buttons are not Mixed's segments)
         //   Plain   (10, 300, 304 x 48): a UIStack, not a group, with a button whose value is "two"
         //   Unbound (10, 400, 304 x 48): no `bind`; one segment has value "two", the other no value
+        //   Comp    (10, 470, 412 x 48): composed segments bound to `comp`: a caption on the element, an icon-left one (clicker, an image child, a caption child), a disabled one
+        //   Forms   (10, 530, 500 x 48) bound to `comp`: a label, a UIButton, a composed segment and a nested group `FormsInner` of a composed segment bound to `inner`
         constexpr const char* kSegmentedXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -69,6 +73,53 @@ namespace BECore::Tests {
             <children>
               <element type="UIButton" name="UnboundTwo" flex="1" height="48" text="Two" value="two" action="SegTestUnbound" color="70,70,100,255"/>
               <element type="UIButton" name="UnboundNone" flex="1" height="48" text="None" action="SegTestUnbound" color="70,70,100,255"/>
+            </children>
+          </element>
+          <element type="UISegmented" name="Comp" bind="comp" x="10" y="470" width="412" height="48" direction="Horizontal" spacing="4">
+            <children>
+              <element type="UIElement" name="CompPlain" flex="1" height="48" color="70,70,100,255" selectedColor="40,110,60,255">
+                <components>
+                  <component type="UITextComponent" text="Plain" align="Center" verticalAlign="Center" textColor="10,200,30,255"/>
+                  <component type="UIInputClicker" action="SegTestComp" value="plain"/>
+                </components>
+              </element>
+              <element type="UIElement" name="CompIcon" flex="1" height="48" color="70,70,100,255" layout="Stack" direction="Horizontal" spacing="6" crossAlign="Center">
+                <components><component type="UIInputClicker" action="SegTestComp" value="icon"/></components>
+                <children>
+                  <element type="UIElement" name="CompIconImage" width="24" height="24"><components><component type="UIImageComponent"/></components></element>
+                  <element type="UIElement" name="CompIconCaption" flex="1" height="100%">
+                    <components><component type="UITextComponent" text="Icon" align="Center" verticalAlign="Center" textColor="200,100,50,255"/></components>
+                  </element>
+                </children>
+              </element>
+              <element type="UIElement" name="CompOff" flex="1" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Off" align="Center" verticalAlign="Center"/>
+                  <component type="UIInputClicker" action="SegTestComp" value="off" disabled="true"/>
+                </components>
+              </element>
+            </children>
+          </element>
+          <element type="UISegmented" name="Forms" bind="comp" x="10" y="530" width="500" height="48" direction="Horizontal" spacing="4">
+            <children>
+              <element type="UILabel" name="FormsCaption" width="60" height="48" text="Form"/>
+              <element type="UIButton" name="FormsButton" width="100" height="48" text="Button" value="plain" action="SegTestForms" color="70,70,100,255"/>
+              <element type="UIElement" name="FormsComposed" width="100" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Composed" align="Center" verticalAlign="Center"/>
+                  <component type="UIInputClicker" action="SegTestForms" value="icon"/>
+                </components>
+              </element>
+              <element type="UISegmented" name="FormsInner" bind="inner" width="200" height="48" direction="Horizontal" spacing="4">
+                <children>
+                  <element type="UIElement" name="FormsInnerOne" flex="1" height="48" color="70,70,100,255">
+                    <components>
+                      <component type="UITextComponent" text="One" align="Center" verticalAlign="Center"/>
+                      <component type="UIInputClicker" action="SegTestFormsInner" value="plain"/>
+                    </components>
+                  </element>
+                </children>
+              </element>
             </children>
           </element>
         </elements>
@@ -189,6 +240,29 @@ namespace BECore::Tests {
             const UIButton& button = Get<UIButton>(name);
             const Rect bar{button.rect.x, button.rect.y + button.rect.h - UIButton::kSelectedBarHeight, button.rect.w, UIButton::kSelectedBarHeight};
             return std::any_of(_renderer->calls.begin(), _renderer->calls.end(), [&](const DrawCall& call) { return call.kind == DrawKind::Rect && Near(call.rect, bar); });
+        }
+
+        /// Any element by name, whatever its class (`Get<T>` wants the exact type)
+        UIElement& Element(const char* name) const {
+            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
+            EXPECT_NE(element, nullptr) << name;
+            return *element;
+        }
+
+        bool SelectedElement(const char* name) const {
+            return Element(name).selected;
+        }
+
+        /// The colour of the bar of the selected-state look drawn at the foot of the rect of @p name in the last draw, none when there was no bar
+        std::optional<Color> BarColorOf(const char* name) const {
+            const UIElement& element = Element(name);
+            const Rect bar{element.rect.x, element.rect.y + element.rect.h - UIStateLook::kSelectedBarHeight, element.rect.w, UIStateLook::kSelectedBarHeight};
+            for (const DrawCall& call : _renderer->calls) {
+                if (call.kind == DrawKind::Rect && Near(call.rect, bar)) {
+                    return call.color;
+                }
+            }
+            return std::nullopt;
         }
 
         void Click(const char* name) {
@@ -521,6 +595,130 @@ namespace BECore::Tests {
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
         }
+    }
+
+    // ---- composed segments: an element with a clicker is a segment as a UIButton is ----------------------------------------
+
+    TEST_F(UISegmentedTest, ComposedSegmentsAreSelectedByTheVariableThroughTheValueOfTheirClicker) {
+        SetVar("comp", "icon");
+        Draw();
+        EXPECT_FALSE(SelectedElement("CompPlain"));
+        EXPECT_TRUE(SelectedElement("CompIcon"));
+        EXPECT_FALSE(SelectedElement("CompOff"));
+        EXPECT_FALSE(Element("CompIconCaption").selected) << "only the direct children of the group are segments";
+
+        SetVar("comp", "plain");
+        Draw();
+        EXPECT_TRUE(SelectedElement("CompPlain"));
+        EXPECT_FALSE(SelectedElement("CompIcon"));
+
+        SetVar("comp", "nothing");
+        Draw();
+        EXPECT_FALSE(SelectedElement("CompPlain"));
+        EXPECT_FALSE(SelectedElement("CompIcon"));
+    }
+
+    TEST_F(UISegmentedTest, TheComposedSegmentsShareTheWidthByFlexLikeButtons) {
+        Draw();
+        EXPECT_TRUE(Near(Element("CompPlain").rect, {10.0f, 470.0f, 134.667f, 48.0f}, 0.1f));
+        EXPECT_TRUE(Near(Element("CompIcon").rect, {148.667f, 470.0f, 134.667f, 48.0f}, 0.1f));
+        EXPECT_TRUE(Near(Element("CompOff").rect, {287.333f, 470.0f, 134.667f, 48.0f}, 0.1f));
+    }
+
+    TEST_F(UISegmentedTest, TheSelectedBarOfAComposedSegmentTakesTheColourOfItsCaption) {
+        SetVar("comp", "plain");
+        Draw();
+        ASSERT_TRUE(BarColorOf("CompPlain").has_value());
+        EXPECT_EQ(BarColorOf("CompPlain")->g, 200u) << "the caption is on the element itself";
+        EXPECT_FALSE(BarColorOf("CompIcon").has_value());
+
+        SetVar("comp", "icon");
+        Draw();
+        ASSERT_TRUE(BarColorOf("CompIcon").has_value());
+        EXPECT_EQ(BarColorOf("CompIcon")->r, 200u) << "an icon-left segment: the caption child";
+        EXPECT_EQ(BarColorOf("CompIcon")->g, 100u);
+        EXPECT_FALSE(BarColorOf("CompPlain").has_value());
+    }
+
+    TEST_F(UISegmentedTest, AGroupThatIsDisabledGreysItsComposedSegments) {
+        SetVar("comp", "plain");
+        Get<UISegmented>("Comp").disabled = true;
+        Draw();
+        EXPECT_TRUE(Element("CompPlain").groupDisabled);
+        EXPECT_TRUE(Element("CompIcon").IsDisabled());
+        EXPECT_TRUE(SelectedElement("CompPlain")) << "a disabled group still shows what is chosen";
+
+        ActionLog actions;
+        ASSERT_NO_FATAL_FAILURE(Click("CompIcon"));
+        EXPECT_EQ(actions.Total(), 0u);
+
+        Get<UISegmented>("Comp").disabled = false;
+        Draw();
+        EXPECT_FALSE(Element("CompPlain").groupDisabled);
+        EXPECT_FALSE(Element("CompIcon").IsDisabled());
+        ASSERT_NO_FATAL_FAILURE(Click("CompIcon"));
+        EXPECT_EQ(actions.Total(), 1u);
+    }
+
+    TEST_F(UISegmentedTest, AClickOnAComposedSegmentEmitsTheActionAndTheValueOfItsClicker) {
+        ActionLog actions;
+        Draw();
+        ASSERT_NO_FATAL_FAILURE(Click("CompIcon"));
+        EXPECT_EQ(actions.Total(), 1u);
+        EXPECT_EQ(actions.LastAction(), PoolString::Intern("SegTestComp"));
+        EXPECT_EQ(actions.LastValue(), PoolString::Intern("icon"));
+
+        Draw();
+        EXPECT_FALSE(SelectedElement("CompIcon")) << "the group owns no choice: the click changed nothing";
+    }
+
+    TEST_F(UISegmentedTest, ADisabledComposedSegmentTakesTheClickAndEmitsNothing) {
+        ActionLog actions;
+        Draw();
+        ASSERT_NO_FATAL_FAILURE(Click("CompOff"));
+        EXPECT_EQ(actions.Total(), 0u);
+
+        ASSERT_NO_FATAL_FAILURE(Click("CompPlain"));
+        EXPECT_EQ(actions.Total(), 1u) << "the segment next to it still works";
+    }
+
+    TEST_F(UISegmentedTest, AUIButtonAndAComposedSegmentLiveInTheSameGroup) {
+        SetVar("comp", "plain");
+        SetVar("inner", "plain");
+        Draw();
+        EXPECT_TRUE(Selected("FormsButton"));
+        EXPECT_FALSE(SelectedElement("FormsComposed"));
+        EXPECT_EQ(Get<UILabel>("FormsCaption").text, "Form") << "the label is no segment";
+
+        SetVar("comp", "icon");
+        Draw();
+        EXPECT_FALSE(Selected("FormsButton"));
+        EXPECT_TRUE(SelectedElement("FormsComposed"));
+
+        ActionLog actions;
+        ASSERT_NO_FATAL_FAILURE(Click("FormsComposed"));
+        EXPECT_EQ(actions.LastAction(), PoolString::Intern("SegTestForms"));
+        EXPECT_EQ(actions.LastValue(), PoolString::Intern("icon"));
+        ASSERT_NO_FATAL_FAILURE(Click("FormsButton"));
+        EXPECT_EQ(actions.LastAction(), PoolString::Intern("SegTestForms"));
+        EXPECT_EQ(actions.LastValue(), PoolString::Intern("plain"));
+        EXPECT_EQ(actions.Total(), 2u);
+    }
+
+    TEST_F(UISegmentedTest, ANestedGroupOfComposedSegmentsManagesItsOwnChildren) {
+        SetVar("comp", "plain");
+        SetVar("inner", "plain");
+        Draw();
+        EXPECT_TRUE(SelectedElement("FormsInnerOne")) << "its variable is `inner`";
+        EXPECT_FALSE(SelectedElement("FormsInner")) << "a group is no segment of the outer one";
+
+        SetVar("inner", "other");
+        Get<UISegmented>("Forms").disabled = true;
+        Draw();
+        EXPECT_FALSE(SelectedElement("FormsInnerOne"));
+        EXPECT_FALSE(Element("FormsInnerOne").groupDisabled) << "the outer flag reaches its own segments only";
+        EXPECT_TRUE(Get<UIButton>("FormsButton").groupDisabled);
+        EXPECT_TRUE(Element("FormsComposed").groupDisabled);
     }
 
 }  // namespace BECore::Tests
