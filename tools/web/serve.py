@@ -22,17 +22,28 @@ So the server decides, first match wins (the start line says which):
 Access control is optional HTTP Basic: with BASIC_AUTH_USER and BASIC_AUTH_PASSWORD both set in the environment every request but
 GET /healthz needs them (401 and `WWW-Authenticate` otherwise, the isolation headers included); with neither set the server is open;
 with one only, it does not start. The secret lives in the variables of the service, never in a file of the image.
+
+Match logs (off unless MATCH_STORE names a folder; behind the same Basic auth): a page posts a match log piece by piece,
+`POST /matches/<id>/<index>` with <id> 32 lower-case hex digits, <index> a decimal number without leading zeros, and the body the
+lines of the piece (JSON objects, one per line, each ending in a newline; at most 1 MiB; the first piece starts with the `start` event
+whose `version` is inside MATCH_LOG_VERSIONS, `N` or `N-M`, which the game owns). The body is stored as it came in
+<MATCH_STORE>/<id>/<index>.jsonl and nothing else is: no address, user agent or time (the mtime of the file is the only time), and the
+access log never prints a /matches/ line. The same bytes again are 200, other bytes for a stored piece are 409.
 """
 
 import argparse
 import base64
 import binascii
+import contextlib
 import hmac
 import json
 import os
 import posixpath
+import re
+import secrets
 import shutil
 import sys
+import threading
 from email.utils import formatdate
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -54,6 +65,23 @@ COPY_CHUNK = 1 << 20
 # Encodings in the order the server prefers them: brotli is smaller than gzip
 ENCODINGS = (("br", ".br"), ("gzip", ".gz"))
 VARIANT_SUFFIXES = tuple(suffix for _, suffix in ENCODINGS)
+STATIC_ALLOW = "GET, HEAD"
+
+MATCH_STORE_VARIABLE = "MATCH_STORE"
+MATCH_STORE_MAX_MB_VARIABLE = "MATCH_STORE_MAX_MB"
+MATCH_LOG_VERSIONS_VARIABLE = "MATCH_LOG_VERSIONS"
+MATCH_STORE_MAX_MB_DEFAULT = 1024
+MATCH_SEGMENT = "matches"
+MATCH_PREFIX = "/" + MATCH_SEGMENT
+MATCH_ALLOW = "GET, HEAD, POST, DELETE"
+# The ids are made by the game (random 128 bits as hex); a piece number has no leading zero, so a piece has one name only
+MATCH_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
+MATCH_INDEX_PATTERN = re.compile(r"0|[1-9][0-9]{0,5}")
+MATCH_VERSIONS_PATTERN = re.compile(r"([0-9]{1,6})(?:-([0-9]{1,6}))?")
+MATCH_BODY_MAX_BYTES = 1 << 20
+MATCH_BODY_TIMEOUT_SECONDS = 30
+MATCH_TMP_PREFIX = ".tmp-"
+MATCH_PIECE_SUFFIX = ".jsonl"
 
 # Named here, not left to mimetypes: on Windows it reads the registry and has answered text/plain for .js
 CONTENT_TYPES = {
@@ -134,14 +162,109 @@ def etag_matches(header: str | None, etag: str) -> bool:
     return any(tag.strip().removeprefix("W/") == wanted for tag in header.split(","))
 
 
+def check_piece(body: bytes, index: int, versions: tuple[int, int] | None) -> str | None:
+    """Why a piece is refused (a short fixed text, nothing of the input), None when it is fine.
+
+    The rules: UTF-8; empty, or lines ending in a newline (a line is whatever lies between two "\\n", so a blank line inside is refused);
+    every line a JSON object. An empty piece is fine after the first: the game sends one as the marker of a match given up before any
+    settlement. The first piece (index 0) starts with the `start` event whose `version` is an int inside `versions`; with no range
+    configured every first piece is refused, because the format is the game's and the server does not guess it."""
+    try:
+        text = body.decode("utf-8")
+    except UnicodeDecodeError:
+        return "not UTF-8"
+    if not text:
+        return "the first piece is empty" if index == 0 else None
+    if not text.endswith("\n"):
+        return "the last line has no newline"
+    first = None
+    for number, line in enumerate(text[:-1].split("\n")):
+        if not line:
+            return "blank line"
+        try:
+            value = json.loads(line)
+        except (ValueError, RecursionError):
+            return "a line is not JSON"
+        if not isinstance(value, dict):
+            return "a line is not an object"
+        if number == 0:
+            first = value
+    if index == 0:
+        version = first.get("version")
+        if first.get("event") != "start" or type(version) is not int:
+            return "the first line is not the start event"
+        if versions is None or not versions[0] <= version <= versions[1]:
+            return "version not accepted"
+    return None
+
+
+class MatchStoreError(Exception):
+    """The match store cannot be used (the server then does not start)."""
+
+
+class MatchStore:
+    """The folder of match logs: `<folder>/<id>/<index>.jsonl`, written whole and never changed. One server process owns the folder; a lock
+    serialises the decisions and the writes (a piece is at most 1 MiB and the posts are rate limited, so the lock is not a bottleneck)."""
+
+    def __init__(self, folder: Path, versions: tuple[int, int] | None, max_bytes: int):
+        self.folder = folder.resolve()
+        self.versions = versions
+        self.max_bytes = max_bytes
+        self._lock = threading.Lock()
+        try:
+            self.folder.mkdir(parents=True, exist_ok=True)
+            probe = self.folder / f"{MATCH_TMP_PREFIX}probe-{secrets.token_hex(4)}"
+            probe.write_bytes(b"")
+            probe.unlink()
+        except OSError as error:
+            raise MatchStoreError(f"match store is not writable: {folder} ({error.strerror or error})") from error
+
+    def put(self, match_id: str, index: int, body: bytes) -> tuple[HTTPStatus, str]:
+        """Stores a checked piece. The first write and a repeat of the same bytes are both 200 (a client that lost the answer posts again
+        and must get the same one); other bytes for a stored piece are 409, the stored file stays. Two equal posts at once give two 200s:
+        under the lock the second one finds the file the first one has finished (the rename is atomic, a reader never sees half a file)."""
+        target = self.folder / match_id / f"{index}{MATCH_PIECE_SUFFIX}"
+        with self._lock:
+            try:
+                stored = target.read_bytes()
+            except FileNotFoundError:
+                return self._write(target, body)
+            except OSError:
+                return HTTPStatus.INSUFFICIENT_STORAGE, "store failed"
+            if stored == body:
+                return HTTPStatus.OK, "already stored"
+            return HTTPStatus.CONFLICT, "the piece is stored with other bytes"
+
+    def _write(self, target: Path, body: bytes) -> tuple[HTTPStatus, str]:
+        directory = target.parent
+        temp = directory / f"{MATCH_TMP_PREFIX}{secrets.token_hex(8)}"
+        try:
+            directory.mkdir(exist_ok=True)
+            with open(temp, "xb") as stream:
+                stream.write(body)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp, target)
+        except OSError:
+            # No half file and no .tmp-* after a failure; rmdir takes only a folder that is empty
+            with contextlib.suppress(OSError):
+                temp.unlink()
+            with contextlib.suppress(OSError):
+                directory.rmdir()
+            return HTTPStatus.INSUFFICIENT_STORAGE, "store failed"
+        return HTTPStatus.OK, "stored"
+
+
 class StaticHandler(BaseHTTPRequestHandler):
-    """GET and HEAD of the files below `root`; `root`, `cross_origin_isolation` and `quiet` are set by make_server()."""
+    """GET and HEAD of the files below `root`, and with a match store the /matches/ endpoint; `root`, `cross_origin_isolation`, `quiet`
+    and `match_store` are set by make_server()."""
 
     root: Path
     cross_origin_isolation = False
     quiet = False
     # b"user:password" a request must present as Basic credentials; None leaves the server open
     basic_credentials: bytes | None = None
+    match_store: MatchStore | None = None
     protocol_version = "HTTP/1.1"
     server_version = "BagiWebServe"
     # The Server header names the program and not the Python version
@@ -151,8 +274,12 @@ class StaticHandler(BaseHTTPRequestHandler):
         return self.server_version
 
     def log_message(self, format, *args):
-        if not self.quiet:
-            super().log_message(format, *args)
+        if self.quiet:
+            return
+        # The id of a match is the path of its requests; the line of a refused request (send_error) holds the request line too
+        if self.match_store is not None and MATCH_PREFIX in format % args:
+            return
+        super().log_message(format, *args)
 
     def end_headers(self):
         if self.cross_origin_isolation:
@@ -193,6 +320,14 @@ class StaticHandler(BaseHTTPRequestHandler):
         if send_body:
             self.wfile.write(body)
 
+    def match_segments(self) -> list[str] | None:
+        """The segments after /matches/ of the request path (cut on "/" as they are, nothing decoded: `%2f` is then no separator and
+        no hex digit), None for a path that is not below /matches or a server with no match store."""
+        if self.match_store is None:
+            return None
+        parts = urlsplit(self.path).path.split("/")
+        return parts[2:] if parts[:2] == ["", MATCH_SEGMENT] else None
+
     def do_unsupported(self):
         if not self.authorized():
             # The body of a POST is not read, as below
@@ -200,7 +335,7 @@ class StaticHandler(BaseHTTPRequestHandler):
             return
         # The body of a POST is not read, so on a kept connection it would be parsed as the next request
         self.send_response(HTTPStatus.METHOD_NOT_ALLOWED)
-        self.send_header("Allow", "GET, HEAD")
+        self.send_header("Allow", STATIC_ALLOW if self.match_segments() is None else MATCH_ALLOW)
         # send_header("Connection", "close") also sets close_connection
         self.send_header("Connection", "close")
         self.send_header("Content-Length", "0")
@@ -211,6 +346,60 @@ class StaticHandler(BaseHTTPRequestHandler):
         if name.startswith("do_"):
             return self.do_unsupported
         raise AttributeError(name)
+
+    def do_POST(self):
+        """POST /matches/<id>/<index>: one piece of a match log (check_piece(), MatchStore.put()). The answers are 200 (stored, or the same
+        bytes again), 400 (path or body), 401, 409 (the piece is stored with other bytes), 411 (no Content-Length, or chunked), 413 (above
+        MATCH_BODY_MAX_BYTES, refused before the body is read), 507 (the store could not write). A refusal that leaves the body unread
+        closes the connection, as a 405 does. Anything else is as for any other method."""
+        segments = self.match_segments()
+        if segments is None:
+            self.do_unsupported()
+            return
+        if not self.authorized():
+            self.send_unauthorized(send_body=True, close=True)
+            return
+        if len(segments) != 2 or not MATCH_ID_PATTERN.fullmatch(segments[0]) or not MATCH_INDEX_PATTERN.fullmatch(segments[1]):
+            self.send_text(HTTPStatus.BAD_REQUEST, "bad path", True, close=True)
+            return
+        body = self.read_body()
+        if body is None:
+            return
+        index = int(segments[1])
+        problem = check_piece(body, index, self.match_store.versions)
+        if problem is not None:
+            self.send_text(HTTPStatus.BAD_REQUEST, problem, True)
+            return
+        status, text = self.match_store.put(segments[0], index, body)
+        self.send_text(status, text, True)
+
+    def read_body(self) -> bytes | None:
+        """The body of the request, or None after the refusal was sent (or the client left). Exactly Content-Length bytes are read."""
+        if self.headers.get("Transfer-Encoding") is not None:
+            self.send_text(HTTPStatus.LENGTH_REQUIRED, "chunked bodies are not taken", True, close=True)
+            return None
+        lengths = self.headers.get_all("Content-Length", [])
+        if not lengths:
+            self.send_text(HTTPStatus.LENGTH_REQUIRED, "Content-Length is required", True, close=True)
+            return None
+        if len(lengths) != 1 or not re.fullmatch(r"[0-9]{1,9}", lengths[0].strip()):
+            self.send_text(HTTPStatus.BAD_REQUEST, "bad Content-Length", True, close=True)
+            return None
+        length = int(lengths[0])
+        if length > MATCH_BODY_MAX_BYTES:
+            self.send_text(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "too large", True, close=True)
+            return None
+        # A client that stops sending must not hold the thread for ever
+        self.connection.settimeout(MATCH_BODY_TIMEOUT_SECONDS)
+        try:
+            body = self.rfile.read(length)
+        except OSError:
+            body = b""
+        self.connection.settimeout(None)
+        if len(body) != length:
+            self.close_connection = True
+            return None
+        return body
 
     def serve(self, send_body: bool):
         url_path = urlsplit(self.path).path
@@ -278,26 +467,33 @@ class StaticHandler(BaseHTTPRequestHandler):
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     self.close_connection = True
 
-    def send_text(self, status: HTTPStatus, text: str, send_body: bool):
+    def send_text(self, status: HTTPStatus, text: str, send_body: bool, close: bool = False):
         body = text.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if close:
+            self.send_header("Connection", "close")
         self.end_headers()
         if send_body:
             self.wfile.write(body)
 
 
 def make_server(root: Path, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, cross_origin_isolation: bool = False,
-                quiet: bool = False, basic_auth: tuple[str, str] | None = None) -> ThreadingHTTPServer:
+                quiet: bool = False, basic_auth: tuple[str, str] | None = None, match_store: Path | None = None,
+                match_versions: tuple[int, int] | None = None,
+                match_store_max_bytes: int = MATCH_STORE_MAX_MB_DEFAULT << 20) -> ThreadingHTTPServer:
     """A server for `root`; port 0 takes a free one (server.server_address[1]). `basic_auth` is (user, password) or None for an open
-    server. The caller runs serve_forever() and shutdown()."""
+    server. `match_store` is the folder of the /matches/ endpoint (None: the endpoint is off), `match_versions` the (lowest, highest)
+    `version` a match log may start with. The folder is created; MatchStoreError when it cannot be written. The caller runs
+    serve_forever() and shutdown()."""
     handler = type("Handler", (StaticHandler,), {
         "root": root.resolve(),
         "cross_origin_isolation": cross_origin_isolation,
         "quiet": quiet,
         "basic_credentials": f"{basic_auth[0]}:{basic_auth[1]}".encode("utf-8") if basic_auth else None,
+        "match_store": MatchStore(match_store, match_versions, match_store_max_bytes) if match_store is not None else None,
     })
     server = ThreadingHTTPServer((host, port), handler)
     server.daemon_threads = True
@@ -326,6 +522,19 @@ def basic_auth_from(environ, error) -> tuple[str, str] | None:
     if ":" in user:
         error(f"{BASIC_AUTH_USER_VARIABLE} must not contain a colon")
     return user, password
+
+
+def match_versions_from(text: str, error) -> tuple[int, int] | None:
+    """(lowest, highest) from `N` or `N-M` (the value of MATCH_LOG_VERSIONS), None when empty. `error(message)` is called for anything else."""
+    text = text.strip()
+    if not text:
+        return None
+    found = MATCH_VERSIONS_PATTERN.fullmatch(text)
+    low = int(found[1]) if found else 0
+    high = int(found[2]) if found and found[2] is not None else low
+    if not found or low > high:
+        error(f"{MATCH_LOG_VERSIONS_VARIABLE} must be N or N-M with N <= M, not {text!r}")
+    return low, high
 
 
 def manifest_threads(root: Path) -> bool | None:
@@ -366,6 +575,13 @@ def parse_args(argv: list[str] | None = None, environ=None) -> argparse.Namespac
     parser.add_argument("--quiet", action="store_true", help="no access log")
     args = parser.parse_args(argv)
     args.basic_auth = basic_auth_from(environ, parser.error)
+    store = environ.get(MATCH_STORE_VARIABLE, "").strip()
+    args.match_store = Path(store) if store else None
+    megabytes = environ.get(MATCH_STORE_MAX_MB_VARIABLE, "").strip() or str(MATCH_STORE_MAX_MB_DEFAULT)
+    if not re.fullmatch(r"[0-9]{1,9}", megabytes) or int(megabytes) < 1:
+        parser.error(f"{MATCH_STORE_MAX_MB_VARIABLE} must be a whole number of megabytes, 1 or more, not {megabytes!r}")
+    args.match_store_max_bytes = int(megabytes) << 20
+    args.match_versions = match_versions_from(environ.get(MATCH_LOG_VERSIONS_VARIABLE, ""), parser.error)
     args.isolation_source = None
     if args.cross_origin_isolation is not None:
         args.isolation_source = "--cross-origin-isolation" if args.cross_origin_isolation else "--no-cross-origin-isolation"
@@ -382,11 +598,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"serve.py: {args.root} is not a folder", file=sys.stderr)
         return 1
     isolation, reason = decide_cross_origin_isolation(args.cross_origin_isolation, args.isolation_source, args.root)
-    server = make_server(args.root, args.host, args.port, isolation, args.quiet, args.basic_auth)
+    try:
+        server = make_server(args.root, args.host, args.port, isolation, args.quiet, args.basic_auth, args.match_store,
+                             args.match_versions, args.match_store_max_bytes)
+    except MatchStoreError as error:
+        print(f"serve.py: {error}", file=sys.stderr)
+        return 1
     # The password is never printed
     access = "password required" if args.basic_auth else "open"
+    store = "off"
+    if args.match_store is not None:
+        store = str(args.match_store)
+        if args.match_versions is None:
+            store += f" (WARNING: {MATCH_LOG_VERSIONS_VARIABLE} is not set, so every first piece is refused)"
     print(f"serve.py: {args.root} on http://{args.host}:{server.server_address[1]} "
-          f"(cross-origin isolation {'on' if isolation else 'off'}: {reason}; access: {access})", flush=True)
+          f"(cross-origin isolation {'on' if isolation else 'off'}: {reason}; access: {access}; match store: {store})", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

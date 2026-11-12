@@ -46,22 +46,27 @@ class ServerTestCase(unittest.TestCase):
         self.dist = root / "dist"
         package.package(write_build_output(root / "build"), self.dist, brotli_module=self.brotli)
         (root / "secret.txt").write_text("outside the served folder", encoding="utf-8")
-        self.server = serve.make_server(self.dist, "127.0.0.1", 0, self.cross_origin_isolation, quiet=True,
-                                   basic_auth=self.basic_auth)
+        options = dict(quiet=True, basic_auth=self.basic_auth)
+        options.update(self.server_options(root))
+        self.server = serve.make_server(self.dist, "127.0.0.1", 0, self.cross_origin_isolation, **options)
         self.port = self.server.server_address[1]
         thread = threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         thread.start()
         self.addCleanup(self.stop_server, thread)
+
+    def server_options(self, root: Path) -> dict:
+        """More keyword arguments of make_server() (the match store of test_match_upload.py); `root` is the temp folder of the test."""
+        return {}
 
     def stop_server(self, thread):
         self.server.shutdown()
         self.server.server_close()
         thread.join(timeout=10)
 
-    def request(self, path: str, method: str = "GET", headers: dict | None = None) -> Response:
+    def request(self, path: str, method: str = "GET", headers: dict | None = None, body: bytes | None = None) -> Response:
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         try:
-            connection.request(method, path, headers=headers or {})
+            connection.request(method, path, body=body, headers=headers or {})
             return Response(connection.getresponse())
         finally:
             connection.close()
