@@ -23,7 +23,7 @@ Library `BagiFuzzTargets`: one plain function per kind of untrusted input, `void
 | `UiTables` | `ui_tables` | `UIStrings::LoadFromXml`, `UIThemes::LoadFromXml` (`BECore/UI`) |
 | `UiGeometry` | `ui_geometry` | the numbers of a content file in `UIBoxMesh`, `UINineSlice`, `UILayout`, `UICanvasScaler`, `UICanvasLayout` (`BECore/UI`) |
 
-Not covered yet: the sockets and threads of the transports (`WebSocketListener`, `RoomWebSocketServer`: the next slice, `hostile.py`), `LoadFromFile` of both readers, the rest of the control methods (`ui_*`, `screenshot`, the profiler: they need a scene, a renderer or a profiler), and the content and saves as consumers see them in a release build.
+Not covered: the sockets and threads of the transports (`WebSocketListener`, `RoomWebSocketServer`: `tools/rooms/hostile.py` over real sockets), `LoadFromFile` of both readers (a path is not a byte input), assets (images, fonts, audio go through vendored decoders), the editor's user files (`UserFileIo.h`), the rest of the control methods (`ui_*`, `screenshot`, the profiler: they need a scene, a renderer or a profiler), and the pool of interned strings, which never frees (a long libFuzzer run grows memory by design). Cost weights (the last field of a row) are set by the time of one input: 1 for a plain parser, 2 to 8 for the tables and the geometry, 10 to 15 for the targets that touch the disk or run a hub or the web compiler; a new target takes the weight that keeps its share of `BAGI_FUZZ_ITERATIONS` near 2 s in Debug.
 
 ## A target
 

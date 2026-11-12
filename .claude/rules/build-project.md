@@ -89,7 +89,7 @@ ctest --preset macos-fuzz -R Fuzz                                      # the cor
 ```bash
 ctest --preset macos-release -R Fuzz                                   # BAGI_FUZZ_ITERATIONS=2000000 makes it longer
 cmake --preset macos-fuzz-shipped && cmake --build --preset macos-fuzz-shipped --target BagiFuzzers BagiEngineTests
-python3 tools/fuzz/run_fuzzers.py --preset macos-fuzz-shipped --seconds 60
+python3 tools/fuzz/run_fuzzers.py --preset macos-fuzz-shipped --seconds 60   # 180 before a release: 12 targets, about 40 minutes
 ctest --preset macos-fuzz-shipped -R Fuzz
 ```
 
