@@ -287,4 +287,65 @@ namespace BECore::Tests {
         EXPECT_EQ(types[0], kQuad);
     }
 
+    TEST_F(HierarchyModelTest, DeleteRemovesTheSubtreeAndRevealsTheParent) {
+        SceneNode& branch = Node("Branch");
+        const OperationResult result = ApplyOperation(*_scene, {OperationKind::Delete, &Node("B1"), nullptr, 0});
+
+        EXPECT_TRUE(result.changed);
+        EXPECT_EQ(result.reveal, &branch);
+        EXPECT_EQ(Find(Root(), "Leaf"), nullptr);
+        EXPECT_EQ(branch.GetChildren().size(), 1u);
+    }
+
+    TEST_F(HierarchyModelTest, DuplicateAddsACopyRightAfterAndReportsIt) {
+        const OperationResult result = ApplyOperation(*_scene, {OperationKind::Duplicate, &Node("A"), nullptr, 0});
+
+        ASSERT_TRUE(result.changed);
+        ASSERT_NE(result.created, nullptr);
+        EXPECT_EQ(result.created->GetName(), "A (copy)"_intern);
+        EXPECT_EQ(result.reveal, &Root());
+        EXPECT_EQ(Root().GetChildren()[1].Get(), result.created);
+    }
+
+    TEST_F(HierarchyModelTest, MoveGoesThroughTheScene) {
+        SceneNode& branch = Node("Branch");
+        const OperationResult result = ApplyOperation(*_scene, {OperationKind::Move, &Node("A"), &branch, 0});
+
+        EXPECT_TRUE(result.changed);
+        EXPECT_EQ(result.reveal, &branch);
+        EXPECT_EQ(Node("A").GetParent(), &branch);
+        EXPECT_EQ(branch.GetChildren()[0].Get(), &Node("A"));
+    }
+
+    TEST_F(HierarchyModelTest, ARefusedOperationChangesNothing) {
+        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Delete, &Root(), nullptr, 0}).changed);
+        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Duplicate, &Root(), nullptr, 0}).changed);
+        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Move, &Node("Branch"), &Node("B1"), 0}).changed);
+        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::None, &Node("A"), nullptr, 0}).changed);
+        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Delete, nullptr, nullptr, 0}).changed);
+        EXPECT_EQ(Root().GetChildren().size(), 3u);
+        EXPECT_NE(Find(Root(), "Leaf"), nullptr);
+    }
+
+    TEST_F(HierarchyModelTest, ANodeOfAnotherSceneIsRefused) {
+        auto other = New<SceneManager>();
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(kTreeScene));
+        other->Deserialize(deserializer);
+        other->Initialize();
+        Scene* otherScene = other->GetSceneByName("Main"_intern);
+        ASSERT_NE(otherScene, nullptr);
+
+        EXPECT_FALSE(ApplyOperation(*_scene, {OperationKind::Delete, Find(otherScene->GetRootNode(), "A"), nullptr, 0}).changed);
+        EXPECT_NE(Find(otherScene->GetRootNode(), "A"), nullptr);
+    }
+
+    TEST_F(HierarchyModelTest, SelfOrAncestorOf) {
+        EXPECT_TRUE(IsSelfOrAncestorOf(&Node("Branch"), &Node("Leaf")));
+        EXPECT_TRUE(IsSelfOrAncestorOf(&Node("Leaf"), &Node("Leaf")));
+        EXPECT_FALSE(IsSelfOrAncestorOf(&Node("Leaf"), &Node("Branch")));
+        EXPECT_FALSE(IsSelfOrAncestorOf(nullptr, &Node("Leaf")));
+        EXPECT_FALSE(IsSelfOrAncestorOf(&Node("Leaf"), nullptr));
+    }
+
 }  // namespace BECore::Tests

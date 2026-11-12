@@ -1,5 +1,7 @@
 #pragma once
 
+#include "HierarchyPanel.h"
+
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/Widgets/IWidget.h>
@@ -17,7 +19,7 @@ namespace BECore {
      * @brief ImGui widget for real-time scene editing
      *
      * Displays a two-panel layout:
-     *   Left panel  - Hierarchy tree of scene nodes
+     *   Left panel  - HierarchyPanel: tree of scene nodes
      *   Right panel - Inspector for selected node and its components
      *
      * All edits are applied live without staging.
@@ -50,11 +52,8 @@ namespace BECore {
          */
         void OnCommand(const EditorCommandEvent& event);
 
-        /**
-         * @brief Recursively render the hierarchy tree starting from a node.
-         *        Uses the node pointer as the ImGui tree node ID.
-         */
-        void RenderHierarchyNode(SceneNode& node);
+        /// Takes what the hierarchy panel asked for in the last Draw(): the dirty mark, the forgotten UI selection of a removed subtree, the "Add Node" popup
+        void ApplyHierarchyAnswers();
 
         /**
          * @brief Render the inspector panel for the selected node
@@ -78,7 +77,7 @@ namespace BECore {
          */
         void SaveScene();
 
-        SceneNode* _selectedNode = nullptr;
+        HierarchyState _hierarchy;                    // the selected node, the rename and the pending tree edit of the hierarchy panel
         Scene* _lastScene = nullptr;                  // the scene the selection belongs to: a replaced scene drops it
         SceneNode* _uiSelectionNode = nullptr;        // the node whose canvas `_selectedUIElement` belongs to
         IntrusivePtr<UIElement> _selectedUIElement;   // held, so that a tree edit cannot leave it dangling

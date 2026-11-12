@@ -135,6 +135,45 @@ namespace BECore::HierarchyModel {
         return {place == DropPlace::Into ? &target : target.GetParent(), DropIndex(dragged, target, place)};
     }
 
+    OperationResult ApplyOperation(Scene& scene, const Operation& operation) {
+        OperationResult result;
+        SceneNode* const node = operation.node;
+        if (node == nullptr || node->GetParent() == nullptr || !node->IsDescendantOf(scene.GetRootNode())) {
+            return result;
+        }
+        switch (operation.kind) {
+            case OperationKind::Delete: {
+                SceneNode* const parent = node->GetParent();
+                parent->RemoveChild(node);
+                result.changed = true;
+                result.reveal = parent;
+                break;
+            }
+            case OperationKind::Duplicate: {
+                const IntrusivePtr<SceneNode> copy = scene.DuplicateNode(*node);
+                if (copy) {
+                    result.changed = true;
+                    result.created = copy.Get();
+                    result.reveal = copy->GetParent();
+                }
+                break;
+            }
+            case OperationKind::Move:
+                if (scene.MoveNode(*node, operation.parent, operation.index)) {
+                    result.changed = true;
+                    result.reveal = node->GetParent();
+                }
+                break;
+            case OperationKind::None:
+                break;
+        }
+        return result;
+    }
+
+    bool IsSelfOrAncestorOf(const SceneNode* ancestor, const SceneNode* node) {
+        return ancestor != nullptr && node != nullptr && (ancestor == node || node->IsDescendantOf(*ancestor));
+    }
+
     bool ValidateName(eastl::string_view text) {
         if (text.size() > kMaxNodeNameLength) {
             return false;

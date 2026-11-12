@@ -1,6 +1,7 @@
 #include "SceneEditorWidget.h"
 
 #include "ComponentInspectors.h"
+#include "HierarchyPanel.h"
 #include "SceneConfigWriter.h"
 #include "UIRectInspector.h"
 
@@ -57,7 +58,7 @@ namespace BECore {
 
         if (scene != _lastScene) {
             // A replaced scene frees its nodes: the selection would dangle
-            _selectedNode = nullptr;
+            _hierarchy.Reset();
             _contextMenuTargetNode = nullptr;
             ResetUISelection();
             _lastScene = scene;
@@ -91,20 +92,10 @@ namespace BECore {
         const float leftPanelWidth = 300.0f;
         ImGui::BeginChild("##hierarchy", ImVec2(leftPanelWidth, 0.0f), true);
 
-        ImGui::TextUnformatted("Hierarchy");
-        ImGui::Separator();
-
-        auto& rootNode = scene->GetRootNode();
-        RenderHierarchyNode(rootNode);
-
-        ImGui::Separator();
-        if (IconTextButton(ICON_LC_CIRCLE_PLUS, "Add Node", "Add a node at the root of the scene", -1.0f)) {
-            _contextMenuTargetNode = nullptr;
-            _showAddNodePopup = true;
-            snprintf(_nodeNameBuffer, sizeof(_nodeNameBuffer), "NewNode");
-        }
+        HierarchyPanel::Draw(*scene, _hierarchy);
 
         ImGui::EndChild();
+        ApplyHierarchyAnswers();
 
         // ----------------------------------------------------------------
         // Right panel - Inspector
@@ -145,54 +136,23 @@ namespace BECore {
     // Private methods
     // =========================================================================
 
-    void SceneEditorWidget::RenderHierarchyNode(SceneNode& node) {
-        // Take a copy for safe iteration — RemoveChild may modify the parent's vector
-        const auto children = node.GetChildren();
-        const bool isLeaf = children.empty();
-
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick | ImGuiTreeNodeFlags_SpanAvailWidth;
-        if (isLeaf) {
-            flags |= ImGuiTreeNodeFlags_Leaf;
+    void SceneEditorWidget::ApplyHierarchyAnswers() {
+        if (_hierarchy.dirty) {
+            _isDirty = true;
+            _hierarchy.dirty = false;
         }
-        if (_selectedNode == &node) {
-            flags |= ImGuiTreeNodeFlags_Selected;
+        if (_hierarchy.nodeRemoved) {
+            // A removed subtree may have held the node of the add popup or the canvas element in the inspector
+            _contextMenuTargetNode = nullptr;
+            ResetUISelection();
+            _hierarchy.nodeRemoved = false;
         }
-
-        const bool isOpen = ImGui::TreeNodeEx(&node, flags, "%s %s", IconOfNode(node), node.GetName().CStr());
-
-        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-            _selectedNode = &node;
-        }
-
-        bool nodeDeleted = false;
-        if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem(ICON_LC_FOLDER_PLUS " Add Child")) {
-                _contextMenuTargetNode = &node;
-                _showAddNodePopup = true;
-                snprintf(_nodeNameBuffer, sizeof(_nodeNameBuffer), "ChildNode");
-            }
-            if (ImGui::MenuItem(ICON_LC_TRASH_2 " Delete")) {
-                auto* parent = node.GetParent();
-                if (parent) {
-                    if (_selectedNode == &node) {
-                        _selectedNode = nullptr;
-                        ResetUISelection();
-                    }
-                    parent->RemoveChild(&node);
-                    _isDirty = true;
-                    nodeDeleted = true;
-                }
-            }
-            ImGui::EndPopup();
-        }
-
-        if (isOpen) {
-            if (!nodeDeleted) {
-                for (const auto& child : children) {
-                    RenderHierarchyNode(*child.Get());
-                }
-            }
-            ImGui::TreePop();
+        if (_hierarchy.addNodeRequested) {
+            _hierarchy.addNodeRequested = false;
+            _contextMenuTargetNode = _hierarchy.addNodeParent;
+            _hierarchy.addNodeParent = nullptr;
+            _showAddNodePopup = true;
+            snprintf(_nodeNameBuffer, sizeof(_nodeNameBuffer), "%s", _contextMenuTargetNode ? "ChildNode" : "NewNode");
         }
     }
 
@@ -223,14 +183,14 @@ namespace BECore {
     }
 
     void SceneEditorWidget::RenderInspector() {
-        if (!_selectedNode) {
+        if (!_hierarchy.selected) {
             EmptyState(ICON_LC_MOUSE_POINTER_CLICK, "Select a node to inspect");
             return;
         }
 
-        if (_uiSelectionNode != _selectedNode) {
+        if (_uiSelectionNode != _hierarchy.selected) {
             ResetUISelection();
-            _uiSelectionNode = _selectedNode;
+            _uiSelectionNode = _hierarchy.selected;
         }
 
         // Node name editor
@@ -238,9 +198,9 @@ namespace BECore {
         ImGui::SameLine();
 
         char nameBuffer[256] = {};
-        snprintf(nameBuffer, sizeof(nameBuffer), "%s", _selectedNode->GetName().CStr());
+        snprintf(nameBuffer, sizeof(nameBuffer), "%s", _hierarchy.selected->GetName().CStr());
         if (ImGui::InputText("##node_name", nameBuffer, sizeof(nameBuffer))) {
-            _selectedNode->SetName(PoolString::Intern(eastl::string_view(nameBuffer)));
+            _hierarchy.selected->SetName(PoolString::Intern(eastl::string_view(nameBuffer)));
             _isDirty = true;
         }
 
@@ -248,30 +208,30 @@ namespace BECore {
         ImGui::TextUnformatted("Layer:");
         ImGui::SameLine();
 
-        int32_t layer = _selectedNode->GetLayer();
+        int32_t layer = _hierarchy.selected->GetLayer();
         bool layerChanged = false;
         {
             ScopedMonoFont mono;
             layerChanged = ImGui::InputInt("##node_layer", &layer);
         }
         if (layerChanged) {
-            _selectedNode->SetLayer(layer);
+            _hierarchy.selected->SetLayer(layer);
             _isDirty = true;
         }
 
-        if (!_selectedNode->GetSourceRef().Empty()) {
-            ImGui::TextDisabled("Instance of %s", _selectedNode->GetSourceRef().CStr());
+        if (!_hierarchy.selected->GetSourceRef().Empty()) {
+            ImGui::TextDisabled("Instance of %s", _hierarchy.selected->GetSourceRef().CStr());
         }
 
         // Entity ID (read-only)
         ImGui::TextUnformatted("Entity:");
         ImGui::SameLine();
-        ImGui::Text("#%u", static_cast<unsigned int>(_selectedNode->GetEntity()));
+        ImGui::Text("#%u", static_cast<unsigned int>(_hierarchy.selected->GetEntity()));
 
         ImGui::Separator();
         ImGui::TextUnformatted("Components");
 
-        const auto& components = _selectedNode->GetComponents();
+        const auto& components = _hierarchy.selected->GetComponents();
         PoolString componentToRemove;
         for (size_t i = 0; i < components.size(); ++i) {
             const auto& component = components[i];
@@ -302,7 +262,7 @@ namespace BECore {
         }
 
         if (!componentToRemove.Empty()) {
-            _selectedNode->RemoveComponent(componentToRemove);
+            _hierarchy.selected->RemoveComponent(componentToRemove);
             _isDirty = true;
         }
 
@@ -327,6 +287,7 @@ namespace BECore {
                     if (scene) {
                         SceneNode* target = _contextMenuTargetNode ? _contextMenuTargetNode : &scene->GetRootNode();
                         target->AddChild(PoolString::Intern(eastl::string_view(_nodeNameBuffer)));
+                        _hierarchy.revealNode = target;
                         _isDirty = true;
                     }
                 }
@@ -363,10 +324,10 @@ namespace BECore {
                 char label[kComponentLabelSize];
                 snprintf(label, sizeof(label), "%s %s", IconOfClass(meta), meta.typeName.data());
                 if (ImGui::Selectable(label)) {
-                    if (_selectedNode) {
+                    if (_hierarchy.selected) {
                         auto newComponent = factory.Create(meta);
                         if (newComponent) {
-                            _selectedNode->AddComponent(newComponent);
+                            _hierarchy.selected->AddComponent(newComponent);
                             _isDirty = true;
                         }
                     }

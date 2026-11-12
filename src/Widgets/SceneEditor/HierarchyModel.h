@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneNode.h>
 
 namespace BECore::HierarchyModel {
@@ -19,6 +20,38 @@ namespace BECore::HierarchyModel {
         SceneNode* parent = nullptr;
         size_t index = 0;
     };
+
+    /// The one change of the tree a frame of the panel asks for. The panel walks the tree, notes the request and applies it after the walk (ApplyOperation), because Delete and Move change the child
+    /// lists being walked
+    enum class OperationKind : uint8_t {
+        None,
+        Delete,     ///< remove @c node with its subtree
+        Duplicate,  ///< a copy of @c node right after it
+        Move,       ///< @c node to @c parent at @c index (the arguments of Scene::MoveNode)
+    };
+
+    struct Operation {
+        OperationKind kind = OperationKind::None;
+        SceneNode* node = nullptr;
+        SceneNode* parent = nullptr;  ///< Move: the new parent
+        size_t index = 0;             ///< Move: the place among its children
+    };
+
+    struct OperationResult {
+        bool changed = false;          ///< the tree is different, so the scene is dirty
+        SceneNode* created = nullptr;  ///< Duplicate: the copy
+        SceneNode* reveal = nullptr;   ///< the node whose children the panel opens so the result is seen
+    };
+
+    /**
+     * @brief Applies @p operation to @p scene; a request that cannot be done (the root, a node of another scene, a refused move) changes nothing
+     *
+     * After a Delete the node is gone: the caller must note beforehand whether the selection lies in its subtree (IsSelfOrAncestorOf).
+     */
+    OperationResult ApplyOperation(Scene& scene, const Operation& operation);
+
+    /// True when @p node is @p ancestor or lies below it. Null on either side gives false
+    bool IsSelfOrAncestorOf(const SceneNode* ancestor, const SceneNode* node);
 
     /// True when a search text or a component type is set, so the tree shows only what the filter keeps
     bool IsFilterActive(eastl::string_view query, eastl::string_view componentType);
