@@ -1,7 +1,7 @@
 """Tests of tools/web/tests/web_smoke.py. Everything that needs no browser is tested here: the command line, the decisions on PNG
 bytes, the allow-list, the polling, the generated page, and the orchestration against a fake Playwright (which checks the order of
 the calls, not the real API). The class at the end runs the script in a real Chromium and is skipped where Playwright is missing
-(tools/web/CLAUDE.md, "The browser smoke": the venv `build/web-venv`).
+(tools/web/tests/CLAUDE.md: the venv `build/web-venv`).
 Run: python -m unittest discover tools/web/tests"""
 
 import contextlib
