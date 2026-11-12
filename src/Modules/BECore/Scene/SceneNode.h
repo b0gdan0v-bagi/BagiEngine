@@ -65,8 +65,8 @@ namespace BECore {
         entt::entity _entity = entt::null;
         Scene* _scene = nullptr;
         SceneNode* _parent = nullptr;
-        eastl::vector<IntrusivePtr<SceneNode>> _children;
         BE_REFLECT_FIELD eastl::vector<IntrusivePtr<IComponent>> _components;
+        BE_REFLECT_FIELD eastl::vector<IntrusivePtr<SceneNode>> _children;
     };
 
 }  // namespace BECore
