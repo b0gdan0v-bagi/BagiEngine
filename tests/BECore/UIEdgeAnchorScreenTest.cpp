@@ -1,11 +1,11 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasScaler.h>
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIScreenContent.h>
 #include <BECore/UI/UIStrings.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -38,13 +38,22 @@ namespace BECore::Tests {
   <elements>
     <element type="UIPanel" name="Side" anchorMin="0.65,0" anchorMax="1,1" margin="8" color="0,0,0,160">
       <children>
-        <element type="UILabel" name="Title" anchorMin="0,0" anchorMax="1,0" height="48" y="12" margin="12,0,12,0" text="{#edge.title}" fontSize="28"/>
-        <element type="UIButton" name="Ok" anchorMin="0,1" anchorMax="1,1" pivot="0.5,1" height="56" y="-12" margin="12,0,12,0" text="{#edge.ok}" fontSize="26" action="EdgeScreenOk" color="40,90,60,255"/>
+        <element type="UIElement" name="Title" anchorMin="0,0" anchorMax="1,0" height="48" y="12" margin="12,0,12,0" fontSize="28">
+          <components><component type="UITextComponent" text="{#edge.title}"/></components>
+        </element>
+        <element type="UIElement" name="Ok" anchorMin="0,1" anchorMax="1,1" pivot="0.5,1" height="56" y="-12" margin="12,0,12,0" fontSize="26" color="40,90,60,255">
+          <components>
+            <component type="UITextComponent" text="{#edge.ok}" align="Center" verticalAlign="Center" wrap="false"/>
+            <component type="UIInputClicker" action="EdgeScreenOk"/>
+          </components>
+        </element>
       </children>
     </element>
     <element type="UIPanel" name="Bar" region="play" anchorMin="10%,1" anchorMax="90%,1" pivot="0.5,1" y="-16" height="56" color="0,0,0,160">
       <children>
-        <element type="UILabel" name="Status" anchor="Stretch" margin="8" text="{#edge.status}" fontSize="24"/>
+        <element type="UIElement" name="Status" anchor="Stretch" margin="8" fontSize="24">
+          <components><component type="UITextComponent" text="{#edge.status}"/></components>
+        </element>
       </children>
     </element>
   </elements>
@@ -159,9 +168,9 @@ namespace BECore::Tests {
         /// validator does not see it)
         eastl::string CutTexts(const UIElement& element, float scale) {
             eastl::string cut;
-            const bool text = element.Cast<UILabel>() != nullptr;  // a UIButton is a UILabel
+            const bool text = element.GetComponent<UITextComponent>() != nullptr;
             if (text && !element.rect.IsEmpty()) {
-                const float air = element.Cast<UIButton>() ? kButtonAir : 0.0f;
+                const float air = element.GetComponent<UIInputClicker>() ? kButtonAir : 0.0f;  // a button is a text with a clicker
                 const UIContentFit fit = element.CheckContent(element.rect.w - 2.0f * air, element.rect.h, scale);
                 if (fit.hasContent && !fit.fits) {
                     cut += Format("{} ", element.name.ToStringView());

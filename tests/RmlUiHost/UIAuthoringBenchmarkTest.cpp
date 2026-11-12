@@ -4,7 +4,6 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIInputClicker.h>
-#include <BECore/UI/UILabel.h>
 #include <BECore/UI/UIPanel.h>
 #include <BECore/UI/UIScreenContent.h>
 #include <BECore/UI/UITextComponent.h>
@@ -54,8 +53,10 @@ namespace BECore::Tests {
             for (int i = 0; i < kCards; ++i) {
                 const auto [x, y] = CardPlace(i);
                 text += Format("<element type=\"UIPanel\" name=\"c{0}\" x=\"{1}\" y=\"{2}\" width=\"140\" height=\"80\" color=\"30,30,40,255\"/>\n"
-                               "<element type=\"UILabel\" name=\"t{0}\" x=\"{3}\" y=\"{4}\" width=\"124\" height=\"22\" text=\"Card {0}\" fontSize=\"18\"/>\n"
-                               "<element type=\"UILabel\" name=\"v{0}\" x=\"{3}\" y=\"{5}\" width=\"124\" height=\"20\" text=\"Price {0}\" fontSize=\"14\" textColor=\"190,190,190,255\"/>\n"
+                               "<element type=\"UIElement\" name=\"t{0}\" x=\"{3}\" y=\"{4}\" width=\"124\" height=\"22\" fontSize=\"18\"><components>"
+                               "<component type=\"UITextComponent\" text=\"Card {0}\"/></components></element>\n"
+                               "<element type=\"UIElement\" name=\"v{0}\" x=\"{3}\" y=\"{5}\" width=\"124\" height=\"20\" fontSize=\"14\"><components>"
+                               "<component type=\"UITextComponent\" text=\"Price {0}\" textColor=\"190,190,190,255\"/></components></element>\n"
                                "<element type=\"UIElement\" name=\"b{0}\" x=\"{3}\" y=\"{6}\" width=\"56\" height=\"24\" fontSize=\"14\" color=\"40,90,60,255\"><components>"
                                "<component type=\"UITextComponent\" text=\"Buy\" align=\"Center\" verticalAlign=\"Center\" wrap=\"false\"/><component type=\"UIInputClicker\" "
                                "action=\"Buy\"/></components></element>\n",

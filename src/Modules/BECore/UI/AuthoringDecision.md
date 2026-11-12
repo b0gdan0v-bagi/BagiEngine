@@ -4,7 +4,7 @@ Stage 5 of the UI plan in the local plan store. This file holds what was measure
 
 The three candidates, for the same screens:
 
-- **A. The engine's XML** (`.ui.xml`, or inline in `SceneConfig.xml`): stage 4. Elements are `<element type="UIButton" ...>`, the style is flat attributes, responsive variants are `<variants>`.
+- **A. The engine's XML** (`.ui.xml`, or inline in `SceneConfig.xml`): stage 4. Elements are `<element type="UIElement" ...>` with components (when this was measured a button was a `UIButton` class, since replaced by components), the style is flat attributes, responsive variants are `<variants>`.
 - **B. A web-style front-end** (`.ui.html` + CSS): stage 5.1. A compiler writes the text of an A document, so it builds the same tree through the same factories (`UI/CLAUDE.md`, "Writing a screen in HTML and CSS").
 - **C. RmlUi** as a separate host with its own DOM and layout (`.rml` + `.rcss`): stage 5.3. The vendored library (`src/Modules/RmlUi`) and its host (`src/Modules/RmlUiHost`, `CLAUDE.md` there), both behind `-DENGINE_UI_RMLUI=ON`, off by default.
 

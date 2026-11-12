@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- A dropdown with a placeholder, a textColor and a wrap the file names; arrowColor, disabled and the rest stay on the dropdown. A dropdown with no text attribute still gets the component with the constructor defaults. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIDropdown" name="Level" bind="level" action="SetLevel" text="Pick one" textColor="220,220,255,255" arrowColor="255,255,255,255" disabled="true" wrap="true" align="Center" width="240" height="56">
+          <children>
+            <element type="UIElement" name="Easy" fontSize="22">
+              <components>
+                <component type="UITextComponent" text="{#level.easy}"/>
+                <component type="UIInputClicker" value="easy"/>
+              </components>
+            </element>
+          </children>
+        </element>
+        <element type="UIDropdown" name="Bare" bind="bare" action="SetBare" width="240" height="56" />
+      </elements>
+    </component>
+  </components>
+</node>

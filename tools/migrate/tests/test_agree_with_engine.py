@@ -55,14 +55,15 @@ def value_module():
 def test_the_toggle_step_writes_the_numbers_of_the_headers():
     value = value_module()
     assert float(value.SWITCH_AREA_ASPECT) == cpp_constant("UISwitchComponent.h", "kAreaAspect") == 1.25
-    assert float(value.CAPTION_GAP) == cpp_constant("UIToggle.h", "kCaptionGap")
+    assert float(value.CAPTION_GAP) == cpp_constant("UISwitchComponent.h", "kCaptionGap")
     assert value.OFF_TRACK_ALPHA == pytest.approx(cpp_constant("UISwitchComponent.h", "kOffTrackAlpha"))
     # the track is kSwitchHeightRatio x kSwitchAspect of the height, plus the air of a quarter of the height at the right end: the area is that much wider than high
     ratio = cpp_constant("UISwitchComponent.h", "kSwitchHeightRatio")
     aspect = cpp_constant("UISwitchComponent.h", "kSwitchAspect")
     assert ratio * aspect + (1 - ratio) / 2 == pytest.approx(float(value.SWITCH_AREA_ASPECT))
-    for name in ("kSwitchHeightRatio", "kSwitchAspect", "kThumbInset"):
-        assert cpp_constant("UISwitchComponent.h", name) == cpp_constant("UIToggle.h", name)
+    # The numbers `UIToggle` had when it was removed (the component must keep drawing the switch the class did)
+    for name, was in (("kSwitchHeightRatio", 0.5), ("kSwitchAspect", 2.0), ("kThumbInset", 3.0)):
+        assert cpp_constant("UISwitchComponent.h", name) == was
 
 
 def test_the_alpha_of_the_derived_track_is_cut_like_with_alpha_of_the_cpp_source():

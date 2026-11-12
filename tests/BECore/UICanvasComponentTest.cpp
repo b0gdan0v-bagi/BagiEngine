@@ -62,7 +62,11 @@ namespace BECore::Tests {
         <component type="UICanvasComponent" space="SceneView">
           <elements>
             <element type="UIPanel" name="Fill" anchor="Stretch" color="9,9,9,255" blocksInput="false"/>
-            <element type="UIButton" name="Go" x="10" y="10" width="50" height="40" blocksInput="true" color="40,90,60,255"/>
+            <element type="UIElement" name="Go" x="10" y="10" width="50" height="40" blocksInput="true" color="40,90,60,255">
+              <components>
+                <component type="UIInputClicker"/>
+              </components>
+            </element>
           </elements>
           <variants>
             <variant when="orientation:portrait">
@@ -81,7 +85,11 @@ namespace BECore::Tests {
     <node name="BarCanvas"><components>
       <component type="UICanvasComponent" space="SceneView" extendToOutput="true">
         <elements>
-          <element type="UIButton" name="Bar" anchor="Bottom" x="0" y="-10" width="100" height="40" blocksInput="true" color="40,90,60,255"/>
+          <element type="UIElement" name="Bar" anchor="Bottom" x="0" y="-10" width="100" height="40" blocksInput="true" color="40,90,60,255">
+            <components>
+              <component type="UIInputClicker"/>
+            </components>
+          </element>
         </elements>
         <variants>
           <variant when="orientation:portrait"><overrides><set element="Bar" width="200"/></overrides></variant>

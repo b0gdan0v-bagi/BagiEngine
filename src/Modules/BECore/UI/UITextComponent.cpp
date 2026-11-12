@@ -6,9 +6,14 @@
 
 namespace BECore {
 
-    UITextParams UITextComponent::MakeParams(float fontSize) const {
+    const eastl::string& UITextComponent::ShownText(const UIElement& owner, const eastl::string& own) {
+        const eastl::string* replacement = owner.GetTextOverride();
+        return replacement ? *replacement : own;
+    }
+
+    UITextParams UITextComponent::MakeParams(float fontSize, const eastl::string& shown) const {
         UITextParams params;
-        params.text = eastl::string_view(text.data(), text.size());
+        params.text = eastl::string_view(shown.data(), shown.size());
         params.font = font;
         params.fontFamily = fontFamily;
         params.fontWeight = fontWeight;
@@ -50,23 +55,28 @@ namespace BECore {
     }
 
     void UITextComponent::DrawSelf(IRenderer& renderer, UIElement& owner) {
-        _painter.Draw(renderer, MakeParams(owner.active.fontSize), owner.rect, GetStateColor(owner.GetVisualState()), textColor);
+        _painter.Draw(renderer, MakeParams(owner.active.fontSize, ShownText(owner, text)), owner.GetComponentArea(), GetStateColor(owner.GetVisualState()), textColor);
     }
 
     UIContentFit UITextComponent::CheckContent(const UIElement& owner, float width, float height, float scale) const {
-        return _painter.Check(MakeParams(owner.active.fontSize), width, height, scale);
+        return _painter.Check(MakeParams(owner.active.fontSize, ShownText(owner, text)), width, height, scale);
     }
 
     eastl::string_view UITextComponent::GetDisplayText() const {
         return _painter.GetDisplayText(eastl::string_view(text.data(), text.size()));
     }
 
+    eastl::string_view UITextComponent::GetDisplayText(const UIElement& owner) const {
+        const eastl::string& shown = ShownText(owner, text);
+        return _painter.GetDisplayText(eastl::string_view(shown.data(), shown.size()));
+    }
+
     Vec2 UITextComponent::MeasureText(const UIElement& owner, float maxWidth, float scale) const {
-        return _painter.Measure(MakeParams(owner.active.fontSize), maxWidth, scale);
+        return _painter.Measure(MakeParams(owner.active.fontSize, ShownText(owner, text)), maxWidth, scale);
     }
 
     PoolString UITextComponent::GetResolvedFontPath() const {
-        return _painter.GetResolvedFontPath(MakeParams(0.0f));
+        return _painter.GetResolvedFontPath(MakeParams(0.0f, text));
     }
 
 }  // namespace BECore

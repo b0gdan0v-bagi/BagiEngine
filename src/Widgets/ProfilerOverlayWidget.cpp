@@ -54,7 +54,7 @@ namespace BECore {
 
     Font* ProfilerOverlayWidget::ResolveFont() {
         if (!_fontTried) {
-            // The default face of TextConfig.xml, as a label without a font asks for it (UILabel::ResolveFont)
+            // The default face of TextConfig.xml, as a text without a font asks for it (UITextPainter)
             _fontTried = true;
             const PoolString path = CoreManager::GetFontAtlasLibrary().ResolveFontPath(FontRequest{});
             _font = CoreManager::GetResourceManager().Load<Font>(path.ToStringView());

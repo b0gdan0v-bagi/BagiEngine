@@ -1,4 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/BinaryDeserializer.h>
+#include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Scene.h>
@@ -6,7 +8,6 @@
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIInputClicker.h>
-#include <BECore/UI/UISlider.h>
 #include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UIThemes.h>
 #include <Common/EngineEnvironment.h>
@@ -564,7 +565,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(UISliderComponent::FormatValue(1e30f).empty());
     }
 
-    TEST_F(UISliderComponentTest, ValueAtXIsPureAndTheClassCallsIt) {
+    TEST_F(UISliderComponentTest, ValueAtXIsPure) {
         const Rect area{100.0f, 10.0f, 300.0f, 56.0f};
         EXPECT_FLOAT_EQ(UISliderComponent::ValueAtX(area, 0.0f, 1.0f, 0.1f, 128.0f), 0.0f);
         EXPECT_FLOAT_EQ(UISliderComponent::ValueAtX(area, 0.0f, 1.0f, 0.1f, 372.0f), 1.0f);
@@ -573,18 +574,6 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(UISliderComponent::ValueAtX(area, 1.0f, 0.0f, 0.0f, 250.0f), 1.0f) << "a reversed range asks for the minimum as written";
         EXPECT_FLOAT_EQ(UISliderComponent::ValueAtX(area, 2.0f, 2.0f, 0.0f, 250.0f), 2.0f) << "an empty range too";
         EXPECT_FLOAT_EQ(UISliderComponent::ValueAtX({0.0f, 0.0f, 0.0f, 0.0f}, 0.0f, 1.0f, 0.0f, 5.0f), 0.0f) << "a rect with no travel";
-
-        // The class forwards to these
-        UISlider slider;
-        slider.rect = area;
-        slider.minValue = 0.0f;
-        slider.maxValue = 1.0f;
-        slider.step = 0.1f;
-        for (const float x : {120.0f, 200.0f, 250.5f, 390.0f}) {
-            EXPECT_FLOAT_EQ(slider.ValueAt(x), UISliderComponent::ValueAtX(area, 0.0f, 1.0f, 0.1f, x));
-        }
-        EXPECT_EQ(UISlider::FormatValue(0.3f), UISliderComponent::FormatValue(0.3f));
-        EXPECT_TRUE(Near(UISlider::GetParts(area, 0.4f).thumb, UISliderComponent::GetParts(area, 0.4f).thumb));
     }
 
     // ---- a drag keeps asking ------------------------------------------------------------------------------------------------------
@@ -773,6 +762,45 @@ namespace BECore::Tests {
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
         }
+    }
+
+    TEST_F(UISliderComponentTest, TheFieldsSurviveABinaryRoundTrip) {
+        Slider("Volume").step = 0.05f;
+        BinarySerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("component"));
+        _canvas->Serialize(serializer);
+        serializer.EndObject();
+
+        BinaryDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData().data(), serializer.GetData().size()));
+        auto loaded = New<UICanvasComponent>();
+        ASSERT_TRUE(deserializer.BeginObject("component"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+        loaded->Initialize();
+
+        const auto* free = loaded->GetRoot().FindByName(PoolString::Intern("Free"))->GetComponent<UISliderComponent>();
+        ASSERT_NE(free, nullptr);
+        EXPECT_EQ(free->thumbColor.b, 90);
+        EXPECT_FLOAT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Volume"))->GetComponent<UISliderComponent>()->step, 0.05f);
+        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
+        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
+            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
+        }
+    }
+
+    TEST_F(UISliderComponentTest, ThePartShapeIsSkippedAsADefaultWhenAsked) {
+        const auto written = [](const UIElement& element) {
+            XmlSerializer serializer;
+            serializer.SetSkipDefaults(true);
+            EXPECT_TRUE(serializer.BeginObject("element"));
+            element.Serialize(serializer);
+            serializer.EndObject();
+            return serializer.SaveToString();
+        };
+        EXPECT_EQ(written(Element("Free")).find("partShape"), eastl::string::npos);
+        EXPECT_NE(written(Element("Round")).find("partShape=\"Round\""), eastl::string::npos);
     }
 
     // ---- the shape of the parts ----------------------------------------------------------------------------------------------

@@ -5,7 +5,6 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
-#include <BECore/UI/UILabel.h>
 #include <BECore/UI/UILayoutValidator.h>
 #include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
@@ -18,7 +17,7 @@ namespace BECore::Tests {
 
     namespace {
 
-        // Cap (10, 10, 200 x 30) is an element with a text component, Twin a UILabel with the same fields in the same rect (hidden: the tests show one of them at a time),
+        // Cap (10, 10, 200 x 30) is an element with a text component,
         // Narrow (10, 100, 40 x 40) holds a long text that is clipped, Shrinking the same text that shrinks to fit
         constexpr const char* kTextXml = R"(
 <SceneManager><scenes>
@@ -32,8 +31,6 @@ namespace BECore::Tests {
                          disabledTextColor="70,80,90,100" selectedTextColor="110,120,130,255" textOutline="2,0,0,0,255" align="Center" verticalAlign="Center"/>
             </components>
           </element>
-          <element type="UILabel" name="Twin" visible="false" x="10" y="10" width="200" height="30" fontSize="24" text="Score" textColor="200,100,50,255"
-                   textOutline="2,0,0,0,255" align="Center" verticalAlign="Center"/>
           <element type="UIElement" name="Narrow" x="10" y="100" width="40" height="40">
             <components>
               <component type="UITextComponent" text="A text that is much too long for this box" wrap="false" overflow="Clip"/>
@@ -189,26 +186,6 @@ namespace BECore::Tests {
             EXPECT_LE(glyph.rect.x + glyph.rect.w, cap.rect.x + cap.rect.w + 4.0f);
             EXPECT_GE(glyph.rect.y, cap.rect.y - 4.0f);
             EXPECT_LE(glyph.rect.y + glyph.rect.h, cap.rect.y + cap.rect.h + 4.0f);
-        }
-    }
-
-    TEST_F(UITextComponentTest, TheComponentAndALabelWithTheSameFieldsDrawTheSameQuads) {
-        Draw();
-        const eastl::vector<DrawCall> fromComponent = _renderer->calls;
-        ASSERT_FALSE(Glyphs().empty());
-
-        Get("Cap").style.visible = false;
-        Get("Twin").style.visible = true;
-        _canvas->Invalidate();
-        Draw();
-        const eastl::vector<DrawCall>& fromLabel = _renderer->calls;
-
-        ASSERT_EQ(fromComponent.size(), fromLabel.size());
-        for (size_t i = 0; i < fromLabel.size(); ++i) {
-            EXPECT_EQ(fromComponent[i].kind, fromLabel[i].kind) << i;
-            EXPECT_TRUE(SameRect(fromComponent[i].rect, fromLabel[i].rect)) << i;
-            EXPECT_EQ(Pack(fromComponent[i].color), Pack(fromLabel[i].color)) << i;
-            EXPECT_EQ(fromComponent[i].texture, fromLabel[i].texture) << i;
         }
     }
 
@@ -420,6 +397,19 @@ namespace BECore::Tests {
         Get("Cap").groupDisabled = true;
         Draw();
         EXPECT_LT(outlineAlpha(), plain) << "the outline fades with the text";
+    }
+
+    TEST_F(UITextComponentTest, TheHooksOfAPlainOwnerLeaveItsTextAndItsAreaAlone) {
+        Draw();
+        UIElement& cap = Get("Cap");
+        EXPECT_TRUE(SameRect(cap.GetComponentArea(), cap.rect)) << "the area is the rect";
+        EXPECT_EQ(cap.GetTextOverride(), nullptr);
+        EXPECT_EQ(CaptionOf("Cap").GetDisplayText(cap), CaptionOf("Cap").GetDisplayText());
+        EXPECT_EQ(CaptionOf("Cap").GetDisplayText(cap), "Score");
+        for (const DrawCall& glyph : Glyphs()) {
+            EXPECT_GE(glyph.rect.x, cap.rect.x - 1e-2f);
+            EXPECT_LE(glyph.rect.x + glyph.rect.w, cap.rect.x + cap.rect.w + 1e-2f);
+        }
     }
 
     TEST_F(UITextComponentTest, TheStateAccentOfAnElementWithATextComponentIsItsTextColour) {

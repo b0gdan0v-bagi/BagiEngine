@@ -13,7 +13,7 @@ namespace BECore {
     /// Where the text sits in the height of its rect when it does not fill it
     CORE_ENUM(UIVerticalAlign, uint8_t, Top, Center, Bottom)
 
-    /// What the painter reads of a text: the fields of a `UILabel` or of a `UITextComponent`, taken as they are now. A view, never kept
+    /// What the painter reads of a text: the fields of a `UITextComponent`, taken as they are now. A view, never kept
     struct UITextParams {
         eastl::string_view text;  ///< the source text, with its `{#key}` and `{name}` (the painter expands them)
         PoolString font;

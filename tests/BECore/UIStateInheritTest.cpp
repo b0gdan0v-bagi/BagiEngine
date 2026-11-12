@@ -5,15 +5,14 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIDropdown.h>
 #include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIInputClicker.h>
-#include <BECore/UI/UISlider.h>
+#include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UIStateLook.h>
 #include <BECore/UI/UITextComponent.h>
-#include <BECore/UI/UIToggle.h>
+#include <BECore/UI/UIToggleComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -32,8 +31,8 @@ namespace BECore::Tests {
         //   Off      (300, 100, 200 x 60)  a clicker, disabled; an image child OffIcon
         //   Bare     (300, 200, 200 x 60)  a clicker; a text child BareCap only, so the selected bar takes its colour
         //   Plain    (300, 300, 200 x 60)  a clicker and no children, no text: the bar is white
-        //   Holder   (550, 10, 200 x 60)   a clicker; HolderButton, a UIButton with a fill per state, is its child
-        //   Holder2  (550, 100, 200 x 60)  a clicker; a UIDropdown, a UIToggle and a UISlider are its children, a strip at its right edge is bare
+        //   Holder   (550, 10, 200 x 60)   a clicker; HolderButton, an element with a clicker and a fill per state, is its child
+        //   Holder2  (550, 100, 200 x 60)  a clicker; a UIDropdown, a toggle and a slider (elements with a clicker and the component) are its children, a strip at its right edge is bare
         //   Checked  (550, 200, 200 x 60)  a clicker and a probe component that says checked; a child CheckedIcon
         constexpr const char* kInheritXml = R"(
 <SceneManager><scenes>
@@ -123,16 +122,33 @@ namespace BECore::Tests {
                    disabledColor="1,2,5,255" selectedColor="1,2,6,255">
             <components><component type="UIInputClicker" action="Holder"/></components>
             <children>
-              <element type="UIButton" name="HolderButton" x="0" y="0" width="100" height="60" text="In" color="40,40,40,255" hoverColor="60,70,80,255"
-                       pressedColor="20,30,40,255" disabledColor="90,91,92,255" selectedColor="30,90,30,255"/>
+              <element type="UIElement" name="HolderButton" x="0" y="0" width="100" height="60" color="40,40,40,255" hoverColor="60,70,80,255"
+                       pressedColor="20,30,40,255" disabledColor="90,91,92,255" selectedColor="30,90,30,255">
+                <components>
+                  <component type="UITextComponent" text="In" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="HolderButton"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UIElement" name="Holder2" x="550" y="100" width="200" height="60" color="40,40,40,255">
             <components><component type="UIInputClicker" action="Holder2"/></components>
             <children>
-              <element type="UIDropdown" name="HolderDrop" x="0" y="0" width="100" height="60" text="Pick"/>
-              <element type="UIToggle" name="HolderToggle" x="100" y="0" width="90" height="30" text="On"/>
-              <element type="UISlider" name="HolderSlider" x="100" y="30" width="90" height="30"/>
+              <element type="UIDropdown" name="HolderDrop" x="0" y="0" width="100" height="60">
+                <components><component type="UITextComponent" text="Pick" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
+              </element>
+              <element type="UIElement" name="HolderToggle" x="100" y="0" width="90" height="30">
+                <components>
+                  <component type="UIInputClicker"/>
+                  <component type="UIToggleComponent"/>
+                </components>
+              </element>
+              <element type="UIElement" name="HolderSlider" x="100" y="30" width="90" height="30">
+                <components>
+                  <component type="UIInputClicker" stateLook="false"/>
+                  <component type="UISliderComponent"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UIElement" name="Checked" x="550" y="200" width="200" height="60" color="40,40,40,255">
@@ -424,9 +440,9 @@ namespace BECore::Tests {
         EXPECT_FALSE(Get("Icon").GetVisualState().hovered);
     }
 
-    TEST_F(UIStateInheritTest, AUIButtonBelowAnElementWithAClickerDrawsItsOwnState) {
+    TEST_F(UIStateInheritTest, AButtonBelowAnElementWithAClickerDrawsItsOwnState) {
         auto& holder = Get("Holder");
-        auto& button = *Get("HolderButton").Cast<UIButton>();
+        auto& button = Get("HolderButton");
         ASSERT_TRUE(button.OwnsState());
         EXPECT_FALSE(Get("Icon").OwnsState());
         EXPECT_TRUE(holder.OwnsState());
@@ -437,36 +453,36 @@ namespace BECore::Tests {
         ASSERT_TRUE(holder.hovered);
         ASSERT_FALSE(button.hovered);
         EXPECT_FALSE(button.GetVisualState().hovered);
-        EXPECT_EQ(Pack(button.GetCurrentFill()), Pack(Color{40, 40, 40, 255}));
+        EXPECT_EQ(Pack(button.GetStateLook().fill), Pack(Color{40, 40, 40, 255}));
 
         // Over the button both are hovered: its own look, not the holder's fill
         Hover(button);
         EXPECT_TRUE(button.GetVisualState().hovered);
-        EXPECT_EQ(Pack(button.GetCurrentFill()), Pack(Color{60, 70, 80, 255}));
+        EXPECT_EQ(Pack(button.GetStateLook().fill), Pack(Color{60, 70, 80, 255}));
 
         Hold(button);
         EXPECT_TRUE(button.GetVisualState().pressed);
-        EXPECT_EQ(Pack(button.GetCurrentFill()), Pack(Color{20, 30, 40, 255}));
+        EXPECT_EQ(Pack(button.GetStateLook().fill), Pack(Color{20, 30, 40, 255}));
         MoveTo(700.0f, 500.0f);
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(700.0f, 500.0f, false));
         Draw();
 
-        button.disabled = true;
+        button.GetComponent<UIInputClicker>()->disabled = true;
         Draw();
         EXPECT_TRUE(button.GetVisualState().disabled);
-        EXPECT_EQ(Pack(button.GetCurrentFill()), Pack(Color{90, 91, 92, 255}));
-        button.disabled = false;
+        EXPECT_EQ(Pack(button.GetStateLook().fill), Pack(Color{90, 91, 92, 255}));
+        button.GetComponent<UIInputClicker>()->disabled = false;
 
         button.selected = true;
         Draw();
         EXPECT_TRUE(button.GetVisualState().selected);
         EXPECT_FALSE(holder.GetVisualState().selected) << "the holder's flags are its own";
-        EXPECT_EQ(Pack(button.GetCurrentFill()), Pack(Color{30, 90, 30, 255}));
+        EXPECT_EQ(Pack(button.GetStateLook().fill), Pack(Color{30, 90, 30, 255}));
     }
 
-    TEST_F(UIStateInheritTest, ADisabledAncestorDoesNotDisableAUIButton) {
+    TEST_F(UIStateInheritTest, ADisabledAncestorDoesNotDisableAButton) {
         auto& holder = Get("Holder");
-        auto& button = *Get("HolderButton").Cast<UIButton>();
+        auto& button = Get("HolderButton");
         holder.GetComponent<UIInputClicker>()->disabled = true;
         Draw();
 
@@ -507,14 +523,14 @@ namespace BECore::Tests {
         EXPECT_FALSE(Get("HolderSlider").GetVisualState().disabled);
 
         Get("HolderDrop").Cast<UIDropdown>()->disabled = true;
-        Get("HolderToggle").Cast<UIToggle>()->disabled = true;
-        Get("HolderSlider").Cast<UISlider>()->disabled = true;
+        Get("HolderToggle").GetComponent<UIInputClicker>()->disabled = true;
+        Get("HolderSlider").GetComponent<UIInputClicker>()->disabled = true;
         for (const char* name : {"HolderDrop", "HolderToggle", "HolderSlider"}) {
             EXPECT_TRUE(Get(name).IsDisabled()) << name;
             EXPECT_TRUE(Get(name).GetVisualState().disabled) << name;
         }
         Get("HolderToggle").groupDisabled = true;
-        Get("HolderToggle").Cast<UIToggle>()->disabled = false;
+        Get("HolderToggle").GetComponent<UIInputClicker>()->disabled = false;
         EXPECT_TRUE(Get("HolderToggle").IsDisabled()) << "the group's too";
     }
 

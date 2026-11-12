@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!-- Labels and pictures at any depth: in a stack, below another label, in a panel; the components come before the children and a stack child keeps its place. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIStack" name="Column" width="300" height="200" direction="Vertical" spacing="8">
+          <children>
+            <element type="UILabel" name="Title" height="40" text="Title" fontSize="28" align="Center">
+              <children>
+                <element type="UIImage" name="Badge" anchor="TopRight" width="16" height="16" sprite="icons.badge" />
+              </children>
+            </element>
+            <element type="UIPanel" name="Body" height="100">
+              <children>
+                <element type="UILabel" name="Line" height="24" text="A line" textColor="190,190,190,255" />
+              </children>
+            </element>
+          </children>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

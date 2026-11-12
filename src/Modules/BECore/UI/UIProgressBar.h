@@ -16,7 +16,7 @@ namespace BECore {
      * this moment.
      *
      * The bar takes no input (not `interactive`, `blocksInput` false), so a click on it goes to what is below. The whole rect is drawn as the track (`trackColor`), the filled part over it
-     * (`fillColor`); a transparent one is derived from named constants: a translucent white track and the green of the toggle. There is no text on the bar: a `UILabel` beside it with
+     * (`fillColor`); a transparent one is derived from named constants: a translucent white track and the green of the toggle. There is no text on the bar: a text element beside it with
      * `{var}` says the number. `partShape="Round"` makes the track and the filled part pills (`UIElement::DrawPart`); a fill shorter than the bar is high is a smaller pill.
      */
     class UIProgressBar : public UIElement {

@@ -7,7 +7,6 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIControl.h>
 #include <BECore/UI/UIImageComponent.h>
@@ -24,9 +23,9 @@
 namespace BECore::Tests::MigrationTwin {
 
     /*
-     * What the twin tests of the migration steps share (`ContentMigrationButtonTest.cpp` for step 1, `ContentMigrationGroupTest.cpp` for step 2): the fixture folders of
-     * `tools/migrate/tests/fixtures/<step>/`, a content file read as a scene manager, the draw comparison, and a fixture class that loads one form of a screen into canvases on a
-     * `RecordingRenderer`. The two forms of a case are loaded one after the other, never together: both would register their canvases with the one `UIInput` and answer the same pointer.
+     * What the tests of the migration steps share (`ContentMigrationAfterTest.cpp`): the fixture folders of `tools/migrate/tests/fixtures/<step>/`, a content file read as a scene
+     * manager, the pointer helpers, and a fixture class that loads a screen into canvases on a `RecordingRenderer`. There is no `before` side any more: the classes that the steps
+     * rewrote are gone from the engine, so a test loads a final `.after.xml` and checks the composed form on its own.
      */
 
     inline constexpr float kLargeWidth = 1280.0f;
@@ -35,8 +34,6 @@ namespace BECore::Tests::MigrationTwin {
     inline constexpr float kSmallHeight = 900.0f;
     inline constexpr float kDefaultViewWidth = 1280.0f;  // the view of the scene a node file is put into
     inline constexpr float kDefaultViewHeight = 720.0f;
-    inline constexpr float kTolerance = 1e-3f;
-    inline constexpr float kIconTolerance = 1.0f;  // the quad of an icon or of its caption, in output pixels
     inline constexpr int kIconPixels = 16;
     inline constexpr float kTouchSize = 48.0f;
     inline constexpr float kOutside = -100.0f;  // a point on no element, to park the pointer
@@ -142,56 +139,6 @@ namespace BECore::Tests::MigrationTwin {
         return std::string(text.c_str(), text.size());
     }
 
-    inline std::string Where(const std::string& scene, const std::string& node, const std::string& element) {
-        return scene + "|" + node + "|" + element;
-    }
-
-    /// The first difference between two draws of a scene, empty when they are the same
-    inline std::string DrawDifference(const eastl::vector<DrawCall>& before, const eastl::vector<DrawCall>& after, float tolerance) {
-        if (before.size() != after.size()) {
-            return "the draws have " + std::to_string(before.size()) + " and " + std::to_string(after.size()) + " calls";
-        }
-        const auto differs = [tolerance](float a, float b) { return std::abs(a - b) > tolerance; };
-        for (size_t i = 0; i < before.size(); ++i) {
-            const DrawCall& a = before[i];
-            const DrawCall& b = after[i];
-            const std::string call = "call " + std::to_string(i) + ": ";
-            if (a.kind != b.kind) {
-                return call + "a different kind of draw";
-            }
-            if (differs(a.rect.x, b.rect.x) || differs(a.rect.y, b.rect.y) || differs(a.rect.w, b.rect.w) || differs(a.rect.h, b.rect.h)) {
-                return call + "the rect is (" + std::to_string(a.rect.x) + ", " + std::to_string(a.rect.y) + ", " + std::to_string(a.rect.w) + " x " + std::to_string(a.rect.h) + ") and (" +
-                       std::to_string(b.rect.x) + ", " + std::to_string(b.rect.y) + ", " + std::to_string(b.rect.w) + " x " + std::to_string(b.rect.h) + ")";
-            }
-            if (a.color.r != b.color.r || a.color.g != b.color.g || a.color.b != b.color.b || a.color.a != b.color.a) {
-                return call + "the colour is (" + std::to_string(a.color.r) + "," + std::to_string(a.color.g) + "," + std::to_string(a.color.b) + "," + std::to_string(a.color.a) + ") and (" +
-                       std::to_string(b.color.r) + "," + std::to_string(b.color.g) + "," + std::to_string(b.color.b) + "," + std::to_string(b.color.a) + ")";
-            }
-            if (a.texture != b.texture) {
-                return call + "another texture";
-            }
-            if (a.source.has_value() != b.source.has_value() ||
-                (a.source && (differs(a.source->x, b.source->x) || differs(a.source->y, b.source->y) || differs(a.source->w, b.source->w) || differs(a.source->h, b.source->h)))) {
-                return call + "another source rect";
-            }
-            if (a.blend != b.blend || a.clip.has_value() != b.clip.has_value()) {
-                return call + "another blend or clip";
-            }
-            if (a.vertices.size() != b.vertices.size() || a.indices != b.indices) {
-                return call + "another geometry";
-            }
-            for (size_t v = 0; v < a.vertices.size(); ++v) {
-                const GeometryVertex& p = a.vertices[v];
-                const GeometryVertex& q = b.vertices[v];
-                if (differs(p.x, q.x) || differs(p.y, q.y) || differs(p.u, q.u) || differs(p.v, q.v) || p.color.r != q.color.r || p.color.g != q.color.g || p.color.b != q.color.b ||
-                    p.color.a != q.color.a) {
-                    return call + "vertex " + std::to_string(v) + " differs";
-                }
-            }
-        }
-        return {};
-    }
-
     inline void WalkElements(UIElement& parent, const std::function<void(UIElement&)>& visit) {
         for (const auto& child : parent.children) {
             visit(*child);
@@ -277,7 +224,7 @@ namespace BECore::Tests::MigrationTwin {
             _manager.Reset();
         }
 
-        /// The sprite of every icon, whatever its name, is the texture of the test: the icon quad is then in the draws of both forms
+        /// The sprite of every image component, whatever its name, is the texture of the test: the icon quad is then in the draw
         void GiveTheIconsATexture(const std::string& xml) {
             for (const std::string& sceneName : SceneNames(xml)) {
                 Scene* scene = _manager->GetSceneByName(PoolString::Intern(sceneName.c_str()));
@@ -290,9 +237,6 @@ namespace BECore::Tests::MigrationTwin {
                         continue;
                     }
                     WalkElements(canvas->GetRoot(), [this](UIElement& element) {
-                        if (auto* button = element.Cast<UIButton>(); button != nullptr && !button->icon.Empty()) {
-                            button->GetIconSprite().SetTexture(_icon);
-                        }
                         if (auto* image = element.GetComponent<UIImageComponent>(); image != nullptr && !image->sprite.Empty()) {
                             image->GetSprite().SetTexture(_icon);
                         }

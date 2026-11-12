@@ -11,14 +11,18 @@ namespace BECore {
     /**
      * @brief A text in the rect of its element, as a component: `<component type="UITextComponent" text="Play" align="Center" verticalAlign="Center"/>`.
      *
-     * It has the fields of a `UILabel` under the same attribute names (`text`, `font`, `fontFamily`, `fontWeight`, `textColor`, `align`, `verticalAlign`, `overflow`, `wrap`,
-     * `lineSpacing`, `minFontSize`, `textOutline`, `textShadow`) and draws with the same `UITextPainter`, so the two draw the same quads. The size is not a field: it is `fontSize` of the
-     * owner's style in UI units (24 when it is 0, so a responsive variant of the element can change it). The text may name `{variables}` and `{#strings}`.
+     * Its fields (`text`, `font`, `fontFamily`, `fontWeight`, `textColor`, `align`, `verticalAlign`, `overflow`, `wrap`, `lineSpacing`, `minFontSize`, `textOutline`,
+     * `textShadow`) go to the `UITextPainter`, which lays out, measures, checks and draws the text. A plain text, a caption and a dropdown header are this component. The size is not a field: it is
+     * `fontSize` of the owner's style in UI units (24 when it is 0, so a responsive variant of the element can change it). The text may name `{variables}` and `{#strings}`.
      *
      * **State.** The text takes the colour of the owner's state (a child of a button has the state of the button: `UIElement::GetVisualState`): `disabledTextColor`, `pressedTextColor`,
      * `selectedTextColor`, `hoverTextColor`, in that order of priority; a transparent one leaves `textColor` as it is (a button does not tint its caption), except that `fadeWhenDisabled` fades it
      * while the owner is disabled. A fainter state colour fades the outline and the shadow of the text by the same share. The check is the text against the rect of the owner: a text that does not fit
      * and cannot shrink is a defect of the layout validator.
+     *
+     * **Two hooks of the owner.** The text is drawn in `owner.GetComponentArea()` (the rect unless the owner keeps part of it for something else) and an owner that answers
+     * `GetTextOverride()` shows that text instead of `text`: the header of a `UIDropdown` is a text component that draws left of the arrow and shows the chosen caption. For every other
+     * element both are the plain case: the rect and `text`.
      */
     class UITextComponent : public UIComponent {
         BE_CLASS(UITextComponent)
@@ -55,6 +59,9 @@ namespace BECore {
         /// The text as it is shown, with its `{#key}` and `{name}` expanded (`UITextPainter::GetDisplayText`)
         [[nodiscard]] eastl::string_view GetDisplayText() const;
 
+        /// The same for the text @p owner shows: its `GetTextOverride()` when it has one, else `text` (a dropdown's header shows the chosen option's caption)
+        [[nodiscard]] eastl::string_view GetDisplayText(const UIElement& owner) const;
+
         /// The size the shown text takes when wrapped at @p maxWidth canvas units, at the font size of @p owner; see `UITextPainter::Measure`
         [[nodiscard]] Vec2 MeasureText(const UIElement& owner, float maxWidth, float scale) const;
 
@@ -67,7 +74,9 @@ namespace BECore {
         }
 
     private:
-        [[nodiscard]] UITextParams MakeParams(float fontSize) const;
+        /// @p shown is the text to lay out: `text`, or the override of the owner (`ShownText`)
+        [[nodiscard]] UITextParams MakeParams(float fontSize, const eastl::string& shown) const;
+        [[nodiscard]] static const eastl::string& ShownText(const UIElement& owner, const eastl::string& own);
 
         mutable UITextPainter _painter;
     };

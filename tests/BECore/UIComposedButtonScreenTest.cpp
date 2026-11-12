@@ -3,24 +3,22 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIImageComponent.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
 #include <Common/UILayoutMatrix.h>
 #include <gtest/gtest.h>
-#include <set>
-#include <string>
 
 namespace BECore::Tests {
 
     /*
      * The screen test of composed buttons (`UIElement` with `UIImageComponent`, `UITextComponent`, `UIInputClicker`, `UITooltipComponent`; .claude/rules/ui-controls.md,
-     * "Components"), on the validator matrix like `UIIconButtonScreenTest`. Every composed button has a `UIButton` twin of the same rect beside it (the name of the twin ends with
-     * `Twin`), and the test holds that the validator reports the same findings for the two on every case of the matrix: the touch rule and the text fit do not care which form
-     * a button is written in. An icon-left button is a stack holding an image child and a text child (named `Left/Icon`, `Left/Text`: the part before the `/` is the button).
+     * "Components"), on the validator matrix like `UIIconButtonScreenTest`: the touch rule and the text fit are held on every case of the matrix for the forms a button is written in (icon only,
+     * with a tooltip, disabled, captioned, icon-left, from HTML). An icon-left button is a stack holding an image child and a text child (named `Left/Icon`, `Left/Text`: the part
+     * before the `/` is the button).
      *
      * The canvas is a SceneView canvas of a 480 x 300 view: the width of the narrowest window of the matrix, so the view is drawn at scale 1 or more and a button of 48 units is 48
      * window units on screen on every case.
@@ -33,9 +31,13 @@ namespace BECore::Tests {
         constexpr float kTouchSize = 48.0f;  // the least side of a touch target on the smallest scale of the matrix (1.0)
         constexpr float kSmallSide = 40.0f;  // a button that is a hair too small
         constexpr float kEpsilon = 1e-3f;
-        constexpr const char* kTwinSuffix = "Twin";
+        // What the HTML compiler and the migration step write for an icon button: a picture child of this share of the button, or of this share of its height next to a caption
+        constexpr float kIconOnlyShare = UIImageComponent::kIconOnlyShare;
+        constexpr float kIconWithTextShare = UIImageComponent::kIconWithTextShare;
+        constexpr float kIconPadding = UIImageComponent::kIconPadding;
+        constexpr float kIconGap = UIImageComponent::kIconGap;
 
-        // Row one (y 10): an icon-only button (@SIDE@ units, `aspectRatio` 1), one with a tooltip, a disabled one; each followed by its twin.
+        // Row one (y 10): an icon-only button (@SIDE@ units, `aspectRatio` 1), one with a tooltip, a disabled one.
         // Row two (y 100): a captioned button with rounded corners (120 x @SIDE@). Row three (y 160): the icon-left button, a stack (200 x @SIDE@).
         // @EXTRA@ is empty or a captioned button of 80 units whose clipped text does not fit.
         constexpr const char* kBarXml = R"(
@@ -47,27 +49,22 @@ namespace BECore::Tests {
           <element type="UIElement" name="Icon" aspectRatio="1" x="10" y="10" width="@SIDE@" height="@SIDE@" color="40,60,90,255">
             <components><component type="UIImageComponent" sprite="BarIcon"/><component type="UIInputClicker" action="IconBar"/></components>
           </element>
-          <element type="UIButton" name="IconTwin" icon="BarIcon" aspectRatio="1" x="70" y="10" width="@SIDE@" height="@SIDE@" action="IconBar" color="40,60,90,255"/>
 
           <element type="UIElement" name="Tip" aspectRatio="1" x="130" y="10" width="@SIDE@" height="@SIDE@" color="40,60,90,255">
             <components>
               <component type="UIImageComponent" sprite="BarIcon"/><component type="UIInputClicker" action="TipBar"/><component type="UITooltipComponent" text="{#bar.tip}"/>
             </components>
           </element>
-          <element type="UIButton" name="TipTwin" icon="BarIcon" tooltip="{#bar.tip}" aspectRatio="1" x="190" y="10" width="@SIDE@" height="@SIDE@" action="TipBar" color="40,60,90,255"/>
 
           <element type="UIElement" name="Off" aspectRatio="1" x="250" y="10" width="@SIDE@" height="@SIDE@" color="40,60,90,255">
             <components><component type="UIImageComponent" sprite="BarIcon"/><component type="UIInputClicker" action="OffBar" disabled="true"/></components>
           </element>
-          <element type="UIButton" name="OffTwin" icon="BarIcon" aspectRatio="1" x="310" y="10" width="@SIDE@" height="@SIDE@" action="OffBar" disabled="true" color="40,60,90,255"/>
 
           <element type="UIElement" name="Caption" x="10" y="100" width="120" height="@SIDE@" color="40,60,90,255" cornerRadius="8" borderWidth="2" borderColor="200,200,220,255">
             <components>
               <component type="UITextComponent" text="Go" align="Center" verticalAlign="Center"/><component type="UIInputClicker" action="CaptionBar"/>
             </components>
           </element>
-          <element type="UIButton" name="CaptionTwin" text="Go" align="Center" verticalAlign="Center" x="140" y="100" width="120" height="@SIDE@" action="CaptionBar"
-                   color="40,60,90,255" cornerRadius="8" borderWidth="2" borderColor="200,200,220,255"/>
 
           <element type="UIStack" name="Left" direction="Horizontal" spacing="8" crossAlign="Center" x="10" y="160" width="200" height="@SIDE@" color="40,60,90,255">
             <components><component type="UIInputClicker" action="LeftBar"/></components>
@@ -78,7 +75,7 @@ namespace BECore::Tests {
               </element>
             </children>
           </element>
-          <element type="UIButton" name="LeftTwin" icon="BarIcon" text="Go" x="230" y="160" width="200" height="@SIDE@" action="LeftBar" color="40,60,90,255"/>@EXTRA@
+@EXTRA@
         </elements>
       </component>
     </components></node>
@@ -91,8 +88,7 @@ namespace BECore::Tests {
               <component type="UITextComponent" text="A caption far too long for its rect" wrap="false" overflow="Clip"/><component type="UIInputClicker" action="NarrowBar"/>
             </components>
           </element>
-          <element type="UIButton" name="NarrowTwin" text="A caption far too long for its rect" wrap="false" overflow="Clip" x="110" y="220" width="80" height="48" action="NarrowBar"
-                   color="40,60,90,255"/>)";
+)";
 
         // The scene around a list of elements, for the screens that are not written in XML here
         constexpr const char* kSceneHead = R"(<SceneManager><scenes>
@@ -104,7 +100,7 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        // Two buttons written in HTML + CSS (an icon-only one and an icon-left one) and a `UIButton` twin of each, at the same size in the row below
+        // Two buttons written in HTML + CSS: an icon-only one and an icon-left one
         std::string HtmlBarXml(float side) {
             const std::string sideUnits = std::to_string(static_cast<int>(side));
             const std::string sidePx = sideUnits + "px";
@@ -117,9 +113,7 @@ namespace BECore::Tests {
             const std::string xml(compiled.c_str());
             const size_t begin = xml.find("<elements>") + std::string("<elements>").size();
             const size_t end = xml.find("</elements>");
-            return kSceneHead + xml.substr(begin, end - begin) + R"(<element type="UIButton" name="IconTwin" icon="BarIcon" x="10" y="100" width=")" + sideUnits + R"(" height=")" + sideUnits +
-                   R"(" action="IconBar" color="40,60,90,255"/><element type="UIButton" name="LeftTwin" icon="BarIcon" text="Go" x="70" y="100" width="200" height=")" + sideUnits +
-                   R"(" action="LeftBar" color="40,60,90,255"/>)" + kSceneTail;
+            return kSceneHead + xml.substr(begin, end - begin) + kSceneTail;
         }
 
         // A segmented group written in HTML + CSS: an icon-only segment, an icon-left one and a plain one, in a row (the segments are composed like any button)
@@ -151,67 +145,25 @@ namespace BECore::Tests {
             return xml;
         }
 
-        // The button an element name belongs to, and whether it is the UIButton twin: "LeftTwin" is the twin of "Left", "Left/Text" a part of "Left"
-        struct ButtonName {
-            std::string button;
-            bool twin = false;
-        };
-
-        ButtonName SplitName(const PoolString& element) {
+        // The button an element name belongs to: "Left/Text" is a part of "Left"
+        std::string ButtonOf(const PoolString& element) {
             std::string name(element.CStr());
-            ButtonName result;
             const size_t part = name.find('/');
             if (part != std::string::npos) {
                 name.resize(part);
             }
-            const std::string suffix = kTwinSuffix;
-            if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
-                name.resize(name.size() - suffix.size());
-                result.twin = true;
-            }
-            result.button = name;
-            return result;
-        }
-
-        // The findings of the matrix as "case | kind | button" lines, for the composed buttons or for their twins
-        std::set<std::string> Findings(const eastl::vector<UIMatrixFailure>& failures, bool twins) {
-            std::set<std::string> lines;
-            for (const UIMatrixFailure& failure : failures) {
-                for (const UILayoutIssue& issue : failure.issues) {
-                    const ButtonName name = SplitName(issue.element);
-                    if (name.twin == twins) {
-                        lines.insert(std::string(failure.label.c_str()) + " | " + std::string(EnumUtils<UILayoutIssueKind>::ToString(issue.kind).data()) + " | " + name.button);
-                    }
-                }
-            }
-            return lines;
+            return name;
         }
 
         bool Reports(const eastl::vector<UIMatrixFailure>& failures, UILayoutIssueKind kind, const char* button) {
             for (const UIMatrixFailure& failure : failures) {
                 for (const UILayoutIssue& issue : failure.issues) {
-                    const ButtonName name = SplitName(issue.element);
-                    if (!name.twin && issue.kind == kind && name.button == button) {
+                    if (issue.kind == kind && ButtonOf(issue.element) == button) {
                         return true;
                     }
                 }
             }
             return false;
-        }
-
-        std::string Describe(const std::set<std::string>& composed, const std::set<std::string>& twins) {
-            std::string text = "composed " + std::to_string(composed.size()) + " findings, twins " + std::to_string(twins.size()) + "; first difference: ";
-            for (const std::string& line : composed) {
-                if (!twins.contains(line)) {
-                    return text + "composed only: " + line;
-                }
-            }
-            for (const std::string& line : twins) {
-                if (!composed.contains(line)) {
-                    return text + "twin only: " + line;
-                }
-            }
-            return text + "none";
         }
 
     }  // namespace
@@ -285,14 +237,11 @@ namespace BECore::Tests {
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
     }
 
-    TEST_F(UIComposedButtonScreenTest, TheTouchRuleReportsTheComposedButtonsLikeTheirTwins) {
+    TEST_F(UIComposedButtonScreenTest, TheTouchRuleReportsTheComposedButtonsThatAreTooSmall) {
         ASSERT_NO_FATAL_FAILURE(Load(kSmallSide));
         const auto failures = OnMatrix();
-        const std::set<std::string> composed = Findings(failures, false);
-        const std::set<std::string> twins = Findings(failures, true);
 
-        EXPECT_FALSE(composed.empty());
-        EXPECT_EQ(composed, twins) << Describe(composed, twins);
+        EXPECT_FALSE(failures.empty());
         for (const char* button : {"Icon", "Tip", "Off", "Caption", "Left"}) {
             EXPECT_TRUE(Reports(failures, UILayoutIssueKind::TouchTargetTooSmall, button)) << button << " is under the touch size of 48 and is a target by its clicker";
         }
@@ -303,15 +252,12 @@ namespace BECore::Tests {
         }
     }
 
-    TEST_F(UIComposedButtonScreenTest, TheButtonsOfAnHtmlDocumentAreReportedByTheMatrixLikeTheirTwins) {
+    TEST_F(UIComposedButtonScreenTest, TheButtonsOfAnHtmlDocumentAreReportedByTheMatrixWhenTooSmall) {
         for (const float side : {kTouchSize, kSmallSide}) {
             SCOPED_TRACE(side);
             ASSERT_NO_FATAL_FAILURE(LoadXml(HtmlBarXml(side)));
             const auto failures = OnMatrix();
-            const std::set<std::string> composed = Findings(failures, false);
-            const std::set<std::string> twins = Findings(failures, true);
-            EXPECT_EQ(composed, twins) << Describe(composed, twins) << " / " << DescribeMatrixFailures(failures).c_str();
-            EXPECT_EQ(composed.empty(), side >= kTouchSize) << DescribeMatrixFailures(failures).c_str();
+            EXPECT_EQ(failures.empty(), side >= kTouchSize) << DescribeMatrixFailures(failures).c_str();
             if (side < kTouchSize) {
                 EXPECT_TRUE(Reports(failures, UILayoutIssueKind::TouchTargetTooSmall, "Icon"));
                 EXPECT_TRUE(Reports(failures, UILayoutIssueKind::TouchTargetTooSmall, "Left"));
@@ -319,7 +265,7 @@ namespace BECore::Tests {
         }
     }
 
-    TEST_F(UIComposedButtonScreenTest, TheIconAndTheCaptionOfAnHtmlButtonLieWhereTheyDoInAUIButton) {
+    TEST_F(UIComposedButtonScreenTest, TheIconAndTheCaptionOfAnHtmlButtonLieByTheShares) {
         ASSERT_NO_FATAL_FAILURE(LoadXml(HtmlBarXml(kTouchSize)));
         const auto expectRect = [](const Rect& expected, const Rect& actual, const char* what) {
             EXPECT_NEAR(expected.x, actual.x, 1.0f) << what;
@@ -327,12 +273,16 @@ namespace BECore::Tests {
             EXPECT_NEAR(expected.w, actual.w, 1.0f) << what;
             EXPECT_NEAR(expected.h, actual.h, 1.0f) << what;
         };
-        const UIElement& left = Get("Left");
-        const UIButton::Parts leftParts = UIButton::GetParts(left.rect, true, true, UIIconPlacement::Left, 0.0f);
-        expectRect(leftParts.icon, Get("LeftIcon").rect, "the icon of the icon-left button");
-        expectRect(leftParts.text, Get("LeftCaption").rect, "the caption of the icon-left button");
-        const UIButton::Parts iconParts = UIButton::GetParts(Get("Icon").rect, true, false, UIIconPlacement::Left, 0.0f);
-        expectRect(iconParts.icon, Get("IconIcon").rect, "the icon of the icon-only button");
+        // Icon left of a caption: padding on the left, the icon a square of half the height centred on the cross axis, a gap, then the caption takes the rest of the width
+        const Rect left = Get("Left").rect;
+        const float icon = left.h * kIconWithTextShare;
+        expectRect({left.x + kIconPadding, left.y + (left.h - icon) * 0.5f, icon, icon}, Get("LeftIcon").rect, "the icon of the icon-left button");
+        const float captionX = left.x + kIconPadding + icon + kIconGap;
+        expectRect({captionX, left.y, left.x + left.w - captionX, left.h}, Get("LeftCaption").rect, "the caption of the icon-left button");
+        // Icon only: a centred square of 60% of the button
+        const Rect only = Get("Icon").rect;
+        const float side = std::min(only.w, only.h) * kIconOnlyShare;
+        expectRect({only.x + (only.w - side) * 0.5f, only.y + (only.h - side) * 0.5f, side, side}, Get("IconIcon").rect, "the icon of the icon-only button");
     }
 
     TEST_F(UIComposedButtonScreenTest, TheSegmentsOfAnHtmlGroupAreTargetsOfTheMatrixByTheirClickers) {
@@ -341,7 +291,6 @@ namespace BECore::Tests {
         EXPECT_TRUE(failures.empty()) << DescribeMatrixFailures(failures).c_str();
         for (const char* segment : {"SegA", "SegB", "SegC"}) {
             EXPECT_TRUE(Get(segment).IsInteractive()) << segment;
-            EXPECT_EQ(dynamic_cast<UIButton*>(&Get(segment)), nullptr) << segment << " is composed, not a UIButton";
         }
 
         ASSERT_NO_FATAL_FAILURE(LoadXml(HtmlGroupXml(kSmallSide)));
@@ -351,14 +300,10 @@ namespace BECore::Tests {
         }
     }
 
-    TEST_F(UIComposedButtonScreenTest, ACaptionThatDoesNotFitIsReportedLikeThatOfAButton) {
+    TEST_F(UIComposedButtonScreenTest, ACaptionThatDoesNotFitIsReported) {
         ASSERT_NO_FATAL_FAILURE(Load(kTouchSize, true));
         const auto failures = OnMatrix();
         EXPECT_TRUE(Reports(failures, UILayoutIssueKind::TextDoesNotFit, "Narrow"));
-        const std::set<std::string> composed = Findings(failures, false);
-        const std::set<std::string> twins = Findings(failures, true);
-        EXPECT_FALSE(composed.empty());
-        EXPECT_EQ(composed, twins) << Describe(composed, twins);
     }
 
     TEST_F(UIComposedButtonScreenTest, TheTargetOfAClickerIsTheRectOfItsElementNotTheImage) {
@@ -384,10 +329,9 @@ namespace BECore::Tests {
         }
     }
 
-    TEST_F(UIComposedButtonScreenTest, TheTooltipOfAComposedButtonIsTheOneOfItsTwin) {
+    TEST_F(UIComposedButtonScreenTest, TheTooltipOfAComposedButtonIsItsComponentsText) {
         ASSERT_NO_FATAL_FAILURE(Load(kTouchSize));
         EXPECT_EQ(Get("Tip").GetTooltipText(), "{#bar.tip}");
-        EXPECT_EQ(Get("Tip").GetTooltipText(), Get("TipTwin").GetTooltipText());
         EXPECT_TRUE(Get("Icon").GetTooltipText().empty());
     }
 
@@ -395,7 +339,6 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Load(kTouchSize));
         EXPECT_TRUE(Get("Off").IsDisabled());
         EXPECT_TRUE(Get("Off").IsInteractive());
-        EXPECT_EQ(Get("Off").IsDisabled(), Get("OffTwin").IsDisabled());
     }
 
 }  // namespace BECore::Tests

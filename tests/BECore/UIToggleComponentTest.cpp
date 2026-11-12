@@ -1,4 +1,6 @@
 #include <BECore/GameManager/CoreManager.h>
+#include <BECore/Reflection/BinaryDeserializer.h>
+#include <BECore/Reflection/BinarySerializer.h>
 #include <BECore/Reflection/XmlDeserializer.h>
 #include <BECore/Reflection/XmlSerializer.h>
 #include <BECore/Scene/Scene.h>
@@ -9,7 +11,6 @@
 #include <BECore/UI/UISwitchComponent.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
-#include <BECore/UI/UIToggle.h>
 #include <BECore/UI/UIToggleComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -31,6 +32,7 @@ namespace BECore::Tests {
         //   Off      (10, 300, 300 wide)  the clicker is disabled
         //   Round    (10, 400, 300 wide)  partShape Round
         //   Unbound  (10, 500, 300 wide)  no bind
+        //   Long     (330, 10, 220 wide)  a caption far too long for the room that the switch leaves
         constexpr const char* kToggleXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -117,6 +119,20 @@ namespace BECore::Tests {
                 <components><component type="UITextComponent" text="Unbound" verticalAlign="Center" wrap="false"/></components>
               </element>
               <element type="UIElement" name="UnboundSwitch" height="100%" aspectRatio="1.25">
+                <components><component type="UISwitchComponent"/></components>
+              </element>
+            </children>
+          </element>
+          <element type="UIElement" name="Long" x="330" y="10" width="220" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+            <components>
+              <component type="UIInputClicker"/>
+              <component type="UIToggleComponent" bind="soundOn" action="ToggleCompLong"/>
+            </components>
+            <children>
+              <element type="UIElement" name="LongCaption" flex="1" height="100%" fontSize="24">
+                <components><component type="UITextComponent" text="A caption far too long for the room that the switch leaves" verticalAlign="Center" wrap="false"/></components>
+              </element>
+              <element type="UIElement" name="LongSwitch" height="100%" aspectRatio="1.25">
                 <components><component type="UISwitchComponent"/></components>
               </element>
             </children>
@@ -545,7 +561,7 @@ namespace BECore::Tests {
 
     // ---- the geometry ------------------------------------------------------------------------------------------------------
 
-    TEST_F(UIToggleComponentTest, TheRowIsLaidOutAsTheClassToggleWas) {
+    TEST_F(UIToggleComponentTest, TheSwitchIsAtTheRightEndAndTheCaptionTakesTheRoomItLeaves) {
         for (const char* name : {"Sound", "Custom", "Off", "Round"}) {
             const Rect& row = Get(name).rect;
             const Rect& caption = Get((eastl::string(name) + "Caption").c_str()).rect;
@@ -554,21 +570,24 @@ namespace BECore::Tests {
             EXPECT_NEAR(sw.w, row.h * UISwitchComponent::kAreaAspect, kEpsilon) << name;
             EXPECT_NEAR(sw.x + sw.w, row.x + row.w, kEpsilon) << "the switch is at the right end: " << name;
             EXPECT_NEAR(caption.x + caption.w + kCaptionGap, sw.x, kEpsilon) << name;
-
-            // The numbers of the class are the specification: its track, its thumbs, its caption area
-            const auto old = UIToggle::GetParts(row);
-            const auto parts = UISwitchComponent::GetParts(sw);
-            EXPECT_TRUE(Near(parts.track, old.track)) << name;
-            EXPECT_TRUE(Near(parts.thumbOff, old.thumbOff)) << name;
-            EXPECT_TRUE(Near(parts.thumbOn, old.thumbOn)) << name;
-            EXPECT_NEAR(caption.w, old.text.w, kEpsilon) << name;
+            EXPECT_NEAR(caption.w, row.w - row.h * UISwitchComponent::kAreaAspect - kCaptionGap, kEpsilon) << name;
         }
     }
 
-    TEST_F(UIToggleComponentTest, TheConstantsAreTheClassConstants) {
-        EXPECT_FLOAT_EQ(UISwitchComponent::kSwitchHeightRatio, UIToggle::kSwitchHeightRatio);
-        EXPECT_FLOAT_EQ(UISwitchComponent::kSwitchAspect, UIToggle::kSwitchAspect);
-        EXPECT_FLOAT_EQ(UISwitchComponent::kThumbInset, UIToggle::kThumbInset);
+    TEST_F(UIToggleComponentTest, TheTrackAndThumbOfA300By56RowAreAtTheirNumbers) {
+        // The numbers the first toggle (a class, now gone) drew, kept as the specification: a 28 high, 56 wide track with 14 of air to the right
+        const auto parts = PartsOf("Sound");
+        const Rect& row = Get("Sound").rect;
+        EXPECT_TRUE(Near(parts.track, Rect{row.x + 230.0f, row.y + 14.0f, 56.0f, 28.0f}));
+        EXPECT_TRUE(Near(parts.thumbOff, Rect{row.x + 233.0f, row.y + 17.0f, 22.0f, 22.0f}));
+        EXPECT_TRUE(Near(parts.thumbOn, Rect{row.x + 261.0f, row.y + 17.0f, 22.0f, 22.0f}));
+        EXPECT_NEAR(Get("SoundCaption").rect.w, 222.0f, kEpsilon);
+    }
+
+    TEST_F(UIToggleComponentTest, TheConstantsOfTheSwitch) {
+        EXPECT_FLOAT_EQ(UISwitchComponent::kSwitchHeightRatio, 0.5f);
+        EXPECT_FLOAT_EQ(UISwitchComponent::kSwitchAspect, 2.0f);
+        EXPECT_FLOAT_EQ(UISwitchComponent::kThumbInset, 3.0f);
         EXPECT_FLOAT_EQ(UISwitchComponent::kAreaAspect, UISwitchComponent::kSwitchHeightRatio * UISwitchComponent::kSwitchAspect + (1.0f - UISwitchComponent::kSwitchHeightRatio) * 0.5f)
             << "the track and the air at the right end";
     }
@@ -617,6 +636,45 @@ namespace BECore::Tests {
             ASSERT_NE(track, nullptr) << name;
             EXPECT_TRUE(Inside(track->rect, Get(name).rect)) << name;
         }
+    }
+
+    // ---- the caption never runs under the switch ---------------------------------------------------------------------------
+
+    TEST_F(UIToggleComponentTest, ACaptionTooLongForTheRoomTheSwitchLeavesIsCaught) {
+        const UIElement& caption = Get("LongCaption");
+        const UIContentFit longFit = caption.CheckContent(caption.rect.w, caption.rect.h, 1.0f);
+        EXPECT_TRUE(longFit.hasContent);
+        EXPECT_FALSE(longFit.fits) << "the caption is too long for the room the switch leaves";
+        EXPECT_TRUE(longFit.canShrink) << "an ellipsis text can shrink: the check needs `fits`, not the validator alone";
+
+        const UIElement& shortCaption = Get("SoundCaption");
+        const UIContentFit shortFit = shortCaption.CheckContent(shortCaption.rect.w, shortCaption.rect.h, 1.0f);
+        EXPECT_TRUE(shortFit.hasContent);
+        EXPECT_TRUE(shortFit.fits);
+    }
+
+    TEST_F(UIToggleComponentTest, AClippedCaptionThatDoesNotFitCannotShrink) {
+        UIElement& caption = Get("LongCaption");
+        caption.GetComponent<UITextComponent>()->overflow = TextOverflow::Clip;
+        const UIContentFit fit = caption.CheckContent(caption.rect.w, caption.rect.h, 1.0f);
+        EXPECT_FALSE(fit.fits);
+        EXPECT_FALSE(fit.canShrink) << "a clipped text cannot shrink, so the validator reports TextDoesNotFit";
+    }
+
+    TEST_F(UIToggleComponentTest, TheDrawnCaptionDoesNotReachTheSwitch) {
+        const Rect& row = Get("Long").rect;
+        const Rect& sw = SwitchRect("Long");
+        bool anyGlyph = false;
+        for (const DrawCall& call : _renderer->calls) {
+            if (call.kind == DrawKind::Rect) {
+                continue;
+            }
+            if (call.rect.y >= row.y && call.rect.y + call.rect.h <= row.y + row.h && call.rect.x >= row.x - 1.0f && call.rect.x <= row.x + row.w) {
+                anyGlyph = true;
+                EXPECT_LE(call.rect.x + call.rect.w, sw.x + 1.0f);
+            }
+        }
+        EXPECT_TRUE(anyGlyph) << "the text was drawn";
     }
 
     // ---- the colours of the states -----------------------------------------------------------------------------------------
@@ -771,6 +829,46 @@ namespace BECore::Tests {
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
         }
+    }
+
+    TEST_F(UIToggleComponentTest, TheFieldsSurviveABinaryRoundTrip) {
+        Toggle("Sound").offValue = PoolString::Intern("off");
+        BinarySerializer serializer;
+        ASSERT_TRUE(serializer.BeginObject("component"));
+        _canvas->Serialize(serializer);
+        serializer.EndObject();
+
+        BinaryDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromBuffer(serializer.GetData().data(), serializer.GetData().size()));
+        auto loaded = New<UICanvasComponent>();
+        ASSERT_TRUE(deserializer.BeginObject("component"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+        loaded->Initialize();
+
+        const auto* custom = loaded->GetRoot().FindByName(PoolString::Intern("Custom"))->GetComponent<UIToggleComponent>();
+        ASSERT_NE(custom, nullptr);
+        EXPECT_EQ(custom->onValue, PoolString::Intern("1"));
+        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("CustomSwitch"))->GetComponent<UISwitchComponent>()->thumbColor.b, kThumbAuthored.b);
+        EXPECT_EQ(loaded->GetRoot().FindByName(PoolString::Intern("Sound"))->GetComponent<UIToggleComponent>()->offValue, PoolString::Intern("off"));
+        ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
+        for (size_t i = 0; i < loaded->_elements.size(); ++i) {
+            EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
+        }
+    }
+
+    TEST_F(UIToggleComponentTest, ThePartShapeIsSkippedAsADefaultWhenAsked) {
+        auto xmlOf = [](const UIElement& element) {
+            XmlSerializer serializer;
+            serializer.SetSkipDefaults(true);
+            EXPECT_TRUE(serializer.BeginObject("element"));
+            element.Serialize(serializer);
+            serializer.EndObject();
+            return serializer.SaveToString();
+        };
+        EXPECT_EQ(xmlOf(Get("SoundSwitch")).find("partShape"), eastl::string::npos);
+        EXPECT_NE(xmlOf(Get("RoundSwitch")).find("partShape=\"Round\""), eastl::string::npos);
     }
 
 }  // namespace BECore::Tests

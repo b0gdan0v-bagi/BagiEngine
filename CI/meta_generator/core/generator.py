@@ -42,7 +42,7 @@ def find_factory_ancestor(parent_class: Optional[str], classes_by_name: dict, fa
     """Walk up the chain of parents and return the short name of the first factory base, or ''.
 
     A class registers in the factory of the nearest factory base above it, however many classes sit in between
-    (UIButton : UILabel : UIElement registers in AbstractFactory<UIElement>).
+    (UISegmented : UIStack : UIElement registers in AbstractFactory<UIElement>).
     """
     seen: set = set()
     current = parent_class

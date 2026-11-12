@@ -3,15 +3,16 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
-#include <BECore/UI/UISlider.h>
+#include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UIStack.h>
 #include <BECore/UI/UIStrings.h>
-#include <BECore/UI/UIToggle.h>
+#include <BECore/UI/UISwitchComponent.h>
+#include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIToggleComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -27,14 +28,14 @@ namespace BECore::Tests {
      * The shape of the panel (the choice panel of UISelectorScreenTest with other rows):
      *
      *  - a small canvas `Hud` with one button, `Open`, whose action shows the panel;
-     *  - the panel is a modal `SceneView` canvas on a node of its own (`Settings`), started hidden: a dim, a plate and rows, and an OK button. The rows: Sound (a `UIToggle`,
-     *    the caption is the toggle's own text), Music volume (a caption and a `UISlider`, step 0.1), Download (a caption, a `UIProgressBar` and a percent label `{progress}%`),
-     *    Language (a caption and a `UISegmented` bound to `language`). Every text is a `{#key}` reference into the string table;
+     *  - the panel is a modal `SceneView` canvas on a node of its own (`Settings`), started hidden: a dim, a plate and rows, and an OK button. The rows: Sound (a toggle row: a caption and a switch,
+     *    a `UIToggleComponent` on the row), Music volume (a caption and a slider element with a `UISliderComponent`, step 0.1), Download (a caption, a `UIProgressBar` and a percent label
+     * `{progress}%`), Language (a caption and a `UISegmented` bound to `language`). Every text is a `{#key}` reference into the string table;
      *  - the game answers a toggle with the variable it is bound to, a slider with the volume, a segment with `UIStrings::SetLanguage` and the variable (`SettingsGame` below).
      *
      * **One run per language.** The validator reads the text that is shown, so a screen is checked once for every language of the table, and a new language added to the table
      * is covered without touching the test (`ForEachLanguage`). The table has `en`, `ru` and `de`, which is deliberately long (its captions together are 40 % or more longer than the English
-     * ones, counted in characters, and a test holds that). **The validator is not enough for text:** a label with `overflow="Ellipsis"` (the default) "can shrink", so `TextDoesNotFit` is never
+     * ones, counted in characters, and a test holds that). **The validator is not enough for text:** a text with `overflow="Ellipsis"` (the default) "can shrink", so `TextDoesNotFit` is never
      * reported for it; `Problems()` asks `CheckContent()` of every control on the word that is shown, in every language, on every case of the matrix and in the narrowest window alone.
      *
      * **A row with `crossAlign="Stretch"` gives its children the height of the row**, an explicit `height` or none: a control that is meant to be a touch target of 56 units sits in a
@@ -63,7 +64,12 @@ namespace BECore::Tests {
     <node name="Hud" layer="10"><components>
       <component type="UICanvasComponent" space="SceneView" useSafeArea="true">
         <elements>
-          <element type="UIButton" name="Open" anchor="TopRight" x="-12" y="12" width="190" height="56" text="{#settings.open}" fontSize="24" action="SettingsOpen" color="45,75,120,255"/>
+          <element type="UIElement" name="Open" anchor="TopRight" x="-12" y="12" width="190" height="56" fontSize="24" color="45,75,120,255">
+            <components>
+              <component type="UITextComponent" text="{#settings.open}" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="SettingsOpen"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -73,34 +79,80 @@ namespace BECore::Tests {
           <element type="UIElement" name="Dim" anchor="Stretch" ignoreSafeArea="true" color="0,0,0,150" blocksInput="true"/>
           <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
             <children>
-              <element type="UILabel" name="Title" height="44" text="{#settings.title}" fontSize="30" align="Center"/>
-              <element type="UIToggle" name="Sound" bind="soundOn" action="SettingsSound" height="56" text="{#settings.sound}" fontSize="24" verticalAlign="Center"/>
+              <element type="UIElement" name="Title" height="44" fontSize="30">
+                <components><component type="UITextComponent" text="{#settings.title}" align="Center"/></components>
+              </element>
+              <element type="UIElement" name="Sound" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+                <components>
+                  <component type="UIInputClicker"/>
+                  <component type="UIToggleComponent" bind="soundOn" action="SettingsSound"/>
+                </components>
+                <children>
+                  <element type="UIElement" name="SoundCaption" flex="1" height="100%" fontSize="24">
+                    <components><component type="UITextComponent" text="{#settings.sound}" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
+                  </element>
+                  <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25"><components><component type="UISwitchComponent"/></components></element>
+                </children>
+              </element>
               <element type="UIStack" name="MusicRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
                 <children>
-                  <element type="UILabel" name="MusicCaption" width="220" height="56" text="{#settings.music}" fontSize="24" verticalAlign="Center"/>
-                  <element type="UISlider" name="Volume" bind="volume" action="SettingsVolume" minValue="0" maxValue="1" step="0.1" flex="1" height="56"/>
+                  <element type="UIElement" name="MusicCaption" width="220" height="56" fontSize="24">
+                    <components><component type="UITextComponent" text="{#settings.music}" verticalAlign="Center"/></components>
+                  </element>
+                  <element type="UIElement" name="Volume" flex="1" height="56">
+                    <components>
+                      <component type="UIInputClicker" stateLook="false"/>
+                      <component type="UISliderComponent" bind="volume" action="SettingsVolume" minValue="0" maxValue="1" step="0.1"/>
+                    </components>
+                  </element>
                 </children>
               </element>
               <element type="UIStack" name="DownloadRow" height="56" direction="Horizontal" spacing="8" crossAlign="Center">
                 <children>
-                  <element type="UILabel" name="DownloadCaption" width="220" height="56" text="{#settings.download}" fontSize="24" verticalAlign="Center"/>
+                  <element type="UIElement" name="DownloadCaption" width="220" height="56" fontSize="24">
+                    <components><component type="UITextComponent" text="{#settings.download}" verticalAlign="Center"/></components>
+                  </element>
                   <element type="UIProgressBar" name="Progress" bind="progress" minValue="0" maxValue="100" flex="1" height="24"/>
-                  <element type="UILabel" name="Percent" width="64" height="56" text="{progress}%" fontSize="24" align="Right" verticalAlign="Center"/>
+                  <element type="UIElement" name="Percent" width="64" height="56" fontSize="24">
+                    <components><component type="UITextComponent" text="{progress}%" align="Right" verticalAlign="Center"/></components>
+                  </element>
                 </children>
               </element>
               <element type="UIStack" name="LanguageRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
                 <children>
-                  <element type="UILabel" name="LanguageCaption" width="220" height="56" text="{#settings.language}" fontSize="24" verticalAlign="Center"/>
+                  <element type="UIElement" name="LanguageCaption" width="220" height="56" fontSize="24">
+                    <components><component type="UITextComponent" text="{#settings.language}" verticalAlign="Center"/></components>
+                  </element>
                   <element type="UISegmented" name="Language" bind="language" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255">
                     <children>
-                      <element type="UIButton" name="LanguageEn" flex="1" height="56" text="{#lang.en}" fontSize="24" value="en" action="SettingsLanguage" color="70,70,100,255"/>
-                      <element type="UIButton" name="LanguageRu" flex="1" height="56" text="{#lang.ru}" fontSize="24" value="ru" action="SettingsLanguage" color="70,70,100,255"/>
-                      <element type="UIButton" name="LanguageDe" flex="1" height="56" text="{#lang.de}" fontSize="24" value="de" action="SettingsLanguage" color="70,70,100,255"/>
+                      <element type="UIElement" name="LanguageEn" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="{#lang.en}" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SettingsLanguage" value="en"/>
+                        </components>
+                      </element>
+                      <element type="UIElement" name="LanguageRu" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="{#lang.ru}" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SettingsLanguage" value="ru"/>
+                        </components>
+                      </element>
+                      <element type="UIElement" name="LanguageDe" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="{#lang.de}" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SettingsLanguage" value="de"/>
+                        </components>
+                      </element>
                     </children>
                   </element>
                 </children>
               </element>
-              <element type="UIButton" name="Ok" height="56" text="{#settings.ok}" fontSize="26" action="SettingsClose" color="40,90,60,255"/>
+              <element type="UIElement" name="Ok" height="56" fontSize="26" color="40,90,60,255">
+                <components>
+                  <component type="UITextComponent" text="{#settings.ok}" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SettingsClose"/>
+                </components>
+              </element>
             </children>
           </element>
         </elements>
@@ -170,7 +222,7 @@ namespace BECore::Tests {
         const Language kLanguages[] = {{"en", "Settings", "LanguageEn"}, {"ru", "Настройки", "LanguageRu"}, {"de", "Einstellungen ändern", "LanguageDe"}};
 
         // Every control of the panel that shows a text of the table
-        constexpr const char* kTextControlNames[] = {"Title", "Sound", "MusicCaption", "DownloadCaption", "Percent", "LanguageCaption", "LanguageEn", "LanguageRu", "LanguageDe", "Ok"};
+        constexpr const char* kTextControlNames[] = {"Title", "SoundCaption", "MusicCaption", "DownloadCaption", "Percent", "LanguageCaption", "LanguageEn", "LanguageRu", "LanguageDe", "Ok"};
 
         std::string SceneXml(float viewWidth, float viewHeight, const std::function<void(std::string&)>& edit = {}) {
             std::string xml = kSettingsXml;
@@ -291,9 +343,14 @@ namespace BECore::Tests {
             eastl::vector<PoolString> _values;
         };
 
+        /// A button is an element with a clicker and a text: its text keeps `kButtonAir` from each edge of its fill
+        bool IsButton(const UIElement& element) {
+            return element.GetComponent<UIInputClicker>() && element.GetComponent<UITextComponent>();
+        }
+
         /// Every control of the tree that shows text or takes a press, depth first (the root itself is the canvas and has none)
         void CollectControls(const UIElement& element, eastl::vector<const UIElement*>& found) {
-            if (element.Cast<UILabel>() || element.Cast<UIButton>() || element.Cast<UIToggle>() || element.Cast<UISlider>()) {
+            if (element.GetComponent<UITextComponent>() || element.IsInteractive()) {
                 found.push_back(&element);
             }
             for (const auto& child : element.children) {
@@ -302,19 +359,13 @@ namespace BECore::Tests {
         }
 
         eastl::string ShownText(const UIElement& element) {
-            const UILabel* label = element.Cast<UILabel>();
-            if (!label) {
-                label = element.Cast<UIButton>();
-            }
-            if (!label) {
-                label = element.Cast<UIToggle>();
-            }
-            return label ? eastl::string(label->GetDisplayText()) : eastl::string();
+            const UITextComponent* text = element.GetComponent<UITextComponent>();
+            return text ? eastl::string(text->GetDisplayText()) : eastl::string();
         }
 
         /// What is wrong with a laid-out panel in the language that is set now, one problem to a line, nothing when it is right: a control that is not shown at all (an empty
-        /// rect), text that its control cuts (the validator does not see it for an ellipsis label; a toggle is asked for the area left of its switch), and a control that takes a
-        /// press and is under kRowHeight
+        /// rect), text that its control cuts (the validator does not see it for an ellipsis text; the caption of a toggle is asked in the room the switch leaves it), and a control
+        /// that takes a press and is under kRowHeight
         eastl::string Problems(const UICanvasLayout& layout) {
             eastl::string problems;
             const float scale = layout.GetResolved().scale;
@@ -327,13 +378,13 @@ namespace BECore::Tests {
                     }
                     continue;
                 }
-                const float air = control->Cast<UIButton>() ? kButtonAir : 0.0f;
+                const float air = IsButton(*control) ? kButtonAir : 0.0f;
                 const UIContentFit fit = control->CheckContent(control->rect.w - 2.0f * air, control->rect.h, scale);
                 if (fit.hasContent && !fit.fits) {
                     problems += Format("{} cuts '{}': {:.1f} units wide with {:.1f} of air each side, at scale {:.3f}\n", control->name.ToStringView(), ShownText(*control).c_str(), control->rect.w,
                                        air, scale);
                 }
-                if (control->interactive && control->rect.h < kRowHeight - 0.01f) {
+                if (control->IsInteractive() && control->rect.h < kRowHeight - 0.01f) {
                     problems += Format("{} is {:.1f} units high, under {:.0f}\n", control->name.ToStringView(), control->rect.h, kRowHeight);
                 }
             }
@@ -461,6 +512,33 @@ namespace BECore::Tests {
             return context;
         }
 
+        UIElement& El(const char* name) const {
+            UIElement* element = _settings->GetRoot().FindByName(PoolString::Intern(name));
+            if (element == nullptr) {
+                ADD_FAILURE() << name << " is not in the panel";
+                std::abort();  // a reference to nothing cannot be returned; the failure above is printed first
+            }
+            return *element;
+        }
+
+        const UISliderComponent& Slider(const char* name) const {
+            const UISliderComponent* slider = El(name).GetComponent<UISliderComponent>();
+            if (slider == nullptr) {
+                ADD_FAILURE() << name << " is not a slider";
+                std::abort();
+            }
+            return *slider;
+        }
+
+        const UIToggleComponent& Toggle(const char* name) const {
+            const UIToggleComponent* toggle = El(name).GetComponent<UIToggleComponent>();
+            if (toggle == nullptr) {
+                ADD_FAILURE() << name << " is not a toggle";
+                std::abort();
+            }
+            return *toggle;
+        }
+
         template <typename T>
         T& Get(const char* name) const {
             UIElement* element = _settings->GetRoot().FindByName(PoolString::Intern(name));
@@ -489,13 +567,12 @@ namespace BECore::Tests {
 
         /// The x of the slider's thumb centre when the value stands at @p fraction of the travel
         float XAt(float fraction) const {
-            const UISlider& slider = Get<UISlider>("Volume");
-            const UISlider::Parts parts = UISlider::GetParts(slider.rect, fraction);
+            const UISliderComponent::Parts parts = UISliderComponent::GetParts(El("Volume").rect, fraction);
             return parts.travelStart + (parts.travelEnd - parts.travelStart) * fraction;
         }
 
         float VolumeY() const {
-            return CenterOf(Get<UISlider>("Volume")).second;
+            return CenterOf(El("Volume")).second;
         }
 
         /// The panel on the whole matrix with the options of the game, once for every language: the findings of the validator, each case named with its language
@@ -629,7 +706,7 @@ namespace BECore::Tests {
             for (const char* name : kTextControlNames) {
                 const UIElement* element = _settings->GetRoot().FindByName(PoolString::Intern(name));
                 ASSERT_NE(element, nullptr) << name;
-                const float air = element->Cast<UIButton>() ? kButtonAir : 0.0f;
+                const float air = IsButton(*element) ? kButtonAir : 0.0f;
                 const UIContentFit fit = element->CheckContent(element->rect.w - 2.0f * air, element->rect.h, scale);
                 EXPECT_TRUE(fit.hasContent) << language.ToStringView().data() << " " << name;
                 EXPECT_TRUE(fit.fits) << language.ToStringView().data() << " " << name << " '" << ShownText(*element).c_str() << "' in " << element->rect.w << " units";
@@ -679,18 +756,17 @@ namespace BECore::Tests {
             EXPECT_LT(caption->rect.x + caption->rect.w, control->rect.x + 0.01f) << pair.caption;
             EXPECT_GE(control->rect.w, 200.0f) << pair.control << " keeps room to be used";
         }
-        const UISlider& volume = Get<UISlider>("Volume");
-        EXPECT_NEAR(volume.rect.h, kRowHeight, 0.01f) << "the thumb is the height of the slider: a touch target";
+        EXPECT_NEAR(El("Volume").rect.h, kRowHeight, 0.01f) << "the thumb is the height of the slider: a touch target";
         const UIElement& bar = Get<UIProgressBar>("Progress");
         const UIElement& row = Get<UIStack>("DownloadRow");
         EXPECT_NEAR(bar.rect.y + bar.rect.h * 0.5f, row.rect.y + row.rect.h * 0.5f, 0.01f) << "the thin bar is centered in its row";
-        EXPECT_LT(bar.rect.x + bar.rect.w, Get<UILabel>("Percent").rect.x + 0.01f);
+        EXPECT_LT(bar.rect.x + bar.rect.w, El("Percent").rect.x + 0.01f);
     }
 
     TEST_F(UISettingsScreenTest, InAPortraitViewTheLanguageCaptionIsAboveItsGroupAndTheSegmentsKeepTheirHeight) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kPortraitWidth, kPortraitHeight));
         Draw();
-        const UIElement& caption = Get<UILabel>("LanguageCaption");
+        const UIElement& caption = El("LanguageCaption");
         const UIElement& group = Get<UISegmented>("Language");
         EXPECT_LT(caption.rect.y + caption.rect.h, group.rect.y + 0.01f);
         EXPECT_NEAR(caption.rect.x, group.rect.x, 0.01f);
@@ -699,7 +775,7 @@ namespace BECore::Tests {
         EXPECT_NEAR(plate.rect.h, 456.0f, 0.01f);
         EXPECT_GE(plate.rect.y, 0.0f);
         EXPECT_LE(plate.rect.y + plate.rect.h, kPortraitHeight);
-        EXPECT_GE(Get<UISlider>("Volume").rect.h, kRowHeight - 0.01f);
+        EXPECT_GE(El("Volume").rect.h, kRowHeight - 0.01f);
     }
 
     // ---- hidden, shown (modal) ---------------------------------------------------------------------------------------------
@@ -723,7 +799,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Show());
         BoardClicks board;
         const UIElement& plate = Get<UIStack>("Plate");
-        const std::pair<float, float> points[] = {CenterOf(Get<UIToggle>("Sound")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
+        const std::pair<float, float> points[] = {CenterOf(El("Sound")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
         for (const auto& [x, y] : points) {
             const auto [pressed, released] = ClickAt(x, y);
             EXPECT_TRUE(pressed) << x << "," << y;
@@ -732,7 +808,7 @@ namespace BECore::Tests {
         EXPECT_EQ(board.downs, 0) << "a modal canvas keeps the press from the board";
         EXPECT_EQ(_game->Total(), 1u) << "only the click on the toggle is an action";
 
-        const auto [x, y] = CenterOf(Get<UISlider>("Volume"));
+        const auto [x, y] = CenterOf(El("Volume"));
         UICanvasComponent::SetVisibleByName(GetScene(), "Settings"_intern, false);
         Draw();
         const auto [pressed, released] = ClickAt(x, y);
@@ -753,7 +829,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_game->LastAction(), "SettingsOpen"_intern);
         EXPECT_TRUE(_settings->_visible);
         Draw();
-        Click(Get<UIButton>("Ok"));
+        Click(El("Ok"));
         EXPECT_EQ(_game->LastAction(), "SettingsClose"_intern);
         EXPECT_FALSE(_settings->_visible);
     }
@@ -763,17 +839,18 @@ namespace BECore::Tests {
     TEST_F(UISettingsScreenTest, TheToggleAsksForTheOppositeValueAndTheGameMovesTheSwitch) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(Show());
-        const UIToggle& sound = Get<UIToggle>("Sound");
+        const UIElement& soundRow = El("Sound");
+        const UIToggleComponent& sound = Toggle("Sound");
         ASSERT_TRUE(sound.IsOn());
 
-        const auto [pressed, released] = Click(sound);
+        const auto [pressed, released] = Click(soundRow);
         EXPECT_TRUE(pressed && released);
         EXPECT_EQ(_game->LastAction(), "SettingsSound"_intern);
         EXPECT_EQ(_game->LastValue(), "false"_intern) << "the toggle is on, so it asks for off";
         Draw();
         EXPECT_FALSE(sound.IsOn()) << "the game answered with the variable";
 
-        Click(sound);
+        Click(soundRow);
         EXPECT_EQ(_game->LastValue(), "true"_intern);
         Draw();
         EXPECT_TRUE(sound.IsOn());
@@ -783,20 +860,20 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(Show());
         _game.reset();
-        const UIToggle& sound = Get<UIToggle>("Sound");
-        Click(sound);
+        Click(El("Sound"));
         Draw();
-        EXPECT_TRUE(sound.IsOn());
+        EXPECT_TRUE(Toggle("Sound").IsOn());
         EXPECT_EQ(CoreManager::GetUIVars().Get("soundOn"_intern), "true");
     }
 
     TEST_F(UISettingsScreenTest, TheThumbOfTheToggleStandsAtTheRightWhenOnAndAtTheLeftWhenOff) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(Show());
-        const UIToggle& sound = Get<UIToggle>("Sound");
-        const UIToggle::Parts parts = UIToggle::GetParts(sound.rect);
+        const UIElement& sound = El("Sound");
+        const UIElement& caption = El("SoundCaption");
+        const UISwitchComponent::Parts parts = UISwitchComponent::GetParts(El("SoundSwitch").rect);
         EXPECT_GT(parts.thumbOn.x, parts.thumbOff.x);
-        EXPECT_GE(parts.track.x, parts.text.x + parts.text.w - 0.01f) << "the caption never runs under the switch";
+        EXPECT_GE(parts.track.x, caption.rect.x + caption.rect.w - 0.01f) << "the caption never runs under the switch";
         EXPECT_LE(parts.track.x + parts.track.w, sound.rect.x + sound.rect.w + 0.01f);
 
         // The thumb is drawn: a square of the thumb's size at the place of the state, in a draw call of the renderer (rects are in output pixels = view units here)
@@ -814,7 +891,7 @@ namespace BECore::Tests {
     TEST_F(UISettingsScreenTest, ADragOnTheSliderThroughTheInputMovesTheValueOneEmissionPerChange) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(Show());
-        const UISlider& volume = Get<UISlider>("Volume");
+        const UISliderComponent& volume = Slider("Volume");
         EXPECT_NEAR(volume.GetFraction(), 0.5f, 1e-4f);
         const float y = VolumeY();
 
@@ -852,8 +929,8 @@ namespace BECore::Tests {
         EXPECT_EQ(values[1], "1") << "past the end: the maximum, written without a decimal point";
         EXPECT_EQ(values[2], "0");
         Draw();
-        const UISlider& volume = Get<UISlider>("Volume");
-        const UISlider::Parts parts = UISlider::GetParts(volume.rect, volume.GetFraction());
+        const UIElement& volume = El("Volume");
+        const UISliderComponent::Parts parts = UISliderComponent::GetParts(volume.rect, Slider("Volume").GetFraction());
         EXPECT_GE(parts.thumb.x, volume.rect.x - 0.01f);
         EXPECT_LE(parts.thumb.x + parts.thumb.w, volume.rect.x + volume.rect.w + 0.01f);
     }
@@ -866,7 +943,7 @@ namespace BECore::Tests {
         CoreManager::GetUIInput().DispatchMouseButtonDown(Button(XAt(0.9f), y, true));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(XAt(0.9f), y, false));
         Draw();
-        EXPECT_NEAR(Get<UISlider>("Volume").GetFraction(), 0.5f, 1e-4f);
+        EXPECT_NEAR(Slider("Volume").GetFraction(), 0.5f, 1e-4f);
     }
 
     TEST_F(UISettingsScreenTest, TheProgressBarFollowsItsVariableAndTakesNoClick) {
@@ -874,14 +951,14 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(Show());
         const UIProgressBar& bar = Get<UIProgressBar>("Progress");
         EXPECT_NEAR(bar.GetFraction(), 0.4f, 1e-4f);
-        EXPECT_EQ(ShownText(Get<UILabel>("Percent")), "40%");
+        EXPECT_EQ(ShownText(El("Percent")), "40%");
 
         for (const char* value : {"0", "75", "100", "250", "abc"}) {
             CoreManager::GetUIVars().Set("progress"_intern, value);
             Draw();
             const float expected = std::string(value) == "75" ? 0.75f : (std::string(value) == "100" || std::string(value) == "250") ? 1.0f : 0.0f;
             EXPECT_NEAR(bar.GetFraction(), expected, 1e-4f) << value;
-            EXPECT_EQ(ShownText(Get<UILabel>("Percent")), Format("{}%", value).c_str()) << value;
+            EXPECT_EQ(ShownText(El("Percent")), Format("{}%", value).c_str()) << value;
         }
         const size_t before = _game->Total();
         Click(bar);
@@ -891,22 +968,22 @@ namespace BECore::Tests {
     TEST_F(UISettingsScreenTest, TheLanguageSegmentsEmitTheirValueAndTheGameSwitchesEveryCaptionAtTheNextDraw) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(Show());
-        EXPECT_TRUE(Get<UIButton>("LanguageEn").selected);
-        EXPECT_EQ(ShownText(Get<UILabel>("Title")), "Settings");
+        EXPECT_TRUE(El("LanguageEn").selected);
+        EXPECT_EQ(ShownText(El("Title")), "Settings");
 
         for (const Language& language : kLanguages) {
             Draw();  // the layout of the narrowest window below is not the one the clicks are aimed at
-            Click(Get<UIButton>(language.segment));
+            Click(El(language.segment));
             EXPECT_EQ(_game->LastAction(), "SettingsLanguage"_intern) << language.id;
             EXPECT_EQ(_game->LastValue(), PoolString::Intern(language.id));
             Draw();
             EXPECT_EQ(CoreManager::GetUIStrings().GetLanguage(), PoolString::Intern(language.id));
-            EXPECT_EQ(ShownText(Get<UILabel>("Title")), language.title) << "the title follows the language at the next draw";
+            EXPECT_EQ(ShownText(El("Title")), language.title) << "the title follows the language at the next draw";
             EXPECT_EQ(ShownText(*_hud->GetRoot().FindByName("Open"_intern)), *CoreManager::GetUIStrings().Find("settings.open")) << "the button of the other canvas follows too";
-            EXPECT_TRUE(Get<UIButton>(language.segment).selected);
+            EXPECT_TRUE(El(language.segment).selected);
             EXPECT_EQ(Get<UISegmented>("Language").GetSelectedValue(), language.id);
             // The names of the languages are the same in every language
-            EXPECT_EQ(ShownText(Get<UIButton>("LanguageDe")), "Deutsch");
+            EXPECT_EQ(ShownText(El("LanguageDe")), "Deutsch");
             // The layout is still valid in the narrowest window, in the language that is set now
             UICanvasLayout& layout = _settings->GetLayout();
             LayOutInTheNarrowestWindow(layout);
@@ -918,7 +995,7 @@ namespace BECore::Tests {
     TEST_F(UISettingsScreenTest, AllWordsOfTheScreenChangeWithTheLanguageAndOnlyTheNamesOfTheLanguagesStay) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(Show());
-        const char* const names[] = {"Title", "Sound", "MusicCaption", "DownloadCaption", "LanguageCaption", "Ok"};
+        const char* const names[] = {"Title", "SoundCaption", "MusicCaption", "DownloadCaption", "LanguageCaption", "Ok"};
         eastl::vector<eastl::string> english;
         for (const char* name : names) {
             english.push_back(ShownText(*_settings->GetRoot().FindByName(PoolString::Intern(name))));
@@ -945,7 +1022,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_TRUE(CoreManager::GetUIStrings().SetLanguage("de"_intern));
         Draw();
-        EXPECT_EQ(ShownText(Get<UIButton>("Ok")), "OK") << "the default language answers";
+        EXPECT_EQ(ShownText(El("Ok")), "OK") << "the default language answers";
         EXPECT_TRUE(CoreManager::GetUIStrings().GetMissing().empty()) << "a fallback is not a missing key";
         UICanvasLayout& layout = _settings->GetLayout();
         LayOutInTheNarrowestWindow(layout);
@@ -956,17 +1033,17 @@ namespace BECore::Tests {
     // ---- a deliberately broken copy must be caught ------------------------------------------------------------------------
 
     TEST_F(UISettingsScreenTest, ASliderUnderTheTouchSizeIsCaughtByTheValidator) {
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(step="0.1" flex="1" height="56")", R"(step="0.1" flex="1" height="30")"); }));
-        EXPECT_NEAR(Get<UISlider>("Volume").rect.h, 30.0f, 0.01f);
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(name="Volume" flex="1" height="56")", R"(name="Volume" flex="1" height="30")"); }));
+        EXPECT_NEAR(El("Volume").rect.h, 30.0f, 0.01f);
         const auto failures = ValidatePanel(*_settings);
         EXPECT_TRUE(HasIssue(failures, UILayoutIssueKind::TouchTargetTooSmall)) << DescribeMatrixFailures(failures).c_str();
         EXPECT_NE(ProblemsOnMatrix(*_settings).find("Volume is 30.0 units high"), eastl::string::npos);
     }
 
     TEST_F(UISettingsScreenTest, ASliderWithoutAnExplicitHeightHasNoRectAndIsCaughtHere) {
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(step="0.1" flex="1" height="56")", R"(step="0.1" flex="1")"); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(name="Volume" flex="1" height="56")", R"(name="Volume" flex="1")"); }));
         ASSERT_NO_FATAL_FAILURE(Show());
-        EXPECT_NEAR(Get<UISlider>("Volume").rect.h, 0.0f, 0.01f);
+        EXPECT_NEAR(El("Volume").rect.h, 0.0f, 0.01f);
         UICanvasLayout& layout = _settings->GetLayout();
         const eastl::string problems = Problems(layout);
         EXPECT_NE(problems.find("Volume '' has an empty rect"), eastl::string::npos) << problems.c_str();
@@ -977,11 +1054,11 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, lengthen));
         EXPECT_FALSE(HasIssue(ValidatePanel(*_settings), UILayoutIssueKind::TextDoesNotFit)) << "an ellipsis label can shrink: the validator does not report it";
         const eastl::string matrix = ProblemsOnMatrix(*_settings);
-        EXPECT_NE(matrix.find("Sound cuts 'Sound effects"), eastl::string::npos) << matrix.c_str();
+        EXPECT_NE(matrix.find("SoundCaption cuts 'Sound effects"), eastl::string::npos) << matrix.c_str();
 
         UICanvasLayout& layout = _settings->GetLayout();
         LayOutInTheNarrowestWindow(layout);
-        EXPECT_NE(Problems(layout).find("Sound cuts 'Sound effects"), eastl::string::npos);
+        EXPECT_NE(Problems(layout).find("SoundCaption cuts 'Sound effects"), eastl::string::npos);
         layout.Invalidate();
     }
 
@@ -995,7 +1072,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadStrings(table.c_str()));
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         const eastl::string problems = ProblemsInTheNarrowestWindow(*_settings);
-        EXPECT_NE(problems.find("[de] Sound cuts 'Geräuscheffekte und"), eastl::string::npos) << problems.c_str();
+        EXPECT_NE(problems.find("[de] SoundCaption cuts 'Geräuscheffekte und"), eastl::string::npos) << problems.c_str();
         EXPECT_EQ(problems.find("[en]"), eastl::string::npos) << "English and Russian are fine: the failure names its language";
         EXPECT_EQ(problems.find("[ru]"), eastl::string::npos);
     }
@@ -1005,14 +1082,14 @@ namespace BECore::Tests {
                                           [](std::string& xml) { Replace(xml, R"(text="{#settings.sound}")", R"(text="{#settings.sound.effects.volume.and.noise.of.the.game.and.of.the.menu}")"); }));
         ASSERT_TRUE(CoreManager::GetUIStrings().SetLanguage("de"_intern));
         Draw();
-        EXPECT_EQ(ShownText(Get<UIToggle>("Sound")), "settings.sound.effects.volume.and.noise.of.the.game.and.of.the.menu") << "the key itself, without the braces: never an empty label";
+        EXPECT_EQ(ShownText(El("SoundCaption")), "settings.sound.effects.volume.and.noise.of.the.game.and.of.the.menu") << "the key itself, without the braces: never an empty label";
         ASSERT_EQ(CoreManager::GetUIStrings().GetMissing().size(), 1u);
         EXPECT_EQ(CoreManager::GetUIStrings().GetMissing()[0].language, "de"_intern);
 
         UICanvasLayout& layout = _settings->GetLayout();
         LayOutInTheNarrowestWindow(layout);
         const eastl::string problems = Problems(layout);
-        EXPECT_NE(problems.find("Sound cuts 'settings.sound.effects.volume.and.noise.of.the.game.and.of.the.menu'"), eastl::string::npos) << problems.c_str();
+        EXPECT_NE(problems.find("SoundCaption cuts 'settings.sound.effects.volume.and.noise.of.the.game.and.of.the.menu'"), eastl::string::npos) << problems.c_str();
         layout.Invalidate();
     }
 

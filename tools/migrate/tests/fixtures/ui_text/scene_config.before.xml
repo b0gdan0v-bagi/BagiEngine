@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!-- The menu and the HUD of games/Match3/config/SceneConfig.xml as they were at version 4: a SceneConfig, three labels among composed buttons. -->
+<SceneManager contentVersion="4">
+  <scenes>
+    <scene
+      type="Scene"
+      name="MainMenu">
+      <nodes>
+        <node name="Menu" layer="10">
+          <components>
+            <component type="UICanvasComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720" match="0.5" minScale="0.7" useSafeArea="true">
+              <elements>
+                <element type="UIStack" name="Column" anchor="Center" width="90%" maxWidth="320" height="232" direction="Vertical" spacing="16" crossAlign="Stretch">
+                  <children>
+                    <element type="UILabel" name="Title" height="88" text="Match 3" fontSize="56" align="Center" verticalAlign="Center" />
+                    <element type="UIElement" name="Play" height="56" fontSize="28" color="40,90,60,255">
+                      <components>
+                        <component type="UITextComponent" text="Play" align="Center" verticalAlign="Center" wrap="false"/>
+                        <component type="UIInputClicker" action="Match3Play"/>
+                      </components>
+                    </element>
+                  </children>
+                </element>
+              </elements>
+            </component>
+          </components>
+        </node>
+        <node name="Hud" layer="20">
+          <components>
+            <component type="UICanvasComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1280" referenceHeight="720">
+              <elements>
+                <element type="UILabel" name="Score" x="96" y="12" width="250" height="40" text="Score: {score}" fontSize="28" verticalAlign="Center" />
+                <element type="UILabel" name="Seed" anchor="BottomLeft" x="96" y="-26" width="300" height="24" text="seed {seed}" fontSize="16" textColor="190,190,190,255" />
+              </elements>
+            </component>
+          </components>
+        </node>
+      </nodes>
+    </scene>
+  </scenes>
+</SceneManager>

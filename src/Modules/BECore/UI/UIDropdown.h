@@ -1,7 +1,7 @@
 #pragma once
 
-#include <BECore/UI/UIButton.h>
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UIElement.h>
+#include <BECore/UI/UIStateLook.h>
 #include <EASTL/array.h>
 
 namespace BECore {
@@ -9,12 +9,14 @@ namespace BECore {
     /**
      * @brief A choice of many values behind one row: the header shows the chosen option and an arrow, a click opens a list of the options above everything of the canvas.
      *
-     * `<element type="UIDropdown" name="Level" bind="level" action="SetLevel" text="Pick one" x="20" y="20" width="240" height="56" optionHeight="56">` with `<children>` of
-     * an option per child: `<element type="UIElement" value="easy" ...>` with a `UITextComponent` and a `UIInputClicker` (the composed button; an icon is a child) or the old
-     * `<element type="UIButton" value="easy" text="{#level.easy}" .../>`. The two forms may be mixed (`UIChoice`: an option is a `UIButton` or an element with a `UIInputClicker`). `bind` names
-     * a `UIVars` variable, like `UISegmented`: the option (a direct child) whose `value` equals the variable is the chosen one. The header shows that option's caption (`UIChoice::GetText`:
-     * any `{#key}` or `{name}` in it is expanded as in the option itself, so a language switch rewords the header); with no option chosen it shows the dropdown's own `text`, a placeholder or
-     * empty. Only the options are children of interest, anything else is ignored. An option has no `action` (the dropdown emits it): the clicker of a composed option carries `value` only.
+     * `<element type="UIDropdown" name="Level" bind="level" action="SetLevel" x="20" y="20" width="240" height="56" optionHeight="56">` with a `<components>` of one
+     * `<component type="UITextComponent" text="Pick one" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/>` (the header text) and `<children>` of an option per child:
+     * `<element type="UIElement" value="easy" ...>` with a `UITextComponent` and a `UIInputClicker` (the composed button; an icon is a child) (`UIChoice`: an option is an element with a
+     * `UIInputClicker`). `bind` names a `UIVars` variable, like `UISegmented`: the option (a direct child) whose `value` equals the variable is the chosen one. The header text is that option's
+     * caption (`UIChoice::GetText`: any `{#key}` or `{name}` in it is expanded as in the option itself, so a language switch rewords the header); with no option chosen it is the `text` of the
+     * component, a placeholder or empty. The font, the colour and the size (`fontSize` of the element) are the component's; it draws in `GetComponentArea()` and shows `GetTextOverride()`, the two
+     * hooks of `UIElement` that this class answers. Only the options are children of interest, anything else is ignored. An option has no `action` (the dropdown emits it): the clicker of a composed
+     * option carries `value` only.
      *
      * **The dropdown owns no choice.** A click on an option emits `ActionEvent(action, value)` with the option's `value` and changes nothing else; the game answers by setting the
      * variable (game -> `UIVars` -> widget). That the list is open is runtime UI state (like `hovered`), neither reflected nor saved.
@@ -27,10 +29,10 @@ namespace BECore {
      *
      * The header is the touch target (`interactive`). It is the box of any element (`box`: rounded corners, border, gradient, shadow; with the default style one rect of `color`), its
      * fill and gradient end with the hover, press and disabled shifts of a button (`GetCurrentBox`); the options have a box of their own (an option is drawn by the canvas in its own state, the
-     * children of a composed option in the state of the option). The text is laid out left of the arrow, and `CheckContent()` measures it there. `arrowColor` is derived from `textColor` when left
-     * transparent; the arrow points down closed and up open, so the state does not rest on color alone.
+     * children of a composed option in the state of the option). The text is laid out left of the arrow, and `CheckContent()` measures it there. `arrowColor` is derived from the `textColor` of the
+     * text component when left transparent; the arrow points down closed and up open, so the state does not rest on color alone.
      */
-    class UIDropdown : public UILabel {
+    class UIDropdown : public UIElement {
         BE_CLASS(UIDropdown)
     public:
         UIDropdown();
@@ -39,7 +41,7 @@ namespace BECore {
         BE_REFLECT_FIELD PoolString bind;    ///< the variable that holds the `value` of the chosen option
         BE_REFLECT_FIELD PoolString action;  ///< emitted on a choice, with the `value` of the option
         BE_REFLECT_FIELD bool disabled = false;
-        BE_REFLECT_FIELD UIColor arrowColor;         ///< the arrow; transparent is `textColor`
+        BE_REFLECT_FIELD UIColor arrowColor;         ///< the arrow; transparent is the `textColor` of the `UITextComponent`, else white
         BE_REFLECT_FIELD float optionHeight = 0.0f;  ///< the height of an option that has none of its own; 0 is the height of the header
 
         static constexpr float kTextInset = 12.0f;    ///< the air left of the header text
@@ -101,11 +103,12 @@ namespace BECore {
 
         /// The box, the fill and the gradient end of the header for the state now (pure): the fill and the gradient end shifted as `GetCurrentFill` does; `disabled` drops the shadow and
         /// the glow and fades the border and the highlight; hover and press leave them as authored (the dropdown has no state colors of its own)
-        [[nodiscard]] UIButton::Look GetCurrentBox() const;
+        [[nodiscard]] UIStateLook::Look GetCurrentBox() const;
 
-        /// The arrow color: `arrowColor` or `textColor`, half alpha when `disabled`
+        /// The arrow color: `arrowColor`, else the `textColor` of the text component, else white; half alpha when `disabled`
         [[nodiscard]] Color GetCurrentArrow() const;
 
+        /// The box, then the arrow. The header text is the `UITextComponent`, which the canvas draws right after this, in the area left of the arrow (the two never overlap)
         void DrawSelf(IRenderer& renderer) override;
         void OnClick() override;
 
@@ -133,12 +136,14 @@ namespace BECore {
         /// The header text against the area left of the arrow, not the whole rect
         [[nodiscard]] UIContentFit CheckContent(float width, float height, float scale) const override;
 
-    protected:
-        /// Resolves the colour fields of this control (UIElement::ApplyTheme): `arrowColor`, after the label's
-        void ApplyTheme(UIThemes& themes) override;
+        /// The text area of the header: left of the arrow (`GetHeaderParts`)
+        [[nodiscard]] Rect GetComponentArea() const override;
+        /// The caption of the chosen option (`UIChoice::GetText`), null when none is chosen: the header then shows the placeholder, the component's own `text`
+        [[nodiscard]] const eastl::string* GetTextOverride() const override;
 
-        /// The chosen option's caption (`UIChoice::GetText`), or the dropdown's own text when none is chosen
-        [[nodiscard]] const eastl::string& GetSourceText() const override;
+    protected:
+        /// Resolves the colour fields of this control (UIElement::ApplyTheme): `arrowColor`, after the element's
+        void ApplyTheme(UIThemes& themes) override;
 
     private:
         bool _open = false;  // runtime UI state, not reflected

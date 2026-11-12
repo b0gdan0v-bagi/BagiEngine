@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- Failure: a label that has <components> already (a tooltip): the composed form is written by hand. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UILabel" name="Hinted" width="200" height="30" text="Hover me">
+          <components>
+            <component type="UITooltipComponent" text="Tip"/>
+          </components>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- Failure: a dropdown that has <components> with no text component (a tooltip): the step does not merge into it. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIDropdown" name="Level" bind="level" action="SetLevel" text="Pick one" width="240" height="56">
+          <components>
+            <component type="UITooltipComponent" text="Tip"/>
+          </components>
+        </element>
+      </elements>
+    </component>
+  </components>
+</node>

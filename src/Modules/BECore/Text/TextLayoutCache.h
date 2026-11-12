@@ -7,7 +7,7 @@ namespace BECore {
     /**
      * @brief Keeps the last TextLayoutResult of a text so that a draw which asks for the same thing again does not lay it out again.
      *
-     * One cache per text (a TextComponent, a UILabel). The key is the font, the text and every option; any change makes a new layout on the next Get().
+     * One cache per text (a TextComponent, a UITextComponent). The key is the font, the text and every option; any change makes a new layout on the next Get().
      */
     class TextLayoutCache {
     public:

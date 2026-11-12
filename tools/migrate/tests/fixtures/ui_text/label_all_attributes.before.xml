@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- A plain label with every text attribute: they all move to the component with the values as written, in the fixed order; the rest stays on the element. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UILabel" name="Full" x="10" y="10" width="300" height="40" color="0,0,0,80" visible="true" flex="1" fontSize="28" textShadow="2,2,0,0,0,200" textOutline="1,10,20,30,255" minFontSize="12" lineSpacing="1.2" wrap="false" overflow="AutoFit" verticalAlign="Center" align="Right" textColor="255,200,0,255" fontWeight="700" fontFamily="Display" font="fonts/Title.ttf" text="Score: {score}" />
+      </elements>
+    </component>
+  </components>
+</node>

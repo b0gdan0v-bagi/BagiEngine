@@ -14,10 +14,10 @@ namespace BECore {
      * | HTML | Element |
      * |------|---------|
      * | `div`, `section`, `nav`, `ul`, `li`, ... | `UIPanel` when it has a `background-image`, else `UIElement` (a group) |
-     * | `span`, `p`, `h1`..`h6`, `label`, or any element that holds only text | `UILabel` (its `background` is the fill behind the text) |
+     * | `span`, `p`, `h1`..`h6`, `label`, or any element that holds only text | `UIElement` with a `UITextComponent` (its `background` is the element's `color`, the fill behind the text) |
      * | `button` | `UIElement` with `UITextComponent`, `UIInputClicker` and `UITooltipComponent` (`title`); also as a segment of a segmented group |
      * | `button` with `data-icon` | the same, the icon in a child `<N>Icon` (and `<N>Caption` with text); `-be-icon-color` is its `tint` (`ui-controls.md`) |
-     * | `img` | `UIImage` (`src` is the sprite name) |
+     * | `img` | `UIElement` with a `UIImageComponent` (`src` is the sprite name) |
      * | any element with `data-widget="segmented"` | `UISegmented` (`data-bind` is `bind`; its `<button data-value>` children are the segments, composed like any button) |
      * | any element with `data-widget="toggle"` | a row `UIElement` with a clicker and `UIToggleComponent`, children `<N>Caption` and `<N>Switch` (`ui-controls.md`) |
      * | any element with `data-widget="slider"` | `UIElement` with `UIInputClicker` (`stateLook="false"`) and `UISliderComponent` |

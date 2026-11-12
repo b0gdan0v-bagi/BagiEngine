@@ -26,14 +26,15 @@ namespace BECore {
         constexpr size_t TextShadowMaxNumbers = 3;  // ... and the blur
         constexpr size_t TextShadowBlurIndex = 2;
 
-        // The composed button (`ui-controls.md`, "Components"): the attributes that live on its components, the forms of an icon (`UIButton::kIconOnlyShare`, `kIconWithTextShare`,
-        // `kIconPadding`, `kIconGap`, which the tests hold these to) and the name suffixes of its children
+        // The composed button (`ui-controls.md`, "Components"): the attributes that live on its components, the forms of an icon (`UIImageComponent::kIconOnlyShare`, `kIconWithTextShare`,
+        // `kIconPadding`, `kIconGap`, which the tests hold these to) and the name suffixes of its children. A plain text element carries the same text component, a picture the image one
         constexpr eastl::string_view TextComponentKeys[] = {"text",     "font", "fontFamily",  "fontWeight",  "textColor",   "align",     "verticalAlign",
                                                             "overflow", "wrap", "lineSpacing", "minFontSize", "textOutline", "textShadow"};
         constexpr eastl::string_view ClickerKeys[] = {"action", "value", "disabled"};
+        constexpr eastl::string_view ImageKeys[] = {"sprite", "stretch"};  // of the `UIImageComponent` of an `img`
         constexpr eastl::string_view IconKeys[] = {"icon", "iconTint"};
         constexpr eastl::string_view StackKeys[] = {"layout", "direction", "spacing", "padding", "crossAlign", "wrapChildren"};
-        // What a `UIButton` (or a `UIToggle`) does with its text and a `UITextComponent` does not
+        // What a button or a toggle does with its text and a `UITextComponent` does not
         struct ButtonTextDefault {
             eastl::string_view key;
             eastl::string_view value;
@@ -50,10 +51,10 @@ namespace BECore {
         constexpr eastl::string_view ToggleKeys[] = {"bind", "action", "onValue", "offValue"};
         constexpr eastl::string_view SwitchKeys[] = {"trackColor", "fillColor", "thumbColor", "partShape"};  // the switch of a toggle and the slider have them under the same names
         constexpr eastl::string_view SliderKeys[] = {"bind", "action", "minValue", "maxValue", "step"};
-        constexpr ButtonTextDefault ToggleTextDefaults[] = {{"verticalAlign", "Center"}, {"wrap", "false"}};  // what a `UIToggle` did with its text
+        constexpr ButtonTextDefault ToggleTextDefaults[] = {{"verticalAlign", "Center"}, {"wrap", "false"}};  // what the caption of a toggle does with its text
         constexpr eastl::string_view SwitchSuffix = "Switch";
-        constexpr const char* FadeWhenDisabledKey = "fadeWhenDisabled";  ///< the caption of a toggle fades while it is disabled, as `UIToggle` drew it
-        constexpr const char* ToggleGap = "8";                           ///< the air between the caption and the switch (`UIToggle::kCaptionGap`)
+        constexpr const char* FadeWhenDisabledKey = "fadeWhenDisabled";  ///< the caption of a toggle fades while it is disabled
+        constexpr const char* ToggleGap = "8";                           ///< the air between the caption and the switch (`UISwitchComponent::kCaptionGap`)
         constexpr Color CaptionWhite{255, 255, 255, 255};                ///< the caption colour the switch component's own fallbacks assume
 
         template <size_t N>
@@ -68,15 +69,13 @@ namespace BECore {
             switch (kind) {
                 case WebKind::Panel:
                     return "UIPanel";
-                case WebKind::Label:
-                    return "UILabel";
-                case WebKind::Image:
-                    return "UIImage";
                 case WebKind::Segmented:
                     return "UISegmented";
                 case WebKind::Progress:
                     return "UIProgressBar";
                 case WebKind::Group:
+                case WebKind::Label:   // a `UIElement` with a `UITextComponent`
+                case WebKind::Image:   // a `UIElement` with a `UIImageComponent`
                 case WebKind::Button:  // written by `WriteButton`, a composed `UIElement`
                 case WebKind::Toggle:  // by `WriteToggle`
                 case WebKind::Slider:  // by `WriteSlider`
@@ -2030,7 +2029,8 @@ namespace BECore {
                 }
             }
 
-            /// The text of a control as a `UITextComponent`, with what the class had by itself (@p defaults: a `UIButton` centred its text, a `UIToggle` centred it vertically and did not wrap);
+            /// The text of a control as a `UITextComponent`, with what a button or a toggle does by itself (@p defaults: a button centres its text, a toggle's caption centres it vertically and does
+            /// not wrap);
             /// @p colorOnly writes the colour alone (the bar of a selected icon-only button takes it)
             template <size_t N>
             static void AddTextComponent(pugi::xml_node components, const Attrs& attrs, bool colorOnly, const ButtonTextDefault (&defaults)[N]) {
@@ -2265,10 +2265,28 @@ namespace BECore {
                 if (!node.name.empty()) {
                     element.append_attribute("name") = node.name.c_str();
                 }
-                for (const auto& [key, value] : _baseAttrs[index].Entries()) {
-                    element.append_attribute(key.c_str()) = value.c_str();
+                const Attrs& attrs = _baseAttrs[index];
+                const bool isText = node.kind == WebKind::Label;
+                const bool isImage = node.kind == WebKind::Image;
+                for (const auto& [key, value] : attrs.Entries()) {
+                    if (!(isText && IsKeyOf(TextComponentKeys, key)) && !(isImage && IsKeyOf(ImageKeys, key))) {
+                        element.append_attribute(key.c_str()) = value.c_str();
+                    }
                 }
                 ++_report.elements;
+                if (isText || isImage) {
+                    pugi::xml_node component = element.append_child("components").append_child("component");
+                    component.append_attribute("type") = isText ? "UITextComponent" : "UIImageComponent";
+                    if (isText) {
+                        for (const eastl::string_view key : TextComponentKeys) {
+                            AddComponentAttribute(component, attrs, key);
+                        }
+                    } else {
+                        for (const eastl::string_view key : ImageKeys) {
+                            AddComponentAttribute(component, attrs, key);
+                        }
+                    }
+                }
                 if (!node.children.empty()) {
                     pugi::xml_node children = element.append_child("children");
                     for (const int child : node.children) {

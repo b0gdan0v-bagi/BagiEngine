@@ -37,6 +37,7 @@ namespace BECore {
         /// The width of the switch element over its height: the track (`kSwitchAspect` x `kSwitchHeightRatio` = 1 height) and the air at the right end, which is a quarter of the height (as
         /// much as above and below the track)
         static constexpr float kAreaAspect = 1.25f;
+        static constexpr float kCaptionGap = 8.0f;      ///< the air between a toggle's caption and its switch: the spacing of the row (the HTML compiler writes it)
         static constexpr float kOffTrackAlpha = 0.35f;  ///< of the white the off track derives from: a track that is there without shouting
 
         /// Where the parts are in a rect: the track, and the thumb in each state. Pure geometry, so a test and the drawing use the same numbers

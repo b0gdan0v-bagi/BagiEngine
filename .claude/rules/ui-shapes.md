@@ -2,9 +2,9 @@
 paths:
   - "src/Modules/BECore/UI/UIBox*"
   - "src/Modules/BECore/UI/UIElement.*"
-  - "src/Modules/BECore/UI/UIButton.*"
-  - "src/Modules/BECore/UI/UIToggle.*"
-  - "src/Modules/BECore/UI/UISlider.*"
+  - "src/Modules/BECore/UI/UIStateLook.*"
+  - "src/Modules/BECore/UI/UISwitchComponent.*"
+  - "src/Modules/BECore/UI/UISliderComponent.*"
   - "src/Modules/BECore/UI/UIProgressBar.*"
   - "src/Modules/BECore/UI/UIDropdown.*"
   - "tests/BECore/UIBox*"
@@ -12,7 +12,7 @@ paths:
 
 # UI: rounded boxes, borders, gradients, shadows and glow
 
-Every UI element draws a box. With the default style it is the plain `DrawFilledRect(color)` it always was (no test or screen changes); with a `UIBoxStyle` it is rounded, bordered, graded, shadowed or glowing, through the `IRenderer::DrawGeometry` of both backends (untextured triangles with per-vertex alpha: no backend code, no RmlUi). Files: `UIBoxMesh` (pure geometry), `UIBoxStyle` (the fields), `UIElement::DrawBox`, `UIButton::GetCurrentBox`.
+Every UI element draws a box. With the default style it is the plain `DrawFilledRect(color)` it always was (no test or screen changes); with a `UIBoxStyle` it is rounded, bordered, graded, shadowed or glowing, through the `IRenderer::DrawGeometry` of both backends (untextured triangles with per-vertex alpha: no backend code, no RmlUi). Files: `UIBoxMesh` (pure geometry), `UIBoxStyle` (the fields), `UIElement::DrawBox`, `UIStateLook` and `UIDropdown::GetCurrentBox`.
 
 ## The fields (flat attributes of any element)
 
@@ -35,15 +35,15 @@ Only non-default values are saved. A malformed value is reported and the default
 - A `UIPanel` draws its sprite over the rounded fill; the sprite is not clipped to the corners.
 - A box that has an effect draws nothing for an empty rect; the default style draws nothing for a colour with no alpha.
 
-## Button states (`UIStateLook`: `UIButton::GetCurrentBox` and the box of any element with a `UIInputClicker` call it)
+## Button states (`UIStateLook`: `UIDropdown::GetCurrentBox` and the box of any element with a `UIInputClicker` call it)
 
 Hover lightens the fill (both gradient ends) and the border; pressed darkens, halves the shadow offset, cuts the blur by a third and drops the highlight; selected raises the border to `textColor` and adds a faint glow of it when the style has none, and the 4-unit bar stays inside the rounded bottom corners; disabled drops shadow and glow and fades fill, border and highlight. An explicit state colour replaces the start colour and the gradient end keeps its offset. A button with the default style is drawn exactly as before.
 
 ## Parts of the widgets
 
-- **`partShape`** (`Square` default, `Round`; on `UISwitchComponent`, `UISliderComponent`, `UIProgressBar` (and the old `UIToggle`, `UISlider`) only, since nothing else has parts) goes through `UIElement::DrawPart`. `Square` is the plain `DrawFilledRect` call the part always made. `Round` is a box whose only setting is a corner radius of half the shorter side (`DrawBoxIn`, the body of `DrawBox` for any rect): a pill for a track, a circle for a square thumb. Toggle: pill track, round thumb; slider: pill track and filled part, round thumb; progress bar: pill track and fill. The colours, shifts and sizes are the widget's own; the touch area and the layout do not change.
+- **`partShape`** (`Square` default, `Round`; on `UISwitchComponent`, `UISliderComponent`, `UIProgressBar` only, since nothing else has parts) goes through `UIElement::DrawPart`. `Square` is the plain `DrawFilledRect` call the part always made. `Round` is a box whose only setting is a corner radius of half the shorter side (`DrawBoxIn`, the body of `DrawBox` for any rect): a pill for a track, a circle for a square thumb. Toggle: pill track, round thumb; slider: pill track and filled part, round thumb; progress bar: pill track and fill. The colours, shifts and sizes are the widget's own; the touch area and the layout do not change.
 - A fill shorter than the track is high (a bar at 2 %) is a smaller pill, not a track-high slice: accepted.
-- **The plate of a toggle** (its `color` and `box`) and **the header of a dropdown** go through `DrawBox` like any element's. The dropdown has `GetCurrentBox` (the `UIButton::Look`): the fill and the gradient end shift on hover and press, disabled drops shadow and glow and fades border and highlight, hover and press leave border and highlight as authored (no state colours of its own). The options of a dropdown are `UIButton`s with their own box; its arrow stays strips.
+- **The plate of a toggle** (its `color` and `box`) and **the header of a dropdown** go through `DrawBox` like any element's. The dropdown has `GetCurrentBox` (a `UIStateLook::Look`): the fill and the gradient end shift on hover and press, disabled drops shadow and glow and fades border and highlight, hover and press leave border and highlight as authored (no state colours of its own). The options of a dropdown are composed buttons with their own box; its arrow stays strips.
 
 ## What is not here
 

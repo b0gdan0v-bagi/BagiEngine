@@ -3,43 +3,93 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
+#include <BECore/UI/UIImageComponent.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/RecordingRenderer.h>
 #include <gtest/gtest.h>
 
 namespace BECore::Tests {
 
+    /*
+     * The draw and the content check of an icon button in its composed form (`ui-controls.md`, "Components": an image child, and a caption child in a horizontal stack when there is text).
+     * The class `UIButton` had these cases with `GetParts`; the geometry is now the layout of the children, and the numbers (the shares and the gaps that the HTML compiler writes, which
+     * `UIWebTest` holds it to) are given below as numbers. What the class tests held on the colour of an icon by state (hover, press, disabled, group-disabled, selected) is
+     * `UIStateLookTest` (`ResolveTint`), `UIInputClickerTest` and `UIStateInheritTest` (a child follows its button). An icon above the caption has no composed form, so its cases are gone.
+     */
+
     namespace {
 
         constexpr float kEpsilon = 1e-3f;
+        constexpr float kTolerance = 1e-2f;
         constexpr uint32_t kIconPixels = 32;
+        constexpr float kIconOnlyShare = UIImageComponent::kIconOnlyShare;          // width and height of the icon of a button with no caption, of the shorter side
+        constexpr float kIconWithTextShare = UIImageComponent::kIconWithTextShare;  // height of the icon of a button with a caption
+        constexpr float kIconPadding = UIImageComponent::kIconPadding;              // left of the icon of a button with a caption
+        constexpr float kIconGap = UIImageComponent::kIconGap;                      // between the icon and the caption
 
-        // A Screen canvas in window pixels (output 800 x 600, scale 1); every button names the sprite "TestIcon", whose texture the fixture hands over:
-        //   Only   (10, 10, 48 x 48)     no caption
-        //   Left   (10, 100, 200 x 48)   a short caption, the icon at the left
-        //   Above  (10, 200, 120 x 96)   a short caption, the icon above it
-        //   Plain  (10, 320, 200 x 48)   a caption and no icon
-        //   Long   (10, 400, 120 x 48)   a caption that fits the whole rect but not the room the icon leaves
+        // A Screen canvas in window pixels (output 800 x 600, scale 1); every icon is the sprite "TestIcon", whose texture the fixture hands over:
+        //   Only      (10, 10, 48 x 48)     no caption: the icon alone, in the middle
+        //   Left      (10, 100, 200 x 48)   a short caption, the icon at the left
+        //   Plain     (10, 320, 200 x 48)   a caption and no icon
+        //   Long      (10, 400, 120 x 48)   a caption that fits the whole rect but not the room the icon leaves
+        //   LongPlain (10, 480, 120 x 48)   the same caption with no icon
         constexpr const char* kIconXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
     <node name="Hud" layer="10"><components>
       <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
         <elements>
-          <element type="UIButton" name="Only" icon="TestIcon" x="10" y="10" width="48" height="48" color="30,30,30,255"/>
-          <element type="UIButton" name="Left" icon="TestIcon" text="Go" x="10" y="100" width="200" height="48" color="30,30,30,255"/>
-          <element type="UIButton" name="Above" icon="TestIcon" iconPlacement="Above" text="Go" x="10" y="200" width="120" height="96" color="30,30,30,255"/>
-          <element type="UIButton" name="Plain" text="Go" x="10" y="320" width="200" height="48" color="30,30,30,255"/>
-          <element type="UIButton" name="Long" icon="TestIcon" text="Settings" x="10" y="400" width="120" height="48" color="30,30,30,255"/>
+          <element type="UIElement" name="Only" x="10" y="10" width="48" height="48" color="30,30,30,255">
+            <components><component type="UIInputClicker" action="IconOnly"/></components>
+            <children>
+              <element type="UIElement" name="OnlyIcon" anchor="Center" width="60%" height="60%" aspectRatio="1">
+                <components><component type="UIImageComponent" sprite="TestIcon"/></components>
+              </element>
+            </children>
+          </element>
+          <element type="UIElement" name="Left" x="10" y="100" width="200" height="48" color="30,30,30,255" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center">
+            <components><component type="UIInputClicker" action="IconLeft"/></components>
+            <children>
+              <element type="UIElement" name="LeftIcon" height="50%" aspectRatio="1">
+                <components><component type="UIImageComponent" sprite="TestIcon"/></components>
+              </element>
+              <element type="UIElement" name="LeftCaption" flex="1" height="100%" fontSize="24">
+                <components><component type="UITextComponent" text="Go" align="Center" verticalAlign="Center" wrap="false"/></components>
+              </element>
+            </children>
+          </element>
+          <element type="UIElement" name="Plain" x="10" y="320" width="200" height="48" color="30,30,30,255" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="Go" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="IconPlain"/>
+            </components>
+          </element>
+          <element type="UIElement" name="Long" x="10" y="400" width="120" height="48" color="30,30,30,255" layout="Stack" direction="Horizontal" padding="8,0,0,0" spacing="6" crossAlign="Center">
+            <components><component type="UIInputClicker" action="IconLong"/></components>
+            <children>
+              <element type="UIElement" name="LongIcon" height="50%" aspectRatio="1">
+                <components><component type="UIImageComponent" sprite="TestIcon"/></components>
+              </element>
+              <element type="UIElement" name="LongCaption" flex="1" height="100%" fontSize="24">
+                <components><component type="UITextComponent" text="Settings" align="Center" verticalAlign="Center" wrap="false"/></components>
+              </element>
+            </children>
+          </element>
+          <element type="UIElement" name="LongPlain" x="10" y="480" width="120" height="48" color="30,30,30,255" fontSize="24">
+            <components>
+              <component type="UITextComponent" text="Settings" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="IconLongPlain"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
   </nodes></scene>
 </scenes></SceneManager>)";
 
-        bool Near(const Rect& a, const Rect& b, float tolerance = 1e-2f) {
+        bool Near(const Rect& a, const Rect& b, float tolerance = kTolerance) {
             return std::abs(a.x - b.x) <= tolerance && std::abs(a.y - b.y) <= tolerance && std::abs(a.w - b.w) <= tolerance && std::abs(a.h - b.h) <= tolerance;
         }
 
@@ -47,152 +97,7 @@ namespace BECore::Tests {
             return inner.x >= outer.x - tolerance && inner.y >= outer.y - tolerance && inner.x + inner.w <= outer.x + outer.w + tolerance && inner.y + inner.h <= outer.y + outer.h + tolerance;
         }
 
-        bool Disjoint(const Rect& a, const Rect& b) {
-            return a.x + a.w <= b.x + kEpsilon || b.x + b.w <= a.x + kEpsilon || a.y + a.h <= b.y + kEpsilon || b.y + b.h <= a.y + kEpsilon;
-        }
-
-        bool SameColor(const Color& a, const Color& b) {
-            return ColorsEqual(a, b);
-        }
-
-        constexpr Color kText{200, 180, 160, 255};
-        constexpr Color kTint{100, 110, 120, 200};
-
-        IntrusivePtr<UIButton> MakeButton() {
-            auto button = New<UIButton>();
-            button->icon = PoolString::Intern("TestIcon");
-            button->textColor = kText;
-            return button;
-        }
-
     }  // namespace
-
-    // ---- the geometry --------------------------------------------------------------------------------------------------------
-
-    TEST(UIButtonIconTest, WithoutAnIconTheTextTakesTheWholeArea) {
-        const Rect area{10.0f, 20.0f, 100.0f, 40.0f};
-        const auto parts = UIButton::GetParts(area, false, true, UIIconPlacement::Left, 0.0f);
-        EXPECT_TRUE(Near(parts.text, area));
-        EXPECT_TRUE(parts.icon.IsEmpty());
-    }
-
-    TEST(UIButtonIconTest, AnIconAloneIsCentredAndTakesAShareOfTheShorterSide) {
-        const Rect area{10.0f, 20.0f, 100.0f, 40.0f};
-        const auto parts = UIButton::GetParts(area, true, false, UIIconPlacement::Left, 0.0f);
-        const float side = 40.0f * UIButton::kIconOnlyShare;
-        EXPECT_TRUE(Near(parts.icon, {10.0f + (100.0f - side) * 0.5f, 20.0f + (40.0f - side) * 0.5f, side, side}));
-        EXPECT_TRUE(parts.text.IsEmpty());
-
-        const auto sized = UIButton::GetParts(area, true, false, UIIconPlacement::Above, 16.0f);
-        EXPECT_TRUE(Near(sized.icon, {10.0f + 42.0f, 20.0f + 12.0f, 16.0f, 16.0f})) << "iconSize wins, and the placement means nothing without a caption";
-    }
-
-    TEST(UIButtonIconTest, AnIconAtTheLeftLeavesTheRestOfTheWidthToTheText) {
-        const Rect area{10.0f, 20.0f, 200.0f, 48.0f};
-        const auto parts = UIButton::GetParts(area, true, true, UIIconPlacement::Left, 0.0f);
-        const float side = 48.0f * UIButton::kIconWithTextShare;
-        EXPECT_TRUE(Near(parts.icon, {10.0f + UIButton::kIconPadding, 20.0f + (48.0f - side) * 0.5f, side, side}));
-        EXPECT_NEAR(parts.text.x, parts.icon.x + side + UIButton::kIconGap, kEpsilon);
-        EXPECT_NEAR(parts.text.x + parts.text.w, 210.0f, kEpsilon);
-        EXPECT_NEAR(parts.text.y, 20.0f, kEpsilon);
-        EXPECT_NEAR(parts.text.h, 48.0f, kEpsilon);
-        EXPECT_TRUE(Disjoint(parts.icon, parts.text));
-    }
-
-    TEST(UIButtonIconTest, AnIconAboveLeavesTheRestOfTheHeightToTheText) {
-        const Rect area{10.0f, 20.0f, 120.0f, 96.0f};
-        const auto parts = UIButton::GetParts(area, true, true, UIIconPlacement::Above, 0.0f);
-        const float side = 96.0f * UIButton::kIconWithTextShare;
-        EXPECT_TRUE(Near(parts.icon, {10.0f + (120.0f - side) * 0.5f, 20.0f + UIButton::kIconPadding, side, side}));
-        EXPECT_NEAR(parts.text.y, parts.icon.y + side + UIButton::kIconGap, kEpsilon);
-        EXPECT_NEAR(parts.text.y + parts.text.h, 116.0f, kEpsilon);
-        EXPECT_NEAR(parts.text.x, 10.0f, kEpsilon);
-        EXPECT_NEAR(parts.text.w, 120.0f, kEpsilon);
-        EXPECT_TRUE(Disjoint(parts.icon, parts.text));
-    }
-
-    TEST(UIButtonIconTest, AnExplicitIconSizeIsKeptWhereItFitsAndClippedWhereItDoesNot) {
-        const Rect area{0.0f, 0.0f, 200.0f, 48.0f};
-        EXPECT_NEAR(UIButton::GetParts(area, true, true, UIIconPlacement::Left, 20.0f).icon.w, 20.0f, kEpsilon);
-        EXPECT_NEAR(UIButton::GetParts(area, true, true, UIIconPlacement::Left, 500.0f).icon.h, 48.0f, kEpsilon) << "no taller than the rect";
-        EXPECT_NEAR(UIButton::GetParts(area, true, false, UIIconPlacement::Left, 500.0f).icon.w, 48.0f, kEpsilon);
-    }
-
-    TEST(UIButtonIconTest, APartNeverLeavesAnAreaThatIsTooSmall) {
-        for (const UIIconPlacement placement : {UIIconPlacement::Left, UIIconPlacement::Above}) {
-            for (const bool hasText : {false, true}) {
-                for (const float iconSize : {0.0f, 12.0f, 300.0f}) {
-                    for (const float w : {0.0f, 1.0f, 5.0f, 9.0f, 30.0f}) {
-                        for (const float h : {0.0f, 1.0f, 5.0f, 9.0f, 30.0f}) {
-                            const Rect area{5.0f, 7.0f, w, h};
-                            const auto parts = UIButton::GetParts(area, true, hasText, placement, iconSize);
-                            const auto note = [&] {
-                                return ::testing::Message() << "placement " << static_cast<int>(placement) << " text " << hasText << " size " << iconSize << " area " << w << "x" << h;
-                            };
-                            EXPECT_GE(parts.icon.w, 0.0f) << note();
-                            EXPECT_GE(parts.icon.h, 0.0f) << note();
-                            EXPECT_GE(parts.text.w, 0.0f) << note();
-                            EXPECT_GE(parts.text.h, 0.0f) << note();
-                            if (!parts.icon.IsEmpty()) {
-                                EXPECT_TRUE(Inside(parts.icon, area)) << note();
-                            }
-                            if (!parts.text.IsEmpty()) {
-                                EXPECT_TRUE(Inside(parts.text, area)) << note();
-                            }
-                            if (!parts.icon.IsEmpty() && !parts.text.IsEmpty()) {
-                                EXPECT_TRUE(Disjoint(parts.icon, parts.text)) << note();
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // ---- the colour of the icon -----------------------------------------------------------------------------------------------
-
-    TEST(UIButtonIconTest, TheIconTakesTheTextColourUnlessItHasATint) {
-        auto button = MakeButton();
-        EXPECT_TRUE(SameColor(button->GetCurrentIconColor(), kText));
-        button->iconTint = kTint;
-        EXPECT_TRUE(SameColor(button->GetCurrentIconColor(), kTint));
-    }
-
-    TEST(UIButtonIconTest, HoverBrightensAndAHeldPressDarkensTheIcon) {
-        auto button = MakeButton();
-        button->iconTint = kTint;
-
-        button->hovered = true;
-        EXPECT_TRUE(SameColor(button->GetCurrentIconColor(), ShiftColor(kTint, kHoverBrighten)));
-
-        button->pressed = true;
-        EXPECT_TRUE(SameColor(button->GetCurrentIconColor(), ShiftColor(kTint, -kPressDarken)));
-
-        button->hovered = false;  // the press moved off the button: not shown as pressed
-        EXPECT_TRUE(SameColor(button->GetCurrentIconColor(), kTint));
-    }
-
-    TEST(UIButtonIconTest, ADisabledButtonKeepsHalfTheAlphaOfItsIcon) {
-        auto button = MakeButton();
-        button->iconTint = kTint;
-        button->disabled = true;
-        EXPECT_TRUE(SameColor(button->GetCurrentIconColor(), WithAlpha(kTint, kDisabledAlpha)));
-
-        button->hovered = true;
-        EXPECT_TRUE(SameColor(button->GetCurrentIconColor(), WithAlpha(kTint, kDisabledAlpha))) << "no hover shift on a disabled button";
-
-        button->disabled = false;
-        button->groupDisabled = true;
-        EXPECT_TRUE(SameColor(button->GetCurrentIconColor(), WithAlpha(kTint, kDisabledAlpha)));
-    }
-
-    TEST(UIButtonIconTest, SelectedLeavesTheIconColourAlone) {
-        auto button = MakeButton();
-        button->selected = true;
-        EXPECT_TRUE(SameColor(button->GetCurrentIconColor(), kText));
-    }
-
-    // ---- the draw and the check, in a scene -------------------------------------------------------------------------------------
 
     class UIButtonIconDrawTest : public ::testing::Test {
     protected:
@@ -219,8 +124,8 @@ namespace BECore::Tests {
 
             const eastl::vector<uint8_t> pixels(static_cast<size_t>(kIconPixels) * kIconPixels * 4, 200);
             _icon = _renderer->CreateTexture(pixels.data(), kIconPixels, kIconPixels);
-            for (const char* name : {"Only", "Left", "Above", "Long"}) {
-                Button(name).GetIconSprite().SetTexture(_icon);
+            for (const char* name : {"OnlyIcon", "LeftIcon", "LongIcon"}) {
+                Get(name).GetComponent<UIImageComponent>()->GetSprite().SetTexture(_icon);
             }
         }
 
@@ -238,12 +143,10 @@ namespace BECore::Tests {
             _manager->DrawAll();
         }
 
-        UIButton& Button(const char* name) const {
+        UIElement& Get(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
             EXPECT_NE(element, nullptr) << name;
-            UIButton* typed = element ? element->Cast<UIButton>() : nullptr;
-            EXPECT_NE(typed, nullptr) << name << " is not a button";
-            return *typed;
+            return *element;
         }
 
         /// The draws of the icon texture (there is one icon texture for all the buttons)
@@ -278,6 +181,15 @@ namespace BECore::Tests {
             return bounds;
         }
 
+        bool IconDrawnAt(const Rect& expected) const {
+            for (const DrawCall& call : IconCalls()) {
+                if (Near(call.rect, expected)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         IntrusivePtr<RecordingRenderer> _renderer;
         IntrusivePtrAtomic<SceneManager> _manager;
         IntrusivePtr<UICanvasComponent> _canvas;
@@ -286,89 +198,50 @@ namespace BECore::Tests {
 
     TEST_F(UIButtonIconDrawTest, AnIconOnlyButtonDrawsTheSpriteAloneInTheMiddleOfItsRect) {
         Draw();
-        const auto& only = Button("Only");
-        const auto calls = IconCalls();
-        ASSERT_EQ(calls.size(), 4u) << "one icon per icon button, the plain one has none";
+        const UIElement& only = Get("Only");
+        ASSERT_EQ(IconCalls().size(), 3u) << "one icon per icon button, the plain one has none";
 
-        const Rect expected = UIButton::GetParts(only.rect, true, false, UIIconPlacement::Left, 0.0f).icon;
+        const float side = only.rect.h * kIconOnlyShare;
+        const Rect expected{only.rect.x + (only.rect.w - side) * 0.5f, only.rect.y + (only.rect.h - side) * 0.5f, side, side};
         bool found = false;
-        for (const DrawCall& call : calls) {
+        for (const DrawCall& call : IconCalls()) {
             if (Near(call.rect, expected)) {
                 found = true;
-                EXPECT_TRUE(SameColor(call.color, only.GetCurrentIconColor()));
                 ASSERT_TRUE(call.source.has_value());
                 EXPECT_TRUE(Near(*call.source, {0.0f, 0.0f, static_cast<float>(kIconPixels), static_cast<float>(kIconPixels)}));
             }
         }
-        EXPECT_TRUE(found) << "the icon of the Only button is where GetParts puts it";
+        EXPECT_TRUE(found) << "the icon of the Only button is the square share of its rect, in the middle";
         EXPECT_FALSE(GlyphBounds(only.rect)) << "no caption, no glyph";
     }
 
     TEST_F(UIButtonIconDrawTest, TheIconAndTheCaptionOfALeftButtonShareTheRect) {
         Draw();
-        const auto& left = Button("Left");
-        const auto parts = UIButton::GetParts(left.rect, true, true, UIIconPlacement::Left, 0.0f);
+        const UIElement& left = Get("Left");
+        const float side = left.rect.h * kIconWithTextShare;
+        const Rect icon{left.rect.x + kIconPadding, left.rect.y + (left.rect.h - side) * 0.5f, side, side};
+        EXPECT_TRUE(IconDrawnAt(icon));
 
-        bool iconDrawn = false;
-        for (const DrawCall& call : IconCalls()) {
-            iconDrawn = iconDrawn || Near(call.rect, parts.icon);
-        }
-        EXPECT_TRUE(iconDrawn);
-
+        const Rect captionArea{icon.x + side + kIconGap, left.rect.y, left.rect.x + left.rect.w - (icon.x + side + kIconGap), left.rect.h};
+        EXPECT_TRUE(Near(Get("LeftCaption").rect, captionArea));
         const auto glyphs = GlyphBounds(left.rect);
         ASSERT_TRUE(glyphs.has_value()) << "the caption is drawn";
-        EXPECT_TRUE(Inside(*glyphs, parts.text, 1.0f)) << "in the area the icon leaves";
-        EXPECT_GE(glyphs->x, parts.text.x - 1.0f);
-    }
-
-    TEST_F(UIButtonIconDrawTest, TheCaptionOfAnAboveButtonIsUnderTheIcon) {
-        Draw();
-        const auto& above = Button("Above");
-        const auto parts = UIButton::GetParts(above.rect, true, true, UIIconPlacement::Above, 0.0f);
-
-        bool iconDrawn = false;
-        for (const DrawCall& call : IconCalls()) {
-            iconDrawn = iconDrawn || Near(call.rect, parts.icon);
-        }
-        EXPECT_TRUE(iconDrawn);
-
-        const auto glyphs = GlyphBounds(above.rect);
-        ASSERT_TRUE(glyphs.has_value());
-        EXPECT_GE(glyphs->y, parts.icon.y + parts.icon.h - 1.0f) << "below the icon";
-    }
-
-    TEST_F(UIButtonIconDrawTest, TheIconIsDrawnInTheColourOfTheStateOfTheButton) {
-        auto& left = Button("Left");
-        left.iconTint = kTint;
-        left.hovered = true;
-        Draw();
-        const Rect iconRect = UIButton::GetParts(left.rect, true, true, UIIconPlacement::Left, 0.0f).icon;
-        for (const DrawCall& call : IconCalls()) {
-            if (Near(call.rect, iconRect)) {
-                EXPECT_TRUE(SameColor(call.color, ShiftColor(kTint, kHoverBrighten)));
-                return;
-            }
-        }
-        FAIL() << "the icon was not drawn";
+        EXPECT_TRUE(Inside(*glyphs, captionArea, 1.0f)) << "in the area the icon leaves";
     }
 
     TEST_F(UIButtonIconDrawTest, ASpriteThatIsNotInTheLibraryDrawsNoIconButStillTheCaption) {
-        auto& left = Button("Left");
-        left.GetIconSprite() = UISprite{};  // no direct texture any more: the name "TestIcon" is not in the TextureLibrary
+        Get("LeftIcon").GetComponent<UIImageComponent>()->GetSprite() = UISprite{};  // no direct texture any more: the name "TestIcon" is not in the TextureLibrary
         Draw();
-        EXPECT_EQ(IconCalls().size(), 3u);
-        EXPECT_TRUE(GlyphBounds(left.rect).has_value());
+        EXPECT_EQ(IconCalls().size(), 2u);
+        EXPECT_TRUE(GlyphBounds(Get("Left").rect).has_value());
     }
 
-    TEST_F(UIButtonIconDrawTest, AButtonWithoutAnIconDrawsAsItDidBefore) {
+    TEST_F(UIButtonIconDrawTest, AButtonWithoutAnIconCentresItsCaptionInTheWholeRect) {
         Draw();
-        const auto& plain = Button("Plain");
+        const UIElement& plain = Get("Plain");
         const auto glyphs = GlyphBounds(plain.rect);
         ASSERT_TRUE(glyphs.has_value());
-
-        // The caption is centred in the whole rect, as a button with no icon always did
-        const float middle = glyphs->x + glyphs->w * 0.5f;
-        EXPECT_NEAR(middle, plain.rect.x + plain.rect.w * 0.5f, 3.0f);
+        EXPECT_NEAR(glyphs->x + glyphs->w * 0.5f, plain.rect.x + plain.rect.w * 0.5f, 3.0f);
 
         size_t rects = 0;
         for (const DrawCall& call : _renderer->calls) {
@@ -388,29 +261,31 @@ namespace BECore::Tests {
 
     TEST_F(UIButtonIconDrawTest, ACaptionThatFitsTheRectButNotTheRoomTheIconLeavesIsCaught) {
         Draw();
-        auto& longOne = Button("Long");
-        const UIContentFit withIcon = longOne.CheckContent(longOne.rect.w, longOne.rect.h, 1.0f);
+        const UIElement& caption = Get("LongCaption");
+        const UIContentFit withIcon = caption.CheckContent(caption.rect.w, caption.rect.h, 1.0f);
         EXPECT_TRUE(withIcon.hasContent);
         EXPECT_FALSE(withIcon.fits) << "the icon takes room the caption needs";
 
-        longOne.icon = PoolString{};
-        const UIContentFit without = longOne.CheckContent(longOne.rect.w, longOne.rect.h, 1.0f);
+        const UIElement& whole = Get("LongPlain");
+        const UIContentFit without = whole.CheckContent(whole.rect.w, whole.rect.h, 1.0f);
         EXPECT_TRUE(without.hasContent);
         EXPECT_TRUE(without.fits) << "the same caption fits the whole rect";
     }
 
     TEST_F(UIButtonIconDrawTest, ACaptionNextToAnIconThatFitsIsNotReported) {
         Draw();
-        const auto& left = Button("Left");
-        const UIContentFit fit = left.CheckContent(left.rect.w, left.rect.h, 1.0f);
+        const UIElement& caption = Get("LeftCaption");
+        const UIContentFit fit = caption.CheckContent(caption.rect.w, caption.rect.h, 1.0f);
         EXPECT_TRUE(fit.hasContent);
         EXPECT_TRUE(fit.fits);
     }
 
     TEST_F(UIButtonIconDrawTest, AnIconOnlyButtonHasNoTextToCheck) {
         Draw();
-        const auto& only = Button("Only");
+        const UIElement& only = Get("Only");
         EXPECT_FALSE(only.CheckContent(only.rect.w, only.rect.h, 1.0f).hasContent);
+        const UIElement& icon = Get("OnlyIcon");
+        EXPECT_FALSE(icon.CheckContent(icon.rect.w, icon.rect.h, 1.0f).hasContent);
     }
 
 }  // namespace BECore::Tests

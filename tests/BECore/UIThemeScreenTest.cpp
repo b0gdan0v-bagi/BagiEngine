@@ -4,10 +4,11 @@
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
 #include <BECore/UI/UICanvasComponent.h>
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UIInputClicker.h>
+#include <BECore/UI/UISwitchComponent.h>
 #include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
-#include <BECore/UI/UIToggle.h>
+#include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UIVars.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <Common/EngineEnvironment.h>
@@ -21,7 +22,7 @@ namespace BECore::Tests {
 
     /*
      * The screen test of a screen written with theme tokens, the template for a game's own (.claude/rules/ui-layout.md, "A screen test"; the language twin is UISettingsScreenTest).
-     * The screen is a card (a stack on a `@panel` fill) with a title, a strip, a composed button (a `UIElement` with a `UITextComponent` and an `UIInputClicker`), a `UIToggle` and a
+     * The screen is a card (a stack on a `@panel` fill) with a title, a strip, a composed button (a `UIElement` with a `UITextComponent` and an `UIInputClicker`), a composed toggle row and a
      * part written in HTML and CSS with `var(--note)`, compiled by `UIWebCompiler` into the same card. Three themes: `light` (the default), `dark`, and `soft`, which leaves the token
      * `track` to the default theme.
      *
@@ -51,7 +52,9 @@ namespace BECore::Tests {
         <elements>
           <element type="UIStack" name="Card" anchor="Center" width="94%" maxWidth="560" height="304" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="@panel">
             <children>
-              <element type="UILabel" name="Title" height="44" text="Themes" fontSize="30" align="Center" textColor="@text"/>
+              <element type="UIElement" name="Title" height="44" fontSize="30">
+                <components><component type="UITextComponent" text="Themes" align="Center" textColor="@text"/></components>
+              </element>
               <element type="UIPanel" name="Strip" height="12" color="@accent"/>
               <element type="UIElement" name="Action" height="56" color="@button" hoverColor="@buttonHover">
                 <components>
@@ -59,7 +62,20 @@ namespace BECore::Tests {
                   <component type="UIInputClicker" action="ThemeGo"/>
                 </components>
               </element>
-              <element type="UIToggle" name="Sound" bind="sound" action="ThemeSound" height="56" text="Sound" fontSize="24" verticalAlign="Center" textColor="@text" trackColor="@track" fillColor="@accent" thumbColor="@text"/>
+              <element type="UIElement" name="Sound" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+                <components>
+                  <component type="UIInputClicker"/>
+                  <component type="UIToggleComponent" bind="sound" action="ThemeSound"/>
+                </components>
+                <children>
+                  <element type="UIElement" name="SoundCaption" flex="1" height="100%" fontSize="24">
+                    <components><component type="UITextComponent" text="Sound" verticalAlign="Center" wrap="false" fadeWhenDisabled="true" textColor="@text"/></components>
+                  </element>
+                  <element type="UIElement" name="SoundSwitch" height="100%" aspectRatio="1.25">
+                    <components><component type="UISwitchComponent" trackColor="@track" fillColor="@accent" thumbColor="@text"/></components>
+                  </element>
+                </children>
+              </element>
               @NOTE@
             </children>
           </element>
@@ -210,17 +226,6 @@ namespace BECore::Tests {
             return *element;
         }
 
-        template <typename T>
-        T& Get(const char* name) const {
-            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
-            T* typed = element ? element->Cast<T>() : nullptr;
-            if (typed == nullptr) {
-                ADD_FAILURE() << name << (element ? " is not the expected control" : " is not in the screen");
-                std::abort();  // a reference to nothing cannot be returned; the failure above is printed first
-            }
-            return *typed;
-        }
-
         UILayoutContext ViewContext() const {
             UILayoutContext context;
             context.sceneViewWidth = GetScene().GetViewWidth();
@@ -244,7 +249,7 @@ namespace BECore::Tests {
             context.outputHeight = kViewHeight;
             layout.Update(context);
             const float scale = layout.GetResolved().scale;
-            for (const char* name : {"Title", "Action", "Sound", "Note"}) {
+            for (const char* name : {"Title", "Action", "SoundCaption", "Note"}) {
                 const UIElement& element = Find(name);
                 const UIContentFit fit = element.CheckContent(element.rect.w, element.rect.h, scale);
                 if (fit.hasContent && !fit.fits) {
@@ -261,14 +266,15 @@ namespace BECore::Tests {
             Draw();
             const Color panel = Find("Card").color;
             const UITextComponent* goText = Find("Action").GetComponent<UITextComponent>();
+            const UITextComponent* noteText = Find("Note").GetComponent<UITextComponent>();  // the compiled part: a text is a component
             const struct {
                 const char* what;
                 Color text;
                 Color plate;
-            } pairs[] = {{"Title on the card", Get<UILabel>("Title").textColor, panel},
-                         {"Sound on the card", Get<UIToggle>("Sound").textColor, panel},
+            } pairs[] = {{"Title on the card", Find("Title").GetComponent<UITextComponent>()->textColor, panel},
+                         {"Sound on the card", Find("SoundCaption").GetComponent<UITextComponent>()->textColor, panel},
                          {"Go on its button", goText ? Color(goText->textColor) : Color{}, Find("Action").color},
-                         {"Note on its plate", Get<UILabel>("Note").textColor, Find("Note").color}};
+                         {"Note on its plate", noteText ? Color(noteText->textColor) : Color{}, Find("Note").color}};
             eastl::string problems;
             for (const auto& pair : pairs) {
                 const float ratio = ContrastRatio(pair.text, pair.plate);
@@ -383,7 +389,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(themes.SetTheme(PoolString::Intern(kSoft)));
         EXPECT_FALSE(themes.HasToken(PoolString::Intern(kSoft), "track"));
         Draw();
-        EXPECT_TRUE(ColorsEqual(Get<UIToggle>("Sound").trackColor, Color{150, 150, 150, 255})) << "soft has no track: the light one is drawn";
+        EXPECT_TRUE(ColorsEqual(Find("SoundSwitch").GetComponent<UISwitchComponent>()->trackColor, Color{150, 150, 150, 255})) << "soft has no track: the light one is drawn";
         EXPECT_TRUE(themes.GetMissing().empty()) << "a fallback is not a missing token";
     }
 

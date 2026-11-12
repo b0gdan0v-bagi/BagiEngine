@@ -30,8 +30,16 @@ namespace BECore::Tests {
         constexpr const char* kCanvasNode = R"(<node name="Panel"><components>
   <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
     <elements>
-      <element type="UILabel" name="Title" x="8" y="8" width="184" height="30" text="Base" fontSize="24"/>
-      <element type="UILabel" name="Note" x="8" y="48" width="184" height="30" text="Note" fontSize="24"/>
+      <element type="UIElement" name="Title" x="8" y="8" width="184" height="30" fontSize="24">
+        <components>
+          <component type="UITextComponent" text="Base"/>
+        </components>
+      </element>
+      <element type="UIElement" name="Note" x="8" y="48" width="184" height="30" fontSize="24">
+        <components>
+          <component type="UITextComponent" text="Note"/>
+        </components>
+      </element>
     </elements>
   </component>
 </components></node>)";
@@ -308,7 +316,11 @@ namespace BECore::Tests {
 
     TEST_F(SceneInstantiateTest, ACanvasOverrideReplacesTheWholeList) {
         const char* reference = R"(<node ref="nodes/Panel" name="Short"><components><component type="UICanvasComponent"><elements>
-  <element type="UILabel" name="Only" x="1" y="2" width="3" height="4" text="X" fontSize="24"/>
+  <element type="UIElement" name="Only" x="1" y="2" width="3" height="4" fontSize="24">
+    <components>
+      <component type="UITextComponent" text="X"/>
+    </components>
+  </element>
 </elements></component></components></node>)";
         Scene& expected = LoadExpected(reference);
         const std::vector<std::string> expectedTexts = ComponentTexts(*expected.GetRootNode().GetChildren()[1]);

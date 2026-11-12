@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!-- Failure: a picture below a clicker whose tint a variant sets. The tint moves with the state tints written beside it, so the override would name an attribute the element no longer has. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UIElement" name="Play" width="120" height="56">
+          <components>
+            <component type="UIInputClicker" action="Go"/>
+          </components>
+          <children>
+            <element type="UIImage" name="PlayIcon" width="24" height="24" sprite="icons.play" tint="255,255,255,255" />
+          </children>
+        </element>
+      </elements>
+      <variants>
+        <variant when="orientation:portrait">
+          <overrides>
+            <set element="PlayIcon" tint="200,200,200,255" />
+          </overrides>
+        </variant>
+      </variants>
+    </component>
+  </components>
+</node>

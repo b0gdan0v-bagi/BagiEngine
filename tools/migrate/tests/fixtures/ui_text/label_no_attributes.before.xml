@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<!-- A label with no text attribute is still given its (empty) component: code sets the text later. -->
+<node name="Texts" layer="5" contentVersion="4">
+  <components>
+    <component type="UICanvasComponent" space="Screen">
+      <elements>
+        <element type="UILabel" name="Empty" width="100" height="24" />
+        <element type="UILabel" width="100" height="24" color="10,20,30,255"></element>
+      </elements>
+    </component>
+  </components>
+</node>

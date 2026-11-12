@@ -26,7 +26,11 @@ namespace BECore::Tests {
         <component type="UICanvasComponent" space="SceneView" extendToOutput="true">
           <elements>
             <element type="UIPanel" name="Board" x="20" y="20" width="200" height="200" color="9,9,9,255" blocksInput="false"/>
-            <element type="UIButton" name="Bar" anchor="Bottom" x="0" y="-20" width="300" height="100" visible="false" blocksInput="true" color="40,90,60,255"/>
+            <element type="UIElement" name="Bar" anchor="Bottom" x="0" y="-20" width="300" height="100" visible="false" blocksInput="true" color="40,90,60,255">
+              <components>
+                <component type="UIInputClicker"/>
+              </components>
+            </element>
           </elements>
           <variants>
             <variant when="maxAspect:0.5"><overrides><set element="Bar" visible="true"/></overrides></variant>
@@ -42,7 +46,11 @@ namespace BECore::Tests {
         <component type="UICanvasComponent" space="SceneView" extendToOutput="true">
           <elements>
             <element type="UIPanel" name="Board" x="20" y="20" width="200" height="200" color="9,9,9,255" blocksInput="false"/>
-            <element type="UIButton" name="Bar" anchor="Bottom" x="0" y="-20" width="300" height="100" blocksInput="true" color="40,90,60,255"/>
+            <element type="UIElement" name="Bar" anchor="Bottom" x="0" y="-20" width="300" height="100" blocksInput="true" color="40,90,60,255">
+              <components>
+                <component type="UIInputClicker"/>
+              </components>
+            </element>
           </elements>
         </component>
       </components></node>

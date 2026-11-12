@@ -1,6 +1,5 @@
 #include "UIChoice.h"
 
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UITextComponent.h>
 
@@ -32,21 +31,15 @@ namespace BECore::UIChoice {
     }  // namespace
 
     bool IsOption(const UIElement& element) {
-        return element.Is<UIButton>() || element.GetComponent<UIInputClicker>() != nullptr;
+        return element.GetComponent<UIInputClicker>() != nullptr;
     }
 
     PoolString GetValue(const UIElement& element) {
-        if (const auto* button = element.Cast<UIButton>()) {
-            return button->value;
-        }
         const UIInputClicker* clicker = element.GetComponent<UIInputClicker>();
         return clicker ? clicker->value : PoolString{};
     }
 
     const eastl::string& GetText(const UIElement& element) {
-        if (const auto* button = element.Cast<UIButton>()) {
-            return button->text;
-        }
         if (const UITextComponent* own = element.GetComponent<UITextComponent>()) {
             return own->text;
         }

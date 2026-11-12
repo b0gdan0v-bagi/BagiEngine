@@ -36,7 +36,11 @@ namespace BECore::Tests {
         constexpr const char* kSampleXml = R"(<root><component><elements>
   <element type="UIPanel" name="Panel" color="200,40,40,255" cornerRadius="16" borderWidth="3" borderColor="255,255,255,255" gradientDirection="Vertical" gradientColor="40,40,200,255"
            shadow="0,12,6,0,#000000C8" glow="0,0,6,0,#FFD70050"/>
-  <element type="UIButton" name="Button" color="40,90,60,255" cornerRadius="12"/>
+  <element type="UIElement" name="Button" color="40,90,60,255" cornerRadius="12">
+    <components>
+      <component type="UIInputClicker"/>
+    </components>
+  </element>
 </elements></component></root>)";
 
         Pixel PixelAtOutput(const PixelBuffer& image, uint32_t x, uint32_t y) {

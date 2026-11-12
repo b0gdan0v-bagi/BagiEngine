@@ -6,17 +6,20 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIDropdown.h>
-#include <BECore/UI/UIImage.h>
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UIImageComponent.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIPanel.h>
 #include <BECore/UI/UIProgressBar.h>
 #include <BECore/UI/UISegmented.h>
-#include <BECore/UI/UISlider.h>
+#include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UIStack.h>
-#include <BECore/UI/UIToggle.h>
+#include <BECore/UI/UIStateLook.h>
+#include <BECore/UI/UISwitchComponent.h>
+#include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UIToggleComponent.h>
+#include <BECore/UI/UITooltipComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -33,8 +36,9 @@ namespace BECore::Tests {
         constexpr float kScaleTolerance = 3.0f;  // glyphs are snapped to whole pixels at each size, so a doubled text is only doubled to a few pixels
 
         // One screen of every control, on a Screen canvas in window pixels (output 800 x 600, scale 1):
-        //   Plate (10, 10, 200 x 100) holds the Title label and the Ok button in its bottom right corner, which is (122, 62, 80 x 40)
-        //   Icon  (300, 10, 64 x 64) is an image, Frame (300, 100, 100 x 60) a panel with a nine-slice sprite, Off (300, 200, 80 x 40) a disabled button
+        //   Plate (10, 10, 200 x 100) holds the Title text and the Ok button in its bottom right corner, which is (122, 62, 80 x 40)
+        //   Icon  (300, 10, 64 x 64) is a picture, Frame (300, 100, 100 x 60) a panel with a nine-slice sprite, Off (300, 200, 80 x 40) a disabled button
+        //   Switch (500, 200, 204 x 56) is a disabled toggle row, Level (500, 400, 204 x 56) a disabled slider
         constexpr const char* kControlsXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -43,21 +47,55 @@ namespace BECore::Tests {
         <elements>
           <element type="UIPanel" name="Plate" x="10" y="10" width="200" height="100" color="10,20,30,200">
             <children>
-              <element type="UILabel" name="Title" x="8" y="8" width="184" height="30" text="Score" fontSize="24"/>
-              <element type="UIButton" name="Ok" anchor="BottomRight" x="-8" y="-8" width="80" height="40" text="OK" action="UIControlsTestOk" color="40,90,60,255"/>
+              <element type="UIElement" name="Title" x="8" y="8" width="184" height="30" fontSize="24">
+                <components><component type="UITextComponent" text="Score"/></components>
+              </element>
+              <element type="UIElement" name="Ok" anchor="BottomRight" x="-8" y="-8" width="80" height="40" fontSize="24" color="40,90,60,255">
+                <components>
+                  <component type="UITextComponent" text="OK" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="UIControlsTestOk"/>
+                </components>
+              </element>
             </children>
           </element>
-          <element type="UIImage" name="Icon" x="300" y="10" width="64" height="64"/>
+          <element type="UIElement" name="Icon" x="300" y="10" width="64" height="64"><components><component type="UIImageComponent"/></components></element>
           <element type="UIPanel" name="Frame" x="300" y="100" width="100" height="60" sliceBorder="4" blocksInput="false"/>
-          <element type="UIButton" name="Off" x="300" y="200" width="80" height="40" text="Off" action="UIControlsTestOff" color="40,90,60,255" disabled="true"/>
+          <element type="UIElement" name="Off" x="300" y="200" width="80" height="40" fontSize="24" color="40,90,60,255">
+            <components>
+              <component type="UITextComponent" text="Off" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="UIControlsTestOff" disabled="true"/>
+            </components>
+          </element>
           <element type="UIStack" name="Row" x="500" y="10" width="100" height="40" direction="Horizontal" spacing="4"/>
           <element type="UISegmented" name="Choice" bind="choice" x="500" y="100" width="204" height="48" direction="Horizontal" spacing="4" disabled="true"/>
-          <element type="UIToggle" name="Switch" bind="switchOn" action="UIControlsTestSwitch" text="Switch" onValue="yes" offValue="no" x="500" y="200" width="204" height="56" disabled="true"/>
-          <element type="UIProgressBar" name="Meter" bind="meter" minValue="10" maxValue="90" x="500" y="300" width="204" height="24"/>
-          <element type="UISlider" name="Level" bind="level" action="UIControlsTestLevel" minValue="2" maxValue="12" step="0.5" x="500" y="400" width="204" height="56" disabled="true"/>
-          <element type="UIDropdown" name="Pick" bind="pickVar" action="UIControlsTestPick" text="Pick one" x="300" y="300" width="180" height="56" optionHeight="48" arrowColor="1,2,3,255" disabled="true">
+          <element type="UIElement" name="Switch" x="500" y="200" width="204" height="56" layout="Stack" direction="Horizontal" spacing="8" crossAlign="Center">
+            <components>
+              <component type="UIInputClicker" disabled="true"/>
+              <component type="UIToggleComponent" bind="switchOn" action="UIControlsTestSwitch" onValue="yes" offValue="no"/>
+            </components>
             <children>
-              <element type="UIButton" name="PickA" text="A" value="a" height="48"/>
+              <element type="UIElement" name="SwitchCaption" flex="1" height="100%" fontSize="24">
+                <components><component type="UITextComponent" text="Switch" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
+              </element>
+              <element type="UIElement" name="SwitchSwitch" height="100%" aspectRatio="1.25"><components><component type="UISwitchComponent"/></components></element>
+            </children>
+          </element>
+          <element type="UIProgressBar" name="Meter" bind="meter" minValue="10" maxValue="90" x="500" y="300" width="204" height="24"/>
+          <element type="UIElement" name="Level" x="500" y="400" width="204" height="56">
+            <components>
+              <component type="UIInputClicker" stateLook="false" disabled="true"/>
+              <component type="UISliderComponent" bind="level" action="UIControlsTestLevel" minValue="2" maxValue="12" step="0.5"/>
+            </components>
+          </element>
+          <element type="UIDropdown" name="Pick" bind="pickVar" action="UIControlsTestPick" x="300" y="300" width="180" height="56" optionHeight="48" arrowColor="1,2,3,255" disabled="true">
+            <components><component type="UITextComponent" text="Pick one" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
+            <children>
+              <element type="UIElement" name="PickA" height="48">
+                <components>
+                  <component type="UITextComponent" text="A" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="a"/>
+                </components>
+              </element>
             </children>
           </element>
         </elements>
@@ -172,6 +210,25 @@ namespace BECore::Tests {
             _manager->DrawAll();
         }
 
+        UIElement& El(const char* name) const {
+            UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
+            EXPECT_NE(element, nullptr) << name;
+            return *element;
+        }
+
+        /// The text component of the element called @p name
+        UITextComponent& Text(const char* name) const {
+            UITextComponent* text = El(name).GetComponent<UITextComponent>();
+            EXPECT_NE(text, nullptr) << name << " has no text component";
+            return *text;
+        }
+
+        UIInputClicker& Clicker(const char* name) const {
+            UIInputClicker* clicker = El(name).GetComponent<UIInputClicker>();
+            EXPECT_NE(clicker, nullptr) << name << " has no clicker";
+            return *clicker;
+        }
+
         template <typename T>
         T& Get(const char* name) const {
             UIElement* element = _canvas->GetRoot().FindByName(PoolString::Intern(name));
@@ -231,32 +288,36 @@ namespace BECore::Tests {
         ASSERT_EQ(root.children.size(), 10u);
 
         EXPECT_TRUE(root.children[0]->Is<UIPanel>());
-        EXPECT_TRUE(root.children[1]->Is<UIImage>());
+        EXPECT_NE(root.children[1]->GetComponent<UIImageComponent>(), nullptr);
         EXPECT_TRUE(root.children[2]->Is<UIPanel>());
-        EXPECT_TRUE(root.children[3]->Is<UIButton>());
+        EXPECT_NE(root.children[3]->GetComponent<UIInputClicker>(), nullptr);
         EXPECT_TRUE(root.children[4]->Is<UIStack>());
         EXPECT_TRUE(root.children[5]->Is<UISegmented>());
-        EXPECT_TRUE(root.children[6]->Is<UIToggle>());
+        EXPECT_NE(root.children[6]->GetComponent<UIToggleComponent>(), nullptr);
         EXPECT_TRUE(root.children[7]->Is<UIProgressBar>());
-        EXPECT_TRUE(root.children[8]->Is<UISlider>());
+        EXPECT_NE(root.children[8]->GetComponent<UISliderComponent>(), nullptr);
         EXPECT_TRUE(root.children[9]->Is<UIDropdown>());
-        EXPECT_TRUE(root.children[0]->children[0]->Is<UILabel>());
-        EXPECT_TRUE(root.children[0]->children[1]->Is<UIButton>());
+        EXPECT_NE(root.children[0]->children[0]->GetComponent<UITextComponent>(), nullptr);
+        EXPECT_NE(root.children[0]->children[1]->GetComponent<UIInputClicker>(), nullptr);
+        for (const size_t composed : {1u, 3u, 6u, 8u}) {
+            EXPECT_EQ(root.children[composed]->GetTypeMeta().typeName, "UIElement") << composed << ": a composed control is a plain element";
+        }
     }
 
     TEST_F(UIControlsTest, TheFieldsComeFromTheFile) {
-        const auto& title = Get<UILabel>("Title");
+        const auto& title = Text("Title");
         EXPECT_EQ(title.text, "Score");
-        EXPECT_FLOAT_EQ(title.style.fontSize, 24.0f);
+        EXPECT_FLOAT_EQ(El("Title").style.fontSize, 24.0f);
         EXPECT_EQ(title.overflow, TextOverflow::Ellipsis);  // the default
 
-        const auto& ok = Get<UIButton>("Ok");
+        const auto& ok = Clicker("Ok");
         EXPECT_EQ(ok.action, PoolString::Intern("UIControlsTestOk"));
-        EXPECT_TRUE(ok.interactive);
-        EXPECT_EQ(ok.align, TextAlign::Center);
-        EXPECT_EQ(ok.verticalAlign, UIVerticalAlign::Center);
+        EXPECT_TRUE(El("Ok").IsInteractive());
+        EXPECT_EQ(Text("Ok").align, TextAlign::Center);
+        EXPECT_EQ(Text("Ok").verticalAlign, UIVerticalAlign::Center);
         EXPECT_FALSE(ok.disabled);
-        EXPECT_TRUE(Get<UIButton>("Off").disabled);
+        EXPECT_TRUE(Clicker("Off").disabled);
+        EXPECT_FALSE(El("Title").IsInteractive());
 
         EXPECT_EQ(Get<UIPanel>("Frame").sliceBorder, (UIEdges{4.0f, 4.0f, 4.0f, 4.0f}));
         EXPECT_TRUE(Get<UIPanel>("Plate").blocksInput);  // a panel takes clicks unless it says otherwise
@@ -265,25 +326,30 @@ namespace BECore::Tests {
         EXPECT_EQ(Get<UISegmented>("Choice").layout, UILayoutKind::Stack);
         EXPECT_EQ(Get<UISegmented>("Choice").bind, PoolString::Intern("choice"));
         EXPECT_TRUE(Get<UISegmented>("Choice").disabled);
-        EXPECT_EQ(Get<UIToggle>("Switch").bind, PoolString::Intern("switchOn"));
-        EXPECT_EQ(Get<UIToggle>("Switch").onValue, PoolString::Intern("yes"));
-        EXPECT_EQ(Get<UIToggle>("Switch").offValue, PoolString::Intern("no"));
-        EXPECT_TRUE(Get<UIToggle>("Switch").disabled);
-        EXPECT_TRUE(Get<UIToggle>("Switch").interactive);
+        const auto* toggle = El("Switch").GetComponent<UIToggleComponent>();
+        ASSERT_NE(toggle, nullptr);
+        EXPECT_EQ(toggle->bind, PoolString::Intern("switchOn"));
+        EXPECT_EQ(toggle->onValue, PoolString::Intern("yes"));
+        EXPECT_EQ(toggle->offValue, PoolString::Intern("no"));
+        EXPECT_TRUE(Clicker("Switch").disabled);
+        EXPECT_TRUE(El("Switch").IsInteractive());
         EXPECT_EQ(Get<UIProgressBar>("Meter").bind, PoolString::Intern("meter"));
         EXPECT_FLOAT_EQ(Get<UIProgressBar>("Meter").minValue, 10.0f);
         EXPECT_FLOAT_EQ(Get<UIProgressBar>("Meter").maxValue, 90.0f);
         EXPECT_FALSE(Get<UIProgressBar>("Meter").interactive);
-        EXPECT_EQ(Get<UISlider>("Level").bind, PoolString::Intern("level"));
-        EXPECT_EQ(Get<UISlider>("Level").action, PoolString::Intern("UIControlsTestLevel"));
-        EXPECT_FLOAT_EQ(Get<UISlider>("Level").minValue, 2.0f);
-        EXPECT_FLOAT_EQ(Get<UISlider>("Level").maxValue, 12.0f);
-        EXPECT_FLOAT_EQ(Get<UISlider>("Level").step, 0.5f);
-        EXPECT_TRUE(Get<UISlider>("Level").disabled);
-        EXPECT_TRUE(Get<UISlider>("Level").interactive);
+        const auto* level = El("Level").GetComponent<UISliderComponent>();
+        ASSERT_NE(level, nullptr);
+        EXPECT_EQ(level->bind, PoolString::Intern("level"));
+        EXPECT_EQ(level->action, PoolString::Intern("UIControlsTestLevel"));
+        EXPECT_FLOAT_EQ(level->minValue, 2.0f);
+        EXPECT_FLOAT_EQ(level->maxValue, 12.0f);
+        EXPECT_FLOAT_EQ(level->step, 0.5f);
+        EXPECT_TRUE(Clicker("Level").disabled);
+        EXPECT_TRUE(El("Level").IsInteractive());
         EXPECT_EQ(Get<UIDropdown>("Pick").bind, PoolString::Intern("pickVar"));
         EXPECT_EQ(Get<UIDropdown>("Pick").action, PoolString::Intern("UIControlsTestPick"));
-        EXPECT_EQ(Get<UIDropdown>("Pick").text, "Pick one");
+        ASSERT_NE(Get<UIDropdown>("Pick").GetComponent<UITextComponent>(), nullptr);
+        EXPECT_EQ(Get<UIDropdown>("Pick").GetComponent<UITextComponent>()->text, "Pick one");
         EXPECT_FLOAT_EQ(Get<UIDropdown>("Pick").optionHeight, 48.0f);
         EXPECT_EQ(Get<UIDropdown>("Pick").arrowColor.g, 2);
         EXPECT_EQ(Get<UIDropdown>("Pick").arrowColor.a, 255);
@@ -366,7 +432,67 @@ namespace BECore::Tests {
             box.highlight = Paint(tokens, Color{87, 88, 89, 90});
         }
 
+        /// The text fields of a text component, each set to something other than its default
+        void SetEveryTextField(UITextComponent& text, bool tokens) {
+            text.text = "Some text";
+            text.font = PoolString::Intern("assets/fonts/Other.ttf");
+            text.fontFamily = PoolString::Intern("Test");
+            text.fontWeight = 700;
+            text.textColor = Paint(tokens, Color{21, 22, 23, 24});
+            text.hoverTextColor = Paint(tokens, Color{101, 102, 103, 104});
+            text.pressedTextColor = Paint(tokens, Color{105, 106, 107, 108});
+            text.disabledTextColor = Paint(tokens, Color{109, 110, 111, 112});
+            text.selectedTextColor = Paint(tokens, Color{113, 114, 115, 116});
+            text.fadeWhenDisabled = true;
+            text.align = TextAlign::Right;
+            text.verticalAlign = UIVerticalAlign::Bottom;
+            text.overflow = TextOverflow::AutoFit;
+            text.wrap = false;  // the text one: the stack one is style.stack.wrap, and the two must stay apart
+            text.lineSpacing = 1.5f;
+            text.minFontSize = 10.0f;
+            text.textEffects = {1.5f, Paint(tokens, Color{91, 92, 93, 94}), 2.0f, -3.0f, Paint(tokens, Color{95, 96, 97, 98})};
+        }
+
+        /// One of every component a composed control is made of, every field of each set to something other than its default
+        void SetEveryComponentField(UIElement& element, bool tokens) {
+            SetEveryTextField(element.AddComponent<UITextComponent>(), tokens);
+            auto& image = element.AddComponent<UIImageComponent>();
+            image.sprite = PoolString::Intern("ImageSprite");
+            image.tint = Paint(tokens, Color{5, 6, 7, 8});
+            image.hoverTint = Paint(tokens, Color{117, 118, 119, 120});
+            image.pressedTint = Paint(tokens, Color{121, 122, 123, 124});
+            image.disabledTint = Paint(tokens, Color{125, 126, 127, 128});
+            image.stretch = true;
+            auto& clicker = element.AddComponent<UIInputClicker>();
+            clicker.action = PoolString::Intern("BusyAction");
+            clicker.value = PoolString::Intern("BusyValue");
+            clicker.disabled = true;
+            clicker.stateLook = false;
+            element.AddComponent<UITooltipComponent>().text = "Busy {#tip.key} {name}";
+            auto& toggle = element.AddComponent<UIToggleComponent>();
+            toggle.bind = PoolString::Intern("busyOn");
+            toggle.action = PoolString::Intern("BusyToggleAction");
+            toggle.onValue = PoolString::Intern("BusyOn");
+            toggle.offValue = PoolString::Intern("BusyOff");
+            auto& thumb = element.AddComponent<UISwitchComponent>();
+            thumb.trackColor = Paint(tokens, Color{31, 32, 33, 34});
+            thumb.fillColor = Paint(tokens, Color{35, 36, 37, 38});
+            thumb.thumbColor = Paint(tokens, Color{39, 40, 41, 42});
+            thumb.partShape = UIPartShape::Round;
+            auto& slider = element.AddComponent<UISliderComponent>();
+            slider.bind = PoolString::Intern("busyLevel");
+            slider.action = PoolString::Intern("BusySliderAction");
+            slider.minValue = -1.5f;
+            slider.maxValue = 7.5f;
+            slider.step = 0.25f;
+            slider.trackColor = Paint(tokens, Color{51, 52, 53, 54});
+            slider.fillColor = Paint(tokens, Color{55, 56, 57, 58});
+            slider.thumbColor = Paint(tokens, Color{59, 60, 61, 62});
+            slider.partShape = UIPartShape::Round;
+        }
+
         void SetEveryControlField(UIElement& element, bool tokens) {
+            const eastl::string_view typeName = element.GetTypeMeta().typeName;
             element.name = PoolString::Intern("Busy");
             element.layout = UILayoutKind::Stack;
             element.color = Paint(tokens, Color{1, 2, 3, 4});
@@ -382,36 +508,9 @@ namespace BECore::Tests {
                 panel->sprite = PoolString::Intern("PanelSprite");
                 panel->sliceBorder = {1.0f, 2.0f, 3.0f, 4.0f};
                 panel->spriteTint = Paint(tokens, Color{5, 6, 7, 8});
-            } else if (auto* image = element.Cast<UIImage>()) {
-                image->sprite = PoolString::Intern("ImageSprite");
-                image->tint = Paint(tokens, Color{5, 6, 7, 8});
-                image->stretch = true;
-            } else if (auto* button = element.Cast<UIButton>()) {
-                button->action = PoolString::Intern("BusyAction");
-                button->hoverColor = Paint(tokens, Color{9, 10, 11, 12});
-                button->pressedColor = Paint(tokens, Color{13, 14, 15, 16});
-                button->disabledColor = Paint(tokens, Color{17, 18, 19, 20});
-                button->selectedColor = Paint(tokens, Color{25, 26, 27, 28});
-                button->value = PoolString::Intern("BusyValue");
-                button->disabled = true;
-                button->icon = PoolString::Intern("BusyIcon");
-                button->iconTint = Paint(tokens, Color{67, 68, 69, 70});
-                button->iconPlacement = UIIconPlacement::Above;
-                button->iconSize = 31.5f;
-                button->tooltip = "Busy {#tip.key} {name}";
             } else if (auto* group = element.Cast<UISegmented>()) {
                 group->bind = PoolString::Intern("busyChoice");
                 group->disabled = true;
-            } else if (auto* toggle = element.Cast<UIToggle>()) {
-                toggle->bind = PoolString::Intern("busyOn");
-                toggle->action = PoolString::Intern("BusyToggleAction");
-                toggle->onValue = PoolString::Intern("BusyOn");
-                toggle->offValue = PoolString::Intern("BusyOff");
-                toggle->disabled = true;
-                toggle->trackColor = Paint(tokens, Color{31, 32, 33, 34});
-                toggle->fillColor = Paint(tokens, Color{35, 36, 37, 38});
-                toggle->thumbColor = Paint(tokens, Color{39, 40, 41, 42});
-                toggle->partShape = UIPartShape::Round;
             } else if (auto* dropdown = element.Cast<UIDropdown>()) {
                 dropdown->bind = PoolString::Intern("busyPick");
                 dropdown->action = PoolString::Intern("BusyPickAction");
@@ -426,40 +525,16 @@ namespace BECore::Tests {
                 bar->trackColor = Paint(tokens, Color{43, 44, 45, 46});
                 bar->fillColor = Paint(tokens, Color{47, 48, 49, 50});
                 bar->partShape = UIPartShape::Round;
-            } else if (auto* slider = element.Cast<UISlider>()) {
-                slider->bind = PoolString::Intern("busyLevel");
-                slider->action = PoolString::Intern("BusySliderAction");
-                slider->minValue = -1.5f;
-                slider->maxValue = 7.5f;
-                slider->step = 0.25f;
-                slider->disabled = true;
-                slider->trackColor = Paint(tokens, Color{51, 52, 53, 54});
-                slider->fillColor = Paint(tokens, Color{55, 56, 57, 58});
-                slider->thumbColor = Paint(tokens, Color{59, 60, 61, 62});
-                slider->partShape = UIPartShape::Round;
             }
-            if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>() || element.Cast<UIDropdown>()) {
-                auto* text = label                      ? label
-                             : element.Cast<UIButton>() ? static_cast<UILabel*>(element.Cast<UIButton>())
-                             : element.Cast<UIToggle>() ? static_cast<UILabel*>(element.Cast<UIToggle>())
-                                                        : static_cast<UILabel*>(element.Cast<UIDropdown>());
-                text->text = "Some text";
-                text->font = PoolString::Intern("assets/fonts/Other.ttf");
-                text->fontFamily = PoolString::Intern("Test");
-                text->fontWeight = 700;
-                text->textColor = Paint(tokens, Color{21, 22, 23, 24});
-                text->align = TextAlign::Right;
-                text->verticalAlign = UIVerticalAlign::Bottom;
-                text->overflow = TextOverflow::AutoFit;
-                text->wrap = false;  // the text one: the stack one is style.stack.wrap, and the two must stay apart
-                text->lineSpacing = 1.5f;
-                text->minFontSize = 10.0f;
-                text->textEffects = {1.5f, Paint(tokens, Color{91, 92, 93, 94}), 2.0f, -3.0f, Paint(tokens, Color{95, 96, 97, 98})};
+            if (element.Cast<UIDropdown>()) {
+                SetEveryTextField(element.AddComponent<UITextComponent>(), tokens);  // the header of a dropdown is a text component
+            } else if (typeName == "UIElement") {
+                SetEveryComponentField(element, tokens);
             }
         }
 
         void ExpectEveryPropertySurvivesARoundTrip(bool tokens) {
-            for (const char* type : {"UIElement", "UIPanel", "UIImage", "UILabel", "UIButton", "UIStack", "UISegmented", "UIToggle", "UIDropdown", "UIProgressBar", "UISlider"}) {
+            for (const char* type : {"UIElement", "UIPanel", "UIStack", "UISegmented", "UIDropdown", "UIProgressBar"}) {
                 auto original = AbstractFactory<UIElement>::GetInstance().Create(type);
                 ASSERT_TRUE(original) << type;
                 SetEveryStyleProperty(original->style);
@@ -501,61 +576,43 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, TheTextWrapAndTheStackWrapAreTwoThings) {
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString("<root><component><elements><element type=\"UILabel\" name=\"A\" wrap=\"false\"/>"
-                                                "<element type=\"UIStack\" name=\"B\" wrapChildren=\"true\"/></elements></component></root>"));
+        ASSERT_TRUE(
+            deserializer.LoadFromString("<root><component><elements><element type=\"UIElement\" name=\"A\"><components><component type=\"UITextComponent\" wrap=\"false\"/></components></element>"
+                                        "<element type=\"UIStack\" name=\"B\" wrapChildren=\"true\"/></elements></component></root>"));
         auto canvas = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         canvas->Deserialize(deserializer);
         deserializer.EndObject();
         ASSERT_EQ(canvas->_elements.size(), 2u);
 
-        auto* label = canvas->_elements[0]->Cast<UILabel>();
+        auto* label = canvas->_elements[0]->GetComponent<UITextComponent>();
         ASSERT_NE(label, nullptr);
         EXPECT_FALSE(label->wrap);
-        EXPECT_FALSE(label->style.stack.wrap);
+        EXPECT_FALSE(canvas->_elements[0]->style.stack.wrap);
         EXPECT_TRUE(canvas->_elements[1]->style.stack.wrap);
     }
 
     // ---- variables and show / hide by name --------------------------------------------------------------------------------
 
-    TEST_F(UIControlsTest, ALabelFollowsItsVariables) {
-        auto& title = Get<UILabel>("Title");
-        title.text = "Score: {score}";
-        UIVars& vars = CoreManager::GetUIVars();
-
-        Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Score: ") << "a variable nobody set is empty";
-        EXPECT_EQ(GlyphsIn(title).size(), 6u);  // S c o r e :
-
-        vars.Set("score"_intern, 5);
-        Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Score: 5");
-        EXPECT_EQ(GlyphsIn(title).size(), 7u);
-
-        vars.Set("score"_intern, 100);
-        Draw();
-        EXPECT_EQ(GlyphsIn(title).size(), 9u);
-    }
-
-    TEST_F(UIControlsTest, ALabelIsLaidOutAgainOnlyWhenItsTextChanged) {
-        auto& title = Get<UILabel>("Title");
-        title.text = "Score: {score}";
+    TEST_F(UIControlsTest, ATextIsLaidOutAgainOnlyWhenItsShownTextChanged) {
+        auto& text = Text("Title");
+        text.text = "Score: {score}";
         UIVars& vars = CoreManager::GetUIVars();
         vars.Set("score"_intern, 5);
 
         Draw();
-        const uint32_t afterFirst = title.GetLayoutCount();
+        const uint32_t afterFirst = text.GetLayoutCount();
         Draw();
         Draw();
-        EXPECT_EQ(title.GetLayoutCount(), afterFirst) << "an unchanged screen costs no layout";
+        EXPECT_EQ(text.GetLayoutCount(), afterFirst) << "an unchanged screen costs no layout";
 
         vars.Set("other"_intern, 1);  // a variable the label does not show still moves the version, but the shown text stays
         Draw();
-        EXPECT_EQ(title.GetLayoutCount(), afterFirst);
+        EXPECT_EQ(text.GetLayoutCount(), afterFirst);
 
         vars.Set("score"_intern, 6);
         Draw();
-        EXPECT_EQ(title.GetLayoutCount(), afterFirst + 1);
+        EXPECT_EQ(text.GetLayoutCount(), afterFirst + 1);
     }
 
     // ---- strings in texts ---------------------------------------------------------------------------------------------------
@@ -580,39 +637,22 @@ namespace BECore::Tests {
 
     }  // namespace
 
-    TEST_F(UIControlsTest, ALabelShowsTheStringOfTheCurrentLanguageAndFollowsASwitch) {
-        FillStrings();
-        auto& title = Get<UILabel>("Title");
-        title.text = "{#menu.start}";
-
-        Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Start");
-        EXPECT_EQ(GlyphsIn(title).size(), 5u);
-
-        EXPECT_TRUE(CoreManager::GetUIStrings().SetLanguage("ru"_intern));
-        Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Начать");
-
-        EXPECT_TRUE(CoreManager::GetUIStrings().SetLanguage("en"_intern));
-        Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Start");
-    }
-
     TEST_F(UIControlsTest, AKeyMissingInTheLanguageFallsBackToTheDefaultOneAndAKeyMissingEverywhereShowsTheKey) {
         FillStrings();
         CoreManager::GetUIStrings().SetLanguage("ru"_intern);
-        auto& title = Get<UILabel>("Title");
+        auto& title = El("Title");
+        auto& text = Text("Title");
 
-        title.text = "{#only.en}";
+        text.text = "{#only.en}";
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "English only");
+        EXPECT_EQ(text.GetDisplayText(), "English only");
         EXPECT_TRUE(CoreManager::GetUIStrings().GetMissing().empty());
 
-        title.text = "{#menu.options}";
+        text.text = "{#menu.options}";
         for (int frame = 0; frame < 5; ++frame) {
             Draw();
         }
-        EXPECT_EQ(title.GetDisplayText(), "menu.options") << "the key itself, never an empty label";
+        EXPECT_EQ(text.GetDisplayText(), "menu.options") << "the key itself, never an empty label";
         EXPECT_FALSE(GlyphsIn(title).empty());
         ASSERT_EQ(CoreManager::GetUIStrings().GetMissing().size(), 1u) << "a missing key is recorded (and logged) once, not once per frame";
         EXPECT_EQ(CoreManager::GetUIStrings().GetMissing()[0].key, "menu.options");
@@ -621,90 +661,91 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, ATextMixesAStringAndAVariableAndFollowsBoth) {
         FillStrings();
-        auto& title = Get<UILabel>("Title");
-        title.text = "{#score.title}: {score}";
+        auto& title = El("Title");
+        auto& text = Text("Title");
+        text.text = "{#score.title}: {score}";
         CoreManager::GetUIVars().Set("score"_intern, 5);
 
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Score: 5");
+        EXPECT_EQ(text.GetDisplayText(), "Score: 5");
 
         CoreManager::GetUIVars().Set("score"_intern, 6);
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Score: 6");
+        EXPECT_EQ(text.GetDisplayText(), "Score: 6");
 
         CoreManager::GetUIStrings().SetLanguage("ru"_intern);
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Счёт: 6");
+        EXPECT_EQ(text.GetDisplayText(), "Счёт: 6");
 
         CoreManager::GetUIVars().Set("score"_intern, 7);
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Счёт: 7");
+        EXPECT_EQ(text.GetDisplayText(), "Счёт: 7");
     }
 
     TEST_F(UIControlsTest, AStringThatHoldsAVariableFollowsTheVariable) {
         FillStrings();
-        auto& title = Get<UILabel>("Title");
-        title.text = "{#greet}";
+        auto& text = Text("Title");
+        text.text = "{#greet}";
         CoreManager::GetUIVars().Set("name"_intern, "Ann");
 
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Hello Ann");
+        EXPECT_EQ(text.GetDisplayText(), "Hello Ann");
 
         CoreManager::GetUIVars().Set("name"_intern, "Bob");
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Hello Bob");
+        EXPECT_EQ(text.GetDisplayText(), "Hello Bob");
 
         CoreManager::GetUIStrings().SetLanguage("ru"_intern);
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "Привет, Bob");
+        EXPECT_EQ(text.GetDisplayText(), "Привет, Bob");
     }
 
     TEST_F(UIControlsTest, AStringIsNotResolvedAgainAndALiteralReferenceIsWrittenWithDoubledBraces) {
         FillStrings();
         CoreManager::GetUIStrings().Set("en"_intern, "again", "{#menu.start}");
-        auto& title = Get<UILabel>("Title");
+        auto& text = Text("Title");
 
         // The result of a reference goes to the variable step, which reads `{#menu.start}` as a variable named "#menu.start" (unset, so empty): not a second string step
-        title.text = "[{#again}]";
+        text.text = "[{#again}]";
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "[]");
+        EXPECT_EQ(text.GetDisplayText(), "[]");
 
         // `{{#other}}` in a string survives both steps as the text `{#other}`
-        title.text = "{#quoted}";
+        text.text = "{#quoted}";
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "{#other}");
+        EXPECT_EQ(text.GetDisplayText(), "{#other}");
 
         // and so does a doubled brace in the text itself
-        title.text = "{{#menu.start}}";
+        text.text = "{{#menu.start}}";
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "{#menu.start}");
+        EXPECT_EQ(text.GetDisplayText(), "{#menu.start}");
     }
 
     TEST_F(UIControlsTest, ATextWithoutABraceOrWithOnlyAVariableIsUntouchedByTheStrings) {
         FillStrings();
-        auto& title = Get<UILabel>("Title");
+        auto& text = Text("Title");
 
-        title.text = "#menu.start";
+        text.text = "#menu.start";
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "#menu.start");
+        EXPECT_EQ(text.GetDisplayText(), "#menu.start");
 
-        title.text = "{menu.start}";  // a variable, not a string
+        text.text = "{menu.start}";  // a variable, not a string
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "");
+        EXPECT_EQ(text.GetDisplayText(), "");
         EXPECT_TRUE(CoreManager::GetUIStrings().GetMissing().empty());
     }
 
     TEST_F(UIControlsTest, AButtonAndAToggleShowTheirCaptionsFromTheStrings) {
         FillStrings();
-        auto& ok = Get<UIButton>("Ok");
-        auto& toggle = Get<UIToggle>("Switch");
+        auto& ok = Text("Ok");
+        auto& toggle = Text("SwitchCaption");
         ok.text = "{#menu.start}";
         toggle.text = "{#score.title}";
 
         Draw();
         EXPECT_EQ(ok.GetDisplayText(), "Start");
         EXPECT_EQ(toggle.GetDisplayText(), "Score");
-        EXPECT_EQ(GlyphsIn(ok).size(), 5u);
+        EXPECT_EQ(GlyphsIn(El("Ok")).size(), 5u);
 
         CoreManager::GetUIStrings().SetLanguage("ru"_intern);
         Draw();
@@ -714,139 +755,94 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, AnUnchangedScreenWithStringsCostsNoLayoutAndASwitchLaysOutOnlyWhatChanged) {
         FillStrings();
-        auto& title = Get<UILabel>("Title");
-        auto& ok = Get<UIButton>("Ok");
-        title.text = "{#menu.start}";
+        auto& text = Text("Title");
+        auto& ok = Text("Ok");
+        text.text = "{#menu.start}";
         ok.text = "{#same}";
         UIStrings& strings = CoreManager::GetUIStrings();
 
         Draw();
-        const uint32_t titleLayouts = title.GetLayoutCount();
+        const uint32_t titleLayouts = text.GetLayoutCount();
         const uint32_t okLayouts = ok.GetLayoutCount();
         EXPECT_GE(titleLayouts, 1u);
         for (int frame = 0; frame < 5; ++frame) {
             Draw();
         }
-        EXPECT_EQ(title.GetLayoutCount(), titleLayouts);
+        EXPECT_EQ(text.GetLayoutCount(), titleLayouts);
         EXPECT_EQ(ok.GetLayoutCount(), okLayouts);
 
         CoreManager::GetUIVars().Set("unrelated"_intern, 1);  // the version moves, the text does not
         strings.Set("en"_intern, "unrelated.key", "x");       // so does the version of the strings
         Draw();
-        EXPECT_EQ(title.GetLayoutCount(), titleLayouts);
+        EXPECT_EQ(text.GetLayoutCount(), titleLayouts);
         EXPECT_EQ(ok.GetLayoutCount(), okLayouts);
 
         strings.SetLanguage("ru"_intern);
         Draw();
-        EXPECT_EQ(title.GetLayoutCount(), titleLayouts + 1) << "the text changed with the language";
+        EXPECT_EQ(text.GetLayoutCount(), titleLayouts + 1) << "the text changed with the language";
         EXPECT_EQ(ok.GetLayoutCount(), okLayouts) << "the string is the same in both languages, so the same layout is kept";
 
         Draw();
-        EXPECT_EQ(title.GetLayoutCount(), titleLayouts + 1);
+        EXPECT_EQ(text.GetLayoutCount(), titleLayouts + 1);
     }
 
-    TEST_F(UIControlsTest, ALanguageSwitchLeavesALabelThatNamesNoStringAlone) {
+    TEST_F(UIControlsTest, ALanguageSwitchLeavesATextThatNamesNoStringAlone) {
         FillStrings();
-        auto& title = Get<UILabel>("Title");
-        title.text = "Score: {score}";
+        auto& text = Text("Title");
+        text.text = "Score: {score}";
         CoreManager::GetUIVars().Set("score"_intern, 5);
 
         Draw();
-        const uint32_t layouts = title.GetLayoutCount();
+        const uint32_t layouts = text.GetLayoutCount();
         CoreManager::GetUIStrings().SetLanguage("ru"_intern);
         Draw();
 
-        EXPECT_EQ(title.GetDisplayText(), "Score: 5");
-        EXPECT_EQ(title.GetLayoutCount(), layouts);
+        EXPECT_EQ(text.GetDisplayText(), "Score: 5");
+        EXPECT_EQ(text.GetLayoutCount(), layouts);
     }
 
-    TEST_F(UIControlsTest, TheValidatorMeasuresTheStringOfTheCurrentLanguage) {
-        UIStrings& strings = CoreManager::GetUIStrings();
-        strings.Set("en"_intern, "line", "Short");
-        strings.Set("de"_intern, "line", "A value that is much too long for a label of this width");
-        strings.SetDefaultLanguage("en"_intern);
-        auto& title = Get<UILabel>("Title");
-        title.text = "{#line}";
-        title.wrap = false;
-        title.overflow = TextOverflow::Clip;
-        title.style.rect.height = UILength::Px(40.0f);
-        _canvas->Invalidate();
-        const auto textIssues = [this]() {
-            Draw();
-            size_t count = 0;
-            for (const UILayoutIssue& issue : _canvas->GetLayout().Validate({})) {
-                count += issue.kind == UILayoutIssueKind::TextDoesNotFit ? 1u : 0u;
-            }
-            return count;
-        };
-
-        EXPECT_EQ(textIssues(), 0u);
-        EXPECT_TRUE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
-
-        strings.SetLanguage("de"_intern);
-        EXPECT_EQ(textIssues(), 1u);
-        EXPECT_FALSE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
-    }
-
-    TEST_F(UIControlsTest, TheFamilyAndTheWeightChooseTheFaceOfALabel) {
+    TEST_F(UIControlsTest, TheFamilyAndTheWeightChooseTheFaceOfAText) {
         const ScopedTextSettings settings(MakeTestFamilySettings());
-        auto& title = Get<UILabel>("Title");
-        title.fontFamily = "Test"_intern;
+        auto& title = El("Title");
+        auto& text = Text("Title");
+        text.fontFamily = "Test"_intern;
 
-        title.fontWeight = 400;
-        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
-        title.fontWeight = 700;
-        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));
+        text.fontWeight = 400;
+        EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+        text.fontWeight = 700;
+        EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));
         Draw();
         EXPECT_FALSE(GlyphsIn(title).empty());  // the other face is loaded and drawn
-        title.fontWeight = 600;
-        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));  // the nearest face, over 500 the one above
-        title.fontWeight = 400;
-        title.fontFamily = PoolString{};  // the default family of the settings is PT Sans, which this table does not have
-        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+        text.fontWeight = 600;
+        EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));  // the nearest face, over 500 the one above
+        text.fontWeight = 400;
+        text.fontFamily = PoolString{};  // the default family of the settings is PT Sans, which this table does not have
+        EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
     }
 
     TEST_F(UIControlsTest, APathInFontWinsOverFamilyAndWeight) {
         const ScopedTextSettings settings(MakeTestFamilySettings());
-        auto& title = Get<UILabel>("Title");
-        title.font = PoolString::Intern(kTestRegularPath);
-        title.fontFamily = "Test"_intern;
-        title.fontWeight = 700;
+        auto& text = Text("Title");
+        text.font = PoolString::Intern(kTestRegularPath);
+        text.fontFamily = "Test"_intern;
+        text.fontWeight = 700;
         const WarningCounter warnings("font family");
 
-        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
-        title.fontFamily = "Nope"_intern;  // not looked at either: no warning
-        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+        EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
+        text.fontFamily = "Nope"_intern;  // not looked at either: no warning
+        EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestRegularPath));
         EXPECT_EQ(warnings.Count(), 0u);
-    }
-
-    TEST_F(UIControlsTest, AnUnknownFamilyIsLoggedOnceAndTheDefaultFontIsUsed) {
-        const ScopedTextSettings settings(MakeTestFamilySettings());
-        const PoolString defaultFont = CoreManager::GetFontAtlasLibrary().GetSettings().defaultFont;
-        auto& title = Get<UILabel>("Title");
-        title.fontFamily = "Nope"_intern;
-        const WarningCounter warnings("font family 'Nope'");
-
-        for (int frame = 0; frame < 3; ++frame) {
-            Draw();
-        }
-        EXPECT_EQ(title.GetResolvedFontPath(), defaultFont);
-        EXPECT_EQ(warnings.Count(), 1u);
-        EXPECT_FALSE(GlyphsIn(title).empty());  // the text is drawn with the default font
-
-        title.fontFamily = "Test"_intern;
-        Draw();
-        EXPECT_EQ(warnings.Count(), 1u);  // a known family says nothing
     }
 
     TEST_F(UIControlsTest, TheValidatorMeasuresWithTheFaceOfTheFamilyAndTheWeight) {
         const ScopedTextSettings settings(MakeTestFamilySettings());
-        auto& title = Get<UILabel>("Title");
-        title.text = "A value that is much too long for a label of this width";
-        title.fontFamily = "Test"_intern;
-        title.fontWeight = 700;
-        title.wrap = false;
-        title.overflow = TextOverflow::Clip;
+        auto& title = El("Title");
+        auto& text = Text("Title");
+        text.text = "A value that is much too long for a label of this width";
+        text.fontFamily = "Test"_intern;
+        text.fontWeight = 700;
+        text.wrap = false;
+        text.overflow = TextOverflow::Clip;
         title.style.rect.height = UILength::Px(40.0f);
         _canvas->Invalidate();
         Draw();
@@ -858,24 +854,25 @@ namespace BECore::Tests {
 
         EXPECT_EQ(count, 1u);
         EXPECT_FALSE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
-        EXPECT_EQ(title.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));  // the face the check measured with
-        title.text = "Short";
+        EXPECT_EQ(text.GetResolvedFontPath(), PoolString::Intern(kTestBoldPath));  // the face the check measured with
+        text.text = "Short";
         EXPECT_TRUE(title.CheckContent(184.0f, 40.0f, 1.0f).fits);
     }
 
     // The shipped PT Sans has a bold face: a box that holds a text in weight 400 is too tight for it in weight 700
     TEST_F(UIControlsTest, ARealBoldFaceDoesNotFitTheBoxThatTheRegularFaceFits) {
-        auto& title = Get<UILabel>("Title");
-        title.text = "Weighty text";
-        title.fontFamily = "PT Sans"_intern;
-        title.wrap = false;
-        title.overflow = TextOverflow::Clip;
+        auto& title = El("Title");
+        auto& text = Text("Title");
+        text.text = "Weighty text";
+        text.fontFamily = "PT Sans"_intern;
+        text.wrap = false;
+        text.overflow = TextOverflow::Clip;
         title.style.rect.height = UILength::Px(40.0f);
-        const auto widthAt = [this, &title](uint16_t weight) {
-            title.fontWeight = weight;
+        const auto widthAt = [this, &title, &text](uint16_t weight) {
+            text.fontWeight = weight;
             _canvas->Invalidate();
             Draw();
-            return title.GetLastLayout().width;
+            return text.MeasureText(title, 100000.0f, 1.0f).x;
         };
         const float regularWidth = widthAt(400);
         const float boldWidth = widthAt(700);
@@ -892,13 +889,13 @@ namespace BECore::Tests {
             return count;
         };
 
-        title.fontWeight = 400;
+        text.fontWeight = 400;
         EXPECT_EQ(textIssues(), 0u);
         EXPECT_TRUE(title.CheckContent(box, 40.0f, 1.0f).fits);
-        title.fontWeight = 700;
+        text.fontWeight = 700;
         EXPECT_EQ(textIssues(), 1u);
         EXPECT_FALSE(title.CheckContent(box, 40.0f, 1.0f).fits);
-        EXPECT_EQ(title.GetResolvedFontPath(), "assets/fonts/PT_Sans-Web-Bold.ttf"_intern);
+        EXPECT_EQ(text.GetResolvedFontPath(), "assets/fonts/PT_Sans-Web-Bold.ttf"_intern);
     }
 
     // ---- the outline and the shadow of a text ---------------------------------------------------------------------------------
@@ -929,12 +926,13 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST_F(UIControlsTest, TheTextEffectsAreTwoAttributesAndAreWrittenOnlyWhenSet) {
-        auto& title = Get<UILabel>("Title");
+        auto& title = El("Title");
+        auto& text = Text("Title");
         const eastl::string plain = ElementToXml(title);
         EXPECT_EQ(plain.find("textOutline"), eastl::string::npos);
         EXPECT_EQ(plain.find("textShadow"), eastl::string::npos);
 
-        title.textEffects = MakeEffects();
+        text.textEffects = MakeEffects();
         const eastl::string styled = ElementToXml(title);
         EXPECT_NE(styled.find("textOutline=\"1.5,#0A141EC8\""), eastl::string::npos) << styled.c_str();
         EXPECT_NE(styled.find("textShadow=\"2,2,#28323CA0\""), eastl::string::npos) << styled.c_str();
@@ -942,10 +940,10 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, TheTextEffectsComeFromAFileAndAMalformedOneIsReported) {
         const auto load = [](const char* attributes, bool& hadErrors) {
-            const eastl::string xml = Format("<root><element type=\"UILabel\" {}/></root>", attributes);
+            const eastl::string xml = Format("<root><element type=\"UIElement\"><components><component type=\"UITextComponent\" {}/></components></element></root>", attributes);
             XmlDeserializer deserializer;
             EXPECT_TRUE(deserializer.LoadFromString(eastl::string_view(xml.data(), xml.size())));
-            auto element = AbstractFactory<UIElement>::GetInstance().Create("UILabel");
+            auto element = AbstractFactory<UIElement>::GetInstance().Create("UIElement");
             EXPECT_TRUE(deserializer.BeginObject("element"));
             element->Deserialize(deserializer);
             deserializer.EndObject();
@@ -955,7 +953,7 @@ namespace BECore::Tests {
 
         bool errors = false;
         auto good = load("textOutline=\"2,255,0,0,255\" textShadow=\"1,3,#000000A0\"", errors);
-        const auto* label = good->Cast<UILabel>();
+        const auto* label = good->GetComponent<UITextComponent>();
         ASSERT_NE(label, nullptr);
         EXPECT_FALSE(errors);
         EXPECT_FLOAT_EQ(label->textEffects.outlineWidth, 2.0f);
@@ -967,11 +965,11 @@ namespace BECore::Tests {
         for (const char* bad : {"textOutline=\"2\"", "textOutline=\"-1,#000\"", "textShadow=\"1,#000000\"", "textShadow=\"a,b,#000000\""}) {
             auto element = load(bad, errors);
             EXPECT_TRUE(errors) << bad;
-            EXPECT_TRUE(element->Cast<UILabel>()->textEffects == UITextEffects{}) << bad << ": a malformed value leaves the default";
+            EXPECT_TRUE(element->GetComponent<UITextComponent>()->textEffects == UITextEffects{}) << bad << ": a malformed value leaves the default";
         }
     }
 
-    TEST_F(UIControlsTest, ALabelWithAnOutlineAndAShadowDrawsThreeQuadsPerGlyphInOrder) {
+    TEST_F(UIControlsTest, ATextWithAnOutlineAndAShadowDrawsThreeQuadsPerGlyphInOrder) {
         _canvas->_scaleMode = CanvasScaleMode::ScaleWithScreen;
         _canvas->_referenceWidth = 800.0f;
         _canvas->_referenceHeight = 600.0f;
@@ -981,8 +979,9 @@ namespace BECore::Tests {
         const size_t plainQuads = Textures(*_renderer).size();
         const size_t plainAtlases = CoreManager::GetFontAtlasLibrary().GetAtlasCount();
 
-        auto& title = Get<UILabel>("Title");
-        title.textEffects = MakeEffects();
+        auto& title = El("Title");
+        auto& text = Text("Title");
+        text.textEffects = MakeEffects();
         Draw();
         const auto textures = Textures(*_renderer);
         ASSERT_EQ(textures.size(), plainQuads + 2 * kInkedGlyphsInScore);
@@ -995,7 +994,7 @@ namespace BECore::Tests {
             const DrawCall& fill = textures[2 * kInkedGlyphsInScore + i];
             EXPECT_TRUE(ColorsEqual(shadow.color, kShadowColor)) << i;
             EXPECT_TRUE(ColorsEqual(outline.color, kOutlineColor)) << i;
-            EXPECT_TRUE(ColorsEqual(fill.color, title.textColor)) << i;
+            EXPECT_TRUE(ColorsEqual(fill.color, text.textColor)) << i;
             EXPECT_FLOAT_EQ(outline.rect.w, fill.rect.w + 2.0f * kOutlineAtScale2) << "the outline picture is the glyph grown by the width of the outline on every side";
             EXPECT_FLOAT_EQ(outline.rect.h, fill.rect.h + 2.0f * kOutlineAtScale2);
             EXPECT_FLOAT_EQ(outline.rect.x, fill.rect.x - kOutlineAtScale2) << "the centre of the outline is the centre of the fill";
@@ -1006,38 +1005,38 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, AShadowAloneIsDrawnFromTheFillPicturesAndNeedsNoOutlineAtlas) {
-        auto& title = Get<UILabel>("Title");
-        title.textEffects.shadowColor = kShadowColor;
-        title.textEffects.shadowOffsetY = 1.0f;
+        auto& text = Text("Title");
+        text.textEffects.shadowColor = kShadowColor;
+        text.textEffects.shadowOffsetY = 1.0f;
         Draw();
         const size_t atlases = CoreManager::GetFontAtlasLibrary().GetAtlasCount();
         const auto textures = Textures(*_renderer);
 
         ASSERT_GE(textures.size(), 2 * kInkedGlyphsInScore);
         EXPECT_TRUE(ColorsEqual(textures[0].color, kShadowColor));
-        EXPECT_TRUE(ColorsEqual(textures[kInkedGlyphsInScore].color, title.textColor));
+        EXPECT_TRUE(ColorsEqual(textures[kInkedGlyphsInScore].color, text.textColor));
         EXPECT_FLOAT_EQ(textures[0].rect.w, textures[kInkedGlyphsInScore].rect.w);
         EXPECT_FLOAT_EQ(textures[0].rect.y, textures[kInkedGlyphsInScore].rect.y + 1.0f);
-        title.textEffects.shadowColor = Color{};
+        text.textEffects.shadowColor = Color{};
         Draw();
         EXPECT_EQ(CoreManager::GetFontAtlasLibrary().GetAtlasCount(), atlases) << "no outline atlas was made";
     }
 
-    TEST_F(UIControlsTest, AButtonWithAnOutlineAndAShadowDrawsThemToo) {
-        auto& ok = Get<UIButton>("Ok");
+    TEST_F(UIControlsTest, AButtonCaptionWithAnOutlineAndAShadowDrawsThemToo) {
+        auto& ok = El("Ok");
         Draw();
         const size_t glyphs = GlyphsIn(ok).size();
         ASSERT_GT(glyphs, 0u);
         const size_t plainQuads = Textures(*_renderer).size();
 
-        ok.textEffects = MakeEffects();
+        Text("Ok").textEffects = MakeEffects();
         Draw();
         EXPECT_EQ(Textures(*_renderer).size(), plainQuads + 2 * glyphs);
     }
 
     TEST_F(UIControlsTest, ADisabledControlFadesItsEffectsWithItsText) {
-        auto& toggle = Get<UIToggle>("Switch");  // disabled in the fixture: its caption is drawn at kDisabledAlpha
-        toggle.textEffects = MakeEffects();
+        auto& toggle = El("SwitchCaption");  // its row is disabled in the fixture: the caption is drawn at kDisabledAlpha
+        Text("SwitchCaption").textEffects = MakeEffects();
         Draw();
         const size_t captionGlyphs = GlyphsIn(toggle).size();
         const auto textures = Textures(*_renderer);
@@ -1054,36 +1053,38 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, AnEffectNeverChangesTheLayoutOrTheValidatorResult) {
-        auto& title = Get<UILabel>("Title");
+        auto& title = El("Title");
+        auto& text = Text("Title");
         Draw();
-        const uint32_t layouts = title.GetLayoutCount();
+        const uint32_t layouts = text.GetLayoutCount();
         const auto validate = [this]() { return _canvas->GetLayout().Validate({}).size(); };
         const size_t issues = validate();
         const bool fits = title.CheckContent(184.0f, 30.0f, 1.0f).fits;
 
-        title.textEffects = MakeEffects();
+        text.textEffects = MakeEffects();
         Draw();
-        title.textEffects.outlineWidth = 4.0f;
-        title.textEffects.shadowOffsetX = 9.0f;
+        text.textEffects.outlineWidth = 4.0f;
+        text.textEffects.shadowOffsetX = 9.0f;
         Draw();
 
-        EXPECT_EQ(title.GetLayoutCount(), layouts) << "paint is not layout: no new layout";
+        EXPECT_EQ(text.GetLayoutCount(), layouts) << "paint is not layout: no new layout";
         EXPECT_EQ(validate(), issues);
         EXPECT_EQ(title.CheckContent(184.0f, 30.0f, 1.0f).fits, fits);
     }
 
     TEST_F(UIControlsTest, ABracedTextWithoutAVariableIsShownWithoutBraces) {
-        auto& title = Get<UILabel>("Title");
-        title.text = "{{x}}";
+        auto& text = Text("Title");
+        text.text = "{{x}}";
         Draw();
-        EXPECT_EQ(title.GetDisplayText(), "{x}");
+        EXPECT_EQ(text.GetDisplayText(), "{x}");
     }
 
     TEST_F(UIControlsTest, TheValidatorSeesTheTextThatIsShown) {
-        auto& title = Get<UILabel>("Title");
-        title.text = "{line}";
-        title.wrap = false;
-        title.overflow = TextOverflow::Clip;
+        auto& title = El("Title");
+        auto& text = Text("Title");
+        text.text = "{line}";
+        text.wrap = false;
+        text.overflow = TextOverflow::Clip;
         title.style.rect.height = UILength::Px(40.0f);  // a line of 24 units is a little over 30 high, so the fixture's 30 would not hold even "Short"
         _canvas->Invalidate();
         const auto textIssues = [this]() {
@@ -1103,7 +1104,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, AnElementIsHiddenAndShownByName) {
         Draw();
-        auto& title = Get<UILabel>("Title");
+        auto& title = El("Title");
         ASSERT_FALSE(GlyphsIn(title).empty());
 
         EXPECT_TRUE(_canvas->SetElementVisible(PoolString::Intern("Title"), false));
@@ -1124,7 +1125,7 @@ namespace BECore::Tests {
     TEST_F(UIControlsTest, AHiddenButtonTakesNoClicks) {
         ActionRecorder actions;
         Draw();
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         const Rect c = Center(ok);
 
         Scene& scene = *_manager->GetSceneByName(PoolString::Intern("Main"));
@@ -1145,11 +1146,11 @@ namespace BECore::Tests {
         _canvas->UpdateLayout(800.0f, 600.0f);
         const UICanvasLayout& layout = _canvas->GetLayout();
 
-        EXPECT_EQ(layout.HitTest(162.0f, 82.0f), &Get<UIButton>("Ok"));    // the button is a child of the plate and drawn above it
-        EXPECT_EQ(layout.HitTest(30.0f, 25.0f), &Get<UIPanel>("Plate"));   // the label above the plate takes no clicks, the plate does
-        EXPECT_EQ(layout.HitTest(330.0f, 40.0f), nullptr);                 // an image is decoration
-        EXPECT_EQ(layout.HitTest(350.0f, 130.0f), nullptr);                // a panel with blocksInput="false"
-        EXPECT_EQ(layout.HitTest(340.0f, 220.0f), &Get<UIButton>("Off"));  // a disabled button still takes the click
+        EXPECT_EQ(layout.HitTest(162.0f, 82.0f), &El("Ok"));              // the button is a child of the plate and drawn above it
+        EXPECT_EQ(layout.HitTest(30.0f, 25.0f), &Get<UIPanel>("Plate"));  // the label above the plate takes no clicks, the plate does
+        EXPECT_EQ(layout.HitTest(330.0f, 40.0f), nullptr);                // an image is decoration
+        EXPECT_EQ(layout.HitTest(350.0f, 130.0f), nullptr);               // a panel with blocksInput="false"
+        EXPECT_EQ(layout.HitTest(340.0f, 220.0f), &El("Off"));            // a disabled button still takes the click
         EXPECT_EQ(layout.HitTest(700.0f, 500.0f), nullptr);
     }
 
@@ -1163,7 +1164,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_renderer->calls[0].color.a, 200);
         EXPECT_TRUE(Near(_renderer->calls[0].rect, Get<UIPanel>("Plate").rect));
 
-        const auto glyphs = GlyphsIn(Get<UILabel>("Title"));
+        const auto glyphs = GlyphsIn(El("Title"));
         EXPECT_EQ(glyphs.size(), 5u) << "one quad per glyph of 'Score'";
         for (const DrawCall& glyph : glyphs) {
             EXPECT_EQ(glyph.color.r, 255);  // the default text color is the tint
@@ -1171,21 +1172,9 @@ namespace BECore::Tests {
         }
     }
 
-    TEST_F(UIControlsTest, ALabelIsLaidOutOnlyWhenSomethingChanged) {
-        auto& title = Get<UILabel>("Title");
+    TEST_F(UIControlsTest, ATopTextStaysAtTheTopOfItsRect) {
         Draw();
-        Draw();
-        EXPECT_EQ(title.GetLayoutCount(), 1u);
-
-        title.text = "Score: 100";
-        Draw();
-        EXPECT_EQ(title.GetLayoutCount(), 2u);
-        EXPECT_EQ(GlyphsIn(title).size(), 9u);  // the space has no ink
-    }
-
-    TEST_F(UIControlsTest, ATopLabelStaysAtTheTopOfItsRect) {
-        Draw();
-        const auto& title = Get<UILabel>("Title");
+        const auto& title = El("Title");
         const auto glyphs = GlyphsIn(title);
         ASSERT_FALSE(glyphs.empty());
 
@@ -1198,7 +1187,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, AButtonCentersItsTextInItsRect) {
         Draw();
-        const auto& ok = Get<UIButton>("Ok");
+        const auto& ok = El("Ok");
         const auto glyphs = GlyphsIn(ok);
         ASSERT_EQ(glyphs.size(), 2u);
 
@@ -1224,13 +1213,13 @@ namespace BECore::Tests {
         _canvas->_referenceHeight = 600.0f;
 
         Draw();
-        const auto small = GlyphsIn(Get<UILabel>("Title"));
+        const auto small = GlyphsIn(El("Title"));
         ASSERT_FALSE(small.empty());
 
         _renderer->width = 1600.0f;
         _renderer->height = 1200.0f;
         Draw();
-        const auto large = GlyphsIn(Get<UILabel>("Title"), 2.0f);
+        const auto large = GlyphsIn(El("Title"), 2.0f);
         ASSERT_EQ(large.size(), small.size());
 
         // The same text in a twice as large output: every quad is twice as large and twice as far from the corner
@@ -1242,7 +1231,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, AVariantCanChangeTheFontSize) {
-        auto& title = Get<UILabel>("Title");
+        auto& title = El("Title");
         title.style.rect.height = UILength::Px(80.0f);  // room for a line of 48 units
         _canvas->Invalidate();
         Draw();
@@ -1264,11 +1253,12 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, ClipCutsTheTextAtTheRectAndEllipsisEndsIt) {
-        auto& title = Get<UILabel>("Title");
-        title.text = "A text that is much too long for a label of this width";
-        title.wrap = false;
+        auto& title = El("Title");
+        auto& text = Text("Title");
+        text.text = "A text that is much too long for a label of this width";
+        text.wrap = false;
 
-        title.overflow = TextOverflow::Clip;
+        text.overflow = TextOverflow::Clip;
         Draw();
         ASSERT_FALSE(GlyphsIn(title).empty());
         bool clipped = false;
@@ -1277,18 +1267,18 @@ namespace BECore::Tests {
                 clipped = true;
             }
         }
-        EXPECT_TRUE(clipped) << "the glyphs are drawn inside a clip of the label's rect";
-        EXPECT_TRUE(title.GetLastLayout().overflowed);
+        EXPECT_TRUE(clipped) << "the glyphs are drawn inside a clip of the text's rect";
+        const size_t clippedGlyphs = Textures(*_renderer).size();
 
-        title.overflow = TextOverflow::Ellipsis;
+        text.overflow = TextOverflow::Ellipsis;
         Draw();
-        EXPECT_TRUE(title.GetLastLayout().truncated);
+        EXPECT_LT(Textures(*_renderer).size(), clippedGlyphs) << "the text is cut short and ends with an ellipsis: fewer glyphs than the clipped whole";
     }
 
     TEST_F(UIControlsTest, TheValidatorKnowsWhenATextCannotFit) {
-        auto& title = Get<UILabel>("Title");
-        title.text = "A text that is much too long for a label of this width";
-        title.wrap = false;
+        auto& text = Text("Title");
+        text.text = "A text that is much too long for a label of this width";
+        text.wrap = false;
         const auto countTextIssues = [this]() {
             Draw();
             size_t count = 0;
@@ -1298,11 +1288,11 @@ namespace BECore::Tests {
             return count;
         };
 
-        title.overflow = TextOverflow::Clip;
+        text.overflow = TextOverflow::Clip;
         EXPECT_EQ(countTextIssues(), 1u);
-        title.overflow = TextOverflow::Ellipsis;
+        text.overflow = TextOverflow::Ellipsis;
         EXPECT_EQ(countTextIssues(), 0u) << "a text that ends with an ellipsis is a decision, not a defect";
-        title.overflow = TextOverflow::AutoFit;
+        text.overflow = TextOverflow::AutoFit;
         EXPECT_EQ(countTextIssues(), 0u);
     }
 
@@ -1346,7 +1336,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, AnImageKeepsItsProportionsUnlessItStretches) {
-        auto& icon = Get<UIImage>("Icon");
+        auto& icon = *El("Icon").GetComponent<UIImageComponent>();
         icon.GetSprite().SetTexture(_renderer->CreateTexture(GreyPixels(32, 16).data(), 32, 16));  // 2 : 1, in a square 64 x 64 rect
         icon.tint = Color{10, 20, 30, 40};
 
@@ -1374,7 +1364,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, AnImageWithoutASpriteDrawsOnlyItsFill) {
-        auto& icon = Get<UIImage>("Icon");
+        auto& icon = El("Icon");
         icon.color = Color{1, 2, 3, 255};
         Draw();
 
@@ -1388,7 +1378,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, AButtonFollowsThePointer) {
         Draw();
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         const Rect c = Center(ok);
         EXPECT_EQ(FillOf(ok)->r, kButtonColor.r);
         EXPECT_FALSE(ok.hovered);
@@ -1418,7 +1408,7 @@ namespace BECore::Tests {
     TEST_F(UIControlsTest, AClickIsAPressAndItsReleaseOnTheButton) {
         ActionRecorder actions;
         Draw();
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         const Rect c = Center(ok);
 
         ASSERT_TRUE(Press(ok));
@@ -1430,7 +1420,7 @@ namespace BECore::Tests {
     TEST_F(UIControlsTest, ReleasingElsewhereCancelsTheClick) {
         ActionRecorder actions;
         Draw();
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
 
         ASSERT_TRUE(Press(ok));
         Release(700.0f, 500.0f);
@@ -1446,18 +1436,18 @@ namespace BECore::Tests {
     TEST_F(UIControlsTest, OnlyTheLeftButtonClicks) {
         ActionRecorder actions;
         Draw();
-        const Rect c = Center(Get<UIButton>("Ok"));
+        const Rect c = Center(El("Ok"));
 
         CoreManager::GetUIInput().DispatchMouseButtonDown(Button(c.x, c.y, true, SDL_BUTTON_RIGHT));
         CoreManager::GetUIInput().DispatchMouseButtonUp(Button(c.x, c.y, false, SDL_BUTTON_RIGHT));
         EXPECT_EQ(actions.Total(), 0u);
-        EXPECT_FALSE(Get<UIButton>("Ok").pressed);
+        EXPECT_FALSE(El("Ok").pressed);
     }
 
     TEST_F(UIControlsTest, ADisabledButtonTakesTheClickAndDoesNothing) {
         ActionRecorder actions;
         Draw();
-        auto& off = Get<UIButton>("Off");
+        auto& off = El("Off");
         const Rect c = Center(off);
 
         EXPECT_TRUE(Press(off)) << "the click does not fall through to what is below";
@@ -1471,7 +1461,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, ExplicitStateColorsWin) {
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         ok.hoverColor = Color{1, 2, 3, 255};
         ok.pressedColor = Color{4, 5, 6, 255};
         Draw();
@@ -1487,7 +1477,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, AGameDragDoesNotLightTheButton) {
         Draw();
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         const Rect c = Center(ok);
 
         // A button is held that the canvas did not take (the pointer went down on the game): passing over the UI is the game's drag
@@ -1498,7 +1488,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, AHiddenCanvasForgetsThePointer) {
         Draw();
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         const Rect c = Center(ok);
         MoveTo(c.x, c.y);
         Press(ok);
@@ -1515,7 +1505,7 @@ namespace BECore::Tests {
     TEST_F(UIControlsTest, TheClickOfAButtonCarriesItsValue) {
         ActionRecorder actions;
         Draw();
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         const Rect c = Center(ok);
 
         ASSERT_TRUE(Press(ok));
@@ -1523,7 +1513,7 @@ namespace BECore::Tests {
         EXPECT_EQ(actions.Count("UIControlsTestOk"), 1);
         EXPECT_TRUE(actions.LastValue().Empty()) << "a plain button emits an empty value";
 
-        ok.value = PoolString::Intern("computer");
+        Clicker("Ok").value = PoolString::Intern("computer");
         ASSERT_TRUE(Press(ok));
         ASSERT_TRUE(Release(c.x, c.y));
         EXPECT_EQ(actions.Count("UIControlsTestOk"), 2);
@@ -1532,8 +1522,8 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, AValueAndASelectedColorAreReadFromTheFile) {
         XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString("<root><component><elements><element type=\"UIButton\" name=\"B\" action=\"A\" value=\"two\" selectedColor=\"1,2,3,255\"/>"
-                                                "</elements></component></root>"));
+        ASSERT_TRUE(deserializer.LoadFromString("<root><component><elements><element type=\"UIElement\" name=\"B\" selectedColor=\"1,2,3,255\">"
+                                                "<components><component type=\"UIInputClicker\" action=\"A\" value=\"two\"/></components></element></elements></component></root>"));
         auto canvas = New<UICanvasComponent>();
         ASSERT_TRUE(deserializer.BeginObject("component"));
         canvas->Deserialize(deserializer);
@@ -1541,46 +1531,19 @@ namespace BECore::Tests {
         ASSERT_FALSE(deserializer.HasErrors());
         ASSERT_EQ(canvas->_elements.size(), 1u);
 
-        auto* button = canvas->_elements[0]->Cast<UIButton>();
-        ASSERT_NE(button, nullptr);
-        EXPECT_EQ(button->value, PoolString::Intern("two"));
-        EXPECT_EQ(button->selectedColor.g, 2);
-        EXPECT_FALSE(button->selected) << "the selection is a runtime state, never read from a file";
-        EXPECT_FALSE(button->groupDisabled);
-    }
-
-    TEST_F(UIControlsTest, TheIconAndTheTooltipOfAButtonAreReadFromTheFile) {
-        XmlDeserializer deserializer;
-        ASSERT_TRUE(deserializer.LoadFromString("<root><component><elements><element type=\"UIButton\" name=\"B\" icon=\"Gear\" iconTint=\"1,2,3,255\" iconPlacement=\"Above\" iconSize=\"20\""
-                                                " tooltip=\"{#tip.gear}\"/><element type=\"UIButton\" name=\"Plain\"/></elements></component></root>"));
-        auto canvas = New<UICanvasComponent>();
-        ASSERT_TRUE(deserializer.BeginObject("component"));
-        canvas->Deserialize(deserializer);
-        deserializer.EndObject();
-        ASSERT_FALSE(deserializer.HasErrors());
-        ASSERT_EQ(canvas->_elements.size(), 2u);
-
-        const auto* button = canvas->_elements[0]->Cast<UIButton>();
-        ASSERT_NE(button, nullptr);
-        EXPECT_EQ(button->icon, PoolString::Intern("Gear"));
-        EXPECT_EQ(button->iconTint.g, 2);
-        EXPECT_EQ(button->iconPlacement, UIIconPlacement::Above);
-        EXPECT_FLOAT_EQ(button->iconSize, 20.0f);
-        EXPECT_STREQ(button->tooltip.c_str(), "{#tip.gear}");
-
-        const auto* plain = canvas->_elements[1]->Cast<UIButton>();
-        ASSERT_NE(plain, nullptr);
-        EXPECT_TRUE(plain->icon.Empty());
-        EXPECT_EQ(plain->iconTint.a, 0);
-        EXPECT_EQ(plain->iconPlacement, UIIconPlacement::Left);
-        EXPECT_FLOAT_EQ(plain->iconSize, 0.0f);
-        EXPECT_TRUE(plain->tooltip.empty());
+        const UIElement& button = *canvas->_elements[0];
+        const auto* clicker = button.GetComponent<UIInputClicker>();
+        ASSERT_NE(clicker, nullptr);
+        EXPECT_EQ(clicker->value, PoolString::Intern("two"));
+        EXPECT_EQ(button.selectedColor.g, 2);
+        EXPECT_FALSE(button.selected) << "the selection is a runtime state, never read from a file";
+        EXPECT_FALSE(button.groupDisabled);
     }
 
     TEST_F(UIControlsTest, ASelectedButtonIsFilledLighterAndHasABar) {
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         const auto barDrawn = [&] {
-            const Rect bar{ok.rect.x, ok.rect.y + ok.rect.h - UIButton::kSelectedBarHeight, ok.rect.w, UIButton::kSelectedBarHeight};  // the rect is laid out by the first draw
+            const Rect bar{ok.rect.x, ok.rect.y + ok.rect.h - UIStateLook::kSelectedBarHeight, ok.rect.w, UIStateLook::kSelectedBarHeight};  // the rect is laid out by the first draw
             for (const DrawCall& call : _renderer->calls) {
                 if (call.kind == DrawKind::Rect && Near(call.rect, bar)) {
                     return std::optional<Color>(call.color);
@@ -1607,8 +1570,8 @@ namespace BECore::Tests {
         EXPECT_GT(FillOf(ok)->r, hovered.r) << "the derived selected fill is lighter than the hover shift";
         EXPECT_GT(FillOf(ok)->r, plain.r);
         ASSERT_TRUE(barDrawn());
-        EXPECT_EQ(barDrawn()->r, ok.textColor.r);
-        EXPECT_EQ(barDrawn()->a, ok.textColor.a);
+        EXPECT_EQ(barDrawn()->r, Text("Ok").textColor.r);
+        EXPECT_EQ(barDrawn()->a, Text("Ok").textColor.a);
 
         ok.selected = false;
         Draw();
@@ -1617,7 +1580,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, ASelectedColorWinsOverTheDerivedOne) {
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         ok.selected = true;
         ok.selectedColor = Color{7, 8, 9, 255};
         Draw();
@@ -1626,7 +1589,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, HoverAndPressShiftFromTheSelectedFill) {
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         ok.selected = true;
         ok.selectedColor = Color{100, 100, 100, 255};
         Draw();
@@ -1650,7 +1613,7 @@ namespace BECore::Tests {
     }
 
     TEST_F(UIControlsTest, DisabledWinsOverSelected) {
-        auto& off = Get<UIButton>("Off");
+        auto& off = El("Off");
         off.selected = true;
         off.selectedColor = Color{200, 200, 200, 255};
         Draw();
@@ -1660,7 +1623,7 @@ namespace BECore::Tests {
 
     TEST_F(UIControlsTest, AGroupDisabledButtonIsGreyAndSwallowsTheClick) {
         ActionRecorder actions;
-        auto& ok = Get<UIButton>("Ok");
+        auto& ok = El("Ok");
         ok.groupDisabled = true;
         Draw();
         EXPECT_EQ(FillOf(ok)->a, kButtonColor.a / 2);

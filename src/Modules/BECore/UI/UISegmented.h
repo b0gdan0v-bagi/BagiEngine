@@ -7,8 +7,8 @@ namespace BECore {
     /**
      * @brief A choice group: a stack of segments of which one is the chosen one (`<element type="UISegmented" bind="side" direction="Horizontal">`).
      *
-     * `bind` names a `UIVars` variable. A segment is a direct child that is a `UIButton` or an element with a `UIInputClicker` (`UIChoice::IsOption`: the composed button, with or without an
-     * icon; the two forms may be mixed). The segment whose `value` equals the variable is `selected`, the others are not; an unset variable, an empty `bind` or an empty `value`
+     * `bind` names a `UIVars` variable. A segment is a direct child that is an element with a `UIInputClicker` (`UIChoice::IsOption`: a composed button, with or without an
+     * icon). The segment whose `value` equals the variable is `selected`, the others are not; an unset variable, an empty `bind` or an empty `value`
      * select nothing. `disabled` greys the whole group (`groupDisabled` of every segment). Two segments are a toggle, four are a level.
      *
      * **The group owns no choice.** A click on a segment emits `ActionEvent(action, value)` and changes nothing here: the game answers by setting the variable, the

@@ -31,7 +31,7 @@ TOOLTIP_ATTRIBUTE = "tooltip"
 CAPTION_ATTRIBUTE = "fontSize"  # on the button of a plain composed one, on the caption child of an icon-left one
 ICON_ATTRIBUTES = ("icon", "iconTint", "iconSize", "iconPlacement")
 DROPPED_ATTRIBUTES = ("interactive",)
-# The forms of an icon (`UIButton::kIconOnlyShare`, `kIconWithTextShare`, `kIconPadding`, `kIconGap`; the tests hold them to the header)
+# The forms of an icon (`UIImageComponent::kIconOnlyShare`, `kIconWithTextShare`, `kIconPadding`, `kIconGap`; the tests hold them to the header)
 ICON_ONLY_SHARE = "60%"
 ICON_WITH_TEXT_SHARE = "50%"
 ICON_PADDING = "8"

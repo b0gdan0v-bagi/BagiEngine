@@ -3,7 +3,7 @@
 #include <BECore/Input/UIInput.h>
 #include <BECore/Scene/IComponent.h>
 #include <BECore/UI/UICanvasLayout.h>
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UIElement.h>
 #include <BECore/UI/UITooltip.h>
 
 namespace BECore {
@@ -32,10 +32,10 @@ namespace BECore {
      * `UIElement::OnPopupChoice` of the popup instead of the child's `OnClick`. Opening one popup closes another; a canvas that cannot take input closes its popups. The canvas
      * invalidates its layout when the set of open popups changed (the layout cache does not see element edits), at the latest on the next draw.
      *
-     * **Tooltips.** A hovered element with a tooltip (`UIElement::GetTooltipText`: a `UITooltipComponent`, or the `tooltip` of a `UIButton`) shows it after `UITooltip::kHoverDelay`, a finger held on
+     * **Tooltips.** A hovered element with a tooltip (`UIElement::GetTooltipText`: a `UITooltipComponent`) shows it after `UITooltip::kHoverDelay`, a finger held on
      * it for `UITooltip::kLongPress` shows it too and that press is no click (the release is swallowed); the rules are `UITooltip::Tracker`, the time is `CoreManager::GetTime()`. The plate is drawn
-     * last, over the popups, by a label the canvas owns: it is no element of the tree, so it takes no input, is never hit, and the layout, `ui_tree` and the validator do not see it. A hidden canvas,
-     * one without input and any press of a mouse hide it.
+     * last, over the popups, by a text element the canvas owns: it is no element of the tree, so it takes no input, is never hit, and the layout, `ui_tree` and the validator do not see it. A hidden
+     * canvas, one without input and any press of a mouse hide it.
      *
      * **Regions.** The game publishes named rectangles with SetRegion() and an element places itself in one with `region="name"` (UIRectSpec::region).
      */
@@ -182,9 +182,9 @@ namespace BECore {
         bool _authoredAdopted = false;     // Initialize() has handed `_elements` and `_variants` to the layout
 
         UITooltip::Tracker _tooltip;
-        IntrusivePtr<UIElement> _pointerOver;  // what the last pointer event was over, for the tooltip (a hover the game's drag does not count)
-        bool _pointerTouch = false;            // that event came from a finger
-        IntrusivePtr<UILabel> _tooltipLabel;   // draws the plate's text; made at the first tooltip, not in the tree
+        IntrusivePtr<UIElement> _pointerOver;   // what the last pointer event was over, for the tooltip (a hover the game's drag does not count)
+        bool _pointerTouch = false;             // that event came from a finger
+        IntrusivePtr<UIElement> _tooltipPlate;  // an element with a text component that draws the plate's text; made at the first tooltip, not in the tree
     };
 
 }  // namespace BECore
