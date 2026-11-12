@@ -9,6 +9,18 @@ namespace BECore {
 
     class SeatedGameRegistry;
 
+    /// What the periodic `Room server: <n> connections, <m> rooms` line says: the hub's own counts
+    struct RoomServerStats {
+        size_t connections = 0;
+        size_t rooms = 0;
+
+        [[nodiscard]] bool operator==(const RoomServerStats&) const = default;
+    };
+
+    /// Whether the hub thread logs the stats line now: the numbers differ from the ones last logged, and @p interval has passed since that line (or since the start).
+    /// A zero or negative @p interval is off
+    [[nodiscard]] bool ShouldLogRoomServerStats(const RoomServerStats& current, const RoomServerStats& lastLogged, RoomTime now, RoomTime lastLoggedAt, std::chrono::milliseconds interval);
+
     /**
      * @brief The Rooms hub on the network: a WebSocket server whose every text message is a message of the room protocol.
      *
@@ -77,6 +89,9 @@ namespace BECore {
 
         [[nodiscard]] WebSocketHandler MakeHandler();
         void RunHub();
+
+        /// Logs the stats line when ShouldLogRoomServerStats() says so (hub thread, on the tick)
+        void LogStats(const RoomHub& hub, RoomServerStats& lastLogged, RoomTime& lastLoggedAt, RoomTime now) const;
 
         /// Pings the connections that went quiet and drops the ones that did not answer (hub thread, on the tick)
         void CheckLiveness(LivenessMap& liveness, RoomTime now);

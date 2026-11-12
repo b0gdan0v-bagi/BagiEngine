@@ -30,11 +30,14 @@ Run: `build/<preset>/bin/BagiRoomServer --test-games --port 0`.
 | `--max-per-address N` | open sockets of one address, 0 is off (32) |
 | `--computer-delay-ms N`, `--reconnect-grace-ms N` | the hub's times (800, 30000) |
 | `--ping-interval-ms N` | liveness pings, 0 is off (20000) |
+| `--stats-interval-ms N` | the connections-and-rooms log line at most this often, 0 is off (30000) |
 | `--test-games`, `--help` | |
 
-**Environment** (a hosting platform sets no flags): `PORT` and `BAGI_ROOMS_BIND`, `_ORIGINS` (comma-separated, items trimmed, empty ones skipped), `_MAX_CONNECTIONS`, `_MAX_PER_ADDRESS`, `_COMPUTER_DELAY_MS`, `_RECONNECT_GRACE_MS`, `_PING_INTERVAL_MS` and `_TEST_GAMES` (`1|0|true|false`; the first live check of the demo server only), each with the range of its flag. The order is default, then variable, then flag (`--origin` on the command line replaces the list of the variable); an empty variable is unset. `ReadRoomServerEnvironment` takes the lookup as a function so a test needs no real environment.
+**Environment** (a hosting platform sets no flags): `PORT` and `BAGI_ROOMS_BIND`, `_ORIGINS` (comma-separated, items trimmed, empty ones skipped), `_MAX_CONNECTIONS`, `_MAX_PER_ADDRESS`, `_COMPUTER_DELAY_MS`, `_RECONNECT_GRACE_MS`, `_PING_INTERVAL_MS`, `_STATS_INTERVAL_MS` and `_TEST_GAMES` (`1|0|true|false`; the first live check of the demo server only), each with the range of its flag. The order is default, then variable, then flag (`--origin` on the command line replaces the list of the variable); an empty variable is unset. `ReadRoomServerEnvironment` takes the lookup as a function so a test needs no real environment.
 
 Numbers are range-checked; an unknown flag or a bad number or variable is an error with a message (naming the flag or the variable) and exit code 1.
+
+**Log** (what a hosting platform shows): `RunRoomServer` makes stdout line-buffered first, since a piped stdout is block-buffered and the platform would see the lines in chunks or at exit. Lines: the listening line, `Room server settings: ...` (the effective values, nothing secret), a line per connection, refusal and close, and `Room server: <n> connections, <m> rooms` from the hub thread when the pair changed and `statsLogInterval` (the server's `clock`) has passed since the last such line. No name, code or token is ever logged.
 
 **Health:** `ToSettings` sets `policy.healthPath` to `/healthz`, so a plain `GET /healthz` gets 200 `ok` (`RemoteControl/CLAUDE.md`, "Security"); the platform's health check needs it.
 

@@ -45,6 +45,10 @@ namespace BECore {
         /// with `clock`. A client has to answer pings (a browser does by itself)
         std::chrono::milliseconds pingInterval{20'000};
 
+        /// How often the hub thread may log `Room server: <n> connections, <m> rooms`, and only when the numbers changed since the last such line. 0 turns it off.
+        /// Judged with `clock`
+        std::chrono::milliseconds statsLogInterval{0};
+
         /// What the hub is told the time is. Empty: the real clock (`steady_clock`). A test moves a manual clock instead of sleeping
         std::function<RoomTime()> clock;
 

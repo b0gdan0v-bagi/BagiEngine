@@ -39,6 +39,10 @@ namespace BECore {
 
     }  // namespace
 
+    bool ShouldLogRoomServerStats(const RoomServerStats& current, const RoomServerStats& lastLogged, RoomTime now, RoomTime lastLoggedAt, std::chrono::milliseconds interval) {
+        return interval > std::chrono::milliseconds::zero() && current != lastLogged && now - lastLoggedAt >= interval;
+    }
+
     RoomWebSocketServer::RoomWebSocketServer(const SeatedGameRegistry& registry, RoomServerSettings settings)
         : _registry(registry), _settings(std::move(settings)), _clock(_settings.clock ? _settings.clock : std::function<RoomTime()>([] { return std::chrono::steady_clock::now(); })),
           _random(_settings.random ? _settings.random : MakeSecureRandom()), _listener(MakeListenerSettings(_settings), MakeHandler()) {}
@@ -142,6 +146,8 @@ namespace BECore {
                     });
 
         LivenessMap liveness;
+        RoomServerStats lastLoggedStats;
+        RoomTime lastStatsLoggedAt = Now();
         auto nextTick = std::chrono::steady_clock::now() + _settings.tickInterval;
         eastl::deque<Event> batch;
         for (;;) {
@@ -181,9 +187,21 @@ namespace BECore {
                 const RoomTime now = Now();
                 hub.Tick(now);
                 CheckLiveness(liveness, now);
+                LogStats(hub, lastLoggedStats, lastStatsLoggedAt, now);
                 nextTick = std::chrono::steady_clock::now() + _settings.tickInterval;
             }
         }
+    }
+
+    void RoomWebSocketServer::LogStats(const RoomHub& hub, RoomServerStats& lastLogged, RoomTime& lastLoggedAt, RoomTime now) const {
+        const RoomServerStats current{hub.GetConnectionCount(), hub.GetRoomCount()};
+        if (!ShouldLogRoomServerStats(current, lastLogged, now, lastLoggedAt, _settings.statsLogInterval)) {
+            return;
+        }
+        // Counts only: no name, code or token of anyone goes into a log line
+        LOG_INFO("{}: {} connections, {} rooms"_format(kLogName, current.connections, current.rooms));
+        lastLogged = current;
+        lastLoggedAt = now;
     }
 
     void RoomWebSocketServer::CheckLiveness(LivenessMap& liveness, RoomTime now) {

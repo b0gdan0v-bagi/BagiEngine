@@ -58,13 +58,14 @@ namespace BECore::Tests {
         EXPECT_EQ(args->computerDelay, RoomLimits::kComputerDelay);
         EXPECT_EQ(args->reconnectGrace, RoomLimits::kReconnectGrace);
         EXPECT_EQ(args->pingInterval, 20s);
+        EXPECT_EQ(args->statsInterval, 30s);
         EXPECT_FALSE(args->testGames);
         EXPECT_FALSE(args->help);
     }
 
     TEST(RoomServerArgsTest, EveryFlagIsRead) {
         const auto args = Parse({"--port", "9001", "--bind", "loopback", "--origin", "https://a.example", "--max-connections", "100", "--max-per-address", "5", "--computer-delay-ms", "0",
-                                 "--reconnect-grace-ms", "300", "--ping-interval-ms", "1500", "--test-games"});
+                                 "--reconnect-grace-ms", "300", "--ping-interval-ms", "1500", "--stats-interval-ms", "2000", "--test-games"});
         ASSERT_TRUE(args.has_value());
         EXPECT_EQ(args->port, 9001);
         EXPECT_EQ(args->bind, SocketBind::Loopback);
@@ -75,7 +76,25 @@ namespace BECore::Tests {
         EXPECT_EQ(args->computerDelay, 0ms);
         EXPECT_EQ(args->reconnectGrace, 300ms);
         EXPECT_EQ(args->pingInterval, 1500ms);
+        EXPECT_EQ(args->statsInterval, 2000ms);
         EXPECT_TRUE(args->testGames);
+    }
+
+    TEST(RoomServerArgsTest, StatsIntervalZeroTurnsTheLineOffAndNegativeIsAnError) {
+        const auto args = Parse({"--stats-interval-ms", "0"});
+        ASSERT_TRUE(args.has_value());
+        EXPECT_EQ(args->statsInterval, 0ms);
+        EXPECT_EQ(ToSettings(*args).statsLogInterval, 0ms);
+        EXPECT_NE(ErrorOf({"--stats-interval-ms", "-5"}).find("--stats-interval-ms"), std::string::npos);
+        EXPECT_NE(ErrorOf({"--stats-interval-ms", "often"}).find("often"), std::string::npos);
+    }
+
+    TEST(RoomServerArgsTest, ToSettingsCarriesTheStatsInterval) {
+        EXPECT_EQ(ToSettings(RoomServerArgs{}).statsLogInterval, 30s);
+        const auto args = Parse({"--stats-interval-ms", "200"});
+        ASSERT_TRUE(args.has_value());
+        EXPECT_EQ(ToSettings(*args).statsLogInterval, 200ms);
+        EXPECT_EQ(RoomServerSettings{}.statsLogInterval, 0ms) << "a test server logs no stats unless it asks";
     }
 
     TEST(RoomServerArgsTest, BindAnyAndPortZeroAndPerAddressZeroAreValid) {
@@ -114,8 +133,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(args->help);
 
         const std::string usage = GetRoomServerUsage().c_str();
-        for (const char* flag :
-             {"--port", "--bind", "--origin", "--max-connections", "--max-per-address", "--computer-delay-ms", "--reconnect-grace-ms", "--ping-interval-ms", "--test-games", "--help"}) {
+        for (const char* flag : {"--port", "--bind", "--origin", "--max-connections", "--max-per-address", "--computer-delay-ms", "--reconnect-grace-ms", "--ping-interval-ms", "--stats-interval-ms",
+                                 "--test-games", "--help"}) {
             EXPECT_NE(usage.find(flag), std::string::npos) << flag;
         }
     }
@@ -127,7 +146,8 @@ namespace BECore::Tests {
     }
 
     TEST(RoomServerArgsTest, MissingValueIsAnError) {
-        for (const char* flag : {"--port", "--bind", "--origin", "--max-connections", "--max-per-address", "--computer-delay-ms", "--reconnect-grace-ms", "--ping-interval-ms"}) {
+        for (const char* flag :
+             {"--port", "--bind", "--origin", "--max-connections", "--max-per-address", "--computer-delay-ms", "--reconnect-grace-ms", "--ping-interval-ms", "--stats-interval-ms"}) {
             const std::string error = ErrorOf({flag});
             EXPECT_NE(error.find("needs a value"), std::string::npos) << flag << ": " << error;
         }
@@ -205,6 +225,7 @@ namespace BECore::Tests {
                                            {"BAGI_ROOMS_COMPUTER_DELAY_MS", "10"},
                                            {"BAGI_ROOMS_RECONNECT_GRACE_MS", "300"},
                                            {"BAGI_ROOMS_PING_INTERVAL_MS", "1500"},
+                                           {"BAGI_ROOMS_STATS_INTERVAL_MS", "2000"},
                                            {"BAGI_ROOMS_TEST_GAMES", "1"}});
         ASSERT_TRUE(args.has_value());
         EXPECT_EQ(args->port, 9001);
@@ -216,6 +237,7 @@ namespace BECore::Tests {
         EXPECT_EQ(args->computerDelay, 10ms);
         EXPECT_EQ(args->reconnectGrace, 300ms);
         EXPECT_EQ(args->pingInterval, 1500ms);
+        EXPECT_EQ(args->statsInterval, 2000ms);
         EXPECT_TRUE(args->testGames);
     }
 
@@ -258,6 +280,7 @@ namespace BECore::Tests {
             {"BAGI_ROOMS_COMPUTER_DELAY_MS", "soon"},
             {"BAGI_ROOMS_RECONNECT_GRACE_MS", "999999999999"},
             {"BAGI_ROOMS_PING_INTERVAL_MS", "1.5"},
+            {"BAGI_ROOMS_STATS_INTERVAL_MS", "-1"},
             {"BAGI_ROOMS_TEST_GAMES", "yes"},
         };
         for (const auto& [name, value] : bad) {
@@ -320,7 +343,7 @@ namespace BECore::Tests {
     TEST(RoomServerArgsTest, UsageNamesTheVariablesAndTheHealthPath) {
         const std::string usage = GetRoomServerUsage().c_str();
         for (const char* name : {"PORT", "BAGI_ROOMS_BIND", "BAGI_ROOMS_ORIGINS", "BAGI_ROOMS_MAX_CONNECTIONS", "BAGI_ROOMS_MAX_PER_ADDRESS", "BAGI_ROOMS_COMPUTER_DELAY_MS",
-                                 "BAGI_ROOMS_RECONNECT_GRACE_MS", "BAGI_ROOMS_PING_INTERVAL_MS", "BAGI_ROOMS_TEST_GAMES", "/healthz"}) {
+                                 "BAGI_ROOMS_RECONNECT_GRACE_MS", "BAGI_ROOMS_PING_INTERVAL_MS", "BAGI_ROOMS_STATS_INTERVAL_MS", "BAGI_ROOMS_TEST_GAMES", "/healthz"}) {
             EXPECT_NE(usage.find(name), std::string::npos) << name;
         }
     }

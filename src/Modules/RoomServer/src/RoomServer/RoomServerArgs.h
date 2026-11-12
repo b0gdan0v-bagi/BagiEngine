@@ -29,6 +29,9 @@ namespace BECore {
         /// 0 turns the liveness pings off (RoomServerSettings::pingInterval)
         std::chrono::milliseconds pingInterval{20'000};
 
+        /// How often the server may log its number of connections and rooms when they changed (RoomServerSettings::statsLogInterval); 0 is off
+        std::chrono::milliseconds statsInterval{30'000};
+
         /// Registers the test games (`cards-leaky`, the negative control) next to `cards`
         bool testGames = false;
 

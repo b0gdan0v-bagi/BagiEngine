@@ -3,6 +3,8 @@
 #include "RoomSocketClient.h"
 #include "TestRandom.h"
 
+#include <BECore/Logger/LogEvent.h>
+#include <Events/SubscriptionHolder.h>
 #include <RoomServer/RoomWebSocketServer.h>
 #include <Rooms/RoomErrors.h>
 #include <gtest/gtest.h>
@@ -582,6 +584,115 @@ namespace BECore::Tests {
         second.Stop();
         host->Send(PingMessage{});
         EXPECT_TRUE(host->WaitFor(RoomMessageTypes::kPong).has_value()) << "stopping one server must not touch the other";
+    }
+
+    namespace {
+
+        constexpr std::chrono::milliseconds kStatsInterval{1000};
+
+        /// Collects the stats lines (`Room server: <n> connections, <m> rooms`) that LogEvent::Flush() delivers while it lives
+        class StatsLines : public SubscriptionHolder {
+        public:
+            StatsLines() {
+                LogEvent::Flush();  // what earlier tests left in the ring is not ours
+                Subscribe<LogEvent, &StatsLines::OnLog>(this);
+            }
+
+            /// Delivers the pending log entries, then the lines so far
+            [[nodiscard]] const std::vector<std::string>& Lines() {
+                LogEvent::Flush();
+                return _lines;
+            }
+
+            /// Waits (real time, up to @p limit) until @p count lines have come
+            bool WaitForCount(size_t count, std::chrono::milliseconds limit = 3s) {
+                const auto deadline = std::chrono::steady_clock::now() + limit;
+                while (Lines().size() < count && std::chrono::steady_clock::now() < deadline) {
+                    std::this_thread::sleep_for(10ms);
+                }
+                return _lines.size() >= count;
+            }
+
+        private:
+            void OnLog(const LogEvent& event) {
+                const std::string message(event.message.data(), event.message.size());
+                if (message.find("Room server: ") != std::string::npos && message.find(" connections, ") != std::string::npos && message.find(" rooms") != std::string::npos) {
+                    _lines.push_back(message);
+                }
+            }
+
+            std::vector<std::string> _lines;
+        };
+
+        RoomServerSettings MakeStatsSettings(ManualClock& clock, std::chrono::milliseconds interval = kStatsInterval) {
+            RoomServerSettings settings = MakeSettings();
+            settings.statsLogInterval = interval;
+            settings.clock = clock.AsFunction();
+            return settings;
+        }
+
+    }  // namespace
+
+    TEST(RoomServerStatsTest, LogsOnlyAChangeAfterTheInterval) {
+        using Stats = RoomServerStats;
+        const RoomTime start = std::chrono::steady_clock::now();
+        EXPECT_FALSE(ShouldLogRoomServerStats(Stats{1, 0}, Stats{}, start + 999ms, start, 1000ms)) << "the interval has not passed";
+        EXPECT_TRUE(ShouldLogRoomServerStats(Stats{1, 0}, Stats{}, start + 1000ms, start, 1000ms));
+        EXPECT_FALSE(ShouldLogRoomServerStats(Stats{1, 0}, Stats{1, 0}, start + 1h, start, 1000ms)) << "nothing changed";
+        EXPECT_TRUE(ShouldLogRoomServerStats(Stats{1, 1}, Stats{1, 0}, start + 1h, start, 1000ms)) << "the rooms alone count";
+        EXPECT_TRUE(ShouldLogRoomServerStats(Stats{}, Stats{3, 1}, start + 1h, start, 1000ms)) << "the way back to nothing is a change too";
+        EXPECT_FALSE(ShouldLogRoomServerStats(Stats{1, 0}, Stats{}, start + 1h, start, 0ms)) << "0 is off";
+    }
+
+    TEST_F(RoomWebSocketServerTest, StatsLineComesAfterTheIntervalOnlyWhenTheNumbersChanged) {
+        ManualClock clock;
+        StatsLines lines;
+        const uint16_t port = StartServer(MakeStatsSettings(clock));
+        auto host = MakeHost(port);
+        ASSERT_TRUE(host.has_value());
+        RoundTrip(*host);
+        LetTicksPass();
+        EXPECT_TRUE(lines.Lines().empty()) << "the interval has not passed";
+
+        clock.Advance(kStatsInterval + 100ms);
+        ASSERT_TRUE(lines.WaitForCount(1));
+        EXPECT_NE(lines.Lines()[0].find("1 connections, 1 rooms"), std::string::npos) << lines.Lines()[0];
+
+        clock.Advance(5 * kStatsInterval);
+        LetTicksPass();
+        EXPECT_EQ(lines.Lines().size(), 1u) << "nothing changed: no second line";
+
+        // The interval has long passed, so a change is logged at once
+        auto second = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(second.has_value());
+        RoundTrip(*second);
+        ASSERT_TRUE(lines.WaitForCount(2));
+        EXPECT_NE(lines.Lines()[1].find("2 connections, 1 rooms"), std::string::npos) << lines.Lines()[1];
+
+        auto third = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(third.has_value());
+        RoundTrip(*third);
+        LetTicksPass();
+        EXPECT_EQ(lines.Lines().size(), 2u) << "a change inside the interval waits for it";
+        clock.Advance(kStatsInterval + 100ms);
+        ASSERT_TRUE(lines.WaitForCount(3));
+        EXPECT_NE(lines.Lines()[2].find("3 connections, 1 rooms"), std::string::npos) << lines.Lines()[2];
+
+        for (const std::string& line : lines.Lines()) {
+            EXPECT_EQ(line.find("Host"), std::string::npos) << "no name in a log line: " << line;
+        }
+    }
+
+    TEST_F(RoomWebSocketServerTest, StatsIntervalZeroLogsNoStats) {
+        ManualClock clock;
+        StatsLines lines;
+        const uint16_t port = StartServer(MakeStatsSettings(clock, 0ms));
+        auto host = MakeHost(port);
+        ASSERT_TRUE(host.has_value());
+        RoundTrip(*host);
+        clock.Advance(1h);
+        LetTicksPass();
+        EXPECT_TRUE(lines.Lines().empty());
     }
 
 }  // namespace BECore::Tests

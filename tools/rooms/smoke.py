@@ -10,7 +10,9 @@ Scenarios, on a server with --test-games --computer-delay-ms 0 --reconnect-grace
   * the same hand on `cards-leaky` must make the judge report a leak (the negative control: a judge that cannot fail proves nothing);
   * a server started with --origin https://good.example answers 403 to another Origin and takes the listed one;
   * a server started with PORT=0 in the environment and no --port listens on a port of its own and takes a client (the variable is read);
-  * a plain GET /healthz gets 200 and `ok`, GET / gets 400.
+  * a plain GET /healthz gets 200 and `ok`, GET / gets 400;
+  * the log reaches a piped stdout while the server runs: the settings line, the line of a refused connection and a stats line (--stats-interval-ms 200);
+    output that is block-buffered fails this.
 With the probe (the C++ client of RoomClient, a process of its own; its scenarios are skipped with a line when there is none):
   * the probe hosts a room, plays it to the end and prints `PROBE OK`;
   * the same against a server whose --origin list names only a web page: the probe sends no Origin and gets in;
@@ -62,6 +64,11 @@ HTTP_FORBIDDEN = 403
 HTTP_OK = 200
 HTTP_BAD_REQUEST = 400
 HEALTH_PATH = "/healthz"
+STATS_INTERVAL_MS = 200
+LOG_LIMIT_SECONDS = 5.0  # a log line has to be on the pipe this soon, not at 4 KiB or at exit
+SETTINGS_LINE = "Room server settings:"
+REFUSED_LINE = "a connection was refused"
+STATS_LINE = re.compile(r"Room server: \d+ connections, \d+ rooms")
 DEFAULT_PORT = 8080  # what a server without --port and PORT would listen on
 PROBE_EXE_NAME = "BagiRoomClientProbe"
 PROBE_OK = "PROBE OK"
@@ -128,6 +135,9 @@ class RoomServer:
         self._log_dir.cleanup()
         if exc_type is None and code is not None:
             raise SmokeFailure(code)
+
+    def output(self) -> str:
+        return self.log_path.read_text(errors="replace")
 
     def kill(self) -> None:
         """Takes the server away without a word (no close frames); its exit code is then no longer checked."""
@@ -426,6 +436,29 @@ def scenario_health(port: int) -> None:
     check(status == HTTP_BAD_REQUEST, f"a plain GET / got {status}, not {HTTP_BAD_REQUEST}: {text!r}")
 
 
+def scenario_logs(server: RoomServer) -> None:
+    try:
+        BagiControlClient(port=server.port, timeout=IO_TIMEOUT_SECONDS, origin=EVIL_ORIGIN).connect()
+    except HandshakeError:
+        pass
+    else:
+        raise SmokeFailure("a foreign Origin was let in")
+    human = Human(server.port)
+    human.send({"type": "ping"})
+    human.wait_for("pong")
+
+    wanted = {"the settings line": lambda text: SETTINGS_LINE in text, "the line of the refused connection": lambda text: REFUSED_LINE in text, "a stats line": lambda text: STATS_LINE.search(text) is not None}
+    deadline = time.monotonic() + LOG_LIMIT_SECONDS
+    missing = list(wanted)
+    while missing and time.monotonic() < deadline:
+        time.sleep(STARTUP_POLL_SECONDS)
+        text = server.output()
+        missing = [name for name, found in wanted.items() if not found(text)]
+    # The human is still connected, the server still runs: the lines came through the pipe by themselves
+    check(not missing, f"not in the log of a running server after {LOG_LIMIT_SECONDS} s: {missing}\n--- server log ---\n{server.output()}")
+    human.close()
+
+
 def scenario_probe(server: RoomServer, probe: Path | None) -> None:
     assert probe is not None
     with Probe(probe, server.port) as running:
@@ -455,6 +488,7 @@ SCENARIOS: list[tuple[str, list[str], Callable[[RoomServer, Path | None], None],
     ("origin", ["--origin", GOOD_ORIGIN], by_port(scenario_origin), False, {}),
     ("environment-port", [], by_port(scenario_environment_port), False, {"PORT": "0"}),
     ("health", [], by_port(scenario_health), False, {}),
+    ("logs", ["--origin", GOOD_ORIGIN, "--stats-interval-ms", str(STATS_INTERVAL_MS)], lambda server, _probe: scenario_logs(server), False, {}),
     ("probe", [], scenario_probe, True, {}),
     # The probe sends no Origin, and a server that lists only a web page lets a program in
     ("probe-no-origin", ["--origin", GOOD_ORIGIN], scenario_probe, True, {}),
