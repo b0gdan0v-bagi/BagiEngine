@@ -10,8 +10,8 @@
 
 /**
  * The decisions around a swapchain as pure functions: what a Vulkan result means, when the swapchain has to be
- * rebuilt, which extent and surface format to ask for. Header only and free of any Vulkan call, so a test checks
- * them without a device (`tests/BECore/VulkanSwapchainPolicyTest.cpp`).
+ * rebuilt, which extent and surface format to ask for, how ImGui's colours meet the swapchain. Header only and free of any Vulkan call, so a test
+ * checks them without a device (`tests/BECore/VulkanSwapchainPolicyTest.cpp`).
  */
 namespace BECore::VulkanSwapchainPolicy {
 
@@ -25,6 +25,10 @@ namespace BECore::VulkanSwapchainPolicy {
     /// Done (the swapchain, image views and framebuffers are new), ZeroExtent (the size is zero, minimized: nothing
     /// was touched), Failed (a Vulkan call failed or the surface no longer offers the format of the render pass; logged)
     CORE_ENUM(SwapchainRecreateResult, uint8_t, Done, ZeroExtent, Failed)
+
+    /// Where ImGui's vertex colours go: Direct (the swapchain is not sRGB, the colours are written as they are, the
+    /// stock shader), Linearize (the swapchain is sRGB, the vertex shader turns the colours into linear values)
+    CORE_ENUM(ImGuiColorMode, uint8_t, Direct, Linearize)
 
     /// Where a swapchain status comes from: the result of vkAcquireNextImageKHR or of vkQueuePresentKHR
     CORE_ENUM(SwapchainStage, uint8_t, Acquire, Present)
@@ -114,6 +118,36 @@ namespace BECore::VulkanSwapchainPolicy {
             return std::nullopt;
         }
         return formats.front();
+    }
+
+    /// True for the formats whose attachment encodes linear values to sRGB on write (and whose sampler decodes on
+    /// read): the `*_SRGB` formats a swapchain can have
+    [[nodiscard]] constexpr bool IsSrgbFormat(VkFormat format) {
+        switch (format) {
+            case VK_FORMAT_B8G8R8A8_SRGB:
+            case VK_FORMAT_R8G8B8A8_SRGB:
+            case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
+            case VK_FORMAT_R8G8B8_SRGB:
+            case VK_FORMAT_B8G8R8_SRGB:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// How ImGui's colours have to be written into the main swapchain. ImGui's vertex colours are sRGB values (a
+    /// theme colour 0.14 means "0.14 on the screen"), but an sRGB attachment encodes what it is given, so written as
+    /// they are they come out much too light: they have to be turned into linear values first. A swapchain that is
+    /// not sRGB stores them as they are.
+    [[nodiscard]] constexpr ImGuiColorMode ChooseImGuiColorMode(VkFormat mainSwapchainFormat) {
+        return IsSrgbFormat(mainSwapchainFormat) ? ImGuiColorMode::Linearize : ImGuiColorMode::Direct;
+    }
+
+    /// The format the swapchains of ImGui's secondary (floating) windows must ask for. The backend builds one
+    /// shader pair for the main window and for them, so they must end in the same colour pipeline: sRGB when the
+    /// vertex shader linearizes, otherwise UNORM, the format the backend picks by itself.
+    [[nodiscard]] constexpr VkFormat ImGuiViewportFormat(ImGuiColorMode mode) {
+        return mode == ImGuiColorMode::Linearize ? VK_FORMAT_B8G8R8A8_SRGB : VK_FORMAT_B8G8R8A8_UNORM;
     }
 
 }  // namespace BECore::VulkanSwapchainPolicy

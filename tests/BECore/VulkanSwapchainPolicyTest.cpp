@@ -151,4 +151,38 @@ namespace BECore::Tests {
         EXPECT_FALSE(ChooseSurfaceFormat({}, VK_FORMAT_B8G8R8A8_SRGB).has_value());
     }
 
+    TEST(VulkanSwapchainPolicyTest, IsSrgbFormatIsTrueOnlyForTheSrgbFormats) {
+        static_assert(IsSrgbFormat(VK_FORMAT_B8G8R8A8_SRGB) && !IsSrgbFormat(VK_FORMAT_B8G8R8A8_UNORM));
+        for (const VkFormat format : {VK_FORMAT_B8G8R8A8_SRGB, VK_FORMAT_R8G8B8A8_SRGB, VK_FORMAT_A8B8G8R8_SRGB_PACK32, VK_FORMAT_R8G8B8_SRGB, VK_FORMAT_B8G8R8_SRGB}) {
+            EXPECT_TRUE(IsSrgbFormat(format)) << format;
+        }
+        for (const VkFormat format : {VK_FORMAT_B8G8R8A8_UNORM, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_A8B8G8R8_UNORM_PACK32, VK_FORMAT_R8G8B8_UNORM, VK_FORMAT_B8G8R8_UNORM,
+                                      VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_UNDEFINED}) {
+            EXPECT_FALSE(IsSrgbFormat(format)) << format;
+        }
+    }
+
+    TEST(VulkanSwapchainPolicyTest, ChooseImGuiColorModeLinearizesOnlyForAnSrgbSwapchain) {
+        static_assert(ChooseImGuiColorMode(VK_FORMAT_B8G8R8A8_SRGB) == ImGuiColorMode::Linearize);
+        EXPECT_EQ(ChooseImGuiColorMode(VK_FORMAT_B8G8R8A8_SRGB), ImGuiColorMode::Linearize);
+        EXPECT_EQ(ChooseImGuiColorMode(VK_FORMAT_R8G8B8A8_SRGB), ImGuiColorMode::Linearize);
+        EXPECT_EQ(ChooseImGuiColorMode(VK_FORMAT_B8G8R8A8_UNORM), ImGuiColorMode::Direct);
+        EXPECT_EQ(ChooseImGuiColorMode(VK_FORMAT_UNDEFINED), ImGuiColorMode::Direct);
+    }
+
+    TEST(VulkanSwapchainPolicyTest, ImGuiViewportFormatFollowsTheColorMode) {
+        static_assert(ImGuiViewportFormat(ImGuiColorMode::Linearize) == VK_FORMAT_B8G8R8A8_SRGB);
+        EXPECT_EQ(ImGuiViewportFormat(ImGuiColorMode::Linearize), VK_FORMAT_B8G8R8A8_SRGB);
+        EXPECT_EQ(ImGuiViewportFormat(ImGuiColorMode::Direct), VK_FORMAT_B8G8R8A8_UNORM);
+    }
+
+    TEST(VulkanSwapchainPolicyTest, TheFormatTheSwapchainPrefersLinearizes) {
+        const std::array formats{Format(VK_FORMAT_R8G8B8A8_UNORM), Format(VK_FORMAT_B8G8R8A8_SRGB)};
+        const auto chosen = ChooseSurfaceFormat(formats);
+        ASSERT_TRUE(chosen.has_value());
+        EXPECT_EQ(ChooseImGuiColorMode(chosen->format), ImGuiColorMode::Linearize);
+        // The viewports then ask for the same kind of format the main window has
+        EXPECT_TRUE(IsSrgbFormat(ImGuiViewportFormat(ChooseImGuiColorMode(chosen->format))));
+    }
+
 }  // namespace BECore::Tests
