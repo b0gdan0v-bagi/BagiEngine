@@ -180,6 +180,18 @@ namespace BECore {
         /// does nothing with it
         [[nodiscard]] virtual bool IsDisabled() const;
 
+        /// The area the components draw in: the rect, unless the element keeps part of it for something else. A dropdown answers the part left of its arrow, so its `UITextComponent` is
+        /// laid out and drawn there (`UITextComponent::DrawSelf`)
+        [[nodiscard]] virtual Rect GetComponentArea() const {
+            return rect;
+        }
+
+        /// The text a `UITextComponent` of this element shows instead of its own `text`, null for none (the default). A dropdown answers the caption of the chosen option, so the authored `text`
+        /// (its placeholder) stays what a file holds. It must not allocate: the component asks on every draw and every check
+        [[nodiscard]] virtual const eastl::string* GetTextOverride() const {
+            return nullptr;
+        }
+
         /// The text of the tooltip the canvas shows after a hover or a long touch press, empty for none: the `UITooltipComponent` text (a control with a tooltip of its own overrides it); it may hold
         /// `{#key}` and `{var}`
         [[nodiscard]] virtual const eastl::string& GetTooltipText() const;

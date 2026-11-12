@@ -129,7 +129,7 @@ namespace BECore {
                 caption = FindInDescendants<UITextComponent>(element, [](const UITextComponent&) { return true; });
             }
             if (caption != nullptr && !isLabel) {
-                json["text"] = MakeJsonString(caption->GetDisplayText());
+                json["text"] = MakeJsonString(caption->GetDisplayText(element));  // as shown: a dropdown's header says the chosen caption
             }
             if (const auto* clicker = element.GetComponent<UIInputClicker>()) {
                 json["action"] = MakeJsonString(clicker->action.ToStringView());

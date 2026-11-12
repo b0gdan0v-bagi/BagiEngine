@@ -181,7 +181,8 @@ namespace BECore::Tests {
     <node name="Panel"><components>
       <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
         <elements>
-          <element type="UIDropdown" name="Level" bind="uiApiLevel" action="UIControlApiLevel" text="Pick" x="100" y="100" width="240" height="56" optionHeight="56" color="30,30,30,255">
+          <element type="UIDropdown" name="Level" bind="uiApiLevel" action="UIControlApiLevel" x="100" y="100" width="240" height="56" optionHeight="56" color="30,30,30,255">
+            <components><component type="UITextComponent" text="Pick" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
               <element type="UIButton" name="Easy" text="Easy" value="easy" color="70,70,100,255"/>
               <element type="UIButton" name="Normal" text="Normal" value="normal" color="70,70,100,255"/>
@@ -211,6 +212,7 @@ namespace BECore::Tests {
             </components>
           </element>
           <element type="UIDropdown" name="Frozen" bind="uiApiFrozen" action="UIControlApiFrozen" disabled="true" x="100" y="450" width="240" height="56" optionHeight="56" color="30,30,30,255">
+            <components><component type="UITextComponent" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
               <element type="UIButton" name="Only" text="Only" value="only" color="70,70,100,255"/>
             </children>
@@ -262,7 +264,8 @@ namespace BECore::Tests {
               </element>
             </children>
           </element>
-          <element type="UIDropdown" name="CLevel" bind="uiApiCLevel" action="UIControlApiCLevel" text="Pick" x="100" y="300" width="240" height="56" optionHeight="56" color="30,30,30,255">
+          <element type="UIDropdown" name="CLevel" bind="uiApiCLevel" action="UIControlApiCLevel" x="100" y="300" width="240" height="56" optionHeight="56" color="30,30,30,255">
+            <components><component type="UITextComponent" text="Pick" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
               <element type="UIElement" name="CEasy" color="70,70,100,255" fontSize="24">
                 <components>

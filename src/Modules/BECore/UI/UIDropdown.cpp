@@ -3,6 +3,7 @@
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Renderer/IRenderer.h>
 #include <BECore/UI/UIChoice.h>
+#include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIThemes.h>
 #include <Events/InputEvents.h>
 #include <Generated/UIDropdown.gen.hpp>
@@ -11,8 +12,6 @@ namespace BECore {
 
     UIDropdown::UIDropdown() {
         interactive = true;
-        verticalAlign = UIVerticalAlign::Center;
-        wrap = false;
     }
 
     UIDropdown::HeaderParts UIDropdown::GetHeaderParts(const Rect& header) {
@@ -122,17 +121,21 @@ namespace BECore {
         }
     }
 
-    const eastl::string& UIDropdown::GetSourceText() const {
+    Rect UIDropdown::GetComponentArea() const {
+        return GetHeaderParts(rect).text;
+    }
+
+    const eastl::string* UIDropdown::GetTextOverride() const {
         const UIElement* chosen = FindChosenOption();
-        return chosen ? UIChoice::GetText(*chosen) : text;
+        return chosen ? &UIChoice::GetText(*chosen) : nullptr;
     }
 
     Color UIDropdown::GetCurrentFill() const {
         return GetCurrentBox().fill;
     }
 
-    UIButton::Look UIDropdown::GetCurrentBox() const {
-        UIButton::Look look{box, color, box.gradientColor};
+    UIStateLook::Look UIDropdown::GetCurrentBox() const {
+        UIStateLook::Look look{box, color, box.gradientColor};
         if (disabled) {
             look.fill = WithAlpha(look.fill, kDisabledAlpha);
             look.gradientEnd = WithAlpha(look.gradientEnd, kDisabledAlpha);
@@ -150,18 +153,19 @@ namespace BECore {
             look.gradientEnd = ShiftColor(look.gradientEnd, kHoverBrighten);
         }
         if (look.box.gradientDirection != UIGradientDirection::None) {
-            look.box.gradientColor = look.gradientEnd;  // the look says the far end twice, as UIButton's does
+            look.box.gradientColor = look.gradientEnd;  // the look says the far end twice, as a button's does
         }
         return look;
     }
 
     Color UIDropdown::GetCurrentArrow() const {
-        const Color base = arrowColor.a > 0 ? Color(arrowColor) : Color(textColor);
+        const UITextComponent* header = GetComponent<UITextComponent>();
+        const Color base = arrowColor.a > 0 ? Color(arrowColor) : (header ? Color(header->textColor) : Color(255, 255, 255, 255));
         return disabled ? WithAlpha(base, kDisabledAlpha) : base;
     }
 
     void UIDropdown::ApplyTheme(UIThemes& themes) {
-        UILabel::ApplyTheme(themes);
+        UIElement::ApplyTheme(themes);
         themes.Resolve(arrowColor);
     }
 
@@ -170,11 +174,11 @@ namespace BECore {
         if (rect.IsEmpty()) {
             return;
         }
-        const UIButton::Look look = GetCurrentBox();
+        // The box, then the arrow; the header text is the component, which the canvas draws right after this (`DrawComponents`), left of the arrow
+        const UIStateLook::Look look = GetCurrentBox();
         DrawBox(renderer, look.box, look.fill, look.gradientEnd);
 
         const HeaderParts parts = GetHeaderParts(rect);
-        DrawText(renderer, parts.text, disabled ? WithAlpha(textColor, kDisabledAlpha) : Color(textColor));
 
         if (!parts.arrow.IsEmpty()) {
             const Color arrow = GetCurrentArrow();
@@ -236,14 +240,15 @@ namespace BECore {
 
     UIContentFit UIDropdown::CheckContent(float width, float height, float scale) const {
         const HeaderParts parts = GetHeaderParts({0.0f, 0.0f, width, height});
-        if (parts.text.w <= 0.0f && !GetDisplayText().empty() && width > 0.0f && height > 0.0f) {
+        const UITextComponent* header = GetComponent<UITextComponent>();
+        if (parts.text.w <= 0.0f && header && !header->GetDisplayText(*this).empty() && width > 0.0f && height > 0.0f) {
             // The arrow takes the whole width: the text has no room at all, and nothing can shrink to nothing
             UIContentFit none;
             none.hasContent = true;
             none.fits = false;
             return none;
         }
-        return UILabel::CheckContent(parts.text.w, parts.text.h, scale);
+        return UIElement::CheckContent(parts.text.w, parts.text.h, scale);
     }
 
 }  // namespace BECore

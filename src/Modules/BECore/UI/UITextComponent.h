@@ -19,6 +19,10 @@ namespace BECore {
      * `selectedTextColor`, `hoverTextColor`, in that order of priority; a transparent one leaves `textColor` as it is (a button does not tint its caption), except that `fadeWhenDisabled` fades it
      * while the owner is disabled. A fainter state colour fades the outline and the shadow of the text by the same share. The check is the text against the rect of the owner: a text that does not fit
      * and cannot shrink is a defect of the layout validator.
+     *
+     * **Two hooks of the owner.** The text is drawn in `owner.GetComponentArea()` (the rect unless the owner keeps part of it for something else) and an owner that answers
+     * `GetTextOverride()` shows that text instead of `text`: the header of a `UIDropdown` is a text component that draws left of the arrow and shows the chosen caption. For every other
+     * element both are the plain case: the rect and `text`.
      */
     class UITextComponent : public UIComponent {
         BE_CLASS(UITextComponent)
@@ -55,6 +59,9 @@ namespace BECore {
         /// The text as it is shown, with its `{#key}` and `{name}` expanded (`UITextPainter::GetDisplayText`)
         [[nodiscard]] eastl::string_view GetDisplayText() const;
 
+        /// The same for the text @p owner shows: its `GetTextOverride()` when it has one, else `text` (a dropdown's header shows the chosen option's caption)
+        [[nodiscard]] eastl::string_view GetDisplayText(const UIElement& owner) const;
+
         /// The size the shown text takes when wrapped at @p maxWidth canvas units, at the font size of @p owner; see `UITextPainter::Measure`
         [[nodiscard]] Vec2 MeasureText(const UIElement& owner, float maxWidth, float scale) const;
 
@@ -67,7 +74,9 @@ namespace BECore {
         }
 
     private:
-        [[nodiscard]] UITextParams MakeParams(float fontSize) const;
+        /// @p shown is the text to lay out: `text`, or the override of the owner (`ShownText`)
+        [[nodiscard]] UITextParams MakeParams(float fontSize, const eastl::string& shown) const;
+        [[nodiscard]] static const eastl::string& ShownText(const UIElement& owner, const eastl::string& own);
 
         mutable UITextPainter _painter;
     };

@@ -130,7 +130,9 @@ namespace BECore::Tests {
           <element type="UIElement" name="Holder2" x="550" y="100" width="200" height="60" color="40,40,40,255">
             <components><component type="UIInputClicker" action="Holder2"/></components>
             <children>
-              <element type="UIDropdown" name="HolderDrop" x="0" y="0" width="100" height="60" text="Pick"/>
+              <element type="UIDropdown" name="HolderDrop" x="0" y="0" width="100" height="60">
+                <components><component type="UITextComponent" text="Pick" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
+              </element>
               <element type="UIToggle" name="HolderToggle" x="100" y="0" width="90" height="30" text="On"/>
               <element type="UISlider" name="HolderSlider" x="100" y="30" width="90" height="30"/>
             </children>

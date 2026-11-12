@@ -422,6 +422,19 @@ namespace BECore::Tests {
         EXPECT_LT(outlineAlpha(), plain) << "the outline fades with the text";
     }
 
+    TEST_F(UITextComponentTest, TheHooksOfAPlainOwnerLeaveItsTextAndItsAreaAlone) {
+        Draw();
+        UIElement& cap = Get("Cap");
+        EXPECT_TRUE(SameRect(cap.GetComponentArea(), cap.rect)) << "the area is the rect";
+        EXPECT_EQ(cap.GetTextOverride(), nullptr);
+        EXPECT_EQ(CaptionOf("Cap").GetDisplayText(cap), CaptionOf("Cap").GetDisplayText());
+        EXPECT_EQ(CaptionOf("Cap").GetDisplayText(cap), "Score");
+        for (const DrawCall& glyph : Glyphs()) {
+            EXPECT_GE(glyph.rect.x, cap.rect.x - 1e-2f);
+            EXPECT_LE(glyph.rect.x + glyph.rect.w, cap.rect.x + cap.rect.w + 1e-2f);
+        }
+    }
+
     TEST_F(UITextComponentTest, TheStateAccentOfAnElementWithATextComponentIsItsTextColour) {
         EXPECT_EQ(Pack(Get("Cap").GetStateAccent()), Pack(kTextColor));
         EXPECT_EQ(Pack(Get("Narrow").GetStateAccent()), Pack({255, 255, 255, 255})) << "the text component of Narrow keeps the default white";

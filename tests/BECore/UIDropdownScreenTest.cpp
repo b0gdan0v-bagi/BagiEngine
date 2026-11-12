@@ -59,7 +59,8 @@ namespace BECore::Tests {
           <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="220" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
             <children>
               <element type="UILabel" name="Title" height="44" text="{#levels.title}" fontSize="30" align="Center"/>
-              <element type="UIDropdown" name="Level" bind="level" action="SetLevel" height="56" optionHeight="56" text="{#levels.pick}" fontSize="24" verticalAlign="Center" color="70,70,100,255">
+              <element type="UIDropdown" name="Level" bind="level" action="SetLevel" height="56" optionHeight="56" fontSize="24" color="70,70,100,255">
+                <components><component type="UITextComponent" text="{#levels.pick}" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
                 <children>
                   <element type="UIButton" name="LevelNovice" text="{#level.novice}" fontSize="24" value="novice" color="70,70,100,255"/>
                   <element type="UIButton" name="LevelEasy" text="{#level.easy}" fontSize="24" value="easy" color="70,70,100,255"/>
@@ -236,16 +237,19 @@ namespace BECore::Tests {
             }
         }
 
+        /// The header text as shown: the chosen caption, else the placeholder
+        eastl::string HeaderText(const UIDropdown& dropdown) {
+            const UITextComponent* header = dropdown.GetComponent<UITextComponent>();
+            return header ? eastl::string(header->GetDisplayText(dropdown)) : eastl::string();
+        }
+
         eastl::string ShownText(const UIElement& element) {
             if (const UITextComponent* caption = element.GetComponent<UITextComponent>()) {
-                return eastl::string(caption->GetDisplayText());
+                return eastl::string(caption->GetDisplayText(element));  // with the owner: a dropdown shows the chosen caption
             }
             const UILabel* label = element.Cast<UILabel>();
             if (!label) {
                 label = element.Cast<UIButton>();
-            }
-            if (!label) {
-                label = element.Cast<UIDropdown>();  // Cast is of the exact class
             }
             return label ? eastl::string(label->GetDisplayText()) : eastl::string();
         }
@@ -573,7 +577,7 @@ namespace BECore::Tests {
     TEST_F(UIDropdownScreenTest, AChoiceIsAnActionTheGameAnswersWithTheVariableAndTheHeaderFollows) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        EXPECT_EQ(Get<UIDropdown>("Level").GetDisplayText(), eastl::string("Grandmaster"));
+        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), eastl::string("Grandmaster"));
 
         ASSERT_TRUE(Click(Get<UIButton>("LevelHard")));
         EXPECT_EQ(_game->CountOf("SetLevel"), 1u);
@@ -582,7 +586,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(Get<UIDropdown>("Level").IsOpen());
 
         Draw();
-        EXPECT_EQ(Get<UIDropdown>("Level").GetDisplayText(), eastl::string("Hard"));
+        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), eastl::string("Hard"));
         EXPECT_TRUE(Get<UIButton>("LevelEasy").rect.IsEmpty()) << "closed again";
     }
 
@@ -701,7 +705,7 @@ namespace BECore::Tests {
     TEST_F(UIDropdownScreenTest, AChoiceOfAComposedOptionIsAnActionTheGameAnswersAndTheHeaderFollowsInEveryLanguage) {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, ComposeOptions));
         ASSERT_NO_FATAL_FAILURE(ShowAndOpen());
-        EXPECT_EQ(Get<UIDropdown>("Level").GetDisplayText(), eastl::string("Grandmaster"));
+        EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), eastl::string("Grandmaster"));
 
         ASSERT_TRUE(Click(Find("LevelEasy")));
         EXPECT_EQ(_game->CountOf("SetLevel"), 1u);
@@ -713,7 +717,7 @@ namespace BECore::Tests {
         EXPECT_TRUE(Find("LevelEasy").rect.IsEmpty()) << "closed again";
         EXPECT_TRUE(Find("LevelEasyCaption").rect.IsEmpty());
         ForEachLanguage(
-            [&](PoolString language) { EXPECT_EQ(Get<UIDropdown>("Level").GetDisplayText(), eastl::string(*CoreManager::GetUIStrings().Find("level.easy"))) << language.ToStringView().data(); });
+            [&](PoolString language) { EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), eastl::string(*CoreManager::GetUIStrings().Find("level.easy"))) << language.ToStringView().data(); });
     }
 
     TEST_F(UIDropdownScreenTest, APressOutsideAComposedListClosesItAndNothingElseHappens) {

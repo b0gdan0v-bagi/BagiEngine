@@ -48,6 +48,7 @@ namespace BECore::Tests {
           <element type="UIButton" name="Hovered" x="10" y="60" width="100" height="40" color="@panel" hoverColor="@hover"/>
           <element type="UIButton" name="Twin" x="10" y="110" width="100" height="40" color="240,240,230,255" hoverColor="200,220,255,255"/>
           <element type="UIDropdown" name="Menu" bind="menu" x="10" y="160" width="100" height="40" optionHeight="40" color="@panel">
+            <components><component type="UITextComponent" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
               <element type="UIButton" name="OptionA" value="a" color="@panel"/>
             </children>
@@ -505,7 +506,8 @@ namespace BECore::Tests {
                                                                  Field<UISlider>("thumbColor", &UISlider::thumbColor)})},
                 {"UIProgressBar", nullptr,
                  Join(ElementColors(), eastl::vector<ColorField>{Field<UIProgressBar>("trackColor", &UIProgressBar::trackColor), Field<UIProgressBar>("fillColor", &UIProgressBar::fillColor)})},
-                {"UIDropdown", nullptr, Join(ElementColors(), TextColors<UIDropdown>(), eastl::vector<ColorField>{Field<UIDropdown>("arrowColor", &UIDropdown::arrowColor)})},
+                // The header text is a UITextComponent (the row below)
+                {"UIDropdown", nullptr, Join(ElementColors(), eastl::vector<ColorField>{Field<UIDropdown>("arrowColor", &UIDropdown::arrowColor)})},
                 {"UIElement",
                  "UIImageComponent",
                  {OfComponent<UIImageComponent>("tint", &UIImageComponent::tint), OfComponent<UIImageComponent>("hoverTint", &UIImageComponent::hoverTint),

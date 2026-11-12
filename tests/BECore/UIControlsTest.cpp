@@ -16,6 +16,7 @@
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UISlider.h>
 #include <BECore/UI/UIStack.h>
+#include <BECore/UI/UITextComponent.h>
 #include <BECore/UI/UIToggle.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
@@ -55,7 +56,8 @@ namespace BECore::Tests {
           <element type="UIToggle" name="Switch" bind="switchOn" action="UIControlsTestSwitch" text="Switch" onValue="yes" offValue="no" x="500" y="200" width="204" height="56" disabled="true"/>
           <element type="UIProgressBar" name="Meter" bind="meter" minValue="10" maxValue="90" x="500" y="300" width="204" height="24"/>
           <element type="UISlider" name="Level" bind="level" action="UIControlsTestLevel" minValue="2" maxValue="12" step="0.5" x="500" y="400" width="204" height="56" disabled="true"/>
-          <element type="UIDropdown" name="Pick" bind="pickVar" action="UIControlsTestPick" text="Pick one" x="300" y="300" width="180" height="56" optionHeight="48" arrowColor="1,2,3,255" disabled="true">
+          <element type="UIDropdown" name="Pick" bind="pickVar" action="UIControlsTestPick" x="300" y="300" width="180" height="56" optionHeight="48" arrowColor="1,2,3,255" disabled="true">
+            <components><component type="UITextComponent" text="Pick one" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
               <element type="UIButton" name="PickA" text="A" value="a" height="48"/>
             </children>
@@ -283,7 +285,8 @@ namespace BECore::Tests {
         EXPECT_TRUE(Get<UISlider>("Level").interactive);
         EXPECT_EQ(Get<UIDropdown>("Pick").bind, PoolString::Intern("pickVar"));
         EXPECT_EQ(Get<UIDropdown>("Pick").action, PoolString::Intern("UIControlsTestPick"));
-        EXPECT_EQ(Get<UIDropdown>("Pick").text, "Pick one");
+        ASSERT_NE(Get<UIDropdown>("Pick").GetComponent<UITextComponent>(), nullptr);
+        EXPECT_EQ(Get<UIDropdown>("Pick").GetComponent<UITextComponent>()->text, "Pick one");
         EXPECT_FLOAT_EQ(Get<UIDropdown>("Pick").optionHeight, 48.0f);
         EXPECT_EQ(Get<UIDropdown>("Pick").arrowColor.g, 2);
         EXPECT_EQ(Get<UIDropdown>("Pick").arrowColor.a, 255);
@@ -438,23 +441,25 @@ namespace BECore::Tests {
                 slider->thumbColor = Paint(tokens, Color{59, 60, 61, 62});
                 slider->partShape = UIPartShape::Round;
             }
-            if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>() || element.Cast<UIDropdown>()) {
-                auto* text = label                      ? label
-                             : element.Cast<UIButton>() ? static_cast<UILabel*>(element.Cast<UIButton>())
-                             : element.Cast<UIToggle>() ? static_cast<UILabel*>(element.Cast<UIToggle>())
-                                                        : static_cast<UILabel*>(element.Cast<UIDropdown>());
-                text->text = "Some text";
-                text->font = PoolString::Intern("assets/fonts/Other.ttf");
-                text->fontFamily = PoolString::Intern("Test");
-                text->fontWeight = 700;
-                text->textColor = Paint(tokens, Color{21, 22, 23, 24});
-                text->align = TextAlign::Right;
-                text->verticalAlign = UIVerticalAlign::Bottom;
-                text->overflow = TextOverflow::AutoFit;
-                text->wrap = false;  // the text one: the stack one is style.stack.wrap, and the two must stay apart
-                text->lineSpacing = 1.5f;
-                text->minFontSize = 10.0f;
-                text->textEffects = {1.5f, Paint(tokens, Color{91, 92, 93, 94}), 2.0f, -3.0f, Paint(tokens, Color{95, 96, 97, 98})};
+            // The text fields are the same names on the old text controls and on the component the dropdown's header is
+            const auto setEveryTextField = [tokens](auto& text) {
+                text.text = "Some text";
+                text.font = PoolString::Intern("assets/fonts/Other.ttf");
+                text.fontFamily = PoolString::Intern("Test");
+                text.fontWeight = 700;
+                text.textColor = Paint(tokens, Color{21, 22, 23, 24});
+                text.align = TextAlign::Right;
+                text.verticalAlign = UIVerticalAlign::Bottom;
+                text.overflow = TextOverflow::AutoFit;
+                text.wrap = false;  // the text one: the stack one is style.stack.wrap, and the two must stay apart
+                text.lineSpacing = 1.5f;
+                text.minFontSize = 10.0f;
+                text.textEffects = {1.5f, Paint(tokens, Color{91, 92, 93, 94}), 2.0f, -3.0f, Paint(tokens, Color{95, 96, 97, 98})};
+            };
+            if (auto* label = element.Cast<UILabel>(); label || element.Cast<UIButton>() || element.Cast<UIToggle>()) {
+                setEveryTextField(label ? *label : element.Cast<UIButton>() ? static_cast<UILabel&>(*element.Cast<UIButton>()) : static_cast<UILabel&>(*element.Cast<UIToggle>()));
+            } else if (element.Cast<UIDropdown>()) {
+                setEveryTextField(element.AddComponent<UITextComponent>());
             }
         }
 
