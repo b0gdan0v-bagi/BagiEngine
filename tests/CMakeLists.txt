@@ -30,6 +30,12 @@ be_add_game_tests(BagiEngineTests SOURCES ${TESTS_SOURCES} LINK RemoteControlMod
 target_link_libraries(BagiEngineTests PRIVATE Vulkan::Headers)
 target_include_directories(BagiEngineTests PRIVATE ${BAGI_ENGINE_DIR}/src/Modules/Vulkan/src)
 
+# THIRD_PARTY_NOTICES.md against the tree: a new vendored library, external folder, font or vendored file without its row fails
+if(Python3_FOUND)
+    add_test(NAME BagiThirdPartyNotices
+        COMMAND ${Python3_EXECUTABLE} ${BAGI_ENGINE_DIR}/CI/scripts/check_third_party_notices.py --root ${BAGI_ENGINE_DIR})
+endif()
+
 # A real TLS handshake of the platform's backend against local servers: tls_local_check.py starts a Python `ssl` WebSocket echo server
 # (fixtures in BECore/Tls/data) and runs TlsLocalEndpointTest of BagiEngineTests with their ports in the environment. Skipped (77) when
 # Python has no `ssl`; the cases themselves skip on a platform without a TLS backend. Own port per run (port 0), so it runs beside the others.

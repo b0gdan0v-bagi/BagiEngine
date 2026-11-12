@@ -15,7 +15,8 @@ ctest --preset macos-debug                 # every test in its own process, 8 at
 - C++23, exceptions disabled (`ENGINE_NO_EXCEPTIONS=ON`). Re-run `cmake --preset` after changing `BE_CLASS` / `BE_REFLECT_FIELD` or adding files (sources are globbed).
 - **Output goes to the build folder of the preset**: executables in `build/<preset>/bin`, static libraries in `build/<preset>/lib`, so Debug and Release sit side by side (Visual Studio presets add `bin/<Config>/`).
 - Tests: `BagiEngineTests` (`tests/`), `Match3Tests` (`games/Match3/tests/`), `BagiMatch3ControlSmoke` and `BagiMatch3Scenario.*` (the recorded sessions of `games/Match3/tests/scenarios/`; both skipped with 77 when the game is not built). **They run 8 at a time**, so every test must be safe beside others: temp names from `tests/Common/TempPath.h`, port 0, polls with a time limit, never read `engine.log`. Rules: `.claude/rules/tests-module.md`. Runtime `ITest`s run at game start-up (`config/TestsConfig.xml`).
-- Python tools have pytest suites outside ctest: `.venv/bin/python -m pytest tools/control/tests`, `... tools/perf/tests`, `... tools/migrate/tests`, `... CI/meta_generator/tests`.
+- Python tools have pytest suites outside ctest: `.venv/bin/python -m pytest tools/control/tests`, `... tools/perf/tests`, `... tools/migrate/tests`, `... CI/meta_generator/tests`, `... CI/scripts/tests`.
+- **Licence:** the engine is Beerware (`LICENSE`); every vendored library, external folder and font has a row in `THIRD_PARTY_NOTICES.md`, held to the tree by ctest `BagiThirdPartyNotices`: a new one adds its row in the same commit.
 
 ## Architecture
 
@@ -26,7 +27,7 @@ ctest --preset macos-debug                 # every test in its own process, 8 at
 BECore → Events → TaskSystem → RemoteControl → SDL / Vulkan → Games → Rooms → RoomClient → RoomServer → Runtime (src/Application, src/Widgets) → games/<Name> → executable
 ```
 
-**Stack:** CMake 3.31+ / Ninja, SDL3 + SDL_image, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb_truetype, fmt, magic_enum, GoogleTest.
+**Stack:** CMake 3.31+ / Ninja, SDL3 + SDL_image, ImGui, EnTT, EASTL, pugixml, nlohmann/json (control API only), stb_truetype, fmt, GoogleTest.
 
 ```
 cmake/            engine setup, be_* functions, build options (cmake/CLAUDE.md)
