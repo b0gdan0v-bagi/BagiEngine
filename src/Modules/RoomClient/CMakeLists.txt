@@ -13,3 +13,9 @@ be_add_module(RoomClient LINK
 if(ENGINE_WITH_REMOTE_CONTROL)
     target_link_libraries(RoomClientModule PUBLIC RemoteControlModule)
 endif()
+
+if(EMSCRIPTEN)
+    # The browser transport calls emscripten_websocket_*, which is a JavaScript library of the SDK (libwebsocket.js): a game that links
+    # this module gets the link flag -lwebsocket.js with it
+    target_link_libraries(RoomClientModule PUBLIC websocket.js)
+endif()
