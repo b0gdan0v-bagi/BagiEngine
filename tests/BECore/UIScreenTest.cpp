@@ -3,11 +3,11 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UIPanel.h>
 #include <BECore/UI/UIScreenContent.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -26,9 +26,18 @@ namespace BECore::Tests {
   <elements>
     <element type="UIPanel" name="Plate" anchor="TopLeft" x="16" y="16" width="260" height="120" color="0,0,0,160">
       <children>
-        <element type="UILabel" name="Score" x="12" y="10" width="236" height="36" text="Score: {score}" fontSize="28"/>
-        <element type="UILabel" name="Seed" x="12" y="52" width="100" height="24" text="seed {seed}" fontSize="16" textColor="200,200,200,255"/>
-        <element type="UIButton" name="Reset" anchor="BottomRight" x="-12" y="-10" width="120" height="48" text="Reset" fontSize="24" action="ScreenTestReset" color="40,90,60,255"/>
+        <element type="UIElement" name="Score" x="12" y="10" width="236" height="36" fontSize="28">
+          <components><component type="UITextComponent" text="Score: {score}"/></components>
+        </element>
+        <element type="UIElement" name="Seed" x="12" y="52" width="100" height="24" fontSize="16">
+          <components><component type="UITextComponent" text="seed {seed}" textColor="200,200,200,255"/></components>
+        </element>
+        <element type="UIElement" name="Reset" anchor="BottomRight" x="-12" y="-10" width="120" height="48" fontSize="24" color="40,90,60,255">
+          <components>
+            <component type="UITextComponent" text="Reset" align="Center" verticalAlign="Center" wrap="false"/>
+            <component type="UIInputClicker" action="ScreenTestReset"/>
+          </components>
+        </element>
       </children>
     </element>
   </elements>
@@ -236,7 +245,7 @@ namespace BECore::Tests {
 
     TEST_F(UIScreenTest, TheScoreFollowsTheGameInBothShapes) {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
-        auto* score = _canvas->GetRoot().FindByName(PoolString::Intern("Score"))->Cast<UILabel>();
+        auto* score = _canvas->GetRoot().FindByName(PoolString::Intern("Score"))->GetComponent<UITextComponent>();
         ASSERT_NE(score, nullptr);
 
         CoreManager::GetUIVars().Set("score"_intern, 0);

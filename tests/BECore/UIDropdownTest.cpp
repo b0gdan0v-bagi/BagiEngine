@@ -4,7 +4,6 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIChoice.h>
 #include <BECore/UI/UIDropdown.h>
@@ -29,9 +28,9 @@ namespace BECore::Tests {
         //   Low   (20, 520) near the bottom edge: its list goes above
         //   Off   (300, 200) disabled
         //   Silent (300, 300) no action
-        //   Mixed (500, 20) holds a label between its options
+        //   Mixed (500, 400) holds a text with no clicker between its options
         //   Comp  (520, 200) bound to `comp`, composed options (an element with a clicker): a caption on the element, an icon-left one (an image child and a caption child), a disabled one
-        //   Both  (520, 450) bound to `both`: a UIButton and a composed option in one list (it opens above, the list does not fit below)
+        //   Both  (520, 450) bound to `both`: a caption option and a second one in one list (it opens above, the list does not fit below)
         constexpr const char* kDropdownXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -41,43 +40,100 @@ namespace BECore::Tests {
           <element type="UIDropdown" name="Level" bind="level" action="DdTestLevel" x="20" y="20" width="240" height="56" optionHeight="56" color="40,40,70,255">
             <components><component type="UITextComponent" text="Pick one" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
-              <element type="UIButton" name="Easy" text="{#lvl.easy}" value="easy" color="70,70,100,255"/>
-              <element type="UIButton" name="Medium" text="{#lvl.medium}" value="medium" color="70,70,100,255"/>
-              <element type="UIButton" name="Hard" text="{#lvl.hard}" value="hard" height="80" color="70,70,100,255"/>
-              <element type="UIButton" name="Locked" text="Locked" value="locked" disabled="true" color="70,70,100,255"/>
+              <element type="UIElement" name="Easy" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="{#lvl.easy}" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="easy"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Medium" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="{#lvl.medium}" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="medium"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Hard" height="80" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="{#lvl.hard}" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="hard"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Locked" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Locked" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="locked" disabled="true"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UIDropdown" name="Plain" bind="plain" action="DdTestPlain" x="300" y="20" width="160" height="56" color="40,40,70,255">
             <components><component type="UITextComponent" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
-              <element type="UIButton" name="PlainA" text="A" value="a" width="260"/>
-              <element type="UIButton" name="PlainB" text="B" value="b"/>
+              <element type="UIElement" name="PlainA" width="260">
+                <components>
+                  <component type="UITextComponent" text="A" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="a"/>
+                </components>
+              </element>
+              <element type="UIElement" name="PlainB">
+                <components>
+                  <component type="UITextComponent" text="B" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="b"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UIDropdown" name="Low" bind="low" action="DdTestLow" x="20" y="520" width="240" height="56" optionHeight="56" color="40,40,70,255">
             <components><component type="UITextComponent" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
-              <element type="UIButton" name="LowA" text="A" value="a"/>
-              <element type="UIButton" name="LowB" text="B" value="b"/>
+              <element type="UIElement" name="LowA">
+                <components>
+                  <component type="UITextComponent" text="A" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="a"/>
+                </components>
+              </element>
+              <element type="UIElement" name="LowB">
+                <components>
+                  <component type="UITextComponent" text="B" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="b"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UIDropdown" name="Off" bind="off" action="DdTestOff" x="300" y="200" width="240" height="56" optionHeight="56" disabled="true">
             <components><component type="UITextComponent" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
-              <element type="UIButton" name="OffA" text="A" value="a"/>
+              <element type="UIElement" name="OffA">
+                <components>
+                  <component type="UITextComponent" text="A" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="a"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UIDropdown" name="Silent" bind="silent" x="300" y="300" width="240" height="56" optionHeight="56">
             <components><component type="UITextComponent" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
-              <element type="UIButton" name="SilentA" text="A" value="a"/>
+              <element type="UIElement" name="SilentA">
+                <components>
+                  <component type="UITextComponent" text="A" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="a"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UIDropdown" name="Mixed" bind="mixed" action="DdTestMixed" x="500" y="400" width="240" height="56" optionHeight="56">
             <components><component type="UITextComponent" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
-              <element type="UILabel" name="Caption" text="Caption" value="x"/>
-              <element type="UIButton" name="MixedA" text="A" value="a"/>
+              <element type="UIElement" name="Caption">
+                <components><component type="UITextComponent" text="Caption"/></components>
+              </element>
+              <element type="UIElement" name="MixedA">
+                <components>
+                  <component type="UITextComponent" text="A" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="a"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UIDropdown" name="Comp" bind="comp" action="DdTestComp" x="520" y="200" width="240" height="56" optionHeight="56" color="40,40,70,255">
@@ -109,7 +165,12 @@ namespace BECore::Tests {
           <element type="UIDropdown" name="Both" bind="both" action="DdTestBoth" x="520" y="450" width="240" height="56" optionHeight="56" color="40,40,70,255">
             <components><component type="UITextComponent" text="Pick" verticalAlign="Center" wrap="false" fadeWhenDisabled="true"/></components>
             <children>
-              <element type="UIButton" name="BothButton" text="{#lvl.medium}" value="button" color="70,70,100,255"/>
+              <element type="UIElement" name="BothButton" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="{#lvl.medium}" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" value="button"/>
+                </components>
+              </element>
               <element type="UIElement" name="BothComposed" color="70,70,100,255">
                 <components>
                   <component type="UITextComponent" text="Composed" align="Center" verticalAlign="Center"/>
@@ -319,9 +380,9 @@ namespace BECore::Tests {
         Draw();
 
         EXPECT_EQ(HeaderText(Get<UIDropdown>("Level")), "Medium");
-        EXPECT_EQ(Get<UIDropdown>("Level").FindChosenOption(), &Get<UIButton>("Medium"));
-        EXPECT_TRUE(Get<UIButton>("Medium").selected);
-        EXPECT_FALSE(Get<UIButton>("Easy").selected);
+        EXPECT_EQ(Get<UIDropdown>("Level").FindChosenOption(), &Element("Medium"));
+        EXPECT_TRUE(Element("Medium").selected);
+        EXPECT_FALSE(Element("Easy").selected);
 
         SetVar("plain", "b");
         EXPECT_EQ(HeaderText(Get<UIDropdown>("Plain")), "B");
@@ -521,7 +582,7 @@ namespace BECore::Tests {
 
     TEST_F(UIDropdownTest, ClosedTheOptionsHaveNoRect) {
         for (const char* name : {"Easy", "Medium", "Hard", "Locked"}) {
-            EXPECT_TRUE(Get<UIButton>(name).rect.IsEmpty()) << name;
+            EXPECT_TRUE(Element(name).rect.IsEmpty()) << name;
         }
         EXPECT_TRUE(_canvas->GetLayout().OpenPopups().empty());
     }
@@ -530,42 +591,42 @@ namespace BECore::Tests {
         Get<UIDropdown>("Plain").Open();
         Draw();
         // No optionHeight, so the header's 56; PlainA asks for 260 units of width, which makes the column that wide
-        EXPECT_FLOAT_EQ(Get<UIButton>("PlainA").rect.h, 56.0f);
-        EXPECT_FLOAT_EQ(Get<UIButton>("PlainB").rect.h, 56.0f);
-        EXPECT_FLOAT_EQ(Get<UIButton>("PlainA").rect.w, 260.0f);
-        EXPECT_FLOAT_EQ(Get<UIButton>("PlainB").rect.w, 260.0f) << "one column";
-        EXPECT_FLOAT_EQ(Get<UIButton>("PlainA").rect.y, 76.0f);
-        EXPECT_FLOAT_EQ(Get<UIButton>("PlainB").rect.y, 132.0f);
+        EXPECT_FLOAT_EQ(Element("PlainA").rect.h, 56.0f);
+        EXPECT_FLOAT_EQ(Element("PlainB").rect.h, 56.0f);
+        EXPECT_FLOAT_EQ(Element("PlainA").rect.w, 260.0f);
+        EXPECT_FLOAT_EQ(Element("PlainB").rect.w, 260.0f) << "one column";
+        EXPECT_FLOAT_EQ(Element("PlainA").rect.y, 76.0f);
+        EXPECT_FLOAT_EQ(Element("PlainB").rect.y, 132.0f);
 
         Get<UIDropdown>("Level").Open();  // the newest popup wins, Plain is closed
         Draw();
         EXPECT_FALSE(Get<UIDropdown>("Plain").IsOpen());
-        EXPECT_FLOAT_EQ(Get<UIButton>("Easy").rect.h, 56.0f) << "optionHeight of the dropdown";
-        EXPECT_FLOAT_EQ(Get<UIButton>("Hard").rect.h, 80.0f) << "the option's own height wins";
-        EXPECT_FLOAT_EQ(Get<UIButton>("Easy").rect.y, 76.0f);
-        EXPECT_FLOAT_EQ(Get<UIButton>("Medium").rect.y, 132.0f);
-        EXPECT_FLOAT_EQ(Get<UIButton>("Hard").rect.y, 188.0f);
-        EXPECT_FLOAT_EQ(Get<UIButton>("Locked").rect.y, 268.0f);
-        EXPECT_FLOAT_EQ(Get<UIButton>("Easy").rect.w, 240.0f);
+        EXPECT_FLOAT_EQ(Element("Easy").rect.h, 56.0f) << "optionHeight of the dropdown";
+        EXPECT_FLOAT_EQ(Element("Hard").rect.h, 80.0f) << "the option's own height wins";
+        EXPECT_FLOAT_EQ(Element("Easy").rect.y, 76.0f);
+        EXPECT_FLOAT_EQ(Element("Medium").rect.y, 132.0f);
+        EXPECT_FLOAT_EQ(Element("Hard").rect.y, 188.0f);
+        EXPECT_FLOAT_EQ(Element("Locked").rect.y, 268.0f);
+        EXPECT_FLOAT_EQ(Element("Easy").rect.w, 240.0f);
     }
 
     TEST_F(UIDropdownTest, AListNearTheBottomEdgeOpensAboveTheHeader) {
         Get<UIDropdown>("Low").Open();
         Draw();
 
-        EXPECT_FLOAT_EQ(Get<UIButton>("LowA").rect.y, 408.0f);
-        EXPECT_FLOAT_EQ(Get<UIButton>("LowB").rect.y, 464.0f);
+        EXPECT_FLOAT_EQ(Element("LowA").rect.y, 408.0f);
+        EXPECT_FLOAT_EQ(Element("LowB").rect.y, 464.0f);
     }
 
     TEST_F(UIDropdownTest, OnlyTheButtonsAreOptions) {
         auto& mixed = Get<UIDropdown>("Mixed");
         mixed.Open();
-        SetVar("mixed", "x");  // the label has a `value` field in the file, but it is no option
+        SetVar("mixed", "x");  // the text has no clicker, so it is no option
         Draw();
 
         EXPECT_EQ(mixed.FindChosenOption(), nullptr);
-        EXPECT_TRUE(Get<UILabel>("Caption").rect.IsEmpty());
-        EXPECT_FLOAT_EQ(Get<UIButton>("MixedA").rect.y, 456.0f) << "the label takes no room in the list";
+        EXPECT_TRUE(Element("Caption").rect.IsEmpty());
+        EXPECT_FLOAT_EQ(Element("MixedA").rect.y, 456.0f) << "the text takes no room in the list";
     }
 
     // ---- input ------------------------------------------------------------------------------------------------------------
@@ -575,12 +636,12 @@ namespace BECore::Tests {
         EXPECT_TRUE(Click("Level"));
         EXPECT_TRUE(Get<UIDropdown>("Level").IsOpen());
         Draw();
-        EXPECT_FALSE(Get<UIButton>("Easy").rect.IsEmpty());
+        EXPECT_FALSE(Element("Easy").rect.IsEmpty());
 
         EXPECT_TRUE(Click("Level"));
         EXPECT_FALSE(Get<UIDropdown>("Level").IsOpen());
         Draw();
-        EXPECT_TRUE(Get<UIButton>("Easy").rect.IsEmpty());
+        EXPECT_TRUE(Element("Easy").rect.IsEmpty());
         EXPECT_EQ(log.Total(), 0u) << "opening and closing emit nothing";
     }
 
@@ -596,7 +657,7 @@ namespace BECore::Tests {
         EXPECT_EQ(log.LastValue(), "medium"_intern);
         EXPECT_FALSE(Get<UIDropdown>("Level").IsOpen());
         Draw();
-        EXPECT_TRUE(Get<UIButton>("Medium").rect.IsEmpty());
+        EXPECT_TRUE(Element("Medium").rect.IsEmpty());
     }
 
     TEST_F(UIDropdownTest, AChoiceChangesNoVariable) {
@@ -626,14 +687,14 @@ namespace BECore::Tests {
         auto& level = Get<UIDropdown>("Level");
         level.Open();
         Draw();
-        ASSERT_FALSE(Get<UIButton>("Easy").rect.IsEmpty());
+        ASSERT_FALSE(Element("Easy").rect.IsEmpty());
 
         level.disabled = true;
         Draw();  // the canvas notices the list is gone and invalidates
         Draw();
 
         EXPECT_FALSE(level.IsOpen());
-        EXPECT_TRUE(Get<UIButton>("Easy").rect.IsEmpty());
+        EXPECT_TRUE(Element("Easy").rect.IsEmpty());
     }
 
     TEST_F(UIDropdownTest, ADisabledOptionTakesTheClickAndTheListStaysOpen) {
@@ -695,7 +756,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(_canvas->SetElementVisible("Level"_intern, true));
         Draw();
         EXPECT_FALSE(level.IsOpen()) << "shown again, it is closed";
-        EXPECT_TRUE(Get<UIButton>("Easy").rect.IsEmpty());
+        EXPECT_TRUE(Element("Easy").rect.IsEmpty());
     }
 
     TEST_F(UIDropdownTest, AnOpenListIsValidatedLikeAnythingElse) {
@@ -864,8 +925,8 @@ namespace BECore::Tests {
         EXPECT_EQ(bare.GetTextOverride(), nullptr);
     }
 
-    TEST_F(UIDropdownTest, TheOptionsKeepTheBoxOfTheirOwnButtons) {
-        auto& easy = Get<UIButton>("Easy");
+    TEST_F(UIDropdownTest, TheOptionsKeepTheBoxOfTheirOwn) {
+        auto& easy = Element("Easy");
         easy.box.cornerRadius = UICorners::Uniform(10.0f);
         Get<UIDropdown>("Level").Open();
         Draw();
@@ -873,7 +934,7 @@ namespace BECore::Tests {
         EXPECT_EQ(Get<UIDropdown>("Level").box, UIBoxStyle{}) << "the header's own box is untouched";
     }
 
-    // ---- composed options: an element with a clicker is an option as a UIButton is ----------------------------------------
+    // ---- composed options: an element with a clicker is an option ----------------------------------------
 
     TEST_F(UIDropdownTest, TheHeaderShowsTheCaptionOfAChosenComposedOption) {
         EXPECT_EQ(HeaderText(Get<UIDropdown>("Comp")), "Pick") << "the placeholder while nothing is chosen";
@@ -912,7 +973,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GlyphQuadsIn({0.0f, 256.0f, 800.0f, 168.0f}), 0u) << "where the list would be";
     }
 
-    TEST_F(UIDropdownTest, OpenTheComposedOptionsLieInAColumnWithTheGeometryOfUIButtons) {
+    TEST_F(UIDropdownTest, OpenTheComposedOptionsLieInAColumn) {
         Get<UIDropdown>("Comp").Open();
         Draw();
 
@@ -1042,9 +1103,9 @@ namespace BECore::Tests {
         const auto& comp = Get<UIDropdown>("Comp");
         EXPECT_TRUE(comp.EmitsOnChoice(Element("CompEasy")));
         EXPECT_FALSE(comp.EmitsOnChoice(Element("CompLocked")));
-        EXPECT_FALSE(Get<UIDropdown>("Silent").EmitsOnChoice(Get<UIButton>("SilentA"))) << "no action";
-        EXPECT_FALSE(Get<UIDropdown>("Level").EmitsOnChoice(Get<UIButton>("Locked")));
-        EXPECT_TRUE(Get<UIDropdown>("Level").EmitsOnChoice(Get<UIButton>("Easy")));
+        EXPECT_FALSE(Get<UIDropdown>("Silent").EmitsOnChoice(Element("SilentA"))) << "no action";
+        EXPECT_FALSE(Get<UIDropdown>("Level").EmitsOnChoice(Element("Locked")));
+        EXPECT_TRUE(Get<UIDropdown>("Level").EmitsOnChoice(Element("Easy")));
     }
 
     TEST_F(UIDropdownTest, APressOutsideAComposedListClosesItAndEmitsNothing) {
@@ -1058,7 +1119,7 @@ namespace BECore::Tests {
         EXPECT_EQ(log.Total(), 0u);
     }
 
-    TEST_F(UIDropdownTest, AListOfAButtonAndAComposedOptionChoosesAndShowsBoth) {
+    TEST_F(UIDropdownTest, AListOfACaptionOptionAndAnIconOptionChoosesAndShowsBoth) {
         ActionLog log;
         auto& both = Get<UIDropdown>("Both");
         SetVar("both", "button");
@@ -1080,7 +1141,7 @@ namespace BECore::Tests {
         EXPECT_EQ(log.Total(), 2u);
     }
 
-    TEST_F(UIDropdownTest, AnOpenComposedListIsValidatedLikeAUIButtonList) {
+    TEST_F(UIDropdownTest, AnOpenComposedListIsValidatedAgainstTheTouchSize) {
         Get<UIDropdown>("Comp").Open();
         Draw();
         EXPECT_TRUE(_canvas->GetLayout().Validate({}).empty());

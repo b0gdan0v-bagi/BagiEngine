@@ -6,13 +6,13 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
 #include <BECore/UI/UIChoice.h>
 #include <BECore/UI/UIInputClicker.h>
-#include <BECore/UI/UILabel.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStack.h>
+#include <BECore/UI/UIStateLook.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -31,7 +31,7 @@ namespace BECore::Tests {
         //   Plain   (10, 300, 304 x 48): a UIStack, not a group, with a button whose value is "two"
         //   Unbound (10, 400, 304 x 48): no `bind`; one segment has value "two", the other no value
         //   Comp    (10, 470, 412 x 48): composed segments bound to `comp`: a caption on the element, an icon-left one (clicker, an image child, a caption child), a disabled one
-        //   Forms   (10, 530, 500 x 48) bound to `comp`: a label, a UIButton, a composed segment and a nested group `FormsInner` of a composed segment bound to `inner`
+        //   Forms   (10, 530, 500 x 48) bound to `comp`: a text, two composed segments and a nested group `FormsInner` of a composed segment bound to `inner`
         constexpr const char* kSegmentedXml = R"(
 <SceneManager><scenes>
   <scene type="Scene" name="Main"><nodes>
@@ -40,39 +40,101 @@ namespace BECore::Tests {
         <elements>
           <element type="UISegmented" name="Mode" bind="mode" x="10" y="10" width="304" height="48" direction="Horizontal" spacing="4" color="30,30,30,255">
             <children>
-              <element type="UIButton" name="ModeTwo" flex="1" height="48" text="Two players" value="two" action="SegTestMode" color="70,70,100,255"/>
-              <element type="UIButton" name="ModeComputer" flex="1" height="48" text="Computer" value="computer" action="SegTestMode" color="70,70,100,255"/>
+              <element type="UIElement" name="ModeTwo" flex="1" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Two players" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestMode" value="two"/>
+                </components>
+              </element>
+              <element type="UIElement" name="ModeComputer" flex="1" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Computer" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestMode" value="computer"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UISegmented" name="Level" bind="level" x="10" y="100" width="412" height="48" direction="Horizontal" spacing="4">
             <children>
-              <element type="UIButton" name="Easy" flex="1" height="48" text="Easy" value="easy" action="SegTestLevel" color="70,70,100,255"/>
-              <element type="UIButton" name="Medium" flex="1" height="48" text="Medium" value="medium" action="SegTestLevel" color="70,70,100,255"/>
-              <element type="UIButton" name="Hard" flex="1" height="48" text="Hard" value="hard" action="SegTestLevel" color="70,70,100,255"/>
-              <element type="UIButton" name="Max" flex="1" height="48" text="Max" value="max" action="SegTestLevel" color="70,70,100,255"/>
+              <element type="UIElement" name="Easy" flex="1" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Easy" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestLevel" value="easy"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Medium" flex="1" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Medium" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestLevel" value="medium"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Hard" flex="1" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Hard" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestLevel" value="hard"/>
+                </components>
+              </element>
+              <element type="UIElement" name="Max" flex="1" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Max" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestLevel" value="max"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UISegmented" name="Mixed" bind="mode" x="10" y="200" width="500" height="48" direction="Horizontal" spacing="4">
             <children>
-              <element type="UILabel" name="Caption" width="100" height="48" text="Mode"/>
-              <element type="UIButton" name="MixedTwo" width="100" height="48" text="Two" value="two" action="SegTestMixed" color="70,70,100,255"/>
+              <element type="UIElement" name="Caption" width="100" height="48">
+                <components><component type="UITextComponent" text="Mode"/></components>
+              </element>
+              <element type="UIElement" name="MixedTwo" width="100" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Two" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestMixed" value="two"/>
+                </components>
+              </element>
               <element type="UISegmented" name="Inner" bind="inner" width="200" height="48" direction="Horizontal" spacing="4">
                 <children>
-                  <element type="UIButton" name="InnerTwo" flex="1" height="48" text="Two" value="two" action="SegTestInner" color="70,70,100,255"/>
-                  <element type="UIButton" name="InnerX" flex="1" height="48" text="X" value="x" action="SegTestInner" color="70,70,100,255"/>
+                  <element type="UIElement" name="InnerTwo" flex="1" height="48" color="70,70,100,255">
+                    <components>
+                      <component type="UITextComponent" text="Two" align="Center" verticalAlign="Center" wrap="false"/>
+                      <component type="UIInputClicker" action="SegTestInner" value="two"/>
+                    </components>
+                  </element>
+                  <element type="UIElement" name="InnerX" flex="1" height="48" color="70,70,100,255">
+                    <components>
+                      <component type="UITextComponent" text="X" align="Center" verticalAlign="Center" wrap="false"/>
+                      <component type="UIInputClicker" action="SegTestInner" value="x"/>
+                    </components>
+                  </element>
                 </children>
               </element>
             </children>
           </element>
           <element type="UIStack" name="Plain" x="10" y="300" width="304" height="48" direction="Horizontal">
             <children>
-              <element type="UIButton" name="PlainTwo" width="100" height="48" text="Two" value="two" action="SegTestPlain" color="70,70,100,255"/>
+              <element type="UIElement" name="PlainTwo" width="100" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Two" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestPlain" value="two"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UISegmented" name="Unbound" x="10" y="400" width="304" height="48" direction="Horizontal" spacing="4">
             <children>
-              <element type="UIButton" name="UnboundTwo" flex="1" height="48" text="Two" value="two" action="SegTestUnbound" color="70,70,100,255"/>
-              <element type="UIButton" name="UnboundNone" flex="1" height="48" text="None" action="SegTestUnbound" color="70,70,100,255"/>
+              <element type="UIElement" name="UnboundTwo" flex="1" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Two" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestUnbound" value="two"/>
+                </components>
+              </element>
+              <element type="UIElement" name="UnboundNone" flex="1" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="None" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestUnbound"/>
+                </components>
+              </element>
             </children>
           </element>
           <element type="UISegmented" name="Comp" bind="comp" x="10" y="470" width="412" height="48" direction="Horizontal" spacing="4">
@@ -102,8 +164,15 @@ namespace BECore::Tests {
           </element>
           <element type="UISegmented" name="Forms" bind="comp" x="10" y="530" width="500" height="48" direction="Horizontal" spacing="4">
             <children>
-              <element type="UILabel" name="FormsCaption" width="60" height="48" text="Form"/>
-              <element type="UIButton" name="FormsButton" width="100" height="48" text="Button" value="plain" action="SegTestForms" color="70,70,100,255"/>
+              <element type="UIElement" name="FormsCaption" width="60" height="48">
+                <components><component type="UITextComponent" text="Form"/></components>
+              </element>
+              <element type="UIElement" name="FormsButton" width="100" height="48" color="70,70,100,255">
+                <components>
+                  <component type="UITextComponent" text="Button" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SegTestForms" value="plain"/>
+                </components>
+              </element>
               <element type="UIElement" name="FormsComposed" width="100" height="48" color="70,70,100,255">
                 <components>
                   <component type="UITextComponent" text="Composed" align="Center" verticalAlign="Center"/>
@@ -232,13 +301,13 @@ namespace BECore::Tests {
         }
 
         bool Selected(const char* name) const {
-            return Get<UIButton>(name).selected;
+            return Element(name).selected;
         }
 
         /// True when the bar of a selected button was drawn at the foot of the rect of @p name in the last draw
         bool BarDrawn(const char* name) const {
-            const UIButton& button = Get<UIButton>(name);
-            const Rect bar{button.rect.x, button.rect.y + button.rect.h - UIButton::kSelectedBarHeight, button.rect.w, UIButton::kSelectedBarHeight};
+            const UIElement& button = Element(name);
+            const Rect bar{button.rect.x, button.rect.y + button.rect.h - UIStateLook::kSelectedBarHeight, button.rect.w, UIStateLook::kSelectedBarHeight};
             return std::any_of(_renderer->calls.begin(), _renderer->calls.end(), [&](const DrawCall& call) { return call.kind == DrawKind::Rect && Near(call.rect, bar); });
         }
 
@@ -289,7 +358,7 @@ namespace BECore::Tests {
         EXPECT_EQ(mode.bind, PoolString::Intern("mode"));
         EXPECT_FALSE(mode.disabled);
         ASSERT_EQ(mode.children.size(), 2u);
-        EXPECT_TRUE(mode.children[0]->Is<UIButton>());
+        EXPECT_NE(mode.children[0]->GetComponent<UIInputClicker>(), nullptr);
 
         const auto made = AbstractFactory<UIElement>::GetInstance().Create("UISegmented");
         ASSERT_TRUE(made);
@@ -382,7 +451,7 @@ namespace BECore::Tests {
         SetVar("inner", "x");
         Draw();
         EXPECT_TRUE(Selected("MixedTwo")) << "the button next to a label is a segment";
-        EXPECT_EQ(Get<UILabel>("Caption").text, "Mode") << "the label is left alone";
+        EXPECT_EQ(Element("Caption").GetComponent<UITextComponent>()->text, "Mode") << "the label is left alone";
 
         // A nested group manages its own children: `Inner` is bound to `inner`, not to `mode`
         EXPECT_FALSE(Selected("InnerTwo")) << "its value is the one of Mixed, but the nested group has its own variable";
@@ -391,8 +460,8 @@ namespace BECore::Tests {
         // The outer group's disabled flag reaches its own segments only
         Get<UISegmented>("Mixed").disabled = true;
         Draw();
-        EXPECT_TRUE(Get<UIButton>("MixedTwo").groupDisabled);
-        EXPECT_FALSE(Get<UIButton>("InnerX").groupDisabled);
+        EXPECT_TRUE(Element("MixedTwo").groupDisabled);
+        EXPECT_FALSE(Element("InnerX").groupDisabled);
     }
 
     TEST_F(UISegmentedTest, APlainStackIsUntouched) {
@@ -400,7 +469,7 @@ namespace BECore::Tests {
         SetVar("plain", "two");
         Draw();
         EXPECT_FALSE(Selected("PlainTwo"));
-        EXPECT_FALSE(Get<UIButton>("PlainTwo").groupDisabled);
+        EXPECT_FALSE(Element("PlainTwo").groupDisabled);
         EXPECT_FALSE(Get<UIStack>("Plain").Is<UISegmented>());
     }
 
@@ -428,24 +497,25 @@ namespace BECore::Tests {
 
     TEST_F(UISegmentedTest, TheSegmentsShareTheWidthByFlex) {
         Draw();
-        const Rect two = Get<UIButton>("ModeTwo").rect;
-        const Rect computer = Get<UIButton>("ModeComputer").rect;
+        const Rect two = Element("ModeTwo").rect;
+        const Rect computer = Element("ModeComputer").rect;
         EXPECT_TRUE(Near(two, {10.0f, 10.0f, 150.0f, 48.0f})) << two.x << " " << two.y << " " << two.w << " " << two.h;
         EXPECT_TRUE(Near(computer, {164.0f, 10.0f, 150.0f, 48.0f})) << computer.x << " " << computer.w;
 
         const char* const levels[] = {"Easy", "Medium", "Hard", "Max"};
         for (size_t i = 0; i < 4; ++i) {
-            EXPECT_TRUE(Near(Get<UIButton>(levels[i]).rect, {10.0f + 104.0f * static_cast<float>(i), 100.0f, 100.0f, 48.0f})) << levels[i];
+            EXPECT_TRUE(Near(Element(levels[i]).rect, {10.0f + 104.0f * static_cast<float>(i), 100.0f, 100.0f, 48.0f})) << levels[i];
         }
     }
 
     TEST_F(UISegmentedTest, TheSelectionIsDrawnWithoutLayingTheLabelsOutAgain) {
         SetVar("level", "easy");
         Draw();
-        const uint32_t layouts = Get<UIButton>("Easy").GetLayoutCount() + Get<UIButton>("Max").GetLayoutCount();
+        const auto layoutsOfTheTexts = [this] { return Element("Easy").GetComponent<UITextComponent>()->GetLayoutCount() + Element("Max").GetComponent<UITextComponent>()->GetLayoutCount(); };
+        const uint32_t layouts = layoutsOfTheTexts();
         Draw();
         Draw();
-        EXPECT_EQ(Get<UIButton>("Easy").GetLayoutCount() + Get<UIButton>("Max").GetLayoutCount(), layouts) << "an unchanged screen lays nothing out";
+        EXPECT_EQ(layoutsOfTheTexts(), layouts) << "an unchanged screen lays nothing out";
     }
 
     // ---- disabled ----------------------------------------------------------------------------------------------------------
@@ -456,7 +526,7 @@ namespace BECore::Tests {
         level.disabled = true;
         Draw();
         for (const char* name : {"Easy", "Medium", "Hard", "Max"}) {
-            EXPECT_TRUE(Get<UIButton>(name).groupDisabled) << name;
+            EXPECT_TRUE(Element(name).groupDisabled) << name;
         }
         EXPECT_TRUE(Selected("Hard")) << "a disabled group still shows what is chosen";
     }
@@ -472,7 +542,7 @@ namespace BECore::Tests {
         level.disabled = false;
         Draw();
         for (const char* name : {"Easy", "Medium", "Hard", "Max"}) {
-            EXPECT_FALSE(Get<UIButton>(name).groupDisabled) << name;
+            EXPECT_FALSE(Element(name).groupDisabled) << name;
         }
         ASSERT_NO_FATAL_FAILURE(Click("Medium"));
         EXPECT_EQ(actions.Total(), 1u);
@@ -521,7 +591,7 @@ namespace BECore::Tests {
         ASSERT_TRUE(_canvas->SetElementVisible(PoolString::Intern("Level"), false));
         SetVar("level", "hard");
         Draw();
-        EXPECT_TRUE(Get<UIButton>("Hard").rect.IsEmpty());
+        EXPECT_TRUE(Element("Hard").rect.IsEmpty());
         EXPECT_FALSE(BarDrawn("Hard"));
         EXPECT_FALSE(BarDrawn("Easy"));
 
@@ -530,7 +600,7 @@ namespace BECore::Tests {
         EXPECT_FALSE(Selected("Easy"));
         EXPECT_TRUE(Selected("Hard"));
         EXPECT_TRUE(BarDrawn("Hard"));
-        EXPECT_FALSE(Get<UIButton>("Hard").rect.IsEmpty());
+        EXPECT_FALSE(Element("Hard").rect.IsEmpty());
     }
 
     // ---- reflection --------------------------------------------------------------------------------------------------------
@@ -590,14 +660,14 @@ namespace BECore::Tests {
         EXPECT_EQ(typed->bind, PoolString::Intern("mode"));
         EXPECT_TRUE(typed->disabled);
         ASSERT_EQ(typed->children.size(), 2u);
-        EXPECT_EQ(typed->children[1]->Cast<UIButton>()->value, PoolString::Intern("computer"));
+        EXPECT_EQ(typed->children[1]->GetComponent<UIInputClicker>()->value, PoolString::Intern("computer"));
         ASSERT_EQ(loaded->_elements.size(), _canvas->_elements.size());
         for (size_t i = 0; i < loaded->_elements.size(); ++i) {
             EXPECT_STREQ(ElementToXml(*_canvas->_elements[i]).c_str(), ElementToXml(*loaded->_elements[i]).c_str()) << i;
         }
     }
 
-    // ---- composed segments: an element with a clicker is a segment as a UIButton is ----------------------------------------
+    // ---- composed segments: an element with a clicker is a segment ----------------------------------------
 
     TEST_F(UISegmentedTest, ComposedSegmentsAreSelectedByTheVariableThroughTheValueOfTheirClicker) {
         SetVar("comp", "icon");
@@ -682,13 +752,13 @@ namespace BECore::Tests {
         EXPECT_EQ(actions.Total(), 1u) << "the segment next to it still works";
     }
 
-    TEST_F(UISegmentedTest, AUIButtonAndAComposedSegmentLiveInTheSameGroup) {
+    TEST_F(UISegmentedTest, ComposedSegmentsBesideATextAreChosenEachByItsOwnValue) {
         SetVar("comp", "plain");
         SetVar("inner", "plain");
         Draw();
         EXPECT_TRUE(Selected("FormsButton"));
         EXPECT_FALSE(SelectedElement("FormsComposed"));
-        EXPECT_EQ(Get<UILabel>("FormsCaption").text, "Form") << "the label is no segment";
+        EXPECT_EQ(Element("FormsCaption").GetComponent<UITextComponent>()->text, "Form") << "the label is no segment";
 
         SetVar("comp", "icon");
         Draw();
@@ -717,7 +787,7 @@ namespace BECore::Tests {
         Draw();
         EXPECT_FALSE(SelectedElement("FormsInnerOne"));
         EXPECT_FALSE(Element("FormsInnerOne").groupDisabled) << "the outer flag reaches its own segments only";
-        EXPECT_TRUE(Get<UIButton>("FormsButton").groupDisabled);
+        EXPECT_TRUE(Element("FormsButton").groupDisabled);
         EXPECT_TRUE(Element("FormsComposed").groupDisabled);
     }
 

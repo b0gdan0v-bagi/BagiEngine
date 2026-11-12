@@ -3,11 +3,11 @@
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
-#include <BECore/UI/UIButton.h>
 #include <BECore/UI/UICanvasComponent.h>
-#include <BECore/UI/UILabel.h>
+#include <BECore/UI/UIInputClicker.h>
 #include <BECore/UI/UISegmented.h>
 #include <BECore/UI/UIStack.h>
+#include <BECore/UI/UITextComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -57,7 +57,12 @@ namespace BECore::Tests {
     <node name="Hud" layer="10"><components>
       <component type="UICanvasComponent" space="SceneView" useSafeArea="true">
         <elements>
-          <element type="UIButton" name="NewGame" anchor="TopRight" x="-12" y="12" width="190" height="56" text="Opponent" fontSize="24" action="SelectorOpen" color="45,75,120,255"/>
+          <element type="UIElement" name="NewGame" anchor="TopRight" x="-12" y="12" width="190" height="56" fontSize="24" color="45,75,120,255">
+            <components>
+              <component type="UITextComponent" text="Opponent" align="Center" verticalAlign="Center" wrap="false"/>
+              <component type="UIInputClicker" action="SelectorOpen"/>
+            </components>
+          </element>
         </elements>
       </component>
     </components></node>
@@ -67,54 +72,119 @@ namespace BECore::Tests {
           <element type="UIElement" name="Dim" anchor="Stretch" ignoreSafeArea="true" color="0,0,0,150" blocksInput="true"/>
           <element type="UIStack" name="Plate" anchor="Center" width="94%" maxWidth="640" height="416" direction="Vertical" spacing="12" padding="16" crossAlign="Stretch" color="36,40,52,255" blocksInput="true">
             <children>
-              <element type="UILabel" name="Title" height="44" text="Opponent" fontSize="30" align="Center"/>
+              <element type="UIElement" name="Title" height="44" fontSize="30">
+                <components><component type="UITextComponent" text="Opponent" align="Center"/></components>
+              </element>
               <element type="UIStack" name="ModeRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
                 <children>
-                  <element type="UILabel" name="ModeCaption" width="150" height="56" text="Opponent" fontSize="24" verticalAlign="Center"/>
+                  <element type="UIElement" name="ModeCaption" width="150" height="56" fontSize="24">
+                    <components><component type="UITextComponent" text="Opponent" verticalAlign="Center"/></components>
+                  </element>
                   <element type="UISegmented" name="Mode" bind="opponentMode" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255">
                     <children>
-                      <element type="UIButton" name="ModeTwo" flex="1" height="56" text="Two players" fontSize="24" value="two" action="SelectorMode" color="70,70,100,255"/>
-                      <element type="UIButton" name="ModeComputer" flex="1" height="56" text="Computer" fontSize="24" value="computer" action="SelectorMode" color="70,70,100,255"/>
+                      <element type="UIElement" name="ModeTwo" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="Two players" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SelectorMode" value="two"/>
+                        </components>
+                      </element>
+                      <element type="UIElement" name="ModeComputer" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="Computer" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SelectorMode" value="computer"/>
+                        </components>
+                      </element>
                     </children>
                   </element>
                 </children>
               </element>
               <element type="UIStack" name="ColorRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
                 <children>
-                  <element type="UILabel" name="ColorCaption" width="150" height="56" text="Play as" fontSize="24" verticalAlign="Center"/>
+                  <element type="UIElement" name="ColorCaption" width="150" height="56" fontSize="24">
+                    <components><component type="UITextComponent" text="Play as" verticalAlign="Center"/></components>
+                  </element>
                   <element type="UISegmented" name="Color" bind="opponentColor" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255">
                     <children>
-                      <element type="UIButton" name="ColorWhite" flex="1" height="56" text="White" fontSize="24" value="white" action="SelectorColor" color="70,70,100,255"/>
-                      <element type="UIButton" name="ColorBlack" flex="1" height="56" text="Black" fontSize="24" value="black" action="SelectorColor" color="70,70,100,255"/>
+                      <element type="UIElement" name="ColorWhite" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="White" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SelectorColor" value="white"/>
+                        </components>
+                      </element>
+                      <element type="UIElement" name="ColorBlack" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="Black" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SelectorColor" value="black"/>
+                        </components>
+                      </element>
                     </children>
                   </element>
                 </children>
               </element>
               <element type="UIStack" name="EngineRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
                 <children>
-                  <element type="UILabel" name="EngineCaption" width="150" height="56" text="Engine" fontSize="24" verticalAlign="Center"/>
+                  <element type="UIElement" name="EngineCaption" width="150" height="56" fontSize="24">
+                    <components><component type="UITextComponent" text="Engine" verticalAlign="Center"/></components>
+                  </element>
                   <element type="UISegmented" name="Engine" bind="opponentEngine" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255">
                     <children>
-                      <element type="UIButton" name="EngineStockfish" flex="1" height="56" text="Stockfish" fontSize="24" value="stockfish" action="SelectorEngine" color="70,70,100,255"/>
-                      <element type="UIButton" name="EngineOwn" flex="1" height="56" text="Own engine" fontSize="24" value="own" action="SelectorEngine" color="70,70,100,255"/>
+                      <element type="UIElement" name="EngineStockfish" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="Stockfish" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SelectorEngine" value="stockfish"/>
+                        </components>
+                      </element>
+                      <element type="UIElement" name="EngineOwn" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="Own engine" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SelectorEngine" value="own"/>
+                        </components>
+                      </element>
                     </children>
                   </element>
                 </children>
               </element>
               <element type="UIStack" name="LevelRow" height="56" direction="Horizontal" spacing="8" crossAlign="Stretch">
                 <children>
-                  <element type="UILabel" name="LevelCaption" width="150" height="56" text="Level" fontSize="24" verticalAlign="Center"/>
+                  <element type="UIElement" name="LevelCaption" width="150" height="56" fontSize="24">
+                    <components><component type="UITextComponent" text="Level" verticalAlign="Center"/></components>
+                  </element>
                   <element type="UISegmented" name="Level" bind="opponentLevel" flex="1" height="56" direction="Horizontal" spacing="4" color="30,30,30,255">
                     <children>
-                      <element type="UIButton" name="LevelEasy" flex="1" height="56" text="Easy" fontSize="24" value="easy" action="SelectorLevel" color="70,70,100,255"/>
-                      <element type="UIButton" name="LevelMedium" flex="1" height="56" text="Medium" fontSize="24" value="medium" action="SelectorLevel" color="70,70,100,255"/>
-                      <element type="UIButton" name="LevelHard" flex="1" height="56" text="Hard" fontSize="24" value="hard" action="SelectorLevel" color="70,70,100,255"/>
-                      <element type="UIButton" name="LevelMax" flex="1" height="56" text="Max" fontSize="24" value="max" action="SelectorLevel" color="70,70,100,255"/>
+                      <element type="UIElement" name="LevelEasy" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="Easy" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SelectorLevel" value="easy"/>
+                        </components>
+                      </element>
+                      <element type="UIElement" name="LevelMedium" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="Medium" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SelectorLevel" value="medium"/>
+                        </components>
+                      </element>
+                      <element type="UIElement" name="LevelHard" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="Hard" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SelectorLevel" value="hard"/>
+                        </components>
+                      </element>
+                      <element type="UIElement" name="LevelMax" flex="1" height="56" fontSize="24" color="70,70,100,255">
+                        <components>
+                          <component type="UITextComponent" text="Max" align="Center" verticalAlign="Center" wrap="false"/>
+                          <component type="UIInputClicker" action="SelectorLevel" value="max"/>
+                        </components>
+                      </element>
                     </children>
                   </element>
                 </children>
               </element>
-              <element type="UIButton" name="Ok" height="56" text="OK" fontSize="26" action="SelectorClose" color="40,90,60,255"/>
+              <element type="UIElement" name="Ok" height="56" fontSize="26" color="40,90,60,255">
+                <components>
+                  <component type="UITextComponent" text="OK" align="Center" verticalAlign="Center" wrap="false"/>
+                  <component type="UIInputClicker" action="SelectorClose"/>
+                </components>
+              </element>
             </children>
           </element>
         </elements>
@@ -253,7 +323,7 @@ namespace BECore::Tests {
 
         /// Every control with text in the tree, depth first (the root itself is the canvas and has none)
         void CollectControls(const UIElement& element, eastl::vector<const UIElement*>& found) {
-            if (element.Cast<UILabel>() || element.Cast<UIButton>()) {
+            if (element.GetComponent<UITextComponent>()) {
                 found.push_back(&element);
             }
             for (const auto& child : element.children) {
@@ -262,11 +332,8 @@ namespace BECore::Tests {
         }
 
         eastl::string ShownText(const UIElement& element) {
-            const UILabel* label = element.Cast<UILabel>();
-            if (!label) {
-                label = element.Cast<UIButton>();
-            }
-            return label ? eastl::string(label->GetDisplayText()) : eastl::string();
+            const UITextComponent* text = element.GetComponent<UITextComponent>();
+            return text ? eastl::string(text->GetDisplayText()) : eastl::string();
         }
 
         /// What is wrong with a laid-out panel, one problem to a line, nothing when it is right: a control that is not shown at all (an empty rect: a segment without a
@@ -283,13 +350,13 @@ namespace BECore::Tests {
                     }
                     continue;
                 }
-                const float air = control->interactive ? kButtonAir : 0.0f;
+                const float air = control->IsInteractive() ? kButtonAir : 0.0f;
                 const UIContentFit fit = control->CheckContent(control->rect.w - 2.0f * air, control->rect.h, scale);
                 if (fit.hasContent && !fit.fits) {
                     problems += Format("{} cuts '{}': {:.1f} units wide with {:.1f} of air each side, at scale {:.3f}\n", control->name.ToStringView(), ShownText(*control).c_str(), control->rect.w,
                                        air, scale);
                 }
-                if (control->interactive && control->rect.h < kSegmentHeight - 0.01f) {
+                if (control->IsInteractive() && control->rect.h < kSegmentHeight - 0.01f) {
                     problems += Format("{} is {:.1f} units high, under {:.0f}\n", control->name.ToStringView(), control->rect.h, kSegmentHeight);
                 }
             }
@@ -384,6 +451,15 @@ namespace BECore::Tests {
             context.sceneViewWidth = GetScene().GetViewWidth();
             context.sceneViewHeight = GetScene().GetViewHeight();
             return context;
+        }
+
+        UIElement& El(const char* name) const {
+            UIElement* element = _selector->GetRoot().FindByName(PoolString::Intern(name));
+            if (element == nullptr) {
+                ADD_FAILURE() << name << " is not in the panel";
+                std::abort();  // a reference to nothing cannot be returned; the failure above is printed first
+            }
+            return *element;
         }
 
         template <typename T>
@@ -498,7 +574,7 @@ namespace BECore::Tests {
         size_t segments = 0;
         for (const Group& group : Groups()) {
             for (const auto& [name, value] : group.segments) {
-                const UIElement& segment = Get<UIButton>(name);
+                const UIElement& segment = El(name);
                 ++segments;
                 EXPECT_GE(segment.rect.h, kSegmentHeight - 0.01f) << name;
                 EXPECT_GE(std::min(segment.rect.w, segment.rect.h) * layout.GetResolved().scale, minTouch - 0.01f) << name << " is a touch target on the smallest window";
@@ -516,7 +592,7 @@ namespace BECore::Tests {
         const float scale = layout.GetResolved().scale;
         for (const Group& group : Groups()) {
             for (const auto& [name, value] : group.segments) {
-                const UIButton& segment = Get<UIButton>(name);
+                const UIElement& segment = El(name);
                 const UIContentFit fit = segment.CheckContent(segment.rect.w - 2.0f * kButtonAir, segment.rect.h, scale);
                 EXPECT_TRUE(fit.hasContent) << name;
                 EXPECT_TRUE(fit.fits) << name << " '" << ShownText(segment).c_str() << "' in " << segment.rect.w << " units";
@@ -531,7 +607,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene());
         Draw();
         for (const char* row : {"Mode", "Color", "Engine", "Level"}) {
-            const UIElement& caption = Get<UILabel>((std::string(row) + "Caption").c_str());
+            const UIElement& caption = El((std::string(row) + "Caption").c_str());
             const UIElement& group = Get<UISegmented>(row);
             EXPECT_LT(caption.rect.x + caption.rect.w, group.rect.x + 0.01f) << row;
             EXPECT_NEAR(caption.rect.y, group.rect.y, 0.01f) << row;
@@ -546,7 +622,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kPortraitWidth, kPortraitHeight));
         Draw();
         for (const char* row : {"Mode", "Color", "Engine", "Level"}) {
-            const UIElement& caption = Get<UILabel>((std::string(row) + "Caption").c_str());
+            const UIElement& caption = El((std::string(row) + "Caption").c_str());
             const UIElement& group = Get<UISegmented>(row);
             EXPECT_LT(caption.rect.y + caption.rect.h, group.rect.y + 0.01f) << row;
             EXPECT_NEAR(caption.rect.x, group.rect.x, 0.01f) << row;
@@ -566,7 +642,7 @@ namespace BECore::Tests {
         float left = level.rect.x;
         float width = -1.0f;
         for (const auto& [name, value] : Groups().back().segments) {
-            const UIElement& segment = Get<UIButton>(name);
+            const UIElement& segment = El(name);
             EXPECT_NEAR(segment.rect.x, left, 0.01f) << name;
             if (width < 0.0f) {
                 width = segment.rect.w;
@@ -589,8 +665,8 @@ namespace BECore::Tests {
         for (const Group& group : Groups()) {
             for (const auto& [name, value] : group.segments) {
                 const bool expected = std::any_of(std::begin(chosen), std::end(chosen), [&](const char* c) { return std::string(c) == name; });
-                EXPECT_EQ(Get<UIButton>(name).selected, expected) << name;
-                selected += Get<UIButton>(name).selected ? 1u : 0u;
+                EXPECT_EQ(El(name).selected, expected) << name;
+                selected += El(name).selected ? 1u : 0u;
             }
             EXPECT_EQ(CoreManager::GetUIVars().Get(PoolString::Intern(group.variable)), Get<UISegmented>(group.name).GetSelectedValue()) << group.name;
         }
@@ -624,7 +700,7 @@ namespace BECore::Tests {
         // Show it once so that the segment has a place, then hide it again: the same point must now belong to the board
         ASSERT_TRUE(UICanvasComponent::SetVisibleByName(GetScene(), "Selector"_intern, true));
         Draw();
-        const auto [x, y] = CenterOf(Get<UIButton>("LevelMedium"));
+        const auto [x, y] = CenterOf(El("LevelMedium"));
         ASSERT_GT(x, 0.0f);
         ASSERT_TRUE(UICanvasComponent::SetVisibleByName(GetScene(), "Selector"_intern, false));
         Draw();
@@ -645,7 +721,7 @@ namespace BECore::Tests {
 
         // On a segment, on the plate between two controls and on the dim far from the plate: all are the panel's
         const UIElement& plate = Get<UIStack>("Plate");
-        const std::pair<float, float> points[] = {CenterOf(Get<UIButton>("LevelHard")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
+        const std::pair<float, float> points[] = {CenterOf(El("LevelHard")), {plate.rect.x + 4.0f, plate.rect.y + 4.0f}, {5.0f, 5.0f}, {kViewWidth - 5.0f, kViewHeight - 5.0f}};
         for (const auto& [x, y] : points) {
             const auto [pressed, released] = ClickAt(x, y);
             EXPECT_TRUE(pressed) << x << "," << y;
@@ -674,7 +750,7 @@ namespace BECore::Tests {
         EXPECT_EQ(_game->Total(), actions) << "the modal panel is in front of the menu button";
         EXPECT_EQ(board.downs, 0);
 
-        Click(Get<UIButton>("Ok"));
+        Click(El("Ok"));
         EXPECT_EQ(_game->LastAction(), "SelectorClose"_intern);
         EXPECT_FALSE(_selector->_visible);
         Draw();
@@ -700,17 +776,17 @@ namespace BECore::Tests {
             const size_t index = static_cast<size_t>(&group - Groups().data());
             for (const auto& [name, value] : group.segments) {
                 const size_t before = _game->Total();
-                const auto [pressed, released] = Click(Get<UIButton>(name));
+                const auto [pressed, released] = Click(El(name));
                 EXPECT_TRUE(pressed && released) << name;
                 ASSERT_EQ(_game->Total(), before + 1) << name;
                 EXPECT_EQ(_game->LastAction(), PoolString::Intern(actions[index].action)) << name;
                 EXPECT_EQ(_game->LastValue(), PoolString::Intern(value)) << name;
 
                 Draw();  // the game answered with the variable; the next draw moves the selection
-                EXPECT_TRUE(Get<UIButton>(name).selected) << name;
+                EXPECT_TRUE(El(name).selected) << name;
                 for (const auto& [other, otherValue] : group.segments) {
                     if (std::string(other) != name) {
-                        EXPECT_FALSE(Get<UIButton>(other).selected) << other << " after " << name;
+                        EXPECT_FALSE(El(other).selected) << other << " after " << name;
                     }
                 }
             }
@@ -723,13 +799,13 @@ namespace BECore::Tests {
         _game.reset();  // nobody answers: the panel only reports
         CoreManager::GetUIVars().Set("opponentLevel"_intern, "easy");
         Draw();
-        ASSERT_TRUE(Get<UIButton>("LevelEasy").selected);
+        ASSERT_TRUE(El("LevelEasy").selected);
 
-        const auto [pressed, released] = Click(Get<UIButton>("LevelMax"));
+        const auto [pressed, released] = Click(El("LevelMax"));
         EXPECT_TRUE(pressed && released);
         Draw();
-        EXPECT_TRUE(Get<UIButton>("LevelEasy").selected);
-        EXPECT_FALSE(Get<UIButton>("LevelMax").selected);
+        EXPECT_TRUE(El("LevelEasy").selected);
+        EXPECT_FALSE(El("LevelMax").selected);
         EXPECT_EQ(CoreManager::GetUIVars().Get("opponentLevel"_intern), "easy");
     }
 
@@ -737,13 +813,17 @@ namespace BECore::Tests {
 
     TEST_F(UISelectorScreenTest, ASegmentTooNarrowForItsWordIsCaughtByTheValidatorAndByTheFitCheck) {
         // "Own engine" at font 44 cannot fit its half of a row on any case: with `overflow="Clip"` the validator reports TextDoesNotFit
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(text="Own engine" fontSize="24")", R"(text="Own engine" fontSize="44" overflow="Clip")"); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) {
+            Replace(xml, R"(name="EngineOwn" flex="1" height="56" fontSize="24")", R"(name="EngineOwn" flex="1" height="56" fontSize="44")");
+            Replace(xml, R"(text="Own engine")", R"(text="Own engine" overflow="Clip")");
+        }));
         const auto failures = ValidatePanel(*_selector);
         EXPECT_FALSE(failures.empty());
         EXPECT_TRUE(HasIssue(failures, UILayoutIssueKind::TextDoesNotFit)) << DescribeMatrixFailures(failures).c_str();
 
         // With the default ellipsis the validator is silent ("can shrink"), and the fit check of this file is what catches it
-        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(text="Own engine" fontSize="24")", R"(text="Own engine" fontSize="44")"); }));
+        ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight,
+                                          [](std::string& xml) { Replace(xml, R"(name="EngineOwn" flex="1" height="56" fontSize="24")", R"(name="EngineOwn" flex="1" height="56" fontSize="44")"); }));
         EXPECT_FALSE(HasIssue(ValidatePanel(*_selector), UILayoutIssueKind::TextDoesNotFit)) << "an ellipsis label can shrink: the validator does not report it";
         const eastl::string problems = ProblemsOnMatrix(*_selector);
         EXPECT_NE(problems.find("EngineOwn cuts 'Own engine'"), eastl::string::npos) << problems.c_str();
@@ -772,7 +852,7 @@ namespace BECore::Tests {
         ASSERT_NO_FATAL_FAILURE(LoadScene(kViewWidth, kViewHeight, [](std::string& xml) { Replace(xml, R"(name="LevelHard" flex="1" height="56")", R"(name="LevelHard" flex="1")"); }));
         ASSERT_TRUE(UICanvasComponent::SetVisibleByName(GetScene(), "Selector"_intern, true));
         Draw();
-        EXPECT_NEAR(Get<UIButton>("LevelHard").rect.h, 0.0f, 0.01f);
+        EXPECT_NEAR(El("LevelHard").rect.h, 0.0f, 0.01f);
         UICanvasLayout& layout = _selector->GetLayout();
         const eastl::string problems = Problems(layout);
         EXPECT_NE(problems.find("LevelHard 'Hard' has an empty rect"), eastl::string::npos) << problems.c_str();
