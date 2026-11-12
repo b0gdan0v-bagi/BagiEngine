@@ -9,7 +9,7 @@
 # It is include()d, not add_subdirectory()'d, on purpose: the compile definitions, exception flags
 # and output directories set here must apply to the game's targets as well.
 #
-# Public API (defined below): be_add_module, be_add_game_reflection, be_add_game_executable,
+# Public API (defined below): be_add_module, be_add_game_reflection, be_add_game_executable, be_add_headless_executable,
 # be_add_game_tests, be_add_game_control_tests, be_add_game_scenario_tests, be_link_engine, be_force_include_pch.
 # =============================================================================
 include_guard(GLOBAL)
@@ -451,6 +451,37 @@ function(be_deploy_runtime_libs TARGET_NAME)
     endif()
 endfunction()
 
+# be_add_headless_executable(<Name> SOURCES <files>... [LINK <targets>...])
+# A console program on the engine core, with no window and no Application (the room server): its own main(), the engine
+# core with WHOLE_ARCHIVE (be_link_engine without WITH_RUNTIME: no renderer, no SDL runtime) and GamesModule. LINK adds the
+# program's own modules as ordinary static libraries. It reuses the PCH of BECoreModule like every other target.
+function(be_add_headless_executable NAME)
+    cmake_parse_arguments(ARG "" "" "SOURCES;LINK" ${ARGN})
+
+    add_executable(${NAME} ${ARG_SOURCES})
+    source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "${NAME}" FILES ${ARG_SOURCES})
+
+    target_include_directories(${NAME} PRIVATE ${BAGI_ENGINE_DIR}/src ${CMAKE_BINARY_DIR})
+
+    target_precompile_headers(${NAME} REUSE_FROM BECoreModule)
+    be_force_include_pch(${NAME})
+
+    # IMGUI_VULKAN_AVAILABLE must match BECoreModule, otherwise the reused PCH is rejected
+    target_compile_definitions(${NAME} PRIVATE IMGUI_VULKAN_AVAILABLE=1 REFLECTION_GENERATED=1)
+
+    be_link_engine(${NAME})
+    target_link_libraries(${NAME} PRIVATE GamesModule ${ARG_LINK})
+
+    if(APPLE)
+        set_target_properties(${NAME} PROPERTIES
+            BUILD_RPATH "@executable_path"
+            INSTALL_RPATH "@executable_path"
+        )
+    endif()
+
+    be_deploy_runtime_libs(${NAME})
+endfunction()
+
 # =============================================================================
 # Reflection System
 # =============================================================================
@@ -594,6 +625,12 @@ add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Games)
 
 # Rooms of an online game by code: protocol, room logic, hub (pure code over Games' ISeatedGame; no sockets yet)
 add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/Rooms)
+
+# The Rooms hub on the network. It needs the sockets of RemoteControl, which the web build does not have, so it exists only with them
+# (Rooms stays unconditional: the browser client of a later slice speaks its protocol)
+if(ENGINE_WITH_REMOTE_CONTROL)
+    add_subdirectory(${BAGI_ENGINE_DIR}/src/Modules/RoomServer)
+endif()
 
 # The host of the vendored RmlUi: the interfaces over the engine and the scene component (only with ENGINE_UI_RMLUI)
 if(ENGINE_UI_RMLUI)

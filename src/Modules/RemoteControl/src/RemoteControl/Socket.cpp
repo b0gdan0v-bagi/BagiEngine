@@ -23,7 +23,9 @@ namespace BECore {
 
     namespace {
 
-        constexpr int kListenBacklog = 8;
+        constexpr int kLoopbackListenBacklog = 8;
+        constexpr int kPublicListenBacklog = 128;
+        constexpr const char* kUnknownPeerAddress = "?";
 
 #ifdef PLATFORM_WINDOWS
         using NativeSocket = SOCKET;
@@ -102,12 +104,25 @@ namespace BECore {
             return static_cast<NativeSocket>(handle);
         }
 
-        sockaddr_in LoopbackAddress(uint16_t port) {
+        sockaddr_in IPv4Address(uint32_t host, uint16_t port) {
             sockaddr_in address{};
             address.sin_family = AF_INET;
-            address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            address.sin_addr.s_addr = htonl(host);
             address.sin_port = htons(port);
             return address;
+        }
+
+        sockaddr_in LoopbackAddress(uint16_t port) {
+            return IPv4Address(INADDR_LOOPBACK, port);
+        }
+
+        /// The dotted text of the IPv4 address of @p address
+        eastl::string FormatIPv4(const sockaddr_in& address) {
+            std::array<char, INET_ADDRSTRLEN> text{};
+            if (inet_ntop(AF_INET, &address.sin_addr, text.data(), static_cast<socklen_t>(text.size())) == nullptr) {
+                return kUnknownPeerAddress;
+            }
+            return text.data();
         }
 
         eastl::string DescribeError(eastl::string_view what, int error) {
@@ -163,7 +178,7 @@ namespace BECore {
         return *this;
     }
 
-    std::expected<Socket, eastl::string> Socket::Listen(uint16_t port) {
+    std::expected<Socket, eastl::string> Socket::Listen(uint16_t port, SocketBind scope) {
         const NativeSocket handle = CreateTcpSocket();
         if (handle == kNativeInvalid) {
             return std::unexpected(DescribeError("socket()", LastError()));
@@ -179,11 +194,12 @@ namespace BECore {
         setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
 #endif
 
-        const sockaddr_in address = LoopbackAddress(port);
+        const bool isPublic = scope == SocketBind::AnyAddress;
+        const sockaddr_in address = isPublic ? IPv4Address(INADDR_ANY, port) : LoopbackAddress(port);
         if (bind(handle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
-            return std::unexpected(DescribeError(Format("bind() to 127.0.0.1:{}", port), LastError()));
+            return std::unexpected(DescribeError(Format("bind() to {}:{}", isPublic ? "0.0.0.0" : "127.0.0.1", port), LastError()));
         }
-        if (listen(handle, kListenBacklog) != 0) {
+        if (listen(handle, isPublic ? kPublicListenBacklog : kLoopbackListenBacklog) != 0) {
             return std::unexpected(DescribeError("listen()", LastError()));
         }
         return std::move(socketGuard);
@@ -206,7 +222,7 @@ namespace BECore {
         return std::move(socketGuard);
     }
 
-    std::expected<Socket, SocketError> Socket::Accept(std::chrono::milliseconds timeout) {
+    std::expected<Socket, SocketError> Socket::Accept(std::chrono::milliseconds timeout, eastl::string* peerAddress) {
         if (!IsValid()) {
             return std::unexpected(SocketError::Failed);
         }
@@ -217,8 +233,18 @@ namespace BECore {
         }
 
         for (;;) {
-            const NativeSocket accepted = accept(ToNative(_handle), nullptr, nullptr);
+            sockaddr_in peer{};
+#ifdef PLATFORM_WINDOWS
+            int peerSize = sizeof(peer);
+#else
+            socklen_t peerSize = sizeof(peer);
+#endif
+            const NativeSocket accepted = accept(ToNative(_handle), reinterpret_cast<sockaddr*>(&peer), &peerSize);
             if (accepted != kNativeInvalid) {
+                if (peerAddress != nullptr) {
+                    const bool known = peer.sin_family == AF_INET && peerSize >= static_cast<decltype(peerSize)>(sizeof(peer));
+                    *peerAddress = known ? FormatIPv4(peer) : eastl::string(kUnknownPeerAddress);
+                }
 #ifdef PLATFORM_MACOS
                 const int enable = 1;
                 setsockopt(accepted, SOL_SOCKET, SO_NOSIGPIPE, &enable, sizeof(enable));
