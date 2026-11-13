@@ -99,6 +99,14 @@
             }
         },
         {
+            "name": "asan-windows-crt",
+            "hidden": true,
+            "description": "ASan's Windows runtime is built against the release C runtime, so the Debug build type links /MD (asserts and expects stay ON, no NDEBUG). With a runtime that supports the debug C runtime, MultiThreadedDebugDLL is the one-line change",
+            "cacheVariables": {
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL"
+            }
+        },
+        {
             "name": "clang",
             "hidden": true,
             "cacheVariables": {
@@ -291,6 +299,12 @@
             "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "release"]
         },
         {
+            "name": "windows-clang-asan",
+            "displayName": "Windows Clang Ninja Debug with AddressSanitizer + UBSan",
+            "description": "Configured and built through CI/scripts/vs_env.py like windows-clang-debug; LLVM must be on PATH (its ASan runtime DLL is copied at configure)",
+            "inherits": ["ninja", "host-windows", "vs-env", "clang", "no-module-scan", "debug", "asan", "asan-windows-crt"]
+        },
+        {
             "name": "windows-vs2022",
             "displayName": "Windows Visual Studio 2022 (MSVC)",
             "inherits": ["vs2022", "host-windows"]
@@ -466,6 +480,12 @@
             "displayName": "Windows Clang Ninja Release",
             "inherits": "build-windows",
             "configurePreset": "windows-clang-release"
+        },
+        {
+            "name": "windows-clang-asan",
+            "displayName": "Windows Clang Ninja Debug with AddressSanitizer + UBSan",
+            "inherits": "build-windows",
+            "configurePreset": "windows-clang-asan"
         },
         {
             "name": "windows-vs2022-debug",
@@ -651,6 +671,16 @@
             "displayName": "Windows Clang Ninja Release",
             "inherits": "test-windows",
             "configurePreset": "windows-clang-release"
+        },
+        {
+            "name": "windows-clang-asan",
+            "displayName": "Windows Clang Ninja Debug with AddressSanitizer + UBSan",
+            "inherits": "test-windows",
+            "configurePreset": "windows-clang-asan",
+            "environment": {
+                "ASAN_OPTIONS": "detect_stack_use_after_return=1:strict_string_checks=1",
+                "UBSAN_OPTIONS": "print_stacktrace=1"
+            }
         },
         {
             "name": "windows-vs2022-debug",
