@@ -6,7 +6,7 @@ namespace BECore::Stress {
 
     inline constexpr float kOrbitMinRadius = 20.0f;
     inline constexpr float kOrbitMaxRadius = 120.0f;
-    /// The seconds one turn of an orbit takes: long, so that few tweens restart in one frame
+    /// The seconds one turn of an orbit takes
     inline constexpr float kOrbitMinSeconds = 2.0f;
     inline constexpr float kOrbitMaxSeconds = 6.0f;
     /// Every this many nodes the scene also writes a rotation each frame (a cost a game has besides the tweens)
@@ -20,7 +20,10 @@ namespace BECore::Stress {
         float centerY = 0.0f;
         float radius = 0.0f;
         float phase = 0.0f;    // radians: where on the circle the node is when the tween is at 0
-        float seconds = 0.0f;  // one turn, the duration of the tween
+        float seconds = 0.0f;  // one turn, the duration of a full tween
+        /// Where in its turn (0..1) the node's first tween starts: hashed, so the first ends are spread over the first turn like the later ones,
+        /// not all after a full duration (every restart after the first is a full turn from 0)
+        float startTurn = 0.0f;
     };
 
     /// The orbit of node @p index, the same on every machine (StressHash.h); the whole circle is inside @p view

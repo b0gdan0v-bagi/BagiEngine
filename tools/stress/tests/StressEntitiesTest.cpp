@@ -146,6 +146,30 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(Field().GetChildren().size(), 50u);
     }
 
+    TEST_F(StressEntitiesTest, TheRestartsOfAFreshFieldAreSpreadFromItsFirstFrames) {
+        constexpr uint32_t kNodes = 2000;
+        constexpr uint32_t kFrames = 120;  // 2 s: the shortest orbit, so no node has yet ended a full first turn
+        StartEntities(kNodes);
+        Update();
+        ASSERT_EQ(Component().GetRestartCount(), 0u);
+
+        uint64_t restarts = Component().GetRestartCount();
+        uint64_t mostInAFrame = 0;
+        uint64_t framesWithRestarts = 0;
+        for (uint32_t frame = 0; frame < kFrames; ++frame) {
+            Tweens().Advance(1.0f / 60.0f);
+            const uint64_t now = Component().GetRestartCount();
+            mostInAFrame = std::max(mostInAFrame, now - restarts);
+            framesWithRestarts += now > restarts ? 1u : 0u;
+            restarts = now;
+        }
+
+        const double perFrame = static_cast<double>(restarts) / kFrames;
+        EXPECT_GT(perFrame, 5.0) << "a full-duration first tween would restart nothing in these two seconds";
+        EXPECT_GE(framesWithRestarts, uint64_t{kFrames} * 9 / 10) << "nearly every frame restarts some: no stretch of quiet frames";
+        EXPECT_LT(static_cast<double>(mostInAFrame), 3.0 * perFrame) << "no frame is a burst";
+    }
+
     TEST_F(StressEntitiesTest, EveryKthNodeTurnsOnUpdate) {
         StartEntities(40);
         Update();

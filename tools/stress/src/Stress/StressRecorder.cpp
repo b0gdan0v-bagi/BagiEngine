@@ -10,6 +10,8 @@ namespace BECore::Stress {
         constexpr double kMedian = 0.5;
         constexpr double kTail = 0.99;
         constexpr int kDecimals = 4;
+        /// Room for the fixed line (under 400 characters), so that writing it does not grow the string
+        constexpr size_t kLineReserve = 512;
 
         /// The sorted values of one field of the samples
         template <typename Field>
@@ -138,7 +140,7 @@ namespace BECore::Stress {
 
     eastl::string FormatJsonLine(const StressSummary& summary, const StressRunContext& context) {
         eastl::string line;
-        line.reserve(512);
+        line.reserve(kLineReserve);
         // Sorted by key (byte order, so `allocBytesPerFrame` < `allocTracking` < `allocsPerFrame`): a reader can diff two lines
         AddNumber(line, "allocBytesPerFrame", summary.allocBytesPerFrame);
         AddBool(line, "allocTracking", context.allocTracking);

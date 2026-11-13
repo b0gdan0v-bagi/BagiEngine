@@ -13,6 +13,7 @@ namespace BECore::Stress {
         constexpr uint64_t kSaltRadius = 13;
         constexpr uint64_t kSaltPhase = 14;
         constexpr uint64_t kSaltSeconds = 15;
+        constexpr uint64_t kSaltStartTurn = 16;
 
         constexpr float kFullTurn = 2.0f * std::numbers::pi_v<float>;
 
@@ -25,6 +26,7 @@ namespace BECore::Stress {
         orbit.centerY = Between(orbit.radius, std::max(orbit.radius, view.height - orbit.radius), Unit(index, kSaltCenterY));
         orbit.phase = Unit(index, kSaltPhase) * kFullTurn;
         orbit.seconds = Between(kOrbitMinSeconds, kOrbitMaxSeconds, Unit(index, kSaltSeconds));
+        orbit.startTurn = Unit(index, kSaltStartTurn);
         return orbit;
     }
 

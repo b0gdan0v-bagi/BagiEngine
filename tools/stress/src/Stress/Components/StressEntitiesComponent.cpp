@@ -64,22 +64,27 @@ namespace BECore::Stress {
             entity.transform = New<TransformComponent>();
             entity.node->AddComponent(entity.transform);
             _entities.push_back(std::move(entity));
-            StartTween(static_cast<uint32_t>(_entities.size() - 1));
+            StartTween(static_cast<uint32_t>(_entities.size() - 1), true);
         }
     }
 
-    void StressEntitiesComponent::StartTween(uint32_t index) {
+    void StressEntitiesComponent::StartTween(uint32_t index, bool first) {
         const EntityOrbit orbit = OrbitOf(index, _view);
         const IntrusivePtr<TransformComponent> transform = _entities[index].transform;
+        // The first tween begins at the node's hashed point of its turn, so the ends of a field that was just built are spread; a restart is a full turn
+        const float from = first ? orbit.startTurn : 0.0f;
         // The restart captures the index: the nodes are only added and removed at the tail, and a node's tween is reset before it goes
         _entities[index].tween.Reset(CoreManager::GetTweens().Start<float>(
-            0.0f, 1.0f, {.duration = orbit.seconds, .ease = EaseType::Linear},
+            from, 1.0f, {.duration = orbit.seconds * (1.0f - from), .ease = EaseType::Linear},
             [transform, orbit](const float& turn) {
                 const OrbitPoint point = PointOn(orbit, turn);
                 transform->_x = point.x;
                 transform->_y = point.y;
             },
-            [this, index] { StartTween(index); }));
+            [this, index] {
+                ++_restartCount;
+                StartTween(index, false);
+            }));
     }
 
 }  // namespace BECore::Stress

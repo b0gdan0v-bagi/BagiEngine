@@ -6,6 +6,9 @@ namespace BECore::Stress {
 
     namespace {
 
+        /// Room for the ramp line (under 300 characters), so that writing it does not grow the string
+        constexpr size_t kLineReserve = 384;
+
         /// The count after @p count on the way up: x kRampGrowth, at least +1, never above kMaxCount
         uint32_t Grown(uint32_t count) {
             const auto scaled = static_cast<uint64_t>(static_cast<double>(count) * kRampGrowth);
@@ -128,7 +131,7 @@ namespace BECore::Stress {
 
     eastl::string FormatRampLine(const RampResult& result, StressMeasure measure, const RampRunContext& context) {
         eastl::string line;
-        line.reserve(384);
+        line.reserve(kLineReserve);
         // Sorted by key, byte order, as the fixed run's line is
         AddBool(line, "aborted", result.aborted);
         AddBool(line, "allocTracking", context.allocTracking);

@@ -48,7 +48,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
     },
     {
       "name": "stress-entities",
-      "about": "BagiStress entities without a window: 30000 nodes with a transform and a tween each, nothing drawn, 3000 frames after 120 of warm-up. work_ms_p50 is about 1.7 ms (p99 2.3: tween restarts), a run about 6 s; 50000 nodes would be 3.3 ms and 12 s",
+      "about": "BagiStress entities without a window: 30000 nodes with a transform and a tween each, nothing drawn, 3000 frames after 120 of warm-up. work_ms_p50 is about 1.7 ms (p99 2.3), a run about 6 s; 50000 nodes would be 3.3 ms and 12 s",
       "fast": true,
       "command": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "entities", "--count", "30000", "--frames", "3000", "--warmup", "120"],
       "traceCommand": ["{python}", "{engine}/tools/perf/stress_frames.py", "--exe", "{bin}/BagiStress", "--scene", "entities", "--count", "30000", "--frames", "3000", "--warmup", "120", "--trace", "{trace}"],
@@ -87,7 +87,7 @@ Read by the skills `perf` and `perf-investigate` and by the sentinel step of `to
     },
     {
       "name": "stress-entities-ramp",
-      "about": "BagiStress entities ramp: the count at which work_ms fits 16.6 ms, about 207000 nodes in 11 s; the line says verified false (the re-measure of the result fails three times in a row, the tween restarts make the p95 of 30 frames jump), so the number is a little above what the frame holds. gate false until a baseline shows the noise of the number",
+      "about": "BagiStress entities ramp: the count at which work_ms fits 16.6 ms, about 150000 to 158000 nodes in 6 to 7 s over three runs (the line says verified true; a fixed run of 150000 nodes after 500 warm-up frames has work_ms_p50 16.7 ms). The tweens restart every frame at these counts. gate false until a baseline shows the noise of the number",
       "fast": false,
       "repetitions": 3,
       "timeoutSeconds": 180,

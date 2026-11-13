@@ -38,6 +38,20 @@ namespace BECore::Stress::Tests {
         }
     }
 
+    TEST(EntityFieldTest, TheFirstTweenStartsAtAHashedPointOfItsTurn) {
+        constexpr size_t kBuckets = 10;
+        size_t buckets[kBuckets] = {};
+        for (uint32_t i = 0; i < kNodes; ++i) {
+            const float start = OrbitOf(i, kView).startTurn;
+            ASSERT_GE(start, 0.0f);
+            ASSERT_LT(start, 1.0f);
+            ++buckets[static_cast<size_t>(start * static_cast<float>(kBuckets))];
+        }
+        for (size_t bucket : buckets) {
+            EXPECT_GT(bucket, kNodes / kBuckets / 2) << "the starts are spread over the whole turn";
+        }
+    }
+
     TEST(EntityFieldTest, TheOrbitsDiffer) {
         const EntityOrbit a = OrbitOf(0, kView);
         const EntityOrbit b = OrbitOf(1, kView);

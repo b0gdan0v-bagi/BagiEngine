@@ -101,8 +101,11 @@ def run(args: argparse.Namespace) -> str:
                     stepped += args.chunk
                 except TimeoutError as error:
                     raise fail(game, f"a step of {args.chunk} frames did not answer in {args.timeout:g} s") from error
-                except (ConnectionClosed, ControlError, OSError):
-                    ended = True  # the game quit during the step; a control error that is not a quit ends in the exit code below
+                except (ConnectionClosed, OSError):
+                    ended = True  # the game quit during the step
+                except ControlError as error:
+                    ended = True  # a control error ends the run too; the exit code and the line decide below, the text is kept for the log
+                    print(f"stress_frames: the step answered with a control error: {error}", file=sys.stderr)
         finally:
             client.close()
         exit_code = game.stop(EXIT_WAIT_SECONDS)
