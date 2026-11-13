@@ -278,3 +278,22 @@ def test_the_migrations_run_once(clean_database):
         conn.row_factory = psycopg.rows.dict_row
         assert db.migrate(conn) == ["001_init.sql", "002_aliases.sql", "003_branch_origin.sql", "004_dependencies.sql", "005_slicing.sql", "006_priority.sql"]
         assert db.migrate(conn) == []
+
+
+def test_the_dashboard_shows_orders_and_filters_by_priority(api):
+    add(api, id="plain", title="Plain one")
+    add(api, id="urgent", title="Urgent one", priority="now")
+    add(api, id="slow", title="Slow one", priority="low")
+    page = lambda **params: api.get("/dashboard/", params=params, headers={"Authorization": ""}, auth=("x", TOKEN))  # noqa: E731
+    text = page().text
+    assert 'class="badge p-now"' in text and 'class="badge p-low"' in text and text.count('title="priority"') == 2
+    assert text.index("Urgent one") < text.index("Plain one") < text.index("Slow one")
+    only = page(priority="now").text
+    assert "Urgent one" in only and "Plain one" not in only and "Slow one" not in only
+    assert "Filter: priority now; 2 entries hidden." in only
+    unset = page(priority="none,low").text
+    assert "Plain one" in unset and "Slow one" in unset and "Urgent one" not in unset
+    assert "?area=engine&amp;priority=high" in page(area="engine", priority="now").text
+    assert page(priority="urgent").status_code == 422
+    entry_text = api.get("/dashboard/entry/urgent", headers={"Authorization": ""}, auth=("x", TOKEN)).text
+    assert "<strong>Priority:</strong> now" in entry_text

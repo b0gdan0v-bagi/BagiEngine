@@ -15,17 +15,22 @@ from todo_markdown import markdown_to_html
 STATUS_LABELS = {"open": "open", "in progress": "in progress", "review": "review", "deferred": "deferred"}
 ALL_STATUS_LABELS = {**STATUS_LABELS, "closed": "closed"}
 NO_STAGE_TITLE = "No stage"
+# The order of the lists: the owner's levels, unset counting as normal (the same as PRIORITY_RANK of todo.py).
+PRIORITY_RANK = {"now": 0, "high": 1, "normal": 2, None: 2, "low": 3}
+FILTER_LINKS = (("all", None), ("now", "now"), ("high", "high"), ("normal", "normal"), ("low", "low"), ("unset", "none"))
 
 _STYLE = """
 :root {
   --bg: #f7f7f5; --panel: #ffffff; --text: #1f2328; --muted: #656d76; --line: #d8dee4;
   --open: #656d76; --progress: #1a7f37; --review: #0969da; --deferred: #9a6700; --bar: #d8dee4;
+  --p-now: #cf222e; --p-high: #bc4c00; --p-normal: #8c959f; --p-low: #6e7781;
   --area-0: #eef4fb; --area-1: #f6f0e4; --area-2: #eef6ee; --area-3: #f4eef6;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0e1116; --panel: #161b22; --text: #e6edf3; --muted: #8d96a0; --line: #30363d;
     --open: #8d96a0; --progress: #3fb950; --review: #58a6ff; --deferred: #d29922; --bar: #30363d;
+    --p-now: #ff7b72; --p-high: #ffa657; --p-normal: #6e7681; --p-low: #8d96a0;
     --area-0: #15202e; --area-1: #261f12; --area-2: #13241a; --area-3: #221a28;
   }
 }
@@ -48,6 +53,9 @@ li:first-child { border-top: 0; }
 .badge { font-size: 12px; border: 1px solid currentColor; border-radius: 10px; padding: 0 8px; }
 .s-open { color: var(--open); } .s-in-progress { color: var(--progress); }
 .s-review { color: var(--review); } .s-deferred { color: var(--deferred); }
+.p-now { color: var(--p-now); font-weight: 600; } .p-high { color: var(--p-high); }
+.p-normal { color: var(--p-normal); } .p-low { color: var(--p-low); border-style: dashed; }
+nav.filters { margin: 0 0 8px; font-size: 14px; }
 .bar { width: 160px; height: 8px; background: var(--bar); border-radius: 4px; overflow: hidden;
   align-self: center; }
 .bar span { display: block; height: 100%; background: var(--progress); }
@@ -88,6 +96,16 @@ def _badge(status: str) -> str:
     return f'<span class="badge {css}">{escape(ALL_STATUS_LABELS.get(status, status))}</span>'
 
 
+def _priority_badge(entry: dict) -> str:
+    level = entry.get("priority")
+    return f'<span class="badge p-{level}" title="priority">{escape(level)}</span>' if level else ""
+
+
+def _by_priority(entries: list[dict]) -> list[dict]:
+    """Stable: the server's order (stage, id) breaks the ties of one priority."""
+    return sorted(entries, key=lambda entry: PRIORITY_RANK.get(entry.get("priority"), PRIORITY_RANK[None]))
+
+
 def _age(entry: dict, today: date) -> str:
     if not entry["statusDate"]:
         return "no date"
@@ -111,7 +129,7 @@ def _progress(entry: dict) -> str:
 
 def _entry_row(entry: dict, today: date, with_age: bool = False, with_summary: bool = False) -> str:
     link = f'<a href="entry/{quote(entry["id"])}">{escape(entry["title"])}</a>'
-    parts = [f'<span class="title">{link}</span>', _badge(entry["status"])]
+    parts = [f'<span class="title">{link}</span>', _badge(entry["status"]), _priority_badge(entry)]
     if with_age:
         parts.append(f'<span class="meta">{escape(_age(entry, today))}</span>')
     parts.append(_progress(entry))
@@ -154,9 +172,12 @@ def _page(title: str, body: str, wide: bool = False) -> str:
     )
 
 
-def _nav(areas: list[dict], current: str | None, page: str = "", graph_link: bool = True) -> str:
+def _nav(areas: list[dict], current: str | None, page: str = "", graph_link: bool = True, keep: str = "") -> str:
+    """`keep`: extra query text (`&priority=now`) the area links carry along."""
     links = [
-        f"<strong>{escape(area['title'])}</strong>" if area["id"] == current else f'<a href="{page}?area={quote(area["id"])}">{escape(area["title"])}</a>'
+        f"<strong>{escape(area['title'])}</strong>"
+        if area["id"] == current
+        else f'<a href="{page}?area={quote(area["id"])}{escape(keep)}">{escape(area["title"])}</a>'
         for area in areas
     ]
     if graph_link:
@@ -164,9 +185,31 @@ def _nav(areas: list[dict], current: str | None, page: str = "", graph_link: boo
     return f"<nav>{''.join(links)}</nav>"
 
 
+def _filter_links(area: str | None, current: str | None) -> str:
+    """The row under the nav: all, one level, or the unset ones; the area stays."""
+    where = f"area={quote(area)}" if area else ""
+    links = []
+    for label, value in FILTER_LINKS:
+        if value == current:
+            links.append(f"<strong>{label}</strong>")
+            continue
+        query = "&amp;".join(part for part in (where, f"priority={value}" if value else "") if part)
+        links.append(f'<a href="?{query}">{label}</a>')
+    return f'<nav class="filters"><span class="muted">Priority:</span>{"".join(links)}</nav>'
+
+
+def _filter_note(priority: str | None, hidden: int) -> str:
+    if not priority:
+        return ""
+    names = ", ".join("unset" if part == "none" else part for part in priority.split(","))
+    return f'<p class="muted">Filter: priority {escape(names)}; {hidden} {"entry" if hidden == 1 else "entries"} hidden.</p>'
+
+
 def render_dashboard(data: dict, today: date) -> str:
-    """data: {areas, area, stages, entries (to_json without the body, closed ones left out), warnings}."""
-    entries = data["entries"]
+    """data: {areas, area, stages, entries (to_json without the body, closed ones left out), warnings,
+    priority (the filter text of the page or None), hidden (how many entries the filter left out)}."""
+    entries = _by_priority(data["entries"])
+    priority = data.get("priority")
     stage_numbers = {stage["number"] for stage in data["stages"]}
 
     stage_panels = []
@@ -196,9 +239,11 @@ def render_dashboard(data: dict, today: date) -> str:
     warnings = "".join(f"<li class='meta'>{escape(warning)}</li>" for warning in data.get("warnings", []))
 
     body = [
-        _nav(data.get("areas", []), data.get("area")),
+        _nav(data.get("areas", []), data.get("area"), keep=f"&priority={priority}" if priority else ""),
+        _filter_links(data.get("area"), priority),
         "<h1>TODO dashboard</h1>",
         f'<div class="muted">{today.isoformat()}, from the todo store. {len(entries)} open entries.</div>',
+        _filter_note(priority, data.get("hidden", 0)),
         f'<div class="totals">{totals}</div>',
         section("Roadmap", "".join(stage_panels)),
         section("In review", f"<ul class='panel'>{in_review_rows}</ul>" if in_review else '<p class="muted">Nothing waits for review.</p>'),
@@ -217,6 +262,8 @@ def render_entry(entry: dict, plans: list[dict], events: list[dict]) -> str:
     facts = [f"<strong>Status:</strong> {escape(entry['statusLine'])}", f"<strong>Area:</strong> {escape(entry['area'])}"]
     if entry["stage"] is not None:
         facts.append(f"<strong>Stage:</strong> {entry['stage']}")
+    if entry.get("priority"):
+        facts.append(f"<strong>Priority:</strong> {escape(entry['priority'])}")
     plan_rows = "".join(
         f'<li><a href="../plan/{quote(plan["name"])}">{escape(plan["name"])}</a> <span class="meta">{escape(plan["kind"])}, '
         f'{escape(plan["updatedAt"][:16])}</span></li>'

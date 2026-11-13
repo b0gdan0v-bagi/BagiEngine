@@ -404,13 +404,20 @@ def create_app(settings: Settings, start_mirror: bool = True) -> FastAPI:
         return RedirectResponse("/dashboard/")
 
     @app.get("/dashboard/", response_class=HTMLResponse)
-    def dashboard_page(area: str | None = None, _: None = Depends(check_page)):
+    def dashboard_page(area: str | None = None, priority: str | None = None, _: None = Depends(check_page)):
+        """`priority=now,high` shows only those levels (`none` = unset); an unknown level is 422, as in the API."""
+
         def run(conn):
+            priorities = store.parse_priority_filter(priority) if priority else None
             areas = store.list_areas(conn)
             current = area or (areas[0]["id"] if areas else None)
             stages = next((a["stages"] for a in areas if a["id"] == current), [])
-            entries = store.entries_json(conn, store.list_entries(conn, current, ["open", "in progress", "review", "deferred"]))
-            return dashboard.render_dashboard({"areas": areas, "area": current, "stages": stages, "entries": entries}, date.today())
+            statuses = ["open", "in progress", "review", "deferred"]
+            rows = store.list_entries(conn, current, statuses, priorities)
+            hidden = len(store.list_entries(conn, current, statuses)) - len(rows) if priorities is not None else 0
+            data = {"areas": areas, "area": current, "stages": stages, "entries": store.entries_json(conn, rows),
+                    "priority": ",".join(level or "none" for level in priorities) if priorities else None, "hidden": hidden}
+            return dashboard.render_dashboard(data, date.today())
 
         return read(run)
 
