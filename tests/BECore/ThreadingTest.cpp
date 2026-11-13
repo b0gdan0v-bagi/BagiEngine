@@ -1,12 +1,16 @@
+#include <BECore/Profiler/Profiler.h>
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/LockGuards.h>
 #include <BECore/Threading/LockOrder.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
+#include <BECore/Threading/Thread.h>
 #include <atomic>
 #include <chrono>
+#include <cstring>
 #include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -463,6 +467,167 @@ namespace BECore::Tests {
         waiter.join();
         EXPECT_EQ(heldAfterWait, 1u);
         EXPECT_EQ(heldAfterUnlock, 0u);
+    }
+
+#endif
+
+    // ---------------------------------------------------------------- Thread
+
+#if !BE_SINGLE_THREAD
+
+    namespace {
+
+        constexpr uint32_t kTestSortIndex = 321;
+
+        /// The name the profiler has for the calling thread, "" when it has none (and always "" with the profiler off)
+        std::string CurrentThreadNameInProfiler() {
+#if BE_PROFILER
+            const char* name = Profiler::GetThreadName(Profiler::CurrentThreadId());
+            return name != nullptr ? name : "";
+#else
+            return {};
+#endif
+        }
+
+    }  // namespace
+
+    TEST(ThreadingTest, ThreadRunsTheBodyOnAnotherThreadAndJoins) {
+        Thread::Id bodyThread;
+        Thread thread("Test body", [&] { bodyThread = Thread::CurrentId(); });
+        EXPECT_TRUE(thread.joinable());
+        const Thread::Id id = thread.get_id();
+        thread.join();
+        EXPECT_FALSE(thread.joinable());
+        EXPECT_NE(bodyThread, Thread::CurrentId());
+        EXPECT_EQ(bodyThread, id);
+    }
+
+    TEST(ThreadingTest, ThreadIsNamedBeforeItsBodyRuns) {
+        std::string seen;
+        uint32_t seenSortIndex = 0;
+        Thread thread("Test named", [&] {
+            seen = CurrentThreadNameInProfiler();
+#if BE_PROFILER
+            seenSortIndex = Profiler::GetThreadSortIndex(Profiler::CurrentThreadId());
+#endif
+        });
+        thread.join();
+#if BE_PROFILER
+        EXPECT_EQ(seen, "Test named");
+        EXPECT_EQ(seenSortIndex, Profiler::kNoSortIndex);
+#else
+        EXPECT_TRUE(seen.empty());
+        static_cast<void>(seenSortIndex);
+#endif
+    }
+
+    TEST(ThreadingTest, ThreadKeepsItsSortIndex) {
+        std::string seen;
+        uint32_t seenSortIndex = 0;
+        Thread thread("Test sorted", kTestSortIndex, [&] {
+            seen = CurrentThreadNameInProfiler();
+#if BE_PROFILER
+            seenSortIndex = Profiler::GetThreadSortIndex(Profiler::CurrentThreadId());
+#endif
+        });
+        thread.join();
+#if BE_PROFILER
+        EXPECT_EQ(seen, "Test sorted");
+        EXPECT_EQ(seenSortIndex, kTestSortIndex);
+#else
+        static_cast<void>(seenSortIndex);
+        EXPECT_TRUE(seen.empty());
+#endif
+    }
+
+    TEST(ThreadingTest, ThreadCopiesARunTimeName) {
+        std::atomic<bool> nameGone{false};
+        std::string seen;
+        auto name = std::make_unique<std::string>("Test run-time name 7");
+        Thread thread(name->c_str(), [&] {
+            while (!nameGone.load()) {
+                std::this_thread::yield();
+            }
+            seen = CurrentThreadNameInProfiler();
+        });
+        // The thread may not have started yet; the name must not be needed after the constructor returned
+        name.reset();
+        nameGone.store(true);
+        thread.join();
+#if BE_PROFILER
+        EXPECT_EQ(seen, "Test run-time name 7");
+#else
+        EXPECT_TRUE(seen.empty());
+#endif
+    }
+
+    TEST(ThreadingTest, ThreadDefaultConstructedIsNotJoinable) {
+        Thread thread;
+        EXPECT_FALSE(thread.joinable());
+        EXPECT_EQ(thread.get_id(), Thread::Id{});
+    }
+
+    TEST(ThreadingTest, ThreadMovesByConstructionAndAssignment) {
+        std::atomic<int> runs{0};
+        Thread first("Test move", [&] { runs.fetch_add(1); });
+        const Thread::Id id = first.get_id();
+
+        Thread second(std::move(first));
+        EXPECT_FALSE(first.joinable());
+        EXPECT_TRUE(second.joinable());
+        EXPECT_EQ(second.get_id(), id);
+
+        Thread third;
+        third = std::move(second);
+        EXPECT_FALSE(second.joinable());
+        EXPECT_TRUE(third.joinable());
+        third.join();
+        EXPECT_EQ(runs.load(), 1);
+
+        // Assigning over a finished (joined) Thread is fine
+        third = Thread("Test move again", [&] { runs.fetch_add(1); });
+        third.join();
+        EXPECT_EQ(runs.load(), 2);
+    }
+
+    TEST(ThreadingTest, ThreadDetachedBodyStillRuns) {
+        // The state outlives the test body: a detached thread may touch it after the Thread object is gone
+        struct State {
+            std::atomic<bool> ran{false};
+        };
+        auto state = std::make_shared<State>();
+        Thread thread("Test detach", [state] { state->ran.store(true); });
+        thread.detach();
+        EXPECT_FALSE(thread.joinable());
+        EXPECT_TRUE(WaitUntil([&] { return state->ran.load(); }));
+    }
+
+    TEST(ThreadingTest, ThreadTakesAMoveOnlyBody) {
+        auto payload = std::make_unique<int>(42);
+        int seen = 0;
+        Thread thread("Test move-only body", [owned = std::move(payload), &seen] { seen = *owned; });
+        thread.join();
+        EXPECT_EQ(seen, 42);
+    }
+
+    TEST(ThreadingTest, ThreadHardwareConcurrencyIsTheStdValue) {
+        EXPECT_EQ(Thread::HardwareConcurrency(), std::thread::hardware_concurrency());
+        EXPECT_TRUE(Thread::kAvailable);
+    }
+
+#else
+
+    // The single-thread build (the browser's single-thread page): a Thread starts nothing
+    TEST(ThreadingTest, ThreadStartsNothingInASingleThreadBuild) {
+        EXPECT_FALSE(Thread::kAvailable);
+        bool ran = false;
+#if BE_LOCK_ORDER_CHECK
+        EXPECT_NONFATAL_FAILURE(Thread("Test single", [&] { ran = true; }), "no thread can start");
+#else
+        Thread thread("Test single", [&] { ran = true; });
+        EXPECT_FALSE(thread.joinable());
+#endif
+        EXPECT_FALSE(ran);
     }
 
 #endif
