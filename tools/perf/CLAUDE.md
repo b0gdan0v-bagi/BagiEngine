@@ -8,6 +8,7 @@ The benchmark runner of the skills `perf` and `perf-investigate` (`.claude/skill
 | `perf_stats.py` | mean, t interval, Welch comparison, the verdicts |
 | `perf_baseline.py` | the machine fingerprint, the baseline plan (read, merge, append), the todo store through `tools/todo/todo.py` |
 | `headless_frames.py` | a benchmark command: a game `--headless --manual-clock`, N frames stepped over the control API, one JSON line of `frame_stats` means |
+| `stress_frames.py` | a benchmark command: `BagiStress` `--headless --control --manual-clock` with the `--stress-*` flags, stepped in chunks until the game quits by itself, then the game's own JSON line (fixed run or `--ramp`) printed unchanged; no line, a non-zero exit code, the step bound or the time limit is an error with the game's log tail |
 | `trace_summary.py` | a Chrome trace of the profiler: zones by self / total time and allocations, the frame-time distribution, the counters |
 | `tests/` | pytest of all of it (a whole run over a fake benchmark; no build, no store) |
 
@@ -16,6 +17,7 @@ python3 <engine>/tools/perf/perf.py --list                   # from the root of 
 python3 <engine>/tools/perf/perf.py [--fast] [--only a,b] [--repetitions N] [--no-build] [--json FILE]
 python3 <engine>/tools/perf/perf.py --update-baseline        # the owner's word only (the skill asks)
 python3 <engine>/tools/perf/perf.py --trace NAME [--trace-file F]   # the profile preset, one run with a trace (build/perf/), its summary
+python3 <engine>/tools/perf/stress_frames.py --exe build/macos-release/bin/BagiStress --scene sprites --count 5000 --frames 300 --warmup 30   # or --ramp
 python3 <engine>/tools/perf/trace_summary.py trace.json [--top N] [--json]
 .venv/bin/python -m pytest tools/perf/tests                  # in the engine
 ```
@@ -49,6 +51,6 @@ A plan of the todo store, one per area and machine, without an entry and of kind
 
 ## Caveats
 
-- Headless frames are mostly the software renderer's present (`SDLRenderer::PresentFrame`): `workMs` (`cpuMs` minus the `Present` stage) is the part that follows the scene, and it is small and noisy in an idle scene.
+- Headless frames are mostly the software renderer's present (`SDLRenderer::PresentFrame`): `workMs` (`cpuMs` minus the `Present` stage) is the part that follows the scene, and it is small and noisy in an idle scene. The software renderer also rasterizes the queued sprites inside the present, so for `BagiStress` `sprites` `workMs` is the scene and the `IRenderer` calls only; a ramp that must see the pixels takes `--measure cpu`.
 - The runner measures one machine against itself. Other load on the machine (a build of a worker) makes noise or false regressions: the skill checks the load first.
 - Allocation counts need `ENGINE_PROFILER_ALLOC` (the profile preset); Release reports 0, so allocations are read through `--trace` (the `E` events' `allocs`) and `zone_allocs`, not gated in the Release set.

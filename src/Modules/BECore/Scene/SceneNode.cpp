@@ -34,9 +34,11 @@ namespace BECore {
             return;
         }
 
-        auto it = eastl::find_if(_children.begin(), _children.end(), [child](const IntrusivePtr<SceneNode>& node) { return node.Get() == child; });
+        // From the tail: a field of nodes that shrinks removes the last child, and that is then no walk of the whole list
+        const auto reverseIt = eastl::find_if(_children.rbegin(), _children.rend(), [child](const IntrusivePtr<SceneNode>& node) { return node.Get() == child; });
 
-        if (it != _children.end()) {
+        if (reverseIt != _children.rend()) {
+            const auto it = _children.begin() + (_children.rend() - reverseIt - 1);
             // The registry must not keep a SceneDrawItem that points into the removed subtree
             if (_scene) {
                 _scene->DestroyNodeEntities(**it, {});

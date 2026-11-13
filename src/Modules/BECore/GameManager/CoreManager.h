@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Animation/TweenManager.h>
+#include <BECore/Application/CommandLine.h>
 #include <BECore/Assert/AssertHandlers.h>
 #include <BECore/Clipboard/Clipboard.h>
 #include <BECore/Config/ConfigManager.h>
@@ -50,6 +51,11 @@ namespace BECore {
 
         static MainWindowManager& GetMainWindowManager() {
             return GetInstance()._mainWindowManager;
+        }
+
+        /// The program's arguments, stored by `Application::SetArguments`: a game reads its own flags here (`Application/CommandLine.h`)
+        static CommandLine& GetCommandLine() {
+            return GetInstance()._commandLine;
         }
 
         static FileSystem& GetFileSystem() {
@@ -191,6 +197,7 @@ namespace BECore {
         // Game time of the delayed tasks, tasks, tweens and the scene update: everything a Held frame leaves out. Does nothing for FrameKind::Held
         void UpdateGame(FrameKind kind);
 
+        CommandLine _commandLine;
         FileSystem _fileSystem;
         ConfigManager _configManager;
         IntrusivePtrAtomic<LoggerManager> _loggerManager;

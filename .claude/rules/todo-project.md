@@ -18,7 +18,7 @@ Read by the skills `todo-loop`, `todo-merge`, `todo-add`, `todo-db` and by the a
 
 ## Build and test (baseline and reviewer)
 
-- Targets: `BagiEngineTests Match3Tests` and the games the smoke tests need (`BagiMatch3`); then `ctest --preset <p>`. The preset comes from `cmake --list-presets=build` (the `build` skill picks it).
+- Targets: `BagiEngineTests Match3Tests StressTests` and the games the smoke tests need (`BagiMatch3`, `BagiStress`); then `ctest --preset <p>`. The preset comes from `cmake --list-presets=build` (the `build` skill picks it).
 - The build, format and include commands (product, test targets, configure triggers, the `format_sources.py` and `strip_pch_includes.py` calls) are in `build-project.md`; the targets above are the ones the loop uses.
 - Read first: `CLAUDE.md` (style, DO and DON'T), the nested `CLAUDE.md` of the touched directories and the matching `.claude/rules/` file.
 

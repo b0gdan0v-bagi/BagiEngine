@@ -8,13 +8,13 @@ Presets of `CMakePresets.json`, each into `build/<preset>/`; the `build` skill a
 
 ```bash
 cmake --preset macos-debug                 # configure (also regenerates reflection code)
-cmake --build --preset macos-debug         # BagiMatch3 and the test executables
+cmake --build --preset macos-debug         # BagiMatch3, BagiStress and the test executables
 ctest --preset macos-debug                 # every test in its own process, 8 at a time
 ```
 
 - C++23, exceptions disabled (`ENGINE_NO_EXCEPTIONS=ON`). Re-run `cmake --preset` after changing `BE_CLASS` / `BE_REFLECT_FIELD` or adding files (sources are globbed).
 - **Output goes to the build folder of the preset**: executables in `build/<preset>/bin`, static libraries in `build/<preset>/lib`, so Debug and Release sit side by side (Visual Studio presets add `bin/<Config>/`).
-- Tests: `BagiEngineTests` (`tests/`), `Match3Tests` (`games/Match3/tests/`), `BagiMatch3ControlSmoke` and `BagiMatch3Scenario.*` (the recorded sessions of `games/Match3/tests/scenarios/`; both skipped with 77 when the game is not built). **They run 8 at a time**, so every test must be safe beside others: temp names from `tests/Common/TempPath.h`, port 0, polls with a time limit, never read `engine.log`. Rules: `.claude/rules/tests-module.md`. Runtime `ITest`s run at game start-up (`config/TestsConfig.xml`).
+- Tests: `BagiEngineTests` (`tests/`), `Match3Tests` (`games/Match3/tests/`), `StressTests` (`tools/stress/tests/`), `BagiMatch3ControlSmoke`, `BagiStressControlSmoke` and `BagiMatch3Scenario.*` (the recorded sessions of `games/Match3/tests/scenarios/`; both skipped with 77 when the game is not built). **They run 8 at a time**, so every test must be safe beside others: temp names from `tests/Common/TempPath.h`, port 0, polls with a time limit, never read `engine.log`. Rules: `.claude/rules/tests-module.md`. Runtime `ITest`s run at game start-up (`config/TestsConfig.xml`).
 - Untrusted input (the readers of saves and content, the WebSocket transport, the room protocol and hub, the control API) has fuzz targets: `FuzzCorpusTest` replays and mutates their corpus in every `ctest`, libFuzzer with ASan + UBSan runs them long in the preset `macos-fuzz` (`tests/Fuzz/CLAUDE.md`).
 - Python tools have pytest suites outside ctest: `.venv/bin/python -m pytest tools/control/tests`, `... tools/perf/tests`, `... tools/shots/tests`, `... tools/migrate/tests`, `... tools/dev/tests`, `... CI/meta_generator/tests`, `... CI/scripts/tests`.
 - **Licence:** the engine is Beerware (`LICENSE`); every vendored library, external folder and font has a row in `THIRD_PARTY_NOTICES.md`, held to the tree by ctest `BagiThirdPartyNotices`: a new one adds its row in the same commit.
@@ -39,7 +39,7 @@ src/Modules/      BECore, Events, TaskSystem, RemoteControl, SDL, Vulkan, Games,
 config/, assets/  engine content; a game's files of the same name replace the engine's (FileSystem/CLAUDE.md)
 games/Match3/     the engine's own game
 tests/            BagiEngineTests + Common (BagiEngineTestSupport)
-tools/            todo (the todo store), control (control API client, smoke test, MCP server), rooms (smoke test of BagiRoomServer, which also runs the client probe BagiRoomClientProbe; `docker_check.py`, the manual check of the Docker image), perf (benchmarks, trace summary), shots (before / after pictures of a game's scenes and their text diff, for the todo reviewer), migrate (rewrites the content files of a game to the engine's format), web, dev (`dev.py`: build and run a game's products from its `dev.json`, flags as `-dev` presets), vscode/todo-workers and vscode/bagi-dev (the panels)
+tools/            todo (the todo store), control (control API client, smoke test, MCP server), rooms (smoke test of BagiRoomServer, which also runs the client probe BagiRoomClientProbe; `docker_check.py`, the manual check of the Docker image), perf (benchmarks, trace summary), shots (before / after pictures of a game's scenes and their text diff, for the todo reviewer), stress (`BagiStress`, the engine's own 2D stress app: the target of the stress benchmarks and of a control smoke; `tools/stress/CLAUDE.md`), migrate (rewrites the content files of a game to the engine's format), web, dev (`dev.py`: build and run a game's products from its `dev.json`, flags as `-dev` presets), vscode/todo-workers and vscode/bagi-dev (the panels)
 ```
 
 **BECore subsystems** (each has a `CLAUDE.md`): `GameManager/CoreManager` (the service locator), `Scene/`, `UI/` (canvases, scaler, layout, validator), `Text/`, `Animation/` (tweens, timelines), `Particles/` (2D particle effects), `Control/` (the control API core; transport in `RemoteControl`), `Save/`, `Config/`, `FileSystem/`, `Resource/`, `Renderer/` (`IRenderer`, SDL or Vulkan backend by `renderer` in `ApplicationConfig.xml`), `Reflection/`, `Logger/`, `Profiler/` (the `BE_PROFILE_*` macros; `ENGINE_PROFILER`, preset `macos-profile`).

@@ -30,6 +30,7 @@ namespace BECore {
         for (int i = 1; i < argc && argv != nullptr; ++i) {
             _arguments.emplace_back(argv[i]);
         }
+        CoreManager::GetCommandLine().Set(_arguments);
     }
 
     bool Application::Initialize() {

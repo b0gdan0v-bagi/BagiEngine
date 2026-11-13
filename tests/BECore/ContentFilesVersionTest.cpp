@@ -26,6 +26,10 @@ namespace BECore::Tests {
         ExpectContentFilesAtCurrentVersion(EngineRoot() / "games" / "Match3" / "config");
     }
 
+    TEST(ContentFilesVersionTest, StressConfigIsCurrent) {
+        ExpectContentFilesAtCurrentVersion(EngineRoot() / "tools" / "stress" / "config");
+    }
+
     /// The helper a game's own test calls, on a folder with one file of every kind
     TEST(ContentFilesVersionTest, FindsOnlyStaleContentFiles) {
         const std::filesystem::path dir = TestTempDirectory("BagiContentFilesCheck");
