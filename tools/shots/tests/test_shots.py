@@ -220,3 +220,15 @@ def test_the_command_line_runs_as_a_script(game_root):
     done = subprocess.run([sys.executable, str(shots.SHOTS_DIR / "shots.py"), "scenes", "--root", str(game_root)], capture_output=True, text=True)
 
     assert done.returncode == 0 and "fresh-table: the table after the deal" in done.stdout
+
+
+def test_the_example_set_of_the_doc_is_a_valid_set(tmp_path):
+    doc = (shots.SHOTS_DIR / "CLAUDE.md").read_text(encoding="utf-8")
+    example = doc.split("## The screenshot set of a game", 1)[1].split("```json\n", 1)[1].split("\n```", 1)[0]
+    rules = tmp_path / ".claude" / "rules"
+    rules.mkdir(parents=True)
+    (rules / "qa-project.md").write_text("## Screenshots\n\n```json\n" + example + "\n```\n", encoding="utf-8")
+
+    shots_set = shots.load_set(tmp_path)
+
+    assert shots.parse_scenes("table,setup@720x1280", shots_set) == {"1920x1080": ["table"], "720x1280": ["setup"]}
