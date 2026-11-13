@@ -33,6 +33,7 @@ namespace BECore {
     }
 
     void UIElement::Initialize() {
+        opacity = IRenderer::ClampOpacity(opacity);
         // The second of a type is dropped, as `AddComponent` would never have made it
         for (size_t i = 0; i < components.size(); ++i) {
             const auto typeName = components[i]->GetTypeMeta().typeName;

@@ -57,6 +57,7 @@ namespace BECore {
         BE_REFLECT_FIELD bool _modal = false;           ///< while shown, no mouse event gets past this canvas
         BE_REFLECT_FIELD bool _visible = true;          ///< drawn and, with `inputEnabled`, takes input
         BE_REFLECT_FIELD bool _inputEnabled = true;
+        BE_REFLECT_FIELD float _opacity = 1.0f;  ///< paint only: the tree and the popups are drawn at this alpha factor, 0..1; the tooltip plate is not faded
 
         /// A screen in a file of its own, a UIDocument such as `assets/ui/hud.ui.xml`. Its elements and variants come first, the inline ones below come after them
         /// (drawn on top, and a later variant wins). The elements of a file belong to the file: they are not saved back with the scene

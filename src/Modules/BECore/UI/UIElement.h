@@ -70,6 +70,7 @@ namespace BECore {
         BE_REFLECT_FIELD UIColor pressedColor;   ///< the fill while pressed; transparent: `color` darkened
         BE_REFLECT_FIELD UIColor disabledColor;  ///< the fill when disabled; transparent: `color` at half alpha
         BE_REFLECT_FIELD UIColor selectedColor;  ///< the fill when selected; transparent: `color` brightened
+        BE_REFLECT_FIELD float opacity = 1.0f;   ///< paint only: the element and its whole subtree are drawn at this alpha factor, 0..1 (laid out, hit and listed as ever; hide with `visible`)
         Rect rect;                               ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
         BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> children;      // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
         BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIComponent>> components;  // the same: the long name; one of each type, in draw order

@@ -162,6 +162,7 @@ namespace BECore {
         if (!element.active.visible) {
             return;
         }
+        const ScopedOpacity opacity(renderer, element.opacity);  // the element and its subtree, nested by multiplying
         element.ResolveTheme(CoreManager::GetUIThemes());
         // An element with a clicker is drawn in its own state and hands it to its descendants; one without is drawn in the state it was given
         element.SetInheritedState(inheritedState);
@@ -319,8 +320,11 @@ namespace BECore {
         // The scene's own transform is in effect here; the canvas sets its own and gives the scene's back
         const ViewTransform sceneTransform = renderer->GetViewTransform();
         renderer->SetViewTransform(_layout.GetResolved().transform);
-        DrawElement(*renderer, *_layout.root);
-        DrawPopups(*renderer);
+        {
+            const ScopedOpacity opacity(*renderer, _opacity);  // the tooltip plate stays outside
+            DrawElement(*renderer, *_layout.root);
+            DrawPopups(*renderer);
+        }
         RefreshTooltip();
         DrawTooltip(*renderer);
         renderer->SetViewTransform(sceneTransform);

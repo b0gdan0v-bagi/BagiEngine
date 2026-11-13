@@ -50,6 +50,7 @@ Each file below loads by itself when a file of its area is read; read it by path
 
 - **UI code reads the context, never the window.** `UICanvasLayout`, `UILayout`, `UICanvasScaler`, `UIVariants` and the validator stay pure (no scene, window or renderer).
 - **Edit the tree, then `Invalidate()`.** The cache notices context and canvas-setting changes itself, not element edits. A reflected field changed in the inspector is noticed on the next draw.
+- **Opacity is paint only.** `UIElement::opacity` and `UICanvasComponent::_opacity` multiply into the alpha of every draw of a subtree (`ScopedOpacity`; the tooltip plate is outside the canvas's); an element at 0 is still laid out, hit and in `ui_tree`. The children of an open popup get the canvas opacity, not their ancestors'.
 - **Draw only in `OnDraw()`**, input only through `UIInput`; `OnDraw()` adds or removes no nodes or components.
 - `CoreManager` declares `_uiInput` and `_uiEnvironment` before `_sceneManager`: a canvas unregisters from `UIInput` in its destructor.
 - **Widgets own no game state.** A choice group, a dropdown, a toggle and a slider only emit `ActionEvent(action, value)`; the game applies it and sets the bound `UIVars` variable (game → `UIVars` → widget), so the screen cannot disagree with the game; a widget keeps UI state only (hover, press, an open list), never the choice. Publish **ids** in variables, **words** in the string table.
