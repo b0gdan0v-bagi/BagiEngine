@@ -82,6 +82,36 @@ namespace BECore::Tests {
   </nodes></scene>
 </scenes></SceneManager>)";
 
+        // Two canvases (the same output): Below (layer 5) has a button, Dialog (layer 10) is modal and shows and hides in one second, Linear.
+        //   Box (100, 100, 200 x 100) with the button DialogButton (0, 0, 60 x 40), and BelowButton (100, 400, 100 x 40)
+        constexpr const char* kCanvasXml = R"(
+<SceneManager><scenes>
+  <scene type="Scene" name="Main"><nodes>
+    <node name="Below" layer="5"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize">
+        <elements>
+          <element type="UIElement" name="BelowButton" x="100" y="400" width="100" height="40" color="40,50,60,200">
+            <components><component type="UIInputClicker" action="CanvasBelow"/></components>
+          </element>
+        </elements>
+      </component>
+    </components></node>
+    <node name="Dialog" layer="10"><components>
+      <component type="UICanvasComponent" space="Screen" scaleMode="ConstantPixelSize" modal="true" transitionDuration="1" transitionEase="Linear">
+        <elements>
+          <element type="UIElement" name="Box" x="100" y="100" width="200" height="100" color="100,110,120,200">
+            <children>
+              <element type="UIElement" name="DialogButton" x="0" y="0" width="60" height="40" color="10,20,30,200">
+                <components><component type="UIInputClicker" action="CanvasDialog"/></components>
+              </element>
+            </children>
+          </element>
+        </elements>
+      </component>
+    </components></node>
+  </nodes></scene>
+</scenes></SceneManager>)";
+
         constexpr double kStep = 0.125;  // an exact binary fraction; a frame is clamped to 0.25 s anyway
         constexpr uint8_t kAuthoredAlpha = 200;
         constexpr float kRectTolerance = 1e-3f;
@@ -95,12 +125,16 @@ namespace BECore::Tests {
             int fader = 0;
             int open = 0;
             int under = 0;
+            int dialog = 0;
+            int below = 0;
 
         private:
             void OnAction(const InputEvents::ActionEvent& event) {
                 fader += event.action == PoolString::Intern("TransitionFader") ? 1 : 0;
                 open += event.action == PoolString::Intern("TransitionOpen") ? 1 : 0;
                 under += event.action == PoolString::Intern("TransitionUnder") ? 1 : 0;
+                dialog += event.action == PoolString::Intern("CanvasDialog") ? 1 : 0;
+                below += event.action == PoolString::Intern("CanvasBelow") ? 1 : 0;
             }
         };
 
@@ -457,6 +491,263 @@ namespace BECore::Tests {
         EXPECT_EQ(AllocTracker::GetThreadCounters().count, before);
 #endif
         EXPECT_EQ(AlphaAt(Get("Fader").rect), kAuthoredAlpha);
+    }
+
+    // ---- the canvas ----------------------------------------------------------------------------------------------------------
+
+    class UICanvasTransitionTest : public ::testing::Test {
+    protected:
+        static void SetUpTestSuite() {
+            EngineEnvironment::EnsureCoreServices();
+        }
+
+        void SetUp() override {
+            CoreManager::GetUIVars().Clear();
+            CoreManager::GetUIStrings().Clear();
+            CoreManager::GetFontAtlasLibrary().Clear();
+            CoreManager::GetTime().Reset();
+            _renderer = New<RecordingRenderer>();
+            _renderer->width = 800.0f;
+            _renderer->height = 600.0f;
+            CoreManager::GetRendererManager().SetRenderer(_renderer);
+
+            XmlDeserializer deserializer;
+            ASSERT_TRUE(deserializer.LoadFromString(kCanvasXml));
+            _manager = New<SceneManager>();
+            _manager->Deserialize(deserializer);
+            ASSERT_FALSE(deserializer.HasErrors());
+            _manager->Initialize();
+            _manager->SetActiveScene(PoolString::Intern("Main"));
+            _scene = _manager->GetSceneByName(PoolString::Intern("Main"));
+            const auto& nodes = _scene->GetRootNode().GetChildren();
+            _below = nodes[0]->GetComponent<UICanvasComponent>();
+            _dialog = nodes[1]->GetComponent<UICanvasComponent>();
+            ASSERT_TRUE(_below && _dialog);
+            Draw();
+        }
+
+        void TearDown() override {
+            _below.Reset();
+            _dialog.Reset();
+            _manager.Reset();
+            CoreManager::GetRendererManager().SetRenderer({});
+            CoreManager::GetFontAtlasLibrary().Clear();
+            CoreManager::GetTime().Reset();
+        }
+
+        void Draw() {
+            _renderer->ClearCalls();
+            _manager->DrawAll();
+        }
+
+        void Wait(double seconds) {
+            for (double passed = 0.0; passed < seconds - 1e-9; passed += kStep) {
+                CoreManager::GetTime().Advance(kStep);
+                Draw();
+            }
+        }
+
+        void SetDialogVisible(bool visible) {
+            ASSERT_TRUE(UICanvasComponent::SetVisibleByName(*_scene, PoolString::Intern("Dialog"), visible));
+        }
+
+        UIElement& Get(UICanvasComponent& canvas, const char* name) const {
+            UIElement* element = canvas.GetRoot().FindByName(PoolString::Intern(name));
+            EXPECT_NE(element, nullptr) << name;
+            return *element;
+        }
+
+        const DrawCall* CallAt(const Rect& rect) const {
+            const DrawCall* found = nullptr;
+            for (const DrawCall& call : _renderer->calls) {
+                if (call.kind == DrawKind::Rect && SameRect(call.rect, rect)) {
+                    found = &call;
+                }
+            }
+            return found;
+        }
+
+        std::optional<uint8_t> AlphaAt(const Rect& rect) const {
+            const DrawCall* call = CallAt(rect);
+            return call ? std::optional<uint8_t>(call->color.a) : std::nullopt;
+        }
+
+        void Click(const UIElement& element) {
+            const float x = element.rect.x + 5.0f;
+            const float y = element.rect.y + 5.0f;
+            CoreManager::GetUIInput().DispatchMouseMotion(Motion(x, y));
+            CoreManager::GetUIInput().DispatchMouseButtonDown(Button(x, y, true));
+            CoreManager::GetUIInput().DispatchMouseButtonUp(Button(x, y, false));
+        }
+
+        IntrusivePtr<RecordingRenderer> _renderer;
+        IntrusivePtrAtomic<SceneManager> _manager;
+        Scene* _scene = nullptr;
+        IntrusivePtr<UICanvasComponent> _below;
+        IntrusivePtr<UICanvasComponent> _dialog;
+    };
+
+    TEST_F(UICanvasTransitionTest, AHiddenCanvasIsDrawnForTheDurationAndThenNoMore) {
+        const Rect box = Get(*_dialog, "Box").rect;
+        EXPECT_EQ(AlphaAt(box), kAuthoredAlpha);
+        SetDialogVisible(false);
+        Draw();
+        EXPECT_EQ(AlphaAt(box), kAuthoredAlpha) << "the first frame of the hide";
+        Wait(0.5);
+        EXPECT_EQ(AlphaAt(box), 100);
+        EXPECT_EQ(AlphaAt(Get(*_dialog, "DialogButton").rect), 100);
+        EXPECT_EQ(_renderer->GetOpacity(), 1.0f);
+        Wait(0.375);
+        EXPECT_EQ(AlphaAt(box), 25);
+        Wait(0.125);
+        EXPECT_FALSE(AlphaAt(box).has_value());
+        EXPECT_FALSE(AlphaAt(Get(*_dialog, "DialogButton").rect).has_value()) << "nothing of the canvas is drawn after the end";
+    }
+
+    TEST_F(UICanvasTransitionTest, AShownCanvasRisesFromNothing) {
+        SetDialogVisible(false);
+        Draw();
+        Wait(1.0);
+        const Rect box = Get(*_dialog, "Box").rect;
+        EXPECT_FALSE(AlphaAt(box).has_value());
+        SetDialogVisible(true);
+        Draw();
+        EXPECT_EQ(AlphaAt(box), 0);
+        Wait(0.5);
+        EXPECT_EQ(AlphaAt(box), 100);
+        Wait(0.5);
+        EXPECT_EQ(AlphaAt(box), kAuthoredAlpha);
+    }
+
+    TEST_F(UICanvasTransitionTest, AHideReversedInTheMiddleContinuesFromWhatIsShown) {
+        const Rect box = Get(*_dialog, "Box").rect;
+        SetDialogVisible(false);
+        Draw();
+        Wait(0.25);
+        EXPECT_EQ(AlphaAt(box), 150);
+        SetDialogVisible(true);
+        Draw();
+        EXPECT_EQ(AlphaAt(box), 150);
+        Wait(0.125);
+        EXPECT_EQ(AlphaAt(box), 175);
+    }
+
+    TEST_F(UICanvasTransitionTest, ANoDurationIsTheOldPop) {
+        _dialog->_transitionDuration = 0.0f;
+        const Rect box = Get(*_dialog, "Box").rect;
+        SetDialogVisible(false);
+        Draw();
+        EXPECT_FALSE(AlphaAt(box).has_value());
+        SetDialogVisible(true);
+        Draw();
+        EXPECT_EQ(AlphaAt(box), kAuthoredAlpha);
+    }
+
+    TEST_F(UICanvasTransitionTest, TheScaleIsAboutTheCentreOfTheCanvasAndTheSlideIsInCanvasUnits) {
+        _dialog->_transitionFade = false;
+        _dialog->_transitionScaleFrom = 0.5f;
+        _dialog->_transitionSlideX = 40.0f;
+        _dialog->_transitionSlideY = -20.0f;
+        const Rect box = Get(*_dialog, "Box").rect;
+        SetDialogVisible(false);
+        Draw();
+        Wait(0.5);
+        // Scale 0.75 about (400, 300); half of the slide is left
+        const Rect expected{box.x * 0.75f + 400.0f * 0.25f + 20.0f, box.y * 0.75f + 300.0f * 0.25f - 10.0f, box.w * 0.75f, box.h * 0.75f};
+        const DrawCall* call = CallAt(expected);
+        ASSERT_NE(call, nullptr);
+        EXPECT_EQ(call->color.a, kAuthoredAlpha);
+        EXPECT_EQ(_renderer->GetViewTransform().scale, 1.0f);
+    }
+
+    TEST_F(UICanvasTransitionTest, AModalCanvasReleasesTheScreenTheMomentItStartsToLeave) {
+        ActionCounter actions;
+        EXPECT_TRUE(_dialog->TakesInput());
+        Click(Get(*_below, "BelowButton"));
+        EXPECT_EQ(actions.below, 0) << "a shown modal shields the canvas below";
+        SetDialogVisible(false);
+        EXPECT_FALSE(_dialog->TakesInput()) << "before the next frame";
+        Click(Get(*_below, "BelowButton"));
+        EXPECT_EQ(actions.below, 1);
+        Draw();
+        Wait(0.25);
+        ASSERT_TRUE(CallAt(Get(*_dialog, "Box").rect));
+        EXPECT_FALSE(_dialog->TakesInput()) << "it is still drawn";
+        Click(Get(*_below, "BelowButton"));
+        EXPECT_EQ(actions.below, 2);
+        Click(Get(*_dialog, "DialogButton"));
+        EXPECT_EQ(actions.dialog, 0);
+    }
+
+    TEST_F(UICanvasTransitionTest, WithTransitionInputALeavingModalKeepsTheScreenUntilItEnds) {
+        ActionCounter actions;
+        _dialog->_transitionInput = true;
+        SetDialogVisible(false);
+        Draw();
+        Wait(0.25);
+        EXPECT_TRUE(_dialog->TakesInput());
+        Click(Get(*_below, "BelowButton"));
+        EXPECT_EQ(actions.below, 0) << "the modal still shields";
+        Click(Get(*_dialog, "DialogButton"));
+        EXPECT_EQ(actions.dialog, 1);
+        Wait(1.0);
+        EXPECT_FALSE(_dialog->TakesInput());
+        Click(Get(*_below, "BelowButton"));
+        EXPECT_EQ(actions.below, 1) << "released when the hide ends";
+    }
+
+    TEST_F(UICanvasTransitionTest, ACanvasThatIsShowingConsumesTheEventsAndDeliversNoneUnlessItTakesInput) {
+        ActionCounter actions;
+        SetDialogVisible(false);
+        Draw();
+        Wait(1.0);
+        SetDialogVisible(true);
+        Draw();
+        Wait(0.25);
+        UIElement& button = Get(*_dialog, "DialogButton");
+        EXPECT_TRUE(CoreManager::GetUIInput().DispatchMouseMotion(Motion(button.rect.x + 5.0f, button.rect.y + 5.0f)));
+        EXPECT_FALSE(button.hovered);
+        Click(button);
+        Click(Get(*_below, "BelowButton"));
+        EXPECT_EQ(actions.dialog, 0);
+        EXPECT_EQ(actions.below, 0) << "the modal shields while it comes in";
+        Wait(1.0);
+        Click(button);
+        EXPECT_EQ(actions.dialog, 1);
+
+        _dialog->_transitionInput = true;
+        SetDialogVisible(false);
+        Draw();
+        Wait(1.0);
+        SetDialogVisible(true);
+        Draw();
+        Wait(0.25);
+        Click(button);
+        EXPECT_EQ(actions.dialog, 2) << "with the flag it is as live as a shown one";
+    }
+
+    TEST_F(UICanvasTransitionTest, TheTooltipIsHiddenWhileTheCanvasTransitions) {
+        const auto plateDrawn = [this] {
+            for (const DrawCall& call : _renderer->calls) {
+                if (call.kind == DrawKind::Rect && ColorsEqual(call.color, UITooltip::kPlateColor)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        _dialog->_transitionInput = true;
+        _dialog->_transitionHideDuration = 8.0f;
+        UIElement& button = Get(*_dialog, "DialogButton");
+        button.AddComponent<UITooltipComponent>().text = "Dialog tip";
+        CoreManager::GetUIInput().DispatchMouseMotion(Motion(button.rect.x + 5.0f, button.rect.y + 5.0f));
+        Wait(UITooltip::kHoverDelay + kStep);
+        EXPECT_TRUE(plateDrawn()) << "a steady canvas shows it";
+        SetDialogVisible(false);
+        Draw();
+        CoreManager::GetUIInput().DispatchMouseMotion(Motion(button.rect.x + 6.0f, button.rect.y + 6.0f));
+        Wait(UITooltip::kHoverDelay + kStep);
+        ASSERT_TRUE(CallAt(Get(*_dialog, "Box").rect)) << "it is still on its way out";
+        EXPECT_FALSE(plateDrawn());
     }
 
 }  // namespace BECore::Tests

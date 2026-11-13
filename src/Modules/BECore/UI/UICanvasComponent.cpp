@@ -333,20 +333,45 @@ namespace BECore {
         return false;
     }
 
+    UITransitionSpec UICanvasComponent::MakeTransitionSpec() const {
+        UITransitionSpec spec;
+        spec.fade = _transitionFade;
+        spec.scaleFrom = _transitionScaleFrom;
+        spec.slideX = _transitionSlideX;
+        spec.slideY = _transitionSlideY;
+        spec.duration = _transitionDuration;
+        spec.hideDuration = _transitionHideDuration;
+        spec.ease = _transitionEase;
+        spec.inputDuringTransition = _transitionInput;
+        return spec;
+    }
+
+    bool UICanvasComponent::IsLeavingWithInput() const {
+        return _transitionInput && !_visible && _transition.IsLeaving(CoreManager::GetTime().GetTotalTime());
+    }
+
+    bool UICanvasComponent::IsInputLockedByTransition() const {
+        return _visible && !_transitionInput && _transition.IsShowing(CoreManager::GetTime().GetTotalTime());
+    }
+
     void UICanvasComponent::OnDraw() {
         BE_PROFILE_SCOPE("UICanvas::OnDraw");
         // Also while hidden, so a canvas that is shown later (a modal dialog) already has its place in the input order
         RefreshInputOrder();
 
         const auto& renderer = CoreManager::GetRenderer();
-        if (!_visible) {
+        const double now = CoreManager::GetTime().GetTotalTime();
+        const UITransitionSpec spec = MakeTransitionSpec();
+        _transition.Sync(_visible, now, spec);  // also while hidden: that is how a change of `_visible` is found
+        const bool leaving = _transition.IsLeaving(now);
+        if (!_visible && !IsLeavingWithInput()) {
             ClearPointerState();  // a hidden screen keeps no hover and no press
         }
-        if (!renderer || !_visible) {
+        if (!renderer || (!_visible && !leaving)) {
             return;
         }
-        if (!TakesInput()) {
-            _tooltip.Reset();  // a screen that takes no input (turned off while the pointer rested on it) shows no tooltip
+        if (!TakesInput() || _transition.IsTransitioning(now)) {
+            _tooltip.Reset();  // a screen that takes no input (turned off while the pointer rested on it) or is on its way in or out shows no tooltip
             _pointerOver.Reset();
         }
         SyncPopups();  // a popup opened or closed by code since the last draw gets its rects now
@@ -360,6 +385,10 @@ namespace BECore {
         renderer->SetViewTransform(_layout.GetResolved().transform);
         {
             const ScopedOpacity opacity(*renderer, _opacity);  // the tooltip plate stays outside
+            std::optional<ScopedTransitionDraw> transitionDraw;
+            if (_transition.IsTransitioning(now)) {
+                transitionDraw.emplace(*renderer, UITransition::Evaluate(spec, _transition.Progress(now)), CentreOf(_layout.GetResolved().bounds));
+            }
             DrawElement(*renderer, *_layout.root);
             DrawPopups(*renderer);
         }
@@ -369,7 +398,7 @@ namespace BECore {
     }
 
     bool UICanvasComponent::TakesInput() const {
-        return _visible && _inputEnabled && IsSceneActive();
+        return (_visible || IsLeavingWithInput()) && _inputEnabled && IsSceneActive();
     }
 
     UIElement* UICanvasComponent::HitTestOutput(float outputX, float outputY) const {
@@ -417,7 +446,8 @@ namespace BECore {
         _pressed.Reset();
         element->pressed = false;
         // Letting go anywhere else cancels the click, and so does a transition that locked the element since the press
-        return !element->inputLocked && HitTestOutput(event.x, event.y) == element.Get() ? element : IntrusivePtr<UIElement>{};
+        const bool locked = element->inputLocked || IsInputLockedByTransition();
+        return !locked && HitTestOutput(event.x, event.y) == element.Get() ? element : IntrusivePtr<UIElement>{};
     }
 
     bool UICanvasComponent::OnMouseButtonDown(const SDL_MouseButtonEvent& event) {
@@ -439,7 +469,7 @@ namespace BECore {
             _consumedButtons |= ButtonBit(event.button);
         }
         // An element that is showing or hiding without input shields what is below it and gets nothing
-        const bool locked = hit && hit->inputLocked;
+        const bool locked = IsInputLockedByTransition() || (hit && hit->inputLocked);
         IntrusivePtr<UIElement> toPress;
         if (!locked && hit && hit->IsInteractive() && event.button == SDL_BUTTON_LEFT) {
             if (_pressed) {
@@ -479,7 +509,7 @@ namespace BECore {
         IntrusivePtr<UIElement> clicked = TakeClick(event);
         const bool consumed = ConsumeButtonUp(event);
         UIElement* under = HitTestOutput(event.x, event.y);
-        UpdateTooltip(under && under->inputLocked ? nullptr : under, IsTouch(event));
+        UpdateTooltip(IsInputLockedByTransition() || (under && under->inputLocked) ? nullptr : under, IsTouch(event));
         if (clicked && _tooltip.IsLongPress()) {
             clicked.Reset();  // a finger held long enough showed the tooltip: the release is no click
         }
@@ -505,10 +535,10 @@ namespace BECore {
         UIElement* hit = HitTestOutput(event.x, event.y);
         // A button is held and this canvas did not take its press: a drag of the game, which passing over the UI does not interrupt or light up
         const bool gameDrag = event.state != 0 && _consumedButtons == 0;
-        const bool locked = hit && hit->inputLocked;  // consumed below like any hit, but it gets no hover and no tooltip
+        const bool locked = IsInputLockedByTransition() || (hit && hit->inputLocked);  // consumed below like any hit, but it gets no hover and no tooltip
         SetHovered(gameDrag || locked ? nullptr : hit);
         UpdateTooltip(gameDrag || locked ? nullptr : hit, IsTouch(event));
-        if (_pressed && !_pressed->inputLocked && (event.state & SDL_BUTTON_LMASK) != 0) {
+        if (_pressed && !_pressed->inputLocked && !IsInputLockedByTransition() && (event.state & SDL_BUTTON_LMASK) != 0) {
             // The press that began on this element is held: the element follows the pointer wherever it goes. The copy keeps it alive through the handler
             const IntrusivePtr<UIElement> pressed = _pressed;
             const auto [x, y] = _layout.OutputToCanvas(event.x, event.y);
