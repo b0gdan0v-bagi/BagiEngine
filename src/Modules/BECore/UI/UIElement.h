@@ -4,6 +4,7 @@
 #include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIComponent.h>
 #include <BECore/UI/UIElementStyle.h>
+#include <BECore/UI/UIStateBlend.h>
 #include <BECore/UI/UIStateLook.h>
 
 namespace BECore {
@@ -42,6 +43,8 @@ namespace BECore {
      * **State.** `hovered` and `pressed` are set by the canvas, `selected` and `groupDisabled` by whoever owns a choice; `GetVisualState()` is what they add up to and `UIStateLook` (the pure
      * rules) turns it into a look. The element's own box takes that look (the fills `hoverColor`, `pressedColor`, `disabledColor`, `selectedColor`, or the derived shifts) only when a
      * component says `GivesStateLook()`; a panel that merely `blocksInput` is hovered too and must not light up. A control that is its own class (`UIDropdown`) draws the state look itself.
+     * With a `stateDuration` above 0 (or `UISettings::stateTransition`) a change of state eases: the box, and the tint and the text colour of the children, go from the look shown to the new one over
+     * that time (`UIBlend`, advanced by the draw only; `GetStateLook()` stays the pure look of the state now).
      * An element that does not `OwnsState()` (no `UIInputClicker`) is drawn in the state of its nearest ancestor that does (`GetVisualState`), so the `UIImageComponent` and the
      * `UITextComponent` of the children of a composed button follow its hover, press and disabled state; the child itself is not hovered (its flags, the hit test and `ui_tree` are its own).
      *
@@ -70,7 +73,10 @@ namespace BECore {
         BE_REFLECT_FIELD UIColor pressedColor;   ///< the fill while pressed; transparent: `color` darkened
         BE_REFLECT_FIELD UIColor disabledColor;  ///< the fill when disabled; transparent: `color` at half alpha
         BE_REFLECT_FIELD UIColor selectedColor;  ///< the fill when selected; transparent: `color` brightened
-        Rect rect;                               ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
+        BE_REFLECT_FIELD float opacity = 1.0f;   ///< paint only: the element and its whole subtree are drawn at this alpha factor, 0..1 (laid out, hit and listed as ever; hide with `visible`)
+        BE_REFLECT_FIELD float stateDuration =
+            -1.0f;  ///< seconds the look takes to ease between states (this element's box, and its children's picture and text); -1: `UISettings::stateTransition`, 0: off
+        Rect rect;  ///< laid out: canvas coordinates; empty while the element or an ancestor is hidden
         BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIElement>> children;      // not the IntrusivePtr alias: the generator looks for the long name to find a factory field
         BE_REFLECT_FIELD eastl::vector<IntrusivePtrNonAtomic<UIComponent>> components;  // the same: the long name; one of each type, in draw order
 
@@ -79,6 +85,8 @@ namespace BECore {
         bool pressed = false;
         bool selected = false;       ///< runtime, set by whoever owns the choice: drawn as the chosen one (a bar, a brighter fill)
         bool groupDisabled = false;  ///< runtime: the group this element is in is disabled
+        bool inputLocked = false;    ///< runtime, set by the layout pass of the transitions: the element or an ancestor is showing / hiding with `inputDuringTransition` off; the canvas consumes what
+                                     ///< lands on it and delivers nothing (`UITransitionComponent`)
 
         /// Draws this element, not its children, with the view transform of the canvas in effect (units of the canvas). The base draws the box (`DrawBox`) of `color` and `box`
         virtual void DrawSelf(IRenderer& renderer);
@@ -175,7 +183,12 @@ namespace BECore {
 
         /// Runtime, called by the canvas before it draws the element: the state of the nearest ancestor that `OwnsState()`, null for none. Ignored by an element that `OwnsState()`. Not
         /// reflected and not saved; the element's own flags, `ui_tree` and the hit test never read it
-        void SetInheritedState(const UIStateLook::State* state);
+        /// @p duration is that owner's `GetStateDuration()`: the children follow the owner's transition, not their own
+        void SetInheritedState(const UIStateLook::State* state, float duration);
+
+        /// How long the look of this element eases between states, in seconds, 0 for none: its own `stateDuration`, else `UISettings::stateTransition`; an element drawn inside an owner of the state
+        /// (`SetInheritedState`) answers with the owner's, so a button's picture and caption move with its box
+        [[nodiscard]] float GetStateDuration() const;
 
         /// The element does not react: `groupDisabled` or the `disabled` of its `UIInputClicker` (a control that has a `disabled` of its own adds it). A disabled element still takes the click and
         /// does nothing with it
@@ -241,6 +254,10 @@ namespace BECore {
         /// that always shows its state calls it itself
         void DrawStateBox(IRenderer& renderer);
 
+        /// The look to draw for @p target (this element's state look now): @p target itself when `GetStateDuration()` is 0, else what the blend of this element shows at the game time. Call it
+        /// once per draw; a control that draws its own state box (`UIDropdown`) passes its look through it
+        [[nodiscard]] const UIStateLook::Look& ShownLook(const UIStateLook::Look& target);
+
         /**
          * Draws the box in `rect`: shadow, glow, fill, border, highlight, in this order, as one DrawGeometry call (the order of the triangles is the order of the paint). A
          * @p boxStyle with no effect (`UIBoxStyle::HasEffect`) is the plain `DrawFilledRect` of @p fill, the call every element made before the box existed. @p fill is the colour
@@ -256,7 +273,9 @@ namespace BECore {
     private:
         bool _hasInheritedState = false;  ///< runtime: `_inheritedState` was passed down by the canvas at the last draw
         UIStateLook::State _inheritedState;
-        uint64_t _themeVersion = 0;  ///< UIThemes::GetVersion() at the last resolve; 0: never (the table starts at 1)
+        float _inheritedDuration = 0.0f;        ///< runtime: the owner's `GetStateDuration()`, passed down with it
+        UIBlend<UIStateLook::Look> _lookBlend;  ///< runtime: the box as it is shown while a state change eases; not saved, not copied with the element
+        uint64_t _themeVersion = 0;             ///< UIThemes::GetVersion() at the last resolve; 0: never (the table starts at 1)
 
         // The triangles of DrawBox, kept so that a steady frame allocates nothing
         eastl::vector<GeometryVertex> _boxVertices;

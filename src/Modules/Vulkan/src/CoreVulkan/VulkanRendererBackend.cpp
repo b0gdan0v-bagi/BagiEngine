@@ -449,7 +449,7 @@ namespace BECore {
             return;
         }
         const Rect rect = GetViewTransform().ToOutput(x, y, w, h);
-        _rectPipeline.Draw(_commandBuffers[_currentFrame], rect.x, rect.y, rect.w, rect.h, color, _currentExtent, scissor);
+        _rectPipeline.Draw(_commandBuffers[_currentFrame], rect.x, rect.y, rect.w, rect.h, ApplyOpacity(color), _currentExtent, scissor);
         CountDraw(nullptr, kQuadTriangles);
     }
 
@@ -484,6 +484,7 @@ namespace BECore {
         const Rect dst = GetViewTransform().ToOutput(dstX, dstY, dstW, dstH);
 
         constexpr float kColorScale = 1.0f / 255.0f;
+        const Color faded = ApplyOpacity(tint);
         VulkanTexturePipeline::PushConstants pc{};
         pc.dstX    = dst.x;
         pc.dstY    = dst.y;
@@ -493,10 +494,10 @@ namespace BECore {
         pc.v0      = v0;
         pc.u1      = u1;
         pc.v1      = v1;
-        pc.tintR   = static_cast<float>(tint.r) * kColorScale;
-        pc.tintG   = static_cast<float>(tint.g) * kColorScale;
-        pc.tintB   = static_cast<float>(tint.b) * kColorScale;
-        pc.tintA   = static_cast<float>(tint.a) * kColorScale;
+        pc.tintR   = static_cast<float>(faded.r) * kColorScale;
+        pc.tintG   = static_cast<float>(faded.g) * kColorScale;
+        pc.tintB   = static_cast<float>(faded.b) * kColorScale;
+        pc.tintA   = static_cast<float>(faded.a) * kColorScale;
         pc.screenW = static_cast<float>(_currentExtent.width);
         pc.screenH = static_cast<float>(_currentExtent.height);
 
@@ -558,9 +559,10 @@ namespace BECore {
         auto* out = static_cast<VulkanGeometryPipeline::Vertex*>(allocation.vertices);
         for (size_t i = 0; i < vertices.size(); ++i) {
             const GeometryVertex& vertex = vertices[i];
+            const Color color = ApplyOpacity(vertex.color);
             const float x = (vertex.x + translateX) * view.scale + view.offsetX;
             const float y = (vertex.y + translateY) * view.scale + view.offsetY;
-            out[i] = {x, y, vertex.color.r, vertex.color.g, vertex.color.b, vertex.color.a, vertex.u, vertex.v};
+            out[i] = {x, y, color.r, color.g, color.b, color.a, vertex.u, vertex.v};
         }
         auto* outIndices = static_cast<uint32_t*>(allocation.indices);
         for (size_t i = 0; i < indexCount; ++i) {

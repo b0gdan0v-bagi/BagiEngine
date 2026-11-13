@@ -129,6 +129,24 @@ namespace BECore {
             return _blendMode;
         }
 
+        // The opacity of what is drawn next, 0 to 1 (1 by default; a NaN is 1, a value outside the range is cut to it). State of the interface like the
+        // blend mode: every primitive (DrawFilledRect, DrawTexture, DrawGeometry, so text, UI boxes, particles and the transformed draws) multiplies its
+        // alpha by it, once, in both backends. It is a per-draw multiply, not a composite of a group, so overlapping draws blend through each other.
+        // Whoever sets another value puts the previous one back (ScopedOpacity, which nests by multiplying).
+        void SetOpacity(float opacity) {
+            _opacity = ClampOpacity(opacity);
+        }
+        [[nodiscard]] float GetOpacity() const {
+            return _opacity;
+        }
+        /// An opacity in the range the renderer keeps: 0 to 1, a NaN is 1
+        [[nodiscard]] static constexpr float ClampOpacity(float opacity) {
+            if (!(opacity == opacity)) {
+                return 1.0f;
+            }
+            return opacity < 0.0f ? 0.0f : (opacity > 1.0f ? 1.0f : opacity);
+        }
+
         // Maps the coordinates of DrawFilledRect() and DrawTexture() to output pixels (the identity by default). The
         // scene sets it around its draw pass to fit its view to the output (Scene::Draw()). The backends apply it.
         void SetViewTransform(const ViewTransform& transform) {
@@ -185,13 +203,26 @@ namespace BECore {
         }
         static constexpr uint64_t kQuadTriangles = 2;
 
+        /// The one place the opacity rule is written: @p color with its alpha times GetOpacity(), rounded. A backend calls it once per primitive;
+        /// at opacity 1 the color comes back untouched.
+        [[nodiscard]] Color ApplyOpacity(const Color& color) const {
+            if (_opacity >= 1.0f) {
+                return color;
+            }
+            Color result = color;
+            result.a = static_cast<unsigned char>(static_cast<float>(color.a) * _opacity + kOpacityRounding);
+            return result;
+        }
+
     private:
+        static constexpr float kOpacityRounding = 0.5f;
         static constexpr Color kWhite{255, 255, 255, 255};
 
         uint64_t _id = 0;
         bool _geometryWarned = false;
         ViewTransform _viewTransform;
         BlendMode _blendMode = BlendMode::Alpha;
+        float _opacity = 1.0f;
         // Each entry is already intersected with the one below it
         eastl::vector<Rect> _clipStack;
         RenderCounters _counters;
@@ -236,6 +267,25 @@ namespace BECore {
     private:
         IRenderer& _renderer;
         BlendMode _previous;
+    };
+
+    /// Multiplies the opacity of a renderer by @p factor for the length of a scope and puts the previous value back, so a subtree inside a subtree
+    /// draws with the product. A NaN factor is 1.
+    class ScopedOpacity {
+    public:
+        ScopedOpacity(IRenderer& renderer, float factor) : _renderer(renderer), _previous(renderer.GetOpacity()) {
+            _renderer.SetOpacity(_previous * IRenderer::ClampOpacity(factor));
+        }
+        ~ScopedOpacity() {
+            _renderer.SetOpacity(_previous);
+        }
+
+        ScopedOpacity(const ScopedOpacity&) = delete;
+        ScopedOpacity& operator=(const ScopedOpacity&) = delete;
+
+    private:
+        IRenderer& _renderer;
+        float _previous;
     };
 
 }  // namespace BECore

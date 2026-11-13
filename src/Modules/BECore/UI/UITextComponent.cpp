@@ -1,5 +1,6 @@
 #include "UITextComponent.h"
 
+#include <BECore/GameManager/CoreManager.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UIThemes.h>
 #include <Generated/UITextComponent.gen.hpp>
@@ -55,7 +56,9 @@ namespace BECore {
     }
 
     void UITextComponent::DrawSelf(IRenderer& renderer, UIElement& owner) {
-        _painter.Draw(renderer, MakeParams(owner.active.fontSize, ShownText(owner, text)), owner.GetComponentArea(), GetStateColor(owner.GetVisualState()), textColor);
+        const Color targetColor = GetStateColor(owner.GetVisualState());
+        const Color& stateColor = _colorBlend.Follow(targetColor, CoreManager::GetTime().GetTotalTime(), owner.GetStateDuration(), UIStateLook::kTransitionEase);
+        _painter.Draw(renderer, MakeParams(owner.active.fontSize, ShownText(owner, text)), owner.GetComponentArea(), stateColor, textColor);
     }
 
     UIContentFit UITextComponent::CheckContent(const UIElement& owner, float width, float height, float scale) const {

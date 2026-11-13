@@ -13,6 +13,7 @@
 #include <BECore/UI/UISliderComponent.h>
 #include <BECore/UI/UISwitchComponent.h>
 #include <BECore/UI/UIToggleComponent.h>
+#include <BECore/UI/UITransitionComponent.h>
 #include <Common/EngineEnvironment.h>
 #include <Common/Printers.h>
 #include <Common/RecordingRenderer.h>
@@ -254,6 +255,42 @@ namespace BECore::Tests {
         EXPECT_STREQ(ElementToXml(*loaded).c_str(), xml.c_str());
         EXPECT_EQ(loaded->components[0]->Cast<UITestProbe>()->mark.g, 0);
         EXPECT_EQ(loaded->components[0]->Cast<UITestProbe>()->mark.r, 1);
+    }
+
+    TEST_F(UIComponentTest, ATransitionComponentComesFromTheFileAndSavesBackTheSame) {
+        constexpr const char* xml =
+            R"(<root><element name="T"><components><component type="UITransitionComponent" duration="0.2" hideDuration="0.1" scaleFrom="0.9" slideX="4" slideY="24" ease="CubicOut" fade="false" inputDuringTransition="true"/></components></element></root>)";
+        XmlDeserializer deserializer;
+        ASSERT_TRUE(deserializer.LoadFromString(xml));
+        auto loaded = New<UIElement>();
+        ASSERT_TRUE(deserializer.BeginObject("element"));
+        loaded->Deserialize(deserializer);
+        deserializer.EndObject();
+        ASSERT_FALSE(deserializer.HasErrors());
+        const UITransitionComponent* transition = loaded->GetComponent<UITransitionComponent>();
+        ASSERT_NE(transition, nullptr);
+        EXPECT_EQ(transition->duration, 0.2f);
+        EXPECT_EQ(transition->hideDuration, 0.1f);
+        EXPECT_EQ(transition->scaleFrom, 0.9f);
+        EXPECT_EQ(transition->slideX, 4.0f);
+        EXPECT_EQ(transition->slideY, 24.0f);
+        EXPECT_EQ(transition->ease, EaseType::CubicOut);
+        EXPECT_FALSE(transition->fade);
+        EXPECT_TRUE(transition->inputDuringTransition);
+
+        const eastl::string saved = ElementToXml(*loaded);
+        XmlDeserializer again;
+        ASSERT_TRUE(again.LoadFromString(eastl::string_view(saved.data(), saved.size())));
+        auto reloaded = New<UIElement>();
+        ASSERT_TRUE(again.BeginObject("element"));
+        reloaded->Deserialize(again);
+        again.EndObject();
+        EXPECT_STREQ(ElementToXml(*reloaded).c_str(), saved.c_str());
+
+        // The defaults of a bare component: a show and a hide with no time, the fade on
+        const UITransitionComponent bare;
+        EXPECT_TRUE(bare.fade);
+        EXPECT_FALSE(bare.MakeSpec().IsActive());
     }
 
     TEST_F(UIComponentTest, AnElementWithNoComponentsSavesNoneAndLoadsNone) {

@@ -61,10 +61,12 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(settings.userScale, 1.0f);
         EXPECT_FLOAT_EQ(settings.minTouchSize, 32.0f);
         EXPECT_FLOAT_EQ(settings.hotReloadInterval, 0.5f);
+        EXPECT_FLOAT_EQ(settings.stateTransition, 0.0f);
     }
 
     TEST(UISettingsPureTest, AttributesOverrideTheDefaults) {
-        const UISettings settings = Parse(R"(<UIConfig userScale="1.5" minTouchSize="44" hotReloadInterval="2"/>)");
+        const UISettings settings = Parse(R"(<UIConfig userScale="1.5" minTouchSize="44" hotReloadInterval="2" stateTransition="0.125"/>)");
+        EXPECT_FLOAT_EQ(settings.stateTransition, 0.125f);
 
         EXPECT_FLOAT_EQ(settings.userScale, 1.5f);
         EXPECT_FLOAT_EQ(settings.minTouchSize, 44.0f);
@@ -82,6 +84,12 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(Parse(R"(<UIConfig minTouchSize="-4"/>)").minTouchSize, 0.0f);
     }
 
+    TEST(UISettingsPureTest, TheStateTransitionIsKeptInsideItsRange) {
+        EXPECT_FLOAT_EQ(Parse(R"(<UIConfig stateTransition="-1"/>)").stateTransition, 0.0f);
+        EXPECT_FLOAT_EQ(Parse(R"(<UIConfig stateTransition="600"/>)").stateTransition, UISettings::kMaxStateTransition);
+        EXPECT_FLOAT_EQ(Parse(R"(<UIConfig stateTransition="slow"/>)").stateTransition, 0.0f);
+    }
+
     TEST(UISettingsPureTest, AMalformedAttributeKeepsTheDefault) {
         const UISettings settings = Parse(R"(<UIConfig userScale="big" minTouchSize="small" hotReloadInterval="often"/>)");
 
@@ -96,6 +104,7 @@ namespace BECore::Tests {
         EXPECT_FLOAT_EQ(settings.userScale, 1.0f);
         EXPECT_FLOAT_EQ(settings.minTouchSize, 32.0f);
         EXPECT_FLOAT_EQ(settings.hotReloadInterval, 0.5f);
+        EXPECT_FLOAT_EQ(settings.stateTransition, 0.0f) << "no screen of the engine changes unless a game turns it on";
     }
 
     TEST(UIEnvironmentTest, WithoutAWindowTheMetricsAreNeutral) {

@@ -106,7 +106,8 @@ namespace BECore {
     void SDLRendererBackend::DrawFilledRect(float x, float y, float w, float h, const Color& color) {
         if (_renderer && !IsClipEmpty()) {
             SDL_SetRenderDrawBlendMode(_renderer, ToSDLBlendMode(GetBlendMode()));
-            SDL_SetRenderDrawColor(_renderer, color.r, color.g, color.b, color.a);
+            const Color faded = ApplyOpacity(color);
+            SDL_SetRenderDrawColor(_renderer, faded.r, faded.g, faded.b, faded.a);
             const Rect out = GetViewTransform().ToOutput(x, y, w, h);
             SDL_FRect rect{out.x, out.y, out.w, out.h};
             SDL_RenderFillRect(_renderer, &rect);
@@ -124,7 +125,7 @@ namespace BECore {
         }
 
         SDL_Texture* handle = sdlTexture->GetSDLTexture();
-        ApplyTextureState(handle, tint, GetBlendMode());
+        ApplyTextureState(handle, ApplyOpacity(tint), GetBlendMode());
 
         const Rect out = GetViewTransform().ToOutput(dstX, dstY, dstW, dstH);
         SDL_FRect dst{out.x, out.y, out.w, out.h};
@@ -154,7 +155,7 @@ namespace BECore {
         // Not through DrawGeometry(): the software renderer takes two triangles that form an upright rectangle for a plain blit that only flips (so a quad turned by exactly 90 degrees comes out
         // unturned), and its triangle path maps the UVs onto texels 0 to n-1. SDL_RenderTextureRotated is exact on every SDL renderer.
         SDL_Texture* handle = sdlTexture->GetSDLTexture();
-        ApplyTextureState(handle, tint, GetBlendMode());
+        ApplyTextureState(handle, ApplyOpacity(tint), GetBlendMode());
 
         // The view transform is a uniform scale and an offset, so the angle stays and the pivot is the point of the draw units mapped like the rect
         const ViewTransform& view = GetViewTransform();
@@ -228,12 +229,13 @@ namespace BECore {
         _geometryTexCoords.resize(vertices.size() * 2);
         for (size_t i = 0; i < vertices.size(); ++i) {
             const GeometryVertex& vertex = vertices[i];
+            const Color color = ApplyOpacity(vertex.color);
             _geometryPositions[i * 2] = (vertex.x + translateX) * view.scale + view.offsetX;
             _geometryPositions[i * 2 + 1] = (vertex.y + translateY) * view.scale + view.offsetY;
-            _geometryColors[i * kFloatsPerColor] = static_cast<float>(vertex.color.r) / kChannelMax;
-            _geometryColors[i * kFloatsPerColor + 1] = static_cast<float>(vertex.color.g) / kChannelMax;
-            _geometryColors[i * kFloatsPerColor + 2] = static_cast<float>(vertex.color.b) / kChannelMax;
-            _geometryColors[i * kFloatsPerColor + 3] = static_cast<float>(vertex.color.a) / kChannelMax;
+            _geometryColors[i * kFloatsPerColor] = static_cast<float>(color.r) / kChannelMax;
+            _geometryColors[i * kFloatsPerColor + 1] = static_cast<float>(color.g) / kChannelMax;
+            _geometryColors[i * kFloatsPerColor + 2] = static_cast<float>(color.b) / kChannelMax;
+            _geometryColors[i * kFloatsPerColor + 3] = static_cast<float>(color.a) / kChannelMax;
             _geometryTexCoords[i * 2] = vertex.u;
             _geometryTexCoords[i * 2 + 1] = vertex.v;
         }

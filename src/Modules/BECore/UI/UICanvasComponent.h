@@ -5,6 +5,7 @@
 #include <BECore/UI/UICanvasLayout.h>
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UITooltip.h>
+#include <BECore/UI/UITransition.h>
 
 namespace BECore {
 
@@ -57,6 +58,20 @@ namespace BECore {
         BE_REFLECT_FIELD bool _modal = false;           ///< while shown, no mouse event gets past this canvas
         BE_REFLECT_FIELD bool _visible = true;          ///< drawn and, with `inputEnabled`, takes input
         BE_REFLECT_FIELD bool _inputEnabled = true;
+        BE_REFLECT_FIELD float _opacity = 1.0f;  ///< paint only: the tree and the popups are drawn at this alpha factor, 0..1; the tooltip plate is not faded
+
+        /// Show / hide of the whole canvas, the data of a `UITransitionSpec` (`UITransitionComponent` has the same on an element); a duration of 0 is no transition (no animation: the change shows in
+        /// the same frame). A change of
+        /// `_visible` starts it; the canvas is drawn until a hide ends. A hidden canvas takes no input at once (a modal releases the screen when it starts to leave), unless `_transitionInput`:
+        /// then it takes input as a shown one until the hide ends, and a canvas that is showing takes none (it consumes events, delivers nothing) unless `_transitionInput`
+        BE_REFLECT_FIELD float _transitionDuration = 0.0f;       ///< seconds of a show
+        BE_REFLECT_FIELD float _transitionHideDuration = -1.0f;  ///< seconds of a hide; negative: `_transitionDuration`
+        BE_REFLECT_FIELD EaseType _transitionEase = EaseType::QuadOut;
+        BE_REFLECT_FIELD bool _transitionFade = true;
+        BE_REFLECT_FIELD float _transitionScaleFrom = 1.0f;  ///< about the centre of the canvas bounds
+        BE_REFLECT_FIELD float _transitionSlideX = 0.0f;
+        BE_REFLECT_FIELD float _transitionSlideY = 0.0f;
+        BE_REFLECT_FIELD bool _transitionInput = false;
 
         /// A screen in a file of its own, a UIDocument such as `assets/ui/hud.ui.xml`. Its elements and variants come first, the inline ones below come after them
         /// (drawn on top, and a later variant wins). The elements of a file belong to the file: they are not saved back with the scene
@@ -124,7 +139,7 @@ namespace BECore {
             return _inputOrder;
         }
 
-        /// True while the canvas is shown, has input on and its scene is the active one: the only time it consumes an event
+        /// True while the canvas is shown, has input on and its scene is the active one: the only time it consumes an event. A canvas that is hiding takes none, unless `_transitionInput`
         [[nodiscard]] bool TakesInput() const;
 
         /// True between a mouse press that this canvas took and its release: the canvas keeps consuming the motion in between
@@ -145,10 +160,16 @@ namespace BECore {
         [[nodiscard]] UILayoutContext MakeContext(float outputWidth, float outputHeight) const;
         void SyncParams();
         void AdoptDocument();
-        void DrawElement(IRenderer& renderer, UIElement& element, const UIStateLook::State* inheritedState = nullptr) const;
+        void DrawElement(IRenderer& renderer, UIElement& element, const UIStateLook::State* inheritedState = nullptr, float inheritedDuration = 0.0f) const;
         void DrawPopups(IRenderer& renderer) const;
         void DrawTooltip(IRenderer& renderer);
         void RefreshInputOrder();
+
+        [[nodiscard]] UITransitionSpec MakeTransitionSpec() const;
+        /// The canvas is hidden but still drawn by its hide, and `_transitionInput` keeps its input
+        [[nodiscard]] bool IsLeavingWithInput() const;
+        /// Events that land on this canvas are consumed and none is delivered: it is showing with `_transitionInput` off
+        [[nodiscard]] bool IsInputLockedByTransition() const;
 
         /// The element under a point in output pixels, by the layout of the last draw
         [[nodiscard]] UIElement* HitTestOutput(float outputX, float outputY) const;
@@ -180,6 +201,7 @@ namespace BECore {
         IntrusivePtr<UIElement> _popup;    // the open popup the last SyncPopups() saw
         bool _extendWarned = false;        // the ignored `extendToOutput` of a Screen or World canvas was reported
         bool _authoredAdopted = false;     // Initialize() has handed `_elements` and `_variants` to the layout
+        UITransitionRun _transition;       // the show / hide of the canvas, synced with `_visible` at every draw; runtime, not saved
 
         UITooltip::Tracker _tooltip;
         IntrusivePtr<UIElement> _pointerOver;   // what the last pointer event was over, for the tooltip (a hover the game's drag does not count)

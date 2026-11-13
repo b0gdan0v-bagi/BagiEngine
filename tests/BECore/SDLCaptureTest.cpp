@@ -378,6 +378,56 @@ namespace BECore::Tests {
         EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {132, 137, 142, 255}, kBlendTolerance));
     }
 
+    TEST_F(SDLCaptureTest, HalfOpacityFadesARectOverBlack) {
+        renderer->Clear(Color{0, 0, 0, 255});
+        {
+            ScopedOpacity half(*renderer, 0.5f);
+            renderer->DrawFilledRect(100.0f, 50.0f, 200.0f, 100.0f, Color{255, 255, 255, 255});
+        }
+        renderer->DrawFilledRect(0.0f, 0.0f, 40.0f, 40.0f, Color{255, 255, 255, 255});  // the opacity is back to 1
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_TRUE(IsNear(PixelAt(image, 150, 80), {128, 128, 128, 255}, kBlendTolerance));
+        EXPECT_EQ(PixelAt(image, 20, 20), AsPixel(Color{255, 255, 255, 255}));
+    }
+
+    TEST_F(SDLCaptureTest, HalfOpacityFadesATextureOverBlackAndDoesNotStick) {
+        auto texture = MakeSolidTexture(4, 4, Color{255, 255, 255, 255});
+        ASSERT_TRUE(texture);
+
+        renderer->Clear(Color{0, 0, 0, 255});
+        renderer->SetOpacity(0.5f);
+        renderer->DrawTexture(*texture, nullptr, 0.0f, 0.0f, 40.0f, 40.0f);
+        renderer->DrawTransformedTexture(*texture, nullptr, 100.0f, 0.0f, 40.0f, 40.0f, Color{255, 255, 255, 255}, DrawTransform{45.0f, 120.0f, 20.0f});
+        renderer->SetOpacity(1.0f);
+        renderer->DrawTexture(*texture, nullptr, 200.0f, 0.0f, 40.0f, 40.0f);  // the same texture at full opacity
+        const PixelBuffer image = PresentAndRead();
+
+        EXPECT_TRUE(IsNear(PixelAt(image, 20, 20), {128, 128, 128, 255}, kBlendTolerance));
+        EXPECT_TRUE(IsNear(PixelAt(image, 120, 20), {128, 128, 128, 255}, kBlendTolerance));  // the turned branch is faded once
+        EXPECT_EQ(PixelAt(image, 220, 20), AsPixel(Color{255, 255, 255, 255}));
+    }
+
+    TEST_F(SDLCaptureTest, HalfOpacityFadesGeometryOverBlack) {
+        const Color white{255, 255, 255, 255};
+        const eastl::vector<GeometryVertex> quad = {
+            {0.0f, 0.0f, white, 0.0f, 0.0f},
+            {100.0f, 0.0f, white, 1.0f, 0.0f},
+            {100.0f, 100.0f, white, 1.0f, 1.0f},
+            {0.0f, 100.0f, white, 0.0f, 1.0f},
+        };
+        const eastl::vector<int> indices = {0, 1, 2, 0, 2, 3};
+        renderer->Clear(Color{0, 0, 0, 255});
+
+        renderer->SetOpacity(0.5f);
+        renderer->DrawGeometry(nullptr, {quad.data(), quad.size()}, {indices.data(), indices.size()}, 0.0f, 0.0f);
+        renderer->SetOpacity(1.0f);
+        const PixelBuffer image = PresentAndRead();
+
+        ASSERT_FALSE(image.rgba.empty());
+        EXPECT_TRUE(IsNear(PixelAt(image, 50, 50), {128, 128, 128, 255}, kBlendTolerance));
+    }
+
     TEST_F(SDLCaptureTest, UntexturedGeometryFillsItsTrianglesWithTheVertexColors) {
         const eastl::vector<GeometryVertex> quad = {
             {100.0f, 50.0f, kRed, 0.0f, 0.0f},

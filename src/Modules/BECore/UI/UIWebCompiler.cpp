@@ -25,12 +25,16 @@ namespace BECore {
         constexpr size_t TextShadowMinNumbers = 2;  // offsetX, offsetY
         constexpr size_t TextShadowMaxNumbers = 3;  // ... and the blur
         constexpr size_t TextShadowBlurIndex = 2;
+        constexpr float MillisecondsToSeconds = 0.001f;
+        constexpr float PercentToFraction = 0.01f;
 
         // The composed button (`ui-controls.md`, "Components"): the attributes that live on its components, the forms of an icon (`UIImageComponent::kIconOnlyShare`, `kIconWithTextShare`,
         // `kIconPadding`, `kIconGap`, which the tests hold these to) and the name suffixes of its children. A plain text element carries the same text component, a picture the image one
         constexpr eastl::string_view TextComponentKeys[] = {"text",     "font", "fontFamily",  "fontWeight",  "textColor",   "align",     "verticalAlign",
                                                             "overflow", "wrap", "lineSpacing", "minFontSize", "textOutline", "textShadow"};
         constexpr eastl::string_view ClickerKeys[] = {"action", "value", "disabled"};
+        // The fields of the `UITransitionComponent` a `transition` makes (written as attributes of the node, moved into the component by the writers)
+        constexpr eastl::string_view TransitionKeys[] = {"fade", "scaleFrom", "slideX", "slideY", "duration", "ease", "inputDuringTransition"};
         constexpr eastl::string_view ImageKeys[] = {"sprite", "stretch"};  // of the `UIImageComponent` of an `img`
         constexpr eastl::string_view IconKeys[] = {"icon", "iconTint"};
         constexpr eastl::string_view StackKeys[] = {"layout", "direction", "spacing", "padding", "crossAlign", "wrapChildren"};
@@ -148,6 +152,15 @@ namespace BECore {
             UIWebText::WebColor color;
         };
 
+        /// A `transition` value: the seconds of each kind of change it names (not set: not named) and the easing of the fade and the slide
+        struct TransitionValue {
+            std::optional<float> fade;            ///< `opacity`
+            std::optional<float> transform;       ///< `transform`: the scale and the slide of `-be-transition-scale` / `-be-transition-slide`
+            bool transformFirst = false;          ///< `transform` is named before `opacity`: its time is the shared duration
+            std::optional<float> state;           ///< `background-color`, `color`, `border-color`, `all`: the look of a state
+            EaseType ease = EaseType::QuadInOut;  ///< CSS's default easing is `ease`
+        };
+
         /// What the declarations of one element come to, last one winning. Every field is "not set" until a declaration sets it
         struct Resolved {
             bool displayNone = false;
@@ -204,9 +217,147 @@ namespace BECore {
             std::optional<UIWebText::WebColor> fillColor;
             std::optional<UIWebText::WebColor> thumbColor;
             std::optional<UIWebText::WebColor> iconColor;
+            std::optional<float> opacity;
+            std::optional<TransitionValue> transition;
+            std::optional<float> transitionScale;
+            std::optional<std::pair<float, float>> transitionSlide;
+            std::optional<bool> transitionInput;
             /// Set by a handler that applied a value with a caveat (a blurred shadow drawn hard): the check of the declarations reports it, the value still counts
             eastl::string note;
         };
+
+        /// A CSS time: `.2s` or `200ms`, not negative
+        std::optional<float> ParseTime(eastl::string_view text) {
+            const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(text));
+            float scale = 1.0f;
+            eastl::string_view number = lower;
+            if (number.size() > 2 && number.substr(number.size() - 2) == "ms") {
+                number.remove_suffix(2);
+                scale = MillisecondsToSeconds;
+            } else if (number.size() > 1 && number.back() == 's') {
+                number.remove_suffix(1);
+            } else {
+                return std::nullopt;
+            }
+            const auto value = UIText::ParseFiniteFloat(number);
+            if (!value || *value < 0.0f) {
+                return std::nullopt;
+            }
+            return *value * scale;
+        }
+
+        /// The CSS easings the engine has a curve for: `ease` is the quadratic in-out, the others the quadratic or the line
+        std::optional<EaseType> ParseEase(eastl::string_view word) {
+            static const std::pair<eastl::string_view, EaseType> Names[] = {
+                {"linear", EaseType::Linear}, {"ease", EaseType::QuadInOut}, {"ease-in", EaseType::QuadIn}, {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}};
+            for (const auto& [name, ease] : Names) {
+                if (word == name) {
+                    return ease;
+                }
+            }
+            return std::nullopt;
+        }
+
+        /// `opacity`: a number or a percentage, 0 to 1
+        bool ParseOpacity(eastl::string_view value, std::optional<float>& out) {
+            eastl::string_view text = UIWebText::TrimSpace(value);
+            float scale = 1.0f;
+            if (!text.empty() && text.back() == '%') {
+                text.remove_suffix(1);
+                scale = PercentToFraction;
+            }
+            const auto number = UIText::ParseFiniteFloat(text);
+            if (!number) {
+                return false;
+            }
+            const float opacity = *number * scale;
+            if (opacity < 0.0f || opacity > 1.0f) {
+                return false;
+            }
+            out = opacity;
+            return true;
+        }
+
+        /// Adds @p text to the note of a declaration
+        void AddNote(Resolved& r, eastl::string_view text) {
+            if (!r.note.empty()) {
+                r.note += "; ";
+            }
+            r.note += eastl::string(text);
+        }
+
+        /// `transition`: `<property> <time> [<easing>] [<delay>]` entries, comma separated. A delay, an easing the engine has no curve for and a property it does not animate are
+        /// noted and left out; the declaration is not understood when no entry is
+        bool ParseTransition(Resolved& r, eastl::string_view value) {
+            if (UIWebText::ToLower(UIWebText::TrimSpace(value)) == "none") {
+                r.transition.reset();
+                return true;
+            }
+            TransitionValue parsed;
+            bool any = false;
+            bool easeSet = false;
+            for (const eastl::string_view entry : UIWebText::SplitTopLevel(value, ',')) {
+                std::optional<float> duration;
+                std::optional<float> delay;
+                std::optional<EaseType> ease;
+                eastl::string property;
+                bool understood = true;
+                for (const eastl::string_view word : UIWebText::SplitWords(entry)) {
+                    const eastl::string lower = UIWebText::ToLower(word);
+                    if (const auto time = ParseTime(lower)) {
+                        (duration ? delay : duration) = *time;
+                    } else if (const auto curve = ParseEase(lower)) {
+                        ease = curve;
+                    } else if (property.empty() && !lower.empty() && (std::isalpha(static_cast<unsigned char>(lower[0])) != 0)) {
+                        property = lower;
+                    } else {
+                        understood = false;
+                    }
+                }
+                if (property.empty()) {
+                    property = "all";  // CSS: no property is all of them
+                }
+                std::optional<float>* target = property == "opacity"                                                     ? &parsed.fade
+                                               : property == "transform"                                                 ? &parsed.transform
+                                               : IsOneOf(property, {"background-color", "color", "border-color", "all"}) ? &parsed.state
+                                                                                                                         : nullptr;
+                // The colour properties share the one state duration; the others are named once
+                const bool repeated = target != nullptr && *target && target != &parsed.state;
+                if (!understood || !duration || target == nullptr || repeated) {
+                    AddNote(r, Format("'{}' is not supported: left out", UIText::Excerpt(entry).c_str()));
+                    continue;
+                }
+                any = true;
+                if (target == &parsed.transform && !parsed.fade) {
+                    parsed.transformFirst = true;
+                }
+                if (target == &parsed.state && *target && **target != *duration) {
+                    AddNote(r, "the colours of a state share one duration: the first is used");
+                } else {
+                    *target = *duration;
+                }
+                if (delay && *delay != 0.0f) {
+                    AddNote(r, "a transition delay is not supported: left out");
+                }
+                if (ease && target != &parsed.state) {
+                    if (easeSet && parsed.ease != *ease) {
+                        AddNote(r, "fade and slide share one easing: the first is used");
+                    } else {
+                        parsed.ease = *ease;
+                        easeSet = true;
+                    }
+                }
+            }
+            if (!any) {
+                r.note.clear();
+                return false;
+            }
+            if (parsed.fade && parsed.transform && *parsed.fade != *parsed.transform) {
+                AddNote(r, "fade and slide share one duration: the first is used");
+            }
+            r.transition = parsed;
+            return true;
+        }
 
         bool ParseOffset(eastl::string_view value, std::optional<float>& out) {
             if (UIWebText::ToLower(value) == "auto") {
@@ -643,6 +794,40 @@ namespace BECore {
                  } else {
                      return false;
                  }
+                 return true;
+             }},
+            {"opacity", [](Resolved& r, eastl::string_view v) { return ParseOpacity(v, r.opacity); }},
+            {"transition", [](Resolved& r, eastl::string_view v) { return ParseTransition(r, v); }},
+            {"-be-transition-scale",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto scale = UIText::ParseFiniteFloat(UIWebText::TrimSpace(v));
+                 if (!scale || *scale < 0.0f) {
+                     return false;
+                 }
+                 r.transitionScale = *scale;
+                 return true;
+             }},
+            {"-be-transition-slide",
+             [](Resolved& r, eastl::string_view v) {
+                 const auto words = UIWebText::SplitWords(v);
+                 if (words.size() != 2) {
+                     return false;
+                 }
+                 const auto x = UIWebText::ParsePixels(words[0]);
+                 const auto y = UIWebText::ParsePixels(words[1]);
+                 if (!x || !y) {
+                     return false;
+                 }
+                 r.transitionSlide = std::make_pair(*x, *y);
+                 return true;
+             }},
+            {"-be-transition-input",
+             [](Resolved& r, eastl::string_view v) {
+                 const eastl::string lower = UIWebText::ToLower(UIWebText::TrimSpace(v));
+                 if (lower != "allow" && lower != "block") {
+                     return false;
+                 }
+                 r.transitionInput = lower == "allow";
                  return true;
              }},
             {"color",
@@ -1575,6 +1760,7 @@ namespace BECore {
                     attrs.Set("color", UIWebText::FormatWebColor(*r.background));
                 }
                 AddBox(attrs, r, node.kind, report);
+                AddTransition(attrs, r, report);
                 // A panel takes clicks by itself; any other element does when it is a visible plate, and `pointer-events` decides when it is said.
                 // A button, a toggle and a slider are interactive already, which is hit-testable, and a progress bar takes no input at all, so they are left alone
                 const bool defaultBlocks = node.kind == WebKind::Panel;
@@ -1641,6 +1827,57 @@ namespace BECore {
                     AddDerivedSwitchColors(attrs, r, report);
                 }
                 return attrs;
+            }
+
+            /// `opacity` and `transition`: the opacity and the state duration of the element, and the fields of the `UITransitionComponent` the writers make of the transition keys
+            static void AddTransition(Attrs& attrs, const Resolved& r, UIWebReport* report) {
+                if (r.opacity && *r.opacity != 1.0f) {
+                    attrs.Set("opacity", Number(*r.opacity));
+                }
+                const TransitionValue* transition = r.transition ? &*r.transition : nullptr;
+                const bool slides = transition != nullptr && transition->transform;
+                if (!slides && (r.transitionScale || r.transitionSlide)) {
+                    Note(report, "-be-transition-scale and -be-transition-slide only apply with `transform` in transition");
+                }
+                if (transition == nullptr || (!transition->fade && !slides)) {
+                    if (r.transitionInput) {
+                        Note(report, "-be-transition-input only applies with `opacity` or `transform` in transition");
+                    }
+                }
+                if (transition == nullptr) {
+                    return;
+                }
+                if (transition->state && *transition->state > 0.0f) {
+                    attrs.Set("stateDuration", Number(*transition->state));
+                }
+                if (slides && !r.transitionScale && !r.transitionSlide) {
+                    Note(report, "a `transform` transition needs -be-transition-scale or -be-transition-slide to say where it starts");
+                }
+                const float fade = transition->fade.value_or(0.0f);
+                const float transform = slides && (r.transitionScale || r.transitionSlide) ? *transition->transform : 0.0f;
+                const float duration = fade > 0.0f && !(transform > 0.0f && transition->transformFirst) ? fade : transform;
+                if (duration <= 0.0f) {
+                    return;
+                }
+                attrs.Set("duration", Number(duration));
+                if (fade <= 0.0f) {
+                    attrs.Set("fade", "false");
+                }
+                if (transform > 0.0f) {
+                    if (r.transitionScale) {
+                        attrs.Set("scaleFrom", Number(*r.transitionScale));
+                    }
+                    if (r.transitionSlide) {
+                        attrs.Set("slideX", Number(r.transitionSlide->first));
+                        attrs.Set("slideY", Number(r.transitionSlide->second));
+                    }
+                }
+                if (transition->ease != EaseType::QuadOut) {
+                    attrs.Set("ease", Format("{}", transition->ease));
+                }
+                if (r.transitionInput.value_or(false)) {
+                    attrs.Set("inputDuringTransition", "true");
+                }
             }
 
             static void AddBind(Attrs& attrs, const UIHtmlNode& html) {
@@ -2075,6 +2312,22 @@ namespace BECore {
                 }
             }
 
+            /// The `UITransitionComponent` of an element, from the transition keys of its attributes; none when it has no duration
+            static void AddTransitionComponent(pugi::xml_node element, const Attrs& attrs) {
+                if (attrs.Find("duration") == nullptr) {
+                    return;
+                }
+                pugi::xml_node components = element.child("components");
+                if (!components) {
+                    components = element.append_child("components");
+                }
+                pugi::xml_node component = components.append_child("component");
+                component.append_attribute("type") = "UITransitionComponent";
+                for (const eastl::string_view key : TransitionKeys) {
+                    AddComponentAttribute(component, attrs, key);
+                }
+            }
+
             /// The text of a control as a `UITextComponent`, with what a button or a toggle does by itself (@p defaults: a button centres its text, a toggle's caption centres it vertically and does
             /// not wrap);
             /// @p colorOnly writes the colour alone (the bar of a selected icon-only button takes it)
@@ -2130,7 +2383,8 @@ namespace BECore {
                 }
                 bool ownStack = false;
                 for (const auto& [key, value] : attrs.Entries()) {
-                    const bool moved = IsKeyOf(TextComponentKeys, key) || IsKeyOf(ClickerKeys, key) || IsKeyOf(IconKeys, key) || key == "tooltip" || (iconLeft && key == "fontSize");
+                    const bool moved =
+                        IsKeyOf(TextComponentKeys, key) || IsKeyOf(ClickerKeys, key) || IsKeyOf(IconKeys, key) || IsKeyOf(TransitionKeys, key) || key == "tooltip" || (iconLeft && key == "fontSize");
                     // The children of an icon button are a stack of their own, so its own stack attributes would fight them
                     const bool stack = hasIcon && IsKeyOf(StackKeys, key);
                     ownStack |= stack;
@@ -2167,6 +2421,7 @@ namespace BECore {
                     component.append_attribute("type") = "UITooltipComponent";
                     component.append_attribute("text") = tooltip->c_str();
                 }
+                AddTransitionComponent(element, attrs);
                 if (!hasIcon) {
                     return;
                 }
@@ -2213,7 +2468,8 @@ namespace BECore {
                 }
                 bool ownStack = false;
                 for (const auto& [key, value] : attrs.Entries()) {
-                    const bool moved = IsKeyOf(TextComponentKeys, key) || IsKeyOf(ToggleKeys, key) || IsKeyOf(SwitchKeys, key) || key == "disabled" || key == "fontSize";
+                    const bool moved =
+                        IsKeyOf(TextComponentKeys, key) || IsKeyOf(ToggleKeys, key) || IsKeyOf(SwitchKeys, key) || IsKeyOf(TransitionKeys, key) || key == "disabled" || key == "fontSize";
                     const bool stack = IsKeyOf(StackKeys, key);  // the row is a stack of its own
                     ownStack |= stack;
                     if (!moved && !stack) {
@@ -2239,6 +2495,7 @@ namespace BECore {
                 for (const eastl::string_view key : ToggleKeys) {
                     AddComponentAttribute(toggle, attrs, key);
                 }
+                AddTransitionComponent(element, attrs);
 
                 pugi::xml_node children = element.append_child("children");
                 pugi::xml_node caption = AppendPartChild(children, node, CaptionSuffix);
@@ -2271,7 +2528,7 @@ namespace BECore {
                     element.append_attribute("name") = node.name.c_str();
                 }
                 for (const auto& [key, value] : attrs.Entries()) {
-                    if (!IsKeyOf(SliderKeys, key) && !IsKeyOf(SwitchKeys, key) && key != "disabled") {
+                    if (!IsKeyOf(SliderKeys, key) && !IsKeyOf(SwitchKeys, key) && !IsKeyOf(TransitionKeys, key) && key != "disabled") {
                         element.append_attribute(key.c_str()) = value.c_str();
                     }
                 }
@@ -2290,6 +2547,7 @@ namespace BECore {
                 for (const eastl::string_view key : SwitchKeys) {
                     AddComponentAttribute(slider, attrs, key);
                 }
+                AddTransitionComponent(element, attrs);
             }
 
             void WriteNode(pugi::xml_node parent, int index) {
@@ -2315,7 +2573,7 @@ namespace BECore {
                 const bool isText = node.kind == WebKind::Label;
                 const bool isImage = node.kind == WebKind::Image;
                 for (const auto& [key, value] : attrs.Entries()) {
-                    if (!(isText && IsKeyOf(TextComponentKeys, key)) && !(isImage && IsKeyOf(ImageKeys, key))) {
+                    if (!(isText && IsKeyOf(TextComponentKeys, key)) && !(isImage && IsKeyOf(ImageKeys, key)) && !IsKeyOf(TransitionKeys, key)) {
                         element.append_attribute(key.c_str()) = value.c_str();
                     }
                 }
@@ -2333,6 +2591,7 @@ namespace BECore {
                         }
                     }
                 }
+                AddTransitionComponent(element, attrs);
                 if (!node.children.empty()) {
                     pugi::xml_node children = element.append_child("children");
                     for (const int child : node.children) {

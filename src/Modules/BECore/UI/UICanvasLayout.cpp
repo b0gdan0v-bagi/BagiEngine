@@ -44,6 +44,30 @@ namespace BECore {
             }
         }
 
+        /// The pass of the transitions over the whole tree (a hidden element too: its children have their own flags). @p variantsChosen: `active` was just reset from `style`, so a `held` element
+        /// is not visible by its own state any more or again; otherwise the pass of the last layout left `active.visible` true for it and gives the authored `false` back first
+        void SyncTransitions(UIElement& element, double now, bool inheritedLock, bool variantsChosen, eastl::vector<IntrusivePtr<UITransitionComponent>>& found) {
+            bool lock = inheritedLock;
+            if (UITransitionComponent* transition = element.GetComponent<UITransitionComponent>()) {
+                if (transition->held && !variantsChosen) {
+                    element.active.visible = false;
+                }
+                transition->held = false;
+                const UITransitionSpec spec = transition->MakeSpec();
+                transition->run.Sync(element.active.visible, now, spec);
+                if (transition->run.IsLeaving(now)) {
+                    element.active.visible = true;  // it is drawn, laid out and hit until the run ends
+                    transition->held = true;
+                }
+                lock = lock || (transition->run.IsTransitioning(now) && !spec.inputDuringTransition);
+                found.push_back(IntrusivePtr<UITransitionComponent>(transition));
+            }
+            element.inputLocked = lock;
+            for (const auto& child : element.children) {
+                SyncTransitions(*child, now, lock, variantsChosen, found);
+            }
+        }
+
     }  // namespace
 
     bool UICanvasLayout::Update(const UILayoutContext& context) {
@@ -59,17 +83,33 @@ namespace BECore {
         _resolved = UICanvasScaler::Resolve(params, context);
 
         // The variants depend on the bounds only: a change of the safe area or of the density that leaves them alone does not choose again
+        bool variantsChosen = false;
         if (!_valid || !_variantsChosen || !SameRect(_resolved.bounds, _variantBounds)) {
             UIVariants::Apply(*root, variants, _resolved.bounds);
             _variantBounds = _resolved.bounds;
             _variantsChosen = true;
+            variantsChosen = true;
             ++_variantRuns;
         }
+
+        _transitions.clear();
+        SyncTransitions(*root, time, false, variantsChosen, _transitions);
 
         UITreeLayout::Run(*root, _resolved.contentBounds, _resolved.bounds, _regions);
         ++_layoutRuns;
         _valid = true;
         return true;
+    }
+
+    bool UICanvasLayout::AdvanceTransitions(double now) {
+        bool ended = false;
+        for (const auto& transition : _transitions) {
+            ended = transition->run.TakeFinished(now) || ended;
+        }
+        if (ended) {
+            Invalidate();
+        }
+        return ended;
     }
 
     std::pair<float, float> UICanvasLayout::OutputToCanvas(float outputX, float outputY) const {

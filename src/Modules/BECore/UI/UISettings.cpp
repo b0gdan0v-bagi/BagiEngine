@@ -6,6 +6,10 @@ namespace BECore {
         return std::clamp(scale, kMinUserScale, kMaxUserScale);
     }
 
+    float UISettings::ClampStateTransition(float seconds) {
+        return seconds >= 0.0f ? std::min(seconds, kMaxStateTransition) : 0.0f;
+    }
+
     UISettings UISettings::FromConfig(const XmlNode& node) {
         UISettings settings;
         if (!node) {
@@ -19,6 +23,9 @@ namespace BECore {
         }
         if (auto hotReloadInterval = node.ParseAttribute<float>("hotReloadInterval")) {
             settings.hotReloadInterval = std::max(*hotReloadInterval, 0.0f);
+        }
+        if (auto stateTransition = node.ParseAttribute<float>("stateTransition")) {
+            settings.stateTransition = ClampStateTransition(*stateTransition);
         }
         return settings;
     }

@@ -499,6 +499,8 @@ namespace BECore::Tests {
             element.blocksInput = true;
             element.interactive = true;
             element.ignoreSafeArea = true;
+            element.opacity = 0.625f;
+            element.stateDuration = 0.25f;
             auto& probe = element.AddComponent<UITestProbe>();  // the list of components rides along with every control
             probe.tag = PoolString::Intern("BusyProbe");
             probe.mark = Paint(tokens, Color{1, 2, 3, 4});
@@ -561,6 +563,8 @@ namespace BECore::Tests {
 
                 EXPECT_TRUE(original->style == loaded->_elements[0]->style) << type << ": the style changed on the way";
                 EXPECT_TRUE(original->box == loaded->_elements[0]->box) << type << ": the box changed on the way";
+                EXPECT_EQ(loaded->_elements[0]->opacity, 0.625f) << type;
+                EXPECT_EQ(loaded->_elements[0]->stateDuration, 0.25f) << type;
                 EXPECT_STREQ(ElementToXml(*original).c_str(), ElementToXml(*loaded->_elements[0]).c_str()) << type;
             }
         }

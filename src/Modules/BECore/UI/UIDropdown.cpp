@@ -175,7 +175,8 @@ namespace BECore {
             return;
         }
         // The box, then the arrow; the header text is the component, which the canvas draws right after this (`DrawComponents`), left of the arrow
-        const UIStateLook::Look look = GetCurrentBox();
+        const UIStateLook::Look target = GetCurrentBox();
+        const UIStateLook::Look& look = ShownLook(target);
         DrawBox(renderer, look.box, look.fill, look.gradientEnd);
 
         const HeaderParts parts = GetHeaderParts(rect);

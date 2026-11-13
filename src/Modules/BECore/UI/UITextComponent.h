@@ -2,6 +2,7 @@
 
 #include <BECore/UI/UIColor.h>
 #include <BECore/UI/UIComponent.h>
+#include <BECore/UI/UIStateBlend.h>
 #include <BECore/UI/UIStateLook.h>
 #include <BECore/UI/UITextEffects.h>
 #include <BECore/UI/UITextPainter.h>
@@ -79,6 +80,7 @@ namespace BECore {
         [[nodiscard]] static const eastl::string& ShownText(const UIElement& owner, const eastl::string& own);
 
         mutable UITextPainter _painter;
+        UIBlend<Color> _colorBlend;  ///< runtime: the colour as it is shown while a state change eases (`UIElement::GetStateDuration`)
     };
 
 }  // namespace BECore
