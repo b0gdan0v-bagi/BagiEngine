@@ -25,11 +25,11 @@ The module's contract: `src/Modules/BECore/UI/CLAUDE.md`. Everything here is **o
 - **Leaving keeps the rect.** While it leaves, the layout keeps the element visible, so it keeps its rect and is drawn; the canvas lays out again when the run ends (`AdvanceTransitions`) and the element goes for good. A hidden element is laid out empty as ever.
 - **The rect is not scaled or slid for input.** Hit testing uses the laid-out rect.
 - **Input.** An element in a transition takes no hover, press, click or tooltip unless `inputDuringTransition`, but still consumes events that land on a hit-testable element (`inputLocked`), so what lies below stays shielded. **A canvas that starts to leave releases input at once** (a modal frees the screen), unless `_transitionInput`; a canvas that is showing without it consumes and delivers nothing.
-- A transition never makes the pop of before worse: duration 0, a spec that is not active, a component with no duration all mean the old one-frame change.
+- A transition never makes the pop of before worse: duration 0, a spec that is not active, a component with no duration all mean the change shows in the same frame, as before.
 
 ## The smooth state
 
-`UISettings::stateTransition` (`config/UIConfig.xml`) and the per-element `stateDuration` (0 = off, the default; unset follows the setting) ease the **state look** from the look shown to the new one: the box fill, border and shadow, the tint of an image and the colour of a text, through `UIStateBlend` (`UIBlend<T>`, a fixed `QuadOut`). A new target starts from what is shown, so a hover cut by a press is continuous; the first draw snaps. Not animated: a toggle's switch, a slider's thumb, a dropdown's open / close, the rect (no layout animation) and RmlUi documents (they have their own `opacity` and `transition`).
+`UISettings::stateTransition` (`config/UIConfig.xml`) and the per-element `stateDuration` (-1, the default, follows the setting; 0 is off) ease the **state look** from the look shown to the new one: the box fill, border and shadow, the tint of an image and the colour of a text, through `UIStateBlend` (`UIBlend<T>`, a fixed `QuadOut`). A new target starts from what is shown, so a hover cut by a press is continuous; the first draw snaps. Not animated: a toggle's switch, a slider's thumb, a dropdown's open / close, the rect (no layout animation) and RmlUi documents (they have their own `opacity` and `transition`).
 
 ## Allocations
 

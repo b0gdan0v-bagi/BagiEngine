@@ -20,7 +20,7 @@ namespace BECore {
         float scaleFrom = 1.0f;              ///< the scale of the hidden end, about the pivot; 1 is no scale
         float slideX = 0.0f;                 ///< canvas units the hidden end is moved by, to the right; 0 is none
         float slideY = 0.0f;                 ///< and down
-        float duration = 0.0f;               ///< seconds of a show; 0 or less is no animation (the one-frame pop of before)
+        float duration = 0.0f;               ///< seconds of a show; 0 or less is no animation (no animation: the change shows in the same frame)
         float hideDuration = -1.0f;          ///< seconds of a hide; negative takes `duration`
         EaseType ease = EaseType::QuadOut;   ///< the curve of the progress
         bool inputDuringTransition = false;  ///< whether input reaches the element while it shows or hides

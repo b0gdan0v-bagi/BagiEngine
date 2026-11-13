@@ -60,7 +60,8 @@ namespace BECore {
         BE_REFLECT_FIELD bool _inputEnabled = true;
         BE_REFLECT_FIELD float _opacity = 1.0f;  ///< paint only: the tree and the popups are drawn at this alpha factor, 0..1; the tooltip plate is not faded
 
-        /// Show / hide of the whole canvas, the data of a `UITransitionSpec` (`UITransitionComponent` has the same on an element); a duration of 0 is no transition, the pop of before. A change of
+        /// Show / hide of the whole canvas, the data of a `UITransitionSpec` (`UITransitionComponent` has the same on an element); a duration of 0 is no transition (no animation: the change shows in
+        /// the same frame). A change of
         /// `_visible` starts it; the canvas is drawn until a hide ends. A hidden canvas takes no input at once (a modal releases the screen when it starts to leave), unless `_transitionInput`:
         /// then it takes input as a shown one until the hide ends, and a canvas that is showing takes none (it consumes events, delivers nothing) unless `_transitionInput`
         BE_REFLECT_FIELD float _transitionDuration = 0.0f;       ///< seconds of a show

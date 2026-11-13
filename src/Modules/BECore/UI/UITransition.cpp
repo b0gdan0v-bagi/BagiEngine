@@ -113,7 +113,8 @@ namespace BECore {
     }
 
     bool UITransitionRun::IsLeaving(double now) const {
-        return _synced && !_targetVisible && Progress(now) > kHiddenProgress;
+        // The run decides, not the progress: an overshooting ease (BackOut, ElasticOut) takes the progress below 0 before it settles
+        return _synced && !_targetVisible && IsTransitioning(now);
     }
 
     bool UITransitionRun::IsShowing(double now) const {

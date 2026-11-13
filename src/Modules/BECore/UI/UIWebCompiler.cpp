@@ -156,6 +156,7 @@ namespace BECore {
         struct TransitionValue {
             std::optional<float> fade;            ///< `opacity`
             std::optional<float> transform;       ///< `transform`: the scale and the slide of `-be-transition-scale` / `-be-transition-slide`
+            bool transformFirst = false;          ///< `transform` is named before `opacity`: its time is the shared duration
             std::optional<float> state;           ///< `background-color`, `color`, `border-color`, `all`: the look of a state
             EaseType ease = EaseType::QuadInOut;  ///< CSS's default easing is `ease`
         };
@@ -327,6 +328,9 @@ namespace BECore {
                     continue;
                 }
                 any = true;
+                if (target == &parsed.transform && !parsed.fade) {
+                    parsed.transformFirst = true;
+                }
                 if (target == &parsed.state && *target && **target != *duration) {
                     AddNote(r, "the colours of a state share one duration: the first is used");
                 } else {
@@ -797,7 +801,7 @@ namespace BECore {
             {"-be-transition-scale",
              [](Resolved& r, eastl::string_view v) {
                  const auto scale = UIText::ParseFiniteFloat(UIWebText::TrimSpace(v));
-                 if (!scale || *scale <= 0.0f) {
+                 if (!scale || *scale < 0.0f) {
                      return false;
                  }
                  r.transitionScale = *scale;
@@ -1851,7 +1855,7 @@ namespace BECore {
                 }
                 const float fade = transition->fade.value_or(0.0f);
                 const float transform = slides && (r.transitionScale || r.transitionSlide) ? *transition->transform : 0.0f;
-                const float duration = fade > 0.0f ? fade : transform;
+                const float duration = fade > 0.0f && !(transform > 0.0f && transition->transformFirst) ? fade : transform;
                 if (duration <= 0.0f) {
                     return;
                 }

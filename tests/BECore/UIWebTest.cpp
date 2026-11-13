@@ -3282,6 +3282,37 @@ button:checked { background: var(--panel); }
         EXPECT_EQ(move->ease, EaseType::QuadIn);
     }
 
+    TEST_F(UIWebTest, TheFirstTimeOfOpacityAndTransformIsTheDuration) {
+        const auto transformFirst = Compile(R"(<div id="p"></div>)", "#p { transition: transform 300ms, opacity 100ms; -be-transition-scale: 0.9 }");
+        const auto* first = transformFirst->Element("p")->GetComponent<UITransitionComponent>();
+        ASSERT_NE(first, nullptr) << transformFirst->xml.c_str();
+        EXPECT_FLOAT_EQ(first->duration, 0.3f);
+        EXPECT_EQ(transformFirst->IssuesMentioning("share one duration"), 1u);
+
+        const auto opacityFirst = Compile(R"(<div id="p"></div>)", "#p { transition: opacity 100ms, transform 300ms; -be-transition-scale: 0.9 }");
+        const auto* second = opacityFirst->Element("p")->GetComponent<UITransitionComponent>();
+        ASSERT_NE(second, nullptr) << opacityFirst->xml.c_str();
+        EXPECT_FLOAT_EQ(second->duration, 0.1f);
+        EXPECT_EQ(opacityFirst->IssuesMentioning("share one duration"), 1u);
+
+        // A transform with no end values does nothing, so it does not take the time of the fade
+        const auto noEnd = Compile(R"(<div id="p"></div>)", "#p { transition: transform 300ms, opacity 100ms }");
+        const auto* fadeOnly = noEnd->Element("p")->GetComponent<UITransitionComponent>();
+        ASSERT_NE(fadeOnly, nullptr) << noEnd->xml.c_str();
+        EXPECT_FLOAT_EQ(fadeOnly->duration, 0.1f);
+    }
+
+    TEST_F(UIWebTest, AZeroTransitionScaleIsAccepted) {
+        const auto compiled = Compile(R"(<div id="p"></div>)", "#p { transition: opacity .2s, transform .2s; -be-transition-scale: 0 }");
+        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
+        const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+        ASSERT_NE(transition, nullptr) << compiled->xml.c_str();
+        EXPECT_FLOAT_EQ(transition->scaleFrom, 0.0f);
+
+        const auto negative = Compile(R"(<div id="p"></div>)", "#p { transition: transform .2s; -be-transition-scale: -1 }");
+        EXPECT_EQ(negative->IssuesMentioning("'-be-transition-scale: -1' is not understood"), 1u);
+    }
+
     TEST_F(UIWebTest, TheCssEasingsMapToTheEngineCurves) {
         const std::pair<const char*, EaseType> cases[] = {{"linear", EaseType::Linear},    {"ease", EaseType::QuadInOut},        {"ease-in", EaseType::QuadIn},
                                                           {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}, {"", EaseType::QuadInOut}};

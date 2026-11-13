@@ -27,7 +27,7 @@ namespace BECore {
         BE_REFLECT_FIELD float scaleFrom = 1.0f;
         BE_REFLECT_FIELD float slideX = 0.0f;
         BE_REFLECT_FIELD float slideY = 0.0f;
-        BE_REFLECT_FIELD float duration = 0.0f;       ///< seconds of a show; 0: no animation (the pop of before)
+        BE_REFLECT_FIELD float duration = 0.0f;       ///< seconds of a show; 0: no animation (no animation: the change shows in the same frame)
         BE_REFLECT_FIELD float hideDuration = -1.0f;  ///< seconds of a hide; negative: `duration`
         BE_REFLECT_FIELD EaseType ease = EaseType::QuadOut;
         BE_REFLECT_FIELD bool inputDuringTransition = false;

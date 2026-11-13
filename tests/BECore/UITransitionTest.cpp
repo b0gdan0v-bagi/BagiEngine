@@ -229,6 +229,22 @@ namespace BECore::Tests {
         EXPECT_FALSE(run.IsLeaving(12.0));
     }
 
+    TEST(UITransitionRunTest, AnOvershootingEaseKeepsLeavingUntilTheEnd) {
+        UITransitionSpec spec = Spec(1.0f);
+        spec.ease = EaseType::BackOut;
+        UITransitionRun run;
+        run.Sync(true, 0.0, spec);
+        run.Sync(false, 10.0, spec);
+        bool dipped = false;
+        for (double now = 10.0; now < 11.0; now += 0.0625) {
+            dipped = dipped || run.Progress(now) < 0.0f;
+            EXPECT_TRUE(run.IsLeaving(now)) << "at " << now << " progress " << run.Progress(now);
+        }
+        EXPECT_TRUE(dipped) << "BackOut goes past the goal: the progress dips below 0 before it settles";
+        EXPECT_FALSE(run.IsLeaving(11.0));
+        EXPECT_EQ(run.Progress(11.0), 0.0f);
+    }
+
     TEST(UITransitionRunTest, HideUsesItsOwnDuration) {
         UITransitionRun run;
         run.Sync(true, 0.0, Spec(1.0f, 2.0f));
