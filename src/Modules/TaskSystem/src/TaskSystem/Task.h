@@ -1,7 +1,6 @@
 #pragma once
 
 #include <TaskSystem/TaskPriority.h>
-#include <condition_variable>
 #include <coroutine>
 
 namespace BECore {
@@ -31,7 +30,7 @@ namespace BECore {
              * Signal() hands the reference back, so the owner may be destroyed right inside Signal().
              */
             void SetKeepAlive(IntrusivePtr<RefCountedAtomic> owner) {
-                std::lock_guard lock(_mutex);
+                LockGuard lock(_mutex);
                 _keepAlive = std::move(owner);
             }
 
@@ -44,7 +43,7 @@ namespace BECore {
             void Signal() {
                 IntrusivePtr<RefCountedAtomic> keepAlive;
                 {
-                    std::lock_guard lock(_mutex);
+                    LockGuard lock(_mutex);
                     _signaled.store(true, std::memory_order_release);
                     keepAlive = std::move(_keepAlive);
                     _condition.notify_all();
@@ -57,7 +56,7 @@ namespace BECore {
              * because Signal() hands the reference back itself.
              */
             [[nodiscard]] IntrusivePtr<RefCountedAtomic> ReleaseKeepAlive() {
-                std::lock_guard lock(_mutex);
+                LockGuard lock(_mutex);
                 return std::move(_keepAlive);
             }
 
@@ -65,7 +64,7 @@ namespace BECore {
              * Wakes waiters without finishing the task, so they re-check their own predicate (used by Cancel).
              */
             void Wake() {
-                std::lock_guard lock(_mutex);
+                LockGuard lock(_mutex);
                 _condition.notify_all();
             }
 
@@ -78,13 +77,13 @@ namespace BECore {
              */
             template <typename Predicate>
             void WaitUntil(Predicate interrupted) {
-                std::unique_lock lock(_mutex);
+                UniqueLock lock(_mutex);
                 _condition.wait(lock, [&] { return _signaled.load(std::memory_order_acquire) || interrupted(); });
             }
 
         private:
-            std::mutex _mutex;
-            std::condition_variable _condition;
+            Mutex _mutex{BE_LOCK_SITE("Task completion")};
+            ConditionVariable _condition;
             std::atomic<bool> _signaled{false};
             IntrusivePtr<RefCountedAtomic> _keepAlive;  // guarded by _mutex
         };

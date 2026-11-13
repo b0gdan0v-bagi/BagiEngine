@@ -179,20 +179,22 @@ namespace BECore {
 
         ThreadPool* _threadPool = nullptr;
 
+        // The three mutexes below have level 0: no path holds two of them (every guard is scoped and ProcessDelayedTasks schedules after it
+        // released its lock), and Shutdown destroys queued handles under one of them, which takes the lock of LiveTasks
         // Очередь главного потока (с приоритетами)
         eastl::priority_queue<PrioritizedTask> _mainThreadQueue;
-        mutable std::mutex _mainThreadMutex;
+        mutable Mutex _mainThreadMutex{BE_LOCK_SITE("Main thread queue")};
 
         // Delayed tasks by real time
         eastl::priority_queue<DelayedTask> _delayedTasks;
         // Delayed tasks by game time (_gameTime), under the same mutex
         eastl::priority_queue<DelayedTask> _gameDelayedTasks;
         Duration _gameTime{};
-        mutable std::mutex _delayedMutex;
+        mutable Mutex _delayedMutex{BE_LOCK_SITE("Delayed tasks")};
 
         // Cooperative queue (inline pool only): continuations of background jobs that yielded
         eastl::deque<TaskQueue::TaskFunc> _backgroundSlices;
-        mutable std::mutex _backgroundMutex;
+        mutable Mutex _backgroundMutex{BE_LOCK_SITE("Cooperative queue")};
 
         // Inline pool only, one thread: true while a background job runs on the stack
         bool _inBackgroundJob = false;

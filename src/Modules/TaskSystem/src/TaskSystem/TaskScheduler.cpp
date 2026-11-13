@@ -41,7 +41,7 @@ namespace BECore {
         }
 
         if (threadType == ThreadType::MainThread) {
-            std::lock_guard lock(_mainThreadMutex);
+            LockGuard lock(_mainThreadMutex);
             _mainThreadQueue.push({std::move(task), priority});
         } else {
             DispatchToThreadPool(std::move(task), priority);
@@ -55,7 +55,7 @@ namespace BECore {
         }
 
         if (clock == DelayClock::GameTime) {
-            std::lock_guard lock(_delayedMutex);
+            LockGuard lock(_delayedMutex);
             const TimePoint executeTime = TimePoint{} + SaturatingAdd(_gameTime, delay);
             _gameDelayedTasks.push({std::move(task), executeTime, priority, threadType});
             return;
@@ -63,7 +63,7 @@ namespace BECore {
 
         auto executeTime = Clock::now() + delay;
 
-        std::lock_guard lock(_delayedMutex);
+        LockGuard lock(_delayedMutex);
         _delayedTasks.push({std::move(task), executeTime, priority, threadType});
     }
 
@@ -78,12 +78,12 @@ namespace BECore {
         constexpr double kMaxSeconds = std::chrono::duration<double>(Duration::max()).count();
         const Duration step = seconds >= kMaxSeconds ? Duration::max() : std::chrono::round<Duration>(std::chrono::duration<double>(seconds));
 
-        std::lock_guard lock(_delayedMutex);
+        LockGuard lock(_delayedMutex);
         _gameTime = SaturatingAdd(_gameTime, step);
     }
 
     TaskScheduler::Duration TaskScheduler::GetGameTime() const {
-        std::lock_guard lock(_delayedMutex);
+        LockGuard lock(_delayedMutex);
         return _gameTime;
     }
 
@@ -92,7 +92,7 @@ namespace BECore {
         eastl::vector<PrioritizedTask> tasksToProcess;
 
         {
-            std::lock_guard lock(_mainThreadMutex);
+            LockGuard lock(_mainThreadMutex);
             // Перемещаем все задачи для обработки
             while (!_mainThreadQueue.empty()) {
                 tasksToProcess.push_back(std::move(const_cast<PrioritizedTask&>(_mainThreadQueue.top())));
@@ -114,7 +114,7 @@ namespace BECore {
         eastl::vector<DelayedTask> readyTasks;
 
         {
-            std::lock_guard lock(_delayedMutex);
+            LockGuard lock(_delayedMutex);
             while (!_delayedTasks.empty() && _delayedTasks.top().executeTime <= now) {
                 readyTasks.push_back(std::move(const_cast<DelayedTask&>(_delayedTasks.top())));
                 _delayedTasks.pop();
@@ -135,7 +135,7 @@ namespace BECore {
 
     void TaskScheduler::ScheduleYielded(TaskQueue::TaskFunc task, ThreadType threadType) {
         if (!_stopped.load(std::memory_order_relaxed) && _threadPool && _threadPool->IsInline() && _inBackgroundJob) {
-            std::lock_guard lock(_backgroundMutex);
+            LockGuard lock(_backgroundMutex);
             _backgroundSlices.push_back(std::move(task));
             return;
         }
@@ -161,7 +161,7 @@ namespace BECore {
 
             TaskQueue::TaskFunc slice;
             {
-                std::lock_guard lock(_backgroundMutex);
+                LockGuard lock(_backgroundMutex);
                 if (_backgroundSlices.empty()) {
                     break;
                 }
@@ -193,7 +193,7 @@ namespace BECore {
     }
 
     size_t TaskScheduler::GetBackgroundSliceCount() const {
-        std::lock_guard lock(_backgroundMutex);
+        LockGuard lock(_backgroundMutex);
         return _backgroundSlices.size();
     }
 
@@ -203,19 +203,19 @@ namespace BECore {
 
         // Очищаем очереди
         {
-            std::lock_guard lock(_mainThreadMutex);
+            LockGuard lock(_mainThreadMutex);
             while (!_mainThreadQueue.empty()) {
                 _mainThreadQueue.pop();
             }
         }
 
         {
-            std::lock_guard lock(_backgroundMutex);
+            LockGuard lock(_backgroundMutex);
             _backgroundSlices.clear();
         }
 
         {
-            std::lock_guard lock(_delayedMutex);
+            LockGuard lock(_delayedMutex);
             while (!_delayedTasks.empty()) {
                 _delayedTasks.pop();
             }
@@ -228,12 +228,12 @@ namespace BECore {
     }
 
     size_t TaskScheduler::GetMainThreadQueueSize() const {
-        std::lock_guard lock(_mainThreadMutex);
+        LockGuard lock(_mainThreadMutex);
         return _mainThreadQueue.size();
     }
 
     size_t TaskScheduler::GetDelayedTaskCount() const {
-        std::lock_guard lock(_delayedMutex);
+        LockGuard lock(_delayedMutex);
         return _delayedTasks.size() + _gameDelayedTasks.size();
     }
 
