@@ -21,6 +21,7 @@
 #include <BECore/UI/UIThemes.h>
 #include <BECore/UI/UIToggleComponent.h>
 #include <BECore/UI/UITooltipComponent.h>
+#include <BECore/UI/UITransitionComponent.h>
 #include <BECore/UI/UIWebCompiler.h>
 #include <BECore/UI/UIWebText.h>
 #include <Common/EngineEnvironment.h>
@@ -2592,9 +2593,9 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     // ---- what is reported ----------------------------------------------------------------------------------------------------
 
     TEST_F(UIWebTest, UnsupportedPropertiesValuesAndTagsAreReported) {
-        const auto compiled = Compile("<table id=\"t\"></table>\n<div id=\"a\"></div>", "#a { opacity: .5;\n  width: 2em;\n  justify-content: center; }\n"
+        const auto compiled = Compile("<table id=\"t\"></table>\n<div id=\"a\"></div>", "#a { z-index: 5;\n  width: 2em;\n  justify-content: center; }\n"
                                                                                         "#a { cursor: pointer; position: absolute; box-sizing: border-box; width: 10px }\n");
-        EXPECT_EQ(compiled->IssuesMentioning("property 'opacity' is not supported"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("property 'z-index' is not supported"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("'width: 2em'"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("property 'justify-content'"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("<table> is not supported"), 1u);
@@ -2604,7 +2605,7 @@ button   { width: 124px; height: 48px; font-size: 24px; }
         EXPECT_EQ(compiled->Attr("a", "width"), "10");
         // The line of the declaration is the line of the style text, counted from the <style> tag
         for (const UIWebIssue& issue : compiled->report.issues) {
-            if (issue.message.find("opacity") != eastl::string::npos) {
+            if (issue.message.find("z-index") != eastl::string::npos) {
                 EXPECT_EQ(issue.line, 1u);
                 EXPECT_EQ(issue.source, "css");
             } else if (issue.message.find("2em") != eastl::string::npos) {
@@ -2614,8 +2615,8 @@ button   { width: 124px; height: 48px; font-size: 24px; }
     }
 
     TEST_F(UIWebTest, AnIssueIsReportedOnceWhateverNumberOfElementsItTouches) {
-        const auto compiled = Compile(R"(<div class="x"></div><div class="x"></div><div class="x"></div>)", ".x { opacity: 0.5; margin: 3px }");
-        EXPECT_EQ(compiled->IssuesMentioning("opacity"), 1u);
+        const auto compiled = Compile(R"(<div class="x"></div><div class="x"></div><div class="x"></div>)", ".x { z-index: 2; margin: 3px }");
+        EXPECT_EQ(compiled->IssuesMentioning("z-index"), 1u);
         EXPECT_EQ(compiled->IssuesMentioning("margin only applies"), 1u);
     }
 
@@ -3222,6 +3223,134 @@ button:checked { background: var(--panel); }
 
         const auto media = Compile(R"(<div id="a"></div>)", "@media (min-aspect-ratio: nan) { #a { width: 1px; } } @media (aspect-ratio: 16/inf) { #a { width: 1px; } }");
         EXPECT_EQ(media->report.mediaBlocks, 0u);
+    }
+
+    TEST_F(UIWebTest, OpacityIsANumberOrAPercentageFromZeroToOne) {
+        const auto compiled = Compile(R"(<div id="a"></div><span id="b">B</span><button id="c" data-action="X">C</button><div id="d"></div><div id="e"></div><div id="f"></div>)",
+                                      "#a { opacity: .5 } #b { opacity: 25% } #c { opacity: 0 } #d { opacity: 1 } #e { opacity: 1.5 } #f { opacity: half }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->Attr("a", "opacity"), "0.5");
+        EXPECT_EQ(compiled->Attr("b", "opacity"), "0.25");
+        EXPECT_EQ(compiled->Attr("c", "opacity"), "0");
+        EXPECT_FALSE(compiled->Has("d", "opacity")) << "1 is the default";
+        EXPECT_FALSE(compiled->Has("e", "opacity"));
+        EXPECT_FALSE(compiled->Has("f", "opacity"));
+        EXPECT_EQ(compiled->IssuesMentioning("'opacity: 1.5' is not understood"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'opacity: half' is not understood"), 1u);
+        EXPECT_EQ(compiled->report.issues.size(), 2u);
+        EXPECT_FLOAT_EQ(compiled->Element("a")->opacity, 0.5f);
+        EXPECT_FLOAT_EQ(compiled->Element("c")->opacity, 0.0f);
+    }
+
+    TEST_F(UIWebTest, APanelWithOpacityAndAFadeCompilesToTheXmlWrittenByHand) {
+        const auto compiled = Compile(R"(<div id="p" class="card"></div>)", ".card { width: 200px; height: 100px; background: #112233; opacity: .8; transition: opacity .2s ease-out }");
+        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
+        const UIScreenContent expected = ReadXml(R"(<ui><elements><element type="UIElement" name="p" color="17,34,51,255" width="200" height="100" opacity="0.8" blocksInput="true">
+            <components><component type="UITransitionComponent" duration="0.2"/></components></element></elements></ui>)");
+        ExpectSameElements(expected.elements, compiled->content.elements);
+        const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+        ASSERT_NE(transition, nullptr) << compiled->xml.c_str();
+        EXPECT_TRUE(transition->fade);
+        EXPECT_FLOAT_EQ(transition->duration, 0.2f);
+        EXPECT_EQ(transition->ease, EaseType::QuadOut);
+        EXPECT_FLOAT_EQ(transition->scaleFrom, 1.0f);
+        EXPECT_FALSE(transition->inputDuringTransition);
+        EXPECT_FALSE(compiled->Has("p", "duration")) << "the transition keys are the component's, not the element's";
+        EXPECT_EQ(compiled->Attr("p", "stateDuration"), "");
+    }
+
+    TEST_F(UIWebTest, ATransformTransitionTakesItsEndValuesFromTheEngineProperties) {
+        const auto compiled =
+            Compile(R"(<div id="p"></div>)", "#p { transition: opacity 150ms linear, transform 150ms linear; -be-transition-scale: 0.9; -be-transition-slide: 0px 24px; -be-transition-input: allow }");
+        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
+        const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+        ASSERT_NE(transition, nullptr) << compiled->xml.c_str();
+        EXPECT_TRUE(transition->fade);
+        EXPECT_FLOAT_EQ(transition->duration, 0.15f);
+        EXPECT_EQ(transition->ease, EaseType::Linear);
+        EXPECT_FLOAT_EQ(transition->scaleFrom, 0.9f);
+        EXPECT_FLOAT_EQ(transition->slideX, 0.0f);
+        EXPECT_FLOAT_EQ(transition->slideY, 24.0f);
+        EXPECT_TRUE(transition->inputDuringTransition);
+
+        const auto onlyMove = Compile(R"(<div id="p"></div>)", "#p { transition: transform .3s ease-in; -be-transition-slide: -40px 0px }");
+        EXPECT_FALSE(onlyMove->report.HasIssues());
+        const auto* move = onlyMove->Element("p")->GetComponent<UITransitionComponent>();
+        ASSERT_NE(move, nullptr) << onlyMove->xml.c_str();
+        EXPECT_FALSE(move->fade) << "no opacity in the list: no fade";
+        EXPECT_FLOAT_EQ(move->slideX, -40.0f);
+        EXPECT_EQ(move->ease, EaseType::QuadIn);
+    }
+
+    TEST_F(UIWebTest, TheCssEasingsMapToTheEngineCurves) {
+        const std::pair<const char*, EaseType> cases[] = {{"linear", EaseType::Linear},    {"ease", EaseType::QuadInOut},        {"ease-in", EaseType::QuadIn},
+                                                          {"ease-out", EaseType::QuadOut}, {"ease-in-out", EaseType::QuadInOut}, {"", EaseType::QuadInOut}};
+        for (const auto& [word, ease] : cases) {
+            const auto compiled = Compile(R"(<div id="p"></div>)", std::string("#p { transition: opacity .1s ") + word + " }");
+            const auto* transition = compiled->Element("p")->GetComponent<UITransitionComponent>();
+            ASSERT_NE(transition, nullptr) << word;
+            EXPECT_EQ(transition->ease, ease) << "'" << word << "' (no word is CSS's `ease`)";
+            EXPECT_FALSE(compiled->report.HasIssues()) << word;
+        }
+        const auto bezier = Compile(R"(<div id="p"></div>)", "#p { transition: opacity .1s cubic-bezier(0, 0, 1, 1) }");
+        EXPECT_EQ(bezier->Element("p")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(bezier->IssuesMentioning("'transition: opacity .1s cubic-bezier(0, 0, 1, 1)' is not understood"), 1u);
+    }
+
+    TEST_F(UIWebTest, TheColorTransitionsOfAButtonAreItsStateDuration) {
+        const auto compiled = Compile(R"(<button id="b" data-action="X">B</button><button id="c" data-action="X">C</button><button id="d" data-action="X">D</button>)",
+                                      "#b { transition: background-color .15s } #c { transition: all 200ms ease-in-out } #d { transition: color .1s, border-color .1s }"
+                                      " button { background: #202020 } button:hover { background: #303030 }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_FALSE(compiled->report.HasIssues()) << compiled->report.issues[0].message.c_str();
+        EXPECT_EQ(compiled->Attr("b", "stateDuration"), "0.15");
+        EXPECT_EQ(compiled->Attr("c", "stateDuration"), "0.2");
+        EXPECT_EQ(compiled->Attr("d", "stateDuration"), "0.1");
+        EXPECT_FLOAT_EQ(compiled->Element("b")->stateDuration, 0.15f);
+        EXPECT_EQ(compiled->Element("b")->GetComponent<UITransitionComponent>(), nullptr) << "the state look is not a show / hide";
+        EXPECT_TRUE(compiled->Find("b").child("components").child("component").attribute("type"));
+    }
+
+    TEST_F(UIWebTest, ATransitionOfAToggleAndASliderGoesToTheirComponents) {
+        const auto compiled =
+            Compile(R"(<div id="t" data-widget="toggle" data-bind="v">T</div><div id="s" data-widget="slider" data-bind="w"></div>)", "#t, #s { transition: opacity .25s ease-out; opacity: .9 }");
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_NE(compiled->Element("t")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_NE(compiled->Element("s")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_FALSE(compiled->Has("t", "duration"));
+        EXPECT_FALSE(compiled->Has("s", "duration"));
+        EXPECT_EQ(compiled->Attr("t", "opacity"), "0.9");
+    }
+
+    TEST_F(UIWebTest, WhatATransitionCannotDoIsReportedOnceEach) {
+        const auto compiled = Compile(R"(<div id="a"></div><div id="b"></div><div id="c"></div><div id="d"></div><div id="e"></div><div id="f"></div><div id="g"></div>)",
+                                      "#a { transition: opacity .2s .1s } "                            // a delay
+                                      "#b { transition: opacity .2s, width .2s } "                     // one entry the engine does not animate
+                                      "#c { transition: width .2s } "                                  // nothing it can place
+                                      "#d { animation: fade 1s } "                                     // not supported at all
+                                      "#e { transition: transform .2s } "                              // no end values
+                                      "#f { -be-transition-scale: 0.9 } "                              // end values with no transform
+                                      "#g { transition: opacity .2s; -be-transition-input: maybe }");  // a bad value
+        ASSERT_FALSE(compiled->deserializeErrors) << compiled->xml.c_str();
+        EXPECT_EQ(compiled->IssuesMentioning("a transition delay is not supported"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'width .2s' is not supported: left out"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'transition: width .2s' is not understood"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("property 'animation' is not supported"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("needs -be-transition-scale or -be-transition-slide"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("only apply with `transform` in transition"), 1u);
+        EXPECT_EQ(compiled->IssuesMentioning("'-be-transition-input: maybe' is not understood"), 1u);
+        EXPECT_EQ(compiled->report.issues.size(), 7u);
+        EXPECT_NE(compiled->Element("a")->GetComponent<UITransitionComponent>(), nullptr) << "the fade stays, the delay is dropped";
+        EXPECT_NE(compiled->Element("b")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(compiled->Element("c")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(compiled->Element("e")->GetComponent<UITransitionComponent>(), nullptr);
+    }
+
+    TEST_F(UIWebTest, ATransitionNoneAndATimeOfZeroMakeNoComponent) {
+        const auto compiled = Compile(R"(<div id="a" class="x"></div><div id="b"></div>)", ".x { transition: opacity .2s } #a { transition: none } #b { transition: opacity 0s }");
+        EXPECT_FALSE(compiled->report.HasIssues());
+        EXPECT_EQ(compiled->Element("a")->GetComponent<UITransitionComponent>(), nullptr);
+        EXPECT_EQ(compiled->Element("b")->GetComponent<UITransitionComponent>(), nullptr) << "a time of 0 is no animation";
     }
 
 }  // namespace BECore::Tests
