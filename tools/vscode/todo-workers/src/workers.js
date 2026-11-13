@@ -248,7 +248,7 @@ function attach(ctx) {
 
     // The start dialog's modes: how far the loop goes from the entry. `slices` is the N of `/todo-loop N`.
     function startModes(through, startSlices) {
-        const modes = [{ key: "one", label: "This entry only", description: "/todo-loop 1", slices: 1, note: "this entry only" }];
+        const modes = [{ key: "one", label: "This entry only", description: through ? "/todo-loop 1; a through entry still runs to the end, this limits nothing" : "/todo-loop 1", slices: 1, note: "this entry only" }];
         if (startSlices > 1) modes.push({ key: "list", label: "This entry, then on through the list", description: `/todo-loop ${startSlices} (todoWorkers.startSlices)`, slices: startSlices, note: "then on through the list" });
         modes.push({
             key: "through",
