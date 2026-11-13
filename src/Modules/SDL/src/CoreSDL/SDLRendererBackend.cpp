@@ -207,6 +207,7 @@ namespace BECore {
         if (!_renderer || IsClipEmpty() || vertices.empty() || indices.size() < kIndicesPerTriangle) {
             return;
         }
+        BE_PROFILE_SCOPE("SDLRenderer::DrawGeometry");
         SDL_Texture* handle = nullptr;
         if (texture) {
             const auto* sdlTexture = dynamic_cast<SDLTexture*>(texture);

@@ -1,6 +1,7 @@
 #include <BECore/UI/UIBoxMesh.h>
 #include <EASTL/sort.h>
 #include <gtest/gtest.h>
+#include <iostream>
 
 namespace BECore::Tests {
 
@@ -92,6 +93,21 @@ namespace BECore::Tests {
                 count += TriangleAt(mesh, i).IsCore() ? 1 : 0;
             }
             return count;
+        }
+
+        /// What the SDL software rasterizer pays for a mesh: it visits every pixel of the bounding rectangle of each triangle (`SDL_SW_FillTriangle` with a blend mode), so
+        /// the sum over the triangles of that rectangle in output pixels (@p ppu is the output pixels of one unit)
+        double RasterCost(const Mesh& mesh, float ppu) {
+            double cost = 0.0;
+            for (size_t i = 0; i < mesh.TriangleCount(); ++i) {
+                const Triangle t = TriangleAt(mesh, i);
+                const float minX = std::min({t.a->x, t.b->x, t.c->x}) * ppu;
+                const float maxX = std::max({t.a->x, t.b->x, t.c->x}) * ppu;
+                const float minY = std::min({t.a->y, t.b->y, t.c->y}) * ppu;
+                const float maxY = std::max({t.a->y, t.b->y, t.c->y}) * ppu;
+                cost += static_cast<double>(std::ceil(maxX) - std::floor(minX)) * static_cast<double>(std::ceil(maxY) - std::floor(minY));
+            }
+            return cost;
         }
 
         /// Every index points at a vertex, the list is whole triangles, and no triangle runs the other way round (a zero-area one, from a collapsed corner, may)
@@ -600,6 +616,41 @@ namespace BECore::Tests {
             ExpectWellFormed(Fill({0, 0, 0.3f, 0.3f}, UICorners::Uniform(5), kRed, ppu), "tiny fill");
             ExpectWellFormed(Border({0, 0, 1.0f, 1.0f}, UICorners::Uniform(5), 0.4f, kRed, ppu), "tiny border");
             ExpectWellFormed(Shadow({0, 0, 0.5f, 0.5f}, UICorners::Uniform(5), {0, 0, 4, 0, kRed}, ppu), "tiny shadow");
+        }
+    }
+
+    TEST(UIBoxMeshTest, TheRasterCostOfABoxIsNearItsAreaTimesTheLayers) {
+        // The sample panel and button of UIBoxCaptureTest
+        struct Sample {
+            const char* name;
+            Rect rect;
+            float radius;
+        };
+        const Sample samples[] = {{"panel", {40.0f, 40.0f, 160.0f, 100.0f}, 16.0f}, {"button", {260.0f, 40.0f, 120.0f, 48.0f}, 12.0f}};
+        const UIShadowSpec shadow{0.0f, 12.0f, 6.0f, 0.0f, Color{0, 0, 0, 200}};
+        const UIShadowSpec glow{0.0f, 0.0f, 6.0f, 0.0f, Color{255, 215, 0, 80}};
+        const UIGradientSpec gradient{UIGradientDirection::Vertical, kBlue};
+
+        for (const Sample& sample : samples) {
+            for (const float ppu : {1.0f, 2.0f}) {
+                const UICorners corners = UICorners::Uniform(sample.radius);
+                const double area = static_cast<double>(sample.rect.w) * static_cast<double>(sample.rect.h) * static_cast<double>(ppu) * static_cast<double>(ppu);
+                const struct {
+                    const char* layer;
+                    Mesh mesh;
+                } layers[] = {
+                    {"fill", Fill(sample.rect, corners, kRed, ppu)},
+                    {"gradient", Fill(sample.rect, corners, kRed, ppu, gradient)},
+                    {"border", Border(sample.rect, corners, 3.0f, kWhite, ppu)},
+                    {"shadow", Shadow(sample.rect, corners, shadow, ppu)},
+                    {"glow", Shadow(sample.rect, corners, glow, ppu)},
+                };
+                for (const auto& layer : layers) {
+                    ASSERT_FALSE(layer.mesh.indices.empty()) << sample.name << " " << layer.layer;
+                    std::cout << "[raster] " << sample.name << " x" << ppu << " " << layer.layer << ": triangles " << layer.mesh.TriangleCount() << ", vertices " << layer.mesh.vertices.size()
+                              << ", cost/area " << RasterCost(layer.mesh, ppu) / area << "\n";
+                }
+            }
         }
     }
 
