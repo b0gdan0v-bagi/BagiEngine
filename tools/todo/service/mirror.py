@@ -15,6 +15,24 @@ The automatic mirror between the store and Vikunja. Nobody runs a push or a pull
 
 The entry row is locked (SELECT ... FOR UPDATE) while its task is written and while a webhook is
 applied, so the echo of the mirror's own write always meets the new snapshot and changes nothing.
+
+Lock order. Postgres aborts one of two transactions that wait for each other's row (DeadlockDetected,
+after one second), so every path takes the same rows in the same order: the entry row, then the outbox
+row of the entry, and several entries in id order. Found by reading the code, not from the service log
+(the log of the deployed service was not read). `store.enqueue` is the outbox INSERT ... ON CONFLICT
+DO UPDATE, which waits for a lock another transaction holds on that row.
+
+| path                                                    | first         | second                                  |
+|---------------------------------------------------------|---------------|-----------------------------------------|
+| store writers: `create_entry`, `update_entry`,          | entry row     | outbox row (`enqueue`)                  |
+| `add_dependency`, `remove_dependency`, `claim`,         |               |                                         |
+| `review`, `stop`, `close`                               |               |                                         |
+| `put_area`, `put_plan`, `delete_plan`, `reconcile`      | (no entry     | outbox rows, in id order                |
+| (the entries it queues)                                 | lock)         |                                         |
+| `process_outbox` (then `write_entry`)                   | entry row     | outbox row; then the outbox rows of the |
+|                                                         |               | entries a new task unblocks             |
+| `on_webhook`, `process_task`, `task_deleted`            | entry row     | outbox row, through `store.update_entry`|
+| (`apply_task` too)                                      |               | or `enqueue`                            |
 """
 
 import hashlib
@@ -209,7 +227,10 @@ class Mirror:
                 entry_id = row["entry_id"]
                 try:
                     with conn.transaction():
-                        # the row is locked first, so a write that queues the entry meanwhile waits and queues it again
+                        # the entry row first, then the outbox row: the order of every writer (see the table above)
+                        if store.get_entry(conn, entry_id, lock=True) is None:
+                            continue  # the entry is gone, and its outbox row with it
+                        # locked, so a write that queues the entry meanwhile waits and queues it again
                         if conn.execute("SELECT 1 FROM vikunja_outbox WHERE entry_id = %s FOR UPDATE", (entry_id,)).fetchone() is None:
                             continue
                         self.write_entry(conn, entry_id)
@@ -491,7 +512,7 @@ class Mirror:
                 with conn.transaction():
                     missing = conn.execute(
                         """SELECT id FROM entries WHERE area = %s AND vikunja_task_id IS NULL AND status <> 'closed'
-                           AND id NOT IN (SELECT entry_id FROM vikunja_outbox)""",
+                           AND id NOT IN (SELECT entry_id FROM vikunja_outbox) ORDER BY id""",
                         (area["id"],),
                     ).fetchall()
                     for row in missing:

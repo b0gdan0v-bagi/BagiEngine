@@ -39,7 +39,13 @@ def add_event(conn: Connection, actor: str, kind: str, entry_id: str | None = No
 
 
 def enqueue(conn: Connection, entry_id: str) -> None:
-    """The entry's task has to be written (again). One row per entry; a new write makes it due now."""
+    """
+    The entry's task has to be written (again). One row per entry; a new write makes it due now.
+
+    Lock order, everywhere: the entry row first (`require_entry(lock=True)`), the outbox row second, never the
+    reverse, and several entries in id order. The mirror locks the same way (`mirror.py`, "Lock order"); a
+    writer that took the outbox row first would deadlock with it.
+    """
     conn.execute(
         """INSERT INTO vikunja_outbox (entry_id) VALUES (%s)
            ON CONFLICT (entry_id) DO UPDATE SET due_at = now(), attempts = 0, last_error = NULL""",
@@ -72,7 +78,7 @@ def put_area(conn: Connection, area_id: str, title: str, vikunja_project: str | 
         conn.execute("DELETE FROM stages WHERE area = %s", (area_id,))
         for stage in stages:
             conn.execute("INSERT INTO stages (area, number, title) VALUES (%s, %s, %s)", (area_id, int(stage["number"]), stage["title"]))
-        for row in conn.execute("SELECT id FROM entries WHERE area = %s AND stage IS NOT NULL", (area_id,)).fetchall():
+        for row in conn.execute("SELECT id FROM entries WHERE area = %s AND stage IS NOT NULL ORDER BY id", (area_id,)).fetchall():
             enqueue(conn, row["id"])  # the stage title is part of the description
     add_event(conn, actor, "area", data={"area": area_id, "title": title, "vikunjaProject": vikunja_project, "stages": stages})
     return next(area for area in list_areas(conn) if area["id"] == area_id)
@@ -498,7 +504,7 @@ def put_plan(conn: Connection, name: str, content: str, entry_id: str | None, ki
         ).fetchone()
     add_event(conn, actor, "plan", plan["entry_id"], name, {"kind": kind, "progress": checklist_progress(read_checklist(content, name))})
     for row in conn.execute(
-        "SELECT id FROM entries WHERE plan = %s OR (id = %s AND plan IS NULL)", (name, plan["entry_id"])
+        "SELECT id FROM entries WHERE plan = %s OR (id = %s AND plan IS NULL) ORDER BY id", (name, plan["entry_id"])
     ).fetchall():
         enqueue(conn, row["id"])
     return plan
@@ -510,7 +516,7 @@ def delete_plan(conn: Connection, name: str, actor: str) -> None:
         raise StoreError(404, f"no plan '{name}'")
     conn.execute("DELETE FROM plans WHERE name = %s", (name,))
     add_event(conn, actor, "plan deleted", plan["entry_id"], name)
-    for row in conn.execute("SELECT id FROM entries WHERE plan = %s OR id = %s", (name, plan["entry_id"])).fetchall():
+    for row in conn.execute("SELECT id FROM entries WHERE plan = %s OR id = %s ORDER BY id", (name, plan["entry_id"])).fetchall():
         enqueue(conn, row["id"])
 
 
