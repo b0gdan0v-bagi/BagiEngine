@@ -1,5 +1,6 @@
 #include "SpriteField.h"
 
+#include <Stress/StressHash.h>
 #include <cmath>
 
 namespace BECore::Stress {
@@ -14,34 +15,12 @@ namespace BECore::Stress {
         constexpr uint32_t kMarkerMargin = 10;  // the marker of a cell is the square that starts this far from the cell's edge
         constexpr uint32_t kFullColor = 255;
 
-        /// Streams of the hash: one per property of a sprite, so the properties do not follow each other
+        /// The salts of the hash (StressHash.h): one per property of a sprite
         constexpr uint64_t kSaltX = 1;
         constexpr uint64_t kSaltY = 2;
         constexpr uint64_t kSaltSize = 3;
         constexpr uint64_t kSaltSpin = 4;
         constexpr uint64_t kSaltCell = 5;
-
-        /// splitmix64: a fixed integer mix, the same on every machine
-        uint64_t Mix(uint64_t value) {
-            value += 0x9e3779b97f4a7c15ULL;
-            value = (value ^ (value >> 30)) * 0xbf58476d1ce4e5b9ULL;
-            value = (value ^ (value >> 27)) * 0x94d049bb133111ebULL;
-            return value ^ (value >> 31);
-        }
-
-        uint64_t Hash(uint32_t index, uint64_t salt) {
-            return Mix((static_cast<uint64_t>(index) << 8) ^ salt);
-        }
-
-        /// A value of the hash in 0..1
-        float Unit(uint32_t index, uint64_t salt) {
-            constexpr uint64_t kBits = 24;
-            return static_cast<float>(Hash(index, salt) >> (64 - kBits)) / static_cast<float>(1ULL << kBits);
-        }
-
-        float Between(float low, float high, float unit) {
-            return low + (high - low) * unit;
-        }
 
         /// A colour channel of cell @p cell of atlas @p atlas: spread over 40..255 so that no two cells of one atlas look alike
         uint8_t Channel(uint32_t atlas, uint32_t cell, uint64_t channel) {

@@ -17,9 +17,9 @@ Each scene is 1920 x 1080 and has a node `Field` for the scene's component.
 ```
 CMakeLists.txt        be_add_module(Stress), the reflection, BagiStress, StressTests (no standalone block: not a game of its own repository)
 config/               ApplicationConfig.xml (Game mode), SceneConfig.xml: kept at the engine's content version by ContentFilesVersionTest
-src/Stress/           StressSettings (the flags), StressState (what is shown now), StressGame (the IGame), StressGameControl (the control adapter), SpriteField (pure placement of the sprites)
-src/Stress/Components/ the component of each scene (StressSpritesComponent, ...)
-tests/                gtest sources of StressTests
+src/Stress/           StressSettings (the flags), StressState (what is shown now), StressGame (the IGame), StressGameControl (the control adapter), SpriteField and EntityField (pure placement of the sprites and the orbits), StressHash (the integer hash they share)
+src/Stress/Components/ the component of each scene (StressSpritesComponent, StressEntitiesComponent, ...)
+tests/                gtest sources of StressTests; StressSceneFixture.h is the shipped scene file on a RecordingRenderer with the StressGame active (the setup of every scene component's test)
 ```
 
 ## The arguments and the state
@@ -39,6 +39,14 @@ tests/                gtest sources of StressTests
 
 ## The `sprites` scene
 
-`SpriteField` (pure) places sprite `i` of `count`: position, size, spin and the cell of the atlas depend on the index alone (an own integer hash, never `std::rand` or the `std::` distributions: the numbers must not differ between standard libraries), so a bigger count keeps the first sprites where they are. The atlas and the blend mode are what a batcher sees: by default consecutive sprites share them (`count / atlases` per atlas, `kBlendRunLength` per blend mode: the way a game sorts), `--stress-interleave` changes both on every sprite (the worst case). So the runs depend on the count, and a count change re-applies atlas and blend mode to the kept nodes (once, not per frame).
+`SpriteField` (pure) places sprite `i` of `count`: position, size, spin and the cell of the atlas depend on the index alone (`StressHash.h`: an own integer hash, never `std::rand` or the `std::` distributions: the numbers must not differ between standard libraries), so a bigger count keeps the first sprites where they are. The atlas and the blend mode are what a batcher sees: by default consecutive sprites share them (`count / atlases` per atlas, `kBlendRunLength` per blend mode: the way a game sorts), `--stress-interleave` changes both on every sprite (the worst case). So the runs depend on the count, and a count change re-applies atlas and blend mode to the kept nodes (once, not per frame).
 
 `StressSpritesComponent` makes `count` child nodes of its node (`TransformComponent` + `SpriteRendererComponent`, one shared name) when `StressState::Version()` moved: it appends at the tail or removes from the tail, never rebuilds. The atlases are made once at the first update with `IRenderer::CreateTexture` (`SpriteField::MakeAtlasPixels`; the renderer can be missing at `OnAttached`) and handed to the sprites with `SetTexture`; at `ApplicationCleanUpEvent` it waits for the GPU and lets go of them before the renderer dies. A steady frame only adds `spin * deltaTime` to each `_rotation` through cached pointers. There is no batching: one `IRenderer` call per sprite, which is the number a batcher is to lower.
+
+## The `entities` scene
+
+`StressEntitiesComponent` makes `count` child nodes with a `TransformComponent` each and nothing else, so the scene draws nothing and costs the update of the nodes, the tweens and the draw system's walk. The nodes grow and shrink at the tail like the sprites'. Each node runs one `Tween<float>` of 0..1 (`EaseType::Linear`, the duration is one turn of its orbit, 2..6 s by index, `EntityField::OrbitOf`) whose setter writes the position on a circle of its own; the `onComplete` starts it again. Every 16th node also gets a rotation on `SceneUpdateEvent`.
+
+- **The tween rules that matter** (`Animation/CLAUDE.md`): a restart costs one frame per link (rule 2), and the long durations keep the restarts few in a frame; a shrink resets the tail's `ScopedTween`s before the nodes go (rule 8), so the tween count drops with the count and a destroyed scene leaves none.
+- **A restart allocates** (a new tween handle), so a frame in which some tween ends is not allocation-free; every other frame is. The scene is therefore a measure of the tween manager as a game uses it, restarts included.
+- **The tweens run on the global `TweenManager`, not on the scene:** they keep running when another scene is shown. A run is one scene per process (the benchmarks start a fresh one), so switching scenes with `set_scene` in one run leaves the entities' tweens in the measure of the next scene.

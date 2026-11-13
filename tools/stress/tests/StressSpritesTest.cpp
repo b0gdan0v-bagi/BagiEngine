@@ -1,12 +1,6 @@
-#include <BECore/GameManager/CoreManager.h>
-#include <BECore/Reflection/XmlDeserializer.h>
-#include <BECore/Scene/Scene.h>
-#include <BECore/Scene/SceneManager.h>
-#include <Common/EngineEnvironment.h>
-#include <Common/RecordingRenderer.h>
-#include <Games/GameManager.h>
+#include "StressSceneFixture.h"
+
 #include <Stress/Components/StressSpritesComponent.h>
-#include <Stress/StressGame.h>
 #include <gtest/gtest.h>
 
 /**
@@ -16,18 +10,10 @@
 namespace BECore::Stress::Tests {
 
     using BECore::Tests::DrawCall;
-    using BECore::Tests::EngineEnvironment;
-    using BECore::Tests::RecordingRenderer;
 
     namespace {
 
-        constexpr double kFrame = 1.0 / 32.0;  // a power of two: the sums of frame times are exact
         constexpr uint32_t kCount = 2000;
-
-        /// The scenes the app ships, from the file next to the sources: the app's own content is not mounted in the test environment
-        std::filesystem::path ShippedSceneConfig() {
-            return std::filesystem::path(__FILE__).parent_path().parent_path() / "config" / "SceneConfig.xml";
-        }
 
         size_t TextureSwitches(const eastl::vector<DrawCall>& calls) {
             size_t switches = 0;
@@ -39,67 +25,15 @@ namespace BECore::Stress::Tests {
 
     }  // namespace
 
-    class StressSpritesTest : public ::testing::Test {
+    class StressSpritesTest : public StressSceneFixture {
     protected:
-        static void SetUpTestSuite() {
-            EngineEnvironment::EnsureCoreServices();
-        }
-
-        /// Starts the game with the flags @p arguments and the scene file shipped; the scene is `StressSprites`
-        void StartGame(const eastl::vector<eastl::string>& arguments = {}) {
-            CoreManager::GetCommandLine().Set(arguments);
-            _renderer = New<RecordingRenderer>();
-            CoreManager::GetRendererManager().SetRenderer(_renderer);
-
-            XmlDeserializer deserializer;
-            ASSERT_TRUE(deserializer.LoadFromFile(ShippedSceneConfig())) << ShippedSceneConfig().string();
-            _manager = New<SceneManager>();
-            _manager->Deserialize(deserializer);
-            ASSERT_FALSE(deserializer.HasErrors());
-            _manager->Initialize();
-            EngineEnvironment::UseSceneManager(_manager);
-
-            GameManager::GetInstance().Initialize();
-            ASSERT_NE(StressGame::GetActive(), nullptr);
+        void StartSprites(const eastl::vector<eastl::string>& arguments = {}) {
+            StartGame(arguments);
             ASSERT_EQ(_manager->GetActiveScene()->GetName(), "StressSprites"_intern);
         }
 
-        void TearDown() override {
-            GameManager::GetInstance().Shutdown();
-            EngineEnvironment::UseSceneManager({});
-            _manager.Reset();
-            CoreManager::GetRendererManager().SetRenderer({});
-            CoreManager::GetCommandLine().Set({});
-            CoreManager::GetTime().Reset();
-        }
-
-        void SetCount(uint32_t count) {
-            StressGame::GetActive()->GetState().SetCount(count);
-        }
-
-        /// One frame of the scene: the clock, the update
-        void Update() {
-            CoreManager::GetTime().Advance(kFrame);
-            _manager->UpdateAll();
-        }
-
-        void Draw() {
-            _renderer->ClearCalls();
-            _manager->DrawAll();
-        }
-
-        Scene& GetScene() const {
-            return *_manager->GetSceneByName("StressSprites"_intern);
-        }
-
         SceneNode& Field() const {
-            for (const auto& node : GetScene().GetRootNode().GetChildren()) {
-                if (node->GetName() == "Field"_intern) {
-                    return *node;
-                }
-            }
-            ADD_FAILURE() << "no node Field";
-            return GetScene().GetRootNode();
+            return StressSceneFixture::Field("StressSprites");
         }
 
         StressSpritesComponent& Component() const {
@@ -107,13 +41,10 @@ namespace BECore::Stress::Tests {
             EXPECT_TRUE(component);
             return *component;
         }
-
-        IntrusivePtr<RecordingRenderer> _renderer;
-        IntrusivePtrAtomic<SceneManager> _manager;
     };
 
     TEST_F(StressSpritesTest, OneDrawCallPerSprite) {
-        StartGame();
+        StartSprites();
         SetCount(1000);
         Update();
         Draw();
@@ -123,7 +54,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, TheCountOfTheCommandLineIsWhatTheFirstFrameShows) {
-        StartGame({"--stress-count=64"});
+        StartSprites({"--stress-count=64"});
         Update();
         Draw();
 
@@ -131,7 +62,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, TheAtlasesAreMadeOnceAndSharedBySprites) {
-        StartGame();
+        StartSprites();
         SetCount(300);
         Update();
         EXPECT_EQ(_renderer->texturesCreated, kDefaultAtlases);
@@ -143,7 +74,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, GrowAppendsAndShrinkRemovesTheTailKeepingTheFirstNodes) {
-        StartGame();
+        StartSprites();
         SetCount(100);
         Update();
         eastl::vector<const SceneNode*> first;
@@ -170,7 +101,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, KeptSpritesKeepTheirPlace) {
-        StartGame();
+        StartSprites();
         SetCount(100);
         Update();
         const auto transform = Field().GetChildren()[7]->GetComponent<TransformComponent>();
@@ -190,7 +121,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, CountZeroDrawsNothingAndComesBack) {
-        StartGame();
+        StartSprites();
         SetCount(40);
         Update();
         SetCount(0);
@@ -206,7 +137,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, TheSpritesSpin) {
-        StartGame();
+        StartSprites();
         SetCount(20);
         Update();  // builds the nodes and turns them for the first time
         auto transform = [&](size_t i) { return Field().GetChildren()[i]->GetComponent<TransformComponent>(); };
@@ -225,7 +156,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, TheRotationStaysInOneTurn) {
-        StartGame();
+        StartSprites();
         SetCount(30);
         for (int frame = 0; frame < 400; ++frame) {
             Update();
@@ -238,7 +169,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, AGameThatIsNotActiveShowsNothing) {
-        StartGame();
+        StartSprites();
         SetCount(100);
         GameManager::GetInstance().Shutdown();  // no active game now
         Update();
@@ -250,7 +181,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, AnotherActiveSceneDoesNotBuildTheField) {
-        StartGame();
+        StartSprites();
         SetCount(100);
         _manager->SetActiveScene("StressEntities"_intern);
         Update();
@@ -258,7 +189,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, EveryBlendModeIsDrawn) {
-        StartGame();
+        StartSprites();
         SetCount(kCount);
         Update();
         Draw();
@@ -272,7 +203,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, TextureSwitchesFollowTheRuns) {
-        StartGame();
+        StartSprites();
         SetCount(kCount);
         Update();
         Draw();
@@ -282,7 +213,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, InterleaveSwitchesTheTextureOnEverySprite) {
-        StartGame({"--stress-interleave"});
+        StartSprites({"--stress-interleave"});
         SetCount(kCount);
         Update();
         Draw();
@@ -292,7 +223,7 @@ namespace BECore::Stress::Tests {
     }
 
     TEST_F(StressSpritesTest, ChangingTheCountKeepsTheRunsOfTheNewCount) {
-        StartGame();
+        StartSprites();
         SetCount(100);
         Update();
         SetCount(kCount);
