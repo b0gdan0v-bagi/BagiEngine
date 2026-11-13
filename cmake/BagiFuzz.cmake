@@ -52,8 +52,11 @@ if(BE_SANITIZERS)
         list(APPEND BE_SANITIZER_FLAGS -fsanitize=undefined,float-cast-overflow -fno-sanitize-recover=undefined,float-cast-overflow)
     endif()
     add_compile_options(${BE_SANITIZER_FLAGS})
-    # The checks a vendored file cannot pass (cmake/sanitizers/ignorelist.txt); the runtime suppressions do not reach -fno-sanitize-recover
-    add_compile_options(-fsanitize-ignorelist=${CMAKE_CURRENT_LIST_DIR}/sanitizers/ignorelist.txt)
+    # The checks a vendored file cannot pass (cmake/sanitizers/ignorelist.txt); the runtime suppressions do not reach -fno-sanitize-recover.
+    # Clang only: GCC has no -fsanitize-ignorelist, so a GCC build gets no ignore list
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        add_compile_options(-fsanitize-ignorelist=${CMAKE_CURRENT_LIST_DIR}/sanitizers/ignorelist.txt)
+    endif()
     add_link_options(${BE_SANITIZER_FLAGS})
 
     if(ENGINE_FUZZ_LIBFUZZER)

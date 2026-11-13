@@ -1,9 +1,9 @@
 # Compile-time ignore list of the sanitizer builds (-fsanitize-ignorelist=, cmake/BagiFuzz.cmake): a file is compiled without the named
 # check. It is the only way to silence a finding here: the runtime suppressions of UBSAN_OPTIONS do not apply to a build with
-# -fno-sanitize-recover (its abort handlers ignore them; tried on Apple clang 17), and that flag is what makes a finding fail a test.
+# -fno-sanitize-recover (its abort handlers ignore them), and that flag is what makes a finding fail a test.
 # Format: a section [<check>] and under it src:<glob> lines (the glob matches the path as the compiler got it, so it starts with *).
 # Each entry needs a comment that says: the library, the symptom (the report text), why it cannot be fixed here (vendored code, the
-# SDK, a system library). An engine finding is never listed here: it is fixed, or listed in the plan of the entry `sanitizers`.
+# SDK, a system library). An engine finding is never listed here: it is fixed.
 # No line is added without a finding behind it.
 
 # SDL_image's miniz (external/SDL_image/src/miniz.h:2619, the PNG encoder behind IMG_SavePNG_IO; seen in EncodePngTest,
