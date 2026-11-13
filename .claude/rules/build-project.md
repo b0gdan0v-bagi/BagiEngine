@@ -29,7 +29,7 @@ Fields the `build` skill reads. A game fills every row.
 | Field | Meaning | Engine value |
 |-------|---------|--------------|
 | Product | the executable (target name; the file is `build/<preset>/bin/<name>[.exe]`) | `BagiMatch3` |
-| Tests | the gtest targets; the argument `tests` builds exactly these (`--target <tests>`) | `BagiEngineTests Match3Tests` |
+| Tests | the gtest targets; the argument `tests` builds exactly these (`--target <tests>`) | `BagiEngineTests Match3Tests StressTests` |
 | Default build | what `cmake --build --preset <p>` with no `--target` builds | every target: the product and the test executables |
 | Source paths | the paths of `git status --porcelain -- <paths>` (a configure trigger) and of the `BE_CLASS` / `BE_EVENT` / `BE_REFLECT_FIELD` search | `src tests games` |
 | Extra configure triggers | cases besides the common ones (below) that need `cmake --preset <p>` | a change of `BE_WITH_EDITOR` (`-DBE_WITH_EDITOR=...`, or a switch between a preset with and without the editor): the set of runtime and test sources changes (see "Gotchas") |
@@ -70,7 +70,7 @@ Engine:
 
 ### Tests
 
-Engine: `ctest --preset <p>` runs every gtest in its own process (`BagiEngineTests`, `Match3Tests`) and `BagiMatch3ControlSmoke`, a Python script that starts the game `--headless` and plays it over the control API. The smoke test is skipped (exit code 77) when the executable is not built. A `--target` list without the product (what the argument `tests` builds) builds no game, so add the product to run the smoke test. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests tools/perf/tests`.
+Engine: `ctest --preset <p>` runs every gtest in its own process (`BagiEngineTests`, `Match3Tests`, `StressTests`) and `BagiMatch3ControlSmoke` and `BagiStressControlSmoke`, Python scripts that start the game `--headless` and play it over the control API. The smoke test is skipped (exit code 77) when the executable is not built. A `--target` list without the product (what the argument `tests` builds) builds no game, so add the product to run the smoke test. The Python tools have pytest tests of their own, not part of ctest: `.venv/bin/python -m pytest tools/control/tests tools/perf/tests`.
 
 **Parallel run.** `ctest --preset <p>` runs 8 tests at once (`execution.jobs` 8 in `test-base` of `CMakePresets.json`; the game repositories get it through the included presets). `-j1` runs them one at a time, `-jN` sets another number; `CTEST_PARALLEL_LEVEL` does **not** override a preset. The smoke test takes the `bagi_control_smoke` lock (no other smoke test beside it; unit tests run beside it). Do not start several `ctest`s in one build folder at the same moment right after a build (`gtest_discover_tests` rewrites `<Exe>[1]_tests.cmake` and two writers corrupt it: delete `build/<p>/**/<Exe>*_tests.cmake` and run `ctest -N` once). Rules for a test that runs beside others: `.claude/rules/tests-module.md`.
 
@@ -176,7 +176,7 @@ Fields the `strip-pch-includes` skill reads (it shares `Python`, `Format scope` 
 |-------|---------|--------------|
 | PCH | the header whose includes are dropped from sources; always the engine's, relative to `<engine>` | `src/Modules/BECore/pch.h` (the script's default) |
 | Strip example dir | a bounded folder of `<R>` for the dry run and the first real pass | `src/Widgets` (also `src/Modules/BECore`, which the script does not exclude) |
-| After a pass | what to build and run to validate the scope | `cmake --build --preset <p>` (the `build` skill), then `ctest --preset <p>`; `BagiEngineTests` for engine code, `Match3Tests` for code under `games/Match3` |
+| After a pass | what to build and run to validate the scope | `cmake --build --preset <p>` (the `build` skill), then `ctest --preset <p>`; `BagiEngineTests` for engine code, `Match3Tests` for code under `games/Match3`, `StressTests` for `tools/stress` |
 
 The commands, written with the engine values:
 

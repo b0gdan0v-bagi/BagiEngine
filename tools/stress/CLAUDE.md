@@ -77,3 +77,10 @@ tests/                gtest sources of StressTests; StressSceneFixture.h is the 
 - **`capped`** (kMaxCount fit: the app cannot ask for more), **`aborted`** (`kMaxRampFrames` frames went first: the best passing count so far, `verified: false`) and `objectsAt60fps` 0 (even `kRampStart` fails) are all in the line. The budget is 16.6 ms, a frame that fits 60 fps.
 - **The line** (keys sorted): `aborted allocTracking atlases budgetMs capped frames interleave manualClock measure measureFrames mode objectsAt60fps scene settleFrames steps verified`. `frames` is the frames the ramp took, `steps` the steps (settle + measure). Same stdout rule as the fixed line. `FormatRampLine`.
 - The count of a ramp is a number of **this** scene's objects: the three scenes do not compare with one another.
+- **A step-down can fail at a huge count** (seen on `entities`: the ramp ends `verified: false`): the frame at a very large count is not steady, probably the tween restarts, which land in bunches when many nodes share a duration. A `verified: false` count is a lower-confidence number: read it with `steps` and the repetitions, and do not gate on it (the ramp benchmarks have no gate).
+
+## Running it
+
+- **The perf runner** drives it through `tools/perf/stress_frames.py` and `.claude/rules/perf-project.md` (`stress-*`, `stress-*-ramp`); the sprites benchmark takes 5000 sprites over 300 frames because the software renderer's present dominates `cpuMs` at more.
+- **The control smoke** is the ctest entry `BagiStressControlSmoke` (`tests/stress_smoke.py`): a fresh game per scene on the manual clock, the count shown in the next frame (`frame_stats` draw calls and the `Stress objects` counter), the bad values, screenshots that are not flat, a language switch that changes the `ui` picture, `set_scene`, and a log with no Warning or Error. It imports the helpers of `tools/control/tests/smoke.py` and starts the game through `GameProcess` (the log check needs the log's path, which `smoke.play` keeps to itself).
+- **Not there:** 3D, a comparison of backends, a URL query in the browser build (the page runs the defaults: `sprites`, the default count).
