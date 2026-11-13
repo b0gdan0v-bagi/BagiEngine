@@ -8,6 +8,7 @@
 #include <BECore/Profiler/Profiler.h>
 // clang-format on
 #include <cstddef>
+#include <cstring>
 #include <new>
 #include <tracy/TracyC.h>
 
@@ -112,6 +113,112 @@ namespace BECore {
     void TracyProfilerBackend::OnFree(void* ptr) {
         if (IsRunning()) {
             ___tracy_emit_memory_free_callstack(ptr, kAllocCallstackDepth);
+        }
+    }
+
+    namespace {
+
+        TracyCLockCtx AsLock(void* context) {
+            return static_cast<TracyCLockCtx>(context);
+        }
+
+        TracyCSharedLockCtx AsSharedLock(void* context) {
+            return static_cast<TracyCSharedLockCtx>(context);
+        }
+
+    }  // namespace
+
+    void* TracyProfilerBackend::AnnounceLock(const ProfileSite& site, LockKind kind) {
+        if (!IsRunning()) {
+            return nullptr;
+        }
+        // The lock's name is the `function` of its site (BE_LOCK_SITE); the custom name makes sure the viewer shows it as the lock's label
+        const size_t nameLength = std::strlen(site.function);
+        if (kind == LockKind::Mutex) {
+            TracyCLockCtx context = ___tracy_announce_lockable_ctx(AsSourceLocation(site));
+            ___tracy_custom_name_lockable_ctx(context, site.function, nameLength);
+            return context;
+        }
+        TracyCSharedLockCtx context = ___tracy_announce_shared_lockable_ctx(AsSourceLocation(site));
+        ___tracy_custom_name_shared_lockable_ctx(context, site.function, nameLength);
+        return context;
+    }
+
+    void TracyProfilerBackend::TerminateLock(void* context, LockKind kind) {
+        if (!IsRunning() || context == nullptr) {
+            return;
+        }
+        if (kind == LockKind::Mutex) {
+            ___tracy_terminate_lockable_ctx(AsLock(context));
+        } else {
+            ___tracy_terminate_shared_lockable_ctx(AsSharedLock(context));
+        }
+    }
+
+    bool TracyProfilerBackend::BeforeLock(void* context, LockKind kind) {
+        if (!IsRunning() || context == nullptr) {
+            return false;
+        }
+        switch (kind) {
+            case LockKind::Mutex:
+                return ___tracy_before_lock_lockable_ctx(AsLock(context)) != 0;
+            case LockKind::SharedWriter:
+                return ___tracy_before_lock_shared_lockable_ctx(AsSharedLock(context)) != 0;
+            case LockKind::SharedReader:
+                return ___tracy_before_lock_shared_shared_lockable_ctx(AsSharedLock(context)) != 0;
+        }
+        return false;
+    }
+
+    void TracyProfilerBackend::AfterLock(void* context, LockKind kind) {
+        if (!IsRunning() || context == nullptr) {
+            return;
+        }
+        switch (kind) {
+            case LockKind::Mutex:
+                ___tracy_after_lock_lockable_ctx(AsLock(context));
+                break;
+            case LockKind::SharedWriter:
+                ___tracy_after_lock_shared_lockable_ctx(AsSharedLock(context));
+                break;
+            case LockKind::SharedReader:
+                ___tracy_after_lock_shared_shared_lockable_ctx(AsSharedLock(context));
+                break;
+        }
+    }
+
+    void TracyProfilerBackend::BeforeUnlock(void* context, LockKind kind) {
+        if (!IsRunning() || context == nullptr) {
+            return;
+        }
+        switch (kind) {
+            case LockKind::Mutex:
+                ___tracy_before_unlock_lockable_ctx(AsLock(context));
+                break;
+            case LockKind::SharedWriter:
+                ___tracy_before_unlock_shared_lockable_ctx(AsSharedLock(context));
+                break;
+            case LockKind::SharedReader:
+                ___tracy_before_unlock_shared_shared_lockable_ctx(AsSharedLock(context));
+                break;
+        }
+    }
+
+    void TracyProfilerBackend::AfterTryLock(void* context, LockKind kind, bool acquired) {
+        if (!IsRunning() || context == nullptr) {
+            return;
+        }
+        const int32_t result = acquired ? 1 : 0;
+        switch (kind) {
+            case LockKind::Mutex:
+                ___tracy_after_try_lock_lockable_ctx(AsLock(context), result);
+                break;
+            case LockKind::SharedWriter:
+                ___tracy_after_try_lock_shared_lockable_ctx(AsSharedLock(context), result);
+                break;
+            case LockKind::SharedReader:
+                ___tracy_after_try_lock_shared_shared_lockable_ctx(AsSharedLock(context), result);
+                break;
         }
     }
 

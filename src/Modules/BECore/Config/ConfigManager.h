@@ -140,7 +140,7 @@ namespace BECore {
          */
         Task<void> LoadConfigAsync(std::filesystem::path path, PoolString name);
 
-        std::mutex _writeMutex;
+        Mutex _writeMutex{BE_LOCK_SITE("Config write")};
         UnorderedPoolMap<ConfigEntry> _configs;
         std::atomic<bool> _initialized{false};
     };

@@ -34,7 +34,7 @@ namespace BECore {
          * Добавляет handle в группу.
          */
         void Add(IntrusivePtr<TaskHandleBase> handle) {
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             _handles.push_back(std::move(handle));
         }
 
@@ -44,7 +44,7 @@ namespace BECore {
         void CancelAll() {
             _token.Cancel();
 
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             for (auto& handle : _handles) {
                 handle->Cancel();
             }
@@ -56,7 +56,7 @@ namespace BECore {
         void WaitAll() {
             eastl::vector<IntrusivePtr<TaskHandleBase>> handlesCopy;
             {
-                std::lock_guard lock(_mutex);
+                LockGuard lock(_mutex);
                 handlesCopy = _handles;
             }
 
@@ -69,7 +69,7 @@ namespace BECore {
          * Проверяет, завершены ли все задачи.
          */
         [[nodiscard]] bool AllDone() const {
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             for (const auto& handle : _handles) {
                 if (!handle->IsDone()) {
                     return false;
@@ -82,7 +82,7 @@ namespace BECore {
          * Возвращает количество задач в группе.
          */
         [[nodiscard]] size_t Size() const {
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             return _handles.size();
         }
 
@@ -90,7 +90,7 @@ namespace BECore {
          * Возвращает количество завершенных задач.
          */
         [[nodiscard]] size_t CompletedCount() const {
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             size_t count = 0;
             for (const auto& handle : _handles) {
                 if (handle->IsDone()) {
@@ -114,13 +114,13 @@ namespace BECore {
          * Очищает список задач.
          */
         void Clear() {
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             _handles.clear();
         }
 
     private:
         eastl::vector<IntrusivePtr<TaskHandleBase>> _handles;
-        mutable std::mutex _mutex;
+        mutable Mutex _mutex{BE_LOCK_SITE("Task group")};
         CancellationToken _token;
     };
 

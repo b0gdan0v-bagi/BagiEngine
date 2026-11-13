@@ -5,7 +5,6 @@
 #if PLATFORM_WEB
 
 #include <emscripten/websocket.h>
-#include <thread>
 
 namespace BECore {
 
@@ -58,7 +57,7 @@ namespace BECore {
         Phase _phase = Phase::Idle;
         /// An `error` came: the `close` that follows reports a failed connect, and the reason says so
         bool _sawError = false;
-        std::thread::id _owner;
+        Thread::Id _owner;
         /// The events not taken yet are _events[_head, _count); the slots stay allocated, so a steady stream reuses their buffers
         eastl::vector<RoomTransportEvent> _events;
         size_t _head = 0;

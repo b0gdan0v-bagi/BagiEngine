@@ -119,18 +119,18 @@ namespace BECore {
         const std::function<RoomTime()> _clock;
         const RandomFn _random;
 
-        std::mutex _connectionsMutex;
+        Mutex _connectionsMutex{BE_LOCK_SITE("Room connections")};
         eastl::hash_map<ConnectionId, eastl::shared_ptr<WebSocketConnection>> _connections;  // open connections by id; guarded by _connectionsMutex
         bool _draining = false;                                                              // Stop() is telling the clients; guarded by _connectionsMutex
-        std::condition_variable _connectionsChanged;                                         // a connection ended (with _connectionsMutex); Stop() waits here during the drain
+        ConditionVariable _connectionsChanged;                                               // a connection ended (with _connectionsMutex); Stop() waits here during the drain
 
-        std::mutex _queueMutex;            // guards the queue, its byte count and _stopping
-        std::condition_variable _hubWake;  // the hub thread waits here for an event, the tick or the stop
-        std::condition_variable _notFull;  // a reader waits here while the queue is full
+        Mutex _queueMutex{BE_LOCK_SITE("Room event queue")};  // guards the queue, its byte count and _stopping
+        ConditionVariable _hubWake;                           // the hub thread waits here for an event, the tick or the stop
+        ConditionVariable _notFull;                           // a reader waits here while the queue is full
         eastl::deque<Event> _queue;
         size_t _queueBytes = 0;
         bool _stopping = false;
-        std::thread _hubThread;
+        Thread _hubThread;
 
         WebSocketListener _listener;  // last: it is destroyed first, and its threads use the members above
     };

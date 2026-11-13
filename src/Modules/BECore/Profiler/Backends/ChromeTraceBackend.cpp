@@ -35,7 +35,7 @@ namespace BECore {
     };
 
     struct ChromeTraceBackend::ThreadBuffer {
-        std::thread::id owner;
+        std::thread::id owner;  // raw: the profiler cannot profile itself (Threading/CLAUDE.md)
         uint32_t threadId = 0;
         std::atomic<uint32_t> count{0};       // events [0, count) are complete; written by the owner only
         std::atomic<uint32_t> startIndex{0};  // the first event of the trace (MarkTraceStart)
@@ -90,8 +90,7 @@ namespace BECore {
         return found;
     }
 
-    void ChromeTraceBackend::Record(uint8_t type, const void* data, uint64_t a, uint64_t b) {
-        const uint64_t ticks = ProfilerClock::Now();
+    void ChromeTraceBackend::Record(uint8_t type, const void* data, uint64_t a, uint64_t b, uint64_t ticks) {
         ThreadBuffer* buffer = GetThreadBuffer();
         if (buffer == nullptr) {
             _dropped.fetch_add(1, std::memory_order_relaxed);
@@ -116,20 +115,32 @@ namespace BECore {
     }
 
     uint64_t ChromeTraceBackend::BeginZone(const ProfileSite& site) {
-        Record(+TraceEventType::Begin, &site, 0, 0);
+        Record(+TraceEventType::Begin, &site, 0, 0, ProfilerClock::Now());
         return 0;
     }
 
     void ChromeTraceBackend::EndZone(uint64_t /*token*/, const ProfileSite& site, const ZoneAllocs& allocs) {
-        Record(+TraceEventType::End, &site, allocs.count, allocs.bytes);
+        Record(+TraceEventType::End, &site, allocs.count, allocs.bytes, ProfilerClock::Now());
+    }
+
+    void ChromeTraceBackend::RecordZone(const ProfileSite& site, uint64_t beginTicks, uint64_t endTicks) {
+        // The thread was blocked between the two ticks, so nothing of its own lies between them and the pair nests. A full buffer drops
+        // the pair as a whole: a lone E would close an outer zone early
+        ThreadBuffer* buffer = GetThreadBuffer();
+        if (buffer == nullptr || buffer->count.load(std::memory_order_relaxed) + 2 > kMaxEventsPerThread) {
+            _dropped.fetch_add(2, std::memory_order_relaxed);
+            return;
+        }
+        Record(+TraceEventType::Begin, &site, 0, 0, beginTicks);
+        Record(+TraceEventType::End, &site, 0, 0, endTicks);
     }
 
     void ChromeTraceBackend::FrameMark() {
-        Record(+TraceEventType::Frame, nullptr, 0, 0);
+        Record(+TraceEventType::Frame, nullptr, 0, 0, ProfilerClock::Now());
     }
 
     void ChromeTraceBackend::Counter(const char* name, double value) {
-        Record(+TraceEventType::Counter, name, std::bit_cast<uint64_t>(value), 0);
+        Record(+TraceEventType::Counter, name, std::bit_cast<uint64_t>(value), 0, ProfilerClock::Now());
     }
 
     void ChromeTraceBackend::SetThreadName(const char* /*name*/) {

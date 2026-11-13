@@ -1,5 +1,7 @@
 #pragma once
 
+#include <BECore/Threading/Mutex.h>
+
 namespace BECore {
     template <typename T>
     class Singleton {
@@ -81,7 +83,7 @@ namespace BECore {
         static T& GetInstance() {
             T* instance = _instance.load(std::memory_order_acquire);
             if (instance == nullptr) {
-                std::lock_guard<std::mutex> lock(_mutex);
+                LockGuard lock(_mutex);
                 instance = _instance.load(std::memory_order_relaxed);
                 if (instance == nullptr) {
                     instance = new T();
@@ -98,7 +100,7 @@ namespace BECore {
         static void DestroyInstance() {
             T* instance = _instance.load(std::memory_order_acquire);
             if (instance != nullptr) {
-                std::lock_guard<std::mutex> lock(_mutex);
+                LockGuard lock(_mutex);
                 instance = _instance.load(std::memory_order_relaxed);
                 if (instance != nullptr) {
                     delete instance;
@@ -127,7 +129,7 @@ namespace BECore {
 
     private:
         static std::atomic<T*> _instance;
-        static std::mutex _mutex;
+        static Mutex _mutex;
     };
 
     // Инициализация статических членов
@@ -135,6 +137,6 @@ namespace BECore {
     std::atomic<T*> SingletonAtomic<T>::_instance{nullptr};
 
     template <typename T>
-    std::mutex SingletonAtomic<T>::_mutex;
+    Mutex SingletonAtomic<T>::_mutex{BE_LOCK_SITE("SingletonAtomic")};
 
 }  // namespace BECore

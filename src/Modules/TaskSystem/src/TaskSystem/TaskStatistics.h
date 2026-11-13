@@ -81,7 +81,7 @@ namespace BECore {
             snapshot.backgroundTasksCompleted = _backgroundTasksCompleted.load(std::memory_order_relaxed);
 
             {
-                std::lock_guard lock(_durationMutex);
+                LockGuard lock(_durationMutex);
                 snapshot.averageTaskDurationMs = _averageDurationMs;
                 snapshot.maxTaskDurationMs = _maxDurationMs;
                 snapshot.minTaskDurationMs = _minDurationMs;
@@ -98,7 +98,7 @@ namespace BECore {
             _mainThreadTasksCompleted.store(0, std::memory_order_relaxed);
             _backgroundTasksCompleted.store(0, std::memory_order_relaxed);
 
-            std::lock_guard lock(_durationMutex);
+            LockGuard lock(_durationMutex);
             _averageDurationMs = 0.0;
             _maxDurationMs = 0.0;
             _minDurationMs = std::numeric_limits<double>::max();
@@ -118,7 +118,7 @@ namespace BECore {
 
     private:
         void UpdateDurationStats(double durationMs) {
-            std::lock_guard lock(_durationMutex);
+            LockGuard lock(_durationMutex);
 
             _totalDurationMs += durationMs;
             _durationCount++;
@@ -141,7 +141,7 @@ namespace BECore {
         std::atomic<uint64_t> _backgroundTasksCompleted{0};
 
         // Duration stats (protected by mutex)
-        mutable std::mutex _durationMutex;
+        mutable Mutex _durationMutex{BE_LOCK_SITE("Task statistics")};
         double _averageDurationMs = 0.0;
         double _maxDurationMs = 0.0;
         double _minDurationMs = std::numeric_limits<double>::max();

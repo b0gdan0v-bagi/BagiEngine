@@ -63,6 +63,14 @@ namespace BECore {
         /// number is shown higher). The engine keeps the main thread at 0, the task pool at 100 + n and the control threads at 200
         static void SetThreadName(const char* name, uint32_t sortIndex);
 
+        /// A wait on a Mutex / SharedMutex of at least this many microseconds is recorded as a zone `lock wait: <name>` (any thread; relaxed)
+        static void SetLockWaitThresholdUs(uint32_t microseconds) {
+            _lockWaitThresholdUs.store(microseconds, std::memory_order_relaxed);
+        }
+        [[nodiscard]] static uint32_t GetLockWaitThresholdUs() {
+            return _lockWaitThresholdUs.load(std::memory_order_relaxed);
+        }
+
         /// The calling thread's id in traces: 1, 2, ... in the order threads first ask
         [[nodiscard]] static uint32_t CurrentThreadId();
         /// The name given to thread @p threadId, nullptr when it has none
@@ -80,15 +88,19 @@ namespace BECore {
 
         static constexpr uint32_t kMaxThreads = 256;  // threads beyond it are recorded without a name
         static constexpr uint32_t kNoSortIndex = 0xFFFFFFFFu;
+        static constexpr uint32_t kDefaultLockWaitThresholdUs = 50;
         static constexpr uint32_t kMaxFanOuts = 16;  // distinct primary backends that can run beside the ring over the life of the process
 
     private:
         /// What GetBackend() becomes for @p primary with the ring on or off (the backend mutex is held)
+        /// Makes @p effective the backend of the zones and of the lock events (the backend mutex is held)
+        static void PublishEffective(IProfilerBackend* effective);
         static IProfilerBackend* ResolveEffective(IProfilerBackend* primary, bool ringEnabled);
 
         static constinit inline std::atomic<IProfilerBackend*> _backend{nullptr};  // the effective backend
         static constinit inline std::atomic<IProfilerBackend*> _primary{nullptr};
         static constinit inline std::atomic<bool> _ringEnabled{false};
+        static constinit inline std::atomic<uint32_t> _lockWaitThresholdUs{kDefaultLockWaitThresholdUs};
     };
 
 }  // namespace BECore

@@ -148,7 +148,7 @@ namespace BECore {
     bool ConfigManager::SaveConfig(PoolString name) {
         BE_PROFILE_SCOPE("ConfigManager::SaveConfig");
         ASSERT(_initialized.load(std::memory_order_acquire));
-        std::scoped_lock lock(_writeMutex);
+        LockGuard lock(_writeMutex);
         auto it = _configs.find(name);
         if (it == _configs.end() || !it->second.doc) {
             LOG_ERROR(Format("[ConfigManager] SaveConfig: config '{}' not found", name.ToStringView()).c_str());
@@ -173,7 +173,7 @@ namespace BECore {
         ASSERT(_initialized.load(std::memory_order_acquire));
         std::filesystem::path filePath;
         {
-            std::scoped_lock lock(_writeMutex);
+            LockGuard lock(_writeMutex);
             auto it = _configs.find(name);
             if (it == _configs.end()) {
                 LOG_ERROR(Format("[ConfigManager] ReloadConfig: config '{}' not found", name.ToStringView()).c_str());
@@ -189,7 +189,7 @@ namespace BECore {
         }
 
         {
-            std::scoped_lock lock(_writeMutex);
+            LockGuard lock(_writeMutex);
             auto it = _configs.find(name);
             if (it != _configs.end()) {
                 it->second.doc = newDoc;
@@ -223,7 +223,7 @@ namespace BECore {
 
         // Проверяем, не загружен ли уже конфиг (защита от дубликатов)
         {
-            std::scoped_lock lock(_writeMutex);
+            LockGuard lock(_writeMutex);
             if (_configs.find(name) != _configs.end()) {
                 LOG_WARNING(Format("[ConfigManager] Config {} already loaded, skipping duplicate", name.ToStringView()).c_str());
                 co_return;
@@ -241,7 +241,7 @@ namespace BECore {
 
         // Добавляем в кэш (потокобезопасно)
         {
-            std::scoped_lock lock(_writeMutex);
+            LockGuard lock(_writeMutex);
             // Повторная проверка на случай race condition
             if (_configs.find(name) != _configs.end()) {
                 LOG_WARNING(Format("[ConfigManager] Config {} was loaded by another thread, discarding duplicate", name.ToStringView()).c_str());

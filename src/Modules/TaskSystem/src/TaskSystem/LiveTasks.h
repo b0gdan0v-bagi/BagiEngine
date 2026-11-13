@@ -34,7 +34,9 @@ namespace BECore {
         private:
             LiveTasks() = default;
 
-            std::mutex _mutex;
+            // Level 0: handles are destroyed under the locks of the scheduler queues and of a TaskGroup (their Remove takes this one), and
+            // AbandonAll takes the completion lock of a handle under this one, so no single order holds on every path
+            Mutex _mutex{BE_LOCK_SITE("Live tasks")};
             eastl::hash_set<TaskHandleBase*> _handles;
         };
 

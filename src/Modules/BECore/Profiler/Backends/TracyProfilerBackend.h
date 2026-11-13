@@ -26,6 +26,17 @@ namespace BECore {
         void FrameMark() override;
         void Counter(const char* name, double value) override;
         void SetThreadName(const char* name) override;
+        /// Tracy's lockables: every Mutex / SharedMutex shows with its name. A lock's context is made on its first use while Tracy runs
+        /// and every call is a no-op once Tracy has been shut down (a lock may outlive it; its context is then left to the process exit)
+        [[nodiscard]] bool WantsLockEvents() const override {
+            return true;
+        }
+        void* AnnounceLock(const ProfileSite& site, LockKind kind) override;
+        void TerminateLock(void* context, LockKind kind) override;
+        bool BeforeLock(void* context, LockKind kind) override;
+        void AfterLock(void* context, LockKind kind) override;
+        void BeforeUnlock(void* context, LockKind kind) override;
+        void AfterTryLock(void* context, LockKind kind, bool acquired) override;
         void OnAlloc(void* ptr, size_t size) override;
         void OnFree(void* ptr) override;
 

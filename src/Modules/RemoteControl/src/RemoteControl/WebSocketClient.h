@@ -4,9 +4,7 @@
 #include <RemoteControl/Tls/ClientStream.h>
 #include <RemoteControl/WebSocketClientHandshake.h>
 #include <RemoteControl/WebSocketFrame.h>
-#include <condition_variable>
 #include <random>
-#include <thread>
 
 namespace BECore {
 
@@ -148,8 +146,8 @@ namespace BECore {
         WebSocketClientSettings _settings;
         WebSocketUrl _url;
 
-        std::thread _reader;               // started by Open(), joined by the next Open() or the destructor
-        std::thread _writer;               // started and joined by the reader
+        Thread _reader;                    // started by Open(), joined by the next Open() or the destructor
+        Thread _writer;                    // started and joined by the reader
         std::random_device _random;        // the reader draws the handshake key, then the writer the masks: never both at once
         std::atomic<bool> _cancel{false};  // wakes the connect and the TLS handshake
         std::atomic<uint64_t> _bytesReceived{0};
@@ -157,9 +155,9 @@ namespace BECore {
         ClientStream _stream;                                      // published by the reader under _mutex once connected; closed only after the threads were joined
         std::chrono::steady_clock::time_point _handshakeDeadline;  // the reader's: the end of the opening (with wss:// since the start of the connect)
 
-        mutable std::mutex _mutex;            // guards everything below
-        std::condition_variable _wake;        // the writer: a frame was queued, the connection was aborted, the reader ended
-        std::condition_variable _inboxSpace;  // the reader: PollEvent() made room, or the connection was aborted
+        mutable Mutex _mutex{BE_LOCK_SITE("WebSocket client")};  // guards everything below
+        ConditionVariable _wake;                                 // the writer: a frame was queued, the connection was aborted, the reader ended
+        ConditionVariable _inboxSpace;                           // the reader: PollEvent() made room, or the connection was aborted
         WebSocketClientState _state = WebSocketClientState::Idle;
         bool _aborted = false;
         bool _readerDone = false;  // the reader will read no more: a writer that sent its close frame need not wait for the answer

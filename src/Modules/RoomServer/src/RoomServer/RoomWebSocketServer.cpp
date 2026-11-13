@@ -59,7 +59,7 @@ namespace BECore {
             bool draining = false;
             {
                 // The flag and the map change under one lock, so a connection is either in the snapshot Stop() closes or sees the flag here
-                std::lock_guard<std::mutex> lock(_connectionsMutex);
+                LockGuard lock(_connectionsMutex);
                 _connections[connection->GetId()] = connection;
                 draining = _draining;
             }
@@ -73,7 +73,7 @@ namespace BECore {
         };
         handler.onClosed = [this](const WebSocketHandler::ConnectionPtr& connection) {
             {
-                std::lock_guard<std::mutex> lock(_connectionsMutex);
+                LockGuard lock(_connectionsMutex);
                 _connections.erase(connection->GetId());
             }
             _connectionsChanged.notify_all();
@@ -88,13 +88,13 @@ namespace BECore {
         }
 
         {
-            std::lock_guard<std::mutex> lock(_queueMutex);
+            LockGuard lock(_queueMutex);
             _stopping = false;
             _queue.clear();
             _queueBytes = 0;
         }
         {
-            std::lock_guard<std::mutex> lock(_connectionsMutex);
+            LockGuard lock(_connectionsMutex);
             _draining = false;
         }
         const auto started = _listener.Start(_settings.port);
@@ -104,7 +104,7 @@ namespace BECore {
         }
 
         // A connection that arrives before the hub thread runs waits in the queue
-        _hubThread = std::thread([this] { RunHub(); });
+        _hubThread = Thread("Room hub", kThreadOrder + 3, [this] { RunHub(); });
         LOG_INFO("{}: listening on port {}"_format(kLogName, *started));
         return started;
     }
@@ -121,7 +121,7 @@ namespace BECore {
 
         // A reader that waits for room in the queue would never end, and the listener joins the readers: wake them first
         {
-            std::lock_guard<std::mutex> lock(_queueMutex);
+            LockGuard lock(_queueMutex);
             _stopping = true;
         }
         _notFull.notify_all();
@@ -132,7 +132,7 @@ namespace BECore {
             _hubThread.join();
         }
         {
-            std::lock_guard<std::mutex> lock(_connectionsMutex);
+            LockGuard lock(_connectionsMutex);
             _connections.clear();
             _draining = false;
         }
@@ -142,7 +142,7 @@ namespace BECore {
     void RoomWebSocketServer::DrainConnections() {
         eastl::vector<eastl::shared_ptr<WebSocketConnection>> open;
         {
-            std::lock_guard<std::mutex> lock(_connectionsMutex);
+            LockGuard lock(_connectionsMutex);
             _draining = true;
             open.reserve(_connections.size());
             for (const auto& entry : _connections) {
@@ -162,7 +162,7 @@ namespace BECore {
         // does not read (its writer is stuck in a full send buffer), and the grace bounds that. The real clock: this is the process's wait, not the hub's time
         size_t left = 0;
         {
-            std::unique_lock<std::mutex> lock(_connectionsMutex);
+            UniqueLock lock(_connectionsMutex);
             _connectionsChanged.wait_for(lock, _settings.shutdownGrace, [this] { return _connections.empty(); });
             left = _connections.size();
         }
@@ -174,7 +174,7 @@ namespace BECore {
     bool RoomWebSocketServer::PushEvent(EventKind kind, ConnectionId connection, eastl::string text) {
         const size_t size = text.size();
         {
-            std::unique_lock<std::mutex> lock(_queueMutex);
+            UniqueLock lock(_queueMutex);
             _notFull.wait(lock, [&] { return _stopping || (_queue.size() < kMaxQueuedEvents && (_queue.empty() || _queueBytes + size <= kMaxQueuedBytes)); });
             if (_stopping) {
                 return false;
@@ -187,8 +187,6 @@ namespace BECore {
     }
 
     void RoomWebSocketServer::RunHub() {
-        BE_PROFILE_THREAD_ORDER("Room hub", kThreadOrder + 3);
-
         // The hub lives here and nowhere else: only this thread can reach it
         RoomHub hub(_registry, _settings.hub, _random,
                     HubSink{
@@ -203,7 +201,7 @@ namespace BECore {
         eastl::deque<Event> batch;
         for (;;) {
             {
-                std::unique_lock<std::mutex> lock(_queueMutex);
+                UniqueLock lock(_queueMutex);
                 _hubWake.wait_until(lock, nextTick, [this] { return _stopping || !_queue.empty(); });
                 if (_stopping) {
                     return;
@@ -260,7 +258,7 @@ namespace BECore {
             return;
         }
 
-        std::lock_guard<std::mutex> lock(_connectionsMutex);
+        LockGuard lock(_connectionsMutex);
         for (const auto& [id, connection] : _connections) {
             if (!connection->IsOpen()) {
                 continue;  // closing or dropped: its Closed event is on the way
@@ -300,7 +298,7 @@ namespace BECore {
     }
 
     eastl::shared_ptr<WebSocketConnection> RoomWebSocketServer::FindConnection(ConnectionId connection) {
-        std::lock_guard<std::mutex> lock(_connectionsMutex);
+        LockGuard lock(_connectionsMutex);
         const auto found = _connections.find(connection);
         return found == _connections.end() ? nullptr : found->second;
     }

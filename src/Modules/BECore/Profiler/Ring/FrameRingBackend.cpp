@@ -40,7 +40,7 @@ namespace BECore {
     }  // namespace
 
     struct FrameRingBackend::ThreadBuffer {
-        std::thread::id owner;
+        std::thread::id owner;  // raw: the profiler cannot profile itself (Threading/CLAUDE.md)
         uint32_t threadId = 0;
         uint64_t* slots = nullptr;          // kEventsPerThread * kSlotWords words, written through atomic_ref by the owner
         std::atomic<uint64_t> count{0};     // entries [count - capacity, count) are complete; written by the owner only
@@ -116,6 +116,24 @@ namespace BECore {
         return found;
     }
 
+    uint64_t FrameRingBackend::ClaimSlot(ThreadBuffer& buffer) {
+        const uint64_t index = buffer.count.load(std::memory_order_relaxed);
+        // Announce the slot before it is overwritten: a reader that sees any of the new words then sees this store too
+        buffer.reserved.store(index + 1, std::memory_order_relaxed);
+        std::atomic_thread_fence(std::memory_order_release);
+        return index;
+    }
+
+    void FrameRingBackend::PublishZone(ThreadBuffer& buffer, uint64_t index, const ProfileSite& site, uint64_t beginTicks, uint64_t endTicks, uint32_t depth, const ZoneAllocs& allocs) {
+        uint64_t* slot = buffer.slots + (index & kSlotMask) * kSlotWords;
+        StoreWord(slot[0], std::bit_cast<uintptr_t>(&site));
+        StoreWord(slot[1], beginTicks);
+        StoreWord(slot[2], endTicks);
+        StoreWord(slot[3], (allocs.count & kCountMask) | (static_cast<uint64_t>(depth) << kDepthShift));
+        StoreWord(slot[4], allocs.bytes);
+        buffer.count.store(index + 1, std::memory_order_release);
+    }
+
     uint64_t FrameRingBackend::BeginZone(const ProfileSite& /*site*/) {
         ThreadBuffer* buffer = GetThreadBuffer();
         if (buffer == nullptr) {
@@ -154,19 +172,29 @@ namespace BECore {
             return;
         }
 
-        const uint64_t index = buffer->count.load(std::memory_order_relaxed);
-        // Announce the slot before it is overwritten: a reader that sees any of the new words then sees this store too
-        buffer->reserved.store(index + 1, std::memory_order_relaxed);
-        std::atomic_thread_fence(std::memory_order_release);
+        const uint64_t index = ClaimSlot(*buffer);
         // The end tick is read after the announce, so that a test's clock can take a snapshot at the moment a slot is claimed and not yet written
         const uint64_t endTicks = _options.now();
-        uint64_t* slot = buffer->slots + (index & kSlotMask) * kSlotWords;
-        StoreWord(slot[0], std::bit_cast<uintptr_t>(&site));
-        StoreWord(slot[1], buffer->openBegin[buffer->depth]);
-        StoreWord(slot[2], endTicks);
-        StoreWord(slot[3], (allocs.count & kCountMask) | (static_cast<uint64_t>(buffer->depth) << kDepthShift));
-        StoreWord(slot[4], allocs.bytes);
-        buffer->count.store(index + 1, std::memory_order_release);
+        PublishZone(*buffer, index, site, buffer->openBegin[buffer->depth], endTicks, buffer->depth, allocs);
+    }
+
+    void FrameRingBackend::RecordZone(const ProfileSite& site, uint64_t beginTicks, uint64_t endTicks) {
+        ThreadBuffer* buffer = GetThreadBuffer();
+        if (buffer == nullptr) {
+            _dropped.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+        const uint64_t generation = _generation.load(std::memory_order_relaxed);
+        if (buffer->generation != generation) {
+            buffer->generation = generation;
+            buffer->depth = 0;
+        }
+        if (buffer->depth >= kMaxZoneDepth) {
+            _dropped.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+        // A zone that is not open: it sits at the depth of the zones the thread has open now and leaves the open stack alone
+        PublishZone(*buffer, ClaimSlot(*buffer), site, beginTicks, endTicks, buffer->depth, {});
     }
 
     void FrameRingBackend::FrameMark() {

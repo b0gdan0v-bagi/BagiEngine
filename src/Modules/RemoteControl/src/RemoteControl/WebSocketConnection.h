@@ -3,8 +3,6 @@
 #include <RemoteControl/Socket.h>
 #include <RemoteControl/WebSocketFrame.h>
 #include <RemoteControl/WebSocketHandshake.h>
-#include <condition_variable>
-#include <thread>
 
 namespace BECore {
 
@@ -83,7 +81,7 @@ namespace BECore {
         /// False: no WebSocket connection (the client was answered with an error or is gone)
         bool Handshake(const HandshakePolicy& policy, std::chrono::milliseconds timeout, eastl::vector<uint8_t>& pendingBytes, const AdmitClientFn& admit = {});
 
-        void StartReader(std::thread reader) {
+        void StartReader(Thread reader) {
             _reader = std::move(reader);
         }
 
@@ -143,13 +141,13 @@ namespace BECore {
         const WebSocketConnectionSettings _settings;
 
         Socket _socket;
-        std::thread _reader;  // started and joined by the listener (accept thread and Stop()), never touched by the connection's own threads
-        std::thread _writer;  // started and joined by the reader thread
+        Thread _reader;  // started and joined by the listener (accept thread and Stop()), never touched by the connection's own threads
+        Thread _writer;  // started and joined by the reader thread
         std::atomic<bool> _finished{false};
         std::atomic<uint64_t> _bytesReceived{0};
 
-        mutable std::mutex _mutex;  // guards everything below
-        std::condition_variable _wake;
+        mutable Mutex _mutex{BE_LOCK_SITE("WebSocket connection")};  // guards everything below
+        ConditionVariable _wake;
         eastl::deque<OutgoingFrame> _outbox;
         size_t _outboxBytes = 0;
         bool _open = false;     // handshake done, the writer runs

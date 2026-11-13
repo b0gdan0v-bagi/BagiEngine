@@ -1,8 +1,7 @@
 #pragma once
 
-#include <BECore/PoolString/PoolStringMap.h>
 #include <BECore/Resource/IResource.h>
-#include <shared_mutex>
+#include <BECore/Threading/SharedMutex.h>
 
 namespace BECore {
 
@@ -10,7 +9,7 @@ namespace BECore {
      * @brief Thread-safe cache for loaded resources
      *
      * Stores resources by virtual path with reference counting.
-     * Uses shared_mutex for read-heavy concurrent access patterns.
+     * Uses SharedMutex for read-heavy concurrent access patterns.
      *
      * @note Eviction is not implemented in v1. Resources stay cached
      * until explicitly cleared or application shutdown.
@@ -89,7 +88,7 @@ namespace BECore {
         size_t GetCount() const;
 
     private:
-        mutable std::shared_mutex _mutex;
+        mutable SharedMutex _mutex{BE_LOCK_SITE("Resource cache")};
         UnorderedPoolMap<IntrusivePtr<IResource>> _cache;
     };
 

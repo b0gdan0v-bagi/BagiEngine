@@ -1,14 +1,13 @@
 #pragma once
 
 #include <EASTL/deque.h>
-#include <condition_variable>
 
 namespace BECore {
 
     /**
      * TaskQueue - потокобезопасная очередь задач.
      *
-     * Использует mutex для синхронизации и condition_variable для ожидания.
+     * Использует Mutex для синхронизации и ConditionVariable для ожидания.
      * Поддерживает graceful shutdown.
      */
     class TaskQueue {
@@ -30,7 +29,7 @@ namespace BECore {
          */
         void Push(TaskFunc task) {
             {
-                std::lock_guard lock(_mutex);
+                LockGuard lock(_mutex);
                 _tasks.push_back(std::move(task));
             }
             _condition.notify_one();
@@ -42,7 +41,7 @@ namespace BECore {
          * @return true если задача получена, false если очередь остановлена
          */
         bool Pop(TaskFunc& task) {
-            std::unique_lock lock(_mutex);
+            UniqueLock lock(_mutex);
             _condition.wait(lock, [this] { return !_tasks.empty() || _stopped.load(std::memory_order_acquire); });
 
             if (_stopped.load(std::memory_order_acquire) && _tasks.empty()) {
@@ -60,7 +59,7 @@ namespace BECore {
          * @return true если задача получена
          */
         bool TryPop(TaskFunc& task) {
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             if (_tasks.empty()) {
                 return false;
             }
@@ -75,7 +74,7 @@ namespace BECore {
          * @return true если задача получена
          */
         bool TrySteal(TaskFunc& task) {
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             if (_tasks.empty()) {
                 return false;
             }
@@ -91,7 +90,7 @@ namespace BECore {
             {
                 // The flag is part of the predicate of Pop's wait: it changes under the mutex, otherwise a
                 // worker between the predicate check and the block misses the wakeup and sleeps forever.
-                std::lock_guard lock(_mutex);
+                LockGuard lock(_mutex);
                 _stopped.store(true, std::memory_order_release);
             }
             _condition.notify_all();
@@ -108,7 +107,7 @@ namespace BECore {
          * Возвращает количество задач в очереди.
          */
         [[nodiscard]] size_t Size() const {
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             return _tasks.size();
         }
 
@@ -116,7 +115,7 @@ namespace BECore {
          * Проверяет, пуста ли очередь.
          */
         [[nodiscard]] bool Empty() const {
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             return _tasks.empty();
         }
 
@@ -124,14 +123,14 @@ namespace BECore {
          * Очищает очередь.
          */
         void Clear() {
-            std::lock_guard lock(_mutex);
+            LockGuard lock(_mutex);
             _tasks.clear();
         }
 
     private:
         eastl::deque<TaskFunc> _tasks;
-        mutable std::mutex _mutex;
-        std::condition_variable _condition;
+        mutable Mutex _mutex{BE_LOCK_SITE("Task queue")};
+        ConditionVariable _condition;
         std::atomic<bool> _stopped{false};
     };
 

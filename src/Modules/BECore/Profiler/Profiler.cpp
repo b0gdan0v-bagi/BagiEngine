@@ -21,6 +21,7 @@ namespace BECore {
         constinit std::atomic<const char*> g_threadNames[Profiler::kMaxThreads]{};
         // The sort index + 1 of a thread, 0: none (so the zero-initialised table means "none")
         constinit std::atomic<uint32_t> g_threadSortIndex[Profiler::kMaxThreads]{};
+        // raw: the profiler cannot profile itself (Threading/CLAUDE.md)
         constinit std::mutex g_backendMutex;
         // One fan-out per distinct primary, made with std::malloc and never freed (a zone may still end on it); under g_backendMutex
         constinit FanOutBackend* g_fanOuts[Profiler::kMaxFanOuts]{};
@@ -60,6 +61,14 @@ namespace BECore {
         return g_fanOuts[g_fanOutCount++];
     }
 
+    void Profiler::PublishEffective(IProfilerBackend* effective) {
+        _backend.store(effective, std::memory_order_release);
+#if BE_PROFILER
+        // Only a backend that asks for them gets the events of every lock operation (Tracy's lockables); Chrome and the ring get none
+        LockHooks::SetEventBackend(effective != nullptr && effective->WantsLockEvents() ? effective : nullptr);
+#endif
+    }
+
     bool Profiler::SetBackend(IProfilerBackend* backend) {
         std::lock_guard lock(g_backendMutex);
         IProfilerBackend* old = _primary.load(std::memory_order_acquire);
@@ -70,7 +79,7 @@ namespace BECore {
             return false;
         }
         _primary.store(backend, std::memory_order_release);
-        _backend.store(ResolveEffective(backend, _ringEnabled.load(std::memory_order_relaxed)), std::memory_order_release);
+        PublishEffective(ResolveEffective(backend, _ringEnabled.load(std::memory_order_relaxed)));
         if (old != nullptr) {
             old->Stop();
         }
@@ -86,7 +95,7 @@ namespace BECore {
             GetFrameRing().Start();  // zones that began before the ring was on are not its own
         }
         _ringEnabled.store(enabled, std::memory_order_release);
-        _backend.store(ResolveEffective(_primary.load(std::memory_order_relaxed), enabled), std::memory_order_release);
+        PublishEffective(ResolveEffective(_primary.load(std::memory_order_relaxed), enabled));
     }
 
     void Profiler::FrameMark() {

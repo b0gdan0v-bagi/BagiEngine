@@ -4,7 +4,6 @@
 #include <BECore/Control/JsonFwd.h>
 #include <EASTL/deque.h>
 #include <chrono>
-#include <condition_variable>
 
 namespace BECore {
 
@@ -142,8 +141,8 @@ namespace BECore {
         void Process(Request& request);
         void Settle(eastl::unique_ptr<ControlCall> call);
 
-        std::mutex _mutex;
-        std::condition_variable _posted;                  // notified by Post(); WaitForRequests() waits on it
+        Mutex _mutex{BE_LOCK_SITE("Control queue")};
+        ConditionVariable _posted;                        // notified by Post(); WaitForRequests() waits on it
         eastl::deque<eastl::unique_ptr<Request>> _queue;  // posted, not yet seen by the main thread; guarded by _mutex
         bool _stopped = false;                            // guarded by _mutex
 

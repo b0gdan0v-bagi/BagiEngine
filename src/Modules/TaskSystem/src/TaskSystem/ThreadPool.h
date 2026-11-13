@@ -1,7 +1,6 @@
 #pragma once
 
 #include <TaskSystem/TaskQueue.h>
-#include <thread>
 
 namespace BECore {
 
@@ -115,20 +114,20 @@ namespace BECore {
         void SetWorkerBusy(size_t threadIndex, bool busy);
         bool TryStealTask(size_t thiefIndex, TaskQueue::TaskFunc& task);
 
-        eastl::vector<std::thread> _threads;
+        eastl::vector<Thread> _threads;
         eastl::vector<eastl::unique_ptr<TaskQueue>> _queues;
         std::atomic<bool> _stopped{false};
         std::atomic<size_t> _nextQueue{0};
 
         // One flag per worker (written by that worker, read by GetBusyWorkerCount) and the jobs taken from another worker's queue since the last sample
         eastl::unique_ptr<std::atomic<bool>[]> _workerBusy;
-        std::mutex _busyReportMutex;  // orders the busy graphs of the workers (only while a profiler backend records)
+        Mutex _busyReportMutex{BE_LOCK_SITE("Pool busy report")};  // orders the busy graphs of the workers (only while a profiler backend records)
         std::atomic<uint64_t> _stealCount{0};
 
         // Inline mode only. One thread uses the pool, so no lock.
         bool _isInline = false;
         bool _drainingInline = false;
-        std::thread::id _inlineThread;
+        Thread::Id _inlineThread;
         eastl::deque<TaskQueue::TaskFunc> _inlineQueue;
     };
 

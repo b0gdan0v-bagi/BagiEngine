@@ -56,6 +56,7 @@ tools/            todo (the todo store), control (control API client, smoke test
 - `CORE_ENUM(Name, Type, Values...)` instead of `enum class`; convert with `EnumUtils<E>`.
 - `ASSERT()` / `EXPECT()` / `FATALERROR()`; they compile out in Release, so no side effects inside.
 - `std::expected<T, E>` for recoverable errors.
+- `Mutex`, `SharedMutex`, `ConditionVariable`, `Thread` of `BECore/Threading/` instead of raw `std::mutex` / `std::thread`; a lock has a `BE_LOCK_SITE("name")` (`Threading/CLAUDE.md`).
 - `Format("... {}", args)` or `"... {}"_format(args)`; `LOG_*` take one string.
 - `override`, `#pragma once`, namespace closing comments, inline member initialisers.
 - Look at similar code first and put new code in the matching module. Widely used headers go into `BECore/pch.h`. A new module needs its own `CMakeLists.txt` and an `add_subdirectory` (`.claude/rules/cmake-rules.md`).

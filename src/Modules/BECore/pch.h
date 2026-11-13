@@ -48,6 +48,11 @@
 #include <BECore/Math/Color.h>
 #include <BECore/Math/Rect.h>
 
+// Threading: the locks and the thread of the engine (profiled, named), before anything that holds a lock
+#include <BECore/Threading/ConditionVariable.h>
+#include <BECore/Threading/LockGuards.h>
+#include <BECore/Threading/Thread.h>
+
 // Core
 #include <BECore/Utils/String.h>
 #include <BECore/Utils/Singleton.h>
