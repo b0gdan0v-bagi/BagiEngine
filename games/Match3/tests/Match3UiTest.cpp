@@ -1,6 +1,7 @@
 #include <BECore/Animation/TweenManager.h>
 #include <BECore/GameManager/CoreManager.h>
 #include <BECore/Reflection/XmlDeserializer.h>
+#include <BECore/Scene/Components/ParticleEmitterComponent.h>
 #include <BECore/Scene/Scene.h>
 #include <BECore/Scene/SceneManager.h>
 #include <BECore/Text/FontAtlasLibrary.h>
@@ -397,10 +398,16 @@ namespace BECore::Match3::Tests {
             return {};
         }
 
-        /// The recorded draw of the board in its current state
+        /// The recorded draw of the board in its current state, without the particles of the clear bursts (a batch of geometry)
         eastl::vector<DrawCall> Drawn() {
             Draw();
-            return _renderer->calls;
+            eastl::vector<DrawCall> board;
+            for (const DrawCall& call : _renderer->calls) {
+                if (call.kind != DrawKind::Geometry) {
+                    board.push_back(call);
+                }
+            }
+            return board;
         }
 
         void AdvanceFrames(int frames) {
@@ -649,6 +656,144 @@ namespace BECore::Match3::Tests {
         _manager.Reset();
 
         EXPECT_EQ(CoreManager::GetTweens().GetActiveCount(), 0u);
+    }
+
+    // ---- the burst of the cleared gems ---------------------------------------------------------------------------------------
+
+    class Match3BurstTest : public Match3AnimationTest {
+    protected:
+        ParticleEmitterComponent* Emitter() const {
+            for (const auto& node : GetScene("Match3Scene").GetRootNode().GetChildren()) {
+                if (node->GetName() == PoolString::Intern("ClearBurst")) {
+                    return node->GetComponent<ParticleEmitterComponent>().Get();
+                }
+            }
+            return nullptr;
+        }
+
+        /// One frame of the game: the tweens and the scene by the same game time
+        void Frame() {
+            CoreManager::GetTweens().Advance(kFrame);
+            CoreManager::GetTime().Advance(kFrame);
+            _manager->UpdateAll();
+        }
+    };
+
+    TEST_F(Match3BurstTest, TheSceneHasTheBurstNodeAboveTheBoardAndBelowTheHud) {
+        ParticleEmitterComponent* emitter = Emitter();
+        ASSERT_NE(emitter, nullptr);
+        EXPECT_EQ(Board()._burstNode, PoolString::Intern("ClearBurst"));
+        EXPECT_FALSE(emitter->_playOnStart);
+        EXPECT_EQ(emitter->GetLiveCount(), 0u);
+        const auto layerOf = [this](const char* name) {
+            for (const auto& node : GetScene("Match3Scene").GetRootNode().GetChildren()) {
+                if (node->GetName() == PoolString::Intern(name)) {
+                    return node->GetLayer();
+                }
+            }
+            ADD_FAILURE() << name;
+            return 0;
+        };
+        const auto boardLayer = layerOf("Board");
+        const auto burstLayer = layerOf("ClearBurst");
+        const auto hudLayer = layerOf("Hud");
+        EXPECT_LT(boardLayer, burstLayer);
+        EXPECT_LT(burstLayer, hudLayer);
+    }
+
+    TEST_F(Match3BurstTest, AClickThatClearsThrowsABurstPerGemWhenTheClearStartsAndItDiesOut) {
+        ParticleEmitterComponent* emitter = Emitter();
+        ASSERT_NE(emitter, nullptr);
+        ClickALegalSwap();
+        const SwapTrace* trace = Board().GetModel().GetLastSwap();
+        ASSERT_NE(trace, nullptr);
+        EXPECT_EQ(emitter->GetLiveCount(), 0u) << "the swap slides first";
+
+        int frames = 0;
+        while (emitter->GetLiveCount() == 0 && frames < kMaxFrames) {
+            Frame();
+            ++frames;
+        }
+        EXPECT_EQ(frames, 4) << "the swap takes 4 frames; the burst comes with the first shrink";
+        EXPECT_EQ(emitter->GetLiveCount(), trace->steps[0].removed.size() * static_cast<size_t>(emitter->_effect.burstCount));
+        for (const Particle& particle : emitter->GetSimulation().GetParticles()) {
+            EXPECT_NE(particle.tint.r | particle.tint.g | particle.tint.b, 0) << "the tint of a gem";
+        }
+
+        for (int i = 0; i < kMaxFrames && (Board().IsAnimating() || emitter->GetLiveCount() > 0); ++i) {
+            Frame();
+        }
+        EXPECT_FALSE(Board().IsAnimating());
+        EXPECT_EQ(emitter->GetLiveCount(), 0u);
+    }
+
+    TEST_F(Match3BurstTest, TheBurstOfAGemStartsAtItsCellInOneColor) {
+        ParticleEmitterComponent* emitter = Emitter();
+        ASSERT_NE(emitter, nullptr);
+        ClickALegalSwap();
+        const SwapTrace* trace = Board().GetModel().GetLastSwap();
+        ASSERT_NE(trace, nullptr);
+        for (int i = 0; i < 4; ++i) {
+            Frame();
+        }
+
+        const auto& particles = emitter->GetSimulation().GetParticles();
+        ASSERT_FALSE(particles.empty());
+        const float radius = emitter->_effect.shapeRadius;
+        for (size_t i = 0; i < trace->steps[0].removed.size() * static_cast<size_t>(emitter->_effect.burstCount); ++i) {
+            const auto [cellX, cellY] = CellCentre(trace->steps[0].removed[i / static_cast<size_t>(emitter->_effect.burstCount)]);
+            EXPECT_LE(std::hypot(particles[i].originX - cellX, particles[i].originY - cellY), radius + 0.01f) << "particle " << i;
+        }
+        const size_t perGem = static_cast<size_t>(emitter->_effect.burstCount);
+        for (size_t i = 1; i < perGem; ++i) {
+            EXPECT_EQ(particles[i].tint.r, particles[0].tint.r);
+            EXPECT_EQ(particles[i].tint.g, particles[0].tint.g);
+            EXPECT_EQ(particles[i].tint.b, particles[0].tint.b);
+        }
+        EXPECT_EQ(particles[0].tint.a, 255) << "the colors of the gems are opaque";
+    }
+
+    TEST_F(Match3BurstTest, AMoveNoClickStartedThrowsNothing) {
+        ParticleEmitterComponent* emitter = Emitter();
+        ASSERT_NE(emitter, nullptr);
+        ScoreSomething();  // TrySwap, what the control API does
+        for (int i = 0; i < 40; ++i) {
+            Frame();
+        }
+        EXPECT_EQ(emitter->GetLiveCount(), 0u);
+    }
+
+    TEST_F(Match3BurstTest, ARejectedSwapAndASkippedAnimationThrowNothing) {
+        ParticleEmitterComponent* emitter = Emitter();
+        ASSERT_NE(emitter, nullptr);
+        const auto [a, b] = FindRejectedSwap();
+        Board().ClickCell(a);
+        Board().ClickCell(b);
+        ASSERT_TRUE(Board().IsAnimating());
+        for (int i = 0; i < 40; ++i) {
+            Frame();
+        }
+        EXPECT_EQ(emitter->GetLiveCount(), 0u);
+
+        Emit("Match3Reset");
+        ClickALegalSwap();
+        Frame();
+        Board().SkipAnimation();
+        for (int i = 0; i < 40; ++i) {
+            Frame();
+        }
+        EXPECT_EQ(emitter->GetLiveCount(), 0u) << "the cancelled run leaves no burst pending";
+    }
+
+    TEST_F(Match3BurstTest, ABoardWithoutTheNodeOrWithAnEmptyNameStillPlays) {
+        for (const char* name : {"", "NoSuchNode", "Hud"}) {
+            Emit("Match3Reset");
+            Board()._burstNode = PoolString::Intern(name);
+            ClickALegalSwap();
+            ASSERT_TRUE(Board().IsAnimating()) << name;
+            AdvanceUntilDone();
+            EXPECT_EQ(Emitter()->GetLiveCount(), 0u) << name;
+        }
     }
 
 }  // namespace BECore::Match3::Tests

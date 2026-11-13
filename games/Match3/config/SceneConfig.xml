@@ -52,6 +52,22 @@
             <component type="Match3BoardComponent" originX="100" originY="80" cellSize="64" seed="1337" menuScene="MainMenu" />
           </components>
         </node>
+        <!-- The burst of every cleared gem (Match3BoardComponent::burstNode): the board throws it in the gem's color at the cell, so the node has no place of its own.
+             Above the board, below the HUD. -->
+        <node name="ClearBurst" layer="5">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="0" height="0" />
+            <component type="ParticleEmitterComponent" playOnStart="false">
+              <effect burstCount="8" maxParticles="256" lifetimeMin="0.3" lifetimeMax="0.55" shape="Circle" shapeRadius="6" speedMin="60" speedMax="160" direction="0" spread="360" gravityY="150" blend="Add" frameClass="FiniteEffect">
+                <size from="10" to="2" ease="QuadOut"/>
+                <color>
+                  <from r="255" g="255" b="255" a="255"/>
+                  <to r="255" g="255" b="255" a="0"/>
+                </color>
+              </effect>
+            </component>
+          </components>
+        </node>
         <!-- The HUD is in the margins of the view (space="SceneView"), so it scales and moves with the board and never covers it, whatever the shape of the window.
              The buttons are 48 units high: at the smallest fit scale of the size matrix (0.67) that is still a 32 px touch target. -->
         <node name="Hud" layer="10">

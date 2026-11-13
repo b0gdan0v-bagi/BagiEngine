@@ -64,6 +64,15 @@ namespace BECore::Match3 {
         /// Stops the run where it is (no value is set) and drops the sprites; the owner then draws the model board
         void Finish();
 
+        /**
+         * @brief Called once per cleared gem, at the moment the clear of its cascade round starts (the gems begin to shrink). The sink gets the cell
+         *        the gem sat on and its type. It does not fire for a swap that clears nothing, nor for a run that `Finish` or a second `Start`
+         *        cancelled before that moment; it is read when the callback fires, so it may be set after `Start`. An empty function is none.
+         */
+        void SetClearedSink(eastl::function<void(Cell, GemType)> sink) {
+            _clearedSink = std::move(sink);
+        }
+
         /// True from `Start` until the last `Advance` of the run (or `Finish`)
         [[nodiscard]] bool IsRunning() const;
 
@@ -90,6 +99,7 @@ namespace BECore::Match3 {
         void Play(TweenManager& tweens, Timeline&& timeline);
 
         BoardAnimationSettings _settings;
+        eastl::function<void(Cell, GemType)> _clearedSink;
         eastl::vector<GemSprite> _sprites;  // built before the timeline plays and never resized while it does: the setters write by index
         ScopedTween _play;
     };
