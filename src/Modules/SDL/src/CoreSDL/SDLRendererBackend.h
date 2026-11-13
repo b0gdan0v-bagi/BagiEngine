@@ -41,6 +41,9 @@ namespace BECore {
         float GetOutputWidth() const override;
         float GetOutputHeight() const override;
 
+        /// Reduced when SDL made its software renderer (the headless game, and a window where no GPU driver came up), Full for a GPU driver
+        [[nodiscard]] GeometryDetail GetGeometryDetail() const override;
+
         /// Serves the request just before the next SDL_RenderPresent with SDL_RenderReadPixels
         void RequestCapture(CaptureCallback callback) override;
 
@@ -58,6 +61,8 @@ namespace BECore {
         void PresentFrame();
         void ServeCapture();
         void OnSetRenderDrawColor(const RenderEvents::SetRenderDrawColorEvent& event);
+
+        bool _software = false;  // SDL's own software renderer: every blended triangle costs a surface and a blit
 
         // Scratch of DrawGeometry(): the vertices in the planar layout SDL_RenderGeometryRaw takes, kept between calls so a draw does not allocate
         eastl::vector<float> _geometryPositions;

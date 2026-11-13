@@ -2,6 +2,7 @@
 
 #include <BECore/Renderer/BlendMode.h>
 #include <BECore/Renderer/DrawTransform.h>
+#include <BECore/Renderer/GeometryDetail.h>
 #include <BECore/Renderer/RenderCounters.h>
 #include <BECore/Renderer/ViewTransform.h>
 
@@ -58,6 +59,12 @@ namespace BECore {
 
         // Why GetGpuDevice() is null, for the log line of a caller that wanted 3D (the default is generic, a backend says what it lacks)
         [[nodiscard]] virtual eastl::string GetNoGpuDeviceReason() const;
+
+        // How much detail generated geometry (the shadows and glows of UIBoxMesh) should have for this renderer: Full by default, Reduced for the SDL
+        // software renderer, where every blended triangle costs a surface and a blit. Not BE_FUNCTION (an engine query, not a control API call).
+        [[nodiscard]] virtual GeometryDetail GetGeometryDetail() const {
+            return GeometryDetail::Full;
+        }
 
         BE_FUNCTION virtual bool Initialize(IMainWindow& window) = 0;
         BE_FUNCTION virtual void Destroy() = 0;

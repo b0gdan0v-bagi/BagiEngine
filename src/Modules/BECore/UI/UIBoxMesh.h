@@ -80,26 +80,36 @@ namespace BECore {
      */
     class UIBoxMesh {
     public:
-        static constexpr float kFeatherPixels = 1.0f;        ///< the width of the alpha ramp of every edge, in output pixels
-        static constexpr float kCornerSagittaPixels = 0.1f;  ///< how far a corner's polygon may sit inside the true arc, in output pixels
-        static constexpr int kMinCornerSegments = 2;         ///< the fewest segments of a rounded corner (a quarter circle)
-        static constexpr int kMaxCornerSegments = 32;        ///< the most segments of a rounded corner
-        static constexpr int kBlurRings = 8;                 ///< the steps of the falloff of a blur (the rings are one more)
-        static constexpr float kHighlightWidth = 1.0f;       ///< the thickness of the inner top line, in UI units
+        static constexpr float kFeatherPixels = 1.0f;                ///< the width of the alpha ramp of every edge, in output pixels
+        static constexpr float kCornerSagittaPixels = 0.1f;          ///< how far a corner's polygon may sit inside the true arc, in output pixels
+        static constexpr int kMinCornerSegments = 2;                 ///< the fewest segments of a rounded corner (a quarter circle)
+        static constexpr int kMaxCornerSegments = 32;                ///< the most segments of a rounded corner
+        static constexpr int kBlurRings = 8;                         ///< the steps of the falloff of a blur (the rings are one more)
+        static constexpr int kReducedBlurRings = 4;                  ///< the same for GeometryDetail::Reduced
+        static constexpr float kReducedCornerSagittaPixels = 0.25f;  ///< the corner tolerance of a shadow or glow at GeometryDetail::Reduced
+        static constexpr float kHighlightWidth = 1.0f;               ///< the thickness of the inner top line, in UI units
 
         /// What one call appends at most, whatever the numbers are (a shape has four corners of at most kMaxCornerSegments + 1 points on each ring, and at most kBlurRings + 1 rings;
-        /// the strips are two triangles per point between two rings and the core is a fan): the lists of the element never grow past these in a call
+        /// the strips are two triangles per point between two rings, the core is the quad of the four arc centres, a fan of at most kMaxCornerSegments triangles per
+        /// corner and two triangles per side, and its four centres are vertices of their own): the lists of the element never grow past these in a call
         static constexpr int kMaxRingPoints = 4 * (kMaxCornerSegments + 1);
-        static constexpr int kMaxVerticesPerCall = (kBlurRings + 1) * kMaxRingPoints;
-        static constexpr int kMaxIndicesPerCall = 6 * kBlurRings * kMaxRingPoints + 3 * (kMaxRingPoints - 2);
+        static constexpr int kCoreCenterVertices = 4;
+        static constexpr int kMaxVerticesPerCall = (kBlurRings + 1) * kMaxRingPoints + kCoreCenterVertices;
+        static constexpr int kMaxCoreTriangles = 2 + 4 * kMaxCornerSegments + 4 * 2;
+        static constexpr int kMaxIndicesPerCall = 6 * kBlurRings * kMaxRingPoints + 3 * kMaxCoreTriangles;
 
-        /// The segments of one quarter-circle corner of @p radiusPixels (0 for a corner that is not rounded), within the limits above
-        [[nodiscard]] static int CornerSegments(float radiusPixels);
+        /// The segments of one quarter-circle corner of @p radiusPixels (0 for a corner that is not rounded), within the limits above; @p sagittaPixels is how far the
+        /// polygon may sit inside the arc
+        [[nodiscard]] static int CornerSegments(float radiusPixels, float sagittaPixels = kCornerSagittaPixels);
 
         /**
          * A solid or gradient box. The fully opaque core is the rect inset by half the feather; outside it one feather of alpha falling to 0. A gradient runs
          * over the core (so the top vertices hold exactly the colour and the bottom ones exactly `gradient.end`). Nothing for a colour with no alpha at
          * both ends.
+         *
+         * The core (of a fill, a shadow and a glow) is not a fan from one corner: the SDL software renderer pays for every triangle the pixels of its bounding
+         * rectangle (a temporary surface, `SDL_SW_FillTriangle` with blending), and a fan of n points would cost n times the area. It is cut along the four arc
+         * centres into small triangles, about twice the area in bounding boxes; the covered area is the same, so Vulkan sees no difference.
          */
         static void AppendFill(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient,
                                float pixelsPerUnit);
@@ -117,8 +127,12 @@ namespace BECore {
          * alpha is the colour's at the inner ring and 0 at the outer one (`blur` units beyond the edge), falling by a smooth curve. A blur under one output
          * pixel is a hard edge with the plain feather. A shape smaller than its blur never reaches full alpha. The box itself is not cut out of the shadow:
          * the fill is drawn over it.
+         *
+         * @p detail is what the renderer asks for (`IRenderer::GetGeometryDetail()`): Full is the mesh above, Reduced has kReducedBlurRings steps and corners within
+         * kReducedCornerSagittaPixels, about a third of the triangles, for a renderer that pays for each one. The bounds of a call hold for both.
          */
-        static void AppendShadow(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit);
+        static void AppendShadow(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
+                                 GeometryDetail detail = GeometryDetail::Full);
 
         /**
          * A line of @ref kHighlightWidth units just inside the top edge, following the top corners (it starts and fades out half way round each of them), for a

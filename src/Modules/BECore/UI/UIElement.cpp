@@ -203,16 +203,20 @@ namespace BECore {
         }
 
         const float pixelsPerUnit = renderer.GetViewTransform().scale;
-        _boxVertices.clear();
-        _boxIndices.clear();
-        // Each appender draws nothing for a colour with no alpha, so the order is all that is decided here
-        UIBoxMesh::AppendShadow(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.shadow, pixelsPerUnit);
-        UIBoxMesh::AppendShadow(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.glow, pixelsPerUnit);
-        UIBoxMesh::AppendFill(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, fill, boxStyle.MakeGradient(gradientEnd), pixelsPerUnit);
-        if (boxStyle.borderWidth > 0.0f) {
-            UIBoxMesh::AppendBorder(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.borderWidth, boxStyle.borderColor, pixelsPerUnit);
+        const GeometryDetail detail = renderer.GetGeometryDetail();
+        {
+            BE_PROFILE_SCOPE("UIElement::DrawBoxIn");
+            _boxVertices.clear();
+            _boxIndices.clear();
+            // Each appender draws nothing for a colour with no alpha, so the order is all that is decided here
+            UIBoxMesh::AppendShadow(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.shadow, pixelsPerUnit, detail);
+            UIBoxMesh::AppendShadow(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.glow, pixelsPerUnit, detail);
+            UIBoxMesh::AppendFill(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, fill, boxStyle.MakeGradient(gradientEnd), pixelsPerUnit);
+            if (boxStyle.borderWidth > 0.0f) {
+                UIBoxMesh::AppendBorder(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.borderWidth, boxStyle.borderColor, pixelsPerUnit);
+            }
+            UIBoxMesh::AppendHighlight(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.highlight, pixelsPerUnit);
         }
-        UIBoxMesh::AppendHighlight(_boxVertices, _boxIndices, area, boxStyle.cornerRadius, boxStyle.highlight, pixelsPerUnit);
         if (!_boxVertices.empty()) {
             renderer.DrawGeometry(nullptr, _boxVertices, _boxIndices, 0.0f, 0.0f);
         }
