@@ -1,6 +1,6 @@
 # Particles
 
-A 2D particle effect in three layers; this folder holds the first two (`ParticleEmitterComponent` is the third).
+A 2D particle effect in three layers; this folder holds the first two (`ParticleEmitterComponent`, in `Scene/Components/`, is the third).
 
 | Layer | Where | Knows |
 |-------|-------|-------|
@@ -49,3 +49,23 @@ Plain C++ over `ParticleEffect`: `Update(effect, area, dt)`, `Burst(effect, cent
 - **`NeedsFrames()`** is what the frame loop will ask (render-on-demand): true from `Play()` or a burst until the last particle died, for a looping emitter while it plays. The activity token itself and the cap of a `DecorativeLoop` belong to that entry.
 - **Tint:** the tint of a `Burst` multiplies the whole color curve of the particles of that burst and no other.
 - **Not there:** drag, collisions, sub-emitters, local space (particles that follow a moving node), trails. Tests: `tests/BECore/ParticleSimulationTest.cpp`.
+
+
+## The component (`ParticleEmitterComponent`)
+
+`<component type="ParticleEmitterComponent">` with the reflected `effect` (a child element, the file shape above), `playOnStart` (default true) and `burstAction`. Add it to a node that has a `TransformComponent`; the node's rect is the emission area.
+
+```xml
+<node name="Sparks"><components>
+  <component type="TransformComponent" x="120" y="80" width="0" height="0"/>
+  <component type="ParticleEmitterComponent" playOnStart="false" burstAction="Cleared">
+    <effect burstCount="12" lifetimeMin="0.3" lifetimeMax="0.6" blend="Add"><size from="10" to="2"/></effect>
+  </component>
+</components></node>
+```
+
+- **Time:** it updates on `SceneUpdateEvent` (`SubscribeInScene`, so a scene that is not active does nothing and draws nothing) by `deltaTime`; a held frame has 0 and moves nothing. `playOnStart` calls `Play()` when the component is attached; a one-shot effect fires at the first update.
+- **Code:** `Play`, `Stop`, `Clear`, `Burst(x, y, count, tint)` (scene units; `count` -1 is the effect's `burstCount`, `tint` multiplies the color of these particles only), `IsEmitting`, `GetLiveCount`, `NeedsFrames`, `GetSimulation`. **Action:** an `InputEvents::ActionEvent` named `burstAction` bursts `burstCount` at the center of the node's rect; empty is none.
+- **Edits take effect at once:** the effect is read on every update and at draw time, so an inspector edit needs no restart; a larger `maxParticles` reserves the pool and the geometry vectors again at the next update (the only allocation after the first).
+- **Sprite:** `spriteId` resolves through `TextureLibrary` (the part of the texture is its `srcRect`), else `texturePath` is the whole texture. An unknown sprite is one `LOG_ERROR` and plain squares. A change of either field loads the texture again. `SetTexture()` hands it a texture made from pixels (it lasts until the sprite or path changes).
+- **Draw:** `OnDraw()` makes one `DrawGeometry` call for all live particles, none when there are none, under `ScopedBlendMode(effect.blend)`; Vulkan shows `Add` as straight alpha (`.claude/rules/rendering-module.md`). The texture is a GPU object and is let go at `ApplicationCleanUp`, like `RenderProbeComponent`. Tests: `tests/BECore/ParticleEmitterComponentTest.cpp`.
