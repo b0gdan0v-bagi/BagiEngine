@@ -1,43 +1,69 @@
 # =============================================================================
-# Fuzzing: sanitizers on every target and libFuzzer executables over the fuzz targets of tests/Fuzz
+# Sanitizers on every target and libFuzzer executables over the fuzz targets of tests/Fuzz
 # =============================================================================
 # Included once by cmake/BagiEngine.cmake before the first target, so the flags reach every target (the vendored libraries too).
 #
-#   ENGINE_FUZZ            OFF  AddressSanitizer + UndefinedBehaviorSanitizer on all code, compile and link, with
-#                               -fno-sanitize-recover=undefined (a finding stops the process) and frame pointers. Clang and GCC only.
+#   ENGINE_SANITIZE        ""   A ';' list of sanitizers for all code, compile and link, with frame pointers. Clang and GCC only.
+#                               address    AddressSanitizer (-fsanitize=address)
+#                               undefined  UndefinedBehaviorSanitizer with float-cast-overflow (a float to integer conversion out of range;
+#                                          not in -fsanitize=undefined) and -fno-sanitize-recover (a finding stops the process)
+#                               `thread` and coverage are the entry `build-diagnostic-presets`: any other value is a configure error.
+#   ENGINE_FUZZ            OFF  The fuzz presets: address;undefined, the same flags as above.
 #   ENGINE_FUZZ_LIBFUZZER  OFF  Also instrument for libFuzzer (-fsanitize=fuzzer-no-link) and define be_add_fuzz_executable(). Needs ENGINE_FUZZ
 #                               and a compiler with the libFuzzer runtime: Apple clang has none, Homebrew LLVM has (preset macos-fuzz).
 #
-# The names are not ENGINE_SANITIZE on purpose: the entries `sanitizers` and `build-diagnostic-presets` can map their own option onto
-# ENGINE_FUZZ without a clash. Asserts and expects are the preset's business: macos-fuzz keeps them ON, because an assertion that an
-# input can reach is a finding, and macos-fuzz-shipped turns them OFF, the flags of a shipped build. tests/Fuzz/CLAUDE.md says how the targets and the corpus are made.
+# Sets BE_SANITIZED (ON when any sanitizer is on) for the code after it. Asserts and expects are the preset's business: macos-fuzz and
+# macos-asan keep them ON, because an assertion that an input can reach is a finding, and macos-fuzz-shipped turns them OFF, the flags
+# of a shipped build. cmake/sanitizers/ holds the runtime suppressions the test presets name; tests/Fuzz/CLAUDE.md says how the fuzz
+# targets and the corpus are made.
 include_guard(GLOBAL)
 
-option(ENGINE_FUZZ "Build every target with AddressSanitizer and UndefinedBehaviorSanitizer (the fuzz presets)" OFF)
+set(ENGINE_SANITIZE "" CACHE STRING "Sanitizers on every target, a ';' list of: address, undefined (the presets macos-asan, macos-fuzz)")
+option(ENGINE_FUZZ "Build every target with AddressSanitizer and UndefinedBehaviorSanitizer (the fuzz presets); the same as ENGINE_SANITIZE=address;undefined" OFF)
 option(ENGINE_FUZZ_LIBFUZZER "Instrument for libFuzzer and build the BagiFuzz<Name> executables (needs ENGINE_FUZZ and a compiler with libFuzzer)" OFF)
 
 if(ENGINE_FUZZ_LIBFUZZER AND NOT ENGINE_FUZZ)
     message(FATAL_ERROR "ENGINE_FUZZ_LIBFUZZER needs ENGINE_FUZZ=ON (the fuzzers run under the sanitizers)")
 endif()
 
+set(BE_SANITIZERS ${ENGINE_SANITIZE})
 if(ENGINE_FUZZ)
+    list(APPEND BE_SANITIZERS address undefined)
+endif()
+list(REMOVE_DUPLICATES BE_SANITIZERS)
+
+foreach(BE_SANITIZER IN LISTS BE_SANITIZERS)
+    if(NOT BE_SANITIZER MATCHES "^(address|undefined)$")
+        message(FATAL_ERROR "ENGINE_SANITIZE: unknown sanitizer '${BE_SANITIZER}' (known: address, undefined; thread and coverage are the entry build-diagnostic-presets)")
+    endif()
+endforeach()
+
+if(BE_SANITIZERS)
+    set(BE_SANITIZED ON)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU" OR MSVC)
-        message(FATAL_ERROR "ENGINE_FUZZ=ON needs Clang or GCC (AddressSanitizer and UndefinedBehaviorSanitizer through -fsanitize); this compiler is ${CMAKE_CXX_COMPILER_ID}")
+        message(FATAL_ERROR "Sanitizers (ENGINE_SANITIZE=${BE_SANITIZERS}, ENGINE_FUZZ=${ENGINE_FUZZ}) need Clang or GCC (-fsanitize); this compiler is ${CMAKE_CXX_COMPILER_ID}")
     endif()
 
-    set(BE_FUZZ_SANITIZER_FLAGS -fsanitize=address,undefined,float-cast-overflow -fno-sanitize-recover=undefined,float-cast-overflow -fno-omit-frame-pointer)
-    add_compile_options(${BE_FUZZ_SANITIZER_FLAGS})
-    add_link_options(${BE_FUZZ_SANITIZER_FLAGS})
+    set(BE_SANITIZER_FLAGS -fno-omit-frame-pointer)
+    if("address" IN_LIST BE_SANITIZERS)
+        list(APPEND BE_SANITIZER_FLAGS -fsanitize=address)
+    endif()
+    if("undefined" IN_LIST BE_SANITIZERS)
+        list(APPEND BE_SANITIZER_FLAGS -fsanitize=undefined,float-cast-overflow -fno-sanitize-recover=undefined,float-cast-overflow)
+    endif()
+    add_compile_options(${BE_SANITIZER_FLAGS})
+    add_link_options(${BE_SANITIZER_FLAGS})
 
     if(ENGINE_FUZZ_LIBFUZZER)
         # Coverage instrumentation only; the libFuzzer runtime and its main() are linked into the BagiFuzz<Name> executables alone
         add_compile_options(-fsanitize=fuzzer-no-link)
-        message(STATUS "Fuzz: ENABLED (ASan + UBSan, libFuzzer executables BagiFuzz<Name>; compiler ${CMAKE_CXX_COMPILER})")
+        message(STATUS "Sanitizers: ${BE_SANITIZERS} (libFuzzer executables BagiFuzz<Name>; compiler ${CMAKE_CXX_COMPILER})")
     else()
-        message(STATUS "Fuzz: ENABLED (ASan + UBSan, no libFuzzer; compiler ${CMAKE_CXX_COMPILER})")
+        message(STATUS "Sanitizers: ${BE_SANITIZERS} (no libFuzzer; compiler ${CMAKE_CXX_COMPILER})")
     endif()
 else()
-    message(STATUS "Fuzz: DISABLED")
+    set(BE_SANITIZED OFF)
+    message(STATUS "Sanitizers: DISABLED")
 endif()
 
 # be_add_fuzz_executable(<Name> <Function>)

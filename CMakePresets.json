@@ -91,6 +91,14 @@
             }
         },
         {
+            "name": "asan",
+            "hidden": true,
+            "description": "AddressSanitizer + UndefinedBehaviorSanitizer on all code (ENGINE_SANITIZE, cmake/BagiFuzz.cmake) on the ordinary toolchain of the preset, with no libFuzzer; asserts and expects stay ON (an assertion is a finding too). The test preset of the same name sets ASAN_OPTIONS and UBSAN_OPTIONS",
+            "cacheVariables": {
+                "ENGINE_SANITIZE": "address;undefined"
+            }
+        },
+        {
             "name": "clang",
             "hidden": true,
             "cacheVariables": {
@@ -223,6 +231,11 @@
             "name": "macos-profile-editor",
             "displayName": "macOS Clang Profile with the editor (the ImGui Profiler panel)",
             "inherits": ["ninja", "host-macos", "clang", "editor", "profile"]
+        },
+        {
+            "name": "macos-asan",
+            "displayName": "macOS Clang Debug with AddressSanitizer + UBSan",
+            "inherits": ["ninja", "host-macos", "clang", "debug", "asan"]
         },
         {
             "name": "macos-fuzz",
@@ -389,6 +402,12 @@
             "configurePreset": "macos-profile-editor"
         },
         {
+            "name": "macos-asan",
+            "displayName": "macOS Clang Debug with AddressSanitizer + UBSan",
+            "inherits": "build-macos",
+            "configurePreset": "macos-asan"
+        },
+        {
             "name": "macos-fuzz",
             "displayName": "macOS Homebrew LLVM fuzzing (ASan + UBSan, libFuzzer executables)",
             "inherits": "build-macos",
@@ -550,6 +569,16 @@
             "displayName": "macOS Clang Release with the editor",
             "inherits": "test-macos",
             "configurePreset": "macos-release-editor"
+        },
+        {
+            "name": "macos-asan",
+            "displayName": "macOS Clang Debug with AddressSanitizer + UBSan",
+            "inherits": "test-macos",
+            "configurePreset": "macos-asan",
+            "environment": {
+                "ASAN_OPTIONS": "detect_stack_use_after_return=1:strict_string_checks=1",
+                "UBSAN_OPTIONS": "print_stacktrace=1:suppressions=${fileDir}/cmake/sanitizers/ubsan.supp"
+            }
         },
         {
             "name": "macos-fuzz",
