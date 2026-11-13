@@ -1,9 +1,11 @@
 #include <BECore/Threading/ConditionVariable.h>
 #include <BECore/Threading/LockGuards.h>
+#include <BECore/Threading/LockOrder.h>
 #include <BECore/Threading/Mutex.h>
 #include <BECore/Threading/SharedMutex.h>
 #include <atomic>
 #include <chrono>
+#include <gtest/gtest-spi.h>
 #include <gtest/gtest.h>
 #include <thread>
 #include <vector>
@@ -262,6 +264,208 @@ namespace BECore::Tests {
         lock.unlock();
         notifier.join();
     }
+
+    // ---------------------------------------------------------------- lock order
+
+#if BE_LOCK_ORDER_CHECK
+
+    namespace {
+
+        constexpr uint32_t kLowLevel = 10;
+        constexpr uint32_t kMidLevel = 20;
+        constexpr uint32_t kHighLevel = 30;
+
+        /// A failed engine ASSERT is reported by AssertBridge as a non-fatal gtest failure: the lock order message names both locks
+        constexpr const char* kLowAfterHigh = "taking 'Order low' (level 10) while holding 'Order high' (level 30)";
+
+    }  // namespace
+
+    TEST(ThreadingTest, LockOrderAscendingPasses) {
+        Mutex low{BE_LOCK_SITE_LEVEL("Order low", kLowLevel)};
+        Mutex mid{BE_LOCK_SITE_LEVEL("Order mid", kMidLevel)};
+        SharedMutex high{BE_LOCK_SITE_LEVEL("Order high", kHighLevel)};
+
+        ASSERT_EQ(LockOrder::HeldCount(), 0u);
+        {
+            std::lock_guard<Mutex> first(low);
+            std::lock_guard<Mutex> second(mid);
+            std::lock_guard<SharedMutex> third(high);
+            EXPECT_EQ(LockOrder::HeldCount(), 3u);
+        }
+        EXPECT_EQ(LockOrder::HeldCount(), 0u);
+    }
+
+    TEST(ThreadingTest, LockOrderDescendingAsserts) {
+        Mutex low{BE_LOCK_SITE_LEVEL("Order low", kLowLevel)};
+        Mutex high{BE_LOCK_SITE_LEVEL("Order high", kHighLevel)};
+
+        high.lock();
+        EXPECT_NONFATAL_FAILURE(low.lock(), kLowAfterHigh);
+        // The lock is taken after the report, like any assert that lets the code go on: release both
+        low.unlock();
+        high.unlock();
+        EXPECT_EQ(LockOrder::HeldCount(), 0u);
+    }
+
+    TEST(ThreadingTest, LockOrderSameLevelAsserts) {
+        Mutex first{BE_LOCK_SITE_LEVEL("Order first", kMidLevel)};
+        Mutex second{BE_LOCK_SITE_LEVEL("Order second", kMidLevel)};
+
+        first.lock();
+        EXPECT_NONFATAL_FAILURE(second.lock(), "taking 'Order second' (level 20) while holding 'Order first' (level 20)");
+        second.unlock();
+        first.unlock();
+    }
+
+    TEST(ThreadingTest, LockOrderLevelZeroNeverAsserts) {
+        Mutex high{BE_LOCK_SITE_LEVEL("Order high", kHighLevel)};
+        Mutex unordered{BE_LOCK_SITE("Order none")};
+        Mutex low{BE_LOCK_SITE_LEVEL("Order low", kLowLevel)};
+
+        {
+            std::lock_guard<Mutex> highGuard(high);
+            std::lock_guard<Mutex> unorderedGuard(unordered);
+            EXPECT_EQ(LockOrder::HeldCount(), 1u);  // a level 0 lock is not recorded
+        }
+        {
+            std::lock_guard<Mutex> unorderedGuard(unordered);
+            std::lock_guard<Mutex> lowGuard(low);
+            std::lock_guard<Mutex> highGuard(high);
+        }
+        EXPECT_EQ(LockOrder::HeldCount(), 0u);
+    }
+
+    TEST(ThreadingTest, LockOrderTryLockIsRecordedButNeverAsserts) {
+        Mutex low{BE_LOCK_SITE_LEVEL("Order low", kLowLevel)};
+        Mutex high{BE_LOCK_SITE_LEVEL("Order high", kHighLevel)};
+
+        high.lock();
+        EXPECT_TRUE(low.try_lock());  // descending, but it cannot wait, so it cannot deadlock
+        EXPECT_EQ(LockOrder::HeldCount(), 2u);
+        low.unlock();
+        high.unlock();
+        EXPECT_EQ(LockOrder::HeldCount(), 0u);
+    }
+
+    TEST(ThreadingTest, LockOrderFailedTryLockRecordsNothing) {
+        Mutex low{BE_LOCK_SITE_LEVEL("Order low", kLowLevel)};
+        ASSERT_TRUE(low.try_lock());
+
+        size_t heldByOther = 99;
+        std::thread other([&] {
+            const bool locked = low.try_lock();
+            heldByOther = LockOrder::HeldCount() + (locked ? 100u : 0u);
+        });
+        other.join();
+        EXPECT_EQ(heldByOther, 0u);
+        low.unlock();
+    }
+
+    TEST(ThreadingTest, LockOrderReleaseOutOfOrderKeepsTheStackRight) {
+        Mutex low{BE_LOCK_SITE_LEVEL("Order low", kLowLevel)};
+        Mutex mid{BE_LOCK_SITE_LEVEL("Order mid", kMidLevel)};
+        Mutex high{BE_LOCK_SITE_LEVEL("Order high", kHighLevel)};
+
+        low.lock();
+        mid.lock();
+        high.lock();
+        mid.unlock();  // the middle one, not the last
+        low.unlock();
+        EXPECT_EQ(LockOrder::HeldCount(), 1u);
+
+        // Only `high` is held now: a lower lock still asserts, and the released ones are really gone
+        EXPECT_NONFATAL_FAILURE(mid.lock(), "taking 'Order mid' (level 20) while holding 'Order high' (level 30)");
+        mid.unlock();
+        high.unlock();
+        EXPECT_EQ(LockOrder::HeldCount(), 0u);
+
+        // Nothing stale is left behind: the ascending order passes again
+        low.lock();
+        mid.lock();
+        high.lock();
+        high.unlock();
+        mid.unlock();
+        low.unlock();
+        EXPECT_EQ(LockOrder::HeldCount(), 0u);
+    }
+
+    TEST(ThreadingTest, LockOrderEveryThreadHasItsOwnStack) {
+        Mutex low{BE_LOCK_SITE_LEVEL("Order low", kLowLevel)};
+        Mutex high{BE_LOCK_SITE_LEVEL("Order high", kHighLevel)};
+        std::atomic<bool> holding{false};
+        std::atomic<bool> release{false};
+
+        std::thread holder([&] {
+            std::lock_guard<Mutex> lock(high);
+            holding.store(true);
+            while (!release.load()) {
+                std::this_thread::yield();
+            }
+        });
+        ASSERT_TRUE(WaitUntil([&] { return holding.load(); }));
+
+        // Another thread holds the high lock; this one holds nothing, so the low lock is in order here
+        {
+            std::lock_guard<Mutex> lock(low);
+            EXPECT_EQ(LockOrder::HeldCount(), 1u);
+        }
+        release.store(true);
+        holder.join();
+        EXPECT_EQ(LockOrder::HeldCount(), 0u);
+    }
+
+    TEST(ThreadingTest, LockOrderCountsBothSidesOfASharedMutex) {
+        SharedMutex high{BE_LOCK_SITE_LEVEL("Order high", kHighLevel)};
+        Mutex low{BE_LOCK_SITE_LEVEL("Order low", kLowLevel)};
+        SharedMutex lowShared{BE_LOCK_SITE_LEVEL("Order low shared", kLowLevel)};
+
+        high.lock_shared();
+        EXPECT_NONFATAL_FAILURE(low.lock(), kLowAfterHigh);
+        low.unlock();
+        EXPECT_NONFATAL_FAILURE(lowShared.lock_shared(), "taking 'Order low shared' (level 10) while holding 'Order high' (level 30)");
+        lowShared.unlock_shared();
+        high.unlock_shared();
+        EXPECT_EQ(LockOrder::HeldCount(), 0u);
+
+        high.lock();
+        EXPECT_NONFATAL_FAILURE(low.lock(), kLowAfterHigh);
+        low.unlock();
+        high.unlock();
+        EXPECT_EQ(LockOrder::HeldCount(), 0u);
+
+        // And a shared lock below a held lock is in order as well as an exclusive one
+        low.lock();
+        high.lock_shared();
+        high.unlock_shared();
+        low.unlock();
+    }
+
+    TEST(ThreadingTest, LockOrderConditionVariableWaitKeepsTheLockHeld) {
+        Mutex mutex{BE_LOCK_SITE_LEVEL("Order cv", kMidLevel)};
+        ConditionVariable changed;
+        bool ready = false;
+        size_t heldAfterWait = 0;
+        size_t heldAfterUnlock = 99;
+
+        std::thread waiter([&] {
+            std::unique_lock<Mutex> lock(mutex);
+            changed.wait(lock, [&] { return ready; });
+            heldAfterWait = LockOrder::HeldCount();
+            lock.unlock();
+            heldAfterUnlock = LockOrder::HeldCount();
+        });
+        std::this_thread::sleep_for(kShortWait);
+        {
+            std::lock_guard<Mutex> lock(mutex);
+            ready = true;
+        }
+        changed.notify_one();
+        waiter.join();
+        EXPECT_EQ(heldAfterWait, 1u);
+        EXPECT_EQ(heldAfterUnlock, 0u);
+    }
+
+#endif
 
     // ---------------------------------------------------------------- sizes
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Threading/LockHooks.h>
+#include <BECore/Threading/LockOrder.h>
 #include <BECore/Threading/LockSite.h>
 #include <mutex>
 
@@ -33,21 +34,47 @@ namespace BECore {
         Mutex& operator=(const Mutex&) = delete;
 
         void lock() {
+            OrderBefore();
             if (!_native.try_lock()) {
                 LockContended();
             }
+            OrderAcquired();
         }
 
         [[nodiscard]] bool try_lock() {
-            return _native.try_lock();
+            const bool locked = _native.try_lock();
+            if (locked) {
+                OrderAcquired();
+            }
+            return locked;
         }
 
         void unlock() {
+            OrderReleased();
             _native.unlock();
         }
 
     private:
         friend class ConditionVariable;
+
+        /// The lock order check (LockOrder.h): nothing at all without BE_LOCK_ORDER_CHECK
+        void OrderBefore() const {
+#if BE_LOCK_ORDER_CHECK
+            LockOrder::BeforeAcquire(*_site);
+#endif
+        }
+
+        void OrderAcquired() const {
+#if BE_LOCK_ORDER_CHECK
+            LockOrder::Acquired(*_site);
+#endif
+        }
+
+        void OrderReleased() const {
+#if BE_LOCK_ORDER_CHECK
+            LockOrder::Released(*_site);
+#endif
+        }
 
 #if BE_LOCK_SITES
         /// The blocking lock after a failed try_lock, timed for the profiler (Mutex.cpp)

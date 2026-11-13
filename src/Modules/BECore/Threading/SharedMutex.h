@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BECore/Threading/LockHooks.h>
+#include <BECore/Threading/LockOrder.h>
 #include <BECore/Threading/LockSite.h>
 #include <shared_mutex>
 
@@ -25,34 +26,67 @@ namespace BECore {
         SharedMutex& operator=(const SharedMutex&) = delete;
 
         void lock() {
+            OrderBefore();
             if (!_native.try_lock()) {
                 LockContended();
             }
+            OrderAcquired();
         }
 
         [[nodiscard]] bool try_lock() {
-            return _native.try_lock();
+            const bool locked = _native.try_lock();
+            if (locked) {
+                OrderAcquired();
+            }
+            return locked;
         }
 
         void unlock() {
+            OrderReleased();
             _native.unlock();
         }
 
         void lock_shared() {
+            OrderBefore();
             if (!_native.try_lock_shared()) {
                 LockContendedShared();
             }
+            OrderAcquired();
         }
 
         [[nodiscard]] bool try_lock_shared() {
-            return _native.try_lock_shared();
+            const bool locked = _native.try_lock_shared();
+            if (locked) {
+                OrderAcquired();
+            }
+            return locked;
         }
 
         void unlock_shared() {
+            OrderReleased();
             _native.unlock_shared();
         }
 
     private:
+        /// The lock order check (LockOrder.h): nothing at all without BE_LOCK_ORDER_CHECK
+        void OrderBefore() const {
+#if BE_LOCK_ORDER_CHECK
+            LockOrder::BeforeAcquire(*_site);
+#endif
+        }
+
+        void OrderAcquired() const {
+#if BE_LOCK_ORDER_CHECK
+            LockOrder::Acquired(*_site);
+#endif
+        }
+
+        void OrderReleased() const {
+#if BE_LOCK_ORDER_CHECK
+            LockOrder::Released(*_site);
+#endif
+        }
+
 #if BE_LOCK_SITES
         /// The blocking locks after a failed try, timed for the profiler (SharedMutex.cpp)
         void LockContended();
