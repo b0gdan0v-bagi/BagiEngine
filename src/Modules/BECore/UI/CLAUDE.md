@@ -25,6 +25,7 @@ Each file below loads by itself when a file of its area is read; read it by path
 | A screen in XML, the controls and their fields, a new control, `UIVars` and `UIStrings` | `.claude/rules/ui-controls.md` |
 | `ui_tree` / `ui_click` of the control API | `.claude/rules/ui-control-api.md` |
 | A screen in HTML + CSS | `.claude/rules/ui-web.md` |
+| Opacity, show / hide transitions, the smooth hover and press | `.claude/rules/ui-transitions.md` |
 | Rounded boxes, borders, gradients, shadows | `.claude/rules/ui-shapes.md` |
 
 | Class | Role |
@@ -75,6 +76,7 @@ Each file below loads by itself when a file of its area is read; read it by path
 - **Tooltips:** a hovered element with a tooltip (`UIElement::GetTooltipText`: the `UITooltipComponent` text) shows it after `UITooltip::kHoverDelay`; a touch (a mouse event with `which == SDL_TOUCH_MOUSEID`) has no hover, it shows it when the press has lasted `kLongPress`, and that press is **no click** (the release is swallowed); it lingers `kTouchLinger`. A press, a hidden or input-less canvas and leaving the element hide it. The canvas holds `UITooltip::Tracker` (the pure rule; time is `CoreManager::GetTime().GetTotalTime()`) and draws the plate last, over the popups, with a text element of its own (an element with a `UITextComponent`, made at the first tooltip): it is no child, so hit testing, `ui_tree` and the validator never see it and it takes no input. A canvas under a modal one gets no pointer events, so it starts none.
 - **Pointer hooks:** `OnClick` on release over the same element; `OnPress(x, y)` / `OnDrag(x, y)` of an `IsInteractive()` element, in canvas units; they run last.
 - **Show / hide:** `UICanvasComponent::SetVisibleByName`; one element: `SetElementVisible` / `SetElementVisibleByName` (sets `style.visible`; a variant still wins).
+- **Transitions** (one page, `.claude/rules/ui-transitions.md`): opacity is a per-draw multiply, a show / hide keeps the authored `visible` as the target, the state look eases by `stateDuration`; all off by default.
 - **Canvas show / hide transition:** the `_transition*` fields (duration 0 = none = the pop of before; a `UITransitionSpec`) animate a change of `_visible`: the canvas is drawn while it leaves (opacity, scale about the centre of its bounds, slide, composed with its view transform) and `SetVisibleByName` needs no change. Input: a hidden canvas takes none **at once**, so a modal releases the screen the moment it starts to leave, unless `_transitionInput`; a canvas that is showing without `_transitionInput` consumes events and delivers none. The tooltip is hidden while it transitions.
 - RmlUi (`RmlUiHost`) is a separate front-end with its own DOM; the editor, the validator and `ui_tree` do not see into it.
 
