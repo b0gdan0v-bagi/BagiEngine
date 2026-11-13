@@ -7,7 +7,8 @@ The automatic mirror between the store and Vikunja. Nobody runs a push or a pull
 - Vikunja -> store: a project webhook (task.created / task.updated / task.deleted) and a reconcile
   pass every few minutes read the task and compare it with the snapshot. What differs was changed by
   a person and is applied to the entry: done (closed / open), the title, the body, the labels
-  `in progress` / `deferred` / `stage N`. A task made in Vikunja without the marker becomes a new entry.
+  `in progress` / `deferred` / `stage N`, the priority (by level: Vikunja's 4 and 5 are both `now`).
+  A task made in Vikunja without the marker becomes a new entry.
   `review` never comes from Vikunja: only the loop sets it.
 - Dependencies go one way, store -> Vikunja: an entry's blockers are its task's `blocked` relations
   (Vikunja adds the `blocking` side). A relation changed in Vikunja is put back at the next write.
@@ -39,6 +40,7 @@ from .vikunja import (
     managed_labels,
     marker_of,
     normalize_html,
+    priority_from_vikunja,
     render_task,
     snapshot_of,
     stage_from_labels,
@@ -255,16 +257,19 @@ class Mirror:
             if entry["status"] == "closed":
                 conn.execute("UPDATE entries SET vikunja_task_id = NULL, vikunja_snapshot = NULL WHERE id = %s", (entry_id,))
                 return "closed, no task"
-            task, _ = self.client.request(
-                "PUT", f"/projects/{project_id}/tasks", {"title": desired["title"], "description": desired["description"], "done": desired["done"]}
-            )
+            created = {"title": desired["title"], "description": desired["description"], "done": desired["done"]}
+            if desired["priority"]:
+                created["priority"] = desired["priority"]
+            task, _ = self.client.request("PUT", f"/projects/{project_id}/tasks", created)
             task["labels"] = []
             self._tasks_by_marker(project_id).setdefault(entry_id, []).append(task)
             action = "create"
         else:
             current = snapshot_of(task)
+            level_differs = current["priority"] != entry["priority"]  # by level: a task at 4 for `now` is left alone
             fields_differ = (
-                current["title"] != desired["title"]
+                level_differs
+                or current["title"] != desired["title"]
                 or current["description"] != normalize_html(desired["description"])
                 or current["done"] != desired["done"]
                 or task.get("project_id") != project_id
@@ -273,6 +278,8 @@ class Mirror:
             if fields_differ:
                 body = {key: value for key, value in task.items() if key != "labels"}
                 body.update(title=desired["title"], description=desired["description"], done=desired["done"], project_id=project_id)
+                if level_differs:
+                    body["priority"] = desired["priority"]
                 written, _ = self.client.request("POST", f"/tasks/{task['id']}", body)
                 task = {**(written or body), "labels": task.get("labels") or []}
                 action = "update"
@@ -357,6 +364,14 @@ class Mirror:
             new_stage = stage_from_labels(current["labels"])
             if new_stage != stage_from_labels(before["labels"]):
                 changes["stage"] = new_stage
+        if "priority" not in before:  # a snapshot from before the priority was mirrored
+            if entry["priority"] is None:
+                if current["priority"] is not None:
+                    changes["priority"] = current["priority"]  # keep what the owner set in Vikunja
+            elif entry["priority"] != current["priority"]:
+                store.enqueue(conn, entry["id"])  # the store's level wins and is written
+        elif current["priority"] != before["priority"]:
+            changes["priority"] = current["priority"]
         if current["description"] != before["description"]:
             body = body_of(task.get("description") or "")
             if not _same_text(body, html_to_markdown(markdown_to_html(entry["body"]))):
@@ -389,6 +404,7 @@ class Mirror:
                 "body": body_of(task.get("description") or ""),
                 "status": status_from_labels(labels) or "open",
                 "stage": stage_from_labels(labels),
+                "priority": priority_from_vikunja(task.get("priority")),
             },
             ACTOR,
         )

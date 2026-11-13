@@ -81,18 +81,140 @@ def test_the_loop_statuses_reach_the_labels_and_close_marks_the_task_done(mirror
     assert task_of(api, fake)["done"] is True and labels(task_of(api, fake)) == ["stage 1"]
 
 
-def test_foreign_fields_and_labels_of_a_task_are_kept(mirrored):
+def test_foreign_fields_and_labels_of_a_task_are_kept_and_the_priority_is_owned(mirrored):
     api, mirror, fake = mirrored
     add(api)
     mirror.process_outbox()
     task = task_of(api, fake)
-    task["priority"] = 4
+    task["due_date"] = "2026-12-01T00:00:00Z"
     task["labels"].append(fake.add_label("urgent"))
     api.post("/api/v1/entries/no-ci/claim", json={"branch": "todo/no-ci"}).raise_for_status()
+    api.patch("/api/v1/entries/no-ci", json={"priority": "high"}).raise_for_status()
     mirror.process_outbox()
     task = task_of(api, fake)
-    assert task["priority"] == 4
+    assert task["due_date"] == "2026-12-01T00:00:00Z"
+    assert task["priority"] == 3
     assert labels(task) == ["in progress", "stage 1", "urgent"]
+
+
+@pytest.mark.parametrize("level,number", [("now", 5), ("high", 3), ("normal", 2), ("low", 1)])
+def test_a_priority_set_in_the_store_reaches_a_new_and_an_existing_task(mirrored, level, number):
+    api, mirror, fake = mirrored
+    add(api, id="made-with", title="Made with", priority=level)
+    add(api, id="made-after", title="Made after")
+    mirror.process_outbox()
+    assert task_of(api, fake, "made-with")["priority"] == number
+    assert task_of(api, fake, "made-after")["priority"] == 0
+    api.patch("/api/v1/entries/made-after", json={"priority": level}).raise_for_status()
+    mirror.process_outbox()
+    assert task_of(api, fake, "made-after")["priority"] == number
+    api.patch("/api/v1/entries/made-after", json={"clear": ["priority"]}).raise_for_status()
+    mirror.process_outbox()
+    assert task_of(api, fake, "made-after")["priority"] == 0
+
+
+@pytest.mark.parametrize("number,level", [(1, "low"), (2, "normal"), (3, "high"), (4, "now"), (5, "now"), (0, None)])
+def test_a_priority_set_in_vikunja_reaches_the_entry(linked, number, level):
+    api, mirror, fake, task = linked
+    api.patch("/api/v1/entries/no-ci", json={"priority": "low" if number != 1 else "high"}).raise_for_status()
+    mirror.process_outbox()
+    task = task_of(api, fake)  # the fake replaces the dict of a task it writes
+    task["priority"] = number
+    assert send_webhook(api, "task.updated", task).json() == {"result": "changed"}
+    assert api.get("/api/v1/entries/no-ci").json()["priority"] == level
+    mirror.reconcile()
+    mirror.process_outbox()
+    assert task["priority"] == number  # the echo changes nothing in the task
+
+
+def test_a_task_a_person_left_at_urgent_stays_there_until_the_level_changes(linked):
+    api, mirror, fake, task = linked
+    task["priority"] = 4
+    send_webhook(api, "task.updated", task)
+    assert api.get("/api/v1/entries/no-ci").json()["priority"] == "now"
+    api.patch("/api/v1/entries/no-ci", json={"title": "Renamed"}).raise_for_status()
+    mirror.process_outbox()
+    assert task_of(api, fake)["priority"] == 4 and task_of(api, fake)["title"] == "Renamed"
+    api.patch("/api/v1/entries/no-ci", json={"priority": "high"}).raise_for_status()
+    mirror.process_outbox()
+    assert task_of(api, fake)["priority"] == 3
+    api.patch("/api/v1/entries/no-ci", json={"priority": "now"}).raise_for_status()
+    mirror.process_outbox()
+    assert task_of(api, fake)["priority"] == 5
+
+
+def test_the_echo_of_a_priority_write_queues_nothing_and_changes_no_version(linked):
+    api, mirror, fake, task = linked
+    api.patch("/api/v1/entries/no-ci", json={"priority": "high"}).raise_for_status()
+    mirror.process_outbox()
+    version = api.get("/api/v1/entries/no-ci").json()["version"]
+    assert send_webhook(api, "task.updated", task_of(api, fake)).json() == {"result": "same"}
+    assert mirror.reconcile() == {"same": 1}
+    assert api.get("/api/v1/entries/no-ci").json()["version"] == version
+    assert api.get("/api/v1/admin/outbox").json() == []
+
+
+def test_clearing_the_priority_in_vikunja_clears_it_in_the_store(linked):
+    api, mirror, fake, task = linked
+    api.patch("/api/v1/entries/no-ci", json={"priority": "high"}).raise_for_status()
+    mirror.process_outbox()
+    task = task_of(api, fake)
+    task["priority"] = 0
+    send_webhook(api, "task.updated", task)
+    assert api.get("/api/v1/entries/no-ci").json()["priority"] is None
+    event = api.get("/api/v1/entries/no-ci/events").json()[0]
+    assert event["actor"] == "vikunja" and event["data"] == {"old": {"priority": "high"}, "new": {"priority": None}}
+
+
+def without_priority_in_snapshot(api, entry_id="no-ci"):
+    """The state of an entry written before the priority was mirrored."""
+    with psycopg_connect(api) as conn:
+        conn.execute("UPDATE entries SET vikunja_snapshot = vikunja_snapshot - 'priority' WHERE id = %s", (entry_id,))
+
+
+def test_an_old_snapshot_adopts_the_priority_the_owner_set_in_vikunja(linked):
+    api, mirror, fake, task = linked
+    without_priority_in_snapshot(api)
+    task["priority"] = 3
+    assert send_webhook(api, "task.updated", task).json() == {"result": "changed"}
+    assert api.get("/api/v1/entries/no-ci").json()["priority"] == "high"
+    mirror.process_outbox()
+    assert task_of(api, fake)["priority"] == 3  # not wiped
+
+
+def test_an_old_snapshot_with_no_priority_anywhere_changes_nothing(linked):
+    api, mirror, fake, task = linked
+    without_priority_in_snapshot(api)
+    version = api.get("/api/v1/entries/no-ci").json()["version"]
+    assert send_webhook(api, "task.updated", task).json() == {"result": "same"}
+    assert api.get("/api/v1/entries/no-ci").json()["version"] == version
+
+
+def test_an_old_snapshot_keeps_the_stores_priority_and_writes_it(linked):
+    api, mirror, fake, task = linked
+    api.patch("/api/v1/entries/no-ci", json={"priority": "low"}).raise_for_status()
+    mirror.process_outbox()
+    without_priority_in_snapshot(api)
+    task = task_of(api, fake)
+    task["priority"] = 5
+    assert send_webhook(api, "task.updated", task).json() == {"result": "same"}
+    assert api.get("/api/v1/entries/no-ci").json()["priority"] == "low"
+    mirror.process_outbox()  # queued by the webhook: the store's level is written
+    assert task_of(api, fake)["priority"] == 1
+
+
+def test_a_task_made_in_vikunja_with_a_priority_becomes_an_entry_with_it(mirrored):
+    api, mirror, fake = mirrored
+    mirror.reconcile()
+    chess = project(fake, "BagiEngine-Chess")
+    task = fake.add_task(chess["id"], "Show the clock", priority=5)
+    assert send_webhook(api, "task.created", task).json() == {"result": "adopted"}
+    assert api.get("/api/v1/entries/show-the-clock").json()["priority"] == "now"
+    mirror.process_outbox()
+    assert fake.tasks[task["id"]]["priority"] == 5
+    plain = fake.add_task(chess["id"], "Plain")
+    send_webhook(api, "task.created", plain)
+    assert api.get("/api/v1/entries/plain").json()["priority"] is None
 
 
 def test_a_plan_shows_its_checklist_in_the_task(mirrored):

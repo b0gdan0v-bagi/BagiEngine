@@ -5,8 +5,10 @@ Checked against Vikunja 2.7.1. A managed task's description starts with the visi
 `todo-sync:id=<entry id>` (the identity a task keeps if the store loses its task id), then the facts
 of the entry, a rule, the body of the entry and, when the entry has a plan, the plan's checklist as
 the editor's task list. Owned fields: title, description, done and the labels "in progress",
-"review", "deferred", "stage N"; everything else on a task is kept (read-modify-write, because
-POST /tasks/{id} replaces the whole task).
+"review", "deferred", "stage N" and the priority; everything else on a task is kept (read-modify-write, because
+POST /tasks/{id} replaces the whole task). The priority is owned by level (`now`, `high`, `normal`, `low`, none):
+the mapping to Vikunja's numbers is below, a task is rewritten only when its level differs from the entry's, so a
+task a person left at 4 (urgent, read as `now`) stays 4 until the entry's level changes.
 """
 
 import json
@@ -33,6 +35,9 @@ MANAGED_LABEL_RE = re.compile(r"^(?:in progress|review|deferred|stage \d+)$")
 _STAGE_LABEL_RE = re.compile(r"^stage (\d+)$")
 _BETWEEN_TAGS_RE = re.compile(r">\s+<")
 _FACT_LINE_RE = re.compile(r"^(?:todo-sync:id=\S+|\*\*(?:Status|Stage|Plan):\*\*.*|---)$")
+# Vikunja's priority field: 0 unset, 1 low, 2 medium, 3 high, 4 urgent, 5 DO NOW.
+_PRIORITY_NUMBERS = {"low": 1, "normal": 2, "high": 3, "now": 5}
+_PRIORITY_LEVELS = {1: "low", 2: "normal", 3: "high", 4: "now", 5: "now"}
 WEBHOOK_EVENTS = ["task.created", "task.updated", "task.deleted"]
 
 
@@ -140,8 +145,18 @@ def strip_plan_block(description: str) -> str:
     return description[:start] if start >= 0 else (description or "")
 
 
+def priority_to_vikunja(level: str | None) -> int:
+    """The number a task gets for an entry's level (0 for none)."""
+    return _PRIORITY_NUMBERS.get(level, 0)
+
+
+def priority_from_vikunja(number: int | None) -> str | None:
+    """The entry's level for a task's number: 4 and 5 are both `now`, 0 and anything unknown none."""
+    return _PRIORITY_LEVELS.get(number)
+
+
 def render_task(entry: dict, status_line: str, stage_title: str | None, plan: dict | None) -> dict:
-    """The owned fields of the entry's task: {title, description, done, labels}."""
+    """The owned fields of the entry's task: {title, description, done, labels, priority (the number)}."""
     facts = [f"{MARKER_PREFIX}{entry['id']}", f"<strong>Status:</strong> {escape(status_line)}"]
     if entry["stage"] is not None:
         stage = f"{entry['stage']}: {stage_title}" if stage_title else str(entry["stage"])
@@ -151,7 +166,13 @@ def render_task(entry: dict, status_line: str, stage_title: str | None, plan: di
     description = "".join(f"<p>{fact}</p>" for fact in facts) + "<hr>" + markdown_to_html(entry["body"])
     if plan is not None and plan["checklist"]:
         description += render_plan_block(plan["name"], plan["checklist"])
-    return {"title": entry["title"], "description": description, "done": entry["status"] == "closed", "labels": sorted(desired_labels(entry))}
+    return {
+        "title": entry["title"],
+        "description": description,
+        "done": entry["status"] == "closed",
+        "labels": sorted(desired_labels(entry)),
+        "priority": priority_to_vikunja(entry["priority"]),
+    }
 
 
 def desired_labels(entry: dict) -> set[str]:
@@ -183,6 +204,7 @@ def snapshot_of(task: dict) -> dict:
         "description": normalize_html(task.get("description")),
         "done": bool(task.get("done")),
         "labels": managed_labels(task),
+        "priority": priority_from_vikunja(task.get("priority")),
     }
 
 
