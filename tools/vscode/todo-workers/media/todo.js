@@ -287,7 +287,7 @@
         const free = (payload.workers || []).filter((w) => !w.active && !w.dirty && !w.busy);
         const title = payload.workers
             ? free.length
-                ? `/todo-loop 1 ${entry.id} as the background session of a free worker (${free.map((w) => w.name).join(", ")}): you pick which`
+                ? `/todo-loop ${entry.id} as the background session of a free worker (${free.map((w) => w.name).join(", ")}): you pick the mode (this entry only, then on through the list, through to the end) and which worker`
                 : "no free worker now: every one runs a session or has uncommitted changes"
             : "the workers are not known yet";
         const b = button("Attach to free worker", { cmd: "startInWorker", entry: entry.id }, title, free.length ? "primary" : "");

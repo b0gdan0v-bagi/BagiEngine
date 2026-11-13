@@ -212,6 +212,19 @@ function attach(ctx) {
         await write(`todo.py edit ${id}`, ["edit", id, "--slicing", "through", "--cost-cap", cap.trim() ? String(Number(cap)) : "none"]);
     }
 
+    // The slicing of an entry for the start dialog: from the list held, else from the store.
+    async function entrySlicing(id) {
+        const held = entries.find((e) => e.id === id);
+        if (held && held.slicing !== undefined) return held.slicing;
+        return JSON.parse(await todo(["show", id, "--json"])).slicing || null;
+    }
+
+    // Through without a cost cap question (the start dialog's third mode); the caller handles the error.
+    async function setSlicingThrough(id) {
+        await todo(["edit", id, "--slicing", "through"]);
+        loadTodoList();
+    }
+
     async function depAdd(id) {
         const candidates = entries.filter((e) => e.id !== id && e.status !== "closed").map((e) => ({ label: e.id, description: `${e.area} · ${e.status}`, detail: e.title }));
         const pick = await vscode.window.showQuickPick(candidates, { placeHolder: `${id} waits for ...`, matchOnDetail: true });
@@ -264,7 +277,7 @@ function attach(ctx) {
         });
     }
 
-    Object.assign(ctx, { openTodoList, loadTodoList, postWorkersToList, openTodoPlan, setThrough });
+    Object.assign(ctx, { openTodoList, loadTodoList, postWorkersToList, openTodoPlan, setThrough, entrySlicing, setSlicingThrough });
 }
 
 module.exports = { attach };
