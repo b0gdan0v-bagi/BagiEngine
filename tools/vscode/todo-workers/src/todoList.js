@@ -1,5 +1,5 @@
 // The Todo list tab: the entries of the store (todo.py list --all --json --body), read again on Refresh and on every
-// write signal, and the owner's writes from it: a new entry, status, stage, body, through and its cost cap,
+// write signal, and the owner's writes from it: a new entry, status, stage, priority, body, through and its cost cap,
 // dependencies, the order of a worker's queue. Every write is todo.py with the actor `owner-panel`.
 "use strict";
 
@@ -175,6 +175,19 @@ function attach(ctx) {
         if (pick) await write(`todo.py edit ${id}`, ["edit", id, "--stage", pick.value]);
     }
 
+    async function setPriority(id) {
+        const current = (entries.find((e) => e.id === id) || {}).priority || "none";
+        const levels = [
+            { label: "now", description: "the loop takes it first" },
+            { label: "high" },
+            { label: "normal", description: "the same as none for the order" },
+            { label: "low", description: "after every other entry" },
+            { label: "none", description: "no priority set" },
+        ].map((l) => ({ ...l, description: [l.description, l.label === current ? "current" : ""].filter(Boolean).join(" · ") }));
+        const pick = await vscode.window.showQuickPick(levels, { placeHolder: `the priority of ${id} (now ${current})` });
+        if (pick && pick.label !== current) await write(`todo.py edit ${id}`, ["edit", id, "--priority", pick.label]);
+    }
+
     async function editBody(id) {
         let entry;
         try {
@@ -236,6 +249,7 @@ function attach(ctx) {
                 case "newEntry": return newEntry();
                 case "setStatus": return setStatus(message.entry, message.status);
                 case "setStage": return setStage(message.entry, message.area);
+                case "setPriority": return setPriority(message.entry);
                 case "editBody": return editBody(message.entry);
                 case "setThrough": return setThrough(message.entry, Boolean(message.on));
                 case "depAdd": return depAdd(message.entry);

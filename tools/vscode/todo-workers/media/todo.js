@@ -5,6 +5,9 @@
     const vscode = acquireVsCodeApi();
     const root = document.getElementById("root");
     const STATUSES = ["open", "in progress", "review", "deferred", "closed"];
+    // The order of todo.py list: normal and unset are one rank; the field is missing before the service has it.
+    const PRIORITY_RANK = { now: 0, high: 1, normal: 2, low: 3 };
+    const priorityRank = (e) => (e.priority in PRIORITY_RANK ? PRIORITY_RANK[e.priority] : PRIORITY_RANK.normal);
     const saved = vscode.getState() || {};
     let payload = { loading: true };
     let filter = {
@@ -191,6 +194,7 @@
             el("span", "area", entry.area),
             el("span", `badge status status-${String(entry.status).replace(" ", "-")}`, entry.status)
         );
+        if (entry.priority in PRIORITY_RANK) top.appendChild(el("span", `badge prio prio-${entry.priority}`, entry.priority));
         if (entry.stage !== null && entry.stage !== undefined) top.appendChild(el("span", "muted", `stage ${entry.stage}`));
         if (entry.slices && entry.slices.count > 1) top.appendChild(el("span", "muted", `${entry.slices.count} slices ${entry.slices.done}/${entry.slices.total}`));
         else if (entry.planProgress && entry.planProgress.total) top.appendChild(el("span", "muted", `plan ${entry.planProgress.done}/${entry.planProgress.total}`));
@@ -254,6 +258,7 @@
         if (entry.status === "open") actions.appendChild(button("Defer", { cmd: "setStatus", entry: entry.id, status: "deferred" }, "status deferred: the loop does not take it"));
         if (entry.status === "deferred") actions.appendChild(button("Open", { cmd: "setStatus", entry: entry.id, status: "open" }, "status open: the loop may take it"));
         actions.appendChild(button("Stage", { cmd: "setStage", entry: entry.id, area: entry.area }, "the roadmap stage of its area, or none"));
+        actions.appendChild(button("Priority", { cmd: "setPriority", entry: entry.id }, `the priority: now, high, normal, low or none (now ${entry.priority || "none"}); the loop and dispatch take the higher first`));
         actions.appendChild(button("Edit text", { cmd: "editBody", entry: entry.id }, "edit the body in the editor, then store it (refused when the entry changed meanwhile)"));
         const through = entry.slicing === "through";
         actions.appendChild(button(through ? "Through: on" : "Through: off", { cmd: "setThrough", entry: entry.id, on: !through }, through
@@ -297,7 +302,7 @@
         list.replaceChildren();
         const entries = (payload.entries || []).filter(matches);
         const order = (e) => STATUSES.indexOf(e.status);
-        entries.sort((a, b) => order(a) - order(b) || String(b.updatedAt).localeCompare(String(a.updatedAt)));
+        entries.sort((a, b) => order(a) - order(b) || priorityRank(a) - priorityRank(b) || String(b.updatedAt).localeCompare(String(a.updatedAt)));
         if (!entries.length) list.appendChild(el("p", "muted", payload.entries ? "No entry matches." : ""));
         for (const entry of entries) list.appendChild(row(entry));
     }

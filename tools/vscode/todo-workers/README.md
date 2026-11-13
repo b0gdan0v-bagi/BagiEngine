@@ -12,6 +12,10 @@ A panel for the parallel `todo-loop` workers (`tools/todo/worker.py`, "Workers" 
 - **collapse**: cards are folded by default to a few lines (the name, the entry and the badge, the title, the review note or the progress bar, one line of what the loop said, and the one action it needs: Answer, Relaunch, Review or Fast start); the arrow unfolds one, **Expand all** / **Collapse all** every card, and the choice is kept. Waiting and limited workers come first. An unfolded card keeps Attach, Relaunch and Stop or Fast start in sight; Log, Plan, Build & run, Update, Folder and Terminal are behind `…`;
 - buttons: **Attach** (`claude attach <session id>`; **Answer** takes its place while the session waits), **Log** (`claude logs`), **Folder** (a new window), **Terminal**, **Plan** (`~/.claude/plans/todo-loop-<branch-id>.md`), **Stop** (`worker.py stop <k>`, after a question, while the session runs); while it does not: **Update** (`worker.py update <k>`: the game and `engine/` detached at the tips of their base branches, as the loop's "go to the base"; the branch it held is kept; refused with uncommitted changes) and **Fast start** (`worker.py start <k>` at once: `/todo-loop` with the settings `todoWorkers.startSlices`, `todoWorkers.loopArgs` and `todoWorkers.reportTo`).
 
+Added in 0.18:
+
+- **Priority**: an entry of the Todo list shows its `priority` (`now` red, `high` orange, `normal` faint, `low` grey; nothing when unset), the entries of one status are ordered `now`, `high`, `normal` and unset, `low` and then newest first (the order of `todo.py list`), and an unfolded entry has **Priority**, a quick pick (`now`, `high`, `normal`, `low`, `none`) that runs `todo.py edit <id> --priority`. The field comes from the service (deploy first; before it no badge shows).
+
 Added in 0.17:
 
 - **Through and money**: a card's bar covers the whole entry when it has several slice plans (`3 slices 120/190 · this slice 12/30`); the toggle `slice by slice` / `through` sets the entry's `slicing` (`todo.py edit --slicing`; turning it on asks for an optional cost cap), and the dollars of the entry stand beside it against the cap.
@@ -55,7 +59,7 @@ No npm: the packer uses the standard library.
 
 ```bash
 python3 tools/vscode/todo-workers/pack.py        # in a game: engine/tools/vscode/todo-workers/pack.py
-code --install-extension tools/vscode/todo-workers/build/todo-workers-0.17.0.vsix
+code --install-extension tools/vscode/todo-workers/build/todo-workers-0.18.0.vsix
 ```
 
 `code` is in `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/` on macOS when it is not on PATH. Then **Developer: Reload Window**. After a change bump `version` in `package.json`, pack and install again.
