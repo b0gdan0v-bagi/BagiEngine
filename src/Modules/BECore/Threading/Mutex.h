@@ -23,7 +23,9 @@ namespace BECore {
     class Mutex {
     public:
         constexpr explicit Mutex(const LockSite& site) noexcept
-#if BE_LOCK_SITES
+#if BE_PROFILER
+            : _site(&site), _events(LockKind::Mutex)
+#elif BE_LOCK_SITES
             : _site(&site)
 #endif
         {
@@ -35,14 +37,17 @@ namespace BECore {
 
         void lock() {
             OrderBefore();
+            const bool tracked = EventsBeforeLock();
             if (!_native.try_lock()) {
                 LockContended();
             }
+            EventsAfterLock(tracked);
             OrderAcquired();
         }
 
         [[nodiscard]] bool try_lock() {
             const bool locked = _native.try_lock();
+            EventsAfterTryLock(locked);
             if (locked) {
                 OrderAcquired();
             }
@@ -51,6 +56,7 @@ namespace BECore {
 
         void unlock() {
             OrderReleased();
+            EventsBeforeUnlock();
             _native.unlock();
         }
 
@@ -76,11 +82,41 @@ namespace BECore {
 #endif
         }
 
+        /// The per-lock events of a backend that wants them (Tracy): with BE_PROFILER one atomic load each, otherwise nothing at all
+        [[nodiscard]] bool EventsBeforeLock() {
+#if BE_PROFILER
+            return _events.BeforeLock(*_site, LockKind::Mutex);
+#else
+            return false;
+#endif
+        }
+
+        void EventsAfterLock([[maybe_unused]] bool tracked) {
+#if BE_PROFILER
+            _events.AfterLock(tracked, LockKind::Mutex);
+#endif
+        }
+
+        void EventsAfterTryLock([[maybe_unused]] bool acquired) {
+#if BE_PROFILER
+            _events.AfterTryLock(*_site, LockKind::Mutex, acquired);
+#endif
+        }
+
+        void EventsBeforeUnlock() {
+#if BE_PROFILER
+            _events.BeforeUnlock(LockKind::Mutex);
+#endif
+        }
+
 #if BE_LOCK_SITES
         /// The blocking lock after a failed try_lock, timed for the profiler (Mutex.cpp)
         void LockContended();
 
         const LockSite* _site;
+#if BE_PROFILER
+        LockEvents _events;
+#endif
 #else
         void LockContended() {
             _native.lock();

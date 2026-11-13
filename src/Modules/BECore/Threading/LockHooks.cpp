@@ -48,3 +48,88 @@ namespace BECore::LockHooks {
 }  // namespace BECore::LockHooks
 
 #endif
+
+#if BE_PROFILER
+
+namespace BECore {
+
+    namespace {
+
+        /// The backend that made the contexts still alive (see LockHooks::SetEventBackend); a backend is never destroyed
+        constinit std::atomic<IProfilerBackend*> g_contextOwner{nullptr};
+
+    }  // namespace
+
+    namespace LockHooks {
+
+        void SetEventBackend(IProfilerBackend* backend) noexcept {
+            if (backend != nullptr) {
+                g_contextOwner.store(backend, std::memory_order_release);
+            }
+            g_eventBackend.store(backend, std::memory_order_release);
+        }
+
+    }  // namespace LockHooks
+
+    void* LockEvents::EnsureContext(IProfilerBackend& backend, const LockSite& site) {
+        void* context = _context.load(std::memory_order_acquire);
+        if (context != nullptr) {
+            return context;
+        }
+        void* fresh = backend.AnnounceLock(site.wait, _announceKind);
+        if (fresh == nullptr) {
+            return nullptr;
+        }
+        if (_context.compare_exchange_strong(context, fresh, std::memory_order_acq_rel)) {
+            return fresh;
+        }
+        backend.TerminateLock(fresh, _announceKind);  // another thread announced first: use its context
+        return context;
+    }
+
+    bool LockEvents::BeforeLockSlow(const LockSite& site, LockKind kind) {
+        IProfilerBackend* backend = LockHooks::g_eventBackend.load(std::memory_order_acquire);
+        if (backend == nullptr) {
+            return false;
+        }
+        void* context = EnsureContext(*backend, site);
+        return context != nullptr && backend->BeforeLock(context, kind);
+    }
+
+    void LockEvents::AfterLockSlow(LockKind kind) {
+        IProfilerBackend* backend = LockHooks::g_eventBackend.load(std::memory_order_acquire);
+        void* context = _context.load(std::memory_order_acquire);
+        if (backend != nullptr && context != nullptr) {
+            backend->AfterLock(context, kind);
+        }
+    }
+
+    void LockEvents::BeforeUnlockSlow(LockKind kind) {
+        IProfilerBackend* backend = LockHooks::g_eventBackend.load(std::memory_order_acquire);
+        void* context = _context.load(std::memory_order_acquire);
+        if (backend != nullptr && context != nullptr) {
+            backend->BeforeUnlock(context, kind);
+        }
+    }
+
+    void LockEvents::AfterTryLockSlow(const LockSite& site, LockKind kind, bool acquired) {
+        IProfilerBackend* backend = LockHooks::g_eventBackend.load(std::memory_order_acquire);
+        if (backend == nullptr) {
+            return;
+        }
+        if (void* context = EnsureContext(*backend, site)) {
+            backend->AfterTryLock(context, kind, acquired);
+        }
+    }
+
+    void LockEvents::Terminate() {
+        void* context = _context.exchange(nullptr, std::memory_order_acq_rel);
+        IProfilerBackend* owner = g_contextOwner.load(std::memory_order_acquire);
+        if (context != nullptr && owner != nullptr) {
+            owner->TerminateLock(context, _announceKind);
+        }
+    }
+
+}  // namespace BECore
+
+#endif

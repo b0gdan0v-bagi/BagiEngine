@@ -61,6 +61,14 @@ namespace BECore {
         return g_fanOuts[g_fanOutCount++];
     }
 
+    void Profiler::PublishEffective(IProfilerBackend* effective) {
+        _backend.store(effective, std::memory_order_release);
+#if BE_PROFILER
+        // Only a backend that asks for them gets the events of every lock operation (Tracy's lockables); Chrome and the ring get none
+        LockHooks::SetEventBackend(effective != nullptr && effective->WantsLockEvents() ? effective : nullptr);
+#endif
+    }
+
     bool Profiler::SetBackend(IProfilerBackend* backend) {
         std::lock_guard lock(g_backendMutex);
         IProfilerBackend* old = _primary.load(std::memory_order_acquire);
@@ -71,7 +79,7 @@ namespace BECore {
             return false;
         }
         _primary.store(backend, std::memory_order_release);
-        _backend.store(ResolveEffective(backend, _ringEnabled.load(std::memory_order_relaxed)), std::memory_order_release);
+        PublishEffective(ResolveEffective(backend, _ringEnabled.load(std::memory_order_relaxed)));
         if (old != nullptr) {
             old->Stop();
         }
@@ -87,7 +95,7 @@ namespace BECore {
             GetFrameRing().Start();  // zones that began before the ring was on are not its own
         }
         _ringEnabled.store(enabled, std::memory_order_release);
-        _backend.store(ResolveEffective(_primary.load(std::memory_order_relaxed), enabled), std::memory_order_release);
+        PublishEffective(ResolveEffective(_primary.load(std::memory_order_relaxed), enabled));
     }
 
     void Profiler::FrameMark() {

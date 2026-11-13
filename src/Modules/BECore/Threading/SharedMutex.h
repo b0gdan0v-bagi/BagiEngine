@@ -15,7 +15,9 @@ namespace BECore {
     class SharedMutex {
     public:
         constexpr explicit SharedMutex(const LockSite& site) noexcept
-#if BE_LOCK_SITES
+#if BE_PROFILER
+            : _site(&site), _events(LockKind::SharedWriter)
+#elif BE_LOCK_SITES
             : _site(&site)
 #endif
         {
@@ -27,14 +29,17 @@ namespace BECore {
 
         void lock() {
             OrderBefore();
+            const bool tracked = EventsBeforeLock(LockKind::SharedWriter);
             if (!_native.try_lock()) {
                 LockContended();
             }
+            EventsAfterLock(tracked, LockKind::SharedWriter);
             OrderAcquired();
         }
 
         [[nodiscard]] bool try_lock() {
             const bool locked = _native.try_lock();
+            EventsAfterTryLock(LockKind::SharedWriter, locked);
             if (locked) {
                 OrderAcquired();
             }
@@ -43,19 +48,23 @@ namespace BECore {
 
         void unlock() {
             OrderReleased();
+            EventsBeforeUnlock(LockKind::SharedWriter);
             _native.unlock();
         }
 
         void lock_shared() {
             OrderBefore();
+            const bool tracked = EventsBeforeLock(LockKind::SharedReader);
             if (!_native.try_lock_shared()) {
                 LockContendedShared();
             }
+            EventsAfterLock(tracked, LockKind::SharedReader);
             OrderAcquired();
         }
 
         [[nodiscard]] bool try_lock_shared() {
             const bool locked = _native.try_lock_shared();
+            EventsAfterTryLock(LockKind::SharedReader, locked);
             if (locked) {
                 OrderAcquired();
             }
@@ -64,6 +73,7 @@ namespace BECore {
 
         void unlock_shared() {
             OrderReleased();
+            EventsBeforeUnlock(LockKind::SharedReader);
             _native.unlock_shared();
         }
 
@@ -87,12 +97,42 @@ namespace BECore {
 #endif
         }
 
+        /// The per-lock events of a backend that wants them (Tracy): with BE_PROFILER one atomic load each, otherwise nothing at all
+        [[nodiscard]] bool EventsBeforeLock([[maybe_unused]] LockKind kind) {
+#if BE_PROFILER
+            return _events.BeforeLock(*_site, kind);
+#else
+            return false;
+#endif
+        }
+
+        void EventsAfterLock([[maybe_unused]] bool tracked, [[maybe_unused]] LockKind kind) {
+#if BE_PROFILER
+            _events.AfterLock(tracked, kind);
+#endif
+        }
+
+        void EventsAfterTryLock([[maybe_unused]] LockKind kind, [[maybe_unused]] bool acquired) {
+#if BE_PROFILER
+            _events.AfterTryLock(*_site, kind, acquired);
+#endif
+        }
+
+        void EventsBeforeUnlock([[maybe_unused]] LockKind kind) {
+#if BE_PROFILER
+            _events.BeforeUnlock(kind);
+#endif
+        }
+
 #if BE_LOCK_SITES
         /// The blocking locks after a failed try, timed for the profiler (SharedMutex.cpp)
         void LockContended();
         void LockContendedShared();
 
         const LockSite* _site;
+#if BE_PROFILER
+        LockEvents _events;
+#endif
 #else
         void LockContended() {
             _native.lock();

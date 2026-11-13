@@ -33,6 +33,34 @@ namespace BECore {
         _secondary.SetThreadName(name);
     }
 
+    bool FanOutBackend::WantsLockEvents() const {
+        return _primary.WantsLockEvents();
+    }
+
+    void* FanOutBackend::AnnounceLock(const ProfileSite& site, LockKind kind) {
+        return _primary.AnnounceLock(site, kind);
+    }
+
+    void FanOutBackend::TerminateLock(void* context, LockKind kind) {
+        _primary.TerminateLock(context, kind);
+    }
+
+    bool FanOutBackend::BeforeLock(void* context, LockKind kind) {
+        return _primary.BeforeLock(context, kind);
+    }
+
+    void FanOutBackend::AfterLock(void* context, LockKind kind) {
+        _primary.AfterLock(context, kind);
+    }
+
+    void FanOutBackend::BeforeUnlock(void* context, LockKind kind) {
+        _primary.BeforeUnlock(context, kind);
+    }
+
+    void FanOutBackend::AfterTryLock(void* context, LockKind kind, bool acquired) {
+        _primary.AfterTryLock(context, kind, acquired);
+    }
+
     void FanOutBackend::OnAlloc(void* ptr, size_t size) {
         _primary.OnAlloc(ptr, size);
     }

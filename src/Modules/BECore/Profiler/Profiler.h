@@ -93,6 +93,8 @@ namespace BECore {
 
     private:
         /// What GetBackend() becomes for @p primary with the ring on or off (the backend mutex is held)
+        /// Makes @p effective the backend of the zones and of the lock events (the backend mutex is held)
+        static void PublishEffective(IProfilerBackend* effective);
         static IProfilerBackend* ResolveEffective(IProfilerBackend* primary, bool ringEnabled);
 
         static constinit inline std::atomic<IProfilerBackend*> _backend{nullptr};  // the effective backend

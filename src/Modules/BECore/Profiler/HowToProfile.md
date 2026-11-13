@@ -59,6 +59,8 @@ build/macos-profile-tracy/bin/BagiMatch3        # Tracy is the default backend o
 
 Then open the Tracy viewer of the **same version** as the vendored client (v0.15.0; `src/Modules/tracy/README.md` says where to get it) and connect to `127.0.0.1`. Nothing is sent until a viewer connects. `--trace=<file>` in this build records the Chrome trace instead.
 
+In Tracy every `Mutex` and `SharedMutex` is a lockable named after its `BE_LOCK_SITE` (`Task queue`, `Pool busy report`, ...): open the viewer's **Locks** window (or the lock rows of a thread's timeline) to see who held it, who waited and for how long. A lock shows once it has been used while the viewer is connected; Tracy's `lock wait` zones of the Chrome trace are not duplicated there.
+
 ## Marking code
 
 ```cpp

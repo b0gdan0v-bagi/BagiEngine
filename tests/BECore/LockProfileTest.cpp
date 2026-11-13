@@ -165,6 +165,74 @@ namespace BECore::Tests {
             return count;
         }
 
+        /// A backend that wants the events of every lock operation and counts them. Never destroyed: a lock may still reach it (Profiler keeps
+        /// the backend that made the contexts alive to end them)
+        class CountingLockBackend : public IProfilerBackend {
+        public:
+            uint64_t BeginZone(const ProfileSite& /*site*/) override {
+                return 0;
+            }
+            void EndZone(uint64_t /*token*/, const ProfileSite& /*site*/, const ZoneAllocs& /*allocs*/) override {}
+            void FrameMark() override {}
+            void Counter(const char* /*name*/, double /*value*/) override {}
+            void SetThreadName(const char* /*name*/) override {}
+
+            [[nodiscard]] bool WantsLockEvents() const override {
+                return true;
+            }
+            void* AnnounceLock(const ProfileSite& site, LockKind kind) override {
+                announced.fetch_add(1);
+                lastName = site.function;
+                lastAnnounceKind = kind;
+                return new int(0);
+            }
+            void TerminateLock(void* context, LockKind /*kind*/) override {
+                terminated.fetch_add(1);
+                delete static_cast<int*>(context);
+            }
+            bool BeforeLock(void* /*context*/, LockKind kind) override {
+                (kind == LockKind::SharedReader ? readerBefore : writerBefore).fetch_add(1);
+                return true;
+            }
+            void AfterLock(void* /*context*/, LockKind kind) override {
+                (kind == LockKind::SharedReader ? readerAfter : writerAfter).fetch_add(1);
+            }
+            void BeforeUnlock(void* /*context*/, LockKind kind) override {
+                (kind == LockKind::SharedReader ? readerUnlock : writerUnlock).fetch_add(1);
+            }
+            void AfterTryLock(void* /*context*/, LockKind /*kind*/, bool acquired) override {
+                (acquired ? tryAcquired : tryFailed).fetch_add(1);
+            }
+
+            void Reset() {
+                for (std::atomic<int>* counter : {&announced, &terminated, &writerBefore, &writerAfter, &writerUnlock, &readerBefore, &readerAfter, &readerUnlock, &tryAcquired, &tryFailed}) {
+                    counter->store(0);
+                }
+            }
+            [[nodiscard]] int Live() const {
+                return announced.load() - terminated.load();
+            }
+
+            std::atomic<int> announced{0};
+            std::atomic<int> terminated{0};
+            std::atomic<int> writerBefore{0};
+            std::atomic<int> writerAfter{0};
+            std::atomic<int> writerUnlock{0};
+            std::atomic<int> readerBefore{0};
+            std::atomic<int> readerAfter{0};
+            std::atomic<int> readerUnlock{0};
+            std::atomic<int> tryAcquired{0};
+            std::atomic<int> tryFailed{0};
+            std::string lastName;
+            LockKind lastAnnounceKind = LockKind::Mutex;
+        };
+
+        CountingLockBackend& GetCountingBackend() {
+            static CountingLockBackend* const backend = new CountingLockBackend();
+            backend->Reset();
+            return *backend;
+        }
+
     }  // namespace
 
     TEST(LockProfileTest, TheDefaultThresholdIsFiftyMicroseconds) {
@@ -371,6 +439,163 @@ namespace BECore::Tests {
         EXPECT_EQ(counter, kThreads * kRounds);
         const eastl::string trace = recorder.WriteJson();
         FindZones(trace, kWaitZoneName);  // checks the nesting of every thread
+    }
+
+    // ---- The events of every lock operation (Tracy's lockables), through a counting backend ----
+
+    TEST(LockProfileTest, OnlyABackendThatAsksGetsTheEventsOfEveryLockOperation) {
+        const ProfilerStateGuard guard;
+        ChromeTraceBackend recorder;
+        ASSERT_TRUE(Profiler::SetBackend(&recorder));
+        EXPECT_FALSE(LockHooks::EventsActive());
+        Profiler::SetRingEnabled(true);
+        EXPECT_FALSE(LockHooks::EventsActive());
+
+        CountingLockBackend& counting = GetCountingBackend();
+        ASSERT_TRUE(Profiler::SetBackend(&counting));
+        EXPECT_TRUE(LockHooks::EventsActive());  // through the fan-out with the ring too
+        Profiler::SetBackend(nullptr);
+        Profiler::SetRingEnabled(false);
+        EXPECT_FALSE(LockHooks::EventsActive());
+    }
+
+    TEST(LockProfileTest, EveryOperationOfBothLocksReachesTheBackendWithItsKind) {
+        const ProfilerStateGuard guard;
+        CountingLockBackend& counting = GetCountingBackend();
+        ASSERT_TRUE(Profiler::SetBackend(&counting));
+        {
+            Mutex mutex{BE_LOCK_SITE("Test lock")};
+            {
+                const std::lock_guard<Mutex> lock(mutex);
+            }
+            EXPECT_EQ(counting.announced.load(), 1);
+            EXPECT_EQ(counting.lastName, "Test lock");
+            EXPECT_EQ(counting.lastAnnounceKind, LockKind::Mutex);
+            EXPECT_EQ(counting.writerBefore.load(), 1);
+            EXPECT_EQ(counting.writerAfter.load(), 1);
+            EXPECT_EQ(counting.writerUnlock.load(), 1);
+
+            ASSERT_TRUE(mutex.try_lock());
+            bool otherGotIn = true;
+            std::thread other([&] { otherGotIn = mutex.try_lock(); });
+            other.join();
+            EXPECT_FALSE(otherGotIn);
+            mutex.unlock();
+            EXPECT_EQ(counting.tryAcquired.load(), 1);
+            EXPECT_EQ(counting.tryFailed.load(), 1);
+            EXPECT_EQ(counting.writerUnlock.load(), 2);
+        }
+        EXPECT_EQ(counting.Live(), 0);
+    }
+
+    TEST(LockProfileTest, ASharedMutexReportsItsWriterAndReaderSidesAndItsTryLocks) {
+        const ProfilerStateGuard guard;
+        CountingLockBackend& counting = GetCountingBackend();
+        ASSERT_TRUE(Profiler::SetBackend(&counting));
+        {
+            SharedMutex mutex{BE_LOCK_SITE("Test lock")};
+            {
+                const std::lock_guard<SharedMutex> writer(mutex);
+            }
+            {
+                const std::shared_lock<SharedMutex> reader(mutex);
+            }
+            EXPECT_EQ(counting.lastAnnounceKind, LockKind::SharedWriter);
+            EXPECT_EQ(counting.writerBefore.load(), 1);
+            EXPECT_EQ(counting.writerAfter.load(), 1);
+            EXPECT_EQ(counting.writerUnlock.load(), 1);
+            EXPECT_EQ(counting.readerBefore.load(), 1);
+            EXPECT_EQ(counting.readerAfter.load(), 1);
+            EXPECT_EQ(counting.readerUnlock.load(), 1);
+
+            ASSERT_TRUE(mutex.try_lock_shared());
+            bool writerGotIn = true;
+            std::thread other([&] { writerGotIn = mutex.try_lock(); });
+            other.join();
+            EXPECT_FALSE(writerGotIn);
+            mutex.unlock_shared();
+            EXPECT_EQ(counting.tryAcquired.load(), 1);
+            EXPECT_EQ(counting.tryFailed.load(), 1);
+            EXPECT_EQ(counting.announced.load(), 1);
+        }
+        EXPECT_EQ(counting.Live(), 0);
+    }
+
+    TEST(LockProfileTest, TheContextIsMadeLazilyAndExactlyOnceUnderARace) {
+        const ProfilerStateGuard guard;
+        CountingLockBackend& counting = GetCountingBackend();
+        constexpr int kThreads = 8;
+        constexpr int kRounds = 200;
+        for (int round = 0; round < kRounds; ++round) {
+            counting.Reset();
+            {
+                Mutex early{BE_LOCK_SITE("Test lock")};
+                ASSERT_EQ(Profiler::GetBackend(), nullptr);
+                {
+                    const std::lock_guard<Mutex> lock(early);  // used while no backend wants events: no context
+                }
+                ASSERT_EQ(counting.announced.load(), 0);
+                ASSERT_TRUE(Profiler::SetBackend(&counting));
+
+                Mutex raced{BE_LOCK_SITE("Test lock")};
+                std::atomic<bool> go{false};
+                std::vector<std::thread> threads;
+                for (int i = 0; i < kThreads; ++i) {
+                    threads.emplace_back([&] {
+                        WaitUntil(go);
+                        const std::lock_guard<Mutex> lock(raced);
+                    });
+                }
+                go = true;
+                for (std::thread& thread : threads) {
+                    thread.join();
+                }
+                EXPECT_EQ(counting.Live(), 1) << "round " << round;  // the threads that lost the race ended their own context
+                {
+                    const std::lock_guard<Mutex> lock(early);  // its first use under the backend
+                }
+                EXPECT_EQ(counting.Live(), 2) << "round " << round;
+                Profiler::SetBackend(nullptr);
+            }
+            EXPECT_EQ(counting.Live(), 0) << "round " << round;  // both locks ended their contexts after the backend was removed
+        }
+    }
+
+    TEST(LockProfileTest, ALockThatOutlivesItsBackendEndsItsContextAndStaysUsable) {
+        const ProfilerStateGuard guard;
+        CountingLockBackend& counting = GetCountingBackend();
+        ASSERT_TRUE(Profiler::SetBackend(&counting));
+        int value = 0;
+        {
+            Mutex mutex{BE_LOCK_SITE("Test lock")};
+            {
+                const std::lock_guard<Mutex> lock(mutex);
+            }
+            ASSERT_EQ(counting.Live(), 1);
+            Profiler::SetBackend(nullptr);
+            {
+                const std::lock_guard<Mutex> lock(mutex);  // no events now
+                ++value;
+            }
+            EXPECT_EQ(counting.writerBefore.load(), 1);
+        }
+        EXPECT_EQ(value, 1);
+        EXPECT_EQ(counting.Live(), 0);
+    }
+
+    TEST(LockProfileTest, AMutexHeldWhileTheBackendChangesIsReleasedCleanly) {
+        const ProfilerStateGuard guard;
+        CountingLockBackend& counting = GetCountingBackend();
+        Mutex mutex{BE_LOCK_SITE("Test lock")};
+        mutex.lock();  // taken before any backend wants events
+        ASSERT_TRUE(Profiler::SetBackend(&counting));
+        mutex.unlock();  // no context yet: the backend sees nothing of it
+        EXPECT_EQ(counting.writerUnlock.load(), 0);
+        {
+            const std::lock_guard<Mutex> lock(mutex);
+        }
+        EXPECT_EQ(counting.writerBefore.load(), 1);
+        EXPECT_EQ(counting.writerUnlock.load(), 1);
     }
 
 #endif
