@@ -46,6 +46,17 @@ namespace BECore::Tests {
                 return index < _connections.size() ? _connections[index] : nullptr;
             }
 
+            /// The open order of two clients is not the order they connected in: look a connection up by what it is
+            [[nodiscard]] WebSocketHandler::ConnectionPtr ConnectionWithClientAddress(const char* address) const {
+                std::lock_guard<std::mutex> lock(_mutex);
+                for (const WebSocketHandler::ConnectionPtr& connection : _connections) {
+                    if (connection && connection->GetClientAddress() == address) {
+                        return connection;
+                    }
+                }
+                return nullptr;
+            }
+
         private:
             mutable std::mutex _mutex;
             std::vector<std::string> _events;
@@ -535,9 +546,10 @@ namespace BECore::Tests {
         auto second = Connect(port, "X-Forwarded-For: 203.0.113.2\r\n");
         ASSERT_TRUE(first && second) << "the socket address is the proxy's: it is not what the limit counts";
         ASSERT_TRUE(WaitForEvents("open:", 2));
-        EXPECT_EQ(recorder.ConnectionAt(0)->GetClientAddress(), "203.0.113.1");
-        EXPECT_EQ(recorder.ConnectionAt(0)->GetPeerAddress(), "127.0.0.1");
-        EXPECT_EQ(recorder.ConnectionAt(1)->GetClientAddress(), "203.0.113.2");
+        const WebSocketHandler::ConnectionPtr firstOpened = recorder.ConnectionWithClientAddress("203.0.113.1");
+        ASSERT_NE(firstOpened, nullptr);
+        EXPECT_EQ(firstOpened->GetPeerAddress(), "127.0.0.1");
+        EXPECT_NE(recorder.ConnectionWithClientAddress("203.0.113.2"), nullptr);
 
         // The same forwarded address again is refused after its handshake, before the handler hears of it
         const std::string refused = TryHandshake(port, "X-Forwarded-For: 203.0.113.1\r\n");
