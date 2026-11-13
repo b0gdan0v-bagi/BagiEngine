@@ -29,7 +29,9 @@
 #include <Common/TempPath.h>
 #include <Common/UILayoutMatrix.h>
 #include <Common/UITreeCompare.h>
+#include <chrono>
 #include <gtest/gtest.h>
+#include <set>
 
 namespace BECore::Tests {
 
@@ -2948,6 +2950,278 @@ button:checked { background: var(--panel); }
         EXPECT_TRUE(ColorsEqual(element->color, kMissingTokenColor));
         ASSERT_EQ(themes.GetMissing().size(), 1u);
         EXPECT_EQ(themes.GetMissing()[0].ToStringView(), "nowhere");
+    }
+
+    // ---- limits: a file is content, and content can be made as large, as deep and as odd as one likes ---------------------------------------
+
+    namespace {
+
+        /// A pass takes milliseconds; the budget only has to tell a pass from a hang or a quadratic scan, on a loaded machine and in a Debug build
+        constexpr double kLimitTestBudgetSeconds = 20.0;
+
+        class Stopwatch {
+        public:
+            [[nodiscard]] double Seconds() const {
+                return std::chrono::duration<double>(std::chrono::steady_clock::now() - _start).count();
+            }
+
+        private:
+            std::chrono::steady_clock::time_point _start = std::chrono::steady_clock::now();
+        };
+
+        /// The XML and the report of a document whose style sheet is the linked file `a.css` (a sheet too large for a <style> element: that is part of the document)
+        struct CompiledWithSheet {
+            eastl::string xml;
+            UIWebReport report;
+        };
+
+        CompiledWithSheet CompileWithSheet(const std::string& html, const std::string& css) {
+            CompiledWithSheet result;
+            const std::string source = "<link rel=\"stylesheet\" href=\"a.css\">" + html;
+            const UIWebCompiler::StylesheetLoader loader = [&css](eastl::string_view) { return std::optional<eastl::string>(eastl::string(css.data(), css.size())); };
+            result.xml = UIWebCompiler::Compile(eastl::string_view(source.data(), source.size()), loader, result.report);
+            return result;
+        }
+
+        std::string Repeat(const std::string& unit, size_t count) {
+            std::string text;
+            text.reserve(unit.size() * count);
+            for (size_t i = 0; i < count; ++i) {
+                text += unit;
+            }
+            return text;
+        }
+
+        bool Mentions(const UIWebReport& report, const char* text) {
+            return std::any_of(report.issues.begin(), report.issues.end(), [&](const UIWebIssue& issue) { return std::string(issue.message.c_str()).find(text) != std::string::npos; });
+        }
+
+    }  // namespace
+
+    TEST_F(UIWebTest, ADocumentNestedAHundredThousandDeepKeepsTheFirstLevelsAndSaysSo) {
+        const Stopwatch watch;
+        const std::string html = Repeat("<div>", 100000);
+        const auto compiled = Compile(html);
+        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
+        EXPECT_TRUE(Mentions(compiled->report, "nested deeper than 64"));
+        EXPECT_EQ(compiled->report.elements, UIHtmlParser::kMaxDepth);
+        EXPECT_FALSE(Mentions(compiled->report, "never closed")) << "a limit ended the read: that is the entry, not a second one";
+    }
+
+    TEST_F(UIWebTest, ANestingAtTheLimitIsKeptWhole) {
+        const std::string html = Repeat("<div>", UIHtmlParser::kMaxDepth) + Repeat("</div>", UIHtmlParser::kMaxDepth);
+        const auto compiled = Compile(html);
+        EXPECT_FALSE(Mentions(compiled->report, "nested deeper"));
+        EXPECT_EQ(compiled->report.elements, UIHtmlParser::kMaxDepth);
+    }
+
+    TEST_F(UIWebTest, MoreNodesThanTheLimitAreLeftOutWithOneEntry) {
+        const Stopwatch watch;
+        const auto compiled = Compile(Repeat("<div></div>", 20000));
+        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
+        EXPECT_TRUE(Mentions(compiled->report, "more than 8192 elements"));
+        EXPECT_LE(compiled->report.elements, UIHtmlParser::kMaxNodes);
+        EXPECT_EQ(compiled->IssuesMentioning("more than 8192 elements"), 1u);
+    }
+
+    TEST_F(UIWebTest, ADocumentOverTheSizeLimitIsCutWithAnEntry) {
+        const std::string html = "<span id=\"s\">" + std::string(2 * UIHtmlParser::kMaxDocumentBytes, 'a') + "</span>";
+        const auto compiled = Compile(html);
+        EXPECT_TRUE(Mentions(compiled->report, "document is longer than 1048576 bytes"));
+    }
+
+    TEST_F(UIWebTest, AStyleSheetOfTenMegabytesIsReadUpToTheLimitInTime) {
+        const Stopwatch watch;
+        const std::string css = Repeat(".a { width: 1px; }\n", 10 * 1024 * 1024 / 19);
+        const CompiledWithSheet compiled = CompileWithSheet("<div id=\"a\" class=\"a\"></div>", css);
+        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
+        EXPECT_TRUE(Mentions(compiled.report, "style sheet is longer than 1048576 bytes"));
+        EXPECT_LE(compiled.report.rules, UICssParser::kMaxRules);
+        EXPECT_TRUE(Mentions(compiled.report, "more than 1024 rules"));
+    }
+
+    TEST_F(UIWebTest, ASelectorOfOneMegabyteIsLeftOutAndTheRuleAfterItStays) {
+        const Stopwatch watch;
+        const std::string css = "." + std::string(1024 * 1024 - 100, 'a') + " { width: 5px; }\n#b { width: 7px; }";
+        const CompiledWithSheet compiled = CompileWithSheet("<div id=\"b\"></div>", css);
+        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
+        EXPECT_TRUE(Mentions(compiled.report, "selector longer than 1024 bytes"));
+        EXPECT_EQ(compiled.report.rules, 1u);
+        for (const UIWebIssue& issue : compiled.report.issues) {
+            EXPECT_LE(issue.message.size(), UIWebReport::kMaxMessageBytes);
+        }
+    }
+
+    TEST_F(UIWebTest, ASelectorOfTooManyPartsAndARuleOfTooManySelectorsAreLeftOut) {
+        const std::string parts = Repeat("div ", UICssParser::kMaxSelectorParts) + "span";
+        const auto tooLong = Compile("<div id=\"a\"></div>", parts + " { width: 1px; }");
+        EXPECT_TRUE(Mentions(tooLong->report, "more than 16 parts"));
+        EXPECT_EQ(tooLong->report.rules, 0u);
+
+        const std::string atTheLimit = Repeat("div ", UICssParser::kMaxSelectorParts - 1) + "span";
+        const auto fits = Compile("<div id=\"a\"></div>", atTheLimit + " { width: 1px; }");
+        EXPECT_FALSE(Mentions(fits->report, "more than 16 parts"));
+        EXPECT_EQ(fits->report.rules, 1u);
+
+        const auto list = Compile("<div id=\"a\"></div>", Repeat("a, ", 40) + "#a { width: 3px; }");
+        EXPECT_TRUE(Mentions(list->report, "more than 32 selectors"));
+    }
+
+    TEST_F(UIWebTest, DeclarationsRulesAndMediaBlocksPastTheirLimitsAreLeftOut) {
+        const auto declarations = Compile("<div id=\"a\"></div>", "#a { " + Repeat("width: 1px; ", 300) + "}");
+        EXPECT_TRUE(Mentions(declarations->report, "more than 256 declarations"));
+        EXPECT_EQ(declarations->report.declarations, UICssParser::kMaxDeclarationsPerRule);
+
+        const auto rules = Compile("<div id=\"a\"></div>", Repeat(".x { width: 1px; }\n", 3000));
+        EXPECT_EQ(rules->report.rules, UICssParser::kMaxRules);
+        EXPECT_TRUE(Mentions(rules->report, "more than 1024 rules"));
+
+        const auto totalDeclarations = Compile("<div id=\"a\"></div>", Repeat(".x { " + Repeat("width: 1px; ", 200) + "}\n", 100));
+        EXPECT_TRUE(Mentions(totalDeclarations->report, "more than 16384 declarations"));
+
+        const auto medias = Compile("<div id=\"a\"></div>", Repeat("@media (min-width: 100px) { #a { width: 1px; } }\n", 20));
+        EXPECT_EQ(medias->report.mediaBlocks, UICssParser::kMaxMediaBlocks);
+        EXPECT_TRUE(Mentions(medias->report, "more than 16 @media blocks"));
+
+        const auto queries = Compile("<div id=\"a\"></div>", "@media " + Repeat("(min-width: 100px), ", 12) + "(max-width: 90px) { #a { width: 1px; } }");
+        EXPECT_TRUE(Mentions(queries->report, "more than 8 queries"));
+        EXPECT_LE(queries->report.variants, UICssParser::kMaxMediaAlternatives);
+    }
+
+    TEST_F(UIWebTest, AnElementWithTooManyOrTooLongAttributesLosesThem) {
+        const auto many = Compile("<div id=\"a\" " + Repeat("data-x=\"1\" ", 100) + "></div>");
+        EXPECT_TRUE(Mentions(many->report, "more than 64 attributes"));
+        EXPECT_TRUE(static_cast<bool>(many->Find("a"))) << "the element itself stays";
+
+        const auto longValue = Compile("<div id=\"a\" title=\"" + std::string(UIHtmlParser::kMaxAttributeBytes + 1, 'x') + "\"></div>");
+        EXPECT_TRUE(Mentions(longValue->report, "longer than 16384 bytes"));
+        EXPECT_EQ(longValue->report.elements, 1u);
+    }
+
+    TEST_F(UIWebTest, NumericEntitiesAtTheEdgesOfUnicodeBecomeAQuestionMark) {
+        // 0, a surrogate, one past the last code point and a number that does not fit 32 bits; the last real one and a plain one are decoded
+        const auto compiled = Compile("<span id=\"t\">&#0;|&#xD800;|&#xDFFF;|&#x110000;|&#4294967296;|&#x10FFFF;|&#65;</span>");
+        const std::string text = compiled->ComponentAttr("t", "UITextComponent", "text");
+        EXPECT_EQ(text.substr(0, std::string("?|?|?|?|&#4294967296;|").size()), "?|?|?|?|&#4294967296;|");
+        EXPECT_NE(text.find("\xF4\x8F\xBF\xBF"), std::string::npos);
+        EXPECT_EQ(text.substr(text.size() - 1), "A");
+    }
+
+    TEST_F(UIWebTest, MoreIssuesThanTheReportKeepsAreCountedAndSaidOnce) {
+        std::string css = "#a {";
+        for (size_t i = 0; i < 500; ++i) {
+            css += " unknown-" + std::to_string(i) + ": 1;";
+        }
+        css += " }";
+        const auto compiled = Compile("<div id=\"a\"></div>", css);
+        EXPECT_EQ(compiled->report.issues.size(), UIWebReport::kMaxIssues + 1);
+        EXPECT_GT(compiled->report.issuesDropped, 0u);
+        EXPECT_TRUE(Mentions(compiled->report, "more issues follow"));
+        EXPECT_EQ(compiled->IssuesMentioning("more issues follow"), 1u);
+    }
+
+    TEST_F(UIWebTest, AMessageThatRepeatsTheFileHasNoLineBreakAndIsCut) {
+        const std::string name = "bad\nname" + std::string(1000, 'z');
+        const auto compiled = Compile("<div id=\"a\"></div>", "#a { " + name + ": 1; }");
+        ASSERT_TRUE(compiled->report.HasIssues());
+        for (const UIWebIssue& issue : compiled->report.issues) {
+            EXPECT_LE(issue.message.size(), UIWebReport::kMaxMessageBytes);
+            EXPECT_EQ(issue.message.find('\n'), eastl::string::npos);
+        }
+        // A cut never leaves half of a UTF-8 character: the text is Cyrillic, two bytes a letter, and the cut falls between the two bytes of one
+        const auto cyrillic = Compile("<div id=\"a\"></div>", "#a { " + Repeat("\xD0\xB1", 400) + ": 1; }");
+        ASSERT_TRUE(cyrillic->report.HasIssues());
+        const std::string message = cyrillic->report.issues[0].message.c_str();
+        const size_t dots = message.find("...");
+        ASSERT_NE(dots, std::string::npos);
+        EXPECT_EQ(static_cast<uint8_t>(message[dots - 1]) & 0xC0, 0x80) << "the character before the dots is whole: it ends in a continuation byte";
+        EXPECT_EQ(static_cast<uint8_t>(message[dots - 2]) & 0xFF, 0xD0);
+        EXPECT_NE(message.find("is not supported"), std::string::npos) << "the reason is not cut away";
+    }
+
+    TEST_F(UIWebTest, AnIssueOfAStartTagThatSpansLinesIsOnTheLineItStarts) {
+        const auto compiled = Compile("<div id=\"a\">\n<blink\n   id=\"b\"\n   title=\"x\"></blink></div>");
+        bool found = false;
+        for (const UIWebIssue& issue : compiled->report.issues) {
+            if (std::string(issue.message.c_str()).find("<blink> is not supported") != std::string::npos) {
+                EXPECT_EQ(issue.line, 2u);
+                found = true;
+            }
+        }
+        EXPECT_TRUE(found);
+    }
+
+    TEST_F(UIWebTest, AnInlineStyleWithLineBreaksReportsInsideTheDocument) {
+        const std::string html = "<div id=\"a\" style=\"\nbogus: 1;\nwidth: 5px\n\"></div>";
+        const auto compiled = Compile(html);
+        size_t lines = 1;
+        for (const char c : html) {
+            lines += c == '\n' ? 1 : 0;
+        }
+        ASSERT_TRUE(compiled->report.HasIssues());
+        for (const UIWebIssue& issue : compiled->report.issues) {
+            EXPECT_LE(issue.line, lines);
+        }
+    }
+
+    TEST_F(UIWebTest, ADescendantSelectorOverADeepChainCostsTheChainNotTheNumberOfWaysThroughIt) {
+        // `span` is never an ancestor, so every way down the chain of 60 divs fails at the end: without memory that is the number of ways to choose 14 of 60
+        const Stopwatch watch;
+        const std::string selector = "span " + Repeat("div ", 14) + "div";
+        const auto compiled = Compile(Repeat("<div>", 60) + Repeat("</div>", 60), selector + " { width: 1px; }");
+        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
+        EXPECT_FALSE(compiled->report.HasIssues());
+    }
+
+    TEST_F(UIWebTest, DescendantAndChildCombinatorsStillMatchThroughTheMemory) {
+        const auto compiled = Compile(R"(<div id="outer" class="o"><section><div id="mid"><p id="leaf">x</p></div></section></div><div id="alone"></div>)",
+                                      ".o div > p { color: #ff0000; } .o section p { width: 11px; } section > p { height: 7px; } div div p { left: 3px; }");
+        EXPECT_EQ(compiled->ComponentAttr("leaf", "UITextComponent", "textColor"), "255,0,0,255");
+        EXPECT_EQ(compiled->Attr("leaf", "width"), "11");
+        EXPECT_EQ(compiled->Attr("leaf", "height"), "");
+    }
+
+    TEST_F(UIWebTest, ClassesSeparatedByAnyWhiteSpaceMatch) {
+        const auto compiled = Compile("<div id=\"a\" class=\" one\ttwo\nthree  \"></div>", ".two { width: 3px; } .three { height: 4px; } .one.two.three { left: 1px; } .on { top: 9px; }");
+        EXPECT_EQ(compiled->Attr("a", "width"), "3");
+        EXPECT_EQ(compiled->Attr("a", "height"), "4");
+        EXPECT_EQ(compiled->Attr("a", "x"), "1");
+        EXPECT_EQ(compiled->Attr("a", "y"), "");
+    }
+
+    TEST_F(UIWebTest, TheCascadeWorkIsBoundedAndTheReportSaysWhenItRanOut) {
+        const Stopwatch watch;
+        const auto compiled = Compile(Repeat("<div class=\"x\"></div>", 4000), Repeat(".x { width: 1px; }\n", 1000));
+        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
+        EXPECT_TRUE(Mentions(compiled->report, "too large for this document"));
+        EXPECT_EQ(compiled->IssuesMentioning("too large for this document"), 1u);
+    }
+
+    TEST_F(UIWebTest, ThousandsOfVariantElementsWithoutAnIdGetNamesInLinearTime) {
+        const Stopwatch watch;
+        const auto compiled = Compile("<div id=\"div-2\"></div>" + Repeat("<div class=\"x\"></div>", 2000), "@media (min-width: 1px) { .x { width: 5px; } }");
+        EXPECT_LT(watch.Seconds(), kLimitTestBudgetSeconds);
+        std::set<std::string> names;
+        for (const pugi::xpath_node node : compiled->document.select_nodes("//element")) {
+            names.insert(node.node().attribute("name").as_string());
+        }
+        EXPECT_EQ(names.size(), 2001u) << "every element has a name of its own, the id `div-2` is not given again";
+    }
+
+    TEST_F(UIWebTest, NumbersThatAreNotFiniteAreNotUnderstoodInAColorALengthARatioOrAGrowFactor) {
+        const auto compiled = Compile(R"(<div id="a"></div>)", "#a { background: rgb(nan, 0, 0); color: rgba(0, 0, 0, inf); width: inf; height: -infpx; aspect-ratio: nan; flex: nan; }");
+        EXPECT_EQ(compiled->report.declarationsUnsupported, 6u);
+        EXPECT_FALSE(compiled->Has("a", "width"));
+        EXPECT_FALSE(compiled->Has("a", "color"));
+
+        EXPECT_FALSE(UIWebText::ParseColor("rgb(inf, 0, 0)"));
+        EXPECT_FALSE(UIWebText::ParseColor("rgb(0, 0, 0, nan)"));
+        EXPECT_FALSE(UIWebText::ParsePixels("nan"));
+        EXPECT_FALSE(UIWebText::ParsePixels("-inf"));
+        EXPECT_TRUE(UIWebText::ParsePixels("-12px"));
+
+        const auto media = Compile(R"(<div id="a"></div>)", "@media (min-aspect-ratio: nan) { #a { width: 1px; } } @media (aspect-ratio: 16/inf) { #a { width: 1px; } }");
+        EXPECT_EQ(media->report.mediaBlocks, 0u);
     }
 
 }  // namespace BECore::Tests

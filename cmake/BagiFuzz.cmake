@@ -9,8 +9,8 @@
 #                               and a compiler with the libFuzzer runtime: Apple clang has none, Homebrew LLVM has (preset macos-fuzz).
 #
 # The names are not ENGINE_SANITIZE on purpose: the entries `sanitizers` and `build-diagnostic-presets` can map their own option onto
-# ENGINE_FUZZ without a clash. Asserts and expects are the preset's business: the fuzz preset keeps them ON, because an assertion that an
-# input can reach is a finding. tests/Fuzz/CLAUDE.md says how the targets and the corpus are made.
+# ENGINE_FUZZ without a clash. Asserts and expects are the preset's business: macos-fuzz keeps them ON, because an assertion that an
+# input can reach is a finding, and macos-fuzz-shipped turns them OFF, the flags of a shipped build. tests/Fuzz/CLAUDE.md says how the targets and the corpus are made.
 include_guard(GLOBAL)
 
 option(ENGINE_FUZZ "Build every target with AddressSanitizer and UndefinedBehaviorSanitizer (the fuzz presets)" OFF)
@@ -25,7 +25,7 @@ if(ENGINE_FUZZ)
         message(FATAL_ERROR "ENGINE_FUZZ=ON needs Clang or GCC (AddressSanitizer and UndefinedBehaviorSanitizer through -fsanitize); this compiler is ${CMAKE_CXX_COMPILER_ID}")
     endif()
 
-    set(BE_FUZZ_SANITIZER_FLAGS -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
+    set(BE_FUZZ_SANITIZER_FLAGS -fsanitize=address,undefined,float-cast-overflow -fno-sanitize-recover=undefined,float-cast-overflow -fno-omit-frame-pointer)
     add_compile_options(${BE_FUZZ_SANITIZER_FLAGS})
     add_link_options(${BE_FUZZ_SANITIZER_FLAGS})
 

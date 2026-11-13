@@ -11,6 +11,7 @@ namespace BECore {
         constexpr uint32_t ClassSpecificity = 1u << 8;
         constexpr uint32_t TagSpecificity = 1u;
         constexpr eastl::string_view ImportantSuffix = "important";
+        constexpr eastl::string_view HtmlSource = "html";
 
         bool IsIdentChar(char c) {
             return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
@@ -103,6 +104,10 @@ namespace BECore {
 
         /// Reads one selector. On failure @p why says what is outside the subset
         std::optional<UICssSelector> ParseSelector(eastl::string_view text, eastl::string& why) {
+            if (text.size() > UICssParser::kMaxSelectorBytes) {
+                why = Format("a selector longer than {} bytes", UICssParser::kMaxSelectorBytes);
+                return std::nullopt;
+            }
             UICssSelector selector;
             size_t pos = 0;
             UICssCombinator pending = UICssCombinator::None;
@@ -187,6 +192,10 @@ namespace BECore {
                     why = "an empty selector";
                     return std::nullopt;
                 }
+                if (selector.compounds.size() >= UICssParser::kMaxSelectorParts) {
+                    why = Format("a selector of more than {} parts", UICssParser::kMaxSelectorParts);
+                    return std::nullopt;
+                }
                 selector.compounds.push_back(std::move(compound));
             }
             if (selector.compounds.empty()) {
@@ -206,10 +215,10 @@ namespace BECore {
         std::optional<float> ParseRatio(eastl::string_view text) {
             const size_t slash = text.find('/');
             if (slash == eastl::string_view::npos) {
-                return UIText::ParseFloat(text);
+                return UIText::ParseFiniteFloat(text);
             }
-            const auto numerator = UIText::ParseFloat(text.substr(0, slash));
-            const auto denominator = UIText::ParseFloat(text.substr(slash + 1));
+            const auto numerator = UIText::ParseFiniteFloat(text.substr(0, slash));
+            const auto denominator = UIText::ParseFiniteFloat(text.substr(slash + 1));
             if (!numerator || !denominator || *denominator <= 0.0f) {
                 return std::nullopt;
             }
@@ -279,11 +288,15 @@ namespace BECore {
             return condition;
         }
 
-        eastl::vector<UICssDeclaration> ReadDeclarations(eastl::string_view body, const LineIndex& lines, uint32_t sourceId) {
+        eastl::vector<UICssDeclaration> ReadDeclarations(eastl::string_view body, const LineIndex& lines, uint32_t sourceId, eastl::string_view sourceName, UIWebReport& report) {
             eastl::vector<UICssDeclaration> declarations;
             for (const eastl::string_view part : UIWebText::SplitTopLevel(body, ';')) {
                 if (part.empty()) {
                     continue;
+                }
+                if (declarations.size() >= UICssParser::kMaxDeclarationsPerRule) {
+                    report.AddOnce(sourceName, lines.LineOf(part.data()), Format("more than {} declarations in one block: the rest are left out", UICssParser::kMaxDeclarationsPerRule));
+                    break;
                 }
                 const size_t colon = part.find(':');
                 if (colon == eastl::string_view::npos) {
@@ -315,7 +328,7 @@ namespace BECore {
 
             void ReadRules(size_t begin, size_t end, int media) {
                 size_t pos = begin;
-                while (pos < end) {
+                while (pos < end && !_stopped) {
                     while (pos < end && UIWebText::IsSpace(_text[pos])) {
                         ++pos;
                     }
@@ -338,6 +351,12 @@ namespace BECore {
             }
 
         private:
+            /// Reports @p why at @p pos and ends the read of the sheet: what was read stays, the rest is left out
+            void Stop(size_t pos, eastl::string why) {
+                Report(pos, std::move(why));
+                _stopped = true;
+            }
+
             void Report(size_t pos, eastl::string message) {
                 _report.AddOnce(_sheet.sources[_sourceId], _lines.LineOf(_text.data() + std::min(pos, _text.size() - 1)), std::move(message));
             }
@@ -367,15 +386,23 @@ namespace BECore {
             }
 
             void ReadMedia(size_t pos, eastl::string_view prelude, size_t open, size_t close) {
+                if (_sheet.medias.size() >= UICssParser::kMaxMediaBlocks) {
+                    Report(pos, Format("more than {} @media blocks: this one is left out", UICssParser::kMaxMediaBlocks));
+                    return;
+                }
                 UICssMedia block;
                 block.line = _lines.LineOf(_text.data() + pos);
                 block.sourceId = _sourceId;
                 for (const eastl::string_view query : UIWebText::SplitTopLevel(prelude, ',')) {
+                    if (block.alternatives.size() >= UICssParser::kMaxMediaAlternatives) {
+                        Report(pos, Format("an @media with more than {} queries: the rest are left out", UICssParser::kMaxMediaAlternatives));
+                        break;
+                    }
                     eastl::string why;
                     if (auto condition = ParseMediaQuery(query, why)) {
                         block.alternatives.push_back(*condition);
                     } else {
-                        Report(pos, Format("@media query '{}' is left out: {} is not supported", eastl::string(query).c_str(), why.c_str()));
+                        Report(pos, Format("@media query '{}' is left out: {} is not supported", UIText::Excerpt(query).c_str(), why.c_str()));
                     }
                 }
                 if (block.alternatives.empty()) {
@@ -388,20 +415,33 @@ namespace BECore {
             }
 
             void ReadRule(eastl::string_view prelude, eastl::string_view body, int media) {
+                const size_t preludePos = static_cast<size_t>(prelude.data() - _text.data());
+                if (_sheet.rules.size() >= UICssParser::kMaxRules) {
+                    Stop(preludePos, Format("more than {} rules: the rest of the style sheet is left out", UICssParser::kMaxRules));
+                    return;
+                }
+                if (_report.declarations >= UICssParser::kMaxDeclarations) {
+                    Stop(preludePos, Format("more than {} declarations: the rest of the style sheet is left out", UICssParser::kMaxDeclarations));
+                    return;
+                }
                 UICssRule rule;
                 rule.media = media;
                 for (const eastl::string_view text : UIWebText::SplitTopLevel(prelude, ',')) {
+                    if (rule.selectors.size() >= UICssParser::kMaxSelectorsPerRule) {
+                        Report(preludePos, Format("a rule with more than {} selectors: the rest are left out", UICssParser::kMaxSelectorsPerRule));
+                        break;
+                    }
                     eastl::string why;
                     if (auto selector = ParseSelector(text, why)) {
                         rule.selectors.push_back(std::move(*selector));
                     } else {
-                        Report(static_cast<size_t>(text.data() - _text.data()), Format("selector '{}' is left out: {} is not supported", eastl::string(text).c_str(), why.c_str()));
+                        Report(static_cast<size_t>(text.data() - _text.data()), Format("selector '{}' is left out: {} is not supported", UIText::Excerpt(text).c_str(), why.c_str()));
                     }
                 }
                 if (rule.selectors.empty()) {
                     return;
                 }
-                rule.declarations = ReadDeclarations(body, _lines, _sourceId);
+                rule.declarations = ReadDeclarations(body, _lines, _sourceId, _sheet.sources[_sourceId], _report);
                 rule.order = static_cast<uint32_t>(_sheet.rules.size());
                 _report.declarations += static_cast<uint32_t>(rule.declarations.size());
                 ++_report.rules;
@@ -413,21 +453,26 @@ namespace BECore {
             LineIndex _lines;
             uint32_t _sourceId;
             UIWebReport& _report;
+            bool _stopped = false;
         };
 
     }  // namespace
 
     void UICssParser::ParseInto(UICssSheet& sheet, eastl::string_view css, eastl::string_view sourceName, uint32_t firstLine, UIWebReport& report) {
+        if (css.size() > kMaxSheetBytes) {
+            report.AddOnce(sourceName, firstLine, Format("the style sheet is longer than {} bytes: the rest is left out", kMaxSheetBytes));
+            css = css.substr(0, kMaxSheetBytes);
+        }
         const eastl::string text = StripComments(css);
         const uint32_t sourceId = static_cast<uint32_t>(sheet.sources.size());
-        sheet.sources.push_back(eastl::string(sourceName));
+        sheet.sources.push_back(UIText::TidyMessage(sourceName));
         SheetReader(sheet, text, firstLine, sourceId, report).ReadRules(0, text.size(), -1);
     }
 
-    eastl::vector<UICssDeclaration> UICssParser::ParseDeclarations(eastl::string_view text, uint32_t line, uint32_t sourceId, UIWebReport& /*report*/) {
+    eastl::vector<UICssDeclaration> UICssParser::ParseDeclarations(eastl::string_view text, uint32_t line, uint32_t sourceId, UIWebReport& report) {
         const eastl::string stripped = StripComments(text);
         const LineIndex lines(stripped, line);
-        return ReadDeclarations(stripped, lines, sourceId);
+        return ReadDeclarations(stripped, lines, sourceId, HtmlSource, report);
     }
 
 }  // namespace BECore

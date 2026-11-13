@@ -82,8 +82,8 @@ namespace BECore {
         /**
          * @brief Adds the languages of a `<UIStrings>` node on top of what the table holds
          * @return the problems it found, as text for the log: a language without an id, a string without a key, with a key that has a `}`, or without a `text`, a duplicate key in
-         *         one language (the first stays), a language with no strings, a `default` that names no language, an unknown element. The rest is loaded. An empty node adds
-         *         nothing
+         *         one language (the first stays), a language with no strings, a `default` that names no language, an unknown element. The rest is loaded. Each problem is one line of at most
+         * `UIText::kMaxMessageBytes` (it repeats text of the file, which is cut). An empty node adds nothing
          */
         eastl::vector<eastl::string> LoadFromXml(const XmlNode& node);
 

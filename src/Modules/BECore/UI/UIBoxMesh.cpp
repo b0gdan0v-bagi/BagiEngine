@@ -1,5 +1,6 @@
 #include "UIBoxMesh.h"
 
+#include <BECore/UI/UIGeometryBounds.h>
 #include <cmath>
 #include <numbers>
 
@@ -43,9 +44,11 @@ namespace BECore {
             bool topHalves = false;
         };
 
+        /// A box with an area whose numbers are within UIBounds::kMaxExtent and a scale within the range of a real output (a number past either would make a vertex
+        /// or the feather infinite)
         [[nodiscard]] bool IsValidBox(const Rect& rect, float pixelsPerUnit) {
-            return std::isfinite(rect.x) && std::isfinite(rect.y) && std::isfinite(rect.w) && std::isfinite(rect.h) && rect.w > 0.0f && rect.h > 0.0f && std::isfinite(pixelsPerUnit) &&
-                   pixelsPerUnit > 0.0f;
+            return UIBounds::IsBounded(rect.x) && UIBounds::IsBounded(rect.y) && UIBounds::IsBounded(rect.w) && UIBounds::IsBounded(rect.h) && rect.w > 0.0f && rect.h > 0.0f &&
+                   pixelsPerUnit >= UIBounds::kMinScale && pixelsPerUnit <= UIBounds::kMaxScale;
         }
 
         [[nodiscard]] unsigned char ScaleAlpha(unsigned char alpha, float factor) {
@@ -219,7 +222,8 @@ namespace BECore {
         return result;
     }
 
-    UICorners UICorners::Inset(float amount) const {
+    UICorners UICorners::Inset(float given) const {
+        const float amount = UIBounds::Bound(given);
         const auto shrink = [amount](float radius) { return std::max(0.0f, radius - amount); };
         return {shrink(topLeft), shrink(topRight), shrink(bottomRight), shrink(bottomLeft)};
     }
@@ -266,7 +270,7 @@ namespace BECore {
 
     void UIBoxMesh::AppendBorder(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, float width, const Color& color,
                                  float pixelsPerUnit) {
-        if (!IsValidBox(rect, pixelsPerUnit) || !std::isfinite(width) || width <= 0.0f || color.a == 0) {
+        if (!IsValidBox(rect, pixelsPerUnit) || !UIBounds::IsBounded(width) || width <= 0.0f || color.a == 0) {
             return;
         }
         const float feather = kFeatherPixels / pixelsPerUnit;
@@ -283,8 +287,8 @@ namespace BECore {
     }
 
     void UIBoxMesh::AppendShadow(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit) {
-        if (!IsValidBox(rect, pixelsPerUnit) || !std::isfinite(shadow.offsetX) || !std::isfinite(shadow.offsetY) || !std::isfinite(shadow.blur) || !std::isfinite(shadow.spread) ||
-            shadow.color.a == 0) {
+        if (!IsValidBox(rect, pixelsPerUnit) || !UIBounds::IsBounded(shadow.offsetX) || !UIBounds::IsBounded(shadow.offsetY) || !UIBounds::IsBounded(shadow.blur) ||
+            !UIBounds::IsBounded(shadow.spread) || shadow.color.a == 0) {
             return;
         }
 

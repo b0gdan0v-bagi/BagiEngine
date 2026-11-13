@@ -1,10 +1,12 @@
 #pragma once
 
+#include <BECore/UI/UITidyMessage.h>
+
 namespace BECore {
 
     /// One thing the web-style front-end could not read or apply
     struct UIWebIssue {
-        eastl::string source;  ///< where it was read: "html", "css" or "css:<href>"
+        eastl::string source;  ///< where it was read: "html", "css" or "css:<href>" (an href is cut as a message is)
         uint32_t line = 0;     ///< 1-based; 0 when it is not about one line
         eastl::string message;
     };
@@ -23,15 +25,33 @@ namespace BECore {
         uint32_t declarations = 0;             ///< declarations of those rules
         uint32_t declarationsUnsupported = 0;  ///< declarations whose property or value is outside the subset
         uint32_t variants = 0;                 ///< variants written
+        uint32_t issuesDropped = 0;            ///< issues past kMaxIssues that were not stored
 
-        /// Adds an issue. @return false (and adds nothing) when the same issue is already there, so a rule that matches many elements reports once
+        /// The most issues a report keeps. A message repeats text of the file (a selector, a value, an href) and is cut by UIText::TidyMessage, and the check for a repeat is a
+        /// scan of the list
+        static constexpr size_t kMaxIssues = 200;
+        static constexpr size_t kMaxMessageBytes = UIText::kMaxMessageBytes;
+
+        /// Adds an issue (its message and source go through UIText::TidyMessage). @return false (and adds nothing) when the same issue is already there, so a rule that matches many elements reports
+        /// once. Past kMaxIssues the list gets one last issue that says so, and a new issue is counted in issuesDropped and not stored (true: it is not known to be a repeat)
         bool AddOnce(eastl::string_view source, uint32_t line, eastl::string message) {
+            const eastl::string tidySource = UIText::TidyMessage(source);
+            const eastl::string tidyMessage = UIText::TidyMessage(eastl::string_view(message.data(), message.size()));
             for (const UIWebIssue& issue : issues) {
-                if (issue.line == line && issue.message == message && eastl::string_view(issue.source) == source) {
+                if (issue.line == line && issue.message == tidyMessage && issue.source == tidySource) {
                     return false;
                 }
             }
-            issues.push_back({eastl::string(source), line, std::move(message)});
+            if (issues.size() > kMaxIssues) {
+                ++issuesDropped;
+                return true;
+            }
+            if (issues.size() == kMaxIssues) {
+                issues.push_back({"html", 0, Format("more issues follow: a report lists the first {} and not the rest", kMaxIssues)});
+                ++issuesDropped;
+                return true;
+            }
+            issues.push_back({tidySource, line, tidyMessage});
             return true;
         }
 

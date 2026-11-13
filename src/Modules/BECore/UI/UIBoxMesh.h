@@ -67,14 +67,14 @@ namespace BECore {
      * @brief Turns a rounded box into triangles for IRenderer::DrawGeometry (untextured, per-vertex alpha), anti-aliased at any scale.
      *
      * Pure, like UINineSlice: no renderer, scene or window. Every function appends to the vertex and index lists it is given (the element keeps them as
-     * scratch, so a steady frame allocates nothing) and draws nothing for a rect with no area or a non-finite number. Indices are positions in @p vertices
+     * scratch, so a steady frame allocates nothing) and draws nothing for a rect with no area, a non-finite number or one past `UIBounds::kMaxExtent`. Indices are positions in @p vertices
      * (not relative to this call), so several calls can fill one list for one draw. Every triangle has the same winding: clockwise on the screen (a positive
      * cross product in y-down coordinates).
      *
      * Units: positions, radii, widths, offsets and blurs are UI units; @p pixelsPerUnit is the output pixels of one unit (`ViewTransform::scale` at the
      * draw). It sets the number of segments of a corner and the feather: the edge is a ring of vertices of alpha 0 and, one output pixel inside it, a ring of
-     * full alpha, so the shape's true edge sits in the middle of the ramp and the covered area stays the rect's. Nothing is drawn for a @p pixelsPerUnit that is
-     * not positive and finite.
+     * full alpha, so the shape's true edge sits in the middle of the ramp and the covered area stays the rect's. Nothing is drawn for a @p pixelsPerUnit outside
+     * [`UIBounds::kMinScale`, `UIBounds::kMaxScale`].
      *
      * Colours are straight alpha. The corners come from `UICorners`; pass them through `Clamped` first or not: every function clamps them to the rect itself.
      */
@@ -86,6 +86,12 @@ namespace BECore {
         static constexpr int kMaxCornerSegments = 32;        ///< the most segments of a rounded corner
         static constexpr int kBlurRings = 8;                 ///< the steps of the falloff of a blur (the rings are one more)
         static constexpr float kHighlightWidth = 1.0f;       ///< the thickness of the inner top line, in UI units
+
+        /// What one call appends at most, whatever the numbers are (a shape has four corners of at most kMaxCornerSegments + 1 points on each ring, and at most kBlurRings + 1 rings;
+        /// the strips are two triangles per point between two rings and the core is a fan): the lists of the element never grow past these in a call
+        static constexpr int kMaxRingPoints = 4 * (kMaxCornerSegments + 1);
+        static constexpr int kMaxVerticesPerCall = (kBlurRings + 1) * kMaxRingPoints;
+        static constexpr int kMaxIndicesPerCall = 6 * kBlurRings * kMaxRingPoints + 3 * (kMaxRingPoints - 2);
 
         /// The segments of one quarter-circle corner of @p radiusPixels (0 for a corner that is not rounded), within the limits above
         [[nodiscard]] static int CornerSegments(float radiusPixels);

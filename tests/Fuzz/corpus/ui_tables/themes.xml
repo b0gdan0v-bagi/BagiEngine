@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<UIThemes default="light">
+    <theme id="light">
+        <color name="panel" value="#f0f0e6"/>
+        <color name="line" value="#0a141e"/>
+        <color name="accent" value="rgb(40, 90, 60)"/>
+        <color name="shade" value="#00000078"/>
+    </theme>
+    <theme id="dark">
+        <color name="panel" value="#1e2028"/>
+        <color name="accent" value="rgba(200, 180, 40, 1)"/>
+        <color name="shade" value="#000000dc"/>
+    </theme>
+</UIThemes>

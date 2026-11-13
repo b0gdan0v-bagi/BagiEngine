@@ -1,0 +1,17 @@
+<UIThemes default="missing">
+    <theme id="a">
+        <color name="x" value="#fff"/>
+        <color name="x" value="#000"/>
+        <color name="1bad" value="#fff"/>
+        <color name="has space" value="#fff"/>
+        <color name="" value="#fff"/>
+        <color value="#fff"/>
+        <color name="novalue"/>
+        <color name="notcolor" value="blue-ish"/>
+        <colour name="y" value="#fff"/>
+    </theme>
+    <theme id="b"><color name="x" value="#123"/><color name="only-b" value="#456"/></theme>
+    <theme/>
+    <theme id="empty"/>
+    <palette id="p"/>
+</UIThemes>

@@ -59,6 +59,16 @@ A game calls `SaveGameService::Initialize(PersistentSaveDirectory())`: the path 
 - **Main thread only** (asserted in the browser): the build has no `PROXY_TO_PTHREAD`, so the game and the mount are on the browser's main thread. A write from a worker thread is forwarded to it by the syscall layer and would reach the mount, but only the main thread is supported, like the rest of the service.
 - **Where the data is:** the site's IndexedDB. Clearing the site data clears the saves; one origin's tabs share it (a tab does not see another's writes until reload, and the last flush wins); the quota is the browser's, a failed flush is logged once and retried by the next change. The slot limit (16 MiB) is the only limit the engine adds.
 
+## What a consumer does with a refused save
+
+The file is input nobody trusts: a player edits it, a disk damages it, an update changes the game. A consumer (the code that turns a `Load` into a live game) keeps these rules; `LoadMatch3` and `Match3SaveDamageTest` are the model.
+
+- **Load into a temporary, apply after a success.** The live state changes only when `Load` and the game's own checks have both passed, and the apply step cannot fail halfway: a refused save leaves the game exactly as it was.
+- **One message, one log line, never a crash.** Every refusal is a `SaveError` whose `detail` is one short sentence; the game shows or logs it once and goes on. A check the consumer makes after `Load` (a board of 63 letters) is worded by the consumer as `Corrupt`, with its reason in the `detail`.
+- **The game starts clean** (a new game, the menu) when there is nothing usable to load.
+- **The damaged file is left alone** until the player chooses to save again, so a mistaken refusal (a save of a newer build, a rule too strict) loses nothing. A consumer does not delete or rewrite a file it refused.
+- **A secret never reaches a message or a log**: a `detail` names the slot and the reason, not the contents. The engine caps the quoted text of a reader error (`ReaderLimits`).
+
 ## How a game uses it
 
 ```cpp

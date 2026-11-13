@@ -45,9 +45,24 @@ namespace BECore {
      * `<style>` and `<script>`. The entities `&amp; &lt; &gt; &quot; &apos; &nbsp;` and numeric ones are decoded. It does not repair markup the way a browser
      * does: an end tag closes the nearest open element of that name, a stray one is reported, and `<p>` and `<li>` are not closed by the next sibling, so every
      * element needs its end tag.
+     *
+     * **Limits.** A file is content a modder or a damaged download can make as large and as deep as it likes, so the parser keeps to these (about a hundred times
+     * what the largest screen of the engine and its games needs, where a cost is a product with the style sheet). A document, a nesting or a node count over its
+     * limit is one entry in the report and the rest of the document is left out (what was read stays); an element with more attributes, or an attribute longer, than
+     * the limit loses those attributes with an entry.
      */
     class UIHtmlParser {
     public:
+        /// Bytes of the document read; the rest of a longer one is left out
+        static constexpr size_t kMaxDocumentBytes = 1024 * 1024;
+        /// Elements and pieces of text (the document node not counted)
+        static constexpr size_t kMaxNodes = 8192;
+        /// Open elements inside each other. The compile walks the tree recursively, and the selector matching of the compiler counts levels in a 64-bit mask
+        static constexpr size_t kMaxDepth = 64;
+        static constexpr size_t kMaxAttributes = 64;
+        /// Bytes of the name and of the value of an attribute
+        static constexpr size_t kMaxAttributeBytes = 16 * 1024;
+
         [[nodiscard]] static UIHtmlDocument Parse(eastl::string_view html, UIWebReport& report);
     };
 

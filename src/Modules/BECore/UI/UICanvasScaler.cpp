@@ -1,5 +1,6 @@
 #include "UICanvasScaler.h"
 
+#include <BECore/UI/UIGeometryBounds.h>
 #include <cmath>
 
 namespace BECore {
@@ -23,22 +24,38 @@ namespace BECore {
         Rect ToUnits(const Rect& outputRect, const ViewTransform& transform) {
             const float left = transform.ToViewX(outputRect.x);
             const float top = transform.ToViewY(outputRect.y);
-            return {left, top, outputRect.w / transform.scale, outputRect.h / transform.scale};
+            return UIBounds::Bound(Rect{left, top, outputRect.w / transform.scale, outputRect.h / transform.scale});
         }
 
         void Finish(UICanvasResolved& resolved, const UICanvasScaleParams& params) {
             resolved.contentBounds = params.useSafeArea ? resolved.safeBounds : resolved.bounds;
         }
 
+        /// The numbers of the context bounded (a size of a window is not NaN or 1e38 in a real run; the editor's custom size and a test are what hand them in)
+        UILayoutContext BoundContext(const UILayoutContext& given) {
+            UILayoutContext context = given;
+            context.outputWidth = std::max(UIBounds::Bound(given.outputWidth), 0.0f);
+            context.outputHeight = std::max(UIBounds::Bound(given.outputHeight), 0.0f);
+            context.safeArea = UIBounds::Bound(given.safeArea);
+            context.sceneViewWidth = UIBounds::Bound(given.sceneViewWidth);
+            context.sceneViewHeight = UIBounds::Bound(given.sceneViewHeight);
+            context.worldBox = UIBounds::Bound(given.worldBox);
+            return context;
+        }
+
         UICanvasResolved ResolveInScene(const UICanvasScaleParams& params, const UILayoutContext& context) {
-            const ViewTransform fit = ViewTransform::Fit(context.sceneViewWidth, context.sceneViewHeight, context.outputWidth, context.outputHeight);
+            ViewTransform fit = ViewTransform::Fit(context.sceneViewWidth, context.sceneViewHeight, context.outputWidth, context.outputHeight);
+            // A view a million times smaller than its output (or the reverse) is no view: the fit of a real scene is within a few orders of 1
+            if (!(fit.scale >= UIBounds::kMinScale && fit.scale <= UIBounds::kMaxScale)) {
+                fit = ViewTransform{};
+            }
 
             UICanvasResolved resolved;
             resolved.scale = fit.scale;
             if (params.space == CanvasSpace::World) {
                 const Rect& box = context.worldBox;
                 resolved.transform = {fit.scale, fit.offsetX + box.x * fit.scale, fit.offsetY + box.y * fit.scale};
-                resolved.bounds = {0.0f, 0.0f, std::max(box.w, 0.0f), std::max(box.h, 0.0f)};
+                resolved.bounds = UIBounds::Bound(Rect{0.0f, 0.0f, std::max(box.w, 0.0f), std::max(box.h, 0.0f)});
                 resolved.safeBounds = resolved.bounds;
                 resolved.viewBounds = resolved.bounds;
             } else {
@@ -76,7 +93,8 @@ namespace BECore {
         return 1.0f;
     }
 
-    UICanvasResolved UICanvasScaler::Resolve(const UICanvasScaleParams& params, const UILayoutContext& context) {
+    UICanvasResolved UICanvasScaler::Resolve(const UICanvasScaleParams& params, const UILayoutContext& givenContext) {
+        const UILayoutContext context = BoundContext(givenContext);
         if (params.space != CanvasSpace::Screen) {
             return ResolveInScene(params, context);
         }
@@ -91,11 +109,12 @@ namespace BECore {
         if (!(scale > 0.0f)) {  // also catches NaN
             scale = 1.0f;
         }
+        scale = std::clamp(scale, UIBounds::kMinScale, UIBounds::kMaxScale);
 
         UICanvasResolved resolved;
         resolved.scale = scale;
         resolved.transform = {scale, 0.0f, 0.0f};
-        resolved.bounds = {0.0f, 0.0f, context.outputWidth / scale, context.outputHeight / scale};
+        resolved.bounds = UIBounds::Bound(Rect{0.0f, 0.0f, context.outputWidth / scale, context.outputHeight / scale});
         resolved.viewBounds = resolved.bounds;
         resolved.safeBounds = Intersect(ToUnits(SafeAreaInOutput(context), resolved.transform), resolved.bounds);
         Finish(resolved, params);

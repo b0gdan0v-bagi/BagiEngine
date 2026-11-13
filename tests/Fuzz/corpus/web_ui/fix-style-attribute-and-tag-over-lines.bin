@@ -1,0 +1,9 @@
+<div id="a"
+  style="
+bogus: 1;
+width: 5px;
+whatever"
+  title="x">
+<blink
+ id="b"
+>x</blink></div>

@@ -1,5 +1,7 @@
 #include "UINineSlice.h"
 
+#include <BECore/UI/UIGeometryBounds.h>
+
 namespace BECore {
 
     namespace {
@@ -12,14 +14,16 @@ namespace BECore {
         };
 
         /// The borders of an axis in the source, never larger than the source itself
-        Spans SourceSpans(float extent, float startBorder, float endBorder) {
+        Spans SourceSpans(float givenExtent, float startBorder, float endBorder) {
+            const float extent = std::max(givenExtent, 0.0f);  // std::clamp needs low <= high
             const float start = std::clamp(startBorder, 0.0f, extent);
             const float end = std::clamp(endBorder, 0.0f, extent - start);
             return {start, extent - start - end, end};
         }
 
         /// The same borders on the destination: one unit per source pixel, shrunk together when the destination is smaller than the two of them
-        Spans DestinationSpans(float extent, const Spans& source) {
+        Spans DestinationSpans(float givenExtent, const Spans& source) {
+            const float extent = std::max(givenExtent, 0.0f);  // a negative extent would make the factor negative, and a large border over it infinite
             const float borders = source.start + source.end;
             const float factor = borders > extent && borders > 0.0f ? extent / borders : 1.0f;
             const float start = source.start * factor;
@@ -29,7 +33,11 @@ namespace BECore {
 
     }  // namespace
 
-    eastl::array<UINineSlicePiece, UINineSlice::PieceCount> UINineSlice::Compute(const Rect& source, const UIEdges& border, const Rect& destination) {
+    eastl::array<UINineSlicePiece, UINineSlice::PieceCount> UINineSlice::Compute(const Rect& givenSource, const UIEdges& givenBorder, const Rect& givenDestination) {
+        // Numbers of a file: bounded, so no span is infinite or NaN and a piece has either finite numbers or none
+        const Rect source = UIBounds::Bound(givenSource);
+        const Rect destination = UIBounds::Bound(givenDestination);
+        const UIEdges border{UIBounds::Bound(givenBorder.left), UIBounds::Bound(givenBorder.top), UIBounds::Bound(givenBorder.right), UIBounds::Bound(givenBorder.bottom)};
         const Spans sourceColumns = SourceSpans(source.w, border.left, border.right);
         const Spans sourceRows = SourceSpans(source.h, border.top, border.bottom);
         const Spans destinationColumns = DestinationSpans(destination.w, sourceColumns);

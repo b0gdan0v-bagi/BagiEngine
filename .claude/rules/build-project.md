@@ -84,7 +84,18 @@ ctest --preset macos-fuzz -R Fuzz                                      # the cor
 .venv/bin/python -m pytest tools/fuzz/tests                            # the run script
 ```
 
-Findings land in `build/macos-fuzz/fuzz-artifacts/`, never in the repository; the script prints how to minimize one and add it as `fix-<what>`. Running all of `BagiEngineTests` under the sanitizers is not part of this (the entry `sanitizers`).
+**The shipped flags.** A shipped build has asserts and expects OFF, so an `ASSERT` on an input path compiles out and the code after it runs on the bad input. `macos-fuzz-shipped` is `macos-fuzz` with Release and those two OFF, in its own build folder; the commands are the same with the preset name (`--preset macos-fuzz-shipped` for the script), and the corpus test alone runs in the plain release preset:
+
+```bash
+ctest --preset macos-release -R Fuzz                                   # BAGI_FUZZ_ITERATIONS=2000000 makes it longer
+cmake --preset macos-fuzz-shipped && cmake --build --preset macos-fuzz-shipped --target BagiFuzzers BagiEngineTests
+python3 tools/fuzz/run_fuzzers.py --preset macos-fuzz-shipped --seconds 60   # 180 before a release: 12 targets, about 40 minutes
+ctest --preset macos-fuzz-shipped -R Fuzz
+```
+
+A CI job takes these commands when the entry `no-ci` is done.
+
+Findings land in `build/<preset>/fuzz-artifacts/`, never in the repository; the script prints how to minimize one and add it as `fix-<what>`. Running all of `BagiEngineTests` under the sanitizers is not part of this (the entry `sanitizers`).
 
 Timings, `ctest --preset macos-debug` on a warm Debug build, 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs per row, interleaved:
 
