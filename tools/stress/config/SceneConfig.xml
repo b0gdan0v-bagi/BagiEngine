@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<SceneManager contentVersion="5">
+  <scenes>
+    <!-- The three scenes of BagiStress; StressGame::GetSceneName() is the one chosen by --stress-scene. The Field node gets the scene's component. -->
+    <scene type="Scene" name="StressSprites" viewWidth="1920" viewHeight="1080">
+      <nodes>
+        <node name="Field">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="0" height="0" />
+          </components>
+        </node>
+      </nodes>
+    </scene>
+    <scene type="Scene" name="StressEntities" viewWidth="1920" viewHeight="1080">
+      <nodes>
+        <node name="Field">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="0" height="0" />
+          </components>
+        </node>
+      </nodes>
+    </scene>
+    <scene type="Scene" name="StressUi" viewWidth="1920" viewHeight="1080">
+      <nodes>
+        <node name="Field">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="0" height="0" />
+          </components>
+        </node>
+      </nodes>
+    </scene>
+  </scenes>
+</SceneManager>

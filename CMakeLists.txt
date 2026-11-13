@@ -14,6 +14,11 @@ if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/games/CMakeLists.txt)
     add_subdirectory(games)
 endif()
 
+# The engine's own 2D stress app (BagiStress): perf and control-smoke target. In tools/, not games/: games/ goes away with Match3
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/tools/stress/CMakeLists.txt)
+    add_subdirectory(tools/stress)
+endif()
+
 if(MSVC AND TARGET BagiMatch3)
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT BagiMatch3)
 endif()
