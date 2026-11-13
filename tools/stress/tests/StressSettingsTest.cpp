@@ -29,7 +29,9 @@ namespace BECore::Stress::Tests {
         EXPECT_EQ(result->count, 2000u);
         EXPECT_EQ(result->frames, 3000u);
         EXPECT_EQ(result->warmup, 120u);
+        EXPECT_FALSE(result->framesGiven);
         EXPECT_FALSE(result->ramp);
+        EXPECT_FALSE(result->IsMeasuring());
         EXPECT_EQ(result->measure, StressMeasure::Work);
         EXPECT_FALSE(result->interleave);
         EXPECT_EQ(result->atlases, 4u);
@@ -55,6 +57,19 @@ namespace BECore::Stress::Tests {
         EXPECT_TRUE(result->interleave);
         EXPECT_EQ(result->atlases, 8u);
         EXPECT_EQ(result->language, StressLanguage::Ru);
+    }
+
+    TEST(StressSettingsTest, AMeasuringRunIsAskedForByFramesOrByTheRamp) {
+        const auto fixed = Parse({"--stress-frames=600"});
+        ASSERT_TRUE(fixed.has_value());
+        EXPECT_TRUE(fixed->framesGiven);
+        EXPECT_TRUE(fixed->IsMeasuring());
+        const auto ramp = Parse({"--stress-ramp"});
+        ASSERT_TRUE(ramp.has_value());
+        EXPECT_FALSE(ramp->framesGiven);
+        EXPECT_TRUE(ramp->IsMeasuring());
+        // The default number of frames alone, or a warm-up alone, starts nothing
+        EXPECT_FALSE(Parse({"--stress-warmup=10", "--stress-count=5"})->IsMeasuring());
     }
 
     TEST(StressSettingsTest, TheSceneIsReadInAnyCase) {

@@ -1,13 +1,19 @@
 <?xml version="1.0"?>
 <SceneManager contentVersion="5">
   <scenes>
-    <!-- The three scenes of BagiStress; StressGame::GetSceneName() is the one chosen by --stress-scene. The Field node gets the scene's component. -->
+    <!-- The three scenes of BagiStress; StressGame::GetSceneName() is the one chosen by --stress-scene. The Field node gets the scene's component, the Run node the measurement (after Field: a frame builds before it is judged). -->
     <scene type="Scene" name="StressSprites" viewWidth="1920" viewHeight="1080">
       <nodes>
         <node name="Field">
           <components>
             <component type="TransformComponent" x="0" y="0" width="0" height="0" />
             <component type="StressSpritesComponent" />
+          </components>
+        </node>
+        <node name="Run">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="0" height="0" />
+            <component type="StressRunComponent" />
           </components>
         </node>
       </nodes>
@@ -18,6 +24,12 @@
           <components>
             <component type="TransformComponent" x="0" y="0" width="0" height="0" />
             <component type="StressEntitiesComponent" />
+          </components>
+        </node>
+        <node name="Run">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="0" height="0" />
+            <component type="StressRunComponent" />
           </components>
         </node>
       </nodes>
@@ -31,6 +43,12 @@
               <elements />
             </component>
             <component type="StressUiComponent" />
+          </components>
+        </node>
+        <node name="Run">
+          <components>
+            <component type="TransformComponent" x="0" y="0" width="0" height="0" />
+            <component type="StressRunComponent" />
           </components>
         </node>
       </nodes>

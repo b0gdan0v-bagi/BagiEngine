@@ -106,6 +106,7 @@ namespace BECore::Stress {
             }
         }
 
+        settings.framesGiven = commandLine.FindValue(StressFlags::kFrames).has_value();
         settings.ramp = commandLine.HasFlag(StressFlags::kRamp);
         settings.interleave = commandLine.HasFlag(StressFlags::kInterleave);
         return settings;

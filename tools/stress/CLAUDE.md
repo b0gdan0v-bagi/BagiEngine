@@ -10,15 +10,15 @@
 | `StressEntities` | `entities` | N nodes with a transform and a tween, nothing drawn |
 | `StressUi` | `ui` | one canvas of N text labels, English and Russian |
 
-Each scene is 1920 x 1080 and has a node `Field` for the scene's component.
+Each scene is 1920 x 1080 and has a node `Field` for the scene's component and a node `Run` (after it) for `StressRunComponent`.
 
 ## Layout
 
 ```
 CMakeLists.txt        be_add_module(Stress), the reflection, BagiStress, StressTests (no standalone block: not a game of its own repository)
 config/               ApplicationConfig.xml (Game mode), SceneConfig.xml: kept at the engine's content version by ContentFilesVersionTest; UIStrings.xml (the `{#key}` labels of the `ui` scene)
-src/Stress/           StressSettings (the flags), StressState (what is shown now), StressGame (the IGame), StressGameControl (the control adapter), SpriteField and EntityField and UiField (pure placement of the sprites, the orbits and the labels, and the texts of the labels), StressHash (the integer hash they share)
-src/Stress/Components/ the component of each scene (StressSpritesComponent, StressEntitiesComponent, StressUiComponent, ...)
+src/Stress/           StressSettings (the flags), StressState (what is shown now), StressGame (the IGame), StressGameControl (the control adapter), SpriteField and EntityField and UiField (pure placement of the sprites, the orbits and the labels, and the texts of the labels), StressHash (the integer hash they share), StressRecorder (the samples, the percentiles and the JSON line of a run)
+src/Stress/Components/ the component of each scene (StressSpritesComponent, StressEntitiesComponent, StressUiComponent, StressRunComponent: the measurement)
 tests/                gtest sources of StressTests; StressSceneFixture.h is the shipped scene file on a RecordingRenderer with the StressGame active (the setup of every scene component's test)
 ```
 
@@ -56,3 +56,12 @@ tests/                gtest sources of StressTests; StressSceneFixture.h is the 
 `UiField` (pure) lays N labels on a grid and picks their texts, both from the index and the count alone. The columns follow the aspect of the view and `kUiCellAspect` (a label is a sentence, so a cell stays wide whatever the count), the font size follows the row (14..28), and the grid always fits the view. The text of label `i` is a view of a static table: the even labels are English sentences, the odd ones Russian, from pools of 16 each (so the glyph atlas stays small), every 8th is a `{#stress.label.<k>}` key of `config/UIStrings.xml` (the labels a language switch rewords) and the 5th and the 8th of every eight name a `{count}` or `{last}` variable. `{last}` (the index of the last label) stands where a per-label `{index}` would: `UIVars` are global, so one value cannot be a label's own index.
 
 `StressUiComponent` sits on the node `Field` beside its `UICanvasComponent` (`Screen`, `ScaleWithScreen` 1920 x 1080, no elements in the file) and adds `UIElement` + `UITextComponent` children of the canvas root when `StressState::Version()` moved: append or remove at the tail, and a count change gives every kept label its cell again, because the grid changes with the count. One `Invalidate()` per change, the variables set with the count (an equal value re-expands nothing). A language change is one `UIStrings::SetLanguage`: the strings' own version rewords the key labels at the next draw, no label is touched. A steady frame does nothing in the component; the cost is the canvas's layout cache, the text layout cache and the glyph quads, which is what the scene measures. The text is `wrap="false"` with the default ellipsis: a cell that is too small shows less, and the layout validator would report such findings, which is expected for a stress field and never asserted.
+
+## Fixed mode
+
+`--stress-frames=F` makes `StressRunComponent` (the node `Run`) measure: the warm-up, F recorded frames, one JSON line on stdout, then `QuitEvent`. Without `--stress-frames` or `--stress-ramp` (`StressSettings::IsMeasuring`) a run only shows the scene; the default `frames` alone starts nothing. A `Stress objects` counter (the state's count) is set every frame in every mode, for the overlay and the smoke.
+
+- **Which frames count.** The component's update runs inside a frame and reads the `FrameStats` of the **last finished** one, once per frame id; a held frame is left out. When `StressState::Version()` moves, the frame that notices it is the one that builds the nodes, textures and glyphs, so it and the next `warmup` frames are skipped, and the samples taken so far are dropped: a change of scene, count or language restarts the run. The samples buffer is reserved then (`StressRecorder::Reserve`), so recording allocates nothing.
+- **The measured number is `workMs`**: `cpuMs` minus the `Present` stage (headless the present is the software renderer's copy; with vsync it waits for the display). `frameMs` is the end-to-end time: on a manual clock it includes the idle between `step`s, so the line says `manualClock` and nothing gates on it. All three are read from `CoreManager::GetFrameStats()`, never from a wall clock.
+- **Percentiles are nearest rank** (`NearestRank`: `sorted[ceil(p * n) - 1]`; one sample is every percentile): a reported p99 is a frame that happened, never an interpolation. p50 and p99 of `frameMs`, `cpuMs`, `workMs`; the means of the draw counters and allocations. `allocsPerFrame` is 0 unless `allocTracking` (`ENGINE_PROFILER_ALLOC`).
+- **The line** (`FormatJsonLine`, keys sorted as `headless_frames.py` writes them): `scene count frames warmup interleave atlases manualClock allocTracking`, `frameMsP50/P99 cpuMsP50/P99 workMsP50/P99`, `cpuMs workMs drawCalls triangles textureSwitches allocsPerFrame allocBytesPerFrame`; `frames` is the samples taken. Written by hand (the app does not link nlohmann), numbers as plain decimals. It goes out with `fputs` and `fflush` because it is not a log line: the perf runner reads the last stdout line that starts with `{` (`tools/perf/CLAUDE.md`). A test gives the component a sink (`SetLineSink`) and a clock (`FrameStatsCollector::SetClock`).

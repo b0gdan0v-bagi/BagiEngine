@@ -38,12 +38,18 @@ namespace BECore::Stress {
         StressScene scene = StressScene::Sprites;
         uint32_t count = kDefaultCount;  // 1..kMaxCount
         uint32_t frames = kDefaultFrames;
+        bool framesGiven = false;  // `--stress-frames` was on the command line: a fixed run (the default `frames` alone starts none)
         uint32_t warmup = kDefaultWarmup;
         bool ramp = false;
         StressMeasure measure = StressMeasure::Work;
         bool interleave = false;  // a new atlas and blend mode on every sprite instead of runs (the worst case for a batcher)
         uint32_t atlases = kDefaultAtlases;
         StressLanguage language = StressLanguage::En;
+
+        /// A run that measures and quits (the fixed mode or the ramp) instead of just showing the scene
+        bool IsMeasuring() const {
+            return ramp || framesGiven;
+        }
     };
 
     /**
