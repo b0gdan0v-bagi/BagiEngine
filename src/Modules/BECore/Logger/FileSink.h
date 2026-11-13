@@ -41,7 +41,7 @@ namespace BECore {
         BE_REFLECT_FIELD eastl::string _filename = "engine.log";
         BE_REFLECT_FIELD bool _append = false;
         std::ofstream _file;
-        std::mutex _mutex;
+        Mutex _mutex{BE_LOCK_SITE("Log file sink")};
         bool _initialized = false;
     };
 

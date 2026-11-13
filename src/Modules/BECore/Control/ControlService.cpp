@@ -77,7 +77,7 @@ namespace BECore {
         ParseRequest(requestText, *request);
 
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             if (!_stopped) {
                 _queue.push_back(std::move(request));
                 _posted.notify_one();
@@ -123,7 +123,7 @@ namespace BECore {
 
     void ControlService::Drain() {
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             while (!_queue.empty()) {
                 _inbox.push_back(std::move(_queue.front()));
                 _queue.pop_front();
@@ -190,7 +190,7 @@ namespace BECore {
     }
 
     void ControlService::WaitForRequests(std::chrono::milliseconds timeout) {
-        std::unique_lock<std::mutex> lock(_mutex);
+        UniqueLock lock(_mutex);
         _posted.wait_for(lock, timeout, [this] { return !_queue.empty(); });
     }
 
@@ -220,7 +220,7 @@ namespace BECore {
 
     void ControlService::Shutdown() {
         {
-            std::lock_guard<std::mutex> lock(_mutex);
+            LockGuard lock(_mutex);
             _stopped = true;
             while (!_queue.empty()) {
                 _inbox.push_back(std::move(_queue.front()));

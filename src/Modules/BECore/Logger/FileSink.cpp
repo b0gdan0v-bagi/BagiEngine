@@ -34,7 +34,7 @@ namespace BECore {
     }
 
     void FileSink::OnFlushEvent() {
-        std::scoped_lock lock(_mutex);
+        LockGuard lock(_mutex);
         if (_file.is_open()) {
             _file.flush();
         }
@@ -58,7 +58,7 @@ namespace BECore {
         localtime_r(&time, &tm_buf);
 #endif
 
-        std::scoped_lock lock(_mutex);
+        LockGuard lock(_mutex);
 
         // Format and output (no colors in file; the time is written out, not {:%Y-%m-%d %H:%M:%S}: the Emscripten build cannot use fmt/chrono.h)
         _file << fmt::format("[{}] [{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03d}] {}\n", level, tm_buf.tm_year + 1900, tm_buf.tm_mon + 1, tm_buf.tm_mday, tm_buf.tm_hour, tm_buf.tm_min, tm_buf.tm_sec,
