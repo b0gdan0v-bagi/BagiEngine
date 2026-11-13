@@ -2,6 +2,7 @@
 
 #include <BECore/Reflection/BinaryDeserializer.h>
 #include <BECore/Reflection/BinarySerializer.h>
+#include <BECore/Save/SaveStorage.h>
 #include <EASTL/sort.h>
 
 namespace BECore {
@@ -152,6 +153,7 @@ namespace BECore {
         if (ec) {
             return fail(Format("Cannot replace '{}': {}", target.string(), ec.message()));
         }
+        NotifySaveChanged();
         return {};
     }
 
@@ -270,7 +272,11 @@ namespace BECore {
             return false;
         }
         std::error_code ec;
-        return std::filesystem::remove(ResolveSlot(slot), ec) && !ec;
+        const bool removed = std::filesystem::remove(ResolveSlot(slot), ec) && !ec;
+        if (removed) {
+            NotifySaveChanged();
+        }
+        return removed;
     }
 
     eastl::vector<PoolString> SaveGameService::List() const {

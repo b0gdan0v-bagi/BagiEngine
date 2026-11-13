@@ -153,6 +153,20 @@ if(index EQUAL -1)
     message(FATAL_ERROR "link options lack --shell-file: ${options}")
 endif()
 
+# --- the save folder: IDBFS linked, FS exported, web/saves.js as --pre-js, in the threaded and in the single-thread list
+check_equal("saves script" "${BE_WEB_SAVES_JS}" "${BAGI_ENGINE_DIR}/web/saves.js")
+if(NOT EXISTS "${BE_WEB_SAVES_JS}")
+    message(FATAL_ERROR "the saves script does not exist: ${BE_WEB_SAVES_JS}")
+endif()
+foreach(list_name options single_options)
+    foreach(required -lidbfs.js -sEXPORTED_RUNTIME_METHODS=FS "SHELL:--pre-js \"${BE_WEB_SAVES_JS}\"")
+        list(FIND ${list_name} "${required}" index)
+        if(index EQUAL -1)
+            message(FATAL_ERROR "${list_name} lacks ${required}: ${${list_name}}")
+        endif()
+    endforeach()
+endforeach()
+
 # --- be_web_generate_shell: a copy of the shell with the placeholder replaced, 1 for a threaded build and 0 for a single-thread one
 file(READ "${BE_WEB_SHELL_FILE}" shell_source)
 string(FIND "${shell_source}" "@BAGI_WEB_THREADS@" placeholder_at)

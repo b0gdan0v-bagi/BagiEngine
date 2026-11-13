@@ -139,6 +139,11 @@ class ArgumentsTest(unittest.TestCase):
         self.assertFalse(self.parse("--dist", "d", "--no-upload-check").upload_check)
         self.assertEqual(self.parse("--selftest", "--selftest-fault", "upload").selftest_fault, "upload")
 
+    def test_the_saves_check_is_on_for_a_dist_and_off_for_no_saves_check_and_for_the_selftest_page(self):
+        self.assertTrue(self.parse("--dist", "d").saves_check)
+        self.assertFalse(self.parse("--dist", "d", "--no-saves-check").saves_check)
+        self.assertFalse(self.parse("--selftest").saves_check)
+
     def test_the_browser_and_input_options_are_read(self):
         options = self.parse("--selftest", "--browser-channel", "msedge", "--device-scale-factor", "2", "--touch")
         self.assertEqual(options.browser_channel, "msedge")
@@ -686,6 +691,221 @@ class UploadCheckTest(unittest.TestCase):
             self.assertIn("HTTP 405", problems[0])
 
 
+class SavesCheckTest(unittest.TestCase):
+    """Check 8 on what the three browser runs showed (no browser)."""
+
+    def good_persist(self, **changes):
+        written = list(range(32))
+        values = dict(written=written, state="persistent", flush=None, restarted=True, state_after="persistent", read_back=list(written))
+        values.update(changes)
+        return web_smoke.SavesPersistRun(**values)
+
+    def good_refused(self):
+        return [web_smoke.SavesRefusedRun(mode, started=True, state="memory") for mode in web_smoke.SAVES_REFUSED_MODES]
+
+    def test_a_file_that_came_back_and_pages_that_started_in_memory_pass(self):
+        self.assertEqual(web_smoke.check_saves(self.good_persist(), self.good_refused()), [])
+
+    def test_each_way_the_reload_can_go_wrong_is_one_reason_of_check_8a(self):
+        cases = {
+            "error": (dict(error="the page has no Module.bagiSaves"), "no Module.bagiSaves"),
+            "state": (dict(state="memory"), "'memory', not 'persistent'"),
+            "flush": (dict(flush="quota"), "flush did not succeed: quota"),
+            "restart": (dict(restarted=False), "did not draw a frame after the reload"),
+            "state after": (dict(state_after="memory"), "'memory' after the reload"),
+            "gone": (dict(read_back=None), "is not there after it"),
+            "changed": (dict(read_back=[1, 2, 3]), "differs from the one written (3 bytes, 32 written)"),
+        }
+        for name, (changes, text) in cases.items():
+            with self.subTest(name):
+                problems = web_smoke.check_saves(self.good_persist(**changes), self.good_refused())
+                self.assertEqual(len(problems), 1, problems)
+                self.assertTrue(problems[0].startswith("(8a) reload: "), problems)
+                self.assertIn(text, problems[0])
+
+    def test_a_refused_indexeddb_must_not_stop_the_page_and_the_state_must_be_memory(self):
+        for changes, text in ((dict(started=False, state=None), "did not start"), (dict(state="persistent"), "not 'memory'"),
+                              (dict(error="the file could not be written"), "could not be written")):
+            with self.subTest(text):
+                refused = self.good_refused()
+                refused[1] = web_smoke.SavesRefusedRun("silent", **{"started": True, "state": "memory", **changes})
+                problems = web_smoke.check_saves(self.good_persist(), refused)
+                self.assertEqual(len(problems), 1, problems)
+                self.assertTrue(problems[0].startswith("(8, IndexedDB silent): "), problems)
+                self.assertIn(text, problems[0])
+
+    def test_console_errors_and_page_errors_count_in_every_run_and_the_allow_list_applies(self):
+        error = ConsoleEntry("error", "storage exploded")
+        persist = self.good_persist(console=[error, ConsoleEntry("warning", "[saves] x"), ConsoleEntry("error", "favicon.ico")],
+                                    page_errors=["boom"])
+        refused = self.good_refused()
+        refused[0].console.append(error)
+        problems = web_smoke.check_saves(persist, refused)
+        self.assertEqual(len(problems), 3, problems)
+        self.assertEqual(web_smoke.check_saves(persist, refused, ["storage exploded"]), ["(8a) reload: uncaught error in the page: boom"])
+
+    def test_the_problems_reach_the_verdict_of_a_run(self):
+        self.assertEqual(web_smoke.evaluate(good_run(saves_problems=["(8a) boom"])), ["(8a) boom"])
+        self.assertEqual(web_smoke.evaluate(good_run(saves_problems=[])), [])
+        self.assertEqual(web_smoke.evaluate(good_run()), [])  # not made (--no-saves-check, the selftest page)
+
+    def test_the_refused_scripts_make_open_throw_and_never_answer(self):
+        self.assertIn("throw", web_smoke.SAVES_REFUSED_SCRIPTS["throws"])
+        self.assertIn("return {}", web_smoke.SAVES_REFUSED_SCRIPTS["silent"])
+        self.assertEqual(set(web_smoke.SAVES_REFUSED_SCRIPTS), set(web_smoke.SAVES_REFUSED_MODES))
+
+    @unittest.skipUnless(NODE, "node is not on PATH")
+    def test_the_page_scripts_are_valid_javascript(self):
+        for name in ("SAVES_WRITE_SCRIPT", "SAVES_READ_SCRIPT"):
+            with self.subTest(name), tempfile.TemporaryDirectory() as scratch:
+                path = Path(scratch) / "script.js"
+                path.write_text(f"const f = {getattr(web_smoke, name)};\n", encoding="utf-8")
+                result = subprocess.run([NODE, "--check", str(path)], capture_output=True, text=True, check=False)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class FakeSavesPage:
+    """A page for check 8: the state of Module.bagiSaves and the file the reload keeps, as the world of the test says."""
+
+    def __init__(self, world, init_script):
+        self.world = world
+        self.init_script = init_script
+        self.canvas = FakeCanvas([STRIPES])
+        self.file = None
+        self.reloads = 0
+        self.urls = []
+
+    @property
+    def state(self):
+        return "memory" if self.init_script else self.world.get("state", "persistent")
+
+    def on(self, name, handler):
+        pass
+
+    def goto(self, url, wait_until, timeout):
+        self.urls.append(url)
+
+    def reload(self, wait_until, timeout):
+        self.reloads += 1
+        if not self.world.get("keeps", True) or self.state != "persistent":
+            self.file = None
+
+    def locator(self, selector):
+        return self.canvas
+
+    def wait_for_timeout(self, milliseconds):
+        pass
+
+    def evaluate(self, script, arg=None):
+        if script == web_smoke.SAVES_WRITE_SCRIPT:
+            _, written, _ = arg
+            self.file = list(written)
+            if "error" in self.world:
+                return {"error": self.world["error"]}
+            return {"state": self.state, "flush": self.world.get("flush") if self.state == "persistent" else None}
+        assert script == web_smoke.SAVES_READ_SCRIPT
+        return {"state": self.state, "bytes": self.file} if self.file is not None else {"state": self.state, "error": "the file is not there"}
+
+
+class FakeSavesBrowser:
+    def __init__(self, world):
+        self.world = world
+        self.pages = []
+        self.contexts = []
+        self.closed = False
+
+    def new_context(self, viewport, **kwargs):
+        browser = self
+        context = SimpleNamespace(scripts=[], kwargs=kwargs)
+        self.contexts.append(context)
+        context.add_init_script = context.scripts.append
+
+        def new_page():
+            page = FakeSavesPage(browser.world, context.scripts[0] if context.scripts else None)
+            browser.pages.append(page)
+            return page
+
+        context.new_page = new_page
+        return context
+
+    def close(self):
+        self.closed = True
+
+
+class SavesRunTest(unittest.TestCase):
+    """run_saves_persistence and run_saves_refused against a fake browser: the order of the calls and what is judged."""
+
+    def setUp(self):
+        for name, value in (("POLL_INTERVAL_SECONDS", 0.01),):
+            patcher = mock.patch.object(web_smoke, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def run_checks(self, **world):
+        browser = FakeSavesBrowser(world)
+        playwright = SimpleNamespace(chromium=SimpleNamespace(launch=lambda headless, args, **kwargs: browser,
+                                                              executable_path=str(Path(__file__))))
+        api = SimpleNamespace(sync_playwright=lambda: contextlib.nullcontext(playwright))
+        problems = web_smoke.run_saves_checks(api, "http://h/", options(saves_check=True))
+        return problems, browser
+
+    def test_a_page_that_keeps_the_file_passes_in_three_fresh_contexts_and_the_browser_is_closed(self):
+        problems, browser = self.run_checks()
+        self.assertEqual(problems, [])
+        self.assertEqual(len(browser.contexts), 1 + len(web_smoke.SAVES_REFUSED_MODES))
+        self.assertEqual([page.reloads for page in browser.pages], [1, 0, 0])
+        self.assertEqual([bool(context.scripts) for context in browser.contexts], [False, True, True])
+        self.assertTrue(all(page.urls == ["http://h/?fullscreen=0"] for page in browser.pages))
+        self.assertTrue(browser.closed)
+
+    def test_a_page_that_loses_the_file_at_the_reload_fails_check_8a_only(self):
+        problems, _ = self.run_checks(keeps=False)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("is not there after it", problems[0])
+
+    def test_a_page_whose_state_is_memory_never_reloads_and_fails_8a(self):
+        problems, browser = self.run_checks(state="memory")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("'memory', not 'persistent'", problems[0])
+        self.assertEqual(browser.pages[0].reloads, 0)
+
+    def test_a_failed_flush_and_a_page_without_the_module_are_reported(self):
+        problems, _ = self.run_checks(flush="no answer within 15 s")
+        self.assertIn("no answer within 15 s", problems[0])
+        problems, _ = self.run_checks(error="the page has no Module.bagiSaves")
+        self.assertEqual(len(problems), 1 + len(web_smoke.SAVES_REFUSED_MODES), problems)
+
+    def test_run_smoke_runs_check_8_for_a_dist_and_prints_its_line(self):
+        with tempfile.TemporaryDirectory() as folder:
+            dist = package_fake_dist(Path(folder))
+            browser = FakeSavesBrowser({})
+            canvas = FakeCanvas([STRIPES], after_click=[OTHER_STRIPES])
+            page = FakePage(canvas)
+            fake = FakePlaywright(page)
+            launched = []  # the first browser is the one of the checks 1 to 7, the next ones are those of check 8
+
+            def launch(headless, args, **kwargs):
+                launched.append(1)
+                return fake._launch(headless, args, **kwargs) if len(launched) == 1 else browser
+
+            fake.chromium.launch = launch
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), mock.patch.object(web_smoke, "CLICK_TIMEOUT_SECONDS", 0.05):
+                code = web_smoke.run_smoke(options(selftest=False, dist=dist, saves_check=True, upload_check=False),
+                                           SimpleNamespace(sync_playwright=fake.sync_playwright))
+        self.assertEqual(code, 0, out.getvalue())
+        self.assertIn("ok: (8)", out.getvalue())
+        self.assertEqual(len(browser.pages), 3)
+
+    def test_run_smoke_skips_check_8_for_the_selftest_page(self):
+        fake = FakePlaywright(FakePage(FakeCanvas([STRIPES], after_click=[OTHER_STRIPES])))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = web_smoke.run_smoke(options(), SimpleNamespace(sync_playwright=fake.sync_playwright))
+        self.assertEqual(code, 0, out.getvalue())
+        self.assertIn("skip: (8)", out.getvalue())
+
+
 class FakeCanvas:
     """`shots` are the screenshots in order (the last one repeats); once the page has been clicked they are `after_click` instead,
     when given: a canvas that changes only because of the click."""
@@ -825,7 +1045,7 @@ class FakePlaywright:
 
 def options(**changes) -> web_smoke.Options:
     values = dict(dist=None, selftest=True, click=None, viewport=(640, 480), timeout=1.0, settle=0.0,
-                  allow_console=[], chromium_args=["--extra"], selftest_fault="none")
+                  allow_console=[], chromium_args=["--extra"], selftest_fault="none", saves_check=False)
     values.update(changes)
     return web_smoke.Options(**values)
 

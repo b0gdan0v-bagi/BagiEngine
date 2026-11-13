@@ -28,7 +28,8 @@
 #       configures again.
 #   be_web_link_options(OUT <var> [SINGLE_THREAD] [SHELL_FILE <file>])
 #       The Emscripten link options: the "-s..." settings, the HTML shell (web/shell.html, or SHELL_FILE: the copy of
-#       be_web_generate_shell), and the assertions in Debug only (as a generator expression, so the list is the same for every
+#       be_web_generate_shell), the persistent save folder (web/saves.js as --pre-js, -lidbfs.js and FS exported: web/CLAUDE.md), and
+#       the assertions in Debug only (as a generator expression, so the list is the same for every
 #       configuration). Without SINGLE_THREAD it also has -pthread and the Web Worker pool (BE_WEB_THREAD_POOL_SIZE); with
 #       SINGLE_THREAD it has neither (no thread, no shared memory).
 #   be_web_configure_target(<target> GAME_ROOT <dir>)
@@ -62,6 +63,9 @@ get_filename_component(BE_WEB_DIR "${CMAKE_CURRENT_LIST_DIR}/../web" ABSOLUTE)
 
 # The page around the wasm: loading bar, WebGL test, error messages (web/shell.html)
 set(BE_WEB_SHELL_FILE "${BE_WEB_DIR}/shell.html")
+
+# The script that keeps the save folder in the browser's IndexedDB (web/saves.js, linked with --pre-js)
+set(BE_WEB_SAVES_JS "${BE_WEB_DIR}/saves.js")
 
 function(be_web_preload_args)
     cmake_parse_arguments(ARG "" "OUT;ENGINE_ROOT;GAME_ROOT;WEB_ROOT" "" ${ARGN})
@@ -161,6 +165,13 @@ function(be_web_link_options)
         -sEXIT_RUNTIME=1
         # The page around the wasm (web/shell.html); SHELL: keeps the flag and its value together, the quotes keep a path with a space in one piece
         "SHELL:--shell-file \"${ARG_SHELL_FILE}\""
+        # The save folder that survives a reload (web/saves.js): it mounts IDBFS, which is a library of its own (-lidbfs.js), and runs
+        # in the module before main() (--pre-js). FS is exported because the script reads the global FS of the module, which is left
+        # out of the build unless it is listed (checked with emsdk 4.0.23: without it neither FS nor IDBFS is in the output; with it
+        # IDBFS comes along), and the browser smoke reads and writes a file through Module.FS
+        -lidbfs.js
+        "SHELL:--pre-js \"${BE_WEB_SAVES_JS}\""
+        -sEXPORTED_RUNTIME_METHODS=FS
         # Runtime checks of the glue code (memory growth, stack, wrong calls); they cost speed and size, so Debug only
         $<$<CONFIG:Debug>:-sASSERTIONS=1>
     )
@@ -208,6 +219,8 @@ function(be_web_configure_target TARGET_NAME)
     # The shell is read at link time: a change of the page relinks (the copy changes when the source does, at the next configure,
     # which configure_file() triggers; the source is listed too)
     set_property(TARGET ${TARGET_NAME} APPEND PROPERTY LINK_DEPENDS "${BE_WEB_SHELL_FILE}" "${_shell}")
+    # The saves script is part of the output .js: an edit relinks
+    set_property(TARGET ${TARGET_NAME} APPEND PROPERTY LINK_DEPENDS "${BE_WEB_SAVES_JS}")
 
     be_web_preload_args(OUT _preload
         ENGINE_ROOT "${BAGI_ENGINE_DIR}"
