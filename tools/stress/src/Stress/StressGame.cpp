@@ -21,16 +21,22 @@ namespace BECore::Stress {
             return "StressSprites"_intern;
         }
 
+        /// The settings of the command line; a bad flag is logged once and the defaults stand
+        StressSettings LoadSettings() {
+            auto settings = ParseStressSettings(CoreManager::GetCommandLine());
+            if (!settings) {
+                LOG_WARNING(Format("Stress: {}; starting with the defaults", settings.error()));
+                return StressSettings{};
+            }
+            return *settings;
+        }
+
     }  // namespace
 
-    StressGame::StressGame() {
-        const auto settings = ParseStressSettings(CoreManager::GetCommandLine());
-        if (settings) {
-            _settings = *settings;
-        } else {
-            LOG_WARNING(Format("Stress: {}; starting with the defaults", settings.error()));
-        }
-        _state = StressState(_settings);
+    StressGame::StressGame() : _settings(LoadSettings()), _state(_settings), _control(_state, [this] { ShowActiveScene(); }) {}
+
+    IControllableGame* StressGame::AsControllable() {
+        return &_control;
     }
 
     PoolString StressGame::GetName() const {
@@ -39,6 +45,13 @@ namespace BECore::Stress {
 
     PoolString StressGame::GetSceneName() const {
         return SceneNameOf(_state.GetScene());
+    }
+
+    void StressGame::ShowActiveScene() {
+        // No scene manager before the start-up and in a test that has none: the scene is shown at the next start then
+        if (SceneManager* manager = CoreManager::FindSceneManager()) {
+            manager->SetActiveScene(GetSceneName());
+        }
     }
 
     StressGame* StressGame::GetActive() {
