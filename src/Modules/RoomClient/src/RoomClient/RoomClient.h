@@ -74,7 +74,8 @@ namespace BECore {
               Left,            // `left`: no longer in the room, code is the reason
               ConnectionLost,  // the connection of a room ended: willRetry says whether the client will bring it back (else Closed follows)
               Resumed,         // the new connection is in the room again (`joined` by token); the lobby and the view follow
-              Closed           // the connection ended for good: code is the reason (RoomClientCloseReasons), closeCode, message
+              Closed,          // the connection ended for good: code is the reason (RoomClientCloseReasons), closeCode, message
+              RoomList         // `rooms`: GetRoomList() was replaced by the answer to ListRooms()
     )
 
     /// One thing the game may want to show or react to
@@ -137,12 +138,19 @@ namespace BECore {
         // ---- Commands ----
 
         /// Opens a connection to @p url and creates a room of @p game with the player @p name; @p options go to the game's Start() (an
-        /// object). `wrong_state` unless Disconnected, or Connected to the same @p url with no room and no request pending
-        [[nodiscard]] std::expected<void, ControlError> Host(eastl::string_view url, eastl::string_view game, eastl::string_view name, const Json& options = Json::object());
+        /// object). @p isPublic asks the server to list the room for ListRooms() (a server that does not know the member keeps the room
+        /// private). `wrong_state` unless Disconnected, or Connected to the same @p url with no room and no request pending
+        [[nodiscard]] std::expected<void, ControlError> Host(eastl::string_view url, eastl::string_view game, eastl::string_view name, const Json& options = Json::object(), bool isPublic = false);
 
         /// Opens a connection to @p url and enters the room @p code (any case) as a new member named @p name. Same states as Host().
         /// A code that cannot be a room code is `unknown_room` at once, without a connection
         [[nodiscard]] std::expected<void, ControlError> Join(eastl::string_view url, eastl::string_view code, eastl::string_view name);
+
+        /// Asks @p url for the public rooms of @p game; the answer is the event `RoomList` and GetRoomList(). Same states as Host(). It is not a
+        /// join: the state stays Connected (no room, no reconnect) and the same connection serves a Join() of a listed code or another
+        /// ListRooms(). The server answers a list at most once per `RoomLimits::kListRefill` on average (then `Error rate_limited` with
+        /// `ref: list_rooms`, the connection stays open), so a screen asks again no faster than that
+        [[nodiscard]] std::expected<void, ControlError> ListRooms(eastl::string_view url, eastl::string_view game);
 
         /// Asks for a seat. In a room only (`wrong_state`). The lobby message does not say which seat is the receiver's, so GetSeat() takes the
         /// asked seat at once and goes back to the old one if the server answers with an error; a `view` always corrects it
@@ -206,6 +214,11 @@ namespace BECore {
             return _seat;
         }
 
+        /// The last `rooms` answer; empty before the first one, replaced by each answer, cleared when the room or the connection is forgotten
+        [[nodiscard]] const RoomListMessage& GetRoomList() const {
+            return _roomList;
+        }
+
         /// Whether this player is the host: the seat the lobby names as the host's
         [[nodiscard]] bool IsHost() const {
             return _host;
@@ -252,9 +265,10 @@ namespace BECore {
         }
 
     private:
-        [[nodiscard]] std::expected<void, ControlError> BeginRequest(eastl::string_view url, eastl::string firstMessage);
+        /// @p awaitsJoin: the request is a `create_room` / `join_room` (its answer is `joined` or `error`); a `list_rooms` is not
+        [[nodiscard]] std::expected<void, ControlError> BeginRequest(eastl::string_view url, eastl::string firstMessage, bool awaitsJoin = true);
         /// Makes and opens a transport for @p url; @p firstMessage goes out when it opens
-        [[nodiscard]] std::expected<void, ControlError> StartConnection(eastl::string_view url, eastl::string firstMessage);
+        [[nodiscard]] std::expected<void, ControlError> StartConnection(eastl::string_view url, eastl::string firstMessage, bool awaitsJoin = true);
         [[nodiscard]] std::expected<void, ControlError> RequireRoom() const;
         std::expected<void, ControlError> SendToServer(const ClientMessage& message);
 
@@ -265,6 +279,7 @@ namespace BECore {
         void OnView(ViewMessage&& message);
         void OnError(ErrorMessage&& message);
         void OnLeft(LeftMessage&& message);
+        void OnRoomList(RoomListMessage&& message);
         void OnTransportClosed(const RoomTransportEvent& event);
         /// The connection is over (the transport is gone or on its way out): reconnect, or end for good
         void OnConnectionEnded(uint16_t closeCode, eastl::string_view reason, eastl::string_view endCode = {});
@@ -296,6 +311,8 @@ namespace BECore {
         eastl::string _url;
         /// Sent when the transport opens
         eastl::string _firstMessage;
+        /// Whether the first message is a join (sets _awaitingJoin when it goes out)
+        bool _firstMessageAwaitsJoin = true;
         /// A create_room or join_room was sent and has no answer (`joined` or `error`) yet
         bool _awaitingJoin = false;
         /// The transport has reported Opened
@@ -321,6 +338,7 @@ namespace BECore {
         int _seatBeforeRequest = -1;
         bool _host = false;
         LobbySnapshot _lobby;
+        RoomListMessage _roomList;
         bool _hasView = false;
         Json _view = Json::object();
         Json _actions = Json::array();

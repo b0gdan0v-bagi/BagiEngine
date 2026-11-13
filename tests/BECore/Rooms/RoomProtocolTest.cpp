@@ -54,7 +54,7 @@ namespace BECore::Tests {
     }  // namespace
 
     static_assert(kRoomProtocolVersion == 1);
-    static_assert(std::variant_size_v<ClientMessage> == 7);
+    static_assert(std::variant_size_v<ClientMessage> == 8);
 
     TEST(RoomProtocolTest, CompileTimeChecks) {
         static_assert(std::is_same_v<std::variant_alternative_t<0, ClientMessage>, CreateRoomMessage>);
@@ -132,6 +132,79 @@ namespace BECore::Tests {
         EXPECT_NE(As<PingMessage>(ParseClientMessage(R"({"v":1,"type":"ping","extra":[1,2,{"a":null}],"seat":"x"})")), nullptr);
     }
 
+    TEST(RoomProtocolTest, CreateRoomPublicIsABooleanAndAbsentMeansPrivate) {
+        const auto absent = ParseClientMessage(Message("create_room", R"("game":"g","name":"Bob")"));
+        ASSERT_NE(As<CreateRoomMessage>(absent), nullptr);
+        EXPECT_FALSE(As<CreateRoomMessage>(absent)->isPublic);
+
+        const auto isPublic = ParseClientMessage(Message("create_room", R"("game":"g","name":"Bob","public":true)"));
+        ASSERT_NE(As<CreateRoomMessage>(isPublic), nullptr);
+        EXPECT_TRUE(As<CreateRoomMessage>(isPublic)->isPublic);
+
+        const auto isPrivate = ParseClientMessage(Message("create_room", R"("game":"g","name":"Bob","public":false)"));
+        ASSERT_NE(As<CreateRoomMessage>(isPrivate), nullptr);
+        EXPECT_FALSE(As<CreateRoomMessage>(isPrivate)->isPublic);
+    }
+
+    TEST(RoomProtocolTest, CreateRoomPublicOfAnotherTypeIsBadMessage) {
+        for (const char* value : {"\"true\"", "\"\"", "1", "0", "null", "[]", "[true]", "{}", "1.5"}) {
+            const eastl::string text = Message("create_room", Format(R"("game":"g","name":"Bob","public":{})", value));
+            EXPECT_EQ(ErrorCodeOfText(text), RoomErrors::kBadMessage) << value;
+        }
+    }
+
+    TEST(RoomProtocolTest, CreateRoomIsWrittenWithPublicOnlyWhenTrue) {
+        CreateRoomMessage create;
+        create.game = "g";
+        create.name = "Bob";
+        EXPECT_EQ(FindJsonMember(ParseOrNull(SerializeClientMessage(create)), "public"), nullptr);
+        create.isPublic = true;
+        const Json written = ParseOrNull(SerializeClientMessage(create));
+        EXPECT_EQ(GetJsonBool(written, "public"), true);
+        const auto parsed = ParseClientMessage(SerializeClientMessage(create));
+        ASSERT_NE(As<CreateRoomMessage>(parsed), nullptr);
+        EXPECT_TRUE(As<CreateRoomMessage>(parsed)->isPublic);
+    }
+
+    TEST(RoomProtocolTest, ListRoomsParsesTheGame) {
+        const auto parsed = ParseClientMessage(Message("list_rooms", R"("game":"mahjong")"));
+        const auto* message = As<ListRoomsMessage>(parsed);
+        ASSERT_NE(message, nullptr);
+        EXPECT_EQ(message->game, "mahjong");
+        EXPECT_EQ(ParseOrNull(SerializeClientMessage(*parsed)), ParseOrNull(Message("list_rooms", R"("game":"mahjong")")));
+        // The longest game name is fine, members it does not read are ignored
+        EXPECT_NE(As<ListRoomsMessage>(ParseClientMessage(Message("list_rooms", Format(R"("game":"{}","name":5,"public":"x")", Repeat('g', RoomLimits::kMaxGameNameBytes))))), nullptr);
+    }
+
+    TEST(RoomProtocolTest, ListRoomsNeedsAGameOfTheRightSize) {
+        const eastl::vector<eastl::string> bad = {
+            Message("list_rooms"),
+            Message("list_rooms", R"("game":"")"),
+            Message("list_rooms", Format(R"("game":"{}")", Repeat('g', RoomLimits::kMaxGameNameBytes + 1))),
+            Message("list_rooms", R"("game":5)"),
+            Message("list_rooms", R"("game":null)"),
+            Message("list_rooms", R"("game":["g"])"),
+        };
+        for (const eastl::string& text : bad) {
+            EXPECT_EQ(ErrorCodeOfText(text), RoomErrors::kBadMessage) << text.c_str();
+        }
+    }
+
+    TEST(RoomProtocolTest, TheSizeAndNulRulesApplyToTheNewTypes) {
+        const eastl::string list = Message("list_rooms", R"("game":"g")");
+        EXPECT_EQ(ErrorCodeOfText(list, list.size()), "<ok>");
+        EXPECT_EQ(ErrorCodeOfText(list, list.size() - 1), RoomErrors::kMessageTooLarge);
+        eastl::string withNul = list;
+        withNul.insert(withNul.size() - 1, 1, '\0');
+        EXPECT_EQ(ErrorCodeOfText(withNul), RoomErrors::kBadMessage);
+        const eastl::string create = Message("create_room", R"("game":"g","name":"Bob","public":true)");
+        EXPECT_EQ(ErrorCodeOfText(create, create.size() - 1), RoomErrors::kMessageTooLarge);
+        eastl::string nulAfter = list;
+        nulAfter.append(1, '\0');
+        nulAfter.append(kPlainPing.data(), kPlainPing.size());
+        EXPECT_EQ(ErrorCodeOfText(nulAfter), RoomErrors::kBadMessage);
+    }
+
     // ---- Client messages: round trip ----------------------------------------------------------------------------------------------
 
     TEST(RoomProtocolTest, EveryClientMessageRoundTrips) {
@@ -140,6 +213,8 @@ namespace BECore::Tests {
         create.name = "Ann";
         create.options = Json::object();
         create.options["rounds"] = 4;
+        CreateRoomMessage publicCreate = create;
+        publicCreate.isPublic = true;
         JoinRoomMessage joinByName;
         joinByName.code = "ABCDE";
         joinByName.name = "Bob";
@@ -152,7 +227,7 @@ namespace BECore::Tests {
         action.action["type"] = "play";
 
         const eastl::vector<ClientMessage> messages = {
-            create, joinByName, reconnect, ChooseSeatMessage{2}, StartMessage{}, action, LeaveMessage{}, PingMessage{},
+            create, publicCreate, joinByName, reconnect, ChooseSeatMessage{2}, StartMessage{}, action, LeaveMessage{}, PingMessage{}, ListRoomsMessage{"mahjong"},
         };
         for (const ClientMessage& original : messages) {
             const eastl::string text = SerializeClientMessage(original);
@@ -172,6 +247,7 @@ namespace BECore::Tests {
         EXPECT_EQ(GetClientMessageType(ActionMessage{}), "action");
         EXPECT_EQ(GetClientMessageType(LeaveMessage{}), "leave");
         EXPECT_EQ(GetClientMessageType(PingMessage{}), "ping");
+        EXPECT_EQ(GetClientMessageType(ListRoomsMessage{}), "list_rooms");
     }
 
     // ---- Client messages: malformed input -----------------------------------------------------------------------------------------
@@ -497,6 +573,7 @@ namespace BECore::Tests {
             MakeErrorMessage("x", "y"),
             MakeLeftMessage("z"),
             MakePongMessage(),
+            MakeRoomListMessage(RoomListMessage{}),
         };
         for (const eastl::string& text : messages) {
             const Json message = ParseOrNull(text);
@@ -856,6 +933,163 @@ namespace BECore::Tests {
         const auto* read = ServerAs<ViewMessage>(parsedView);
         ASSERT_NE(read, nullptr);
         EXPECT_EQ(read->view, view);
+    }
+
+    // ---- `rooms`: the answer to list_rooms ----------------------------------------------------------------------------------------
+
+    namespace {
+
+        RoomListing MakeListing(eastl::string_view code, int taken, int seats) {
+            RoomListing listing;
+            listing.room = code;
+            listing.host = "Ann";
+            listing.taken = taken;
+            listing.seats = seats;
+            return listing;
+        }
+
+        /// A `rooms` entry as JSON text with the members of @p members
+        eastl::string RoomsWith(eastl::string_view entries, eastl::string_view more = "false") {
+            return Message("rooms", Format(R"("game":"g","rooms":[{}],"more":{})", entries, more));
+        }
+
+        constexpr eastl::string_view kGoodEntry = R"({"room":"ABCDE","host":"Ann","taken":1,"seats":4,"started":false})";
+
+    }  // namespace
+
+    TEST(RoomProtocolTest, RoomsMessageRoundTripsAndOmitsEmptyOptions) {
+        RoomListMessage list;
+        list.game = "mahjong";
+        list.rooms.push_back(MakeListing("ABCDE", 1, 4));
+        RoomListing second = MakeListing("FGHJK", 4, 4);
+        second.host = "Bob";
+        second.started = true;
+        second.options["hintsAllowed"] = true;
+        second.options["hands"] = 8;
+        list.rooms.push_back(second);
+        list.more = true;
+
+        const eastl::string text = MakeRoomListMessage(list);
+        const Json json = ParseOrNull(text);
+        EXPECT_EQ(GetJsonString(json, "type"), "rooms");
+        EXPECT_EQ(GetJsonInt(json, "v"), 1);
+        ASSERT_TRUE(json["rooms"].is_array());
+        EXPECT_EQ(FindJsonMember(json["rooms"][0], "options"), nullptr);
+        EXPECT_NE(FindJsonMember(json["rooms"][1], "options"), nullptr);
+
+        const auto parsed = ParseServerMessage(text);
+        const auto* read = ServerAs<RoomListMessage>(parsed);
+        ASSERT_NE(read, nullptr);
+        EXPECT_EQ(GetServerMessageType(*parsed), "rooms");
+        EXPECT_EQ(read->game, "mahjong");
+        EXPECT_TRUE(read->more);
+        ASSERT_EQ(read->rooms.size(), 2u);
+        EXPECT_EQ(read->rooms[0].room, "ABCDE");
+        EXPECT_EQ(read->rooms[0].host, "Ann");
+        EXPECT_EQ(read->rooms[0].taken, 1);
+        EXPECT_EQ(read->rooms[0].seats, 4);
+        EXPECT_FALSE(read->rooms[0].started);
+        EXPECT_TRUE(read->rooms[0].options.empty());
+        EXPECT_TRUE(read->rooms[1].started);
+        EXPECT_EQ(read->rooms[1].options, second.options);
+        EXPECT_EQ(MakeRoomListMessage(*read), text);
+
+        const auto none = ParseServerMessage(MakeRoomListMessage(RoomListMessage{}));
+        const auto* empty = ServerAs<RoomListMessage>(none);
+        ASSERT_NE(empty, nullptr);
+        EXPECT_TRUE(empty->rooms.empty());
+        EXPECT_FALSE(empty->more);
+    }
+
+    TEST(RoomProtocolTest, RoomsMessageReadsTheCapAndRefusesOneMore) {
+        const auto entries = [](size_t count) {
+            eastl::string text;
+            for (size_t i = 0; i < count; ++i) {
+                text.append(i == 0 ? "" : ",");
+                text.append(kGoodEntry.data(), kGoodEntry.size());
+            }
+            return text;
+        };
+        const auto atTheCap = ParseServerMessage(RoomsWith(entries(RoomLimits::kMaxListedRooms)));
+        ASSERT_NE(ServerAs<RoomListMessage>(atTheCap), nullptr);
+        EXPECT_EQ(ServerAs<RoomListMessage>(atTheCap)->rooms.size(), RoomLimits::kMaxListedRooms);
+        EXPECT_EQ(ServerErrorCodeOf(RoomsWith(entries(RoomLimits::kMaxListedRooms + 1))), "bad_message");
+        // The full answer is far inside the size limit of a client's message, so a server never builds a text it could not send
+        RoomListMessage full;
+        full.game = Repeat('g', RoomLimits::kMaxGameNameBytes);
+        for (size_t i = 0; i < RoomLimits::kMaxListedRooms; ++i) {
+            RoomListing listing = MakeListing("ABCDE", 1, static_cast<int>(RoomLimits::kMaxLobbySeats));
+            listing.host = Repeat('h', RoomLimits::kMaxNameBytes);
+            for (size_t option = 0; option < RoomLimits::kMaxLobbyOptions; ++option) {
+                listing.options[Format("option{}", option).c_str()] = 1000000;
+            }
+            full.rooms.push_back(listing);
+        }
+        EXPECT_LT(MakeRoomListMessage(full).size(), RoomLimits::kMaxMessageBytes);
+        EXPECT_NE(ServerAs<RoomListMessage>(ParseServerMessage(MakeRoomListMessage(full))), nullptr);
+    }
+
+    TEST(RoomProtocolTest, RoomsMessageRefusesWhatIsNotAWellFormedList) {
+        const auto entryWith = [](eastl::string_view room, eastl::string_view host, eastl::string_view taken, eastl::string_view seats, eastl::string_view started, eastl::string_view extra = {}) {
+            return Format(R"({{"room":{},"host":{},"taken":{},"seats":{},"started":{}{}}})", room, host, taken, seats, started, extra);
+        };
+        const auto bad = [&](const char* label, const eastl::string& entry) { EXPECT_EQ(ServerErrorCodeOf(RoomsWith(entry)), "bad_message") << label; };
+        EXPECT_EQ(ServerErrorCodeOf(RoomsWith(entryWith("\"ABCDE\"", "\"Ann\"", "4", "4", "false"))), "<ok>");
+        EXPECT_EQ(ServerErrorCodeOf(RoomsWith(entryWith("\"ABCDE\"", "\"Ann\"", "0", "1", "true"))), "<ok>");
+        EXPECT_EQ(ServerErrorCodeOf(RoomsWith(entryWith("\"ABCDE\"", "\"Ann\"", "1", "64", "false"))), "<ok>");
+        bad("lower case code", entryWith("\"abcde\"", "\"Ann\"", "1", "4", "false"));
+        bad("short code", entryWith("\"ABCD\"", "\"Ann\"", "1", "4", "false"));
+        bad("long code", entryWith("\"ABCDEF\"", "\"Ann\"", "1", "4", "false"));
+        bad("code with a forbidden letter", entryWith("\"ABCDO\"", "\"Ann\"", "1", "4", "false"));
+        bad("code a number", entryWith("12345", "\"Ann\"", "1", "4", "false"));
+        bad("host a number", entryWith("\"ABCDE\"", "5", "1", "4", "false"));
+        bad("taken over seats", entryWith("\"ABCDE\"", "\"Ann\"", "5", "4", "false"));
+        bad("taken negative", entryWith("\"ABCDE\"", "\"Ann\"", "-1", "4", "false"));
+        bad("taken a string", entryWith("\"ABCDE\"", "\"Ann\"", "\"1\"", "4", "false"));
+        bad("taken fractional", entryWith("\"ABCDE\"", "\"Ann\"", "1.5", "4", "false"));
+        bad("seats zero", entryWith("\"ABCDE\"", "\"Ann\"", "0", "0", "false"));
+        bad("seats over the bound", entryWith("\"ABCDE\"", "\"Ann\"", "1", "65", "false"));
+        bad("seats negative", entryWith("\"ABCDE\"", "\"Ann\"", "0", "-1", "false"));
+        bad("started a number", entryWith("\"ABCDE\"", "\"Ann\"", "1", "4", "1"));
+        bad("started null", entryWith("\"ABCDE\"", "\"Ann\"", "1", "4", "null"));
+        bad("options an array", entryWith("\"ABCDE\"", "\"Ann\"", "1", "4", "false", R"(,"options":[1])"));
+        bad("options with a string", entryWith("\"ABCDE\"", "\"Ann\"", "1", "4", "false", R"(,"options":{"a":"x"})"));
+        bad("options with an array", entryWith("\"ABCDE\"", "\"Ann\"", "1", "4", "false", R"(,"options":{"a":[1]})"));
+        bad("options with a fraction", entryWith("\"ABCDE\"", "\"Ann\"", "1", "4", "false", R"(,"options":{"a":1.5})"));
+        bad("options with null", entryWith("\"ABCDE\"", "\"Ann\"", "1", "4", "false", R"(,"options":{"a":null})"));
+        bad("an entry that is a string", "\"ABCDE\"");
+        bad("an entry that is an array", "[]");
+        bad("a missing host", R"({"room":"ABCDE","taken":1,"seats":4,"started":false})");
+        bad("a missing seats", R"({"room":"ABCDE","host":"Ann","taken":1,"started":false})");
+        eastl::string tooManyOptions = R"(,"options":{)";
+        for (size_t i = 0; i <= RoomLimits::kMaxLobbyOptions; ++i) {
+            tooManyOptions.append(Format(R"({}"o{}":1)", i == 0 ? "" : ",", i));
+        }
+        tooManyOptions.append("}");
+        bad("more options than the lobby may carry", entryWith("\"ABCDE\"", "\"Ann\"", "1", "4", "false", tooManyOptions));
+
+        EXPECT_EQ(ServerErrorCodeOf(Message("rooms", R"("game":"g","rooms":[],"more":"no")")), "bad_message");
+        EXPECT_EQ(ServerErrorCodeOf(Message("rooms", R"("game":"g","rooms":[])")), "bad_message");
+        EXPECT_EQ(ServerErrorCodeOf(Message("rooms", R"("game":"g","more":false)")), "bad_message");
+        EXPECT_EQ(ServerErrorCodeOf(Message("rooms", R"("game":"g","rooms":{},"more":false)")), "bad_message");
+        EXPECT_EQ(ServerErrorCodeOf(Message("rooms", R"("game":5,"rooms":[],"more":false)")), "bad_message");
+        EXPECT_EQ(ServerErrorCodeOf(Message("rooms", R"("rooms":[],"more":false)")), "bad_message");
+    }
+
+    TEST(RoomProtocolTest, RoomsMessageIgnoresUnknownMembersAndKeepsStringsAsTheyCame) {
+        const eastl::string text =
+            Message("rooms", R"("game":"g","more":false,"extra":{"a":[1]},"rooms":[{"room":"ABCDE","host":"A\u00e9 n","taken":1,"seats":4,"started":false,"since":5,"extra":null}])");
+        const auto parsed = ParseServerMessage(text);
+        const auto* read = ServerAs<RoomListMessage>(parsed);
+        ASSERT_NE(read, nullptr);
+        ASSERT_EQ(read->rooms.size(), 1u);
+        EXPECT_EQ(read->rooms[0].host, "A\xC3\xA9 n");
+        // The size and NUL rules of the reader apply to the new type too
+        const eastl::string rooms = MakeRoomListMessage(RoomListMessage{});
+        EXPECT_EQ(ServerErrorCodeOf(rooms, rooms.size() - 1), RoomErrors::kMessageTooLarge);
+        eastl::string withNul = rooms;
+        withNul.insert(withNul.size() - 1, 1, '\0');
+        EXPECT_EQ(ServerErrorCodeOf(withNul), "bad_message");
     }
 
 }  // namespace BECore::Tests

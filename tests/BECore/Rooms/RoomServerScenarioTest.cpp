@@ -367,4 +367,54 @@ namespace BECore::Tests {
         EXPECT_TRUE(halfOpen->WaitForEndOfStream());
     }
 
+    TEST_F(RoomServerScenarioTest, AClientListsPublicRoomsJoinsFromTheListAndNeverSeesAPrivateCode) {
+        const uint16_t port = StartServer();
+        auto open = RoomSocketClient::Connect(port);
+        auto closed = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(open.has_value() && closed.has_value());
+        open->Send(CreateRoomMessage{"cards", "OpenHost", Json::object(), true});
+        closed->Send(CreateRoomMessage{"cards", "ClosedHost", Json::object()});
+        ASSERT_TRUE(open->WaitFor(RoomMessageTypes::kLobby).has_value());
+        ASSERT_TRUE(closed->WaitFor(RoomMessageTypes::kLobby).has_value());
+
+        auto browser = RoomSocketClient::Connect(port);
+        ASSERT_TRUE(browser.has_value());
+        browser->Send(ListRoomsMessage{"no-such-game"});
+        const auto unknown = browser->WaitFor(RoomMessageTypes::kError);
+        ASSERT_TRUE(unknown.has_value());
+        EXPECT_EQ(unknown->GetString("code"), RoomErrors::kUnknownGame);
+        EXPECT_EQ(unknown->GetString("ref"), RoomMessageTypes::kListRooms);
+
+        browser->Send(ListRoomsMessage{"cards"});
+        const auto listed = browser->WaitFor(RoomMessageTypes::kRooms);
+        ASSERT_TRUE(listed.has_value());
+        const auto list = ParseServerMessage(listed->text, RoomLimits::kMaxServerMessageBytes);
+        ASSERT_TRUE(list.has_value());
+        const auto* rooms = std::get_if<RoomListMessage>(&*list);
+        ASSERT_NE(rooms, nullptr);
+        ASSERT_EQ(rooms->rooms.size(), 1u);
+        EXPECT_EQ(rooms->rooms[0].room, open->roomCode);
+        EXPECT_EQ(rooms->rooms[0].host, "OpenHost");
+        EXPECT_EQ(rooms->rooms[0].taken, 1);
+        EXPECT_EQ(rooms->rooms[0].seats, DemoCardGame::kSeatCount);
+        EXPECT_FALSE(rooms->rooms[0].started);
+        EXPECT_FALSE(rooms->more);
+
+        // Join from the list is the join by code; the hand is played to the end
+        browser->JoinByName(rooms->rooms[0].room, "Browser");
+        ASSERT_TRUE(browser->WaitFor(RoomMessageTypes::kLobby).has_value());
+        open->Start();
+        Clients playing;
+        playing.push_back(std::make_unique<RoomSocketClient>(std::move(*open)));
+        playing.push_back(std::make_unique<RoomSocketClient>(std::move(*browser)));
+        ASSERT_TRUE(PlayToTheEnd(playing));
+        for (const auto& client : playing) {
+            ExpectAllTwelveCardsPlayed(*client);
+            for (const ReceivedMessage& message : client->Received()) {
+                EXPECT_EQ(message.text.find(closed->roomCode), eastl::string::npos) << "the code of a private room reached another room: " << message.text.c_str();
+            }
+        }
+        ExpectCleanWire(playing);
+    }
+
 }  // namespace BECore::Tests

@@ -3,6 +3,7 @@
 
 #include <Common/Printers.h>
 #include <RoomClient/RoomClient.h>
+#include <Rooms/RoomErrors.h>
 #include <algorithm>
 #include <gtest/gtest.h>
 
@@ -191,6 +192,67 @@ namespace BECore::Tests {
             EXPECT_EQ(player->TableSize(), kCardsInAHand);
             EXPECT_TRUE(player->judge->leaks.empty());
         }
+    }
+
+    TEST_F(RoomClientHubTest, APublicRoomIsListedAndJoinedFromTheListOnTheSameConnectionAndAHandIsPlayed) {
+        Player& host = AddPlayer();
+        ASSERT_TRUE(host.client->Host(kUrl, "cards", "P0", Json::object(), true).has_value());
+        ASSERT_TRUE(StepUntil([&] { return host.client->IsInRoom(); }));
+
+        Player& browser = AddPlayer();
+        ASSERT_TRUE(browser.client->ListRooms(kUrl, "cards").has_value());
+        ASSERT_TRUE(StepUntil([&] { return browser.Count(Kind::RoomList) == 1u; }));
+        const RoomListMessage& listed = browser.client->GetRoomList();
+        ASSERT_EQ(listed.rooms.size(), 1u);
+        EXPECT_EQ(listed.rooms[0].room, host.client->GetRoom());
+        EXPECT_EQ(listed.rooms[0].host, "P0");
+        EXPECT_EQ(listed.rooms[0].taken, 1);
+        EXPECT_EQ(listed.rooms[0].seats, DemoCardGame::kSeatCount);
+        EXPECT_FALSE(listed.rooms[0].started);
+        EXPECT_FALSE(listed.more);
+        EXPECT_EQ(browser.client->GetState(), RoomClientState::Connected);
+
+        ASSERT_TRUE(browser.client->Join(kUrl, listed.rooms[0].room, "P1").has_value());
+        ASSERT_TRUE(StepUntil([&] { return browser.client->IsInRoom(); }));
+        EXPECT_EQ(browser.links.links.size(), 1u);
+        EXPECT_EQ(browser.client->GetRoom(), host.client->GetRoom());
+
+        ASSERT_TRUE(host.client->Start().has_value());
+        ASSERT_TRUE(StepUntil([&] { return EveryoneSeesTheEnd(); }));
+        for (const auto& player : _players) {
+            EXPECT_EQ(player->TableSize(), kCardsInAHand);
+            EXPECT_TRUE(player->judge->leaks.empty());
+            EXPECT_EQ(player->Count(Kind::Error), 0u);
+        }
+    }
+
+    TEST_F(RoomClientHubTest, APrivateRoomIsNotSeenByABrowser) {
+        Player& host = AddPlayer();
+        ASSERT_TRUE(host.client->Host(kUrl, "cards", "P0").has_value());
+        ASSERT_TRUE(StepUntil([&] { return host.client->IsInRoom(); }));
+
+        Player& browser = AddPlayer();
+        ASSERT_TRUE(browser.client->ListRooms(kUrl, "cards").has_value());
+        ASSERT_TRUE(StepUntil([&] { return browser.Count(Kind::RoomList) == 1u; }));
+        EXPECT_TRUE(browser.client->GetRoomList().rooms.empty());
+        EXPECT_EQ(browser.Count(Kind::Error), 0u);
+    }
+
+    TEST_F(RoomClientHubTest, ABrowserThatAsksTooOftenGetsAnErrorAndKeepsItsConnection) {
+        Player& browser = AddPlayer();
+        ASSERT_TRUE(browser.client->ListRooms(kUrl, "cards").has_value());
+        ASSERT_TRUE(StepUntil([&] { return browser.Count(Kind::RoomList) == 1u; }));
+        // The burst is spent at once; the next list of the same moment is refused, the connection stays
+        for (int i = 0; i < RoomLimits::kListBurst; ++i) {
+            ASSERT_TRUE(browser.client->ListRooms(kUrl, "cards").has_value());
+        }
+        Step();
+        ASSERT_GE(browser.Count(Kind::Error), 1u);
+        const auto refused = std::find_if(browser.events.begin(), browser.events.end(), [](const RoomClientEvent& event) { return event.kind == Kind::Error; });
+        EXPECT_EQ(refused->code, RoomErrors::kRateLimited);
+        EXPECT_EQ(refused->ref, RoomMessageTypes::kListRooms);
+        EXPECT_EQ(browser.client->GetState(), RoomClientState::Connected);
+        EXPECT_EQ(browser.links.links.size(), 1u);
     }
 
     TEST_F(RoomClientHubTest, AClientThatReturnsAfterTheGraceFindsAComputerHasPlayedItsSeat) {

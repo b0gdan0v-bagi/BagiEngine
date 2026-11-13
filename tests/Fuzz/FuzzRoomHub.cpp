@@ -2,6 +2,7 @@
 #include "FuzzTargets.h"
 
 #include <BECore/Rooms/WireJudge.h>
+#include <EASTL/hash_set.h>
 #include <RoomServer/DemoCardGame.h>
 #include <Rooms/RoomCode.h>
 #include <Rooms/RoomHub.h>
@@ -58,6 +59,16 @@ namespace BECore::Fuzz {
             bool askedForSeat = false;
             eastl::vector<eastl::string> ownTokens;
         };
+
+        /// What the last text of a connection, as the hub read it, said about listing the room: none when it was no create_room
+        std::optional<bool> AsksToListTheRoom(eastl::string_view lastSent) {
+            const auto parsed = ParseClientMessage(lastSent, kMaxMessageBytes);
+            const auto* create = parsed ? std::get_if<CreateRoomMessage>(&*parsed) : nullptr;
+            if (create == nullptr) {
+                return std::nullopt;
+            }
+            return create->isPublic;
+        }
 
         class HubRun {
         public:
@@ -141,6 +152,8 @@ namespace BECore::Fuzz {
                     OnJoined(connection, *parsed);
                 } else if (*type == RoomMessageTypes::kView) {
                     OnView(connection, *parsed);
+                } else if (*type == RoomMessageTypes::kRooms) {
+                    OnRooms(connection, *parsed);
                 } else if (*type == RoomMessageTypes::kLeft) {
                     connection.room.clear();
                     connection.joinedSeat = -1;
@@ -180,11 +193,42 @@ namespace BECore::Fuzz {
                     FUZZ_CHECK(known->second == member);
                     FUZZ_CHECK(connection.lastSent.find(*token) != eastl::string::npos);
                 }
+                // The answer to a create_room is the only way a code becomes listable, and only when it asked for it (a code can come round again for a private room)
+                if (const auto listed = AsksToListTheRoom(connection.lastSent)) {
+                    if (*listed) {
+                        _publicRooms.insert(*room);
+                    } else {
+                        _publicRooms.erase(*room);
+                    }
+                }
                 connection.room = *room;
                 connection.joinedSeat = static_cast<int>(*seat);
                 connection.viewSeat = -1;
                 connection.askedForSeat = false;
                 connection.ownTokens.push_back(*token);
+            }
+
+            /// A list goes to a connection in no room, holds only rooms that their host made public (a private code is told to its members and nobody else), and
+            /// nothing the hub could not offer: the cap, a free seat, a lobby (the demo game lists no started room)
+            void OnRooms(const ConnectionModel& connection, const Json& message) {
+                FUZZ_CHECK(connection.room.empty());
+                FUZZ_CHECK(GetJsonString(message, "game") == std::optional<eastl::string>("demo"));
+                const Json* rooms = FindJsonMember(message, "rooms");
+                FUZZ_CHECK(rooms != nullptr && rooms->is_array() && rooms->size() <= RoomLimits::kMaxListedRooms);
+                eastl::hash_set<eastl::string> seen;
+                for (const Json& entry : *rooms) {
+                    const auto code = GetJsonString(entry, "room");
+                    const auto taken = GetJsonInt(entry, "taken");
+                    const auto seats = GetJsonInt(entry, "seats");
+                    FUZZ_CHECK(code && taken && seats);
+                    FUZZ_CHECK(_publicRooms.find(*code) != _publicRooms.end());
+                    FUZZ_CHECK(_hub.HasRoom(*code));
+                    FUZZ_CHECK(seen.insert(*code).second);
+                    FUZZ_CHECK(*seats == DemoCardGame::kSeatCount);
+                    FUZZ_CHECK(*taken >= 0 && *taken < *seats);
+                    FUZZ_CHECK(GetJsonString(entry, "host").has_value());
+                    FUZZ_CHECK(GetJsonBool(entry, "started") == std::optional<bool>(false));
+                }
             }
 
             void OnView(ConnectionModel& connection, const Json& message) {
@@ -218,6 +262,7 @@ namespace BECore::Fuzz {
             SeatedGameRegistry _registry;
             eastl::map<ConnectionId, ConnectionModel> _connections;
             eastl::hash_map<eastl::string, eastl::string> _tokenOwners;
+            eastl::hash_set<eastl::string> _publicRooms;  ///< The codes that were answered to a create_room with "public":true
             RoomTime _now = kStart;
             RoomHub _hub;
         };

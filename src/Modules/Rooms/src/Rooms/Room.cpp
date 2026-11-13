@@ -403,4 +403,17 @@ namespace BECore {
         return lobby;
     }
 
+    RoomListing Room::GetListing() const {
+        RoomListing listing;
+        listing.room = _code;
+        if (const Member* host = FindMember(_host)) {
+            listing.host = host->name;
+        }
+        listing.taken = static_cast<int>(_members.size());
+        listing.seats = _info.seatCount;
+        listing.started = _phase != RoomPhase::Lobby;
+        listing.options = _lobbyOptions;
+        return listing;
+    }
+
 }  // namespace BECore

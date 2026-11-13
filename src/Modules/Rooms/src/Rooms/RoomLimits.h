@@ -66,6 +66,13 @@ namespace BECore {
         inline constexpr int kServerJoinBurst = 100;
         inline constexpr std::chrono::seconds kServerJoinRefill{6};
 
+        /// The most rooms one `rooms` answer lists (a bound on the wire and on the work of a `list_rooms`); `more` says it was cut
+        inline constexpr size_t kMaxListedRooms = 20;
+
+        /// The `list_rooms` bucket of one connection: this many at once, then one per refill (a list is not a join, so it spends no failed-join budget)
+        inline constexpr int kListBurst = 5;
+        inline constexpr std::chrono::seconds kListRefill{2};
+
         /// A room in the lobby that has had no message but `ping` for this long is closed (0 in the settings: never)
         inline constexpr std::chrono::minutes kLobbyTimeout{15};
 
@@ -109,6 +116,11 @@ namespace BECore {
         std::chrono::milliseconds addressJoinRefill = RoomLimits::kAddressJoinRefill;
         int serverJoinBurst = RoomLimits::kServerJoinBurst;
         std::chrono::milliseconds serverJoinRefill = RoomLimits::kServerJoinRefill;
+        /// The most rooms one `rooms` answer lists (at most RoomLimits::kMaxListedRooms, which the hub clamps it to)
+        size_t maxListedRooms = RoomLimits::kMaxListedRooms;
+        /// The `list_rooms` bucket of one connection; a refill of zero never refills
+        int listBurst = RoomLimits::kListBurst;
+        std::chrono::milliseconds listRefill = RoomLimits::kListRefill;
         /// A lobby with no message but `ping` for this long is closed (`left {lobby_timeout}`); 0 is never
         std::chrono::milliseconds lobbyTimeout = RoomLimits::kLobbyTimeout;
         /// The times of every room of the hub

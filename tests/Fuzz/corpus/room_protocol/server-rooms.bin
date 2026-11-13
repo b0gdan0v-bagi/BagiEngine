@@ -1,0 +1,1 @@
+{"game":"demo","more":false,"rooms":[{"host":"Ann","options":{"firstSeat":2},"room":"ABCDE","seats":4,"started":false,"taken":1},{"host":"Bob","room":"FGHJK","seats":4,"started":false,"taken":3}],"type":"rooms","v":1}

@@ -18,8 +18,10 @@ namespace BECore::Fuzz {
         constexpr size_t kBigOptionsBytes = RoomHubInput::kMaxMessageBytes + 100;
         constexpr uint16_t kPlayPause = 900;
         constexpr uint16_t kLongPause = 40000;
+        constexpr uint16_t kListPause = 2100;  // a little over the refill of the list bucket
         constexpr int kPlayRounds = 6;
         constexpr int kFailedJoins = 6;
+        constexpr int kListFlood = RoomLimits::kListBurst + 2;
 
         FuzzBytes TextWithHeader(uint8_t header, eastl::string_view text) {
             FuzzBytes bytes;
@@ -50,6 +52,8 @@ namespace BECore::Fuzz {
             client("client-create-room-name-bidi.bin", CreateRoomMessage{eastl::string(kGame), "Mal\xE2\x80\xAEory", Json::object()});
             client("client-create-room-name-too-long.bin", CreateRoomMessage{eastl::string(kGame), eastl::string(RoomLimits::kMaxNameBytes + 1, 'n'), Json::object()});
             client("client-create-room-small-limit.bin", CreateRoomMessage{eastl::string(kGame), "Ann", options}, 1);
+            client("client-create-room-public.bin", CreateRoomMessage{eastl::string(kGame), "Ann", options, true});
+            client("client-list-rooms.bin", ListRoomsMessage{eastl::string(kGame)});
             JoinRoomMessage joinByName;
             joinByName.code = "ABCDE";
             joinByName.name = "Cy";
@@ -87,6 +91,15 @@ namespace BECore::Fuzz {
             server("server-error.bin", MakeErrorMessage(RoomErrors::kNotYourTurn, "it is not your turn", RoomMessageTypes::kAction));
             server("server-left.bin", MakeLeftMessage("closed"));
             server("server-pong.bin", MakePongMessage());
+            RoomListMessage list;
+            list.game = kGame;
+            Json listedOptions = Json::object();
+            listedOptions["firstSeat"] = 2;
+            list.rooms = {RoomListing{"ABCDE", "Ann", 1, DemoCardGame::kSeatCount, false, listedOptions}, RoomListing{"FGHJK", "Bob", 3, DemoCardGame::kSeatCount, false, Json::object()}};
+            server("server-rooms.bin", MakeRoomListMessage(list));
+            list.rooms.clear();
+            list.more = true;
+            server("server-rooms-empty.bin", MakeRoomListMessage(list));
         }
 
         // =============================================================================
@@ -122,8 +135,12 @@ namespace BECore::Fuzz {
                 _hub.OnMessage(RoomHubInput::ConnectionOf(number), text, _now);
             }
 
-            void Create(uint8_t number, eastl::string_view name, eastl::string_view game = kGame) {
-                Send(number, CreateRoomMessage{eastl::string(game), eastl::string(name), Json::object()});
+            void Create(uint8_t number, eastl::string_view name, eastl::string_view game = kGame, bool isPublic = false) {
+                Send(number, CreateRoomMessage{eastl::string(game), eastl::string(name), Json::object(), isPublic});
+            }
+
+            void List(uint8_t number, eastl::string_view game = kGame) {
+                Send(number, ListRoomsMessage{eastl::string(game)});
             }
 
             void JoinByName(uint8_t number, eastl::string_view code, eastl::string_view name) {
@@ -153,6 +170,11 @@ namespace BECore::Fuzz {
                 return _known[number].room;
             }
 
+            /// The code of the first room of the last list the connection was sent; empty when it has none
+            [[nodiscard]] const eastl::string& FirstListedOf(uint8_t number) {
+                return _known[number].listed;
+            }
+
             [[nodiscard]] const eastl::string& TokenOf(uint8_t number) {
                 return _known[number].token;
             }
@@ -165,6 +187,7 @@ namespace BECore::Fuzz {
             struct Known {
                 eastl::string room;
                 eastl::string token;
+                eastl::string listed;
                 uint64_t version = 0;
                 Json actions = Json::array();
             };
@@ -181,6 +204,12 @@ namespace BECore::Fuzz {
                     if (type == RoomMessageTypes::kJoined) {
                         known.room = GetJsonString(*parsed, "room").value_or(eastl::string());
                         known.token = GetJsonString(*parsed, "token").value_or(eastl::string());
+                    } else if (type == RoomMessageTypes::kRooms) {
+                        known.listed.clear();
+                        const Json* rooms = FindJsonMember(*parsed, "rooms");
+                        if (rooms && rooms->is_array() && !rooms->empty()) {
+                            known.listed = GetJsonString((*rooms)[0], "room").value_or(eastl::string());
+                        }
                     } else if (type == RoomMessageTypes::kView) {
                         known.version = static_cast<uint64_t>(GetJsonInt(*parsed, "version").value_or(0));
                         if (const Json* actions = FindJsonMember(*parsed, "actions")) {
@@ -282,6 +311,36 @@ namespace BECore::Fuzz {
             return recorder.TakeBytes();
         }
 
+        /// Two public rooms and a private one are listed by a connection in no room; it joins the first from the list; a member asks for a list and is refused;
+        /// a list of an unknown game and a list flood past the bucket
+        FuzzBytes RecordList() {
+            Recorder recorder;
+            for (uint8_t number = 0; number < 4; ++number) {
+                recorder.Connect(number);
+            }
+            recorder.List(0);
+            recorder.Create(1, "Open", kGame, true);
+            recorder.Create(2, "Closed");
+            recorder.Connect(4);
+            recorder.List(4);
+            recorder.List(4, "nogame");
+            recorder.JoinByName(4, recorder.FirstListedOf(4), "Browser");
+            recorder.List(4);
+            recorder.Send(1, StartMessage{});
+            recorder.Create(3, "Second", kGame, true);
+            recorder.Connect(5);
+            for (int attempt = 0; attempt < kListFlood; ++attempt) {
+                recorder.List(5);
+            }
+            recorder.Tick(kListPause);
+            recorder.List(5);
+            recorder.Disconnect(1);
+            recorder.Tick(kListPause);
+            recorder.List(5);
+            recorder.Tick(kLongPause);
+            return recorder.TakeBytes();
+        }
+
         /// More connections than the hub takes and more rooms than it holds
         FuzzBytes RecordFullHub() {
             Recorder recorder;
@@ -356,6 +415,7 @@ namespace BECore::Fuzz {
         seeds.push_back({kRoomHubFolder, "reconnect-by-token.bin", RecordReconnect()});
         seeds.push_back({kRoomHubFolder, "refusals.bin", RecordRefusals()});
         seeds.push_back({kRoomHubFolder, "full-hub.bin", RecordFullHub()});
+        seeds.push_back({kRoomHubFolder, "list.bin", RecordList()});
         AddControlSeeds(seeds);
     }
 

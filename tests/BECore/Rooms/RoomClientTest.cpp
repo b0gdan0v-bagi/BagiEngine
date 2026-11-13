@@ -1151,6 +1151,206 @@ namespace BECore::Tests {
         EXPECT_FALSE(_client->GetSession().IsValid());
     }
 
+    // ---- The list of public rooms -------------------------------------------------------------------------------------------------
+
+    namespace {
+
+        eastl::string RoomsAnswer(bool more = false) {
+            RoomListMessage list;
+            list.game = "cards";
+            RoomListing first;
+            first.room = kRoom;
+            first.host = "Ann";
+            first.taken = 1;
+            first.seats = 4;
+            list.rooms.push_back(first);
+            RoomListing second;
+            second.room = "FGHJK";
+            second.host = "Bob";
+            second.taken = 3;
+            second.seats = 4;
+            second.options = Json::object({{"rounds", 4}});
+            list.rooms.push_back(second);
+            list.more = more;
+            return MakeRoomListMessage(list);
+        }
+
+    }  // namespace
+
+    TEST_F(RoomClientTest, ListRoomsAsksAfterOpenedAndTheAnswerFillsTheListAndGivesTheEvent) {
+        ASSERT_TRUE(_client->ListRooms(kUrl, "cards").has_value());
+        FakeLink& link = _transports.Last();
+        Pump();
+        EXPECT_TRUE(link.sent.empty());
+        link.PushOpened();
+        Pump();
+        EXPECT_EQ(_client->GetState(), RoomClientState::Connected);
+        ASSERT_EQ(link.sent.size(), 1u);
+        const auto parsed = SentParsed(link, 0);
+        const auto* list = AsSent<ListRoomsMessage>(parsed);
+        ASSERT_NE(list, nullptr);
+        EXPECT_EQ(list->game, "cards");
+        EXPECT_TRUE(_client->GetRoomList().rooms.empty());
+
+        _events.clear();
+        Receive(link, RoomsAnswer(true));
+        EXPECT_EQ(Kinds(), (eastl::vector<RoomClientEventKind>{Kind::RoomList}));
+        const RoomListMessage& rooms = _client->GetRoomList();
+        EXPECT_EQ(rooms.game, "cards");
+        ASSERT_EQ(rooms.rooms.size(), 2u);
+        EXPECT_EQ(rooms.rooms[0].room, kRoom);
+        EXPECT_EQ(rooms.rooms[0].host, "Ann");
+        EXPECT_EQ(rooms.rooms[1].taken, 3);
+        EXPECT_EQ(rooms.rooms[1].options, Json::object({{"rounds", 4}}));
+        EXPECT_TRUE(rooms.more);
+        // A list is no room and no join: the state stays, and a failed join is not waited for
+        EXPECT_EQ(_client->GetState(), RoomClientState::Connected);
+        EXPECT_FALSE(_client->GetSession().IsValid());
+    }
+
+    TEST_F(RoomClientTest, ASecondListOnTheOpenConnectionReplacesTheFirstAnswer) {
+        ASSERT_TRUE(_client->ListRooms(kUrl, "cards").has_value());
+        FakeLink& link = _transports.Last();
+        link.PushOpened();
+        link.PushText(RoomsAnswer());
+        Pump();
+        EXPECT_EQ(_client->GetRoomList().rooms.size(), 2u);
+
+        // A list awaits no join, so the same connection serves the next one at once
+        ASSERT_TRUE(_client->ListRooms(kUrl, "cards").has_value());
+        EXPECT_EQ(_transports.Count(), 1u);
+        EXPECT_EQ(link.sent.size(), 2u);
+        RoomListMessage empty;
+        empty.game = "cards";
+        Receive(link, MakeRoomListMessage(empty));
+        EXPECT_TRUE(_client->GetRoomList().rooms.empty());
+        EXPECT_FALSE(_client->GetRoomList().more);
+        EXPECT_EQ(_events.back().kind, Kind::RoomList);
+
+        // Another address is another connection: not served by this one
+        EXPECT_EQ(_client->ListRooms("ws://127.0.0.1:9001", "cards").error().code, RoomClientErrors::kWrongState);
+    }
+
+    TEST_F(RoomClientTest, ARateLimitedListIsAnErrorAndKeepsTheConnectionAndTheLastAnswer) {
+        ASSERT_TRUE(_client->ListRooms(kUrl, "cards").has_value());
+        FakeLink& link = _transports.Last();
+        link.PushOpened();
+        link.PushText(RoomsAnswer());
+        Pump();
+        _events.clear();
+
+        ASSERT_TRUE(_client->ListRooms(kUrl, "cards").has_value());
+        Receive(link, MakeErrorMessage(RoomErrors::kRateLimited, "slow down", RoomMessageTypes::kListRooms));
+        ASSERT_EQ(_events.size(), 1u);
+        EXPECT_EQ(_events[0].kind, Kind::Error);
+        EXPECT_EQ(_events[0].code, RoomErrors::kRateLimited);
+        EXPECT_EQ(_events[0].ref, RoomMessageTypes::kListRooms);
+        EXPECT_EQ(_client->GetState(), RoomClientState::Connected);
+        EXPECT_FALSE(link.closeCalled);
+        EXPECT_EQ(_client->GetRoomList().rooms.size(), 2u);
+
+        // The connection serves a join of a listed code (the same message as a code typed by hand)
+        ASSERT_TRUE(_client->Join(kUrl, kRoom, "Cy").has_value());
+        EXPECT_EQ(_transports.Count(), 1u);
+        ASSERT_EQ(link.sent.size(), 3u);
+        const auto parsed = SentParsed(link, 2);
+        const auto* join = AsSent<JoinRoomMessage>(parsed);
+        ASSERT_NE(join, nullptr);
+        EXPECT_EQ(join->code, kRoom);
+        EXPECT_EQ(join->name, "Cy");
+        link.PushText(MakeJoinedMessage(kRoom, 2, kToken, 1, false));
+        Pump();
+        EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
+        EXPECT_TRUE(_client->GetRoomList().rooms.empty());
+    }
+
+    TEST_F(RoomClientTest, ARefusedListDoesNotClearTheWaitForAJoinAnswer) {
+        ASSERT_TRUE(_client->Join(kUrl, kRoom, "Cy").has_value());
+        FakeLink& link = _transports.Last();
+        link.PushOpened();
+        Pump();
+        // A join is under way: the list is refused by the state, and a stray list error does not end the wait
+        EXPECT_EQ(_client->ListRooms(kUrl, "cards").error().code, RoomClientErrors::kWrongState);
+        Receive(link, MakeErrorMessage(RoomErrors::kRateLimited, "slow down", RoomMessageTypes::kListRooms));
+        EXPECT_EQ(_client->Join(kUrl, kRoom, "Cy").error().code, RoomClientErrors::kWrongState);
+    }
+
+    TEST_F(RoomClientTest, ARoomsMessageInARoomIsDropped) {
+        FakeLink& link = EnterAsHost();
+        _events.clear();
+        Receive(link, RoomsAnswer());
+        EXPECT_TRUE(_events.empty());
+        EXPECT_TRUE(_client->GetRoomList().rooms.empty());
+        EXPECT_EQ(_client->GetState(), RoomClientState::InRoom);
+    }
+
+    TEST_F(RoomClientTest, AMalformedRoomsMessageIsABadServerMessageAndKeepsTheLastAnswer) {
+        ASSERT_TRUE(_client->ListRooms(kUrl, "cards").has_value());
+        FakeLink& link = _transports.Last();
+        link.PushOpened();
+        link.PushText(RoomsAnswer());
+        Pump();
+        _events.clear();
+
+        // taken above seats, and a code in lower case
+        Receive(link, R"({"v":1,"type":"rooms","game":"cards","rooms":[{"room":"ABCDE","host":"Ann","taken":5,"seats":4,"started":false}],"more":false})");
+        Receive(link, R"({"v":1,"type":"rooms","game":"cards","rooms":[{"room":"abcde","host":"Ann","taken":1,"seats":4,"started":false}],"more":false})");
+        ASSERT_EQ(_events.size(), 2u);
+        EXPECT_EQ(_events[0].kind, Kind::Error);
+        EXPECT_EQ(_events[0].code, RoomClientErrors::kBadServerMessage);
+        EXPECT_EQ(_events[1].code, RoomClientErrors::kBadServerMessage);
+        EXPECT_EQ(_client->GetRoomList().rooms.size(), 2u);
+        EXPECT_EQ(_client->GetState(), RoomClientState::Connected);
+    }
+
+    TEST_F(RoomClientTest, AConnectionLostWhileBrowsingEndsWithClosedAndForgetsTheList) {
+        ASSERT_TRUE(_client->ListRooms(kUrl, "cards").has_value());
+        FakeLink& link = _transports.Last();
+        link.PushOpened();
+        link.PushText(RoomsAnswer());
+        Pump();
+        _events.clear();
+
+        Lose(link);
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+        ASSERT_FALSE(_events.empty());
+        EXPECT_EQ(_events.back().kind, Kind::Closed);
+        EXPECT_TRUE(_client->GetRoomList().rooms.empty());
+        // No reconnect: the client does not open another connection by itself
+        Advance(seconds(10));
+        EXPECT_EQ(_transports.Count(), 1u);
+    }
+
+    TEST_F(RoomClientTest, ListRoomsOnAClosedTransportThatCannotStartIsAnErrorOfTheCommand) {
+        _transports.FailNextOpen("connection refused");
+        const auto listed = _client->ListRooms(kUrl, "cards");
+        ASSERT_FALSE(listed.has_value());
+        EXPECT_EQ(listed.error().code, RoomClientErrors::kConnectFailed);
+        EXPECT_EQ(_client->GetState(), RoomClientState::Disconnected);
+    }
+
+    TEST_F(RoomClientTest, HostWithPublicSendsThePublicMember) {
+        ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann", Json::object(), true).has_value());
+        FakeLink& link = _transports.Last();
+        link.PushOpened();
+        Pump();
+        ASSERT_EQ(link.sent.size(), 1u);
+        EXPECT_NE(link.sent[0].find("\"public\":true"), eastl::string::npos);
+        const auto parsed = SentParsed(link, 0);
+        const auto* create = AsSent<CreateRoomMessage>(parsed);
+        ASSERT_NE(create, nullptr);
+        EXPECT_TRUE(create->isPublic);
+    }
+
+    TEST_F(RoomClientTest, HostIsPrivateByDefaultAndSendsNoPublicMember) {
+        ASSERT_TRUE(_client->Host(kUrl, "cards", "Ann").has_value());
+        FakeLink& link = _transports.Last();
+        link.PushOpened();
+        Pump();
+        ASSERT_EQ(link.sent.size(), 1u);
+        EXPECT_EQ(link.sent[0].find("public"), eastl::string::npos);
+    }
+
     // ---- Allocations --------------------------------------------------------------------------------------------------------------
 
 #if BE_PROFILER_ALLOC

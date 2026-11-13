@@ -25,12 +25,19 @@ namespace BECore {
 
     RoomClient::~RoomClient() = default;
 
-    std::expected<void, ControlError> RoomClient::Host(eastl::string_view url, eastl::string_view game, eastl::string_view name, const Json& options) {
+    std::expected<void, ControlError> RoomClient::Host(eastl::string_view url, eastl::string_view game, eastl::string_view name, const Json& options, bool isPublic) {
         CreateRoomMessage message;
         message.game = eastl::string(game);
         message.name = eastl::string(name);
         message.options = options;
+        message.isPublic = isPublic;
         return BeginRequest(url, SerializeClientMessage(message));
+    }
+
+    std::expected<void, ControlError> RoomClient::ListRooms(eastl::string_view url, eastl::string_view game) {
+        ListRoomsMessage message;
+        message.game = eastl::string(game);
+        return BeginRequest(url, SerializeClientMessage(message), false);
     }
 
     std::expected<void, ControlError> RoomClient::Join(eastl::string_view url, eastl::string_view code, eastl::string_view name) {
@@ -45,10 +52,10 @@ namespace BECore {
         return BeginRequest(url, SerializeClientMessage(message));
     }
 
-    std::expected<void, ControlError> RoomClient::BeginRequest(eastl::string_view url, eastl::string firstMessage) {
+    std::expected<void, ControlError> RoomClient::BeginRequest(eastl::string_view url, eastl::string firstMessage, bool awaitsJoin) {
         if (_state == RoomClientState::Connected && !_awaitingJoin && url == _url) {
             // The connection that is open serves the request
-            _awaitingJoin = true;
+            _awaitingJoin = awaitsJoin;
             if (!_transport->SendText(firstMessage)) {
                 _awaitingJoin = false;
                 return Fail(RoomClientErrors::kWrongState, "the connection is closing");
@@ -58,7 +65,7 @@ namespace BECore {
         if (_state != RoomClientState::Disconnected) {
             return Fail(RoomClientErrors::kWrongState, "the client is connected: leave the room or disconnect first");
         }
-        if (auto started = StartConnection(url, std::move(firstMessage)); !started) {
+        if (auto started = StartConnection(url, std::move(firstMessage), awaitsJoin); !started) {
             return started;
         }
         _endReason.clear();
@@ -66,7 +73,7 @@ namespace BECore {
         return {};
     }
 
-    std::expected<void, ControlError> RoomClient::StartConnection(eastl::string_view url, eastl::string firstMessage) {
+    std::expected<void, ControlError> RoomClient::StartConnection(eastl::string_view url, eastl::string firstMessage, bool awaitsJoin) {
         eastl::unique_ptr<IRoomTransport> transport = _settings.transportFactory ? _settings.transportFactory() : MakeDefaultRoomTransport();
         if (!transport) {
             return Fail(RoomClientErrors::kTransportUnavailable, "there is no way to connect to a room server in this build");
@@ -80,6 +87,7 @@ namespace BECore {
         _transport = std::move(transport);
         _url = eastl::string(url);
         _firstMessage = std::move(firstMessage);
+        _firstMessageAwaitsJoin = awaitsJoin;
         _transportOpened = false;
         _connectStart.reset();
         return {};
@@ -244,7 +252,7 @@ namespace BECore {
                     Emit(RoomClientEventKind::Connected);
                 }
                 if (!_firstMessage.empty()) {
-                    _awaitingJoin = true;
+                    _awaitingJoin = _firstMessageAwaitsJoin;
                     if (!_transport->SendText(_firstMessage)) {
                         // The connection ended already: its Closed is next
                         _awaitingJoin = false;
@@ -279,6 +287,7 @@ namespace BECore {
                        [&](ErrorMessage& message) { OnError(std::move(message)); },
                        [&](LeftMessage& message) { OnLeft(std::move(message)); },
                        [](const PongMessage&) {},
+                       [&](RoomListMessage& message) { OnRoomList(std::move(message)); },
                        // A newer server may send messages this client does not know
                        [](const UnknownServerMessage&) {},
                    },
@@ -338,12 +347,24 @@ namespace BECore {
             GiveUp(gone ? RoomClientCloseReasons::kRoomGone : eastl::string_view(message.code), message.message, gone);
             return;
         }
-        _awaitingJoin = false;
+        if (message.ref != RoomMessageTypes::kListRooms) {
+            // A refused list is no answer to a join
+            _awaitingJoin = false;
+        }
         if (message.ref == RoomMessageTypes::kChooseSeat) {
             _seat = _seatBeforeRequest;
         }
         _lastError = MakeControlError(message.code, message.message);
         Emit(RoomClientEventKind::Error, message.code, message.message, message.ref);
+    }
+
+    void RoomClient::OnRoomList(RoomListMessage&& message) {
+        if (_state != RoomClientState::Connected) {
+            LOG_WARNING("Room client: a rooms message outside a connection without a room was dropped");
+            return;
+        }
+        _roomList = std::move(message);
+        Emit(RoomClientEventKind::RoomList);
     }
 
     void RoomClient::OnLeft(LeftMessage&& message) {
@@ -486,6 +507,7 @@ namespace BECore {
         _seatBeforeRequest = -1;
         _host = false;
         _lobby = {};
+        _roomList = {};
         _hasView = false;
         _view = Json::object();
         _actions = Json::array();

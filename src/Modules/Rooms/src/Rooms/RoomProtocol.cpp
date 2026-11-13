@@ -101,13 +101,22 @@ namespace BECore {
             return std::move(*name);
         }
 
-        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseCreateRoom(const Json& root) {
+        /// The `game` member of `create_room` and `list_rooms`: a string of 1 to kMaxGameNameBytes bytes
+        [[nodiscard]] std::expected<eastl::string, ControlError> RequireGameName(const Json& root) {
             auto game = RequireString(root, "game");
             if (!game) {
                 return std::unexpected(game.error());
             }
             if (game->empty() || game->size() > RoomLimits::kMaxGameNameBytes) {
                 return BadMessage(Format("'game' must be 1 to {} bytes", RoomLimits::kMaxGameNameBytes));
+            }
+            return std::move(*game);
+        }
+
+        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseCreateRoom(const Json& root) {
+            auto game = RequireGameName(root);
+            if (!game) {
+                return std::unexpected(game.error());
             }
             auto name = RequireName(root);
             if (!name) {
@@ -122,7 +131,21 @@ namespace BECore {
                 }
                 message.options = *options;
             }
+            if (const Json* isPublic = FindJsonMember(root, "public")) {
+                if (!isPublic->is_boolean()) {
+                    return BadMessage("'public' must be a boolean");
+                }
+                message.isPublic = isPublic->get<bool>();
+            }
             return ClientMessage(std::move(message));
+        }
+
+        [[nodiscard]] std::expected<ClientMessage, ControlError> ParseListRooms(const Json& root) {
+            auto game = RequireGameName(root);
+            if (!game) {
+                return std::unexpected(game.error());
+            }
+            return ClientMessage(ListRoomsMessage{std::move(*game)});
         }
 
         [[nodiscard]] std::expected<ClientMessage, ControlError> ParseJoinRoom(const Json& root) {
@@ -353,6 +376,80 @@ namespace BECore {
             return ServerMessage(std::move(message));
         }
 
+        [[nodiscard]] std::expected<RoomListing, ControlError> ParseRoomListing(const Json& entry) {
+            if (!entry.is_object()) {
+                return BadMessage("an entry of 'rooms' must be an object");
+            }
+            RoomListing listing;
+            auto room = RequireString(entry, "room");
+            if (!room) {
+                return std::unexpected(room.error());
+            }
+            if (NormalizeRoomCode(*room) != std::optional<eastl::string>(*room)) {
+                return BadMessage("a room of 'rooms' has no well-formed code");
+            }
+            listing.room = std::move(*room);
+            auto host = RequireString(entry, "host");
+            if (!host) {
+                return std::unexpected(host.error());
+            }
+            listing.host = std::move(*host);
+            const auto seats = RequireInt(entry, "seats", 1, static_cast<int64_t>(RoomLimits::kMaxLobbySeats));
+            if (!seats) {
+                return std::unexpected(seats.error());
+            }
+            listing.seats = static_cast<int>(*seats);
+            const auto taken = RequireInt(entry, "taken", 0, *seats);
+            if (!taken) {
+                return std::unexpected(taken.error());
+            }
+            listing.taken = static_cast<int>(*taken);
+            const auto started = RequireBool(entry, "started");
+            if (!started) {
+                return std::unexpected(started.error());
+            }
+            listing.started = *started;
+            if (const Json* options = FindJsonMember(entry, "options"); options != nullptr) {
+                if (!options->is_object() || options->size() > RoomLimits::kMaxLobbyOptions) {
+                    return BadMessage(Format("'options' must be an object of at most {} members", RoomLimits::kMaxLobbyOptions));
+                }
+                for (auto it = options->begin(); it != options->end(); ++it) {
+                    if (!it.value().is_boolean() && !it.value().is_number_integer()) {
+                        return BadMessage("'options' may hold only booleans and integers");
+                    }
+                }
+                listing.options = *options;
+            }
+            return listing;
+        }
+
+        [[nodiscard]] std::expected<ServerMessage, ControlError> ParseRoomList(const Json& root) {
+            RoomListMessage message;
+            auto game = RequireString(root, "game");
+            if (!game) {
+                return std::unexpected(game.error());
+            }
+            message.game = std::move(*game);
+            const auto more = RequireBool(root, "more");
+            if (!more) {
+                return std::unexpected(more.error());
+            }
+            message.more = *more;
+            const Json* rooms = FindJsonMember(root, "rooms");
+            if (rooms == nullptr || !rooms->is_array() || rooms->size() > RoomLimits::kMaxListedRooms) {
+                return BadMessage(Format("'rooms' must be an array of at most {} rooms", RoomLimits::kMaxListedRooms));
+            }
+            message.rooms.reserve(rooms->size());
+            for (const Json& entry : *rooms) {
+                auto listing = ParseRoomListing(entry);
+                if (!listing) {
+                    return std::unexpected(listing.error());
+                }
+                message.rooms.push_back(std::move(*listing));
+            }
+            return ServerMessage(std::move(message));
+        }
+
         [[nodiscard]] std::expected<ServerMessage, ControlError> ParseView(const Json& root) {
             ViewMessage message;
             auto room = RequireString(root, "room");
@@ -468,6 +565,9 @@ namespace BECore {
         if (*type == RoomMessageTypes::kPing) {
             return ClientMessage(PingMessage{});
         }
+        if (*type == RoomMessageTypes::kListRooms) {
+            return ParseListRooms(root);
+        }
         return BadMessage("unknown message type");
     }
 
@@ -480,6 +580,7 @@ namespace BECore {
                               [](const ActionMessage&) { return RoomMessageTypes::kAction; },
                               [](const LeaveMessage&) { return RoomMessageTypes::kLeave; },
                               [](const PingMessage&) { return RoomMessageTypes::kPing; },
+                              [](const ListRoomsMessage&) { return RoomMessageTypes::kListRooms; },
                           },
                           message);
     }
@@ -491,6 +592,9 @@ namespace BECore {
                            root["game"] = MakeJsonString(m.game);
                            root["name"] = MakeJsonString(m.name);
                            root["options"] = m.options;
+                           if (m.isPublic) {
+                               root["public"] = true;
+                           }
                        },
                        [&](const JoinRoomMessage& m) {
                            root["code"] = MakeJsonString(m.code);
@@ -508,6 +612,7 @@ namespace BECore {
                        [](const StartMessage&) {},
                        [](const LeaveMessage&) {},
                        [](const PingMessage&) {},
+                       [&](const ListRoomsMessage& m) { root["game"] = MakeJsonString(m.game); },
                    },
                    message);
         return DumpJson(root);
@@ -568,6 +673,27 @@ namespace BECore {
         if (lobby.options.is_object() && !lobby.options.empty()) {
             root["options"] = lobby.options;
         }
+        return DumpJson(root);
+    }
+
+    eastl::string MakeRoomListMessage(const RoomListMessage& list) {
+        Json root = MakeEnvelope(RoomMessageTypes::kRooms);
+        root["game"] = MakeJsonString(list.game);
+        Json rooms = Json::array();
+        for (const RoomListing& listing : list.rooms) {
+            Json entry = Json::object();
+            entry["room"] = MakeJsonString(listing.room);
+            entry["host"] = MakeJsonString(listing.host);
+            entry["taken"] = listing.taken;
+            entry["seats"] = listing.seats;
+            entry["started"] = listing.started;
+            if (listing.options.is_object() && !listing.options.empty()) {
+                entry["options"] = listing.options;
+            }
+            rooms.push_back(std::move(entry));
+        }
+        root["rooms"] = std::move(rooms);
+        root["more"] = list.more;
         return DumpJson(root);
     }
 
@@ -649,6 +775,9 @@ namespace BECore {
         if (*type == RoomMessageTypes::kPong) {
             return ServerMessage(PongMessage{});
         }
+        if (*type == RoomMessageTypes::kRooms) {
+            return ParseRoomList(root);
+        }
         return ServerMessage(UnknownServerMessage{std::move(*type)});
     }
 
@@ -660,6 +789,7 @@ namespace BECore {
                               [](const ErrorMessage&) { return RoomMessageTypes::kError; },
                               [](const LeftMessage&) { return RoomMessageTypes::kLeft; },
                               [](const PongMessage&) { return RoomMessageTypes::kPong; },
+                              [](const RoomListMessage&) { return RoomMessageTypes::kRooms; },
                               [](const UnknownServerMessage& m) { return eastl::string_view(m.type); },
                           },
                           message);

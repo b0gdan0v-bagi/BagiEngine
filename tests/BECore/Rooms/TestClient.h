@@ -100,6 +100,8 @@ namespace BECore::Tests {
             EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake", FakeSeatedGame::kSeatCount}, factory));
             // The same game with public options: the lobby shows `open` and `count` of `create_room`
             EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake-public", FakeSeatedGame::kSeatCount, {"open", "count"}}, factory));
+            // The same game that also lists its started public rooms that have a free seat
+            EXPECT_TRUE(_registry.Register(SeatedGameInfo{"fake-started", FakeSeatedGame::kSeatCount, {}, true}, factory));
         }
 
         /// Small times for tests: no computer delay, the usual grace and timeouts
@@ -145,6 +147,11 @@ namespace BECore::Tests {
             return _clients[id];
         }
 
+        /// Every client the harness has made, with everything each was sent
+        [[nodiscard]] const eastl::map<ConnectionId, TestClient>& Clients() const {
+            return _clients;
+        }
+
         /// Sends raw text as if it came from the connection
         void SendText(ConnectionId id, eastl::string_view text) {
             _startingRoom = Client(id).roomCode;
@@ -156,8 +163,13 @@ namespace BECore::Tests {
             SendText(id, SerializeClientMessage(message));
         }
 
-        void Create(ConnectionId id, eastl::string_view name, eastl::string_view game = "fake", Json options = Json::object()) {
-            Send(id, CreateRoomMessage{eastl::string(game), eastl::string(name), std::move(options)});
+        void Create(ConnectionId id, eastl::string_view name, eastl::string_view game = "fake", Json options = Json::object(), bool isPublic = false) {
+            Send(id, CreateRoomMessage{eastl::string(game), eastl::string(name), std::move(options), isPublic});
+        }
+
+        /// `list_rooms` for @p game
+        void List(ConnectionId id, eastl::string_view game = "fake") {
+            Send(id, ListRoomsMessage{eastl::string(game)});
         }
 
         void JoinByName(ConnectionId id, eastl::string_view code, eastl::string_view name) {

@@ -119,6 +119,57 @@ namespace BECore::Tests {
         EXPECT_EQ(harness.Client(hostA).Count(RoomMessageTypes::kLobby), 1u);
     }
 
+    TEST(RoomHostileTest, ListingAThousandTimesBetweenGuessesLearnsNoPrivateCodeAndTheCloseAfterWrongCodesStillComes) {
+        HubHarness harness;
+        eastl::vector<eastl::string> privateCodes;
+        eastl::vector<ConnectionId> members;
+        for (int i = 0; i < 3; ++i) {
+            const ConnectionId host = harness.Connect();
+            harness.Create(host, Format("Private{}", i).c_str());
+            privateCodes.push_back(harness.Client(host).roomCode);
+            members.push_back(host);
+        }
+        const ConnectionId publicHost = harness.Connect();
+        harness.Create(publicHost, "Open", "fake", Json::object(), true);
+        members.push_back(publicHost);
+
+        // Many connections, each of which lists as much as it may and guesses a wrong code now and then; every one is closed in the end
+        eastl::vector<ConnectionId> attackers;
+        int lists = 0;
+        while (lists < 1000) {
+            const ConnectionId attacker = harness.Connect("10.0.0.9");
+            attackers.push_back(attacker);
+            for (int i = 0; i < 100 && !harness.Client(attacker).closed; ++i) {
+                eastl::string guess = Format("{}{}{}{}{}", "ABCDEFGH"[i % 8], "JKLMNPQR"[(i / 8) % 8], "STUVWXYZ"[lists % 8], "23456789"[i % 8], "ABCDEFGH"[(lists / 8) % 8]);
+                SendRaw(harness, attacker, SerializeClientMessage(ListRoomsMessage{"fake"}));
+                ++lists;
+                if (i % 7 == 6) {
+                    SendRaw(harness, attacker, SerializeClientMessage(JoinRoomMessage{guess, "Eve", {}}));
+                }
+            }
+            harness.Advance(minutes(2));
+        }
+        EXPECT_GE(lists, 1000);
+        for (const ConnectionId attacker : attackers) {
+            for (const eastl::string& code : privateCodes) {
+                EXPECT_EQ(CountTextsContaining(harness.Client(attacker), code), 0u) << code.c_str();
+            }
+            EXPECT_GE(harness.Client(attacker).Count(RoomMessageTypes::kRooms), 1u);
+        }
+        EXPECT_EQ(harness.GetLeakCount(), 0u);
+
+        // The failed-join limit is the same as without lists: the fifth wrong code in a row closes the connection, lists in between or not
+        harness.Advance(minutes(10));
+        const ConnectionId guesser = harness.Connect("10.0.0.10");
+        for (int i = 0; i < RoomLimits::kMaxFailedJoinsInRow; ++i) {
+            EXPECT_FALSE(harness.Client(guesser).closed) << i;
+            SendRaw(harness, guesser, SerializeClientMessage(ListRoomsMessage{"fake"}));
+            SendRaw(harness, guesser, SerializeClientMessage(JoinRoomMessage{"ZZZZ2", "Eve", {}}));
+        }
+        EXPECT_TRUE(harness.Client(guesser).closed);
+        EXPECT_EQ(harness.Client(guesser).closeReason, "too_many_failed_joins");
+    }
+
     TEST(RoomHostileTest, AFewWrongTokensForOneRoomCloseTheConnectionLikeWrongCodes) {
         HubHarness harness;
         const ConnectionId hostA = harness.Connect();
