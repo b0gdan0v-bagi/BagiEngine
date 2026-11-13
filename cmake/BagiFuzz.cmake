@@ -3,7 +3,9 @@
 # =============================================================================
 # Included once by cmake/BagiEngine.cmake before the first target, so the flags reach every target (the vendored libraries too).
 #
-#   ENGINE_SANITIZE        ""   A ';' list of sanitizers for all code, compile and link, with frame pointers. Clang and GCC only.
+#   ENGINE_SANITIZE        ""   A ';' list of sanitizers for all code, compile and link, with frame pointers. Clang and GCC only: on Windows
+#                               the compiler is clang (preset windows-clang-asan), and with address its runtime DLL is copied next to the
+#                               executables at configure.
 #                               address    AddressSanitizer (-fsanitize=address)
 #                               undefined  UndefinedBehaviorSanitizer with float-cast-overflow (a float to integer conversion out of range;
 #                                          not in -fsanitize=undefined) and -fno-sanitize-recover (a finding stops the process)
@@ -40,8 +42,9 @@ endforeach()
 
 if(BE_SANITIZERS)
     set(BE_SANITIZED ON)
-    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU" OR MSVC)
-        message(FATAL_ERROR "Sanitizers (ENGINE_SANITIZE=${BE_SANITIZERS}, ENGINE_FUZZ=${ENGINE_FUZZ}) need Clang or GCC (-fsanitize); this compiler is ${CMAKE_CXX_COMPILER_ID}")
+    # Not MSVC: that variable is also true for clang with the MSVC target, which is the compiler of the Windows sanitizer preset
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        message(FATAL_ERROR "Sanitizers (ENGINE_SANITIZE=${BE_SANITIZERS}, ENGINE_FUZZ=${ENGINE_FUZZ}) need Clang or GCC (-fsanitize); this compiler is ${CMAKE_CXX_COMPILER_ID} (cl has no -fsanitize here: on Windows use clang, preset windows-clang-asan)")
     endif()
 
     set(BE_SANITIZER_FLAGS -fno-omit-frame-pointer)
@@ -58,6 +61,24 @@ if(BE_SANITIZERS)
         add_compile_options(-fsanitize-ignorelist=${CMAKE_CURRENT_LIST_DIR}/sanitizers/ignorelist.txt)
     endif()
     add_link_options(${BE_SANITIZER_FLAGS})
+
+    # The Windows ASan runtime is a DLL the executables load at start (without it they stop with 0xc0000135): copy it next to them
+    if(WIN32 AND "address" IN_LIST BE_SANITIZERS)
+        execute_process(COMMAND ${CMAKE_CXX_COMPILER} --print-resource-dir
+            OUTPUT_VARIABLE BE_CLANG_RESOURCE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        file(TO_CMAKE_PATH "${BE_CLANG_RESOURCE_DIR}" BE_CLANG_RESOURCE_DIR)
+        # lib/windows/clang_rt.asan_dynamic-x86_64.dll or lib/x86_64-pc-windows-msvc/clang_rt.asan_dynamic.dll, never the other targets'
+        file(GLOB_RECURSE BE_ASAN_DLLS "${BE_CLANG_RESOURCE_DIR}/lib/*asan_dynamic*.dll")
+        list(FILTER BE_ASAN_DLLS EXCLUDE REGEX "(i386|aarch64)")
+        if(BE_ASAN_DLLS)
+            list(GET BE_ASAN_DLLS 0 BE_ASAN_DLL)
+        else()
+            message(FATAL_ERROR "Sanitizers: the ASan runtime DLL (clang_rt.asan_dynamic*.dll) is not under '${BE_CLANG_RESOURCE_DIR}/lib' (compiler ${CMAKE_CXX_COMPILER}); install the LLVM that ships it")
+        endif()
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+        file(COPY "${BE_ASAN_DLL}" DESTINATION "${CMAKE_BINARY_DIR}/bin")
+        message(STATUS "Sanitizers: ASan runtime ${BE_ASAN_DLL} copied to ${CMAKE_BINARY_DIR}/bin")
+    endif()
 
     if(ENGINE_FUZZ_LIBFUZZER)
         # Coverage instrumentation only; the libFuzzer runtime and its main() are linked into the BagiFuzz<Name> executables alone
