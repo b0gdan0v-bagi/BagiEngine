@@ -18,7 +18,6 @@
 #define SECURITY_WIN32
 #include <security.h>
 // clang-format on
-#include <shared_mutex>
 
 namespace BECore {
 
@@ -197,14 +196,14 @@ namespace BECore {
                     return FailConnect(connected.error());
                 }
                 {
-                    std::unique_lock publish(_lifetime);
+                    UniqueLock publish(_lifetime);
                     if (_closing.load()) {
                         return FailConnect(Format("connect to {} cancelled", _target));
                     }
                     _socket = std::move(*connected);
                 }
 
-                std::shared_lock life(_lifetime);  // Close() waits for the handshake; it is woken within Socket::kWakeInterval
+                SharedLock life(_lifetime);  // Close() waits for the handshake; it is woken within Socket::kWakeInterval
                 if (_closing.load()) {
                     return FailConnect(Format("connect to {} cancelled", _target));
                 }
@@ -230,13 +229,13 @@ namespace BECore {
                 if (data.empty()) {
                     return IsValid();
                 }
-                std::shared_lock life(_lifetime);
+                SharedLock life(_lifetime);
                 if (_closing.load() || _phase.load() != Phase::Ready) {
                     return false;
                 }
                 // The records leave in the order they were encrypted (the TLS sequence numbers say so): the send lock covers encrypt and send.
                 // Order of locks everywhere: send, then SSPI, never held while waiting for the socket by the SSPI one
-                std::lock_guard sendOrder(_sendMutex);
+                LockGuard sendOrder(_sendMutex);
                 eastl::vector<uint8_t> record;
                 size_t offset = 0;
                 while (offset < data.size()) {
@@ -263,7 +262,7 @@ namespace BECore {
                     SecBufferDesc description{SECBUFFER_VERSION, 4, buffers};
                     SECURITY_STATUS status = SEC_E_OK;
                     {
-                        std::lock_guard sspi(_sspiMutex);
+                        LockGuard sspi(_sspiMutex);
                         status = EncryptMessage(&_context, 0, &description, 0);
                     }
                     if (status != SEC_E_OK) {
@@ -290,7 +289,7 @@ namespace BECore {
                 if (buffer.empty()) {
                     return std::unexpected(SocketError::Failed);
                 }
-                std::shared_lock life(_lifetime);
+                SharedLock life(_lifetime);
                 uint8_t chunk[kReceiveChunk];
                 for (;;) {
                     if (_closing.load()) {
@@ -337,14 +336,14 @@ namespace BECore {
             }
 
             bool SetReceiveTimeout(std::chrono::milliseconds timeout) override {
-                std::shared_lock life(_lifetime);
+                SharedLock life(_lifetime);
                 _receiveTimeoutMs.store(timeout.count());
                 return _phase.load() == Phase::Ready && _socket.SetReceiveTimeout(timeout);
             }
 
             void ShutdownBoth() override {
                 _closing.store(true);
-                std::shared_lock life(_lifetime);
+                SharedLock life(_lifetime);
                 _socket.ShutdownBoth();  // wakes the Receive() and SendAll() that wait on the socket, within Socket::kWakeInterval
             }
 
@@ -352,12 +351,12 @@ namespace BECore {
                 // _closing first: a Receive() that sees the server's answer to our close_notify must not record it as a failure
                 const bool wasOpen = !_closing.exchange(true);
                 if (wasOpen && _phase.load() == Phase::Ready) {
-                    std::shared_lock life(_lifetime);
+                    SharedLock life(_lifetime);
                     SendCloseNotify();
                 }
                 ShutdownBoth();
                 // Nobody is inside a call any more once this lock is ours: the woken ones leave within Socket::kWakeInterval
-                std::unique_lock exclusive(_lifetime);
+                UniqueLock exclusive(_lifetime);
                 if (_hasContext.load()) {
                     DeleteSecurityContext(&_context);
                     _hasContext.store(false);
@@ -374,7 +373,7 @@ namespace BECore {
             }
 
             eastl::string GetLastError() const override {
-                std::lock_guard lock(_errorMutex);
+                LockGuard lock(_errorMutex);
                 return _failure;
             }
 
@@ -387,7 +386,7 @@ namespace BECore {
 
             void SetFailure(const eastl::string& text, SECURITY_STATUS status) {
                 {
-                    std::lock_guard lock(_errorMutex);
+                    LockGuard lock(_errorMutex);
                     if (_failure.empty()) {
                         _failure = text;
                         LOG_WARNING("{} (status 0x{:08X})"_format(_failure, static_cast<uint32_t>(status)));
@@ -468,7 +467,7 @@ namespace BECore {
                     TimeStamp expiry{};
                     SECURITY_STATUS status = SEC_E_OK;
                     {
-                        std::lock_guard sspi(_sspiMutex);
+                        LockGuard sspi(_sspiMutex);
                         status = InitializeSecurityContextA(&_credentials, first ? nullptr : &_context, const_cast<SEC_CHAR*>(_host.c_str()), requests, 0, 0, first ? nullptr : &inDescription, 0,
                                                             &_context, &outDescription, &attributes, &expiry);
                     }
@@ -540,7 +539,7 @@ namespace BECore {
 
             /// Sends bytes that are not application data (a handshake token, close_notify), in order with the encrypted records
             bool SendRaw(eastl::span<const uint8_t> bytes) {
-                std::lock_guard sendOrder(_sendMutex);
+                LockGuard sendOrder(_sendMutex);
                 return _socket.SendAll(bytes);
             }
 
@@ -562,7 +561,7 @@ namespace BECore {
                     SecBufferDesc description{SECBUFFER_VERSION, 4, buffers};
                     SECURITY_STATUS status = SEC_E_OK;
                     {
-                        std::lock_guard sspi(_sspiMutex);
+                        LockGuard sspi(_sspiMutex);
                         status = DecryptMessage(&_context, &description, 0, nullptr);
                     }
                     const SecBuffer* extra = FindBuffer(buffers, 4, SECBUFFER_EXTRA);
@@ -606,7 +605,7 @@ namespace BECore {
             /// Best effort, once: tells the server we are done (ApplyControlToken with SCHANNEL_SHUTDOWN, then the token InitializeSecurityContext
             /// gives is the close_notify alert). Skipped when a sender holds the send lock; the caller holds the lifetime lock
             void SendCloseNotify() {
-                std::unique_lock sendOrder(_sendMutex, std::try_to_lock);
+                UniqueLock sendOrder(_sendMutex, std::try_to_lock);
                 if (!sendOrder.owns_lock() || !_hasContext.load()) {
                     return;
                 }
@@ -623,7 +622,7 @@ namespace BECore {
                 TimeStamp expiry{};
                 SECURITY_STATUS status = SEC_E_OK;
                 {
-                    std::lock_guard sspi(_sspiMutex);
+                    LockGuard sspi(_sspiMutex);
                     if (ApplyControlToken(&_context, &controlDescription) != SEC_E_OK) {
                         return;
                     }
@@ -714,10 +713,10 @@ namespace BECore {
 
             // Order of the locks: _lifetime, then _sendMutex, then _sspiMutex. The SSPI mutex is held only for the SSPI call itself, never
             // while waiting on the socket
-            mutable std::shared_mutex _lifetime;  // shared by every call that uses the socket or the context, exclusive in Close()
-            std::mutex _sspiMutex;                // a Schannel context is not safe for concurrent calls
-            std::mutex _sendMutex;                // the ciphertext leaves in the order it was made
-            mutable std::mutex _errorMutex;
+            mutable SharedMutex _lifetime{BE_LOCK_SITE_LEVEL("TLS lifetime", 10)};  // shared by every call that uses the socket or the context, exclusive in Close()
+            Mutex _sspiMutex{BE_LOCK_SITE_LEVEL("TLS SSPI", 30)};                   // a Schannel context is not safe for concurrent calls
+            Mutex _sendMutex{BE_LOCK_SITE_LEVEL("TLS send", 20)};                   // the ciphertext leaves in the order it was made
+            mutable Mutex _errorMutex{BE_LOCK_SITE("TLS error")};
             eastl::string _failure;
 
             std::atomic<Phase> _phase{Phase::Idle};

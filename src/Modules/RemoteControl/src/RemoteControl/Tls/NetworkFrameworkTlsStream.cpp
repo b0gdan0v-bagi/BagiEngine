@@ -77,8 +77,8 @@ namespace BECore {
                 ReleaseConnectionLocked();
             }
 
-            std::mutex mutex;
-            std::condition_variable changed;
+            Mutex mutex{BE_LOCK_SITE("TLS stream state")};
+            ConditionVariable changed;
 
             Phase phase = Phase::Idle;
             bool closing = false;  // ShutdownBoth() or Close() was called
@@ -110,7 +110,7 @@ namespace BECore {
             }
 
             void OnState(nw_connection_state_t state, nw_error_t error) {
-                std::lock_guard lock(mutex);
+                LockGuard lock(mutex);
                 switch (state) {
                     case nw_connection_state_ready:
                         if (phase == Phase::Connecting) {
@@ -142,7 +142,7 @@ namespace BECore {
             }
 
             void OnReceived(dispatch_data_t content, nw_content_context_t context, bool isComplete, nw_error_t error) {
-                std::lock_guard lock(mutex);
+                LockGuard lock(mutex);
                 receiveInFlight = false;
                 if (content != nullptr) {
                     dispatch_data_apply(content, ^bool(dispatch_data_t, size_t, const void* bytes, size_t size) {
@@ -162,7 +162,7 @@ namespace BECore {
             }
 
             void OnSent(nw_error_t error) {
-                std::lock_guard lock(mutex);
+                LockGuard lock(mutex);
                 ++sendsCompleted;
                 if (error != nullptr) {
                     sendFailed = true;
@@ -226,7 +226,7 @@ namespace BECore {
                 return true;
             }
             CfOwned<CFErrorRef> evaluationError(rawError);
-            std::lock_guard lock(state.mutex);
+            LockGuard lock(state.mutex);
             state.verifyFailureCode = evaluationError ? static_cast<int>(CFErrorGetCode(evaluationError.get())) : errSecNotTrusted;
             return false;
         }
@@ -258,7 +258,7 @@ namespace BECore {
                 const std::shared_ptr<StreamState> state = _state;
                 const eastl::string host(params.host.data(), params.host.size());
                 {
-                    std::lock_guard lock(state->mutex);
+                    LockGuard lock(state->mutex);
                     state->target = Format("{}:{}", host, params.port);
                     if (state->phase != Phase::Idle) {
                         return std::unexpected(Format("TLS: stream already used for {}", state->target));
@@ -277,7 +277,7 @@ namespace BECore {
                     if (!anchors) {
                         return Fail(*state, Format("an additional trust anchor is not a certificate, not connecting to {}", state->target));
                     }
-                    std::lock_guard lock(state->mutex);
+                    LockGuard lock(state->mutex);
                     state->anchors = std::move(anchors);
                 }
 
@@ -312,7 +312,7 @@ namespace BECore {
                     return Fail(*state, Format("cannot create a connection to {}", state->target));
                 }
                 {
-                    std::lock_guard lock(state->mutex);
+                    LockGuard lock(state->mutex);
                     if (state->closing) {
                         nw_release(connection);
                         return std::unexpected(Format("TLS: connect to {} cancelled", state->target));
@@ -335,7 +335,7 @@ namespace BECore {
                     return IsValid();
                 }
                 const std::shared_ptr<StreamState> state = _state;
-                std::unique_lock lock(state->mutex);
+                UniqueLock lock(state->mutex);
                 if (state->closing || state->phase != Phase::Ready || state->connection == nullptr) {
                     return false;
                 }
@@ -353,7 +353,7 @@ namespace BECore {
                     return std::unexpected(SocketError::Failed);
                 }
                 const std::shared_ptr<StreamState> state = _state;
-                std::unique_lock lock(state->mutex);
+                UniqueLock lock(state->mutex);
                 const bool hasDeadline = state->receiveTimeout > std::chrono::milliseconds::zero();
                 const auto deadline = hasDeadline ? std::chrono::steady_clock::now() + state->receiveTimeout : std::chrono::steady_clock::time_point::max();
                 bool expired = false;
@@ -394,13 +394,13 @@ namespace BECore {
             }
 
             bool SetReceiveTimeout(std::chrono::milliseconds timeout) override {
-                std::lock_guard lock(_state->mutex);
+                LockGuard lock(_state->mutex);
                 _state->receiveTimeout = timeout;
                 return _state->phase == Phase::Ready;
             }
 
             void ShutdownBoth() override {
-                std::lock_guard lock(_state->mutex);
+                LockGuard lock(_state->mutex);
                 _state->closing = true;
                 if (_state->connection != nullptr) {
                     nw_connection_cancel(_state->connection);
@@ -409,26 +409,26 @@ namespace BECore {
             }
 
             void Close() override {
-                std::lock_guard lock(_state->mutex);
+                LockGuard lock(_state->mutex);
                 _state->closing = true;
                 _state->ReleaseConnectionLocked();
                 _state->changed.notify_all();
             }
 
             bool IsValid() const override {
-                std::lock_guard lock(_state->mutex);
+                LockGuard lock(_state->mutex);
                 return _state->phase == Phase::Ready && !_state->closing;
             }
 
             eastl::string GetLastError() const override {
-                std::lock_guard lock(_state->mutex);
+                LockGuard lock(_state->mutex);
                 return _state->failure;
             }
 
         private:
             /// Records @p what as the failure (if none is recorded yet), drops the connection and returns it
             static std::unexpected<eastl::string> Fail(StreamState& state, const eastl::string& what) {
-                std::lock_guard lock(state.mutex);
+                LockGuard lock(state.mutex);
                 if (state.phase != Phase::Failed) {
                     state.phase = Phase::Failed;
                     state.failure = Format("TLS: {}", what);
@@ -439,7 +439,7 @@ namespace BECore {
 
             /// Waits in slices of Socket::kWakeInterval for the state `ready` (TCP and TLS done) or a failure, the cancel flag, a Close() and the deadline
             static std::expected<void, eastl::string> WaitUntilReady(StreamState& state, const TlsConnectParams& params) {
-                std::unique_lock lock(state.mutex);
+                UniqueLock lock(state.mutex);
                 for (;;) {
                     if (state.closing && state.phase != Phase::Failed && state.phase != Phase::Cancelled) {
                         state.phase = Phase::Failed;

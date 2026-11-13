@@ -74,7 +74,7 @@ namespace BECore {
     }  // namespace
 
     EmscriptenRoomTransport::~EmscriptenRoomTransport() {
-        ASSERT(_phase == Phase::Idle || std::this_thread::get_id() == _owner, "EmscriptenRoomTransport is destroyed off its thread");
+        ASSERT(_phase == Phase::Idle || Thread::CurrentId() == _owner, "EmscriptenRoomTransport is destroyed off its thread");
         DeleteSocket();
     }
 
@@ -95,7 +95,7 @@ namespace BECore {
         attributes.url = address.c_str();
         attributes.createOnMainThread = true;
 
-        _owner = std::this_thread::get_id();
+        _owner = Thread::CurrentId();
         const EMSCRIPTEN_WEBSOCKET_T socket = emscripten_websocket_new(&attributes);
         if (socket <= 0) {
             return std::unexpected(Format("the browser refused to create the WebSocket (code {})", socket));
@@ -118,7 +118,7 @@ namespace BECore {
     }
 
     bool EmscriptenRoomTransport::SendText(eastl::string_view text) {
-        ASSERT(std::this_thread::get_id() == _owner, "EmscriptenRoomTransport is used off its thread");
+        ASSERT(Thread::CurrentId() == _owner, "EmscriptenRoomTransport is used off its thread");
         if (_phase != Phase::Open) {
             return false;
         }
@@ -135,7 +135,7 @@ namespace BECore {
     }
 
     void EmscriptenRoomTransport::Close(uint16_t code, eastl::string_view reason) {
-        ASSERT(std::this_thread::get_id() == _owner, "EmscriptenRoomTransport is used off its thread");
+        ASSERT(Thread::CurrentId() == _owner, "EmscriptenRoomTransport is used off its thread");
         switch (_phase) {
             case Phase::Connecting:
                 Abort();
@@ -155,7 +155,7 @@ namespace BECore {
     }
 
     void EmscriptenRoomTransport::Abort() {
-        ASSERT(std::this_thread::get_id() == _owner, "EmscriptenRoomTransport is used off its thread");
+        ASSERT(Thread::CurrentId() == _owner, "EmscriptenRoomTransport is used off its thread");
         if (_phase == Phase::Idle || _phase == Phase::Finished) {
             return;
         }
@@ -164,7 +164,7 @@ namespace BECore {
     }
 
     bool EmscriptenRoomTransport::PollEvent(RoomTransportEvent& event) {
-        ASSERT(_phase == Phase::Idle || std::this_thread::get_id() == _owner, "EmscriptenRoomTransport is used off its thread");
+        ASSERT(_phase == Phase::Idle || Thread::CurrentId() == _owner, "EmscriptenRoomTransport is used off its thread");
         if (_head == _count) {
             return false;
         }
@@ -183,7 +183,7 @@ namespace BECore {
 
     bool EmscriptenRoomTransport::OnOpen(int /*eventType*/, const EmscriptenWebSocketOpenEvent* /*event*/, void* userData) {
         auto* self = static_cast<EmscriptenRoomTransport*>(userData);
-        ASSERT(std::this_thread::get_id() == self->_owner, "a WebSocket callback ran off the thread of its transport");
+        ASSERT(Thread::CurrentId() == self->_owner, "a WebSocket callback ran off the thread of its transport");
         if (self->_phase == Phase::Connecting) {
             self->_phase = Phase::Open;
             self->PushEvent(RoomTransportEventKind::Opened, {}, kRoomTransportAbnormalClosure, {});
@@ -193,7 +193,7 @@ namespace BECore {
 
     bool EmscriptenRoomTransport::OnMessage(int /*eventType*/, const EmscriptenWebSocketMessageEvent* event, void* userData) {
         auto* self = static_cast<EmscriptenRoomTransport*>(userData);
-        ASSERT(std::this_thread::get_id() == self->_owner, "a WebSocket callback ran off the thread of its transport");
+        ASSERT(Thread::CurrentId() == self->_owner, "a WebSocket callback ran off the thread of its transport");
         if (self->_phase != Phase::Open && self->_phase != Phase::Closing) {
             return true;
         }
@@ -217,7 +217,7 @@ namespace BECore {
 
     bool EmscriptenRoomTransport::OnError(int /*eventType*/, const EmscriptenWebSocketErrorEvent* /*event*/, void* userData) {
         auto* self = static_cast<EmscriptenRoomTransport*>(userData);
-        ASSERT(std::this_thread::get_id() == self->_owner, "a WebSocket callback ran off the thread of its transport");
+        ASSERT(Thread::CurrentId() == self->_owner, "a WebSocket callback ran off the thread of its transport");
         // The browser says nothing about the cause (refused, no route, a rejected handshake, a certificate); `close` follows at once
         self->_sawError = true;
         return true;
@@ -225,7 +225,7 @@ namespace BECore {
 
     bool EmscriptenRoomTransport::OnClose(int /*eventType*/, const EmscriptenWebSocketCloseEvent* event, void* userData) {
         auto* self = static_cast<EmscriptenRoomTransport*>(userData);
-        ASSERT(std::this_thread::get_id() == self->_owner, "a WebSocket callback ran off the thread of its transport");
+        ASSERT(Thread::CurrentId() == self->_owner, "a WebSocket callback ran off the thread of its transport");
         if (self->_phase == Phase::Finished) {
             return true;
         }
