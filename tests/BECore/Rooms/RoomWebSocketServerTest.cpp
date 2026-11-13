@@ -970,4 +970,17 @@ namespace BECore::Tests {
         EXPECT_EQ(refused->GetString("code"), RoomErrors::kTooManyRooms);
     }
 
+    // ASan is the assertion: a function that held the clock itself would read freed memory
+    TEST(ManualClockTest, AFunctionMadeFromTheClockOutlivesIt) {
+        auto clock = std::make_unique<ManualClock>();
+        const RoomTime before = clock->Now();
+        const std::function<RoomTime()> now = clock->AsFunction();
+        clock->Advance(5s);
+        clock.reset();
+
+        const RoomTime first = now();
+        EXPECT_GE(first - before, 5s);
+        EXPECT_GE(now(), first);
+    }
+
 }  // namespace BECore::Tests

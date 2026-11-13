@@ -31,7 +31,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/BagiWeb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiPlatformOptions.cmake)
 # ccache in front of the compiler when it is installed (before the first target, so every target gets the launcher)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiCompilerCache.cmake)
-# Sanitizers on every target and the libFuzzer executables (ENGINE_FUZZ, ENGINE_FUZZ_LIBFUZZER; before the first target, like the cache)
+# Sanitizers on every target and the libFuzzer executables (ENGINE_SANITIZE, ENGINE_FUZZ, ENGINE_FUZZ_LIBFUZZER; before the first target, like the cache)
 include(${CMAKE_CURRENT_LIST_DIR}/BagiFuzz.cmake)
 
 # =============================================================================
@@ -116,9 +116,9 @@ set_target_properties(fmt PROPERTIES FOLDER "External")
 # Clang 22 (emsdk 4.0.23) refuses the FMT_STRING() uses inside the vendored fmt 11.0.2 (src/os.cc, fmt/format-inl.h): a string literal
 # evaluated twice at compile time is two objects now, and fmt subtracts pointers into both ("call to consteval function ... is not a
 # constant expression"). Below C++20 fmt has no consteval checks, so the library (not its users) is compiled as C++17 on the web;
-# the compiled functions are the same, only the compile-time format check of fmt's own sources is off. Homebrew LLVM 21 (the fuzz preset,
+# the compiled functions are the same, only the compile-time format check of fmt's own sources is off. Homebrew LLVM 21 (the fuzz presets,
 # cmake/BagiFuzz.cmake) has the same refusal; Apple clang does not (its compiler id is AppleClang), and the other presets are left alone
-if(ENGINE_TARGET_WEB OR (ENGINE_FUZZ AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 21))
+if(ENGINE_TARGET_WEB OR (BE_SANITIZED AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 21))
     set_target_properties(fmt PROPERTIES CXX_STANDARD 17)
 endif()
 
