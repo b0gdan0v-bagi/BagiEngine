@@ -107,6 +107,16 @@ ctest --preset macos-asan                                                       
 
 The test preset sets `ASAN_OPTIONS=detect_stack_use_after_return=1:strict_string_checks=1` and `UBSAN_OPTIONS=print_stacktrace=1`; to run one executable by hand, export the same: `ASAN_OPTIONS=... UBSAN_OPTIONS=... build/macos-asan/bin/BagiEngineTests --gtest_filter=<test>`. Apple's runtime has no leak detector, so there are no leak findings. The one silenced finding is a vendored file in `cmake/sanitizers/ignorelist.txt` (compile-time: the runtime `suppressions` do not apply under `-fno-sanitize-recover`); a line there names the library, the report text and why it cannot be fixed here, and an engine finding is fixed instead. A game that includes the presets gets `macos-asan` and builds its tests with it from its own root (its own `.claude/rules/build-project.md` says so).
 
+Windows, `windows-clang-asan` (LLVM on `PATH`; **not yet run on Windows**: the owner's first run replaces this line):
+
+```bash
+python CI/scripts/vs_env.py cmake --preset windows-clang-asan
+python CI/scripts/vs_env.py cmake --build --preset windows-clang-asan --target BagiEngineTests Match3Tests BagiMatch3
+ctest --preset windows-clang-asan
+```
+
+On the first run look at: a link error on `__ubsan_handle_*` (link the `clang_rt.ubsan_standalone` library of the compiler's resource dir); the configure message that the ASan DLL is not found; a `pointer-overflow` report in `miniz.h` (the ignore list's glob did not match the Windows path); a start failure if the mixin `asan-windows-crt` is switched to the debug CRT. A CI job takes these commands with the other sanitizer commands when the entry `no-ci` is done.
+
 Timings, `ctest --preset macos-debug` on a warm Debug build, 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs per row, interleaved:
 
 | Set | `-j1` | `-j4` | `-j8` (preset) | `-j14` |
