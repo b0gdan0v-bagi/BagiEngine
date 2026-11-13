@@ -59,6 +59,9 @@ namespace BECore {
             return false;
         }
 
+        const char* rendererName = SDL_GetRendererName(_renderer);
+        _software = rendererName && std::strcmp(rendererName, kSoftwareRenderer) == 0;
+
 #ifdef __EMSCRIPTEN__
         // In the browser a frame is a requestAnimationFrame. A renderer made without vsync makes SDL set the swap interval to 0 when
         // the first frame has run, which turns the main loop into setTimeout(0) ticks: busy, and not in step with the display
@@ -80,11 +83,16 @@ namespace BECore {
         return true;
     }
 
+    GeometryDetail SDLRendererBackend::GetGeometryDetail() const {
+        return _software ? GeometryDetail::Reduced : GeometryDetail::Full;
+    }
+
     void SDLRendererBackend::Destroy() {
         _captureCallback = nullptr;  // nothing will be presented any more
         if (_renderer) {
             SDL_DestroyRenderer(_renderer);
             _renderer = nullptr;
+            _software = false;
         }
     }
 

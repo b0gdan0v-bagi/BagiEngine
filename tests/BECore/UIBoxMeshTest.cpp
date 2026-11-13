@@ -1,5 +1,6 @@
 #include <BECore/UI/UIBoxMesh.h>
 #include <BECore/UI/UIGeometryBounds.h>
+#include <Common/RecordingRenderer.h>
 #include <EASTL/sort.h>
 #include <gtest/gtest.h>
 
@@ -63,9 +64,9 @@ namespace BECore::Tests {
             return mesh;
         }
 
-        Mesh Shadow(const Rect& rect, const UICorners& corners, const UIShadowSpec& spec, float ppu) {
+        Mesh Shadow(const Rect& rect, const UICorners& corners, const UIShadowSpec& spec, float ppu, GeometryDetail detail = GeometryDetail::Full) {
             Mesh mesh;
-            UIBoxMesh::AppendShadow(mesh.vertices, mesh.indices, rect, corners, spec, ppu);
+            UIBoxMesh::AppendShadow(mesh.vertices, mesh.indices, rect, corners, spec, ppu, detail);
             return mesh;
         }
 
@@ -769,6 +770,81 @@ namespace BECore::Tests {
         ExpectCoreCoversTheLastRingOnce(Shadow(rect, UICorners::Uniform(12), {0, 4, 6, 0, kBlue}, 2.0f), UIBoxMesh::kBlurRings + 1, "a shadow");
         ExpectCoreCoversTheLastRingOnce(Shadow({0, 0, 200, 3}, UICorners::Uniform(1), {0, 0, 6, 0, kBlue}, 1.0f), UIBoxMesh::kBlurRings + 1, "the shadow of a thin rect");
         ExpectCoreCoversTheLastRingOnce(Shadow(rect, {}, {0, 0, 0, 0, kBlue}, 1.0f), 2, "a hard shadow");
+    }
+
+    TEST(UIBoxMeshTest, AReducedShadowHasFewerTrianglesAndTheSameFalloffAndExtent) {
+        const Rect rect{20, 20, 100, 60};
+        const float radius = 10.0f;
+        const float blur = 12.0f;
+        const Color color{10, 20, 30, 200};
+        const UIShadowSpec spec{0, 0, blur, 0, color};
+        const Mesh full = Shadow(rect, UICorners::Uniform(radius), spec, 2.0f);
+        const Mesh reduced = Shadow(rect, UICorners::Uniform(radius), spec, 2.0f, GeometryDetail::Reduced);
+        ASSERT_GT(reduced.vertices.size(), 0u);
+        EXPECT_LT(reduced.TriangleCount() * 2, full.TriangleCount());
+        EXPECT_LT(reduced.vertices.size(), full.vertices.size());
+        ExpectWellFormed(reduced, "reduced shadow");
+
+        const Extent fullExtent = ExtentOf(full);
+        const Extent reducedExtent = ExtentOf(reduced);
+        EXPECT_NEAR(reducedExtent.minX, fullExtent.minX, kTolerance);
+        EXPECT_NEAR(reducedExtent.maxX, fullExtent.maxX, kTolerance);
+        EXPECT_NEAR(reducedExtent.minY, fullExtent.minY, kTolerance);
+        EXPECT_NEAR(reducedExtent.maxY, fullExtent.maxY, kTolerance);
+
+        // Falls monotonically outwards, nothing at the outer ring, the colour's own alpha at the inner one
+        eastl::vector<eastl::pair<float, unsigned char>> samples;
+        for (const GeometryVertex& v : reduced.vertices) {
+            samples.push_back({RoundedRectDistance(rect, radius, v.x, v.y), v.color.a});
+        }
+        eastl::sort(samples.begin(), samples.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        for (size_t i = 1; i < samples.size(); ++i) {
+            if (samples[i].first - samples[i - 1].first > 1e-2f) {
+                EXPECT_LE(samples[i].second, samples[i - 1].second);
+            }
+        }
+        EXPECT_EQ(samples.back().second, 0);
+        EXPECT_EQ(samples.front().second, color.a);
+
+        // The coarser falloff stays close to the smooth one: the alpha of a vertex of the reduced mesh is the alpha the full one has at that distance, within a few levels
+        constexpr float kAlphaTolerance = 8.0f;
+        for (const GeometryVertex& v : reduced.vertices) {
+            const float distance = RoundedRectDistance(rect, radius, v.x, v.y);
+            float nearest = 1e30f;
+            unsigned char alpha = 0;
+            for (const GeometryVertex& f : full.vertices) {
+                const float d = std::fabs(RoundedRectDistance(rect, radius, f.x, f.y) - distance);
+                if (d < nearest) {
+                    nearest = d;
+                    alpha = f.color.a;
+                }
+            }
+            EXPECT_NEAR(static_cast<float>(v.color.a), static_cast<float>(alpha), kAlphaTolerance);
+        }
+    }
+
+    TEST(UIBoxMeshTest, AReducedCoreCoversTheShapeExactlyOnceAndTheFullMeshIsTheDefault) {
+        const Rect rect{10.0f, 20.0f, 100.0f, 60.0f};
+        const UIShadowSpec spec{0, 4, 6, 0, kBlue};
+        ExpectCoreCoversTheLastRingOnce(Shadow(rect, UICorners::Uniform(12), spec, 2.0f, GeometryDetail::Reduced), UIBoxMesh::kReducedBlurRings + 1, "a reduced shadow");
+        ExpectCoreCoversTheLastRingOnce(Shadow(rect, {}, {0, 0, 0, 0, kBlue}, 1.0f, GeometryDetail::Reduced), 2, "a reduced hard shadow");
+
+        Mesh viaDefault;
+        UIBoxMesh::AppendShadow(viaDefault.vertices, viaDefault.indices, rect, UICorners::Uniform(12), spec, 2.0f);
+        const Mesh full = Shadow(rect, UICorners::Uniform(12), spec, 2.0f, GeometryDetail::Full);
+        ASSERT_EQ(viaDefault.vertices.size(), full.vertices.size());
+        ASSERT_EQ(viaDefault.indices.size(), full.indices.size());
+        EXPECT_EQ(viaDefault.indices, full.indices);
+
+        // The Full mesh of the sample panel's shadow is what it was when the core stopped being a fan: 1230 triangles, 652 vertices
+        const Mesh panel = Shadow({40.0f, 40.0f, 160.0f, 100.0f}, UICorners::Uniform(16.0f), {0.0f, 12.0f, 6.0f, 0.0f, Color{0, 0, 0, 200}}, 1.0f);
+        EXPECT_EQ(panel.TriangleCount(), 1230u);
+        EXPECT_EQ(panel.vertices.size(), 652u);
+    }
+
+    TEST(UIBoxMeshTest, ARendererAsksForFullGeometryUnlessItSaysOtherwise) {
+        RecordingRenderer renderer;
+        EXPECT_EQ(renderer.GetGeometryDetail(), GeometryDetail::Full);
     }
 
     TEST(UIBoxMeshTest, TheCoreOfTheLargestShapeStaysWithinTheBounds) {

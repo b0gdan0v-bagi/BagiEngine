@@ -151,6 +151,10 @@ namespace BECore::Tests {
 
     }  // namespace
 
+    TEST_F(UIBoxCaptureTest, TheSoftwareRendererAsksForReducedGeometry) {
+        EXPECT_EQ(renderer->GetGeometryDetail(), GeometryDetail::Reduced);
+    }
+
     TEST_P(UIBoxCaptureScaleTest, ThePanelIsRoundedBorderedGradedAndShadowed) {
         const float scale = GetParam();
         const PixelBuffer image = DrawSample(scale);

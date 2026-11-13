@@ -175,7 +175,7 @@ namespace BECore {
          */
         template <typename ColorFn>
         void AppendRings(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Ring* rings, int ringCount, const Path& path,
-                         bool roundOutwards, bool fillCore, float pixelsPerUnit, ColorFn&& colorOf) {
+                         bool roundOutwards, bool fillCore, float pixelsPerUnit, float cornerSagitta, ColorFn&& colorOf) {
             const UICorners baseCorners = corners.Clamped(rect.w, rect.h);
             const float halfShortSide = std::min(rect.w, rect.h) * 0.5f;
 
@@ -187,7 +187,7 @@ namespace BECore {
             const auto largestArcs = MakeArcs(rect, baseCorners, largestOffset, roundOutwards);
             int segments[kCornerCount];
             for (int c = 0; c < kCornerCount; ++c) {
-                segments[c] = UIBoxMesh::CornerSegments(largestArcs[c].radius * pixelsPerUnit);
+                segments[c] = UIBoxMesh::CornerSegments(largestArcs[c].radius * pixelsPerUnit, cornerSagitta);
             }
 
             const int firstCorner = 0;
@@ -295,13 +295,13 @@ namespace BECore {
         return {shrink(topLeft), shrink(topRight), shrink(bottomRight), shrink(bottomLeft)};
     }
 
-    int UIBoxMesh::CornerSegments(float radiusPixels) {
+    int UIBoxMesh::CornerSegments(float radiusPixels, float sagittaPixels) {
         if (!(radiusPixels > 0.0f) || !std::isfinite(radiusPixels)) {
             return radiusPixels > 0.0f ? kMaxCornerSegments : 0;
         }
         // A chord of the arc that spans an angle `step` lies R * (1 - cos(step / 2)) inside it; the step is the one the tolerance allows if it is measured
         // against the whole angle, which is a little stricter than needed, so n >= (pi / 2) / acos(1 - tolerance / R)
-        const float ratio = std::clamp(1.0f - kCornerSagittaPixels / radiusPixels, -1.0f, 1.0f);
+        const float ratio = std::clamp(1.0f - sagittaPixels / radiusPixels, -1.0f, 1.0f);
         const float step = std::acos(ratio);
         const int segments = step > 0.0f ? static_cast<int>(std::ceil(kHalfPi / step)) : kMaxCornerSegments;
         return std::clamp(segments, kMinCornerSegments, kMaxCornerSegments);
@@ -326,7 +326,7 @@ namespace BECore {
         const float axisStart = vertical ? rect.y + coreInset : rect.x + coreInset;
         const float axisLength = (vertical ? rect.h : rect.w) - 2.0f * coreInset;
 
-        AppendRings(vertices, indices, rect, corners, rings, 2, Path{}, false, true, pixelsPerUnit, [&](const PointInfo& point) {
+        AppendRings(vertices, indices, rect, corners, rings, 2, Path{}, false, true, pixelsPerUnit, UIBoxMesh::kCornerSagittaPixels, [&](const PointInfo& point) {
             if (!hasGradient) {
                 return color;
             }
@@ -350,10 +350,11 @@ namespace BECore {
 
         Ring rings[kMaxRings];
         const int ringCount = MakeStrokeRings(0.0f, -width, feather, rings);
-        AppendRings(vertices, indices, rect, corners, rings, ringCount, Path{}, false, false, pixelsPerUnit, [&](const PointInfo&) { return color; });
+        AppendRings(vertices, indices, rect, corners, rings, ringCount, Path{}, false, false, pixelsPerUnit, UIBoxMesh::kCornerSagittaPixels, [&](const PointInfo&) { return color; });
     }
 
-    void UIBoxMesh::AppendShadow(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit) {
+    void UIBoxMesh::AppendShadow(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const UIShadowSpec& shadow, float pixelsPerUnit,
+                                 GeometryDetail detail) {
         if (!IsValidBox(rect, pixelsPerUnit) || !UIBounds::IsBounded(shadow.offsetX) || !UIBounds::IsBounded(shadow.offsetY) || !UIBounds::IsBounded(shadow.blur) ||
             !UIBounds::IsBounded(shadow.spread) || shadow.color.a == 0) {
             return;
@@ -372,11 +373,14 @@ namespace BECore {
         const float blur = std::max(shadow.blur, 0.0f);
         const Color color = shadow.color;
         const auto flat = [&color](const PointInfo&) { return color; };
+        const bool reduced = detail == GeometryDetail::Reduced;
+        const float sagitta = reduced ? kReducedCornerSagittaPixels : kCornerSagittaPixels;
+        const int steps = reduced ? kReducedBlurRings : kBlurRings;
 
         if (blur < feather) {
             const float inset = std::min(feather * 0.5f, std::min(base.w, base.h) * 0.5f);
             const Ring rings[2] = {{feather * 0.5f, 0.0f}, {-inset, 1.0f}};
-            AppendRings(vertices, indices, base, baseCorners, rings, 2, Path{}, false, true, pixelsPerUnit, flat);
+            AppendRings(vertices, indices, base, baseCorners, rings, 2, Path{}, false, true, pixelsPerUnit, sagitta, flat);
             return;
         }
 
@@ -384,11 +388,11 @@ namespace BECore {
         // further than the middle of the shorter side, so a small shape stops at the alpha it reaches there
         const float halfShortSide = std::min(base.w, base.h) * 0.5f;
         Ring rings[kMaxRings];
-        for (int i = 0; i <= kBlurRings; ++i) {
-            const float offset = std::max(blur * (1.0f - 2.0f * static_cast<float>(i) / static_cast<float>(kBlurRings)), -halfShortSide);
+        for (int i = 0; i <= steps; ++i) {
+            const float offset = std::max(blur * (1.0f - 2.0f * static_cast<float>(i) / static_cast<float>(steps)), -halfShortSide);
             rings[i] = {offset, Smoothstep((blur - offset) / (2.0f * blur))};
         }
-        AppendRings(vertices, indices, base, baseCorners, rings, kBlurRings + 1, Path{}, true, true, pixelsPerUnit, flat);
+        AppendRings(vertices, indices, base, baseCorners, rings, steps + 1, Path{}, true, true, pixelsPerUnit, sagitta, flat);
     }
 
     void UIBoxMesh::AppendHighlight(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, float pixelsPerUnit) {
@@ -408,7 +412,7 @@ namespace BECore {
         path.topHalves = true;
 
         // The line fades out along the half arcs: full on the straight top, 0 at the far end of each arc
-        AppendRings(vertices, indices, rect, corners, rings, ringCount, path, false, false, pixelsPerUnit, [&](const PointInfo& point) {
+        AppendRings(vertices, indices, rect, corners, rings, ringCount, path, false, false, pixelsPerUnit, UIBoxMesh::kCornerSagittaPixels, [&](const PointInfo& point) {
             Color faded = color;
             const int half = point.segments - point.segments / 2;
             if (half > 0) {
