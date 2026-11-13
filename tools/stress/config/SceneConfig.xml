@@ -7,6 +7,7 @@
         <node name="Field">
           <components>
             <component type="TransformComponent" x="0" y="0" width="0" height="0" />
+            <component type="StressSpritesComponent" />
           </components>
         </node>
       </nodes>

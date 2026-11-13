@@ -17,7 +17,8 @@ Each scene is 1920 x 1080 and has a node `Field` for the scene's component.
 ```
 CMakeLists.txt        be_add_module(Stress), the reflection, BagiStress, StressTests (no standalone block: not a game of its own repository)
 config/               ApplicationConfig.xml (Game mode), SceneConfig.xml: kept at the engine's content version by ContentFilesVersionTest
-src/Stress/           StressSettings (the flags), StressState (what is shown now), StressGame (the IGame), StressGameControl (the control adapter)
+src/Stress/           StressSettings (the flags), StressState (what is shown now), StressGame (the IGame), StressGameControl (the control adapter), SpriteField (pure placement of the sprites)
+src/Stress/Components/ the component of each scene (StressSpritesComponent, ...)
 tests/                gtest sources of StressTests
 ```
 
@@ -35,3 +36,9 @@ tests/                gtest sources of StressTests
 - A malformed or out-of-range value is `invalid_params`; an action that is well-formed and changes nothing is accepted (the version does not move); `illegal_action` is only for an unknown `type`.
 - A scene change makes the game switch the active scene (`SetActiveScene` through a callback, so a test needs no scene manager). `reset` takes an optional `{"scene", "count"}` and puts the rest to the defaults, so a measurement starts from a known state; the options are checked before anything changes.
 - `get_state` version is `StressState::Version()`.
+
+## The `sprites` scene
+
+`SpriteField` (pure) places sprite `i` of `count`: position, size, spin and the cell of the atlas depend on the index alone (an own integer hash, never `std::rand` or the `std::` distributions: the numbers must not differ between standard libraries), so a bigger count keeps the first sprites where they are. The atlas and the blend mode are what a batcher sees: by default consecutive sprites share them (`count / atlases` per atlas, `kBlendRunLength` per blend mode: the way a game sorts), `--stress-interleave` changes both on every sprite (the worst case). So the runs depend on the count, and a count change re-applies atlas and blend mode to the kept nodes (once, not per frame).
+
+`StressSpritesComponent` makes `count` child nodes of its node (`TransformComponent` + `SpriteRendererComponent`, one shared name) when `StressState::Version()` moved: it appends at the tail or removes from the tail, never rebuilds. The atlases are made once at the first update with `IRenderer::CreateTexture` (`SpriteField::MakeAtlasPixels`; the renderer can be missing at `OnAttached`) and handed to the sprites with `SetTexture`; at `ApplicationCleanUpEvent` it waits for the GPU and lets go of them before the renderer dies. A steady frame only adds `spin * deltaTime` to each `_rotation` through cached pointers. There is no batching: one `IRenderer` call per sprite, which is the number a batcher is to lower.
