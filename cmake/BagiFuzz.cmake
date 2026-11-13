@@ -14,7 +14,7 @@
 #
 # Sets BE_SANITIZED (ON when any sanitizer is on) for the code after it. Asserts and expects are the preset's business: macos-fuzz and
 # macos-asan keep them ON, because an assertion that an input can reach is a finding, and macos-fuzz-shipped turns them OFF, the flags
-# of a shipped build. cmake/sanitizers/ holds the runtime suppressions the test presets name; tests/Fuzz/CLAUDE.md says how the fuzz
+# of a shipped build. cmake/sanitizers/ignorelist.txt holds what vendored code cannot pass; tests/Fuzz/CLAUDE.md says how the fuzz
 # targets and the corpus are made.
 include_guard(GLOBAL)
 
@@ -52,6 +52,8 @@ if(BE_SANITIZERS)
         list(APPEND BE_SANITIZER_FLAGS -fsanitize=undefined,float-cast-overflow -fno-sanitize-recover=undefined,float-cast-overflow)
     endif()
     add_compile_options(${BE_SANITIZER_FLAGS})
+    # The checks a vendored file cannot pass (cmake/sanitizers/ignorelist.txt); the runtime suppressions do not reach -fno-sanitize-recover
+    add_compile_options(-fsanitize-ignorelist=${CMAKE_CURRENT_LIST_DIR}/sanitizers/ignorelist.txt)
     add_link_options(${BE_SANITIZER_FLAGS})
 
     if(ENGINE_FUZZ_LIBFUZZER)

@@ -1,5 +1,0 @@
-# Runtime suppressions of UndefinedBehaviorSanitizer for the test presets (UBSAN_OPTIONS=suppressions=..., CMakePresets.json).
-# Format: <check>:<pattern>, the pattern matches a file or a function name in the report's stack.
-# Each line needs a comment above it that says: the library, the symptom (the report text), why it cannot be fixed here (vendored code,
-# the SDK, a system library). An engine finding is never suppressed: it is fixed, or listed in the plan of the entry `sanitizers`.
-# No line is added without a finding behind it.

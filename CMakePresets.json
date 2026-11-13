@@ -93,7 +93,7 @@
         {
             "name": "asan",
             "hidden": true,
-            "description": "AddressSanitizer + UndefinedBehaviorSanitizer on all code (ENGINE_SANITIZE, cmake/BagiFuzz.cmake) on the ordinary toolchain of the preset, with no libFuzzer; asserts and expects stay ON (an assertion is a finding too). The test preset of the same name sets ASAN_OPTIONS and UBSAN_OPTIONS",
+            "description": "AddressSanitizer + UndefinedBehaviorSanitizer on all code (ENGINE_SANITIZE, cmake/BagiFuzz.cmake) on the ordinary toolchain of the preset, with no libFuzzer; asserts and expects stay ON (an assertion is a finding too). The test preset of the same name sets ASAN_OPTIONS and UBSAN_OPTIONS (a stack for every report)",
             "cacheVariables": {
                 "ENGINE_SANITIZE": "address;undefined"
             }
@@ -577,7 +577,7 @@
             "configurePreset": "macos-asan",
             "environment": {
                 "ASAN_OPTIONS": "detect_stack_use_after_return=1:strict_string_checks=1",
-                "UBSAN_OPTIONS": "print_stacktrace=1:suppressions=${fileDir}/cmake/sanitizers/ubsan.supp"
+                "UBSAN_OPTIONS": "print_stacktrace=1"
             }
         },
         {
