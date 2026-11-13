@@ -28,7 +28,7 @@ namespace BECore {
     };
 
     class PoolString::Storage {
-        std::shared_mutex _mutex;
+        SharedMutex _mutex{BE_LOCK_SITE("PoolString")};
         IntrusivePoolTable<Entry, 16384> _table;
 
         struct Page {
@@ -55,7 +55,7 @@ namespace BECore {
             }
 
             const uint64_t hash = String::GetHash(str);
-            std::shared_lock lock(_mutex);
+            SharedLock lock(_mutex);
             return _table.Find(hash, str);
         }
 
@@ -68,14 +68,14 @@ namespace BECore {
 
             // 1. Поиск под Shared Lock
             {
-                std::shared_lock lock(_mutex);
+                SharedLock lock(_mutex);
                 if (auto e = _table.Find(hash, str)) {
                     return e;
                 }
             }
 
             // 2. Вставка под Unique Lock
-            std::unique_lock lock(_mutex);
+            UniqueLock lock(_mutex);
 
             // Double-check
             if (auto e = _table.Find(hash, str)) {
