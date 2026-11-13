@@ -7,6 +7,7 @@
 #include <BECore/Scene/SceneNode.h>
 #include <BECore/UI/UIDocument.h>
 #include <BECore/UI/UITextComponent.h>
+#include <BECore/UI/UITransitionComponent.h>
 #include <Generated/UICanvasComponent.gen.hpp>
 
 namespace BECore {
@@ -58,6 +59,32 @@ namespace BECore {
                 }
             }
             return false;
+        }
+
+        /// What a transition does to what is drawn inside the scope: the view transform composed with the scale and the slide about @p pivot, and the opacity multiplied by the progress. Puts both
+        /// back
+        class ScopedTransitionDraw {
+        public:
+            ScopedTransitionDraw(IRenderer& renderer, const UITransition::Evaluated& evaluated, Vec2 pivot) : _renderer(renderer), _view(renderer.GetViewTransform()), _opacity(renderer.GetOpacity()) {
+                _renderer.SetViewTransform(UITransition::Compose(_view, pivot, evaluated));
+                _renderer.SetOpacity(_opacity * IRenderer::ClampOpacity(evaluated.opacity));
+            }
+            ~ScopedTransitionDraw() {
+                _renderer.SetViewTransform(_view);
+                _renderer.SetOpacity(_opacity);
+            }
+
+            ScopedTransitionDraw(const ScopedTransitionDraw&) = delete;
+            ScopedTransitionDraw& operator=(const ScopedTransitionDraw&) = delete;
+
+        private:
+            IRenderer& _renderer;
+            ViewTransform _view;
+            float _opacity;
+        };
+
+        Vec2 CentreOf(const Rect& rect) {
+            return {rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f};
         }
 
     }  // namespace
@@ -155,6 +182,9 @@ namespace BECore {
             return;
         }
         SyncParams();
+        const double now = CoreManager::GetTime().GetTotalTime();
+        _layout.time = now;
+        _layout.AdvanceTransitions(now);  // a run that ended lays out again, so a hidden element goes and a shown one unlocks
         _layout.Update(MakeContext(outputWidth, outputHeight));
     }
 
@@ -163,6 +193,13 @@ namespace BECore {
             return;
         }
         const ScopedOpacity opacity(renderer, element.opacity);  // the element and its subtree, nested by multiplying
+        std::optional<ScopedTransitionDraw> transitionDraw;
+        if (const UITransitionComponent* transition = element.GetComponent<UITransitionComponent>()) {
+            const double now = CoreManager::GetTime().GetTotalTime();
+            if (transition->run.IsTransitioning(now)) {
+                transitionDraw.emplace(renderer, UITransition::Evaluate(transition->MakeSpec(), transition->run.Progress(now)), CentreOf(element.rect));
+            }
+        }
         element.ResolveTheme(CoreManager::GetUIThemes());
         // An element with a clicker is drawn in its own state and hands it to its descendants; one without is drawn in the state it was given
         element.SetInheritedState(inheritedState, inheritedDuration);
@@ -379,8 +416,8 @@ namespace BECore {
         IntrusivePtr<UIElement> element = _pressed;
         _pressed.Reset();
         element->pressed = false;
-        // Letting go anywhere else cancels the click
-        return HitTestOutput(event.x, event.y) == element.Get() ? element : IntrusivePtr<UIElement>{};
+        // Letting go anywhere else cancels the click, and so does a transition that locked the element since the press
+        return !element->inputLocked && HitTestOutput(event.x, event.y) == element.Get() ? element : IntrusivePtr<UIElement>{};
     }
 
     bool UICanvasComponent::OnMouseButtonDown(const SDL_MouseButtonEvent& event) {
@@ -401,8 +438,10 @@ namespace BECore {
         if (consumed) {
             _consumedButtons |= ButtonBit(event.button);
         }
+        // An element that is showing or hiding without input shields what is below it and gets nothing
+        const bool locked = hit && hit->inputLocked;
         IntrusivePtr<UIElement> toPress;
-        if (hit && hit->IsInteractive() && event.button == SDL_BUTTON_LEFT) {
+        if (!locked && hit && hit->IsInteractive() && event.button == SDL_BUTTON_LEFT) {
             if (_pressed) {
                 _pressed->pressed = false;  // a release that never arrived
             }
@@ -410,7 +449,7 @@ namespace BECore {
             hit->pressed = true;
             toPress = _pressed;
         }
-        UpdateTooltip(hit, IsTouch(event));
+        UpdateTooltip(locked ? nullptr : hit, IsTouch(event));
         if (toPress) {
             // Last, like OnClick: the handler may do anything, and this canvas is done with the event by then. The copy keeps the element alive through it
             const auto [x, y] = _layout.OutputToCanvas(event.x, event.y);
@@ -439,7 +478,8 @@ namespace BECore {
         // The click runs last: its handlers may do anything, and this canvas is done with the event by then
         IntrusivePtr<UIElement> clicked = TakeClick(event);
         const bool consumed = ConsumeButtonUp(event);
-        UpdateTooltip(HitTestOutput(event.x, event.y), IsTouch(event));
+        UIElement* under = HitTestOutput(event.x, event.y);
+        UpdateTooltip(under && under->inputLocked ? nullptr : under, IsTouch(event));
         if (clicked && _tooltip.IsLongPress()) {
             clicked.Reset();  // a finger held long enough showed the tooltip: the release is no click
         }
@@ -465,9 +505,10 @@ namespace BECore {
         UIElement* hit = HitTestOutput(event.x, event.y);
         // A button is held and this canvas did not take its press: a drag of the game, which passing over the UI does not interrupt or light up
         const bool gameDrag = event.state != 0 && _consumedButtons == 0;
-        SetHovered(gameDrag ? nullptr : hit);
-        UpdateTooltip(gameDrag ? nullptr : hit, IsTouch(event));
-        if (_pressed && (event.state & SDL_BUTTON_LMASK) != 0) {
+        const bool locked = hit && hit->inputLocked;  // consumed below like any hit, but it gets no hover and no tooltip
+        SetHovered(gameDrag || locked ? nullptr : hit);
+        UpdateTooltip(gameDrag || locked ? nullptr : hit, IsTouch(event));
+        if (_pressed && !_pressed->inputLocked && (event.state & SDL_BUTTON_LMASK) != 0) {
             // The press that began on this element is held: the element follows the pointer wherever it goes. The copy keeps it alive through the handler
             const IntrusivePtr<UIElement> pressed = _pressed;
             const auto [x, y] = _layout.OutputToCanvas(event.x, event.y);

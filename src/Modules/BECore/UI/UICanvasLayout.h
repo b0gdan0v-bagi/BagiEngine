@@ -4,6 +4,7 @@
 #include <BECore/UI/UIElement.h>
 #include <BECore/UI/UILayoutValidator.h>
 #include <BECore/UI/UIRegions.h>
+#include <BECore/UI/UITransitionComponent.h>
 #include <BECore/UI/UIVariant.h>
 
 namespace BECore {
@@ -18,6 +19,10 @@ namespace BECore {
      * the bounds changed or after Invalidate()), lay the tree out in the content bounds (UITreeLayout), an element that names a published region in that
      * region. It does nothing when neither the context, the params, the `regions` nor the tree changed. A change of `regions` lays the tree out again and
      * does not choose the variants again: they depend on the bounds only.
+     *
+     * **Transitions.** After the variants (and on every layout) a pass `Sync`s the run of each `UITransitionComponent` with the element's authored `active.visible`, makes a leaving element visible
+     * again so it keeps its rect and is drawn, and sets `UIElement::inputLocked` on the subtree of a transitioning element whose input is off. The authored state is the target; nothing else
+     * moves it.
      */
     class UICanvasLayout {
     public:
@@ -25,9 +30,14 @@ namespace BECore {
         IntrusivePtr<UIElement> root = New<UIElement>();  ///< the canvas itself: its children are the elements; its rect is the content bounds
         eastl::vector<UIVariant> variants;
         UIRegionSet regions;  ///< the rectangles the game published, in canvas units; noticed by Update() by themselves, like `params`
+        double time = 0.0;    ///< game time of this frame in seconds, for the transitions of the elements; the owner sets it before Update() (it is no part of what makes Update() lay out again)
 
         /// @return true when the layout was computed again
         bool Update(const UILayoutContext& context);
+
+        /// Asks the transition runs of the elements (`UITransitionComponent`) whether one ended at @p now; then the layout is invalidated, so the next Update() lets a hidden element go (its rect
+        /// is cleared) and unlocks the input of a shown one. A steady canvas pays a loop over the elements that have the component. @return true when a run ended
+        bool AdvanceTransitions(double now);
 
         /// The tree or the variants were edited: the next Update() chooses the variants and lays out again
         void Invalidate() {
@@ -91,6 +101,7 @@ namespace BECore {
         bool _variantsChosen = false;
         uint32_t _variantRuns = 0;
         uint32_t _layoutRuns = 0;
+        eastl::vector<IntrusivePtr<UITransitionComponent>> _transitions;  ///< the components found by the last layout, in tree order; kept so a steady frame allocates nothing
     };
 
 }  // namespace BECore

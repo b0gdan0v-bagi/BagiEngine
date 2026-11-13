@@ -85,6 +85,8 @@ namespace BECore {
         bool pressed = false;
         bool selected = false;       ///< runtime, set by whoever owns the choice: drawn as the chosen one (a bar, a brighter fill)
         bool groupDisabled = false;  ///< runtime: the group this element is in is disabled
+        bool inputLocked = false;    ///< runtime, set by the layout pass of the transitions: the element or an ancestor is showing / hiding with `inputDuringTransition` off; the canvas consumes what
+                                     ///< lands on it and delivers nothing (`UITransitionComponent`)
 
         /// Draws this element, not its children, with the view transform of the canvas in effect (units of the canvas). The base draws the box (`DrawBox`) of `color` and `box`
         virtual void DrawSelf(IRenderer& renderer);
