@@ -14,7 +14,7 @@ Python tools that drive a game through the control API (`src/Modules/RemoteContr
 | `bagi_play.py` | The scenario player ("Playing a scenario"): `play(exe, header, steps, update, lenient)` and the command line |
 | `bagi_mcp.py` | The MCP server (stdio). Each tool is one line over `GameSession`; the only file that needs `mcp` |
 | `requirements.txt` | `mcp` (2.x) and `pytest`; nothing else is needed |
-| `tests/` | pytest, plus `smoke.py` (the ctest entries `Bagi<Game>ControlSmoke`, `.claude/rules/cmake-rules.md`) |
+| `tests/` | pytest, plus `smoke.py` (the ctest entries `Bagi<Game>ControlSmoke`, `.claude/rules/cmake-rules.md`). The engine's smoke has two targets: `BagiMatch3` (`smoke.py`) and `BagiStress` (`tools/stress/tests/stress_smoke.py`, which imports the helpers of `smoke.py` and drives the game through `GameProcess` to check its log) |
 
 ## Running
 

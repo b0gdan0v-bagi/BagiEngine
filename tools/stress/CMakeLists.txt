@@ -22,4 +22,6 @@ if(ENGINE_BUILD_TESTS)
         SOURCES ${STRESS_TEST_SOURCES}
         WHOLE_ARCHIVE StressModule
     )
+    # the control smoke of the app: its own script (a fresh game per scene, the check of the game's log)
+    be_add_game_control_tests(BagiStress SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/tests/stress_smoke.py)
 endif()
