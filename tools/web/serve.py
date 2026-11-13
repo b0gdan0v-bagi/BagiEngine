@@ -134,6 +134,8 @@ SIGNIN_PATH = "/signin"
 # The privacy statement: open to everybody (an OAuth consent screen links it), whatever the door
 PRIVACY_PATH = "/privacy"
 PRIVACY_CONTACT_VARIABLE = "PRIVACY_CONTACT"
+# The terms of use: open like the privacy page (a consent screen may link them too)
+TERMS_PATH = "/terms"
 AUTH_PREFIX = "/auth/"
 # /auth/<provider>/start and /auth/<provider>/callback; /auth/guest and /auth/signout
 AUTH_START = "start"
@@ -751,6 +753,23 @@ shared with anyone. To have your matches deleted earlier, write to {contact}.</p
 """
 
 
+TERMS_TEXT = """<h1>Terms of use / Условия использования</h1>
+<p>This is a free game in testing, offered as it is, with no warranty and no promise that it works or stays available. Your progress
+and matches may be lost at any update. Play fairly: do not attack the service, overload it or try to read other players' data. Access
+may be withdrawn from anybody who does. What is kept about you is on the <a href="/privacy">privacy page</a>. Questions: {contact}.</p>
+<p>Это бесплатная игра в стадии тестирования, предоставляется как есть, без гарантий того, что она работает или останется доступной.
+Прогресс и матчи могут пропасть при любом обновлении. Играйте честно: не атакуйте сервис, не перегружайте его и не пытайтесь читать
+данные других игроков; доступ может быть закрыт тому, кто это делает. Что о вас хранится, написано на
+<a href="/privacy">странице о конфиденциальности</a>. Вопросы: {contact}.</p>
+"""
+
+
+def terms_page(contact: str | None) -> bytes:
+    """The terms of use: plain HTML, both languages, no script; `contact` is PRIVACY_CONTACT."""
+    who = html.escape(contact) if contact else "the operator of this service / владельцу сервиса"
+    return SIGNIN_PAGE.format(body=TERMS_TEXT.format(contact=who)).replace("<title>Sign in</title>", "<title>Terms</title>").encode("utf-8")
+
+
 def privacy_page(contact: str | None, session_days: int) -> bytes:
     """The privacy statement: plain HTML, both languages, no script; `contact` is PRIVACY_CONTACT (an email address or a link text)."""
     who = html.escape(contact) if contact else "the operator of this service / владельцу сервиса"
@@ -776,7 +795,8 @@ def signin_page(sign_in: SignIn, session: dict | None, failed: bool) -> bytes:
         if sign_in.guests:
             parts.append(f'<a class="button quiet" href="{AUTH_GUEST_PATH}">Play without signing in / Играть без входа</a>')
         parts.append('<p class="note">Only your email address is read.<br>Читается только ваш адрес почты.<br>'
-                     f'<a href="{PRIVACY_PATH}" style="color:#a9a69f">Privacy / Конфиденциальность</a></p>')
+                     f'<a href="{PRIVACY_PATH}" style="color:#a9a69f">Privacy / Конфиденциальность</a> · '
+                     f'<a href="{TERMS_PATH}" style="color:#a9a69f">Terms / Условия</a></p>')
     return SIGNIN_PAGE.format(body="\n".join(parts)).encode("utf-8")
 
 
@@ -1029,6 +1049,10 @@ class StaticHandler(BaseHTTPRequestHandler):
         url_path = urlsplit(self.path).path
         if url_path == HEALTH_PATH:
             self.send_text(HTTPStatus.OK, "ok", send_body)
+            return
+        if url_path == TERMS_PATH:
+            self.send_bytes(terms_page(self.privacy_contact), "text/html; charset=utf-8", send_body,
+                            headers=(("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"),))
             return
         if url_path == PRIVACY_PATH:
             days = self.sign_in.session_seconds // (24 * 3600) if self.sign_in is not None else SESSION_DAYS_DEFAULT
