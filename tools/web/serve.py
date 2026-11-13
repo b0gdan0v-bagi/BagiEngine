@@ -131,6 +131,9 @@ LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
 PROVIDER_TIMEOUT_SECONDS = 10
 PROVIDER_ANSWER_MAX_BYTES = 1 << 16
 SIGNIN_PATH = "/signin"
+# The privacy statement: open to everybody (an OAuth consent screen links it), whatever the door
+PRIVACY_PATH = "/privacy"
+PRIVACY_CONTACT_VARIABLE = "PRIVACY_CONTACT"
 AUTH_PREFIX = "/auth/"
 # /auth/<provider>/start and /auth/<provider>/callback; /auth/guest and /auth/signout
 AUTH_START = "start"
@@ -732,6 +735,29 @@ p.error{{color:#f2a3a3}}
 """
 
 
+PRIVACY_TEXT = """<h1>Privacy / Конфиденциальность</h1>
+<p>This server hosts a game for testers. When you sign in with an account (Google or another provider listed on the sign-in page),
+it reads only your verified email address. It keeps it in a signed cookie in your browser for up to {days} days, and, if you agree in
+the game to send your finished matches, it stores those matches together with that email. A guest's matches carry no email. Nothing
+else about you is stored: no name, no picture, no address or browser data with the matches.</p>
+<p>Stored matches are deleted after 90 days at the latest. They are used only to improve the game's computer players and are not
+shared with anyone. To have your matches deleted earlier, write to {contact}.</p>
+<p>Этот сервер размещает игру для тестировщиков. Когда вы входите через аккаунт (Google или другого провайдера со страницы входа),
+он читает только ваш подтверждённый адрес почты. Адрес хранится в подписанной cookie в вашем браузере до {days} дней, и, если в игре вы
+согласились отправлять сыгранные матчи, матчи хранятся вместе с этим адресом. Матчи гостя адреса не содержат. Больше ничего о вас не
+хранится: ни имени, ни фото, ни IP-адреса или данных браузера вместе с матчами.</p>
+<p>Сохранённые матчи удаляются не позже чем через 90 дней. Они нужны только чтобы улучшать компьютерных игроков и никому не передаются.
+Чтобы удалить ваши матчи раньше, напишите на {contact}.</p>
+"""
+
+
+def privacy_page(contact: str | None, session_days: int) -> bytes:
+    """The privacy statement: plain HTML, both languages, no script; `contact` is PRIVACY_CONTACT (an email address or a link text)."""
+    who = html.escape(contact) if contact else "the operator of this service / владельцу сервиса"
+    return SIGNIN_PAGE.format(body=PRIVACY_TEXT.format(days=session_days, contact=who)).replace(
+        "<title>Sign in</title>", "<title>Privacy</title>").encode("utf-8")
+
+
 def signin_page(sign_in: SignIn, session: dict | None, failed: bool) -> bytes:
     """The sign-in page: plain HTML of this server in both languages, no script and no resource of another origin."""
     parts = []
@@ -749,7 +775,8 @@ def signin_page(sign_in: SignIn, session: dict | None, failed: bool) -> bytes:
                          f"Sign in with {title} / Войти через {title}</a>")
         if sign_in.guests:
             parts.append(f'<a class="button quiet" href="{AUTH_GUEST_PATH}">Play without signing in / Играть без входа</a>')
-        parts.append('<p class="note">Only your email address is read.<br>Читается только ваш адрес почты.</p>')
+        parts.append('<p class="note">Only your email address is read.<br>Читается только ваш адрес почты.<br>'
+                     f'<a href="{PRIVACY_PATH}" style="color:#a9a69f">Privacy / Конфиденциальность</a></p>')
     return SIGNIN_PAGE.format(body="\n".join(parts)).encode("utf-8")
 
 
@@ -770,6 +797,8 @@ class StaticHandler(BaseHTTPRequestHandler):
     auth_limiter: RateLimiter | None = None
     # b"token" that GET and DELETE of /matches/ accept as `Authorization: Bearer`; None: no token opens them
     collect_token: bytes | None = None
+    # PRIVACY_CONTACT: who to write to, named on /privacy
+    privacy_contact: str | None = None
     protocol_version = "HTTP/1.1"
     server_version = "BagiWebServe"
     # The Server header names the program and not the Python version
@@ -1001,6 +1030,11 @@ class StaticHandler(BaseHTTPRequestHandler):
         if url_path == HEALTH_PATH:
             self.send_text(HTTPStatus.OK, "ok", send_body)
             return
+        if url_path == PRIVACY_PATH:
+            days = self.sign_in.session_seconds // (24 * 3600) if self.sign_in is not None else SESSION_DAYS_DEFAULT
+            self.send_bytes(privacy_page(self.privacy_contact, days), "text/html; charset=utf-8", send_body,
+                            headers=(("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'"),))
+            return
         if self.sign_in is not None and (url_path == SIGNIN_PATH or url_path.startswith(AUTH_PREFIX)):
             self.serve_sign_in(url_path, send_body)
             return
@@ -1149,7 +1183,8 @@ def make_server(root: Path, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, 
                 quiet: bool = False, basic_auth: tuple[str, str] | None = None, match_store: Path | None = None,
                 match_versions: tuple[int, int] | None = None,
                 match_store_max_bytes: int = MATCH_STORE_MAX_MB_DEFAULT << 20, match_forwarded_for: bool = False,
-                clock=time.time, sign_in: SignIn | None = None, collect_token: str | None = None) -> ThreadingHTTPServer:
+                clock=time.time, sign_in: SignIn | None = None, collect_token: str | None = None,
+                privacy_contact: str | None = None) -> ThreadingHTTPServer:
     """A server for `root`; port 0 takes a free one (server.server_address[1]). `basic_auth` is (user, password) or None for an open
     server. `match_store` is the folder of the /matches/ endpoint (None: the endpoint is off), `match_versions` the (lowest, highest)
     `version` a match log may start with, `match_store_max_bytes` the cap of all pieces, `match_forwarded_for` whether the rate limit
@@ -1171,6 +1206,7 @@ def make_server(root: Path, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, 
         "sign_in": sign_in,
         "auth_limiter": RateLimiter(AUTH_RATE_LIMIT, AUTH_RATE_WINDOW_SECONDS, clock) if sign_in is not None else None,
         "collect_token": collect_token.encode("utf-8") if collect_token else None,
+        "privacy_contact": privacy_contact or None,
     })
     server = MatchServer((host, port), handler)
     if store is not None:
@@ -1324,6 +1360,7 @@ def parse_args(argv: list[str] | None = None, environ=None) -> argparse.Namespac
     args.match_versions = match_versions_from(environ.get(MATCH_LOG_VERSIONS_VARIABLE, ""), parser.error)
     args.sign_in = sign_in_from(environ, args.host, args.port, args.basic_auth, parser.error)
     args.collect_token = collect_token_from(environ, parser.error)
+    args.privacy_contact = environ.get(PRIVACY_CONTACT_VARIABLE, "").strip() or None
     args.isolation_source = None
     if args.cross_origin_isolation is not None:
         args.isolation_source = "--cross-origin-isolation" if args.cross_origin_isolation else "--no-cross-origin-isolation"
@@ -1343,7 +1380,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         server = make_server(args.root, args.host, args.port, isolation, args.quiet, args.basic_auth, args.match_store,
                              args.match_versions, args.match_store_max_bytes, args.match_forwarded_for,
-                             sign_in=make_sign_in(args.sign_in) if args.sign_in else None, collect_token=args.collect_token)
+                             sign_in=make_sign_in(args.sign_in) if args.sign_in else None, collect_token=args.collect_token,
+                             privacy_contact=args.privacy_contact)
     except MatchStoreError as error:
         print(f"serve.py: {error}", file=sys.stderr)
         return 1
