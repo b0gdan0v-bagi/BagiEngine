@@ -42,6 +42,7 @@ from smoke import (  # noqa: E402
     RoomServer,
     SmokeFailure,
     check,
+    exchange,
     open_room,
     play_to_the_end,
     run_until,
@@ -90,6 +91,10 @@ PROXY_PER_ADDRESS_FLAG = 3
 PROXY_FORWARDED_NET = "203.0.113"  # TEST-NET-3, RFC 5737
 GUESS_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
 ROOM_CODE_LENGTH = 5
+LIST_BURST = 5  # RoomLimits::kListBurst
+LISTS_PER_SOCKET = LIST_BURST  # a fresh socket's list bucket takes this many at once
+LIST_SOCKETS_PER_ROUND = 5
+LISTS_ON_THE_GUESSER = 3
 
 
 def mask_payload(payload: bytes, mask: bytes) -> bytes:
@@ -314,12 +319,8 @@ def open_client(port: int, headers: list[str] | None = None) -> RawClient:
     return client
 
 
-def create_room_as(port: int, name: str) -> Human:
-    human = Human(port)
-    human.send({"type": "create_room", "game": "cards", "name": name, "options": {}})
-    human.wait_for("joined")
-    human.wait_for("lobby")
-    return human
+def create_room_as(port: int, name: str, public: bool = False) -> Human:
+    return smoke.create_room_as(port, "cards", name, public)
 
 
 def guess(port: int, code: str, name: str = "Guesser") -> tuple[Human, dict]:
@@ -652,6 +653,80 @@ def scenario_proxy_addresses(server: RoomServer, table: GoodTable) -> None:
         client.close()
 
 
+def list_rooms_message() -> dict:
+    return {"type": "list_rooms", "game": "cards"}
+
+
+def expect_list_or_limit(answer: dict, public_code: str, what: str) -> None:
+    """An answer to a `list_rooms` is the list with the public room in it, or the list bucket's `rate_limited` that keeps the connection."""
+    if answer.get("type") == "rooms":
+        check([entry.get("room") for entry in answer["rooms"]] == [public_code], f"{what}: the list is {answer['rooms']}, not only {public_code}")
+    else:
+        check(answer.get("type") == "error" and answer.get("code") == "rate_limited" and answer.get("ref") == "list_rooms", f"{what}: the answer to a list was {answer}")
+
+
+def scenario_list_flood(server: RoomServer, table: GoodTable) -> None:
+    """A flood of `list_rooms` meets the list bucket and then the general one; lists spend nothing of the guessing limits and show no private code."""
+    port = server.port
+    public = create_room_as(port, "Open", public=True)
+    private = create_room_as(port, "Closed")
+    secrets = {table.room, private.room}
+
+    client = open_client(port)
+    batch = build_frame(OPCODE_TEXT, message_bytes(list_rooms_message())) * FLOOD_BATCH
+    sent = 0
+    while sent < FLOOD_MESSAGES and not client.is_closed():
+        client.send(batch)
+        sent += FLOOD_BATCH
+        client.fill()
+    closing = client.wait_closed()
+    check(sent < FLOOD_MESSAGES, f"{FLOOD_MESSAGES} list_rooms were all taken, the connection was never closed")
+    check(closing.code == CLOSE_POLICY_VIOLATION and closing.reason == "rate_limited", f"the list flood ended with {closing}, not close {CLOSE_POLICY_VIOLATION} rate_limited")
+    lists = [text for text in client.texts if text.get("type") == "rooms"]
+    list_limited = [text for text in client.texts if text.get("type") == "error" and text.get("code") == "rate_limited" and text.get("ref") == "list_rooms"]
+    check(0 < len(lists) <= LIST_BURST + 1, f"the flood got {len(lists)} lists, the bucket holds {LIST_BURST}")
+    check(list_limited, f"no list was answered rate_limited with ref list_rooms; the flood got {[text.get('type') for text in client.texts][:30]}")
+    check(all([entry.get("room") for entry in text["rooms"]] == [public.room] for text in lists), "a list of the flood names a room that is not the public one")
+    check(not any(code in json.dumps(client.texts) for code in secrets), "the code of a private room is in an answer to the flood")
+    client.close()
+    table.pump()
+
+    # Lists between wrong codes: they are no failed join and no reset of the count, and they spend none of the address's budget
+    codes = [code for code in wrong_codes(3 * FAILED_JOINS_IN_A_ROW, table.room) if code not in secrets][: 2 * FAILED_JOINS_IN_A_ROW]
+    guesser = Human(port)
+    seen = []
+    for index in range(FAILED_JOINS_IN_A_ROW - 1):
+        answer = exchange(guesser, {"type": "join_room", "code": codes[index], "name": "Guesser"})
+        check(answer.get("code") == "unknown_room", f"a wrong code got {answer}")
+        for _ in range(LISTS_ON_THE_GUESSER):
+            expect_list_or_limit(exchange(guesser, list_rooms_message()), public.room, "a list between guesses")
+        for _socket in range(LIST_SOCKETS_PER_ROUND):  # more lists, from fresh sockets of the same address
+            browser = Human(port)
+            for _ in range(LISTS_PER_SOCKET):
+                answer = exchange(browser, list_rooms_message())
+                check(answer.get("type") == "rooms", f"a fresh socket's list got {answer}")
+                expect_list_or_limit(answer, public.room, "a list of a fresh socket")
+            seen += browser.messages
+            browser.close()
+        table.pump()
+    answer = exchange(guesser, {"type": "join_room", "code": codes[FAILED_JOINS_IN_A_ROW - 1], "name": "Guesser"})
+    check(answer.get("code") == "unknown_room", f"the fifth wrong code got {answer}")
+    run_until(lambda: guesser.closed is not None, guesser.poll, "the fifth wrong code did not close the connection")
+    check(guesser.closed.reason == "too_many_failed_joins", f"the guesser was closed with {guesser.closed}, not too_many_failed_joins")
+    seen += guesser.messages
+    check(not any(code in json.dumps(seen) for code in secrets), "the code of a private room is in an answer to a list")
+
+    # The lists took nothing of the address's budget (10): the five guesses above and five more are answered as wrong codes, the next is rate_limited
+    second = Human(port)
+    for index in range(FAILED_JOINS_IN_A_ROW):
+        answer = exchange(second, {"type": "join_room", "code": codes[FAILED_JOINS_IN_A_ROW + index], "name": "Guesser"})
+        check(answer.get("code") == "unknown_room", f"a wrong code after the lists got {answer}: the lists spent the failed-join budget")
+    third, answer = guess(port, wrong_codes(1, table.room)[0], "Late")
+    check(answer.get("code") == "rate_limited", f"a wrong code with the address budget spent got {answer}")
+    for human in (second, third, public, private):
+        human.close()
+
+
 @dataclass
 class Scenario:
     name: str
@@ -671,6 +746,7 @@ SCENARIOS: list[Scenario] = [
     Scenario("rooms-per-address", ["--max-rooms-per-address", str(ROOMS_PER_ADDRESS_FLAG)], scenario_rooms_per_address),
     Scenario("lobby-timeout", ["--lobby-timeout-ms", str(LOBBY_TIMEOUT_MS)], scenario_lobby_timeout),
     Scenario("guessing", [], scenario_guessing),
+    Scenario("list-flood", [], scenario_list_flood),
     Scenario("proxy-addresses", ["--trusted-proxy-hops", "1", "--max-per-address", str(PROXY_PER_ADDRESS_FLAG)], scenario_proxy_addresses),
 ]
 

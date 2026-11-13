@@ -1,6 +1,7 @@
 #include "FuzzRoomInput.h"
 #include "FuzzTargets.h"
 
+#include <Rooms/RoomCode.h>
 #include <Rooms/RoomErrors.h>
 #include <Rooms/RoomProtocol.h>
 
@@ -137,6 +138,8 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(join->name.empty() || SanitizePlayerName(join->name) == std::optional<eastl::string>(join->name));
             } else if (const auto* action = std::get_if<ActionMessage>(&*parsed)) {
                 FUZZ_CHECK(action->action.is_object());
+            } else if (const auto* list = std::get_if<ListRoomsMessage>(&*parsed)) {
+                FUZZ_CHECK(!list->game.empty() && list->game.size() <= RoomLimits::kMaxGameNameBytes);
             }
         }
 
@@ -168,6 +171,20 @@ namespace BECore::Fuzz {
             return {};
         }
 
+        /// What a client that read a `rooms` message may rely on: the cap, a code that is a code, counts that fit, options that are plain numbers and flags
+        void CheckRoomList(const RoomListMessage& list) {
+            FUZZ_CHECK(list.rooms.size() <= RoomLimits::kMaxListedRooms);
+            for (const RoomListing& listing : list.rooms) {
+                FUZZ_CHECK(NormalizeRoomCode(listing.room) == std::optional<eastl::string>(listing.room));
+                FUZZ_CHECK(listing.seats >= 1 && static_cast<size_t>(listing.seats) <= RoomLimits::kMaxLobbySeats);
+                FUZZ_CHECK(listing.taken >= 0 && listing.taken <= listing.seats);
+                FUZZ_CHECK(listing.options.is_object() && listing.options.size() <= RoomLimits::kMaxLobbyOptions);
+                for (auto it = listing.options.begin(); it != listing.options.end(); ++it) {
+                    FUZZ_CHECK(it->is_boolean() || it->is_number_integer());
+                }
+            }
+        }
+
         void CheckServerMessage(eastl::string_view text, size_t maxBytes) {
             const auto parsed = ParseServerMessage(text, maxBytes);
             if (!parsed.has_value()) {
@@ -182,6 +199,8 @@ namespace BECore::Fuzz {
                 FUZZ_CHECK(joined->token.size() == RoomLimits::kTokenLength);
             } else if (const auto* lobby = std::get_if<LobbyMessage>(&*parsed)) {
                 FUZZ_CHECK(lobby->seats.size() <= RoomLimits::kMaxLobbySeats);
+            } else if (const auto* rooms = std::get_if<RoomListMessage>(&*parsed)) {
+                CheckRoomList(*rooms);
             }
 
             // What the builders make of a message that was read reads back, and builds the same text again

@@ -13,6 +13,8 @@ Scenarios, on a server with --test-games --computer-delay-ms 0 --reconnect-grace
   * a plain GET /healthz gets 200 and `ok`, GET / gets 400;
   * the log reaches a piped stdout while the server runs: the settings line, the line of a refused connection and a stats line (--stats-interval-ms 200);
     output that is block-buffered fails this;
+  * `list`: a public and a private `cards` room, a third socket lists them: only the public one is there (host, taken, seats), the private code is on no wire
+    of the browser, `no-such-game` is `unknown_game`; the browser joins from the list and the hand is played to the end under the judge;
   * SIGTERM with a client connected (--shutdown-grace-ms 3000): the client is closed with 1001 `server_stopping` and the process exits 0 well inside the grace
     (not on Windows, where a process is terminated without a signal handler).
 With the probe (the C++ client of RoomClient, a process of its own; its scenarios are skipped with a line when there is none):
@@ -60,6 +62,7 @@ RECONNECT_GRACE_MS = 300
 GUEST_SEAT = 1
 GUEST_DROP_TABLE_SIZE = 4  # guest, two computers, host have played: the guest's second turn
 TOTAL_PLAYS = 12
+GAME_SEATS = 4  # the seats of the demo game `cards`
 GOOD_ORIGIN = "https://good.example"
 EVIL_ORIGIN = "https://evil.example"
 HTTP_FORBIDDEN = 403
@@ -351,6 +354,24 @@ def open_room(port: int, game: str, options: dict[str, Any] | None = None) -> tu
     return host, guest
 
 
+def create_room_as(port: int, game: str, name: str, public: bool = False) -> Human:
+    """A host in a room of its own; `public` lists it (the member is sent only when true: absent is the private default)."""
+    host = Human(port)
+    host.send({"type": "create_room", "game": game, "name": name, "options": {}, **({"public": True} if public else {})})
+    host.wait_for("joined")
+    host.wait_for("lobby")
+    return host
+
+
+def exchange(human: Human, message: dict[str, Any]) -> dict[str, Any]:
+    """Sends one message and returns the one answer it gets (every message of this protocol that the callers use is answered once, in order)."""
+    taken = len(human.messages)
+    human.send(message)
+    run_until(lambda: len(human.messages) > taken or human.closed is not None, human.poll, f"no answer to {message.get('type')}")
+    check(len(human.messages) > taken, f"the connection was closed ({human.closed}) before it answered {message.get('type')}")
+    return human.messages[taken]
+
+
 def check_no_error(humans: list[Human]) -> None:
     for human in humans:
         errors = [message for message in human.messages if message.get("type") == "error"]
@@ -415,6 +436,36 @@ def scenario_leaky(port: int) -> None:
     check(find_card_ids("c1_20 xc1_2 c1_2x") == [], "the judge took part of a longer word for a card")
     host.close()
     guest.close()
+
+
+def scenario_list(port: int) -> None:
+    public = create_room_as(port, "cards", "OpenHost", public=True)
+    private = create_room_as(port, "cards", "ClosedHost")
+    prober = Human(port)
+    unknown = exchange(prober, {"type": "list_rooms", "game": "no-such-game"})
+    check(unknown.get("type") == "error" and unknown.get("code") == "unknown_game" and unknown.get("ref") == "list_rooms", f"a list for an unknown game got {unknown}")
+    prober.close()
+
+    browser = Human(port)
+    listed = exchange(browser, {"type": "list_rooms", "game": "cards"})
+    check(listed.get("type") == "rooms" and listed.get("game") == "cards" and listed.get("more") is False, f"the browser got {listed}")
+    check([entry.get("room") for entry in listed["rooms"]] == [public.room], f"the list names {listed['rooms']}, not only the public room {public.room}")
+    entry = listed["rooms"][0]
+    check(entry.get("host") == "OpenHost" and entry.get("taken") == 1 and entry.get("seats") == GAME_SEATS and entry.get("started") is False, f"the entry is {entry}")
+    check(private.room not in json.dumps(browser.messages), "the code of a private room reached the browser")
+
+    # Join from the list is the ordinary join by code
+    browser.send({"type": "join_room", "code": entry["room"], "name": "Browser"})
+    browser.wait_for("joined")
+    browser.wait_for("lobby")
+    public.send({"type": "start"})
+    play_to_the_end([public, browser])
+    check_no_error([public, browser])
+    for human in (public, browser, private):
+        check(not human.leaks, f"seat {human.seat} was sent hidden cards: {human.leaks}")
+    check(private.room not in json.dumps(browser.messages) + json.dumps(public.messages), "the code of a private room reached another room")
+    for human in (public, browser, private):
+        human.close()
 
 
 def scenario_origin(port: int) -> None:
@@ -528,6 +579,7 @@ SCENARIOS: list[tuple[str, list[str], Callable[[RoomServer, Path | None], None],
     ("hand", [], by_port(scenario_hand), False, {}),
     ("reconnect", [], by_port(scenario_reconnect), False, {}),
     ("leaky", [], by_port(scenario_leaky), False, {}),
+    ("list", [], by_port(scenario_list), False, {}),
     ("origin", ["--origin", GOOD_ORIGIN], by_port(scenario_origin), False, {}),
     ("environment-port", [], by_port(scenario_environment_port), False, {"PORT": "0"}),
     ("health", [], by_port(scenario_health), False, {}),
