@@ -27,6 +27,10 @@
         <node name="Field">
           <components>
             <component type="TransformComponent" x="0" y="0" width="0" height="0" />
+            <component type="UICanvasComponent" space="Screen" scaleMode="ScaleWithScreen" referenceWidth="1920" referenceHeight="1080" match="0.5">
+              <elements />
+            </component>
+            <component type="StressUiComponent" />
           </components>
         </node>
       </nodes>

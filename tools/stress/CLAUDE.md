@@ -16,9 +16,9 @@ Each scene is 1920 x 1080 and has a node `Field` for the scene's component.
 
 ```
 CMakeLists.txt        be_add_module(Stress), the reflection, BagiStress, StressTests (no standalone block: not a game of its own repository)
-config/               ApplicationConfig.xml (Game mode), SceneConfig.xml: kept at the engine's content version by ContentFilesVersionTest
-src/Stress/           StressSettings (the flags), StressState (what is shown now), StressGame (the IGame), StressGameControl (the control adapter), SpriteField and EntityField (pure placement of the sprites and the orbits), StressHash (the integer hash they share)
-src/Stress/Components/ the component of each scene (StressSpritesComponent, StressEntitiesComponent, ...)
+config/               ApplicationConfig.xml (Game mode), SceneConfig.xml: kept at the engine's content version by ContentFilesVersionTest; UIStrings.xml (the `{#key}` labels of the `ui` scene)
+src/Stress/           StressSettings (the flags), StressState (what is shown now), StressGame (the IGame), StressGameControl (the control adapter), SpriteField and EntityField and UiField (pure placement of the sprites, the orbits and the labels, and the texts of the labels), StressHash (the integer hash they share)
+src/Stress/Components/ the component of each scene (StressSpritesComponent, StressEntitiesComponent, StressUiComponent, ...)
 tests/                gtest sources of StressTests; StressSceneFixture.h is the shipped scene file on a RecordingRenderer with the StressGame active (the setup of every scene component's test)
 ```
 
@@ -50,3 +50,9 @@ tests/                gtest sources of StressTests; StressSceneFixture.h is the 
 - **The tween rules that matter** (`Animation/CLAUDE.md`): a restart costs one frame per link (rule 2), and the long durations keep the restarts few in a frame; a shrink resets the tail's `ScopedTween`s before the nodes go (rule 8), so the tween count drops with the count and a destroyed scene leaves none.
 - **A restart allocates** (a new tween handle), so a frame in which some tween ends is not allocation-free; every other frame is. The scene is therefore a measure of the tween manager as a game uses it, restarts included.
 - **The tweens run on the global `TweenManager`, not on the scene:** they keep running when another scene is shown. A run is one scene per process (the benchmarks start a fresh one), so switching scenes with `set_scene` in one run leaves the entities' tweens in the measure of the next scene.
+
+## The `ui` scene
+
+`UiField` (pure) lays N labels on a grid and picks their texts, both from the index and the count alone. The columns follow the aspect of the view and `kUiCellAspect` (a label is a sentence, so a cell stays wide whatever the count), the font size follows the row (14..28), and the grid always fits the view. The text of label `i` is a view of a static table: the even labels are English sentences, the odd ones Russian, from pools of 16 each (so the glyph atlas stays small), every 8th is a `{#stress.label.<k>}` key of `config/UIStrings.xml` (the labels a language switch rewords) and the 5th and the 8th of every eight name a `{count}` or `{last}` variable. `{last}` (the index of the last label) stands where a per-label `{index}` would: `UIVars` are global, so one value cannot be a label's own index.
+
+`StressUiComponent` sits on the node `Field` beside its `UICanvasComponent` (`Screen`, `ScaleWithScreen` 1920 x 1080, no elements in the file) and adds `UIElement` + `UITextComponent` children of the canvas root when `StressState::Version()` moved: append or remove at the tail, and a count change gives every kept label its cell again, because the grid changes with the count. One `Invalidate()` per change, the variables set with the count (an equal value re-expands nothing). A language change is one `UIStrings::SetLanguage`: the strings' own version rewords the key labels at the next draw, no label is touched. A steady frame does nothing in the component; the cost is the canvas's layout cache, the text layout cache and the glyph quads, which is what the scene measures. The text is `wrap="false"` with the default ellipsis: a cell that is too small shows less, and the layout validator would report such findings, which is expected for a stress field and never asserted.

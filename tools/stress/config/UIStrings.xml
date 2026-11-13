@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<!-- The strings of the `ui` scene: the labels that name a {#stress.label.<k>} key change their words with the language (StressUiComponent). -->
+<UIStrings default="en">
+  <language id="en">
+    <string key="stress.label.0" text="Frame budget" />
+    <string key="stress.label.1" text="Draw calls" />
+    <string key="stress.label.2" text="Glyph atlas" />
+    <string key="stress.label.3" text="Layout cache" />
+    <string key="stress.label.4" text="Text quads" />
+    <string key="stress.label.5" text="Scene update" />
+    <string key="stress.label.6" text="Batch break" />
+    <string key="stress.label.7" text="Texture switch" />
+    <string key="stress.label.8" text="Blend mode" />
+    <string key="stress.label.9" text="Clip rect" />
+    <string key="stress.label.10" text="Opacity" />
+    <string key="stress.label.11" text="Ellipsis" />
+    <string key="stress.label.12" text="Word wrap" />
+    <string key="stress.label.13" text="Font size" />
+    <string key="stress.label.14" text="Pixel density" />
+    <string key="stress.label.15" text="Safe area" />
+  </language>
+  <language id="ru">
+    <string key="stress.label.0" text="Бюджет кадра" />
+    <string key="stress.label.1" text="Вызовы отрисовки" />
+    <string key="stress.label.2" text="Атлас глифов" />
+    <string key="stress.label.3" text="Кеш раскладки" />
+    <string key="stress.label.4" text="Квады текста" />
+    <string key="stress.label.5" text="Обновление сцены" />
+    <string key="stress.label.6" text="Разрыв пакета" />
+    <string key="stress.label.7" text="Смена текстуры" />
+    <string key="stress.label.8" text="Режим смешивания" />
+    <string key="stress.label.9" text="Область отсечения" />
+    <string key="stress.label.10" text="Прозрачность" />
+    <string key="stress.label.11" text="Многоточие" />
+    <string key="stress.label.12" text="Перенос слов" />
+    <string key="stress.label.13" text="Размер шрифта" />
+    <string key="stress.label.14" text="Плотность пикселей" />
+    <string key="stress.label.15" text="Безопасная зона" />
+  </language>
+</UIStrings>
