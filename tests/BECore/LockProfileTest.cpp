@@ -39,7 +39,8 @@ namespace BECore::Tests {
             ScopedThreshold& operator=(const ScopedThreshold&) = delete;
         };
 
-        /// Leaves the process with no backend and the ring off, whatever the test did
+        /// Leaves the process with no backend and the ring off, whatever the test did. It stops the
+        /// primary backend, so declare it after every backend the test installs (locals die in reverse)
         class ProfilerStateGuard {
         public:
             ProfilerStateGuard() = default;
@@ -245,9 +246,9 @@ namespace BECore::Tests {
     }
 
     TEST(LockProfileTest, AContendedMutexRecordsALockWaitZoneOnTheWaitingThread) {
-        const ProfilerStateGuard guard;
         const ScopedThreshold threshold(kTestThresholdUs);
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&recorder));
 
         Mutex mutex{BE_LOCK_SITE("Test lock")};
@@ -263,9 +264,9 @@ namespace BECore::Tests {
     }
 
     TEST(LockProfileTest, TheWaitZoneNestsInsideTheZonesTheWaiterHasOpen) {
-        const ProfilerStateGuard guard;
         const ScopedThreshold threshold(kTestThresholdUs);
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&recorder));
 
         Mutex mutex{BE_LOCK_SITE("Test lock")};
@@ -285,9 +286,9 @@ namespace BECore::Tests {
     }
 
     TEST(LockProfileTest, AnUncontendedLockRecordsNothing) {
-        const ProfilerStateGuard guard;
         const ScopedThreshold threshold(0);  // even a zero threshold: nothing waited, nothing recorded
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&recorder));
 
         Mutex mutex{BE_LOCK_SITE("Test lock")};
@@ -305,9 +306,9 @@ namespace BECore::Tests {
     }
 
     TEST(LockProfileTest, AWaitBelowTheThresholdRecordsNothing) {
-        const ProfilerStateGuard guard;
         const ScopedThreshold threshold(60U * 1000U * 1000U);  // a minute
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&recorder));
 
         Mutex mutex{BE_LOCK_SITE("Test lock")};
@@ -332,9 +333,9 @@ namespace BECore::Tests {
     }
 
     TEST(LockProfileTest, AWriterWaitingForReadersAndAReaderWaitingForAWriterAreRecorded) {
-        const ProfilerStateGuard guard;
         const ScopedThreshold threshold(kTestThresholdUs);
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&recorder));
 
         SharedMutex mutex{BE_LOCK_SITE("Test lock")};
@@ -350,9 +351,9 @@ namespace BECore::Tests {
     }
 
     TEST(LockProfileTest, TwoReadersDoNotWaitForEachOther) {
-        const ProfilerStateGuard guard;
         const ScopedThreshold threshold(0);
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&recorder));
 
         SharedMutex mutex{BE_LOCK_SITE("Test lock")};
@@ -362,9 +363,9 @@ namespace BECore::Tests {
     }
 
     TEST(LockProfileTest, TheRingHoldsTheWaitZone) {
-        const ProfilerStateGuard guard;
         const ScopedThreshold threshold(kTestThresholdUs);
         FrameRingBackend ring;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&ring));
 
         Mutex mutex{BE_LOCK_SITE("Test lock")};
@@ -378,9 +379,9 @@ namespace BECore::Tests {
     }
 
     TEST(LockProfileTest, TheRingKeepsTheOpenZonesOfTheWaiterIntact) {
-        const ProfilerStateGuard guard;
         const ScopedThreshold threshold(kTestThresholdUs);
         FrameRingBackend ring;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&ring));
 
         Mutex mutex{BE_LOCK_SITE("Test lock")};
@@ -399,9 +400,9 @@ namespace BECore::Tests {
     }
 
     TEST(LockProfileTest, TheZoneReachesBothSidesOfAFanOut) {
-        const ProfilerStateGuard guard;
         const ScopedThreshold threshold(kTestThresholdUs);
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&recorder));
         Profiler::SetRingEnabled(true);
         ASSERT_NE(Profiler::GetBackend(), &recorder);
@@ -414,9 +415,9 @@ namespace BECore::Tests {
     }
 
     TEST(LockProfileTest, TheTraceStaysBalancedWithFourThreadsFightingOverALock) {
-        const ProfilerStateGuard guard;
         const ScopedThreshold threshold(0);
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&recorder));
 
         Mutex mutex{BE_LOCK_SITE("Test lock")};
@@ -444,8 +445,8 @@ namespace BECore::Tests {
     // ---- The events of every lock operation (Tracy's lockables), through a counting backend ----
 
     TEST(LockProfileTest, OnlyABackendThatAsksGetsTheEventsOfEveryLockOperation) {
-        const ProfilerStateGuard guard;
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&recorder));
         EXPECT_FALSE(LockHooks::EventsActive());
         Profiler::SetRingEnabled(true);

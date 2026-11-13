@@ -64,6 +64,10 @@ There is no review between WPs: the slice is reviewed once, at the end. What a f
 
 Number the runs from 1; the level of a run is the highest of its WPs (the conductor picks the developer's model by it).
 
+## Shots
+
+Opt-in (`tools/shots/CLAUDE.md`). Write `**Shots:** <scene>[@WxH], ...` and `**Shots expect:** <one line: which scenes change and where; the others stay equal>` in `## Slice` only for a visible change whose mistake the layout tests would miss (a look, a new screen, a skin, a layout), never for logic, tools, docs or engine-core slices. The scene names come only from `python3 <engine>/tools/shots/shots.py scenes`, run at the checkout root: no output or exit 77 means no line; when the scene you need is not in the list, write no line and one sentence under "Left for the owner" saying which scene the rules file lacks. A scene without `@WxH` uses the set's default size. A through entry's slice K gets its own line. The conductor takes `before` with this list and the reviewer takes `after`; "expect" is what the reviewer measures the diff against, so name the scenes and regions you know the slice changes.
+
 ## Files
 
 The plan has a `## Files` section: every path of `<R>` the slice will add or change, one `- <path>` per line (a folder ends with `/` when the slice adds files in it whose names are not known yet). Several loops can run at once, each in its own worker folder (`todo-loop/SKILL.md`, "Parallel workers"); they read this section of the plans in the store and do not take an entry that would change the same files. Name what you see, not more: a path too many keeps another entry waiting, a path too few is a merge conflict later.
@@ -79,6 +83,8 @@ Area `<area>` (repository `<R>`, base `<base>`), branch `todo/<branch-id>`, entr
 
 ## Slice
 <what the slice delivers and what it leaves out>
+**Shots:** <scene>[@WxH], ...            (optional: a visible change only, see "Shots")
+**Shots expect:** <which scenes change and where; the others stay equal>
 
 ## Files
 - <path relative to <R>>
@@ -107,4 +113,4 @@ Area `<area>` (repository `<R>`, base `<base>`), branch `todo/<branch-id>`, entr
 
 ## Answer
 
-Short, for the conductor: the plan path (**absolute, the home directory expanded**, e.g. `/Users/<name>/.claude/plans/todo-loop-<plan id>.md`, never `~`: the conductor turns it into a link in the chat; get the home with `echo "$HOME"`), the number of WPs with one line each and its level and run, `slice K of M` and the gate it stops at, anything that did not fit the slice. When the entry has no `priority` and its text and the plan make one clear, one line `Priority: proposed <level> (<reason>)` (`now`, `high`, `normal`, `low`); never when it has one. For a through entry also the stage plan path and `ends at: size | gate | end` of this slice. Or one line `BLOCKED: <reason>`: the entry is vague, the owner has to decide, the code it names does not exist, or the work cannot be checked on this machine.
+Short, for the conductor: the plan path (**absolute, the home directory expanded**, e.g. `/Users/<name>/.claude/plans/todo-loop-<plan id>.md`, never `~`: the conductor turns it into a link in the chat; get the home with `echo "$HOME"`), the number of WPs with one line each and its level and run, `slice K of M` and the gate it stops at, `shots: <scenes>` when the plan has a `**Shots:**` line (nothing otherwise), anything that did not fit the slice. When the entry has no `priority` and its text and the plan make one clear, one line `Priority: proposed <level> (<reason>)` (`now`, `high`, `normal`, `low`); never when it has one. For a through entry also the stage plan path and `ends at: size | gate | end` of this slice. Or one line `BLOCKED: <reason>`: the entry is vague, the owner has to decide, the code it names does not exist, or the work cannot be checked on this machine.

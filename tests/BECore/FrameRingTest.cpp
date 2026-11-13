@@ -406,7 +406,8 @@ namespace BECore::Tests {
         constexpr ProfileSite kSwitchedSite{"Spans the switch", "Test", "FrameRingTest.cpp", 12, 0};
         constexpr ProfileSite kPrimaryOnlySite{"Primary only", "Test", "FrameRingTest.cpp", 13, 0};
 
-        /// Leaves the process with no backend and the ring off, whatever the test did
+        /// Leaves the process with no backend and the ring off, whatever the test did. It stops the
+        /// primary backend, so declare it after every backend the test installs (locals die in reverse)
         class ProfilerStateGuard {
         public:
             ProfilerStateGuard() = default;
@@ -448,8 +449,8 @@ namespace BECore::Tests {
     }  // namespace
 
     TEST(ProfilerRingTest, WithTheRingOffTheBackendIsExactlyThePrimary) {
-        const ProfilerStateGuard guard;
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         ASSERT_TRUE(Profiler::SetBackend(&recorder));
         EXPECT_EQ(Profiler::GetBackend(), &recorder);
         EXPECT_EQ(Profiler::GetPrimaryBackend(), &recorder);
@@ -481,8 +482,8 @@ namespace BECore::Tests {
     }
 
     TEST(ProfilerRingTest, AZoneLandsInThePrimaryAndInTheRing) {
-        const ProfilerStateGuard guard;
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         Profiler::SetBackend(&recorder);
         Profiler::SetRingEnabled(true);
         EXPECT_NE(Profiler::GetBackend(), &recorder);
@@ -502,8 +503,8 @@ namespace BECore::Tests {
     }
 
     TEST(ProfilerRingTest, TheSameFanOutServesAPrimaryEveryTimeTheRingComesBack) {
-        const ProfilerStateGuard guard;
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         Profiler::SetBackend(&recorder);
         Profiler::SetRingEnabled(true);
         IProfilerBackend* const first = Profiler::GetBackend();
@@ -513,9 +514,9 @@ namespace BECore::Tests {
     }
 
     TEST(ProfilerRingTest, ChangingThePrimaryKeepsTheRing) {
-        const ProfilerStateGuard guard;
         ChromeTraceBackend first;
         ChromeTraceBackend second;
+        const ProfilerStateGuard guard;
         Profiler::SetBackend(&first);
         Profiler::SetRingEnabled(true);
         ASSERT_TRUE(Profiler::SetBackend(&second));
@@ -536,8 +537,8 @@ namespace BECore::Tests {
     }
 
     TEST(ProfilerRingTest, AZoneEndsOnTheBackendItBeganOnWhenTheRingGoesOff) {
-        const ProfilerStateGuard guard;
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         Profiler::SetBackend(&recorder);
         Profiler::SetRingEnabled(true);
         const size_t before = CountInRing(kSwitchedSite);
@@ -553,8 +554,8 @@ namespace BECore::Tests {
     }
 
     TEST(ProfilerRingTest, AZoneBegunBeforeTheRingWasOnEndsOnThePrimaryOnly) {
-        const ProfilerStateGuard guard;
         ChromeTraceBackend recorder;
+        const ProfilerStateGuard guard;
         Profiler::SetBackend(&recorder);
         const size_t before = CountInRing(kPrimaryOnlySite);
         {
@@ -569,8 +570,8 @@ namespace BECore::Tests {
     }
 
     TEST(ProfilerRingTest, ScopedTraceWithTheRingOnRestoresThePrimary) {
-        const ProfilerStateGuard guard;
         ChromeTraceBackend original;
+        const ProfilerStateGuard guard;
         Profiler::SetBackend(&original);
         Profiler::SetRingEnabled(true);
 
