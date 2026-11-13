@@ -20,7 +20,7 @@ Basic and sign-in exclude each other (the server does not start with both). Sign
 
 ## The privacy page
 
-`GET /privacy` is open behind every door (no session, no password): the OAuth consent screen of a provider must link a privacy policy before the app can be published, and the provider checks the link. It says, in both languages, what the server keeps (the email in the session cookie and with the matches a visitor agreed to send, nothing about a guest, 90 days at most, used only for the computer players, shared with nobody) and whom to write to: `PRIVACY_CONTACT` (an email address), else "the operator of this service". `/signin` links it. The text is in `serve.py` (`PRIVACY_TEXT`): change it there when the server starts keeping anything else.
+`GET /privacy` is open behind every door (no session, no password): the OAuth consent screen of a provider must link a privacy policy before the app can be published, and the provider checks the link. It says, in both languages, what the server keeps (the email in the session cookie and with the matches a visitor agreed to send, nothing about a guest, 90 days at most, used only for the computer players, shared with nobody) and whom to write to: `PRIVACY_CONTACT` (an email address), else "the operator of this service". `/signin` links it, and `GET /terms` (open the same way: a free game in testing, no warranty, play fairly) links back. The text is in `serve.py` (`PRIVACY_TEXT`): change it there when the server starts keeping anything else.
 
 ## Matches with sign-in
 
@@ -33,7 +33,7 @@ Basic and sign-in exclude each other (the server does not start with both). Sign
 
 ## The owner's checklist (Google, once)
 
-1. [Google Cloud console](https://console.cloud.google.com/): a project; **APIs & Services → OAuth consent screen**: External, app name, support email, scopes `openid` and `email` only; **Branding**: home page `https://<service domain>/`, privacy policy `https://<service domain>/privacy`, authorized domain `<service domain>` (publishing refuses without them).
+1. [Google Cloud console](https://console.cloud.google.com/): a project; **APIs & Services → OAuth consent screen**: External, app name, support email, scopes `openid` and `email` only; **Branding**: home page `https://<service domain>/`, privacy policy `https://<service domain>/privacy`, terms of service `https://<service domain>/terms`, authorized domain `<service domain>` (publishing refuses without them).
 2. **Publish the app** (consent screen → Publish app). In "Testing" only the listed test users (at most 100) can sign in; `openid email` are not sensitive scopes, so publishing needs no verification review.
 3. **Credentials → Create credentials → OAuth client ID**, type Web application, **Authorized redirect URI** `https://<service domain>/auth/google/callback` exactly (no JavaScript origin is needed). Copy the client id and the secret.
 4. `railway variables --service <name> --set GOOGLE_CLIENT_ID=... --set GOOGLE_CLIENT_SECRET=... --set PUBLIC_URL=https://<service domain> --set SESSION_SECRET=<python -c "import secrets; print(secrets.token_urlsafe(48))"> --set MATCH_COLLECT_TOKEN=<another one> --set PRIVACY_CONTACT=<your email>`; remove `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD` (`railway variables --service <name> --remove ...` or the dashboard); redeploy.

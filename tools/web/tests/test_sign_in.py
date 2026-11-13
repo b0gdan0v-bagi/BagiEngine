@@ -405,6 +405,13 @@ class PrivacyTest(SignInTestCase):
 
     def test_the_sign_in_page_links_it(self):
         self.assertIn('href="/privacy"', self.request("/signin").body.decode())
+        self.assertIn('href="/terms"', self.request("/signin").body.decode())
+
+    def test_the_terms_page_is_open_and_links_the_privacy_page(self):
+        page = self.request("/terms")
+        self.assertEqual(page.status, 200)
+        self.assertIn('href="/privacy"', page.body.decode())
+        self.assertIn("owner&lt;x&gt;@example.com", page.body.decode())
 
 
 class PrivacyBehindBasicTest(ServerTestCase):
@@ -412,6 +419,7 @@ class PrivacyBehindBasicTest(ServerTestCase):
 
     def test_the_privacy_page_needs_no_password(self):
         self.assertEqual(self.request("/privacy").status, 200)
+        self.assertEqual(self.request("/terms").status, 200)
 
 
 class ClaimsTest(unittest.TestCase):
