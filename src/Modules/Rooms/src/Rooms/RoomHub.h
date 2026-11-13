@@ -71,6 +71,8 @@ namespace BECore {
     private:
         struct Connection {
             RateLimiter limiter;
+            /// The bucket of `list_rooms`: a list is cheap, but not free, and it is no join attempt
+            RateLimiter listLimiter;
             /// The client's address, empty when unknown
             eastl::string address;
             RoomTime lastActivity{};
@@ -88,6 +90,8 @@ namespace BECore {
 
         struct RoomEntry {
             eastl::unique_ptr<Room> room;
+            /// The order of creation (the hub counts up), so a list is oldest first whatever the hash order
+            uint64_t creation = 0;
             /// The `options` of `create_room`, handed to the game at `start`
             Json options = Json::object();
             /// The connections of the members that are connected, in the order they joined
@@ -107,6 +111,8 @@ namespace BECore {
         void HandleStart(ConnectionId id, Connection& connection, RoomTime now);
         void HandleAction(ConnectionId id, Connection& connection, const ActionMessage& message, RoomTime now);
         void HandleLeave(ConnectionId id, Connection& connection, RoomTime now);
+        /// `list_rooms`: the public rooms of the game that could take a member, oldest first, at most the cap; touches no room and no join budget
+        void HandleList(ConnectionId id, Connection& connection, const ListRoomsMessage& message, RoomTime now);
 
         /// Sends `error`
         void SendError(ConnectionId id, const ControlError& error, eastl::string_view ref);
@@ -148,6 +154,7 @@ namespace BECore {
         };
 
         RateLimiter _serverJoinBudget;
+        uint64_t _roomsCreated = 0;
         eastl::hash_map<eastl::string, AddressState> _addresses;
         eastl::hash_map<ConnectionId, Connection> _connections;
         eastl::hash_map<eastl::string, eastl::unique_ptr<RoomEntry>> _rooms;

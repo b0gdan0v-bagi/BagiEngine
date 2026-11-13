@@ -128,6 +128,20 @@ namespace BECore {
         /// What a `lobby` message says now
         [[nodiscard]] LobbySnapshot GetLobbySnapshot() const;
 
+        /// Whether the room is listed for `list_rooms` (the host's choice at `create_room`). Not part of the lobby snapshot, so
+        /// it never moves the lobby revision. A room is private until this is set.
+        void SetPublic(bool isPublic) {
+            _public = isPublic;
+        }
+
+        [[nodiscard]] bool IsPublic() const {
+            return _public;
+        }
+
+        /// What a `rooms` entry says now: the code, the host's name (empty when no human is left to host), the humans, the seat
+        /// count, whether the game has started, the public options. Whether the room may be listed is the hub's to judge.
+        [[nodiscard]] RoomListing GetListing() const;
+
         /**
          * @brief Keeps the public part of the room's `options` (from `create_room`, untrusted) for the lobby: the members whose key is
          *        in `SeatedGameInfo::publicOptions` and whose value is a boolean or an integer, at most kMaxLobbyOptions. Anything
@@ -197,6 +211,7 @@ namespace BECore {
         uint64_t _lobbyRevision = 1;
         /// The public options the lobby shows (SetLobbyOptions)
         Json _lobbyOptions = Json::object();
+        bool _public = false;
     };
 
 }  // namespace BECore

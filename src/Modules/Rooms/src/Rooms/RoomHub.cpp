@@ -106,6 +106,7 @@ namespace BECore {
         }
         Connection created;
         created.limiter = RateLimiter(_settings.rateBurst, _settings.ratePerSecond);
+        created.listLimiter = RateLimiter(_settings.listBurst, RefillRate(_settings.listRefill));
         created.lastActivity = now;
         if (!address.empty()) {
             created.address = eastl::string(address);
@@ -222,8 +223,7 @@ namespace BECore {
                 } else if constexpr (std::is_same_v<T, LeaveMessage>) {
                     HandleLeave(id, connection, now);
                 } else if constexpr (std::is_same_v<T, ListRoomsMessage>) {
-                    // WP 2 of rooms-public-list replaces this answer
-                    SendError(id, RoomErrors::kBadMessage, "list_rooms is not supported yet", RoomMessageTypes::kListRooms);
+                    HandleList(id, connection, typed, now);
                 } else {
                     static_assert(std::is_same_v<T, PingMessage>, "a new client message needs its handler");
                     SendText(id, MakePongMessage());
@@ -271,8 +271,10 @@ namespace BECore {
         const eastl::string gameName = info->name;
         auto entry = eastl::make_unique<RoomEntry>();
         entry->room = eastl::make_unique<Room>(code, *info, _random, [registry, gameName]() { return registry->Create(gameName); }, _settings.timings);
+        entry->creation = ++_roomsCreated;
         entry->options = message.options;
         entry->room->SetLobbyOptions(message.options);
+        entry->room->SetPublic(message.isPublic);
         entry->address = connection.address;
         entry->lastActivity = now;
         auto joined = entry->room->AddMember(message.name, now);
@@ -289,6 +291,44 @@ namespace BECore {
 
         SendText(id, MakeJoinedMessage(code, joined->player, joined->token, joined->seat, stored.room->IsHost(joined->player)));
         Flush(stored, now);
+    }
+
+    void RoomHub::HandleList(ConnectionId id, Connection& connection, const ListRoomsMessage& message, RoomTime now) {
+        const eastl::string_view ref = RoomMessageTypes::kListRooms;
+        if (!connection.roomCode.empty()) {
+            SendError(id, RoomErrors::kAlreadyInRoom, "You are already in a room: leave it first", ref);
+            return;
+        }
+        const std::optional<SeatedGameInfo> info = _registry.Find(message.game);
+        if (!info) {
+            SendError(id, RoomErrors::kUnknownGame, "No such game", ref);
+            return;
+        }
+        // An empty bucket is no failed join and no reason to close: the general bucket already ends a flood
+        if (!connection.listLimiter.TryTake(now)) {
+            SendError(id, RoomErrors::kRateLimited, "Too many room lists: wait a moment", ref);
+            return;
+        }
+
+        eastl::vector<const RoomEntry*> found;
+        for (const auto& [code, entry] : _rooms) {
+            const Room& room = *entry->room;
+            const RoomPhase phase = room.GetPhase();
+            const bool listedPhase = phase == RoomPhase::Lobby || (phase == RoomPhase::Playing && info->listsStartedRooms);
+            if (room.IsPublic() && listedPhase && room.GetGameInfo().name == info->name && room.GetMemberCount() < static_cast<size_t>(info->seatCount)) {
+                found.push_back(entry.get());
+            }
+        }
+        std::ranges::sort(found, [](const RoomEntry* a, const RoomEntry* b) { return a->creation < b->creation; });
+
+        const size_t cap = eastl::min(_settings.maxListedRooms, RoomLimits::kMaxListedRooms);
+        RoomListMessage list;
+        list.game = info->name;
+        list.more = found.size() > cap;
+        for (size_t i = 0; i < found.size() && i < cap; ++i) {
+            list.rooms.push_back(found[i]->room->GetListing());
+        }
+        SendText(id, MakeRoomListMessage(list));
     }
 
     void RoomHub::HandleJoin(ConnectionId id, Connection& connection, const JoinRoomMessage& message, RoomTime now) {
