@@ -95,7 +95,17 @@ ctest --preset macos-fuzz-shipped -R Fuzz
 
 A CI job takes these commands when the entry `no-ci` is done.
 
-Findings land in `build/<preset>/fuzz-artifacts/`, never in the repository; the script prints how to minimize one and add it as `fix-<what>`. Running all of `BagiEngineTests` under the sanitizers is not part of this (the entry `sanitizers`).
+Findings land in `build/<preset>/fuzz-artifacts/`, never in the repository; the script prints how to minimize one and add it as `fix-<what>`. Running all of `BagiEngineTests` under the sanitizers is the next paragraph.
+
+**Sanitizers** (`cmake/CLAUDE.md`, "Sanitizers and fuzzing"). `macos-asan` builds the whole engine, vendored code and SDL included, with AddressSanitizer + UBSan on the ordinary Debug toolchain (Apple clang, asserts and expects ON: an assertion is a finding too); `macos-fuzz` is RelWithDebInfo on Homebrew LLVM with libFuzzer, and its corpus test runs in both. A report stops the process (`-fno-sanitize-recover`), so it fails its test; the Match3 control smoke fails when the game it starts reports. By explicit name or for a QA request only:
+
+```bash
+cmake --preset macos-asan
+cmake --build --preset macos-asan --target BagiEngineTests Match3Tests BagiMatch3   # no target: also the room server and its probe; about 8 minutes from scratch
+ctest --preset macos-asan                                                          # the engine set: about 150 to 220 s at -j8 (macos-debug: about 70 s)
+```
+
+The test preset sets `ASAN_OPTIONS=detect_stack_use_after_return=1:strict_string_checks=1` and `UBSAN_OPTIONS=print_stacktrace=1`; to run one executable by hand, export the same: `ASAN_OPTIONS=... UBSAN_OPTIONS=... build/macos-asan/bin/BagiEngineTests --gtest_filter=<test>`. Apple's runtime has no leak detector, so there are no leak findings. The one silenced finding is a vendored file in `cmake/sanitizers/ignorelist.txt` (compile-time: the runtime `suppressions` do not apply under `-fno-sanitize-recover`); a line there names the library, the report text and why it cannot be fixed here, and an engine finding is fixed instead. A game that includes the presets gets `macos-asan` and builds its tests with it from its own root (its own `.claude/rules/build-project.md` says so).
 
 Timings, `ctest --preset macos-debug` on a warm Debug build, 2026-11-08, Apple M4 Pro (14 cores), **shared with other todo-loop workers** (load average about 5 to 12 before each run, so the numbers move by a few seconds between runs; read them as a factor, not as a benchmark). Wall time of three runs per row, interleaved:
 
