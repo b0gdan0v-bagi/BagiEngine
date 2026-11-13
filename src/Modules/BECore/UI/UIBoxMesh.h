@@ -88,10 +88,13 @@ namespace BECore {
         static constexpr float kHighlightWidth = 1.0f;       ///< the thickness of the inner top line, in UI units
 
         /// What one call appends at most, whatever the numbers are (a shape has four corners of at most kMaxCornerSegments + 1 points on each ring, and at most kBlurRings + 1 rings;
-        /// the strips are two triangles per point between two rings and the core is a fan): the lists of the element never grow past these in a call
+        /// the strips are two triangles per point between two rings, the core is the quad of the four arc centres, a fan of at most kMaxCornerSegments triangles per
+        /// corner and two triangles per side, and its four centres are vertices of their own): the lists of the element never grow past these in a call
         static constexpr int kMaxRingPoints = 4 * (kMaxCornerSegments + 1);
-        static constexpr int kMaxVerticesPerCall = (kBlurRings + 1) * kMaxRingPoints;
-        static constexpr int kMaxIndicesPerCall = 6 * kBlurRings * kMaxRingPoints + 3 * (kMaxRingPoints - 2);
+        static constexpr int kCoreCenterVertices = 4;
+        static constexpr int kMaxVerticesPerCall = (kBlurRings + 1) * kMaxRingPoints + kCoreCenterVertices;
+        static constexpr int kMaxCoreTriangles = 2 + 4 * kMaxCornerSegments + 4 * 2;
+        static constexpr int kMaxIndicesPerCall = 6 * kBlurRings * kMaxRingPoints + 3 * kMaxCoreTriangles;
 
         /// The segments of one quarter-circle corner of @p radiusPixels (0 for a corner that is not rounded), within the limits above
         [[nodiscard]] static int CornerSegments(float radiusPixels);
@@ -100,6 +103,10 @@ namespace BECore {
          * A solid or gradient box. The fully opaque core is the rect inset by half the feather; outside it one feather of alpha falling to 0. A gradient runs
          * over the core (so the top vertices hold exactly the colour and the bottom ones exactly `gradient.end`). Nothing for a colour with no alpha at
          * both ends.
+         *
+         * The core (of a fill, a shadow and a glow) is not a fan from one corner: the SDL software renderer pays for every triangle the pixels of its bounding
+         * rectangle (a temporary surface, `SDL_SW_FillTriangle` with blending), and a fan of n points would cost n times the area. It is cut along the four arc
+         * centres into small triangles, about twice the area in bounding boxes; the covered area is the same, so Vulkan sees no difference.
          */
         static void AppendFill(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Color& color, const UIGradientSpec& gradient,
                                float pixelsPerUnit);

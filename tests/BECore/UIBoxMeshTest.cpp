@@ -1,7 +1,7 @@
 #include <BECore/UI/UIBoxMesh.h>
+#include <BECore/UI/UIGeometryBounds.h>
 #include <EASTL/sort.h>
 #include <gtest/gtest.h>
-#include <iostream>
 
 namespace BECore::Tests {
 
@@ -161,8 +161,8 @@ namespace BECore::Tests {
         const float feather = 1.0f / ppu;
         const Mesh mesh = Fill(rect, {}, kWhite, ppu);
 
-        // Four core corners and four feather corners; the core is two triangles, the feather is a ring of eight
-        EXPECT_EQ(mesh.vertices.size(), 8u);
+        // Four core corners and four feather corners, and the four centres of the core (at the core corners here, no radius); the core is two triangles, the feather is a ring of eight
+        EXPECT_EQ(mesh.vertices.size(), 8u + UIBoxMesh::kCoreCenterVertices);
         EXPECT_EQ(CoreTriangleCount(mesh), 2u);
         EXPECT_EQ(mesh.TriangleCount(), 10u);
 
@@ -335,7 +335,9 @@ namespace BECore::Tests {
 
             // A rounded box: every vertex of alpha 0 lies one feather from the opaque outline (its distance to the shape is half a feather outside, the core half inside)
             const Mesh round = Fill(rect, UICorners::Uniform(20), kWhite, ppu);
-            for (const GeometryVertex& v : round.vertices) {
+            // (the centres of the core come after the rings and lie well inside)
+            for (size_t i = 0; i + UIBoxMesh::kCoreCenterVertices < round.vertices.size(); ++i) {
+                const GeometryVertex& v = round.vertices[i];
                 const float distance = RoundedRectDistance(rect, 20.0f, v.x, v.y);
                 EXPECT_NEAR(distance, v.color.a == kOpaque ? -feather * 0.5f : feather * 0.5f, kTolerance * 2.0f) << "ppu " << ppu;
             }
@@ -504,7 +506,7 @@ namespace BECore::Tests {
         const float feather = 1.0f / ppu;
         const Mesh mesh = Fill(rect, UICorners::Uniform(radius), kWhite, ppu);
         // The opaque ring is the second one, in outline order: the middle of each of its edges is at most the sagitta inside the arc
-        const size_t ringSize = mesh.vertices.size() / 2;
+        const size_t ringSize = (mesh.vertices.size() - UIBoxMesh::kCoreCenterVertices) / 2;
         for (size_t i = 0; i < ringSize; ++i) {
             const GeometryVertex& from = mesh.vertices[ringSize + i];
             const GeometryVertex& to = mesh.vertices[ringSize + (i + 1) % ringSize];
@@ -620,7 +622,13 @@ namespace BECore::Tests {
     }
 
     TEST(UIBoxMeshTest, TheRasterCostOfABoxIsNearItsAreaTimesTheLayers) {
-        // The sample panel and button of UIBoxCaptureTest
+        // The sample panel and button of UIBoxCaptureTest. A triangle is at best half its bounding box, so a layer that covers the box costs about 2 times its area (the
+        // old fan from one point cost 13 to 21 times); the ring strips of a shadow add a little
+        constexpr double kFillCostLimit = 3.2;
+        constexpr double kBorderCostLimit = 1.2;
+        constexpr double kShadowCostLimit = 4.5;
+        constexpr size_t kShadowTriangleLimit = 1800;
+
         struct Sample {
             const char* name;
             Rect rect;
@@ -638,20 +646,137 @@ namespace BECore::Tests {
                 const struct {
                     const char* layer;
                     Mesh mesh;
+                    double costLimit;
+                    size_t triangleLimit;
                 } layers[] = {
-                    {"fill", Fill(sample.rect, corners, kRed, ppu)},
-                    {"gradient", Fill(sample.rect, corners, kRed, ppu, gradient)},
-                    {"border", Border(sample.rect, corners, 3.0f, kWhite, ppu)},
-                    {"shadow", Shadow(sample.rect, corners, shadow, ppu)},
-                    {"glow", Shadow(sample.rect, corners, glow, ppu)},
+                    {"fill", Fill(sample.rect, corners, kRed, ppu), kFillCostLimit, 300},
+                    {"gradient", Fill(sample.rect, corners, kRed, ppu, gradient), kFillCostLimit, 300},
+                    {"border", Border(sample.rect, corners, 3.0f, kWhite, ppu), kBorderCostLimit, 600},
+                    {"shadow", Shadow(sample.rect, corners, shadow, ppu), kShadowCostLimit, kShadowTriangleLimit},
+                    {"glow", Shadow(sample.rect, corners, glow, ppu), kShadowCostLimit, kShadowTriangleLimit},
                 };
                 for (const auto& layer : layers) {
                     ASSERT_FALSE(layer.mesh.indices.empty()) << sample.name << " " << layer.layer;
-                    std::cout << "[raster] " << sample.name << " x" << ppu << " " << layer.layer << ": triangles " << layer.mesh.TriangleCount() << ", vertices " << layer.mesh.vertices.size()
-                              << ", cost/area " << RasterCost(layer.mesh, ppu) / area << "\n";
+                    EXPECT_LE(RasterCost(layer.mesh, ppu) / area, layer.costLimit) << sample.name << " x" << ppu << " " << layer.layer;
+                    EXPECT_LE(layer.mesh.TriangleCount(), layer.triangleLimit) << sample.name << " x" << ppu << " " << layer.layer;
                 }
             }
         }
+    }
+
+    /// The core of @p mesh (the triangles that use only the last of @p ringCount rings and the four centres after the rings) covers the outline of that ring exactly once
+    /// and nothing outside it: the area adds up, and a grid of points is in one core triangle inside the outline and in none outside it
+    void ExpectCoreCoversTheLastRingOnce(const Mesh& mesh, size_t ringCount, const char* what) {
+        ASSERT_GT(mesh.vertices.size(), UIBoxMesh::kCoreCenterVertices) << what;
+        const size_t ringSize = (mesh.vertices.size() - UIBoxMesh::kCoreCenterVertices) / ringCount;
+        const size_t firstCoreVertex = (ringCount - 1) * ringSize;
+        const auto inCore = [&](size_t triangle) {
+            for (size_t corner = 0; corner < 3; ++corner) {
+                if (static_cast<size_t>(mesh.indices[triangle * 3 + corner]) < firstCoreVertex) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        constexpr float kMinEdgeLength = 1e-3f;
+        // The outline is convex and clockwise: a point is inside when it is on the right of every edge
+        const auto side = [&](size_t edge, float x, float y) {
+            const GeometryVertex& from = mesh.vertices[firstCoreVertex + edge];
+            const GeometryVertex& to = mesh.vertices[firstCoreVertex + (edge + 1) % ringSize];
+            const float length = std::hypot(to.x - from.x, to.y - from.y);
+            // Two corners whose arcs meet with no side between them leave an edge of no length: it bounds nothing
+            return length < kMinEdgeLength ? 1.0f : ((to.x - from.x) * (y - from.y) - (x - from.x) * (to.y - from.y)) / length;
+        };
+
+        double outlineArea = 0.0;
+        for (size_t i = 0; i < ringSize; ++i) {
+            const GeometryVertex& from = mesh.vertices[firstCoreVertex + i];
+            const GeometryVertex& to = mesh.vertices[firstCoreVertex + (i + 1) % ringSize];
+            outlineArea += static_cast<double>(from.x) * static_cast<double>(to.y) - static_cast<double>(to.x) * static_cast<double>(from.y);
+        }
+        outlineArea *= 0.5;
+        double coreArea = 0.0;
+        for (size_t i = 0; i < mesh.TriangleCount(); ++i) {
+            if (inCore(i)) {
+                coreArea += static_cast<double>(TriangleAt(mesh, i).Cross()) * 0.5;
+            }
+        }
+        EXPECT_NEAR(coreArea, outlineArea, 1e-3 * std::max(outlineArea, 1.0)) << what;
+
+        constexpr float kStep = 0.37f;
+        constexpr float kMargin = 1e-3f;        // of the cross product of a triangle's edge, whose length is up to the size of the shape
+        constexpr float kSkipDistance = 0.02f;  // from the outline: the tolerance above must be well inside it
+        const Extent extent = ExtentOf(mesh);
+        int inside = 0;
+        for (float y = extent.minY - 1.0f; y <= extent.maxY + 1.0f; y += kStep) {
+            for (float x = extent.minX - 1.0f; x <= extent.maxX + 1.0f; x += kStep) {
+                float nearest = 1e30f;
+                bool allRight = true;
+                for (size_t edge = 0; edge < ringSize; ++edge) {
+                    const float distance = side(edge, x, y);
+                    nearest = std::min(nearest, std::abs(distance));
+                    allRight = allRight && distance >= 0.0f;
+                }
+                if (nearest < kSkipDistance) {
+                    continue;  // on the outline or on an edge between two triangles: either answer is fine
+                }
+                // A point a hair from an edge between two triangles may be in both or in neither by the noise of the floats: it must be in at most one for sure and in one at least
+                // with the tolerance
+                int surely = 0;
+                int perhaps = 0;
+                for (size_t i = 0; i < mesh.TriangleCount(); ++i) {
+                    if (!inCore(i)) {
+                        continue;
+                    }
+                    const Triangle t = TriangleAt(mesh, i);
+                    if (t.Cross() <= 0.0f) {
+                        continue;
+                    }
+                    const auto edge = [&](const GeometryVertex* p, const GeometryVertex* q) { return (q->x - p->x) * (y - p->y) - (x - p->x) * (q->y - p->y); };
+                    const float e1 = edge(t.a, t.b);
+                    const float e2 = edge(t.b, t.c);
+                    const float e3 = edge(t.c, t.a);
+                    surely += e1 > kMargin && e2 > kMargin && e3 > kMargin ? 1 : 0;
+                    perhaps += e1 >= -kMargin && e2 >= -kMargin && e3 >= -kMargin ? 1 : 0;
+                }
+                if (allRight) {
+                    ++inside;
+                    ASSERT_LE(surely, 1) << what << " at " << x << ", " << y;
+                    ASSERT_GE(perhaps, 1) << what << " at " << x << ", " << y;
+                } else {
+                    ASSERT_EQ(perhaps, 0) << what << " at " << x << ", " << y;
+                }
+            }
+        }
+        if (outlineArea > 1.0) {
+            EXPECT_GT(inside, 0) << what;
+        }
+    }
+
+    TEST(UIBoxMeshTest, TheCoreCoversTheShapeExactlyOnce) {
+        const Rect rect{10.0f, 20.0f, 100.0f, 60.0f};
+        const Rect square{0.0f, 0.0f, 100.0f, 100.0f};
+        ExpectCoreCoversTheLastRingOnce(Fill(rect, UICorners::Uniform(12), kRed, 2.0f), 2, "uniform radius");
+        ExpectCoreCoversTheLastRingOnce(Fill(rect, {}, kRed, 1.0f), 2, "no radius");
+        ExpectCoreCoversTheLastRingOnce(Fill(rect, UICorners{25, 0, 8, 3}, kRed, 1.0f), 2, "per-corner radii");
+        ExpectCoreCoversTheLastRingOnce(Fill(rect, UICorners::Uniform(500), kRed, 1.0f), 2, "a clamped radius");
+        // A large radius next to small ones makes the quad of the arc centres non-convex: the diagonal of its split has to stay inside
+        for (const UICorners& corners : {UICorners{60, 40, 0, 40}, UICorners{40, 60, 40, 0}, UICorners{0, 40, 60, 40}, UICorners{40, 0, 40, 60}}) {
+            ExpectCoreCoversTheLastRingOnce(Fill(square, corners, kRed, 1.0f), 2, "one large radius");
+        }
+        ExpectCoreCoversTheLastRingOnce(Fill(rect, UICorners::Uniform(10), kRed, 1.0f, {UIGradientDirection::Horizontal, kBlue}), 2, "a gradient");
+        ExpectCoreCoversTheLastRingOnce(Shadow(rect, UICorners::Uniform(12), {0, 4, 6, 0, kBlue}, 2.0f), UIBoxMesh::kBlurRings + 1, "a shadow");
+        ExpectCoreCoversTheLastRingOnce(Shadow({0, 0, 200, 3}, UICorners::Uniform(1), {0, 0, 6, 0, kBlue}, 1.0f), UIBoxMesh::kBlurRings + 1, "the shadow of a thin rect");
+        ExpectCoreCoversTheLastRingOnce(Shadow(rect, {}, {0, 0, 0, 0, kBlue}, 1.0f), 2, "a hard shadow");
+    }
+
+    TEST(UIBoxMeshTest, TheCoreOfTheLargestShapeStaysWithinTheBounds) {
+        const Rect huge{0.0f, 0.0f, 4000.0f, 4000.0f};
+        const Mesh mesh = Shadow(huge, UICorners::Uniform(2000.0f), {0, 0, 100, 0, kBlue}, UIBounds::kMaxScale);
+        EXPECT_LE(mesh.vertices.size(), static_cast<size_t>(UIBoxMesh::kMaxVerticesPerCall));
+        EXPECT_LE(mesh.indices.size(), static_cast<size_t>(UIBoxMesh::kMaxIndicesPerCall));
+        EXPECT_GT(mesh.indices.size(), static_cast<size_t>(6 * UIBoxMesh::kBlurRings * UIBoxMesh::kMaxRingPoints));
     }
 
 }  // namespace BECore::Tests

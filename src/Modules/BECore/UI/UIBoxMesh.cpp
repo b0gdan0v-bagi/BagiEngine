@@ -98,10 +98,80 @@ namespace BECore {
             return corner == 0 ? StepRange{segments / 2, segments} : StepRange{0, half};
         }
 
+        /// Twice the signed area of the triangle (a, b, c) in y-down coordinates: positive is clockwise on the screen
+        [[nodiscard]] float Cross(const GeometryVertex& a, const GeometryVertex& b, const GeometryVertex& c) {
+            return (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y);
+        }
+
+        void AddTriangle(eastl::vector<int>& indices, int a, int b, int c) {
+            indices.push_back(a);
+            indices.push_back(b);
+            indices.push_back(c);
+        }
+
+        /**
+         * The fully opaque inside of the closed outline whose points start at @p ring (the corners one after the other, each `segments + 1` points, clockwise).
+         * The outline is convex, so the four arc centres (@p arcs) are inside it and the core is cut along them: the quad of the centres (two triangles), a small
+         * fan from each centre over the points of its own corner, and for each side the quad between the two centres and the two points where the arcs meet the
+         * side. A triangle is at best half of its bounding box, and these are close to it, so the bounding boxes the SDL software rasterizer pays for
+         * (`SDL_SW_FillTriangle`) add up to about twice the area, where a fan from one point would cost its number of points times the area. A corner with no radius has no fan and no side
+         * triangle (they would have no area). The centres are appended to @p vertices (their colour is @p colorOf at the centre: a gradient is linear in the
+         * position, so it interpolates exactly) with the alpha of the ring.
+         */
+        template <typename ColorFn>
+        void AppendCore(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, int ring, const int* segments, const eastl::array<Arc, kCornerCount>& arcs, float alpha,
+                        ColorFn&& colorOf) {
+            int cornerFirst[kCornerCount];
+            int next = ring;
+            for (int c = 0; c < kCornerCount; ++c) {
+                cornerFirst[c] = next;
+                next += segments[c] + 1;
+            }
+
+            int center[kCornerCount];
+            for (int c = 0; c < kCornerCount; ++c) {
+                PointInfo point;
+                point.x = arcs[c].centerX;
+                point.y = arcs[c].centerY;
+                point.corner = c;
+                point.segments = segments[c];
+                Color color = colorOf(point);
+                color.a = ScaleAlpha(color.a, alpha);
+                center[c] = static_cast<int>(vertices.size());
+                vertices.push_back(GeometryVertex{point.x, point.y, color, 0.0f, 0.0f});
+            }
+
+            // The quad of the centres can have one reflex corner (a large radius next to small ones); its diagonal must not leave it, so try 0-2 and else take 1-3
+            const bool diagonalFromFirst = Cross(vertices[center[0]], vertices[center[1]], vertices[center[2]]) >= 0.0f && Cross(vertices[center[0]], vertices[center[2]], vertices[center[3]]) >= 0.0f;
+            if (diagonalFromFirst) {
+                AddTriangle(indices, center[0], center[1], center[2]);
+                AddTriangle(indices, center[0], center[2], center[3]);
+            } else {
+                AddTriangle(indices, center[0], center[1], center[3]);
+                AddTriangle(indices, center[1], center[2], center[3]);
+            }
+
+            for (int c = 0; c < kCornerCount; ++c) {
+                for (int step = 0; step < segments[c]; ++step) {
+                    AddTriangle(indices, center[c], cornerFirst[c] + step, cornerFirst[c] + step + 1);
+                }
+                // The side from the end of this corner's arc to the start of the next corner's: the quad (centre, arc end, next arc start, next centre)
+                const int nextCorner = (c + 1) % kCornerCount;
+                const int arcEnd = cornerFirst[c] + segments[c];
+                const int nextStart = cornerFirst[nextCorner];
+                if (arcs[c].radius > 0.0f) {
+                    AddTriangle(indices, center[c], arcEnd, nextStart);
+                }
+                if (arcs[nextCorner].radius > 0.0f) {
+                    AddTriangle(indices, center[c], nextStart, center[nextCorner]);
+                }
+            }
+        }
+
         /**
          * Appends the vertices of every ring (each ring is one outline with the same number of points, so the corresponding points of two rings are
-         * neighbours), strips of triangles between each two rings and, with @p fillCore, a fan over the last ring. @p colorOf gives the colour of a point
-         * before the ring's alpha is applied.
+         * neighbours), strips of triangles between each two rings and, with @p fillCore, the core inside the last ring (`AppendCore`: not a fan, whose
+         * bounding boxes would all be the whole box). @p colorOf gives the colour of a point before the ring's alpha is applied.
          */
         template <typename ColorFn>
         void AppendRings(eastl::vector<GeometryVertex>& vertices, eastl::vector<int>& indices, const Rect& rect, const UICorners& corners, const Ring* rings, int ringCount, const Path& path,
@@ -129,10 +199,12 @@ namespace BECore {
             }
 
             const int firstVertex = static_cast<int>(vertices.size());
+            eastl::array<Arc, kCornerCount> lastArcs;
             for (int r = 0; r < ringCount; ++r) {
                 // An outline cannot move in further than the middle of the shorter side
                 const float offset = std::max(rings[r].offset, -halfShortSide);
                 const auto arcs = MakeArcs(rect, baseCorners, offset, roundOutwards);
+                lastArcs = arcs;
                 for (int c = firstCorner; c <= lastCorner; ++c) {
                     const Arc& arc = arcs[c];
                     const StepRange range = VisitedSteps(path, c, segments[c]);
@@ -167,12 +239,7 @@ namespace BECore {
             }
 
             if (fillCore && path.closed) {
-                const int core = firstVertex + (ringCount - 1) * pointsPerRing;
-                for (int i = 1; i + 1 < pointsPerRing; ++i) {
-                    indices.push_back(core);
-                    indices.push_back(core + i);
-                    indices.push_back(core + i + 1);
-                }
+                AppendCore(vertices, indices, firstVertex + (ringCount - 1) * pointsPerRing, segments, lastArcs, rings[ringCount - 1].alpha, colorOf);
             }
         }
 
