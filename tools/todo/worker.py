@@ -533,7 +533,7 @@ def store_entries(layout: Layout) -> tuple[list[dict], str | None]:
         entries = json.loads(result.stdout or "[]")
     except json.JSONDecodeError as error:
         return [], f"todo.py list: {error}"
-    keep = ("id", "area", "title", "status", "statusNote", "branch", "planShown", "planProgress", "blocks", "blockedBy", "slicing", "costCap", "slices", "stagesPlan")
+    keep = ("id", "area", "title", "status", "statusNote", "branch", "planShown", "planProgress", "blocks", "blockedBy", "slicing", "costCap", "slices", "stagesPlan", "priority")
     table = {row["area"]: row for row in rule_area_table(layout.main)}
     shown = []
     for entry in entries:
@@ -1495,6 +1495,11 @@ def term_matches(term: str, entry: dict) -> bool:
     return bool(pattern.search(entry.get("id") or "") or pattern.search(entry.get("title") or ""))
 
 
+# The order of the entries by the owner's level; unset counts as `normal`. The same map is PRIORITY_RANK of todo.py
+# (separate stdlib files).
+PRIORITY_RANK = {"now": 0, "high": 1, "normal": 2, None: 2, "low": 3}
+
+
 def preference_rank(prefer: list[str], entry: dict) -> int | None:
     """The index of the first `prefer` term that names the entry; None when none does."""
     return next((i for i, term in enumerate(prefer) if term_matches(term, entry)), None)
@@ -1581,7 +1586,8 @@ def busy_files(layout: Layout, entry: dict, area: dict) -> list[str]:
 def dispatch_state(layout: Layout, args) -> dict:
     listing = list_json(layout, argparse.Namespace(claude=args.claude, store=False, usage=False, activity=False))
     saved = read_rooted(prefs_file(), layout)
-    prefer = split_terms(args.prefer) if args.prefer is not None else saved.get("prefer", [])
+    prefer = split_terms(args.prefer) if args.prefer is not None else []
+    saved_prefer = saved.get("prefer", [])
     avoid = split_terms(args.avoid) if args.avoid is not None else saved.get("avoid", [])
     table = {row["area"]: row for row in rule_area_table(layout.main)}
     entries = open_entries(layout)
@@ -1644,11 +1650,13 @@ def dispatch_state(layout: Layout, args) -> dict:
         verdict = fresh_verdict(cache.get(entry_id), e.get("version"), now)
         candidates.append({
             "area": e["area"], "id": entry_id, "title": e.get("title"), "stage": e.get("stage"), "summary": e.get("summary"),
-            "continue": bool(stopped), "prefer": preference_rank(prefer, e), "unblocks": unblocks,
+            "continue": bool(stopped), "priority": e.get("priority"), "prefer": preference_rank(prefer, e),
+            "saved": preference_rank(saved_prefer, e), "unblocks": unblocks,
             "verdict": None if verdict is None else {k: verdict.get(k) for k in ("verdict", "size", "level", "touches", "reason")},
         })
-    candidates.sort(key=lambda c: (not c["continue"], c["prefer"] is None, c["prefer"] or 0, -c["unblocks"],
-                                   -1 if c["stage"] is None else c["stage"], c["id"]))
+    candidates.sort(key=lambda c: (not c["continue"], c["prefer"] is None, c["prefer"] or 0,
+                                   PRIORITY_RANK.get(c["priority"], PRIORITY_RANK[None]), c["saved"] is None, c["saved"] or 0,
+                                   -c["unblocks"], -1 if c["stage"] is None else c["stage"], c["id"]))
     free = [w for w in workers if w["free"] and (not args.workers or w["k"] in args.workers)]
     slots = len(free) * args.depth
     want = slots * CLASSIFY_MARGIN
@@ -1660,7 +1668,7 @@ def dispatch_state(layout: Layout, args) -> dict:
             classify.append(c["id"])
         elif c["verdict"]["verdict"] == "eligible":
             ready += 1
-    return {"prefs": {"prefer": prefer, "avoid": avoid, "saved": bool(saved)}, "workers": workers, "slots": slots,
+    return {"prefs": {"prefer": prefer, "saved_prefer": saved_prefer, "avoid": avoid, "saved": bool(saved)}, "workers": workers, "slots": slots,
             "review": [{"id": e["id"], "area": e["area"], "branch": e.get("branch")} for e in entries if e.get("status") == "review"],
             "busy": busy, "candidates": candidates, "classify": classify, "skipped": skipped}
 
@@ -1682,7 +1690,7 @@ def cmd_dispatch(layout: Layout, args) -> None:
     print(f"review: {' '.join(e['id'] for e in state['review']) or '-'}")
     for c in state["candidates"][:20]:
         v = c["verdict"]
-        print(f"  {c['id']:40} {'continue ' if c['continue'] else ''}prefer={c['prefer']} unblocks={c['unblocks']} {v['verdict'] if v else '?'}")
+        print(f"  {c['id']:40} {'continue ' if c['continue'] else ''}prefer={c['prefer']} priority={c['priority'] or '-'} saved={c['saved']} unblocks={c['unblocks']} {v['verdict'] if v else '?'}")
     print(f"classify: {' '.join(state['classify']) or '-'}")
 
 
@@ -2228,14 +2236,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("prefs", help="the owner's preferences of /todo-dispatch (a local file, ~/.claude/todo/dispatch-prefs.json)")
-    p.add_argument("--prefer", help="comma list of ids, id or title word prefixes, areas, first is strongest ('' clears)")
+    p.add_argument("--prefer", help="comma list of ids, id or title word prefixes, areas, first is strongest ('' clears); in dispatch they count after the priority")
     p.add_argument("--avoid", help="comma list of the same: never dispatched ('' clears)")
     p.add_argument("--clear", action="store_true", help="forget both")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("dispatch", help="one read for /todo-dispatch: free workers, review pile, busy files, candidates in order with cached verdicts")
     p.add_argument("workers", nargs="*", type=int, help="only these workers count as free slots (default: all)")
     p.add_argument("--depth", type=int, default=2, help="entries per free worker (default 2)")
-    p.add_argument("--prefer", help="this run only, instead of the saved `prefer`")
+    p.add_argument("--prefer", help="this run only, counts before the priority (the saved `prefer` still counts after it)")
     p.add_argument("--avoid", help="this run only, instead of the saved `avoid`")
     p.add_argument("--record", help="store a classifier answer (a JSON file, or - for stdin) and exit")
     p.add_argument("--claude", default="claude", help="the command (default claude)")
