@@ -69,3 +69,18 @@ Plain C++ over `ParticleEffect`: `Update(effect, area, dt)`, `Burst(effect, cent
 - **Edits take effect at once:** the effect is read on every update and at draw time, so an inspector edit needs no restart; a larger `maxParticles` reserves the pool and the geometry vectors again at the next update (the only allocation after the first).
 - **Sprite:** `spriteId` resolves through `TextureLibrary` (the part of the texture is its `srcRect`), else `texturePath` is the whole texture. An unknown sprite is one `LOG_ERROR` and plain squares. A change of either field loads the texture again. `SetTexture()` hands it a texture made from pixels (it lasts until the sprite or path changes).
 - **Draw:** `OnDraw()` makes one `DrawGeometry` call for all live particles, none when there are none, under `ScopedBlendMode(effect.blend)`; Vulkan shows `Add` as straight alpha (`.claude/rules/rendering-module.md`). The texture is a GPU object and is let go at `ApplicationCleanUp`, like `RenderProbeComponent`. Tests: `tests/BECore/ParticleEmitterComponentTest.cpp`.
+
+### The example effect
+
+Sparks: a square of 20 with the color (100, 100, 100) that flies right at 100 a second under a gravity of 80, drawn from the right half of a sprite and added to what is behind it. Every range has min = max and the cone has no width, so the burst is one exact path and `tests/BECore/ParticleCaptureTest.cpp` reads its pixels back on the headless SDL renderer (`Scene::Draw()`, the fake clock): the position from the closed form, two `Add` particles brighter than one, the same picture from 16 steps or 2 steps of the same game time, the background again when the effect ended. The test holds this text as a constant and checks that this file still quotes it.
+
+```xml
+<effect burstCount="1" maxParticles="16" lifetimeMin="1" lifetimeMax="1" speedMin="100" speedMax="100"
+        direction="0" spread="0" gravityY="80" spriteId="ParticleCaptureSpark" blend="Add" frameClass="FiniteEffect">
+  <size from="20" to="20"/>
+  <color>
+    <from r="100" g="100" b="100" a="255"/>
+    <to r="100" g="100" b="100" a="255"/>
+  </color>
+</effect>
+```
